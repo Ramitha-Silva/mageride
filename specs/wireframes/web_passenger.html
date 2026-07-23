@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MageRide · passenger.mageride.lk — no-login proxy / package web (wireframes)</title>
+<style>
+:root{
+  --primary:#FF6D00;--onPrimary:#fff;--secondary:#0061A4;--secondaryContainer:#D1E4FF;
+  --bg:#EEF0F3;--surface:#F7F8FA;--surfaceVariant:#ECEEF1;--outline:#C7CBD1;
+  --onSurface:#1A1C1E;--onSurfaceVariant:#5B5F66;--ink:#11141A;
+  --success:#2E9E4F;--warning:#F5A300;--error:#D32F2F;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--onSurface);line-height:1.45}
+.page-header{position:sticky;top:0;z-index:20;background:#15171B;color:#fff;padding:14px 28px;box-shadow:0 2px 8px rgba(0,0,0,.25)}
+.page-header h1{font-size:18px;font-weight:700}.page-header .sub{font-size:12px;color:#AEB3BC;margin-top:3px}.page-header a{color:#FFB68A;text-decoration:none}
+.note-bar{background:#EAF3FF;border-left:4px solid var(--secondary);color:#114;font-size:12.5px;padding:10px 28px}
+.grid{display:flex;flex-wrap:wrap;gap:30px;padding:26px 30px 50px;align-items:flex-start;justify-content:flex-start;max-width:1100px;margin:0 auto}
+.cell{width:330px}
+.cap{font-size:12.5px;font-weight:700;color:var(--ink);margin-bottom:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.cap .scr{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;color:var(--primary)}
+.cap .tag{font-size:9px;font-weight:700;color:#fff;background:#2E9E4F;border-radius:4px;padding:1px 6px}
+.states{font-size:10.5px;color:var(--onSurfaceVariant);margin-top:7px;font-style:italic;background:#fff;border:1px solid var(--outline);border-radius:8px;padding:8px 10px}.states b{font-style:normal;color:var(--ink)}
+/* mobile-web browser frame */
+.mweb{background:#fff;border:1px solid var(--outline);border-radius:14px;overflow:hidden;box-shadow:0 8px 22px rgba(0,0,0,.12)}
+.mchrome{height:34px;background:#E7EAEE;display:flex;align-items:center;gap:7px;padding:0 10px;border-bottom:1px solid var(--outline)}
+.mchrome .url{flex:1;height:22px;background:#fff;border-radius:11px;border:1px solid var(--outline);display:flex;align-items:center;gap:6px;padding:0 9px;font-size:10.5px;color:var(--onSurfaceVariant);overflow:hidden;white-space:nowrap}
+.mchrome .url b{color:var(--ink)}
+.mchrome .dots{color:var(--outlineVariant);font-size:15px}
+.view{height:580px;display:flex;flex-direction:column;overflow:hidden;background:#fff}
+/* slim web top brand (no app chrome) */
+.webbar{height:46px;background:var(--primary);color:#fff;display:flex;align-items:center;gap:9px;padding:0 14px;flex:0 0 auto;font-weight:700;font-size:15px}
+.webbar .m{width:26px;height:26px;border-radius:7px;background:#fff;color:var(--primary);display:grid;place-items:center;font-weight:800;font-size:14px}
+.webbar .sp{flex:1}.webbar .lang{font-size:11px;font-weight:600;opacity:.9}
+.body{flex:1;padding:14px;overflow:auto;display:flex;flex-direction:column;gap:12px}
+.body.center{justify-content:center;align-items:center;text-align:center}
+.h-headline{font-size:21px;font-weight:700}.h-title{font-size:17px;font-weight:600}.t-sub{font-size:15px;font-weight:600}.t-body{font-size:14px}.t-small{font-size:12.5px;color:var(--onSurfaceVariant)}.t-label{font-size:11.5px;font-weight:600;color:var(--onSurfaceVariant)}.muted{color:var(--onSurfaceVariant)}
+.cta{height:50px;border-radius:10px;background:var(--primary);color:#fff;display:grid;place-items:center;font-weight:700;font-size:15px;width:100%}
+.cta.err{background:var(--error)}.cta.succ{background:var(--success)}
+.btn-out{height:46px;border-radius:10px;border:1.5px solid var(--outline);color:var(--onSurface);display:grid;place-items:center;font-weight:600;font-size:14px;background:#fff}
+.btn-row{display:flex;gap:10px}.btn-row>*{flex:1}.textlink{color:var(--primary);font-weight:600;font-size:13px}
+.field{min-height:48px;border:1.5px solid var(--outline);border-radius:10px;display:flex;align-items:center;gap:9px;padding:0 12px;font-size:14px;color:var(--onSurfaceVariant);background:#fff}
+.otp{display:flex;gap:8px;justify-content:center}.otp .b{width:42px;height:50px;border:1.5px dashed var(--outline);border-radius:9px;display:grid;place-items:center;font-size:20px;font-weight:700;background:var(--surface)}.otp .b.fill{border-style:solid;border-color:var(--primary)}
+.card{border:1.5px solid var(--outline);border-radius:12px;padding:11px 12px;background:#fff}.card.fill{background:var(--surface)}
+.avatar{width:40px;height:40px;border-radius:50%;background:var(--surfaceVariant);display:grid;place-items:center;color:var(--outlineVariant);font-size:18px;flex:0 0 auto}
+.stars{color:var(--warning);font-size:14px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:10px}.col{display:flex;flex-direction:column}.gap6{gap:6px}.gap10{gap:10px}.spacer{flex:1}
+.cdot{width:10px;height:10px;border-radius:50%;display:inline-block}
+.map{flex:1;min-height:150px;position:relative;border-radius:12px;overflow:hidden;background:linear-gradient(0deg,rgba(0,0,0,.02),rgba(0,0,0,.02)),repeating-linear-gradient(0deg,#EAEFE9,#EAEFE9 30px,#E3EAE2 30px,#E3EAE2 31px),repeating-linear-gradient(90deg,#EAEFE9,#EAEFE9 30px,#E3EAE2 30px,#E3EAE2 31px)}
+.mk{position:absolute;width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:14px solid var(--primary);filter:drop-shadow(0 1px 2px rgba(0,0,0,.3))}
+.pin{position:absolute;width:20px;height:20px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:2px solid #fff;box-shadow:0 2px 4px rgba(0,0,0,.3)}.pin.pickup{background:var(--success)}.pin.drop{background:var(--error)}
+.stepper{display:flex;align-items:center;gap:4px}.stepper .s{width:13px;height:13px;border-radius:50%;background:var(--outline)}.stepper .s.done{background:var(--success)}.stepper .s.now{background:var(--primary);box-shadow:0 0 0 4px rgba(255,109,0,.18)}.stepper .ln{flex:1;height:2px;background:var(--outline)}.stepper .ln.done{background:var(--success)}
+.pill-status{font-size:10.5px;font-weight:700;border-radius:20px;padding:3px 9px;display:inline-block}.pill-status.ok{background:#E4F5EA;color:#1B7A38}.pill-status.warn{background:#FFF1D6;color:#8A5B00}.pill-status.info{background:var(--secondaryContainer);color:var(--secondary)}
+.banner{padding:9px 12px;font-size:12px;font-weight:600;display:flex;align-items:center;gap:8px}.banner.warn{background:#FFF6E9;color:#5B4300}.banner.info{background:var(--secondaryContainer);color:#003355}
+.kv{display:flex;justify-content:space-between;font-size:13px;padding:3px 0}.kv .k{color:var(--onSurfaceVariant)}
+.appcta{background:var(--surface);border-top:1px solid var(--outline);padding:10px 14px;display:flex;align-items:center;gap:10px;font-size:12px;flex:0 0 auto}
+.appcta .b{margin-left:auto;height:32px;border-radius:7px;background:#15171B;color:#fff;display:grid;place-items:center;padding:0 12px;font-weight:600;font-size:12px}
+</style>
+</head>
+<body>
+<div class="page-header">
+  <h1>MageRide — <span style="color:#9FCAFF">passenger.mageride.lk</span> · no-login proxy / package web subview</h1>
+  <div class="sub">AL-04 / Epic 25 (2026-07-05: screens <b>SCR-WT-001…006</b>, served by <code>public-bff /public/track/*</code>) — a lightweight, <b>no-login</b> mobile-web surface opened from an <b>SMS web-share token</b> for people who don't have the app: unregistered package recipients (P-09) and proxy pickup confirmation. Responsive mobile web (no app chrome). Full apps → <a href="passenger_android.html">Android</a> / <a href="passenger_ios.html">iOS</a> · <a href="index.html">index</a></div>
+</div>
+<div class="note-bar"><b>Reached via:</b> <code>passenger.mageride.lk/track?token=…</code> link in an SMS, sent when the <b>driver confirms pickup</b> and the recipient does <b>not</b> have the MageRide app. (Recipients <b>with</b> the app instead get an FCM push <i>"📦 Package on the way — K. Fernando · ETA 12 min"</i> that opens SCR-PA-021.) 5-min TTL for pickup-confirm; declining never sends GPS (P-02). Si/Ta/En. Each token scopes to exactly one trip/package — no account, no login.</div>
+
+<div class="grid">
+
+  <!-- token landing -->
+  <div class="cell">
+    <div class="cap"><span class="scr">SCR-WT-001</span> · passenger.mageride.lk · landing <span class="tag">AL-04</span></div>
+    <div class="mweb">
+      <div class="mchrome"><span class="dots">‹ ›</span><div class="url">🔒 <b>passenger.mageride.lk</b>/t/aХ8…</div><span class="dots">⋯</span></div>
+      <div class="view">
+        <div class="webbar"><span class="m">M</span> MageRide<span class="sp"></span><span class="lang">EN ▾</span></div>
+        <div class="body center" style="gap:14px">
+          <div style="width:74px;height:74px;border-radius:20px;background:var(--surfaceVariant);display:grid;place-items:center;font-size:32px">📦</div>
+          <div class="h-headline">A package is on its way to you</div>
+          <div class="t-small">Sunethra, K. Fernando is delivering a package. Track it live — no app or login needed.</div>
+          <div class="card fill" style="width:100%"><div class="kv"><span class="k">From</span><span>Ramith (Galle Face)</span></div><div class="kv"><span class="k">Size</span><span>Medium</span></div><div class="kv"><span class="k">ETA</span><span>~14 min</span></div></div>
+          <div class="cta">Track delivery live</div>
+          <div class="t-small">Link expires when the package is delivered.</div>
+        </div>
+      </div>
+    </div>
+    <div class="states"><b>States:</b> SMS sent to the recipient's phone when the <b>driver confirms pickup</b> (recipient is not a MageRide user). Token valid → opens tracking; expired/invalid token → "This link has expired"; delivered → receipt view. No app chrome, no login (P-09).</div>
+  </div>
+
+  <!-- package recipient tracking -->
+  <div class="cell">
+    <div class="cap"><span class="scr">SCR-WT-002</span> · passenger.mageride.lk · track (recipient) <span class="tag">P-09</span></div>
+    <div class="mweb">
+      <div class="mchrome"><span class="dots">‹ ›</span><div class="url">🔒 <b>passenger.mageride.lk</b>/t/aХ8…</div><span class="dots">⋯</span></div>
+      <div class="view">
+        <div class="webbar"><span class="m">M</span> Package tracking<span class="sp"></span><span class="lang">EN ▾</span></div>
+        <div class="map"><span class="mk" style="left:150px;top:90px"></span><div class="pin drop" style="left:110px;top:40px"></div></div>
+        <div class="body" style="flex:0 0 auto;gap:11px">
+          <div class="stepper"><span class="s done"></span><span class="ln done"></span><span class="s done"></span><span class="ln done"></span><span class="s now"></span><span class="ln"></span><span class="s"></span></div>
+          <div class="row"><span class="t-small">Pending</span><span class="t-small">Picked</span><span class="t-small"><b>In transit</b></span><span class="t-small">Delivered</span></div>
+          <div class="card fill" style="text-align:center"><div class="t-label">Show this Delivery OTP to the driver</div><div class="otp" style="justify-content:center;margin-top:6px"><span class="b fill">7</span><span class="b fill">3</span><span class="b fill">1</span><span class="b fill">5</span></div></div>
+          <div class="row"><div class="avatar">👤</div><div class="col"><span class="t-body">K. Fernando · Tuk <span class="stars">★4.7</span></span><span class="t-small">ABC-1234 · ETA 12 min</span></div><span class="textlink">📞 Call</span></div>
+        </div>
+        <div class="appcta">💡 Want your own deliveries? <span class="b">Get the app</span></div>
+      </div>
+    </div>
+    <div class="states"><b>States:</b> live driver position + 4-step status (FCM/poll); 4-digit delivery OTP shown to recipient (US-20.5, P-07); on Delivered → receipt. Tap-to-call tel: link with the driver's number (US-26.3 — masking removed).</div>
+  </div>
+
+  <!-- confirm pickup (proxy rider, web) -->
+  <div class="cell">
+    <div class="cap"><span class="scr">SCR-WT-003</span> · passenger.mageride.lk · confirm pickup <span class="tag">P-02</span></div>
+    <div class="mweb">
+      <div class="mchrome"><span class="dots">‹ ›</span><div class="url">🔒 <b>passenger.mageride.lk</b>/p/9f2…</div><span class="dots">⋯</span></div>
+      <div class="view">
+        <div class="webbar"><span class="m">M</span> Share pickup<span class="sp"></span><span class="lang">EN ▾</span></div>
+        <div class="banner warn">⏱ Expires in 4:38 · declining never shares your GPS</div>
+        <div class="map"><div class="pin pickup" style="left:150px;top:120px;width:26px;height:26px"></div><div style="position:absolute;left:118px;top:160px;font-size:11px;color:var(--onSurfaceVariant)">drag to adjust</div></div>
+        <div class="body" style="flex:0 0 auto;gap:10px">
+          <div class="t-sub"><b>Ramith</b> is booking a ride for you</div>
+          <div class="t-small">Share your current pickup location so the driver can find you. No app or login needed.</div>
+          <div class="btn-row"><div class="btn-out">Decline</div><div class="cta">Share location ▸</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="states"><b>States:</b> 5-min TTL countdown; adjustable map pin; Share → <code>POST …/confirm {lat,lng}</code>, Decline → no GPS leak (P-02). For an unregistered proxy rider who lacks the app — booker falls back here / to map-pin (US-8.19).</div>
+  </div>
+
+  <!-- ride track (proxy, web) -->
+  <div class="cell">
+    <div class="cap"><span class="scr">SCR-WT-004</span> · passenger.mageride.lk · ride track <span class="tag">AL-04</span></div>
+    <div class="mweb">
+      <div class="mchrome"><span class="dots">‹ ›</span><div class="url">🔒 <b>passenger.mageride.lk</b>/p/9f2…</div><span class="dots">⋯</span></div>
+      <div class="view">
+        <div class="webbar"><span class="m">M</span> Your ride<span class="sp"></span><span class="lang">EN ▾</span></div>
+        <div class="map"><span class="mk" style="left:120px;top:120px"></span><div class="pin pickup" style="left:180px;top:170px"></div></div>
+        <div class="body" style="flex:0 0 auto;gap:11px">
+          <div class="pill-status info">Driver arriving · 3 min</div>
+          <div class="card"><div class="row"><div class="avatar">👤</div><div class="col"><span class="t-sub">K. Fernando <span class="stars">★4.8</span></span><span class="t-small">Sedan · ABC-1234</span></div></div></div>
+          <div class="card fill" style="text-align:center"><div class="t-label">Tell the driver this Start OTP</div><div class="otp" style="justify-content:center;margin-top:6px"><span class="b fill">4</span><span class="b fill">8</span><span class="b fill">2</span><span class="b fill">9</span></div></div>
+          <div class="btn-row"><div class="btn-out">📞 Call driver</div><div class="btn-out" style="color:var(--error);border-color:var(--error)">⛨ SOS</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="states"><b>States:</b> proxy rider (booked by someone else) tracks the live ride + sees Start OTP without the app; call driver via tap-to-call tel: link (real number, US-26.3); SOS sends GPS via SMS. Booker-paid; if Cash the rider pays the driver (US-8.21).</div>
+  </div>
+
+  <!-- delivered / receipt -->
+  <div class="cell">
+    <div class="cap"><span class="scr">SCR-WT-005</span> · passenger.mageride.lk · delivered <span class="tag">AL-04</span></div>
+    <div class="mweb">
+      <div class="mchrome"><span class="dots">‹ ›</span><div class="url">🔒 <b>passenger.mageride.lk</b>/t/aХ8…</div><span class="dots">⋯</span></div>
+      <div class="view">
+        <div class="webbar"><span class="m">M</span> Delivered<span class="sp"></span><span class="lang">EN ▾</span></div>
+        <div class="body center" style="gap:14px">
+          <div style="width:78px;height:78px;border-radius:50%;background:#E4F5EA;display:grid;place-items:center;font-size:36px;color:var(--success)">✓</div>
+          <div class="h-headline">Package delivered</div>
+          <div class="t-small">Handed over at 09:48 · verified with Delivery OTP.</div>
+          <div class="card fill" style="width:100%"><div class="kv"><span class="k">From</span><span>Ramith</span></div><div class="kv"><span class="k">Driver</span><span>K. Fernando · Tuk</span></div><div class="kv"><span class="k">Delivered</span><span>09:48, 17 Jun</span></div><div class="kv"><span class="k">Payment</span><span>COD · Rs 480 collected</span></div></div>
+          <div class="btn-out">⬇ Download receipt</div>
+          <div class="t-small">This link is now closed.</div>
+        </div>
+        <div class="appcta">💡 Send packages yourself <span class="b">Get the app</span></div>
+      </div>
+    </div>
+    <div class="states"><b>States:</b> Delivered (OTP verified) / photo-proof (recipient absent, P-10) / COD collected vs Disputed (uncollected &gt;24h, P-14). Receipt download; token closes after completion.</div>
+  </div>
+
+  <!-- expired / error -->
+  <div class="cell">
+    <div class="cap"><span class="scr">SCR-WT-006</span> · passenger.mageride.lk · expired link <span class="tag">AL-04</span></div>
+    <div class="mweb">
+      <div class="mchrome"><span class="dots">‹ ›</span><div class="url">🔒 <b>passenger.mageride.lk</b>/t/xx</div><span class="dots">⋯</span></div>
+      <div class="view">
+        <div class="webbar"><span class="m">M</span> MageRide<span class="sp"></span><span class="lang">EN ▾</span></div>
+        <div class="body center" style="gap:14px">
+          <div style="width:74px;height:74px;border-radius:20px;background:var(--surfaceVariant);display:grid;place-items:center;font-size:32px">⏱</div>
+          <div class="h-title">This link has expired</div>
+          <div class="t-small">For your safety, tracking and pickup links are time-limited and single-use. Ask the sender to share a new link, or open the MageRide app.</div>
+          <div class="cta">Open MageRide</div>
+        </div>
+      </div>
+    </div>
+    <div class="states"><b>States:</b> expired / invalid / already-completed token → safe dead-end with no data exposed; offers app download. Tokens are single-trip, TTL-bounded (P-02/P-09 privacy).</div>
+  </div>
+
+</div>
+<footer style="color:#5b5f66;font-size:12px;padding:0 30px 40px;max-width:1100px;margin:0 auto">MageRide · passenger.mageride.lk · no-login proxy / package web subview (AL-04) · generated from <code>D2_mageride_ui_spec.md</code> §0.3 + D1′ P-02/P-09 · responsive mobile web, no app chrome.</footer>
+</body>
+</html>

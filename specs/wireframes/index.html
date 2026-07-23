@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MageRide — Wireframe Index (fresh set · ADD v2.6 / URD v2.2)</title>
+<style>
+:root{--primary:#FF6D00;--onSurface:#1A1C1E;--onSurfaceVariant:#44474B;--outline:#C7CBD1;--surface:#F7F8FA;--success:#2E9E4F;--secondary:#0061A4;}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#EEF0F3;color:var(--onSurface);line-height:1.5}
+header{background:#15171B;color:#fff;padding:28px 32px}
+header h1{font-size:25px;font-weight:800}
+header p{color:#AEB3BC;font-size:13px;margin-top:8px;max-width:820px}
+.wrap{max-width:1040px;margin:0 auto;padding:30px 32px 60px}
+.meta{display:flex;gap:18px;flex-wrap:wrap;margin-bottom:22px}
+.stat{background:#fff;border:1px solid var(--outline);border-radius:12px;padding:13px 20px;min-width:140px}
+.stat .n{font-size:25px;font-weight:800;color:var(--primary)}
+.stat .l{font-size:12px;color:var(--onSurfaceVariant)}
+.note{background:#FFF6E9;border-left:4px solid #F5A300;color:#5B4300;font-size:13px;padding:13px 16px;border-radius:8px;margin-bottom:14px}
+.note.blue{background:#EAF3FF;border-left-color:#0061A4;color:#11406b}
+h2{font-size:15px;margin:28px 0 14px;display:flex;align-items:center;gap:10px;color:#15171B}
+h2 .pill{font-size:11px;font-weight:700;color:#fff;background:var(--primary);border-radius:20px;padding:3px 12px}
+h2 .pill.web{background:#0061A4}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
+a.card{display:block;background:#fff;border:1px solid var(--outline);border-radius:14px;padding:17px 18px;text-decoration:none;color:inherit;transition:.12s}
+a.card:hover{border-color:var(--primary);box-shadow:0 6px 18px rgba(255,109,0,.14);transform:translateY(-2px)}
+a.card .top{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+a.card .ic{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;font-size:16px;color:#fff;flex:0 0 auto}
+a.card.web .ic{background:#0061A4}a.card.and .ic{background:#3DDC84;color:#063}a.card.ios .ic{background:#15171B}
+a.card .t{font-size:15px;font-weight:700}
+a.card .d{font-size:12.5px;color:var(--onSurfaceVariant);margin-top:2px}
+a.card .c{font-size:11px;color:var(--success);font-weight:700;margin-top:9px}
+a.card .url{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;color:var(--secondary)}
+.legend{display:flex;flex-wrap:wrap;gap:9px 14px;margin:6px 0 0;font-size:11px;color:var(--onSurfaceVariant)}
+.legend .sw{display:inline-flex;align-items:center;gap:5px}.legend .dot{width:11px;height:11px;border-radius:50%;border:1px solid rgba(0,0,0,.08)}
+.archive{font-size:12px;color:var(--onSurfaceVariant);margin-top:8px}
+.archive a{color:var(--secondary)}
+footer{color:var(--onSurfaceVariant);font-size:12px;padding:0 32px 40px;max-width:1040px;margin:0 auto}
+code{background:#fff;border:1px solid var(--outline);border-radius:4px;padding:0 4px;font-size:11.5px}
+</style>
+</head>
+<body>
+<header>
+  <h1>MageRide — Wireframes <span style="font-size:14px;color:#FFB68A;font-weight:600">fresh set</span></h1>
+  <p>Regenerated from the current <b>mageride-specs</b> (ADD v2.6 / URD v2.2, AL-01…AL-16). Seven deliverables: four native mobile targets (Passenger/Driver × Android Material 3 / iOS HIG) and three responsive web portals. Mid-fidelity, self-contained HTML keyed to the <b>D2′ §0.2 design tokens</b> — each screen carries its SCR-ID, transform tag, platform/role note, and states/edge-cases.</p>
+</header>
+<div class="wrap">
+  <div class="meta">
+    <div class="stat"><div class="n">7</div><div class="l">deliverables</div></div>
+    <div class="stat"><div class="n">~171</div><div class="l">screen frames</div></div>
+    <div class="stat"><div class="n">4</div><div class="l">mobile targets</div></div>
+    <div class="stat"><div class="n">3</div><div class="l">web portals</div></div>
+    <div class="stat"><div class="n">✓</div><div class="l">AL-09 palette</div></div>
+  </div>
+
+  <div class="note">What changed vs the prior wireframes: <b>AL-09 vehicle taxonomy</b> — "car" → <b>sedan</b>; <b>flex / sedan / mini&nbsp;van / van</b> are now distinct fare tiers (+truck / mini&nbsp;truck for delivery). The driver "Wallet&nbsp;Portal" web app is gone (AL-02) → replaced by <b>admin.mageride.lk</b>; new <b>fleet.mageride.lk</b> (AL-03) and <b>passenger.mageride.lk</b> (AL-04). Plus: reseller = driver capability (AL-01), bank-transfer top-up removed (AL-05), LankaQR = Pay deep-link (AL-15), passenger settings (AL-14), insurance all modes (AL-10), driver emergency contact (AL-13), single-active-device per app (AL-08).</div>
+
+  <div class="legend">
+    <span class="sw"><span class="dot" style="background:#2E9E4F"></span>Bus</span><span class="sw"><span class="dot" style="background:#E5331F"></span>Train</span><span class="sw"><span class="dot" style="background:#8E44CE"></span>Motorbike</span><span class="sw"><span class="dot" style="background:#F5C518"></span>Three-wheeler</span><span class="sw"><span class="dot" style="background:#1ABC9C"></span>Flex</span><span class="sw"><span class="dot" style="background:#1E6FE5"></span>Sedan</span><span class="sw"><span class="dot" style="background:#EC4899"></span>Mini Van</span><span class="sw"><span class="dot" style="background:#F57C00"></span>Van</span><span class="sw"><span class="dot" style="background:#8B5E3C"></span>Truck</span><span class="sw"><span class="dot" style="background:#808000"></span>Mini Truck</span><span class="sw"><span class="dot" style="background:#8A8F98"></span>Private (Mode B)</span>
+  </div>
+
+  <h2><span class="pill">Mobile apps</span> 4 targets · ~146 frames</h2>
+  <div class="cards">
+    <a class="card and" href="passenger_android.html"><div class="top"><div class="ic">🤖</div><div class="t">Passenger · Android</div></div><div class="d">Jetpack Compose / Material 3. Auth · live map · booking · proxy · package · pay · ride · settings · support · nav drawer · subscription payments. <b>SCR-PA</b>.</div><div class="c">~40 screens ✓</div></a>
+    <a class="card ios" href="passenger_ios.html"><div class="top"><div class="ic"></div><div class="t">Passenger · iOS</div></div><div class="d">SwiftUI / HIG: large titles, grouped lists, segmented controls, sheet detents, CallKit, subscription payments. <b>SCR-PI</b>.</div><div class="c">~40 screens ✓</div></a>
+    <a class="card and" href="driver_android.html"><div class="top"><div class="ic">🤖</div><div class="t">Driver · Android</div></div><div class="d">Mode-aware dashboard · 15s dispatch · directional · wallet &amp; daily fee · reseller · vouchers · trackers · per-vehicle sharing · nav drawer. <b>SCR-DA</b>.</div><div class="c">~34 screens ✓</div></a>
+    <a class="card ios" href="driver_ios.html"><div class="top"><div class="ic"></div><div class="t">Driver · iOS</div></div><div class="d">SwiftUI / HIG: APNs-silent offer wake, CocoaMQTT, App Attest, VisionKit QR, CallKit · per-vehicle sharing · nav drawer. <b>SCR-DI</b>.</div><div class="c">~34 screens ✓</div></a>
+  </div>
+
+  <h2><span class="pill web">Web portals</span> 3 sites · ~27 frames</h2>
+  <div class="cards">
+    <a class="card web" href="web_admin.html"><div class="top"><div class="ic">🛡</div><div class="t">Admin Portal</div></div><div class="url">admin.mageride.lk</div><div class="d">Single back-office, 6 roles, deny-by-default RBAC: verification · moderation · support · finance · config · users · audit. <b>SCR-AP</b>.</div><div class="c">9 screens ✓</div></a>
+    <a class="card web" href="web_fleet.html"><div class="top"><div class="ic">🚐</div><div class="t">Fleet Portal</div></div><div class="url">fleet.mageride.lk</div><div class="d">Operators (Owner/Manager/Viewer): onboarding · driver assign · trackers · live map · scheduling · analytics · billing · Mode B subscriptions/requests/payments. Mode A/B only. <b>SCR-FP</b>.</div><div class="c">12 screens ✓</div></a>
+    <a class="card web" href="web_passenger.html"><div class="top"><div class="ic">📦</div><div class="t">Passenger Web</div></div><div class="url">passenger.mageride.lk</div><div class="d">No-login proxy / package web subview (AL-04) via SMS token: track delivery, share pickup, receipt. No app chrome.</div><div class="c">6 views ✓</div></a>
+  </div>
+
+  <div class="archive">Prior version (superseded — old vehicle palette &amp; "Wallet Portal", Android-only with iOS annotated): <a href="passenger_01_auth_livemap.html">passenger_01–05</a>, <a href="driver_01_auth_registration.html">driver_01–05</a>. Kept for diff/reference only.</div>
+
+  <div class="note blue" style="margin-top:22px">Review gate before Phase C: confirm every D2′ screen ID renders, tokens match §0.2, and Android/iOS deltas + portal role-scoping match D2′ §C / §AP / §FP. To change a screen → edit <b>D2′ first</b>, then regenerate that file. Export frames to PNG or import a file into Figma via the <b>html.to.design</b> plugin (each file is self-contained).</div>
+</div>
+<footer>MageRide wireframes · generated from <code>mageride-specs/D2_mageride_ui_spec.md</code> (+ D1′ flows, D5′ fares/levels) · ADD v2.6 / URD v2.2 · AL-01…AL-16 applied · next: review gate → Phase C C0-planner.</footer>
+</body>
+</html>

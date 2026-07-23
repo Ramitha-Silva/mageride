@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MageRide · Fleet Portal — fleet.mageride.lk (wireframes)</title>
+<style>
+:root{
+  --primary:#FF6D00;--secondary:#0061A4;--secondaryContainer:#D1E4FF;
+  --bg:#EEF0F3;--surface:#FFFFFF;--surfaceVariant:#F4F6F8;--outline:#D8DCE2;
+  --onSurface:#1A1C1E;--onSurfaceVariant:#5B5F66;--ink:#11141A;
+  --success:#2E9E4F;--warning:#F5A300;--error:#D32F2F;
+  --vehBus:#2E9E4F;--vehTrain:#E5331F;--vehMotorbike:#8E44CE;--vehTuk:#F5C518;--vehFlex:#1ABC9C;--vehSedan:#1E6FE5;--vehMiniVan:#EC4899;--vehVan:#F57C00;--vehPrivate:#8A8F98;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--onSurface);line-height:1.45}
+.page-header{position:sticky;top:0;z-index:20;background:#15171B;color:#fff;padding:14px 28px;box-shadow:0 2px 8px rgba(0,0,0,.25)}
+.page-header h1{font-size:18px;font-weight:700}.page-header .sub{font-size:12px;color:#AEB3BC;margin-top:3px}.page-header a{color:#FFB68A;text-decoration:none}
+.note-bar{background:#E8F5EC;border-left:4px solid var(--success);color:#1B5E2A;font-size:12.5px;padding:10px 28px}
+.wrap{max-width:1000px;margin:0 auto;padding:26px 28px 60px}
+.cap{font-size:13px;font-weight:700;color:var(--ink);margin:30px 0 8px;display:flex;align-items:center;gap:8px}
+.cap .scr{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;color:var(--primary)}
+.cap .tag{font-size:9px;font-weight:700;color:#fff;background:#2E9E4F;border-radius:4px;padding:1px 6px}
+.cap .role{font-size:10px;font-weight:700;color:#003355;background:var(--secondaryContainer);border-radius:4px;padding:1px 7px}
+.states{font-size:11px;color:var(--onSurfaceVariant);margin-top:7px;font-style:italic;background:#fff;border:1px solid var(--outline);border-radius:8px;padding:8px 11px}.states b{font-style:normal;color:var(--ink)}
+.browser{background:#fff;border:1px solid var(--outline);border-radius:12px;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,.10)}
+.chrome{height:38px;background:#E7EAEE;display:flex;align-items:center;gap:8px;padding:0 14px;border-bottom:1px solid var(--outline)}
+.lights{display:flex;gap:6px}.lights i{width:11px;height:11px;border-radius:50%}.lights i:nth-child(1){background:#FF5F57}.lights i:nth-child(2){background:#FEBC2E}.lights i:nth-child(3){background:#28C840}
+.url{flex:1;height:24px;background:#fff;border-radius:6px;border:1px solid var(--outline);display:flex;align-items:center;gap:7px;padding:0 10px;font-size:12px;color:var(--onSurfaceVariant)}.url b{color:var(--ink);font-weight:600}
+.portal{display:flex;min-height:400px}
+.side{width:184px;background:#0E2A1C;color:#bfe3cf;padding:14px 10px;flex:0 0 auto}
+.side .brand{color:#fff;font-weight:800;font-size:15px;padding:4px 10px 14px;display:flex;align-items:center;gap:8px}
+.side .brand .m{width:24px;height:24px;border-radius:7px;background:var(--primary);display:grid;place-items:center;color:#fff;font-weight:800;font-size:14px}
+.side .grp{font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:#5e8b73;padding:12px 10px 5px}
+.side .nv{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:8px;font-size:13px;color:#bfe3cf}
+.side .nv.on{background:rgba(255,109,0,.18);color:#FFC79A;font-weight:600}
+.side .nv .gi{width:18px;text-align:center}
+.main{flex:1;display:flex;flex-direction:column;background:var(--surfaceVariant);min-width:0}
+.topbar{height:52px;background:#fff;border-bottom:1px solid var(--outline);display:flex;align-items:center;gap:12px;padding:0 18px}
+.topbar .ttl{font-weight:700;font-size:15px}.topbar .sp{flex:1}
+.search{height:32px;width:190px;background:var(--surfaceVariant);border-radius:7px;display:flex;align-items:center;padding:0 10px;font-size:12px;color:var(--onSurfaceVariant)}
+.who{display:flex;align-items:center;gap:8px;font-size:12px}.who .av{width:28px;height:28px;border-radius:50%;background:#D7EFDF;display:grid;place-items:center;color:#1B7A38;font-weight:700}
+.content{padding:18px;display:flex;flex-direction:column;gap:14px;overflow:auto}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.kpi{background:#fff;border:1px solid var(--outline);border-radius:10px;padding:13px 14px}
+.kpi .l{font-size:11px;color:var(--onSurfaceVariant)}.kpi .n{font-size:24px;font-weight:800;margin-top:3px}.kpi .d{font-size:11px;margin-top:3px}
+.card{background:#fff;border:1px solid var(--outline);border-radius:10px;padding:14px}
+.card h3{font-size:13px;font-weight:700;margin-bottom:10px;display:flex;align-items:center;gap:8px}.card h3 .sp{flex:1}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th{text-align:left;color:var(--onSurfaceVariant);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.3px;padding:7px 8px;border-bottom:1px solid var(--outline)}
+td{padding:9px 8px;border-bottom:1px solid var(--surfaceVariant)}tr:last-child td{border-bottom:none}
+.pill{font-size:10.5px;font-weight:700;border-radius:20px;padding:2px 9px;display:inline-block}
+.pill.ok{background:#E4F5EA;color:#1B7A38}.pill.warn{background:#FFF1D6;color:#8A5B00}.pill.err{background:#FBE2E2;color:#A21B1B}.pill.info{background:var(--secondaryContainer);color:var(--secondary)}.pill.mut{background:var(--surfaceVariant);color:var(--onSurfaceVariant)}
+.btn{height:32px;border-radius:7px;background:var(--primary);color:#fff;display:inline-flex;align-items:center;justify-content:center;padding:0 13px;font-weight:600;font-size:12.5px;border:none;cursor:pointer}
+.btn.ghost{background:#fff;border:1px solid var(--outline);color:var(--onSurface)}.btn.ok{background:var(--success)}.btn.err{background:var(--error)}.btn.sm{height:27px;padding:0 10px;font-size:11.5px}
+.cdot{width:10px;height:10px;border-radius:50%;display:inline-block;vertical-align:middle;margin-right:5px}
+.field{height:38px;border:1px solid var(--outline);border-radius:8px;display:flex;align-items:center;padding:0 11px;font-size:13px;color:var(--onSurfaceVariant);background:#fff}
+.field.lbl{flex-direction:column;align-items:stretch;justify-content:center;height:auto;padding:6px 11px}
+.field .lab{font-size:10.5px;color:var(--onSurfaceVariant);font-weight:600}.field .val{color:var(--ink);font-size:13px}
+.row{display:flex;gap:12px}.col{display:flex;flex-direction:column;gap:8px}.sp{flex:1}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--outline);margin-bottom:10px}
+.tabs b{padding:7px 12px;font-size:12.5px;font-weight:600;color:var(--onSurfaceVariant);border-bottom:2px solid transparent;cursor:pointer}.tabs b.on{color:var(--primary);border-bottom-color:var(--primary)}
+.bp{font-size:10.5px;color:var(--onSurfaceVariant);margin-top:6px}
+.login-wrap{flex:1;display:grid;place-items:center;background:linear-gradient(135deg,#E9F6EE,#FFF3EA)}
+.login-card{background:#fff;border:1px solid var(--outline);border-radius:14px;padding:26px;width:380px;box-shadow:0 8px 24px rgba(0,0,0,.08)}
+.gbtn{height:40px;border:1px solid var(--outline);border-radius:8px;display:flex;align-items:center;justify-content:center;gap:9px;font-size:13px;font-weight:600;background:#fff}
+.divider{display:flex;align-items:center;gap:10px;color:#9aa;font-size:11px;margin:4px 0}.divider::before,.divider::after{content:"";height:1px;flex:1;background:var(--outline)}
+.dropzone{border:2px dashed var(--outline);border-radius:10px;padding:22px;text-align:center;color:var(--onSurfaceVariant);font-size:13px;background:var(--surfaceVariant)}
+.map{height:230px;position:relative;border-radius:10px;overflow:hidden;background:linear-gradient(0deg,rgba(0,0,0,.02),rgba(0,0,0,.02)),repeating-linear-gradient(0deg,#EAEFE9,#EAEFE9 30px,#E3EAE2 30px,#E3EAE2 31px),repeating-linear-gradient(90deg,#EAEFE9,#EAEFE9 30px,#E3EAE2 30px,#E3EAE2 31px);border:1px solid var(--outline)}
+.mk{position:absolute;width:15px;height:15px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 2px 3px rgba(0,0,0,.3);border:2px solid #fff}
+.toggle{width:40px;height:23px;border-radius:12px;background:var(--outline);position:relative;display:inline-block;vertical-align:middle}.toggle.on{background:var(--success)}.toggle::after{content:"";position:absolute;width:17px;height:17px;border-radius:50%;background:#fff;top:3px;left:3px}.toggle.on::after{left:20px}
+</style>
+</head>
+<body>
+<div class="page-header">
+  <h1>MageRide — <span style="color:#9FCAFF">Fleet Portal · fleet.mageride.lk</span></h1>
+  <div class="sub">New self-service portal for fleet operators (AL-03, Epic 13 Phase 1). Org-scoped Owner / Manager / Viewer sub-roles. Email+Password / Google / Apple (AL-07). Mode A &amp; B only — <b>no Mode C</b>. Admin ops → <a href="web_admin.html">admin.mageride.lk</a> · <a href="index.html">index</a></div>
+</div>
+<div class="note-bar"><b>Gate:</b> org must be Verification-Officer-approved (in Admin Portal) before non-read operations (US-13.A7). Monthly billing per Mode-B vehicle (Mode A free). Per-vehicle Mode B passenger subscriptions, requests &amp; payments (Paid/Free). 12 screens · SCR-FP-001…012. Updated per discussion 2026-06-21.</div>
+
+<div class="wrap">
+
+<!-- FP-001 LOGIN -->
+<div class="cap"><span class="scr">SCR-FP-001</span> · fleet_login_signup — Login / Sign-up <span class="tag">NEW</span></div>
+<div class="browser">
+  <div class="chrome"><div class="lights"><i></i><i></i><i></i></div><div class="url">🔒 <b>fleet.mageride.lk</b>/signup</div></div>
+  <div class="portal"><div class="login-wrap">
+    <div class="login-card">
+      <div style="text-align:center;margin-bottom:16px"><div style="width:42px;height:42px;border-radius:11px;background:var(--primary);display:inline-grid;place-items:center;color:#fff;font-weight:800;font-size:20px">M</div><div style="font-weight:800;font-size:17px;margin-top:8px">MageRide Fleet</div><div style="font-size:12px;color:var(--onSurfaceVariant)">Manage your fleet of vehicles</div></div>
+      <div class="col">
+        <div class="field lbl"><span class="lab">Work email</span><span class="val">ops@lankatransit.lk</span></div>
+        <div class="field lbl"><span class="lab">Password</span><span class="val">••••••••••</span></div>
+        <button class="btn" style="height:40px">Create account</button>
+        <div class="divider">or continue with</div>
+        <div class="row"><div class="gbtn sp"><span style="color:#4285F4;font-weight:800">G</span> Google</div><div class="gbtn sp"><span style="font-weight:800"></span> Apple</div></div>
+        <div class="bp" style="text-align:center">Email verification + password reset · link / unlink identities (US-13.A2/A3)</div>
+      </div>
+    </div>
+  </div></div>
+</div>
+<div class="states"><b>States:</b> sign-up vs login; unverified email banner; password reset; identity link/unlink. Org-scoped roles assigned after org setup.</div>
+
+<!-- FP-002 ORG SETUP -->
+<div class="cap"><span class="scr">SCR-FP-002</span> · fleet_org_setup — Organisation setup <span class="tag">NEW</span> <span class="role">Owner</span></div>
+<div class="browser">
+  <div class="chrome"><div class="lights"><i></i><i></i><i></i></div><div class="url">🔒 <b>fleet.mageride.lk</b>/org/setup</div></div>
+  <div class="portal">
+    <div class="side"><div class="brand"><span class="m">M</span> Fleet</div><div class="grp">Setup</div><div class="nv on"><span class="gi">🏢</span> Organisation</div><div class="nv"><span class="gi">👥</span> Team</div></div>
+    <div class="main">
+      <div class="topbar"><div class="ttl">Organisation setup</div><div class="sp"></div><span class="pill warn">KYC pending Verification</span></div>
+      <div class="content"><div class="row">
+        <div class="card sp"><h3>Org profile &amp; KYC</h3><div class="col">
+          <div class="field lbl"><span class="lab">Organisation name</span><span class="val">Lanka Transit (Pvt) Ltd</span></div>
+          <div class="field lbl"><span class="lab">Business reg no</span><span class="val">PV-118842</span></div>
+          <div class="field lbl"><span class="lab">Language</span><span class="val">English ▾</span></div>
+          <div class="dropzone">⬆ Upload KYC documents (BR, owner ID)</div>
+          <div class="bp">→ Verification-Officer gate (US-13.A7). Until approved, only read operations are available.</div>
+        </div></div>
+        <div class="card" style="width:280px"><h3>Team members</h3><table><tr><th>Member</th><th>Role</th></tr><tr><td>ops@lankatransit.lk</td><td><span class="pill info">Owner</span></td></tr><tr><td>dispatch@lankatransit.lk</td><td><span class="pill mut">Manager</span></td></tr><tr><td>audit@lankatransit.lk</td><td><span class="pill mut">Viewer</span></td></tr></table><button class="btn ghost sm" style="margin-top:10px">+ Invite member</button></div>
+      </div></div>
+    </div>
+  </div>
+</div>
+<div class="states"><b>States:</b> org profile + KYC → Verification gate; team invites Owner/Manager/Viewer (US-13.A5/A7). Non-read ops disabled until approved. Links to <b>Bank &amp; payout details (SCR-FP-002a)</b>.</div>
+
+<!-- FP-002a BANK & PAYOUT DETAILS -->
+<div class="cap"><span class="scr">SCR-FP-002a</span> · fleet_bank_payout — Bank &amp; payout details <span class="tag">NEW</span> <span class="role">Owner</span></div>
+<div class="browser">
+  <div class="chrome"><div class="lights"><i></i><i></i><i></i></div><div class="url">🔒 <b>fleet.mageride.lk</b>/org/payout</div></div>
+  <div class="portal">
+    <div class="side"><div class="brand"><span class="m">M</span> Fleet</div><div class="grp">Setup</div><div class="nv"><span class="gi">🏢</span> Organisation</div><div class="nv on"><span class="gi">🏦</span> Bank &amp; payout</div><div class="nv"><span class="gi">👥</span> Team</div></div>
+    <div class="main">
+      <div class="topbar"><div class="ttl">Bank &amp; payout details</div><div class="sp"></div><span class="pill warn">Pending verification</span></div>
+      <div class="content"><div class="row">
+        <div class="card sp"><h3>Bank account — receives Mode B subscription payments</h3><div class="col">
+          <div class="row"><div class="field lbl sp"><span class="lab">Bank</span><span class="val">Commercial Bank ▾</span></div><div class="field lbl sp"><span class="lab">Branch</span><span class="val">Nugegoda</span></div></div>
+          <div class="row"><div class="field lbl sp"><span class="lab">Account number</span><span class="val">8001234567</span></div><div class="field lbl sp"><span class="lab">Account holder name</span><span class="val">Lanka Transit (Pvt) Ltd</span></div></div>
+          <div class="dropzone">⬆ Copy of the <b>latest bank statement</b> <i>or</i> the <b>first page of the passbook</b></div>
+          <div class="bp">Account-holder name must match the org / owner-KYC name (US-27.1). Editing any field re-triggers verification.</div>
+        </div></div>
+        <div class="card" style="width:280px"><h3>Bank-app LankaQR code</h3><div class="dropzone" style="padding:16px">⬆ Upload the <b>LankaQR code image</b> generated by your bank app</div><div class="bp">Shown to Mode B subscribers in the passenger pay sheet (LankaQR scan / deep link); online-transfer payers see the verified account details on the left. (US-27.2)</div></div>
+      </div></div>
+    </div>
+  </div>
+</div>
+<div class="states"><b>States:</b> Owner-only sub-screen of Organisation setup (SCR-FP-002). Bank · branch · account number · account holder name + <b>statement-or-passbook-first-page upload</b> + <b>bank-app LankaQR image upload</b>. Status: <b>Pending verification → Verified</b> (Verification Officer, same fleet-org queue SCR-AP-003) → Rejected with reason. <b>Until Verified, a vehicle cannot be set Service payment = Paid and Paid subscriptions cannot start billing</b>; the passenger pay sheet consumes the verified details (online transfer) + QR image (LankaQR). Any edit re-enters Pending. (US-27.1/27.2, AL-49)</div>
+
+<!-- FP-003 DASHBOARD -->
+<div class="cap"><span class="scr">SCR-FP-003</span> · fleet_dashboard — Fleet dashboard <span class="tag">NEW</span></div>
+<div class="browser">
+  <div class="chrome"><div class="lights"><i></i><i></i><i></i></div><div class="url">🔒 <b>fleet.mageride.lk</b>/dashboard</div></div>
+  <div class="portal">
+    <div class="side"><div class="brand"><span class="m">M</span> Fleet</div><div class="grp">Operate</div><div class="nv on"><span class="gi">▦</span> Dashboard</div><div class="nv"><span class="gi">🚐</span> Vehicles</div><div class="nv"><span class="gi">🧑‍✈️</span> Drivers</div><div class="nv"><span class="gi">📡</span> Trackers</div><div class="nv"><span class="gi">🗺</span> Live map</div><div class="grp">Manage</div><div class="nv"><span class="gi">📅</span> Scheduling</div><div class="nv"><span class="gi">📊</span> Analytics</div><div class="nv"><span class="gi">💳</span> Billing</div></div>
+    <div class="main">
+      <div class="topbar"><div class="ttl">Dashboard</div><div class="sp"></div><div class="who"><div class="av">L</div>Lanka Transit · Owner</div></div>
+      <div class="content">
+        <div class="kpis">
+          <div class="kpi"><div class="l">Online</div><div class="n" style="color:var(--success)">96</div><div class="d">of 120 vehicles</div></div>
+          <div class="kpi"><div class="l">Stale (&gt;30s)</div><div class="n" style="color:var(--warning)">18</div><div class="d">signal weak</div></div>
+          <div class="kpi"><div class="l">Offline</div><div class="n" style="color:var(--error)">6</div><div class="d">&gt;15 min</div></div>
+          <div class="kpi"><div class="l">Trips today</div><div class="n">842</div><div class="d">Mode A 612 · B 230</div></div>
+        </div>
+        <div class="row">
+          <div class="card sp"><h3>Alerts</h3><table><tr><td>Vehicle not started (scheduled)</td><td style="text-align:right"><span class="pill warn">3</span></td></tr><tr><td>Tracker offline &gt;15 min</td><td style="text-align:right"><span class="pill err">6</span></td></tr><tr><td>Insurance expiring (30d)</td><td style="text-align:right"><span class="pill warn">4</span></td></tr></table></div>
+          <div class="card" style="width:300px"><h3>Wallet &amp; next invoice</h3><div style="font-size:26px;font-weight:800">Rs 84,500</div><div class="bp">Fleet wallet balance</div><table style="margin-top:8px"><tr><td>Next monthly invoice</td><td style="text-align:right;font-weight:700">Rs 69,000</td></tr><tr><td>Mode B vehicles billable</td><td style="text-align:right">230 × Rs 300</td></tr></table><button class="btn ghost sm" style="margin-top:10px">Top up wallet</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="states"><b>States:</b> fleet KPIs (online/stale/offline), today's trips, alerts, fleet wallet balance + next monthly invoice. Owner/Manager full; Viewer read-only.</div>
+
+<!-- FP-004 VEHICLE ONBOARDING -->
+<div class="cap"><span class="scr">SCR-FP-004</span> · fleet_vehicle_onboarding — Vehicle onboarding <span class="tag">NEW</span> <span class="role">Owner / Manager</span></div>
+<div class="browser">
+  <div class="chrome"><div class="lights"><i></i><i></i><i></i></div><div class="url">🔒 <b>fleet.mageride.lk</b>/vehicles/onboard</div></div>
+  <div class="portal">
+    <div class="side"><div class="brand"><span class="m">M</span> Fleet</div><div class="grp">Operate</div><div class="nv"><span class="gi">▦</span> Dashboard</div><div class="nv on"><span class="gi">🚐</span> Vehicles</div><div class="nv"><span class="gi">🧑‍✈️</span> Drivers</div></div>
+    <div class="main">
+      <div class="topbar"><div class="ttl">Vehicle onboarding</div><div class="sp"></div><span class="pill info">Mode A / B only — no Mode C</span></div>
+      <div class="content">
+        <div class="tabs"><b class="on">Single vehicle</b><b>Bulk CSV</b></div>
+        <div class="row">
+          <div class="card sp"><h3>Add vehicle</h3><div class="col"><div class="row"><div class="field lbl sp"><span class="lab">Reg no</span><span class="val">NB-4521</span></div><div class="field lbl sp"><span class="lab">Vehicle type</span><span class="val">Van (Mode B) ▾</span></div></div><div class="row"><div class="field lbl sp"><span class="lab">Service payment (Mode B)</span><span class="val">Paid ▾ &nbsp;(Free for office transport)</span></div><div class="field lbl sp"><span class="lab">Default monthly fare (Paid)</span><span class="val">Rs 6,000</span></div></div>
+            <div class="divider">vehicle documents → AI extraction</div>
+            <div class="row"><div class="dropzone sp">⬆ Registration copy (CR book)</div><div class="dropzone sp">⬆ Insurance certificate</div></div>
+            <div class="row"><div class="dropzone sp">⬆ Revenue license</div><div class="dropzone sp">⬆ Route permit <i>(Mode A — required)</i></div></div>
+            <div class="bp">Each document is a named slot: AI extraction (reg no ↔ plate match, insurance &amp; revenue-license expiry, permit no/route) with a per-document Verified / Pending / Missing chip. A vehicle cannot reach <b>Approved</b> while a required document is Missing/Pending — route permit is required for Mode A only. (US-27.3, AL-50)</div></div></div>
+          <div class="card" style="width:280px"><h3>Bulk CSV</h3><div class="dropzone" style="padding:16px">⬆ Drop CSV (≤5,000 rows)</div><div class="bp">Validated with per-row error report (US-13.6). CSV rows create vehicles in <b>Docs pending</b>; documents are then uploaded per vehicle (no docs via CSV).</div></div>
+        </div>
+        <div class="card"><h3>Onboarding status</h3><table><tr><th>Reg no</th><th>Type</th><th>Service payment</th><th>Documents</th><th>Status</th></tr>
+          <tr><td>NB-4521</td><td><span class="cdot" style="background:var(--vehBus)"></span>Bus (A)</td><td><span class="pill mut">—</span></td><td><span class="pill ok">4/4 verified (incl. route permit)</span></td><td><span class="pill ok">Approved</span></td></tr>
+          <tr><td>VN-8810</td><td><span class="cdot" style="background:var(--vehPrivate)"></span>Private (B)</td><td><span class="pill warn">Paid · Rs 6,000/mo</span></td><td><span class="pill warn">2/3 — insurance pending</span></td><td><span class="pill warn">Under review</span></td></tr>
+          <tr><td>VN-9920</td><td><span class="cdot" style="background:var(--vehPrivate)"></span>Private (B)</td><td><span class="pill ok">Free (office)</span></td><td><span class="pill err">CR copy missing</span></td><td><span class="pill err">Rejected</span></td></tr>
+        </table></div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="states"><b>States:</b> single + bulk CSV; <b>named per-vehicle document slots — registration copy (CR book), insurance certificate, revenue license, route permit (Mode A required)</b> — with AI extraction and per-document Verified/Pending/Missing chips (US-27.3, AL-50); per-vehicle Pending/Approved/Rejected; <b>Mode A/B only, no Mode C</b> (US-13.1/13.6). <b>Mode B vehicles require a Service payment setting — Free or Paid</b> (renamed from "Mode B classification", US-27.4/AL-51) — office transports can be <b>Free</b>, others <b>Paid</b> with a default monthly fare (overridable per subscriber in SCR-FP-011); <b>Paid requires a Verified bank &amp; payout profile (SCR-FP-002a)</b>. Bulk CSV carries service-payment + fare columns; docs are uploaded per vehicle afterwards. (US-NEW.payments a/b, US-27.3/27.4)</div>
+
+<!-- FP-005 DRIVERS -->
+<div class="cap"><span class="scr">SCR-FP-005</span> · fleet_drivers — Driver assignment <span class="tag">NEW</span> <span class="role">Owner / Manager</span></div>
+<div class="browser">
+  <div class="chrome"><div class="lights"><i></i><i></i><i></i></div><div class="url">🔒 <b>fleet.mageride.lk</b>/drivers</div></div>
+  <div class="portal">
+    <div class="side"><div class="brand"><span class="m">M</span> Fleet</div><div class="grp">Operate</div><div class="nv"><span class="gi">🚐</span> Vehicles</div><div class="nv on"><span class="gi">🧑‍✈️</span> Drivers</div><div class="nv"><span class="gi">📡</span> Trackers</div></div>
+    <div class="main">
+      <div class="topbar"><div class="ttl">Driver assignment</div><div class="sp"></div><div class="row"><div class="field" style="width:230px">Assign driver by User ID / phone</div><button class="btn">Assign</button></div></div>
+      <div class="content"><div class="card"><h3>Assignments</h3><table>
+        <tr><th>Driver</th><th>Vehicle</th><th>Since</th><th>Status</th><th></th></tr>
+        <tr><td>DRV-22011 · K. Fernando</td><td>NB-4521 · Bus</td><td>02 Jun</td><td><span class="pill ok">Active</span></td><td><button class="btn err sm">Revoke</button></td></tr>
+        <tr><td>DRV-30188 · S. Bandara</td><td>VN-8810 · Private</td><td>10 Jun</td><td><span class="pill ok">Active</span></td><td><button class="btn err sm">Revoke</button></td></tr>
+        <tr><td>DRV-31002 · (by +94 77…)</td><td>—</td><td>—</td><td><span class="pill warn">Invite sent</span></td><td><button class="btn ghost sm">Resend</button></td></tr>
+      </table><div class="bp">Assignment history retained per vehicle (US-13.2/13.8).</div></div></div>
+    </div>
+  </div>
+</div>
+<div class="states"><b>States:</b> assign/revoke drivers by User ID / phone to vehicles; assignment history; invite pending. Viewer cannot assign.</div>
+
+<!-- FP-006 TRACKERS -->
+<div class="cap"><span class="scr">SCR-FP-006</span> · fleet_trackers — Tracker binding <span class="tag">NEW</span> <span class="role">Owner / Manager</span></div>
+<div class="browser">
+  <div class="chrome"><div class="lights"><i></i><i></i><i></i></div><div class="url">🔒 <b>fleet.mageride.lk</b>/trackers</div></div>
+  <div class="portal">
+    <div class="side"><div class="brand"><span class="m">M</span> Fleet</div><div class="grp">Operate</div><div class="nv"><span class="gi">🧑‍✈️</span> Drivers</div><div class="nv on"><span class="gi">📡</span> Trackers</div><div class="nv"><span class="gi">🗺</span> Live map</div></div>
+    <div class="main">
+      <div class="topbar"><div class="ttl">Tracker binding</div><div class="sp"></div><button class="btn">+ Bind tracker</button></div>
+      <div class="content">
+        <div class="card"><h3>ST-901 trackers <span class="sp"></span><span class="pill info">auto-session config</span></h3><table>
+          <tr><th>IMEI / MAC</th><th>Vehicle</th><th>Cadence profile</th><th>Last seen</th><th>Health</th></tr>
+          <tr><td>8612…0123</td><td>NB-4521</td><td>4s / 10s / 60s</td><td>3s ago</td><td><span class="pill ok">Online</span></td></tr>
+          <tr><td>8612…7788</td><td>VN-8810</td><td>4s / 10s / 60s</td><td>42s ago</td><td><span class="pill warn">Stale</span></td></tr>
+          <tr><td>8612…9920</td><td>VN-9920</td><td>4s / 10s / 60s</td><td>18 min ago</td><td><span class="pill err">Offline</span></td></tr>
+        </table><div class="bp">Auto-session config = Mode A broadcasts with no driver-app session (US-3.22). Publish-cadence profile per vehicle (US-13.12).</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="states"><b>States:</b> ST-901 IMEI/MAC binding + auto-session config; publish-cadence profile; offline/stale health (US-13.12). Duplicate IMEI → Admin Portal quarantine.</div>
+
+<!-- FP-007 LIVE MAP -->
+<div class="cap"><span class="scr">SCR-FP-007</span> · fleet_map — Live fleet map <span class="tag">NEW</span></div>
+<div class="browser">
+  <div class="chrome"><div class="lights"><i></i><i></i><i></i></div><div class="url">🔒 <b>fleet.mageride.lk</b>/map</div></div>
+  <div class="portal">
+    <div class="side"><div class="brand"><span class="m">M</span> Fleet</div><div class="grp">Operate</div><div class="nv"><span class="gi">📡</span> Trackers</div><div class="nv on"><span class="gi">🗺</span> Live map</div><div class="nv"><span class="gi">📅</span> Scheduling</div></div>
+    <div class="main">
+      <div class="topbar"><div class="ttl">Live fleet map</div><div class="sp"></div><span class="pill ok">96 online</span><span class="pill warn">18 stale</span><span class="pill err">6 offline</span></div>
+      <div class="content">
+        <div class="map">
+          <span class="mk" style="background:var(--vehBus);left:90px;top:50px"></span><span class="mk" style="background:var(--vehBus);left:220px;top:90px"></span><span class="mk" style="background:var(--vehPrivate);left:340px;top:60px"></span><span class="mk" style="background:var(--vehBus);left:160px;top:150px"></span><span class="mk" style="background:var(--vehPrivate);left:420px;top:160px;opacity:.45"></span><span class="mk" style="background:var(--vehBus);left:520px;top:110px"></span>
+        </div>
+        <div class="card"><h3>Fleet-health overlay</h3><table><tr><th>Vehicle</th><th>Driver</th><th>Speed</th><th>Battery</th><th>Health</th></tr><tr><td>NB-4521 Bus</td><td>K. Fernando</td><td>34 km/h</td><td>—</td><td><span class="pill ok">Online</span></td></tr><tr><td>VN-8810 Private</td><td>S. Bandara</td><td>0 km/h</td><td>62%</td><td><span class="pill warn">Stale</span></td></tr></table><div class="bp">Single org-scoped MapLibre map — row-level security keeps other fleets hidden (US-13.3).</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="states"><b>States:</b> org-scoped MapLibre map (row-level security); fleet-health overlay; offline markers dimmed. Only this org's vehicles visible.</div>
+
+<!-- FP-008 SCHEDULING -->
+<div class="cap"><span class="scr">SCR-FP-008</span> · fleet_scheduling — Scheduling &amp; alarms <span class="tag">NEW</span> <span class="role">Owner / Manager</span></div>
+<div class="browser">
+  <div class="chrome"><div class="lights"><i></i><i></i><i></i></div><div class="url">🔒 <b>fleet.mageride.lk</b>/scheduling</div></div>
+  <div class="portal">
+    <div class="side"><div class="brand"><span class="m">M</span> Fleet</div><div class="grp">Manage</div><div class="nv on"><span class="gi">📅</span> Scheduling</div><div class="nv"><span class="gi">📊</span> Analytics</div><div class="nv"><span class="gi">💳</span> Billing</div></div>
+    <div class="main">
+      <div class="topbar"><div class="ttl">Scheduling &amp; alarms</div><div class="sp"></div><button class="btn">+ Schedule ride</button></div>
+      <div class="content"><div class="card"><h3>Per-vehicle scheduled rides</h3><table>
+        <tr><th>Vehicle</th><th>Route</th><th>Start</th><th>Not-started alarm</th><th>Status</th></tr>
+        <tr><td>NB-4521 Bus</td><td>138 Pettah ↔ Maharagama</td><td>06:00</td><td><span class="toggle on"></span> +10 min</td><td><span class="pill ok">On time</span></td></tr>
+        <tr><td>NB-4811 Bus</td><td>120 Kollupitiya ↔ Horana</td><td>06:30</td><td><span class="toggle on"></span> +10 min</td><td><span class="pill err">Not started — alarm rang</span></td></tr>
+        <tr><td>VN-8810 Private</td><td>School run</td><td>07:00</td><td><span class="toggle"></span></td><td><span class="pill mut">Scheduled</span></td></tr>
+      </table><div class="bp">Not-started alarm rings in the assigned driver's app (US-13.11).</div></div></div>
+    </div>
+  </div>
+</div>
+<div class="states"><b>States:</b> per-vehicle scheduled rides; not-started alarm config that rings in assigned-driver apps (US-13.11). Alarm fired → red status.</div>
+
+<!-- FP-009 ANALYTICS -->
+<div class="cap"><span class="scr">SCR-FP-009</span> · fleet_analytics — Trip history &amp; analytics <span class="tag">NEW</span></div>
+<div class="browser">
+  <div class="chrome"><div class="lights"><i></i><i></i><i></i></div><div class="url">🔒 <b>fleet.mageride.lk</b>/analytics</div></div>
+  <div class="portal">
+    <div class="side"><div class="brand"><span class="m">M</span> Fleet</div><div class="grp">Manage</div><div class="nv"><span class="gi">📅</span> Scheduling</div><div class="nv on"><span class="gi">📊</span> Analytics</div><div class="nv"><span class="gi">💳</span> Billing</div></div>
+    <div class="main">
+      <div class="topbar"><div class="ttl">Trip history &amp; analytics</div><div class="sp"></div><div class="field" style="width:160px">📅 01–17 Jun 2026</div><button class="btn ghost">Export CSV / PDF</button></div>
+      <div class="content"><div class="kpis">
+        <div class="kpi"><div class="l">Total trips</div><div class="n">12,480</div></div>
+        <div class="kpi"><div class="l">Distance</div><div class="n">84,210 km</div></div>
+        <div class="kpi"><div class="l">Utilisation</div><div class="n">73%</div></div>
+        <div class="kpi"><div class="l">Avg idle / day</div><div class="n">2.4 h</div></div>
+      </div>
+      <div class="card"><h3>Per-vehicle</h3><table><tr><th>Vehicle</th><th>Trips</th><th>Distance</th><th>Utilisation</th><th>Idle</th></tr>
+        <tr><td>NB-4521 Bus</td><td>318</td><td>4,120 km</td><td>81%</td><td>1.8 h</td></tr>
+        <tr><td>VN-8810 Private</td><td>96</td><td>2,010 km</td><td>54%</td><td>4.1 h</td></tr>
+      </table></div></div>
+    </div>
+  </div>
+</div>
+<div class="states"><b>States:</b> per-vehicle trips/distance/utilisation/idle; date filters; CSV/PDF export (US-13.4). Viewer read-only access ok.</div>
+
+<!-- FP-010 BILLING -->
+<div class="cap"><span class="scr">SCR-FP-010</span> · fleet_billing — Billing &amp; wallet <span class="tag">NEW</span> <span class="role">Owner</span></div>
+<div class="browser">
+  <div class="chrome"><div class="lights"><i></i><i></i><i></i></div><div class="url">🔒 <b>fleet.mageride.lk</b>/billing</div></div>
+  <div class="portal">
+    <div class="side"><div class="brand"><span class="m">M</span> Fleet</div><div class="grp">Manage</div><div class="nv"><span class="gi">📊</span> Analytics</div><div class="nv on"><span class="gi">💳</span> Billing</div></div>
+    <div class="main">
+      <div class="topbar"><div class="ttl">Billing &amp; wallet</div><div class="sp"></div><button class="btn">Top up wallet</button></div>
+      <div class="content"><div class="row">
+        <div class="card sp"><h3>Monthly invoice — June 2026</h3><table>
+          <tr><th>Item</th><th>Qty</th><th>Rate</th><th>Amount</th></tr>
+          <tr><td>Mode B vehicles</td><td>230</td><td>Rs 300</td><td>Rs 69,000</td></tr>
+          <tr><td>Mode A vehicles</td><td>88</td><td>Free</td><td>Rs 0</td></tr>
+          <tr><td style="font-weight:700">Total due</td><td></td><td></td><td style="font-weight:700">Rs 69,000</td></tr>
+        </table><div class="bp">Per-Mode-B-vehicle monthly billing; Mode A free (US-13.10/10b).</div></div>
+        <div class="card" style="width:280px"><h3>Fleet wallet</h3><div style="font-size:26px;font-weight:800">Rs 84,500</div><div class="bp">Balance</div><div class="divider">top up via</div><div class="col"><div class="field">💳 Card</div><div class="field">OnePay</div><div class="field">🏦 LankaQR (Pay deep link)</div></div><div class="bp" style="color:var(--error)">No bank transfer (AL-05)</div></div>
+      </div></div>
+    </div>
+  </div>
+</div>
+<div class="states"><b>States:</b> monthly per-Mode-B-vehicle invoice (Mode A free); fleet wallet top-up Card/OnePay/LankaQR — no bank transfer (US-13.10/10b, AL-05). <b>Responsive:</b> ≤768px sidebar → drawer, tables stack.</div>
+
+<!-- FP-011 SUBSCRIPTIONS & REQUESTS -->
+<div class="cap"><span class="scr">SCR-FP-011</span> · fleet_subscriptions — Mode&nbsp;B subscriptions &amp; requests <span class="tag">NEW</span> <span class="role">Owner / Manager</span></div>
+<div class="browser">
+  <div class="chrome"><div class="lights"><i></i><i></i><i></i></div><div class="url">🔒 <b>fleet.mageride.lk</b>/subscriptions</div></div>
+  <div class="portal">
+    <div class="side"><div class="brand"><span class="m">M</span> Fleet</div><div class="grp">Passengers (Mode B)</div><div class="nv on"><span class="gi">👥</span> Subscriptions</div><div class="nv"><span class="gi">💵</span> Payments</div><div class="grp">Operate</div><div class="nv"><span class="gi">🚐</span> Vehicles</div><div class="nv"><span class="gi">🗺</span> Live map</div></div>
+    <div class="main">
+      <div class="topbar"><div class="ttl">Mode B subscriptions</div><div class="sp"></div><div class="field" style="width:250px">Vehicle: VN-8810 · Office Van (Paid) ▾</div></div>
+      <div class="content">
+        <div class="card"><h3>Incoming requests · VN-8810 <span class="sp"></span><span class="pill warn">2 pending</span></h3>
+          <table>
+            <tr><th>Passenger</th><th>Mobile / ID</th><th>Requested</th><th>Action</th></tr>
+            <tr><td>Sunethra</td><td>+94 77 712 0345 · PAX-77120</td><td>20 Jun</td><td><button class="btn ok sm">Accept</button> <button class="btn err sm">Reject</button></td></tr>
+            <tr><td>N. Jayasuriya</td><td>+94 71 555 9090 · PAX-55909</td><td>21 Jun</td><td><button class="btn ok sm">Accept</button> <button class="btn err sm">Reject</button></td></tr>
+          </table>
+          <div class="bp">Each Mode B vehicle has its own request queue. <b>Accept</b> grants tracking access and starts the subscription/billing cycle; <b>Reject</b> dismisses. The same accept/reject is also available to the assigned driver in the Driver App (SCR-DA-028). (US-NEW.requests, item 15)</div>
+        </div>
+        <div class="card"><h3>Subscribers · VN-8810 <span class="sp"></span><span class="pill info">Paid · default Rs 6,000/mo</span></h3>
+          <table>
+            <tr><th>Passenger</th><th>Monthly fare</th><th>Billing cycle</th><th>This month</th><th>Actions</th></tr>
+            <tr><td>Ramith de Silva<br><span class="bp">+94 77 123 4567</span></td><td>Rs 6,000 <span class="textlink" style="color:var(--primary);cursor:pointer">✎</span></td><td>Joined 5 Jun · due 6 Jul</td><td><span class="pill ok">Paid · LankaQR</span></td><td><button class="btn ghost sm">Payments</button></td></tr>
+            <tr><td>K. Silva<br><span class="bp">+94 76 220 1188</span></td><td>Rs 5,500 <span class="textlink" style="color:var(--primary);cursor:pointer">✎</span></td><td>1st of month · due 1 Jul</td><td><span class="pill warn">Transfer — verify slip</span> <button class="btn ok sm">Confirm</button></td><td><button class="btn ghost sm">Payments</button></td></tr>
+            <tr><td>M. Perera<br><span class="bp">+94 77 909 0011</span></td><td>Rs 6,000 <span class="textlink" style="color:var(--primary);cursor:pointer">✎</span></td><td>Joined 12 Jun · due 13 Jul</td><td><span class="pill mut">Cash due</span> <button class="btn sm">Mark received</button></td><td><button class="btn ghost sm">Payments</button></td></tr>
+            <tr style="opacity:.45"><td>T. Wijesinghe<br><span class="bp">+94 71 030 2929 · unsubscribed</span></td><td>Rs 6,000</td><td>Left 18 Jun</td><td><span class="pill mut">Unsubscribed</span></td><td><button class="btn err sm">Delete</button></td></tr>
+          </table>
+          <div class="bp"><b>Per-subscriber monthly fare is editable</b> (each subscriber may pay a different amount). <b>Billing cycle</b> = 1st-of-month <i>or</i> anniversary of the join day (joined 5 Jun → next due 6 Jul). <b>Cash</b> → "Mark received" flips the passenger app to <b>Paid</b> and logs it. Online <b>transfer</b> slips appear as "verify" → <b>Confirm</b>. <b>Unsubscribed passengers stay muted here until the owner Deletes them</b>; once deleted/unsubscribed they can no longer see the vehicle and must re-request to rejoin. (US-NEW.payments c/f/g, US-NEW.1, items 16 &amp; 17)</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="states"><b>States:</b> per-vehicle queue of <b>incoming passenger requests</b> with Accept/Reject (item 15); subscriber roster scoped to the selected Mode B vehicle with <b>per-subscriber editable monthly fare</b>, anniversary/1st-of-month <b>cycle</b>, this-month payment status (Paid / verify-transfer / cash-due) and per-subscriber <b>Mark received</b> / <b>Confirm</b>; <b>unsubscribed rows are muted until Delete</b>. Free-classified vehicles hide fare/payment columns. Owner/Manager act; Viewer read-only.</div>
+
+<!-- FP-012 SUBSCRIBER PAYMENTS -->
+<div class="cap"><span class="scr">SCR-FP-012</span> · fleet_subscriber_payments — Per-subscriber payment ledger <span class="tag">NEW</span> <span class="role">Owner / Manager</span></div>
+<div class="browser">
+  <div class="chrome"><div class="lights"><i></i><i></i><i></i></div><div class="url">🔒 <b>fleet.mageride.lk</b>/payments</div></div>
+  <div class="portal">
+    <div class="side"><div class="brand"><span class="m">M</span> Fleet</div><div class="grp">Passengers (Mode B)</div><div class="nv"><span class="gi">👥</span> Subscriptions</div><div class="nv on"><span class="gi">💵</span> Payments</div></div>
+    <div class="main">
+      <div class="topbar"><div class="ttl">Payments</div><div class="sp"></div><div class="field" style="width:250px">VN-8810 · Ramith de Silva ▾</div><button class="btn ghost">Export CSV</button></div>
+      <div class="content">
+        <div class="kpis">
+          <div class="kpi"><div class="l">Collected · June</div><div class="n" style="color:var(--success)">Rs 11,500</div><div class="d">VN-8810</div></div>
+          <div class="kpi"><div class="l">Pending verify</div><div class="n" style="color:var(--warning)">Rs 5,500</div><div class="d">1 transfer</div></div>
+          <div class="kpi"><div class="l">Cash due</div><div class="n" style="color:var(--error)">Rs 6,000</div><div class="d">1 subscriber</div></div>
+          <div class="kpi"><div class="l">Subscribers</div><div class="n">3</div><div class="d">+1 unsubscribed</div></div>
+        </div>
+        <div class="card"><h3>Ledger · Ramith de Silva · VN-8810</h3>
+          <table>
+            <tr><th>Month</th><th>Date</th><th>Method</th><th>Amount</th><th>Status</th><th></th></tr>
+            <tr><td>Jun 2026</td><td>6 Jun</td><td>LankaQR (deep link)</td><td>Rs 6,000</td><td><span class="pill ok">Paid</span></td><td></td></tr>
+            <tr><td>May 2026</td><td>6 May</td><td>Online transfer (slip)</td><td>Rs 6,000</td><td><span class="pill warn">Verify</span></td><td><button class="btn ok sm">Confirm</button> <button class="btn ghost sm">View slip</button></td></tr>
+            <tr><td>Apr 2026</td><td>6 Apr</td><td>Cash</td><td>Rs 6,000</td><td><span class="pill mut">Received (owner)</span></td><td></td></tr>
+          </table>
+          <div class="bp">Owner monitors the full payment history per subscriber, per vehicle (item 16i). Confirming a transfer or marking cash received pushes <b>Paid</b> to the passenger app (SCR-PA-025/025b). OnePay/LankaQR settle automatically. (US-NEW.payments d/f/i)</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="states"><b>States:</b> per-subscriber, per-vehicle ledger of all subscription payments (LankaQR / OnePay / online transfer / cash); summary KPIs (collected / pending verify / cash due). Owner <b>Confirms</b> transfers and <b>marks cash received</b>; both sync to the passenger's app + history. Electronic payments routed to the fleet owner. CSV export. (US-NEW.payments)</div>
+
+</div>
+<footer style="color:#5b5f66;font-size:12px;padding:0 28px 40px;max-width:1000px;margin:0 auto">MageRide · Fleet Portal · fleet.mageride.lk · 13 screens (SCR-FP, incl. 002a) · generated from <code>D2_mageride_ui_spec.md</code> §FP · Epic 13 Phase 1. Mode B subscriptions/requests/payments added per discussion 2026-06-21; bank &amp; payout details (SCR-FP-002a), vehicle-document slots + "Service payment" rename per discussion 2026-07-18 (Epic 27, AL-49…51).</footer>
+</body>
+</html>

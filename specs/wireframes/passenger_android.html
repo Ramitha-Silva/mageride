@@ -1,0 +1,1139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MageRide · Passenger · Android (Material 3) — wireframes</title>
+<style>
+:root{
+  --primary:#FF6D00;--onPrimary:#FFFFFF;--primaryContainer:#FFE0CC;--onPrimaryContainer:#2B1100;
+  --secondary:#0061A4;--secondaryContainer:#D1E4FF;
+  --background:#FFFFFF;--surface:#F7F8FA;--surfaceVariant:#ECEEF1;--outline:#C7CBD1;
+  --onSurface:#1A1C1E;--onSurfaceVariant:#44474B;--outlineVariant:#74777C;
+  --success:#2E9E4F;--warning:#F5A300;--error:#D32F2F;
+  /* canonical AL-09 vehicle palette */
+  --vehBus:#2E9E4F;--vehTrain:#E5331F;--vehMotorbike:#8E44CE;--vehTuk:#F5C518;--vehFlex:#1ABC9C;
+  --vehSedan:#1E6FE5;--vehMiniVan:#EC4899;--vehVan:#F57C00;--vehTruck:#8B5E3C;--vehMiniTruck:#808000;--vehPrivate:#8A8F98;
+  --modeA:#2E9E4F;--modeB:#6B7280;--modeC:#FF6D00;
+  --xxs:4px;--xs:8px;--sm:12px;--md:16px;--lg:24px;--xl:32px;
+  --rSm:8px;--rMd:12px;--rLg:16px;--rCard:24px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#E6E8EC;color:var(--onSurface);line-height:1.4}
+/* page chrome */
+.page-header{position:sticky;top:0;z-index:20;background:#15171B;color:#fff;padding:14px 24px;box-shadow:0 2px 8px rgba(0,0,0,.25)}
+.page-header h1{font-size:18px;font-weight:700}
+.page-header .sub{font-size:12px;color:#AEB3BC;margin-top:3px}
+.page-header a{color:#FFB68A;text-decoration:none;font-size:12px}
+.legend{display:flex;flex-wrap:wrap;gap:8px 14px;margin-top:10px;font-size:10.5px;color:#C7CBD1}
+.legend .sw{display:inline-flex;align-items:center;gap:5px}
+.legend .dot{width:11px;height:11px;border-radius:50%;border:1px solid rgba(255,255,255,.25)}
+.note-bar{background:#FFF6E9;border-left:4px solid var(--warning);color:#5B4300;font-size:12.5px;padding:10px 24px}
+.cluster{padding:22px 24px 4px;font-size:15px;font-weight:700;color:#15171B;display:flex;align-items:center;gap:10px}
+.cluster .pill{font-size:10px;font-weight:700;color:#fff;background:var(--primary);border-radius:20px;padding:3px 10px}
+.grid{display:flex;flex-wrap:wrap;gap:30px;padding:14px 30px 30px;align-items:flex-start}
+.cell{width:320px}
+.cap{font-size:12.5px;font-weight:600;color:#15171B;margin-bottom:4px}
+.cap .scr{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;color:var(--primary);font-weight:700}
+.cap .tag{font-size:9px;font-weight:700;color:#fff;background:#6B7280;border-radius:4px;padding:1px 5px;margin-left:5px;vertical-align:middle}
+.cap .tag.new{background:#2E9E4F}.cap .tag.rep{background:#1E6FE5}.cap .tag.adp{background:#F5A300}.cap .tag.keep{background:#6B7280}
+.states{font-size:10px;color:var(--onSurfaceVariant);margin-top:6px;font-style:italic;background:#fff;border:1px solid var(--outline);border-radius:8px;padding:7px 9px}
+.states b{font-style:normal;color:#15171B}
+/* phone shell — Material 3 */
+.phone{width:320px;height:680px;background:var(--background);border-radius:26px;border:9px solid #0f1115;box-shadow:0 12px 28px rgba(0,0,0,.26);overflow:hidden;display:flex;flex-direction:column;position:relative}
+.sbar{height:26px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;font-size:11px;color:var(--onSurfaceVariant);flex:0 0 auto;font-weight:600}
+.sbar.onPrim{color:rgba(255,255,255,.92)}
+.sbar .r{display:flex;gap:5px;align-items:center}
+.screen{flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative;background:var(--background)}
+.appbar{height:52px;display:flex;align-items:center;gap:12px;padding:0 14px;flex:0 0 auto;font-weight:700;font-size:17px;color:var(--onSurface)}
+.appbar .ic{width:24px;height:24px;display:grid;place-items:center;color:var(--onSurfaceVariant);font-size:19px}
+.appbar.elev{box-shadow:0 1px 0 var(--outline)}
+.navbar{height:56px;background:var(--surface);border-top:1px solid var(--outline);display:flex;flex:0 0 auto}
+.navbar .t{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:10px;color:var(--onSurfaceVariant)}
+.navbar .t.on{color:var(--primary);font-weight:700}
+.navbar .t .gi{font-size:18px}
+.navbar .t.on .gi{background:var(--primaryContainer);border-radius:12px;padding:1px 12px}
+.body{flex:1;padding:14px;overflow:hidden;display:flex;flex-direction:column;gap:12px}
+.body.center{justify-content:center;align-items:center;text-align:center}
+/* type */
+.h-display{font-size:28px;font-weight:700}.h-headline{font-size:21px;font-weight:700;letter-spacing:-.2px}
+.h-title{font-size:17px;font-weight:600}.t-sub{font-size:15px;font-weight:600}.t-body{font-size:14px}
+.t-small{font-size:12.5px;color:var(--onSurfaceVariant)}.t-label{font-size:11.5px;font-weight:600;color:var(--onSurfaceVariant)}
+.muted{color:var(--onSurfaceVariant)}
+/* controls */
+.cta{height:50px;border-radius:var(--rSm);background:var(--primary);color:var(--onPrimary);display:grid;place-items:center;font-weight:700;font-size:15px;width:100%}
+.cta.tonal{background:var(--primaryContainer);color:var(--onPrimaryContainer)}
+.cta.err{background:var(--error)}.cta.succ{background:var(--success)}.cta.dis{background:var(--surfaceVariant);color:var(--outlineVariant)}
+.btn-out{height:46px;border-radius:var(--rSm);border:1.5px solid var(--outline);color:var(--onSurface);display:grid;place-items:center;font-weight:600;font-size:14px;background:#fff}
+.btn-row{display:flex;gap:10px}.btn-row>*{flex:1}
+.textlink{color:var(--primary);font-weight:600;font-size:13px}
+.field{min-height:50px;border:1.5px solid var(--outline);border-radius:var(--rMd);display:flex;align-items:center;gap:10px;padding:0 12px;background:#fff;color:var(--onSurfaceVariant);font-size:14px}
+.field.lbl{flex-direction:column;align-items:stretch;justify-content:center;padding:7px 12px;gap:1px}
+.field.lbl .t-label{color:var(--primary)}.field .val{color:var(--onSurface)}
+.field .pre{color:var(--onSurface);font-weight:700}
+.divider{display:flex;align-items:center;gap:10px;color:var(--outlineVariant);font-size:11px;margin:2px 0}
+.divider::before,.divider::after{content:"";height:1px;flex:1;background:var(--outline)}
+.otp{display:flex;gap:7px;justify-content:center}
+.otp .b{width:38px;height:46px;border:1.5px solid var(--outline);border-radius:var(--rSm);display:grid;place-items:center;font-size:18px;font-weight:700;background:#fff}
+.otp .b.fill{border-color:var(--primary)}
+.otp.mono .b{border-style:dashed}
+.dots{display:flex;gap:6px;justify-content:center}.dots i{width:7px;height:7px;border-radius:50%;background:var(--outline)}.dots i.on{background:var(--primary);width:18px;border-radius:4px}
+.seg{display:flex;border:1.5px solid var(--outline);border-radius:var(--rSm);overflow:hidden}
+.seg b{flex:1;text-align:center;padding:8px 0;font-size:12.5px;font-weight:600;color:var(--onSurfaceVariant)}
+.seg b.on{background:var(--secondaryContainer);color:var(--secondary)}
+.toggle{width:42px;height:25px;border-radius:13px;background:var(--outline);position:relative;flex:0 0 auto}
+.toggle.on{background:var(--primary)}.toggle::after{content:"";position:absolute;width:19px;height:19px;border-radius:50%;background:#fff;top:3px;left:3px}.toggle.on::after{left:20px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.col{display:flex;flex-direction:column}.gap6{gap:6px}.gap8{gap:8px}.gap10{gap:10px}.spacer{flex:1}
+.fab{position:absolute;right:12px;width:44px;height:44px;border-radius:14px;background:#fff;border:1px solid var(--outline);display:grid;place-items:center;box-shadow:0 3px 8px rgba(0,0,0,.16);color:var(--onSurface);font-size:19px}
+.fab.prim{background:var(--primary);color:#fff;border:none}
+.chip{border:1.5px solid var(--outline);border-radius:18px;padding:5px 11px;font-size:12px;font-weight:600;color:var(--onSurface);display:inline-flex;align-items:center;gap:6px;background:#fff}
+.chip.on{background:var(--primaryContainer);border-color:var(--primaryContainer);color:var(--onPrimaryContainer)}
+.chip.sm{padding:3px 8px;font-size:11px}
+.cdot{width:10px;height:10px;border-radius:50%;flex:0 0 auto}
+.vico{width:18px;height:18px;border-radius:5px;display:inline-grid;place-items:center;font-size:11px;flex:0 0 auto;color:#fff}
+.iconbtn{height:32px;min-width:32px;border-radius:8px;border:1.5px solid var(--outline);background:#fff;display:inline-flex;align-items:center;justify-content:center;gap:5px;padding:0 9px;font-size:12px;font-weight:600;color:var(--onSurface)}
+.iconbtn.err{color:var(--error);border-color:var(--error)}
+.iconbtn.prim{color:var(--primary);border-color:var(--primary)}
+.badge{font-size:10px;font-weight:700;color:#fff;border-radius:6px;padding:2px 7px;display:inline-block}
+.card{border:1.5px solid var(--outline);border-radius:var(--rMd);padding:11px 12px;background:#fff}
+.card.fill{background:var(--surface)}
+.avatar{width:40px;height:40px;border-radius:50%;background:var(--surfaceVariant);display:grid;place-items:center;color:var(--outlineVariant);font-size:18px;flex:0 0 auto}
+.avatar.lg{width:88px;height:88px;position:relative}
+.avatar .cam{position:absolute;right:-2px;bottom:-2px;width:28px;height:28px;border-radius:50%;background:var(--primary);color:#fff;display:grid;place-items:center;font-size:14px;border:3px solid #fff}
+.illus{height:150px;border-radius:var(--rLg);background:repeating-linear-gradient(45deg,var(--surfaceVariant),var(--surfaceVariant) 12px,#E4E7EB 12px,#E4E7EB 24px);display:grid;place-items:center;color:var(--outlineVariant);font-size:12px}
+.stars{color:var(--warning);font-size:15px;letter-spacing:1px}
+.pill-status{font-size:10.5px;font-weight:700;border-radius:20px;padding:3px 9px;display:inline-block}
+.pill-status.ok{background:#E4F5EA;color:#1B7A38}.pill-status.warn{background:#FFF1D6;color:#8A5B00}.pill-status.err{background:#FBE2E2;color:#A21B1B}.pill-status.info{background:var(--secondaryContainer);color:var(--secondary)}.pill-status.mut{background:var(--surfaceVariant);color:var(--onSurfaceVariant)}
+/* map */
+.map{flex:1;position:relative;overflow:hidden;background:linear-gradient(0deg,rgba(0,0,0,.02),rgba(0,0,0,.02)),repeating-linear-gradient(0deg,#EAEFE9,#EAEFE9 34px,#E3EAE2 34px,#E3EAE2 35px),repeating-linear-gradient(90deg,#EAEFE9,#EAEFE9 34px,#E3EAE2 34px,#E3EAE2 35px)}
+.road{position:absolute;background:#fff;box-shadow:0 0 0 1px var(--outline)}
+.mk{position:absolute;width:16px;height:16px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 2px 3px rgba(0,0,0,.3);border:2px solid #fff}
+.mk.tri{width:0;height:0;background:none;border:none;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:13px solid #333;border-radius:0;transform:none;filter:drop-shadow(0 1px 1px rgba(0,0,0,.3))}
+.userdot{position:absolute;width:15px;height:15px;border-radius:50%;background:var(--vehSedan);border:3px solid #fff;box-shadow:0 0 0 6px rgba(30,111,229,.18)}
+.pin{position:absolute;width:20px;height:20px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:2px solid #fff;box-shadow:0 2px 4px rgba(0,0,0,.3)}
+.pin.pickup{background:var(--success)}.pin.drop{background:var(--error)}
+/* sheet / overlay */
+.sheet{background:#fff;border-radius:var(--rCard) var(--rCard) 0 0;box-shadow:0 -6px 20px rgba(0,0,0,.12);padding:12px 14px 14px;position:relative}
+.handle{width:34px;height:4px;border-radius:2px;background:var(--outline);margin:0 auto 11px}
+.scrim{position:absolute;inset:0;background:rgba(0,0,0,.32);z-index:5}
+.overlay{position:absolute;left:0;right:0;bottom:0;z-index:6}
+.dialog{position:absolute;inset:0;display:grid;place-items:center;z-index:7;padding:24px}
+.dialog .box{background:#fff;border-radius:var(--rLg);padding:18px;width:100%;box-shadow:0 10px 30px rgba(0,0,0,.3)}
+.snackbar{position:absolute;left:12px;right:12px;bottom:12px;background:#2A2D31;color:#fff;border-radius:var(--rSm);padding:12px 14px;font-size:13px;display:flex;justify-content:space-between;align-items:center;z-index:8}
+.snackbar .act{color:#FFB68A;font-weight:700}
+.banner{padding:9px 12px;font-size:12px;font-weight:600;display:flex;align-items:center;gap:8px}
+.banner.warn{background:#FFF6E9;color:#5B4300;border-bottom:1px solid #F3D9A0}
+.banner.err{background:#FBE2E2;color:#8A1B1B}
+.banner.info{background:var(--secondaryContainer);color:#003355}
+.searchbar{height:48px;border-radius:var(--rMd);background:var(--surface);border:1px solid var(--outline);display:flex;align-items:center;justify-content:space-between;padding:0 13px;color:var(--onSurfaceVariant);font-size:14px}
+.tier{border:1.5px solid var(--outline);border-radius:var(--rMd);padding:9px 11px;display:flex;align-items:center;gap:11px}
+.tier.sel{border-color:var(--primary);background:#FFF6EF}
+.tier .vi{width:36px;height:36px;border-radius:9px;display:grid;place-items:center;color:#fff;font-size:16px;flex:0 0 auto}
+.tier .price{margin-left:auto;text-align:right;font-weight:700;font-size:15px}
+.listrow{display:flex;align-items:center;gap:11px;padding:10px 2px;border-bottom:1px solid var(--surfaceVariant)}
+.listrow .ic{width:30px;height:30px;border-radius:8px;background:var(--surfaceVariant);display:grid;place-items:center;color:var(--onSurfaceVariant);font-size:15px;flex:0 0 auto}
+.listrow .chev{color:var(--outlineVariant);margin-left:auto}
+.stepper{display:flex;align-items:center;gap:4px}
+.stepper .s{width:13px;height:13px;border-radius:50%;background:var(--outline);flex:0 0 auto}
+.stepper .s.done{background:var(--success)}.stepper .s.now{background:var(--primary);box-shadow:0 0 0 4px rgba(255,109,0,.18)}
+.stepper .ln{flex:1;height:2px;background:var(--outline)}.stepper .ln.done{background:var(--success)}
+.ring{width:74px;height:74px;border-radius:50%;display:grid;place-items:center;font-weight:700;font-size:24px;color:var(--onSurface);background:conic-gradient(var(--primary) 270deg,var(--surfaceVariant) 0)}
+.ring i{width:60px;height:60px;border-radius:50%;background:#fff;display:grid;place-items:center;font-style:normal}
+.kv{display:flex;justify-content:space-between;font-size:13px;padding:3px 0}
+.kv .k{color:var(--onSurfaceVariant)}
+.tabbar2{display:flex;border-bottom:1px solid var(--outline)}
+.tabbar2 b{padding:9px 4px;font-size:12.5px;font-weight:600;color:var(--onSurfaceVariant);flex:1;text-align:center;border-bottom:2px solid transparent}
+.tabbar2 b.on{color:var(--primary);border-bottom-color:var(--primary)}
+.pulse{width:120px;height:120px;border-radius:50%;background:radial-gradient(circle,rgba(255,109,0,.28),rgba(255,109,0,.05) 70%);display:grid;place-items:center}
+.pulse i{width:46px;height:46px;border-radius:50%;background:var(--primary);color:#fff;display:grid;place-items:center;font-style:normal;font-size:22px}
+.legendcard{font-size:10.5px;color:var(--onSurfaceVariant)}
+.capnote{font-size:10.5px;color:var(--onSurfaceVariant);margin:-4px 0 8px}
+</style>
+</head>
+<body>
+<div class="page-header">
+  <h1>MageRide — Passenger App · <span style="color:#9FCAFF">Android (Jetpack Compose / Material 3)</span></h1>
+  <div class="sub">Fresh wireframes from D2′ (ADD v2.6 / URD v2.2). Canonical AL-09 vehicle palette · upfront fare · Cash/LankaQR/OnePay+5% · proxy &amp; package · single-active-device. iOS variants in <a href="passenger_ios.html">passenger_ios.html</a> · index: <a href="index.html">index.html</a></div>
+  <div class="legend">
+    <span class="sw"><span class="dot" style="background:#2E9E4F"></span>Bus</span>
+    <span class="sw"><span class="dot" style="background:#E5331F"></span>Train</span>
+    <span class="sw"><span class="dot" style="background:#8E44CE"></span>Motorbike</span>
+    <span class="sw"><span class="dot" style="background:#F5C518"></span>Three-wheeler</span>
+    <span class="sw"><span class="dot" style="background:#1ABC9C"></span>Flex</span>
+    <span class="sw"><span class="dot" style="background:#1E6FE5"></span>Sedan</span>
+    <span class="sw"><span class="dot" style="background:#EC4899"></span>Mini Van</span>
+    <span class="sw"><span class="dot" style="background:#F57C00"></span>Van</span>
+    <span class="sw"><span class="dot" style="background:#8B5E3C"></span>Truck</span>
+    <span class="sw"><span class="dot" style="background:#808000"></span>Mini Truck</span>
+    <span class="sw"><span class="dot" style="background:#8A8F98"></span>Private (Mode B)</span>
+  </div>
+</div>
+<div class="note-bar"><b>AL-09 applied:</b> "car" → <b>sedan</b>; flex / sedan / mini&nbsp;van / van are now distinct tiers; +truck / mini&nbsp;truck for delivery. Fares: Motorbike 80/60 · TW 100/80 · Flex 130/90 · Sedan 150/100 · MiniVan 150/110 · Van 150/120 (peak +20% / night +15%).</div>
+
+<!-- ============ CLUSTER 1 : AUTH / ONBOARDING ============ -->
+<div class="cluster"><span class="pill">Cluster 1</span> Auth &amp; Onboarding</div>
+<div class="grid">
+
+  <!-- splash -->
+  <div class="cell">
+    <div class="cap"><span class="scr">SCR-PA-001</span> · splash <span class="tag keep">KEEP</span></div>
+    <div class="phone">
+      <div class="sbar onPrim" style="background:var(--primary)"><span>9:41</span><span class="r">▾ ▾ ▮</span></div>
+      <div class="screen" style="background:var(--primary)">
+        <div class="body center" style="gap:18px">
+          <div style="width:84px;height:84px;border-radius:22px;background:#fff;display:grid;place-items:center;color:var(--primary);font-weight:800;font-size:34px">M</div>
+          <div style="color:#fff;font-weight:700;font-size:22px">MageRide</div>
+          <div style="width:30px;height:30px;border-radius:50%;border:3px solid rgba(255,255,255,.4);border-top-color:#fff"></div>
+        </div>
+      </div>
+    </div>
+    <div class="states"><b>States:</b> Loading only. KMP <code>auth</code> validates token → onboarding / login / live_map (resumes active ride via <code>GET /v1/rides/passenger/{id}/active</code>). Offline → last screen + banner.</div>
+  </div>
+
+  <!-- onboarding -->
+  <div class="cell">
+    <div class="cap"><span class="scr">SCR-PA-002</span> · onboarding + language <span class="tag adp">ADAPT</span></div>
+    <div class="phone">
+      <div class="sbar"><span>9:41</span><span class="r">▾ ▾ ▮</span></div>
+      <div class="screen">
+        <div class="body" style="gap:14px">
+          <div class="row"><span class="spacer"></span><span class="textlink">Skip</span></div>
+          <div class="illus">illustration · slide 1/3</div>
+          <div class="h-headline">Track every ride, live</div>
+          <div class="t-small">See buses, trains, tuks &amp; cars near you on one map — book in seconds.</div>
+          <div class="dots"><i class="on"></i><i></i><i></i></div>
+          <div class="t-label" style="text-align:center">Language</div>
+          <div class="col gap6">
+            <div class="field" style="justify-content:center;border-color:var(--primary);background:#FFF6EF"><span class="val">සිංහල · Sinhala</span></div>
+            <div class="field" style="justify-content:center"><span class="val">தமிழ் · Tamil</span></div>
+            <div class="field" style="justify-content:center"><span class="val">English</span></div>
+          </div>
+          <div class="spacer"></div>
+          <div class="cta">Get Started</div>
+        </div>
+      </div>
+    </div>
+    <div class="states"><b>States:</b> first-launch only. <b>Δ Android:</b> <code>HorizontalPager</code>; language as <b>vertical selectable boxes</b> stacked one per row — <b>Sinhala first</b>, Tamil second, English third (default highlight = Sinhala); haptic on lang change. <b>Get Started is pinned to the bottom of the screen</b> (full-width CTA below the language list, after the spacer) so the primary action is always reachable with the thumb. (US-1.2/1.3)</div>
+  </div>
+
+  <!-- phone + otp -->
+  <div class="cell">
+    <div class="cap"><span class="scr">SCR-PA-003</span> · phone + OTP <span class="tag adp">ADAPT</span></div>
+    <div class="phone">
+      <div class="sbar"><span>9:41</span><span class="r">▾ ▾ ▮</span></div>
+      <div class="screen">
+        <div class="appbar"><span class="ic">‹</span></div>
+        <div class="body" style="gap:14px">
+          <div class="h-headline">Enter mobile number</div>
+          <div class="t-small">We'll send a 6-digit code via SMS.</div>
+          <div class="field"><span class="pre">+94</span><span>7X XXX XXXX</span></div>
+          <div class="divider">enter code</div>
+          <div class="otp"><span class="b fill">4</span><span class="b fill">8</span><span class="b fill">2</span><span class="b">_</span><span class="b">_</span><span class="b">_</span></div>
+          <div class="row"><span class="t-small">Didn't get it?</span><span class="textlink">Resend (54s)</span></div>
+          <div class="spacer"></div>
+          <div class="cta">Continue</div>
+        </div>
+      </div>
+    </div>
+    <div class="states"><b>States:</b> Loading "Sending…/Verifying…"; Error → red hint + Snackbar; rate-limited (5/h, D-32). <b>Δ Android:</b> SMS Retriever auto-read. (US-1.1/1.10)</div>
+  </div>
+
+  <!-- profile setup -->
+  <div class="cell">
+    <div class="cap"><span class="scr">SCR-PA-004</span> · profile setup <span class="tag keep">KEEP</span></div>
+    <div class="phone">
+      <div class="sbar"><span>9:41</span><span class="r">▾ ▾ ▮</span></div>
+      <div class="screen">
+        <div class="appbar"><span class="ic">‹</span><span style="font-size:16px">Set up profile</span></div>
+        <div class="body" style="gap:16px">
+          <div style="display:grid;place-items:center;padding:8px 0"><div class="avatar lg"><span>👤</span><div class="cam">＋</div></div></div>
+          <div class="col gap6"><div class="t-label">Full name</div><div class="field"><span class="val">Ramith de Silva</span></div></div>
+          <div class="col gap6"><div class="t-label">Language</div><div class="field"><span class="val">English</span><span class="spacer"></span><span>▾</span></div></div>
+          <div class="row"><div class="t-body">Notifications &amp; offers</div><div class="toggle on"></div></div>
+          <div class="spacer"></div>
+          <div class="cta">Save &amp; continue</div>
+        </div>
+      </div>
+    </div>
+    <div class="states"><b>States:</b> Loading on save; inline errors. No referral/Aadhaar (dropped). Avatar crop sheet. (US-1.5)</div>
+  </div>
+
+  <!-- permission -->
+  <div class="cell">
+    <div class="cap"><span class="scr">SCR-PA-005</span> · location permission <span class="tag adp">ADAPT</span></div>
+    <div class="phone">
+      <div class="sbar"><span>9:41</span><span class="r">▾ ▾ ▮</span></div>
+      <div class="screen">
+        <div class="body center" style="gap:16px">
+          <div class="illus" style="width:100%">📍 location illustration</div>
+          <div class="h-title">Allow location access</div>
+          <div class="t-small">MageRide needs your location to show nearby vehicles and set your pickup.</div>
+          <div class="spacer"></div>
+          <div class="cta">Allow location</div>
+          <div class="textlink">Not now</div>
+        </div>
+        <div class="dialog"><div class="box" style="text-align:center">
+          <div class="t-sub">Allow MageRide to access this device's location?</div>
+          <div class="btn-row" style="margin-top:14px"><div class="btn-out">While using app</div><div class="btn-out">Only this time</div></div>
+          <div class="btn-out" style="margin-top:8px;border:none;color:var(--secondary)">Don't allow</div>
+        </div></div>
+      </div>
+    </div>
+    <div class="states"><b>States:</b> denied → "Open Settings" deep-link. <b>Δ Android:</b> <code>rememberLauncherForActivityResult</code> (FINE + FOREGROUND_SERVICE_LOCATION).</div>
+  </div>
+</div>
+
+<!-- ============ CLUSTER 2 : LIVE MAP & DISCOVERY ============ -->
+<div class="cluster"><span class="pill">Cluster 2</span> Live Map &amp; Discovery <span style="font-weight:400;font-size:12px;color:#666">— the home state machine</span></div>
+<div class="grid">
+
+  <!-- live map home -->
+  <div class="cell">
+    <div class="cap"><span class="scr">SCR-PA-010</span> · live map (PRIMARY) <span class="tag rep">REPLACE</span></div>
+    <div class="phone">
+      <div class="sbar onPrim"><span style="color:var(--onSurface)">9:41</span><span class="r" style="color:var(--onSurface)">▾ ▾ ▮</span></div>
+      <div class="screen">
+        <div class="appbar elev"><span class="ic">≡</span><span>MageRide</span><span class="spacer"></span><span class="ic">⦿</span></div>
+        <div class="map">
+          <div class="road" style="left:0;right:0;top:90px;height:9px"></div>
+          <div class="road" style="top:0;bottom:0;left:120px;width:9px"></div>
+          <span class="mk" style="background:var(--vehBus);left:60px;top:60px"></span>
+          <span class="mk" style="background:var(--vehTuk);left:170px;top:130px"></span>
+          <span class="mk" style="background:var(--vehSedan);left:90px;top:200px"></span>
+          <span class="mk" style="background:var(--vehTrain);left:210px;top:70px"></span>
+          <span class="mk" style="background:var(--vehMotorbike);left:140px;top:250px"></span>
+          <div class="userdot" style="left:130px;top:170px"></div>
+          <div class="fab" style="top:200px">⊕</div>
+        </div>
+        <div class="sheet">
+          <div class="handle"></div>
+          <div class="searchbar"><span>🔍 Where to?</span></div>
+          <div class="row" style="margin-top:10px"><span class="chip">★ Home</span><span class="chip">★ Work</span><span class="chip sm">＋ Add</span></div>
+          <div class="t-label" style="margin-top:10px">Recent</div>
+          <div class="listrow"><span class="ic">🕘</span><div class="col"><span class="t-body">Nugegoda Junction</span><span class="t-small">2.4 km</span></div></div>
+        </div>
+        <div class="navbar"><div class="t on"><span class="gi">🗺</span>Map</div><div class="t"><span class="gi">🧾</span>Trips</div><div class="t"><span class="gi">💬</span>Support</div><div class="t"><span class="gi">≡</span>Menu</div></div>
+      </div>
+    </div>
+    <div class="states"><b>States:</b> skeleton markers · Empty "No {type} active nearby" (US-7.14) · Offline → last-known dimmed + banner (US-15.2) · engaged Mode C hidden (US-7.16) · stale removed (US-7.17). SignalR geocell H3 res-7+ring(2).</div>
+  </div>
+
+  <!-- mode filter -->
+  <div class="cell">
+    <div class="cap"><span class="scr">SCR-PA-006</span> · mode / type filter <span class="tag new">NEW</span></div>
+    <div class="phone">
+      <div class="sbar"><span>9:41</span><span class="r">▾ ▾ ▮</span></div>
+      <div class="screen">
+        <div class="map"><div class="scrim"></div></div>
+        <div class="overlay sheet">
+          <div class="handle"></div>
+          <div class="h-title" style="margin-bottom:10px">Show on map</div>
+          <div class="row" style="padding:6px 0"><div class="row gap8"><span class="badge" style="background:var(--modeA)">A</span><span class="t-body">Mode A — Bus &amp; Train</span></div><div class="toggle on"></div></div>
+          <div class="row" style="padding:6px 0"><div class="row gap8"><span class="badge" style="background:var(--modeB)">B</span><span class="t-body">Mode B — Private</span></div><div class="toggle"></div></div>
+          <div class="row" style="padding:6px 0"><div class="row gap8"><span class="badge" style="background:var(--modeC)">C</span><span class="t-body">Mode C — Standby</span></div><div class="toggle on"></div></div>
+          <div class="divider">vehicle types</div>
+          <div class="row" style="flex-wrap:wrap;gap:7px;justify-content:flex-start">
+            <span class="chip on sm"><span class="vico" style="background:var(--vehBus)">🚌</span>Bus</span>
+            <span class="chip sm"><span class="vico" style="background:var(--vehTrain)">🚆</span>Train</span>
+            <span class="chip on sm"><span class="vico" style="background:var(--vehTuk)">🛺</span>Tuk</span>
+            <span class="chip sm"><span class="vico" style="background:var(--vehFlex)">🚙</span>Flex</span>
+            <span class="chip on sm"><span class="vico" style="background:var(--vehSedan)">🚗</span>Sedan</span>
+            <span class="chip sm"><span class="vico" style="background:var(--vehMiniVan)">🚐</span>Mini Van</span>
+            <span class="chip sm"><span class="vico" style="background:var(--vehVan)">🚐</span>Van</span>
+            <span class="chip sm"><span class="vico" style="background:var(--vehMotorbike)">🏍</span>Bike</span>
+          </div>
+          <div class="cta" style="margin-top:12px">Apply</div>
+        </div>
+      </div>
+    </div>
+    <div class="states"><b>States:</b> instant client-side filter; trains filterable separately (US-7.7). Each type shows its <b>small vehicle icon tinted with the canonical AL-09 colour</b> (not a plain dot) so the chip matches the map marker colour. Chip select scale + haptic.</div>
+  </div>
+
+  <!-- vehicle popup -->
+  <div class="cell">
+    <div class="cap"><span class="scr">SCR-PA-007</span> · vehicle popup (Mode A) <span class="tag adp">ADAPT</span></div>
+    <div class="phone">
+      <div class="sbar"><span>9:41</span><span class="r">▾ ▾ ▮</span></div>
+      <div class="screen">
+        <div class="map">
+          <span class="mk" style="background:var(--vehBus);left:140px;top:120px;width:22px;height:22px"></span>
+          <div class="scrim" style="background:rgba(0,0,0,.15)"></div>
+        </div>
+        <div class="overlay sheet" style="border-radius:var(--rCard)">
+          <div class="handle"></div>
+          <div class="row"><span class="badge" style="background:var(--modeA)">MODE A · BUS</span><span class="pill-status mut">last seen 6s ago</span></div>
+          <div class="row" style="margin-top:10px"><div class="avatar">🚌</div><div class="col"><span class="t-sub">Route 138 — Pettah → Maharagama</span><span class="t-small">NB-4521 · Driver: K. Perera</span></div></div>
+          <div class="row" style="margin-top:10px"><div class="card fill" style="flex:1;text-align:center"><div class="t-label">Distance</div><div class="t-sub">350 m</div></div><div class="card fill" style="flex:1;text-align:center"><div class="t-label">ETA</div><div class="t-sub">2 min</div></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="states"><b>States:</b> this popup is for <b>Mode A</b> markers (bus/train route info). Tapping a <b>Mode B (private)</b> marker does <b>not</b> open this popup — it routes to <b>SCR-PA-024 · Mode B access request</b> (US-4.6). Mode C engaged → no popup (US-7.4); stale → "Last seen Ns ago". Driver shown for Mode A; Mode C after-accept only (US-7.12).</div>
+  </div>
+
+  <!-- search -->
+  <div class="cell">
+    <div class="cap"><span class="scr">SCR-PA-008</span> · search location <span class="tag rep">REPLACE</span></div>
+    <div class="phone">
+      <div class="sbar"><span>9:41</span><span class="r">▾ ▾ ▮</span></div>
+      <div class="screen">
+        <div class="appbar"><span class="ic">‹</span><span style="font-size:16px">Set route</span></div>
+        <div class="body" style="gap:10px">
+          <div class="field"><span class="cdot" style="background:var(--success)"></span><span class="val">Current location</span></div>
+          <div class="field"><span class="cdot" style="background:var(--error)"></span><span class="val">Maharagama</span><span class="spacer"></span><span class="t-small">place / address</span></div>
+          <div class="t-label">Predictions</div>
+          <div class="listrow"><span class="ic">📍</span><div class="col"><span class="t-body">Maharagama Town</span><span class="t-small">High Level Rd · 2.4 km</span></div></div>
+          <div class="listrow"><span class="ic">📍</span><div class="col"><span class="t-body">Maharagama Bus Stand</span><span class="t-small">3.1 km</span></div></div>
+          <div class="listrow"><span class="ic">★</span><div class="col"><span class="t-body">Home</span><span class="t-small">221 Galle Rd, Dehiwala</span></div></div>
+          <div class="spacer"></div>
+          <div class="btn-row"><div class="btn-out">📌 Select on map</div><div class="btn-out">＋ Add address</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="states"><b>States:</b> destination is a <b>geo location only</b> — passengers type a <b>place / address</b> (route numbers are <b>not</b> accepted here). Predictions = geocoded places + saved/recent addresses (no route rows). Selecting a place → <b>SCR-PA-009</b>, where the system computes and lists the <b>relevant public buses (GTFS) + private tiers</b> that reach that destination. Empty → recents/saved; Loading → shimmer; geocoder down → "Pick on map". Nominatim/Photon, debounced. (US-8.2)</div>
+  </div>
+</div>
+
+<!-- ============ CLUSTER 3 : BOOKING (Mode C / Proxy / Package) ============ -->
+<div class="cluster"><span class="pill">Cluster 3</span> Booking · Proxy · Package · Schedule</div>
+<div class="grid">
+
+  <!-- ride booking -->
+  <div class="cell">
+    <div class="cap"><span class="scr">SCR-PA-009</span> · ride booking (PRIMARY) <span class="tag rep">REPLACE</span></div>
+    <div class="phone">
+      <div class="sbar"><span>9:41</span><span class="r">▾ ▾ ▮</span></div>
+      <div class="screen">
+        <div class="map" style="flex:0 0 160px">
+          <!-- public bus route polyline (green, zoomed out) -->
+          <div class="road" style="left:14px;top:48px;width:140px;height:4px;background:var(--vehBus);box-shadow:none"></div>
+          <div class="road" style="left:150px;top:50px;width:155px;height:4px;background:var(--vehBus);box-shadow:none;transform:rotate(20deg);transform-origin:left center"></div>
+          <span class="mk" style="background:var(--vehBus);left:60px;top:38px"></span>
+          <!-- closest bus halt on route -->
+          <div class="pin pickup" style="left:145px;top:38px;background:var(--vehBus)"></div>
+          <span style="position:absolute;left:118px;top:20px;font-size:9px;font-weight:700;color:var(--vehBus)">⬤ Halt · 250 m</span>
+          <!-- walk-to-halt nav polyline (blue, dashed) from current location -->
+          <div style="position:absolute;left:150px;top:58px;width:0;height:58px;border-left:3px dashed var(--vehSedan);transform:rotate(7deg);transform-origin:top"></div>
+          <div class="userdot" style="left:150px;top:116px"></div>
+          <div class="pin drop" style="left:266px;top:92px"></div>
+        </div>
+        <div class="sheet" style="flex:1;overflow:auto">
+          <div class="handle"></div>
+          <div class="card fill" style="padding:8px 10px"><div class="kv"><span><span class="cdot" style="background:var(--success);display:inline-block"></span> Galle Face</span><span class="textlink">✎</span></div><div class="kv"><span><span class="cdot" style="background:var(--error);display:inline-block"></span> Nugegoda</span><span></span></div></div>
+          <div class="row" style="margin:10px 0;gap:8px"><div class="seg" style="flex:1"><b class="on">For Me</b><b>Someone else</b></div><div class="seg" style="flex:1"><b class="on">Person</b><b>Package</b></div></div>
+          <div class="t-label">Public buses · direct routes (GTFS)</div>
+          <div class="tier sel"><div class="vi" style="background:var(--vehBus)">🚌</div><div class="col"><span class="t-sub">138 · Pettah → Maharagama</span><span class="t-small">via High Level Rd · every ~10 min</span></div><div class="col" style="align-items:flex-end;margin-left:auto;gap:3px"><span class="pill-status ok">Direct</span><span class="badge" style="background:var(--vehBus)">PUBLIC</span></div></div>
+          <div class="tier" style="margin-top:8px"><div class="vi" style="background:var(--vehBus)">🚌</div><div class="col"><span class="t-sub">120 · Pettah → Homagama</span><span class="t-small">via Maharagama · every ~15 min</span></div><div class="col" style="align-items:flex-end;margin-left:auto;gap:3px"><span class="pill-status ok">Direct</span><span class="badge" style="background:var(--vehBus)">PUBLIC</span></div></div>
+          <div class="tier" style="margin-top:8px"><div class="vi" style="background:var(--vehTrain)">🚆</div><div class="col"><span class="t-sub">KV Line → 138</span><span class="t-small">1 transfer at Nugegoda</span></div><div class="col" style="align-items:flex-end;margin-left:auto;gap:3px"><span class="pill-status mut">Transit</span><span class="badge" style="background:var(--vehBus)">PUBLIC</span></div></div>
+          <div class="banner info" style="border-radius:8px;margin-top:8px"><span style="color:var(--vehSedan)">●</span> Walk 250 m to Pamankada halt — blue route on map</div>
+          <div class="t-label" style="margin-top:8px">Private (Mode C · standby)</div>
+          <div class="tier" style="margin-top:4px"><div class="vi" style="background:var(--vehTuk)">🛺</div><div class="col"><span class="t-sub">Three-wheeler</span><span class="t-small">Standby · upfront fare</span></div><div class="price">Rs 740</div></div>
+          <div class="tier" style="margin-top:8px"><div class="vi" style="background:var(--vehSedan)">🚗</div><div class="col"><span class="t-sub">Sedan</span><span class="t-small">Standby · upfront fare</span></div><div class="price">Rs 850</div></div>
+          <div class="cta" style="margin-top:10px">Track Route</div>
+        </div>
+      </div>
+    </div>
+    <div class="states"><b>States:</b> multimodal list. <b>Mode A public buses</b> show <b>route number + route description</b> (origin → destination + corridor), a <b>Direct / Transit</b> tag and the <b>PUBLIC</b> label; the system lists <b>all direct options derived from GTFS</b> routes for the entered destination (transit options shown below direct). <b>Mode C</b> private tiers <b>cannot show minutes-away or distance</b> (no driver matched yet) — they show the <b>upfront price only</b>. Pick a private tier → upfront fare + <b>Book Now</b>/Schedule (blocked after 3 post-accept cancels, US-6A.10b). Pick a <b>public route</b> → map zooms to its GTFS polyline; if off-route a <b>blue</b> walking polyline routes to the closest halt (US-8.2).</div>
+  </div>
+
+  <!-- proxy details -->
+  <div class="cell">
+    <div class="cap"><span class="scr">SCR-PA-010b</span> · proxy rider details <span class="tag new">NEW</span></div>
+    <div class="phone">
+      <div class="sbar"><span>9:41</span><span class="r">▾ ▾ ▮</span></div>
+      <div class="screen">
+        <div class="appbar"><span class="ic">‹</span><span style="font-size:16px">Book for someone else</span></div>
+        <div class="body" style="gap:12px">
+          <div class="col gap6"><div class="t-label">Rider name</div><div class="field"><span class="val">Nimal</span></div></div>
+          <div class="col gap6"><div class="t-label">Rider mobile</div><div class="field"><span class="pre">+94</span><span class="val">77 123 4567</span><span class="spacer"></span><span class="textlink">👥 Contacts</span></div></div>
+          <div class="t-label">Pickup method</div>
+          <div class="seg" style="font-size:11px"><b>Search</b><b>Map pin</b><b>Paste link</b><b class="on">Request loc</b></div>
+          <div class="capnote" style="margin-top:6px">🔗 <b>Paste link</b> → opens the paste sheet (<b>SCR-PA-012a</b>): paste a Google Maps link copied from WhatsApp → app parses lat/lng from the URL &amp; drops the pin automatically.</div>
+          <div class="card" style="background:#FFF6E9;border-color:#F3D9A0"><div class="row"><span class="t-small" style="color:#5B4300">Waiting for rider to share location…</span><span class="ring" style="width:34px;height:34px;font-size:11px"><i style="width:26px;height:26px">5:00</i></span></div></div>
+          <div class="spacer"></div>
+          <div class="cta">Request rider location</div>
+        </div>
+      </div>
+    </div>
+    <div class="states"><b>States:</b> 4 pickup methods — <b>Search</b>, <b>Map pin</b>, <b>Paste link</b> (Google Maps URL → parse lat/lng → drop pin), <b>Request loc</b>. Unregistered (P-03) → "Not a MageRide user — enter pickup manually" (US-8.19); Pending spinner; Confirmed → pin auto-fills; Declined/Expired → fallback. FCM <code>POST /location-requests</code> (P-02).</div>
+  </div>
+
+  <!-- confirm pickup rider -->
+  <div class="cell">
+    <div class="cap"><span class="scr">SCR-PA-011</span> · confirm pickup (rider) <span class="tag new">NEW</span></div>
+    <div class="phone">
+      <div class="sbar"><span>9:41</span><span class="r">▾ ▾ ▮</span></div>
+      <div class="screen">
+        <div class="banner warn">⏱ Expires in 4:38 · declining never sends your GPS</div>
+        <div class="map">
+          <div class="pin pickup" style="left:150px;top:130px;width:26px;height:26px"></div>
+          <div style="position:absolute;left:120px;top:170px;font-size:11px;color:var(--onSurfaceVariant)">drag to adjust</div>
+        </div>
+        <div class="sheet">
+          <div class="t-sub"><b>Ramith</b> wants your pickup location</div>
+          <div class="t-small" style="margin:6px 0 12px">Share your current spot so the driver finds you.</div>
+          <div class="btn-row"><div class="btn-out">Decline</div><div class="cta">Share location ▸</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="states"><b>States:</b> 5-min TTL countdown; auto-dismiss on expiry. Pin drop bounce; success haptic. Privacy: decline = no GPS (P-02).</div>
+  </div>
+
+  <!-- package booking -->
+  <div class="cell">
+    <div class="cap"><span class="scr">SCR-PA-012</span> · package booking <span class="tag new">NEW</span></div>
+    <div class="phone">
+      <div class="sbar"><span>9:41</span><span class="r">▾ ▾ ▮</span></div>
+      <div class="screen">
+        <div class="appbar"><span class="ic">‹</span><span style="font-size:16px">Send a package</span></div>
+        <div class="body" style="gap:11px">
+          <div class="t-label">Size</div>
+          <div class="seg"><b class="on">S</b><b>M</b><b>L</b></div>
+          <div class="row gap6" style="align-items:flex-start;color:var(--onSurfaceVariant)"><span style="font-size:13px;line-height:1.2">ℹ</span><span class="t-small">Up to 5 kg · Fits in a backpack or motorbike box</span></div>
+          <div class="field lbl"><span class="t-label">Description</span><span class="val">Documents folder</span></div>
+          <div class="field lbl"><span class="t-label">Recipient name</span><span class="val">Sunethra</span></div>
+          <div class="field"><span class="pre">+94</span><span class="val">71 222 3344</span></div>
+          <div class="t-label">Pickup location</div>
+          <div class="seg" style="font-size:11px"><b class="on">Search</b><b>Map</b><b>Paste link</b></div>
+          <div class="t-label">Drop-off location</div>
+          <div class="seg" style="font-size:11px"><b class="on">Search</b><b>Map</b><b>Paste link</b><b>Request</b></div>
+          <div class="capnote" style="margin-top:2px">🔗 <b>Paste link</b> opens the paste sheet (<b>SCR-PA-012a</b>) — parses lat/lng from a Google Maps URL · <b>Request</b> asks the recipient to share their drop-off location.</div>
+          <div class="row"><span class="chip">Payment: COD ▾</span><span class="t-small">same Mode C fare</span></div>
+          <div class="cta">Get estimate &amp; Book</div>
+        </div>
+      </div>
+    </div>
+    <div class="states"><b>States:</b> size hint updates per pick — <b>S</b> ≤5 kg (backpack/bike box) · <b>M</b> ≤20 kg (tuk/car trunk) · <b>L</b> &gt;20 kg (van/truck). <b>Pickup location</b>: Search / Map / Paste link (Request removed). <b>Drop-off location</b> now captured too with 4 options — Search / Map / Paste link / Request (recipient shares). Loading estimate; payment incl. <b>COD</b> (US-20.8). Truck/mini_truck for large delivery (AL-09). (US-20.1/20.2, P-06)</div>
+  </div>
+
+  <!-- paste link → pin interaction -->
+  <div class="cell">
+    <div class="cap"><span class="scr">SCR-PA-012a</span> · paste link → pin <span class="tag new">NEW</span></div>
+    <div class="phone">
+      <div class="sbar"><span>9:41</span><span class="r">▾ ▾ ▮</span></div>
+      <div class="screen">
+        <div class="map"><div class="scrim"></div></div>
+        <div class="overlay sheet">
+          <div class="handle"></div>
+          <div class="row"><span class="h-title">Paste drop-off link</span><span class="spacer"></span><span class="badge" style="background:var(--vehBus)">📦 DROP-OFF</span></div>
+          <div class="t-small" style="margin:6px 0 10px">Got a location's Google Maps link on WhatsApp? Paste it here — we'll drop the pin, no typing.</div>
+          <!-- clipboard paste affordance -->
+          <div class="field" style="border-color:var(--primary);background:#FFF6EF">
+            <span style="font-size:15px">🔗</span>
+            <span class="val" style="font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">https://maps.app.goo.gl/xK7vQ2…</span>
+            <span class="spacer"></span>
+            <span class="iconbtn prim">📋 Paste</span>
+          </div>
+          <div class="capnote" style="margin:5px 0 0">Tap <b>📋 Paste</b> (or long-press → Paste) to read the copied link from your clipboard.</div>
+          <!-- resolved preview -->
+          <div class="card" style="margin-top:10px;padding:0;overflow:hidden">
+            <div class="map" style="height:90px;flex:none;position:relative"><div class="pin drop" style="left:140px;top:30px;width:22px;height:22px"></div></div>
+            <div style="padding:9px 11px">
+              <div class="row gap6"><span class="pill-status ok">✓ Link read</span><span class="t-small">from WhatsApp link</span></div>
+              <div class="t-sub" style="margin-top:5px">No. 27, Maple Ave, Nugegoda</div>
+              <div class="t-small" style="font-variant-numeric:tabular-nums">6.86412, 79.88901 · reverse-geocoded</div>
+            </div>
+          </div>
+          <div class="btn-row" style="margin-top:10px"><div class="btn-out">Pick on map</div><div class="cta">Use this drop-off</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="states"><b>States:</b> opens as a <b>ModalBottomSheet</b> when <b>Paste link</b> is tapped (proxy pickup SCR-PA-010b · package pickup/drop-off SCR-PA-012). <b>Empty</b> → field placeholder "Paste a Google Maps link" + Android 13+ clipboard-preview chip. <b>Pasting/Parsing</b> → spinner "Reading link…"; full URLs parsed on-device, short <code>maps.app.goo.gl</code> / <code>goo.gl/maps</code> links resolved via <code>transit-svc /geo/parse-maps-link</code> (BR-23.4 / I-23.1 / AL-20). <b>Resolved</b> → pin preview + reverse-geocoded address (Nominatim) + lat/lng; <b>Use this drop-off</b> commits the pin to the package form. <b>Error</b> (unparseable / 3 s timeout) → "Couldn't read that link — pick on map" + <b>Pick on map</b> fallback. <b>Δ Android:</b> <code>ClipboardManager</code> + <code>rememberModalBottomSheetState</code>; paste haptic. (US-8.2d)</div>
+  </div>
+
+  <!-- schedule ride -->
+  <div class="cell">
+    <div class="cap"><span class="scr">SCR-PA-013</span> · schedule ride <span class="tag new">NEW</span></div>
+    <div class="phone">
+      <div class="sbar"><span>9:41</span><span class="r">▾ ▾ ▮</span></div>
+      <div class="screen">
+        <div class="appbar"><span class="ic">‹</span><span style="font-size:16px">Schedule ride</span></div>
+        <div class="body" style="gap:12px">
+          <div class="t-label">Where to?</div>
+          <div class="col gap6">
+            <div class="field"><span class="pre" style="color:var(--success)">●</span><span class="val">Current location · Nugegoda</span></div>
+            <div class="field" style="border-color:var(--primary);background:#FFF6EF"><span class="pre" style="color:var(--error)">◉</span><span class="val">Select destination…</span><span class="spacer"></span><span>🔍</span></div>
+          </div>
+          <div class="card fill"><div class="t-label">Date</div><div class="t-sub">Wed, 18 Jun 2026</div></div>
+          <div class="card" style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;text-align:center;font-size:12px">
+            <span class="muted">M</span><span class="muted">T</span><span class="muted">W</span><span class="muted">T</span><span class="muted">F</span><span class="muted">S</span><span class="muted">S</span>
+            <span>16</span><span>17</span><span style="background:var(--primary);color:#fff;border-radius:50%">18</span><span>19</span><span>20</span><span>21</span><span>22</span>
+          </div>
+          <div class="row"><div class="card fill" style="flex:1;text-align:center"><div class="t-label">Time</div><div class="h-title">08 : 30 AM</div></div></div>
+          <div class="banner info" style="border-radius:8px">Reminders set: 1 h &amp; 15 min before (US-10.9)</div>
+          <div class="spacer"></div>
+          <div class="cta">Confirm schedule</div>
+        </div>
+      </div>
+    </div>
+    <div class="states"><b>States:</b> <b>destination is mandatory before scheduling</b> — tapping "Select destination" opens the place-search / map-pick sheet (same picker as SCR-PA-008/SCR-PA-011) so the rider chooses <b>the location to go</b>; pickup defaults to current location but is editable. Confirm disabled until a destination is set. Past time disabled; Job Board dispatch 30 min prior (US-6A.4/6A.5). <b>Δ Android:</b> M3 <code>DatePicker</code>+<code>TimePicker</code>; destination picker = <code>ModalBottomSheet</code>. (US-10.1a)</div>
+  </div>
+
+  <!-- payment method -->
+  <div class="cell">
+    <div class="cap"><span class="scr">SCR-PA-016</span> · payment method <span class="tag rep">REPLACE</span></div>
+    <div class="phone">
+      <div class="sbar"><span>9:41</span><span class="r">▾ ▾ ▮</span></div>
+      <div class="screen">
+        <div class="map"><div class="scrim"></div></div>
+        <div class="overlay sheet">
+          <div class="handle"></div>
+          <div class="h-title" style="margin-bottom:10px">Payment method</div>
+          <div class="row card" style="margin-bottom:8px"><div class="row gap10"><span style="font-size:18px">💵</span><span class="t-body">Cash</span><span class="badge" style="background:var(--success)">DEFAULT</span></div><span class="t-sub">Rs 850</span></div>
+          <div class="row card" style="margin-bottom:8px;border-color:var(--primary)"><div class="row gap10"><span style="font-size:18px">🏦</span><div class="col"><span class="t-body">LankaQR</span><span class="t-small" style="color:var(--success)">no surcharge</span></div></div><span class="t-sub">Rs 850</span></div>
+          <div class="row card" style="margin-bottom:8px"><div class="row gap10"><span style="font-size:18px">💳</span><div class="col"><span class="t-body">OnePay</span><span class="t-small" style="color:var(--warning)">+5% Rs 43</span></div></div><span class="t-sub">Rs 893</span></div>
+          <div class="cta">Confirm</div>
+        </div>
+      </div>
+    </div>
+    <div class="states"><b>States:</b> OnePay shows recomputed +5% total (US-8.11); packages add COD (US-20.8). Count-up on total change.</div>
+  </div>
+</div>
+
+<!-- ============ CLUSTER 4 : ACTIVE RIDE / PAY / RATE ============ -->
+<div class="cluster"><span class="pill">Cluster 4</span> Finding · Active Ride · Pay · Rate</div>
+<div class="grid">
+
+  <!-- finding driver -->
+  <div class="cell">
+    <div class="cap"><span class="scr">SCR-PA-014</span> · finding driver <span class="tag rep">REPLACE</span></div>
+    <div class="phone">
+      <div class="sbar"><span>9:41</span><span class="r">▾ ▾ ▮</span></div>
+      <div class="screen">
+        <div class="map"><div style="position:absolute;inset:0;display:grid;place-items:center"><div class="pulse"><i>🔍</i></div></div></div>
+        <div class="sheet">
+          <div class="h-title">Finding a driver…</div>
+          <div class="t-small" style="margin:4px 0 12px">Sedan · usually under 2 min · <b>1:34</b> left</div>
+          <div class="btn-out">Cancel (free)</div>
+        </div>
+      </div>
+    </div>
+    <div class="states"><b>States:</b> Matching → pulse; NoDriver (2-min timeout) → "No drivers available" + retry (US-6A.11); cancel before accept = free (US-6A.9). Radar sweep → assigned card.</div>
+  </div>
+
+  <!-- ride in progress -->
+  <div class="cell">
+    <div class="cap"><span class="scr">SCR-PA-015</span> · ride in progress <span class="tag rep">REPLACE</span></div>
+    <div class="phone">
+      <div class="sbar"><span>9:41</span><span class="r">▾ ▾ ▮</span></div>
+      <div class="screen">
+        <div class="map">
+          <span class="mk tri" style="left:120px;top:140px"></span>
+          <div class="pin pickup" style="left:180px;top:200px"></div>
+          <div style="position:absolute;left:14px;top:14px" class="pill-status info">Driver arriving · 3 min</div>
+        </div>
+        <div class="sheet">
+          <div class="row"><div class="avatar">👤</div><div class="col"><span class="t-sub">K. Fernando <span class="stars">★4.8</span></span><span class="t-small">Sedan · ABC-1234 · 3 min</span></div></div>
+          <div class="card fill" style="margin:10px 0;text-align:center"><div class="t-label">Start OTP — give to driver</div><div class="otp mono" style="margin-top:5px"><span class="b fill">4</span><span class="b fill">8</span><span class="b fill">2</span><span class="b fill">9</span></div></div>
+          <div class="btn-row"><div class="btn-out">📞 Call ▾</div><div class="btn-out" style="color:var(--error);border-color:var(--error)">⛨ SOS</div><div class="btn-out" style="flex:.5">✕</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="states"><b>States:</b> Accepted→DriverArrived→InProgress drive card (Appendix B.2). <b>Tapping 📞 Call opens the call-type chooser (SCR-PA-015a)</b> — the rider picks a <b>Free call</b> (in-app VoIP) or a <b>Normal call</b> (direct call to the driver's number — masking removed, US-26.2). Cancel after accept → <b>Rs 50</b> confirm dialog (US-6A.10, settled next trip). Offline → marker frozen + banner.</div>
+  </div>
+
+  <!-- call type chooser -->
+  <div class="cell">
+    <div class="cap"><span class="scr">SCR-PA-015a</span> · call type chooser <span class="tag new">NEW</span></div>
+    <div class="phone">
+      <div class="sbar"><span>9:41</span><span class="r">▾ ▾ ▮</span></div>
+      <div class="screen">
+        <div class="map"><div class="scrim"></div></div>
+        <div class="overlay sheet">
+          <div class="handle"></div>
+          <div class="row"><div class="avatar">👤</div><div class="col"><span class="t-sub">K. Fernando <span class="stars">★4.8</span></span><span class="t-small">Sedan · ABC-1234</span></div></div>
+          <div class="h-title" style="margin:10px 0 8px">How do you want to call?</div>
+          <div class="row card" style="margin-bottom:8px;border-color:var(--primary)"><div class="row gap10"><span style="font-size:18px">🆓</span><div class="col"><span class="t-body">Free call</span><span class="t-small" style="color:var(--success)">In-app VoIP · no charge · number hidden</span></div></div><span>›</span></div>
+          <div class="row card" style="margin-bottom:8px"><div class="row gap10"><span style="font-size:18px">📞</span><div class="col"><span class="t-body">Normal call</span><span class="t-small">Uses your minutes · direct call</span></div></div><span>›</span></div>
+          <div class="btn-out">Cancel</div>
+        </div>
+      </div>
+    </div>
+    <div class="states"><b>States:</b> opens as a <b>ModalBottomSheet</b> when 📞 Call is tapped on SCR-PA-015 (and from SCR-PA-023 trip details / SCR-PA-022 history). <b>Free call</b> → in-app VoIP (SCR-PA-028, WebRTC); on VoIP failure → "Call normally instead?" direct-dial prompt (US-26.4; D-25 removed). <b>Normal call</b> → places a <b>direct cellular call to the driver's real number</b> (revealed post-accept; masking removed — AL-48, US-26.2). First-call tooltip: "Your number is visible to the other party" (US-26.5). Disabled options greyed if the rider has no minutes / data; remembers last choice. <b>Δ Android:</b> <code>rememberModalBottomSheetState</code>; Normal call uses <code>Intent.ACTION_CALL</code> on the real number.</div>
+  </div>
+
+  <!-- pay fare -->
+  <div class="cell">
+    <div class="cap"><span class="scr">SCR-PA-017</span> · pay fare <span class="tag rep">REPLACE</span></div>
+    <div class="phone">
+      <div class="sbar"><span>9:41</span><span class="r">▾ ▾ ▮</span></div>
+      <div class="screen">
+        <div class="appbar"><span class="ic">‹</span><span style="font-size:16px">Pay fare</span></div>
+        <div class="body center" style="gap:14px">
+          <div class="t-label">Amount due</div>
+          <div class="h-display">Rs 850</div>
+          <div class="card" style="width:100%;display:grid;place-items:center;padding:22px;gap:10px;border-style:dashed;border-color:var(--primary)">
+            <div style="font-size:40px">📷</div>
+            <div class="t-sub">Scan driver's QR to pay</div>
+            <div class="t-small">Point your camera at the driver's printed or on-screen LankaQR</div>
+          </div>
+          <div class="cta">📷 Scan driver's QR</div>
+          <div class="cta tonal">🏦 Pay with my bank app (LankaQR)</div>
+          <div class="t-small">Awaiting confirmation… (88s)</div>
+          <div class="row gap10"><span class="textlink">Retry</span><span class="textlink">Switch to Cash</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="states"><b>States:</b> the passenger <b>scans the driver's QR</b> (printed, displayed on the driver device, or a window sticker) to complete payment — the app <b>no longer renders a MageRide QR in the centre</b>. Scan opens the camera scanner; alternatively "Pay with my bank app" deep-links LankaQR (AL-15). OnePay sheet; Pending 90s → Succeeded ✓ / Failed → retry or <b>FellBackToCash</b> (US-8.15) without losing history. <b>Driver-QR path (AL-47, US-26.1):</b> after paying, tap <b>“I’ve paid”</b> (optional receipt screenshot) → “Waiting for driver to confirm…” → Confirmed ✓ on <b>DriverConfirmedQR</b>; unconfirmed &gt;5 min → “Get help” support link.</div>
+  </div>
+
+  <!-- trip summary -->
+  <div class="cell">
+    <div class="cap"><span class="scr">SCR-PA-018</span> · trip summary <span class="tag keep">KEEP</span></div>
+    <div class="phone">
+      <div class="sbar"><span>9:41</span><span class="r">▾ ▾ ▮</span></div>
+      <div class="screen">
+        <div class="appbar"><span class="ic">✕</span><span style="font-size:16px">Trip complete</span></div>
+        <div class="body" style="gap:12px">
+          <div style="text-align:center"><div class="t-label">Total paid</div><div class="h-display">Rs 850</div><span class="pill-status ok">Cash settled</span></div>
+          <div class="map" style="flex:0 0 110px;border-radius:var(--rMd)"><div class="road" style="left:30px;top:50px;width:160px;height:4px;background:var(--primary);box-shadow:none"></div></div>
+          <div class="card"><div class="kv"><span class="k">Distance</span><span>8.2 km</span></div><div class="kv"><span class="k">First km</span><span>Rs 150</span></div><div class="kv"><span class="k">Per km × 7.2</span><span>Rs 720</span></div><div class="kv"><span class="k">Peak +20%</span><span>—</span></div><div class="kv" style="font-weight:700;border-top:1px solid var(--outline);padding-top:6px"><span>Total</span><span>Rs 850</span></div></div>
+          <div class="cta tonal">Rate your driver ★</div>
+        </div>
+      </div>
+    </div>
+    <div class="states"><b>States:</b> PaymentPending → "Pay now" CTA; Paid/CashSettled → receipt. Hero fade-in. (drop tip / India charges)</div>
+  </div>
+
+  <!-- rate driver -->
+  <div class="cell">
+    <div class="cap"><span class="scr">SCR-PA-019</span> · rate driver <span class="tag adp">ADAPT</span></div>
+    <div class="phone">
+      <div class="sbar"><span>9:41</span><span class="r">▾ ▾ ▮</span></div>
+      <div class="screen">
+        <div class="map"><div class="scrim"></div></div>
+        <div class="overlay sheet">
+          <div class="handle"></div>
+          <div style="text-align:center"><div class="avatar lg" style="margin:0 auto"><span>👤</span></div><div class="t-sub" style="margin-top:8px">How was your ride with K. Fernando?</div></div>
+          <div style="text-align:center;font-size:34px;color:var(--warning);margin:10px 0;letter-spacing:6px">★★★★☆</div>
+          <div class="row" style="flex-wrap:wrap;gap:6px;justify-content:center"><span class="chip sm">Clean</span><span class="chip sm on">On time</span><span class="chip sm">Polite</span><span class="chip sm">Safe driving</span></div>
+          <div class="field" style="margin:10px 0"><span style="color:var(--onSurfaceVariant)">Add a comment (optional)</span></div>
+          <div class="cta">Submit</div>
+        </div>
+      </div>
+    </div>
+    <div class="states"><b>States:</b> submit loader. 1–5 stars → reason chips → optional comment (US-18.1). Star tap scale + haptic.</div>
+  </div>
+
+  <!-- package track sender -->
+  <div class="cell">
+    <div class="cap"><span class="scr">SCR-PA-020</span> · package track (sender) <span class="tag new">NEW</span></div>
+    <div class="phone">
+      <div class="sbar"><span>9:41</span><span class="r">▾ ▾ ▮</span></div>
+      <div class="screen">
+        <div class="appbar"><span class="ic">‹</span><span style="font-size:16px">Package · sending</span></div>
+        <div class="map" style="flex:0 0 150px"><span class="mk tri" style="left:130px;top:80px"></span></div>
+        <div class="body" style="gap:12px">
+          <div class="stepper"><span class="s now"></span><span class="ln"></span><span class="s"></span><span class="ln"></span><span class="s"></span><span class="ln"></span><span class="s"></span></div>
+          <div class="row"><span class="t-small"><b>Pickup pending</b></span><span class="t-small">Picked up</span><span class="t-small">In transit</span><span class="t-small">Delivered</span></div>
+          <div class="card fill" style="text-align:center"><div class="t-label">Pickup OTP — give to driver</div><div class="otp mono" style="margin-top:5px;justify-content:center"><span class="b fill">4</span><span class="b fill">8</span><span class="b fill">2</span><span class="b fill">9</span></div></div>
+          <div class="row"><div class="avatar">👤</div><div class="col"><span class="t-body">K. Fernando · Tuk <span class="stars">★4.7</span></span></div><span class="textlink">📞 Call</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="states"><b>States:</b> 4-step status via FCM (US-20.7). 4-digit pickup OTP (P-07, US-20.4). Step fill anim.</div>
+  </div>
+
+  <!-- package track recipient -->
+  <div class="cell">
+    <div class="cap"><span class="scr">SCR-PA-021</span> · package track (recipient) <span class="tag new">NEW</span></div>
+    <div class="phone">
+      <div class="sbar"><span>9:41</span><span class="r">▾ ▾ ▮</span></div>
+      <div class="screen">
+        <div class="appbar"><span class="ic">‹</span><span style="font-size:16px">Incoming package</span></div>
+        <div class="map" style="flex:0 0 150px"><span class="mk tri" style="left:170px;top:100px"></span><div class="pin drop" style="left:120px;top:50px"></div></div>
+        <div class="body" style="gap:12px">
+          <div class="stepper"><span class="s done"></span><span class="ln done"></span><span class="s done"></span><span class="ln done"></span><span class="s now"></span><span class="ln"></span><span class="s"></span></div>
+          <div class="t-small"><b>In transit</b> · arriving ~12 min</div>
+          <div class="card fill" style="text-align:center"><div class="t-label">Delivery OTP — give to driver on handover</div><div class="otp mono" style="margin-top:5px;justify-content:center"><span class="b fill">7</span><span class="b fill">3</span><span class="b fill">1</span><span class="b fill">5</span></div></div>
+          <div class="row"><div class="avatar">👤</div><div class="col"><span class="t-body">K. Fernando · Tuk · ABC-1234</span><span class="t-small">ETA 12 min</span></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="states"><b>States:</b> trigger = <b>driver confirms pickup</b>. Recipient <b>with MageRide app</b> → FCM push <i>"📦 Package on the way — K. Fernando · ETA 12 min"</i>; tapping it opens <b>this screen (SCR-PA-021)</b>. Recipient <b>without the app</b> → SMS <i>"Your package is on the way. Track here: passenger.mageride.lk/track?token=xxxxx"</i> → opens a <b>lightweight web tracking page</b> (map + status + Delivery OTP, no app/login, P-09). 4-digit delivery OTP (US-20.5).</div>
+  </div>
+</div>
+
+<!-- ============ CLUSTER 5 : HISTORY / MODE B / SETTINGS / SUPPORT / SYSTEM ============ -->
+<div class="cluster"><span class="pill">Cluster 5</span> History · Mode B · Settings · Support · System</div>
+<div class="grid">
+
+  <!-- trip history -->
+  <div class="cell">
+    <div class="cap"><span class="scr">SCR-PA-022</span> · trip &amp; schedule history <span class="tag keep">KEEP</span></div>
+    <div class="phone">
+      <div class="sbar"><span>9:41</span><span class="r">▾ ▾ ▮</span></div>
+      <div class="screen">
+        <div class="appbar"><span style="font-size:17px">Your trips</span></div>
+        <div class="tabbar2"><b class="on">Past</b><b>Scheduled</b><b>Packages</b></div>
+        <div class="body" style="gap:10px">
+          <div class="card"><div class="row"><span class="t-sub">Nugegoda → Galle Face</span><span class="pill-status ok">Paid</span></div><div class="kv"><span class="k">17 Jun · 8.2 km · Sedan</span><span>Rs 850</span></div><div class="row" style="margin-top:4px"><span class="t-small">🚗 K. Fernando · 📞 +94 77 123 4567</span><span class="spacer"></span><span class="textlink">Call</span></div></div>
+          <div class="card"><div class="row"><span class="t-sub">Home → Office</span><span class="pill-status mut">Cash</span></div><div class="kv"><span class="k">15 Jun · 5.1 km · Tuk</span><span>Rs 520</span></div><div class="row" style="margin-top:4px"><span class="t-small">🚗 S. Perera · 📞 +94 71 998 2210</span><span class="spacer"></span><span class="textlink">Call</span></div></div>
+          <div class="card"><div class="row"><span class="t-sub">Pettah → Dehiwala</span><span class="pill-status err">Cancelled</span></div><div class="kv"><span class="k">14 Jun · Rs 50 penalty</span><span>Rs 50</span></div></div>
+        </div>
+        <div class="navbar"><div class="t"><span class="gi">🗺</span>Map</div><div class="t on"><span class="gi">🧾</span>Trips</div><div class="t"><span class="gi">💬</span>Support</div><div class="t"><span class="gi">≡</span>Menu</div></div>
+      </div>
+    </div>
+    <div class="states"><b>States:</b> empty → illustration; Loading → shimmer; infinite scroll. Tabs Past/Scheduled/Packages (US-8.7, 20.11). <b>Each completed trip card shows the driver's name and mobile number</b> with a <b>Call</b> action (opens the call-type chooser SCR-PA-015a) so the rider can reach the driver after the trip — e.g. for a lost item. Number hidden for cancelled-before-assignment trips. (US-24.4)</div>
+  </div>
+
+  <!-- trip details -->
+  <div class="cell">
+    <div class="cap"><span class="scr">SCR-PA-023</span> · trip details <span class="tag keep">KEEP</span></div>
+    <div class="phone">
+      <div class="sbar"><span>9:41</span><span class="r">▾ ▾ ▮</span></div>
+      <div class="screen">
+        <div class="appbar"><span class="ic">‹</span><span style="font-size:16px">Trip details</span></div>
+        <div class="body" style="gap:12px">
+          <div class="map" style="flex:0 0 120px;border-radius:var(--rMd)"></div>
+          <div class="card"><div class="kv"><span class="k">Date</span><span>17 Jun 2026, 08:32</span></div><div class="kv"><span class="k">Vehicle</span><span>Sedan · ABC-1234</span></div><div class="kv"><span class="k">Driver</span><span>K. Fernando ★4.8</span></div><div class="kv"><span class="k">Distance</span><span>8.2 km</span></div><div class="kv" style="font-weight:700;border-top:1px solid var(--outline);padding-top:6px"><span>Total (Cash)</span><span>Rs 850</span></div></div>
+          <div class="btn-row"><div class="btn-out">⬇ Receipt</div><div class="btn-out">⚑ Report issue</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="states"><b>States:</b> receipt download. → Report issue / Support.</div>
+  </div>
+
+  <!-- mode b request -->
+  <div class="cell">
+    <div class="cap"><span class="scr">SCR-PA-024</span> · Mode B access request <span class="tag new">NEW</span></div>
+    <div class="phone">
+      <div class="sbar"><span>9:41</span><span class="r">▾ ▾ ▮</span></div>
+      <div class="screen">
+        <div class="appbar"><span class="ic">‹</span><span style="font-size:16px">Private transport</span></div>
+        <div class="body" style="gap:13px">
+          <div class="card fill"><span class="badge" style="background:var(--modeB)">MODE B</span><div class="t-small" style="margin-top:6px">Request access to track a private vehicle. The owner approves in the Driver App.</div></div>
+          <div class="field lbl"><span class="t-label">Vehicle ID</span><span class="val">MR-VEH-48213</span></div>
+          <div class="card" style="background:#E4F5EA;border-color:#A9DDB9"><span class="pill-status ok">Pending approval</span><div class="t-small" style="margin-top:5px">Request sent · first month free (US-4.7)</div></div>
+          <div class="spacer"></div>
+          <div class="cta">Send request</div>
+        </div>
+      </div>
+    </div>
+    <div class="states"><b>States:</b> opened by <b>tapping a Mode B (private) vehicle marker</b> on the live map — Vehicle ID is pre-filled from the marker (also reachable from the nav drawer → "Private transport"). Pending / Accepted / Rejected chip (US-4.6). Grant added to map only after the driver/owner <b>accepts</b> (D-23). Re-subscribing after an unsubscribe (US-NEW.1) follows the same request → accept flow.</div>
+  </div>
+
+  <!-- mode b manage -->
+  <div class="cell">
+    <div class="cap"><span class="scr">SCR-PA-025</span> · my private subscriptions <span class="tag new">NEW</span></div>
+    <div class="phone">
+      <div class="sbar"><span>9:41</span><span class="r">▾ ▾ ▮</span></div>
+      <div class="screen">
+        <div class="appbar"><span class="ic">‹</span><span style="font-size:16px">My subscriptions</span></div>
+        <div class="body" style="gap:10px">
+          <div class="card">
+            <div class="row"><div class="col"><span class="t-sub">Office Van · MR-VEH-48213</span><span class="t-small">Paid · Rs 6,000/mo · next due 6 Jul</span></div><span class="badge" style="background:var(--vehPrivate)">B</span></div>
+            <div class="row" style="margin-top:8px"><span class="pill-status warn">Payment due</span><span class="spacer"></span>
+              <span class="iconbtn prim">💳 Pay</span>
+              <span class="iconbtn">🧾</span>
+              <span class="iconbtn err" title="Unsubscribe">✕</span>
+            </div>
+          </div>
+          <div class="card">
+            <div class="row"><div class="col"><span class="t-sub">School Bus · MR-VEH-77120</span><span class="t-small">Paid · Rs 4,500/mo · valid to 31 Jul</span></div><span class="badge" style="background:var(--vehPrivate)">B</span></div>
+            <div class="row" style="margin-top:8px"><span class="pill-status ok">Paid</span><span class="spacer"></span>
+              <span class="iconbtn prim">💳 Pay</span>
+              <span class="iconbtn">🧾</span>
+              <span class="iconbtn err" title="Unsubscribe">✕</span>
+            </div>
+          </div>
+          <div class="card">
+            <div class="row"><div class="col"><span class="t-sub">Staff Shuttle · MR-VEH-90233</span><span class="t-small">Free (office transport)</span></div><span class="badge" style="background:var(--vehPrivate)">B</span></div>
+            <div class="row" style="margin-top:8px"><span class="pill-status mut">Free</span><span class="spacer"></span>
+              <span class="iconbtn err" title="Unsubscribe">✕</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="states"><b>States:</b> each card shows <b>Paid (amount/mo + next-due / valid-to)</b> or <b>Free</b>. <b>💳 Pay</b> (Paid only) → <b>SCR-PA-025a payment</b>; <b>🧾</b> → <b>SCR-PA-025b payment history</b>; <b>small ✕ unsubscribe icon</b> (now a compact icon button, not a full-width bar). <b>Unsubscribe</b> → revocation push &lt;200 ms (D-22, US-NEW.1); the passenger <b>can no longer see the vehicle</b> and must request again (driver/owner accept) to re-subscribe; the row stays <b>muted in the fleet portal until the owner deletes it</b>. <b>Δ Android:</b> swipe-to-unsubscribe also supported.</div>
+  </div>
+
+  <!-- subscription payment -->
+  <div class="cell">
+    <div class="cap"><span class="scr">SCR-PA-025a</span> · subscription payment <span class="tag new">NEW</span></div>
+    <div class="phone">
+      <div class="sbar"><span>9:41</span><span class="r">▾ ▾ ▮</span></div>
+      <div class="screen">
+        <div class="appbar"><span class="ic">‹</span><span style="font-size:16px">Pay subscription</span></div>
+        <div class="body" style="gap:11px;overflow:auto">
+          <div class="card fill"><div class="row"><div class="col"><span class="t-sub">Office Van · MR-VEH-48213</span><span class="t-small">June · due 6 Jul · to ABC Fleet (Pvt) Ltd</span></div><div class="h-title">Rs 6,000</div></div></div>
+          <div class="t-label">Choose payment mode</div>
+          <div class="card" style="border-color:var(--primary)"><div class="row gap10"><span style="font-size:18px">🏦</span><div class="col"><span class="t-body">LankaQR — deep link</span><span class="t-small" style="color:var(--success)">open your bank app · no surcharge</span></div><span class="cdot" style="background:var(--primary)"></span></div></div>
+          <div class="card"><div class="row gap10"><span style="font-size:18px">📷</span><div class="col"><span class="t-body">LankaQR — scan QR code</span><span class="t-small">scan the fleet's LankaQR</span></div></div></div>
+          <div class="card"><div class="row gap10"><span style="font-size:18px">💳</span><div class="col"><span class="t-body">OnePay</span><span class="t-small" style="color:var(--warning)">cards / wallets · +5%</span></div></div></div>
+          <div class="card"><div class="row gap10"><span style="font-size:18px">🧾</span><div class="col"><span class="t-body">Online transfer</span><span class="t-small">to fleet bank account · attach slip</span></div></div>
+            <div class="btn-out" style="margin-top:9px;height:42px">📎 Attach transfer screenshot</div>
+          </div>
+          <div class="cta">Confirm &amp; pay Rs 6,000</div>
+        </div>
+      </div>
+    </div>
+    <div class="states"><b>States:</b> reached from <b>💳 Pay</b> on a Paid subscription card (SCR-PA-025). Modes — <b>LankaQR deep-link</b>, <b>LankaQR QR scan</b>, <b>OnePay</b> (+5%), <b>Online transfer</b> (must <b>attach screenshot</b> of the slip). Electronic modes confirm instantly → card shows <b>Paid</b>; transfer submits as <b>Pending verification</b> until the fleet owner confirms in the portal. Payment is routed to the <b>fleet owner</b> for that vehicle and lands in their portal under the vehicle. (US-NEW.payments)</div>
+  </div>
+
+  <!-- subscription payment history -->
+  <div class="cell">
+    <div class="cap"><span class="scr">SCR-PA-025b</span> · payment history <span class="tag new">NEW</span></div>
+    <div class="phone">
+      <div class="sbar"><span>9:41</span><span class="r">▾ ▾ ▮</span></div>
+      <div class="screen">
+        <div class="appbar"><span class="ic">‹</span><span style="font-size:16px">Payment history</span></div>
+        <div class="body" style="gap:10px">
+          <div class="card fill"><div class="row"><span class="t-sub">Office Van · MR-VEH-48213</span><span class="t-small">Rs 6,000/mo</span></div></div>
+          <div class="card"><div class="row"><span class="t-body">Jun 2026</span><span class="pill-status ok">Paid</span></div><div class="kv"><span class="k">6 Jun · LankaQR</span><span>Rs 6,000</span></div></div>
+          <div class="card"><div class="row"><span class="t-body">May 2026</span><span class="pill-status warn">Pending verification</span></div><div class="kv"><span class="k">6 May · Online transfer (slip)</span><span>Rs 6,000</span></div></div>
+          <div class="card"><div class="row"><span class="t-body">Apr 2026</span><span class="pill-status mut">Paid · cash</span></div><div class="kv"><span class="k">6 Apr · marked received by owner</span><span>Rs 6,000</span></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="states"><b>States:</b> per-subscriber statement reached from <b>🧾</b> on a subscription card. Rows show month, date, method (LankaQR / OnePay / transfer / <b>cash marked received by owner</b>) and status — <b>Paid</b> / <b>Pending verification</b> (transfer awaiting owner) (US-NEW.payments h). Mirrors the fleet portal per-subscriber ledger.</div>
+  </div>
+
+  <!-- saved addresses -->
+  <div class="cell">
+    <div class="cap"><span class="scr">SCR-PA-026</span> · saved addresses <span class="tag adp">ADAPT</span></div>
+    <div class="phone">
+      <div class="sbar"><span>9:41</span><span class="r">▾ ▾ ▮</span></div>
+      <div class="screen">
+        <div class="appbar"><span class="ic">‹</span><span style="font-size:16px">Saved addresses</span></div>
+        <div class="body" style="gap:10px">
+          <div class="listrow"><span class="ic">★</span><div class="col"><span class="t-body">Home</span><span class="t-small">221 Galle Rd, Dehiwala</span></div><span class="chev">✎</span></div>
+          <div class="listrow"><span class="ic">★</span><div class="col"><span class="t-body">Work</span><span class="t-small">WTC, Colombo 01</span></div><span class="chev">✎</span></div>
+          <div class="listrow"><span class="ic">📍</span><div class="col"><span class="t-body">Gym</span><span class="t-small">Nugegoda</span></div><span class="chev">✎</span></div>
+          <div class="map" style="flex:0 0 100px;border-radius:var(--rMd)"><div class="pin pickup" style="left:140px;top:40px"></div></div>
+          <div class="t-small">Drop / drag pin on map → reverse-geocoded (AL-14)</div>
+          <div class="cta">＋ Add address</div>
+        </div>
+      </div>
+    </div>
+    <div class="states"><b>States:</b> Save Home &amp; Work by pin on OSM map. After dragging/dropping the pin, tapping <b>＋ Add address</b> opens a <b>ModalBottomSheet (SCR-PA-026a)</b> to capture the address; edit/delete supported. (US-22.1/22.2)</div>
+  </div>
+
+  <!-- add address modal -->
+  <div class="cell">
+    <div class="cap"><span class="scr">SCR-PA-026a</span> · save address (modal sheet) <span class="tag new">NEW</span></div>
+    <div class="phone">
+      <div class="sbar"><span>9:41</span><span class="r">▾ ▾ ▮</span></div>
+      <div class="screen">
+        <div class="appbar"><span class="ic">‹</span><span style="font-size:16px">Saved addresses</span></div>
+        <div class="map" style="flex:0 0 150px"><div class="pin pickup" style="left:150px;top:60px;width:26px;height:26px"></div><div style="position:absolute;left:120px;top:96px;font-size:11px;color:var(--onSurfaceVariant)">drag to adjust</div></div>
+        <div class="scrim"></div>
+        <div class="overlay sheet">
+          <div class="handle"></div>
+          <div class="h-title" style="margin-bottom:4px">Add address</div>
+          <div class="capnote">Pinned: 6.8649, 79.8997 · reverse-geocoded (AL-14)</div>
+          <div class="field lbl"><span class="t-label">Address Line 1</span><span class="val">No. 42, Galle Road</span></div>
+          <div class="field lbl"><span class="t-label">Address Line 2</span><span class="val">Kollupitiya</span></div>
+          <div class="field lbl"><span class="t-label">Address Line 3</span><span class="val">Colombo 03</span></div>
+          <div class="field lbl"><span class="t-label">Label</span><span class="val">Gym</span></div>
+          <div class="cta" style="margin-top:12px">Save address</div>
+        </div>
+      </div>
+    </div>
+    <div class="states"><b>States:</b> M3 <b>ModalBottomSheet</b> opened when <b>＋ Add address</b> is tapped after dragging/dropping the map pin (SCR-PA-026). Captures <b>Address Line 1</b> (main street/building), <b>Address Line 2</b> (area/suburb), <b>Address Line 3</b> (city/district) and a free-text <b>Label</b> ("Gym", "Mum's House", "Office"). Save → Loading → row appears in Saved addresses. (US-22.1/22.2)</div>
+  </div>
+
+  <!-- profile & settings -->
+  <div class="cell">
+    <div class="cap"><span class="scr">SCR-PA-027</span> · profile &amp; settings <span class="tag adp">ADAPT</span></div>
+    <div class="phone">
+      <div class="sbar"><span>9:41</span><span class="r">▾ ▾ ▮</span></div>
+      <div class="screen">
+        <div class="appbar"><span class="ic">‹</span><span style="font-size:16px">Profile &amp; settings</span></div>
+        <div class="body" style="gap:9px">
+          <div class="row card"><div class="avatar">👤</div><div class="col"><span class="t-sub">Ramith de Silva</span><span class="t-small">ID: PAX-90431 · +94 77 123 4567</span></div><span class="chev">✎</span></div>
+          <div class="listrow"><span class="ic">🌐</span><span class="t-body">Language</span><span class="chev">English ›</span></div>
+          <div class="listrow"><span class="ic">★</span><span class="t-body">Save Home &amp; Work</span><span class="chev">›</span></div>
+          <div class="listrow"><span class="ic">📍</span><span class="t-body">Saved addresses</span><span class="chev">›</span></div>
+          <div class="listrow"><span class="ic">💳</span><span class="t-body">Default payment</span><span class="chev">Cash ›</span></div>
+          <div class="listrow"><span class="ic">🔔</span><span class="t-body">Notifications</span><div class="toggle on"></div></div>
+          <div class="listrow"><span class="ic">💬</span><span class="t-body">Help &amp; support</span><span class="chev">›</span></div>
+          <div class="row" style="margin-top:6px"><span class="textlink">Log out</span><span class="textlink" style="color:var(--error)">Delete account</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="states"><b>States:</b> tap profile card → <b>Edit profile</b> (SCR-PA-027b). Default payment Cash/LankaQR/OnePay (US-22.4, AL-14); delete → confirm dialog (PDPA, US-1.8). Single-active-device per app (AL-08).</div>
+  </div>
+
+  <!-- edit profile -->
+  <div class="cell">
+    <div class="cap"><span class="scr">SCR-PA-027b</span> · edit profile <span class="tag new">NEW</span></div>
+    <div class="phone">
+      <div class="sbar"><span>9:41</span><span class="r">▾ ▾ ▮</span></div>
+      <div class="screen">
+        <div class="appbar"><span class="ic">‹</span><span style="font-size:16px">Edit profile</span><span class="spacer"></span><span class="textlink">Save</span></div>
+        <div class="body" style="gap:12px;overflow:auto">
+          <div style="display:grid;place-items:center;padding:4px 0"><div class="avatar lg"><span>👤</span><div class="cam">📷</div></div><span class="textlink" style="margin-top:8px">Take photo or upload</span></div>
+          <div class="col gap6"><div class="t-label">Full name</div><div class="field"><span class="val">Ramith de Silva</span></div></div>
+          <div class="row"><div class="t-body">Notifications &amp; offers</div><div class="toggle on"></div></div>
+          <div class="t-label" style="margin-top:2px">SOS / emergency contacts</div>
+          <div class="listrow"><span class="ic">👤</span><div class="col"><span class="t-body">Amma</span><span class="t-small">+94 77 000 1111</span></div><span class="chev">✎</span></div>
+          <div class="btn-out" style="height:42px">＋ Add SOS contact</div>
+        </div>
+      </div>
+    </div>
+    <div class="states"><b>States:</b> reached from SCR-PA-027 profile card. Avatar tap → camera/gallery action sheet + crop; edit name; notification toggle; add/edit SOS contacts (feeds SCR-PA-029 SOS). <b>Language selection removed from this screen</b> — language is set in onboarding (SCR-PA-002) and Profile &amp; settings (SCR-PA-027). Loading on Save; inline validation. (US-1.5 / 12.1 / 22.x)</div>
+  </div>
+
+  <!-- voip call -->
+  <div class="cell">
+    <div class="cap"><span class="scr">SCR-PA-028</span> · VoIP call <span class="tag new">NEW</span></div>
+    <div class="phone">
+      <div class="sbar onPrim"><span>9:41</span><span class="r">▾ ▾ ▮</span></div>
+      <div class="screen" style="background:#15171B">
+        <div class="body center" style="gap:16px;color:#fff">
+          <div class="t-small" style="color:#AEB3BC">In-app call · number hidden</div>
+          <div class="avatar lg" style="background:#2A2D31;color:#9aa">👤</div>
+          <div class="h-headline" style="color:#fff">K. Fernando</div>
+          <div class="t-small" style="color:#9FCAFF">Connected · 01:24</div>
+          <div class="spacer"></div>
+          <div class="row gap16"><div class="fab" style="position:static">🔇</div><div class="fab" style="position:static">🔊</div></div>
+          <div class="cta err" style="width:64px;height:64px;border-radius:50%">📞</div>
+        </div>
+      </div>
+    </div>
+    <div class="states"><b>States:</b> Connecting/Connected/Ended; VoIP fails → "Call normally instead?" direct-dial prompt (US-26.4; D-25 removed). <b>Δ Android:</b> WebRTC + ConnectionService. (US-6A.16)</div>
+  </div>
+
+  <!-- sos -->
+  <div class="cell">
+    <div class="cap"><span class="scr">SCR-PA-029</span> · SOS <span class="tag adp">ADAPT</span></div>
+    <div class="phone">
+      <div class="sbar onPrim"><span>9:41</span><span class="r">▾ ▾ ▮</span></div>
+      <div class="screen" style="background:#2A0A0A">
+        <div class="body center" style="gap:16px;color:#fff">
+          <div class="h-title" style="color:#fff">Emergency SOS</div>
+          <div style="width:130px;height:130px;border-radius:50%;background:var(--error);display:grid;place-items:center;font-weight:800;font-size:26px;color:#fff;box-shadow:0 0 0 14px rgba(211,47,47,.25)">SOS</div>
+          <div class="t-small" style="color:#FFB4AB">Sending GPS + trip to emergency contacts via SMS…</div>
+          <div class="card" style="width:100%;background:#3A1414;border-color:#5A2020;color:#fff"><div class="row"><span>Amma · +94 77 000 1111</span><span class="pill-status ok">Sent</span></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="states"><b>States:</b> Active → pulsing red + "Sending…"; confirmation (SOS ≤5s, D-33). Strong haptic. (US-12.1)</div>
+  </div>
+
+  <!-- support + ticket -->
+  <div class="cell">
+    <div class="cap"><span class="scr">SCR-PA-030</span> · support + ticket <span class="tag adp">ADAPT</span></div>
+    <div class="phone">
+      <div class="sbar"><span>9:41</span><span class="r">▾ ▾ ▮</span></div>
+      <div class="screen">
+        <div class="appbar"><span class="ic">‹</span><span style="font-size:16px">Support</span></div>
+        <div class="body" style="gap:9px">
+          <div class="searchbar"><span>🔍 Search help</span></div>
+          <div class="t-label">FAQ</div>
+          <div class="listrow"><span class="t-body">How do I get a receipt?</span><span class="chev">＋</span></div>
+          <div class="listrow"><span class="t-body">Payment failed — what now?</span><span class="chev">＋</span></div>
+          <div class="t-label" style="margin-top:4px">Your tickets</div>
+          <div class="card"><div class="row"><span class="t-body">#TK-4521 · Wrong fare</span><span class="pill-status warn">Open</span></div><div class="t-small">Attached trip PAX-90431-0617</div></div>
+          <div class="cta tonal">Raise a ticket</div>
+        </div>
+      </div>
+    </div>
+    <div class="states"><b>States:</b> ticket status chip; "Raise a ticket" → <b>modal sheet (SCR-PA-030a)</b>. FAQ accordion + thread (US-16.1/16.2).</div>
+  </div>
+
+  <!-- raise ticket modal -->
+  <div class="cell">
+    <div class="cap"><span class="scr">SCR-PA-030a</span> · raise ticket (modal sheet) <span class="tag new">NEW</span></div>
+    <div class="phone">
+      <div class="sbar"><span>9:41</span><span class="r">▾ ▾ ▮</span></div>
+      <div class="screen">
+        <div class="appbar"><span class="ic">‹</span><span style="font-size:16px">Support</span></div>
+        <div class="body" style="gap:9px">
+          <div class="searchbar"><span>🔍 Search help</span></div>
+          <div class="t-label">FAQ</div>
+          <div class="listrow"><span class="t-body">How do I get a receipt?</span><span class="chev">＋</span></div>
+        </div>
+        <div class="scrim"></div>
+        <div class="overlay sheet">
+          <div class="handle"></div>
+          <div class="h-title" style="margin-bottom:10px">Raise a ticket</div>
+          <div class="field lbl" style="min-height:72px;align-items:stretch"><span class="t-label">Issue description</span><span style="color:var(--onSurfaceVariant)">Tell us what went wrong…</span></div>
+          <div class="col gap6" style="margin-top:10px"><div class="t-label">Related trip</div><div class="field"><span class="val">PAX-90431-0617 · Nugegoda → Galle Face</span><span class="spacer"></span><span>▾</span></div></div>
+          <div class="btn-out" style="margin-top:10px;height:42px">📎 Attach a screenshot</div>
+          <div class="cta" style="margin-top:12px">Submit ticket</div>
+        </div>
+      </div>
+    </div>
+    <div class="states"><b>States:</b> M3 modal bottom sheet from "Raise a ticket". Inputs — issue description, <b>past Trip ID dropdown</b>, attach screenshot. Submit → Loading → new ticket appears under "Your tickets" (US-16.1/16.2).</div>
+  </div>
+
+  <!-- app update -->
+  <div class="cell">
+    <div class="cap"><span class="scr">SCR-PA-031</span> · app update <span class="tag new">NEW</span></div>
+    <div class="phone">
+      <div class="sbar"><span>9:41</span><span class="r">▾ ▾ ▮</span></div>
+      <div class="screen">
+        <div class="map"><div class="scrim"></div></div>
+        <div class="dialog"><div class="box" style="text-align:center">
+          <div style="font-size:34px">⬆️</div>
+          <div class="t-sub" style="margin:8px 0">Update required</div>
+          <div class="t-small">A new version is required to keep riding. This update can't be skipped.</div>
+          <div class="cta" style="margin-top:14px">Update now</div>
+        </div></div>
+        <div class="snackbar" style="bottom:auto;top:40px">Soft update available <span class="act">Update</span></div>
+      </div>
+    </div>
+    <div class="states"><b>States:</b> gateway <code>426</code> → mandatory = non-dismissible dialog → Store; soft = dismissible banner/snackbar (US-17.1/17.2, D-31).</div>
+  </div>
+
+  <!-- offline banner -->
+  <div class="cell">
+    <div class="cap"><span class="scr">SCR-PA-032</span> · offline state <span class="tag adp">ADAPT</span></div>
+    <div class="phone">
+      <div class="sbar"><span>9:41</span><span class="r">▾ ✕ ▮</span></div>
+      <div class="screen">
+        <div class="appbar elev"><span class="ic">≡</span><span>MageRide</span><span class="spacer"></span><span class="ic">⦿</span></div>
+        <div class="banner err">📡 Connection lost — showing last known positions</div>
+        <div class="map" style="filter:grayscale(.5) opacity(.7)">
+          <span class="mk" style="background:var(--vehBus);left:60px;top:60px"></span>
+          <span class="mk" style="background:var(--vehSedan);left:150px;top:120px"></span>
+          <div class="userdot" style="left:120px;top:160px"></div>
+        </div>
+        <div class="sheet"><div class="handle"></div><div class="searchbar"><span>🔍 Where to?</span></div></div>
+      </div>
+    </div>
+    <div class="states"><b>States:</b> banner only (not full takeover); current screen preserved; auto-clears on reconnect &lt;5s (US-15.4/15.6). Distinguishes "no connectivity" from "no vehicles".</div>
+  </div>
+
+  <!-- menu / nav drawer -->
+  <div class="cell">
+    <div class="cap"><span class="scr">SCR-PA-033</span> · menu (nav drawer) <span class="tag new">NEW</span></div>
+    <div class="phone">
+      <div class="sbar onPrim"><span style="color:var(--onSurface)">9:41</span><span class="r" style="color:var(--onSurface)">▾ ▾ ▮</span></div>
+      <div class="screen">
+        <div class="appbar elev"><span class="ic">≡</span><span>MageRide</span><span class="spacer"></span><span class="ic">⦿</span></div>
+        <div class="map">
+          <span class="mk" style="background:var(--vehBus);left:60px;top:60px"></span>
+          <span class="mk" style="background:var(--vehSedan);left:150px;top:120px"></span>
+          <div class="scrim"></div>
+          <!-- left modal nav drawer -->
+          <div style="position:absolute;top:0;bottom:0;left:0;width:248px;background:#fff;box-shadow:4px 0 18px rgba(0,0,0,.22);display:flex;flex-direction:column;z-index:6">
+            <div style="padding:18px 16px;background:var(--primaryContainer);color:var(--onPrimaryContainer)">
+              <div class="avatar" style="background:#fff">👤</div>
+              <div class="t-sub" style="margin-top:8px">Ramith de Silva</div>
+              <div class="t-small" style="color:var(--onPrimaryContainer)">PAX-90431 · +94 77 123 4567</div>
+            </div>
+            <div style="padding:8px 6px;display:flex;flex-direction:column;gap:2px">
+              <div class="listrow" style="border:none;padding:11px 10px"><span class="ic">🚐</span><span class="t-body">Private transport</span><span class="chev">›</span></div>
+              <div class="listrow" style="border:none;padding:11px 10px"><span class="ic">🔑</span><span class="t-body">My subscriptions</span><span class="chev">›</span></div>
+              <div class="listrow" style="border:none;padding:11px 10px"><span class="ic">★</span><span class="t-body">Saved addresses</span><span class="chev">›</span></div>
+              <div class="listrow" style="border:none;padding:11px 10px"><span class="ic">⚙</span><span class="t-body">Profile &amp; settings</span><span class="chev">›</span></div>
+              <div class="divider" style="margin:6px 10px"></div>
+              <div class="listrow" style="border:none;padding:11px 10px"><span class="ic">💬</span><span class="t-body">Help &amp; support</span><span class="chev">›</span></div>
+              <div class="listrow" style="border:none;padding:11px 10px"><span class="ic">⎋</span><span class="t-body" style="color:var(--error)">Log out</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="navbar"><div class="t"><span class="gi">🗺</span>Map</div><div class="t"><span class="gi">🧾</span>Trips</div><div class="t"><span class="gi">💬</span>Support</div><div class="t on"><span class="gi">≡</span>Menu</div></div>
+      </div>
+    </div>
+    <div class="states"><b>States:</b> Material 3 <b>modal navigation drawer</b> opened from the ≡ menu / "Menu" tab. Items route to: <b>Private transport → SCR-PA-024</b>, <b>My subscriptions → SCR-PA-025</b>, <b>Saved addresses → SCR-PA-026</b>, <b>Profile &amp; settings → SCR-PA-027</b> (plus Help &amp; support, Log out). Scrim tap / swipe-left closes. (US-NEW.nav)</div>
+  </div>
+</div>
+
+<footer style="color:#5b5f66;font-size:12px;padding:8px 30px 40px">MageRide · Passenger · Android (Material 3) · ~38 screens · generated from <code>mageride-specs/D2_mageride_ui_spec.md</code> §A · AL-09 palette · light theme. Updated per discussion 2026-06-21.</footer>
+</body>
+</html>

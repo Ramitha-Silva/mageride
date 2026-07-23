@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MageRide · Admin Portal — admin.mageride.lk (wireframes)</title>
+<style>
+:root{
+  --primary:#FF6D00;--secondary:#0061A4;--secondaryContainer:#D1E4FF;
+  --bg:#EEF0F3;--surface:#FFFFFF;--surfaceVariant:#F4F6F8;--outline:#D8DCE2;
+  --onSurface:#1A1C1E;--onSurfaceVariant:#5B5F66;--ink:#11141A;
+  --success:#2E9E4F;--warning:#F5A300;--error:#D32F2F;
+  --vehBus:#2E9E4F;--vehTrain:#E5331F;--vehMotorbike:#8E44CE;--vehTuk:#F5C518;--vehFlex:#1ABC9C;--vehSedan:#1E6FE5;--vehMiniVan:#EC4899;--vehVan:#F57C00;--vehTruck:#8B5E3C;--vehMiniTruck:#808000;--vehPrivate:#8A8F98;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--onSurface);line-height:1.45}
+.page-header{position:sticky;top:0;z-index:20;background:#15171B;color:#fff;padding:14px 28px;box-shadow:0 2px 8px rgba(0,0,0,.25)}
+.page-header h1{font-size:18px;font-weight:700}.page-header .sub{font-size:12px;color:#AEB3BC;margin-top:3px}.page-header a{color:#FFB68A;text-decoration:none}
+.note-bar{background:#FFF6E9;border-left:4px solid var(--warning);color:#5B4300;font-size:12.5px;padding:10px 28px}
+.wrap{max-width:1000px;margin:0 auto;padding:26px 28px 60px}
+.cap{font-size:13px;font-weight:700;color:var(--ink);margin:30px 0 8px;display:flex;align-items:center;gap:8px}
+.cap .scr{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;color:var(--primary)}
+.cap .tag{font-size:9px;font-weight:700;color:#fff;background:#2E9E4F;border-radius:4px;padding:1px 6px}
+.cap .role{font-size:10px;font-weight:700;color:#003355;background:var(--secondaryContainer);border-radius:4px;padding:1px 7px}
+.states{font-size:11px;color:var(--onSurfaceVariant);margin-top:7px;font-style:italic;background:#fff;border:1px solid var(--outline);border-radius:8px;padding:8px 11px}.states b{font-style:normal;color:var(--ink)}
+/* browser frame */
+.browser{background:#fff;border:1px solid var(--outline);border-radius:12px;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,.10)}
+.chrome{height:38px;background:#E7EAEE;display:flex;align-items:center;gap:8px;padding:0 14px;border-bottom:1px solid var(--outline)}
+.lights{display:flex;gap:6px}.lights i{width:11px;height:11px;border-radius:50%}.lights i:nth-child(1){background:#FF5F57}.lights i:nth-child(2){background:#FEBC2E}.lights i:nth-child(3){background:#28C840}
+.url{flex:1;height:24px;background:#fff;border-radius:6px;border:1px solid var(--outline);display:flex;align-items:center;gap:7px;padding:0 10px;font-size:12px;color:var(--onSurfaceVariant)}
+.url b{color:var(--ink);font-weight:600}
+/* portal layout */
+.portal{display:flex;min-height:420px}
+.side{width:188px;background:#15171B;color:#cfd3da;padding:14px 10px;flex:0 0 auto}
+.side .brand{color:#fff;font-weight:800;font-size:15px;padding:4px 10px 14px;display:flex;align-items:center;gap:8px}
+.side .brand .m{width:24px;height:24px;border-radius:7px;background:var(--primary);display:grid;place-items:center;color:#fff;font-weight:800;font-size:14px}
+.side .grp{font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:#6b7280;padding:12px 10px 5px}
+.side .nv{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:8px;font-size:13px;color:#cfd3da}
+.side .nv.on{background:rgba(255,109,0,.16);color:#FFB68A;font-weight:600}
+.side .nv .gi{width:18px;text-align:center}
+.side .nv.lock{color:#6b7280}
+.main{flex:1;display:flex;flex-direction:column;background:var(--surfaceVariant);min-width:0}
+.topbar{height:52px;background:#fff;border-bottom:1px solid var(--outline);display:flex;align-items:center;gap:12px;padding:0 18px}
+.topbar .ttl{font-weight:700;font-size:15px}.topbar .sp{flex:1}
+.search{height:32px;width:200px;background:var(--surfaceVariant);border-radius:7px;display:flex;align-items:center;padding:0 10px;font-size:12px;color:var(--onSurfaceVariant)}
+.who{display:flex;align-items:center;gap:8px;font-size:12px}.who .av{width:28px;height:28px;border-radius:50%;background:var(--secondaryContainer);display:grid;place-items:center;color:var(--secondary);font-weight:700}
+.content{padding:18px;display:flex;flex-direction:column;gap:14px;overflow:auto}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.kpi{background:#fff;border:1px solid var(--outline);border-radius:10px;padding:13px 14px}
+.kpi .l{font-size:11px;color:var(--onSurfaceVariant)}.kpi .n{font-size:24px;font-weight:800;margin-top:3px}.kpi .d{font-size:11px;margin-top:3px}
+.card{background:#fff;border:1px solid var(--outline);border-radius:10px;padding:14px}
+.card h3{font-size:13px;font-weight:700;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.card h3 .sp{flex:1}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th{text-align:left;color:var(--onSurfaceVariant);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.3px;padding:7px 8px;border-bottom:1px solid var(--outline)}
+td{padding:9px 8px;border-bottom:1px solid var(--surfaceVariant)}
+tr:last-child td{border-bottom:none}
+.pill{font-size:10.5px;font-weight:700;border-radius:20px;padding:2px 9px;display:inline-block}
+.pill.ok{background:#E4F5EA;color:#1B7A38}.pill.warn{background:#FFF1D6;color:#8A5B00}.pill.err{background:#FBE2E2;color:#A21B1B}.pill.info{background:var(--secondaryContainer);color:var(--secondary)}.pill.mut{background:var(--surfaceVariant);color:var(--onSurfaceVariant)}
+.btn{height:32px;border-radius:7px;background:var(--primary);color:#fff;display:inline-flex;align-items:center;justify-content:center;padding:0 13px;font-weight:600;font-size:12.5px;border:none;cursor:pointer}
+.btn.ghost{background:#fff;border:1px solid var(--outline);color:var(--onSurface)}.btn.ok{background:var(--success)}.btn.err{background:var(--error)}.btn.sm{height:27px;padding:0 10px;font-size:11.5px}
+.cdot{width:10px;height:10px;border-radius:50%;display:inline-block;vertical-align:middle;margin-right:5px}
+.field{height:38px;border:1px solid var(--outline);border-radius:8px;display:flex;align-items:center;padding:0 11px;font-size:13px;color:var(--onSurfaceVariant);background:#fff}
+.field.lbl{flex-direction:column;align-items:stretch;justify-content:center;height:auto;padding:6px 11px}
+.field .lab{font-size:10.5px;color:var(--onSurfaceVariant);font-weight:600}.field .val{color:var(--ink);font-size:13px}
+.row{display:flex;gap:12px}.col{display:flex;flex-direction:column;gap:8px}.sp{flex:1}
+.docthumb{height:96px;border-radius:8px;background:repeating-linear-gradient(45deg,#EEF0F3,#EEF0F3 10px,#E4E7EB 10px,#E4E7EB 20px);display:grid;place-items:center;color:#9aa;font-size:11px;border:1px solid var(--outline)}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--outline);margin-bottom:10px}
+.tabs b{padding:7px 12px;font-size:12.5px;font-weight:600;color:var(--onSurfaceVariant);border-bottom:2px solid transparent;cursor:pointer}.tabs b.on{color:var(--primary);border-bottom-color:var(--primary)}
+.toggle{width:40px;height:23px;border-radius:12px;background:var(--outline);position:relative;display:inline-block;vertical-align:middle}.toggle.on{background:var(--success)}.toggle::after{content:"";position:absolute;width:17px;height:17px;border-radius:50%;background:#fff;top:3px;left:3px}.toggle.on::after{left:20px}
+.bp{font-size:10.5px;color:var(--onSurfaceVariant);margin-top:6px}
+.login-wrap{flex:1;display:grid;place-items:center;background:linear-gradient(135deg,#FFF3EA,#EAF1FA)}
+.login-card{background:#fff;border:1px solid var(--outline);border-radius:14px;padding:26px;width:360px;box-shadow:0 8px 24px rgba(0,0,0,.08)}
+.gbtn{height:40px;border:1px solid var(--outline);border-radius:8px;display:flex;align-items:center;justify-content:center;gap:9px;font-size:13px;font-weight:600;background:#fff}
+.divider{display:flex;align-items:center;gap:10px;color:#9aa;font-size:11px;margin:4px 0}.divider::before,.divider::after{content:"";height:1px;flex:1;background:var(--outline)}
+.otpdig{display:flex;gap:8px;justify-content:center}.otpdig .b{width:38px;height:46px;border:1px solid var(--outline);border-radius:8px;display:grid;place-items:center;font-size:18px;font-weight:700}
+.seg{display:inline-flex;border:1px solid var(--outline);border-radius:8px;overflow:hidden;background:#fff}
+.seg b{padding:6px 13px;font-size:12px;font-weight:600;color:var(--onSurfaceVariant);cursor:pointer;border-right:1px solid var(--outline)}
+.seg b:last-child{border-right:none}.seg b.on{background:var(--primary);color:#fff}
+.filterbar{background:#fff;border:1px solid var(--outline);border-radius:10px;padding:10px 14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.thumbgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.thumbgrid .docthumb{cursor:pointer;position:relative}.thumbgrid .docthumb .zi{position:absolute;right:5px;bottom:5px;font-size:11px;background:rgba(0,0,0,.55);color:#fff;border-radius:5px;padding:1px 5px}
+.lightbox{position:fixed;inset:0;background:rgba(0,0,0,.78);display:grid;place-items:center;z-index:40}
+.lightbox .frame{background:#15171B;border-radius:12px;padding:14px;width:560px;max-width:92vw;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.lightbox .big{height:300px;border-radius:8px;background:repeating-linear-gradient(45deg,#3a3d42,#3a3d42 12px,#33363b 12px,#33363b 24px)}
+</style>
+</head>
+<body>
+<div class="page-header">
+  <h1>MageRide — <span style="color:#9FCAFF">Admin Portal · admin.mageride.lk</span></h1>
+  <div class="sub">Single internal back-office (AL-02) for six roles with deny-by-default RBAC (AL-06). Next.js responsive (375 / 768 / 1024). Password or Google sign-in (AL-07 — <b>OTP/MFA step removed</b>). Old driver "Wallet Portal" removed — drivers never use a web portal. Fleet ops → <a href="web_fleet.html">fleet.mageride.lk</a> · <a href="index.html">index</a></div>
+</div>
+<div class="note-bar"><b>Roles &amp; role-scoped menus:</b> Admin · Super Admin · Verification Officer · Support/CSR · Finance · Auditor. Each user sees only permitted modules (e.g. Verification Officer → onboarding queue only; Auditor → read-only). 18 screens · SCR-AP-001…015 (incl. split verification 003/003a/003b/003c &amp; passenger/driver/vehicle directories 010–015).</div>
+
+<div class="wrap">
+
+<!-- AP-001 LOGIN -->
+<div class="cap"><span class="scr">SCR-AP-001</span> · admin_login — Login <span class="tag">DERIVED</span></div>
+<div class="browser">
+  <div class="chrome"><div class="lights"><i></i><i></i><i></i></div><div class="url">🔒 <b>admin.mageride.lk</b>/login</div></div>
+  <div class="portal"><div class="login-wrap">
+    <div class="login-card">
+      <div style="text-align:center;margin-bottom:16px"><div style="width:42px;height:42px;border-radius:11px;background:var(--primary);display:inline-grid;place-items:center;color:#fff;font-weight:800;font-size:20px">M</div><div style="font-weight:800;font-size:17px;margin-top:8px">MageRide Admin</div><div style="font-size:12px;color:var(--onSurfaceVariant)">Internal staff only</div></div>
+      <div class="col">
+        <div class="field lbl"><span class="lab">Email</span><span class="val">officer@mageride.lk</span></div>
+        <div class="field lbl"><span class="lab">Password</span><span class="val">••••••••••</span></div>
+        <button class="btn" style="height:40px">Sign in</button>
+        <div class="divider">or</div>
+        <div class="gbtn"><span style="color:#4285F4;font-weight:800">G</span> Sign in with Google</div>
+        <div class="card" style="background:var(--surfaceVariant);border:none;text-align:center;margin-top:6px;font-size:11.5px;color:var(--onSurfaceVariant)">No OTP / authenticator step — sign in completes straight to the dashboard.</div>
+      </div>
+    </div>
+  </div></div>
+</div>
+<div class="states"><b>States:</b> wrong credentials → inline error; <b>no OTP / MFA / authenticator step</b> — staff sign in with <b>password or Google only</b> and land directly on the dashboard (AL-07 updated, item-5). No Phone-OTP / no driver login. Session enforced by iam-svc; account lock-out after repeated failures + IP allow-list remain the protection (no second factor).</div>
+
+<!-- AP-002 DASHBOARD -->
+<div class="cap"><span class="scr">SCR-AP-002</span> · admin_home — Role-scoped dashboard <span class="tag">DERIVED</span> <span class="role">all roles (scoped)</span></div>
+<div class="browser">
+  <div class="chrome"><div class="lights"><i></i><i></i><i></i></div><div class="url">🔒 <b>admin.mageride.lk</b>/dashboard</div></div>
+  <div class="portal">
+    <div class="side">
+      <div class="brand"><span class="m">M</span> Admin</div>
+      <div class="grp">Operations</div>
+      <div class="nv on"><span class="gi">▦</span> Dashboard</div>
+      <div class="nv"><span class="gi">🗂</span> Verification</div>
+      <div class="nv"><span class="gi">⛔</span> Moderation</div>
+      <div class="nv"><span class="gi">🎧</span> Support &amp; Disputes</div>
+      <div class="grp">Directory</div>
+      <div class="nv"><span class="gi">🧑</span> Passengers</div>
+      <div class="nv"><span class="gi">🚖</span> Drivers</div>
+      <div class="nv"><span class="gi">🚗</span> Vehicles</div>
+      <div class="grp">Finance &amp; Config</div>
+      <div class="nv"><span class="gi">💰</span> Finance</div>
+      <div class="nv"><span class="gi">⚙</span> Configuration</div>
+      <div class="grp">Admin</div>
+      <div class="nv lock"><span class="gi">👤</span> Users &amp; Roles</div>
+      <div class="nv"><span class="gi">📜</span> Audit Logs</div>
+    </div>
+    <div class="main">
+      <div class="topbar"><div class="ttl">Dashboard</div><div class="sp"></div><div class="search">🔍 Search driver / trip / ticket</div><div class="who"><div class="av">A</div>Admin · Colombo</div></div>
+      <div class="content">
+        <div class="filterbar">
+          <span style="font-size:12px;font-weight:700;color:var(--ink)">Statistics for</span>
+          <div class="seg"><b>Today</b><b>This week</b><b class="on">This month</b><b>Custom range</b></div>
+          <div class="field" style="height:32px;width:auto;padding:0 11px;font-size:12px">📅 01 Jun – 28 Jun 2026 ▾</div>
+          <span class="sp"></span>
+          <span class="pill mut">vs previous period</span>
+          <button class="btn sm ghost">⬇ Export</button>
+        </div>
+        <div class="kpis">
+          <div class="kpi"><div class="l">Completed trips</div><div class="n">48,210</div><div class="d" style="color:var(--success)">▲ 9% vs last month</div></div>
+          <div class="kpi"><div class="l">Gross fare (Rs)</div><div class="n">38.6M</div><div class="d" style="color:var(--success)">▲ 7%</div></div>
+          <div class="kpi"><div class="l">New riders / drivers</div><div class="n">2,140 / 318</div><div class="d" style="color:var(--success)">▲ 12% riders</div></div>
+          <div class="kpi"><div class="l">Daily-fee revenue (Rs)</div><div class="n">5.9M</div><div class="d">platform earnings</div></div>
+        </div>
+        <div class="kpis">
+          <div class="kpi"><div class="l">Pending verifications</div><div class="n">38</div><div class="d" style="color:var(--warning)">12 fleet orgs</div></div>
+          <div class="kpi"><div class="l">Online drivers (now)</div><div class="n">1,204</div><div class="d" style="color:var(--success)">▲ 6% today</div></div>
+          <div class="kpi"><div class="l">Open tickets</div><div class="n">57</div><div class="d" style="color:var(--error)">9 disputes</div></div>
+          <div class="kpi"><div class="l">Gateway settlement</div><div class="n">Rs 4.2M</div><div class="d">to reconcile</div></div>
+        </div>
+        <div class="row">
+          <div class="card sp"><h3>Live trips by mode</h3><table><tr><td><span class="cdot" style="background:var(--vehBus)"></span>Mode A (bus/train)</td><td style="text-align:right">412</td></tr><tr><td><span class="cdot" style="background:var(--vehPrivate)"></span>Mode B (private)</td><td style="text-align:right">88</td></tr><tr><td><span class="cdot" style="background:var(--primary)"></span>Mode C (standby)</td><td style="text-align:right">936</td></tr></table></div>
+          <div class="card sp"><h3>Alerts</h3><table><tr><td>Tracker offline &gt;15 min</td><td style="text-align:right"><span class="pill warn">24</span></td></tr><tr><td>Duplicate IMEI quarantine</td><td style="text-align:right"><span class="pill err">3</span></td></tr><tr><td>COD uncollected &gt;24h</td><td style="text-align:right"><span class="pill warn">5</span></td></tr></table></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="states"><b>States:</b> menu items render only for the signed-in role (AL-06); Verification Officer sees only Verification; Auditor → read-only. <b>The statistics filter (item-7) scopes every KPI &amp; chart to Today / This week / This month / a Custom date range</b> (Asia/Colombo), each shown with a <b>vs-previous-period</b> delta; period KPIs (completed trips, gross fare, new riders/drivers, daily-fee revenue) recompute on change, while the live cards (online drivers now, pending verifications, open tickets) stay real-time. Export downloads the filtered figures as CSV. Backed by <code>GET /admin/dashboard/stats?period=…&amp;from=&amp;to=</code> (analytics read-model).</div>
+
+<!-- AP-003 VERIFICATION QUEUES (LIST) -->
+<div class="cap"><span class="scr">SCR-AP-003</span> · verification_queues — Pending queues (list) <span class="tag">DERIVED</span> <span class="role">Verification Officer</span></div>
+<div class="browser">
+  <div class="chrome"><div class="lights"><i></i><i></i><i></i></div><div class="url">🔒 <b>admin.mageride.lk</b>/verification</div></div>
+  <div class="portal">
+    <div class="side"><div class="brand"><span class="m">M</span> Admin</div><div class="grp">Operations</div><div class="nv"><span class="gi">▦</span> Dashboard</div><div class="nv on"><span class="gi">🗂</span> Verification</div><div class="nv"><span class="gi">⛔</span> Moderation</div><div class="nv"><span class="gi">🎧</span> Support</div></div>
+    <div class="main">
+      <div class="topbar"><div class="ttl">Verification</div><div class="sp"></div><div class="search">🔍 Driver / vehicle / org ID</div><span class="pill warn">50 pending</span></div>
+      <div class="content">
+        <div class="tabs"><b class="on">Driving-licence pending <span class="pill warn">22</span></b><b>Vehicle-registration pending <span class="pill warn">16</span></b><b>Fleet-org approval <span class="pill warn">12</span></b></div>
+        <div class="card"><h3>Driving-licence verifications — pending <span class="sp"></span><span class="pill info">manual / doubtful flags only</span></h3>
+          <table>
+            <tr><th>Driver</th><th>Submitted</th><th>Flagged fields</th><th>Status</th><th></th></tr>
+            <tr><td><b>DRV-22011</b> · K. Fernando</td><td>17 Jun 08:40</td><td>NIC no · allowed types</td><td><span class="pill warn">Pending · 2</span></td><td><button class="btn sm">Review ›</button></td></tr>
+            <tr><td><b>DRV-22014</b> · S. Perera</td><td>17 Jun 07:55</td><td>Licence expiry (doubtful)</td><td><span class="pill warn">Pending · 1</span></td><td><button class="btn sm">Review ›</button></td></tr>
+            <tr><td><b>DRV-22019</b> · A. Nawaz</td><td>16 Jun 21:10</td><td>—</td><td><span class="pill ok">Auto-verified</span></td><td><button class="btn sm ghost">View</button></td></tr>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="states"><b>States:</b> <b>SCR-AP-003 is now the queues list (item-8).</b> Three separate queues — <b>Driving-licence pending</b>, <b>Vehicle-registration pending</b>, <b>Fleet-org approval</b> — each its own tab/list. Rows show the subject, submitted time, the flagged fields, and a status pill. <b>Selecting a driving-licence / vehicle-registration row opens the detail screen (SCR-AP-003a)</b>; selecting a fleet-org row opens <b>SCR-AP-003c</b>. Only items with a manual-entry, low-confidence, or plate↔reg-no-mismatch flag appear as Pending (US-2.9/2.10/2.10a). Search + status filter; auto-verified items are viewable read-only. Verification Officer scope (AL-06).</div>
+
+<!-- AP-003a VERIFICATION DETAIL -->
+<div class="cap"><span class="scr">SCR-AP-003a</span> · verification_detail — Selected entry + document thumbnails <span class="tag">DERIVED</span> <span class="role">Verification Officer</span></div>
+<div class="browser">
+  <div class="chrome"><div class="lights"><i></i><i></i><i></i></div><div class="url">🔒 <b>admin.mageride.lk</b>/verification/DRV-22011</div></div>
+  <div class="portal">
+    <div class="side"><div class="brand"><span class="m">M</span> Admin</div><div class="grp">Operations</div><div class="nv"><span class="gi">▦</span> Dashboard</div><div class="nv on"><span class="gi">🗂</span> Verification</div><div class="nv"><span class="gi">⛔</span> Moderation</div><div class="nv"><span class="gi">🎧</span> Support</div></div>
+    <div class="main">
+      <div class="topbar"><span class="pill mut">‹ Back to queue</span><div class="ttl" style="margin-left:8px">DRV-22011 · K. Fernando</div><div class="sp"></div><span class="pill warn">Pending review · 4 flagged fields</span></div>
+      <div class="content">
+        <div class="card"><h3>Attached documents <span class="sp"></span><span class="pill info">tap a thumbnail to open full size</span></h3>
+          <div class="thumbgrid">
+            <div class="docthumb">License front<span class="zi">🔍 1/6</span></div>
+            <div class="docthumb">License back<span class="zi">🔍 2/6</span></div>
+            <div class="docthumb">Insurance<span class="zi">🔍 3/6</span></div>
+            <div class="docthumb">Revenue licence<span class="zi">🔍 4/6</span></div>
+            <div class="docthumb">Vehicle front<span class="zi">🔍 5/6</span></div>
+            <div class="docthumb">Vehicle back<span class="zi">🔍 6/6</span></div>
+          </div>
+          <div class="bp">Each thumbnail is a stored onboarding document. <b>Tapping a thumbnail opens it in a full-size viewer (SCR-AP-003b)</b> with zoom/rotate and prev/next paging.</div>
+        </div>
+        <div class="row">
+          <div class="card sp"><h3>AI-extracted fields <span class="sp"></span><span class="pill info">Gemini Flash 3.0 · PII redacted</span></h3>
+            <table>
+              <tr><th>Field</th><th>Value</th><th>Source</th><th>Status</th><th>Action</th></tr>
+              <tr><td>Licence no</td><td>B1234567</td><td><span class="pill mut">AI 0.98</span></td><td><span class="pill ok">Auto-verified</span></td><td></td></tr>
+              <tr><td>Licence expiry</td><td>2028-04</td><td><span class="pill mut">AI 0.95</span></td><td><span class="pill ok">Auto-verified</span></td><td></td></tr>
+              <tr><td><b>NIC no</b></td><td>1990 12345 678</td><td><span class="pill warn">Manual</span></td><td><span class="pill warn">Pending</span></td><td><button class="btn sm ok">Confirm</button> <button class="btn sm ghost">Edit</button></td></tr>
+              <tr><td><b>Allowed vehicle types</b></td><td>B1 · C1</td><td><span class="pill warn">Manual</span></td><td><span class="pill warn">Pending</span></td><td><button class="btn sm ok">Confirm</button> <button class="btn sm ghost">Edit</button></td></tr>
+              <tr><td><b>Reg no ↔ plate</b></td><td>ABC-1234 · plate read <b>AB6-1234</b></td><td><span class="pill mut">AI 0.71</span></td><td><span class="pill err">Pending · mismatch</span></td><td><button class="btn sm ok">Confirm</button> <button class="btn sm ghost">Edit</button></td></tr>
+              <tr><td>Insurance expiry</td><td>2026-12-31</td><td><span class="pill mut">AI 0.62</span></td><td><span class="pill warn">Pending · doubtful</span></td><td><button class="btn sm ok">Confirm</button> <button class="btn sm ghost">Edit</button></td></tr>
+              <tr><td>Revenue licence no</td><td>RL-558231</td><td><span class="pill mut">AI 0.93</span></td><td><span class="pill ok">Auto-verified</span></td><td></td></tr>
+            </table>
+            <div class="bp">Rows with <b>Source = Manual</b> or <b>doubtful / plate↔reg-no-mismatch AI</b> are <b>Pending</b> and must be <b>Confirmed</b> (or <b>Edited &amp; confirmed</b>). NIC no &amp; allowed vehicle types come from the driving-licence scan (US-2.4a).</div>
+          </div>
+          <div class="card" style="width:240px"><h3>Decision</h3><div class="col">
+            <div class="card" style="background:var(--surfaceVariant);border:none;padding:9px 11px"><div style="font-size:11px;font-weight:700;margin-bottom:5px">Onboarding steps</div>
+              <table style="font-size:11.5px"><tr><td>Profile / licence</td><td style="text-align:right"><span class="pill warn">Pending</span></td></tr><tr><td>Insurance</td><td style="text-align:right"><span class="pill warn">Pending</span></td></tr><tr><td>Revenue licence</td><td style="text-align:right"><span class="pill ok">Verified</span></td></tr><tr><td>Vehicle photos</td><td style="text-align:right"><span class="pill err">Pending</span></td></tr></table>
+            </div>
+            <div class="field lbl"><span class="lab">Reject reason (if any)</span><span class="val" style="color:#9aa">Plate doesn't match reg no…</span></div>
+            <button class="btn ok">Confirm all &amp; approve</button><button class="btn err">Reject with reason</button>
+            <div class="bp"><b>Approve enabled once every Pending field is confirmed.</b> Approval → vehicle/driver APPROVED + OnePay merchant onboarding (D-11) + FCM (US-2.14). All confirm/edit actions written to the audit log.</div>
+          </div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="states"><b>States:</b> <b>detail screen for the selected queue entry (item-8).</b> Top card = <b>attached-document thumbnails grid</b>; <b>tapping any thumbnail → full-size viewer (SCR-AP-003b)</b>. Below: the AI-extracted fields with <b>Confirm / Edit &amp; confirm</b> per flagged row and the right-rail decision panel (per-step Verified/Pending breakdown; Approve unlocks only when all Pending fields are confirmed). approve/reject with reason (US-2.9). Vehicle-registration entries open the same screen scoped to the vehicle's docs. All actions audited.</div>
+
+<!-- AP-003b DOCUMENT VIEWER -->
+<div class="cap"><span class="scr">SCR-AP-003b</span> · document_viewer — Full-size document (lightbox) <span class="tag">DERIVED</span> <span class="role">Verification Officer</span></div>
+<div class="browser">
+  <div class="chrome"><div class="lights"><i></i><i></i><i></i></div><div class="url">🔒 <b>admin.mageride.lk</b>/verification/DRV-22011/doc/1</div></div>
+  <div class="portal">
+    <div class="main" style="background:#0e1014;align-items:center;justify-content:center;padding:0">
+      <div class="lightbox" style="position:relative;inset:auto;width:100%;min-height:420px">
+        <div class="frame">
+          <div class="row" style="margin-bottom:10px"><span style="color:#cfd3da;font-size:13px;font-weight:600">License front · DRV-22011 (1 / 6)</span><span class="sp"></span><span style="color:#cfd3da">🔄 ↺ ＋ －</span> <span style="color:#FFB68A;font-weight:700;cursor:pointer">✕ Close</span></div>
+          <div class="big"></div>
+          <div class="row" style="margin-top:10px"><button class="btn ghost sm">‹ Prev</button><span class="sp"></span><span style="color:#9aa;font-size:11px">Original upload · captured via driver drag-crop scanner</span><span class="sp"></span><button class="btn sm">Next ›</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="states"><b>States:</b> <b>full-size document window (item-8)</b> opened by tapping a thumbnail on SCR-AP-003a (or any thumbnail elsewhere in the portal). Supports <b>zoom, rotate, and prev/next paging</b> across the entry's documents; ESC / ✕ closes back to the detail. Images are served from object storage via short-lived signed URLs (PII access is itself audit-logged). Read-only.</div>
+
+<!-- AP-003c FLEET-ORG APPROVAL DETAIL -->
+<div class="cap"><span class="scr">SCR-AP-003c</span> · fleetorg_detail — Fleet-org approval detail <span class="tag">DERIVED</span> <span class="role">Verification Officer</span></div>
+<div class="browser">
+  <div class="chrome"><div class="lights"><i></i><i></i><i></i></div><div class="url">🔒 <b>admin.mageride.lk</b>/verification/org/ORG-1042</div></div>
+  <div class="portal">
+    <div class="side"><div class="brand"><span class="m">M</span> Admin</div><div class="grp">Operations</div><div class="nv"><span class="gi">▦</span> Dashboard</div><div class="nv on"><span class="gi">🗂</span> Verification</div><div class="nv"><span class="gi">⛔</span> Moderation</div><div class="nv"><span class="gi">🎧</span> Support</div></div>
+    <div class="main">
+      <div class="topbar"><span class="pill mut">‹ Back to queue</span><div class="ttl" style="margin-left:8px">Lanka Transit (Pvt) Ltd · ORG-1042</div><div class="sp"></div><span class="pill warn">KYC pending</span></div>
+      <div class="content">
+        <div class="row">
+          <div class="card sp"><h3>Organisation KYC <span class="sp"></span><span class="pill info">120 vehicles</span></h3>
+            <table><tr><td>Registered name</td><td>Lanka Transit (Pvt) Ltd</td></tr><tr><td>BR no</td><td>PV-118842</td></tr><tr><td>Authorised contact</td><td>R. Jayasuriya · +94 71 555 0042</td></tr><tr><td>Route permits</td><td>Mode A · 14 routes</td></tr></table>
+            <h3 style="margin-top:12px">KYC documents <span class="sp"></span><span class="pill info">tap to open full size</span></h3>
+            <div class="thumbgrid">
+              <div class="docthumb">BR certificate<span class="zi">🔍</span></div>
+              <div class="docthumb">Director NIC<span class="zi">🔍</span></div>
+              <div class="docthumb">Route permit<span class="zi">🔍</span></div>
+              <div class="docthumb">Bank letter<span class="zi">🔍</span></div>
+            </div>
+          </div>
+          <div class="card" style="width:240px"><h3>Decision</h3><div class="col">
+            <div class="field lbl"><span class="lab">Reject reason (if any)</span><span class="val" style="color:#9aa">e.g. BR mismatch…</span></div>
+            <button class="btn ok">Approve organisation</button><button class="btn err">Reject with reason</button>
+            <div class="bp">Fleet-org approval gate before any non-read fleet op (US-13.A7). On approve the org's Fleet Portal is unlocked; all actions audited.</div>
+          </div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="states"><b>States:</b> <b>fleet-org approval detail (item-8)</b> — KYC fields + a <b>KYC-document thumbnails grid</b> (BR certificate, director NIC, route permit, bank letter); <b>tapping a thumbnail → full-size viewer (SCR-AP-003b)</b>. Approve / reject with reason; fleet-org approval gate before non-read ops (US-13.A7); insurance verified all modes (AL-10). All actions audited.</div>
+
+<!-- AP-004 MODERATION -->
+<div class="cap"><span class="scr">SCR-AP-004</span> · moderation — Suspend / ban / reports <span class="tag">DERIVED</span> <span class="role">Admin</span></div>
+<div class="browser">
+  <div class="chrome"><div class="lights"><i></i><i></i><i></i></div><div class="url">🔒 <b>admin.mageride.lk</b>/moderation</div></div>
+  <div class="portal">
+    <div class="side"><div class="brand"><span class="m">M</span> Admin</div><div class="grp">Operations</div><div class="nv"><span class="gi">▦</span> Dashboard</div><div class="nv"><span class="gi">🗂</span> Verification</div><div class="nv on"><span class="gi">⛔</span> Moderation</div><div class="nv"><span class="gi">🎧</span> Support</div></div>
+    <div class="main">
+      <div class="topbar"><div class="ttl">Moderation</div><div class="sp"></div><div class="search">🔍 Driver / vehicle ID</div></div>
+      <div class="content">
+        <div class="card"><h3>Vehicle reports — pending review</h3><table>
+          <tr><th>Subject</th><th>Reports</th><th>Reason</th><th>Driver Level</th><th>Action</th></tr>
+          <tr><td>DRV-55120 · Tuk · TK-9981</td><td><span class="pill err">3</span></td><td>Rash driving</td><td>L2 → L1 risk</td><td><button class="btn err sm">Delist 24h</button> <button class="btn ghost sm">Dismiss</button></td></tr>
+          <tr><td>Vehicle VN-3321 · Van</td><td><span class="pill warn">2</span></td><td>Wrong vehicle photo</td><td>—</td><td><button class="btn sm">Suspend vehicle</button></td></tr>
+          <tr><td>DRV-22011 · Sedan</td><td><span class="pill mut">0</span></td><td>—</td><td>L3</td><td><span class="pill ok">No action</span></td></tr>
+        </table></div>
+        <div class="card"><h3>Suspend / ban</h3><div class="row"><div class="field lbl sp"><span class="lab">Driver / vehicle ID</span><span class="val">DRV-55120</span></div><div class="field lbl sp"><span class="lab">Duration</span><span class="val">Temporary — 24h ▾</span></div><button class="btn err" style="align-self:flex-end">Apply</button></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="states"><b>States:</b> 3 reports → level drop + temporary delisting (US-6A.6); suspend/ban driver or vehicle (US-12.6, US-14.3). All actions logged to audit trail.</div>
+
+<!-- AP-005 SUPPORT -->
+<div class="cap"><span class="scr">SCR-AP-005</span> · support_tickets — Support &amp; disputes <span class="tag">DERIVED</span> <span class="role">Support / CSR</span></div>
+<div class="browser">
+  <div class="chrome"><div class="lights"><i></i><i></i><i></i></div><div class="url">🔒 <b>admin.mageride.lk</b>/support/TK-4521</div></div>
+  <div class="portal">
+    <div class="side"><div class="brand"><span class="m">M</span> Admin</div><div class="grp">Operations</div><div class="nv"><span class="gi">▦</span> Dashboard</div><div class="nv on"><span class="gi">🎧</span> Support &amp; Disputes</div></div>
+    <div class="main">
+      <div class="topbar"><div class="ttl">Ticket #TK-4521</div><div class="sp"></div><span class="pill warn">Open</span></div>
+      <div class="content"><div class="row">
+        <div class="card" style="width:260px"><h3>Queue</h3><table><tr><td>#TK-4521 Wrong fare</td><td><span class="pill warn">Open</span></td></tr><tr><td>#TK-4519 COD dispute</td><td><span class="pill err">Dispute</span></td></tr><tr><td>#TK-4515 Refund req</td><td><span class="pill info">Finance</span></td></tr></table></div>
+        <div class="card sp"><h3>#TK-4521 · Wrong fare <span class="sp"></span><span class="pill mut">PAX-90431</span></h3>
+          <div class="card" style="background:var(--surfaceVariant);border:none;font-size:12.5px">Passenger: "Charged Rs 850 but estimate was Rs 720." · Attached trip <b>PAX-90431-0617</b></div>
+          <table style="margin-top:10px"><tr><th>Read-only lookup</th><th></th></tr><tr><td>Trip distance</td><td>8.2 km (peak +20% applied)</td></tr><tr><td>Vehicle / driver</td><td>Sedan · DRV-22011</td></tr><tr><td>Payment</td><td>Cash · CashSettled</td></tr></table>
+          <div class="row" style="margin-top:10px"><button class="btn ghost">Reply</button><button class="btn">Escalate to Finance (refund)</button><button class="btn ok">Resolve</button></div>
+        </div>
+      </div></div>
+    </div>
+  </div>
+</div>
+<div class="states"><b>States:</b> ticket queue, read-only trip/user lookup, dispute investigation, refund <i>requests</i> → Finance (US-14.13, US-16.3). CSR cannot post wallet adjustments directly.</div>
+
+<!-- AP-006 FINANCE -->
+<div class="cap"><span class="scr">SCR-AP-006</span> · finance — Finance &amp; reconciliation <span class="tag">DERIVED</span> <span class="role">Finance</span></div>
+<div class="browser">
+  <div class="chrome"><div class="lights"><i></i><i></i><i></i></div><div class="url">🔒 <b>admin.mageride.lk</b>/finance</div></div>
+  <div class="portal">
+    <div class="side"><div class="brand"><span class="m">M</span> Admin</div><div class="grp">Finance &amp; Config</div><div class="nv on"><span class="gi">💰</span> Finance</div><div class="nv"><span class="gi">⚙</span> Configuration</div></div>
+    <div class="main">
+      <div class="topbar"><div class="ttl">Finance &amp; reconciliation</div><div class="sp"></div><div class="search">🔍 Txn / driver</div></div>
+      <div class="content">
+        <div class="tabs"><b class="on">Gateway settlement</b><b>Wallet ledger</b><b>Reversals &amp; refunds</b><b>Payouts</b><b>Credit transfers</b></div>
+        <div class="card"><h3>OnePay / LankaQR settlement reconciliation <span class="sp"></span><span class="pill warn">Rs 4.2M unmatched</span></h3>
+          <table><tr><th>Gateway</th><th>Txns</th><th>Settled</th><th>Platform ledger</th><th>Δ</th><th></th></tr>
+          <tr><td>OnePay (+5%)</td><td>8,120</td><td>Rs 12.4M</td><td>Rs 12.4M</td><td><span class="pill ok">0</span></td><td><button class="btn sm ghost">Detail</button></td></tr>
+          <tr><td>LankaQR</td><td>5,402</td><td>Rs 6.1M</td><td>Rs 5.9M</td><td><span class="pill err">Rs 0.2M</span></td><td><button class="btn sm">Investigate</button></td></tr>
+          </table>
+          <div class="bp">No bank-transfer queue (AL-05). Money = integer minor units (Rs×100). Double-entry ledger (D-09).</div>
+        </div>
+        <div class="card"><h3>Wallet reversal / adjustment</h3><div class="row"><div class="field lbl sp"><span class="lab">Driver</span><span class="val">DRV-22011</span></div><div class="field lbl sp"><span class="lab">Amount</span><span class="val">+ Rs 100 (daily-fee refund)</span></div><div class="field lbl sp"><span class="lab">Reason / ticket</span><span class="val">#TK-9012 crash on Go Online</span></div><button class="btn" style="align-self:flex-end">Post reversal</button></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="states"><b>States:</b> wallet transactions; OnePay/LankaQR settlement reconciliation (no bank-transfer — AL-05); reversals/adjustments &amp; refunds (US-9A.15, US-14.11); payouts; <b>Credit transfers</b> = read-only review of driver→driver transfers (exact value, <b>no per-driver/per-transfer commission</b>, AL-01). Bulk-voucher commission % is set <b>per voucher value</b> in Configuration. <b>Mode B subscription payments</b> (passenger → fleet owner via LankaQR/OnePay/online-transfer/cash) are <b>pass-through to the fleet owner</b>, not platform revenue — admin sees them read-only for dispute support; online-transfer slips and cash are <b>owner-verified in the Fleet Portal</b> (SCR-FP-011/012). (US-NEW.payments)</div>
+
+<!-- AP-007 CONFIG -->
+<div class="cap"><span class="scr">SCR-AP-007</span> · config — Platform configuration <span class="tag">DERIVED</span> <span class="role">Admin</span></div>
+<div class="browser">
+  <div class="chrome"><div class="lights"><i></i><i></i><i></i></div><div class="url">🔒 <b>admin.mageride.lk</b>/config/tariffs</div></div>
+  <div class="portal">
+    <div class="side"><div class="brand"><span class="m">M</span> Admin</div><div class="grp">Finance &amp; Config</div><div class="nv"><span class="gi">💰</span> Finance</div><div class="nv on"><span class="gi">⚙</span> Configuration</div></div>
+    <div class="main">
+      <div class="topbar"><div class="ttl">Configuration</div><div class="sp"></div><button class="btn">Save changes</button></div>
+      <div class="content">
+        <div class="tabs"><b class="on">Fare tariffs</b><b>Daily fee</b><b>Commission &amp; vouchers</b><b>Vehicle types</b><b>Driver Level</b><b>Feature flags</b></div>
+        <div class="card"><h3>Fare tariffs <span class="sp"></span><span class="pill info">canonical AL-09</span></h3>
+          <table><tr><th>Vehicle</th><th>1st km (Rs)</th><th>Per km (Rs)</th><th>Daily fee (Rs)</th><th>Peak</th><th>Night</th></tr>
+          <tr><td><span class="cdot" style="background:var(--vehMotorbike)"></span>Motorbike</td><td>80</td><td>60</td><td>50</td><td>+20%</td><td>+15%</td></tr>
+          <tr><td><span class="cdot" style="background:var(--vehTuk)"></span>Three-wheeler</td><td>100</td><td>80</td><td>100</td><td>+20%</td><td>+15%</td></tr>
+          <tr><td><span class="cdot" style="background:var(--vehFlex)"></span>Flex</td><td>130</td><td>90</td><td>150</td><td>+20%</td><td>+15%</td></tr>
+          <tr><td><span class="cdot" style="background:var(--vehSedan)"></span>Sedan</td><td>150</td><td>100</td><td>200</td><td>+20%</td><td>+15%</td></tr>
+          <tr><td><span class="cdot" style="background:var(--vehMiniVan)"></span>Mini Van</td><td>150</td><td>110</td><td>250</td><td>+20%</td><td>+15%</td></tr>
+          <tr><td><span class="cdot" style="background:var(--vehVan)"></span>Van</td><td>150</td><td>120</td><td>300</td><td>+20%</td><td>+15%</td></tr>
+          <tr><td><span class="cdot" style="background:var(--vehBus)"></span>Bus / Train (Mode A)</td><td>—</td><td>—</td><td>Free</td><td>—</td><td>—</td></tr>
+          </table>
+          <div class="bp">"car" removed → sedan; +truck / mini_truck (delivery). Mode B platform fee = monthly ~Rs 300 (1st month free); the <b>passenger-facing Mode B fare is fleet-set</b> (Paid/Free + per-subscriber amount, SCR-FP-011). <b>Public-transport routing uses an admin-managed GTFS feed</b> — SCR-PA-009 lists all <b>direct</b> bus options from it. All admin-configurable.</div>
+        </div>
+        <div class="card"><h3>Bulk voucher commission — by voucher value <span class="sp"></span><span class="pill info">Commission &amp; vouchers tab</span></h3>
+          <div class="bp" style="margin:0 0 9px">"Reseller" is <b>not a role</b> and there is <b>no per-driver commission</b>. Any driver who buys bulk credit resells it at face value; their margin is this admin-set <b>commission %</b>, charged <b>only at purchase</b> and configurable <b>per voucher value</b>. Driver→driver transfers later move the <b>exact value</b> (no further commission).</div>
+          <table><tr><th>Voucher value</th><th>Commission %</th><th>Driver pays</th><th>Wallet credit</th><th>Active</th><th></th></tr>
+          <tr><td>Rs 1,000</td><td>10%</td><td>Rs 900</td><td>Rs 1,000</td><td><span class="toggle on"></span></td><td><button class="btn sm ghost">Edit</button></td></tr>
+          <tr><td>Rs 2,000</td><td>12%</td><td>Rs 1,760</td><td>Rs 2,000</td><td><span class="toggle on"></span></td><td><button class="btn sm ghost">Edit</button></td></tr>
+          <tr><td>Rs 3,000</td><td>13%</td><td>Rs 2,610</td><td>Rs 3,000</td><td><span class="toggle on"></span></td><td><button class="btn sm ghost">Edit</button></td></tr>
+          <tr><td>Rs 5,000</td><td>15%</td><td>Rs 4,250</td><td>Rs 5,000</td><td><span class="toggle on"></span></td><td><button class="btn sm ghost">Edit</button></td></tr>
+          <tr><td>Rs 10,000</td><td>18%</td><td>Rs 8,200</td><td>Rs 10,000</td><td><span class="toggle on"></span></td><td><button class="btn sm ghost">Edit</button></td></tr>
+          </table>
+          <div class="bp">Stored per denomination in <code>billing.voucher_discount_tiers</code> (admin-set); <code>PUT /admin/voucher-discount-tiers</code>. Applied only at purchase; change writes to audit log.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="states"><b>States:</b> fare tariffs, daily-fee rates, <b>bulk-voucher commission % per voucher value</b> (purchase-only — the reseller's margin; <b>no per-driver / per-transfer commission</b>), <b>canonical vehicle types (AL-09)</b>, Driver Level params (start L3, 500 pts/level, 3 reports→delist), feature flags (US-14.4/14.5/14.12). Changes write to audit log.</div>
+
+<!-- AP-008 RBAC -->
+<div class="cap"><span class="scr">SCR-AP-008</span> · rbac — User &amp; role management <span class="tag">DERIVED</span> <span class="role">Super Admin only</span></div>
+<div class="browser">
+  <div class="chrome"><div class="lights"><i></i><i></i><i></i></div><div class="url">🔒 <b>admin.mageride.lk</b>/admin/users</div></div>
+  <div class="portal">
+    <div class="side"><div class="brand"><span class="m">M</span> Admin</div><div class="grp">Admin</div><div class="nv on"><span class="gi">👤</span> Users &amp; Roles</div><div class="nv"><span class="gi">📜</span> Audit Logs</div></div>
+    <div class="main">
+      <div class="topbar"><div class="ttl">Users &amp; roles</div><div class="sp"></div><button class="btn">+ Provision user</button></div>
+      <div class="content">
+        <div class="card"><h3>Internal users <span class="sp"></span><span class="pill info">deny-by-default RBAC</span></h3>
+          <table><tr><th>User</th><th>Role(s)</th><th>MFA</th><th>Active session</th><th>Status</th><th></th></tr>
+          <tr><td>nuwan@mageride.lk</td><td>Verification Officer</td><td><span class="pill ok">On</span></td><td>Colombo · 2 min ago</td><td><span class="pill ok">Active</span></td><td><button class="btn sm ghost">Edit</button></td></tr>
+          <tr><td>finance@mageride.lk</td><td>Finance, Auditor</td><td><span class="pill ok">On</span></td><td>—</td><td><span class="pill ok">Active</span></td><td><button class="btn sm ghost">Edit</button></td></tr>
+          <tr><td>tmp@mageride.lk</td><td>Support / CSR</td><td><span class="pill warn">Pending</span></td><td>—</td><td><span class="pill mut">Invited</span></td><td><button class="btn sm err">Revoke</button></td></tr>
+          </table>
+        </div>
+        <div class="card"><h3>Permission set — Verification Officer</h3><table><tr><td>Verification queue (read/write)</td><td><span class="toggle on"></span></td></tr><tr><td>Approve / reject drivers</td><td><span class="toggle on"></span></td></tr><tr><td>Finance &amp; reversals</td><td><span class="toggle"></span></td></tr><tr><td>RBAC / user management</td><td><span class="toggle"></span></td></tr></table></div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="states"><b>States:</b> provision internal users, assign roles, define permission sets, suspend/revoke accounts + sessions (Epic 21, AL-06). Super Admin only; all changes audited.</div>
+
+<!-- AP-009 AUDIT -->
+<div class="cap"><span class="scr">SCR-AP-009</span> · audit_logs — Audit trail <span class="tag">DERIVED</span> <span class="role">Auditor (read-only)</span></div>
+<div class="browser">
+  <div class="chrome"><div class="lights"><i></i><i></i><i></i></div><div class="url">🔒 <b>admin.mageride.lk</b>/audit</div></div>
+  <div class="portal">
+    <div class="side"><div class="brand"><span class="m">M</span> Admin</div><div class="grp">Admin</div><div class="nv"><span class="gi">👤</span> Users &amp; Roles</div><div class="nv on"><span class="gi">📜</span> Audit Logs</div></div>
+    <div class="main">
+      <div class="topbar"><div class="ttl">Audit trail</div><div class="sp"></div><div class="search">🔍 Actor / action</div><button class="btn ghost">Export CSV</button></div>
+      <div class="content"><div class="card"><h3>Immutable admin-action log <span class="sp"></span><span class="pill mut">read-only</span></h3>
+        <table><tr><th>Time</th><th>Actor</th><th>Role</th><th>Action</th><th>Target</th></tr>
+        <tr><td>17 Jun 09:12</td><td>nuwan@</td><td>Verification</td><td>APPROVE_DRIVER</td><td>DRV-22011</td></tr>
+        <tr><td>17 Jun 09:05</td><td>finance@</td><td>Finance</td><td>WALLET_REVERSAL +Rs100</td><td>DRV-22011 (#TK-9012)</td></tr>
+        <tr><td>17 Jun 08:40</td><td>admin@</td><td>Admin</td><td>CONFIG_TARIFF_UPDATE</td><td>fares.tariffs[sedan]</td></tr>
+        <tr><td>17 Jun 08:31</td><td>super@</td><td>Super Admin</td><td>ROLE_GRANT Finance</td><td>finance@mageride.lk</td></tr>
+        </table>
+        <div class="bp">Includes permission-change log (US-19.3). Analytics / reporting export. Append-only — cannot be edited.</div>
+      </div></div>
+    </div>
+  </div>
+</div>
+<div class="states"><b>States:</b> immutable admin-action + permission-change log; date/actor/action filters; CSV export (US-19.3). Auditor role = read-only across the portal. <b>Responsive:</b> ≤768px sidebar collapses to drawer; tables → stacked cards.</div>
+
+<!-- ============ DIRECTORY: PASSENGERS · DRIVERS · VEHICLES (items 9–11) ============ -->
+
+<!-- AP-010 PASSENGER SEARCH -->
+<div class="cap"><span class="scr">SCR-AP-010</span> · passenger_search — Find a passenger <span class="tag">DERIVED</span> <span class="role">Support / Admin / Auditor</span></div>
+<div class="browser">
+  <div class="chrome"><div class="lights"><i></i><i></i><i></i></div><div class="url">🔒 <b>admin.mageride.lk</b>/passengers</div></div>
+  <div class="portal">
+    <div class="side"><div class="brand"><span class="m">M</span> Admin</div><div class="grp">Operations</div><div class="nv"><span class="gi">▦</span> Dashboard</div><div class="nv"><span class="gi">🗂</span> Verification</div><div class="nv"><span class="gi">🎧</span> Support</div><div class="grp">Directory</div><div class="nv on"><span class="gi">🧑</span> Passengers</div><div class="nv"><span class="gi">🚖</span> Drivers</div><div class="nv"><span class="gi">🚗</span> Vehicles</div></div>
+    <div class="main">
+      <div class="topbar"><div class="ttl">Passengers</div><div class="sp"></div><span class="pill mut">read · PII access audited</span></div>
+      <div class="content">
+        <div class="card"><h3>Search passengers <span class="sp"></span><span class="pill info">any criterion</span></h3>
+          <div class="row" style="flex-wrap:wrap">
+            <div class="field lbl sp"><span class="lab">Name</span><span class="val">Ramith…</span></div>
+            <div class="field lbl sp"><span class="lab">Mobile</span><span class="val">+94 7…</span></div>
+            <div class="field lbl sp"><span class="lab">Passenger ID</span><span class="val">PAX-…</span></div>
+            <div class="field lbl sp"><span class="lab">Email</span><span class="val">name@…</span></div>
+            <button class="btn" style="align-self:flex-end">Search</button>
+          </div>
+        </div>
+        <div class="card"><h3>Results <span class="sp"></span><span class="pill mut">3 of 3</span></h3>
+          <table>
+            <tr><th>Passenger</th><th>Mobile</th><th>Trips</th><th>Joined</th><th>Status</th><th></th></tr>
+            <tr><td><b>PAX-90431</b> · Ramith de Silva</td><td>+94 77 123 4567</td><td>128</td><td>Jan 2026</td><td><span class="pill ok">Active</span></td><td><button class="btn sm">Open ›</button></td></tr>
+            <tr><td><b>PAX-90120</b> · N. Silva</td><td>+94 71 880 2231</td><td>14</td><td>Mar 2026</td><td><span class="pill warn">Flagged</span></td><td><button class="btn sm">Open ›</button></td></tr>
+            <tr><td><b>PAX-88110</b> · T. Jay</td><td>+94 76 442 1190</td><td>2</td><td>Jun 2026</td><td><span class="pill mut">New</span></td><td><button class="btn sm">Open ›</button></td></tr>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="states"><b>States:</b> <b>passenger directory search (item-9).</b> <b>Multiple search criteria</b> — name, mobile, passenger ID, or email (any combination). Results list is paginated; a row → passenger detail (SCR-AP-011). PII (mobile/email) is shown only to permitted roles and <b>every passenger lookup is written to the audit log</b>. Empty → "No matching passengers". (US-16.4 / US-19.x)</div>
+
+<!-- AP-011 PASSENGER DETAIL -->
+<div class="cap"><span class="scr">SCR-AP-011</span> · passenger_detail — Profile + transactions <span class="tag">DERIVED</span> <span class="role">Support / Admin / Auditor</span></div>
+<div class="browser">
+  <div class="chrome"><div class="lights"><i></i><i></i><i></i></div><div class="url">🔒 <b>admin.mageride.lk</b>/passengers/PAX-90431</div></div>
+  <div class="portal">
+    <div class="side"><div class="brand"><span class="m">M</span> Admin</div><div class="grp">Directory</div><div class="nv on"><span class="gi">🧑</span> Passengers</div><div class="nv"><span class="gi">🚖</span> Drivers</div><div class="nv"><span class="gi">🚗</span> Vehicles</div></div>
+    <div class="main">
+      <div class="topbar"><span class="pill mut">‹ Back</span><div class="ttl" style="margin-left:8px">PAX-90431 · Ramith de Silva</div><div class="sp"></div><span class="pill ok">Active</span></div>
+      <div class="content">
+        <div class="row">
+          <div class="card" style="width:240px"><h3>Profile</h3>
+            <table style="font-size:12px"><tr><td>Mobile</td><td>+94 77 123 4567</td></tr><tr><td>Email</td><td>ramith@…</td></tr><tr><td>Joined</td><td>14 Jan 2026</td></tr><tr><td>Rating</td><td>★ 4.9</td></tr><tr><td>Default pay</td><td>Cash</td></tr><tr><td>SOS contacts</td><td>2</td></tr></table>
+            <button class="btn ghost sm" style="margin-top:8px">Raise / link ticket</button>
+          </div>
+          <div class="card sp"><div class="tabs"><b class="on">Trips</b><b>Payments</b><b>Packages</b><b>Disputes</b></div>
+            <table>
+              <tr><th>Date</th><th>Route</th><th>Vehicle / driver</th><th>Fare</th><th>Pay</th><th>Status</th></tr>
+              <tr><td>17 Jun</td><td>Nugegoda → Galle Face</td><td>Sedan · DRV-22011</td><td>Rs 850</td><td>Cash</td><td><span class="pill ok">Completed</span></td></tr>
+              <tr><td>15 Jun</td><td>Home → Office</td><td>Tuk · DRV-31180</td><td>Rs 520</td><td>LankaQR</td><td><span class="pill ok">Completed</span></td></tr>
+              <tr><td>14 Jun</td><td>Pettah → Dehiwala</td><td>—</td><td>Rs 50</td><td>—</td><td><span class="pill err">Cancelled</span></td></tr>
+            </table>
+            <div class="bp">Tabs: <b>Trips</b> (history + map link), <b>Payments</b> (gateway/cash txns, refunds), <b>Packages</b> (deliveries), <b>Disputes</b> (linked tickets). Read-only lookup; refunds route to Finance.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="states"><b>States:</b> <b>passenger detail (item-9)</b> — profile card + tabbed <b>Trips / Payments / Packages / Disputes</b>. Each trip links to the read-only trip lookup (as in Support SCR-AP-005); each payment shows method, gateway ref &amp; status. CSR can link a ticket or escalate a refund to Finance but <b>cannot post wallet adjustments</b>. All PII views audited.</div>
+
+<!-- AP-012 DRIVER SEARCH -->
+<div class="cap"><span class="scr">SCR-AP-012</span> · driver_search — Find a driver <span class="tag">DERIVED</span> <span class="role">Support / Admin / Auditor</span></div>
+<div class="browser">
+  <div class="chrome"><div class="lights"><i></i><i></i><i></i></div><div class="url">🔒 <b>admin.mageride.lk</b>/drivers</div></div>
+  <div class="portal">
+    <div class="side"><div class="brand"><span class="m">M</span> Admin</div><div class="grp">Directory</div><div class="nv"><span class="gi">🧑</span> Passengers</div><div class="nv on"><span class="gi">🚖</span> Drivers</div><div class="nv"><span class="gi">🚗</span> Vehicles</div></div>
+    <div class="main">
+      <div class="topbar"><div class="ttl">Drivers</div><div class="sp"></div><span class="pill mut">verified drivers</span></div>
+      <div class="content">
+        <div class="card"><h3>Search drivers <span class="sp"></span><span class="pill info">multiple criteria</span></h3>
+          <div class="row" style="flex-wrap:wrap">
+            <div class="field lbl sp"><span class="lab">Name</span><span class="val">K. Fern…</span></div>
+            <div class="field lbl sp"><span class="lab">Mobile</span><span class="val">+94 7…</span></div>
+            <div class="field lbl sp"><span class="lab">Driver ID</span><span class="val">DRV-…</span></div>
+            <div class="field lbl sp"><span class="lab">NIC no</span><span class="val">1990…</span></div>
+          </div>
+          <div class="row" style="flex-wrap:wrap;margin-top:8px">
+            <div class="field lbl sp"><span class="lab">Vehicle reg no</span><span class="val">ABC-1234</span></div>
+            <div class="field lbl sp"><span class="lab">Driver Level</span><span class="val">L1–L5 ▾</span></div>
+            <div class="field lbl sp"><span class="lab">Status</span><span class="val">Verified ▾</span></div>
+            <button class="btn" style="align-self:flex-end">Search</button>
+          </div>
+        </div>
+        <div class="card"><h3>Results <span class="sp"></span><span class="pill mut">verified only · 2</span></h3>
+          <table>
+            <tr><th>Driver</th><th>Mobile</th><th>Vehicles</th><th>Level</th><th>Trips</th><th>Status</th><th></th></tr>
+            <tr><td><b>DRV-22011</b> · K. Fernando</td><td>+94 77 123 4567</td><td>Sedan ABC-1234</td><td>L3</td><td>980</td><td><span class="pill ok">Verified</span></td><td><button class="btn sm">Open ›</button></td></tr>
+            <tr><td><b>DRV-31180</b> · S. Perera</td><td>+94 71 998 2210</td><td>Tuk TK-7781</td><td>L2</td><td>410</td><td><span class="pill ok">Verified</span></td><td><button class="btn sm">Open ›</button></td></tr>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="states"><b>States:</b> <b>driver directory search (item-10).</b> <b>Multiple search options</b> — name, mobile, driver ID, NIC no, vehicle reg no, Driver Level, or status. Defaults to <b>verified drivers</b> (status filter can include pending/suspended for Admin). Row → driver detail (SCR-AP-013). All lookups audited; PII role-gated.</div>
+
+<!-- AP-013 DRIVER DETAIL -->
+<div class="cap"><span class="scr">SCR-AP-013</span> · driver_detail — Profile, vehicles &amp; transactions <span class="tag">DERIVED</span> <span class="role">Support / Admin / Finance / Auditor</span></div>
+<div class="browser">
+  <div class="chrome"><div class="lights"><i></i><i></i><i></i></div><div class="url">🔒 <b>admin.mageride.lk</b>/drivers/DRV-22011</div></div>
+  <div class="portal">
+    <div class="side"><div class="brand"><span class="m">M</span> Admin</div><div class="grp">Directory</div><div class="nv"><span class="gi">🧑</span> Passengers</div><div class="nv on"><span class="gi">🚖</span> Drivers</div><div class="nv"><span class="gi">🚗</span> Vehicles</div></div>
+    <div class="main">
+      <div class="topbar"><span class="pill mut">‹ Back</span><div class="ttl" style="margin-left:8px">DRV-22011 · K. Fernando</div><div class="sp"></div><span class="pill ok">Verified · L3</span></div>
+      <div class="content">
+        <div class="row">
+          <div class="card" style="width:240px"><h3>Driver</h3>
+            <table style="font-size:12px"><tr><td>Mobile</td><td>+94 77 123 4567</td></tr><tr><td>NIC no</td><td>1990 12345 678</td></tr><tr><td>Joined</td><td>02 Feb 2026</td></tr><tr><td>Rating</td><td>★ 4.8</td></tr><tr><td>Wallet</td><td>Rs 3,250</td></tr><tr><td>Driver Level</td><td>L3 · 1,180 pts</td></tr></table>
+            <div class="bp" style="margin-top:6px">Vehicles: <b>Sedan ABC-1234</b> (Approved) · → SCR-AP-015</div>
+            <button class="btn ghost sm" style="margin-top:6px">View documents</button>
+          </div>
+          <div class="card sp"><div class="tabs"><b class="on">Trips</b><b>Wallet ledger</b><b>Daily fee</b><b>Credit transfers</b><b>Reports</b></div>
+            <table>
+              <tr><th>Date</th><th>Type</th><th>Detail</th><th>Amount</th><th>Status</th></tr>
+              <tr><td>17 Jun 08:32</td><td>Trip</td><td>Nugegoda → Galle Face · 8.2 km</td><td>Rs 850</td><td><span class="pill ok">Completed</span></td></tr>
+              <tr><td>17 Jun 06:00</td><td>Daily fee</td><td>Sedan ABC-1234</td><td>− Rs 200</td><td><span class="pill mut">Debited</span></td></tr>
+              <tr><td>16 Jun 19:10</td><td>Top-up</td><td>OnePay voucher Rs 5,000</td><td>+ Rs 5,000</td><td><span class="pill ok">Credited</span></td></tr>
+              <tr><td>16 Jun 12:02</td><td>Credit transfer</td><td>→ DRV-31180 (exact value)</td><td>− Rs 1,000</td><td><span class="pill ok">Sent</span></td></tr>
+            </table>
+            <div class="bp">Tabs: <b>Trips</b>, <b>Wallet ledger</b> (top-ups, transfers, adjustments), <b>Daily fee</b> (idempotent per driver/vehicle/day), <b>Credit transfers</b> (exact value, no commission — AL-01), <b>Reports</b> (moderation). Finance can post a reversal from here (SCR-AP-006); others read-only.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="states"><b>States:</b> <b>driver detail &amp; transactions (item-10)</b> — profile/wallet/level summary + linked vehicles, with tabbed <b>Trips / Wallet ledger / Daily fee / Credit transfers / Reports</b>. Money in integer minor units, double-entry ledger (D-09). Vehicle chips link to vehicle detail (SCR-AP-015). Reversals are Finance-only; all views audited; PII role-gated.</div>
+
+<!-- AP-014 VEHICLE SEARCH -->
+<div class="cap"><span class="scr">SCR-AP-014</span> · vehicle_search — Find a vehicle <span class="tag">DERIVED</span> <span class="role">Support / Admin / Auditor</span></div>
+<div class="browser">
+  <div class="chrome"><div class="lights"><i></i><i></i><i></i></div><div class="url">🔒 <b>admin.mageride.lk</b>/vehicles</div></div>
+  <div class="portal">
+    <div class="side"><div class="brand"><span class="m">M</span> Admin</div><div class="grp">Directory</div><div class="nv"><span class="gi">🧑</span> Passengers</div><div class="nv"><span class="gi">🚖</span> Drivers</div><div class="nv on"><span class="gi">🚗</span> Vehicles</div></div>
+    <div class="main">
+      <div class="topbar"><div class="ttl">Vehicles</div><div class="sp"></div><span class="pill mut">registered vehicles</span></div>
+      <div class="content">
+        <div class="card"><h3>Search vehicles <span class="sp"></span><span class="pill info">different criteria</span></h3>
+          <div class="row" style="flex-wrap:wrap">
+            <div class="field lbl sp"><span class="lab">Registration no</span><span class="val">ABC-1234</span></div>
+            <div class="field lbl sp"><span class="lab">Vehicle ID</span><span class="val">MR-VEH-…</span></div>
+            <div class="field lbl sp"><span class="lab">Type</span><span class="val">Sedan ▾</span></div>
+            <div class="field lbl sp"><span class="lab">Mode</span><span class="val">A / B / C ▾</span></div>
+          </div>
+          <div class="row" style="flex-wrap:wrap;margin-top:8px">
+            <div class="field lbl sp"><span class="lab">Owner mobile</span><span class="val">+94 7…</span></div>
+            <div class="field lbl sp"><span class="lab">Fleet org</span><span class="val">Lanka Transit ▾</span></div>
+            <div class="field lbl sp"><span class="lab">Status</span><span class="val">Approved ▾</span></div>
+            <button class="btn" style="align-self:flex-end">Search</button>
+          </div>
+        </div>
+        <div class="card"><h3>Results <span class="sp"></span><span class="pill mut">2</span></h3>
+          <table>
+            <tr><th>Vehicle</th><th>Type · Mode</th><th>Owner / fleet</th><th>Reg no</th><th>Trips</th><th>Status</th><th></th></tr>
+            <tr><td><b>MR-VEH-48213</b></td><td><span class="cdot" style="background:var(--vehSedan)"></span>Sedan · C</td><td>DRV-22011</td><td>ABC-1234</td><td>980</td><td><span class="pill ok">Approved</span></td><td><button class="btn sm">Open ›</button></td></tr>
+            <tr><td><b>MR-VEH-50111</b></td><td><span class="cdot" style="background:var(--vehBus)"></span>Bus · A</td><td>Lanka Transit</td><td>NB-4412</td><td>5,210</td><td><span class="pill ok">Approved</span></td><td><button class="btn sm">Open ›</button></td></tr>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="states"><b>States:</b> <b>vehicle directory search (item-11).</b> <b>Search by different criteria</b> — registration no, vehicle ID, type, mode (A/B/C), owner mobile, fleet org, or status. Row → vehicle detail (SCR-AP-015). Canonical vehicle types (AL-09); all lookups audited.</div>
+
+<!-- AP-015 VEHICLE DETAIL -->
+<div class="cap"><span class="scr">SCR-AP-015</span> · vehicle_detail — Information &amp; transactions <span class="tag">DERIVED</span> <span class="role">Support / Admin / Finance / Auditor</span></div>
+<div class="browser">
+  <div class="chrome"><div class="lights"><i></i><i></i><i></i></div><div class="url">🔒 <b>admin.mageride.lk</b>/vehicles/MR-VEH-48213</div></div>
+  <div class="portal">
+    <div class="side"><div class="brand"><span class="m">M</span> Admin</div><div class="grp">Directory</div><div class="nv"><span class="gi">🧑</span> Passengers</div><div class="nv"><span class="gi">🚖</span> Drivers</div><div class="nv on"><span class="gi">🚗</span> Vehicles</div></div>
+    <div class="main">
+      <div class="topbar"><span class="pill mut">‹ Back</span><div class="ttl" style="margin-left:8px">MR-VEH-48213 · Sedan ABC-1234</div><div class="sp"></div><span class="pill ok">Approved · Mode C</span></div>
+      <div class="content">
+        <div class="row">
+          <div class="card" style="width:240px"><h3>Vehicle</h3>
+            <table style="font-size:12px"><tr><td>Type</td><td>Sedan (AL-09)</td></tr><tr><td>Reg no</td><td>ABC-1234</td></tr><tr><td>Mode</td><td>C · standby</td></tr><tr><td>Owner</td><td>DRV-22011</td></tr><tr><td>Insurance</td><td><span class="pill ok">to 2026-12-31</span></td></tr><tr><td>Revenue lic.</td><td><span class="pill ok">to 2026-09-30</span></td></tr><tr><td>Tracker</td><td>Paired · online</td></tr></table>
+            <h3 style="margin-top:10px">Documents <span class="sp"></span><span class="pill info">tap to enlarge</span></h3>
+            <div class="thumbgrid" style="grid-template-columns:repeat(2,1fr)"><div class="docthumb">Insurance<span class="zi">🔍</span></div><div class="docthumb">Revenue lic.<span class="zi">🔍</span></div><div class="docthumb">Front<span class="zi">🔍</span></div><div class="docthumb">Back<span class="zi">🔍</span></div></div>
+          </div>
+          <div class="card sp"><div class="tabs"><b class="on">Trips</b><b>Earnings</b><b>Daily fee</b><b>Reports</b></div>
+            <table>
+              <tr><th>Date</th><th>Trip</th><th>Driver</th><th>Fare</th><th>Status</th></tr>
+              <tr><td>17 Jun</td><td>Nugegoda → Galle Face · 8.2 km</td><td>DRV-22011</td><td>Rs 850</td><td><span class="pill ok">Completed</span></td></tr>
+              <tr><td>16 Jun</td><td>Kandy → Peradeniya · 6.0 km</td><td>DRV-22011</td><td>Rs 700</td><td><span class="pill ok">Completed</span></td></tr>
+              <tr><td>16 Jun</td><td>Daily fee · Sedan</td><td>—</td><td>− Rs 200</td><td><span class="pill mut">Debited</span></td></tr>
+            </table>
+            <div class="bp">Tabs: <b>Trips</b> (this vehicle's rides), <b>Earnings</b> (fare totals), <b>Daily fee</b> (per-day platform fee on this vehicle), <b>Reports</b> (moderation on the vehicle). Document thumbnails open the full-size viewer (SCR-AP-003b).</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="states"><b>States:</b> <b>vehicle detail, information &amp; transactions (item-11)</b> — registration / insurance / revenue-licence / tracker info, a document-thumbnail grid (→ full-size viewer SCR-AP-003b), and tabbed <b>Trips / Earnings / Daily fee / Reports</b>. Mode A/B vehicles also show the owning fleet org &amp; subscription pass-through. All views audited; suspend/delist actions route through Moderation (SCR-AP-004).</div>
+
+<!-- AP-016 GTFS DATASET MANAGER (US-28.1…28.3, AL-54/AL-55) -->
+<div class="cap"><span class="scr">SCR-AP-016</span> · gtfs_manager — GTFS Dataset Manager <span class="tag">NEW</span> <span class="role">Admin / Super Admin</span></div>
+<div class="browser">
+  <div class="chrome"><div class="lights"><i></i><i></i><i></i></div><div class="url">🔒 <b>admin.mageride.lk</b>/config/transit/gtfs</div></div>
+  <div class="portal">
+    <div class="side"><div class="brand"><span class="m">M</span> Admin</div><div class="grp">Configuration</div><div class="nv"><span class="gi">💲</span> Fare tariffs</div><div class="nv on"><span class="gi">🚌</span> Transit data (GTFS)</div><div class="nv"><span class="gi">⚙️</span> Feature flags</div></div>
+    <div class="main">
+      <div class="topbar"><div class="ttl">GTFS Dataset Manager</div><div class="sp"></div><span class="pill ok">Active: feed-20260720 · 1,842 routes</span></div>
+      <div class="content">
+        <div class="row">
+          <div class="card" style="width:300px"><h3>Upload full GTFS feed</h3>
+            <div style="border:2px dashed #9aa0a6;border-radius:8px;padding:22px;text-align:center;font-size:12px">⬆️<br><b>Drag the GTFS .zip here</b><br>or <u>choose a file</u> · ≤ 200 MB</div>
+            <div class="bp" style="margin-top:8px">Required: agency · routes · trips · stops · stop_times · calendar(_dates). Optional: shapes · frequencies · translations · feed_info. Duplicate files (same checksum) are refused.</div>
+          </div>
+          <div class="card sp"><h3>Validation &amp; preview <span class="sp"></span><span class="pill ok">Validated</span></h3>
+            <div class="bp">Uploaded ✓ → Validating ✓ → <b>Validated</b> · feed-20260722 · service 2026-07-22 → 2027-01-31</div>
+            <table style="font-size:12px"><tr><th>Agencies</th><th>Routes</th><th>Trips</th><th>Stops</th><th>Stop times</th><th>Shapes</th></tr>
+              <tr><td>3</td><td>1,858</td><td>41,220</td><td>12,431</td><td>512,908</td><td>1,795</td></tr></table>
+            <div class="bp">⚠ 2 warnings: service window &lt; 30 days on 4 trips · 12 stops renamed vs active feed</div>
+            <div style="margin-top:8px"><span class="pill ok"><b>Activate feed</b></span> <span class="pill mut">Download error report</span></div>
+          </div>
+        </div>
+        <div class="card" style="margin-top:10px"><h3>Version history</h3>
+          <table>
+            <tr><th>Feed version</th><th>File</th><th>Uploaded</th><th>Routes</th><th>Status</th><th>Actions</th></tr>
+            <tr><td>feed-20260722</td><td>gtfs_lk_full_0722.zip</td><td>Today · admin@mageride.lk</td><td>1,858</td><td><span class="pill info">Validated</span></td><td>Activate · Report · Zip</td></tr>
+            <tr><td>feed-20260720</td><td>gtfs_lk_full_0720.zip</td><td>20 Jul · admin@mageride.lk</td><td>1,842</td><td><span class="pill ok">Active</span></td><td>Report · Zip</td></tr>
+            <tr><td>feed-20260718</td><td>gtfs_lk_full_0718.zip</td><td>18 Jul · admin@mageride.lk</td><td>1,842</td><td><span class="pill mut">Archived</span></td><td>Re-activate · Zip</td></tr>
+            <tr><td>—</td><td>gtfs_lk_draft.zip</td><td>17 Jul · admin@mageride.lk</td><td>—</td><td><span class="pill warn">Failed</span></td><td>Report · Zip</td></tr>
+          </table>
+          <div class="bp">Activate / Re-activate = atomic staging→live swap (confirm dialog names the feed being replaced); transit-svc reloads ≤ 60 s. Failed feeds can never be activated. Zips kept ≥ 12 months.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="states"><b>States:</b> <b>GTFS Dataset Manager (US-28.1…28.3)</b> — empty (pre-first-import: "no feed loaded, route-matching hidden") · uploading (progress) · validating · <b>validated-preview</b> (counts + feed_info version + warnings, Activate) · failed (error banner + row-level report download) · activating (spinner, atomic) · active-idle. Rollback = Re-activate an Archived version, same atomic swap (Scenario 114). Full national feed loaded day-0 before go-live (AL-55). Admin/Super Admin only; all mutations audited.</div>
+
+</div>
+<footer style="color:#5b5f66;font-size:12px;padding:0 28px 40px;max-width:1000px;margin:0 auto">MageRide · Admin Portal · admin.mageride.lk · 19 screens (SCR-AP-001…016, incl. 003a/003b/003c) · generated from <code>D2_mageride_ui_spec.md</code> §AP · breakpoints 375 / 768 / 1024.</footer>
+</body>
+</html>
