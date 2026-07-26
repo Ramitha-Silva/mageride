@@ -518,8 +518,9 @@ Online toggle is disabled with a prompt to onboard (SCR-DA/DI-026a) or await ass
 RS256 **30-min access** + **opaque rotating refresh** (`iam.sessions`, single-use, rotate jti).
 **Single active device PER APP** (AL-08, US-1.12; US-1.11 merged) — a new-device login revokes only that
 app's prior `(user_id, app)` session; the same person may run Driver + Passenger apps simultaneously.
-**Sign-in by surface:** apps = Phone OTP only; Admin Portal = Password/Google + MFA; Fleet Portal =
-Email/Google/Apple (AL-07). **Nine-role deny-by-default RBAC** (AL-06). **MQTT session JWT separate**
+**Sign-in by surface:** apps = Phone OTP only; Admin Portal = Password/Google, **no MFA/TOTP second
+factor** (~~+ MFA~~ removed by **AL-37** — see BR-28.5; compensating controls = failed-attempt lock-out,
+session binding, optional IP allow-list); Fleet Portal = Email/Google/Apple (AL-07). **Nine-role deny-by-default RBAC** (AL-06). **MQTT session JWT separate**
 (TTL = max(ride+2h, 4h), E-02). Logout/forced-logout revokes refresh.
 
 ### 14.3 SOS SLO (D-33)   [NEW]
@@ -611,7 +612,7 @@ Templates rendered by **content-svc** in user language (Si/Ta/En, D-26); was Hin
 | D-18 | §13.1 plausibility | ✅ | R-20 | §6.4 stuck SLOs | ✅ |
 | D-19 | §5.2/§1 (SLO p95<5s cadence) | ✅ | E-03 | §3.2 doc-suspend | ✅ |
 | D-23 | §3.2 block/entitlement cache | ✅ | E-04 | §1.2 Kalman distance | ✅ |
-| D-25 | §10 VoIP masked-SMS fallback | ✅ | E-05 | §8.2 refund | ✅ |
+| D-25 | §10 — **withdrawn by AL-48**; VoIP fallback is a direct dial, no masked-SMS relay (BR-30.3) | ✅ | E-05 | §8.2 refund | ✅ |
 | D-29 | §14.2 JWT/sessions | ✅ | E-06 | §15 PDPA | ✅ |
 | D-32 | §14.1 OTP rate-limit | ✅ | E-07 | §15 anti-collusion | ✅ |
 | D-33 | §14.3 SOS p99 5s | ✅ | E-10 | §8.2 tip | ✅ |
@@ -715,7 +716,7 @@ When the active vehicle is Mode A or Mode B, **Home is the Start/End-Journey das
 
 ### BR-25.7 Three-stage package-delivery flow + "Delivery completed" (item 9, AL-33)
 The driver delivery flow is **three sequential bottom sheets**:
-1. **Review** (SCR-DA/DI-016a) — pickup & drop distances, payment method, **sender & recipient phone numbers each with a Call button** (direct **PSTN dial**, not masked VoIP). **Start** proceeds; **Cancel** releases the offer back to dispatch → **next eligible driver** (R-02/O2).
+1. **Review** (SCR-DA/DI-016a) — pickup & drop distances, payment method, **sender & recipient phone numbers each with a Call button** (direct **PSTN dial** — the same mechanism as the passenger "Normal call" since AL-48; the in-app VoIP "Free call" option is passenger-ride-only). **Start** proceeds; **Cancel** releases the offer back to dispatch → **next eligible driver** (R-02/O2).
 2. **Pickup** (016b) — Call sender, SOS, **Pickup OTP**; correct OTP → `package.picked_up` and the third sheet appears.
 3. **Complete** (016c) — **Delivery OTP** / proof photo, sender+recipient call buttons, and **"Delivery completed"** → `Completed`. The **"Cash received (COD)" button is removed**; COD/cash is reconciled separately (uncollected 24 h → Disputed, P-14).
 
@@ -735,7 +736,7 @@ SCR-DA/DI-028 **drops the "Showing sharing for … temporarily assigned by …" 
 A scheduled ride **cannot be confirmed without a destination** ("the location to go"). The picker reuses the on-demand place-search/map-pick; pickup defaults to the rider's current GPS but is editable. `POST /v1/rides/schedule` **rejects (400) a request with no `destLat/destLng`**. Reminders (1 h & 15 min) and Job-Board dispatch at T-30 min are unchanged (US-24.2).
 
 ### BR-28.2 Call-type chooser — free VoIP vs masked cellular (item 4, AL-36)
-Tapping 📞 **Call** (active ride SCR-PA/PI-015, history SCR-PA/PI-022, trip details) opens the **call-type chooser (SCR-PA/PI-015a)**: **Free call** → in-app WebRTC/CallKit VoIP (both numbers hidden); **Normal call** → a **masked-number PSTN bridge** so neither party sees the other's real MSISDN. The chosen channel is written to `comms.call_log.call_type`. VoIP failure falls back to masked-SMS (D-25). The last choice is remembered. **Distinct from the driver delivery flow's direct-PSTN dial (BR-25.7).** (US-24.3)
+Tapping 📞 **Call** (active ride SCR-PA/PI-015, history SCR-PA/PI-022, trip details) opens the **call-type chooser (SCR-PA/PI-015a)**: **Free call** → in-app WebRTC/CallKit VoIP (numbers incidentally hidden); **Normal call** → a **direct `tel:` dial of the counterparty's real MSISDN**, returned post-accept in the ride detail (P-05: the driver sees the rider, never the booker). The chosen channel is written best-effort to `comms.call_log.call_type` (`free_voip` | `direct_dial`). VoIP failure prompts **"Call normally instead?"** → the same direct dial. The last choice is remembered. **Same dial mechanism as the driver delivery flow (BR-25.7).** (US-24.3, as amended by **AL-48** / US-26.2 — the ~~masked-number PSTN bridge~~ and the ~~masked-SMS fallback (D-25)~~ are withdrawn; see BR-30.2/30.3)
 
 ### BR-28.3 Driver mobile in passenger trip history (item 3, AL-36)
 Each **completed** trip in passenger history shows the driver's **name + mobile number** with a **Call** action (→ 015a), so the rider can reach the driver after the trip (e.g. lost item). The number is **withheld for rides cancelled before driver assignment**. (US-24.4)
@@ -768,7 +769,7 @@ Every `SCR-WT` page is gated by a `safety.trip_share_tokens` token: **single rid
 When a location request resolves `RiderNotRegistered` (P-03), the platform **now sends the rider an SMS link** with a `pickup_confirm` token → the rider shares an adjustable pin on **SCR-WT-003** within the same 5-min TTL, feeding the **same `rides.location_requests` state machine** as the in-app confirm. **Decline transmits no coordinates** (P-02). **Supersedes the "map-pin/search only" reading of US-8.19** — the booker fallback remains for decline/expiry/no-SMS-delivery, but is no longer the only path. (US-25.3)
 
 ### BR-29.3 Web masked call (item 4, AL-44)
-**Call driver** on SCR-WT-002/004 provisions a **ride-scoped masked proxy DID** (same PSTN-bridge provider as BR-28.2's Normal call) dialled via browser `tel:` — **no VoIP stack on the web subview**; neither party ever sees the other's real MSISDN. Logged to `comms.call_log(call_type='web_masked', share_token=…)`. DID lease expires with the token. Supersedes the "masked-VoIP" wording of US-11.9. (US-25.4)
+**Call driver** on SCR-WT-002/004 is a plain **browser `tel:` link** on the `driver.phone` carried in the token-scoped snapshot — **no VoIP stack on the web subview**, and no server round-trip. The number appears only in `package_recipient`/`proxy_rider` scopes and only while the token lives (BR-29.1). Supersedes the "masked-VoIP" wording of US-11.9. (US-25.4, as amended by **AL-48** / US-26.3 — the ~~ride-scoped masked proxy DID~~, the ~~`POST /public/track/{token}/call`~~ endpoint and ~~`call_log.share_token`~~ are withdrawn; see BR-30.3)
 
 ### BR-29.4 Web SOS (item 5, AL-44)
 **SOS** on SCR-WT-004 sends the browser's geolocation via **dual-gateway SMS, p99 ≤ 5 s (D-33)** to the **booker** (the proxy rider has no registered emergency contact) and raises the admin live feed, logged `safety.sos_events(source='web', share_token=…)`. Geolocation permission denied → SOS still fires with the **last known driver-reported position**, marked `accuracy=unknown`. (US-25.5)

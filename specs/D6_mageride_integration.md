@@ -306,9 +306,10 @@ Redis GEO). Resolves NY's HTTP-poll-only model (`[ADAPT]` → real socket + reco
 `voip-svc` (LiveKit SFU + coturn) issues **LiveKit signalling tokens scoped to `(rideId, role)`**,
 **expiring at trip end**. Driver↔**rider** binding (not booker) for proxy (P-05). Signalling via
 `voip-svc` REST behind YARP; **TURN media relay (coturn) on host UDP range (3478 + 50000–50100), NOT
-via HAProxy/L7** (HAProxy cannot relay UDP). **Fallback (D-25):** if VoIP fails → masked-number SMS
-relay via `notification-svc` (driver-side short-code) — no phone numbers ever exposed. Recordings off
-by default (PDPA).
+via HAProxy/L7** (HAProxy cannot relay UDP). **Fallback (AL-48, supersedes D-25):** if VoIP fails the
+app offers **"Call normally instead?"** — a client-side `tel:` dial of the counterparty's real number
+(carried post-accept in the ride detail). The ~~masked-number SMS relay via `notification-svc`~~ is
+**removed**; there is no CPaaS/DID integration on this path. Recordings off by default (PDPA).
 
 ---
 
@@ -427,7 +428,7 @@ dispatch-svc` · `/v1/fare/** → fare-svc` · `/v1/wallet/**,/v1/fees/** → wa
 | US-6A.2/6A.3 | 6A | §2.4 outbox; §2.2 dispatch.events | [NEW] | R-13/E-09 | offer after commit, 15s |
 | US-6A.11 | 6A | §3.4 LWT; §8.3 timers | [NEW] | R-15 | release on offline |
 | US-6A.13 | 6A | §7.4 FCM offer | [ADAPT] | E-01 | hi-priority + SMS fallback |
-| US-6A.16 | 6A | §6 VoIP | [NEW] | D-24/25 | LiveKit, masked-SMS |
+| US-6A.16 | 6A | §6 VoIP | [ADAPT] | D-24 (D-25 removed, AL-48) | LiveKit; VoIP fail → direct `tel:` dial |
 | US-6A.17–23 | 6A | §3.4 LWT clears directional | [NEW] | DT-04 | offline/LWT clear |
 | US-7.1–7.4 | 7 | §5.1/5.2 SignalR | [ADAPT] | R-06 | geocell groups, visibility |
 | US-7.16/7.17 | 7 | §5.2 VehicleRemoved | [NEW] | — | engaged/stale dropped |
@@ -453,7 +454,7 @@ dispatch-svc` · `/v1/fare/** → fare-svc` · `/v1/wallet/**,/v1/fees/** → wa
 | D-21 | §3.2 JWKS cache 15min | ✅ | E-08 | §3.3 shared subscription | ✅ |
 | D-22 | §5.2 RemoveFromGroup | ✅ | E-09 | §2.4 LISTEN/NOTIFY <50ms | ✅ |
 | D-23 | §5.2 share:{userId} cache | ✅ | P-02 | §5.3 loc-request | ✅ |
-| D-25 | §6 masked-SMS fallback | ✅ | P-09 | §7.4 recipient FCM/SMS | ✅ |
+| D-25 | §6 — **withdrawn by AL-48**; fallback is a direct `tel:` dial, no masked-SMS relay | ✅ | P-09 | §7.4 recipient FCM/SMS | ✅ |
 | D-33 | §7.3 dual SMS p99 5s | ✅ | P-12 | §7.4 booker rate-limit | ✅ |
 | R-04 | §2.4/§3.1 durable timer (Quartz) | ✅ | P-13 | §5.3 booker WS group | ✅ |
 | R-06 | §5.1 H3 res-7 + ring(2) | ✅ | T-01 | §4.1 adapters | ✅ |
@@ -524,7 +525,7 @@ Per uploaded step doc, the `ocr-svc` verdict drives `registry.onboarding_steps.s
 For tracker-equipped Mode A/B vehicles, **ACC-on/off ingest events** (Epic 3 ingest → `trip-state-svc`) **auto-start/end the tracking session**; the phone does **not** ingest GPS once the device is the active publisher (US-3.6). The Mode A/B dashboard (SCR-DA/DI-011) reads session state and offers a **manual Start/End override**.
 
 ### I-25.4 Delivery sender/recipient calls = direct PSTN dial (item 9, AL-33)
-The Call buttons on the delivery sheets place a **direct telephony dial** (`tel:` / CallKit / ConnectionService outbound) to the sender/recipient numbers — **distinct from masked VoIP** used for passenger rides (P-05). **Cancel** on sheet 1 returns the package offer to dispatch (next driver). **"Delivery completed"** → ride `Completed`; COD/cash reconciled separately.
+The Call buttons on the delivery sheets place a **direct telephony dial** (`tel:` / CallKit / ConnectionService outbound) to the sender/recipient numbers — the same mechanism the passenger "Normal call" uses since AL-48; the passenger flow additionally offers in-app VoIP as the "Free call" option (P-05 proxy routing unchanged: the driver sees the rider, never the booker). **Cancel** on sheet 1 returns the package offer to dispatch (next driver). **"Delivery completed"** → ride `Completed`; COD/cash reconciled separately.
 
 ### I-25.5 Credit-request QR removed (item 10, AL-34)
 SCR-DA/DI-023 drops the VisionKit / ML-Kit driver-QR scan; `POST /v1/subscriptions/credit-transfer/request` takes a **Driver ID only**.
@@ -539,8 +540,10 @@ SCR-DA/DI-023 drops the VisionKit / ML-Kit driver-QR scan; `POST /v1/subscriptio
 ### I-28.2 Document drag-crop capture (item 6, AL-43)
 Client capture uses **CameraX `ImageCapture` (Android)** / **VisionKit `VNDocumentCameraViewController` (iOS)** with a four-corner adjustable quad; the client applies a **perspective transform + de-skew** before upload to object storage. Same `PUT /v1/vehicles/{id}/onboarding/{step}` multipart contract → `ocr-svc`/Gemini Flash; `docs.uploads.captured_via='camera_dragcrop'`. The PII-redaction pre-pass (D-36) is unchanged.
 
-### I-28.3 Call-type chooser — VoIP vs masked PSTN bridge (item 4, AL-36)
-`POST /v1/calls/start` with `callType=free_voip` opens a **WebRTC/CallKit** session (numbers hidden); `callType=normal_masked` provisions a **masked-number PSTN bridge** via the telephony provider (each leg dials a proxy DID; real MSISDNs never exposed) — distinct from the **direct PSTN dial** used in the driver delivery sheets (I-25.4). VoIP failure → masked-SMS fallback (D-25). Channel recorded in `comms.call_log`.
+### I-28.3 Call-type chooser — VoIP vs direct dial (item 4, AL-36 as amended by AL-48)
+`POST /v1/calls/start` with `callType=free_voip` opens a **WebRTC/CallKit** session (numbers incidentally hidden — a VoIP property, no longer a requirement). **"Normal call" needs no integration at all**: it is a client-side `tel:` dial of the counterparty's real MSISDN, carried post-accept in the ride detail — the same mechanism as the driver delivery sheets (I-25.4). Channel recorded best-effort in `comms.call_log` (`free_voip` | `direct_dial`).
+
+> ⚠ **Superseded clauses (AL-48, see I-30.2):** the `callType=normal_masked` leg, the **masked-number PSTN bridge** / proxy-DID provisioning, and the **masked-SMS fallback (D-25)** are all **removed**. No CPaaS, no DID pool, no operator voice API.
 
 ### I-28.4 Admin document viewer — signed URLs + audit (item 8, AL-39)
 `GET /admin/documents/{docId}` returns a **short-lived signed object-storage URL** (presigned, ~60 s) for the full-size viewer (SCR-AP-003b) and emits a **`DOC_VIEW`** event into `audit.events`. Thumbnails use the same presign at smaller render size. Verification queue feeds and detail joins are read-only.
@@ -561,8 +564,8 @@ A thin stateless BFF fronts `passenger.mageride.lk`: validates the token against
 ### I-29.2 Token minting + SMS templates (items 1, 3, AL-44/45)
 `notification-svc` mints tokens server-side and embeds them in SMS via the existing dual gateway (Notify.lk primary / Dialog secondary): template `package_on_the_way` (scope `package_recipient`, on driver pickup-confirm — existing, unchanged), **new `proxy_ride_link`** (scope `proxy_rider`, on driver accept of a proxy ride, US-8.22/10.10) and **new `pickup_confirm_link`** (scope `pickup_confirm`, on `RiderNotRegistered`, TTL 300 s). Tokens are single-use-scope, never returned to any client API, and burned per BR-29.1.
 
-### I-29.3 Web masked call — proxy DID lease (item 4, AL-44)
-`POST /public/track/{token}/call` leases a **ride-scoped proxy DID** from the same CPaaS PSTN bridge as I-28.3 (`normal_masked`); the browser dials it via `tel:`. The bridge connects to the driver's masked leg; lease TTL ≤ token TTL; concurrent-lease cap 1 per token. No WebRTC/mic permission on the web subview.
+### I-29.3 Web subview call — plain `tel:` link (item 4, AL-44 as amended by AL-48)
+**REMOVED IN FULL BY AL-48 (see I-30.2).** There is no `POST /public/track/{token}/call`, no ride-scoped proxy-DID lease and no CPaaS bridge. The `/public/track/{token}` snapshot carries `driver.phone` for `package_recipient`/`proxy_rider` scopes, and SCR-WT-002/004 render it as a plain `tel:` link the browser dials directly (US-26.3). Still no WebRTC/mic permission on the web subview. Web SOS (I-29.4) is unaffected.
 
 ### I-29.4 Web SOS delivery (item 5, AL-44)
 `POST /public/track/{token}/sos` fans out through the existing SOS pipeline (D-33: SMS×2 parallel, p99 ≤ 5 s) with recipient = **booker's registered mobile** + admin live-feed event; the browser's Geolocation API supplies coordinates (fallback: last driver-reported position). Logged `safety.sos_events(source='web')`; admin ack flow unchanged (US-12.11).

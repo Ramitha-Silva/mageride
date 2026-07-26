@@ -46,7 +46,7 @@ inconsistent code.
 | ID | Concept | Doc A says | Doc B says | Authority | Recommended fix |
 |----|---------|-----------|-----------|-----------|-----------------|
 | **D-DRIFT-1** | **Vehicle-type taxonomy** ✅ **RESOLVED (AL-09)** | _(was: `fares.tariffs` priced 4 types incl. `car`)_ | _(was: `billing.plans`/`registry.vehicles` had different sets, no `car`)_ | **URD §1.B v2.2 / ADD §1.8 AL-09** | **Done:** one canonical enumeration — `motorbike, three_wheeler, flex, sedan, mini_van, van` (+`truck, mini_truck` delivery, +`bus, train` Mode A); **"car"→"sedan"**; Flex (130/90) & Mini Van (150/110) now have their **own** `fares.tariffs` rows. Applied to D4 §2 CHECK + §19 seeds, D5 §1.1 table, D3 `vehicleType` enums, D2 markers, D1 markers. |
-| **D-DRIFT-2** | **Tracker-adapter service name** (LOW) | D3′ Part 1 service map + interface note call it **`tracker-adapter-svc`** (D3 ln 75, 215; traceability ln 652) | D6′ graph + body and D7′ compose/manifests call it **`tcp-adapter`** / `tcp-adapter-svc` (D6 ln 33, 212; D7 §2.1 ln 55, §3 ln 147, §5) | replica = **`tcp-adapter`** (ADD T-01 lists `tcp-adapter (tracker-adapter-svc)`) | Normalise to **`tcp-adapter`** as the container/service name in D3′ (Part 1 row + §215 interface heading + traceability T-01 row), keeping "tracker-adapter-svc" only as a parenthetical alias. Prevents the Phase-C #14b prompt from being assembled under two names. |
+| **D-DRIFT-2** | **Tracker-adapter service name** (LOW) ✅ **RESOLVED (2026-07-26)** | _(was: D3′ Part 1 service map + interface note called it **`tracker-adapter-svc`**)_ | D6′ graph + body and D7′ compose/manifests call it **`tcp-adapter`** / `tcp-adapter-svc` (D6 ln 33, 212; D7 §2.1 ln 55, §3 ln 147, §5) | replica = **`tcp-adapter`** | **Done:** **`tcp-adapter`** is the canonical container/service name everywhere; "tracker-adapter-svc" survives only as a parenthetical alias. Applied to D3′ (Part-1 row + interface heading + T-01 traceability row), **ADD §6 + T-01 + §19 phase checklists**, and D1′ §B ingest note. Build component = **C043 `tcp-adapter`**. |
 | **D-DRIFT-3** | **MQTT session JWT TTL** (LOW) | D1′ §B.11 states a flat **"MQTT JWT (24 h TTL)"** (D1 ln 561) | D3′ §0, D5′ §14.2, D6′ §3.2 all state **`TTL = max(active-ride + 2h, 4h)`** (E-02) | ADD **E-02** → `max(ride+2h, 4h)` | Edit D1′ ln 561 "24 h TTL" → "TTL = max(active-ride + 2 h, 4 h) (E-02)". D1′ is the user-flow narrative; the three authoritative specs already agree. |
 | D-NOTE-4 | `ride.events` partition key | D6′ §2 prose: "Partition key = `vehicleId`" (D6 ln 102) | D6′ §2.1 topic table: `ride.events`/`dispatch.events` keyed by **`rideId`**, only telemetry by `vehicleId` (D6 ln 112–113) | the table (more specific) | Soften the §2 blanket sentence to "default partition key `vehicleId`; ride/dispatch topics keyed by `rideId` (see §2.1)". Internal to D6′; not cross-doc. |
 
@@ -127,6 +127,12 @@ Either add the transition to D5′ §7 or drop the unreachable state from the D4
 
 ## §5. Phase-C Build-Order & Dependency Map
 
+> ⚠️ **SUPERSEDED (2026-07-26) — historical reference only.** The authoritative build order is
+> **`build/manifest.yaml`** (132 components, waves 0–6) with its generated prompts and
+> `build/progress.md`. The wave numbering below is *not* the manifest's: this map's "Wave 4 — Apps"
+> corresponds to manifest waves 4a/4b/4c, and its "Wave 5 — Hardening" to manifest wave 6.
+> Read this section for the *dependency reasoning* and the D′-section paste list, not for scope.
+
 ```mermaid
 graph TD
   subgraph Wave0[Wave 0 — Foundation]
@@ -150,7 +156,7 @@ graph TD
   end
   subgraph Wave4[Wave 4 — Apps]
     DAND[Driver Android]; PAND[Passenger Android]
-    DIOS[Driver iOS]; PIOS[Passenger iOS]; PORTAL[Wallet Portal]; ADMIN[admin-bff]
+    DIOS[Driver iOS]; PIOS[Passenger iOS]; ADMINP[Admin Portal]; FLEETP[Fleet Portal]; ADMIN[admin-bff]
   end
   subgraph Wave5[Wave 5 — Hardening]
     SEC[security review]; SPOOF[anti-spoof]; LOAD[load tests]; CHAOS[chaos drills]
@@ -188,17 +194,19 @@ graph TD
 | 3 | fare-svc (**D-DRIFT-1**) | ride-svc | fare-svc | §9 fares | §1,§8 | §7.1,§7.2 |
 | 3 | wallet-svc | — | wallet-svc | §10 ledger | §9 | §7.1,§7.2 |
 | 3 | notification/safety/support/ocr/content/voip | core | each §6 service | §8,§11–§16 | §14 | §6,§7 |
-| 4 | Driver/Passenger apps (Android→iOS), Wallet Portal, admin-bff | KMP + backend | — | — | D1′,D2′ | — |
+| 4 | Driver/Passenger apps (Android→iOS), **Admin Portal + Fleet Portal** (the `wallet-portal` was removed by **AL-02**; drivers never use a web portal), admin-bff | KMP + backend | — | — | D1′,D2′ | — |
 | 5 | security / anti-spoof / load / chaos | all | — | — | §13 | §8.3 |
 
 ### Spec-blocked components (do **not** assemble a Phase-C prompt until the fix lands)
 
-- **`fare-svc` (#28)** and **`subscription-svc` (#26)** — **blocked on D-DRIFT-1**. Their `vehicleType`
+> ✅ **All clear as of 2026-07-26** — both blockers below are resolved; nothing is spec-blocked.
+
+- ~~**`fare-svc` (#28)** and **`subscription-svc` (#26)** — **blocked on D-DRIFT-1**. Their `vehicleType`
   domains and rate tables disagree (`car` priced but not fee-charged; `sedan/mini_van/flex` fee-charged
-  but not priced). Resolve the taxonomy (Backlog B1) before generating these two prompts.
-- **`tcp-adapter` (#14b)** — assemble only after **D-DRIFT-2** is normalised, so the prompt uses one
-  service name.
-- Everything else (Wave 0, Wave 1, Wave 2 except tcp-adapter) is **spec-ready now**.
+  but not priced).~~ **Resolved by AL-09** (canonical vehicle-type enumeration, Backlog B1 applied).
+- ~~**`tcp-adapter` (#14b)** — assemble only after **D-DRIFT-2** is normalised, so the prompt uses one
+  service name.~~ **Resolved** — `tcp-adapter` is canonical in every document (see D-DRIFT-2 above).
+- Everything is **spec-ready**. Scope and ordering now come from `build/manifest.yaml`, not this section.
 
 ---
 
@@ -223,9 +231,11 @@ graph TD
 
 **LOW**
 
-- **[B2]** In `D3_mageride_api_contracts.md` rename `tracker-adapter-svc` → **`tcp-adapter`** in the
+- **[B2]** ✅ **APPLIED.** In `D3_mageride_api_contracts.md` rename `tracker-adapter-svc` → **`tcp-adapter`** in the
   Part-1 service-map row (ln 75), the §215 interface heading, and the T-01 traceability row (ln 705,
   652), keeping "(tracker-adapter-svc)" as a parenthetical alias only. *Authority: replica / ADD T-01.*
+  **Extended 2026-07-26:** the ADD itself (§6 component row, T-01 deficit row, §19 phase checklists)
+  and `D1_mageride_user_flows.md` §B were the last holdouts and now use `tcp-adapter` too — D-DRIFT-2 closed.
 - **[B3]** In `D1_mageride_user_flows.md` §B.11 (ln 561) change "MQTT JWT (24 h TTL…)" →
   "MQTT session JWT, TTL = max(active-ride + 2 h, 4 h) (E-02)" to match D3′/D5′/D6′. *Authority: ADD E-02.*
 - **[B4]** In `D4_mageride_data_model.md` `rides.rides` CHECK (ln 355) either remove the unreachable

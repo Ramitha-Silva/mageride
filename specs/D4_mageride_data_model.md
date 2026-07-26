@@ -18,8 +18,10 @@
 
 ## 0. Schema Architecture & Conventions
 
-**18 schemas (bounded contexts):** `iam, registry, prov, trips, rides, dispatch, reputation, safety,
-fares, billing, comms, docs, support, content, audit, pdpa, spatial, telemetry`.
+**21 schemas (bounded contexts):** `iam, registry, prov, trips, rides, dispatch, reputation, safety,
+fares, billing, comms, docs, support, content, audit, pdpa, spatial, telemetry` **+ `config` (§17b),
+`subscription` (Δ 2026-06-21) and `transit` (Δ 2026-06-21)**. Two further schemas are created by later
+change sets: `analytics` (Δ 2026-06-28, AL-38) and `transit_staging` (Δ 2026-07-22 #2, AL-54).
 
 | Convention | MageRide rule | NY delta |
 |---|---|---|
@@ -44,6 +46,7 @@ CREATE SCHEMA rides; CREATE SCHEMA dispatch; CREATE SCHEMA reputation; CREATE SC
 CREATE SCHEMA fares; CREATE SCHEMA billing; CREATE SCHEMA comms; CREATE SCHEMA docs;
 CREATE SCHEMA support; CREATE SCHEMA content; CREATE SCHEMA audit; CREATE SCHEMA pdpa;
 CREATE SCHEMA spatial; CREATE SCHEMA telemetry; CREATE SCHEMA config;
+CREATE SCHEMA subscription; CREATE SCHEMA transit;
 ```
 
 **NY→MageRide context map:** `person`(rider/driver)→`iam.users`+`registry.driver_profiles`;
@@ -920,8 +923,13 @@ INSERT INTO config.operating_cities(code,name_en,name_si,name_ta,centroid_lat,ce
   ('kandy','Kandy','මහනුවර','கண்டி',7.2906,80.6337,1),
   ('galle','Galle','ගාල්ල','காலி',6.0535,80.2210,2);
 ```
+```sql
+-- The chosen city persists on the user (AL-27, US-1.3a):
+ALTER TABLE iam.users ADD COLUMN IF NOT EXISTS operating_city_code TEXT
+  REFERENCES config.operating_cities(code);
+```
 Admins toggle `is_active` / add rows to launch a new city — **no app release required**; the apps fetch
-the list on first run (cacheable, see D6 §7).
+the list on first run (cacheable, see D6 §7). Mirrored as runnable DDL in `server_db_schema.md` §17b.
 
 ---
 
@@ -1163,8 +1171,8 @@ Schema changes for the 17-change discussion pass. New objects + altered columns:
 ```sql
 -- Address Line 1/2/3 + free-text Label captured in the Add-address ModalBottomSheet (SCR-PA-026a)
 CREATE TABLE iam.saved_addresses (
-  id          BIGSERIAL PRIMARY KEY,
-  user_id     BIGINT NOT NULL REFERENCES iam.users(id) ON DELETE CASCADE,
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),   -- §0 PK convention
+  user_id     UUID NOT NULL REFERENCES iam.users(id) ON DELETE CASCADE,
   label       TEXT   NOT NULL,                 -- free text e.g. 'Gym','Mum''s House','Office'
   line1       TEXT   NOT NULL,                 -- main street / building
   line2       TEXT,                            -- area / suburb
@@ -1194,19 +1202,20 @@ ALTER TABLE registry.vehicles
 CREATE SCHEMA IF NOT EXISTS subscription;
 
 CREATE TABLE subscription.access_requests (   -- PER VEHICLE request queue (items 8,15)
-  id          BIGSERIAL PRIMARY KEY,
-  vehicle_id  BIGINT NOT NULL REFERENCES registry.vehicles(id),
-  passenger_id BIGINT NOT NULL REFERENCES iam.users(id),
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  vehicle_id  UUID NOT NULL REFERENCES registry.vehicles(id) ON DELETE CASCADE,
+  passenger_id UUID NOT NULL REFERENCES iam.users(id) ON DELETE CASCADE,
   status      TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','accepted','rejected')),
   requested_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  decided_at  TIMESTAMPTZ, decided_by BIGINT REFERENCES iam.users(id),
-  UNIQUE (vehicle_id, passenger_id, status)   -- one open request per (vehicle,passenger)
+  decided_at  TIMESTAMPTZ, decided_by UUID REFERENCES iam.users(id)
 );
+CREATE UNIQUE INDEX ux_access_request_open ON subscription.access_requests(vehicle_id, passenger_id)
+  WHERE status = 'pending';                   -- one OPEN request per (vehicle,passenger)
 
 CREATE TABLE subscription.grants (            -- tracking-access grant (item 17 lifecycle)
-  id          BIGSERIAL PRIMARY KEY,
-  vehicle_id  BIGINT NOT NULL REFERENCES registry.vehicles(id),
-  passenger_id BIGINT NOT NULL REFERENCES iam.users(id),
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  vehicle_id  UUID NOT NULL REFERENCES registry.vehicles(id) ON DELETE CASCADE,
+  passenger_id UUID NOT NULL REFERENCES iam.users(id) ON DELETE CASCADE,
   status      TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','unsubscribed')),
   granted_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
   expires_at  TIMESTAMPTZ,
@@ -1216,38 +1225,46 @@ CREATE TABLE subscription.grants (            -- tracking-access grant (item 17 
 CREATE UNIQUE INDEX uq_grant_active ON subscription.grants(vehicle_id, passenger_id) WHERE deleted_at IS NULL;
 
 CREATE TABLE subscription.subscriptions (     -- per-subscriber Paid/Free + fare + cycle (items 16f,16g)
-  id          BIGSERIAL PRIMARY KEY,
-  grant_id    BIGINT NOT NULL REFERENCES subscription.grants(id),
-  vehicle_id  BIGINT NOT NULL REFERENCES registry.vehicles(id),
-  passenger_id BIGINT NOT NULL REFERENCES iam.users(id),
-  billing     TEXT NOT NULL CHECK (billing IN ('paid','free')),
-  monthly_fare_minor INT,                      -- overridable per subscriber (NULL when free)
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  grant_id    UUID NOT NULL REFERENCES subscription.grants(id) ON DELETE CASCADE,
+  vehicle_id  UUID NOT NULL REFERENCES registry.vehicles(id) ON DELETE CASCADE,
+  passenger_id UUID NOT NULL REFERENCES iam.users(id) ON DELETE CASCADE,
+  billing     TEXT NOT NULL CHECK (billing IN ('paid','free')),   -- defaults from registry.vehicles.mode_b_billing
+  monthly_fare_minor INT CHECK (monthly_fare_minor >= 0),         -- overridable per subscriber (NULL when free)
   cycle       TEXT NOT NULL DEFAULT 'join_anniversary' CHECK (cycle IN ('month_first','join_anniversary')),
-  join_day    SMALLINT,                        -- 1..31 for join_anniversary (5 Jun → next due 6 Jul)
-  next_due    DATE,
-  status      TEXT NOT NULL DEFAULT 'active'
+  join_day    SMALLINT CHECK (join_day BETWEEN 1 AND 31),         -- join_anniversary (5 Jun → next due 6 Jul)
+  next_due    DATE,                            -- Asia/Colombo business date (D-38)
+  status      TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','paused','cancelled')),
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CHECK (billing = 'free' OR monthly_fare_minor IS NOT NULL)
 );
 
 CREATE TABLE subscription.payments (          -- routed to FLEET OWNER (pass-through) (items 16d–16i)
-  id          BIGSERIAL PRIMARY KEY,
-  subscription_id BIGINT NOT NULL REFERENCES subscription.subscriptions(id),
-  vehicle_id  BIGINT NOT NULL REFERENCES registry.vehicles(id),
-  passenger_id BIGINT NOT NULL REFERENCES iam.users(id),
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  subscription_id UUID NOT NULL REFERENCES subscription.subscriptions(id),
+  vehicle_id  UUID NOT NULL REFERENCES registry.vehicles(id),
+  passenger_id UUID NOT NULL REFERENCES iam.users(id),
   period_month DATE NOT NULL,                  -- Asia/Colombo month (D-38)
-  amount_minor INT NOT NULL,
+  amount_minor INT NOT NULL CHECK (amount_minor >= 0),
+  currency    CHAR(3) NOT NULL DEFAULT 'LKR',
   method      TEXT NOT NULL CHECK (method IN ('lankaqr_deeplink','lankaqr_scan','onepay','online_transfer','cash')),
   status      TEXT NOT NULL DEFAULT 'initiated' CHECK (status IN ('initiated','pending_verification','paid','failed')),
   slip_url    TEXT,                            -- online-transfer screenshot (item 16e)
   gateway_ref TEXT,
-  confirmed_by BIGINT REFERENCES iam.users(id),-- owner who confirmed transfer / marked cash (item 16f)
+  confirmed_by UUID REFERENCES iam.users(id),  -- owner who confirmed transfer / marked cash (item 16f)
   paid_at     TIMESTAMPTZ,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+CREATE UNIQUE INDEX ux_subpay_period ON subscription.payments(subscription_id, period_month)
+  WHERE status IN ('initiated','pending_verification','paid');
 CREATE INDEX ix_subpay_vehicle ON subscription.payments(vehicle_id, period_month);
 CREATE INDEX ix_subpay_passenger ON subscription.payments(passenger_id, period_month);
 ```
 
-> The existing `billing.monthly_subscriptions` remains the **platform** Mode-B fee (~Rs 300 to the fleet/owner); the `subscription.*` tables above are the **subscriber-facing fare** the fleet collects (separate money flow, pass-through to owner).
+> PKs/FKs follow the **§0 UUID convention** (this addendum originally listed `BIGSERIAL`/`BIGINT`, which
+> cannot reference the `UUID` PKs of `iam.users` / `registry.vehicles` — corrected 2026-07-26).
+> The existing `billing.monthly_subscriptions` remains the **platform** Mode-B fee (~Rs 300 to the fleet/owner); the `subscription.*` tables above are the **subscriber-facing fare** the fleet collects (separate money flow, pass-through to owner). Mirrored as runnable DDL in `server_db_schema.md` §18b.
 
 ### transit (GTFS public-transport routing) — AL-18 / US-8.2a/8.2b (items 3,4)
 
@@ -1260,6 +1277,9 @@ CREATE TABLE transit.gtfs_stop_times (trip_id TEXT, stop_id TEXT, stop_sequence 
 CREATE TABLE transit.gtfs_shapes (shape_id TEXT, seq INT, geo geography(Point,4326), PRIMARY KEY (shape_id, seq));
 CREATE INDEX ix_gtfs_stops_geo ON transit.gtfs_stops USING GIST (geo);
 ```
+> Mirrored as runnable DDL (with the §0 explicit-FK convention applied to `gtfs_stop_times`) in
+> `server_db_schema.md` §18c; the versioned import lifecycle is `transit.gtfs_feed_versions` +
+> `transit_staging.*` (Δ 2026-07-22 #2, AL-54).
 
 ### Enum / value additions
 - `fares.ride_payments` payment-init `method` adds **`scan_driver_qr`** (item 18, AL-22) — passenger scans the driver's QR to pay; no MageRide QR rendered.
@@ -1294,6 +1314,8 @@ CREATE TABLE comms.call_log (                                -- [NEW]
   ride_id UUID REFERENCES rides.rides(id), caller_id UUID NOT NULL REFERENCES iam.users(id),
   callee_role TEXT NOT NULL CHECK (callee_role IN ('driver','passenger','sender','recipient')),
   call_type TEXT NOT NULL CHECK (call_type IN ('free_voip','normal_masked')),  -- free in-app VoIP vs masked PSTN
+  --   ⚠ migration history only: the Δ 2026-07-05 #2 addendum (AL-48) narrows this to
+  --   ('free_voip','direct_dial') and drops share_token — that is the current schema.
   started_at TIMESTAMPTZ NOT NULL DEFAULT now(), ended_at TIMESTAMPTZ, outcome TEXT);
 ```
 

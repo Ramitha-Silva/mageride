@@ -776,7 +776,7 @@ ALTER TABLE rides ADD COLUMN driver_phone_masked TEXT;   -- masked MSISDN snapsh
 CREATE TABLE IF NOT EXISTS ui_prefs (
   key   TEXT PRIMARY KEY,
   value TEXT
-);  -- e.g. ('last_call_type','free_voip' | 'normal_masked')
+);  -- e.g. ('last_call_type','free_voip' | 'direct_dial')   -- 'normal_masked' withdrawn by AL-48 (see Δ below)
 ```
 
 **No-schema-change notes (2026-06-28):**

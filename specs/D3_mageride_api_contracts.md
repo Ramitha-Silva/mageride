@@ -1,6 +1,6 @@
 # D3′ — MageRide API Contracts (.NET 10 LTS)
 
-> **🔄 Aligned to ADD v2.6 / URD v2.2 (ADD §1.8 AL-01…AL-16).** This pass: JWT `role` claim = **nine canonical roles** + `fleet_role`, deny-by-default RBAC (AL-06); **auth by surface** — apps Phone OTP only, Admin Portal Password/Google+MFA, Fleet Portal Email/Google/Apple (AL-07); `app` claim + **single-active-device per app** (AL-08); **reseller endpoints are Driver-App APIs** (capability, not role/portal — AL-01); **bank-transfer top-up endpoints removed** (AL-05); LankaQR top-up returns a **Pay deep link** (AL-15); **canonical `vehicleType` enum** (car→sedan, +truck/mini_truck — AL-09); **fleet-svc → Phase 1** with full Fleet Portal route table (AL-03); `wallet-portal` references → **Admin Portal** (`admin-bff`, AL-02); passenger settings endpoints (AL-14).
+> **🔄 Aligned to ADD v2.6 / URD v2.2 (ADD §1.8 AL-01…AL-16).** This pass: JWT `role` claim = **nine canonical roles** + `fleet_role`, deny-by-default RBAC (AL-06); **auth by surface** — apps Phone OTP only, Admin Portal Password/Google (**no MFA — AL-37 supersedes the original "+MFA" wording**), Fleet Portal Email/Google/Apple (AL-07); `app` claim + **single-active-device per app** (AL-08); **reseller endpoints are Driver-App APIs** (capability, not role/portal — AL-01); **bank-transfer top-up endpoints removed** (AL-05); LankaQR top-up returns a **Pay deep link** (AL-15); **canonical `vehicleType` enum** (car→sedan, +truck/mini_truck — AL-09); **fleet-svc → Phase 1** with full Fleet Portal route table (AL-03); `wallet-portal` references → **Admin Portal** (`admin-bff`, AL-02); passenger settings endpoints (AL-14).
 
 > **Phase B deliverable (Prompt B3).** Transformed from the Namma Yatri Phase-A API extraction
 > (`nammayatri-extraction/D3_api_contracts.md`) onto **MageRide .NET 10 LTS minimal-API** microservices
@@ -30,7 +30,9 @@
 - **Auth (AL-06/07/08):** `Authorization: Bearer <JWT>` — **RS256, 30-min access** (JWKS-verifiable) + **opaque
   rotating refresh** in `iam.sessions`+Redis `refresh:{jti}` (single-use; **single-active-device per app** —
   a new-device login revokes only that app's prior session, US-1.12). **Sign-in by surface:** Passenger/Driver
-  apps = **Phone OTP only**; Admin Portal (`admin.mageride.lk`) = **Password or Google + MFA**; Fleet Portal
+  apps = **Phone OTP only**; Admin Portal (`admin.mageride.lk`) = **Password or Google Sign-In — no MFA/TOTP
+  second factor** (~~Password or Google + MFA~~ removed by **AL-37**; compensating controls = failed-attempt
+  lock-out, session binding, optional IP allow-list — see the Δ Addendum 2026-06-28); Fleet Portal
   (`fleet.mageride.lk`) = **Email+Password / Google / Apple**. Claims: `sub` (userId), `role ∈ {passenger,
   driver, fleet_owner, admin, super_admin, verification_officer, support_csr, finance_officer, auditor}`
   (effective perms = union of `iam.user_roles`, **deny-by-default RBAC**), `fleet_role?` ∈ {owner,manager,viewer},
@@ -78,7 +80,7 @@
 | Maps/Route proxy (`Maps.hs`) | **query-svc** + **nominatim-svc** + **tile-cdn** | `[REPLACE]` Google → MapLibre/PMTiles + self-hosted geocoder |
 | live driver loc (`Ride.hs` driver/location) | **query-svc** + **fanout-svc** (SignalR) | `[REPLACE]` HTTP poll/external LTS → SignalR geocell groups + MQTT ingest |
 | TriggerFCM / Notifications | **notification-svc** + **content-svc** | `[ADAPT]` FCM+APNs HTTP v1 batch + Si/Ta/En templates (D-26, D-27) |
-| Dashboards (BFF, RBAC) | **admin-bff** (Admin Portal `admin.mageride.lk`) + **fleet-svc** (Fleet Portal `fleet.mageride.lk`) | `[ADAPT]` single consolidated back-office for all six internal roles (AL-02); `wallet-portal` **removed**; audit interceptor (D-35), PDPA, train admin, nine-role RBAC + MFA |
+| Dashboards (BFF, RBAC) | **admin-bff** (Admin Portal `admin.mageride.lk`) + **fleet-svc** (Fleet Portal `fleet.mageride.lk`) | `[ADAPT]` single consolidated back-office for all six internal roles (AL-02); `wallet-portal` **removed**; audit interceptor (D-35), PDPA, train admin, nine-role RBAC (~~+ MFA~~ **no MFA — AL-37**) |
 | Kafka LocationUpdate / LTS | **mqtt-broker** + **mqtt-bridge** + **position-processor** + **persistence-writer** | `[REPLACE]` Kafka→Redpanda; external LTS → in-repo MQTT pipeline |
 | Cancellation reasons / dues | **ride-svc** + **fare-svc** | `[ADAPT]` Rs 50 cross-trip settlement (D-05) |
 | *(none)* | **dispatch-svc Directional** | `[NEW]` Directional Travel (DT-01..08) |
@@ -133,7 +135,7 @@ sessions** (US-1.11); bind device. Idempotent: yes (replay token). Rate Limit: y
 | POST `/v1/auth/logout` | Bearer | [ADAPT] | `{}` → 204 | revoke refresh (US-1.7) |
 | POST `/v1/auth/google` | Google idToken | [NEW] | `{idToken}` → tokens | **Admin & Fleet portals only** (AL-07); apps are Phone OTP only |
 | POST `/v1/auth/apple` | Apple idToken | [NEW] | `{idToken}` → tokens | **Fleet Portal only** (AL-07) |
-| POST `/v1/auth/password` | email+password | [NEW] | → tokens (+MFA challenge for internal roles) | **Admin Portal (Password) + Fleet Portal (Email+Password)** (AL-07) |
+| POST `/v1/auth/password` | email+password | [NEW] | → tokens (**no MFA challenge** — AL-37) | **Admin Portal (Password) + Fleet Portal (Email+Password)** (AL-07) |
 | POST `/v1/auth/mqtt-token` | Bearer | [NEW] | `{vehicleId,deviceId,rideId?}` → `{mqttJwt,expiresIn}` | E-02 long TTL |
 | GET `/v1/users/me` | Bearer | [KEEP] | → `UserProfile` | profile |
 | PUT `/v1/users/me` | Bearer | [KEEP] | `{firstName,photoUrl,language,notifPrefs}` → `UserProfile` | US-1.5 |
@@ -579,8 +581,9 @@ log `safety.sos_events` (US-12.11). Idempotent: yes.
 Purpose: mint LiveKit signalling token scoped to a ride. **Auth:** Bearer + attestation.
 Request: `{ "rideId":"ulid" }`
 Response 200: `{ "roomName":"ride_{id}", "token":"jwt // LiveKit, expires at trip end", "wsUrl":"wss://...", "callee":"rider|driver" }`
-Side Effects: token binds driver↔**rider** (not booker, P-05); on VoIP fail → masked-number SMS relay
-(D-25). Errors: |403 `not-ride-participant`| · |409 `ride-terminal`|
+Side Effects: token binds driver↔**rider** (not booker, P-05); on VoIP fail the client prompts **"Call
+normally instead?"** → direct `tel:` dial of the counterparty number from `GET /v1/rides/{id}`
+(~~masked-number SMS relay (D-25)~~ removed — **AL-48**). Errors: |403 `not-ride-participant`| · |409 `ride-terminal`|
 
 ## notification-svc — push (`/v1/notify`; mostly internal)   [ADAPT] (NY TriggerFCM)
 | Verb · Path | Auth | Tag | Notes |
@@ -907,15 +910,23 @@ GET /admin/vehicles/{id}
         trips:[...], earnings:[...], dailyFee:[...], reports:[...] }   # (US-24.11)
 ```
 
-### scheduling-svc / passenger client (items 1,2,3,4, AL-36)
+### dispatch-svc / passenger client (items 1,2,3,4, AL-36)
+
+> Scheduled rides are owned by **`dispatch-svc`** over **`dispatch.scheduled_rides`** (ADD §9.1, D4' §6,
+> `server_db_schema.md` §6). There is no `scheduling-svc` and no `scheduling` schema — the earlier
+> heading was a naming slip, corrected 2026-07-26.
+
 ```
 POST /v1/rides/schedule           # now REQUIRES destLat/destLng (the "location to go"); pickup defaults to current GPS,
                                   #   editable; 400 if destination missing (US-24.2)
 GET  /v1/rides/history            # each completed trip row now returns driver {name, mobileMasked, callTypesAvailable[]}
                                   #   for the post-trip Call action (US-24.4)
-POST /v1/calls/start              # {rideId, calleeRole, callType: free_voip|normal_masked}
-                                  #   free_voip → WebRTC/CallKit session; normal_masked → provisions a masked PSTN bridge
-                                  #   so neither party sees the other's real MSISDN (US-24.3)
+POST /v1/calls/start              # {rideId, calleeRole, callType: free_voip}
+                                  #   free_voip → WebRTC/CallKit session (US-24.3)
+                                  #   ⚠ SUPERSEDED BY AL-48 (Δ 2026-07-05 #2): the `normal_masked` value and the masked
+                                  #   PSTN bridge are REMOVED. "Normal call" is a client-side tel: dial of the
+                                  #   counterparty MSISDN returned post-accept in GET /v1/rides/{id} — no server
+                                  #   round-trip. See "Calling — masking removed (items 2–4, AL-48)" below.
 ```
 > Driver onboarding image uploads (item 6, AL-43) use the **same upload contract** — the camera drag-crop scanner (SCR-DA/DI-005) only changes the client capture/crop; the perspective-corrected image is posted to the existing `PUT /v1/vehicles/{id}/onboarding/{step}` file field, improving OCR confidence.
 
@@ -937,8 +948,9 @@ GET  /public/track/{token}/live                  # SSE stream: position + status
 POST /public/track/{token}/pickup/confirm        # {lat,lng,accuracy} → 200; resolves rides.location_requests
                                                  #   (scope=pickup_confirm only; idempotent; TTL 300 s)   (US-25.3)
 POST /public/track/{token}/pickup/decline        # 200; NO coordinates accepted or stored (P-02)
-POST /public/track/{token}/call                  # → { maskedDialNumber:"+9411xxxxxxx", expiresInSec }
-                                                 #   ride-scoped proxy DID; browser tel: dial (US-25.4, I-29.3)
+#  ⚠ POST /public/track/{token}/call — REMOVED BY AL-48 (Δ 2026-07-05 #2). The ride-scoped proxy-DID
+#  lease is gone; the snapshot above carries driver.phone and SCR-WT-002/004 render it as a plain
+#  tel: link (US-26.3). No endpoint, no DID pool, no confirm-your-number step.
 POST /public/track/{token}/sos                   # {lat,lng,accuracy?} → 202; dual-gateway SMS to booker +
                                                  #   admin live feed; safety.sos_events(source='web')   (US-25.5, D-33)
 GET  /public/track/{token}/receipt               # terminal state only → receipt (HTML + PDF); includes

@@ -609,7 +609,9 @@ segmented haptic.
 ### SCR-PA-028 / SCR-PI-028 · `voip_call` — In-app VoIP call · **[NEW]** (US-6A.16)
 Full-screen call UI: avatar, name, timer, mute/speaker/end; **no phone number shown**. **Android:**
 WebRTC + `ConnectionService`. **iOS:** **CallKit** `CXProvider` + WebRTC. **States:** Connecting/
-Connected/Ended; fallback masked-SMS if VoIP fails (D-25). **Anim:** ripple; CallKit native UI (iOS).
+Connected/Ended; on failure the screen offers **"Call normally instead?"** → direct dial of the
+counterparty's real number (~~masked-SMS fallback (D-25)~~ removed — **AL-48**, US-26.4).
+**Anim:** ripple; CallKit native UI (iOS).
 
 ### SCR-PA-029 / SCR-PI-029 · `sos` — SOS · **[ADAPT]** (NY NammaSafety, drop Aadhaar)
 Large red SOS button → sends GPS + trip to emergency contact via SMS (US-12.1); confirm + countdown.
@@ -1130,10 +1132,13 @@ Offline screen with **buffered-then-replayed GPS indicator** (R-17, US-15.1); ap
 > Finance, Auditor), with **role-scoped menus** (deny-by-default RBAC, AL-06).
 
 Next.js responsive web (`admin-portal`), styled exclusively with **Tailwind CSS** (shared `@mageride/tailwind-preset` carrying the §A tokens — AL-52). **Breakpoints:** mobile 375px / tablet 768px / desktop 1024px
-(sidebar + content + detail). Si/Ta/En. **Auth: Password or Google Sign-In + MFA** (AL-07). No Phone-OTP/driver login.
+(sidebar + content + detail). Si/Ta/En. **Auth: Password or Google Sign-In — no MFA step** (AL-07 as amended by
+**AL-37**). No Phone-OTP/driver login.
 
-### SCR-AP-001 · `admin_login` — Login · [DERIVED] (AL-07)
-Email/password + **Google Sign-In** + **MFA (TOTP)** challenge for internal roles. Centered card (max-width 400px).
+### SCR-AP-001 · `admin_login` — Login · [DERIVED] (AL-07, AL-37)
+Email/password + **Google Sign-In**. Centered card (max-width 400px). **No MFA/TOTP challenge block** —
+sign-in completes straight to the dashboard (~~MFA (TOTP) challenge for internal roles~~ removed by AL-37,
+US-24.5; the account is protected by failed-attempt lock-out + an optional IP allow-list instead).
 
 ### SCR-AP-002 · `admin_home` — Role-scoped dashboard · [DERIVED] (AL-06)
 Each internal user sees only the modules their role(s) permit (Verification Officer → onboarding queue only;
@@ -1280,7 +1285,7 @@ padding; SwiftUI `.safeAreaInset`/`GeometryReader`. RTL = N/A (Si/Ta/En LTR). Da
 | US-9.10/9.13/9.17 | 9 | SCR-DA-023/024 | [NEW] | §11.6 | driver-to-driver credit transfer (by Driver ID, exact value) |
 | US-9.18/9.19/9.20/9.21 | 9 | SCR-DA-022/024 | [REPLACE]/[NEW] | §11.5 | top-up, vouchers |
 | US-9.22/9.23 | 9 | SCR-DA-020/033 | [ADAPT]/[NEW] | US-14.11 | earnings, fee refund |
-| US-9A.1–9A.19 | 9A | SCR-WP-001..011 | [NEW]/[DERIVED] | §11.5 | Wallet Portal |
+| US-9A.1–9A.19 | 9A | `SCR-WP-001..011` — **retired ID block (AL-02)**, see note below | [NEW]/[DERIVED] | §11.5 | ~~Wallet Portal~~ → **Admin Portal** (`SCR-AP-*`) |
 | US-10.x | 10 | SCR-DA-034 / SCR-PA push | [KEEP] | DT-08 | alerts, directional reminder |
 | US-12.1/12.5/12.8/12.10 | 12 | SCR-PA-027b/029/030b, SCR-DA-032 | [ADAPT]/[NEW] | D-33 | SOS contacts (change619), SOS, report/block |
 | US-14.4/14.11/14.12/14.13 | 14 | SCR-WP-011 | [DERIVED] | §6 admin | admin panel |
@@ -1317,7 +1322,13 @@ All in-scope items ✅ — **document NOT `[INCOMPLETE]`.**
 ## Verification & Caveats Summary
 
 - Every screen carries both an Android (`SCR-*A`) and iOS (`SCR-*I`) variant with Compose/SwiftUI
-  component names; Wallet Portal screens (`SCR-WP`) are responsive web with 375/768/1024 breakpoints.
+  component names; the web portals are responsive with 375/768/1024 breakpoints.
+- ⚠️ **`SCR-WP-*` is a retired ID block (AL-02).** The "Wallet Portal" was removed and its functions
+  absorbed into the **Admin Portal** (`SCR-AP-*`, §11 above) and the **Fleet Portal** (`SCR-FP-*`);
+  drivers never use a web portal. The `SCR-WP-*` IDs surviving in the §11.x traceability rows above are
+  **historical** — no `SCR-WP` screen is built, and none appears in `build/manifest.yaml`. **Open item:**
+  the per-screen `SCR-WP-00n → SCR-AP-0nn` remap has never been written down; until it is, treat the
+  `SCR-AP-*` specifications in §11 as authoritative for what gets built.
 - **All Phase-A `[UNVERIFIED]` (10) resolved** (§0.4): dark-theme + spacing + elevation tokens now
   defined; marker rotation/cluster = MapLibre layers; iOS host = real SwiftUI target; RTL N/A;
   passenger no-show N/A.
@@ -1400,7 +1411,7 @@ All in-scope items ✅ — **document NOT `[INCOMPLETE]`.**
 |---|---|---|
 | SCR-PA/PI-002 | Onboarding: **Get Started CTA pinned to the bottom** of the screen (full-width, below the language list after a flexible spacer) | 1 / US-24.1 |
 | SCR-PA/PI-013 | Schedule ride: **mandatory "Where to?" destination picker** (same place-search/map-pick sheet as on-demand booking) + editable pickup (defaults to current location); **Confirm disabled until a destination is set** | 2 / US-24.2 |
-| **SCR-PA/PI-015a** ★ NEW | **Call-type chooser** bottom sheet shown when 📞 Call is tapped (active ride, history, trip details): **Free call** (in-app VoIP, numbers hidden) vs **Normal call** (masked-number cellular); remembers last choice | 4 / US-24.3 |
+| **SCR-PA/PI-015a** ★ NEW | **Call-type chooser** bottom sheet shown when 📞 Call is tapped (active ride, history, trip details): **Free call** (in-app VoIP, numbers incidentally hidden) vs **Normal call** (~~masked-number cellular~~ → **direct cellular dial** of the real number, **AL-48**/US-26.2); remembers last choice | 4 / US-24.3 |
 | SCR-PA/PI-015 | Active ride: 📞 Call shows a **▾** affordance and opens **SCR-PA/PI-015a** instead of dialing immediately | 4 / US-24.3 |
 | SCR-PA/PI-022 | Trip & schedule history: each **completed-trip card shows the driver's name + mobile number** with a **Call** action (opens 015a); number hidden for cancelled-before-assignment trips | 3 / US-24.4 |
 | **SCR-DA/DI-005** ★ NEW | **Document capture (camera + draggable-corner crop):** live camera with an adjustable quad — drag four corner handles so the whole document fills the frame; auto edge-detect proposes the quad; Retake / Use photo; perspective-correct on confirm. Shared by every onboarding capture slot | 6 / US-24.6 |

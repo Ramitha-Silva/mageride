@@ -202,7 +202,7 @@ edge. **K3s single-node uses the same images/manifests** (§5).
 | content-svc | `Cache__Ttl`=300 | Si/Ta/En templates (D-26); **public `GET /config/cities`** from `config.operating_cities`, cacheable (Change 6/22) | yes | — | no |
 | support-svc | `Storage__ScreenshotBucket` | tickets | yes | — | no |
 | fleet-svc | `Fleet__RlsEnabled`=true · `Fleet__VerificationGate`=true (US-13.A7) | **Phase 1** (AL-03) — Fleet Portal | yes | — | no |
-| admin-bff | `Audit__Topic`=audit.events (D-35) · `Pdpa__DueDays`=30 (E-06) · `Rbac__DenyByDefault`=true · `Mfa__RequiredForInternal`=true | Admin Portal, nine-role RBAC (AL-02/06) | yes | — | no |
+| admin-bff | `Audit__Topic`=audit.events (D-35) · `Pdpa__DueDays`=30 (E-06) · `Rbac__DenyByDefault`=true · `Login__MaxFailedAttempts`=5 · `Login__LockoutMinutes`=15 · `Login__IpAllowList` (optional, CSV) | Admin Portal, nine-role RBAC (AL-02/06). **`Mfa__RequiredForInternal` removed — no second factor for internal roles (AL-37)**; the lock-out + optional IP allow-list are the compensating controls | yes | — | no |
 | ocr-svc | `Gemini__ApiKey` · `Gemini__Model`=`gemini-flash-3.0` (Change 6/22) · `Redaction__Enabled`=true (D-36) | OCR + Mode-C auto-verify | yes | — | **yes** |
 | voip-svc | `LiveKit__ApiKey` · `LiveKit__Secret` · `Turn__Realm` (D-24) | VoIP | no | — | **yes** |
 | position-processor-svc | `Plausibility__MaxAccuracyM`=200 (D-18) · `Replay__MaxPerSec`=20 (T-05) | hot-path | yes | — | no |

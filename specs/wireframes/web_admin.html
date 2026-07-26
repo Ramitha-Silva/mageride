@@ -409,10 +409,10 @@ tr:last-child td{border-bottom:none}
       <div class="topbar"><div class="ttl">Users &amp; roles</div><div class="sp"></div><button class="btn">+ Provision user</button></div>
       <div class="content">
         <div class="card"><h3>Internal users <span class="sp"></span><span class="pill info">deny-by-default RBAC</span></h3>
-          <table><tr><th>User</th><th>Role(s)</th><th>MFA</th><th>Active session</th><th>Status</th><th></th></tr>
+          <table><tr><th>User</th><th>Role(s)</th><th>IP allow-list</th><th>Active session</th><th>Status</th><th></th></tr>
           <tr><td>nuwan@mageride.lk</td><td>Verification Officer</td><td><span class="pill ok">On</span></td><td>Colombo · 2 min ago</td><td><span class="pill ok">Active</span></td><td><button class="btn sm ghost">Edit</button></td></tr>
           <tr><td>finance@mageride.lk</td><td>Finance, Auditor</td><td><span class="pill ok">On</span></td><td>—</td><td><span class="pill ok">Active</span></td><td><button class="btn sm ghost">Edit</button></td></tr>
-          <tr><td>tmp@mageride.lk</td><td>Support / CSR</td><td><span class="pill warn">Pending</span></td><td>—</td><td><span class="pill mut">Invited</span></td><td><button class="btn sm err">Revoke</button></td></tr>
+          <tr><td>tmp@mageride.lk</td><td>Support / CSR</td><td><span class="pill mut">Off</span></td><td>—</td><td><span class="pill mut">Invited</span></td><td><button class="btn sm err">Revoke</button></td></tr>
           </table>
         </div>
         <div class="card"><h3>Permission set — Verification Officer</h3><table><tr><td>Verification queue (read/write)</td><td><span class="toggle on"></span></td></tr><tr><td>Approve / reject drivers</td><td><span class="toggle on"></span></td></tr><tr><td>Finance &amp; reversals</td><td><span class="toggle"></span></td></tr><tr><td>RBAC / user management</td><td><span class="toggle"></span></td></tr></table></div>
@@ -420,7 +420,7 @@ tr:last-child td{border-bottom:none}
     </div>
   </div>
 </div>
-<div class="states"><b>States:</b> provision internal users, assign roles, define permission sets, suspend/revoke accounts + sessions (Epic 21, AL-06). Super Admin only; all changes audited.</div>
+<div class="states"><b>States:</b> provision internal users, assign roles, define permission sets, suspend/revoke accounts + sessions (Epic 21, AL-06). Super Admin only; all changes audited. <b>No MFA column</b> — there is no second factor for internal roles (AL-37); the optional per-account <b>IP allow-list</b> + failed-attempt lock-out are the compensating controls.</div>
 
 <!-- AP-009 AUDIT -->
 <div class="cap"><span class="scr">SCR-AP-009</span> · audit_logs — Audit trail <span class="tag">DERIVED</span> <span class="role">Auditor (read-only)</span></div>

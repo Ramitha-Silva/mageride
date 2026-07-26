@@ -202,7 +202,7 @@
 | US-ID | Pri | D1′ | D2′ | D3′ | D4′ | D5′ | D7′ | Tag | Notes |
 |---|---|---|---|---|---|---|---|---|---|
 | US-13.* (Fleet, **Phase 1**) | P0/P1 | Fleet Portal flows | SCR-FP-001..010 | fleet-svc `/v1/fleets/*` | registry.fleets/fleet_vehicles/fleet_assignments, billing.fleet_invoices, iam.fleet_members | — | fleet-svc + fleet-portal | [NEW] | AL-03: org (verification-gated), Mode A/B only, assign, schedule, map, billing |
-| US-21.* (RBAC) | P0/P1 | — | SCR-AP-008 | iam/admin-bff RBAC | iam.user_roles/fleet_members | §14.2 | admin-bff (DenyByDefault, MFA) | [NEW] | AL-06: nine roles, deny-by-default, Super-Admin provisioning |
+| US-21.* (RBAC) | P0/P1 | — | SCR-AP-008 | iam/admin-bff RBAC | iam.user_roles/fleet_members | §14.2 | admin-bff (DenyByDefault; **no MFA — AL-37**) | [NEW] | AL-06: nine roles, deny-by-default, Super-Admin provisioning |
 | US-22.* (Passenger Settings) | P1 | `profile_settings`/`saved_addresses` | SCR-PA-026/027 | iam `/profile` | iam.saved_addresses, users.default_payment_method | — | — | [NEW] | AL-14: Home/Work map pins, saved addresses, default payment, Help |
 | US-2.19 (insurance) | P0 | — | SCR-DA-004a | registry | registry.documents kind=insurance | §14.1a | §7.5 | [NEW] | AL-10: insurance mandatory all modes; Step 2/4 auto-verify (Change 6/22) |
 | US-2.20 (revenue licence) | P0 | — | SCR-DA-004b/006 | registry | registry.documents kind=revenue_license | §14.1a | §7.5 | [NEW] | revenue licence mandatory all modes; Step 3/4 auto-verify; expiry auto-suspends (mirrors AL-10) |
@@ -243,7 +243,7 @@ admin surfaces are now in the **Admin Portal** (drivers use the Driver App).
 |---|---|---|---|---|---|---|---|---|---|
 | US-24.1 / item 1 (Get Started bottom) | P2 | F-28.* | SCR-PA/PI-002 | — | — | — | — | [ADAPT] | AL-36 |
 | US-24.2 / item 2 (schedule destination) | P1 | F-28.1 | SCR-PA/PI-013 | `POST /v1/rides/schedule` (dest required) | dispatch.scheduled_rides (dropoff_geo NOT NULL) | BR-28.1 | — | [ADAPT] | AL-36 |
-| US-24.3 / item 4 (call-type chooser) | P1 | F-28.2 | SCR-PA/PI-015a | `POST /v1/calls/start` | comms.call_log | BR-28.2 | I-28.3 | [NEW] | AL-36 |
+| US-24.3 / item 4 (call-type chooser) — masked leg **superseded by US-26.2 / AL-48** | P1 | F-28.2 | SCR-PA/PI-015a | `POST /v1/calls/start` (**`free_voip` only**); Normal call = client `tel:` dial | comms.call_log (`free_voip`\|`direct_dial`) | BR-28.2 → BR-30.2 | I-28.3 + **I-30.2** | [ADAPT] | AL-36 → **AL-48** |
 | US-24.4 / item 3 (driver mobile in history) | P2 | F-28.3 | SCR-PA/PI-022 | `GET /v1/rides/history` | rides.rides (driver join) | BR-28.3 | — | [ADAPT] | AL-36 |
 | US-24.6 / item 6 (camera drag-crop capture) | P1 | F-28.4 | SCR-DA/DI-005 + 003a/004a/004b/004c | `PUT /v1/vehicles/{id}/onboarding/{step}` | docs.uploads(captured_via) | BR-28.4 | I-28.2 | [NEW] | AL-43 |
 | US-24.5 / item 5 (admin no MFA) | P1 | F-28.5 | SCR-AP-001 | `POST /admin/auth/login` (no MFA) | iam (user_mfa deprecated) | BR-28.5 | I-28.1 | [ADAPT] | AL-37 |
@@ -260,7 +260,7 @@ admin surfaces are now in the **Admin Portal** (drivers use the Driver App).
 | US-25.1 / item 1 (SCR-WT screen IDs + states) | P1 | F-29.1 | **SCR-WT-001…006** (`web_passenger.html`) | — | — | BR-29.1 | — | [NEW] | AL-44 |
 | US-25.2 / item 2 (public track API) | P1 | F-29.1 | SCR-WT-001/002/004 | `public-bff /public/track/{token}[,/live]` | safety.trip_share_tokens (read) | BR-29.1 | I-29.1 | [NEW] | AL-44 |
 | US-25.3 / item 3 (web pickup-confirm, unregistered rider) | P1 | F-29.2 | SCR-WT-003 | `/public/track/{token}/pickup/confirm\|decline` | trip_share_tokens(location_request_id), rides.location_requests | BR-29.2 | I-29.2 | [NEW] | AL-45 |
-| US-25.4 / item 4 (web masked call) | P1 | F-29.3 | SCR-WT-002/004 | `/public/track/{token}/call` | comms.call_log(share_token, web_masked) | BR-29.3 | I-29.3 | [NEW] | AL-44 |
+| US-25.4 / item 4 (web call) — **superseded by US-26.3 / AL-48** | P1 | F-29.3 | SCR-WT-002/004 | ~~`/public/track/{token}/call`~~ **REMOVED** → `GET /public/track/{token}` (+driver.phone), `tel:` link | ~~call_log(share_token, web_masked)~~ **dropped** | BR-29.3 → BR-30.3 | I-29.3 → **I-30.2** | [ADAPT] | AL-44 → **AL-48** |
 | US-25.5 / item 5 (web SOS) | P1 | F-29.3 | SCR-WT-004 | `/public/track/{token}/sos` | safety.sos_events(source, share_token) | BR-29.4 | I-29.4 | [NEW] | AL-44 |
 | US-25.6 / item 6 (delivered / receipt page) | P2 | F-29.4 | SCR-WT-005 | `/public/track/{token}/receipt` | derived (proof_artifacts, ride_payments) | BR-29.5 | I-29.1 | [NEW] | AL-44 |
 | US-25.7 / item 7 (token scopes + metering) | P1 | F-29.* | — | mint: notification-svc (internal) | trip_share_tokens(+2 scopes, metering) | BR-29.1 | I-29.2 | [ADAPT] | AL-44 |

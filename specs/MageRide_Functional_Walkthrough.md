@@ -1483,7 +1483,7 @@ To keep things readable, when a screen behaves identically on both we write it o
 
 > The Admin Portal is a website (`admin.mageride.lk`) used only by MageRide's internal staff. Each of the six internal roles sees only the parts of the portal their job allows.
 
-### Scenario 55: Admin login — email/password + Google Sign-In + extra security code (MFA)
+### Scenario 55: Admin login — email/password or Google Sign-In (no MFA step)
 **Platform:** Admin Portal
 **Who:** Any internal role (Verification Officer, Support Agent, Finance Officer, Super Admin, Auditor, Admin)
 **Goal:** Sign in securely to the back-office.
@@ -1494,16 +1494,21 @@ To keep things readable, when a screen behaves identically on both we write it o
 | Step | Screen (ID) | What the user sees | What the user does | What happens next |
 |---|---|---|---|---|
 | 1 | Login (SCR-AP-001) | A centred login card: email + password **or** a **Google Sign-In** button | Enters credentials or uses Google | Identity checked |
-| 2 | Login (SCR-AP-001) | A **second-step security code** prompt (a 6-digit code from an authenticator app — MFA) | Enters the code | Access granted to their role-scoped dashboard |
+| 2 | Dashboard (SCR-AP-002) | Their role-scoped dashboard — **no second-step security code** | — | Access granted straight away |
 
 **What can go wrong (edge cases):**
 | Situation | What the user sees | What they should do |
 |---|---|---|
 | Wrong password | An error on the login card | Re-enter or reset |
-| Lost the authenticator | Blocked at the second step | Contact the Super Admin to reset MFA |
+| Too many failed attempts | The account is temporarily locked out | Wait for the lock-out window, or ask a Super Admin to clear it |
+| Signing in from outside the office IP allow-list (if enabled for that account) | Sign-in refused | Sign in from an allowed network, or ask a Super Admin to update the allow-list |
 | Wrong portal | Drivers/passengers cannot log in here at all | Use the relevant app instead |
 
-⚠️ **SPEC GAP:** The login screen requires MFA, but the recovery path when a staff member loses their MFA device is not described in the UI spec. QA/security should confirm the admin MFA-reset flow.
+> **Change note (2026-06-28, AL-37 / US-24.5):** the 6-digit authenticator (MFA/TOTP) step was
+> **removed** from this screen — sign-in completes straight to the dashboard. The earlier ⚠️ SPEC GAP
+> about a lost-authenticator recovery path is therefore closed: there is no authenticator to lose.
+> Failed-attempt lock-out and the optional IP allow-list are the compensating controls. See §"Admin
+> Portal — login" later in this document and D2 SCR-AP-001.
 
 ---
 

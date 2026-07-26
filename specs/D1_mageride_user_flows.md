@@ -596,7 +596,7 @@ device ingest; offers move to FCM/APNs; passenger fan-out to SignalR. Channels:
   `provisioning-svc` issues per-device X.509 (MQTT-capable) or HMAC token (legacy GT06/JT808) with
   90-day rotation (US-3.5, T-02). Duplicate-IMEI → both quarantined for admin (US-3.4, T-08).
 - **Source switch** — driver toggles tracking source mobile↔hardware; single active publisher (US-3.6).
-- **Ingest** — TCP (GT06/JT808/H02) / UDP / MQTT normalised by `tracker-adapter-svc` into the
+- **Ingest** — TCP (GT06/JT808/H02) / UDP / MQTT normalised by `tcp-adapter` *(a.k.a. `tracker-adapter-svc`)* into the
   position event stream (US-3.9); plausibility checks identical to mobile (US-3.15, T-07).
 - **Offline replay** — tracker batches in GSM-dead zones, bulk-replays on reconnect; dedup by `seq`
   (US-3.10,3.11, T-05). Mobile shows **buffered-then-replayed indicator** on reconnect (R-17).
@@ -807,7 +807,7 @@ Onboarding **feature carousel** on SCR-DA/DI-002 (item 1); request-credit **Driv
 SCR-PA/PI-013: rider opens **Schedule ride → "Where to?"** → picks a **destination** (place-search/map-pick) → optionally edits pickup → sets date+time → **Confirm** (disabled until destination set). `POST /v1/rides/schedule` requires `dest*`; reminders + T-30 Job-Board dispatch follow as before.
 
 ### F-28.2 Passenger call-type chooser (item 4, US-24.3)
-On 📞 **Call** (active ride / history / trip details) → **SCR-PA/PI-015a** chooser → **Free call** (VoIP, SCR-PA/PI-028) **or** **Normal call** (masked PSTN). VoIP fail → masked-SMS fallback. Choice logged (`comms.call_log`).
+On 📞 **Call** (active ride / history / trip details) → **SCR-PA/PI-015a** chooser → **Free call** (VoIP, SCR-PA/PI-028) **or** **Normal call** (direct `tel:` dial of the real number, revealed post-accept — **AL-48** withdrew the ~~masked PSTN~~ bridge). VoIP fail → **"Call normally instead?"** direct-dial prompt (~~masked-SMS fallback~~ removed). Choice logged (`comms.call_log`). See the 2026-07-05 #2 delta below.
 
 ### F-28.3 Driver post-trip reachability (item 3, US-24.4)
 SCR-PA/PI-022: each completed-trip card shows **driver name + mobile** + **Call** (→ 015a). Cancelled-before-assignment trips hide the number.
@@ -838,7 +838,7 @@ Driver confirms package pickup (`SCR-DA-016b`) or accepts a proxy ride → `noti
 `POST /v1/location-requests` resolves `RiderNotRegistered` (P-03) → the system **now also sends the rider an SMS link** carrying a `pickup_confirm` token → **SCR-WT-003 confirm pickup**: adjustable map pin + 5-min TTL countdown → **Share** → `POST /public/track/{token}/pickup/confirm {lat,lng,accuracy}` → the booker's pickup pin auto-fills (identical to the in-app confirm SCR-PA-011). **Decline** → no GPS ever leaves the device (P-02). Decline / expiry → booker falls back to map-pin/search — the US-8.19 fallback is **retained**, it is no longer the *only* path (AL-45).
 
 ### F-29.3 Web masked call + web SOS during a tracked ride (items 4–5, US-25.4/25.5)
-On SCR-WT-002/004, **Call driver** → `POST /public/track/{token}/call` → returns a ride-scoped **masked proxy DID** → browser `tel:` dial; neither party sees a real MSISDN (no VoIP stack on the web subview — AL-44 supersedes the "masked-VoIP" wording of US-11.9). On SCR-WT-004, **SOS** → browser geolocation → `POST /public/track/{token}/sos` → dual-gateway SMS ≤5 s (D-33) to the **booker** + admin live feed; logged `safety.sos_events(source='web')`.
+On SCR-WT-002/004, **Call driver** → the `driver.phone` in the token snapshot rendered as a plain browser **`tel:` link** (no VoIP stack on the web subview; AL-44 supersedes the "masked-VoIP" wording of US-11.9, and **AL-48** withdrew the ~~`POST /public/track/{token}/call`~~ proxy-DID round-trip — see the 2026-07-05 #2 delta below). On SCR-WT-004, **SOS** → browser geolocation → `POST /public/track/{token}/sos` → dual-gateway SMS ≤5 s (D-33) to the **booker** + admin live feed; logged `safety.sos_events(source='web')`.
 
 ### F-29.4 Delivered / receipt / token closure (item 6, US-25.6)
 Ride reaches a terminal state → **SCR-WT-005 delivered**: OTP-verified ✓, or **photo-proof** (recipient absent, P-10), or COD-collected vs **Disputed >24 h uncollected** (P-14); **Download receipt** → `GET /public/track/{token}/receipt`. Token closes at terminal + 1 h (`package_recipient`) / trip completion (`proxy_rider`); later opens → SCR-WT-006.

@@ -6,7 +6,8 @@
 > (microservices), §7 (real-time plane) and §1.8 (AL-01…AL-16 URD v2.2 alignment).
 >
 > **Engine:** PostgreSQL 16 on TimescaleDB-HA (PostGIS + TimescaleDB + pgcrypto + citext).
-> **Topology:** one PG16 cluster, **18 bounded-context schemas**, primary + 2 read replicas
+> **Topology:** one PG16 cluster, **21 bounded-context schemas** (+ the `analytics` rollup and the
+> `transit_staging` import target), primary + 2 read replicas
 > (streaming), PgBouncer (transaction mode) in front of every service. The high-frequency tracker
 > plane (`telemetry.positions`) is a logically separated TimescaleDB hypertable.
 > **Access:** Dapper over Npgsql — hand-written parameterised SQL, repository-per-schema. **This DDL is
@@ -56,6 +57,11 @@ CREATE SCHEMA IF NOT EXISTS audit;
 CREATE SCHEMA IF NOT EXISTS pdpa;
 CREATE SCHEMA IF NOT EXISTS spatial;
 CREATE SCHEMA IF NOT EXISTS telemetry;
+CREATE SCHEMA IF NOT EXISTS config;        -- launch/operating cities (§17b, D4' §17b)
+CREATE SCHEMA IF NOT EXISTS subscription;  -- Mode B passenger subscriptions (§18b, Epic 23)
+CREATE SCHEMA IF NOT EXISTS transit;       -- GTFS public-transport routing (§18c, AL-18/AL-54)
+-- Also created idempotently by their own change sets: `analytics` (§23, AL-38) and
+-- `transit_staging` (§27, AL-54 — the GTFS importer target swapped into `transit.*` on activate).
 ```
 
 ### 0.2 Shared trigger — `set_updated_at`
@@ -206,8 +212,12 @@ CREATE TABLE registry.vehicles (
   vehicle_photo_url TEXT,
   dispatch_state TEXT NOT NULL DEFAULT 'ACTIVE'
     CHECK (dispatch_state IN ('ACTIVE','DISPATCH_SUSPENDED')),  -- E-03 doc-expiry auto-suspend
+  mode_b_billing TEXT CHECK (mode_b_billing IN ('paid','free')),   -- NULL for Mode A/C (AL-24, US-13.1b)
+  default_monthly_fare_minor INTEGER CHECK (default_monthly_fare_minor >= 0),  -- Paid default, overridable per subscriber
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now());
+-- AL-51: the UI label is "Service payment (Free/Paid)"; the column name is intentionally unchanged.
+-- AL-49 (BR-31.1): mode_b_billing='paid' requires a `verified` registry.fleet_payout_profiles row (§26).
 -- D-37: registration uniqueness across the live (non-rejected/deactivated) set only:
 CREATE UNIQUE INDEX ux_vehicles_regno_active ON registry.vehicles(registration_number)
   WHERE status IN ('PENDING','APPROVED');
@@ -722,7 +732,7 @@ CREATE TABLE fares.ride_payments (                            -- payment state m
   state TEXT NOT NULL DEFAULT 'Initiated' CHECK (state IN
     ('Initiated','Pending','Succeeded','Failed','Retried','FellBackToCash',
      'CashOnDelivery','CashOnDeliveryCollected','Overpaid','Refunded','PartiallyRefunded','Disputed')),
-  method TEXT NOT NULL CHECK (method IN ('cash','lankaqr','onepay','cod')),
+  method TEXT NOT NULL CHECK (method IN ('cash','lankaqr','onepay','cod','scan_driver_qr')),  -- AL-22
   amount_minor INTEGER NOT NULL CHECK (amount_minor >= 0),
   surcharge_minor INTEGER NOT NULL DEFAULT 0 CHECK (surcharge_minor >= 0),  -- OnePay +5% (US-8.11)
   tip_amount_minor INTEGER NOT NULL DEFAULT 0 CHECK (tip_amount_minor >= 0),-- E-10
@@ -1054,6 +1064,38 @@ CREATE INDEX ix_geofences_geom ON spatial.geofences USING gist(geom);
 
 ---
 
+## 17b. `config` — Launch / Operating Cities (D4' §17b, AL-27)
+
+`config.operating_cities` is the **source of truth for the launch-city radio list** on the first-run
+language/city screen (SCR-DA-002 / SCR-DI-002) — previously hard-coded in the apps, now admin-managed
+and served read-only via the cacheable public `GET /config/cities` (active rows only, `sort_order`).
+The chosen `code` persists on `iam.users.operating_city_code` and seeds the map centroid. It replaces
+the dropped India `merchant_operating_city_id` tenancy; the `centroid_*` columns formalise the Mode-B
+"city centroid" default in §20.
+
+```sql
+CREATE TABLE config.operating_cities (                        -- admin-managed launch cities (AL-27)
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  code TEXT NOT NULL UNIQUE,                                  -- short slug, e.g. 'colombo'
+  name_en TEXT NOT NULL, name_si TEXT NOT NULL, name_ta TEXT NOT NULL,   -- Si/Ta/En labels (D-26)
+  centroid_lat DOUBLE PRECISION NOT NULL,
+  centroid_lng DOUBLE PRECISION NOT NULL,
+  is_active BOOLEAN NOT NULL DEFAULT true,                    -- only active cities are shown / bookable
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE INDEX ix_operating_cities_active ON config.operating_cities(sort_order) WHERE is_active;
+
+-- iam.users carries the chosen city (AL-27, US-1.3a):
+ALTER TABLE iam.users ADD COLUMN IF NOT EXISTS operating_city_code TEXT
+  REFERENCES config.operating_cities(code);
+```
+
+Admins toggle `is_active` / add rows to launch a new city — **no app release required**; the apps
+fetch the list on first run (`content-svc`, cacheable — D6 §7). Seed rows are in §20.
+
+---
+
 ## 18. `telemetry` — High-Frequency Tracker Hypertable (T-06, TimescaleDB)
 
 `telemetry.positions` is a **TimescaleDB hypertable** (1-day chunks × 16 vehicle-hash space partitions)
@@ -1106,6 +1148,137 @@ CREATE POLICY fleet_scope ON telemetry.positions USING (fleet_id = current_setti
 
 ---
 
+## 18b. `subscription` — Mode B Passenger Subscriptions, Requests & Payments (Epic 23, AL-23/24/25)
+
+The **subscriber-facing** Mode B money flow: a passenger requests access to a *specific vehicle*, the
+fleet owner accepts (grant), and — when that vehicle's `mode_b_billing='paid'` — the passenger pays a
+**monthly fare that passes through to the fleet owner's verified payout profile** (§26, BR-23.10). This
+is a different flow from `billing.monthly_subscriptions`, which is the **platform's** per-Mode-B-vehicle
+fee charged *to* the fleet — the two never net against each other.
+
+> PKs are the §0 UUID convention. (D4' listed these tables with `BIGSERIAL` PKs and `BIGINT` FKs, which
+> cannot reference the UUID PKs of `iam.users` / `registry.vehicles`; the shape and semantics are D4's.)
+
+```sql
+CREATE TABLE subscription.access_requests (                   -- PER-VEHICLE request queue (US-4.9/4.10)
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  vehicle_id UUID NOT NULL REFERENCES registry.vehicles(id) ON DELETE CASCADE,
+  passenger_id UUID NOT NULL REFERENCES iam.users(id) ON DELETE CASCADE,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','accepted','rejected')),
+  requested_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  decided_at TIMESTAMPTZ,
+  decided_by UUID REFERENCES iam.users(id));
+CREATE UNIQUE INDEX ux_access_request_open ON subscription.access_requests(vehicle_id, passenger_id)
+  WHERE status = 'pending';                                   -- one open request per (vehicle,passenger)
+
+CREATE TABLE subscription.grants (                            -- tracking-access grant lifecycle (US-4.11/4.12)
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  vehicle_id UUID NOT NULL REFERENCES registry.vehicles(id) ON DELETE CASCADE,
+  passenger_id UUID NOT NULL REFERENCES iam.users(id) ON DELETE CASCADE,
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','unsubscribed')),
+  granted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at TIMESTAMPTZ,
+  unsubscribed_at TIMESTAMPTZ,                                -- passenger unsubscribe → loses visibility
+  deleted_at TIMESTAMPTZ);                                    -- fleet-owner only; row stays MUTED until then
+CREATE UNIQUE INDEX ux_grant_active ON subscription.grants(vehicle_id, passenger_id)
+  WHERE deleted_at IS NULL;
+
+CREATE TABLE subscription.subscriptions (                     -- per-subscriber Paid/Free + fare + cycle
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  grant_id UUID NOT NULL REFERENCES subscription.grants(id) ON DELETE CASCADE,
+  vehicle_id UUID NOT NULL REFERENCES registry.vehicles(id) ON DELETE CASCADE,
+  passenger_id UUID NOT NULL REFERENCES iam.users(id) ON DELETE CASCADE,
+  billing TEXT NOT NULL CHECK (billing IN ('paid','free')),   -- defaults from registry.vehicles.mode_b_billing
+  monthly_fare_minor INTEGER CHECK (monthly_fare_minor >= 0), -- overridable per subscriber; NULL when free
+  cycle TEXT NOT NULL DEFAULT 'join_anniversary'
+    CHECK (cycle IN ('month_first','join_anniversary')),
+  join_day SMALLINT CHECK (join_day BETWEEN 1 AND 31),        -- join_anniversary (joined 5 Jun → next due 6 Jul)
+  next_due DATE,                                              -- Asia/Colombo business date (D-38)
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','paused','cancelled')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CHECK (billing = 'free' OR monthly_fare_minor IS NOT NULL));
+
+CREATE TABLE subscription.payments (                          -- routed to the FLEET OWNER (pass-through)
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  subscription_id UUID NOT NULL REFERENCES subscription.subscriptions(id),
+  vehicle_id UUID NOT NULL REFERENCES registry.vehicles(id),
+  passenger_id UUID NOT NULL REFERENCES iam.users(id),
+  period_month DATE NOT NULL,                                 -- Asia/Colombo month (D-38)
+  amount_minor INTEGER NOT NULL CHECK (amount_minor >= 0),
+  currency CHAR(3) NOT NULL DEFAULT 'LKR',
+  method TEXT NOT NULL CHECK (method IN
+    ('lankaqr_deeplink','lankaqr_scan','onepay','online_transfer','cash')),
+  status TEXT NOT NULL DEFAULT 'initiated'
+    CHECK (status IN ('initiated','pending_verification','paid','failed')),
+  slip_url TEXT,                                              -- online-transfer screenshot
+  gateway_ref TEXT,
+  confirmed_by UUID REFERENCES iam.users(id),                 -- owner who confirmed transfer / marked cash
+  paid_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE UNIQUE INDEX ux_subpay_period ON subscription.payments(subscription_id, period_month)
+  WHERE status IN ('initiated','pending_verification','paid');
+CREATE INDEX ix_subpay_vehicle ON subscription.payments(vehicle_id, period_month);
+CREATE INDEX ix_subpay_passenger ON subscription.payments(passenger_id, period_month);
+```
+
+> **No platform commission.** `subscription.payments` never posts to `billing.journal_entries` —
+> the money moves passenger → owner bank-to-bank (`payTo` read from the latest **verified**
+> `registry.fleet_payout_profiles` row, §26). Only the platform's own Mode-B fee
+> (`billing.monthly_subscriptions`) is ledgered.
+
+---
+
+## 18c. `transit` — GTFS Public-Transport Routing (AL-18, AL-54)
+
+Backs `transit-svc`'s direct public-bus route matching (US-8.2b) and the GTFS Dataset Manager
+(SCR-AP-016). The importer loads `transit_staging.gtfs_*` with **identical DDL** and swaps it into
+`transit.*` in one transaction on activate — see §27 for `transit.gtfs_feed_versions` and the
+lifecycle.
+
+```sql
+CREATE TABLE transit.gtfs_routes (
+  route_id TEXT PRIMARY KEY,
+  agency TEXT,
+  route_short_name TEXT,
+  route_long_name TEXT,
+  route_type INTEGER);
+
+CREATE TABLE transit.gtfs_trips (
+  trip_id TEXT PRIMARY KEY,
+  route_id TEXT NOT NULL REFERENCES transit.gtfs_routes(route_id) ON DELETE CASCADE,
+  service_id TEXT,
+  shape_id TEXT,
+  direction SMALLINT);
+CREATE INDEX ix_gtfs_trips_route ON transit.gtfs_trips(route_id);
+
+CREATE TABLE transit.gtfs_stops (
+  stop_id TEXT PRIMARY KEY,
+  name TEXT,
+  geo GEOGRAPHY(POINT,4326));
+CREATE INDEX ix_gtfs_stops_geo ON transit.gtfs_stops USING gist(geo);   -- 400 m stop-radius lookup
+
+CREATE TABLE transit.gtfs_stop_times (
+  trip_id TEXT NOT NULL REFERENCES transit.gtfs_trips(trip_id) ON DELETE CASCADE,
+  stop_id TEXT NOT NULL REFERENCES transit.gtfs_stops(stop_id) ON DELETE CASCADE,
+  stop_sequence INTEGER NOT NULL,
+  arr INTERVAL,                                               -- may exceed 24 h (GTFS after-midnight)
+  dep INTERVAL,
+  PRIMARY KEY (trip_id, stop_sequence));
+CREATE INDEX ix_gtfs_stop_times_stop ON transit.gtfs_stop_times(stop_id);
+
+CREATE TABLE transit.gtfs_shapes (
+  shape_id TEXT NOT NULL,
+  seq INTEGER NOT NULL,
+  geo GEOGRAPHY(POINT,4326),
+  PRIMARY KEY (shape_id, seq));
+```
+
+> Service-calendar evaluation is Asia/Colombo (D-38). `transit_staging` mirrors **these five tables
+> only**; `transit.gtfs_feed_versions` (§27) is the lifecycle ledger and is never staged or swapped.
+
+---
+
 ## 19. Enumerations Reference (text + CHECK, no PG enum types)
 
 | Enum | Values | Used by |
@@ -1118,7 +1291,11 @@ CREATE POLICY fleet_scope ON telemetry.positions USING (fleet_id = current_setti
 | `vehicle.status` | PENDING, APPROVED, REJECTED, DEACTIVATED | `registry.vehicles.status` |
 | `dispatch_state` | ACTIVE, DISPATCH_SUSPENDED | `registry.vehicles.dispatch_state` (E-03) |
 | `ride.state` | Requested, Matching, Offered, Accepted, DriverArrived, InProgress, Completed, PaymentPending, Paid, CashSettled, CashOnDeliveryCollected, Disputed, CancelledByRiderBeforeAccept, CancelledByRiderAfterAccept, CancelledByDriver, ExpiredNoDriver, NoShowRider, NoShowDriver | `rides.rides.state` (R-01) |
-| `payment.method` | cash, lankaqr, onepay, cod | `rides.rides.payment_method`, `fares.ride_payments.method` |
+| `payment.method` | cash, lankaqr, onepay, cod, scan_driver_qr | `rides.rides.payment_method`, `fares.ride_payments.method` (AL-22) |
+| `mode_b_billing` | paid, free (NULL for Mode A/C) | `registry.vehicles.mode_b_billing`, `subscription.subscriptions.billing` (AL-24; UI label "Service payment", AL-51) |
+| `subscription.payment.method` | lankaqr_deeplink, lankaqr_scan, onepay, online_transfer, cash | `subscription.payments.method` (Epic 23) |
+| `subscription.payment.status` | initiated, pending_verification, paid, failed | `subscription.payments.status` |
+| `grant.status` | active, unsubscribed | `subscription.grants.status` (`deleted_at` is fleet-owner-only) |
 | `payment.state` | Initiated, Pending, Succeeded, Failed, Retried, FellBackToCash, CashOnDelivery, CashOnDeliveryCollected, Overpaid, Refunded, PartiallyRefunded, Disputed | `fares.ride_payments.state` (D-10) |
 | `block_state` | OK, WARN, BOOKING_DISABLED, DELISTED | `reputation.block_states` |
 | `document.status` | VALID, EXPIRING, EXPIRED, REJECTED | `registry.documents` (E-03) |
@@ -1167,6 +1344,13 @@ INSERT INTO billing.accounts(owner_type, currency, balance_minor) VALUES ('platf
 -- Directional config defaults (single row id=1):
 INSERT INTO dispatch.directional_config(id) VALUES (1) ON CONFLICT (id) DO NOTHING;
 
+-- Launch cities (§17b). Colombo first & default — matches the map centroid default below:
+INSERT INTO config.operating_cities(code,name_en,name_si,name_ta,centroid_lat,centroid_lng,sort_order) VALUES
+  ('colombo','Colombo','කොළඹ','கொழும்பு',6.9271,79.8612,0),
+  ('kandy','Kandy','මහනුවර','கண்டி',7.2906,80.6337,1),
+  ('galle','Galle','ගාල්ල','காலி',6.0535,80.2210,2)
+ON CONFLICT (code) DO NOTHING;
+
 -- Content templates (Si/Ta/En) sample:
 INSERT INTO content.notification_templates(template_key,language,body) VALUES
   ('ride_offer','en','New ride request: {{pickup}} → {{dropoff}}'),
@@ -1207,12 +1391,23 @@ read-after-write only where required; PgBouncer (transaction mode) in front of e
 
 ## 22. Coverage Note
 
-All **18** ADD §9 bounded-context schemas are present with full DDL: `iam, registry, prov, trips, rides,
+All **21** bounded-context schemas are present with full DDL: `iam, registry, prov, trips, rides,
 dispatch, reputation, safety, fares, billing, comms, docs, support, content, audit, pdpa, spatial,
-telemetry`. This document is the consolidation of `D4_mageride_data_model.md` (canonical) with the
-additional read-model / lookup tables enumerated in ADD §9.1 prose (`iam.roles`, `billing.wallets`,
-`billing.wallet_transactions`, `billing.credit_transfers`, `trips.position_samples`) made explicit
-here. Where D4 and the ADD prose differed only in shape (not intent), D4's typed DDL is authoritative.
+telemetry` (the original ADD §9 eighteen) **+ `config` (§17b), `subscription` (§18b) and `transit`
+(§18c)**, plus two non-bounded-context schemas created by their own change sets: `analytics` (§23) and
+`transit_staging` (§27). This document is the consolidation of `D4_mageride_data_model.md` (canonical)
+with the additional read-model / lookup tables enumerated in ADD §9.1 prose (`iam.roles`,
+`billing.wallets`, `billing.wallet_transactions`, `billing.credit_transfers`, `trips.position_samples`)
+made explicit here. Where D4 and the ADD prose differed only in shape (not intent), D4's typed DDL is
+authoritative.
+
+> **§17b/§18b/§18c back-fill (micro-change-set 2026-07-26).** `config.operating_cities`,
+> the whole `subscription.*` schema and `transit.gtfs_routes/trips/stops/stop_times/shapes` existed in
+> D4' (§17b and the Δ Addendum 2026-06-21) but had never been mirrored here, and §0.1 did not create
+> their schemas. The same back-fill added `registry.vehicles.mode_b_billing` /
+> `default_monthly_fare_minor` (AL-24), `iam.users.operating_city_code` (AL-27) and the
+> `scan_driver_qr` payment method (AL-22) — the remaining objects of that D4' addendum. PKs follow the
+> §0 UUID convention rather than D4's `BIGSERIAL` listing (see §18b).
 
 ---
 
@@ -1238,7 +1433,9 @@ CREATE TABLE analytics.daily_metrics (                       -- one row per metr
 ALTER TABLE docs.uploads
   ADD COLUMN captured_via TEXT CHECK (captured_via IN ('camera_dragcrop','gallery','other'));
 
--- comms.call_log: passenger call-type chooser — free in-app VoIP vs masked PSTN (item 4, AL-36)
+-- comms.call_log: passenger call-type chooser — free in-app VoIP vs masked PSTN (item 4, AL-36).
+--   ⚠ Migration history only: §25 (AL-48) narrows call_type to ('free_voip','direct_dial') and drops
+--   share_token. Apply these scripts in order; the §25 state is the current schema.
 CREATE TABLE comms.call_log (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   ride_id UUID REFERENCES rides.rides(id),
