@@ -1172,7 +1172,7 @@ This is the developer/integration environment. All services run as containers on
 | (3) SignalR ↔ EMQX bridge | `mqtt-bridge-svc` (split out from SignalR — see §1.2 critique) | 2 GB / 1 vCPU |
 | (4) Redis GEO | `redis` | 2 GB / 1 vCPU |
 | (5) PostgreSQL + PostGIS | `postgres` | 4 GB / 1 vCPU |
-| (4.a) ST-901 TCP ingest adapter | `tcp-adapter-svc` | 2 GB / 1 vCPU |
+| (4.a) ST-901 TCP ingest adapter | `tcp-adapter` | 2 GB / 1 vCPU |
 
 ### 10.2 Production Topology — Initial Launch (10k vehicles / 100k passengers)
 
@@ -1193,7 +1193,7 @@ It is sized for **10,000 concurrent vehicles and 100,000 concurrent passengers**
 | `mqtt-bridge-svc` | 2 | 2 GB / 1 vCPU | Subscribes EMQX → Redpanda |
 | `position-processor-svc` | 2–3 | 2 GB / 1 vCPU | Partitioned by `vehicleId` |
 | `fanout-svc` (SignalR) | 3 | 2 GB / 1 vCPU | ~33k WS sessions/pod; sticky sessions via HAProxy `source` hash |
-| `tcp-adapter-svc` (per protocol) | 2 | 2 GB / 1 vCPU | Behind HAProxy TCP frontend (per `stories.txt` 4.a) |
+| `tcp-adapter` (per protocol) | 2 | 2 GB / 1 vCPU | Behind HAProxy TCP frontend (per `stories.txt` 4.a) |
 | `query-svc`, `iam-svc`, `registry-svc`, `trip-state-svc`, `persistence-writer-svc` | 2 each | 2 GB / 1 vCPU | Stateless |
 | `reputation-svc`, `content-svc` | 2 each | 1 GB / 0.5 vCPU | Stateless, heavily Redis-cached |
 | `voip-svc` signalling | 2 | 1 GB / 0.5 vCPU | Stateless REST in front of LiveKit |
@@ -1423,7 +1423,7 @@ Owner App        registry-svc    provisioning-svc    Vault PKI    EMQX ACL    Re
 ### 11.4 TCP Tracker (ST-901 / GT06) Adapter Flow
 
 ```
-ST-901 Tracker    tcp-adapter-svc              Redis            EMQX (internal)
+ST-901 Tracker    tcp-adapter              Redis            EMQX (internal)
     │                    │                       │                    │
     │ TCP CONNECT 5023   │                       │                    │
     │───────────────────►│                       │                    │
@@ -2193,7 +2193,7 @@ Container sizes for **Development** match `stories.txt` §trial setup (2 GB / 1 
 | Redis | 1\u00d7 2 GB + AOF | Sentinel 3\u00d7 2 GB | Cluster 3M+3R, 4 GB each |
 | `position-processor` | 1\u00d7 2 GB | 2\u20133 pods, 2 GB each | 5\u201320 pods HPA, 2 GB each |
 | `fanout-svc` (SignalR) | 1\u00d7 2 GB | 3 pods, 2 GB each | 15\u201350 pods HPA, 4 GB each |
-| `tcp-adapter-svc` | 1\u00d7 2 GB (optional) | 2 pods behind HAProxy TCP frontend | HPA per protocol family |
+| `tcp-adapter` | 1\u00d7 2 GB (optional) | 2 pods behind HAProxy TCP frontend | HPA per protocol family |
 | PostgreSQL | 4 GB, 100 GB SSD | Patroni 1P+2R, 8 GB / 2 vCPU, 500 GB | 32 GB primary, NVMe 2 TB |
 | **Hardware trackers (Phase 1, T-10)** | n/a | 5,000 active devices supported — reuses existing EMQX/processor pods | 100,000 active devices: +1 EMQX node, +2 position-processor pods, +3 adapter pods per protocol family |
 | **TCP/UDP adapter sockets** | 1× small pod | 2 pods per protocol family, 5k sockets each | 3 StatefulSet pods × 10k sockets each per protocol; sticky-hash by IMEI |
@@ -2545,7 +2545,7 @@ This is the topology specified in `stories.txt` §production setup: SignalR + EM
 - [ ] Postgres with read replicas + Citus if needed
 - [ ] ~~admin-bff (operator console)~~ — **moved to Phase 1** (Admin Portal is the consolidated back-office, AL-02)
 - [ ] ~~**`fleet-svc`** (fleet operator org…)~~ — **promoted to Phase 1 (v2.6, §1.8 AL-03); see Phase 1 checklist.** Phase 2 only adds **route-deviation/geofence alerts** (Phase 3 per URD US-13.5) and scales fleet analytics — **URD Epic 13**
-- [ ] ~~`tcp-adapter-svc` / `provisioning-svc` + step-ca (Hardware GPS Tracker Support)~~ — **promoted to Phase 1 (v2.3, §1.6, T-01/T-02); see Phase 1 checklist below.** Phase 2 only *scales* the tracker plane (more adapter pods, separate Timescale cluster)
+- [ ] ~~`tcp-adapter` / `provisioning-svc` + step-ca (Hardware GPS Tracker Support)~~ — **promoted to Phase 1 (v2.3, §1.6, T-01/T-02); see Phase 1 checklist below.** Phase 2 only *scales* the tracker plane (more adapter pods, separate Timescale cluster)
 - [ ] **Ad-hoc route sharing** (seat tracking, FULL state) — **URD Epic 6 (deferred from Phase 1)**
 - [ ] Keycloak replacing Phone OTP SMS gateway (unified IdP migration path)
 - [ ] HashiCorp Vault cluster (Raft storage)
