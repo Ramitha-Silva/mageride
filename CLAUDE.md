@@ -31,10 +31,16 @@
   changes — use the transactional outbox (D6' §2.4).
 
 ## Build Manifest
-- The build plan lives in `build/manifest.yaml`.
-- Each session works on ONE component only.
+- The build plan lives in `build/manifest.yaml` — **132 components, waves 0–6**.
+- Each session works on ONE component only; read its prompt at `build/prompts/Cxxx.md`.
 - After completing a component, append a 3-line handoff to `build/progress.md`.
 - No wave N+1 work begins until all wave N verify commands pass.
+- **`build/prompts/*.md`, `build/progress.md` and `build/screen_coverage.md` are GENERATED**
+  from the manifest by `build/tools/generate_build_plan.py`. Change the manifest, then re-run
+  the generator — never hand-edit a generated file. Re-running resets the Status column and the
+  Session Handoffs log in `progress.md`, so only re-run it when the manifest itself changes.
+- Known spec gaps and conflicts the planner resolved are recorded under
+  **Planner findings** in `build/progress.md` — read them before touching `specs/`.
 
 ## Spec Anchors (how to reference)
 - Format: `specs/D3_mageride_api_contracts.md#section-name`

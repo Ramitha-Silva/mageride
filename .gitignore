@@ -12,6 +12,9 @@ out/
 # Android
 .gradle/
 build/
+# ...but the top-level build/ is the MageRide build plan (manifest, prompts, progress),
+# not a Gradle output directory.
+!/build/
 local.properties
 
 # iOS
