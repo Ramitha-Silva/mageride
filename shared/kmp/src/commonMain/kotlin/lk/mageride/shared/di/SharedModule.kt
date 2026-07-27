@@ -4,6 +4,7 @@ import kotlinx.serialization.json.Json
 import lk.mageride.shared.data.api.apiModule
 import lk.mageride.shared.domain.auth.authModule
 import lk.mageride.shared.domain.dispatch.rideDispatchModule
+import lk.mageride.shared.domain.fare.fareWalletModule
 import lk.mageride.shared.platform.PlatformInfo
 import lk.mageride.shared.platform.platformInfo
 import lk.mageride.shared.serialization.MageRideJson
@@ -38,10 +39,13 @@ public val sharedCoreModule: Module = module {
  * them; the first HTTP call, or the first session read, is where a missing one is reported.
  *
  * [rideDispatchModule] (C015) needs nothing an app has to supply — its one binding,
- * `OfferSession`, resolves entirely out of C013.
+ * `OfferSession`, resolves entirely out of C013. [fareWalletModule] (C016) binds nothing at all:
+ * every money rule it owns is a value type built from server-supplied config, and holding one in
+ * the graph would pin a tariff or a fee tier an operator has since moved. Its KDoc has the
+ * reasoning.
  *
  * **Order matters here.** `authModule` comes after `apiModule` and overrides its
  * [lk.mageride.shared.data.api.TokenProvider] placeholder with the real session-backed one.
  */
 public val sharedModules: List<Module> =
-    listOf(sharedCoreModule, apiModule, authModule, rideDispatchModule)
+    listOf(sharedCoreModule, apiModule, authModule, rideDispatchModule, fareWalletModule)

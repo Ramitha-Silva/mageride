@@ -49,12 +49,13 @@ src/commonMain/kotlin/lk/mageride/shared/
     domain/auth/      OTP sign-in, token lifecycle, MQTT token         (C014)
     domain/ride/      Mode C ride machine, cancellation, package/proxy (C015)
     domain/dispatch/  offers, Driver Level, Job Board, directional     (C015)
-    domain/fare/      Mode C fare rules, surcharges                    (C016)
-    domain/wallet/    balance + transaction history                    (C016)
+    domain/fare/      Mode C fare rules, surcharges, payment machine   (C016)
+    domain/wallet/    balance, daily fee, vouchers, credit transfer    (C016)
+    domain/subscription/  Mode B billing cycle + subscriber payments   (C016)
     domain/geo/       H3 geocells, adaptive rate logic                 (C017)
     mqtt/             MqttConfig, PositionPayload, AdaptiveRateEngine  (C017)
     db/               SQLDelight queries + drivers                     (C018)
-    util/             DateTimeUtils, Validators
+    util/             BusinessCalendar (Asia/Colombo dates, C016)
     platform/         PlatformInfo, SecureStore, attestation (expect)  (C011, C014)
     (ADD §18.2 draws the first of those two as `domain/trip/`. That layout predates R-01, which
      split the Mode C ride out of the tracking session; `domain/trip` under the current vocabulary
@@ -193,6 +194,46 @@ src/androidHostTest/  JVM-only tests of the Android actuals (NOT `androidUnitTes
   that C013 does not already ask for. Everything else is a value type built from the config just
   read — binding a `DirectionalPredicate` at start-up would pin whatever the thresholds were when
   the app launched.
+
+## Money domain (`domain/fare` + `domain/wallet` + `domain/subscription`, C016)
+- **The client never computes the authoritative fare.** `fare-svc` prices every ride and the
+  `fareEstimateToken` binds the quoted price, so no number computed here can become what a
+  passenger is charged. `FareCalculator` mirrors D5' §1.1 to *render* and *explain* a price and to
+  make the §1.3 rounding testable; `FareCalculator.of(response, …)` takes the server's total as
+  given and only decomposes it.
+- **One rounding rule, in one place.** `FareRounding` is banker's rounding (half-to-even) to a
+  whole minor unit, and every percentage — the peak/night uplift, the OnePay 5%, the voucher
+  discount — goes through it as an **exact rational**, never through a `Double`. Nothing is rounded
+  at an additive step.
+- **`fares.peak_windows.multiplier_pct` is deliberately not modelled.** §1.1 reads the *tariff's*
+  `peak_surcharge_pct` / `night_surcharge_pct`; a window decides only whether an uplift applies.
+  Two sources of the same 20/15 would eventually disagree.
+- **Every business date is Asia/Colombo** and goes through `util/BusinessCalendar` (D-13, D-38).
+  A `fee_date`, a `period_month` or a `next_due` answered from the device's zone is wrong for five
+  and a half hours a day.
+- **`ModeCTier` has no ETA and no distance field** (AL-19). The fence is the shape of the type, not
+  a rule in a screen; `ModeCTiers.arrivalVisible(state)` is the one place that says when an arrival
+  time becomes legitimate (`RideState.isDriverAssigned`, i.e. `Accepted` onward — not `Offered`).
+- **`PaymentTransitions` is D-10 + AL-47 as data**, and `PaymentProjection` moves only through
+  `onServerState(…)` — same rule as `RideProjection`: a server-confirmed move the table does not
+  draw is **applied and flagged**, never dropped. `PaymentStatus` carries no version, so ordering
+  is enforced by "a terminal payment is never walked back" instead.
+- **R-05's `Paid` / `CashSettled` are RIDE states, not payment states.**
+  `PaymentTransitions.settlementTrigger` / `settledRideState` is the only join between the two
+  machines; `DriverConfirmedQR` settles as `CashSettled` (AL-47, "settles like cash").
+- **A credit transfer moves the exact value** (AL-01). `CreditTransferRules.entryFor` produces two
+  postings that sum to zero and nothing else; `LedgerEntry`'s own `init` refuses anything that does
+  not balance (D-09, the client-side mirror of `billing.assert_balanced()`).
+- **Top-up is OnePay card / OnePay wallet / LankaQR — there is no fourth** (AL-05). Mode B's
+  `online_transfer` is a *different thing*: a passenger paying a fleet owner directly, pass-through
+  money that never touches a wallet or the platform ledger. `MoneyDomainHygieneTest`
+  (androidHostTest) fails the build if either boundary moves.
+- **Nothing in `domain/subscription` builds a `LedgerEntry`** — Mode B money is a pass-through to
+  the owner (§18b) and MageRide holds none of it.
+- **`fareWalletModule` binds nothing, on purpose.** Every input here is admin-tunable and
+  server-supplied — tariffs, windows, fee tiers, voucher ladder, low-balance threshold — so a
+  binding would pin whatever the numbers were at launch. Build the value types at the call site
+  from the config just read. Read the module's KDoc before adding a binding.
 
 ## Dependency rules
 - **Every version lives in `gradle/libs.versions.toml`.** Never inline one here.

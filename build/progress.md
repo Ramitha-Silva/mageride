@@ -41,7 +41,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C013 | kmp-api-client | 1 | DONE | 2026-07-27 | 16 typed clients covering all 176 operations, 91 new tests (223 total) green; 1 micro-change-set raised (`ReportFormat.wire`) |
 | C014 | kmp-auth-session | 1 | DONE | 2026-07-27 | 277 tests green (54 new); Keystore/Keychain SecureStore + Play Integrity/App Attest; 3 micro-change-sets raised |
 | C015 | kmp-domain-ride-dispatch | 1 | DONE | 2026-07-27 | 384 tests green (107 new); Appendix B.2 as data + exhaustive 18×20 sweep; 4 micro-change-sets raised |
-| C016 | kmp-domain-fare-wallet | 1 | PENDING | | |
+| C016 | kmp-domain-fare-wallet | 1 | DONE | 2026-07-27 | 543 tests green (159 new); §1.3 banker's rounding + 14-state payment machine; 6 micro-change-sets raised |
 | C017 | kmp-geo-realtime | 1 | PENDING | | |
 | C018 | kmp-local-db | 1 | PENDING | | |
 | C019 | kmp-test-kit | 1 | PENDING | | |
@@ -2056,3 +2056,150 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   `Money.ofMinor(5_000)` in a plain `object` needs a named `const` behind it; and detekt's
   `LongParameterList` fires at **six** parameters, not above six, which bites test builders long
   before it bites production code.
+
+- **Component:** C016 kmp-domain-fare-wallet — 2026-07-27
+- **Status:** DONE (common + Android; iOS declared and type-checked, **not** verified) —
+  `./gradlew :shared:testDebugUnitTest detekt ktlintCheck` green from a clean build directory with
+  `--no-build-cache --rerun-tasks`: **543 tests passed, 0 failed, 0 skipped** (159 new; C011–C015's
+  384 still green), detekt and ktlint clean. All four DoD items pass, each with a test that fails if
+  the rule is broken. `./gradlew :shared:compileKotlinIosArm64 --rerun-tasks` also passes, so the new
+  `commonMain` type-checks for Kotlin/Native; **iOS is not marked DONE from this host** (klib
+  cross-compilation only — no linking, no `iosTest`). ~2,100 lines of `domain/fare` +
+  `domain/wallet` + `domain/subscription` + `util` and ~1,900 lines of test. Nothing in `androidMain`
+  or `iosMain` changed: the money rules are entirely platform-independent.
+- **Notes:**
+  **Spec gaps — six micro-change-sets, none actioned in `specs/`:**
+  (a) ***BR-23.9's join-anniversary formula contradicts its own worked example.*** The sentence reads
+  "`next_due = join_date + 1 month` computed in Asia/Colombo (joined **5 Jun → next due 6 Jul**)" —
+  the formula gives 5 July, the example 6 July. Every other source repeats the **example**: ADD §9.1,
+  D4' §18b, `server_db_schema.md` §18b, URD US-23.8 and the functional walkthrough all print
+  "5 Jun → 6 Jul". Five statements to one, so `ModeBBilling.firstDueDate` implements the example (the
+  paid month covers the join day through the same day next month inclusive, so the next payment falls
+  due the day after). **BR-23.9's shorthand should read `join_date + 1 month + 1 day`, or the example
+  should change** — but the example is what six documents agree on.
+  (b) ***The peak/night surcharge percentage has two sources that can diverge.*** `fares.tariffs`
+  carries `peak_surcharge_pct` / `night_surcharge_pct` **and** `fares.peak_windows` carries
+  `multiplier_pct`, both seeded 20/15 (§20). D5' §1.1's formula reads the **tariff**
+  (`peakPct = isPeak(rideTime) ? tariff.peak_surcharge_pct : 0`), so the window's own column is dead
+  weight that an admin can edit into disagreement with the fare engine. `SurchargeWindow` deliberately
+  does not model it. **Either drop `fares.peak_windows.multiplier_pct` or say in §1.1 which wins.**
+  (c) ***R-05 and D5' §8.1 name payment terminals that are not `PaymentState` values.*** Both say the
+  earning posts on "`Paid` / `CashSettled` / `CashOnDeliveryCollected`". `Paid` and `CashSettled` are
+  **`RideState`** values; the payment-side spellings are `Succeeded` and `FellBackToCash`
+  (`ck_ride_payments_state`, C005). Only `CashOnDeliveryCollected` exists in both enums, which is
+  what makes the sentence read as if it were one vocabulary. `PaymentTransitions.settlementTrigger` /
+  `settledRideState` is the mapping. **R-05's row and §8.1's bullet should name the payment states.**
+  (d) ***No spec says which ride state a `DriverConfirmedQR` payment settles into.*** AL-47 says the
+  earning posts and that it "settles like cash"; the ride machine's only cash terminal is
+  `CashSettled` via `CASH_SETTLED`. Implemented on that basis and flagged at the declaration.
+  **AL-47 / ADD Appendix B.2 should state it** — C032/C050 will otherwise each guess.
+  (e) ***P-04 does not route `scan_driver_qr`.*** "Cash ⇒ rider pays driver; LankaQR/OnePay ⇒ booker
+  charged" predates AL-22/AL-47, which added a fifth settlement method. Modelled as
+  **`PayerRole.RIDER`**, on P-04's own reasoning for cash: the payer has to be standing in front of
+  the driver's QR to scan it. **P-04 needs the row.**
+  (f) ***`SubscriptionPayment` has no `paymentLink` field, so a LankaQR deep link has nowhere of its
+  own to ride.*** `fare.yaml`'s `LankaqrInitiation` has both `paymentLink` and `qrPayload`;
+  `subscription.yaml`'s payment has `redirectUrl` and `qrPayload` only. The deep link is therefore
+  read out of `redirectUrl` and `qrPayload` stays the AL-15 fallback. **`subscription.yaml` should
+  gain `paymentLink`**, or BR-23.10 should say the deep link is the redirect.
+  **Other spec observations (no change needed):**
+  (g) *D5' §1.3's rounding sentence is garbled but unambiguous once parsed.* "round() = banker's
+  rounding to nearest minor unit **at each additive step is avoided** — compute in minor units,
+  single round only where a `*pct/100` product is taken" reads as three rules: half-to-even; never
+  round an addition; one round per product. §1.1 also rounds `extraKm * perKmMinor`, which is a
+  second product, not a second rule — a distance is the only genuinely fractional input a fare has.
+  (h) *Neither spec pins the peak/night window boundary.* `[start, end)` (half-open) is the only
+  reading under which two adjacent windows cannot both claim the same instant; 07:00 is peak and
+  09:00 is not. `SurchargeWindowsTest` states it.
+  (i) *§9.4 says "walletBalance < Rs 200" without saying whether that is the raw or the spendable
+  balance.* Used **`availableMinor`** (balance net of D-05 penalty debt) everywhere, since that is
+  what C012's `Wallet` KDoc says the daily-fee gate checks and it is the figure a driver can act on.
+  **Decisions —**
+  (1) **`domain/subscription` is a new package, alongside `domain/fare` and `domain/wallet`.**
+  `shared/kmp/CLAUDE.md`'s layout named only two for C016, but Mode B subscription billing is neither
+  a Mode C fare nor the driver wallet: it is **pass-through money to the fleet owner** that must never
+  reach `billing.journal_entries` (§18b, C005). Putting it in `domain/wallet` would have placed it
+  next to the ledger types it is forbidden to use. The layout table is updated.
+  (2) **`util/BusinessCalendar` is the first thing in `util/`** and is the client mirror of
+  MageRide.Shared's `BusinessCalendar` (C002). Every function takes the zone explicitly and defaults
+  it to Asia/Colombo, so a test states the rule rather than depending on the host clock — and a
+  second operating timezone would be a parameter, not a rewrite. `plusMonths` clamps at month end
+  (31 Jan + 1 month = 28 Feb), which is what a monthly billing anchor needs.
+  (3) **Banker's rounding is implemented explicitly rather than delegated to `kotlin.math.round`.**
+  It is documented as ties-to-even, but the rule is the *definition* of §1.3 and a stdlib doc change
+  would silently move every fare. Percentages never touch a `Double`: `20_000 * 15 / 100` has one
+  right answer and `2e4 * 0.15` is not guaranteed to be it, and a one-cent disagreement with the
+  ledger is a reconciliation ticket rather than a curiosity.
+  (4) **`FareCalculator.of(serverResponse)` rebuilds the base from the breakdown's own
+  `firstKmMinor`/`perKmMinor`/`distanceKm` and leaves the remainder as the surcharge** — it never
+  recomputes the total. The `fareEstimateToken` binds the server's figure, so a client that rendered
+  a different one would be showing a price the passenger is not about to be charged; if a server ever
+  rounded differently, the discrepancy lands visibly in the surcharge line instead.
+  (5) **AL-19 is enforced by the shape of `ModeCTier`, not by a rule in a screen.** The type has no
+  ETA and no distance property, so a pre-match tier board cannot render one; `ModeCTiers.priceOnly`
+  is the projection that drops `TransportOption.etaSeconds` on the way in. `arrivalVisible` reads
+  `RideState.isDriverAssigned`, which excludes `Offered` — a reserved driver has not accepted and may
+  still decline, so "3 minutes away" would promise a vehicle that is free to walk.
+  (6) **Four payment edges are in the table and not in §8.1's mermaid**, each carried by other prose,
+  each commented at its declaration and each listed separately in `PaymentTransitionTableTest`:
+  `Initiated → FellBackToCash` (cash is the *default* method and has no gateway leg to fail first),
+  `Initiated → CashOnDelivery` (§8.3, same reason), `Succeeded → Refunded | PartiallyRefunded | Disputed`
+  (§8.2's admin reversal — the diagram only draws `Overpaid → Refunded`), and
+  `CashOnDelivery → Disputed` (§8.3's 24 h `cod_uncollected` timer, P-14). The sweep covers all
+  14 × 14 = 196 state/trigger pairs, so an undeclared edge fails the build.
+  (7) **`Retried` has no outgoing edge, deliberately.** US-8.15's retry is a *new row* chained by
+  `retry_of_payment_id`; the machine continues on the successor. A test asserts it.
+  (8) **`PaymentProjection` cannot drop a stale frame by version, because `PaymentStatus` has none.**
+  `fares.ride_payments` has no optimistic-concurrency column — it is driven by gateway callbacks that
+  dedupe on `provider_transaction_id` (R-19), not by client mutations needing R-14. The available
+  ordering rule is "a terminal payment is never walked back", which is exactly the case that matters:
+  an in-flight poll answering after the settling push must not un-settle the ride.
+  (9) **The +5-minute AL-47 nudge is measured from the first frame that reported the claim.**
+  `PaymentStatus` carries no claim timestamp, so `onServerState(status, observedAt)` stamps one and
+  keeps it until the payment leaves `QrClaimedByPassenger` — a poll four minutes later must not
+  restart the countdown. notification-svc runs the authoritative timer off its own clock; this drives
+  only what the two apps display. **`fare.yaml`'s `PaymentStatus` gaining a `claimedAt` would let
+  both sides agree** — not raised as a change-set because the client's copy is display-only.
+  (10) **`fareWalletModule` binds nothing, and that is the decision.** C015 bound one object because
+  a driver's offer slot is genuinely stateful; C016 has no equivalent. *Every* input here is
+  admin-tunable and server-supplied — tariffs (versioned by `effective_from`), peak windows, the
+  seven fee tiers, the voucher ladder, the low-balance threshold — so a binding would pin the
+  launch-time numbers, which is C015's `DirectionalPredicate` warning applied to money. The two
+  stateful projections are per-ride (`PaymentProjection`) and per-screen (`WalletHistory`); a
+  singleton of either would be a bug. The module is still registered in `sharedModules` so no app
+  needs an edit when a later component gives it something to bind.
+  (11) **The AL-05 fence is checked against the source, not just the enum.** `MoneyDomainHygieneTest`
+  (androidHostTest — the only source set with a filesystem) fails the build if `bankTransfer`,
+  `BANK_TRANSFER`, `topup/bank` or friends appear anywhere in `domain/fare`, `domain/wallet` or
+  `domain/subscription`, with comments stripped first so the files can keep *documenting* why bank
+  transfer is absent. It carries three more structural fences: `ModeCTier` has no ETA/distance
+  property (AL-19), `CreditTransfer.kt` performs no percentage arithmetic at all (AL-01), and nothing
+  under `domain/subscription` constructs a `LedgerEntry` (AL-24/§18b). A counter-test asserts Mode B's
+  legitimate `ONLINE_TRANSFER` method still exists, so the AL-05 check cannot pass by deletion.
+  (12) **Ledger idempotency keys are composed from the business fact, per §0.** `daily_fee:driver:
+  vehicle:date` is the spelling C005 pinned in a column comment and **C047 must use it verbatim** —
+  `billing.daily_fee_charges` has no `journal_entry_id`, so that key is the only link between the
+  charge row and its entry. `driver_transfer:{transferId}`, `topup:{topupId}` and
+  `voucher_purchase:{purchaseId}` follow the same pattern.
+  **For later components —**
+  **C022 / C032 / C049 / C050 (ride-svc, fare-svc):** `PaymentTransitions.EDGES` is the client's copy
+  of your payment machine and `settlementTrigger` of your `payment-settled` mapping. A server
+  transition outside the table is applied and flagged, so a new edge is a two-file change rather than
+  a silent divergence. Notes (c), (d) and (e) are yours to resolve first.
+  **C046 / C047 / C048 (wallet-svc, subscription-svc):** `DailyFeeRules.decide` is §2.2 in Kotlin and
+  `DailyFeeRules.idempotencyKey` is the key you must write. `CreditTransferRules.entryFor` is the
+  two-posting shape AL-01 requires; `ModeBBilling.firstDueDate` implements note (a)'s reading.
+  **C073 / C080 / C082 / C091 / C098 / C100 (the money screens):** bind nothing new. Build
+  `FareCalculator`, `DailyFeeSchedule` and `VoucherCatalogue` from the config you have just read —
+  never cache one. Render `FareQuote.total` and nothing else (US-8.4). `PaymentMethods.actionFor` is
+  what the pay sheet switches on, and there is deliberately no action that renders a MageRide QR.
+  **C019 (test kit):** `PaymentTransitions`, `TariffTable.D5_DEFAULTS` and
+  `DailyFeeSchedule.D5_DEFAULTS` are pure data and make good generators.
+  **Build host —** no Docker and no compose stack; the replica stayed down. Gradle, the Android SDK
+  and the cached Kotlin/Native 2.4.10 distribution only. No new dependency and no build-script change.
+  A clean gate run takes ~47 s and `compileKotlinIosArm64` another ~18 s. Two things worth knowing
+  next time: **a KDoc containing `topup/*` breaks the file** — Kotlin block comments nest, so the
+  glob opens a second comment and parsing dies several declarations later (the hazard
+  `shared/kmp/CLAUDE.md` already warns about, hit here for real); and **Koin's `Module.mappings` is
+  `@KoinInternalApi`**, so "this module binds nothing" cannot be asserted directly — the graph test
+  asserts membership in `sharedModules` and constructibility without the graph instead.
