@@ -24,6 +24,11 @@
   disabled specifically to catch a script that is not.
 - `TIMESTAMPTZ` for every temporal column. A business-date `DATE` column carries an
   `Asia/Colombo` `tz_at TIMESTAMPTZ` audit companion (D-38); the verify script enforces this.
+- A range-partitioned table ships an `ensure_<table>_partition(DATE)` helper plus a rolling
+  window of partitions, and **no `DEFAULT` partition** — a default that has collected
+  out-of-range rows blocks `CREATE ... PARTITION OF` for the period those rows belong to.
+  See `0503__trips_position_samples.sql`. Partition bounds are built as explicit `TIMESTAMPTZ`
+  values, never bare date literals, which would resolve against the session `TimeZone`.
 - Money is integer minor units (`*_minor`), enumerations are `TEXT` + `CHECK` (never a PG enum
   type), and every table with an `updated_at` calls
   `SELECT public.attach_set_updated_at('<schema>','<table>');`.

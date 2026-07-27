@@ -29,7 +29,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C001 | repo-scaffold | 0 | DONE | 2026-07-27 | verify chain green; 3 spec gaps + root-`build/` collision recorded below |
 | C002 | backend-shared-kernel | 0 | DONE | 2026-07-27 | 152 tests green; 2 micro-change-sets raised (command-log column, direct DSN) |
 | C003 | db-schema-identity-registry | 0 | DONE | 2026-07-27 | 13 scripts, 24 tables, 40/40 verify checks; 4 micro-change-sets raised |
-| C004 | db-schema-trips-rides-dispatch | 0 | PENDING | | |
+| C004 | db-schema-trips-rides-dispatch | 0 | DONE | 2026-07-27 | 21 scripts, 26 tables, 84/84 verify checks; 2 micro-change-sets raised, 1 actioned |
 | C005 | db-schema-business-content | 0 | PENDING | | |
 | C006 | db-schema-telemetry-timescale | 0 | PENDING | | |
 | C007 | openapi-contracts | 0 | PENDING | | |
@@ -397,3 +397,109 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   **Build host —** the verify needs Docker and pulls `timescale/timescaledb-ha:pg16` (~853 MB, already
   cached on this box). Containers are published on `127.0.0.1:0` and removed by an EXIT trap; the replica
   stack stayed down. CI (C010) must provide a Docker daemon for this verify to run.
+
+- **Component:** C004 db-schema-trips-rides-dispatch — 2026-07-27
+- **Status:** DONE — `bash infra/scripts/migrate-verify.sh` → **84/84 checks passed**. 21 new scripts
+  (34 total) apply to an empty `timescale/timescaledb-ha:pg16`, no-op on a journalled re-run, and
+  re-apply cleanly with the journal disabled. 26 new tables: trips 4, rides 7, dispatch 12,
+  reputation 3, plus 14 monthly `trips.position_samples` partitions. All six DoD items pass.
+- **Notes:**
+  **Spec gaps —**
+  (a) ***`dispatch.outbox` does not exist in either DDL source — micro-change-set, created anyway.***
+  server_db_schema §6 and D4' §6 declare no outbox for `dispatch`, but D6' §2.4 names dispatch-svc
+  alongside ride-svc as an outbox writer ("ride-svc/dispatch-svc write domain change + outbox row in one
+  DB transaction; **`offer.created` pushed only after COMMIT** — no phantom offers, R-13") and D6' §2.1
+  registers the `dispatch.events` topic with dispatch-svc as its producer. `offer.created` *is* the event
+  R-13 exists for and it is written by dispatch-svc, so without this table C034 would have to publish
+  outside its transaction — the exact failure R-13 forbids. Landed as `0709__dispatch_outbox.sql`,
+  shape-identical to `rides.outbox` so MageRide.Shared's dispatcher works with
+  `Outbox__Schema=dispatch` / `Outbox__Channel=dispatch_outbox` / `Outbox__Topic=dispatch.events`.
+  **D4' §6 and server_db_schema §6 need this DDL added.**
+  (b) ***`ux_rides_open_passenger` exempts `'Completed'`, which can make the Completed→PaymentPending
+  transition fail — micro-change-set, landed as printed.*** The one-open-ride-per-passenger partial
+  index skips eleven states, and `Completed` is one of them while `PaymentPending` is not. Since D5' §6
+  runs `Completed → PaymentPending`, the guard *lifts* at Completed and *re-applies* one transition
+  later: if a passenger books a new ride during that window, the old ride can never leave Completed —
+  the unique index rejects the UPDATE. Either `Completed` should come out of the exempt list (it is not
+  terminal in D5' §6; the terminal payment states are `Paid` / `CashSettled` /
+  `CashOnDeliveryCollected` / `Disputed`) or `PaymentPending` should go into it. Both specs print the
+  same list, so it is landed verbatim — **C032 (ride-svc-core) should not discover this at runtime.**
+  (c) ***`ux_penalty_apply` enforces nothing.*** Both specs print `UNIQUE (id, applied_ride_id)` on
+  `dispatch.cancellation_penalties` and the DoD repeats it, but `id` is the primary key, so the pair is
+  unique by construction and the index rejects no row. The real D-05 double-apply guard is elsewhere and
+  is intact: the settlement UPDATE is conditional on `status='OUTSTANDING'`, and the ledger entry is
+  keyed `billing.journal_entries.idempotency_key = penalty_id || ':' || rideId` (D5' §7.1 — **C005 owns
+  that table and must keep the key exactly**). Landed as specified rather than reinterpreted.
+  (d) ***`trips.sessions.route_id` has no FK.*** server_db_schema §4 writes
+  `REFERENCES spatial.routes(id)`; `spatial.*` is C005's, so the column lands bare (D4' §4 prints it
+  bare too). **C005 must add the constraint** — same class as C003's `fleet_payout_profiles →
+  docs.uploads` deferral.
+  (e) ***`rides.proof_artifacts.kind` needed a fourth value.*** The §5 base DDL lists three; the
+  Δ 2026-07-05 #2 change set (AL-47) adds `'qr_receipt'` for the passenger's receipt screenshot, which
+  `fares.ride_payments.qr_claim_artifact_id` (C005) points at. Landed with all four. Easy to miss — the
+  addition is stated in prose beneath the §25 SQL block, not inside it.
+  (f) *Cosmetic:* server_db_schema §19's `payment.method` enum row lists `scan_driver_qr` as used by
+  **`rides.rides.payment_method`** as well as `fares.ride_payments.method`. D4' Δ 2026-06-21, D3'
+  `POST /v1/rides/request` (`cash|lankaqr|onepay|cod`) and D3' `POST /fare/pay`
+  (`cash|lankaqr|onepay|scan_driver_qr`) all scope it to the payment table only — the two columns have
+  genuinely different domains (`cod` is booking-side, `scan_driver_qr` is settlement-side). Landed the
+  four-value CHECK; §19's row should name only `fares.ride_payments.method`.
+  (g) *Cosmetic:* the ADD DT-03 critique row describes `dispatch.directional_filters` as "keyed
+  `(driver_id, used_date)` with `use_count`". ADD §9.1 and both DDL sources use **one row per
+  activation** with `COUNT(*) per (driver_id, used_date) ≤ max_uses_per_day`. Row-per-activation landed
+  — it is also the only shape that keeps US-6A.19 true (a manual turn-off still consumes its use).
+  (h) *Cosmetic:* ADD §9.1 prose writes `applied_trip_id` and this prompt's DoD repeats it; both DDL
+  sources write `applied_ride_id`. Took the DDL spelling — this is a Mode C ride, not a Mode A/B trip.
+  **Decisions —**
+  (1) **C002's micro-change-set (a) is actioned here**, since C004 owns `rides.command_log`:
+  `response_body` is **`json`, not `jsonb`**, and **`response_content_type TEXT` is new**. jsonb is a
+  parsed representation, so an R-14 replay through it is semantically equal but not byte-for-byte as
+  ADD §11.13 requires; without the content-type column a replayed error cannot stay
+  `application/problem+json`. This is exactly MageRide.Shared's default shape, so the kernel works
+  unconfigured. **D4' §5 and server_db_schema §5 still need the same edit.**
+  (2) **`used_date_tz_at TIMESTAMPTZ` added to `dispatch.directional_filters`** — D-38 requires a
+  business `DATE` to carry a `tz_at` companion, `used_date` is the platform's first such column, and the
+  C003 verify already fails any DATE without one. `used_date` also defaults to
+  `(now() AT TIME ZONE 'Asia/Colombo')::date` rather than being left to the caller.
+  (3) **Three integrity constraints beyond the printed DDL**, each encoding a rule the specs state in
+  prose: `ck_directional_config_singleton` (both specs say "single row id=1"),
+  `ck_directional_cleared_pair` (`cleared_at` and `cleared_reason` are set together or not at all —
+  D5' §12.3 always knows the reason, so **C036 must supply one**), and non-negative CHECKs on the three
+  `reputation.counters` columns.
+  (4) **`trips.position_samples` ships `trips.ensure_position_samples_partition(DATE)` and a rolling
+  14-month window (last month + 13), and deliberately NO `DEFAULT` partition.** A default that has
+  accumulated out-of-range rows blocks `CREATE ... PARTITION OF` for the month those rows belong to,
+  turning a missed maintenance run into an outage during recovery instead of at the write. Partition
+  bounds are computed as explicit `TIMESTAMPTZ` values — bare date literals in `FOR VALUES` resolve
+  against whatever `TimeZone` the migrating session carries, which would silently shift every
+  Asia/Colombo month boundary by 5:30. **A maintenance job must call the helper** before the window runs
+  out; the convention is now recorded in `db/CLAUDE.md`.
+  (5) **No NOTIFY trigger on either outbox**, despite server_db_schema §5's comment ("A NOTIFY on this
+  table's INSERT ... wakes the dispatcher"). C002 decision (4) issues it from the writing transaction
+  instead: Postgres delivers a transactional NOTIFY at COMMIT, which is precisely R-13, whereas a
+  trigger also fires for rows a later ROLLBACK discards. Recorded in the DDL so nobody adds it back.
+  (6) **CHECK constraints are explicitly named** (`ck_rides_state`, `ck_sessions_mode`, …) so the verify
+  can assert an *exact* value set rather than a substring match. The 18 ride states are compared as a
+  sorted set against D5' §6 / ADD Appendix B.2, so a typo or a stray extra state fails the build.
+  (7) **Nine indexes exist that neither spec prints**, each backing a query the specs do name:
+  `ix_command_log_inflight` (stale-reservation reclaim), `ix_sched_due` (scheduled-ride dispatch scan),
+  `ix_penalty_outstanding` (D5' §7.1 per-passenger settlement), `ix_location_requests_booker` (P-12 rate
+  limit) and `ix_location_requests_ride`, `ix_no_show_events_driver`, `ix_job_board_intents_driver`,
+  `ix_fraud_flags_subject` and `ix_fraud_flags_kind`. No index either spec prints was omitted.
+  (8) **No FKs on `trips.position_samples`, `trips.ratings.subject_id`,
+  `dispatch.no_show_events.ride_id`, `dispatch.cancellation_penalties.*_ride_id` or
+  `rides.rides.current_offer_id`** — all bare in both specs, and each for a reason worth keeping: the
+  sample path is a partitioned bulk write, `subject_id` is polymorphic across `trips.sessions` and
+  `rides.rides`, a level decrement and an accrued debt must outlive the ride they came from, and a
+  `current_offer_id` FK would make `rides.rides` and `dispatch.offers` mutually dependent so neither
+  could be inserted first.
+  (9) **The verify does functional tests, not just catalog introspection** — it proves Mode C is
+  rejected on a tracking session (R-01), that a driver cannot hold two ACTIVE sessions (D-03), two live
+  offers (R-10), two Accepted rides (O2) or two active directional filters (DT-03), that a passenger
+  cannot book twice on one `clientRequestId` (R-18) or hold two open rides, that an incomplete package
+  or proxy ride is rejected (P-06/P-07/P-01), that a cleared filter frees the driver while still
+  counting toward the daily limit (DT-03), and that a sample routes into the correct Asia/Colombo
+  monthly partition.
+  **Build host —** same footprint as C003: Docker plus the cached `timescale/timescaledb-ha:pg16`; the
+  container is published on `127.0.0.1:0` and removed by an EXIT trap. The replica stack stayed down
+  throughout. The verify now runs 84 checks in roughly 40 s.
