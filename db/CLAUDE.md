@@ -15,7 +15,7 @@
 - Ranges: `00xx` bootstrap · `01xx` iam · `02xx` config · `03xx` registry · `04xx` prov ·
   `05xx` trips · `06xx` rides · `07xx` dispatch · `08xx` reputation · `09xx` safety ·
   `10xx` fares · `11xx` billing · `12xx` subscription · `13xx` comms/docs/support/content/
-  audit/pdpa · `14xx` spatial/transit/analytics · `15xx` telemetry · `19xx` seed /
+  audit/pdpa · `14xx` spatial/transit/analytics · `18xx` telemetry · `19xx` seed /
   reference data (§20).
 - A file may create objects in another schema when a foreign key forces the order; name it for
   what it creates and say why in the header (see `0302__iam_fleet_members.sql`).
@@ -46,6 +46,28 @@
   swap renames one schema into the other and silent column drift would corrupt the live feed.
   Keys, indexes and FKs are not copied by `LIKE`; declare them explicitly, pointing *within*
   `transit_staging`. The verify asserts the two sides stay column-for-column identical.
+
+## TimescaleDB (`telemetry`, `18xx`)
+
+Four rules the printed DDL in D4' §17 / `server_db_schema.md` §18 does not survive. All four
+were found by running it; see the C006 handoff in `build/progress.md`.
+
+- **A unique index on a hypertable must contain every partitioning column.** `telemetry.positions`
+  is partitioned by `sample_ts` *and* `vehicle_id`, so the specs' `UNIQUE (vehicle_id, seq)` is
+  rejected outright and the replay-dedupe key is `(vehicle_id, seq, sample_ts)`.
+- **Row-level security and compression are mutually exclusive.** TimescaleDB refuses
+  `ENABLE ROW LEVEL SECURITY` on a hypertable with columnstore enabled, and refuses columnstore
+  on a table with row security. Compression wins on `telemetry.positions`; fleet scoping is a
+  `security_barrier` view (`telemetry.positions_fleet`) that the fleet role holds its only grant
+  on. RLS cannot go on a continuous aggregate either — it is a view.
+- **`CREATE MATERIALIZED VIEW … WITH (timescaledb.continuous)` must say `WITH NO DATA`**, because
+  the runner gives every script a transaction (`WithTransactionPerScript`) and `WITH DATA` cannot
+  run inside one. `refresh_continuous_aggregate` is likewise a procedure that needs its own
+  statement outside a transaction.
+- **Idempotency comes from the `if_not_exists` argument**, not from SQL syntax:
+  `create_hypertable`, `add_compression_policy`, `add_retention_policy` and
+  `add_continuous_aggregate_policy` all take one, and `CREATE MATERIALIZED VIEW IF NOT EXISTS`
+  works for the aggregates themselves.
 
 ## Running
 

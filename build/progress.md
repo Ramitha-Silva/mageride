@@ -31,7 +31,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C003 | db-schema-identity-registry | 0 | DONE | 2026-07-27 | 13 scripts, 24 tables, 40/40 verify checks; 4 micro-change-sets raised |
 | C004 | db-schema-trips-rides-dispatch | 0 | DONE | 2026-07-27 | 21 scripts, 26 tables, 84/84 verify checks; 2 micro-change-sets raised, 1 actioned |
 | C005 | db-schema-business-content | 0 | DONE | 2026-07-27 | 29 scripts, 53 tables, 151/151 verify checks; 3 micro-change-sets raised |
-| C006 | db-schema-telemetry-timescale | 0 | PENDING | | |
+| C006 | db-schema-telemetry-timescale | 0 | DONE | 2026-07-27 | 4 scripts, 67 total, 187/187 verify checks; 2 micro-change-sets raised (both blocking as printed) |
 | C007 | openapi-contracts | 0 | PENDING | | |
 | C008 | api-gateway-yarp | 0 | PENDING | | |
 | C009 | docker-compose-dev | 0 | PENDING | | |
@@ -651,3 +651,120 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   **Build host —** same footprint as C003/C004: Docker plus the cached `timescale/timescaledb-ha:pg16`,
   published on `127.0.0.1:0` and removed by an EXIT trap. The replica stack stayed down throughout. The
   verify now runs 151 checks in roughly 55 s.
+
+- **Component:** C006 db-schema-telemetry-timescale — 2026-07-27
+- **Status:** DONE — `bash infra/scripts/migrate-verify.sh` → **187/187 checks passed**. 4 new scripts
+  (67 total) apply to an empty `timescale/timescaledb-ha:pg16`, no-op on a journalled re-run, and
+  re-apply cleanly with the journal disabled. 1 new table (`telemetry.positions`, a hypertable) + 6
+  views: 4 continuous aggregates and 2 fleet-scoped. All four DoD items pass. Wave 0's DDL is complete.
+- **Notes:**
+  **Spec gaps — two micro-change-sets, neither actioned in `specs/`. Unlike every earlier component's
+  findings, these two are not stylistic: the DDL as printed in D4' §17 and `server_db_schema.md` §18
+  does not run on TimescaleDB 2.28 at all.**
+  (a) ***`CREATE UNIQUE INDEX ON telemetry.positions (vehicle_id, seq)` is rejected by TimescaleDB.***
+  Both sources print it (and ADD §9.5 item 1 repeats it). A unique index on a hypertable must contain
+  **every** partitioning column, and this hypertable is partitioned on `sample_ts` (time) *and*
+  `vehicle_id` (16-way space):
+  `ERROR: cannot create a unique index without the column "sample_ts" (used in partitioning)`.
+  Landed as `ux_positions_vehicle_seq (vehicle_id, seq, sample_ts)`. It still rejects the case
+  T-05/R-17 exists for — a tracker re-sending a buffered sample carries the GNSS timestamp it was
+  captured with, so the replayed tuple collides on all three columns. It does **not** reject a same-seq
+  sample bearing a *different* timestamp, which a bare `(vehicle_id, seq)` index would have. **C040
+  (persistence-writer) must therefore write `ON CONFLICT (vehicle_id, seq, sample_ts) DO NOTHING`, not
+  a two-column conflict target**, and C038/C039 keep owning the upstream rate-limited replay dedupe
+  (ADD §7.5.3). **Both DDL sources need the third column added.**
+  (b) ***Compression and row-level security cannot both be applied to `telemetry.positions`.*** §18
+  prints them six lines apart — `ALTER TABLE … SET (timescaledb.compress, …)` (ADD §9.5 item 3) and
+  `ALTER TABLE … ENABLE ROW LEVEL SECURITY` (item 8) — and TimescaleDB refuses the pair in **both**
+  orders: `ERROR: operation not supported on hypertables that have columnstore enabled` and
+  `ERROR: columnstore cannot be used on table with row security`. A compressed chunk holds a batch of
+  rows as compressed arrays, so a per-row policy cannot be evaluated without decompressing the batch.
+  No GUC relaxes it (checked the full `timescaledb.*` set), and RLS cannot be moved onto a continuous
+  aggregate instead — that is a view, and `ENABLE ROW SECURITY` is table-only.
+  **Resolution taken — compression stays, fleet scoping becomes a security-barrier view.** T-06 exists
+  because "high-frequency telematics [is] not sized for Postgres"; the ~10× on 30 days of raw is the
+  mitigation itself and nothing substitutes for it, whereas the *property* ADD §9.5 item 8 asks for —
+  fleet operators "query only their own telemetry via query-svc **without application-side filtering
+  risk**" — is fully preserved by putting the filter in the database instead of the policy engine.
+  `1804` therefore lands: a `mageride_fleet_reader` NOLOGIN group role; `telemetry.current_fleet_id()`;
+  `telemetry.positions_fleet` and `telemetry.fleet_health_5m_fleet`, both `security_barrier`, both
+  filtered on `app.fleet_id`; and grants such that the fleet role can read **those two objects and
+  nothing else** — not the base table, not a chunk, not the vehicle-keyed rollups. The verify proves
+  all six of those. It is also strictly **fail-closed where the printed policy is not**: the spec's
+  `current_setting('app.fleet_id')` raises 42704 when the GUC is unset, while
+  `current_setting('app.fleet_id', true)` returns NULL and the predicate then matches no row — an
+  unscoped connection sees zero rows rather than an error that a caller might catch and retry
+  unscoped. **§18 / D4' §17 should replace the two RLS lines with the view + grant form**, or state
+  explicitly that compression is dropped — but not keep both.
+  **Other spec observations (no change needed):**
+  (c) *`fleet_health_5m` is given a refresh policy the specs do not print.* §18 attaches
+  `add_continuous_aggregate_policy` to `positions_1m` only. Without one, `fleet_health_5m` never
+  materialises and every Fleet Portal dashboard read (US-3.13, C044) rescans raw chunks through
+  real-time aggregation. Read as an omission, not a decision; landed at 1 day / 5 min / 5 min.
+  (d) *`count(DISTINCT vehicle_id)` in a continuous aggregate works.* Worth recording because it is a
+  documented TimescaleDB limitation in older majors and the obvious thing to "fix" pre-emptively;
+  2.28 accepts it, and `fleet_health_5m` is landed exactly as printed.
+  (e) *`distance_m` is not implementable as an aggregate.* ADD §9.5 item 2 lists the rollups as
+  "(avg, max_speed, distance_m)" but the §18 DDL has no such column, and distance needs an *ordered
+  pairwise* haversine over consecutive fixes, which is a window function — not expressible in a
+  continuous aggregate. Not landed. Trip distance is a `trips`/`rides` summary column already.
+  **Decisions —**
+  (1) **File numbering is `18xx`, not the `15xx` `db/CLAUDE.md` reserved in C003.** The manifest
+  deliverables name `18xx__telemetry_*.sql` and it matches spec §18; both sort between `14xx` and the
+  `19xx` seeds, so nothing moved. `db/CLAUDE.md`'s range table is corrected, and gained a TimescaleDB
+  section recording (a), (b) and the two runner constraints in decision (2).
+  (2) **Every continuous aggregate is created `WITH NO DATA`, and `materialized_only = false` is set
+  explicitly.** `CREATE MATERIALIZED VIEW … WITH DATA` cannot run inside a transaction block and the
+  runner gives each script one (`WithTransactionPerScript`) — so `WITH NO DATA` is not a preference,
+  it is the only form that applies. **This is why C006 needed no change to `MageRide.Migrations`**;
+  a future component that needs a genuinely non-transactional statement will have to add one.
+  `WITH NO DATA` is also the right migration shape: the refresh policies backfill in the background
+  instead of materialising all history while the deploy holds locks. `materialized_only = false` is
+  pinned rather than inherited from the server default so a read always combines materialised buckets
+  with the live tail — the live map and fleet health both read the current, not-yet-materialised bucket.
+  (3) **The 5-minute and 1-hour rollups are computed from raw, not stacked on `positions_1m`.**
+  Hierarchical aggregates are cheaper, but `avg(speed_mps)` over a coarser `avg` is only exact when
+  every sub-bucket holds the same number of **non-NULL** speeds, and `speed_mps` is nullable
+  (`count(*)` counts rows, `avg` skips NULLs). Three independent refreshes over raw cost more CPU and
+  are correct. All three share the 1-minute view's column shape so C042 can pick a granularity by
+  table name alone.
+  (4) **`compress_orderby` is `'sample_ts DESC, seq'`, one column more than the specs print.** With
+  `sample_ts DESC` alone TimescaleDB warns `column "seq" should be used for segmenting or ordering` —
+  a column of a unique index that is neither segmentby nor orderby cannot be checked without
+  decompressing the whole batch, which would make the (a) dedupe guarantee unaffordable on the 7–30 day
+  compressed range. `compress_segmentby` is exactly `vehicle_id`, as specified.
+  (5) **Four CHECK constraints exist that neither spec prints** — `lat`/`lng` in range, `seq >= 0`, and
+  `source BETWEEN 0 AND 4` (the five protocol families the column comment already enumerates). Each is
+  a plain tuple check with no index probe, so the COPY ingest path is unaffected. A cheap tracker
+  reporting 0/999 degrees is a bug C039 must filter before the batch arrives; these make it loud
+  instead of silently poisoning a rollup.
+  (6) **One index exists that neither spec prints:** `ix_positions_trip_ts (trip_id, sample_ts) WHERE
+  trip_id IS NOT NULL`, backing "trip linestring for trip Y" — a read ADD §9.5 item 6 names explicitly.
+  Partial, because only Mode A/B samples carry a trip. No index either spec prints was omitted.
+  (7) **`telemetry` joins `OWNED_SCHEMAS` in the verify**, so the four platform-wide sweeps
+  (TIMESTAMPTZ-only, `tz_at` per business DATE, `set_updated_at`, the money rules) now cover it. It
+  passes all four vacuously — no DATE, no `updated_at`, no `*_minor`, no `currency` — which is the
+  point: the list is the thing a later component has to edit visibly rather than opt out of by omission.
+  (8) **No FK from `telemetry.positions` to `registry.vehicles` or `registry.fleets`**, matching both
+  specs. This is a COPY-batched path at 40k rows/s (§21) where an FK is an index probe per row, and the
+  tracker→vehicle resolution already happened upstream in `prov.tracker_bindings` (T-02/T-03).
+  `fleet_id` is denormalised at write time so fleet scoping needs no join — **C040 must populate it**,
+  and a vehicle that changes fleet keeps its old rows under the old fleet, which is correct for an audit
+  trail and is what the fleet view returns.
+  (9) **The verify does functional tests, not just catalog introspection** (36 new checks). It proves a
+  replayed sample is rejected while a second vehicle may reuse the same seq, that an out-of-range
+  latitude and an unknown protocol are refused, that writing a sample creates a chunk, that all four
+  aggregates **materialise** (asserted on their materialisation hypertables' chunks, not on a real-time
+  read that would pass without any refresh) and return the right bucket contents, and — for the DoD's
+  cross-fleet item — that the fleet role is denied the base table, denied a chunk by name, denied the
+  vehicle-keyed rollups, sees nothing at all with the GUC unset, and sees exactly its own vehicles with
+  it set, while a fleet-less vehicle is invisible to everyone.
+  **For later components —** `mageride_fleet_reader` is a **cluster-scoped role**, so `1804` needs
+  `CREATEROLE` (and `COMMENT ON ROLE` needs superuser). That is free on the dev/replica boxes and on
+  DOKS with a self-managed Postgres, but **C125/C132 must confirm it before pointing the migrate job at
+  a managed instance**. `positions_1m/_5m/_1h` carry no `fleet_id` and are therefore platform-only; if
+  the Fleet Portal (C114) needs a per-vehicle rollup for its own fleet it needs a re-grouped aggregate,
+  which is a C042 decision, not a schema change here.
+  **Build host —** same footprint as C003/C004/C005: Docker plus the cached
+  `timescale/timescaledb-ha:pg16`, published on `127.0.0.1:0` and removed by an EXIT trap. The replica
+  stack stayed down throughout. The verify now runs 187 checks in roughly 70 s.

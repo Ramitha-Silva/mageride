@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =====================================================================================
-# C003 / C004 verify — apply db/migrations to a throwaway PostgreSQL 16 + TimescaleDB +
-# PostGIS container, twice, and assert the objects each definition of done names.
+# C003 / C004 / C005 / C006 verify — apply db/migrations to a throwaway PostgreSQL 16 +
+# TimescaleDB + PostGIS container, twice, and assert the objects each definition of done names.
 #
 #   bash infra/scripts/migrate-verify.sh
 #
@@ -24,13 +24,17 @@ PROJECT="$REPO_ROOT/backend/src/MageRide.Migrations/MageRide.Migrations.csproj"
 FAILURES=0
 CHECKS=0
 
-# Every schema whose tables have been landed so far (C003 + C004 + C005). The platform-wide
-# rules — TIMESTAMPTZ only, a tz_at companion per business DATE, set_updated_at on every
-# mutable table — are asserted across all of them at once, so a later component cannot
-# quietly opt out by adding a schema. `telemetry` joins this list with C006.
+# Every schema whose tables have been landed so far (C003 + C004 + C005 + C006). The
+# platform-wide rules — TIMESTAMPTZ only, a tz_at companion per business DATE, set_updated_at
+# on every mutable table — are asserted across all of them at once, so a later component
+# cannot quietly opt out by adding a schema.
 OWNED_SCHEMAS="'iam','registry','prov','config','trips','rides','dispatch','reputation',
                'safety','fares','billing','subscription','comms','docs','support','content',
-               'audit','pdpa','spatial','transit','transit_staging','analytics'"
+               'audit','pdpa','spatial','transit','transit_staging','analytics','telemetry'"
+
+# The fleet-scoped login role the C006 checks connect as. Created after the migrations run
+# (1804 creates the mageride_fleet_reader group role it is a member of).
+FLEET_ROLE="verify_fleet"
 
 RED=''; GREEN=''; YELLOW=''; RESET=''
 if [[ -t 1 ]]; then RED=$'\033[31m'; GREEN=$'\033[32m'; YELLOW=$'\033[33m'; RESET=$'\033[0m'; fi
@@ -74,6 +78,37 @@ check_rejects() { # check_rejects <label> <sql that must fail>
   CHECKS=$((CHECKS + 1))
   if psql_run "$sql" >/dev/null 2>&1; then
     printf '  %s✗%s %s (the statement was accepted but should have been rejected)\n' "$RED" "$RESET" "$label"
+    FAILURES=$((FAILURES + 1))
+  else
+    printf '  %s✓%s %s\n' "$GREEN" "$RESET" "$label"
+  fi
+}
+
+psql_fleet() { # psql_fleet <fleet_id | ""> <sql> -> last line, whitespace trimmed
+  local fleet="$1" sql="$2" prelude=""
+  [[ -n "$fleet" ]] && prelude="SET app.fleet_id = '$fleet'; "
+  docker exec "$CONTAINER" psql -U "$FLEET_ROLE" -d "$PGDATABASE_VALUE" \
+    -tAqc "$prelude$sql" 2>/dev/null | tail -1 | tr -d '[:space:]'
+}
+
+check_fleet_eq() { # check_fleet_eq <label> <expected> <fleet_id | ""> <sql>
+  local label="$1" expected="$2" fleet="$3" sql="$4" actual
+  CHECKS=$((CHECKS + 1))
+  actual="$(psql_fleet "$fleet" "$sql")"
+  if [[ "$actual" == "$expected" ]]; then
+    printf '  %s✓%s %s\n' "$GREEN" "$RESET" "$label"
+  else
+    printf '  %s✗%s %s (expected %s, got %s)\n' "$RED" "$RESET" "$label" "$expected" "${actual:-<empty>}"
+    FAILURES=$((FAILURES + 1))
+  fi
+}
+
+check_fleet_denied() { # check_fleet_denied <label> <sql the fleet role must not be allowed to run>
+  local label="$1" sql="$2"
+  CHECKS=$((CHECKS + 1))
+  if docker exec "$CONTAINER" psql -U "$FLEET_ROLE" -d "$PGDATABASE_VALUE" \
+       -v ON_ERROR_STOP=1 -qc "$sql" >/dev/null 2>&1; then
+    printf '  %s✗%s %s (the read was allowed)\n' "$RED" "$RESET" "$label"
     FAILURES=$((FAILURES + 1))
   else
     printf '  %s✓%s %s\n' "$GREEN" "$RESET" "$label"
@@ -168,8 +203,6 @@ check_eq "12 dispatch tables" "12" \
 check_eq "3 reputation tables" "3" \
   "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
     WHERE n.nspname='reputation' AND c.relkind IN ('r','p') AND NOT c.relispartition;"
-check_eq "C006 schema left empty" "0" \
-  "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'telemetry';"
 
 step "AL-08 — single active device per app"
 check_eq "ux_sessions_active_app is a unique partial index on (user_id, app)" "1" \
@@ -996,6 +1029,181 @@ psql_run "INSERT INTO pdpa.requests(user_id, kind) VALUES ('$PAX_1','export');" 
 check_eq "a PDPA request defaults to the 30-day statutory deadline (E-06)" "30" \
   "SELECT EXTRACT(DAY FROM (due_by - requested_at))::int FROM pdpa.requests
     WHERE user_id='$PAX_1' LIMIT 1;"
+
+# ---------------------------------------------------------------------------------------
+# C006 — telemetry (TimescaleDB hypertable, rollups, policies, fleet scoping)
+# ---------------------------------------------------------------------------------------
+step "Objects owned by C006"
+check_eq "1 telemetry table" "1" \
+  "SELECT count(*) FROM information_schema.tables
+    WHERE table_schema='telemetry' AND table_type='BASE TABLE';"
+check_eq "6 telemetry views — 4 rollups + 2 fleet-scoped" "6" \
+  "SELECT count(*) FROM information_schema.views WHERE table_schema='telemetry';"
+
+step "T-06 / ADD §9.5 — the hypertable"
+check_eq "telemetry.positions is a hypertable" "1" \
+  "SELECT count(*) FROM timescaledb_information.hypertables
+    WHERE hypertable_schema='telemetry' AND hypertable_name='positions';"
+check_eq "time dimension is sample_ts on 1-day chunks" "sample_ts|1day" \
+  "SELECT column_name||'|'||time_interval FROM timescaledb_information.dimensions
+    WHERE hypertable_schema='telemetry' AND hypertable_name='positions' AND dimension_type='Time';"
+check_eq "space dimension is vehicle_id across 16 partitions" "vehicle_id|16" \
+  "SELECT column_name||'|'||num_partitions FROM timescaledb_information.dimensions
+    WHERE hypertable_schema='telemetry' AND hypertable_name='positions' AND dimension_type='Space';"
+# The specs print UNIQUE (vehicle_id, seq); TimescaleDB requires every partitioning column in
+# a unique index, so sample_ts is in the key. See 1801's header and build/progress.md.
+check_eq "ux_positions_vehicle_seq is UNIQUE and carries the partitioning column" "1" \
+  "SELECT count(*) FROM pg_indexes
+    WHERE schemaname='telemetry' AND indexname='ux_positions_vehicle_seq'
+      AND indexdef LIKE 'CREATE UNIQUE INDEX%(vehicle_id, seq, sample_ts)%';"
+check_eq "ix_positions_fleet_ts is partial on fleet_id IS NOT NULL" "1" \
+  "SELECT count(*) FROM pg_indexes
+    WHERE schemaname='telemetry' AND indexname='ix_positions_fleet_ts'
+      AND indexdef LIKE '%WHERE (fleet_id IS NOT NULL)%';"
+check_eq "the per-vehicle and per-trip read indexes exist (ADD §9.5 item 6)" "2" \
+  "SELECT count(*) FROM pg_indexes WHERE schemaname='telemetry'
+     AND indexname IN ('ix_positions_vehicle_ts','ix_positions_trip_ts');"
+
+step "T-06 — continuous aggregates (1m / 5m / 1h + fleet health)"
+check_eq "four continuous aggregates registered" \
+  "fleet_health_5m,positions_1h,positions_1m,positions_5m" \
+  "SELECT string_agg(view_name, ',' ORDER BY view_name COLLATE \"C\")
+     FROM timescaledb_information.continuous_aggregates WHERE view_schema='telemetry';"
+check_eq "every rollup reads live rows as well as materialised ones" "0" \
+  "SELECT count(*) FROM timescaledb_information.continuous_aggregates
+    WHERE view_schema='telemetry' AND materialized_only;"
+check_eq "four refresh policies scheduled" "4" \
+  "SELECT count(*) FROM timescaledb_information.jobs
+    WHERE hypertable_schema='telemetry' AND proc_name='policy_refresh_continuous_aggregate';"
+check_eq "positions_1m keeps the spec's 3-hour / 1-minute refresh window" "03:00:00|00:01:00" \
+  "SELECT (config->>'start_offset')||'|'||(config->>'end_offset')
+     FROM timescaledb_information.jobs
+    WHERE hypertable_name='positions_1m' AND proc_name='policy_refresh_continuous_aggregate';"
+
+step "ADD §9.5 items 3 and 4 — compression and retention"
+check_eq "compression is segmented by vehicle_id" "vehicle_id" \
+  "SELECT attname FROM timescaledb_information.compression_settings
+    WHERE hypertable_schema='telemetry' AND hypertable_name='positions'
+      AND segmentby_column_index IS NOT NULL;"
+check_eq "chunks compress after 7 days" "7days" \
+  "SELECT config->>'compress_after' FROM timescaledb_information.jobs
+    WHERE hypertable_name='positions' AND proc_name='policy_compression';"
+check_eq "raw telemetry is dropped after 30 days" "30days" \
+  "SELECT config->>'drop_after' FROM timescaledb_information.jobs
+    WHERE hypertable_name='positions' AND proc_name='policy_retention';"
+check_eq "all four aggregates are retained 12 months" "4" \
+  "SELECT count(*) FROM timescaledb_information.jobs
+    WHERE hypertable_schema='telemetry' AND proc_name='policy_retention'
+      AND hypertable_name <> 'positions' AND config->>'drop_after' = '1 year';"
+
+# ---------------------------------------------------------------------------------------
+step "C006 constraints actually bite"
+
+FLEET_1='e0000001-0000-0000-0000-000000000001'
+FLEET_2='e0000001-0000-0000-0000-000000000002'
+VEH_T1='e0000002-0000-0000-0000-000000000001'
+VEH_T2='e0000002-0000-0000-0000-000000000002'
+VEH_T3='e0000002-0000-0000-0000-000000000003'
+VEH_T4='e0000002-0000-0000-0000-000000000004'
+# Two hours back, so the samples sit inside every refresh window and well inside retention.
+TS_BASE="date_trunc('minute', now() - interval '2 hours')"
+
+psql_run "INSERT INTO telemetry.positions(vehicle_id, sample_ts, seq, lat, lng, speed_mps, source, fleet_id)
+            VALUES ('$VEH_T1', $TS_BASE,                        1, 6.9271, 79.8612, 8.0, 1, '$FLEET_1'),
+                   ('$VEH_T1', $TS_BASE + interval '10 seconds', 2, 6.9272, 79.8613, 12.0, 1, '$FLEET_1'),
+                   ('$VEH_T1', $TS_BASE + interval '20 seconds', 3, 6.9273, 79.8614, 10.0, 1, '$FLEET_1'),
+                   ('$VEH_T2', $TS_BASE,                        1, 7.2906, 80.6337, 5.0, 2, '$FLEET_1'),
+                   ('$VEH_T3', $TS_BASE,                        1, 6.0535, 80.2210, 9.0, 3, '$FLEET_2'),
+                   ('$VEH_T4', $TS_BASE,                        1, 6.9271, 79.8612, 0.0, 0, NULL);" >/dev/null \
+  || die "could not seed the telemetry fixtures."
+
+check_eq "writing a sample creates a chunk (ADD §9.5 item 1)" "t" \
+  "SELECT count(*) > 0 FROM timescaledb_information.chunks
+    WHERE hypertable_schema='telemetry' AND hypertable_name='positions';"
+
+check_rejects "a replayed (vehicle_id, seq) sample is rejected (T-05/R-17)" \
+  "INSERT INTO telemetry.positions(vehicle_id, sample_ts, seq, lat, lng, source, fleet_id)
+     VALUES ('$VEH_T1', $TS_BASE, 1, 6.9271, 79.8612, 1, '$FLEET_1');"
+
+CHECKS=$((CHECKS + 1))
+if psql_run "INSERT INTO telemetry.positions(vehicle_id, sample_ts, seq, lat, lng, source, fleet_id)
+               VALUES ('$VEH_T2', $TS_BASE + interval '30 seconds', 1, 7.2907, 80.6338, 2, '$FLEET_1');" >/dev/null 2>&1; then
+  printf '  %s✓%s seq is monotonic per vehicle, not global — another vehicle may reuse it (T-05)\n' "$GREEN" "$RESET"
+else
+  printf '  %s✗%s a second vehicle could not reuse a sequence number\n' "$RED" "$RESET"
+  FAILURES=$((FAILURES + 1))
+fi
+
+check_rejects "a sample outside the latitude range is rejected" \
+  "INSERT INTO telemetry.positions(vehicle_id, sample_ts, seq, lat, lng, source)
+     VALUES ('$VEH_T4', $TS_BASE + interval '1 minute', 99, 999.0, 79.8612, 0);"
+
+check_rejects "an unknown tracker protocol is rejected (server_db_schema §18)" \
+  "INSERT INTO telemetry.positions(vehicle_id, sample_ts, seq, lat, lng, source)
+     VALUES ('$VEH_T4', $TS_BASE + interval '1 minute', 98, 6.9271, 79.8612, 9);"
+
+step "T-06 — the aggregates refresh and answer queries"
+# refresh_continuous_aggregate is a procedure and cannot run inside a transaction block, so
+# each CALL is its own statement.
+for CAGG in positions_1m positions_5m positions_1h fleet_health_5m; do
+  psql_run "CALL refresh_continuous_aggregate('telemetry.$CAGG', now() - interval '1 day', now() - interval '1 hour');" >/dev/null \
+    || die "could not refresh telemetry.$CAGG."
+done
+
+check_eq "all four aggregates materialised at least one chunk" "4" \
+  "SELECT count(*) FROM timescaledb_information.continuous_aggregates ca
+    WHERE ca.view_schema='telemetry'
+      AND EXISTS (SELECT 1 FROM timescaledb_information.chunks c
+                   WHERE c.hypertable_schema = ca.materialization_hypertable_schema
+                     AND c.hypertable_name   = ca.materialization_hypertable_name);"
+check_eq "positions_1m rolled the three samples into one bucket" "3|12" \
+  "SELECT samples||'|'||max_speed::int FROM telemetry.positions_1m
+    WHERE vehicle_id='$VEH_T1';"
+check_eq "positions_1m carries the last fix in the bucket" "6.9273|79.8614" \
+  "SELECT round(last_lat::numeric,4)||'|'||round(last_lng::numeric,4)
+     FROM telemetry.positions_1m WHERE vehicle_id='$VEH_T1';"
+check_eq "positions_5m and positions_1h agree on the sample count" "3|3" \
+  "SELECT (SELECT samples FROM telemetry.positions_5m WHERE vehicle_id='$VEH_T1')||'|'||
+          (SELECT samples FROM telemetry.positions_1h WHERE vehicle_id='$VEH_T1');"
+check_eq "fleet_health_5m counts two distinct vehicles for fleet 1 (US-3.13)" "2|5" \
+  "SELECT active_vehicles||'|'||samples FROM telemetry.fleet_health_5m
+    WHERE fleet_id='$FLEET_1';"
+check_eq "fleet_health_5m ignores vehicles that belong to no fleet" "0" \
+  "SELECT count(*) FROM telemetry.fleet_health_5m WHERE fleet_id IS NULL;"
+
+step "ADD §9.5 item 8 — a fleet reader sees only its own telemetry"
+psql_run "CREATE ROLE $FLEET_ROLE LOGIN;
+          GRANT mageride_fleet_reader TO $FLEET_ROLE;" >/dev/null \
+  || die "could not create the fleet-scoped verify role."
+
+RAW_CHUNK="$(psql_q "SELECT format('%I.%I', chunk_schema, chunk_name)
+                       FROM timescaledb_information.chunks
+                      WHERE hypertable_schema='telemetry' AND hypertable_name='positions' LIMIT 1;")"
+[[ -n "$RAW_CHUNK" ]] || die "no telemetry.positions chunk to test chunk-level access against."
+
+check_fleet_denied "the fleet role cannot read telemetry.positions directly" \
+  "SELECT count(*) FROM telemetry.positions;"
+# A grant on the hypertable propagates to its chunks, so the chunk is the obvious way around a
+# view. It has to be denied too, or the whole fleet fence is decorative.
+check_fleet_denied "the fleet role cannot reach around the view into a chunk ($RAW_CHUNK)" \
+  "SELECT count(*) FROM $RAW_CHUNK;"
+check_fleet_denied "the fleet role cannot read the vehicle-keyed rollups" \
+  "SELECT count(*) FROM telemetry.positions_1m;"
+
+check_fleet_eq "an unscoped session sees no telemetry at all (fail closed)" "0" "" \
+  "SELECT count(*) FROM telemetry.positions_fleet;"
+check_fleet_eq "fleet 1 sees exactly its own five samples" "5" "$FLEET_1" \
+  "SELECT count(*) FROM telemetry.positions_fleet;"
+check_fleet_eq "fleet 1 sees exactly its own two vehicles" "$VEH_T1,$VEH_T2" "$FLEET_1" \
+  "SELECT string_agg(DISTINCT vehicle_id::text, ',' ORDER BY vehicle_id::text) FROM telemetry.positions_fleet;"
+check_fleet_eq "fleet 2's vehicle is invisible to fleet 1 (cross-fleet read blocked)" "0" "$FLEET_1" \
+  "SELECT count(*) FROM telemetry.positions_fleet WHERE vehicle_id='$VEH_T3';"
+check_fleet_eq "fleet 2 sees only its own sample" "$VEH_T3" "$FLEET_2" \
+  "SELECT string_agg(DISTINCT vehicle_id::text, ',') FROM telemetry.positions_fleet;"
+check_fleet_eq "a vehicle owned by no fleet is invisible to every fleet" "0" "$FLEET_2" \
+  "SELECT count(*) FROM telemetry.positions_fleet WHERE vehicle_id='$VEH_T4';"
+check_fleet_eq "the fleet health rollup is scoped the same way" "$FLEET_1" "$FLEET_1" \
+  "SELECT string_agg(DISTINCT fleet_id::text, ',') FROM telemetry.fleet_health_5m_fleet;"
 
 # ---------------------------------------------------------------------------------------
 printf '\n'
