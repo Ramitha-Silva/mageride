@@ -1,0 +1,57 @@
+<Project>
+
+  <!--
+    MageRide — central package management for every .NET project under backend/ (C002).
+    Projects reference packages WITHOUT a Version attribute; the version is pinned here once.
+    Adding a new dependency = add a <PackageVersion> line here first, or the build fails NU1008.
+  -->
+
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+
+  <ItemGroup Label="Data access — Dapper over Npgsql (AL-53; no EF Core, ever)">
+    <PackageVersion Include="Dapper" Version="2.1.79" />
+    <PackageVersion Include="Npgsql" Version="10.0.3" />
+    <PackageVersion Include="Npgsql.NetTopologySuite" Version="10.0.3" />
+    <PackageVersion Include="Npgsql.OpenTelemetry" Version="10.0.3" />
+    <PackageVersion Include="NetTopologySuite" Version="2.6.0" />
+  </ItemGroup>
+
+  <ItemGroup Label="Messaging and cache">
+    <PackageVersion Include="Confluent.Kafka" Version="2.15.0" />
+    <PackageVersion Include="StackExchange.Redis" Version="3.0.17" />
+  </ItemGroup>
+
+  <ItemGroup Label="Auth (D-29)">
+    <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.10" />
+  </ItemGroup>
+
+  <ItemGroup Label="Resilience (D6' §8.3)">
+    <PackageVersion Include="Polly.Core" Version="8.7.0" />
+    <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="10.8.0" />
+  </ItemGroup>
+
+  <ItemGroup Label="Observability (D7' §12)">
+    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.17.0" />
+    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.17.0" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.17.0" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="1.17.0" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.Runtime" Version="1.17.0" />
+    <!-- The Prometheus /metrics scrape endpoint D7' §12 asks for. The OpenTelemetry .NET
+         Prometheus exporter has no stable release yet; this is the current published build. -->
+    <PackageVersion Include="OpenTelemetry.Exporter.Prometheus.AspNetCore" Version="1.17.0-beta.1" />
+  </ItemGroup>
+
+  <ItemGroup Label="Test">
+    <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.8.0" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
+    <PackageVersion Include="Testcontainers.PostgreSql" Version="4.13.0" />
+    <PackageVersion Include="Testcontainers.Redis" Version="4.13.0" />
+    <PackageVersion Include="xunit.v3" Version="3.2.2" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
+  </ItemGroup>
+
+</Project>

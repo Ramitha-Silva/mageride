@@ -27,7 +27,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | ID | Component | Wave | Status | Session Date | Notes |
 |----|-----------|------|--------|--------------|-------|
 | C001 | repo-scaffold | 0 | DONE | 2026-07-27 | verify chain green; 3 spec gaps + root-`build/` collision recorded below |
-| C002 | backend-shared-kernel | 0 | PENDING | | |
+| C002 | backend-shared-kernel | 0 | DONE | 2026-07-27 | 152 tests green; 2 micro-change-sets raised (command-log column, direct DSN) |
 | C003 | db-schema-identity-registry | 0 | PENDING | | |
 | C004 | db-schema-trips-rides-dispatch | 0 | PENDING | | |
 | C005 | db-schema-business-content | 0 | PENDING | | |
@@ -258,3 +258,68 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   is sufficient today. Gradle 9.6.1 is cached in `~/.gradle` and the wrapper jar + distribution were
   SHA-256 verified against services.gradle.org.
 
+
+- **Component:** C002 backend-shared-kernel — 2026-07-27
+- **Status:** DONE — `dotnet test backend/src/MageRide.Shared.Tests -c Release` → **152 passed, 0 failed,
+  0 skipped**. All five DoD items pass, including the E-09 timing test and the byte-for-byte replay
+  test against a real Postgres (Testcontainers `postgis/postgis:16-3.4`, `redis:7-alpine`).
+- **Notes:**
+  **Spec gaps — two micro-change-sets, neither actioned in `specs/` (D4' is C004/C005's to land):**
+  (a) ***`rides.command_log.response_body JSONB` cannot satisfy R-14 as written.*** D4' §5 /
+  `server_db_schema.md` §5 declare the column `JSONB`, and ADD §11.13 requires the stored response be
+  returned "verbatim". `jsonb` is a *parsed* representation: it strips insignificant whitespace, drops
+  duplicate keys and reorders object members, so a replay is semantically equal but **not byte-for-byte**.
+  `PostgresCommandLogTests.Jsonb_storage_does_not_round_trip_byte_for_byte` demonstrates it.
+  Two further columns are also missing: nothing records the original `Content-Type`, so a replay cannot
+  tell `application/json` from `application/problem+json` (the DoD requires every error stay
+  `application/problem+json`). **Recommended DDL delta:** `response_body JSON` (Postgres `json` keeps the
+  exact input text and stays queryable) **+ `response_content_type TEXT`**. The kernel defaults to that
+  shape and also supports `Bytea` and the current lossy `Jsonb` via `CommandLog:BodyStorage`.
+  (b) ***E-09 needs a direct-to-Postgres DSN that D7' §4.1 does not define.*** D7' §4.1 lists one
+  `ConnectionStrings__Postgres` = the PgBouncer DSN, and `server_db_schema.md` §0 / ADD §9.3 put PgBouncer
+  in **transaction mode** in front of every service. `LISTEN` is session-scoped: transaction pooling hands
+  the server connection back at COMMIT, so a LISTEN registered through PgBouncer is dropped and the outbox
+  dispatcher never wakes — E-09's sub-50 ms path silently degrades to the poll it was meant to replace.
+  **Recommended:** add `ConnectionStrings__PostgresDirect` to the D7' §4.1 common table (required for
+  ride-svc / dispatch-svc, optional elsewhere). Implemented as `PostgresOptions.DirectConnectionString`;
+  when unset the factory falls back to the pooled DSN and logs a warning.
+  (c) *Cosmetic:* D3' §0 names 423 "locked (OTP attempts)" and the 426 upgrade gate but gives neither a
+  kebab code. Registered as `otp-locked` / `upgrade-required`. Nine further cross-cutting codes are
+  kernel-defined for the same reason (`validation-failed`, `internal-error`, the four
+  `idempotency-*` codes, `dependency-unavailable`, `upstream-timeout`, `method-not-allowed`).
+  **Decisions —**
+  (1) **Central package management adopted** (`backend/Directory.Packages.props`), as C001's handoff
+  recommended. `<PackageReference>` carries no `Version`; a new dependency needs a `<PackageVersion>`
+  entry first or the build fails NU1008. Noted in `backend/CLAUDE.md`.
+  (2) **Idempotency is opt-out, not opt-in.** Every POST demands the header (D3' §0); a surface with its
+  own dedupe key — the OnePay/IPG webhooks, which key on `provider_transaction_id` (R-19/E-05) — calls
+  `.AllowMissingIdempotencyKey()`. 5xx responses are never stored, so a retry re-executes rather than
+  replaying a failure; a reservation abandoned by a dead process is reclaimed after 60 s.
+  (3) **One outbox drainer at a time**, elected by a transaction-scoped advisory lock. `FOR UPDATE SKIP
+  LOCKED` alone would let two replicas publish two events for the same ride out of order, which breaks the
+  per-aggregate ordering D6' §2.3 promises consumers. Delivery is at-least-once (row marked dispatched only
+  after the broker acks); consumers dedupe on `eventId`/`seq` per D6' §2.3.
+  (4) **`pg_notify` is issued by the writer inside the caller's transaction**, not by a table trigger.
+  Postgres delivers a transactional NOTIFY at COMMIT, which is exactly R-13 ("no phantom offers") and
+  leaves the DDL free of a trigger C004 would otherwise have to own.
+  (5) **Polly v8's breaker is ratio-based**, so D6' §8.3's "open after 5 failures/30 s" maps to
+  `SamplingDuration=30 s`, `MinimumThroughput=5`, `FailureRatio=0.5`, `BreakDuration=15 s`. The ±25% jitter
+  is generated by hand — Polly's `UseJitter` applies a decorrelated curve, not a symmetric band.
+  (6) **`TimeProvider`, not a bespoke `IClock`.** `BusinessCalendar` takes it directly and the tests use
+  `FakeTimeProvider`.
+  (7) **Dapper's built-in type map shadows handlers**, so `DateTimeOffset` and `DateOnly` are
+  `RemoveTypeMap`'d before their handlers are added — otherwise Npgsql rejects any non-UTC offset outright
+  and `DateOnly` (every D-38 business-date column) cannot be used as a parameter at all.
+  (8) **`OpenTelemetry.Exporter.Prometheus.AspNetCore` is `1.17.0-beta.1`** — the only build published.
+  D7' §12 requires a per-service `/metrics` scrape; the OTel .NET Prometheus exporter has no stable
+  release. Gated behind `Otel:PrometheusEnabled` (default on). OTLP traces/metrics/logs use stable packages.
+  (9) `CursorPage.cursor` is force-serialised even when null: D3' §0 spells the field `"opaque|null"`, and
+  the platform-wide `WhenWritingNull` policy would otherwise make "last page" look like "field missing".
+  (10) Cursors are base64url and optionally HMAC-signed; unsigned by default. A decoded cursor stays
+  untrusted input — endpoints must still scope their query by the caller's identity.
+  **Build host —** Docker is used by the test suite (Testcontainers pulls `postgis/postgis:16-3.4` ≈ 853 MB
+  and `redis:7-alpine`); containers are torn down per run and the replica stack stayed down throughout.
+  A host without a Docker daemon skips those tests via `Assert.Skip` rather than failing, so the DB/Redis
+  DoD items are only *proved* where Docker is available — CI (C010) must provide it. The E-09 test runs one
+  unmeasured warm-up round, then asserts the **median** of five commit→publish measurements is under 50 ms;
+  the first drain pays one-off connection and JIT cost (~74 ms measured cold) that is not per-offer latency.

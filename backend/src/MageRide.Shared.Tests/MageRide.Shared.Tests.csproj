@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    C002 verify target: dotnet test backend/src/MageRide.Shared.Tests -c Release
+    Tests that need Postgres or Redis start throwaway containers through Testcontainers and
+    call Assert.Skip when no Docker daemon is reachable, so the suite still runs on a bare host.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.Shared.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <OutputType>Exe</OutputType>
+    <!--
+      xUnit1041: collection-fixture ctor args are consumed through the primary constructor.
+      xUnit1051: every test here is bounded by its own CancellationTokenSource or by the host's
+                 shutdown, so threading TestContext.Current.CancellationToken through each HTTP
+                 call would add noise without changing behaviour.
+    -->
+    <NoWarn>$(NoWarn);xUnit1041;xUnit1051</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.AspNetCore.TestHost" />
+    <PackageReference Include="Testcontainers.PostgreSql" />
+    <PackageReference Include="Testcontainers.Redis" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MageRide.Shared\MageRide.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>
