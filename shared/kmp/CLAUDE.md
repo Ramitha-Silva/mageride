@@ -47,8 +47,8 @@ src/commonMain/kotlin/lk/mageride/shared/
     data/api/         Ktor client for the REST surfaces                (C013)
     data/repository/  repository abstractions                          (C012-C018)
     domain/auth/      OTP sign-in, token lifecycle, MQTT token         (C014)
-    domain/trip/      trip + ride state machines                       (C015)
-    domain/dispatch/  offer handling, Driver Level System              (C015)
+    domain/ride/      Mode C ride machine, cancellation, package/proxy (C015)
+    domain/dispatch/  offers, Driver Level, Job Board, directional     (C015)
     domain/fare/      Mode C fare rules, surcharges                    (C016)
     domain/wallet/    balance + transaction history                    (C016)
     domain/geo/       H3 geocells, adaptive rate logic                 (C017)
@@ -56,6 +56,10 @@ src/commonMain/kotlin/lk/mageride/shared/
     db/               SQLDelight queries + drivers                     (C018)
     util/             DateTimeUtils, Validators
     platform/         PlatformInfo, SecureStore, attestation (expect)  (C011, C014)
+    (ADD §18.2 draws the first of those two as `domain/trip/`. That layout predates R-01, which
+     split the Mode C ride out of the tracking session; `domain/trip` under the current vocabulary
+     would name trip-state-svc's Mode A/B aggregate, which is not in this module at all. The
+     manifest's C015 deliverable already says `domain/ride`. See the C015 handoff.)
 src/androidMain/  Android actuals + the OkHttp Ktor engine
 src/iosMain/      iOS actuals + the Darwin Ktor engine
 src/commonTest/   runs on every target
@@ -159,6 +163,36 @@ src/androidHostTest/  JVM-only tests of the Android actuals (NOT `androidUnitTes
   Integrity token unwrapped, iOS sends `base64url(keyId) "." base64url(assertion)` signed over
   `SHA-256("<METHOD> <path>")`. That last part is why `AttestationRequest` carries the method and
   path rather than only an `operationId`.
+
+## Mode C domain (`domain/ride` + `domain/dispatch`, C015)
+- **Mode C only (R-01).** `domain/ride` is the ride-svc aggregate. Mode A/B tracking sessions are
+  trip-state-svc's and are not modelled here — not now, not later.
+- **[RideTransitions] is ADD Appendix B.2 as data, and it is the only place a transition exists.**
+  `next()` is a map lookup; nothing branches its way to a state the table does not list.
+  `RideTransitionTableTest` re-declares the appendix independently and sweeps all 18 × 20
+  state/trigger pairs, so an added edge fails the build rather than a screen.
+- **The client never advances a ride.** `RideProjection` moves only through `onServerState(…)`, and
+  a server-confirmed move the table does not draw is **applied and flagged**, never dropped —
+  ride-svc is the sole writer, so refusing its answer would show a passenger a ride that had
+  already ended. `verdict(command)` is the other direction: a local guess that saves a round trip,
+  never a claim about what the server would allow.
+- **Two edges are in the table but not in the Appendix B.2 diagram**, both carried by other parts
+  of the same spec and both called out at the declaration: `Matching → Accepted` (D5' §6.1's accept
+  guard `state IN ('Matching','Offered')`) and `Accepted|DriverArrived → NoShowDriver` (the D5' §7
+  matrix row).
+- **An expired offer is never sent.** `OfferSession.accept()` / `decline()` check the 15-second
+  deadline against the clock before touching the network. `409 offer-already-accepted` and
+  `410 offer-expired` stay distinct all the way to `OfferOutcome.Taken` / `Expired`.
+- **Every threshold that the server can tune is read, never baked.** The directional predicate
+  takes `DirectionalConfig` and the level rules take `LevelConfig`; `DriverLevelRules.D5_DEFAULTS`
+  is a fallback for a client that has not read the admin config yet, not a constant. Fixed numbers
+  — the 15 s offer TTL, the 5 OTP attempts, Rs 50 / Rs 100, the R-16 grace windows — are named
+  constants citing the spec line that fixes them.
+- **Almost none of it is in the Koin graph.** `rideDispatchModule` binds one thing, `OfferSession`
+  (the driver's single offer slot, ADD Appendix B.2 invariant 3), and needs nothing from an app
+  that C013 does not already ask for. Everything else is a value type built from the config just
+  read — binding a `DirectionalPredicate` at start-up would pin whatever the thresholds were when
+  the app launched.
 
 ## Dependency rules
 - **Every version lives in `gradle/libs.versions.toml`.** Never inline one here.

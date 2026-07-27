@@ -40,7 +40,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C012 | kmp-core-models | 1 | DONE | 2026-07-27 | 300 public types over 16 contracts, 132 tests green; 3 micro-change-sets raised (ADD Appendix A, trip-state enums, §19) |
 | C013 | kmp-api-client | 1 | DONE | 2026-07-27 | 16 typed clients covering all 176 operations, 91 new tests (223 total) green; 1 micro-change-set raised (`ReportFormat.wire`) |
 | C014 | kmp-auth-session | 1 | DONE | 2026-07-27 | 277 tests green (54 new); Keystore/Keychain SecureStore + Play Integrity/App Attest; 3 micro-change-sets raised |
-| C015 | kmp-domain-ride-dispatch | 1 | PENDING | | |
+| C015 | kmp-domain-ride-dispatch | 1 | DONE | 2026-07-27 | 384 tests green (107 new); Appendix B.2 as data + exhaustive 18×20 sweep; 4 micro-change-sets raised |
 | C016 | kmp-domain-fare-wallet | 1 | PENDING | | |
 | C017 | kmp-geo-realtime | 1 | PENDING | | |
 | C018 | kmp-local-db | 1 | PENDING | | |
@@ -1939,3 +1939,120 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   opens a second comment and the file stops parsing (the error surfaces on a later declaration);
   and `CFBridgingRetain` / `CFBridgingRelease` live in `platform.Foundation`, not
   `platform.CoreFoundation`.
+
+- **Component:** C015 kmp-domain-ride-dispatch — 2026-07-27
+- **Status:** DONE (common + Android; iOS declared and type-checked, **not** verified) —
+  `./gradlew :shared:testDebugUnitTest detekt ktlintCheck` green from a clean build directory with
+  `--no-build-cache`: **384 tests passed, 0 failed, 0 skipped** (107 new; C011–C014's 277 still
+  green), detekt and ktlint clean. All four DoD items pass, each with a test that fails if the rule
+  is broken. `./gradlew :shared:compileKotlinIosArm64 --rerun-tasks` also passes, so the new
+  `commonMain` type-checks for Kotlin/Native; **iOS is not marked DONE from this host**
+  (klib cross-compilation only — no linking, no `iosTest`). ~2,400 lines of `domain/ride` +
+  `domain/dispatch` and ~1,800 lines of test. Nothing in `androidMain` or `iosMain` changed:
+  Mode C's client-side logic is entirely platform-independent.
+- **Notes:**
+  (1) **Package layout — `domain/ride`, not `domain/trip`.** ADD §18.2's KMP tree says
+  `domain/trip/ — Trip state machine logic`; the manifest's C015 deliverable says `domain/ride`.
+  ADD §18.2 predates **R-01**, which split the Mode C ride aggregate out of the Mode A/B tracking
+  session; under the current vocabulary `domain/trip` names trip-state-svc's aggregate, which this
+  module does not contain and never will. Took the manifest. `shared/kmp/CLAUDE.md` §Source-set
+  layout updated. **Micro-change-set:** ADD §18.2's tree should read `domain/ride/`.
+  (2) **`RideTransitions` is Appendix B.2 as data, and it is the only place a transition exists.**
+  `next()` is a map lookup; there is no branch anywhere that can produce a state the table does not
+  list. `RideTransitionTableTest` re-declares the appendix independently from the diagram and the
+  D5' §6/§7 prose and asserts set equality, then sweeps **all 18 × 20 = 360 state/trigger pairs**
+  to prove every pair outside the table moves nothing. That is the DoD's property, and enumerating
+  the whole input space is a stronger statement than sampling it — and faster.
+  (3) **Two edges are in the table and not in the Appendix B.2 diagram.** Both are carried by other
+  parts of the same spec, both are commented at the declaration, and both are listed separately in
+  the test so the claim stays auditable. **(a)** `Matching → Accepted`: D5' §6.1's conditional
+  UPDATE guards on `state IN ('Matching','Offered')`, because the 15 s TTL can bounce the ride back
+  to `Matching` while the winning accept is in flight. Dropping it would make a driver's own
+  successful accept look like a state the client does not understand. **(b)**
+  `Accepted|DriverArrived → NoShowDriver`: the D5' §7 matrix has an explicit row for it. **This
+  contradicts C012's `RideState.NoShowDriver` KDoc**, which says "D5' §7 models driver-side no-show
+  as `CancelledByDriver` and no transition currently writes it" — §7 has both rows. C012's file was
+  left alone; the note is what is wrong, not the enum. **Micro-change-set:** correct that KDoc, and
+  add the two edges to the Appendix B.2 diagram so the picture and the prose agree.
+  (4) **Spec gap — the rider cannot cancel from `DriverArrived`.** D5' §7 has rows for a rider
+  cancel from `Accepted` (Rs 50) and from `InProgress` (full fare), and Appendix B.2 draws both.
+  Neither has a row for the state in between — the driver waiting at the kerb, which is exactly
+  where a rider is most likely to change their mind. Modelled conservatively: the edge is **not**
+  in the table, so `CancellationMatrix.costOfRiderCancelling(DriverArrived)` is `null` and a real
+  server-side cancel from there surfaces as an applied-but-unknown transition rather than being
+  dropped. **Micro-change-set:** D5' §7 needs the row, with its penalty.
+  (5) **Spec conflict — `LevelConfig` is points-valued, D5' §4.2 is level-valued.** The contract's
+  `LevelConfig` offers `noShowPenaltyPoints` and `cancellationPenaltyPoints`; D5' §4.2 describes a
+  no-show and three passenger reports as `level -= 1`, not as point deductions, and gives no rule
+  the two knobs could implement. Implemented D5' (the business-logic spec wins), and
+  `DriverLevelRules.D5_DEFAULTS` leaves both `null` with the reasoning at the declaration.
+  **Micro-change-set:** either give the two knobs a rule in D5' §4.2 or drop them from
+  `dispatch.yaml#/components/schemas/LevelConfig`.
+  (6) **Gap — `offer.created` carries no `version`, and the accept requires one.** D6' §2.2's
+  `dispatch.events` envelope has `offerId`, `rideId`, `driverId`, `expiresAt`, the P-05/P-06/DT-08
+  fields and the fare — but no ride `version`, which `AcceptRideOfferRequest` needs (R-14).
+  `OfferSession.accept()` therefore reads `GET /v1/rides/{rideId}/state` once, and only when the
+  envelope did not carry one; `onVersionKnown(…)` lets a caller that already has it skip the read.
+  Not raised as a change-set — adding `version` to the envelope would be a genuine improvement but
+  the read is cheap and inside the 15 s. Flagged for C022/C023 if they revisit the envelope.
+  (7) **The client never advances a ride.** `RideProjection` moves only through `onServerState(…)`;
+  there is deliberately no `apply(trigger)`. A server-confirmed move the table does not draw is
+  **applied and flagged** (`RideUpdate.Applied.isKnownEdge == false`), never refused — ride-svc is
+  the sole writer (R-01), and a client that dropped a transition it had not been taught would show
+  a passenger a ride that had already been cancelled. `verdict(command)` is the other direction: a
+  local guess that saves a round trip, explicitly not a claim about what the server would allow.
+  `RideUpdate.Applied.trigger` is `null` both when the table draws no edge *and* when it draws more
+  than one — `Accepted → CancelledByDriver` is both a driver cancel and an expired grace, and a
+  bare `RideStateChanged` frame does not say which.
+  (8) **R-14 in one place.** Stale and duplicate snapshots are dropped by version, because SignalR,
+  FCM and the reconnect poll all describe the same ride and none of them promises ordering. A 2,000
+  frame seeded fuzz asserts the version is monotonic and that an applied frame always leaves the
+  projection saying exactly what the server said.
+  (9) **Everything server-tunable is read, not baked.** `DirectionalPredicate` takes
+  `DirectionalConfig` and `DriverLevelRules` takes `LevelConfig`; `D5_DEFAULTS` is a fallback for a
+  client that has not read the admin config, and a test proves both the θ_max and the Job Board
+  level floor move with it. Genuinely fixed numbers — the 15 s TTL, 5 OTP attempts, Rs 50 / Rs 100,
+  the four R-16 grace windows, the 30-minute Job Board lead — are named constants citing the line
+  that fixes them.
+  (10) **AL-16 is a mirror, not a ledger.** `PassengerStanding` projects the Rs 50 debt and the
+  three-consecutive counter so a passenger can be warned *before* the tap; `serverBookingDisabled`
+  wins in both directions when reputation-svc has answered, because re-enablement needs the balance
+  cleared **and** a cooldown or a CSR reinstatement (§7.2) and no device can work that out. A
+  completed ride clears the whole balance, not Rs 50 of it — §7.1 loops over every OUTSTANDING
+  penalty.
+  (11) **Directional Travel touches nothing in `domain/ride`** (ADD Appendix B.2 invariant 7: it is
+  a dispatch-svc candidate filter, and the aggregate is unchanged whether or not a driver had one).
+  The client-side predicate is **advisory** — it exists so the driver app can explain a filter and
+  so DT-02/DT-05 are testable against the spec; it can never add a candidate or relax a gate. Its
+  haversine and bearing are deliberately local rather than in `domain/geo`: that package is C017's
+  and its distance work is JNI-backed on Android, and two textbook formulae on a sphere should not
+  tie this rule to a platform. Server-side is PostGIS geography (an ellipsoid); the two agree to
+  well under a metre at the 2 km / 250 m thresholds in play.
+  (12) **`RideOffer` is `@Serializable` and models D6' §2.2's `offer.created`.** C012 modelled the
+  16 REST contracts and deliberately not the event envelopes, but an offer is the one event an app
+  receives as a *domain object* rather than as a nudge to re-read. Left here rather than pushed
+  back into `data/models` so the event-shape/contract-shape boundary C012 drew stays where it is.
+  **For C017:** parse the FCM `RIDE_OFFER` / MQTT payload straight into it.
+  **For later components —**
+  **C017:** `OfferSession.onOfferPushed(…)` is the entry point for both transports; call
+  `onExpired()` when the local countdown or an `offer.expired` frame lands, and feed every
+  `RideStateChanged` frame to `RideProjection.onServerState(…)`. `RideGrace` is the client's read of
+  the LWT windows your MQTT client's disconnect handling drives.
+  **C022 / C023 (ride-svc, dispatch-svc):** `RideTransitions.EDGES` is the client's copy of your
+  state machine and `CancellationMatrix.ROWS` of your §7 matrix. If a server transition is not in
+  the table the client applies it and flags it — so a new edge is a two-file change, not a silent
+  divergence. Note (3) and (4) are yours to resolve first.
+  **C067 / C076 / C085 / C094:** bind nothing new. `rideDispatchModule` is already in
+  `sharedModules` and its one binding, `OfferSession`, resolves out of C013's `HttpClientEngine` +
+  `ApiConfig`. Build `RideProjection` per ride (`RideProjection.of(rideDetail)`), and construct
+  `DirectionalPredicate` / `DriverLevelRules` from the config you just read rather than caching one.
+  **C019 (test kit):** `RideTransitions` and `CancellationMatrix` are pure data and make good
+  generators — a fixture that walks the table produces only reachable rides by construction.
+  **Build host —** no Docker and no compose stack; the replica stayed down. Gradle, the Android SDK
+  and the cached Kotlin/Native 2.4.10 distribution only. No new dependency and no build-script
+  change: C015 is pure Kotlin over what C011–C013 already brought in. A clean gate run takes ~41 s
+  and `compileKotlinIosArm64` another ~13 s. Two things worth knowing next time: an `object`'s
+  property is **not** covered by detekt's `ignoreCompanionObjectPropertyDeclaration`, so a
+  `Money.ofMinor(5_000)` in a plain `object` needs a named `const` behind it; and detekt's
+  `LongParameterList` fires at **six** parameters, not above six, which bites test builders long
+  before it bites production code.
