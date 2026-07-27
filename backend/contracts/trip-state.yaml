@@ -1,0 +1,368 @@
+openapi: 3.1.0
+
+# =============================================================================================
+# trip-state-svc — Mode A / Mode B tracking sessions
+# Source: specs/D3_mageride_api_contracts.md "trip-state-svc — Mode A/B tracking sessions"
+#         + ADD Appendix C trip-state-svc
+#
+# Scope fence (CLAUDE.md, R-01): **Mode A/B tracking only**. The Mode C ride lifecycle belongs to
+# ride-svc and that boundary is never crossed — a session request with `mode: C` is rejected, and
+# the C004 verify proves it at the database level.
+# =============================================================================================
+
+info:
+  title: MageRide trip-state-svc
+  version: 1.0.0
+  summary: Journey sessions for scheduled public transport (A) and shared private vehicles (B).
+  description: |
+    A session is a driver's live tracking window. Starting one takes the **active-session mutex**
+    — Redis `lock:driver:{driverId}` SETNX plus the Postgres partial unique index — so a driver
+    can never hold two live sessions at once (D-03, US-9.6).
+
+    Mode A is free: no daily fee is charged for a bus or train journey (D3' §trip-state-svc).
+
+    Sessions end three ways: the driver ends them, the **30-minute idle** or **100-metre
+    destination geofence** timer fires (US-5.3/5.4, US-5.9), or the MQTT last-will marks the
+    vehicle offline (R-15, T-04). An auto-ended session can be restarted inside a 5-minute grace
+    window (US-5.10).
+  contact:
+    name: MageRide Platform Engineering
+    url: https://mageride.lk
+  license:
+    name: UNLICENSED
+    url: https://mageride.lk/legal/terms
+
+servers:
+  - url: https://api.mageride.lk
+    description: Production gateway (DOKS Singapore)
+  - url: http://localhost:8080
+    description: Docker Compose dev gateway
+
+tags:
+  - name: sessions
+    description: Mode A/B session lifecycle.
+  - name: ratings
+    description: Post-journey ratings in both directions.
+
+paths:
+
+  /v1/sessions/start:
+    post:
+      operationId: startSession
+      summary: Start a Mode A or Mode B tracking session.
+      description: |
+        Takes the active-session mutex, starts the MQTT publish expectation and arms the idle and
+        geofence timers. `routeId` binds a Mode A bus journey to a `spatial.routes` row;
+        `autoEndAtDestination` arms the 100-metre geofence.
+      tags: [sessions]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [vehicleId, mode]
+              properties:
+                vehicleId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+                mode:
+                  type: string
+                  description: Mode C is rejected here — it belongs to ride-svc (R-01).
+                  enum: [A, B]
+                routeId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+                autoEndAtDestination:
+                  type: boolean
+                  default: false
+      responses:
+        '201':
+          description: Session started.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, vehicle-not-approved, vehicle-not-found, driver-already-live]
+
+  /v1/sessions/{sessionId}/end:
+    post:
+      operationId: endSession
+      summary: End a journey.
+      description: US-5.2. Releases the mutex, cancels the timers and closes the position stream.
+      tags: [sessions]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Session ended.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, not-found, illegal-transition]
+
+  /v1/sessions/{sessionId}/restart:
+    post:
+      operationId: restartSession
+      summary: Restart an auto-ended session inside the 5-minute grace window.
+      description: |
+        US-5.10. Only an auto-ended session qualifies, and only for five minutes — after that the
+        driver starts a fresh session. Re-takes the mutex, so it fails if the driver has already
+        started something else.
+      tags: [sessions]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Session resumed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '410': { $ref: './_shared.yaml#/components/responses/Gone' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, not-found, driver-already-live, illegal-transition]
+
+  /v1/sessions/{vehicleId}/active:
+    get:
+      operationId: getActiveSession
+      summary: Read the vehicle's current session, for client resume.
+      description: |
+        Returns the live session or `null` — the app calls it at cold start to decide whether to
+        resume tracking. Note the path parameter is a **vehicle** id, matching D3' Part 2.
+      tags: [sessions]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: vehicleId
+          in: path
+          required: true
+          schema:
+            $ref: './_shared.yaml#/components/schemas/Ulid'
+      responses:
+        '200':
+          description: Active session, or `null` when the vehicle is idle.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/Session'
+                  - type: 'null'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, not-owner, vehicle-not-found]
+
+  /v1/sessions/{sessionId}/rating:
+    post:
+      operationId: ratePassengerJourney
+      summary: Passenger rates the journey.
+      description: US-18.1 (also US-8.6). One rating per passenger per session.
+      tags: [ratings]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RatingInput'
+      responses:
+        '201':
+          description: Rating recorded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Rating'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, not-found, conflict]
+
+  /v1/sessions/{sessionId}/driver-rating:
+    post:
+      operationId: rateSessionPassenger
+      summary: Driver rates the passenger.
+      description: US-18.2. The reciprocal of `/rating`; the subject is the passenger.
+      tags: [ratings]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/RatingInput'
+                - type: object
+                  required: [passengerId]
+                  properties:
+                    passengerId:
+                      $ref: './_shared.yaml#/components/schemas/Ulid'
+      responses:
+        '201':
+          description: Rating recorded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Rating'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden, not-found, conflict]
+
+  /v1/internal/sessions/{sessionId}/auto-end:
+    post:
+      operationId: autoEndSession
+      summary: End a session from a fired idle or geofence timer.
+      description: |
+        Internal, mTLS only. US-5.9 — the durable timer fires here rather than in the app, so a
+        backgrounded or crashed driver app still leaves a correctly closed session. The reason is
+        recorded, which is what makes the 5-minute restart grace meaningful.
+      tags: [sessions]
+      security:
+        - mtls: []
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason:
+                  type: string
+                  enum: [idle_timeout, destination_geofence, mqtt_offline]
+      responses:
+        '200':
+          description: Session auto-ended.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, not-found, illegal-transition]
+
+components:
+  securitySchemes:
+    bearerAuth:
+      $ref: './_shared.yaml#/components/securitySchemes/bearerAuth'
+    mtls:
+      $ref: './_shared.yaml#/components/securitySchemes/mtls'
+
+  parameters:
+    SessionId:
+      name: sessionId
+      in: path
+      required: true
+      schema:
+        $ref: './_shared.yaml#/components/schemas/Ulid'
+
+  schemas:
+    SessionState:
+      type: string
+      enum: [ACTIVE, ENDED, AUTO_ENDED]
+
+    Session:
+      type: object
+      required: [sessionId, vehicleId, mode, state, startedAt]
+      properties:
+        sessionId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        vehicleId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        driverId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        mode:
+          type: string
+          enum: [A, B]
+        routeId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        state:
+          $ref: '#/components/schemas/SessionState'
+        autoEndAtDestination:
+          type: boolean
+        startedAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+        endedAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+        endReason:
+          type: string
+          enum: [driver_ended, idle_timeout, destination_geofence, mqtt_offline]
+        restartableUntil:
+          description: End of the 5-minute grace window; present only on an auto-ended session.
+          oneOf:
+            - $ref: './_shared.yaml#/components/schemas/Timestamp'
+            - type: 'null'
+
+    RatingInput:
+      type: object
+      required: [stars]
+      properties:
+        stars:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 5
+        text:
+          type: string
+          maxLength: 1000
+
+    Rating:
+      type: object
+      required: [ratingId, stars, createdAt]
+      properties:
+        ratingId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        stars:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 5
+        text:
+          type: string
+        createdAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'

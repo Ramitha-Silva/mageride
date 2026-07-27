@@ -1,0 +1,193 @@
+openapi: 3.1.0
+
+# =============================================================================================
+# notification-svc — push token registry, preferences, internal send
+# Source: specs/D3_mageride_api_contracts.md "notification-svc — push (/v1/notify)"
+#         + D3 Part 3 push-event list, D6' §7.4 (FCM HTTP v1 + APNs HTTP/2)
+#
+# notification-svc also mints the AL-44 web share tokens (package_recipient, proxy_rider,
+# pickup_confirm) and SMSes them. That is deliberately **not** an endpoint: D3' Δ 2026-07-05
+# says "mint-and-SMS, never returned to a client". See public-bff.yaml.
+# =============================================================================================
+
+info:
+  title: MageRide notification-svc
+  version: 1.0.0
+  summary: FCM/APNs device tokens, per-type preferences and the internal fan-out entry point.
+  description: |
+    Push events (D3 Part 3): `RIDE_OFFER` (high-priority/silent, E-01), `DRIVER_ASSIGNED`,
+    `DRIVER_ARRIVED`, `RIDE_CANCELLED`, `PAYMENT_CONFIRMED`, `SCHEDULED_REMINDER`,
+    `DIRECTIONAL_EXPIRING` (10-minute pre-expiry, DT-08/US-10.14), `LOW_BALANCE`,
+    `location_request`, `package_*`, `SOS_*`.
+
+    Copy is resolved through content-svc so every push is delivered in the recipient's language
+    (D-26). Delivery is FCM HTTP v1 batch / APNs HTTP/2 (D6' §7.4).
+  contact:
+    name: MageRide Platform Engineering
+    url: https://mageride.lk
+  license:
+    name: UNLICENSED
+    url: https://mageride.lk/legal/terms
+
+servers:
+  - url: https://api.mageride.lk
+    description: Production gateway (DOKS Singapore)
+  - url: http://localhost:8080
+    description: Docker Compose dev gateway
+
+tags:
+  - name: notify
+    description: Device token registration, preferences, internal send.
+
+paths:
+
+  /v1/notify/register-token:
+    post:
+      operationId: registerPushToken
+      summary: Register or refresh this install's FCM/APNs token.
+      description: |
+        FCM and APNs reissue a token to whichever install currently owns it, so the token is
+        globally unique: registering one that another install holds moves it (`ux_notif_tokens_token`,
+        C005 decision 8). Without that, a reinstall would leave a dead handle receiving E-01 offers.
+      tags: [notify]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, platform, deviceId]
+              properties:
+                token:
+                  type: string
+                  maxLength: 512
+                platform:
+                  type: string
+                  enum: [android, ios]
+                deviceId:
+                  type: string
+                  maxLength: 128
+      responses:
+        '204':
+          description: Token registered.
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized]
+
+  /v1/notify/preferences:
+    put:
+      operationId: updateNotificationPreferences
+      summary: Set per-type push preferences.
+      description: |
+        US-10.7. Safety-critical types (`SOS_*`, `RIDE_CANCELLED`) cannot be muted and are
+        ignored if present in the body.
+      tags: [notify]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [preferences]
+              properties:
+                preferences:
+                  type: object
+                  additionalProperties:
+                    type: boolean
+                  example:
+                    SCHEDULED_REMINDER: true
+                    LOW_BALANCE: false
+      responses:
+        '200':
+          description: Effective preferences after the update.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [preferences]
+                properties:
+                  preferences:
+                    type: object
+                    additionalProperties:
+                      type: boolean
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized]
+
+  /v1/internal/notify/send:
+    post:
+      operationId: sendNotification
+      summary: Fan a templated notification out to one or more users.
+      description: |
+        Internal, mTLS only. Resolves the template per recipient language (D-26), batches to FCM
+        HTTP v1 / APNs HTTP/2, and marks dispatch offers high-priority so they wake a backgrounded
+        driver app (E-01). Accepted asynchronously — delivery receipts are not part of this call.
+      tags: [notify]
+      security:
+        - mtls: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [templateKey, recipients]
+              properties:
+                templateKey:
+                  type: string
+                  pattern: '^[a-z0-9]+(_[a-z0-9]+)*$'
+                recipients:
+                  type: array
+                  minItems: 1
+                  maxItems: 1000
+                  items:
+                    $ref: './_shared.yaml#/components/schemas/Ulid'
+                data:
+                  type: object
+                  description: Template substitution values plus the client's data payload.
+                  additionalProperties: true
+                priority:
+                  type: string
+                  enum: [normal, high]
+                  default: normal
+                  description: '`high` is reserved for E-01 offer pushes.'
+                silent:
+                  type: boolean
+                  default: false
+      responses:
+        '202':
+          description: Accepted for delivery.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [dispatchId, accepted]
+                properties:
+                  dispatchId:
+                    $ref: './_shared.yaml#/components/schemas/Ulid'
+                  accepted:
+                    type: integer
+                    format: int32
+                    description: Recipients with at least one live device token.
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, not-found]
+
+components:
+  securitySchemes:
+    bearerAuth:
+      $ref: './_shared.yaml#/components/securitySchemes/bearerAuth'
+    mtls:
+      $ref: './_shared.yaml#/components/securitySchemes/mtls'

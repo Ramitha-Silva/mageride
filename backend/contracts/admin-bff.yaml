@@ -1,0 +1,2298 @@
+openapi: 3.1.0
+
+# =============================================================================================
+# admin-bff — Admin Portal (admin.mageride.lk), plus the pdpa-svc surface it fronts
+# Source: specs/D3_mageride_api_contracts.md "admin-bff — operator console (/v1/admin)"
+#         + "pdpa-svc (via admin-bff) — data rights (/v1/pdpa)"
+#         + Δ 2026-06-28 AL-38 (dashboard stats), AL-39 (verification split + document viewer),
+#           AL-40 (passenger directory), AL-41 (driver directory), AL-42 (vehicle directory)
+#         + ADD Appendix C admin-bff / pdpa-svc / safety-svc admin queue
+#
+# REMOVED / SUPERSEDED, do not re-add:
+#   GET   /v1/admin/onboarding/queue                              — SUPERSEDED BY AL-39
+#   POST  /v1/admin/onboarding/{id}/fields/{key}/confirm          — SUPERSEDED BY AL-39
+#   PATCH /v1/admin/onboarding/{id}/fields/{key}                  — SUPERSEDED BY AL-39
+#   POST  /v1/admin/vehicles/{id}/approve  ·  /reject             — SUPERSEDED BY AL-39
+#     AL-39 (Δ 2026-06-28 item 8) replaces the single combined onboarding queue with three
+#     subject-typed verification queues and states the write endpoints as
+#     `PUT /admin/verification/{id}/fields/{key}`, `/approve`, `/reject`. That spelling is the
+#     only one that also covers the **fleet-org** subject AL-49 needs an officer to approve, so
+#     it is canonical here and the `/admin/onboarding/*` + `/admin/vehicles/{id}/approve|reject`
+#     forms are absent. The semantics D3' Part 2 attached to the old routes are preserved on the
+#     new ones (OnePay merchant bind on approve, D-11; approval blocked while any field is
+#     `pending`, US-2.10a). Raised as a micro-change-set in the C007 handoff.
+#   GET /v1/admin/drivers/level-1  (ADD Appendix C)               — SUPERSEDED BY AL-41
+#     `GET /v1/admin/drivers?level=1` is the driver directory's own filter, and a literal
+#     `level-1` segment would be ambiguous against `GET /v1/admin/drivers/{driverId}`.
+#   GET /v1/admin/users  (ADD Appendix C)                         — SUPERSEDED BY AL-40/41/42
+#     The three typed directories replace the untyped user search.
+#   POST /v1/admin/auth/mfa/verify                                — REMOVED BY AL-37 (see iam.yaml)
+# =============================================================================================
+
+info:
+  title: MageRide admin-bff
+  version: 1.0.0
+  summary: Operator console — verification, directories, moderation, finance, config, audit, PDPA.
+  description: |
+    **Every mutation passes an audit interceptor** into `audit.events` (D-35, US-19.3), and every
+    `/v1/admin/*` read is RBAC-gated deny-by-default (AL-06). Directory detail reads emit a
+    `PII_READ` event; document reads emit `DOC_VIEW` (AL-39/AL-40). List responses carry
+    **role-masked** phone numbers — the clear number requires the audited detail read.
+
+    Sign-in is Password or Google with **no MFA/TOTP step** (AL-37) — see `iam.yaml`.
+
+    Money is integer minor units throughout.
+  contact:
+    name: MageRide Platform Engineering
+    url: https://mageride.lk
+  license:
+    name: UNLICENSED
+    url: https://mageride.lk/legal/terms
+
+servers:
+  - url: https://api.mageride.lk
+    description: Production gateway (DOKS Singapore)
+  - url: http://localhost:8080
+    description: Docker Compose dev gateway
+
+tags:
+  - name: admin-dashboard
+    description: Platform metrics and the period-filtered statistics view (AL-38).
+  - name: admin-verification
+    description: Verification queues, subject detail, field decisions and the document viewer (AL-39).
+  - name: admin-directories
+    description: Passenger, driver and vehicle directories (AL-40/41/42).
+  - name: admin-moderation
+    description: Suspensions, vehicle reports and support tickets.
+  - name: admin-config
+    description: Tariffs, cities, trains and announcements.
+  - name: admin-finance
+    description: Fee reversal — Finance only.
+  - name: admin-audit
+    description: The audit log.
+  - name: pdpa
+    description: Data-subject export and erasure (E-06).
+
+paths:
+
+  # -------------------------------------------------------------------------------------------
+  # Dashboard
+  # -------------------------------------------------------------------------------------------
+  /v1/admin/dashboard:
+    get:
+      operationId: getAdminDashboard
+      summary: Platform-wide metrics.
+      description: US-14.6. The unfiltered landing view; the period filter is `/dashboard/stats` (AL-38).
+      tags: [admin-dashboard]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Platform metrics.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [kpis, live]
+                properties:
+                  kpis:
+                    $ref: '#/components/schemas/DashboardKpis'
+                  live:
+                    $ref: '#/components/schemas/DashboardLive'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden]
+
+  /v1/admin/dashboard/stats:
+    get:
+      operationId: getAdminDashboardStats
+      summary: Period-filtered KPIs with previous-period deltas.
+      description: |
+        AL-38, US-24.7. Periods are evaluated in **Asia/Colombo** and served from the analytics
+        read-model (`analytics.daily_metrics` rollups). The `live` block — online drivers, pending
+        verifications, open tickets — stays real-time rather than coming from the rollup.
+      tags: [admin-dashboard]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/StatsPeriod'
+        - $ref: '#/components/parameters/StatsFrom'
+        - $ref: '#/components/parameters/StatsTo'
+      responses:
+        '200':
+          description: Filtered statistics.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [period, range, kpis, deltaVsPrev, live]
+                properties:
+                  period:
+                    type: string
+                    enum: [today, week, month, custom]
+                  range:
+                    type: object
+                    required: [from, to]
+                    properties:
+                      from:
+                        $ref: './_shared.yaml#/components/schemas/BusinessDate'
+                      to:
+                        $ref: './_shared.yaml#/components/schemas/BusinessDate'
+                  kpis:
+                    $ref: '#/components/schemas/DashboardKpis'
+                  deltaVsPrev:
+                    $ref: '#/components/schemas/DashboardDeltas'
+                  live:
+                    $ref: '#/components/schemas/DashboardLive'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden]
+
+  /v1/admin/dashboard/stats.csv:
+    get:
+      operationId: exportAdminDashboardStats
+      summary: CSV export of the filtered statistics.
+      description: AL-38. Exactly the figures `/dashboard/stats` returns for the same query, as a download.
+      tags: [admin-dashboard]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/StatsPeriod'
+        - $ref: '#/components/parameters/StatsFrom'
+        - $ref: '#/components/parameters/StatsTo'
+      responses:
+        '200':
+          description: CSV export.
+          content:
+            text/csv:
+              schema:
+                type: string
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden]
+
+  # -------------------------------------------------------------------------------------------
+  # Verification (AL-39)
+  # -------------------------------------------------------------------------------------------
+  /v1/admin/verification/queues/driving-license:
+    get:
+      operationId: listDrivingLicenseQueue
+      summary: Drivers awaiting licence verification.
+      description: |
+        AL-39, SCR-AP-003. `flaggedFields` are the values that came back doubtful, driver-entered
+        or mismatched (AL-29/AL-30) — the reason the driver is in this queue at all.
+      tags: [admin-verification]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/Cursor'
+        - $ref: './_shared.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Queue page.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './_shared.yaml#/components/schemas/CursorPage'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/DriverQueueRow'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden]
+
+  /v1/admin/verification/queues/vehicle-registration:
+    get:
+      operationId: listVehicleRegistrationQueue
+      summary: Vehicles awaiting registration verification.
+      description: AL-39, SCR-AP-003. Vehicles held Incomplete by at least one `PENDING_REVIEW` step.
+      tags: [admin-verification]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/Cursor'
+        - $ref: './_shared.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Queue page.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './_shared.yaml#/components/schemas/CursorPage'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/VehicleQueueRow'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden]
+
+  /v1/admin/verification/queues/fleet-org:
+    get:
+      operationId: listFleetOrgQueue
+      summary: Fleet organisations awaiting KYC verification.
+      description: |
+        AL-39. Also the queue where an org's **payout profile** is approved or rejected — AL-49
+        adds the payout documents to the org's `documents[]`.
+      tags: [admin-verification]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/Cursor'
+        - $ref: './_shared.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Queue page.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './_shared.yaml#/components/schemas/CursorPage'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/OrgQueueRow'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden]
+
+  /v1/admin/verification/org/{orgId}:
+    get:
+      operationId: getOrgVerification
+      summary: Fleet-org verification detail.
+      description: |
+        AL-39. KYC fields plus every attached document — including the AL-49 payout documents
+        (`bank_statement`, `passbook_first_page`, `lankaqr_code`). Approving here is what sets
+        `payout_profiles.status = 'verified'`, which in turn unlocks Paid classification (BR-31.1).
+      tags: [admin-verification]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: orgId
+          in: path
+          required: true
+          schema:
+            $ref: './_shared.yaml#/components/schemas/Ulid'
+      responses:
+        '200':
+          description: Org verification detail.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [kyc, documents]
+                properties:
+                  kyc:
+                    type: object
+                    additionalProperties: true
+                  payoutProfileStatus:
+                    type: string
+                    enum: [pending_verification, verified, rejected]
+                  documents:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DocumentRef'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, not-found]
+
+  /v1/admin/verification/{subjectId}:
+    get:
+      operationId: getVerificationSubject
+      summary: Verification detail for a driver, vehicle or org.
+      description: |
+        AL-39, SCR-AP-003a/003c. One subject-agnostic detail read: the flagged fields with their
+        `source`, `confidence` and `verifyStatus`, plus the attached documents with **short-lived
+        signed** thumbnail and full URLs (US-24.8).
+      tags: [admin-verification]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SubjectId'
+      responses:
+        '200':
+          description: Verification detail.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerificationDetail'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, not-found]
+
+  /v1/admin/verification/{subjectId}/fields/{fieldKey}:
+    put:
+      operationId: decideVerificationField
+      summary: Confirm a flagged field, optionally correcting its value.
+      description: |
+        AL-39, US-2.4a/2.10a. **Omit `value` to confirm the extracted value as is; supply `value`
+        to edit and confirm.** Either way the field becomes `verifyStatus='confirmed'` and the
+        decision is audited (D-35).
+
+        When no field of a step remains `pending`, the step becomes `VERIFIED`; when every step is
+        verified the subject may be approved (US-2.10a).
+
+        This single PUT replaces the two D3' Part 2 routes it supersedes — `POST
+        /admin/onboarding/{id}/fields/{key}/confirm` (confirm as is) and `PATCH
+        /admin/onboarding/{id}/fields/{key}` (edit and confirm).
+      tags: [admin-verification]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SubjectId'
+        - name: fieldKey
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 60
+          example: nicNo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                value:
+                  type: string
+                  maxLength: 500
+                  description: Omit to confirm the extracted value unchanged.
+      responses:
+        '200':
+          description: Field decided; the step and subject status are recomputed.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [field, stepStatus]
+                properties:
+                  field:
+                    $ref: './_shared.yaml#/components/schemas/ExtractedField'
+                  stepStatus:
+                    type: string
+                    enum: [VERIFIED, PENDING_REVIEW, PENDING_INPUT]
+                  approvable:
+                    type: boolean
+                    description: True once no field of the subject is still `pending`.
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden, not-found]
+
+  /v1/admin/verification/{subjectId}/approve:
+    post:
+      operationId: approveVerificationSubject
+      summary: Approve a driver, vehicle or fleet org.
+      description: |
+        US-2.9. **Approval is blocked while any field is `verifyStatus='pending'`** (US-2.10a) —
+        that is `409 conflict`, not a silent partial approval.
+
+        For a vehicle this sets `status='APPROVED'` and triggers the **OnePay merchant bind**
+        (D-11, `POST /v1/internal/vehicles/{id}/merchant`). Per AL-50 a fleet vehicle is not
+        approvable until `registration` + `insurance` + `revenue_license` — **plus `permit` for
+        Mode A** — are all verified. For an org this also sets the payout profile to `verified`
+        (AL-49). Audited (D-35).
+      tags: [admin-verification]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SubjectId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Approved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerificationDecision'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, not-found, conflict]
+
+  /v1/admin/verification/{subjectId}/reject:
+    post:
+      operationId: rejectVerificationSubject
+      summary: Reject a driver, vehicle or fleet org, with a reason.
+      description: |
+        US-2.15. The reason is mandatory and is surfaced verbatim to the applicant at
+        `GET /v1/vehicles/{vehicleId}/status`. Rejecting a vehicle also frees its registration
+        number from the D-37 active-set uniqueness index. Audited (D-35).
+      tags: [admin-verification]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SubjectId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason:
+                  type: string
+                  maxLength: 1000
+      responses:
+        '200':
+          description: Rejected.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerificationDecision'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden, not-found, conflict]
+
+  /v1/admin/documents/{docId}:
+    get:
+      operationId: viewDocument
+      summary: Open a document in the full-size viewer.
+      description: |
+        AL-39, SCR-AP-003b, US-24.8. Redirects to a **short-lived signed** object-storage URL and
+        **emits a `DOC_VIEW` audit event** — looking at someone's licence is itself an auditable
+        act.
+      tags: [admin-verification]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: docId
+          in: path
+          required: true
+          schema:
+            $ref: './_shared.yaml#/components/schemas/Ulid'
+      responses:
+        '302':
+          description: Redirect to the signed URL.
+          headers:
+            Location:
+              required: true
+              schema:
+                type: string
+                format: uri
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, not-found]
+
+  # -------------------------------------------------------------------------------------------
+  # Directories (AL-40/41/42)
+  # -------------------------------------------------------------------------------------------
+  /v1/admin/passengers:
+    get:
+      operationId: searchPassengers
+      summary: Search the passenger directory.
+      description: |
+        AL-40, US-24.9. Multi-criteria. Phone numbers are **masked** in the list; the clear value
+        requires the detail read, which emits `PII_READ`.
+      tags: [admin-directories]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/QName'
+        - $ref: '#/components/parameters/QMobile'
+        - $ref: '#/components/parameters/QId'
+        - name: email
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 200
+        - $ref: './_shared.yaml#/components/parameters/Cursor'
+        - $ref: './_shared.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Passenger page.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './_shared.yaml#/components/schemas/CursorPage'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/PassengerRow'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden]
+
+  /v1/admin/passengers/{passengerId}:
+    get:
+      operationId: getPassengerDetail
+      summary: Passenger profile with tabbed activity.
+      description: |
+        AL-40, US-24.9. **Emits a `PII_READ` audit event.** Read-only: trips, payments, packages
+        and disputes are joined read-models, and refunds still route to Finance.
+      tags: [admin-directories]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: passengerId
+          in: path
+          required: true
+          schema:
+            $ref: './_shared.yaml#/components/schemas/Ulid'
+      responses:
+        '200':
+          description: Passenger detail.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PassengerDetail'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, not-found]
+
+  /v1/admin/drivers:
+    get:
+      operationId: searchDrivers
+      summary: Search the driver directory.
+      description: |
+        AL-41, US-24.10. Multi-criteria, **defaulting to verified drivers**. `level=1` is how the
+        Level-1 list ADD Appendix C asked for is obtained.
+      tags: [admin-directories]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/QName'
+        - $ref: '#/components/parameters/QMobile'
+        - $ref: '#/components/parameters/QId'
+        - name: nic
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 20
+        - name: regNo
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 32
+        - name: level
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+            maximum: 3
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [verified, pending, suspended, all]
+            default: verified
+        - $ref: './_shared.yaml#/components/parameters/Cursor'
+        - $ref: './_shared.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Driver page.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './_shared.yaml#/components/schemas/CursorPage'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/DriverRow'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden]
+
+  /v1/admin/drivers/{driverId}:
+    get:
+      operationId: getDriverDetail
+      summary: Driver profile with wallet, level and tabbed activity.
+      description: |
+        AL-41, US-24.10. **Emits a `PII_READ` audit event.** Reversals stay Finance-only through
+        `POST /v1/admin/drivers/wallet/{driverId}/reverse-fee`; nothing here moves money.
+      tags: [admin-directories]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/DriverId'
+      responses:
+        '200':
+          description: Driver detail.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DriverDetail'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, not-found]
+
+  /v1/admin/vehicles:
+    get:
+      operationId: searchVehicles
+      summary: Search the vehicle directory.
+      description: AL-42, US-24.11. Mode A/B rows also show the owning fleet organisation.
+      tags: [admin-directories]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: regNo
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 32
+        - $ref: '#/components/parameters/QId'
+        - name: type
+          in: query
+          required: false
+          schema:
+            $ref: './_shared.yaml#/components/schemas/VehicleType'
+        - name: mode
+          in: query
+          required: false
+          schema:
+            $ref: './_shared.yaml#/components/schemas/OperatingMode'
+        - name: ownerMobile
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 20
+        - name: fleetOrg
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 200
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [PENDING, APPROVED, REJECTED, DEACTIVATED]
+        - $ref: './_shared.yaml#/components/parameters/Cursor'
+        - $ref: './_shared.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Vehicle page.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './_shared.yaml#/components/schemas/CursorPage'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/VehicleRow'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden]
+
+  /v1/admin/vehicles/{vehicleId}:
+    get:
+      operationId: getVehicleDetail
+      summary: Vehicle detail with documents and tabbed activity.
+      description: |
+        AL-42, US-24.11. Registration, insurance and revenue-licence expiries, tracker binding,
+        document thumbnails (which open the AL-39 viewer), and the trips / earnings / daily-fee /
+        reports tabs.
+      tags: [admin-directories]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/VehicleId'
+      responses:
+        '200':
+          description: Vehicle detail.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminVehicleDetail'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, vehicle-not-found]
+
+  # -------------------------------------------------------------------------------------------
+  # Moderation
+  # -------------------------------------------------------------------------------------------
+  /v1/admin/vehicles/{vehicleId}/suspend:
+    post:
+      operationId: suspendVehicle
+      summary: Suspend a vehicle.
+      description: US-14.3. Removes it from dispatch and the public map immediately. Audited (D-35).
+      tags: [admin-moderation]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/VehicleId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonBody'
+      responses:
+        '200':
+          description: Suspended.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModerationResult'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden, vehicle-not-found]
+
+  /v1/admin/drivers/{driverId}/suspend:
+    post:
+      operationId: suspendDriver
+      summary: Suspend a driver.
+      description: |
+        US-14.3. Ends any live session and blocks new dispatch. An in-flight ride is left to
+        complete — cancelling it is a separate, deliberate act. Audited (D-35).
+      tags: [admin-moderation]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/DriverId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonBody'
+      responses:
+        '200':
+          description: Suspended.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModerationResult'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden, not-found]
+
+  /v1/admin/reports/queue:
+    get:
+      operationId: listReportQueue
+      summary: Pending vehicle reports.
+      description: ADD Appendix C. The moderation inbox behind `safety-svc`'s `POST /v1/reports/vehicle`.
+      tags: [admin-moderation]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/Cursor'
+        - $ref: './_shared.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Report queue.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './_shared.yaml#/components/schemas/CursorPage'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/ReportRow'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden]
+
+  /v1/admin/reports/{reportId}/resolve:
+    post:
+      operationId: resolveReport
+      summary: Confirm or dismiss a vehicle report.
+      description: |
+        US-12.6. **Three confirmed reports auto-delist the vehicle** — the third confirmation is
+        what removes it, not a separate admin action. Audited (D-35).
+      tags: [admin-moderation]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: reportId
+          in: path
+          required: true
+          schema:
+            $ref: './_shared.yaml#/components/schemas/Ulid'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              properties:
+                decision:
+                  type: string
+                  enum: [CONFIRMED, DISMISSED]
+                note:
+                  type: string
+                  maxLength: 1000
+      responses:
+        '200':
+          description: Resolved.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [reportId, status]
+                properties:
+                  reportId:
+                    $ref: './_shared.yaml#/components/schemas/Ulid'
+                  status:
+                    type: string
+                    enum: [PENDING, CONFIRMED, DISMISSED]
+                  confirmedCount:
+                    type: integer
+                    format: int32
+                    minimum: 0
+                  vehicleDelisted:
+                    type: boolean
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden, not-found, conflict]
+
+  /v1/admin/support/tickets:
+    get:
+      operationId: listSupportTicketQueue
+      summary: The support ticket queue.
+      description: US-16.3. Agent-facing; users read their own tickets through support-svc.
+      tags: [admin-moderation]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [OPEN, IN_PROGRESS, RESOLVED]
+        - name: category
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 60
+        - $ref: './_shared.yaml#/components/parameters/Cursor'
+        - $ref: './_shared.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Ticket queue.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './_shared.yaml#/components/schemas/CursorPage'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/TicketRow'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden]
+
+  /v1/admin/support/tickets/{ticketId}/resolve:
+    post:
+      operationId: resolveSupportTicket
+      summary: Resolve a support ticket.
+      description: |
+        US-16.3. The response text is shown verbatim to the user at
+        `GET /v1/support/tickets/{userId}/{ticketId}`. Audited (D-35).
+      tags: [admin-moderation]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: ticketId
+          in: path
+          required: true
+          schema:
+            $ref: './_shared.yaml#/components/schemas/Ulid'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [response]
+              properties:
+                response:
+                  type: string
+                  maxLength: 4000
+      responses:
+        '200':
+          description: Resolved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketRow'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden, not-found]
+
+  # -------------------------------------------------------------------------------------------
+  # Configuration
+  # -------------------------------------------------------------------------------------------
+  /v1/admin/fares/tariffs:
+    put:
+      operationId: updateFareTariffs
+      summary: Configure Mode C tariffs and the peak/night windows.
+      description: |
+        US-14.4. **Tariffs are versioned by `effectiveFrom`, never mutated** — a completed ride
+        must stay reconcilable against the rate that priced it (C005). Peak and night windows are
+        local Asia/Colombo wall-clock and **may wrap midnight** (night 22:00–05:00), so
+        `endLocal < startLocal` is legal and fare-svc handles it.
+
+        There is no Mode B fare here — that is per-vehicle and per-subscriber (Epic 23).
+        Audited (D-35).
+      tags: [admin-config]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tariffs]
+              properties:
+                effectiveFrom:
+                  $ref: './_shared.yaml#/components/schemas/Timestamp'
+                tariffs:
+                  type: array
+                  minItems: 1
+                  items:
+                    $ref: '#/components/schemas/Tariff'
+                peakWindows:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/PeakWindow'
+      responses:
+        '200':
+          description: New tariff version published.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [effectiveFrom, tariffs]
+                properties:
+                  effectiveFrom:
+                    $ref: './_shared.yaml#/components/schemas/Timestamp'
+                  tariffs:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Tariff'
+                  peakWindows:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PeakWindow'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden]
+
+  /v1/admin/config/cities:
+    post:
+      operationId: createOperatingCity
+      summary: Add a launch city.
+      description: |
+        Writes `config.operating_cities`, which `GET /v1/config/cities` serves publicly — **launching
+        a city needs no app release**. All three language names are required (D-26). Audited (D-35).
+      tags: [admin-config]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OperatingCityInput'
+      responses:
+        '201':
+          description: City created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperatingCity'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden, conflict]
+
+  /v1/admin/config/cities/{cityCode}:
+    patch:
+      operationId: updateOperatingCity
+      summary: Edit or deactivate a launch city.
+      description: |
+        Deactivating a city hides it from the first-run picker; users who already chose it keep
+        their `operatingCityCode`. Audited (D-35).
+      tags: [admin-config]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: cityCode
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[a-z][a-z0-9_]{1,40}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nameEn:
+                  type: string
+                nameSi:
+                  type: string
+                nameTa:
+                  type: string
+                centroid:
+                  $ref: './_shared.yaml#/components/schemas/GeoPoint'
+                sortOrder:
+                  type: integer
+                  format: int32
+                active:
+                  type: boolean
+      responses:
+        '200':
+          description: City updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperatingCity'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden, not-found]
+
+  /v1/admin/trains:
+    post:
+      operationId: createTrain
+      summary: Register a train.
+      description: |
+        US-2.17. **Admin-only Mode A** — trains are never onboarded by a driver or a fleet, which
+        is why `train` is excluded from every app-facing vehicle-type enum. Audited (D-35).
+      tags: [admin-config]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TrainInput'
+      responses:
+        '201':
+          description: Train created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Train'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden, registration-exists]
+
+  /v1/admin/trains/{trainId}:
+    put:
+      operationId: updateTrain
+      summary: Edit a train.
+      description: US-2.18. Audited (D-35).
+      tags: [admin-config]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TrainId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TrainInput'
+      responses:
+        '200':
+          description: Train updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Train'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden, not-found]
+    delete:
+      operationId: deleteTrain
+      summary: Retire a train.
+      description: US-2.18. Soft-retires it; historical trips keep their reference. Audited (D-35).
+      tags: [admin-config]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TrainId'
+      responses:
+        '204':
+          description: Retired.
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, not-found]
+
+  /v1/admin/announcements:
+    post:
+      operationId: publishAnnouncement
+      summary: Publish a broadcast announcement.
+      description: |
+        US-14.8. In-app banner plus push. **All three languages are mandatory** — the
+        `ck_broadcasts_trilingual` constraint makes the platform's trilingual rule a schema
+        invariant (D-26, C005 decision 7). Audited (D-35).
+      tags: [admin-config]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [messageByLang, startsAt]
+              properties:
+                messageByLang:
+                  type: object
+                  required: [si, ta, en]
+                  properties:
+                    si:
+                      type: string
+                    ta:
+                      type: string
+                    en:
+                      type: string
+                startsAt:
+                  $ref: './_shared.yaml#/components/schemas/Timestamp'
+                endsAt:
+                  $ref: './_shared.yaml#/components/schemas/Timestamp'
+                push:
+                  type: boolean
+                  default: false
+      responses:
+        '201':
+          description: Published.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [broadcastId]
+                properties:
+                  broadcastId:
+                    $ref: './_shared.yaml#/components/schemas/Ulid'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden]
+
+  # -------------------------------------------------------------------------------------------
+  # Finance & audit
+  # -------------------------------------------------------------------------------------------
+  /v1/admin/drivers/wallet/{driverId}/reverse-fee:
+    post:
+      operationId: reverseDriverFee
+      summary: Reverse a daily-fee deduction.
+      description: |
+        US-14.11, **Finance only** (AL-41 keeps reversals off every other role). Posts a balanced
+        compensating journal entry rather than editing the original — the ledger is append-only.
+        Audited (D-35).
+      tags: [admin-finance]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/DriverId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [feeDate, vehicleId, reason]
+              properties:
+                feeDate:
+                  $ref: './_shared.yaml#/components/schemas/BusinessDate'
+                vehicleId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+                amountMinor:
+                  type: integer
+                  format: int64
+                  minimum: 0
+                  description: Defaults to the full charged amount.
+                reason:
+                  type: string
+                  maxLength: 1000
+      responses:
+        '200':
+          description: Reversal posted.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [entryId, amountMinor, currency]
+                properties:
+                  entryId:
+                    $ref: './_shared.yaml#/components/schemas/Ulid'
+                  amountMinor:
+                    type: integer
+                    format: int64
+                    minimum: 0
+                  currency:
+                    $ref: './_shared.yaml#/components/schemas/Currency'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [invalid-amount, unauthorized, forbidden, not-found, conflict]
+
+  /v1/admin/audit-log:
+    get:
+      operationId: listAuditLog
+      summary: Read the audit log.
+      description: |
+        US-19.3, D-35. Every admin mutation plus the `PII_READ` and `DOC_VIEW` events the
+        directories and document viewer emit. Append-only — there is no write route here.
+      tags: [admin-audit]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: actorId
+          in: query
+          required: false
+          schema:
+            $ref: './_shared.yaml#/components/schemas/Ulid'
+        - name: action
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 60
+        - name: subjectId
+          in: query
+          required: false
+          schema:
+            $ref: './_shared.yaml#/components/schemas/Ulid'
+        - name: from
+          in: query
+          required: false
+          schema:
+            $ref: './_shared.yaml#/components/schemas/Timestamp'
+        - name: to
+          in: query
+          required: false
+          schema:
+            $ref: './_shared.yaml#/components/schemas/Timestamp'
+        - $ref: './_shared.yaml#/components/parameters/Cursor'
+        - $ref: './_shared.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Audit events.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './_shared.yaml#/components/schemas/CursorPage'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/AuditEvent'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden]
+
+  # -------------------------------------------------------------------------------------------
+  # PDPA (E-06) — pdpa-svc, surfaced through admin-bff
+  # -------------------------------------------------------------------------------------------
+  /v1/pdpa/export:
+    post:
+      operationId: requestDataExport
+      summary: Request a copy of your data.
+      description: |
+        E-06, US-1.8. Accepted asynchronously; `dueBy` is the 30-day statutory deadline. The
+        fulfilled export is a signed download on `GET /v1/pdpa/{requestId}`.
+      tags: [pdpa]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      responses:
+        '202':
+          description: Request accepted.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [requestId, dueBy]
+                properties:
+                  requestId:
+                    $ref: './_shared.yaml#/components/schemas/Ulid'
+                  dueBy:
+                    $ref: './_shared.yaml#/components/schemas/Timestamp'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, conflict]
+
+  /v1/pdpa/erasure:
+    post:
+      operationId: requestDataErasure
+      summary: Request erasure of your data.
+      description: |
+        E-06. `holdReasons` names any statutory hold that prevents full erasure — an unsettled
+        payment, an open dispute, a retention obligation. A request under hold is fulfilled as
+        `FulfilledHold` and **must carry a reason** (`ck_pdpa_hold_reason`, C005).
+      tags: [pdpa]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      responses:
+        '202':
+          description: Request accepted.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [requestId, dueBy, holdReasons]
+                properties:
+                  requestId:
+                    $ref: './_shared.yaml#/components/schemas/Ulid'
+                  dueBy:
+                    $ref: './_shared.yaml#/components/schemas/Timestamp'
+                  holdReasons:
+                    type: array
+                    items:
+                      type: string
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, conflict]
+
+  /v1/pdpa/{requestId}:
+    get:
+      operationId: getPdpaRequest
+      summary: Status of a PDPA request.
+      description: Includes the signed download URL once the request is fulfilled.
+      tags: [pdpa]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PdpaRequestId'
+      responses:
+        '200':
+          description: Request status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PdpaRequest'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, not-found]
+
+  /v1/admin/pdpa/{requestId}/fulfill:
+    post:
+      operationId: fulfillPdpaRequest
+      summary: Mark a PDPA request fulfilled.
+      description: |
+        Admin fulfilment. `FulfilledHold` records that some data was retained under a statutory
+        hold and **requires `holdReason`**. Audited (D-35).
+      tags: [pdpa]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PdpaRequestId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [outcome]
+              properties:
+                outcome:
+                  type: string
+                  enum: [Fulfilled, FulfilledHold]
+                holdReason:
+                  type: string
+                  maxLength: 1000
+                  description: Required when `outcome` is `FulfilledHold`.
+                artifactUrl:
+                  type: string
+                  format: uri
+      responses:
+        '200':
+          description: Fulfilled.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PdpaRequest'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden, not-found, conflict]
+
+  /v1/admin/pdpa/{requestId}/reject:
+    post:
+      operationId: rejectPdpaRequest
+      summary: Reject a PDPA request with a reason.
+      description: Used where a statutory hold blocks the request outright. Audited (D-35).
+      tags: [pdpa]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PdpaRequestId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonBody'
+      responses:
+        '200':
+          description: Rejected.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PdpaRequest'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden, not-found, conflict]
+
+components:
+  securitySchemes:
+    bearerAuth:
+      $ref: './_shared.yaml#/components/securitySchemes/bearerAuth'
+
+  parameters:
+    SubjectId:
+      name: subjectId
+      in: path
+      required: true
+      description: A driver, vehicle or fleet-org id — the verification family is subject-agnostic (AL-39).
+      schema:
+        $ref: './_shared.yaml#/components/schemas/Ulid'
+    DriverId:
+      name: driverId
+      in: path
+      required: true
+      schema:
+        $ref: './_shared.yaml#/components/schemas/Ulid'
+    VehicleId:
+      name: vehicleId
+      in: path
+      required: true
+      schema:
+        $ref: './_shared.yaml#/components/schemas/Ulid'
+    TrainId:
+      name: trainId
+      in: path
+      required: true
+      schema:
+        $ref: './_shared.yaml#/components/schemas/Ulid'
+    PdpaRequestId:
+      name: requestId
+      in: path
+      required: true
+      schema:
+        $ref: './_shared.yaml#/components/schemas/Ulid'
+    StatsPeriod:
+      name: period
+      in: query
+      required: false
+      schema:
+        type: string
+        enum: [today, week, month, custom]
+        default: today
+    StatsFrom:
+      name: from
+      in: query
+      required: false
+      description: Required when `period=custom`.
+      schema:
+        $ref: './_shared.yaml#/components/schemas/BusinessDate'
+    StatsTo:
+      name: to
+      in: query
+      required: false
+      description: Required when `period=custom`.
+      schema:
+        $ref: './_shared.yaml#/components/schemas/BusinessDate'
+    QName:
+      name: name
+      in: query
+      required: false
+      schema:
+        type: string
+        maxLength: 200
+    QMobile:
+      name: mobile
+      in: query
+      required: false
+      schema:
+        type: string
+        maxLength: 20
+    QId:
+      name: id
+      in: query
+      required: false
+      schema:
+        $ref: './_shared.yaml#/components/schemas/Ulid'
+
+  schemas:
+    ReasonBody:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          maxLength: 1000
+
+    DashboardKpis:
+      type: object
+      required: [completedTrips, grossFareMinor, newRiders, newDrivers, dailyFeeRevenueMinor]
+      properties:
+        completedTrips:
+          type: integer
+          format: int64
+          minimum: 0
+        grossFareMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        newRiders:
+          type: integer
+          format: int64
+          minimum: 0
+        newDrivers:
+          type: integer
+          format: int64
+          minimum: 0
+        dailyFeeRevenueMinor:
+          type: integer
+          format: int64
+          minimum: 0
+
+    DashboardDeltas:
+      type: object
+      description: Percentage change against the immediately preceding period of the same length.
+      properties:
+        completedTripsPct:
+          type: number
+          format: double
+        grossFarePct:
+          type: number
+          format: double
+        newRidersPct:
+          type: number
+          format: double
+        newDriversPct:
+          type: number
+          format: double
+        dailyFeeRevenuePct:
+          type: number
+          format: double
+
+    DashboardLive:
+      type: object
+      description: Real-time cards; not served from the analytics rollup.
+      required: [onlineDrivers, pendingVerifications, openTickets]
+      properties:
+        onlineDrivers:
+          type: integer
+          format: int32
+          minimum: 0
+        pendingVerifications:
+          type: integer
+          format: int32
+          minimum: 0
+        openTickets:
+          type: integer
+          format: int32
+          minimum: 0
+
+    DriverQueueRow:
+      type: object
+      required: [driverId, name, submittedAt, flaggedFields, status]
+      properties:
+        driverId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        name:
+          type: string
+        submittedAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+        flaggedFields:
+          type: array
+          items:
+            type: string
+        status:
+          type: string
+          enum: [PENDING, APPROVED, REJECTED]
+
+    VehicleQueueRow:
+      type: object
+      required: [vehicleId, regNo, flaggedFields, status]
+      properties:
+        vehicleId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        regNo:
+          type: string
+        ownerDriverId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        submittedAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+        flaggedFields:
+          type: array
+          items:
+            type: string
+        status:
+          type: string
+          enum: [PENDING, APPROVED, REJECTED]
+
+    OrgQueueRow:
+      type: object
+      required: [orgId, name, kycStatus, vehicleCount, status]
+      properties:
+        orgId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        name:
+          type: string
+        kycStatus:
+          type: string
+        vehicleCount:
+          type: integer
+          format: int32
+          minimum: 0
+        status:
+          type: string
+          enum: [PENDING, APPROVED, REJECTED, SUSPENDED]
+
+    DocumentRef:
+      type: object
+      required: [docId, kind]
+      properties:
+        docId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        kind:
+          type: string
+        thumbUrl:
+          type: string
+          format: uri
+          description: Short-lived signed object-storage URL.
+        fullUrl:
+          type: string
+          format: uri
+        capturedVia:
+          type: string
+          description: '`drag_crop` for the AL-43 in-app scanner, `upload` otherwise.'
+          enum: [drag_crop, upload]
+
+    VerificationDetail:
+      type: object
+      required: [subject, fields, documents]
+      properties:
+        subject:
+          type: object
+          required: [id, type]
+          properties:
+            id:
+              $ref: './_shared.yaml#/components/schemas/Ulid'
+            type:
+              type: string
+              enum: [driver, vehicle, org]
+            displayName:
+              type: string
+        fields:
+          type: array
+          items:
+            $ref: './_shared.yaml#/components/schemas/ExtractedField'
+        documents:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentRef'
+        approvable:
+          type: boolean
+          description: False while any field is still `pending` (US-2.10a).
+
+    VerificationDecision:
+      type: object
+      required: [subjectId, status]
+      properties:
+        subjectId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        status:
+          type: string
+          enum: [APPROVED, REJECTED]
+        reason:
+          type: string
+        merchantBound:
+          type: boolean
+          description: True when approving a vehicle triggered the D-11 OnePay merchant bind.
+
+    PassengerRow:
+      type: object
+      required: [passengerId, name, mobileMasked, trips, joinedAt, status]
+      properties:
+        passengerId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        name:
+          type: string
+        mobileMasked:
+          $ref: './_shared.yaml#/components/schemas/PhoneMasked'
+        trips:
+          type: integer
+          format: int32
+          minimum: 0
+        joinedAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+        status:
+          type: string
+          enum: [active, blocked, deleted]
+
+    PassengerDetail:
+      type: object
+      required: [profile]
+      properties:
+        profile:
+          type: object
+          required: [mobile, joinedAt]
+          properties:
+            mobile:
+              $ref: './_shared.yaml#/components/schemas/PhoneE164'
+            email:
+              type: string
+              format: email
+            joinedAt:
+              $ref: './_shared.yaml#/components/schemas/Timestamp'
+            rating:
+              type: number
+              format: double
+              minimum: 0
+              maximum: 5
+            defaultPay:
+              type: string
+            sosContacts:
+              type: array
+              items:
+                type: object
+                properties:
+                  name:
+                    type: string
+                  phone:
+                    $ref: './_shared.yaml#/components/schemas/PhoneE164'
+        trips:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        payments:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        packages:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        disputes:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+
+    DriverRow:
+      type: object
+      required: [driverId, name, mobileMasked, vehicles, level, trips, status]
+      properties:
+        driverId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        name:
+          type: string
+        mobileMasked:
+          $ref: './_shared.yaml#/components/schemas/PhoneMasked'
+        vehicles:
+          type: array
+          items:
+            type: string
+            description: Registration numbers.
+        level:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 3
+        trips:
+          type: integer
+          format: int32
+          minimum: 0
+        status:
+          type: string
+          enum: [verified, pending, suspended]
+
+    DriverDetail:
+      type: object
+      required: [profile]
+      properties:
+        profile:
+          type: object
+          required: [mobile, joinedAt, walletMinor, level, points]
+          properties:
+            mobile:
+              $ref: './_shared.yaml#/components/schemas/PhoneE164'
+            nic:
+              type: string
+            joinedAt:
+              $ref: './_shared.yaml#/components/schemas/Timestamp'
+            rating:
+              type: number
+              format: double
+              minimum: 0
+              maximum: 5
+            walletMinor:
+              type: integer
+              format: int64
+              minimum: 0
+            currency:
+              $ref: './_shared.yaml#/components/schemas/Currency'
+            level:
+              type: integer
+              format: int32
+              minimum: 1
+              maximum: 3
+            points:
+              type: integer
+              format: int32
+        vehicles:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        trips:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        walletLedger:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        dailyFee:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        creditTransfers:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        reports:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+
+    VehicleRow:
+      type: object
+      required: [vehicleId, type, mode, regNo, trips, status]
+      properties:
+        vehicleId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        type:
+          $ref: './_shared.yaml#/components/schemas/VehicleType'
+        mode:
+          $ref: './_shared.yaml#/components/schemas/OperatingMode'
+        owner:
+          type: string
+        fleetOrg:
+          type: string
+          description: Present for Mode A/B vehicles owned by a fleet.
+        regNo:
+          type: string
+        trips:
+          type: integer
+          format: int32
+          minimum: 0
+        status:
+          type: string
+          enum: [PENDING, APPROVED, REJECTED, DEACTIVATED]
+
+    AdminVehicleDetail:
+      type: object
+      required: [info]
+      properties:
+        info:
+          type: object
+          required: [type, regNo, mode]
+          properties:
+            type:
+              $ref: './_shared.yaml#/components/schemas/VehicleType'
+            regNo:
+              type: string
+            mode:
+              $ref: './_shared.yaml#/components/schemas/OperatingMode'
+            owner:
+              type: string
+            fleetOrg:
+              type: string
+            insuranceExpiry:
+              type: string
+              format: date
+            revenueLicenceExpiry:
+              type: string
+              format: date
+            tracker:
+              type: object
+              properties:
+                imei:
+                  type: string
+                online:
+                  type: boolean
+                lastSeen:
+                  $ref: './_shared.yaml#/components/schemas/Timestamp'
+        documents:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentRef'
+        trips:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        earnings:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        dailyFee:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        reports:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+
+    ModerationResult:
+      type: object
+      required: [subjectId, status]
+      properties:
+        subjectId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        status:
+          type: string
+          enum: [SUSPENDED, ACTIVE]
+        reason:
+          type: string
+
+    ReportRow:
+      type: object
+      required: [reportId, vehicleId, reason, status, createdAt]
+      properties:
+        reportId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        vehicleId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        reporterId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        reason:
+          type: string
+        status:
+          type: string
+          enum: [PENDING, CONFIRMED, DISMISSED]
+        confirmedCount:
+          type: integer
+          format: int32
+          minimum: 0
+        createdAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    TicketRow:
+      type: object
+      required: [ticketId, userId, category, status, createdAt]
+      properties:
+        ticketId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        userId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        category:
+          type: string
+        status:
+          type: string
+          enum: [OPEN, IN_PROGRESS, RESOLVED]
+        description:
+          type: string
+        response:
+          type: string
+        createdAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+        resolvedAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    Tariff:
+      type: object
+      required: [vehicleType, firstKmMinor, perKmMinor, currency]
+      properties:
+        vehicleType:
+          $ref: './_shared.yaml#/components/schemas/VehicleType'
+        firstKmMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        perKmMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        peakSurchargePct:
+          type: integer
+          format: int32
+          minimum: 0
+          default: 20
+        nightSurchargePct:
+          type: integer
+          format: int32
+          minimum: 0
+          default: 15
+        currency:
+          $ref: './_shared.yaml#/components/schemas/Currency'
+
+    PeakWindow:
+      type: object
+      description: |
+        Local Asia/Colombo wall-clock. `endLocal` may be **earlier** than `startLocal` — the night
+        window wraps midnight, and no constraint enforces ordering for exactly that reason (C005).
+      required: [kind, startLocal, endLocal, multiplierPct]
+      properties:
+        kind:
+          type: string
+          enum: [peak, night]
+        startLocal:
+          type: string
+          pattern: '^\d{2}:\d{2}$'
+          example: '22:00'
+        endLocal:
+          type: string
+          pattern: '^\d{2}:\d{2}$'
+          example: '05:00'
+        multiplierPct:
+          type: integer
+          format: int32
+          minimum: 0
+
+    OperatingCityInput:
+      type: object
+      required: [code, nameEn, nameSi, nameTa, centroid]
+      properties:
+        code:
+          type: string
+          pattern: '^[a-z][a-z0-9_]{1,40}$'
+        nameEn:
+          type: string
+        nameSi:
+          type: string
+        nameTa:
+          type: string
+        centroid:
+          $ref: './_shared.yaml#/components/schemas/GeoPoint'
+        sortOrder:
+          type: integer
+          format: int32
+          default: 0
+
+    OperatingCity:
+      allOf:
+        - $ref: '#/components/schemas/OperatingCityInput'
+        - type: object
+          required: [active]
+          properties:
+            active:
+              type: boolean
+
+    TrainInput:
+      type: object
+      required: [name, trainNumber]
+      properties:
+        name:
+          type: string
+          maxLength: 200
+        trainNumber:
+          type: string
+          maxLength: 32
+        routeId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        active:
+          type: boolean
+          default: true
+
+    Train:
+      allOf:
+        - $ref: '#/components/schemas/TrainInput'
+        - type: object
+          required: [trainId]
+          properties:
+            trainId:
+              $ref: './_shared.yaml#/components/schemas/Ulid'
+
+    AuditEvent:
+      type: object
+      required: [eventId, actorId, action, occurredAt]
+      properties:
+        eventId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        actorId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        actorRole:
+          $ref: './_shared.yaml#/components/schemas/Role'
+        action:
+          type: string
+          example: PII_READ
+        subjectId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        subjectType:
+          type: string
+        detail:
+          type: object
+          additionalProperties: true
+        ip:
+          type: string
+        occurredAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    PdpaRequest:
+      type: object
+      required: [requestId, kind, status, dueBy]
+      properties:
+        requestId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        kind:
+          type: string
+          enum: [export, erasure]
+        status:
+          type: string
+          description: Matches the `pdpa.requests.status` CHECK (C005).
+          enum: [Received, InProgress, FulfilledHold, Fulfilled, Rejected]
+        holdReason:
+          type: string
+          description: Always present when `status` is `FulfilledHold`.
+        dueBy:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+        downloadUrl:
+          type: string
+          format: uri
+          description: Short-lived signed URL of the export archive.

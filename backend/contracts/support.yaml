@@ -1,0 +1,280 @@
+openapi: 3.1.0
+
+# =============================================================================================
+# support-svc — FAQ articles and in-app tickets
+# Source: specs/D3_mageride_api_contracts.md "support-svc — FAQ & tickets (/v1/support)" (Epic 16)
+#         + ADD Appendix C support-svc
+#
+# The agent-side queue (`GET /v1/admin/support/tickets`, `POST .../{id}/resolve`) is an
+# admin-bff surface and lives in admin-bff.yaml, exactly as D3 Part 2 places it.
+# =============================================================================================
+
+info:
+  title: MageRide support-svc
+  version: 1.0.0
+  summary: Trilingual FAQ plus user-raised support tickets.
+  description: |
+    FAQ articles exist in Sinhala, Tamil and English (US-16.1, D-26); C005 seeded the four topics
+    US-16.1 names (wallet top-up, daily fee, vehicle registration, ride booking).
+
+    `category` is a free-text key rather than an enum — `support.tickets.category` carries no
+    CHECK, and the driver daily-fee refund request (US-9.23) is deliberately modelled as an
+    ordinary category rather than its own endpoint (C005). Clients pick from the category list
+    the FAQ surface publishes.
+  contact:
+    name: MageRide Platform Engineering
+    url: https://mageride.lk
+  license:
+    name: UNLICENSED
+    url: https://mageride.lk/legal/terms
+
+servers:
+  - url: https://api.mageride.lk
+    description: Production gateway (DOKS Singapore)
+  - url: http://localhost:8080
+    description: Docker Compose dev gateway
+
+tags:
+  - name: support
+    description: FAQ and support tickets.
+
+paths:
+
+  /v1/support/faq:
+    get:
+      operationId: listFaqArticles
+      summary: List FAQ articles for a language and optional category.
+      description: US-16.1. Returns article summaries; the body is fetched per article.
+      tags: [support]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/Lang'
+        - name: category
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 60
+      responses:
+        '200':
+          description: FAQ articles.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FaqSummary'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized]
+
+  /v1/support/faq/{articleId}:
+    get:
+      operationId: getFaqArticle
+      summary: Read one FAQ article.
+      description: Falls back to English only if the requested language has no row for the article.
+      tags: [support]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: articleId
+          in: path
+          required: true
+          schema:
+            $ref: './_shared.yaml#/components/schemas/Ulid'
+        - $ref: './_shared.yaml#/components/parameters/Lang'
+      responses:
+        '200':
+          description: Article.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FaqArticle'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, not-found]
+
+  /v1/support/tickets:
+    post:
+      operationId: createSupportTicket
+      summary: Raise a support ticket.
+      description: |
+        US-16.2. `tripId` attaches a Mode C ride or a Mode A/B session; `screenshotFileId` is an
+        already-uploaded `docs.uploads` id. Tickets open in status `OPEN`.
+      tags: [support]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [category, description]
+              properties:
+                category:
+                  type: string
+                  maxLength: 60
+                  description: A category key from the FAQ surface, e.g. `daily_fee_refund` (US-9.23).
+                description:
+                  type: string
+                  maxLength: 4000
+                tripId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+                screenshotFileId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+      responses:
+        '201':
+          description: Ticket created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, not-found]
+
+  /v1/support/tickets/{userId}:
+    get:
+      operationId: listSupportTickets
+      summary: List a user's tickets.
+      description: |
+        A caller may only read their own tickets; support staff use the admin-bff queue instead,
+        which is separately RBAC-gated and audited.
+      tags: [support]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - $ref: './_shared.yaml#/components/parameters/Cursor'
+        - $ref: './_shared.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Ticket page.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './_shared.yaml#/components/schemas/CursorPage'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Ticket'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden]
+
+  /v1/support/tickets/{userId}/{ticketId}:
+    get:
+      operationId: getSupportTicket
+      summary: Read one ticket with the agent's response.
+      description: Includes `adminResponse` once an agent has resolved or replied to the ticket.
+      tags: [support]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - name: ticketId
+          in: path
+          required: true
+          schema:
+            $ref: './_shared.yaml#/components/schemas/Ulid'
+      responses:
+        '200':
+          description: Ticket detail.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketDetail'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, not-found]
+
+components:
+  securitySchemes:
+    bearerAuth:
+      $ref: './_shared.yaml#/components/securitySchemes/bearerAuth'
+
+  parameters:
+    UserId:
+      name: userId
+      in: path
+      required: true
+      schema:
+        $ref: './_shared.yaml#/components/schemas/Ulid'
+
+  schemas:
+    FaqSummary:
+      type: object
+      required: [articleId, title, category, language]
+      properties:
+        articleId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        title:
+          type: string
+        category:
+          type: string
+        language:
+          $ref: './_shared.yaml#/components/schemas/LanguageCode'
+
+    FaqArticle:
+      allOf:
+        - $ref: '#/components/schemas/FaqSummary'
+        - type: object
+          required: [body]
+          properties:
+            body:
+              type: string
+              description: Markdown.
+
+    TicketStatus:
+      type: string
+      description: Matches the `support.tickets.status` CHECK (C005).
+      enum: [OPEN, IN_PROGRESS, RESOLVED]
+
+    Ticket:
+      type: object
+      required: [ticketId, category, status, createdAt]
+      properties:
+        ticketId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        category:
+          type: string
+        status:
+          $ref: '#/components/schemas/TicketStatus'
+        tripId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        createdAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+        resolvedAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    TicketDetail:
+      allOf:
+        - $ref: '#/components/schemas/Ticket'
+        - type: object
+          required: [description]
+          properties:
+            description:
+              type: string
+            screenshotUrl:
+              type: string
+              format: uri
+              description: Short-lived signed object-storage URL.
+            adminResponse:
+              type: string

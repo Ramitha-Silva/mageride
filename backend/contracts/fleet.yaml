@@ -1,0 +1,1757 @@
+openapi: 3.1.0
+
+# =============================================================================================
+# fleet-svc — Fleet Portal (fleet.mageride.lk), Phase 1 per AL-03
+# Source: specs/D3_mageride_api_contracts.md "fleet-svc (Phase 1, AL-03)"
+#         + Δ 2026-06-21 "fleet-svc (Fleet Portal proxies, RLS-scoped to org)"
+#         + Δ 2026-07-18 "fleet-svc — org bank & payout profile (AL-49)" and
+#           "fleet-svc — per-vehicle document slots (AL-50)"
+#         + ADD Appendix C fleet-svc
+#
+# Bulk **tracker** onboarding (`POST /v1/fleets/{fleetId}/trackers/bulk` and its job poll) belongs
+# to provisioning-svc — D3' Part 2 places it there, and this file must not duplicate it. What
+# lives here is the single owner-facing `POST /v1/fleets/{fleetId}/trackers/bind` (US-13.12).
+# =============================================================================================
+
+info:
+  title: MageRide fleet-svc
+  version: 1.0.0
+  summary: Fleet organisations, their Mode A/B vehicles, drivers, scheduling, billing and payouts.
+  description: |
+    Every route is **org-scoped by row-level security** and requires an approved organisation:
+    a `PENDING` org may read but not mutate (US-13.A7). The caller's `fleet_role` claim is
+    `owner`, `manager` or `viewer`, evaluated deny-by-default (AL-03/AL-06).
+
+    **Fleet vehicles are Mode A/B only — never Mode C.** A driver's own standby vehicle is
+    onboarded in the Driver App through registry-svc.
+
+    **Payout profile (AL-49).** Any edit re-triggers verification (`status='pending_verification'`)
+    and the profile rides the existing fleet-org verification queue. Classifying a vehicle as
+    Paid while the org profile is unverified is **`409 payout-profile-not-verified`** (BR-31.1) —
+    that gate is the reason the profile exists.
+
+    **Per-vehicle documents (AL-50).** Required set: `registration` + `insurance` +
+    `revenue_license` for all modes, **plus `permit` for Mode A**. registry-svc blocks
+    `status='APPROVED'` until every required document is verified (extends AL-10). Vehicles
+    created by bulk CSV start `docs_pending`; documents arrive per vehicle afterwards.
+  contact:
+    name: MageRide Platform Engineering
+    url: https://mageride.lk
+  license:
+    name: UNLICENSED
+    url: https://mageride.lk/legal/terms
+
+servers:
+  - url: https://api.mageride.lk
+    description: Production gateway (DOKS Singapore)
+  - url: http://localhost:8080
+    description: Docker Compose dev gateway
+
+tags:
+  - name: fleets
+    description: Organisation registration, members and payout profile.
+  - name: fleet-vehicles
+    description: Fleet vehicles, classification, documents and driver assignment.
+  - name: fleet-ops
+    description: Scheduling, live map, tracker health, analytics and alerts.
+  - name: fleet-billing
+    description: Monthly invoicing and the fleet wallet.
+  - name: fleet-subscriptions
+    description: Org-scoped proxies over the Mode B subscription surface (Epic 23).
+
+paths:
+
+  # -------------------------------------------------------------------------------------------
+  # Organisation
+  # -------------------------------------------------------------------------------------------
+  /v1/fleets:
+    post:
+      operationId: registerFleet
+      summary: Register a fleet organisation.
+      description: |
+        US-13.A7. Creates the org in `PENDING`; a Verification Officer must approve it before any
+        non-read operation succeeds. The signing-in user becomes its `owner`.
+      tags: [fleets]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, registrationNo, contactPhone]
+              properties:
+                name:
+                  type: string
+                  maxLength: 200
+                registrationNo:
+                  type: string
+                  maxLength: 64
+                  description: Business registration number.
+                contactPhone:
+                  $ref: './_shared.yaml#/components/schemas/PhoneE164'
+                contactEmail:
+                  type: string
+                  format: email
+                address:
+                  type: string
+                  maxLength: 500
+      responses:
+        '201':
+          description: Organisation created, pending verification.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Fleet'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden, conflict]
+
+  /v1/fleets/{fleetId}:
+    get:
+      operationId: getFleet
+      summary: Read the organisation.
+      description: Any org sub-role may read; the response includes the verification status.
+      tags: [fleets]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+      responses:
+        '200':
+          description: Organisation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Fleet'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, not-found]
+
+  /v1/fleets/{fleetId}/members:
+    post:
+      operationId: addFleetMember
+      summary: Provision a Manager or Viewer sub-user.
+      description: |
+        US-13.A5. Owner only. The invited user signs in on the Fleet Portal with
+        Email+Password / Google / Apple (AL-07) and carries the `fleet_role` claim granted here.
+      tags: [fleets]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, fleetRole]
+              properties:
+                email:
+                  type: string
+                  format: email
+                name:
+                  type: string
+                  maxLength: 200
+                fleetRole:
+                  $ref: './_shared.yaml#/components/schemas/FleetRole'
+      responses:
+        '201':
+          description: Member provisioned.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [memberId, email, fleetRole]
+                properties:
+                  memberId:
+                    $ref: './_shared.yaml#/components/schemas/Ulid'
+                  email:
+                    type: string
+                    format: email
+                  fleetRole:
+                    $ref: './_shared.yaml#/components/schemas/FleetRole'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden, conflict]
+
+  /v1/fleets/{fleetId}/payout-profile:
+    get:
+      operationId: getPayoutProfile
+      summary: Read the org bank and payout profile.
+      description: |
+        AL-49, SCR-FP-002a. Owner only. `status` gates Paid classification and the passenger pay
+        sheet: only a `verified` profile is ever served as `payTo` (subscription-svc).
+      tags: [fleets]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+      responses:
+        '200':
+          description: Payout profile.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayoutProfile'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, not-owner, not-found]
+    put:
+      operationId: upsertPayoutProfile
+      summary: Create or edit the org bank and payout profile.
+      description: |
+        AL-49. **Any edit re-triggers verification** — the row is versioned and its status goes
+        back to `pending_verification`. Existing Paid subscriptions keep collecting against the
+        **last verified snapshot** until the new one is approved, so an edit never silently
+        redirects money.
+      tags: [fleets]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [bank, branch, accountNo, accountHolderName]
+              properties:
+                bank:
+                  type: string
+                  maxLength: 120
+                branch:
+                  type: string
+                  maxLength: 120
+                accountNo:
+                  type: string
+                  maxLength: 40
+                accountHolderName:
+                  type: string
+                  maxLength: 200
+      responses:
+        '200':
+          description: Profile saved, pending verification.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayoutProfile'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, not-owner, not-found]
+
+  /v1/fleets/{fleetId}/payout-profile/documents:
+    post:
+      operationId: uploadPayoutProfileDocument
+      summary: Upload a payout-profile document.
+      description: |
+        AL-49. Lands in `docs.uploads` and appears in the fleet-org verification queue's
+        `documents[]` (`GET /v1/admin/verification/org/{orgId}`), where the officer approves or
+        rejects the profile.
+      tags: [fleets]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [kind, file]
+              properties:
+                kind:
+                  type: string
+                  enum: [bank_statement, passbook_first_page, lankaqr_code]
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: Document stored.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [docId, kind]
+                properties:
+                  docId:
+                    $ref: './_shared.yaml#/components/schemas/Ulid'
+                  kind:
+                    type: string
+                    enum: [bank_statement, passbook_first_page, lankaqr_code]
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '413': { $ref: './_shared.yaml#/components/responses/PayloadTooLarge' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, not-owner, not-found, payload-too-large]
+
+  # -------------------------------------------------------------------------------------------
+  # Vehicles
+  # -------------------------------------------------------------------------------------------
+  /v1/fleets/{fleetId}/vehicles:
+    post:
+      operationId: addFleetVehicle
+      summary: Add a Mode A or Mode B vehicle to the fleet.
+      description: |
+        **Mode A/B only — a Mode C body is `403 mode-not-allowed`.** A Mode B vehicle may carry its
+        "Service payment" classification and default monthly fare inline (AL-24 item 16b);
+        classifying it Paid still requires a verified payout profile (AL-49).
+      tags: [fleet-vehicles]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [registrationNumber, vehicleType, mode]
+              properties:
+                registrationNumber:
+                  type: string
+                  maxLength: 32
+                vehicleType:
+                  $ref: './_shared.yaml#/components/schemas/VehicleType'
+                mode:
+                  type: string
+                  enum: [A, B]
+                modeBBilling:
+                  $ref: '#/components/schemas/ModeBBilling'
+                defaultMonthlyFareMinor:
+                  type: integer
+                  format: int64
+                  minimum: 0
+      responses:
+        '201':
+          description: Vehicle added.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FleetVehicle'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [invalid-vehicle-type, unauthorized, mode-not-allowed, registration-exists, payout-profile-not-verified]
+
+  /v1/fleets/{fleetId}/vehicles/bulk:
+    post:
+      operationId: bulkAddFleetVehicles
+      summary: Bulk-onboard fleet vehicles from a CSV.
+      description: |
+        US-13.1. Rows are created **`docs_pending`** — documents arrive per vehicle through
+        `POST /v1/fleets/{fleetId}/vehicles/{vehicleId}/documents` (AL-50), and no vehicle is
+        approved until its required set is verified.
+      tags: [fleet-vehicles]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: '`text/csv`, rows `registrationNumber,vehicleType,mode`.'
+      responses:
+        '202':
+          description: Job accepted.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [jobId, totalRows, status]
+                properties:
+                  jobId:
+                    $ref: './_shared.yaml#/components/schemas/Ulid'
+                  totalRows:
+                    type: integer
+                    format: int32
+                    minimum: 0
+                  status:
+                    type: string
+                    enum: [PROCESSING, COMPLETED, FAILED]
+                  errorReportUrl:
+                    type: string
+                    format: uri
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '413': { $ref: './_shared.yaml#/components/responses/PayloadTooLarge' }
+        '429': { $ref: './_shared.yaml#/components/responses/TooManyRequests' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [csv-invalid, unauthorized, forbidden, too-many-rows, bulk-in-progress]
+
+  /v1/fleets/{fleetId}/vehicles/{vehicleId}:
+    delete:
+      operationId: removeFleetVehicle
+      summary: Remove a vehicle from the fleet.
+      description: |
+        Ends any open driver assignment and removes the vehicle from the fleet map. Historical
+        trips and telemetry keep their original `fleet_id`, which is correct for an audit trail
+        (C006 decision 8).
+      tags: [fleet-vehicles]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+        - $ref: '#/components/parameters/VehicleId'
+      responses:
+        '204':
+          description: Removed.
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, vehicle-not-found, conflict]
+
+  /v1/fleets/{fleetId}/vehicles/{vehicleId}/classification:
+    put:
+      operationId: setVehicleClassification
+      summary: Set "Service payment" — Free or Paid — and the default monthly fare.
+      description: |
+        AL-24 item 16b. **Gate (BR-31.1, AL-49):** setting `paid` while the org's payout profile
+        is not `verified` is **`409 payout-profile-not-verified`**.
+
+        The UI label became "Service payment" in AL-51, but the path and the `modeBBilling` field
+        are **intentionally unchanged** — a label rename is not worth a client or database
+        migration.
+      tags: [fleet-vehicles]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+        - $ref: '#/components/parameters/VehicleId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [modeBBilling]
+              properties:
+                modeBBilling:
+                  $ref: '#/components/schemas/ModeBBilling'
+                defaultMonthlyFareMinor:
+                  type: integer
+                  format: int64
+                  minimum: 0
+                  description: Required when `modeBBilling` is `paid`.
+      responses:
+        '200':
+          description: Classification updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FleetVehicle'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden, vehicle-not-found, payout-profile-not-verified]
+
+  /v1/fleets/{fleetId}/vehicles/{vehicleId}/documents:
+    get:
+      operationId: listVehicleDocuments
+      summary: Per-vehicle document slots and their status.
+      description: |
+        AL-50, SCR-FP-004. Named slots with `verified | pending | missing`, expiry and the
+        extracted fields. Required: `registration` + `insurance` + `revenue_license`, **plus
+        `permit` for Mode A**.
+      tags: [fleet-vehicles]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+        - $ref: '#/components/parameters/VehicleId'
+      responses:
+        '200':
+          description: Document slots.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/VehicleDocumentSlot'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, vehicle-not-found]
+    post:
+      operationId: uploadVehicleDocument
+      summary: Upload a document into a named slot.
+      description: |
+        AL-50. Queues ocr-svc extraction. `registration_copy` maps to the stored kind
+        `registration` and `route_permit` to `permit` — the wire names are the SCR-FP-004 slot
+        labels, the stored names are the `registry.documents.kind` CHECK values (C003).
+
+        A document owned by the fleet sets `fleet_id` and **must not also set `driver_id`** —
+        `ck_documents_owner` is an XOR (C003 note (b)).
+      tags: [fleet-vehicles]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+        - $ref: '#/components/parameters/VehicleId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [kind, file]
+              properties:
+                kind:
+                  type: string
+                  enum: [registration_copy, insurance, revenue_license, route_permit]
+                file:
+                  type: string
+                  format: binary
+                expiresAt:
+                  type: string
+                  format: date
+      responses:
+        '201':
+          description: Document stored; OCR queued.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehicleDocumentSlot'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '413': { $ref: './_shared.yaml#/components/responses/PayloadTooLarge' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden, vehicle-not-found, payload-too-large]
+
+  /v1/fleets/{fleetId}/assignments:
+    post:
+      operationId: assignDriverToVehicle
+      summary: Assign a driver to a fleet vehicle.
+      description: |
+        US-13.2. Time-bounded, which is what supports temporarily hired Mode A/B drivers (AL-23).
+        A driver may hold only one open assignment per vehicle at a time.
+      tags: [fleet-vehicles]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [driverId, vehicleId, from]
+              properties:
+                driverId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+                vehicleId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+                from:
+                  $ref: './_shared.yaml#/components/schemas/Timestamp'
+                to:
+                  $ref: './_shared.yaml#/components/schemas/Timestamp'
+      responses:
+        '201':
+          description: Assigned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Assignment'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden, vehicle-not-found, conflict]
+
+  /v1/fleets/{fleetId}/assignments/{assignmentId}:
+    delete:
+      operationId: revokeAssignment
+      summary: Revoke a driver assignment.
+      description: US-13.8. Ends the assignment now; an in-flight session is left to end normally.
+      tags: [fleet-vehicles]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+        - name: assignmentId
+          in: path
+          required: true
+          schema:
+            $ref: './_shared.yaml#/components/schemas/Ulid'
+      responses:
+        '204':
+          description: Revoked.
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, not-found]
+
+  # -------------------------------------------------------------------------------------------
+  # Operations
+  # -------------------------------------------------------------------------------------------
+  /v1/fleets/{fleetId}/trackers/bind:
+    post:
+      operationId: bindFleetTracker
+      summary: Bind a tracker to a fleet vehicle and auto-start its session.
+      description: |
+        US-13.12. Owner/manager. Delegates the credential mint to provisioning-svc (T-02) and, for
+        a hardware-tracked Mode A vehicle, arms tracker-driven journey auto-start (AL-32) — a bus
+        broadcasts irrespective of any driver app (T-11).
+
+        Bulk IMEI onboarding is provisioning-svc's `POST /v1/fleets/{fleetId}/trackers/bulk`.
+      tags: [fleet-ops]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [imei, vehicleId]
+              properties:
+                imei:
+                  type: string
+                  pattern: '^\d{15}$'
+                vehicleId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+                autoStartSession:
+                  type: boolean
+                  default: true
+      responses:
+        '201':
+          description: Bound.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [bindingId, imei, vehicleId]
+                properties:
+                  bindingId:
+                    $ref: './_shared.yaml#/components/schemas/Ulid'
+                  imei:
+                    type: string
+                  vehicleId:
+                    $ref: './_shared.yaml#/components/schemas/Ulid'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden, vehicle-not-found, imei-duplicate]
+
+  /v1/fleets/{fleetId}/schedules:
+    post:
+      operationId: createFleetSchedule
+      summary: Schedule a ride for a fleet vehicle.
+      description: |
+        US-13.11. Per-vehicle scheduled departure with a **not-started alarm**: if the vehicle has
+        not begun its session by the alarm offset, the fleet is notified.
+      tags: [fleet-ops]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [vehicleId, departAt]
+              properties:
+                vehicleId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+                routeId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+                departAt:
+                  $ref: './_shared.yaml#/components/schemas/Timestamp'
+                notStartedAlarmMinutes:
+                  type: integer
+                  format: int32
+                  minimum: 1
+                  maximum: 120
+                  default: 10
+      responses:
+        '201':
+          description: Scheduled.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FleetSchedule'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden, vehicle-not-found]
+
+  /v1/fleets/{fleetId}/map:
+    get:
+      operationId: getFleetMap
+      summary: Live positions of the fleet's vehicles.
+      description: |
+        US-3.24/13.3. Any sub-role. **Scoped in the database, not in the application** — the read
+        goes through the `telemetry.positions_fleet` security-barrier view filtered on
+        `app.fleet_id`, which is fail-closed: an unscoped connection sees zero rows rather than an
+        error a caller might retry unscoped (C006 decision, resolving the RLS/compression conflict).
+      tags: [fleet-ops]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+      responses:
+        '200':
+          description: Fleet positions.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [vehicles, asOf]
+                properties:
+                  vehicles:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FleetVehiclePosition'
+                  asOf:
+                    $ref: './_shared.yaml#/components/schemas/Timestamp'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, not-found]
+
+  /v1/fleets/{fleetId}/health:
+    get:
+      operationId: getFleetHealth
+      summary: Tracker health rollup.
+      description: |
+        US-3.13, served by fleet-health-svc from the `fleet_health_5m` continuous aggregate — an
+        online/offline and last-seen rollup rather than a scan of raw telemetry chunks.
+      tags: [fleet-ops]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+      responses:
+        '200':
+          description: Health rollup.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [vehiclesOnline, vehiclesOffline, items, asOf]
+                properties:
+                  vehiclesOnline:
+                    type: integer
+                    format: int32
+                    minimum: 0
+                  vehiclesOffline:
+                    type: integer
+                    format: int32
+                    minimum: 0
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TrackerHealth'
+                  asOf:
+                    $ref: './_shared.yaml#/components/schemas/Timestamp'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, not-found]
+
+  /v1/fleets/{fleetId}/analytics:
+    get:
+      operationId: getFleetAnalytics
+      summary: Per-vehicle utilisation, distance and earnings.
+      description: US-13.4. Periods are evaluated in **Asia/Colombo** (D-13).
+      tags: [fleet-ops]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+        - name: from
+          in: query
+          required: false
+          schema:
+            $ref: './_shared.yaml#/components/schemas/BusinessDate'
+        - name: to
+          in: query
+          required: false
+          schema:
+            $ref: './_shared.yaml#/components/schemas/BusinessDate'
+      responses:
+        '200':
+          description: Analytics.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/VehicleAnalytics'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden, not-found]
+
+  /v1/fleets/{fleetId}/alerts:
+    get:
+      operationId: listFleetAlerts
+      summary: Route-deviation and geofence alerts.
+      description: |
+        US-13.5. **Phase 3** — the contract is fixed now so the Fleet Portal can render an empty
+        state without a later breaking change, but no producer emits these alerts in Phase 1.
+      tags: [fleet-ops]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+        - $ref: './_shared.yaml#/components/parameters/Cursor'
+        - $ref: './_shared.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Alert page (empty in Phase 1).
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './_shared.yaml#/components/schemas/CursorPage'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/FleetAlert'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, not-found]
+
+  /v1/fleets/{fleetId}/geofences:
+    put:
+      operationId: setFleetGeofences
+      summary: Define the fleet's operational geofences.
+      description: |
+        ADD Appendix C. Stored in `spatial.geofences`. Consumed by the Phase 3 alerting path;
+        defining them in Phase 1 costs nothing and lets an operator prepare.
+      tags: [fleet-ops]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [geofences]
+              properties:
+                geofences:
+                  type: array
+                  items:
+                    type: object
+                    required: [name, polygon]
+                    properties:
+                      name:
+                        type: string
+                        maxLength: 120
+                      polygon:
+                        type: array
+                        minItems: 4
+                        description: Closed ring; the first and last points must match.
+                        items:
+                          $ref: './_shared.yaml#/components/schemas/GeoPoint'
+      responses:
+        '200':
+          description: Geofences stored.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [count]
+                properties:
+                  count:
+                    type: integer
+                    format: int32
+                    minimum: 0
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden, not-found]
+
+  # -------------------------------------------------------------------------------------------
+  # Billing
+  # -------------------------------------------------------------------------------------------
+  /v1/fleets/{fleetId}/billing:
+    get:
+      operationId: getFleetBilling
+      summary: Monthly per-Mode-B-vehicle invoices.
+      description: |
+        US-13.10. One invoice per Colombo month (`periodMonth` is always the first of the month —
+        `ck_fleet_invoices_period_month_first`, C005 — otherwise the UNIQUE would admit two rows
+        per month and the free period could be re-claimed). The **first month is free** and carries
+        no amount (D-13).
+      tags: [fleet-billing]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+        - $ref: './_shared.yaml#/components/parameters/Cursor'
+        - $ref: './_shared.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Invoice history.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './_shared.yaml#/components/schemas/CursorPage'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/FleetInvoice'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, not-owner, not-found]
+
+  /v1/fleets/{fleetId}/wallet/topup:
+    post:
+      operationId: topupFleetWallet
+      summary: Top up the fleet wallet.
+      description: |
+        US-13.10b. OnePay or LankaQR only — bank transfer is not a top-up method anywhere on the
+        platform (AL-05). The wallet is credited on the provider callback with a balanced
+        double-entry journal credit (D-09).
+      tags: [fleet-billing]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amountMinor, method]
+              properties:
+                amountMinor:
+                  type: integer
+                  format: int64
+                  minimum: 1
+                method:
+                  type: string
+                  enum: [onepay, lankaqr]
+                returnUrl:
+                  type: string
+                  format: uri
+      responses:
+        '200':
+          description: Top-up initiated.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [topupId, state, amountMinor, currency]
+                properties:
+                  topupId:
+                    $ref: './_shared.yaml#/components/schemas/Ulid'
+                  state:
+                    type: string
+                    enum: [Pending, Succeeded, Failed]
+                  amountMinor:
+                    type: integer
+                    format: int64
+                    minimum: 1
+                  currency:
+                    $ref: './_shared.yaml#/components/schemas/Currency'
+                  redirectUrl:
+                    type: string
+                    format: uri
+                  paymentLink:
+                    type: string
+                    format: uri
+                  qrPayload:
+                    type: string
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '402': { $ref: './_shared.yaml#/components/responses/PaymentRequired' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [invalid-amount, unauthorized, gateway-error, not-owner, not-found]
+
+  # -------------------------------------------------------------------------------------------
+  # Mode B subscription proxies (Δ 2026-06-21 items 15, 16, 17)
+  # These proxy subscription-svc, scoped to the org's own vehicles by row-level security.
+  # -------------------------------------------------------------------------------------------
+  /v1/fleets/{fleetId}/vehicles/{vehicleId}/requests:
+    get:
+      operationId: listFleetVehicleRequests
+      summary: Incoming Mode B access requests for one of the fleet's vehicles.
+      description: Item 15. The org-scoped view of subscription-svc's per-vehicle request queue.
+      tags: [fleet-subscriptions]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+        - $ref: '#/components/parameters/VehicleId'
+        - $ref: './_shared.yaml#/components/parameters/Cursor'
+        - $ref: './_shared.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Pending requests.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './_shared.yaml#/components/schemas/CursorPage'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/AccessRequest'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, vehicle-not-found]
+
+  /v1/fleets/{fleetId}/vehicles/{vehicleId}/requests/{requestId}/accept:
+    post:
+      operationId: acceptFleetVehicleRequest
+      summary: Accept a Mode B access request.
+      description: Item 15. Creates the grant and starts the subscription, as the direct route does.
+      tags: [fleet-subscriptions]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+        - $ref: '#/components/parameters/VehicleId'
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Accepted.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [requestId, grantId, subscriptionId]
+                properties:
+                  requestId:
+                    $ref: './_shared.yaml#/components/schemas/Ulid'
+                  grantId:
+                    $ref: './_shared.yaml#/components/schemas/Ulid'
+                  subscriptionId:
+                    $ref: './_shared.yaml#/components/schemas/Ulid'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, not-found, conflict]
+
+  /v1/fleets/{fleetId}/vehicles/{vehicleId}/requests/{requestId}/reject:
+    post:
+      operationId: rejectFleetVehicleRequest
+      summary: Reject a Mode B access request.
+      description: Item 15. Terminal; no grant and no subscription are created.
+      tags: [fleet-subscriptions]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+        - $ref: '#/components/parameters/VehicleId'
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  maxLength: 500
+      responses:
+        '200':
+          description: Rejected.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessRequest'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, not-found, conflict]
+
+  /v1/fleets/{fleetId}/vehicles/{vehicleId}/subscribers:
+    get:
+      operationId: listFleetVehicleSubscribers
+      summary: Subscriber roster for one of the fleet's vehicles.
+      description: Items 16, 17. Fare, cycle, this month's status and the muted flag.
+      tags: [fleet-subscriptions]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+        - $ref: '#/components/parameters/VehicleId'
+        - $ref: './_shared.yaml#/components/parameters/Cursor'
+        - $ref: './_shared.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Roster.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './_shared.yaml#/components/schemas/CursorPage'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/SubscriberRow'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, vehicle-not-found]
+
+  /v1/fleets/{fleetId}/vehicles/{vehicleId}/subscribers/{subscriberId}:
+    delete:
+      operationId: deleteFleetVehicleSubscriber
+      summary: Delete a muted or unsubscribed subscriber.
+      description: |
+        Item 17. Owner only, and only for a muted or unsubscribed row — an active subscriber must
+        unsubscribe first.
+      tags: [fleet-subscriptions]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+        - $ref: '#/components/parameters/VehicleId'
+        - $ref: '#/components/parameters/SubscriberId'
+      responses:
+        '204':
+          description: Deleted.
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, not-owner, not-found, conflict]
+
+  /v1/fleets/{fleetId}/vehicles/{vehicleId}/subscribers/{subscriberId}/fare:
+    put:
+      operationId: setFleetSubscriberFare
+      summary: Set a subscriber's monthly fare.
+      description: Item 16f. Overrides the vehicle's default for this subscriber only.
+      tags: [fleet-subscriptions]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+        - $ref: '#/components/parameters/VehicleId'
+        - $ref: '#/components/parameters/SubscriberId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [monthlyFareMinor]
+              properties:
+                monthlyFareMinor:
+                  type: integer
+                  format: int64
+                  minimum: 0
+      responses:
+        '200':
+          description: Fare updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriberRow'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [invalid-amount, unauthorized, not-owner, not-found, conflict]
+
+  /v1/fleets/{fleetId}/vehicles/{vehicleId}/subscribers/{subscriberId}/mark-cash:
+    post:
+      operationId: markFleetSubscriberCashPaid
+      summary: Mark a subscriber's cash payment received.
+      description: Item 16f. Records a `cash` payment as `paid` and advances the next due date.
+      tags: [fleet-subscriptions]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+        - $ref: '#/components/parameters/VehicleId'
+        - $ref: '#/components/parameters/SubscriberId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amountMinor]
+              properties:
+                amountMinor:
+                  type: integer
+                  format: int64
+                  minimum: 0
+                periodMonth:
+                  $ref: './_shared.yaml#/components/schemas/BusinessDate'
+      responses:
+        '200':
+          description: Marked paid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriptionPaymentRow'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [invalid-amount, unauthorized, not-owner, not-found, conflict]
+
+  /v1/fleets/{fleetId}/vehicles/{vehicleId}/subscribers/{subscriberId}/payments:
+    get:
+      operationId: listFleetSubscriberPayments
+      summary: Per-subscriber payment ledger.
+      description: Item 16i, SCR-FP-012.
+      tags: [fleet-subscriptions]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+        - $ref: '#/components/parameters/VehicleId'
+        - $ref: '#/components/parameters/SubscriberId'
+        - $ref: './_shared.yaml#/components/parameters/Cursor'
+        - $ref: './_shared.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Payment ledger.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './_shared.yaml#/components/schemas/CursorPage'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/SubscriptionPaymentRow'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, not-owner, not-found]
+
+  /v1/fleets/{fleetId}/payments/{paymentId}/confirm:
+    post:
+      operationId: confirmFleetTransferSlip
+      summary: Confirm a passenger's online-transfer slip.
+      description: Item 16f. Owner only. Moves the payment to `paid`.
+      tags: [fleet-subscriptions]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+        - name: paymentId
+          in: path
+          required: true
+          schema:
+            $ref: './_shared.yaml#/components/schemas/Ulid'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Confirmed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriptionPaymentRow'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, not-owner, not-found, conflict]
+
+components:
+  securitySchemes:
+    bearerAuth:
+      $ref: './_shared.yaml#/components/securitySchemes/bearerAuth'
+
+  parameters:
+    FleetId:
+      name: fleetId
+      in: path
+      required: true
+      schema:
+        $ref: './_shared.yaml#/components/schemas/Ulid'
+    VehicleId:
+      name: vehicleId
+      in: path
+      required: true
+      schema:
+        $ref: './_shared.yaml#/components/schemas/Ulid'
+    RequestId:
+      name: requestId
+      in: path
+      required: true
+      schema:
+        $ref: './_shared.yaml#/components/schemas/Ulid'
+    SubscriberId:
+      name: subscriberId
+      in: path
+      required: true
+      schema:
+        $ref: './_shared.yaml#/components/schemas/Ulid'
+
+  schemas:
+    FleetStatus:
+      type: string
+      enum: [PENDING, APPROVED, REJECTED, SUSPENDED]
+
+    Fleet:
+      type: object
+      required: [fleetId, name, status]
+      properties:
+        fleetId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        name:
+          type: string
+        registrationNo:
+          type: string
+        contactPhone:
+          $ref: './_shared.yaml#/components/schemas/PhoneE164'
+        contactEmail:
+          type: string
+          format: email
+        address:
+          type: string
+        status:
+          $ref: '#/components/schemas/FleetStatus'
+        rejectionReason:
+          type: string
+        createdAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    PayoutProfileStatus:
+      type: string
+      enum: [pending_verification, verified, rejected]
+
+    PayoutProfile:
+      type: object
+      required: [bank, branch, accountNo, accountHolderName, status]
+      properties:
+        bank:
+          type: string
+        branch:
+          type: string
+        accountNo:
+          type: string
+        accountHolderName:
+          type: string
+        lankaqrDocId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        proofDocId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        status:
+          $ref: '#/components/schemas/PayoutProfileStatus'
+        rejectionReason:
+          type: string
+        verifiedAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    ModeBBilling:
+      type: string
+      description: |
+        "Service payment" in the UI (AL-51); the field name is intentionally unchanged for API
+        stability. Matches the `registry.vehicles.mode_b_billing` CHECK (C003).
+      enum: [paid, free]
+
+    FleetVehicle:
+      type: object
+      required: [vehicleId, registrationNumber, vehicleType, mode, status]
+      properties:
+        vehicleId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        registrationNumber:
+          type: string
+        vehicleType:
+          $ref: './_shared.yaml#/components/schemas/VehicleType'
+        mode:
+          type: string
+          enum: [A, B]
+        status:
+          type: string
+          enum: [PENDING, APPROVED, REJECTED, DEACTIVATED]
+        docsStatus:
+          type: string
+          description: '`docs_pending` is the state a bulk-CSV row starts in (AL-50).'
+          enum: [docs_pending, docs_complete]
+        modeBBilling:
+          $ref: '#/components/schemas/ModeBBilling'
+        defaultMonthlyFareMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        currency:
+          $ref: './_shared.yaml#/components/schemas/Currency'
+
+    VehicleDocumentSlot:
+      type: object
+      required: [kind, status]
+      properties:
+        docId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        kind:
+          type: string
+          description: Stored kind — matches the `registry.documents.kind` CHECK (C003).
+          enum: [registration, insurance, revenue_license, permit]
+        status:
+          type: string
+          enum: [verified, pending, missing]
+        expiresAt:
+          type: string
+          format: date
+        thumbUrl:
+          type: string
+          format: uri
+        fullUrl:
+          type: string
+          format: uri
+        fields:
+          type: array
+          items:
+            $ref: './_shared.yaml#/components/schemas/ExtractedField'
+
+    Assignment:
+      type: object
+      required: [assignmentId, driverId, vehicleId, from]
+      properties:
+        assignmentId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        driverId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        vehicleId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        from:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+        to:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    FleetSchedule:
+      type: object
+      required: [scheduleId, vehicleId, departAt]
+      properties:
+        scheduleId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        vehicleId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        routeId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        departAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+        notStartedAlarmMinutes:
+          type: integer
+          format: int32
+          minimum: 1
+
+    FleetVehiclePosition:
+      type: object
+      required: [vehicleId, lat, lng, sampleTs]
+      properties:
+        vehicleId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        registrationNumber:
+          type: string
+        lat:
+          type: number
+          format: double
+          minimum: -90
+          maximum: 90
+        lng:
+          type: number
+          format: double
+          minimum: -180
+          maximum: 180
+        heading:
+          type: integer
+          format: int32
+          minimum: 0
+          maximum: 359
+        speedMps:
+          type: number
+          format: double
+          minimum: 0
+        sampleTs:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    TrackerHealth:
+      type: object
+      required: [vehicleId, online]
+      properties:
+        vehicleId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        imei:
+          type: string
+        online:
+          type: boolean
+        lastSeen:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+        battery:
+          type: integer
+          format: int32
+          minimum: 0
+          maximum: 100
+        sats:
+          type: integer
+          format: int32
+          minimum: 0
+
+    VehicleAnalytics:
+      type: object
+      required: [vehicleId, tripCount, distanceKm]
+      properties:
+        vehicleId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        registrationNumber:
+          type: string
+        tripCount:
+          type: integer
+          format: int32
+          minimum: 0
+        distanceKm:
+          type: number
+          format: double
+          minimum: 0
+        activeHours:
+          type: number
+          format: double
+          minimum: 0
+        utilisationPct:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 100
+        earningsMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        currency:
+          $ref: './_shared.yaml#/components/schemas/Currency'
+
+    FleetAlert:
+      type: object
+      required: [alertId, kind, vehicleId, raisedAt]
+      properties:
+        alertId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        kind:
+          type: string
+          enum: [route_deviation, geofence_enter, geofence_exit]
+        vehicleId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        geofenceName:
+          type: string
+        raisedAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    FleetInvoice:
+      type: object
+      required: [invoiceId, periodMonth, amountMinor, currency, status]
+      properties:
+        invoiceId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        periodMonth:
+          description: Always the first of the month.
+          allOf:
+            - $ref: './_shared.yaml#/components/schemas/BusinessDate'
+        periodMonthTzAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+        vehicleCount:
+          type: integer
+          format: int32
+          minimum: 0
+        amountMinor:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Zero when `status` is `FREE` — the first month carries no amount (D-13).
+        currency:
+          $ref: './_shared.yaml#/components/schemas/Currency'
+        status:
+          type: string
+          enum: [FREE, DUE, PAID, OVERDUE]
+        dueAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    AccessRequest:
+      type: object
+      required: [requestId, vehicleId, passengerId, status, createdAt]
+      properties:
+        requestId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        vehicleId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        passengerId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        passengerName:
+          type: string
+        passengerMobileMasked:
+          $ref: './_shared.yaml#/components/schemas/PhoneMasked'
+        status:
+          type: string
+          enum: [pending, accepted, rejected]
+        createdAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    SubscriberRow:
+      type: object
+      required: [subscriberId, passengerId, billing, status, muted]
+      properties:
+        subscriberId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        passengerId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        name:
+          type: string
+        mobileMasked:
+          $ref: './_shared.yaml#/components/schemas/PhoneMasked'
+        billing:
+          $ref: '#/components/schemas/ModeBBilling'
+        monthlyFareMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        currency:
+          $ref: './_shared.yaml#/components/schemas/Currency'
+        cycle:
+          type: string
+          enum: [month_first, join_anniversary]
+        thisMonthStatus:
+          type: string
+          enum: [paid, unpaid, pending_verification]
+        muted:
+          type: boolean
+        status:
+          type: string
+          enum: [active, unsubscribed]
+
+    SubscriptionPaymentRow:
+      type: object
+      required: [paymentId, subscriptionId, method, amountMinor, currency, status, periodMonth]
+      properties:
+        paymentId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        subscriptionId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        method:
+          type: string
+          enum: [lankaqr_deeplink, lankaqr_scan, onepay, online_transfer, cash]
+        amountMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        currency:
+          $ref: './_shared.yaml#/components/schemas/Currency'
+        status:
+          type: string
+          enum: [initiated, pending_verification, paid, failed]
+        periodMonth:
+          $ref: './_shared.yaml#/components/schemas/BusinessDate'
+        slipUrl:
+          type: string
+          format: uri
+        paidAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'

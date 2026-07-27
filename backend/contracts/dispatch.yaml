@@ -1,0 +1,812 @@
+openapi: 3.1.0
+
+# =============================================================================================
+# dispatch-svc — standby presence, Directional Travel, Job Board, scheduled rides, Driver Level
+# Source: specs/D3_mageride_api_contracts.md "dispatch-svc — standby, directional, Job Board,
+#         level" + ADD Appendix C dispatch-svc + Δ 2026-06-28 AL-36 (POST /v1/rides/schedule)
+#
+# Scope fence (R-01, ADD Appendix C): the ride lifecycle endpoints ADD Appendix C still lists
+# under dispatch-svc — `/rides/request`, `/offer/{driverId}/accept|reject`, `/rides/{id}/cancel`
+# — **moved to ride-svc** and are in ride.yaml. dispatch-svc consumes ride events and emits offer
+# events; it never writes `rides.rides`.
+#
+# Scheduled rides are owned by dispatch-svc over `dispatch.scheduled_rides` (ADD §9.1, D4' §6).
+# There is no `scheduling-svc` and no `scheduling` schema — the earlier heading was a naming
+# slip, corrected 2026-07-26 (planner finding 2).
+# =============================================================================================
+
+info:
+  title: MageRide dispatch-svc
+  version: 1.0.0
+  summary: Driver presence, candidate scoring inputs, Job Board, Driver Level and Directional Travel.
+  description: |
+    **Directional Travel (DT-01..DT-08)** lets a driver bias dispatch toward a destination — a
+    filter with `{destination, expiresAt}` cached in Redis `driver:directional:{driverId}` and
+    audited in `dispatch.directional_filters`. The daily-use limit is enforced as **one row per
+    activation**: `COUNT(*) per (driverId, usedDate) <= maxUsesPerDay`, in Asia/Colombo. Turning a
+    filter off early therefore **still consumes its use** (US-6A.19, anti-gaming) — that is what
+    `DELETE /v1/standby/directional` means. Going offline clears any active filter (DT-04), and a
+    10-minute pre-expiry reminder is pushed by notification-svc off the Quartz trigger (US-10.14).
+
+    **Job Board (D-06, US-6A.5)** lists future scheduled rides within 30 km (`ST_DWithin`).
+    Drivers **post intent** rather than accept: at T-30 min the ride is offered to the closest
+    intent-poster by Level, on the ordinary dispatch screen. **Level 1 has no Job Board access**
+    (US-6A.8).
+  contact:
+    name: MageRide Platform Engineering
+    url: https://mageride.lk
+  license:
+    name: UNLICENSED
+    url: https://mageride.lk/legal/terms
+
+servers:
+  - url: https://api.mageride.lk
+    description: Production gateway (DOKS Singapore)
+  - url: http://localhost:8080
+    description: Docker Compose dev gateway
+
+tags:
+  - name: standby
+    description: Driver presence and the Directional Travel filter.
+  - name: job-board
+    description: Scheduled rides, the Job Board and driver intents.
+  - name: driver-level
+    description: Driver Level and dispatch statistics.
+  - name: dispatch-admin
+    description: Admin configuration of dispatch behaviour.
+
+paths:
+
+  # -------------------------------------------------------------------------------------------
+  # Standby presence
+  # -------------------------------------------------------------------------------------------
+  /v1/standby/online:
+    post:
+      operationId: goOnline
+      summary: Register the driver as available for Mode C dispatch.
+      description: |
+        US-6A.1. Writes `dispatch.driver_presence` (and its Redis mirror) with the vehicle and
+        last-known position. One row per driver — going online on a second vehicle overwrites
+        `vehicleId`, which is the presence-plane echo of the O2 one-accepted-ride invariant.
+
+        The vehicle must be `APPROVED`; an unapproved or dispatch-suspended vehicle is
+        `403 vehicle-not-approved` (AL-30, E-03).
+      tags: [standby]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [vehicleId, position]
+              properties:
+                vehicleId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+                position:
+                  $ref: './_shared.yaml#/components/schemas/GeoPoint'
+                driverHome:
+                  description: Anchor for the D-06 Job Board 30 km radius, if the driver sets one.
+                  allOf:
+                    - $ref: './_shared.yaml#/components/schemas/GeoPoint'
+      responses:
+        '200':
+          description: Driver is online.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [state]
+                properties:
+                  state:
+                    $ref: '#/components/schemas/PresenceState'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, vehicle-not-approved, vehicle-not-found, driver-already-live]
+
+  /v1/standby/offline:
+    post:
+      operationId: goOffline
+      summary: Leave standby.
+      description: |
+        Clears presence **and any active Directional Travel filter** (DT-04) — the filter is
+        recorded as cleared with reason `offline`, and the use it consumed is not refunded.
+      tags: [standby]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Driver is offline.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [state]
+                properties:
+                  state:
+                    $ref: '#/components/schemas/PresenceState'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, conflict]
+
+  /v1/standby/directional:
+    post:
+      operationId: setDirectionalFilter
+      summary: Set a Directional Travel filter toward a destination.
+      description: |
+        DT-01/DT-03. Writes one `dispatch.directional_filters` activation row (Asia/Colombo
+        business date), caches it in Redis with the remaining TTL, and arms a durable Quartz
+        expiry timer plus the 10-minute pre-expiry reminder. Emits nothing until the filter
+        clears — `directional.cleared` is published on expiry, offline or manual turn-off
+        (DT-04, DT-08).
+
+        Exhausting the daily budget (default 2, US-6A.18) is `409 directional-limit-reached`;
+        setting one while offline is `403 not-online`.
+      tags: [standby]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [destination]
+              properties:
+                destination:
+                  $ref: './_shared.yaml#/components/schemas/GeoPoint'
+                label:
+                  type: string
+                  maxLength: 60
+                  example: Home
+      responses:
+        '201':
+          description: Filter active.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [filterId, expiresAt, usesRemaining, maxDurationSec]
+                properties:
+                  filterId:
+                    $ref: './_shared.yaml#/components/schemas/Ulid'
+                  expiresAt:
+                    $ref: './_shared.yaml#/components/schemas/Timestamp'
+                  usesRemaining:
+                    type: integer
+                    format: int32
+                    minimum: 0
+                  maxDurationSec:
+                    type: integer
+                    format: int32
+                    example: 7200
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, not-online, directional-limit-reached]
+    get:
+      operationId: getDirectionalFilter
+      summary: Read the driver's live Directional Travel state.
+      description: |
+        DT-08. Drives the driver-app filter card — remaining time and remaining daily uses. Pure
+        read; the pre-expiry reminder is pushed separately by notification-svc.
+      tags: [standby]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Filter state.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [active, timeRemainingSec, usesRemaining]
+                properties:
+                  active:
+                    type: boolean
+                  destination:
+                    oneOf:
+                      - $ref: './_shared.yaml#/components/schemas/GeoPoint'
+                      - type: 'null'
+                  label:
+                    type: string
+                  expiresAt:
+                    oneOf:
+                      - $ref: './_shared.yaml#/components/schemas/Timestamp'
+                      - type: 'null'
+                  timeRemainingSec:
+                    type: integer
+                    format: int32
+                    minimum: 0
+                  usesRemaining:
+                    type: integer
+                    format: int32
+                    minimum: 0
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized]
+    delete:
+      operationId: clearDirectionalFilter
+      summary: Turn the Directional Travel filter off early.
+      description: |
+        DT-03/US-6A.19. **Still consumes the daily use** — the activation row keeps its
+        `usedDate` and is marked cleared with reason `manual`. Emits `directional.cleared`.
+      tags: [standby]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Filter cleared.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [active, usesRemaining]
+                properties:
+                  active:
+                    type: boolean
+                    const: false
+                  usesRemaining:
+                    type: integer
+                    format: int32
+                    minimum: 0
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, not-found]
+
+  # -------------------------------------------------------------------------------------------
+  # Scheduled rides & Job Board
+  # -------------------------------------------------------------------------------------------
+  /v1/rides/schedule:
+    post:
+      operationId: scheduleRide
+      summary: Book a ride for a future pickup time.
+      description: |
+        Δ 2026-06-28 item 2 (AL-36, US-24.2). **The destination is required** — `destLat`/`destLng`
+        are mandatory and a missing destination is `400 validation-failed`. Pickup defaults to the
+        passenger's current GPS and is editable.
+
+        Writes `dispatch.scheduled_rides`; the ride materialises as a `rides.rides` row only when
+        dispatch offers it at T-30 min.
+      tags: [job-board]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+        - $ref: './_shared.yaml#/components/parameters/XAttestation'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [destLat, destLng, pickupTime, vehicleType]
+              properties:
+                pickupLat:
+                  type: number
+                  format: double
+                  minimum: -90
+                  maximum: 90
+                  description: Defaults to the passenger's current GPS when omitted.
+                pickupLng:
+                  type: number
+                  format: double
+                  minimum: -180
+                  maximum: 180
+                destLat:
+                  type: number
+                  format: double
+                  minimum: -90
+                  maximum: 90
+                destLng:
+                  type: number
+                  format: double
+                  minimum: -180
+                  maximum: 180
+                pickupTime:
+                  $ref: './_shared.yaml#/components/schemas/Timestamp'
+                vehicleType:
+                  $ref: './_shared.yaml#/components/schemas/RideVehicleType'
+      responses:
+        '201':
+          description: Scheduled.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduledRide'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, attestation-failed, booking-disabled]
+
+  /v1/rides/schedule/{scheduledRideId}:
+    delete:
+      operationId: cancelScheduledRide
+      summary: Cancel a scheduled ride before it is dispatched.
+      description: |
+        Sets `dispatch.scheduled_rides.status = 'CANCELLED'` and withdraws it from the Job Board.
+        Once dispatch has materialised the ride (`status = 'DISPATCHED'`), cancellation belongs to
+        ride-svc's `POST /v1/rides/{rideId}/cancel`, which owns the penalty matrix — this endpoint
+        answers `409 illegal-transition` from that point on.
+
+        Path note: ADD Appendix C spells this `DELETE /rides/scheduled/{rideId}`, which cannot
+        coexist with D3' Part 2's `GET /rides/scheduled/{driverId}` — two different identifiers in
+        the same template position is an ambiguous OpenAPI path. It is landed here as the RESTful
+        partner of AL-36's `POST /v1/rides/schedule` instead. See the C007 handoff.
+      tags: [job-board]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: scheduledRideId
+          in: path
+          required: true
+          schema:
+            $ref: './_shared.yaml#/components/schemas/Ulid'
+      responses:
+        '204':
+          description: Cancelled.
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, not-found, illegal-transition]
+
+  /v1/rides/scheduled/{driverId}:
+    get:
+      operationId: listDriverScheduledRides
+      summary: The driver's upcoming scheduled rides.
+      description: US-6A.15. Rides this driver has been assigned, ordered by pickup time.
+      tags: [job-board]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: driverId
+          in: path
+          required: true
+          schema:
+            $ref: './_shared.yaml#/components/schemas/Ulid'
+        - $ref: './_shared.yaml#/components/parameters/Cursor'
+        - $ref: './_shared.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Upcoming rides.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './_shared.yaml#/components/schemas/CursorPage'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/ScheduledRide'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden]
+
+  /v1/rides/job-board:
+    get:
+      operationId: listJobBoard
+      summary: Future scheduled rides within reach.
+      description: |
+        D-06, US-6A.5. `ST_DWithin` against `dispatch.scheduled_rides.pickup_geo`, default 30 km.
+        **Level 1 drivers have no Job Board access** and receive `403 forbidden` (US-6A.8).
+      tags: [job-board]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: lat
+          in: query
+          required: true
+          schema:
+            type: number
+            format: double
+            minimum: -90
+            maximum: 90
+        - name: lng
+          in: query
+          required: true
+          schema:
+            type: number
+            format: double
+            minimum: -180
+            maximum: 180
+        - name: radius
+          in: query
+          required: false
+          description: Search radius in metres.
+          schema:
+            type: integer
+            format: int32
+            minimum: 1000
+            maximum: 30000
+            default: 30000
+        - $ref: './_shared.yaml#/components/parameters/Cursor'
+        - $ref: './_shared.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Job Board page.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './_shared.yaml#/components/schemas/CursorPage'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/ScheduledRide'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden]
+
+  /v1/rides/job-board/{rideId}/intent:
+    post:
+      operationId: postJobBoardIntent
+      summary: Post intent on a Job Board ride.
+      description: |
+        US-6A.5. **Not an acceptance** — at T-30 min the ride is offered to the closest
+        intent-poster by Level, on the ordinary dispatch screen, where it is accepted through
+        ride-svc. One intent per driver per ride (`ux_job_board_intent`); a repeat is a no-op
+        replay.
+      tags: [job-board]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: rideId
+          in: path
+          required: true
+          description: The `dispatch.scheduled_rides` id shown on the board.
+          schema:
+            $ref: './_shared.yaml#/components/schemas/Ulid'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Intent recorded.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [intentId, scheduledRideId]
+                properties:
+                  intentId:
+                    $ref: './_shared.yaml#/components/schemas/Ulid'
+                  scheduledRideId:
+                    $ref: './_shared.yaml#/components/schemas/Ulid'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, not-found, illegal-transition]
+
+  # -------------------------------------------------------------------------------------------
+  # Driver Level
+  # -------------------------------------------------------------------------------------------
+  /v1/drivers/{driverId}/level:
+    get:
+      operationId: getDriverLevel
+      summary: Read a driver's current level.
+      description: |
+        Levels run 1–3 and everyone starts at 3. **Level 1 loses Job Board and scheduled-ride
+        access** (US-6A.8). The authoritative read on the dispatch hot path is the
+        `Reputation.GetDriverLevel` gRPC call; this is the driver-facing HTTP view.
+      tags: [driver-level]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/DriverId'
+      responses:
+        '200':
+          description: Level.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [level]
+                properties:
+                  level:
+                    type: integer
+                    format: int32
+                    minimum: 1
+                    maximum: 3
+                  ratingPoints:
+                    type: integer
+                    format: int32
+                  levelUpThreshold:
+                    type: integer
+                    format: int32
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, not-found]
+
+  /v1/drivers/{driverId}/stats:
+    get:
+      operationId: getDriverStats
+      summary: Acceptance rate, no-shows and rating points.
+      description: US-6A.14 — the numbers the driver app shows behind the level badge.
+      tags: [driver-level]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/DriverId'
+      responses:
+        '200':
+          description: Stats.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [acceptanceRate, noShows, points]
+                properties:
+                  acceptanceRate:
+                    type: number
+                    format: double
+                    minimum: 0
+                    maximum: 1
+                  noShows:
+                    type: integer
+                    format: int32
+                    minimum: 0
+                  points:
+                    type: integer
+                    format: int32
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, not-found]
+
+  /v1/internal/drivers/{driverId}/no-show:
+    post:
+      operationId: reportDriverNoShow
+      summary: Scheduler reports a driver no-show.
+      description: |
+        Internal, mTLS only. US-6A.7 — decrements the level and writes
+        `dispatch.no_show_events`. Driver-side only; the passenger-side counter lives in
+        `reputation.counters.no_shows`.
+      tags: [driver-level]
+      security:
+        - mtls: []
+      parameters:
+        - $ref: '#/components/parameters/DriverId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                rideId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+      responses:
+        '200':
+          description: Level after the decrement.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [driverId, level]
+                properties:
+                  driverId:
+                    $ref: './_shared.yaml#/components/schemas/Ulid'
+                  level:
+                    type: integer
+                    format: int32
+                    minimum: 1
+                    maximum: 3
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, not-found]
+
+  # -------------------------------------------------------------------------------------------
+  # Admin configuration
+  # -------------------------------------------------------------------------------------------
+  /v1/admin/dispatch/directional-config:
+    put:
+      operationId: updateDirectionalConfig
+      summary: Configure Directional Travel parameters.
+      description: |
+        DT-02/DT-03. Exactly one configuration row exists platform-wide
+        (`ck_directional_config_singleton`, C004). Defaults are the D5' §12.1 values: 45°, 2 km
+        detour, 250 m progress, 2 uses/day, 2 h. Audited (D-35).
+      tags: [dispatch-admin]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DirectionalConfig'
+      responses:
+        '200':
+          description: Configuration after the update.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DirectionalConfig'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden]
+
+  /v1/admin/drivers/level-config:
+    put:
+      operationId: updateDriverLevelConfig
+      summary: Configure the Driver Level system.
+      description: US-14.12. Sets the point thresholds and penalties that drive level movement. Audited (D-35).
+      tags: [dispatch-admin]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LevelConfig'
+      responses:
+        '200':
+          description: Configuration after the update.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LevelConfig'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden]
+
+components:
+  securitySchemes:
+    bearerAuth:
+      $ref: './_shared.yaml#/components/securitySchemes/bearerAuth'
+    mtls:
+      $ref: './_shared.yaml#/components/securitySchemes/mtls'
+
+  parameters:
+    DriverId:
+      name: driverId
+      in: path
+      required: true
+      schema:
+        $ref: './_shared.yaml#/components/schemas/Ulid'
+
+  schemas:
+    PresenceState:
+      type: string
+      description: Matches the `dispatch.driver_presence.state` CHECK (C004).
+      enum: [OFFLINE, AVAILABLE, OFFERED, ON_RIDE]
+
+    ScheduledRideStatus:
+      type: string
+      description: Matches the `dispatch.scheduled_rides.status` CHECK (C004).
+      enum: [SCHEDULED, DISPATCHED, CANCELLED]
+
+    ScheduledRide:
+      type: object
+      required: [scheduledRideId, pickup, dropoff, vehicleType, pickupTime, status]
+      properties:
+        scheduledRideId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        rideId:
+          description: '`null` until dispatch materialises the ride at T-30 min.'
+          oneOf:
+            - $ref: './_shared.yaml#/components/schemas/Ulid'
+            - type: 'null'
+        pickup:
+          $ref: './_shared.yaml#/components/schemas/Place'
+        dropoff:
+          $ref: './_shared.yaml#/components/schemas/Place'
+        vehicleType:
+          $ref: './_shared.yaml#/components/schemas/RideVehicleType'
+        pickupTime:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+        status:
+          $ref: '#/components/schemas/ScheduledRideStatus'
+        distanceM:
+          type: integer
+          format: int32
+          minimum: 0
+          description: Distance from the querying driver, on Job Board reads.
+        intentCount:
+          type: integer
+          format: int32
+          minimum: 0
+
+    DirectionalConfig:
+      type: object
+      required:
+        - thetaMaxDeg
+        - detourMaxM
+        - progressMinM
+        - maxUsesPerDay
+        - maxDurationSec
+        - clearOnFirstTrip
+      properties:
+        thetaMaxDeg:
+          type: integer
+          format: int32
+          minimum: 0
+          maximum: 180
+          default: 45
+          description: Angular tolerance between the ride's bearing and the driver's destination.
+        detourMaxM:
+          type: integer
+          format: int32
+          minimum: 0
+          default: 2000
+          description: Pickup detour ceiling in metres.
+        progressMinM:
+          type: integer
+          format: int32
+          minimum: 0
+          default: 250
+          description: Minimum progress toward the destination for a ride to qualify.
+        maxUsesPerDay:
+          type: integer
+          format: int32
+          minimum: 0
+          default: 2
+        maxDurationSec:
+          type: integer
+          format: int32
+          minimum: 60
+          default: 7200
+        clearOnFirstTrip:
+          type: boolean
+          default: false
+
+    LevelConfig:
+      type: object
+      required: [levelUpThreshold]
+      properties:
+        levelUpThreshold:
+          type: integer
+          format: int32
+          minimum: 1
+          default: 500
+        noShowPenaltyPoints:
+          type: integer
+          format: int32
+          minimum: 0
+        cancellationPenaltyPoints:
+          type: integer
+          format: int32
+          minimum: 0
+        jobBoardMinLevel:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 3
+          default: 2
+          description: Level 1 is excluded from the Job Board (US-6A.8).

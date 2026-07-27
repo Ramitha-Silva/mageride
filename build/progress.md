@@ -32,7 +32,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C004 | db-schema-trips-rides-dispatch | 0 | DONE | 2026-07-27 | 21 scripts, 26 tables, 84/84 verify checks; 2 micro-change-sets raised, 1 actioned |
 | C005 | db-schema-business-content | 0 | DONE | 2026-07-27 | 29 scripts, 53 tables, 151/151 verify checks; 3 micro-change-sets raised |
 | C006 | db-schema-telemetry-timescale | 0 | DONE | 2026-07-27 | 4 scripts, 67 total, 187/187 verify checks; 2 micro-change-sets raised (both blocking as printed) |
-| C007 | openapi-contracts | 0 | PENDING | | |
+| C007 | openapi-contracts | 0 | DONE | 2026-07-27 | 21 service contracts + shared library, 262 operations, spectral 0 errors; 5 micro-change-sets raised |
 | C008 | api-gateway-yarp | 0 | PENDING | | |
 | C009 | docker-compose-dev | 0 | PENDING | | |
 | C010 | ci-skeleton | 0 | PENDING | | |
@@ -768,3 +768,141 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   **Build host —** same footprint as C003/C004/C005: Docker plus the cached
   `timescale/timescaledb-ha:pg16`, published on `127.0.0.1:0` and removed by an EXIT trap. The replica
   stack stayed down throughout. The verify now runs 187 checks in roughly 70 s.
+
+- **Component:** C007 openapi-contracts — 2026-07-27
+- **Status:** DONE — `npx --yes @stoplight/spectral-cli lint 'backend/contracts/*.yaml' --ruleset
+  backend/contracts/.spectral.yaml` exits 0 with **0 errors** (1 warning, explained below). 22 YAML
+  documents (`_shared.yaml` + 21 services), **262 operations**, plus the two realtime contracts and
+  the ruleset. All four DoD items pass.
+- **Notes:**
+  **Spec gaps — five micro-change-sets, none actioned in `specs/`:**
+  (a) ***AL-39 respells the verification write endpoints while calling them "unchanged" —
+  the two spellings cannot both be canonical.*** D3' Part 2 has `GET /admin/onboarding/queue`,
+  `POST /admin/onboarding/{id}/fields/{key}/confirm`, `PATCH /admin/onboarding/{id}/fields/{key}`
+  and `POST /admin/vehicles/{id}/approve|reject`. The later Δ 2026-06-28 item 8 (AL-39) lists three
+  subject-typed queues and then notes "Confirm / Edit&confirm / Approve / Reject endpoints
+  **unchanged** (PUT `/admin/verification/{id}/fields/{key}`, `/approve`, `/reject`)" — a different
+  path family. ADD §1.11's AL-39 row says only "Confirm/Edit/Approve/Reject endpoints unchanged"
+  and does not respell them, so the two documents disagree about what "unchanged" means.
+  **Resolution taken: the `/v1/admin/verification/*` family is canonical** and the
+  `/admin/onboarding/*` + `/admin/vehicles/{id}/approve|reject` forms are absent with a comment
+  naming AL-39, per the prompt's later-addendum-wins fence and DoD item 4. The deciding reason is
+  not recency: AL-49 requires a Verification Officer to Approve/Reject a **fleet org's payout
+  profile**, and `/admin/verification/{subjectId}` is the only spelling whose subject covers
+  driver, vehicle *and* org — `/admin/vehicles/{id}/approve` structurally cannot. Every semantic
+  D3' Part 2 attached to the old routes is carried onto the new ones (D-11 OnePay merchant bind on
+  approve; approval blocked while any field is `pending`, US-2.10a). The two field routes collapse
+  into one `PUT` whose body makes `value` optional — omitted = confirm as is, supplied = edit and
+  confirm. **D3' Part 2's admin-bff rows should be rewritten to the AL-39 family.**
+  (b) ***`DELETE /rides/scheduled/{rideId}` and `GET /rides/scheduled/{driverId}` cannot coexist.***
+  ADD Appendix C prints the first, D3' Part 2 the second. Two paths differing only in the *name* of
+  a template parameter are one ambiguous OpenAPI path, not two endpoints. Landed the cancel as
+  **`DELETE /v1/rides/schedule/{scheduledRideId}`**, the RESTful partner of AL-36's
+  `POST /v1/rides/schedule`, and kept D3's GET verbatim. It refuses once dispatch has materialised
+  the ride (`status='DISPATCHED'`) — from there cancellation is ride-svc's
+  `POST /v1/rides/{rideId}/cancel`, which owns the D-05 penalty matrix, and a dispatch-svc DELETE
+  against `rides.rides` would cross the R-01 boundary. **ADD Appendix C should adopt this path.**
+  (c) ***`voucher-discount-tiers` has two write endpoints in D3' Part 2.*** The subscription-svc
+  table has `PUT /v1/admin/voucher-discount-tiers` and the wallet-svc table has
+  `PUT /v1/wallet/admin/voucher-discount-tiers` — same operation, same table
+  (`billing.voucher_discount_tiers`), two paths. Both are landed so neither route table is silently
+  dropped, and each names the other. **One should be retired; the wallet spelling is the better
+  survivor** because the read (`GET /v1/wallet/admin/voucher-discount-tiers`, usage stats) only
+  exists there. The same duplication exists for the direct credit send
+  (`POST /v1/transfers/driver` vs `POST /v1/wallet/credit-transfer/initiate`) — both landed, both
+  write `billing.credit_transfers` with `direction='DIRECT'`.
+  (d) ***Voucher purchase is placed in two services.*** D3' Part 2 puts it on subscription-svc
+  (`POST /v1/vouchers/purchase`); ADD Appendix C puts it on wallet-svc
+  (`POST /wallet/voucher/purchase`). **Took D3'** — it is the API source of truth — and did not
+  duplicate it. The ADD-only `GET /wallet/voucher/discount-tiers` **was** landed: the Driver App
+  needs the tier ladder before a purchase and D3' gives only the admin read. **ADD Appendix C's
+  wallet block should drop the purchase line.**
+  (e) *Three error codes had to be coined.* AL-54 specifies statuses without kebab keys —
+  "409 duplicate sha256" and "409 not-validated / already-active". Registered `feed-duplicate`,
+  `feed-not-validated`, `feed-already-active`. **C057 must `MageRideErrors.Register` all three at
+  start-up**; the kernel's 63 declared codes are otherwise a byte-for-byte match with the
+  `ErrorCode` enum in `_shared.yaml` (verified both directions).
+  **Other spec observations (no change needed):**
+  (f) *Endpoints deliberately **absent**, each with a comment naming the AL, in the file header
+  where a reader would look for them:* `POST /public/track/{token}/call` and the `normal_masked`
+  call type (**AL-48**, `public-bff.yaml` / `voip.yaml`); `POST /v1/admin/auth/mfa/verify` and TOTP
+  enrolment (**AL-37**, `iam.yaml`); `/v1/wallet/topup/bank-transfer` and the admin bank-transfer
+  routes (**AL-05**, `wallet.yaml`); `POST /wallet/topup/card`, consolidated into `/topup/onepay`
+  since card payment *is* the OnePay rail; the four AL-39 routes in (a); and two ADD-only routes
+  that AL-40/41/42 subsumed — `GET /admin/drivers/level-1` (now `GET /v1/admin/drivers?level=1`,
+  and a literal `level-1` segment would be ambiguous against `GET /v1/admin/drivers/{driverId}`)
+  and `GET /admin/users` (replaced by the three typed directories).
+  (g) *`GET /v1/rides/history` (AL-36) is filed under ride-svc, not query-svc.* The Δ heading
+  groups it with dispatch-svc, but it is a `rides` path and ride-svc is the sole writer of the Mode
+  C aggregate (R-01); query-svc keeps `/v1/trips/*`, which spans both planes. Trip *detail* with
+  the polyline stays on query-svc.
+  (h) *`/v1/geo/search` and `/v1/geo/reverse` are contracted in `query.yaml`.* They are
+  nominatim-svc's, but D3' prints them inside the query-svc section and there is no nominatim
+  deliverable. `/v1/geo/parse-maps-link` is in `transit.yaml`, where AL-20 puts it.
+  (i) *`ride-svc` `/decline` vs ADD Appendix C `/reject`.* Took `/decline` — D3' Part 2's ride-svc
+  table, and ride-svc is the sole writer. Same for the three ride-lifecycle routes ADD Appendix C
+  still lists under dispatch-svc; that appendix supersedes itself in place ("moved to ride-svc").
+  (j) *`ocr-svc`, `analytics-read-model`, `mqtt-bridge`, `position-processor`, `persistence-writer`,
+  `fanout-svc`, `tcp-adapter` and `tile-cdn` have no `.yaml`* — none has an HTTP contract in D3'.
+  Their surfaces are the two `realtime/` documents, the Redpanda topic registry, and the CDN's
+  range-request convention.
+  **Decisions —**
+  (1) **`x-error-codes` on every operation is the machine-checkable half of D3' §0's error
+  contract.** The alternative — inferring codes from status codes — loses exactly the information
+  a client branches on. The lint enforces kebab shape; **C118 should assert set membership against
+  `MageRideErrors.All` at runtime**, which is the only place the check cannot go stale.
+  (2) **The `Idempotency-Key` rule has exactly six documented exemptions**, each carrying
+  `x-idempotency-exempt` with its reason: the OnePay and LankaQR callbacks on fare-svc, wallet-svc
+  and subscription-svc. They are HMAC-signed and dedupe on `provider_transaction_id` (R-19), and no
+  external gateway will send our header — this is C002 decision 2 expressed in the contract.
+  **120 of 126 POST operations carry the required header**, and the lint rejects a seventh
+  exemption that arrives without a reason string. The three public-bff POSTs deliberately **do**
+  require it: SCR-WT is our own client (C117), and the Δ 2026-06-21 addendum restates
+  "`Idempotency-Key` on writes" for every family.
+  (3) **Security is declared explicitly on all 262 operations**, `security: []` included. AL-06 is
+  deny-by-default; a contract that omits `security` inherits a document-level default, and an
+  omission that silently means "public" is the one failure mode this rule exists to prevent.
+  (4) **`X-Attestation` is a per-operation parameter; `X-App-Version` / `X-Platform` are not.**
+  Attestation failure is `401 attestation-failed` on a specific operation, so it is part of that
+  operation's contract and is declared on exactly the surfaces D3' §0 names sensitive (auth,
+  payments, ride accept, wallet, SOS) — 29 operations. The min-version gate is edge behaviour
+  applied to every request by C008 and belongs in `_shared.yaml` as a component, not repeated 262
+  times.
+  (5) **`_shared.yaml` is a valid OpenAPI 3.1 document, not a fragment**, because 3.1 makes `paths`
+  optional. That is what lets the one verify command cover it. `oas3-unused-component` is turned
+  off for that file alone via `overrides` — a component library referencing nothing internally is
+  its purpose, not a defect.
+  (6) **Every service file re-declares its security schemes as `$ref`s into `_shared.yaml`.** Both
+  Spectral and every codegen validate an operation's `security` against a *local*
+  `components.securitySchemes`; a cross-file reference alone leaves them unresolvable.
+  (7) **Enums are pinned to the DDL that landed, not to prose.** `RideState` is the 18-value
+  `ck_rides_state` set, `PaymentState` the 14-value `ck_ride_payments_state` set (including the
+  `PartiallyRefunded` C005 restored), `VehicleType` the 10-value AL-09 set, and the subscription,
+  GTFS, support, PDPA, report and document enums likewise. A contract enum that drifts from a CHECK
+  produces a client that can construct an unstorable request.
+  (8) **`RideVehicleType` is a separate schema from `VehicleType`.** `bus` and `train` are Mode A
+  and can never be booked as a Mode C ride or onboarded through the Driver App; giving the booking
+  and onboarding surfaces the full enum would make `403 mode-not-allowed` a runtime discovery
+  rather than a compile-time impossibility in the generated client.
+  (9) **`CursorPage.cursor` is `type: [string, 'null']`, never omitted** — matching C002 decision 9,
+  so "last page" cannot be mistaken for "field missing" by a generated deserialiser.
+  (10) **The `/public` prefix is admitted by the path rule alongside `/v1`.** AL-44's family is
+  versioned by share-token scope, not by a path segment, and D3' prints it unversioned. The rule
+  admits those two prefixes and nothing else.
+  **For later components —**
+  **C008 (gateway) — six literal-vs-template path overlaps must be routed literal-first, and two
+  of them cross a service boundary:** `GET /v1/rides/job-board` (dispatch) and
+  `GET /v1/rides/scheduled/{driverId}` (dispatch) sit under the same prefix as
+  `GET /v1/rides/{rideId}` and `GET /v1/rides/{rideId}/state` (ride-svc). **A prefix-only YARP rule
+  on `/v1/rides` will send Job Board traffic to ride-svc.** The other four are intra-service and
+  ASP.NET Core's own precedence resolves them: `/v1/rides/history`, `/v1/vehicles/mine`, and
+  `/v1/mode-b/subscriptions/{passengerId}` against `/v1/mode-b/{vehicleId}/…`. Verified by an audit
+  script; no two operations share a templated shape.
+  **C012/C013 (KMP client):** every operation has a unique camelCase `operationId` and exactly one
+  tag, so one API class per tag and one method per `operationId` generates without mangling.
+  **C118 (contract tests):** assert `x-error-codes` membership against `MageRideErrors.All`; assert
+  the `ErrorCode` enum and the kernel registry agree (they do today, 63 + 3 coined); and assert the
+  six `x-idempotency-exempt` operations are exactly the ones calling `AllowMissingIdempotencyKey`.
+  **Build host —** no Docker, no database, no replica stack. `npx` fetched
+  `@stoplight/spectral-cli@6.16.2` from the registry, so **CI (C010) needs network for this verify**
+  or must vendor the CLI. The verify runs in roughly 10 s.

@@ -1,0 +1,703 @@
+openapi: 3.1.0
+
+# =============================================================================================
+# query-svc — live map snapshot, trip history, earnings, geocoding
+# Source: specs/D3_mageride_api_contracts.md "query-svc — nearby, trips, earnings"
+#         + ADD Appendix C query-svc
+#
+# Map hard rule (D3' header): every map endpoint is [REPLACE] — MapLibre + PMTiles + Redis GEO +
+# self-hosted Nominatim. There is no Google Maps or Places call anywhere in MageRide.
+#
+# `tile-cdn` is **not an app API**: PMTiles are served by Cloudflare R2 + Worker over HTTP range
+# requests at `https://tiles.mageride.lk/sl.pmtiles`, with signed offline bundles (MAP-09).
+# The forward/reverse geocode pair below is served by `nominatim-svc`; D3' places both under the
+# query-svc section, so they are contracted here rather than in a file of their own.
+# =============================================================================================
+
+info:
+  title: MageRide query-svc
+  version: 1.0.0
+  summary: Read-side projections — nearby vehicles, trip history, driver earnings, geocoding.
+  description: |
+    `GET /v1/nearby` is a **snapshot and resync** read, not the live feed: positions stream over
+    the SignalR hub `/hubs/live` (see `realtime/signalr-hub.md`), and this endpoint is what a
+    client calls on cold start or after a reconnect.
+
+    **Visibility rules are enforced here as well as in fan-out** (D-22/D-23):
+
+    - Mode C vehicles on active hire are excluded from public results (US-7.16) — they are sent
+      only to their assigned passenger's ride group.
+    - Stale and offline vehicles are dropped (US-7.17).
+    - Mode B vehicles appear only to entitled passengers, checked against the `share:{userId}`
+      entitlement cache (D-23).
+    - Driver name is exposed for a Mode C vehicle **only after acceptance** (US-7.12).
+  contact:
+    name: MageRide Platform Engineering
+    url: https://mageride.lk
+  license:
+    name: UNLICENSED
+    url: https://mageride.lk/legal/terms
+
+servers:
+  - url: https://api.mageride.lk
+    description: Production gateway (DOKS Singapore)
+  - url: http://localhost:8080
+    description: Docker Compose dev gateway
+
+tags:
+  - name: nearby
+    description: Live map snapshot and destination options.
+  - name: trips
+    description: Trip history and detail.
+  - name: earnings
+    description: Driver earnings dashboards.
+  - name: geo
+    description: Forward and reverse geocoding (nominatim-svc).
+
+paths:
+
+  /v1/nearby:
+    get:
+      operationId: getNearbyVehicles
+      summary: Vehicles near a point, for the live map.
+      description: |
+        Served from Redis GEO, so it is a cheap resync rather than a Postgres scan. `asOf` is the
+        instant the snapshot was taken — a client uses it to decide whether a socket frame it
+        already holds is newer.
+      tags: [nearby]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: lat
+          in: query
+          required: true
+          schema:
+            type: number
+            format: double
+            minimum: -90
+            maximum: 90
+        - name: lng
+          in: query
+          required: true
+          schema:
+            type: number
+            format: double
+            minimum: -180
+            maximum: 180
+        - name: radius
+          in: query
+          required: false
+          description: Radius in metres.
+          schema:
+            type: integer
+            format: int32
+            minimum: 100
+            maximum: 20000
+            default: 3000
+        - name: types
+          in: query
+          required: false
+          description: Filter by vehicle type (US-7.7).
+          explode: false
+          schema:
+            type: array
+            items:
+              $ref: './_shared.yaml#/components/schemas/VehicleType'
+        - name: modes
+          in: query
+          required: false
+          explode: false
+          schema:
+            type: array
+            items:
+              $ref: './_shared.yaml#/components/schemas/OperatingMode'
+      responses:
+        '200':
+          description: Visible vehicles.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [vehicles, asOf]
+                properties:
+                  vehicles:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/NearbyVehicle'
+                  asOf:
+                    $ref: './_shared.yaml#/components/schemas/Timestamp'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized]
+
+  /v1/transport-options:
+    get:
+      operationId: getTransportOptions
+      summary: Ways to reach a destination, including trains.
+      description: |
+        US-7.15. Combines the private tiers (Mode C vehicle types with an estimate) with the
+        public-transport options transit-svc computes from the active GTFS feed. Trains are
+        included, which is the whole point of the story.
+      tags: [nearby]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: toLat
+          in: query
+          required: true
+          schema:
+            type: number
+            format: double
+            minimum: -90
+            maximum: 90
+        - name: toLng
+          in: query
+          required: true
+          schema:
+            type: number
+            format: double
+            minimum: -180
+            maximum: 180
+        - name: fromLat
+          in: query
+          required: false
+          description: Defaults to the caller's last known position.
+          schema:
+            type: number
+            format: double
+            minimum: -90
+            maximum: 90
+        - name: fromLng
+          in: query
+          required: false
+          schema:
+            type: number
+            format: double
+            minimum: -180
+            maximum: 180
+      responses:
+        '200':
+          description: Options, public and private.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [options]
+                properties:
+                  options:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TransportOption'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '422': { $ref: './_shared.yaml#/components/responses/UnprocessableEntity' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, route-unavailable]
+
+  /v1/routes/{routeNumber}/buses:
+    get:
+      operationId: getBusesOnRoute
+      summary: Buses currently running a route.
+      description: US-7.9. Live Mode A vehicles bound to this route number, with their last fix.
+      tags: [nearby]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: routeNumber
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 32
+          example: '138'
+      responses:
+        '200':
+          description: Active buses.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [vehicles, asOf]
+                properties:
+                  vehicles:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/NearbyVehicle'
+                  asOf:
+                    $ref: './_shared.yaml#/components/schemas/Timestamp'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, not-found]
+
+  /v1/trips/{userId}:
+    get:
+      operationId: listTrips
+      summary: A user's trip history.
+      description: |
+        US-8.7. Spans both planes — Mode A/B sessions and Mode C rides — because that is what a
+        passenger means by "my trips". Cursor-paged, newest first.
+      tags: [trips]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - $ref: './_shared.yaml#/components/parameters/Cursor'
+        - $ref: './_shared.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Trip page.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './_shared.yaml#/components/schemas/CursorPage'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/TripSummary'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden]
+
+  /v1/trips/{userId}/{tripId}:
+    get:
+      operationId: getTrip
+      summary: Trip detail with its polyline.
+      description: |
+        The polyline is the **Kalman-filtered** track (E-04) — the same one the fare was computed
+        from, so a passenger comparing the map with the receipt sees one number.
+      tags: [trips]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - name: tripId
+          in: path
+          required: true
+          schema:
+            $ref: './_shared.yaml#/components/schemas/Ulid'
+      responses:
+        '200':
+          description: Trip detail.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TripDetail'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, not-found]
+
+  /v1/earnings/{driverId}:
+    get:
+      operationId: getDriverEarnings
+      summary: Driver earnings for a period.
+      description: |
+        US-9.22. Periods are evaluated in **Asia/Colombo** (D-13). Earnings are posted only from
+        terminal payment states (R-05), so an in-flight payment never inflates the dashboard.
+      tags: [earnings]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/DriverId'
+        - name: period
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [today, week, month]
+            default: today
+      responses:
+        '200':
+          description: Earnings summary.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EarningsSummary'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden]
+
+  /v1/earnings/{driverId}/sessions:
+    get:
+      operationId: listEarningSessions
+      summary: Per-session earnings breakdown.
+      description: One row per completed ride or session, with the fee and any penalty netted out.
+      tags: [earnings]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/DriverId'
+        - name: from
+          in: query
+          required: false
+          schema:
+            $ref: './_shared.yaml#/components/schemas/BusinessDate'
+        - name: to
+          in: query
+          required: false
+          schema:
+            $ref: './_shared.yaml#/components/schemas/BusinessDate'
+        - $ref: './_shared.yaml#/components/parameters/Cursor'
+        - $ref: './_shared.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Session earnings page.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './_shared.yaml#/components/schemas/CursorPage'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/SessionEarning'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden]
+
+  /v1/geo/search:
+    get:
+      operationId: searchPlaces
+      summary: Forward geocode a search string.
+      description: |
+        Self-hosted Nominatim (D-14, D6' §7.6) — **no Google Places**. Destination search returns
+        geocoded places plus the caller's saved and recent addresses; it never returns route rows,
+        because a destination is a geo-location only (AL-17).
+      tags: [geo]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 200
+        - name: lat
+          in: query
+          required: false
+          description: Bias results toward this point.
+          schema:
+            type: number
+            format: double
+            minimum: -90
+            maximum: 90
+        - name: lng
+          in: query
+          required: false
+          schema:
+            type: number
+            format: double
+            minimum: -180
+            maximum: 180
+        - $ref: './_shared.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Matching places.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [places]
+                properties:
+                  places:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/GeocodedPlace'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized]
+
+  /v1/geo/reverse:
+    get:
+      operationId: reverseGeocode
+      summary: Reverse geocode a coordinate.
+      description: Self-hosted Nominatim. Used to label a dropped pin and a confirmed pickup point.
+      tags: [geo]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: lat
+          in: query
+          required: true
+          schema:
+            type: number
+            format: double
+            minimum: -90
+            maximum: 90
+        - name: lng
+          in: query
+          required: true
+          schema:
+            type: number
+            format: double
+            minimum: -180
+            maximum: 180
+      responses:
+        '200':
+          description: Nearest addressable place.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GeocodedPlace'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, not-found]
+
+components:
+  securitySchemes:
+    bearerAuth:
+      $ref: './_shared.yaml#/components/securitySchemes/bearerAuth'
+
+  parameters:
+    UserId:
+      name: userId
+      in: path
+      required: true
+      schema:
+        $ref: './_shared.yaml#/components/schemas/Ulid'
+    DriverId:
+      name: driverId
+      in: path
+      required: true
+      schema:
+        $ref: './_shared.yaml#/components/schemas/Ulid'
+
+  schemas:
+    NearbyVehicle:
+      type: object
+      required: [vehicleId, type, mode, lat, lng]
+      properties:
+        vehicleId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        type:
+          $ref: './_shared.yaml#/components/schemas/VehicleType'
+        mode:
+          $ref: './_shared.yaml#/components/schemas/OperatingMode'
+        lat:
+          type: number
+          format: double
+          minimum: -90
+          maximum: 90
+        lng:
+          type: number
+          format: double
+          minimum: -180
+          maximum: 180
+        heading:
+          type: integer
+          format: int32
+          minimum: 0
+          maximum: 359
+        speed:
+          type: number
+          format: double
+          minimum: 0
+          description: Metres per second.
+        driverName:
+          type: string
+          description: Mode C only, and only after the ride is accepted (US-7.12).
+        etaSeconds:
+          type: integer
+          format: int32
+          minimum: 0
+        registrationNumber:
+          type: string
+
+    TransportOption:
+      type: object
+      required: [kind, label]
+      properties:
+        kind:
+          type: string
+          enum: [private, public]
+        label:
+          type: string
+        vehicleType:
+          $ref: './_shared.yaml#/components/schemas/VehicleType'
+        routeNumber:
+          type: string
+        etaSeconds:
+          type: integer
+          format: int32
+          minimum: 0
+        estimatedFareMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        currency:
+          $ref: './_shared.yaml#/components/schemas/Currency'
+        transfers:
+          type: integer
+          format: int32
+          minimum: 0
+          description: '0 = a direct public-transport route (AL-18).'
+
+    TripSummary:
+      type: object
+      required: [tripId, plane, startedAt]
+      properties:
+        tripId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        plane:
+          type: string
+          description: '`ride` = Mode C (ride-svc); `session` = Mode A/B (trip-state-svc).'
+          enum: [ride, session]
+        mode:
+          $ref: './_shared.yaml#/components/schemas/OperatingMode'
+        pickup:
+          $ref: './_shared.yaml#/components/schemas/Place'
+        dropoff:
+          $ref: './_shared.yaml#/components/schemas/Place'
+        fareMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        currency:
+          $ref: './_shared.yaml#/components/schemas/Currency'
+        startedAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+        endedAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    TripDetail:
+      allOf:
+        - $ref: '#/components/schemas/TripSummary'
+        - type: object
+          properties:
+            polyline:
+              type: string
+              description: Encoded polyline of the Kalman-filtered track (E-04).
+            distanceKm:
+              type: number
+              format: double
+              minimum: 0
+            durationSec:
+              type: integer
+              format: int32
+              minimum: 0
+            driver:
+              type: object
+              properties:
+                driverId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+                name:
+                  type: string
+                registrationNumber:
+                  type: string
+            rating:
+              type: integer
+              format: int32
+              minimum: 1
+              maximum: 5
+
+    EarningsSummary:
+      type: object
+      required: [period, grossMinor, netMinor, currency, trips]
+      properties:
+        period:
+          type: string
+          enum: [today, week, month]
+        rangeFrom:
+          $ref: './_shared.yaml#/components/schemas/BusinessDate'
+        rangeTo:
+          $ref: './_shared.yaml#/components/schemas/BusinessDate'
+        grossMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        dailyFeeMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        penaltyMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        tipMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        netMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        currency:
+          $ref: './_shared.yaml#/components/schemas/Currency'
+        trips:
+          type: integer
+          format: int32
+          minimum: 0
+
+    SessionEarning:
+      type: object
+      required: [tripId, grossMinor, netMinor, currency, endedAt]
+      properties:
+        tripId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        grossMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        dailyFeeMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        penaltyMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        tipMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        netMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        currency:
+          $ref: './_shared.yaml#/components/schemas/Currency'
+        endedAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    GeocodedPlace:
+      type: object
+      required: [lat, lng, displayName]
+      properties:
+        lat:
+          type: number
+          format: double
+          minimum: -90
+          maximum: 90
+        lng:
+          type: number
+          format: double
+          minimum: -180
+          maximum: 180
+        displayName:
+          type: string
+        line1:
+          type: string
+        city:
+          type: string
+        source:
+          type: string
+          description: '`nominatim` for a geocode; `saved`/`recent` for the caller''s own places.'
+          enum: [nominatim, saved, recent]

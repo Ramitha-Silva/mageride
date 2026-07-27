@@ -1,0 +1,474 @@
+openapi: 3.1.0
+
+# =============================================================================================
+# public-bff — Passenger Web subview (passenger.mageride.lk), token-scoped, no app required
+# Source: specs/D3_mageride_api_contracts.md Δ 2026-07-05 "public-bff — token-scoped web tracking"
+#         (AL-44..AL-46, URD v2.6 Epic 25) + Δ 2026-07-05 #2 AL-48
+#
+# REMOVED, do not re-add:
+#   POST /public/track/{token}/call  — REMOVED BY AL-48 (Δ 2026-07-05 #2).
+#     The ride-scoped proxy-DID lease is gone. The snapshot carries `driver.phone` and
+#     SCR-WT-002/004 render it as a plain `tel:` link (US-26.3). No endpoint, no DID pool, no
+#     confirm-your-number step, no masked-SMS relay.
+#
+# Path prefix: this family is deliberately **`/public`, not `/v1`** — the token is the credential
+# and the surface is versioned by the share-token scope, not by a path segment. `.spectral.yaml`
+# admits the two prefixes for exactly this reason.
+# =============================================================================================
+
+info:
+  title: MageRide public-bff
+  version: 1.0.0
+  summary: The six SCR-WT web pages a package recipient, proxy rider or pickup-confirm target sees.
+  description: |
+    **There is no Bearer auth — the `safety.trip_share_tokens` token in the path IS the
+    credential** (D-34, P-09). Every response is **shaped by the token's scope**, and no scope
+    ever sees more than it needs (P-02/P-09):
+
+    | Scope | Who holds it | Sees |
+    |---|---|---|
+    | `package_recipient` | the person receiving a package | delivery status, driver, position, delivery OTP; the sender's number is **never** in clear |
+    | `proxy_rider` | someone else's passenger | ride state, driver, ETA, start OTP, route, who is paying; **never** the booker's payment instruments |
+    | `pickup_confirm` | an unregistered rider being asked "where are you?" | the booker's first name, a suggested pin, and a countdown — nothing else |
+
+    Tokens are minted **server-side by notification-svc and SMSed** — never returned to a client
+    (AL-45). Rate limits apply **per token and per IP** (Redis token-bucket); every hit updates
+    `lastAccessAt`/`accessCount`.
+
+    Errors are uniform across the family: `404 token-unknown`, `410 token-expired-or-revoked`,
+    `429 rate-limited`.
+
+    The app-side `POST /v1/location-requests/{requestId}/confirm|decline` contracts are unchanged;
+    the `/public/...` pair below is the no-app path into the same state machine.
+  contact:
+    name: MageRide Platform Engineering
+    url: https://mageride.lk
+  license:
+    name: UNLICENSED
+    url: https://mageride.lk/legal/terms
+
+servers:
+  - url: https://passenger.mageride.lk
+    description: Passenger Web subview
+  - url: http://localhost:8080
+    description: Docker Compose dev gateway
+
+tags:
+  - name: public-track
+    description: Token-scoped tracking, pickup confirmation, web SOS and receipts.
+
+paths:
+
+  /public/track/{token}:
+    get:
+      operationId: getPublicTrackSnapshot
+      summary: Snapshot for this token, shaped by its scope.
+      description: |
+        AL-44, US-25.2. Which variant comes back is decided by the token, not by a query
+        parameter — the client cannot ask for a wider view than it holds.
+
+        **AL-48:** the `package_recipient` and `proxy_rider` variants carry `driver.phone` so the
+        page can render a plain `tel:` link (US-26.3). There is no server-brokered call on this
+        surface.
+      tags: [public-track]
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/ShareToken'
+      responses:
+        '200':
+          description: Scope-shaped snapshot.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/PackageSnapshot'
+                  - $ref: '#/components/schemas/ProxyRideSnapshot'
+                  - $ref: '#/components/schemas/PickupConfirmSnapshot'
+                discriminator:
+                  propertyName: kind
+                  mapping:
+                    package: '#/components/schemas/PackageSnapshot'
+                    ride: '#/components/schemas/ProxyRideSnapshot'
+                    pickup_confirm: '#/components/schemas/PickupConfirmSnapshot'
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '410': { $ref: './_shared.yaml#/components/responses/Gone' }
+        '429': { $ref: './_shared.yaml#/components/responses/TooManyRequests' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [token-unknown, token-expired-or-revoked, rate-limited]
+
+  /public/track/{token}/live:
+    get:
+      operationId: streamPublicTrack
+      summary: Live position and status stream.
+      description: |
+        Server-sent events. A client that cannot hold an SSE connection open falls back to polling
+        with `?since=<cursor>`, which returns the events after that cursor as a JSON batch — the
+        page works on a bad connection without a socket.
+      tags: [public-track]
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/ShareToken'
+        - name: since
+          in: query
+          required: false
+          description: Poll fallback — return events after this cursor instead of streaming.
+          schema:
+            type: string
+            maxLength: 128
+      responses:
+        '200':
+          description: SSE stream, or a batch of events when `since` is supplied.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: '`data:` frames carrying `TrackEvent` JSON.'
+            application/json:
+              schema:
+                type: object
+                required: [events, cursor]
+                properties:
+                  events:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TrackEvent'
+                  cursor:
+                    type: [string, 'null']
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '410': { $ref: './_shared.yaml#/components/responses/Gone' }
+        '429': { $ref: './_shared.yaml#/components/responses/TooManyRequests' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [token-unknown, token-expired-or-revoked, rate-limited]
+
+  /public/track/{token}/pickup/confirm:
+    post:
+      operationId: confirmPublicPickup
+      summary: Rider shares their location from the web page.
+      description: |
+        US-25.3, P-02. **`pickup_confirm` scope only** — any other token is `403 forbidden`.
+        Resolves the same `rides.location_requests` row the in-app
+        `POST /v1/location-requests/{requestId}/confirm` resolves (AL-45), and the booker learns
+        of it over their SignalR group. TTL is 300 seconds.
+      tags: [public-track]
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/ShareToken'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: './_shared.yaml#/components/schemas/GeoPointWithAccuracy'
+      responses:
+        '200':
+          description: Location shared with the booker.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [state]
+                properties:
+                  state:
+                    type: string
+                    const: Confirmed
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '410': { $ref: './_shared.yaml#/components/responses/Gone' }
+        '429': { $ref: './_shared.yaml#/components/responses/TooManyRequests' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, forbidden, token-unknown, token-expired-or-revoked, rate-limited]
+
+  /public/track/{token}/pickup/decline:
+    post:
+      operationId: declinePublicPickup
+      summary: Rider declines to share their location.
+      description: |
+        P-02. **No coordinates are accepted or stored** — the request body is empty by design, so
+        declining cannot leak an approximate position. `pickup_confirm` scope only.
+      tags: [public-track]
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/ShareToken'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Declined; the booker is notified.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [state]
+                properties:
+                  state:
+                    type: string
+                    const: Declined
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '410': { $ref: './_shared.yaml#/components/responses/Gone' }
+        '429': { $ref: './_shared.yaml#/components/responses/TooManyRequests' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [forbidden, token-unknown, token-expired-or-revoked, rate-limited]
+
+  /public/track/{token}/sos:
+    post:
+      operationId: raisePublicSos
+      summary: Raise an SOS from the web page.
+      description: |
+        US-25.5, D-33. Dual-gateway SMS to the booker in parallel plus the admin live feed; writes
+        `safety.sos_events` with **`source='web'`** and the originating `share_token`. This is the
+        one place a token-only caller may write a safety event, and the C005 verify proves a
+        token-less web SOS is refused.
+      tags: [public-track]
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/ShareToken'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: './_shared.yaml#/components/schemas/GeoPointWithAccuracy'
+      responses:
+        '202':
+          description: Alert dispatched.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sosId, dispatchedAt]
+                properties:
+                  sosId:
+                    $ref: './_shared.yaml#/components/schemas/Ulid'
+                  dispatchedAt:
+                    $ref: './_shared.yaml#/components/schemas/Timestamp'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '410': { $ref: './_shared.yaml#/components/responses/Gone' }
+        '429': { $ref: './_shared.yaml#/components/responses/TooManyRequests' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, token-unknown, token-expired-or-revoked, rate-limited]
+
+  /public/track/{token}/receipt:
+    get:
+      operationId: getPublicReceipt
+      summary: Receipt for a finished ride or delivery.
+      description: |
+        US-25.6. **Terminal state only** — asking before the trip finishes is
+        `409 illegal-transition`. `proof` records how the handoff was evidenced: `otp_verified`,
+        `photo_proof`, `cod_collected` or `disputed`. Available as HTML for the page and PDF for
+        a download.
+      tags: [public-track]
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/ShareToken'
+      responses:
+        '200':
+          description: Receipt.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Receipt'
+            text/html:
+              schema:
+                type: string
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '410': { $ref: './_shared.yaml#/components/responses/Gone' }
+        '429': { $ref: './_shared.yaml#/components/responses/TooManyRequests' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [token-unknown, illegal-transition, token-expired-or-revoked, rate-limited]
+
+components:
+  parameters:
+    ShareToken:
+      name: token
+      in: path
+      required: true
+      description: |
+        The `safety.trip_share_tokens` token. It **is** the credential — there is no Authorization
+        header on this family.
+      schema:
+        type: string
+        minLength: 16
+        maxLength: 128
+
+  schemas:
+    PublicDriver:
+      type: object
+      description: |
+        The driver as a non-app viewer sees them. `phone` is present since AL-48 so the page can
+        render a `tel:` link; there is no masking bridge behind it.
+      required: [name, vehicleType, regNo]
+      properties:
+        name:
+          type: string
+        photo:
+          type: string
+          format: uri
+        vehicleType:
+          $ref: './_shared.yaml#/components/schemas/VehicleType'
+        regNo:
+          type: string
+        phone:
+          $ref: './_shared.yaml#/components/schemas/PhoneE164'
+
+    TrackedPosition:
+      type: object
+      required: [lat, lng, ts]
+      properties:
+        lat:
+          type: number
+          format: double
+          minimum: -90
+          maximum: 90
+        lng:
+          type: number
+          format: double
+          minimum: -180
+          maximum: 180
+        ts:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    PackageSnapshot:
+      type: object
+      description: '`package_recipient` scope (US-20.5, P-07).'
+      required: [kind, status, driver]
+      properties:
+        kind:
+          type: string
+          const: package
+        status:
+          type: string
+          enum: [PickupPending, PickedUp, InTransit, Delivered]
+        driver:
+          $ref: '#/components/schemas/PublicDriver'
+        position:
+          $ref: '#/components/schemas/TrackedPosition'
+        deliveryOtp:
+          type: string
+          pattern: '^\d{4}$'
+          description: Shown to the recipient to read out to the driver.
+        dropoff:
+          type: object
+          properties:
+            addr:
+              type: string
+        senderNameMasked:
+          type: string
+          description: |
+            The sender's display name only. **The sender's phone number is never present in this
+            scope** (P-09).
+
+    ProxyRideSnapshot:
+      type: object
+      description: '`proxy_rider` scope (US-8.21/8.22).'
+      required: [kind, state, driver]
+      properties:
+        kind:
+          type: string
+          const: ride
+        state:
+          $ref: './_shared.yaml#/components/schemas/RideState'
+        driver:
+          $ref: '#/components/schemas/PublicDriver'
+        position:
+          $ref: '#/components/schemas/TrackedPosition'
+        etaMin:
+          type: integer
+          format: int32
+          minimum: 0
+        startOtp:
+          type: string
+          pattern: '^\d{4}$'
+        route:
+          type: object
+          properties:
+            polyline:
+              type: string
+        fare:
+          type: object
+          description: |
+            Who settles, and how much. **The booker's payment instruments are never exposed here**
+            (P-09) — only whether the rider owes cash.
+          required: [totalMinor, currency, paidBy]
+          properties:
+            totalMinor:
+              type: integer
+              format: int64
+              minimum: 0
+            currency:
+              $ref: './_shared.yaml#/components/schemas/Currency'
+            paidBy:
+              type: string
+              enum: [booker, cash_due]
+
+    PickupConfirmSnapshot:
+      type: object
+      description: '`pickup_confirm` scope (P-02). Deliberately the narrowest of the three.'
+      required: [kind, bookerFirstName, expiresAt, ttlRemainingSec]
+      properties:
+        kind:
+          type: string
+          const: pickup_confirm
+        bookerFirstName:
+          type: string
+          description: First name only — enough to recognise who is asking, and no more.
+        suggestedPin:
+          $ref: './_shared.yaml#/components/schemas/GeoPoint'
+        expiresAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+        ttlRemainingSec:
+          type: integer
+          format: int32
+          minimum: 0
+
+    TrackEvent:
+      type: object
+      required: [type, at]
+      properties:
+        type:
+          type: string
+          enum: [position, status, resolved]
+        position:
+          $ref: '#/components/schemas/TrackedPosition'
+        status:
+          type: string
+        at:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+        cursor:
+          type: string
+
+    Receipt:
+      type: object
+      required: [kind, state, proof, completedAt]
+      properties:
+        kind:
+          type: string
+          enum: [package, ride]
+        state:
+          type: string
+        totalMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        currency:
+          $ref: './_shared.yaml#/components/schemas/Currency'
+        proof:
+          type: string
+          description: How the handoff was evidenced (US-25.6).
+          enum: [otp_verified, photo_proof, cod_collected, disputed]
+        proofPhotoUrl:
+          type: string
+          format: uri
+          description: Signed URL; present when `proof` is `photo_proof`.
+        driver:
+          $ref: '#/components/schemas/PublicDriver'
+        completedAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'

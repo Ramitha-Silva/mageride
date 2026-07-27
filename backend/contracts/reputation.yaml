@@ -1,0 +1,200 @@
+openapi: 3.1.0
+
+# =============================================================================================
+# reputation-svc — block status, driver level, anti-collusion flags
+# Source: specs/D3_mageride_api_contracts.md "reputation-svc — counters & gRPC" (D-04, E-07)
+#
+# The load-bearing surface of this service is **gRPC over mTLS**, not HTTP: dispatch-svc calls
+# GetBlockStatus/GetDriverLevel as a hard gate before candidate scoring, on the offer hot path.
+# OpenAPI cannot express gRPC, so the proto is reproduced under `x-grpc-service` below and will
+# be generated from `reputation.v1` by C033. Only the two admin HTTP routes are paths here.
+# =============================================================================================
+
+info:
+  title: MageRide reputation-svc
+  version: 1.0.0
+  summary: Driver reputation counters — HTTP admin surface; the hot path is gRPC.
+  description: |
+    Counters live in `reputation.counters` / `reputation.fraud_flags` (C004). Cancellations,
+    no-shows and vehicle reports arrive as gRPC reports from ride-svc, dispatch-svc and
+    safety-svc; three confirmed vehicle reports auto-delist (US-12.6).
+
+    Driver Level 1 is excluded from the Job Board (US-6A.8); a level restore is an appeal
+    outcome, hence the admin route below.
+  contact:
+    name: MageRide Platform Engineering
+    url: https://mageride.lk
+  license:
+    name: UNLICENSED
+    url: https://mageride.lk/legal/terms
+
+servers:
+  - url: https://api.mageride.lk
+    description: Production gateway (DOKS Singapore)
+  - url: http://localhost:8080
+    description: Docker Compose dev gateway
+
+tags:
+  - name: reputation
+    description: Anti-collusion flags and Driver Level administration.
+
+x-grpc-service:
+  package: reputation.v1
+  transport: gRPC over mTLS (Linkerd/SPIFFE); never exposed through the gateway.
+  proto: |
+    service Reputation {
+      rpc GetBlockStatus(DriverRef) returns (BlockStatus);   // OK|WARN|BOOKING_DISABLED|DELISTED
+      rpc GetDriverLevel(DriverRef) returns (Level);         // 1..3 + points
+      rpc ReportCancellation(CancellationEvent) returns (Ack);
+      rpc ReportNoShow(NoShowEvent) returns (Ack);
+      rpc ReportVehicle(VehicleReport) returns (Ack);
+    }
+  callers:
+    - dispatch-svc — GetBlockStatus / GetDriverLevel, hard gate before candidate scoring (D-04)
+    - ride-svc — ReportCancellation on driver-side cancel (D-05)
+    - dispatch-svc — ReportNoShow from the scheduled-ride no-show timer (US-6A.7)
+    - safety-svc — ReportVehicle on passenger report (US-12.5)
+
+paths:
+
+  /v1/admin/reputation/flags:
+    get:
+      operationId: listFraudFlags
+      summary: List open anti-collusion flags.
+      description: |
+        E-07. Surfaces `fraud.suspected` detections — repeated driver/passenger pairings,
+        cancel-and-rebook loops and the other patterns `reputation.fraud_flags` records.
+        RBAC-gated and read-audited like every other `/v1/admin` route (D-35).
+      tags: [reputation]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: kind
+          in: query
+          required: false
+          description: Filter by flag kind, e.g. `collusion`, `cancel_loop`.
+          schema:
+            type: string
+            maxLength: 60
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [open, dismissed, actioned]
+        - $ref: './_shared.yaml#/components/parameters/Cursor'
+        - $ref: './_shared.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Flag page.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './_shared.yaml#/components/schemas/CursorPage'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/FraudFlag'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden]
+
+  /v1/admin/drivers/{driverId}/level/restore:
+    post:
+      operationId: restoreDriverLevel
+      summary: Restore a driver's level after a successful appeal.
+      description: |
+        US-6A.8. Manual admin override of an automatic decrement — writes the new level and an
+        audit event naming the deciding admin. Restoring to the same level the driver already
+        holds is a no-op that still records the decision.
+      tags: [reputation]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: driverId
+          in: path
+          required: true
+          schema:
+            $ref: './_shared.yaml#/components/schemas/Ulid'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [level, reason]
+              properties:
+                level:
+                  type: integer
+                  format: int32
+                  minimum: 1
+                  maximum: 3
+                reason:
+                  type: string
+                  maxLength: 500
+      responses:
+        '200':
+          description: Level after the restore.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [driverId, level, points]
+                properties:
+                  driverId:
+                    $ref: './_shared.yaml#/components/schemas/Ulid'
+                  level:
+                    type: integer
+                    format: int32
+                    minimum: 1
+                    maximum: 3
+                  points:
+                    type: integer
+                    format: int32
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden, not-found]
+
+components:
+  securitySchemes:
+    bearerAuth:
+      $ref: './_shared.yaml#/components/securitySchemes/bearerAuth'
+
+  schemas:
+    BlockStatus:
+      type: string
+      description: The gRPC `GetBlockStatus` verdict, mirrored here for the admin UI.
+      enum: [OK, WARN, BOOKING_DISABLED, DELISTED]
+
+    FraudFlag:
+      type: object
+      required: [flagId, kind, subjectId, status, createdAt]
+      properties:
+        flagId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        kind:
+          type: string
+        subjectId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        subjectType:
+          type: string
+          enum: [driver, passenger, vehicle]
+        counterpartyId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        status:
+          type: string
+          enum: [open, dismissed, actioned]
+        blockStatus:
+          $ref: '#/components/schemas/BlockStatus'
+        detail:
+          type: string
+        createdAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'

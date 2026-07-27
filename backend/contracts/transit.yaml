@@ -1,0 +1,671 @@
+openapi: 3.1.0
+
+# =============================================================================================
+# transit-svc — GTFS public-transport routing and the GTFS Dataset Manager
+# Source: specs/D3_mageride_api_contracts.md Δ 2026-06-21 "transit-svc (NEW — AL-18)"
+#         + Δ 2026-07-22 #2 "GTFS Dataset Manager (AL-54)"
+#         + ADD Appendix C transit-svc
+#
+# AL-18: **the GTFS feed is the source of truth for Mode A routing.** AL-17: a destination is a
+# geo-location only — a passenger never types a route number, and `/v1/geo/search` never returns
+# route rows.
+# =============================================================================================
+
+info:
+  title: MageRide transit-svc
+  version: 1.0.0
+  summary: GTFS-backed public-transport options plus the admin GTFS dataset lifecycle.
+  description: |
+    **Routing (AL-18).** `GET /v1/transit/options` returns **all direct routes** between two
+    points — route id, short name, headsign/description and shape — plus transit options with at
+    least one transfer, each tagged Direct or Transit. Live GTFS-RT ETAs are Phase 3.
+
+    **Dataset lifecycle (AL-54, SCR-AP-016).** Upload a full GTFS zip (<= 200 MB, sha256-deduped)
+    → asynchronous validation (referential integrity, duplicate ids, stops inside the Sri Lanka
+    bounding box, service-window sanity, stable-id warnings) → preview counts and warnings →
+    **activate**. Activation loads `transit_staging.gtfs_*` from the stored zip and swaps the live
+    tables in **one `NpgsqlTransaction`**, then `NOTIFY transit_feed_activated` makes transit-svc
+    reload its route and stop caches within 60 s. The previously active feed becomes `archived`.
+
+    **Rollback is activation of an archived, validated version** — the same endpoint with the same
+    guarantees. **Exactly one feed is `active`**, enforced by a partial unique index (C005), so a
+    bad import is one click from being undone rather than a restore.
+
+    Import runs outside the request path as a queued job; only `activate` touches the live tables.
+  contact:
+    name: MageRide Platform Engineering
+    url: https://mageride.lk
+  license:
+    name: UNLICENSED
+    url: https://mageride.lk/legal/terms
+
+servers:
+  - url: https://api.mageride.lk
+    description: Production gateway (DOKS Singapore)
+  - url: http://localhost:8080
+    description: Docker Compose dev gateway
+
+tags:
+  - name: transit
+    description: Public-transport options and route detail.
+  - name: gtfs-admin
+    description: GTFS Dataset Manager — upload, validate, activate, roll back (AL-54).
+
+paths:
+
+  /v1/transit/options:
+    get:
+      operationId: getTransitOptions
+      summary: All direct and transfer routes between two points.
+      description: |
+        Feeds SCR-PA-009. Computed from the **active** GTFS feed; if no feed is active the answer
+        is an empty option list rather than an error, so the booking screen degrades to private
+        tiers instead of failing.
+      tags: [transit]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: fromLat
+          in: query
+          required: true
+          schema:
+            type: number
+            format: double
+            minimum: -90
+            maximum: 90
+        - name: fromLng
+          in: query
+          required: true
+          schema:
+            type: number
+            format: double
+            minimum: -180
+            maximum: 180
+        - name: toLat
+          in: query
+          required: true
+          schema:
+            type: number
+            format: double
+            minimum: -90
+            maximum: 90
+        - name: toLng
+          in: query
+          required: true
+          schema:
+            type: number
+            format: double
+            minimum: -180
+            maximum: 180
+      responses:
+        '200':
+          description: Direct and transfer options.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [options]
+                properties:
+                  options:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TransitOption'
+                  feedVersion:
+                    type: string
+                    description: '`feed_info` version of the active feed the answer came from.'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '422': { $ref: './_shared.yaml#/components/responses/UnprocessableEntity' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, route-unavailable]
+
+  /v1/transit/routes/{routeId}:
+    get:
+      operationId: getTransitRoute
+      summary: Route detail with its shape and nearest halts.
+      description: |
+        Shape polyline plus the ordered stops, and — when a reference point is supplied — the
+        halts nearest the caller.
+      tags: [transit]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: routeId
+          in: path
+          required: true
+          description: GTFS `route_id` from the active feed.
+          schema:
+            type: string
+            maxLength: 128
+        - name: lat
+          in: query
+          required: false
+          schema:
+            type: number
+            format: double
+            minimum: -90
+            maximum: 90
+        - name: lng
+          in: query
+          required: false
+          schema:
+            type: number
+            format: double
+            minimum: -180
+            maximum: 180
+      responses:
+        '200':
+          description: Route detail.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransitRoute'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, not-found]
+
+  /v1/geo/parse-maps-link:
+    get:
+      operationId: parseMapsLink
+      summary: Resolve a shared Google Maps link to coordinates.
+      description: |
+        AL-20 (items 5, 6). Backs the "Paste link" affordance. Full URLs are parsed client-side;
+        **short `maps.app.goo.gl` links are resolved here by following the redirect** — there is
+        no Google API call, which keeps the map hard rule intact (D6' I-23.1).
+      tags: [transit]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: url
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uri
+            maxLength: 2048
+      responses:
+        '200':
+          description: Resolved coordinate.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [lat, lng]
+                properties:
+                  lat:
+                    type: number
+                    format: double
+                    minimum: -90
+                    maximum: 90
+                  lng:
+                    type: number
+                    format: double
+                    minimum: -180
+                    maximum: 180
+                  label:
+                    type: string
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '422': { $ref: './_shared.yaml#/components/responses/UnprocessableEntity' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, route-unavailable]
+
+  # -------------------------------------------------------------------------------------------
+  # GTFS Dataset Manager (AL-54)
+  # -------------------------------------------------------------------------------------------
+  /v1/admin/transit/gtfs/uploads:
+    post:
+      operationId: uploadGtfsFeed
+      summary: Upload a GTFS zip for validation.
+      description: |
+        Admin/Super Admin only, audited (D-35). Required files: `agency`, `routes`, `trips`,
+        `stops`, `stop_times`, plus `calendar` or `calendar_dates`; optional `shapes`,
+        `frequencies`, `translations`, `feed_info`.
+
+        The zip is stored in object storage and **deduped on sha256** — re-uploading a byte-identical
+        feed is `409 feed-duplicate` rather than a second version. Validation runs as a queued job;
+        poll the status endpoint.
+      tags: [gtfs-admin]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: GTFS zip, at most 200 MB.
+      responses:
+        '202':
+          description: Accepted for validation.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [feedVersionId]
+                properties:
+                  feedVersionId:
+                    $ref: './_shared.yaml#/components/schemas/Ulid'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '413': { $ref: './_shared.yaml#/components/responses/PayloadTooLarge' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden, feed-duplicate, payload-too-large]
+
+  /v1/admin/transit/gtfs/uploads/{feedVersionId}:
+    get:
+      operationId: getGtfsUpload
+      summary: Poll a feed's validation status and preview.
+      description: |
+        `errorSummary` is capped at five entries — the full row-level report is a separate
+        download, so a feed with thousands of errors does not make this response unusable.
+      tags: [gtfs-admin]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FeedVersionId'
+      responses:
+        '200':
+          description: Validation state and preview.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeedUploadStatus'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, not-found]
+
+  /v1/admin/transit/gtfs/uploads/{feedVersionId}/report:
+    get:
+      operationId: getGtfsValidationReport
+      summary: Download the full row-level validation report.
+      description: |
+        Every error and warning with its file, row, code and message. `?format=csv` returns the
+        same content as a spreadsheet, which is what an operator actually fixes the feed from.
+      tags: [gtfs-admin]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FeedVersionId'
+        - name: format
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [json, csv]
+            default: json
+      responses:
+        '200':
+          description: Validation report.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [errors, warnings]
+                properties:
+                  errors:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FeedIssue'
+                  warnings:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FeedIssue'
+            text/csv:
+              schema:
+                type: string
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, not-found]
+
+  /v1/admin/transit/gtfs/uploads/{feedVersionId}/activate:
+    post:
+      operationId: activateGtfsFeed
+      summary: Make a validated feed live.
+      description: |
+        Loads `transit_staging.gtfs_*` from the stored zip, then swaps the live tables in **one
+        transaction** and `NOTIFY`s `transit_feed_activated`; transit-svc reloads its caches within
+        60 s. The prior `active` row becomes `archived`.
+
+        **Rollback is this same endpoint on an archived, validated version.** A feed that has not
+        passed validation is `409 feed-not-validated`; the currently active feed is
+        `409 feed-already-active`.
+
+        The staging indexes are named `ix_staging_*` and survive the rename — C057 must either
+        rename on activate or stop depending on index names (C005 decision 5).
+      tags: [gtfs-admin]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FeedVersionId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Swap committed; this feed is live.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeedVersion'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, not-found, feed-not-validated, feed-already-active]
+
+  /v1/admin/transit/gtfs/versions:
+    get:
+      operationId: listGtfsVersions
+      summary: Feed version history.
+      description: Every uploaded version with its status, counts and who uploaded it. Newest first.
+      tags: [gtfs-admin]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/Cursor'
+        - $ref: './_shared.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Version history.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './_shared.yaml#/components/schemas/CursorPage'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/FeedVersion'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden]
+
+  /v1/admin/transit/gtfs/versions/{feedVersionId}/download:
+    get:
+      operationId: downloadGtfsFeed
+      summary: Download the original zip.
+      description: |
+        Redirects to a short-lived signed object-storage URL. Original zips are retained for every
+        version, which is what makes rollback a re-import rather than a restore.
+      tags: [gtfs-admin]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FeedVersionId'
+      responses:
+        '302':
+          description: Redirect to the signed URL.
+          headers:
+            Location:
+              required: true
+              schema:
+                type: string
+                format: uri
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, not-found]
+
+  /v1/admin/transit/gtfs-import:
+    post:
+      operationId: importGtfsFeed
+      summary: Internal import step (superseded as an operator action).
+      description: |
+        **Superseded by `/uploads` + `/activate` (AL-54)** and retained only as the internal import
+        step the activation job invokes. It is not the operator path — SCR-AP-016 never calls it —
+        and it performs no validation of its own.
+      tags: [gtfs-admin]
+      security:
+        - bearerAuth: []
+      deprecated: true
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [feedVersionId]
+              properties:
+                feedVersionId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+      responses:
+        '202':
+          description: Import queued.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [feedVersionId, status]
+                properties:
+                  feedVersionId:
+                    $ref: './_shared.yaml#/components/schemas/Ulid'
+                  status:
+                    $ref: '#/components/schemas/FeedStatus'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden, not-found]
+
+components:
+  securitySchemes:
+    bearerAuth:
+      $ref: './_shared.yaml#/components/securitySchemes/bearerAuth'
+
+  parameters:
+    FeedVersionId:
+      name: feedVersionId
+      in: path
+      required: true
+      schema:
+        $ref: './_shared.yaml#/components/schemas/Ulid'
+
+  schemas:
+    TransitOption:
+      type: object
+      required: [kind, legs]
+      properties:
+        kind:
+          type: string
+          description: '`direct` = one route end to end; `transit` = at least one transfer (AL-18).'
+          enum: [direct, transit]
+        totalDurationSec:
+          type: integer
+          format: int32
+          minimum: 0
+        walkingDistanceM:
+          type: integer
+          format: int32
+          minimum: 0
+        legs:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/TransitLeg'
+
+    TransitLeg:
+      type: object
+      required: [routeId, routeShortName]
+      properties:
+        routeId:
+          type: string
+        routeShortName:
+          type: string
+          example: '138'
+        headsign:
+          type: string
+        description:
+          type: string
+        boardStopId:
+          type: string
+        alightStopId:
+          type: string
+        shape:
+          type: string
+          description: Encoded polyline of the GTFS shape.
+
+    TransitRoute:
+      type: object
+      required: [routeId, routeShortName, stops]
+      properties:
+        routeId:
+          type: string
+        routeShortName:
+          type: string
+        routeLongName:
+          type: string
+        agencyName:
+          type: string
+        shape:
+          type: string
+        stops:
+          type: array
+          items:
+            $ref: '#/components/schemas/TransitStop'
+        nearestStops:
+          type: array
+          description: Present when a reference coordinate was supplied.
+          items:
+            $ref: '#/components/schemas/TransitStop'
+
+    TransitStop:
+      type: object
+      required: [stopId, name, lat, lng]
+      properties:
+        stopId:
+          type: string
+        name:
+          type: string
+        lat:
+          type: number
+          format: double
+          minimum: -90
+          maximum: 90
+        lng:
+          type: number
+          format: double
+          minimum: -180
+          maximum: 180
+        sequence:
+          type: integer
+          format: int32
+          minimum: 0
+        distanceM:
+          type: integer
+          format: int32
+          minimum: 0
+
+    FeedStatus:
+      type: string
+      description: Matches the `transit.gtfs_feed_versions.status` CHECK (C005).
+      enum: [uploaded, validating, validated, failed, active, archived]
+
+    FeedCounts:
+      type: object
+      description: Per-file row counts from the uploaded zip.
+      additionalProperties:
+        type: integer
+        format: int64
+        minimum: 0
+      example:
+        agency: 12
+        routes: 431
+        trips: 18922
+        stops: 7644
+        stop_times: 512303
+
+    FeedUploadStatus:
+      type: object
+      required: [feedVersionId, status]
+      properties:
+        feedVersionId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        status:
+          $ref: '#/components/schemas/FeedStatus'
+        counts:
+          $ref: '#/components/schemas/FeedCounts'
+        feedInfoVersion:
+          type: string
+        serviceStart:
+          description: |
+            Read out of the feed rather than derived in Asia/Colombo, so unlike every other
+            business date on the platform it carries no `tzAt` companion (C005 decision 1).
+          allOf:
+            - $ref: './_shared.yaml#/components/schemas/BusinessDate'
+        serviceEnd:
+          $ref: './_shared.yaml#/components/schemas/BusinessDate'
+        warnings:
+          type: array
+          items:
+            type: string
+        errorSummary:
+          type: array
+          maxItems: 5
+          description: At most five entries; the full report is a separate download.
+          items:
+            type: string
+
+    FeedIssue:
+      type: object
+      required: [file, code, message]
+      properties:
+        file:
+          type: string
+          example: stop_times.txt
+        row:
+          type: integer
+          format: int64
+          minimum: 0
+        code:
+          type: string
+          example: unknown_stop_id
+        message:
+          type: string
+
+    FeedVersion:
+      type: object
+      required: [feedVersionId, fileName, uploadedBy, uploadedAt, status]
+      properties:
+        feedVersionId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        feedInfoVersion:
+          type: string
+        fileName:
+          type: string
+        sha256:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+        uploadedBy:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        uploadedAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+        counts:
+          $ref: '#/components/schemas/FeedCounts'
+        status:
+          $ref: '#/components/schemas/FeedStatus'
+        activatedAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+        archivedAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'

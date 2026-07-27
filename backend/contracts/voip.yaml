@@ -1,0 +1,181 @@
+openapi: 3.1.0
+
+# =============================================================================================
+# voip-svc — LiveKit call signalling
+# Source: specs/D3_mageride_api_contracts.md "voip-svc — call signalling (/v1/voip)" (D-24/25)
+#         + Δ 2026-06-28 "dispatch-svc / passenger client (items 1,2,3,4, AL-36)"
+#         + Δ 2026-07-05 #2 "Calling — masking removed (items 2–4, AL-48)"
+#
+# REMOVED, do not re-add:
+#   callType `normal_masked` on POST /v1/calls/start  — REMOVED BY AL-48 (Δ 2026-07-05 #2).
+#     The masked PSTN bridge is gone. "Normal call" is a client-side `tel:` dial of the
+#     counterparty MSISDN carried post-accept in `GET /v1/rides/{rideId}` — no server round-trip,
+#     no CPaaS, no DID pool, no masked-SMS relay. D3' Δ 2026-06-28 and D6' I-28.3/I-29.3 still
+#     describe masking; AL-48 is later and wins (planner finding 4).
+#   POST /public/track/{token}/call  — REMOVED BY AL-48; see public-bff.yaml.
+# =============================================================================================
+
+info:
+  title: MageRide voip-svc
+  version: 1.0.0
+  summary: Ride-scoped LiveKit signalling tokens for in-app calling.
+  description: |
+    `voip-svc` (LiveKit SFU + coturn) issues signalling tokens scoped to `(rideId, role)` and
+    expiring at trip end (D-24, D6' §6). The binding is driver↔**rider**, never driver↔booker —
+    on a proxy booking the person in the vehicle is the counterparty (P-05).
+
+    TURN media relays over the host UDP range (3478, 50000–50100) and **not** through
+    HAProxy/YARP, which cannot relay UDP. Recordings are off by default (PDPA).
+
+    On VoIP failure the client offers "Call normally instead?" and dials `tel:` directly — that
+    fallback is entirely client-side (AL-48).
+  contact:
+    name: MageRide Platform Engineering
+    url: https://mageride.lk
+  license:
+    name: UNLICENSED
+    url: https://mageride.lk/legal/terms
+
+servers:
+  - url: https://api.mageride.lk
+    description: Production gateway (DOKS Singapore)
+  - url: http://localhost:8080
+    description: Docker Compose dev gateway
+
+tags:
+  - name: voip
+    description: LiveKit token minting and call logging.
+
+paths:
+
+  /v1/voip/token:
+    post:
+      operationId: issueVoipToken
+      summary: Mint a LiveKit signalling token for a ride.
+      description: |
+        The caller must be a participant in the ride and the ride must be non-terminal. Token
+        lifetime ends at trip end, so a token cannot outlive the reason it was issued.
+      tags: [voip]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+        - $ref: './_shared.yaml#/components/parameters/XAttestation'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rideId]
+              properties:
+                rideId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+      responses:
+        '200':
+          description: Token minted.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [roomName, token, wsUrl, callee]
+                properties:
+                  roomName:
+                    type: string
+                    description: '`ride_{rideId}` — one room per ride.'
+                    example: ride_01JQ9F8Z6N5R7T2V4X6Y8A0B2C
+                  token:
+                    type: string
+                    description: LiveKit JWT, expiring at trip end.
+                  wsUrl:
+                    type: string
+                    format: uri
+                    example: wss://voip.mageride.lk
+                  callee:
+                    type: string
+                    enum: [rider, driver]
+                    description: Who the caller will be connected to (P-05 — never the booker).
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, attestation-failed, not-ride-participant, not-found, ride-terminal]
+
+  /v1/calls/start:
+    post:
+      operationId: startCall
+      summary: Start an in-app VoIP call and log the attempt.
+      description: |
+        `callType` is **`free_voip` only** (AL-48) — mints the WebRTC/CallKit session and writes
+        `comms.call_log`. The former `normal_masked` value and its PSTN bridge are removed.
+
+        A direct `tel:` dial is not brokered here; the client logs it after the fact with
+        `callType: direct_dial`, which is best-effort because a `tel:` dial cannot be
+        server-verified (AL-48). `comms.call_log.caller_id` is nullable, so a row may identify no
+        caller at all (C005 note (f)).
+      tags: [voip]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rideId, calleeRole, callType]
+              properties:
+                rideId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+                calleeRole:
+                  type: string
+                  enum: [driver, passenger, sender, recipient]
+                  description: Matches the `comms.call_log.callee_role` CHECK (C005).
+                callType:
+                  type: string
+                  description: |
+                    `free_voip` starts a LiveKit session. `direct_dial` only records that the
+                    user tapped a `tel:` link — no session is created (AL-48).
+                  enum: [free_voip, direct_dial]
+      responses:
+        '200':
+          description: |
+            Call started (`free_voip`) or tap recorded (`direct_dial`). The `session` block is
+            present only for `free_voip`.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [callId, callType]
+                properties:
+                  callId:
+                    $ref: './_shared.yaml#/components/schemas/Ulid'
+                  callType:
+                    type: string
+                    enum: [free_voip, direct_dial]
+                  session:
+                    type: object
+                    required: [roomName, token, wsUrl]
+                    properties:
+                      roomName:
+                        type: string
+                      token:
+                        type: string
+                      wsUrl:
+                        type: string
+                        format: uri
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, not-ride-participant, not-found, ride-terminal]
+
+components:
+  securitySchemes:
+    bearerAuth:
+      $ref: './_shared.yaml#/components/securitySchemes/bearerAuth'

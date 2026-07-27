@@ -1,0 +1,1508 @@
+openapi: 3.1.0
+
+# =============================================================================================
+# subscription-svc — daily platform fee, vouchers, driver credit transfer, Mode B subscriptions
+# Source: specs/D3_mageride_api_contracts.md "subscription-svc — daily fee, vouchers, credit
+#         transfer" + Δ 2026-06-21 "subscription-svc — Mode B subscriptions, requests & payments"
+#         + Δ 2026-07-18 "subscription-svc — passenger pay sheet consumes the verified payout
+#         profile (item 1, AL-49)" + ADD Appendix C subscription-svc
+#
+# AL-01: the credit-transfer endpoints are **Driver-App APIs**, not portal APIs. "Reseller" is
+# not a role, account or capability — any driver holding credit transfers it by **Driver ID**,
+# moving the **exact value with no commission**. The reseller's entire margin is the bulk-voucher
+# purchase discount, set per denomination in the Admin Portal.
+#
+# AL-34: the credit-request QR-scan path is REMOVED — `credit-transfer/request` is Driver-ID-only
+# and SCR-DA/DI-023 drops the scan tile.
+# =============================================================================================
+
+info:
+  title: MageRide subscription-svc
+  version: 1.0.0
+  summary: Daily platform fee, bulk vouchers, driver-to-driver credit, Mode B subscriptions.
+  description: |
+    **Daily fee (D-08/D-13).** Seven tiers by vehicle type, Mode A free. **The first trip of the
+    day is free**; the fee is deducted before the second, idempotently keyed
+    `(driverId, vehicleId, feeDate)` in **Asia/Colombo**. The ledger entry's idempotency key is
+    exactly `daily_fee:{driverId}:{vehicleId}:{feeDate}` (C005 decision 4) — that spelling is
+    load-bearing. `truck` and `mini_truck` have **no seeded rate**: Finance must configure one
+    before a delivery vehicle can go online (C005).
+
+    **Mode B subscriptions (Epic 23, AL-24).** Each Mode B vehicle is Free or Paid ("Service
+    payment", AL-51). Paid vehicles collect a per-subscriber monthly fare on a 1st-of-month or
+    join-anniversary cycle. Payment routes **to the fleet owner as a pass-through, not platform
+    revenue** — `subscription.payments` must never post to `billing.journal_entries`, and the
+    schema deliberately gives C048 no column tempting it to (C005).
+
+    Passenger payment methods are LankaQR deep-link, LankaQR scan, OnePay and online transfer
+    (slip upload); cash is owner-marked-received. The pay sheet's `payTo` block is served **only
+    from a `verified` payout profile** (AL-49) — an org whose profile falls back to
+    `pending_verification` keeps collecting against the last verified snapshot, never against
+    unverified edits.
+  contact:
+    name: MageRide Platform Engineering
+    url: https://mageride.lk
+  license:
+    name: UNLICENSED
+    url: https://mageride.lk/legal/terms
+
+servers:
+  - url: https://api.mageride.lk
+    description: Production gateway (DOKS Singapore)
+  - url: http://localhost:8080
+    description: Docker Compose dev gateway
+
+tags:
+  - name: fees
+    description: Daily platform fee — rates, today's status, history, internal charge.
+  - name: credit
+    description: Driver-to-driver credit transfer and bulk vouchers (AL-01).
+  - name: mode-b
+    description: Mode B access requests, subscriptions and subscription payments (Epic 23).
+  - name: subscription-admin
+    description: Admin configuration of fee rates and voucher discount tiers.
+
+paths:
+
+  # -------------------------------------------------------------------------------------------
+  # Daily fee
+  # -------------------------------------------------------------------------------------------
+  /v1/fees/rates:
+    get:
+      operationId: listDailyFeeRates
+      summary: The seven-tier daily fee table.
+      description: |
+        Mode A is free; the remaining tiers run Motorbike 50 / Three-wheeler 100 / Flex 150 /
+        Sedan 200 / Mini-van 250 / Van 300. `truck` and `mini_truck` appear only once Finance
+        configures them.
+      tags: [fees]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Configured rates.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DailyFeeRate'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized]
+
+  /v1/fees/{driverId}/today:
+    get:
+      operationId: getTodaysDailyFee
+      summary: Today's daily-fee status for a driver.
+      description: |
+        US-9.1/9.7. `feeDate` is the **Asia/Colombo** business date, and `feeDateTzAt` records the
+        instant it was derived from (D-38) so a driver near midnight can see which day the app is
+        talking about.
+      tags: [fees]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/DriverId'
+      responses:
+        '200':
+          description: Today's fee status.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [vehicleType, dailyRateMinor, status, tripsToday, firstTripFree, feeDate]
+                properties:
+                  vehicleType:
+                    $ref: './_shared.yaml#/components/schemas/VehicleType'
+                  dailyRateMinor:
+                    type: integer
+                    format: int64
+                    minimum: 0
+                  status:
+                    type: string
+                    enum: [PAID, UNPAID]
+                  deductedMinor:
+                    type: integer
+                    format: int64
+                    minimum: 0
+                  tripsToday:
+                    type: integer
+                    format: int32
+                    minimum: 0
+                  firstTripFree:
+                    type: boolean
+                  feeDate:
+                    $ref: './_shared.yaml#/components/schemas/BusinessDate'
+                  feeDateTzAt:
+                    $ref: './_shared.yaml#/components/schemas/Timestamp'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, not-found]
+
+  /v1/fees/{driverId}/history:
+    get:
+      operationId: listDailyFeeHistory
+      summary: Daily-fee deduction history.
+      description: US-9A.6. Cursor-paged, one row per charged or waived Colombo day.
+      tags: [fees]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/DriverId'
+        - name: from
+          in: query
+          required: false
+          schema:
+            $ref: './_shared.yaml#/components/schemas/BusinessDate'
+        - name: to
+          in: query
+          required: false
+          schema:
+            $ref: './_shared.yaml#/components/schemas/BusinessDate'
+        - $ref: './_shared.yaml#/components/parameters/Cursor'
+        - $ref: './_shared.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Deduction history.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './_shared.yaml#/components/schemas/CursorPage'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/DailyFeeCharge'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden]
+
+  /v1/internal/fees/{driverId}/charge-before-trip:
+    post:
+      operationId: chargeDailyFeeBeforeTrip
+      summary: Deduct the daily fee before the driver's second trip.
+      description: |
+        Internal, mTLS only. D-08/D-13 — called by ride-svc during offer acceptance. Idempotent on
+        `(driverId, vehicleId, feeDate)`, which is the primary key of
+        `billing.daily_fee_charges`, so a redelivery is a no-op upsert rather than a second
+        deduction. The first trip of the day writes a `WAIVED_FIRST_TRIP` row carrying **zero**
+        amount — "no row" keeps meaning "not charged yet today".
+
+        An insufficient balance is `402 insufficient-wallet`, which is what surfaces to the driver
+        as a failed accept (US-9.1).
+      tags: [fees]
+      security:
+        - mtls: []
+      parameters:
+        - $ref: '#/components/parameters/DriverId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [vehicleId]
+              properties:
+                vehicleId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+                rideId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+      responses:
+        '200':
+          description: Charge applied, waived, or already present for this Colombo day.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyFeeCharge'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '402': { $ref: './_shared.yaml#/components/responses/PaymentRequired' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, insufficient-wallet, not-found]
+
+  # -------------------------------------------------------------------------------------------
+  # Driver credit transfer & vouchers (AL-01, AL-34)
+  # -------------------------------------------------------------------------------------------
+  /v1/subscriptions/credit-transfer/request:
+    post:
+      operationId: requestCreditTransfer
+      summary: Ask another driver to send you credit.
+      description: |
+        US-9.10, Driver App (AL-01). **Driver ID only** — the QR-scan path was removed by AL-34
+        and SCR-DA/DI-023 has no scan tile. Creates a `PENDING` `billing.credit_transfers` row
+        with `direction='REQUESTED'`; nothing moves until the holder approves.
+      tags: [credit]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [holderDriverId, amountMinor]
+              properties:
+                holderDriverId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+                amountMinor:
+                  type: integer
+                  format: int64
+                  minimum: 1
+      responses:
+        '201':
+          description: Request raised.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreditTransfer'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [invalid-amount, unauthorized, forbidden, not-found, conflict]
+
+  /v1/subscriptions/credit-transfer/pending:
+    get:
+      operationId: listPendingCreditTransfers
+      summary: Incoming credit requests awaiting this driver's decision.
+      description: US-9A.10. The credit-holding driver's approval inbox.
+      tags: [credit]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/Cursor'
+        - $ref: './_shared.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Pending requests.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './_shared.yaml#/components/schemas/CursorPage'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/CreditTransfer'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized]
+
+  /v1/subscriptions/credit-transfer/{transferId}/approve:
+    post:
+      operationId: approveCreditTransfer
+      summary: Holding driver approves a credit request.
+      description: |
+        US-9.13. Debits the sender the **exact amount** and credits the recipient the **exact
+        amount** — **no commission** (AL-01). Posts one balanced `billing.journal_entries` pair;
+        only an `APPROVED` transfer may carry a journal entry (`ck_credit_transfers_posting`).
+      tags: [credit]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TransferId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+        - $ref: './_shared.yaml#/components/parameters/XAttestation'
+      responses:
+        '200':
+          description: Approved and posted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreditTransfer'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '402': { $ref: './_shared.yaml#/components/responses/PaymentRequired' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [attestation-failed, insufficient-wallet, forbidden, not-found, conflict]
+
+  /v1/subscriptions/credit-transfer/{transferId}/reject:
+    post:
+      operationId: rejectCreditTransfer
+      summary: Holding driver rejects a credit request.
+      description: US-9.12. Terminal; no money moves and no journal entry is written.
+      tags: [credit]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TransferId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Rejected.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreditTransfer'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, not-found, conflict]
+
+  /v1/transfers/driver:
+    post:
+      operationId: sendCreditToDriver
+      summary: Send credit directly to another driver by Driver ID.
+      description: |
+        US-9.20/9.21. The push counterpart of the request/approve pair — writes
+        `direction='DIRECT'`, `status='APPROVED'` and posts immediately. **Exact value, no
+        commission.** Self-transfer is rejected (`ck_credit_transfers_not_self`).
+      tags: [credit]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+        - $ref: './_shared.yaml#/components/parameters/XAttestation'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [recipientDriverId, amountMinor]
+              properties:
+                recipientDriverId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+                amountMinor:
+                  type: integer
+                  format: int64
+                  minimum: 1
+      responses:
+        '201':
+          description: Sent and posted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreditTransfer'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '402': { $ref: './_shared.yaml#/components/responses/PaymentRequired' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [invalid-amount, attestation-failed, insufficient-wallet, forbidden, not-found]
+
+  /v1/vouchers/purchase:
+    post:
+      operationId: purchaseVoucher
+      summary: Buy bulk credit at the per-denomination discount.
+      description: |
+        US-9.19. Denominations are Rs 1,000 / 2,000 / 3,000 / 5,000 / 10,000. The discount is
+        **per voucher value**, not per driver and not per transfer (AL-01): the buyer pays
+        `paidMinor` and their **own** wallet is credited the full `denominationMinor` — pay
+        Rs 900, receive Rs 1,000 of credit. There is no redeem code and no second party
+        (`ck_voucher_credit_full`, C005).
+      tags: [credit]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+        - $ref: './_shared.yaml#/components/parameters/XAttestation'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [denominationMinor, method]
+              properties:
+                denominationMinor:
+                  type: integer
+                  format: int64
+                  minimum: 1
+                method:
+                  type: string
+                  enum: [onepay, lankaqr]
+      responses:
+        '201':
+          description: Purchase initiated; credit posts on gateway confirmation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoucherPurchase'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '402': { $ref: './_shared.yaml#/components/responses/PaymentRequired' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [invalid-amount, attestation-failed, gateway-error, forbidden, not-found]
+
+  # -------------------------------------------------------------------------------------------
+  # Mode B access requests & subscriptions (Epic 23)
+  # -------------------------------------------------------------------------------------------
+  /v1/mode-b/{vehicleId}/access-requests:
+    post:
+      operationId: requestModeBAccess
+      summary: Passenger requests access to a Mode B vehicle.
+      description: |
+        Item 8/15. The Mode B marker tap on the passenger map opens this screen with `vehicleId`
+        pre-filled. Access requests and grants are **per vehicle**, never per fleet.
+      tags: [mode-b]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/VehicleId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                note:
+                  type: string
+                  maxLength: 500
+      responses:
+        '201':
+          description: Request raised.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessRequest'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, vehicle-not-found, conflict]
+    get:
+      operationId: listModeBAccessRequests
+      summary: Pending access requests for this vehicle.
+      description: |
+        Driver/owner view: requester name, mobile and passenger id. The Fleet Portal reaches the
+        same data through its org-scoped proxy `GET /v1/fleets/{fleetId}/vehicles/{vehicleId}/requests`.
+      tags: [mode-b]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/VehicleId'
+        - $ref: './_shared.yaml#/components/parameters/Cursor'
+        - $ref: './_shared.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Pending requests.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './_shared.yaml#/components/schemas/CursorPage'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/AccessRequest'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, not-owner, vehicle-not-found]
+
+  /v1/mode-b/access-requests/{requestId}/accept:
+    post:
+      operationId: acceptModeBAccessRequest
+      summary: Driver or owner accepts an access request.
+      description: |
+        Item 15. Creates the grant **and starts the subscription** in one transaction: a Paid
+        vehicle's subscription inherits the vehicle's default monthly fare, overridable per
+        subscriber afterwards.
+      tags: [mode-b]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Accepted; grant and subscription created.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [requestId, grantId, subscriptionId]
+                properties:
+                  requestId:
+                    $ref: './_shared.yaml#/components/schemas/Ulid'
+                  grantId:
+                    $ref: './_shared.yaml#/components/schemas/Ulid'
+                  subscriptionId:
+                    $ref: './_shared.yaml#/components/schemas/Ulid'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, not-owner, not-found, conflict]
+
+  /v1/mode-b/access-requests/{requestId}/reject:
+    post:
+      operationId: rejectModeBAccessRequest
+      summary: Driver or owner rejects an access request.
+      description: Terminal. No grant and no subscription are created.
+      tags: [mode-b]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  maxLength: 500
+      responses:
+        '200':
+          description: Rejected.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessRequest'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, not-owner, not-found, conflict]
+
+  /v1/mode-b/subscriptions/{passengerId}:
+    get:
+      operationId: listPassengerSubscriptions
+      summary: A passenger's Mode B subscriptions.
+      description: SCR-PA-025 — Free/Paid, monthly fare, next due date and status per subscription.
+      tags: [mode-b]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: passengerId
+          in: path
+          required: true
+          schema:
+            $ref: './_shared.yaml#/components/schemas/Ulid'
+        - $ref: './_shared.yaml#/components/parameters/Cursor'
+        - $ref: './_shared.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Subscriptions.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './_shared.yaml#/components/schemas/CursorPage'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Subscription'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden]
+
+  /v1/mode-b/subscriptions/{subscriptionId}/unsubscribe:
+    post:
+      operationId: unsubscribeModeB
+      summary: Passenger unsubscribes.
+      description: |
+        Item 17. Sets `grant.status='unsubscribed'`, emits `share.revoked` (fanout removes the
+        passenger from the vehicle's group in under 200 ms, D-22) and stops billing. The roster
+        row survives as **MUTED** until the owner deletes it (US-4.12) — that is what
+        `DELETE /v1/mode-b/{vehicleId}/subscribers/{subscriberId}` is for.
+      tags: [mode-b]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SubscriptionId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Unsubscribed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Subscription'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, not-found, conflict]
+
+  /v1/mode-b/subscriptions/{subscriptionId}/pay:
+    post:
+      operationId: payModeBSubscription
+      summary: Start paying a Mode B monthly fare.
+      description: |
+        Item 16e, AL-49. The response's `payTo` block comes **only from a `verified` payout
+        profile**: `lankaqrImageUrl` (a signed URL of the owner's bank-app QR) for the LankaQR
+        methods, or bank/branch/account for `online_transfer`. If the org's profile has fallen
+        back to `pending_verification`, collection continues against the **last verified
+        snapshot** — never against unverified edits.
+
+        The money is a **pass-through to the fleet owner** and is never posted to the platform
+        ledger (C005).
+      tags: [mode-b]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SubscriptionId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [method]
+              properties:
+                method:
+                  $ref: '#/components/schemas/SubscriptionPayMethod'
+                periodMonth:
+                  description: First of the month being paid for; defaults to the next due period.
+                  allOf:
+                    - $ref: './_shared.yaml#/components/schemas/BusinessDate'
+      responses:
+        '200':
+          description: Payment initiated with the owner's pay-to details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriptionPayment'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden, not-found, payout-profile-not-verified]
+
+  /v1/mode-b/subscriptions/{subscriptionId}/payments:
+    get:
+      operationId: listSubscriptionPayments
+      summary: A passenger's payment history for one subscription.
+      description: SCR-PA-025b (item 16h).
+      tags: [mode-b]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SubscriptionId'
+        - $ref: './_shared.yaml#/components/parameters/Cursor'
+        - $ref: './_shared.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Payment history.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './_shared.yaml#/components/schemas/CursorPage'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/SubscriptionPayment'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, not-found]
+
+  /v1/mode-b/payments/{paymentId}/transfer-slip:
+    post:
+      operationId: uploadTransferSlip
+      summary: Passenger uploads an online-transfer screenshot.
+      description: |
+        Item 16e. Moves the payment to `pending_verification`; the owner confirms it with
+        `POST /v1/mode-b/payments/{paymentId}/confirm`. Until then the month is unpaid.
+      tags: [mode-b]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PaymentId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Slip received; awaiting owner confirmation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriptionPayment'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '413': { $ref: './_shared.yaml#/components/responses/PayloadTooLarge' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden, not-found, conflict, payload-too-large]
+
+  /v1/mode-b/payments/{paymentId}/confirm:
+    post:
+      operationId: confirmTransferSlip
+      summary: Owner confirms a transfer slip.
+      description: Item 16f. Moves the payment to `paid` and advances the subscription's next due date.
+      tags: [mode-b]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PaymentId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Confirmed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriptionPayment'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, not-owner, not-found, conflict]
+
+  /v1/mode-b/pay/onepay/webhook:
+    post:
+      operationId: modeBOnepayWebhook
+      summary: OnePay confirmation for a subscription payment.
+      description: |
+        HMAC-signed. Idempotent on `provider_transaction_id` (R-19). The credit is a
+        **pass-through to the owner** — no platform ledger entry is written for a Mode B
+        subscription payment (C005).
+      tags: [mode-b]
+      security:
+        - hmacSignature: []
+      x-idempotency-exempt: >-
+        Provider callback. Deduped on provider_transaction_id per R-19; OnePay does not send an
+        Idempotency-Key header. See MageRide.Shared AllowMissingIdempotencyKey (C002 decision 2).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubscriptionProviderCallback'
+      responses:
+        '200':
+          description: Callback accepted (also returned for a redelivery).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [received]
+                properties:
+                  received:
+                    type: boolean
+                    const: true
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, not-found]
+
+  /v1/mode-b/pay/lankaqr/confirm:
+    post:
+      operationId: modeBLankaqrConfirm
+      summary: LankaQR confirmation for a subscription payment.
+      description: HMAC-signed. Idempotent on `provider_transaction_id` (R-19).
+      tags: [mode-b]
+      security:
+        - hmacSignature: []
+      x-idempotency-exempt: >-
+        Provider callback. Deduped on provider_transaction_id per R-19; the bank IPG does not send
+        an Idempotency-Key header. See MageRide.Shared AllowMissingIdempotencyKey (C002 decision 2).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubscriptionProviderCallback'
+      responses:
+        '200':
+          description: Callback accepted (also returned for a redelivery).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [received]
+                properties:
+                  received:
+                    type: boolean
+                    const: true
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, not-found]
+
+  /v1/mode-b/{vehicleId}/subscribers:
+    get:
+      operationId: listModeBSubscribers
+      summary: The vehicle's subscriber roster.
+      description: |
+        Item 16. Fare, cycle, this month's status and the muted flag per subscriber. An
+        unsubscribed row stays here, muted, until the owner deletes it (US-4.12).
+      tags: [mode-b]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/VehicleId'
+        - $ref: './_shared.yaml#/components/parameters/Cursor'
+        - $ref: './_shared.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Roster.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './_shared.yaml#/components/schemas/CursorPage'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/SubscriberRow'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, not-owner, vehicle-not-found]
+
+  /v1/mode-b/{vehicleId}/subscribers/{subscriberId}:
+    delete:
+      operationId: deleteModeBSubscriber
+      summary: Owner hard-deletes a muted or unsubscribed subscriber.
+      description: |
+        Item 17. **Owner only, and only for a muted or unsubscribed row** — deleting an active
+        subscriber is `409 conflict`; the passenger unsubscribes first
+        (`POST /v1/mode-b/subscriptions/{subscriptionId}/unsubscribe`).
+      tags: [mode-b]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/VehicleId'
+        - $ref: '#/components/parameters/SubscriberId'
+      responses:
+        '204':
+          description: Deleted.
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, not-owner, not-found, conflict]
+
+  /v1/mode-b/{vehicleId}/subscribers/{subscriberId}/fare:
+    put:
+      operationId: setSubscriberFare
+      summary: Owner overrides one subscriber's monthly fare.
+      description: |
+        Item 16f. Overrides the vehicle's default for this subscriber only. A Free vehicle carries
+        no fare at all (`ck_subscriptions_fare`, C005).
+      tags: [mode-b]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/VehicleId'
+        - $ref: '#/components/parameters/SubscriberId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [monthlyFareMinor]
+              properties:
+                monthlyFareMinor:
+                  type: integer
+                  format: int64
+                  minimum: 0
+      responses:
+        '200':
+          description: Fare updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriberRow'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [invalid-amount, unauthorized, not-owner, not-found, conflict]
+
+  /v1/mode-b/{vehicleId}/subscribers/{subscriberId}/mark-cash:
+    post:
+      operationId: markSubscriberCashPaid
+      summary: Owner marks a cash payment received.
+      description: |
+        Item 16f. Records a `cash` `subscription.payments` row as `paid` and advances the next due
+        date. Cash is the only method with no gateway leg at all.
+      tags: [mode-b]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/VehicleId'
+        - $ref: '#/components/parameters/SubscriberId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amountMinor]
+              properties:
+                amountMinor:
+                  type: integer
+                  format: int64
+                  minimum: 0
+                periodMonth:
+                  $ref: './_shared.yaml#/components/schemas/BusinessDate'
+      responses:
+        '200':
+          description: Marked paid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriptionPayment'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [invalid-amount, unauthorized, not-owner, not-found, conflict]
+
+  /v1/mode-b/{vehicleId}/subscribers/{subscriberId}/payments:
+    get:
+      operationId: listSubscriberPayments
+      summary: Owner's per-subscriber payment ledger.
+      description: SCR-FP-012 (item 16i).
+      tags: [mode-b]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/VehicleId'
+        - $ref: '#/components/parameters/SubscriberId'
+        - $ref: './_shared.yaml#/components/parameters/Cursor'
+        - $ref: './_shared.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Payment ledger.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './_shared.yaml#/components/schemas/CursorPage'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/SubscriptionPayment'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, not-owner, not-found]
+
+  # -------------------------------------------------------------------------------------------
+  # Admin configuration
+  # -------------------------------------------------------------------------------------------
+  /v1/admin/fees/rates:
+    put:
+      operationId: updateDailyFeeRates
+      summary: Configure the daily-fee rate per vehicle type.
+      description: |
+        US-14.4, Admin Portal Config (SCR-AP-007). Audited (D-35). Setting a rate for `truck` or
+        `mini_truck` is a prerequisite for a delivery vehicle going online — §20 seeds none.
+      tags: [subscription-admin]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items]
+              properties:
+                items:
+                  type: array
+                  minItems: 1
+                  items:
+                    $ref: '#/components/schemas/DailyFeeRate'
+      responses:
+        '200':
+          description: Rates after the update.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DailyFeeRate'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden]
+
+  /v1/admin/voucher-discount-tiers:
+    put:
+      operationId: updateVoucherDiscountTiers
+      summary: Set the bulk-voucher discount per denomination.
+      description: |
+        US-9A.15, Admin Portal Config (AL-01). The percentage is **per voucher value**, expressed
+        in basis points — a 10% rate is `1000`. This is the informal reseller's entire margin;
+        there is no per-driver rate and no per-transfer commission anywhere.
+
+        The read side and an identical write live on wallet-svc at
+        `/v1/wallet/admin/voucher-discount-tiers`; both spellings are in D3' Part 2 and both are
+        landed. See the C007 handoff — one should be retired.
+      tags: [subscription-admin]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tiers]
+              properties:
+                tiers:
+                  type: array
+                  minItems: 1
+                  items:
+                    $ref: '#/components/schemas/VoucherDiscountTier'
+      responses:
+        '200':
+          description: Tiers after the update.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tiers]
+                properties:
+                  tiers:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/VoucherDiscountTier'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden]
+
+components:
+  securitySchemes:
+    bearerAuth:
+      $ref: './_shared.yaml#/components/securitySchemes/bearerAuth'
+    mtls:
+      $ref: './_shared.yaml#/components/securitySchemes/mtls'
+    hmacSignature:
+      $ref: './_shared.yaml#/components/securitySchemes/hmacSignature'
+
+  parameters:
+    DriverId:
+      name: driverId
+      in: path
+      required: true
+      schema:
+        $ref: './_shared.yaml#/components/schemas/Ulid'
+    VehicleId:
+      name: vehicleId
+      in: path
+      required: true
+      schema:
+        $ref: './_shared.yaml#/components/schemas/Ulid'
+    RequestId:
+      name: requestId
+      in: path
+      required: true
+      schema:
+        $ref: './_shared.yaml#/components/schemas/Ulid'
+    SubscriptionId:
+      name: subscriptionId
+      in: path
+      required: true
+      schema:
+        $ref: './_shared.yaml#/components/schemas/Ulid'
+    SubscriberId:
+      name: subscriberId
+      in: path
+      required: true
+      schema:
+        $ref: './_shared.yaml#/components/schemas/Ulid'
+    PaymentId:
+      name: paymentId
+      in: path
+      required: true
+      schema:
+        $ref: './_shared.yaml#/components/schemas/Ulid'
+    TransferId:
+      name: transferId
+      in: path
+      required: true
+      schema:
+        $ref: './_shared.yaml#/components/schemas/Ulid'
+
+  schemas:
+    DailyFeeRate:
+      type: object
+      required: [vehicleType, dailyFeeMinor, mode, currency]
+      properties:
+        vehicleType:
+          $ref: './_shared.yaml#/components/schemas/VehicleType'
+        dailyFeeMinor:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Zero for Mode A — bus and train journeys carry no platform fee.
+        mode:
+          $ref: './_shared.yaml#/components/schemas/OperatingMode'
+        currency:
+          $ref: './_shared.yaml#/components/schemas/Currency'
+
+    DailyFeeCharge:
+      type: object
+      required: [driverId, vehicleId, feeDate, amountMinor, currency, status]
+      properties:
+        driverId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        vehicleId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        feeDate:
+          $ref: './_shared.yaml#/components/schemas/BusinessDate'
+        feeDateTzAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+        amountMinor:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Always zero when `status` is `WAIVED_FIRST_TRIP` (`ck_daily_fee_charges_waiver`).
+        currency:
+          $ref: './_shared.yaml#/components/schemas/Currency'
+        tripsThatDay:
+          type: integer
+          format: int32
+          minimum: 0
+        status:
+          type: string
+          enum: [PAID, WAIVED_FIRST_TRIP]
+        chargedAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    CreditTransfer:
+      type: object
+      required: [transferId, senderDriverId, recipientDriverId, amountMinor, currency, direction, status, createdAt]
+      properties:
+        transferId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        senderDriverId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        recipientDriverId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        amountMinor:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Debited from the sender and credited to the recipient unchanged — no commission leg.
+        currency:
+          $ref: './_shared.yaml#/components/schemas/Currency'
+        direction:
+          type: string
+          description: '`REQUESTED` needs the holder''s approval; `DIRECT` posts immediately.'
+          enum: [REQUESTED, DIRECT]
+        status:
+          type: string
+          enum: [PENDING, APPROVED, REJECTED]
+        createdAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    VoucherDiscountTier:
+      type: object
+      required: [denominationMinor, discountBps, active]
+      properties:
+        denominationMinor:
+          type: integer
+          format: int64
+          minimum: 1
+          description: 'Voucher face value, e.g. `100000` = Rs 1,000.'
+        discountBps:
+          type: integer
+          format: int32
+          minimum: 0
+          maximum: 10000
+          description: 'Basis points; `1000` = 10% — pay Rs 900, receive Rs 1,000 of credit.'
+        active:
+          type: boolean
+        updatedAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    VoucherPurchase:
+      type: object
+      required: [purchaseId, denominationMinor, discountBpsApplied, paidMinor, creditedMinor, currency]
+      properties:
+        purchaseId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        denominationMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        discountBpsApplied:
+          type: integer
+          format: int32
+          minimum: 0
+          maximum: 10000
+        paidMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        creditedMinor:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Always equals `denominationMinor` — the discount lives entirely in `paidMinor`.
+        currency:
+          $ref: './_shared.yaml#/components/schemas/Currency'
+        redirectUrl:
+          type: string
+          format: uri
+        qrPayload:
+          type: string
+
+    AccessRequestStatus:
+      type: string
+      description: Matches the `subscription.access_requests.status` CHECK (C005).
+      enum: [pending, accepted, rejected]
+
+    AccessRequest:
+      type: object
+      required: [requestId, vehicleId, passengerId, status, createdAt]
+      properties:
+        requestId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        vehicleId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        passengerId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        passengerName:
+          type: string
+        passengerMobileMasked:
+          $ref: './_shared.yaml#/components/schemas/PhoneMasked'
+        status:
+          $ref: '#/components/schemas/AccessRequestStatus'
+        createdAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    SubscriptionBilling:
+      type: string
+      description: '"Service payment" (AL-51). The API name is unchanged for stability.'
+      enum: [paid, free]
+
+    SubscriptionCycle:
+      type: string
+      enum: [month_first, join_anniversary]
+
+    Subscription:
+      type: object
+      required: [subscriptionId, vehicleId, passengerId, billing, cycle, status]
+      properties:
+        subscriptionId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        vehicleId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        passengerId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        billing:
+          $ref: '#/components/schemas/SubscriptionBilling'
+        monthlyFareMinor:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Absent on a Free subscription (`ck_subscriptions_fare`).
+        currency:
+          $ref: './_shared.yaml#/components/schemas/Currency'
+        cycle:
+          $ref: '#/components/schemas/SubscriptionCycle'
+        joinDay:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 31
+          description: Required when `cycle` is `join_anniversary`.
+        nextDue:
+          $ref: './_shared.yaml#/components/schemas/BusinessDate'
+        nextDueTzAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+        status:
+          type: string
+          enum: [active, paused, cancelled]
+
+    SubscriberRow:
+      type: object
+      required: [subscriberId, passengerId, billing, status, muted]
+      properties:
+        subscriberId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        passengerId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        name:
+          type: string
+        mobileMasked:
+          $ref: './_shared.yaml#/components/schemas/PhoneMasked'
+        billing:
+          $ref: '#/components/schemas/SubscriptionBilling'
+        monthlyFareMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        currency:
+          $ref: './_shared.yaml#/components/schemas/Currency'
+        cycle:
+          $ref: '#/components/schemas/SubscriptionCycle'
+        thisMonthStatus:
+          type: string
+          enum: [paid, unpaid, pending_verification]
+        muted:
+          type: boolean
+          description: True once the passenger unsubscribes; the row survives until the owner deletes it.
+        status:
+          type: string
+          enum: [active, unsubscribed]
+
+    SubscriptionPayMethod:
+      type: string
+      description: Matches the `subscription.payments.method` CHECK (C005).
+      enum: [lankaqr_deeplink, lankaqr_scan, onepay, online_transfer, cash]
+
+    PayTo:
+      type: object
+      description: |
+        Where the passenger sends the money. Served **only** from a `verified` org payout profile
+        (AL-49); a Paid subscription of an org whose profile has reverted to
+        `pending_verification` keeps collecting against the last verified snapshot.
+      properties:
+        lankaqrImageUrl:
+          type: string
+          format: uri
+          description: Signed URL of the owner's bank-app QR (`lankaqr_scan` / `lankaqr_deeplink`).
+        bank:
+          type: string
+        branch:
+          type: string
+        accountNo:
+          type: string
+        accountHolderName:
+          type: string
+
+    SubscriptionPayment:
+      type: object
+      required: [paymentId, subscriptionId, method, amountMinor, currency, status, periodMonth]
+      properties:
+        paymentId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        subscriptionId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        method:
+          $ref: '#/components/schemas/SubscriptionPayMethod'
+        amountMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        currency:
+          $ref: './_shared.yaml#/components/schemas/Currency'
+        status:
+          type: string
+          description: Matches the `subscription.payments.status` CHECK (C005).
+          enum: [initiated, pending_verification, paid, failed]
+        periodMonth:
+          description: Always the first of the month (`ck_payments_period_month_first`).
+          allOf:
+            - $ref: './_shared.yaml#/components/schemas/BusinessDate'
+        periodMonthTzAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+        payTo:
+          $ref: '#/components/schemas/PayTo'
+        redirectUrl:
+          type: string
+          format: uri
+        qrPayload:
+          type: string
+        slipUrl:
+          type: string
+          format: uri
+          description: Signed URL of the uploaded transfer screenshot.
+        paidAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    SubscriptionProviderCallback:
+      type: object
+      required: [providerTransactionId, status]
+      properties:
+        providerTransactionId:
+          type: string
+          maxLength: 128
+        paymentId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        status:
+          type: string
+          enum: [SUCCESS, FAILED, PENDING]
+        amountMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        currency:
+          $ref: './_shared.yaml#/components/schemas/Currency'
+        raw:
+          type: object
+          additionalProperties: true

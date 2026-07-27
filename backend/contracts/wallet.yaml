@@ -1,0 +1,655 @@
+openapi: 3.1.0
+
+# =============================================================================================
+# wallet-svc — driver wallet balance, top-up, ledger view, credit transfer history
+# Source: specs/D3_mageride_api_contracts.md "wallet-svc — balance, top-up, ledger (/v1/wallet)"
+#         + ADD Appendix C wallet-svc
+#
+# REMOVED, do not re-add:
+#   POST /v1/wallet/topup/bank-transfer        — REMOVED BY AL-05
+#   GET/PUT /v1/wallet/admin/*bank-transfer*   — REMOVED BY AL-05
+#     Bank transfer is **not a top-up method**. Top-up is OnePay or LankaQR only; the LankaQR
+#     route returns a "Pay" deep link into the bank app with the QR as fallback (AL-15).
+#   POST /v1/wallet/topup/card                 — consolidated into /v1/wallet/topup/onepay.
+#     ADD Appendix C lists both; D3' Part 2 lists only the OnePay route, and card payment *is*
+#     the OnePay rail. One endpoint, not two.
+#
+# The voucher *purchase* endpoint is subscription-svc's `POST /v1/vouchers/purchase` (D3' Part 2).
+# ADD Appendix C also spells it `POST /wallet/voucher/purchase`; D3' is the API source of truth,
+# so it is not duplicated here. See the C007 handoff.
+# =============================================================================================
+
+info:
+  title: MageRide wallet-svc
+  version: 1.0.0
+  summary: Driver wallet — balance, OnePay/LankaQR top-up, transaction history, credit sends.
+  description: |
+    Balances are a **projection of the double-entry ledger** (D-09): `billing.journal_entries`
+    plus its balanced `billing.postings` legs are the truth, and every entry is asserted balanced
+    by a database trigger at COMMIT (C005 decision 2). Nothing in this service moves money without
+    writing a balanced entry.
+
+    A credit changes dispatch behaviour, so `wallet.credited` is emitted to invalidate the 5-second
+    balance cache dispatch reads before offering a second trip (D-08).
+
+    The transaction stream is deduped per `(account, entry)` — the ledger event stream is
+    at-least-once (C002 decision 3), so a redelivered entry must not append a second history line
+    (`ux_wallet_tx_account_entry`, C005).
+  contact:
+    name: MageRide Platform Engineering
+    url: https://mageride.lk
+  license:
+    name: UNLICENSED
+    url: https://mageride.lk/legal/terms
+
+servers:
+  - url: https://api.mageride.lk
+    description: Production gateway (DOKS Singapore)
+  - url: http://localhost:8080
+    description: Docker Compose dev gateway
+
+tags:
+  - name: wallet
+    description: Balance, transactions and transfer history.
+  - name: topup
+    description: OnePay and LankaQR top-up plus their provider callbacks.
+  - name: wallet-admin
+    description: Admin view of the bulk-voucher discount tiers.
+
+paths:
+
+  /v1/wallet/{userId}:
+    get:
+      operationId: getWallet
+      summary: Wallet balance and summary.
+      description: |
+        US-9.7 — read-only. `availableMinor` is the balance net of any outstanding accrued debt
+        (a cross-trip cancellation penalty, D-05), which is what the daily-fee gate actually
+        checks.
+      tags: [wallet]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: Wallet summary.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Wallet'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, not-found]
+
+  /v1/wallet/{userId}/transactions:
+    get:
+      operationId: listWalletTransactions
+      summary: Wallet transaction history.
+      description: |
+        US-9A.19. Cursor-paged. `Accept: text/csv` or `application/pdf` returns the same window as
+        a downloadable statement rather than JSON.
+      tags: [wallet]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - name: from
+          in: query
+          required: false
+          schema:
+            $ref: './_shared.yaml#/components/schemas/BusinessDate'
+        - name: to
+          in: query
+          required: false
+          schema:
+            $ref: './_shared.yaml#/components/schemas/BusinessDate'
+        - $ref: './_shared.yaml#/components/parameters/Cursor'
+        - $ref: './_shared.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Transaction page, or a statement when a document media type is requested.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './_shared.yaml#/components/schemas/CursorPage'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/WalletTransaction'
+            text/csv:
+              schema:
+                type: string
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden]
+
+  /v1/wallet/{driverId}/transfers:
+    get:
+      operationId: listWalletTransfers
+      summary: Credit transfers this driver sent and received.
+      description: US-9A.11, Driver App. Both directions in one stream, newest first.
+      tags: [wallet]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: driverId
+          in: path
+          required: true
+          schema:
+            $ref: './_shared.yaml#/components/schemas/Ulid'
+        - name: direction
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [sent, received, all]
+            default: all
+        - $ref: './_shared.yaml#/components/parameters/Cursor'
+        - $ref: './_shared.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Transfer history.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './_shared.yaml#/components/schemas/CursorPage'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/TransferRow'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden]
+
+  /v1/wallet/credit-transfer/initiate:
+    post:
+      operationId: initiateWalletCreditTransfer
+      summary: Driver proactively sends credit to another driver.
+      description: |
+        US-9A.12, Driver App. By **Driver ID**, **exact value, no commission** (AL-01). Posts one
+        balanced journal entry immediately — this is the wallet-side entry point for the same
+        operation subscription-svc exposes as `POST /v1/transfers/driver`; both write
+        `billing.credit_transfers` with `direction='DIRECT'`. Both spellings are in D3' Part 2.
+      tags: [wallet]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+        - $ref: './_shared.yaml#/components/parameters/XAttestation'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [recipientDriverId, amountMinor]
+              properties:
+                recipientDriverId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+                amountMinor:
+                  type: integer
+                  format: int64
+                  minimum: 1
+      responses:
+        '201':
+          description: Sent and posted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransferRow'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '402': { $ref: './_shared.yaml#/components/responses/PaymentRequired' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [invalid-amount, attestation-failed, insufficient-wallet, forbidden, not-found]
+
+  /v1/wallet/voucher/discount-tiers:
+    get:
+      operationId: listVoucherDiscountTiers
+      summary: Current bulk-voucher purchase discounts (Driver App).
+      description: |
+        ADD Appendix C. The driver-facing read of the tiers an admin sets — the app needs it to
+        render the "pay Rs 900, get Rs 1,000" ladder before a purchase. Active tiers only.
+      tags: [wallet]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Active tiers.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tiers]
+                properties:
+                  tiers:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/VoucherDiscountTier'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized]
+
+  # -------------------------------------------------------------------------------------------
+  # Top-up
+  # -------------------------------------------------------------------------------------------
+  /v1/wallet/topup/onepay:
+    post:
+      operationId: topupWithOnepay
+      summary: Start a card/OnePay wallet top-up.
+      description: |
+        US-9.18. Initiates the OnePay session and returns the redirect the app opens. The wallet
+        is credited **only** on the webhook, with a balanced double-entry journal credit (D-09),
+        which then emits `wallet.credited` and invalidates the dispatch balance cache (D-08).
+      tags: [topup]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+        - $ref: './_shared.yaml#/components/parameters/XAttestation'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amountMinor]
+              properties:
+                amountMinor:
+                  type: integer
+                  format: int64
+                  minimum: 1
+                returnUrl:
+                  type: string
+                  format: uri
+      responses:
+        '200':
+          description: Top-up initiated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Topup'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '402': { $ref: './_shared.yaml#/components/responses/PaymentRequired' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [invalid-amount, attestation-failed, gateway-error, forbidden]
+
+  /v1/wallet/topup/lankaqr:
+    post:
+      operationId: topupWithLankaqr
+      summary: Start a LankaQR wallet top-up.
+      description: |
+        US-9.18, AL-15. Returns a **"Pay" deep link into the bank app**; the QR payload is the
+        fallback for devices where the deep link does not resolve. Bank transfer is not an option
+        here and never was after AL-05.
+      tags: [topup]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+        - $ref: './_shared.yaml#/components/parameters/XAttestation'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amountMinor]
+              properties:
+                amountMinor:
+                  type: integer
+                  format: int64
+                  minimum: 1
+      responses:
+        '200':
+          description: Top-up initiated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Topup'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '402': { $ref: './_shared.yaml#/components/responses/PaymentRequired' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [invalid-amount, attestation-failed, gateway-error, forbidden]
+
+  /v1/wallet/topup/onepay/webhook:
+    post:
+      operationId: onepayTopupWebhook
+      summary: OnePay top-up confirmation callback.
+      description: |
+        HMAC-signed. **Idempotent on `provider_transaction_id`** (R-19) — a redelivery credits
+        nothing twice. Writes the balanced journal credit and emits `wallet.credited`.
+      tags: [topup]
+      security:
+        - hmacSignature: []
+      x-idempotency-exempt: >-
+        Provider callback. Deduped on provider_transaction_id per R-19; OnePay does not send an
+        Idempotency-Key header. See MageRide.Shared AllowMissingIdempotencyKey (C002 decision 2).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopupCallback'
+      responses:
+        '200':
+          description: Callback accepted (also returned for a redelivery).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [received]
+                properties:
+                  received:
+                    type: boolean
+                    const: true
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, not-found]
+
+  /v1/wallet/topup/lankaqr/confirm:
+    post:
+      operationId: lankaqrTopupConfirm
+      summary: LankaQR top-up confirmation callback.
+      description: HMAC-signed. Idempotent on `provider_transaction_id` (R-19).
+      tags: [topup]
+      security:
+        - hmacSignature: []
+      x-idempotency-exempt: >-
+        Provider callback. Deduped on provider_transaction_id per R-19; the bank IPG does not send
+        an Idempotency-Key header. See MageRide.Shared AllowMissingIdempotencyKey (C002 decision 2).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopupCallback'
+      responses:
+        '200':
+          description: Callback accepted (also returned for a redelivery).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [received]
+                properties:
+                  received:
+                    type: boolean
+                    const: true
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, not-found]
+
+  # -------------------------------------------------------------------------------------------
+  # Admin
+  # -------------------------------------------------------------------------------------------
+  /v1/wallet/admin/voucher-discount-tiers:
+    get:
+      operationId: adminListVoucherDiscountTiers
+      summary: List bulk-voucher discount tiers with usage.
+      description: |
+        US-9A.15, Admin Portal. Adds per-tier purchase counts and value to the tier table, which
+        is what makes the reseller margin visible to Finance.
+      tags: [wallet-admin]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Tiers with usage.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tiers]
+                properties:
+                  tiers:
+                    type: array
+                    items:
+                      allOf:
+                        - $ref: '#/components/schemas/VoucherDiscountTier'
+                        - type: object
+                          properties:
+                            purchaseCount:
+                              type: integer
+                              format: int32
+                              minimum: 0
+                            purchasedValueMinor:
+                              type: integer
+                              format: int64
+                              minimum: 0
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden]
+    put:
+      operationId: adminUpdateVoucherDiscountTiers
+      summary: Set the bulk-voucher discount per denomination.
+      description: |
+        Admin Portal Config. Functionally identical to subscription-svc's
+        `PUT /v1/admin/voucher-discount-tiers`; **both spellings appear in D3' Part 2** and both
+        are landed so neither route table is silently dropped. One should be retired — see the
+        C007 handoff. Audited (D-35).
+      tags: [wallet-admin]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tiers]
+              properties:
+                tiers:
+                  type: array
+                  minItems: 1
+                  items:
+                    $ref: '#/components/schemas/VoucherDiscountTier'
+      responses:
+        '200':
+          description: Tiers after the update.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tiers]
+                properties:
+                  tiers:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/VoucherDiscountTier'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden]
+
+components:
+  securitySchemes:
+    bearerAuth:
+      $ref: './_shared.yaml#/components/securitySchemes/bearerAuth'
+    hmacSignature:
+      $ref: './_shared.yaml#/components/securitySchemes/hmacSignature'
+
+  parameters:
+    UserId:
+      name: userId
+      in: path
+      required: true
+      schema:
+        $ref: './_shared.yaml#/components/schemas/Ulid'
+
+  schemas:
+    Wallet:
+      type: object
+      required: [userId, balanceMinor, availableMinor, currency]
+      properties:
+        userId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        balanceMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        availableMinor:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Balance net of outstanding accrued debt (cross-trip penalties, D-05).
+        outstandingDebtMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        currency:
+          $ref: './_shared.yaml#/components/schemas/Currency'
+        updatedAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    WalletTransaction:
+      type: object
+      required: [transactionId, entryId, kind, amountMinor, currency, balanceAfterMinor, occurredAt]
+      properties:
+        transactionId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        entryId:
+          description: The `billing.journal_entries` row this line projects; the dedupe key.
+          allOf:
+            - $ref: './_shared.yaml#/components/schemas/Ulid'
+        kind:
+          type: string
+          description: Ledger entry kind, e.g. `topup`, `daily_fee`, `credit_transfer`, `tip_payout`.
+        amountMinor:
+          type: integer
+          format: int64
+          description: Signed — a debit is negative. This is one of the ledger columns §0 exempts from the non-negative rule.
+        currency:
+          $ref: './_shared.yaml#/components/schemas/Currency'
+        balanceAfterMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        reference:
+          type: string
+          description: Ride, transfer or purchase this line came from.
+        occurredAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    TransferRow:
+      type: object
+      required: [transferId, counterpartyDriverId, amountMinor, currency, direction, status, createdAt]
+      properties:
+        transferId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        counterpartyDriverId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        counterpartyName:
+          type: string
+        amountMinor:
+          type: integer
+          format: int64
+          minimum: 1
+        currency:
+          $ref: './_shared.yaml#/components/schemas/Currency'
+        direction:
+          type: string
+          enum: [sent, received]
+        status:
+          type: string
+          enum: [PENDING, APPROVED, REJECTED]
+        createdAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    Topup:
+      type: object
+      required: [topupId, state, amountMinor, currency]
+      properties:
+        topupId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        state:
+          type: string
+          enum: [Pending, Succeeded, Failed]
+        amountMinor:
+          type: integer
+          format: int64
+          minimum: 1
+        currency:
+          $ref: './_shared.yaml#/components/schemas/Currency'
+        redirectUrl:
+          type: string
+          format: uri
+          description: OnePay hosted page.
+        sessionToken:
+          type: string
+        paymentLink:
+          type: string
+          format: uri
+          description: LankaQR "Pay" deep link into the bank app (AL-15).
+        qrPayload:
+          type: string
+          description: LankaQR fallback when the deep link does not resolve.
+
+    TopupCallback:
+      type: object
+      required: [providerTransactionId, status]
+      properties:
+        providerTransactionId:
+          type: string
+          maxLength: 128
+        topupId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        status:
+          type: string
+          enum: [SUCCESS, FAILED, PENDING]
+        amountMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        currency:
+          $ref: './_shared.yaml#/components/schemas/Currency'
+        raw:
+          type: object
+          additionalProperties: true
+
+    VoucherDiscountTier:
+      type: object
+      required: [denominationMinor, discountBps, active]
+      properties:
+        denominationMinor:
+          type: integer
+          format: int64
+          minimum: 1
+        discountBps:
+          type: integer
+          format: int32
+          minimum: 0
+          maximum: 10000
+          description: 'Basis points; `1000` = 10%.'
+        active:
+          type: boolean
+        updatedAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'

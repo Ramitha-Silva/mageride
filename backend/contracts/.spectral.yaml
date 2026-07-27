@@ -1,0 +1,239 @@
+# =============================================================================================
+# MageRide OpenAPI lint ruleset (C007)
+#
+#   npx --yes @stoplight/spectral-cli lint 'backend/contracts/*.yaml' \
+#     --ruleset backend/contracts/.spectral.yaml
+#
+# On top of Spectral's recommended OpenAPI rules this encodes the four platform conventions the
+# component brief names — kebab error codes, a required Idempotency-Key on POST, LKR minor units,
+# and the /v1 path prefix — plus the handful of structural rules C012/C013 (KMP client) and C118
+# (contract tests) generate against.
+#
+# Everything here is `error`: a contract that trips a rule is a contract that will produce a
+# wrong client. Nothing is left at `warn` where it would silently pass the verify.
+# =============================================================================================
+
+extends: [[spectral:oas, recommended]]
+
+rules:
+
+  # -- convention 1: error codes are stable kebab keys ----------------------------------------
+  # Every operation enumerates the ErrorCode values it can emit. D3' §0: "{code} = stable kebab
+  # key". The registry itself is `_shared.yaml#/components/schemas/ErrorCode`, mirrored at
+  # runtime by MageRide.Shared.Errors.MageRideErrors (C002); C118 asserts the two agree.
+  mageride-operation-declares-error-codes:
+    description: Every operation must list the error codes it can emit in `x-error-codes`.
+    message: '{{path}} has no `x-error-codes` array.'
+    severity: error
+    given: "$.paths[*][?(@property === 'get' || @property === 'put' || @property === 'post' || @property === 'delete' || @property === 'patch')]"
+    then:
+      field: x-error-codes
+      function: schema
+      functionOptions:
+        schema:
+          type: array
+          minItems: 1
+          items:
+            type: string
+
+  mageride-error-codes-kebab:
+    description: Error codes are lower-case kebab keys — `offer-expired`, never `OfferExpired`.
+    message: '`{{value}}` is not a kebab error code.'
+    severity: error
+    given: $.paths[*][*].x-error-codes[*]
+    then:
+      function: pattern
+      functionOptions:
+        match: '^[a-z0-9]+(-[a-z0-9]+)*$'
+
+  mageride-error-code-enum-kebab:
+    description: The shared ErrorCode registry may only contain kebab keys.
+    message: '`{{value}}` is not a kebab error code.'
+    severity: error
+    given: $.components.schemas.ErrorCode.enum[*]
+    then:
+      function: pattern
+      functionOptions:
+        match: '^[a-z0-9]+(-[a-z0-9]+)*$'
+
+  mageride-error-response-is-problem-json:
+    description: Error responses are RFC 7807 `application/problem+json` (D3' §0).
+    message: '{{path}} must be served as application/problem+json.'
+    severity: error
+    given: $.paths[*][*].responses[?(@property.match(/^[45]/))].content
+    then:
+      field: application/problem+json
+      function: truthy
+
+  # -- convention 2: Idempotency-Key required on POST -----------------------------------------
+  # D3' §0: "required on all POST mutations". The single documented escape hatch is
+  # `x-idempotency-exempt: <reason>`, used only by the six HMAC-signed payment-provider
+  # callbacks, which dedupe on provider_transaction_id instead (R-19, C002 decision 2).
+  mageride-post-requires-idempotency-key:
+    description: Every POST declares a required `Idempotency-Key` header, or documents its exemption.
+    message: '{{path}} must declare a required Idempotency-Key parameter or `x-idempotency-exempt`.'
+    severity: error
+    given: $.paths[*].post
+    then:
+      function: schema
+      functionOptions:
+        schema:
+          type: object
+          anyOf:
+            - required: [x-idempotency-exempt]
+              properties:
+                x-idempotency-exempt:
+                  type: string
+                  minLength: 20
+            - required: [parameters]
+              properties:
+                parameters:
+                  type: array
+                  contains:
+                    type: object
+                    required: [name, in, required]
+                    properties:
+                      name: { const: Idempotency-Key }
+                      in: { const: header }
+                      required: { const: true }
+
+  mageride-idempotency-exempt-only-on-post:
+    description: '`x-idempotency-exempt` is meaningless on a non-POST operation.'
+    severity: error
+    given: "$.paths[*][?(@property === 'get' || @property === 'put' || @property === 'delete' || @property === 'patch')]"
+    then:
+      field: x-idempotency-exempt
+      function: undefined
+
+  # -- convention 3: money is LKR integer minor units ------------------------------------------
+  # CLAUDE.md: "All currency values stored and transmitted as integers (cents/paisa)."
+  mageride-money-minor-is-int64:
+    description: A `*Minor` field is an integer minor-unit amount, never a float.
+    message: '{{property}} must be `type: integer, format: int64`.'
+    severity: error
+    given: $..properties[?(@property.match(/Minor$/))]
+    then:
+      function: schema
+      functionOptions:
+        schema:
+          type: object
+          required: [type, format]
+          properties:
+            type: { const: integer }
+            format: { const: int64 }
+
+  mageride-currency-is-lkr:
+    description: Every `currency` field is fixed to LKR.
+    message: '{{property}} must be `const: LKR`.'
+    severity: error
+    given: $..properties.currency
+    then:
+      function: schema
+      functionOptions:
+        schema:
+          type: object
+          required: [const]
+          properties:
+            const: { const: LKR }
+
+  mageride-no-float-money-names:
+    description: Money must never be modelled as `number` — use an integer `*Minor` field.
+    message: '{{property}} looks like money but is a float; rename it `…Minor` and use int64.'
+    severity: error
+    given: >-
+      $..properties[?(@property.match(/^(amount|fare|price|balance|fee|total|surcharge|tip)$/i))]
+    then:
+      field: type
+      function: pattern
+      functionOptions:
+        notMatch: '^number$'
+
+  # -- convention 4: /v1 path prefix -----------------------------------------------------------
+  # D3' §0 "Versioning": path-stable /v1 per service behind the gateway. The one deliberate
+  # exception is the AL-44 public-bff family, which is token-scoped rather than versioned.
+  mageride-path-prefix:
+    description: Paths live under `/v1` (or the AL-44 `/public` token-scoped family).
+    message: '`{{property}}` must start with /v1/ or /public/.'
+    severity: error
+    given: $.paths[*]~
+    then:
+      function: pattern
+      functionOptions:
+        match: '^/(v1|public)/'
+
+  mageride-path-kebab-segments:
+    description: Static path segments are lower-case kebab; only `{templates}` may use camelCase.
+    message: '`{{property}}` has a non-kebab static segment.'
+    severity: error
+    given: $.paths[*]~
+    then:
+      function: pattern
+      functionOptions:
+        match: '^(/(\{[a-zA-Z][a-zA-Z0-9]*\}|[a-z0-9]+(-[a-z0-9]+)*(\.[a-z0-9]+)?))+$'
+
+  # -- structural rules the generated clients depend on ----------------------------------------
+  mageride-operation-id-required:
+    description: C012/C013 name every generated KMP client method after `operationId`.
+    severity: error
+    given: "$.paths[*][?(@property === 'get' || @property === 'put' || @property === 'post' || @property === 'delete' || @property === 'patch')]"
+    then:
+      field: operationId
+      function: truthy
+
+  mageride-operation-id-camel-case:
+    description: '`operationId` is camelCase, so the generated Kotlin method name needs no mangling.'
+    severity: error
+    given: $.paths[*][*].operationId
+    then:
+      function: pattern
+      functionOptions:
+        match: '^[a-z][a-zA-Z0-9]*$'
+
+  mageride-operation-summary-required:
+    description: Every operation carries a one-line summary.
+    severity: error
+    given: "$.paths[*][?(@property === 'get' || @property === 'put' || @property === 'post' || @property === 'delete' || @property === 'patch')]"
+    then:
+      field: summary
+      function: truthy
+
+  mageride-operation-security-declared:
+    description: |
+      Every operation states its authentication explicitly — `security: []` for the deliberately
+      public ones (OTP request, city list, public track). Deny-by-default (AL-06) is not something
+      a contract may leave to a default.
+    severity: error
+    given: "$.paths[*][?(@property === 'get' || @property === 'put' || @property === 'post' || @property === 'delete' || @property === 'patch')]"
+    then:
+      field: security
+      function: defined
+
+  mageride-tag-required:
+    description: Every operation is tagged, so the generated client groups into one API class per tag.
+    severity: error
+    given: "$.paths[*][?(@property === 'get' || @property === 'put' || @property === 'post' || @property === 'delete' || @property === 'patch')]"
+    then:
+      field: tags
+      function: schema
+      functionOptions:
+        schema:
+          type: array
+          minItems: 1
+          maxItems: 1
+          items:
+            type: string
+
+overrides:
+  # `_shared.yaml` is a component library: by design nothing in it references anything else in
+  # it, and it declares no paths. Both facts trip rules that are correct for a service contract.
+  - files:
+      - '**/_shared.yaml'
+    rules:
+      oas3-unused-component: 'off'
+      oas2-unused-definition: 'off'
+
+# NOTE — the verify glob `backend/contracts/*.yaml` also matches this ruleset, which is not an
+# OpenAPI document, so Spectral reports one `unrecognized-format` **warning** against this file.
+# It cannot be silenced from here (`unrecognized-format` is a core diagnostic, not a rule, so
+# `overrides` rejects it) and it is below the CLI's `error` fail-severity, so the verify still
+# exits 0. Every finding against an actual contract is an error.

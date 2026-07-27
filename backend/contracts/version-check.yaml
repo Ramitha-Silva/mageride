@@ -1,0 +1,89 @@
+openapi: 3.1.0
+
+# =============================================================================================
+# version-check — minimum-app-version gate (D-31)
+# Source: specs/D3_mageride_api_contracts.md "version-check — gateway gate (/v1/version)"
+#
+# The explicit check below is the app's "am I current?" poll. The *enforcing* half of D-31 is
+# gateway middleware (C008) that reads `X-App-Version` + `X-Platform` on every request and
+# answers `426 upgrade-required` when the client is below the floor — that is not an endpoint
+# and therefore has no path here; `_shared.yaml#/components/responses/UpgradeRequired` is the
+# body shape it returns.
+# =============================================================================================
+
+info:
+  title: MageRide version-check
+  version: 1.0.0
+  summary: Per-platform minimum-version floor for the passenger and driver apps.
+  description: |
+    US-17.1/17.2. The app calls this at cold start to decide whether to show a soft
+    ("Update available") or hard ("Update required") gate before the user gets anywhere. Every
+    other request is gated transparently at the edge with `426 upgrade-required`, whose problem
+    body carries `updateUrl`, `latestVersion` and `isMandatory` as extensions.
+  contact:
+    name: MageRide Platform Engineering
+    url: https://mageride.lk
+  license:
+    name: UNLICENSED
+    url: https://mageride.lk/legal/terms
+
+servers:
+  - url: https://api.mageride.lk
+    description: Production gateway (DOKS Singapore)
+  - url: http://localhost:8080
+    description: Docker Compose dev gateway
+
+tags:
+  - name: version
+    description: Minimum-version floor lookup.
+
+paths:
+
+  /v1/version/check:
+    get:
+      operationId: checkAppVersion
+      summary: Ask whether this build is still above the minimum-version floor.
+      description: |
+        Public — the answer must be obtainable by a client too old to authenticate. `isMandatory`
+        distinguishes a blocking gate from a dismissible prompt.
+      tags: [version]
+      security: []
+      parameters:
+        - name: platform
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [android, ios]
+        - name: current
+          in: query
+          required: true
+          description: The calling build's semantic version.
+          schema:
+            type: string
+            pattern: '^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$'
+          example: 1.4.0
+      responses:
+        '200':
+          description: Floor comparison for this platform.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [updateRequired, latestVersion, updateUrl, isMandatory]
+                properties:
+                  updateRequired:
+                    type: boolean
+                  latestVersion:
+                    type: string
+                    example: 1.6.2
+                  updateUrl:
+                    type: string
+                    format: uri
+                    description: Play Store or App Store deep link for this platform.
+                  isMandatory:
+                    type: boolean
+                    description: True when the client is below the hard floor and must update.
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed]

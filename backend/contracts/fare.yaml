@@ -1,0 +1,763 @@
+openapi: 3.1.0
+
+# =============================================================================================
+# fare-svc — estimate, final calculation, payment state machine, refunds
+# Source: specs/D3_mageride_api_contracts.md "fare-svc — estimate, calculate, pay (/v1/fare)"
+#         + Δ 2026-06-21 "fare-svc (item 18, AL-22)"  — POST /fare/pay/scan-driver-qr
+#         + Δ 2026-07-05 #2 "fare-svc — driver-QR attestation settlement (item 1, AL-47)"
+#         + ADD Appendix C fare-svc
+#
+# Payment hard rule (D3' header): every payment endpoint is [REPLACE]/[NEW] — there is no Juspay
+# anywhere. Gateways are OnePay, LankaQR / Commercial Bank IPG, cash, COD and driver-QR.
+# =============================================================================================
+
+info:
+  title: MageRide fare-svc
+  version: 1.0.0
+  summary: Mode C fare estimation and the ride payment state machine.
+  description: |
+    **Money is integer minor units everywhere** (`amountMinor`, `currency: LKR`).
+
+    The payment state machine (D-10, §11.8) runs
+    `Initiated → Pending → Succeeded | Failed | Retried | FellBackToCash`, plus the cash-on-delivery
+    and driver-QR terminals. **The driver's earning posts only on a terminal state** (R-05), and
+    `POST /v1/internal/rides/{rideId}/payment-settled` on ride-svc is how that terminal is
+    published.
+
+    **Driver-QR settlement (AL-47)** is an *attestation* pair, not a gateway flow: the passenger
+    scans the driver's printed/on-screen QR, pays bank-to-bank outside the platform, then claims
+    it (`QrClaimedByPassenger`); the driver confirms receipt (`DriverConfirmedQR`, terminal) or
+    either party disputes. **No wallet movement, zero commission.** A gateway-verified `Succeeded`
+    remains OnePay-only (D-10).
+
+    The two provider callbacks below are the platform's only `Idempotency-Key` exemptions: they
+    are HMAC-signed and dedupe on `provider_transaction_id` (R-19, `ux_refunds_provider_ref` and
+    its payments counterpart), because an external gateway will not send our header.
+  contact:
+    name: MageRide Platform Engineering
+    url: https://mageride.lk
+  license:
+    name: UNLICENSED
+    url: https://mageride.lk/legal/terms
+
+servers:
+  - url: https://api.mageride.lk
+    description: Production gateway (DOKS Singapore)
+  - url: http://localhost:8080
+    description: Docker Compose dev gateway
+
+tags:
+  - name: fare
+    description: Estimation and final fare calculation.
+  - name: payments
+    description: The ride payment state machine and its gateway callbacks.
+  - name: driver-qr
+    description: Driver-QR attestation settlement (AL-47).
+  - name: fare-admin
+    description: Finance-only refund and reversal.
+
+paths:
+
+  /v1/fare/estimate:
+    get:
+      operationId: estimateFare
+      summary: Upfront total fare for a trip.
+      description: |
+        US-8.9. Prices against the `fares.tariffs` row in force (first-km charge + per-km rate),
+        applying the peak and night surcharge windows, which are evaluated in **Asia/Colombo** and
+        may wrap midnight (D5' §2, D-38).
+
+        `fareEstimateToken` is opaque and binds the quoted price — `POST /v1/rides/request`
+        requires it and rejects a stale or forged one with `400 invalid-fare-token`.
+        **Only the total is shown in the UI** (US-8.4); the breakdown is for support and receipts.
+      tags: [fare]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: fromLat
+          in: query
+          required: true
+          schema:
+            type: number
+            format: double
+            minimum: -90
+            maximum: 90
+        - name: fromLng
+          in: query
+          required: true
+          schema:
+            type: number
+            format: double
+            minimum: -180
+            maximum: 180
+        - name: toLat
+          in: query
+          required: true
+          schema:
+            type: number
+            format: double
+            minimum: -90
+            maximum: 90
+        - name: toLng
+          in: query
+          required: true
+          schema:
+            type: number
+            format: double
+            minimum: -180
+            maximum: 180
+        - name: vehicleType
+          in: query
+          required: true
+          schema:
+            $ref: './_shared.yaml#/components/schemas/RideVehicleType'
+        - name: kind
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [passenger, package]
+            default: passenger
+      responses:
+        '200':
+          description: Estimate with its binding token.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [fareEstimateToken, amountMinor, currency, breakdown]
+                properties:
+                  fareEstimateToken:
+                    type: string
+                  amountMinor:
+                    type: integer
+                    format: int64
+                    minimum: 0
+                  currency:
+                    $ref: './_shared.yaml#/components/schemas/Currency'
+                  breakdown:
+                    $ref: '#/components/schemas/FareBreakdown'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '422': { $ref: './_shared.yaml#/components/responses/UnprocessableEntity' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unserviceable-area, unauthorized, route-unavailable]
+
+  /v1/fare/calculate:
+    post:
+      operationId: calculateFinalFare
+      summary: Compute the final fare when a ride completes.
+      description: |
+        Internal, mTLS only. Called by ride-svc on `complete`. Distance is the **Kalman-filtered**
+        track (E-04), not the raw GPS polyline, so jitter does not inflate the fare. Writes
+        `fares.ride_payments` in `Initiated` and returns the amount the passenger owes.
+      tags: [fare]
+      security:
+        - mtls: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rideId]
+              properties:
+                rideId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+                distanceKm:
+                  type: number
+                  format: double
+                  minimum: 0
+                  description: Kalman-filtered distance; recomputed server-side when omitted.
+                durationSec:
+                  type: integer
+                  format: int32
+                  minimum: 0
+      responses:
+        '200':
+          description: Final fare.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [paymentId, amountMinor, currency, breakdown]
+                properties:
+                  paymentId:
+                    $ref: './_shared.yaml#/components/schemas/Ulid'
+                  amountMinor:
+                    type: integer
+                    format: int64
+                    minimum: 0
+                  currency:
+                    $ref: './_shared.yaml#/components/schemas/Currency'
+                  breakdown:
+                    $ref: '#/components/schemas/FareBreakdown'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, not-found, payment-already-settled]
+
+  /v1/fare/pay:
+    post:
+      operationId: initiatePayment
+      summary: Start paying for a completed ride.
+      description: |
+        D-10. Drives `fares.ride_payments` from `Initiated`. The response carries exactly one
+        method-specific block: `onepay` (redirect + session token) or `lankaqr` (QR payload +
+        bank-app pay link); `cash` carries neither and settles on the driver's confirmation.
+
+        OnePay adds a **5% surcharge** (US-8.11) which is stated as `surchargeMinor` so the
+        passenger sees the difference before committing. A proxy booking routes the charge to the
+        **payer** — the booker, not the rider (P-04). `tipMinor` is optional (E-10).
+
+        A driver with no OnePay merchant binding is `402 merchant-not-onboarded` (D-11).
+      tags: [payments]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+        - $ref: './_shared.yaml#/components/parameters/XAttestation'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rideId, method]
+              properties:
+                rideId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+                method:
+                  $ref: '#/components/schemas/PaymentMethod'
+                tipMinor:
+                  type: integer
+                  format: int64
+                  minimum: 0
+                  description: Optional gratuity (E-10); posts as a `tip_payout` journal kind.
+      responses:
+        '200':
+          description: Payment initiated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentInitiation'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '402': { $ref: './_shared.yaml#/components/responses/PaymentRequired' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [payment-method-invalid, attestation-failed, merchant-not-onboarded, gateway-error, not-ride-participant, not-found, payment-already-settled]
+
+  /v1/fare/pay/{paymentId}/status:
+    get:
+      operationId: getPaymentStatus
+      summary: Poll a payment's state.
+      description: |
+        US-8.15. The client polls this while a gateway round-trip is outstanding; the terminal
+        state also arrives as a `PAYMENT_CONFIRMED` push.
+      tags: [payments]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PaymentId'
+      responses:
+        '200':
+          description: Payment state.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentStatus'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, not-ride-participant, not-found]
+
+  /v1/fare/pay/{paymentId}/fallback-cash:
+    post:
+      operationId: fallbackToCash
+      summary: Switch a failing digital payment to cash.
+      description: |
+        US-8.15. Moves the payment to `FellBackToCash` so a passenger stranded by a gateway
+        outage can settle in the vehicle. Only valid from a non-terminal state — an already
+        successful payment is `409 payment-already-settled`.
+      tags: [payments]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PaymentId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Now settling in cash.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentStatus'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, not-ride-participant, not-found, payment-already-settled]
+
+  /v1/fare/pay/scan-driver-qr:
+    post:
+      operationId: payByScanningDriverQr
+      summary: Settle a fare by scanning the driver's QR.
+      description: |
+        AL-22 (Δ 2026-06-21 item 18). Records `method='scan_driver_qr'` on
+        `fares.ride_payments`. Since AL-47 this **no longer waits for a webhook** — it leads into
+        the claim/confirm attestation pair below, because the money moves bank-to-bank outside
+        the platform and no gateway can confirm it.
+      tags: [driver-qr]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+        - $ref: './_shared.yaml#/components/parameters/XAttestation'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rideId, qrPayload]
+              properties:
+                rideId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+                qrPayload:
+                  type: string
+                  maxLength: 2048
+                  description: Decoded contents of the driver's printed/on-screen/sticker QR.
+      responses:
+        '200':
+          description: Method recorded; awaiting the claim/confirm pair.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentStatus'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, attestation-failed, not-ride-participant, not-found, payment-already-settled]
+
+  /v1/fare/pay/driver-qr/claim:
+    post:
+      operationId: claimDriverQrPayment
+      summary: Passenger claims they paid by driver QR.
+      description: |
+        AL-47, US-26.1. Moves the payment to `QrClaimedByPassenger` and pushes the driver a
+        "QR payment received?" prompt, re-pushed at +5 minutes if unconfirmed. Attaching the bank
+        app's receipt screenshot (`receiptArtifactId`, stored as
+        `rides.proof_artifacts(kind='qr_receipt')`) is what a dispute is later adjudicated on.
+      tags: [driver-qr]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+        - $ref: './_shared.yaml#/components/parameters/XAttestation'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rideId]
+              properties:
+                rideId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+                receiptArtifactId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+      responses:
+        '202':
+          description: Claim recorded; the driver has been prompted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentStatus'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, attestation-failed, not-ride-participant, not-found, payment-already-settled]
+
+  /v1/fare/pay/driver-qr/confirm:
+    post:
+      operationId: confirmDriverQrPayment
+      summary: Driver confirms the QR payment arrived.
+      description: |
+        AL-47. Moves the payment to `DriverConfirmedQR`, which is **terminal** — the earning posts
+        (R-05). Valid with or without a prior passenger claim, because the driver's bank app is
+        the only party that actually saw the money.
+      tags: [driver-qr]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+        - $ref: './_shared.yaml#/components/parameters/XAttestation'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rideId]
+              properties:
+                rideId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+      responses:
+        '200':
+          description: Settled.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentStatus'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, attestation-failed, not-ride-participant, not-found, payment-already-settled]
+
+  /v1/fare/pay/driver-qr/dispute:
+    post:
+      operationId: disputeDriverQrPayment
+      summary: Either party disputes a driver-QR settlement.
+      description: |
+        AL-47. Opens a ticket routed Support → Finance. **No wallet movement** — the platform
+        takes no commission on this path and holds none of the money, so there is nothing to
+        reverse; the evidence is the claim screenshot when one was attached.
+      tags: [driver-qr]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rideId]
+              properties:
+                rideId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+                note:
+                  type: string
+                  maxLength: 2000
+      responses:
+        '201':
+          description: Ticket opened.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ticketId]
+                properties:
+                  ticketId:
+                    $ref: './_shared.yaml#/components/schemas/Ulid'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, not-ride-participant, not-found]
+
+  /v1/fare/pay/onepay/webhook:
+    post:
+      operationId: onepayPaymentWebhook
+      summary: OnePay payment confirmation callback.
+      description: |
+        HMAC-signed, verified before the body is parsed (D6' §7.1). **Idempotent on
+        `provider_transaction_id`** (R-19) — a redelivered callback is a no-op, which is why this
+        operation carries no `Idempotency-Key`: an external gateway cannot send our header.
+        A terminal state here drives `POST /v1/internal/rides/{rideId}/payment-settled` (R-05).
+      tags: [payments]
+      security:
+        - hmacSignature: []
+      x-idempotency-exempt: >-
+        Provider callback. Deduped on provider_transaction_id per R-19; OnePay does not send an
+        Idempotency-Key header. See MageRide.Shared AllowMissingIdempotencyKey (C002 decision 2).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProviderCallback'
+      responses:
+        '200':
+          description: Callback accepted (also returned for a redelivery).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [received]
+                properties:
+                  received:
+                    type: boolean
+                    const: true
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, not-found]
+
+  /v1/fare/pay/lankaqr/confirm:
+    post:
+      operationId: lankaqrPaymentConfirm
+      summary: LankaQR / Commercial Bank IPG payment confirmation callback.
+      description: |
+        HMAC-signed (D-12, D6' §7.2). **Idempotent on `provider_transaction_id`** (R-19), and
+        exempt from `Idempotency-Key` for the same reason as the OnePay callback.
+      tags: [payments]
+      security:
+        - hmacSignature: []
+      x-idempotency-exempt: >-
+        Provider callback. Deduped on provider_transaction_id per R-19; the bank IPG does not send
+        an Idempotency-Key header. See MageRide.Shared AllowMissingIdempotencyKey (C002 decision 2).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProviderCallback'
+      responses:
+        '200':
+          description: Callback accepted (also returned for a redelivery).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [received]
+                properties:
+                  received:
+                    type: boolean
+                    const: true
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, not-found]
+
+  /v1/admin/fare/refund:
+    post:
+      operationId: refundFare
+      summary: Issue a full or partial refund.
+      description: |
+        E-05, **Finance only**. Writes `fares.refunds` and a balanced `billing.journal_entries`
+        pair — the gateway round-trip and the ledger effect are separate rows by design (C005).
+        `kind` matches the `fares.refunds.kind` CHECK. Audited (D-35).
+      tags: [fare-admin]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [paymentId, kind, amountMinor, reasonCode]
+              properties:
+                paymentId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+                kind:
+                  type: string
+                  enum: [full, partial, overpaid_reversal]
+                amountMinor:
+                  type: integer
+                  format: int64
+                  minimum: 0
+                currency:
+                  $ref: './_shared.yaml#/components/schemas/Currency'
+                reasonCode:
+                  type: string
+                  maxLength: 60
+      responses:
+        '201':
+          description: Refund requested.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [refundId, status, amountMinor, currency]
+                properties:
+                  refundId:
+                    $ref: './_shared.yaml#/components/schemas/Ulid'
+                  status:
+                    type: string
+                    description: Matches the `fares.refunds.status` CHECK (C005).
+                    enum: [Requested, Submitted, Succeeded, Failed]
+                  amountMinor:
+                    type: integer
+                    format: int64
+                    minimum: 0
+                  currency:
+                    $ref: './_shared.yaml#/components/schemas/Currency'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [invalid-amount, unauthorized, forbidden, not-found, payment-already-settled]
+
+components:
+  securitySchemes:
+    bearerAuth:
+      $ref: './_shared.yaml#/components/securitySchemes/bearerAuth'
+    mtls:
+      $ref: './_shared.yaml#/components/securitySchemes/mtls'
+    hmacSignature:
+      $ref: './_shared.yaml#/components/securitySchemes/hmacSignature'
+
+  parameters:
+    PaymentId:
+      name: paymentId
+      in: path
+      required: true
+      schema:
+        $ref: './_shared.yaml#/components/schemas/Ulid'
+
+  schemas:
+    PaymentMethod:
+      type: string
+      description: |
+        Settlement-time method. Matches the `fares.ride_payments.method` CHECK (C005) and is
+        deliberately wider than the booking-time `rides.rides.payment_method`, which carries
+        `cod` instead of `scan_driver_qr` (C004 note (f)).
+      enum: [cash, lankaqr, onepay, scan_driver_qr]
+
+    FareBreakdown:
+      type: object
+      required: [firstKmMinor, perKmMinor, distanceKm]
+      properties:
+        firstKmMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        perKmMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        distanceKm:
+          type: number
+          format: double
+          minimum: 0
+        peakSurchargePct:
+          type: integer
+          format: int32
+          minimum: 0
+        nightSurchargePct:
+          type: integer
+          format: int32
+          minimum: 0
+
+    PaymentInitiation:
+      type: object
+      required: [paymentId, state, method, amountMinor, currency]
+      properties:
+        paymentId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        state:
+          $ref: './_shared.yaml#/components/schemas/PaymentState'
+        method:
+          $ref: '#/components/schemas/PaymentMethod'
+        amountMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        surchargeMinor:
+          type: integer
+          format: int64
+          minimum: 0
+          description: OnePay adds 5% (US-8.11); zero for every other method.
+        currency:
+          $ref: './_shared.yaml#/components/schemas/Currency'
+        onepay:
+          description: 'Present only for `method: onepay`.'
+          type: object
+          properties:
+            redirectUrl:
+              type: string
+              format: uri
+            sessionToken:
+              type: string
+        lankaqr:
+          description: 'Present only for `method: lankaqr`.'
+          type: object
+          properties:
+            qrPayload:
+              type: string
+            paymentLink:
+              type: string
+              format: uri
+              description: '"Pay" deep link into the bank app; the QR is the fallback (AL-15).'
+
+    PaymentStatus:
+      type: object
+      required: [paymentId, rideId, state, method, amountMinor, currency]
+      properties:
+        paymentId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        rideId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        state:
+          $ref: './_shared.yaml#/components/schemas/PaymentState'
+        method:
+          $ref: '#/components/schemas/PaymentMethod'
+        amountMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        surchargeMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        tipMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        currency:
+          $ref: './_shared.yaml#/components/schemas/Currency'
+        settledAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    ProviderCallback:
+      type: object
+      description: |
+        Common shape of a gateway callback. `providerTransactionId` is the dedupe key (R-19); the
+        raw provider envelope is preserved in `raw` for reconciliation.
+      required: [providerTransactionId, status]
+      properties:
+        providerTransactionId:
+          type: string
+          maxLength: 128
+        paymentId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        status:
+          type: string
+          enum: [SUCCESS, FAILED, PENDING]
+        amountMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        currency:
+          $ref: './_shared.yaml#/components/schemas/Currency'
+        raw:
+          type: object
+          additionalProperties: true

@@ -1,0 +1,1322 @@
+openapi: 3.1.0
+
+# =============================================================================================
+# ride-svc — the Mode C ride aggregate (SOLE writer)
+# Source: specs/D3_mageride_api_contracts.md "ride-svc — Mode C Ride Aggregate (SOLE writer)"
+#         + ADD Appendix C ride-svc (v2.1/v2.2)
+#         + Δ 2026-06-28 AL-36 (`GET /v1/rides/history`)
+#         + Δ 2026-07-05 #2 AL-48 (`counterpartyPhone` on RideDetail)
+#
+# Scope fence (CLAUDE.md, R-01): ride-svc owns Mode C. Mode A/B tracking sessions belong to
+# trip-state-svc and that boundary is never crossed. dispatch-svc *consumes* ride events and
+# emits offer events; it does not write `rides.rides`.
+#
+# ADD Appendix C also lists `POST /rides/request`, `/offer/{driverId}/accept` and `/cancel` under
+# dispatch-svc. That listing is explicitly superseded in the same appendix ("the ride lifecycle
+# endpoints below ... have moved to ride-svc"); they are here, once.
+# =============================================================================================
+
+info:
+  title: MageRide ride-svc
+  version: 1.0.0
+  summary: On-demand (Mode C) ride lifecycle for passenger, proxy and package bookings.
+  description: |
+    **Every mutation requires `Idempotency-Key` and every response carries `version`.** Clients
+    echo `version` back on the next mutation, so a stale client sees `409 version-conflict`
+    instead of silently overwriting (R-14).
+
+    Three booking kinds share one aggregate:
+
+    - `passenger` — the booker is the rider.
+    - `proxy` — the booker books for someone else; the rider may be unregistered and has no
+      `iam.users` row (P-01). Notifications fan out to **both** booker and rider channels, and
+      calling always binds driver↔rider, never driver↔booker (P-05).
+    - `package` — no rider at all; two 4-digit OTPs (pickup, delivery) gate the handoffs, with a
+      photo-proof fallback when the recipient is absent (P-06/P-07/P-10).
+
+    `POST /v1/rides/request` is idempotent on **two** keys: the header, and
+    `(passengerId, clientRequestId)` (R-18) — a retry after a dropped response returns the
+    existing ride rather than booking a second one.
+
+    Offer acceptance is a single-winner conditional UPDATE within the 15-second TTL (R-02,
+    §11.11): the loser gets `409 offer-already-accepted`, a late arrival gets `410 offer-expired`.
+  contact:
+    name: MageRide Platform Engineering
+    url: https://mageride.lk
+  license:
+    name: UNLICENSED
+    url: https://mageride.lk/legal/terms
+
+servers:
+  - url: https://api.mageride.lk
+    description: Production gateway (DOKS Singapore)
+  - url: http://localhost:8080
+    description: Docker Compose dev gateway
+
+tags:
+  - name: rides
+    description: Ride lifecycle, offers, cancellation, history.
+  - name: package
+    description: Package pickup/delivery OTPs, photo proof, cash on delivery (P-06..P-08).
+  - name: location-requests
+    description: Proxy booking's "where are you?" round-trip (P-02, P-13).
+
+paths:
+
+  # -------------------------------------------------------------------------------------------
+  # Booking & lifecycle
+  # -------------------------------------------------------------------------------------------
+  /v1/rides/request:
+    post:
+      operationId: requestRide
+      summary: Request a Mode C ride (passenger, proxy or package).
+      description: |
+        Inserts `rides.rides` + `rides.command_log` in one transaction and writes the
+        `ride.requested` outbox row, so dispatch never sees a ride the database rolled back
+        (R-13). For a proxy booking the rider phone is resolved through iam-svc (P-03); for a
+        package two OTPs are generated and hashed, and the **pickup OTP is returned in plaintext
+        exactly once**, to be shown to the sender (P-07).
+
+        `paymentMethod: cod` is package-only. `truck` and `mini_truck` are delivery-only vehicle
+        types (AL-09).
+      tags: [rides]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+        - $ref: './_shared.yaml#/components/parameters/XAttestation'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RideRequest'
+      responses:
+        '202':
+          description: Ride accepted for dispatch.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [rideId, state, version, estimatedFare]
+                properties:
+                  rideId:
+                    $ref: './_shared.yaml#/components/schemas/Ulid'
+                  state:
+                    $ref: './_shared.yaml#/components/schemas/RideState'
+                  version:
+                    $ref: '#/components/schemas/Version'
+                  pickupOtp:
+                    type: string
+                    pattern: '^\d{4}$'
+                    description: |
+                      Package bookings only. Shown once to the sender and never returned again
+                      (P-07).
+                  estimatedFare:
+                    $ref: '#/components/schemas/FareEstimate'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '402': { $ref: './_shared.yaml#/components/responses/PaymentRequired' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [invalid-fare-token, attestation-failed, payment-method-invalid, booking-disabled, active-ride-exists]
+
+  /v1/rides/history:
+    get:
+      operationId: listRideHistory
+      summary: List the caller's completed rides.
+      description: |
+        Δ 2026-06-28 item 3 (AL-36, US-24.4). Each row carries the driver's `name`,
+        `mobileMasked` and `callTypesAvailable[]` so the post-trip Call action can be rendered
+        without a second round-trip. Since AL-48 the only server-brokered call type is
+        `free_voip`; `direct_dial` is a client-side `tel:` link.
+
+        Trip *detail* (polyline, fare breakdown) is query-svc's `GET /v1/trips/{userId}/{tripId}`.
+      tags: [rides]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/Cursor'
+        - $ref: './_shared.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Ride history page, newest first.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './_shared.yaml#/components/schemas/CursorPage'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/RideHistoryRow'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized]
+
+  /v1/rides/passenger/{passengerId}/active:
+    get:
+      operationId: getActivePassengerRide
+      summary: The passenger's current non-terminal ride, if any.
+      description: |
+        Client recovery (R-18) — called at cold start so a passenger who killed the app mid-ride
+        lands back on the live ride screen rather than a fresh booking form.
+      tags: [rides]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: passengerId
+          in: path
+          required: true
+          schema:
+            $ref: './_shared.yaml#/components/schemas/Ulid'
+      responses:
+        '200':
+          description: Active ride, or `null`.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/RideDetail'
+                  - type: 'null'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden]
+
+  /v1/rides/driver/{driverId}/active:
+    get:
+      operationId: getActiveDriverRide
+      summary: The driver's current non-terminal ride, if any.
+      description: Driver-side resume, the mirror of the passenger recovery read.
+      tags: [rides]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: driverId
+          in: path
+          required: true
+          schema:
+            $ref: './_shared.yaml#/components/schemas/Ulid'
+      responses:
+        '200':
+          description: Active ride, or `null`.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/RideDetail'
+                  - type: 'null'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden]
+
+  /v1/rides/{rideId}:
+    get:
+      operationId: getRide
+      summary: Read the full ride aggregate.
+      description: |
+        **AL-48:** once the ride reaches `Accepted`, the detail carries `counterpartyPhone` in
+        E.164 — the passenger sees the driver's number, the driver sees the **rider's** number
+        (never the booker's, P-05). It is omitted before acceptance and on rides cancelled before
+        assignment. This field is what makes the client-side `tel:` fallback possible without a
+        masking bridge.
+      tags: [rides]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/RideId'
+      responses:
+        '200':
+          description: Ride detail.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RideDetail'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, not-ride-participant, not-found]
+
+  /v1/rides/{rideId}/state:
+    get:
+      operationId: getRideState
+      summary: Lightweight state poll.
+      description: |
+        The cheap read the driver app uses while an offer is live — `offerExpiresAt` is what the
+        15-second countdown renders. The normal transport for state changes is the SignalR
+        `RideStateChanged` event; this is the reconnect/fallback path.
+      tags: [rides]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/RideId'
+      responses:
+        '200':
+          description: State snapshot.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [state, version]
+                properties:
+                  state:
+                    $ref: './_shared.yaml#/components/schemas/RideState'
+                  version:
+                    $ref: '#/components/schemas/Version'
+                  offerExpiresAt:
+                    $ref: './_shared.yaml#/components/schemas/Timestamp'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, not-ride-participant, not-found]
+
+  /v1/rides/{rideId}/offer/{driverId}/accept:
+    post:
+      operationId: acceptRideOffer
+      summary: Driver accepts an offer — atomic single winner.
+      description: |
+        R-02, §11.11. Runs a conditional update
+        `WHERE state IN ('Matching','Offered') AND offer_expires_at > now() AND version = :v`;
+        exactly one driver's row count is 1. The winner triggers the `ride.accepted` outbox row,
+        the second-trip daily-fee charge (subscription-svc, D-08/D-13) and the passenger's
+        `DRIVER_ASSIGNED` push (US-6A.13).
+
+        `402 insufficient-wallet` is the second-trip fee gate: the first trip of the day is free,
+        the second requires the daily fee to be payable (US-9.1).
+      tags: [rides]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/RideId'
+        - name: driverId
+          in: path
+          required: true
+          schema:
+            $ref: './_shared.yaml#/components/schemas/Ulid'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+        - $ref: './_shared.yaml#/components/parameters/XAttestation'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [offerId, version]
+              properties:
+                offerId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+                version:
+                  $ref: '#/components/schemas/Version'
+      responses:
+        '200':
+          description: This driver won the offer.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [rideId, state, version, ride]
+                properties:
+                  rideId:
+                    $ref: './_shared.yaml#/components/schemas/Ulid'
+                  state:
+                    $ref: './_shared.yaml#/components/schemas/RideState'
+                  version:
+                    $ref: '#/components/schemas/Version'
+                  ride:
+                    $ref: '#/components/schemas/RideDetail'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '402': { $ref: './_shared.yaml#/components/responses/PaymentRequired' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '410': { $ref: './_shared.yaml#/components/responses/Gone' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [attestation-failed, insufficient-wallet, not-ride-participant, not-found, offer-already-accepted, version-conflict, offer-expired]
+
+  /v1/rides/{rideId}/offer/{driverId}/decline:
+    post:
+      operationId: declineRideOffer
+      summary: Driver declines an offer; the ride returns to Matching.
+      description: |
+        No penalty (§11.12) — declining simply frees the ride for the next candidate. ADD
+        Appendix C spells the same operation `/reject` under dispatch-svc; D3' Part 2's ride-svc
+        table spells it `/decline`, and ride-svc is the sole writer, so `/decline` is canonical.
+      tags: [rides]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/RideId'
+        - name: driverId
+          in: path
+          required: true
+          schema:
+            $ref: './_shared.yaml#/components/schemas/Ulid'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [offerId]
+              properties:
+                offerId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+      responses:
+        '200':
+          description: Declined; ride is Matching again.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RideStateChange'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '410': { $ref: './_shared.yaml#/components/responses/Gone' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, not-ride-participant, not-found, illegal-transition, offer-expired]
+
+  /v1/rides/{rideId}/arrive:
+    post:
+      operationId: markDriverArrived
+      summary: Driver has arrived at pickup.
+      description: |
+        Fired automatically by the pickup geofence, with a manual tap as fallback. Transitions
+        `Accepted → DriverArrived`.
+      tags: [rides]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/RideId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VersionedCommand'
+      responses:
+        '200':
+          description: Transitioned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RideStateChange'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [illegal-transition, unauthorized, not-ride-participant, not-found, version-conflict]
+
+  /v1/rides/{rideId}/start:
+    post:
+      operationId: startRide
+      summary: Start the ride, after OTP verification for a passenger booking.
+      description: |
+        `Accepted | DriverArrived → InProgress`. A passenger or proxy ride requires the rider's
+        start OTP; a package ride uses `POST /v1/rides/{rideId}/package/pickup-otp` instead and
+        omits `otp` here.
+      tags: [rides]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/RideId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/VersionedCommand'
+                - type: object
+                  properties:
+                    otp:
+                      type: string
+                      pattern: '^\d{4}$'
+                      description: Rider start OTP. Omitted for package rides.
+      responses:
+        '200':
+          description: Ride in progress.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RideStateChange'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '423': { $ref: './_shared.yaml#/components/responses/Locked' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [illegal-transition, unauthorized, not-ride-participant, not-found, version-conflict, otp-locked]
+
+  /v1/rides/{rideId}/complete:
+    post:
+      operationId: completeRide
+      summary: Complete the ride and hand off to fare settlement.
+      description: |
+        `InProgress → Completed → PaymentPending`, then fare-svc computes the final fare
+        (E-04 Kalman-filtered distance) and drives the payment state machine. The driver's earning
+        posts **only** when payment reaches a terminal state (R-05).
+
+        Note for C032: the `ux_rides_open_passenger` partial index exempts `Completed` but not
+        `PaymentPending`, so the one-open-ride guard lifts and re-applies across this pair. Both
+        DDL sources print that list, so it was landed verbatim (C004 note (b)) — a passenger who
+        books a new ride inside that window can wedge the old one.
+      tags: [rides]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/RideId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VersionedCommand'
+      responses:
+        '200':
+          description: Completed; fare attached.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/RideStateChange'
+                  - type: object
+                    properties:
+                      fare:
+                        $ref: '#/components/schemas/FareEstimate'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [illegal-transition, unauthorized, not-ride-participant, not-found, version-conflict]
+
+  /v1/rides/{rideId}/cancel:
+    post:
+      operationId: cancelRide
+      summary: Cancel the ride; effect follows the §11.12 matrix.
+      description: |
+        Cancelling **after acceptance** accrues the **Rs 50 cross-trip penalty** (D-05, §11.7) —
+        the debt outlives the ride and settles on the passenger's next trip, keyed
+        `penaltyId:rideId` in `billing.journal_entries.idempotency_key` (D5' §7.1). Three
+        continuous passenger cancels disable booking (US-6A.10b); a driver-side cancel is a
+        reputation hit. Emits `ride.cancelled` and `cancellation.penalty.accrued`.
+      tags: [rides]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/RideId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/VersionedCommand'
+                - type: object
+                  required: [reason]
+                  properties:
+                    reason:
+                      type: string
+                      enum: [RIDER_CHANGED_MIND, DRIVER_TOO_FAR, EMERGENCY, OTHER]
+      responses:
+        '200':
+          description: Cancelled; penalty stated when one accrued.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/RideStateChange'
+                  - type: object
+                    properties:
+                      penalty:
+                        type: object
+                        required: [amountMinor, currency, settledOn]
+                        properties:
+                          amountMinor:
+                            type: integer
+                            format: int64
+                            minimum: 0
+                          currency:
+                            $ref: './_shared.yaml#/components/schemas/Currency'
+                          settledOn:
+                            type: string
+                            description: When the accrued debt will be collected.
+                            const: next-trip
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [illegal-transition, unauthorized, not-ride-participant, not-found, version-conflict]
+
+  /v1/rides/{rideId}/dispute:
+    post:
+      operationId: disputeRide
+      summary: Raise a post-payment dispute.
+      description: |
+        E-05. Opens a support ticket and moves the payment to `Disputed`. Refunds are Finance-only
+        and go through `POST /v1/admin/fare/refund`; this endpoint moves no money.
+      tags: [rides]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/RideId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason:
+                  type: string
+                  maxLength: 2000
+      responses:
+        '201':
+          description: Dispute raised.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ticketId]
+                properties:
+                  ticketId:
+                    $ref: './_shared.yaml#/components/schemas/Ulid'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, not-ride-participant, not-found, illegal-transition]
+
+  # -------------------------------------------------------------------------------------------
+  # Package delivery (P-06..P-10)
+  # -------------------------------------------------------------------------------------------
+  /v1/rides/{rideId}/package/pickup-otp:
+    post:
+      operationId: verifyPackagePickupOtp
+      summary: Driver enters the sender's pickup OTP.
+      description: |
+        P-07. Compared against the stored hash; **at most five attempts**, after which the
+        endpoint answers `423 otp-locked` and the handoff needs support intervention. Success
+        moves the package to `PickedUp`.
+      tags: [package]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/RideId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OtpAttempt'
+      responses:
+        '200':
+          description: OTP accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RideStateChange'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '423': { $ref: './_shared.yaml#/components/responses/Locked' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [invalid-otp, unauthorized, not-ride-participant, not-found, otp-locked]
+
+  /v1/rides/{rideId}/package/delivery-otp:
+    post:
+      operationId: verifyPackageDeliveryOtp
+      summary: Driver enters the recipient's delivery OTP.
+      description: P-07. Same five-attempt budget as pickup. Success moves the package to `Delivered`.
+      tags: [package]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/RideId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OtpAttempt'
+      responses:
+        '200':
+          description: OTP accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RideStateChange'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '423': { $ref: './_shared.yaml#/components/responses/Locked' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [invalid-otp, unauthorized, not-ride-participant, not-found, otp-locked]
+
+  /v1/rides/{rideId}/package/proof-photo:
+    post:
+      operationId: uploadPackageProofPhoto
+      summary: Upload photo proof of delivery when the recipient is absent.
+      description: |
+        P-10. The fallback when no one is there to read out the delivery OTP. Persists
+        `rides.proof_artifacts(kind='delivery_photo')`; the receipt surfaced at
+        `GET /public/track/{token}/receipt` then reports `photo_proof` instead of `otp_verified`.
+      tags: [package]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/RideId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                note:
+                  type: string
+                  maxLength: 500
+      responses:
+        '201':
+          description: Proof stored.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [artifactId]
+                properties:
+                  artifactId:
+                    $ref: './_shared.yaml#/components/schemas/Ulid'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '413': { $ref: './_shared.yaml#/components/responses/PayloadTooLarge' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, not-ride-participant, not-found, payload-too-large]
+
+  /v1/rides/{rideId}/cod-collected:
+    post:
+      operationId: confirmCashOnDelivery
+      summary: Driver confirms the cash-on-delivery amount was collected.
+      description: |
+        P-08. Moves the payment to `CashOnDeliveryCollected`, which is terminal — the driver's
+        earning posts from there (R-05). Only valid on a package ride booked `paymentMethod: cod`.
+      tags: [package]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/RideId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+        - $ref: './_shared.yaml#/components/parameters/XAttestation'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [collectedMinor]
+              properties:
+                collectedMinor:
+                  type: integer
+                  format: int64
+                  minimum: 0
+      responses:
+        '200':
+          description: Cash recorded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RideStateChange'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [invalid-amount, attestation-failed, not-ride-participant, not-found, payment-already-settled]
+
+  # -------------------------------------------------------------------------------------------
+  # Location requests (P-02, P-12, P-13, §11.15)
+  # -------------------------------------------------------------------------------------------
+  /v1/location-requests:
+    post:
+      operationId: createLocationRequest
+      summary: Ask the rider to share their live GPS as the pickup point.
+      description: |
+        P-02/P-13. Looks the phone number up through iam-svc (P-03). A registered rider gets an
+        FCM data message and resolves in-app; an unregistered one gets an SMS carrying a
+        `pickup_confirm` web token and resolves through public-bff (AL-45). Either way a durable
+        5-minute expiry timer is armed and the booker subscribes the SignalR group
+        `booker:{bookerId}:loc-req:{requestId}`.
+
+        Rate limited per booker: 5 per hour, 30 per day (P-12).
+      tags: [location-requests]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+        - $ref: './_shared.yaml#/components/parameters/XAttestation'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [riderPhone]
+              properties:
+                riderPhone:
+                  $ref: './_shared.yaml#/components/schemas/PhoneE164'
+                rideDraftId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+      responses:
+        '202':
+          description: Request issued.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [requestId, state, ttl]
+                properties:
+                  requestId:
+                    $ref: './_shared.yaml#/components/schemas/Ulid'
+                  state:
+                    $ref: '#/components/schemas/LocationRequestState'
+                  ttl:
+                    type: integer
+                    format: int32
+                    description: Seconds until expiry.
+                    const: 300
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '429': { $ref: './_shared.yaml#/components/responses/TooManyRequests' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [invalid-phone, attestation-failed, loc-request-rate-limited]
+
+  /v1/location-requests/{requestId}:
+    get:
+      operationId: getLocationRequest
+      summary: Poll a location request (diagnostic).
+      description: |
+        ADD Appendix C. Clients normally learn the outcome from the SignalR
+        `LocationRequestResolved` event on `booker:{bookerId}:loc-req:{requestId}`; this read
+        exists for reconnect and for support diagnosis.
+      tags: [location-requests]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      responses:
+        '200':
+          description: Request state.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocationRequest'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, not-found]
+
+  /v1/location-requests/{requestId}/confirm:
+    post:
+      operationId: confirmLocationRequest
+      summary: Rider shares their location.
+      description: |
+        P-02, in-app path. `POST /public/track/{token}/pickup/confirm` (public-bff) is the no-app
+        path into the same state machine (AL-45); these two contracts stay in lockstep.
+      tags: [location-requests]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: './_shared.yaml#/components/schemas/GeoPointWithAccuracy'
+      responses:
+        '200':
+          description: Location shared with the booker.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocationRequest'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '410': { $ref: './_shared.yaml#/components/responses/Gone' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden, not-found, token-expired-or-revoked]
+
+  /v1/location-requests/{requestId}/decline:
+    post:
+      operationId: declineLocationRequest
+      summary: Rider declines to share their location.
+      description: |
+        P-02. **No coordinates are accepted or stored** on this path — declining must not leak an
+        approximate position.
+      tags: [location-requests]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Declined; the booker is notified.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocationRequest'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '410': { $ref: './_shared.yaml#/components/responses/Gone' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, not-found, token-expired-or-revoked]
+
+  # -------------------------------------------------------------------------------------------
+  # Internal (mTLS)
+  # -------------------------------------------------------------------------------------------
+  /v1/internal/rides/{rideId}/system-cancel:
+    post:
+      operationId: systemCancelRide
+      summary: Cancel a ride from a system trigger.
+      description: |
+        Internal, mTLS only. R-15/R-16 — dispatch-svc calls it when the MQTT last-will marks the
+        driver offline beyond the grace window; reputation-svc calls it on a fraud lock. No
+        passenger penalty accrues on a system cancel.
+      tags: [rides]
+      security:
+        - mtls: []
+      parameters:
+        - $ref: '#/components/parameters/RideId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason:
+                  type: string
+                  enum: [driver_offline_grace_expired, fraud_lock, no_driver_found, admin_intervention]
+      responses:
+        '200':
+          description: Cancelled.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RideStateChange'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, not-found, illegal-transition]
+
+  /v1/internal/rides/{rideId}/payment-settled:
+    post:
+      operationId: notifyPaymentSettled
+      summary: fare-svc reports a terminal payment state.
+      description: |
+        Internal, mTLS only. R-05 — the ride moves to its terminal money state (`Paid`,
+        `CashSettled`, `CashOnDeliveryCollected` or `Disputed`) and the driver's earning posts.
+        Nothing else is allowed to move a ride into a settled state.
+      tags: [rides]
+      security:
+        - mtls: []
+      parameters:
+        - $ref: '#/components/parameters/RideId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [paymentId, paymentState]
+              properties:
+                paymentId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+                paymentState:
+                  $ref: './_shared.yaml#/components/schemas/PaymentState'
+                settledMinor:
+                  type: integer
+                  format: int64
+                  minimum: 0
+      responses:
+        '200':
+          description: Ride settled.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RideStateChange'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, not-found, illegal-transition]
+
+  /v1/internal/rides/{rideId}/saga-state:
+    get:
+      operationId: getRideSagaState
+      summary: Ride saga diagnostics for ops.
+      description: |
+        Internal, mTLS only (ADD Appendix C). Exposes the aggregate's transition log and pending
+        outbox rows so an operator can see why a ride is stuck without querying Postgres directly.
+      tags: [rides]
+      security:
+        - mtls: []
+      parameters:
+        - $ref: '#/components/parameters/RideId'
+      responses:
+        '200':
+          description: Saga diagnostics.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [rideId, state, version, transitions]
+                properties:
+                  rideId:
+                    $ref: './_shared.yaml#/components/schemas/Ulid'
+                  state:
+                    $ref: './_shared.yaml#/components/schemas/RideState'
+                  version:
+                    $ref: '#/components/schemas/Version'
+                  transitions:
+                    type: array
+                    items:
+                      type: object
+                      required: [from, to, at]
+                      properties:
+                        from:
+                          $ref: './_shared.yaml#/components/schemas/RideState'
+                        to:
+                          $ref: './_shared.yaml#/components/schemas/RideState'
+                        at:
+                          $ref: './_shared.yaml#/components/schemas/Timestamp'
+                        actor:
+                          type: string
+                  pendingOutbox:
+                    type: integer
+                    format: int32
+                    minimum: 0
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, not-found]
+
+components:
+  securitySchemes:
+    bearerAuth:
+      $ref: './_shared.yaml#/components/securitySchemes/bearerAuth'
+    mtls:
+      $ref: './_shared.yaml#/components/securitySchemes/mtls'
+
+  parameters:
+    RideId:
+      name: rideId
+      in: path
+      required: true
+      schema:
+        $ref: './_shared.yaml#/components/schemas/Ulid'
+    RequestId:
+      name: requestId
+      in: path
+      required: true
+      schema:
+        $ref: './_shared.yaml#/components/schemas/Ulid'
+
+  schemas:
+    Version:
+      type: integer
+      format: int32
+      minimum: 1
+      description: |
+        Optimistic-concurrency version of the ride aggregate. Every response carries it; every
+        mutation echoes it back and fails `409 version-conflict` if it has moved on.
+
+    VersionedCommand:
+      type: object
+      required: [version]
+      properties:
+        version:
+          $ref: '#/components/schemas/Version'
+
+    OtpAttempt:
+      type: object
+      required: [otp]
+      properties:
+        otp:
+          type: string
+          pattern: '^\d{4}$'
+
+    RideKind:
+      type: string
+      description: Matches `rides.rides.kind` (0=passenger, 1=proxy, 2=package), C004.
+      enum: [passenger, proxy, package]
+
+    PackageSize:
+      type: string
+      enum: [S, M, L]
+
+    RidePaymentMethod:
+      type: string
+      description: |
+        Booking-time method. Matches the `rides.rides.payment_method` CHECK (C004) — deliberately
+        narrower than the settlement-time `fares.ride_payments.method`, which also allows
+        `scan_driver_qr` (C004 note (f)).
+      enum: [cash, lankaqr, onepay, cod]
+
+    RideRequest:
+      type: object
+      required: [clientRequestId, pickup, dropoff, vehicleType, fareEstimateToken, paymentMethod]
+      properties:
+        clientRequestId:
+          description: |
+            The idempotency partner of the header key. `(passengerId, clientRequestId)` is unique
+            in `rides.rides`, so a retry returns the existing ride (R-18).
+          allOf:
+            - $ref: './_shared.yaml#/components/schemas/Ulid'
+        kind:
+          $ref: '#/components/schemas/RideKind'
+        pickup:
+          $ref: './_shared.yaml#/components/schemas/Place'
+        dropoff:
+          $ref: './_shared.yaml#/components/schemas/Place'
+        vehicleType:
+          $ref: './_shared.yaml#/components/schemas/RideVehicleType'
+        fareEstimateToken:
+          type: string
+          description: Opaque token from `GET /v1/fare/estimate`; binds the quoted price.
+        paymentMethod:
+          $ref: '#/components/schemas/RidePaymentMethod'
+        scheduledAt:
+          description: '`null` or absent = immediate dispatch.'
+          oneOf:
+            - $ref: './_shared.yaml#/components/schemas/Timestamp'
+            - type: 'null'
+        isProxy:
+          type: boolean
+          description: Proxy bookings (P-01). The rider need not be a registered user.
+        riderName:
+          type: string
+          maxLength: 200
+        riderPhone:
+          $ref: './_shared.yaml#/components/schemas/PhoneE164'
+        packageSize:
+          $ref: '#/components/schemas/PackageSize'
+        packageDescription:
+          type: string
+          maxLength: 500
+        recipientName:
+          type: string
+          maxLength: 200
+        recipientPhone:
+          $ref: './_shared.yaml#/components/schemas/PhoneE164'
+
+    FareEstimate:
+      type: object
+      required: [amountMinor, currency]
+      properties:
+        amountMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        currency:
+          $ref: './_shared.yaml#/components/schemas/Currency'
+        surchargeMinor:
+          type: integer
+          format: int64
+          minimum: 0
+
+    RideStateChange:
+      type: object
+      required: [rideId, state, version]
+      properties:
+        rideId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        state:
+          $ref: './_shared.yaml#/components/schemas/RideState'
+        version:
+          $ref: '#/components/schemas/Version'
+
+    RideDetail:
+      type: object
+      required: [rideId, kind, state, version, pickup, dropoff, vehicleType, paymentMethod, createdAt]
+      properties:
+        rideId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        kind:
+          $ref: '#/components/schemas/RideKind'
+        state:
+          $ref: './_shared.yaml#/components/schemas/RideState'
+        version:
+          $ref: '#/components/schemas/Version'
+        bookerId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        riderId:
+          description: Absent on a proxy booking for an unregistered rider (P-01).
+          oneOf:
+            - $ref: './_shared.yaml#/components/schemas/Ulid'
+            - type: 'null'
+        riderName:
+          type: string
+        pickup:
+          $ref: './_shared.yaml#/components/schemas/Place'
+        dropoff:
+          $ref: './_shared.yaml#/components/schemas/Place'
+        vehicleType:
+          $ref: './_shared.yaml#/components/schemas/RideVehicleType'
+        paymentMethod:
+          $ref: '#/components/schemas/RidePaymentMethod'
+        scheduledAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+        offerExpiresAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+        driver:
+          $ref: '#/components/schemas/RideDriver'
+        counterpartyPhone:
+          description: |
+            **AL-48.** Present only from `Accepted` onward. The passenger sees the driver's
+            number; the driver sees the **rider's** number, never the booker's (P-05). This is the
+            number the client `tel:` dials when VoIP fails — there is no masking bridge.
+          oneOf:
+            - $ref: './_shared.yaml#/components/schemas/PhoneE164'
+            - type: 'null'
+        fare:
+          $ref: '#/components/schemas/FareEstimate'
+        packageSize:
+          $ref: '#/components/schemas/PackageSize'
+        packageDescription:
+          type: string
+        packageStatus:
+          type: string
+          enum: [PickupPending, PickedUp, InTransit, Delivered]
+        createdAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    RideDriver:
+      type: object
+      required: [driverId, name]
+      properties:
+        driverId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        name:
+          type: string
+        photoUrl:
+          type: string
+          format: uri
+        vehicleType:
+          $ref: './_shared.yaml#/components/schemas/VehicleType'
+        registrationNumber:
+          type: string
+        rating:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 5
+        etaSeconds:
+          type: integer
+          format: int32
+          minimum: 0
+
+    RideHistoryRow:
+      type: object
+      required: [rideId, state, completedAt]
+      properties:
+        rideId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        state:
+          $ref: './_shared.yaml#/components/schemas/RideState'
+        pickup:
+          $ref: './_shared.yaml#/components/schemas/Place'
+        dropoff:
+          $ref: './_shared.yaml#/components/schemas/Place'
+        fare:
+          $ref: '#/components/schemas/FareEstimate'
+        completedAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+        driver:
+          type: object
+          description: AL-36 — enough to render the post-trip Call action without a second read.
+          required: [name, mobileMasked, callTypesAvailable]
+          properties:
+            driverId:
+              $ref: './_shared.yaml#/components/schemas/Ulid'
+            name:
+              type: string
+            mobileMasked:
+              $ref: './_shared.yaml#/components/schemas/PhoneMasked'
+            callTypesAvailable:
+              type: array
+              description: '`normal_masked` was removed by AL-48 and can never appear here.'
+              items:
+                type: string
+                enum: [free_voip, direct_dial]
+
+    LocationRequestState:
+      type: string
+      description: |
+        `RiderNotRegistered` means the SMS `pickup_confirm` web path was taken instead of the
+        in-app one (AL-45).
+      enum: [Pending, RiderNotRegistered, Confirmed, Declined, Expired]
+
+    LocationRequest:
+      type: object
+      required: [requestId, state, expiresAt]
+      properties:
+        requestId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        state:
+          $ref: '#/components/schemas/LocationRequestState'
+        geo:
+          description: Present only when `state` is `Confirmed`.
+          oneOf:
+            - $ref: './_shared.yaml#/components/schemas/GeoPointWithAccuracy'
+            - type: 'null'
+        expiresAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'

@@ -1,0 +1,872 @@
+openapi: 3.1.0
+
+# =============================================================================================
+# iam-svc — auth, profile, session, saved addresses
+# Source: specs/D3_mageride_api_contracts.md "iam-svc — auth, profile, token"
+#         + Δ 2026-06-21 "iam-svc (items 7, 1, 10)"
+#         + Δ 2026-06-28 "iam-svc — Admin login MFA removed (item 5, AL-37)"
+#
+# REMOVED, do not re-add:
+#   POST /v1/admin/auth/mfa/verify  and the TOTP enrolment pair  — REMOVED BY AL-37
+#     (Δ 2026-06-28 item 5, ADD §1.11). Internal-role sign-in completes on password or Google
+#     alone. Compensating controls are failed-attempt lock-out, session binding and an optional
+#     IP allow-list — none of which is an endpoint. D3' §0 and D7' §4.2 still carry pre-AL-37
+#     "+ MFA" wording; AL-37 is later and wins (planner finding 3).
+# =============================================================================================
+
+info:
+  title: MageRide iam-svc
+  version: 1.0.0
+  summary: Phone-OTP, portal and service sign-in; user profile; saved addresses.
+  description: |
+    Sign-in is **by surface** (AL-07):
+
+    | Surface | Methods |
+    |---|---|
+    | Passenger / Driver apps | Phone OTP only |
+    | Admin Portal `admin.mageride.lk` | Password or Google — **no MFA/TOTP** (AL-37) |
+    | Fleet Portal `fleet.mageride.lk` | Email+Password / Google / Apple |
+
+    Tokens are RS256 access (30 min) plus an opaque rotating single-use refresh token held in
+    `iam.sessions` + Redis `refresh:{jti}` (D-29). **One active device per `app` claim** — a
+    new-device login revokes only that app's prior session, so a driver and a passenger session
+    on the same handset coexist (AL-08, US-1.12, enforced by the C003 partial unique index).
+
+    Gateway edge headers (`X-App-Version`, `X-Platform`) and the shared conventions are described
+    in `_shared.yaml`.
+  contact:
+    name: MageRide Platform Engineering
+    url: https://mageride.lk
+  license:
+    name: UNLICENSED
+    url: https://mageride.lk/legal/terms
+
+servers:
+  - url: https://api.mageride.lk
+    description: Production gateway (DOKS Singapore)
+  - url: http://localhost:8080
+    description: Docker Compose dev gateway
+
+tags:
+  - name: auth
+    description: OTP, portal sign-in, token lifecycle, MQTT session tokens.
+  - name: users
+    description: Profile read/update, internal lookup, account deletion.
+  - name: saved-addresses
+    description: Passenger Home/Work and free-form saved places (AL-26, US-22.x).
+
+paths:
+
+  # -------------------------------------------------------------------------------------------
+  # Auth
+  # -------------------------------------------------------------------------------------------
+  /v1/auth/otp/request:
+    post:
+      operationId: requestOtp
+      summary: Start login and send an OTP over SMS.
+      description: |
+        Public. Mints an OTP and sends it via the Notify.lk SMS gateway; creates
+        `iam.auth_attempts`. Apps only — `role` is `passenger` or `driver`; "reseller" is neither
+        a role nor a capability (AL-01). Rate limited by Redis token-bucket, 60 s resend /
+        5 per hour (D-32).
+      tags: [auth]
+      security: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+        - $ref: './_shared.yaml#/components/parameters/XAttestation'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone, deviceId]
+              properties:
+                phone:
+                  $ref: './_shared.yaml#/components/schemas/PhoneE164'
+                deviceId:
+                  type: string
+                  maxLength: 128
+                  description: Stable per-install device identifier; binds the session (AL-08).
+                fcmToken:
+                  type: string
+                  maxLength: 512
+                role:
+                  type: string
+                  enum: [passenger, driver]
+                  description: Which app is signing in. Portals do not use this endpoint.
+      responses:
+        '200':
+          description: OTP dispatched.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [authId, attemptsRemaining, cooldownSeconds, isBlocked]
+                properties:
+                  authId:
+                    $ref: './_shared.yaml#/components/schemas/Ulid'
+                  attemptsRemaining:
+                    type: integer
+                    format: int32
+                    minimum: 0
+                  cooldownSeconds:
+                    type: integer
+                    format: int32
+                    default: 60
+                  isBlocked:
+                    type: boolean
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '426': { $ref: './_shared.yaml#/components/responses/UpgradeRequired' }
+        '429': { $ref: './_shared.yaml#/components/responses/TooManyRequests' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [invalid-phone, attestation-failed, user-blocked, upgrade-required, otp-rate-limited]
+
+  /v1/auth/otp/verify:
+    post:
+      operationId: verifyOtp
+      summary: Verify an OTP and issue a session.
+      description: |
+        Public. On success persists `iam.sessions` (refresh jti) + Redis `refresh:{jti}`, binds
+        the device, and **revokes the caller's prior session for this `app` only** (US-1.11,
+        AL-08). Replaying the `Idempotency-Key` replays the issued token pair rather than minting
+        a second session.
+      tags: [auth]
+      security: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+        - $ref: './_shared.yaml#/components/parameters/XAttestation'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [authId, otp, deviceId]
+              properties:
+                authId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+                otp:
+                  type: string
+                  pattern: '^\d{6}$'
+                deviceId:
+                  type: string
+                  maxLength: 128
+                  description: Must match the `deviceId` sent to `/v1/auth/otp/request`.
+      responses:
+        '200':
+          description: Session issued.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './_shared.yaml#/components/schemas/TokenPair'
+                  - type: object
+                    required: [user, isNewUser]
+                    properties:
+                      user:
+                        $ref: '#/components/schemas/UserProfile'
+                      isNewUser:
+                        type: boolean
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '423': { $ref: './_shared.yaml#/components/responses/Locked' }
+        '429': { $ref: './_shared.yaml#/components/responses/TooManyRequests' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [otp-expired, invalid-otp, attestation-failed, auth-not-found, device-mismatch, otp-locked, otp-rate-limited]
+
+  /v1/auth/otp/resend:
+    post:
+      operationId: resendOtp
+      summary: Re-send the OTP for an in-flight auth attempt.
+      description: 60-second cooldown; counts against the same 5-per-hour budget (D-32).
+      tags: [auth]
+      security: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [authId]
+              properties:
+                authId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+      responses:
+        '200':
+          description: OTP re-sent.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [attemptsRemaining, cooldownSeconds]
+                properties:
+                  attemptsRemaining:
+                    type: integer
+                    format: int32
+                    minimum: 0
+                  cooldownSeconds:
+                    type: integer
+                    format: int32
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '429': { $ref: './_shared.yaml#/components/responses/TooManyRequests' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [auth-not-found, otp-rate-limited]
+
+  /v1/auth/refresh:
+    post:
+      operationId: refreshSession
+      summary: Rotate the refresh token and mint a new access token.
+      description: |
+        The presented refresh token is single-use; a successful call rotates the `jti` (D-29).
+        Presenting a spent token revokes the whole session family — a replayed
+        `Idempotency-Key`, by contrast, replays the original rotation result.
+      tags: [auth]
+      security:
+        - refreshToken: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        '200':
+          description: Rotated token pair.
+          content:
+            application/json:
+              schema:
+                $ref: './_shared.yaml#/components/schemas/TokenPair'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, validation-failed]
+
+  /v1/auth/logout:
+    post:
+      operationId: logout
+      summary: Revoke the caller's refresh token.
+      description: Revokes `iam.sessions` + `refresh:{jti}` for this device only (US-1.7).
+      tags: [auth]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      responses:
+        '204':
+          description: Session revoked. Already-revoked sessions also answer 204.
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized]
+
+  /v1/auth/google:
+    post:
+      operationId: signInWithGoogle
+      summary: Sign in with a Google ID token (Admin and Fleet portals only).
+      description: |
+        **Portals only** (AL-07) — the passenger and driver apps are Phone OTP only and the
+        gateway rejects this route for an app `X-Platform`. No MFA challenge follows (AL-37).
+      tags: [auth]
+      security: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [idToken]
+              properties:
+                idToken:
+                  type: string
+                  description: Google OIDC ID token, verified against Google's JWKS.
+      responses:
+        '200':
+          description: Session issued.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './_shared.yaml#/components/schemas/TokenPair'
+                  - type: object
+                    required: [user]
+                    properties:
+                      user:
+                        $ref: '#/components/schemas/UserProfile'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden]
+
+  /v1/auth/apple:
+    post:
+      operationId: signInWithApple
+      summary: Sign in with an Apple ID token (Fleet Portal only).
+      description: '**Fleet Portal only** (AL-07).'
+      tags: [auth]
+      security: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [idToken]
+              properties:
+                idToken:
+                  type: string
+                  description: Apple `id_token`, verified against Apple's JWKS.
+      responses:
+        '200':
+          description: Session issued.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './_shared.yaml#/components/schemas/TokenPair'
+                  - type: object
+                    required: [user]
+                    properties:
+                      user:
+                        $ref: '#/components/schemas/UserProfile'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden]
+
+  /v1/auth/password:
+    post:
+      operationId: signInWithPassword
+      summary: Email + password sign-in (Admin and Fleet portals).
+      description: |
+        Returns a token pair directly — **there is no MFA challenge step** (AL-37). Failed
+        attempts count toward the lock-out that replaced the second factor.
+      tags: [auth]
+      security: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordLogin'
+      responses:
+        '200':
+          description: Session issued.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './_shared.yaml#/components/schemas/TokenPair'
+                  - type: object
+                    required: [user]
+                    properties:
+                      user:
+                        $ref: '#/components/schemas/UserProfile'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '423': { $ref: './_shared.yaml#/components/responses/Locked' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden, otp-locked]
+
+  /v1/admin/auth/login:
+    post:
+      operationId: adminLogin
+      summary: Admin Portal sign-in — password or Google OIDC code.
+      description: |
+        Δ 2026-06-28 item 5 (AL-37). The Admin Portal's own sign-in surface: `{email, password}`
+        **or** a Google OIDC authorization code. **No `mfaChallenge` step**; the TOTP enrolment
+        and `/v1/admin/auth/mfa/verify` endpoints are removed. Compensating controls are
+        failed-attempt lock-out, session binding and an optional IP allow-list on internal roles
+        — enforced in the handler, not as extra round-trips (US-24.5).
+      tags: [auth]
+      security: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/PasswordLogin'
+                - type: object
+                  required: [googleAuthCode]
+                  properties:
+                    googleAuthCode:
+                      type: string
+                      description: Authorization code from the Google OIDC redirect.
+                    redirectUri:
+                      type: string
+                      format: uri
+      responses:
+        '200':
+          description: Session issued for an internal role.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './_shared.yaml#/components/schemas/TokenPair'
+                  - type: object
+                    required: [user]
+                    properties:
+                      user:
+                        $ref: '#/components/schemas/UserProfile'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '423': { $ref: './_shared.yaml#/components/responses/Locked' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden, otp-locked]
+
+  /v1/auth/mqtt-token:
+    post:
+      operationId: issueMqttToken
+      summary: Mint the device's MQTT session JWT.
+      description: |
+        The MQTT session JWT is **decoupled from the API access token** (E-02, D-21): TTL is
+        `max(active ride + 2 h, 4 h)` and it is bound to `(vehicleId, deviceId, rideId?)`, so a
+        mid-trip API refresh failure in poor coverage does not drop position publishing. EMQX
+        validates it against a locally cached JWKS (15-minute TTL, JIT lookup on miss).
+      tags: [auth]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [vehicleId, deviceId]
+              properties:
+                vehicleId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+                deviceId:
+                  type: string
+                  maxLength: 128
+                rideId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+      responses:
+        '200':
+          description: MQTT session token minted.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [mqttJwt, expiresIn]
+                properties:
+                  mqttJwt:
+                    type: string
+                  expiresIn:
+                    type: integer
+                    format: int32
+                    description: Seconds; never less than 14400 (4 h).
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, not-owner, vehicle-not-found]
+
+  # -------------------------------------------------------------------------------------------
+  # Users
+  # -------------------------------------------------------------------------------------------
+  /v1/users/me:
+    get:
+      operationId: getMyProfile
+      summary: Read the signed-in user's profile.
+      description: |
+        Returns the union of every granted role (AL-06) plus the language and default payment
+        method the apps key their UI off. Portal identities also carry `email`.
+      tags: [users]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Profile.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized]
+    put:
+      operationId: updateMyProfile
+      summary: Update name, photo, language or notification preferences.
+      description: US-1.5. `language` is one of Si/Ta/En and drives every server-rendered string (D-26).
+      tags: [users]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                firstName:
+                  type: string
+                  maxLength: 120
+                photoUrl:
+                  type: string
+                  format: uri
+                language:
+                  $ref: './_shared.yaml#/components/schemas/LanguageCode'
+                notifPrefs:
+                  type: object
+                  additionalProperties:
+                    type: boolean
+      responses:
+        '200':
+          description: Updated profile.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized]
+    delete:
+      operationId: deleteMyAccount
+      summary: Request account deletion.
+      description: |
+        Accepted, not immediate — the request is handed to pdpa-svc as an erasure request and
+        may be held by a statutory hold (US-1.8, E-06). Poll `GET /v1/pdpa/{requestId}`.
+      tags: [users]
+      security:
+        - bearerAuth: []
+      responses:
+        '202':
+          description: Erasure request accepted.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [requestId]
+                properties:
+                  requestId:
+                    $ref: './_shared.yaml#/components/schemas/Ulid'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, conflict]
+
+  /v1/users/lookup:
+    get:
+      operationId: lookupUserByPhone
+      summary: Resolve whether a phone number belongs to a registered user.
+      description: |
+        Internal, mTLS only. Backs the proxy-booking rider lookup (P-03) — ride-svc calls it to
+        decide between an in-app FCM location request and the SMS `pickup_confirm` web path.
+        Returns no PII beyond the answer itself.
+      tags: [users]
+      security:
+        - mtls: []
+      parameters:
+        - name: phone
+          in: query
+          required: true
+          schema:
+            $ref: './_shared.yaml#/components/schemas/PhoneE164'
+      responses:
+        '200':
+          description: Lookup result.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [registered]
+                properties:
+                  registered:
+                    type: boolean
+                  userId:
+                    $ref: './_shared.yaml#/components/schemas/Ulid'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [invalid-phone, unauthorized]
+
+  # -------------------------------------------------------------------------------------------
+  # Saved addresses & preferences (Δ 2026-06-21 items 7, 1, 10)
+  # -------------------------------------------------------------------------------------------
+  /v1/me/saved-addresses:
+    get:
+      operationId: listSavedAddresses
+      summary: List the caller's saved addresses.
+      description: |
+        Backs the passenger Settings > Saved Addresses screen and the booking screen's
+        Home/Work shortcuts (US-22.x, AL-26).
+      tags: [saved-addresses]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Saved addresses, Home and Work first.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SavedAddress'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized]
+    post:
+      operationId: createSavedAddress
+      summary: Save an address.
+      description: |
+        At most one Home and one Work per user — the C003 partial unique indexes reject a second
+        (AL-26). `label` remains addressable for free-form places.
+      tags: [saved-addresses]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SavedAddressInput'
+      responses:
+        '201':
+          description: Address saved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedAddress'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, conflict]
+
+  /v1/me/saved-addresses/{addressId}:
+    put:
+      operationId: updateSavedAddress
+      summary: Edit a saved address.
+      description: |
+        Full replacement of the stored row. Moving the Home or Work flag to this address clears
+        it from whichever address held it, so the at-most-one invariant survives an edit.
+      tags: [saved-addresses]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AddressId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SavedAddressInput'
+      responses:
+        '200':
+          description: Updated address.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedAddress'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, not-found, conflict]
+    delete:
+      operationId: deleteSavedAddress
+      summary: Delete a saved address.
+      description: Hard delete. Rides already booked against it keep their captured coordinates.
+      tags: [saved-addresses]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AddressId'
+      responses:
+        '204':
+          description: Deleted.
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, not-found]
+
+  /v1/me/prefs/language:
+    put:
+      operationId: setLanguagePreference
+      summary: Set the caller's UI language.
+      description: |
+        Reachable from first-run onboarding and Settings only (Δ 2026-06-21 items 1/10). Writes
+        `iam.users.language`; there is no `iam.user_prefs` table despite ADD §9.1 naming one
+        (C003 note (d)).
+      tags: [users]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [language]
+              properties:
+                language:
+                  $ref: './_shared.yaml#/components/schemas/LanguageCode'
+      responses:
+        '200':
+          description: Preference stored.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [language]
+                properties:
+                  language:
+                    $ref: './_shared.yaml#/components/schemas/LanguageCode'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized]
+
+components:
+  # Re-declared by $ref so this document is self-contained for tooling that validates
+  # `security` against a local `components.securitySchemes` (Spectral, most codegens).
+  securitySchemes:
+    bearerAuth:
+      $ref: './_shared.yaml#/components/securitySchemes/bearerAuth'
+    refreshToken:
+      $ref: './_shared.yaml#/components/securitySchemes/refreshToken'
+    mtls:
+      $ref: './_shared.yaml#/components/securitySchemes/mtls'
+
+  parameters:
+    AddressId:
+      name: addressId
+      in: path
+      required: true
+      schema:
+        $ref: './_shared.yaml#/components/schemas/Ulid'
+
+  schemas:
+    UserProfile:
+      type: object
+      required: [userId, phone, role]
+      properties:
+        userId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        phone:
+          $ref: './_shared.yaml#/components/schemas/PhoneE164'
+        email:
+          type: string
+          format: email
+          description: Portal identities only; app users sign in by phone.
+        firstName:
+          type: string
+          maxLength: 120
+        photoUrl:
+          type: string
+          format: uri
+        role:
+          $ref: './_shared.yaml#/components/schemas/Role'
+        roles:
+          type: array
+          description: Every granted role; effective permissions are their union (AL-06).
+          items:
+            $ref: './_shared.yaml#/components/schemas/Role'
+        fleetRole:
+          $ref: './_shared.yaml#/components/schemas/FleetRole'
+        language:
+          $ref: './_shared.yaml#/components/schemas/LanguageCode'
+        operatingCityCode:
+          type: string
+          description: Chosen on the first-run city screen; keys `config.operating_cities`.
+          example: colombo
+        defaultPaymentMethod:
+          type: string
+          enum: [cash, lankaqr, onepay]
+        notifPrefs:
+          type: object
+          additionalProperties:
+            type: boolean
+        createdAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    PasswordLogin:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+          minLength: 12
+
+    SavedAddressInput:
+      type: object
+      required: [label, line1, lat, lng]
+      properties:
+        label:
+          type: string
+          maxLength: 60
+        line1:
+          type: string
+          maxLength: 200
+        line2:
+          type: string
+          maxLength: 200
+        line3:
+          type: string
+          maxLength: 200
+        lat:
+          type: number
+          format: double
+          minimum: -90
+          maximum: 90
+        lng:
+          type: number
+          format: double
+          minimum: -180
+          maximum: 180
+        isHome:
+          type: boolean
+          default: false
+        isWork:
+          type: boolean
+          default: false
+
+    SavedAddress:
+      allOf:
+        - type: object
+          required: [addressId]
+          properties:
+            addressId:
+              $ref: './_shared.yaml#/components/schemas/Ulid'
+        - $ref: '#/components/schemas/SavedAddressInput'

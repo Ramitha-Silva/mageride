@@ -1,0 +1,679 @@
+openapi: 3.1.0
+
+# =============================================================================================
+# MageRide — shared OpenAPI component library
+#
+# Source of truth: specs/D3_mageride_api_contracts.md §0 "MageRide .NET 10 Conventions".
+# Every service contract in this directory $refs into this file; nothing here is served on its
+# own path. It is a valid OpenAPI 3.1 document (3.1 makes `paths` optional) so that the same
+# `spectral lint 'backend/contracts/*.yaml'` command covers it.
+#
+# The error-code enum below mirrors `MageRide.Shared.Errors.MageRideErrors` (C002) exactly —
+# the kernel is the runtime registry, this enum is its machine-checkable shadow. C118 asserts
+# the two agree.
+# =============================================================================================
+
+info:
+  title: MageRide shared components
+  version: 1.0.0
+  summary: RFC 7807 problems, pagination, money, geo and the platform edge headers.
+  description: |
+    Shared building blocks for every MageRide service contract (D3' §0).
+
+    **Conventions that apply to every endpoint in every service file**
+
+    - **Routing** — `/v1` path-stable per service behind the YARP gateway; JSON, camelCase.
+    - **Auth** — `Authorization: Bearer <JWT>` (RS256, 30-min access + opaque rotating refresh,
+      D-29). Claims: `sub`, `role` (nine canonical roles, deny-by-default RBAC AL-06),
+      `fleet_role?`, `device_id`, `app`, attestation. Service-to-service is **mTLS**
+      (Linkerd/SPIFFE) on `/v1/internal/*` routes.
+    - **Edge headers** — the gateway (C008) applies `X-App-Version` + `X-Platform` to every
+      app-originated request (D-31: below floor → `426 upgrade-required`) and validates
+      `X-Attestation` on sensitive mutations (D-30: failure → `401 attestation-failed`).
+      `X-App-Version`/`X-Platform` are declared here as components rather than repeated on
+      every operation, because they are enforced at the edge and not by any handler.
+      `X-Attestation` **is** declared per-operation, on exactly the operations D3' §0 names
+      sensitive (auth, payments, ride accept, wallet, SOS), because its failure mode is part of
+      those operations' contract.
+    - **Errors** — RFC 7807 `application/problem+json`; `type` = `https://mageride.lk/errors/{code}`
+      where `{code}` is a stable kebab key from `ErrorCode` below.
+    - **Pagination** — cursor-based: `{ items, cursor, hasMore }` with `?cursor=&limit=`
+      (default 20, max 100).
+    - **Timestamps** — ISO 8601 UTC (`DateTimeOffset`). Business dates are `Asia/Colombo` (D-13)
+      and are always accompanied by the instant they were derived at (D-38).
+    - **Money** — integer minor units only (Rs x 100), `currency` is always `LKR`.
+    - **Idempotency** — `Idempotency-Key` (ULID/UUID, <= 128 chars) is **required on every POST
+      mutation**; duplicates replay the original response from the per-service command log
+      (R-14, R-18). The only exemptions are the six payment-provider callbacks, which are
+      HMAC-authenticated and dedupe on `provider_transaction_id` (R-19); each carries
+      `x-idempotency-exempt` naming that reason.
+  contact:
+    name: MageRide Platform Engineering
+    url: https://mageride.lk
+  license:
+    name: UNLICENSED
+    url: https://mageride.lk/legal/terms
+
+servers:
+  - url: https://api.mageride.lk
+    description: Production gateway (DOKS Singapore)
+  - url: https://api.replica.mageride.lk
+    description: Lightweight production replica (synthetic data only)
+  - url: http://localhost:8080
+    description: Docker Compose dev gateway
+
+components:
+
+  # -------------------------------------------------------------------------------------------
+  # Security schemes (D3' §0 "Auth")
+  # -------------------------------------------------------------------------------------------
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        RS256 access token, 30-minute lifetime, JWKS-verifiable (D-29). Claims: `sub` (userId),
+        `role` ∈ {passenger, driver, fleet_owner, admin, super_admin, verification_officer,
+        support_csr, finance_officer, auditor}, `fleet_role?` ∈ {owner, manager, viewer},
+        `device_id`, `app` ∈ {passenger, driver}. Effective permissions are the union of
+        `iam.user_roles`, evaluated deny-by-default (AL-06).
+
+    refreshToken:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque
+      description: |
+        Opaque, single-use rotating refresh token held in `iam.sessions` + Redis `refresh:{jti}`
+        (D-29). Single active device per `app` — a new-device login revokes only that app's prior
+        session (AL-08, US-1.12).
+
+    mtls:
+      type: mutualTLS
+      description: |
+        Service-to-service only. Linkerd/SPIFFE workload identity; the gateway never exposes an
+        `/v1/internal/*` route to the public internet.
+
+    hmacSignature:
+      type: apiKey
+      in: header
+      name: X-Signature
+      description: |
+        Payment-provider callback signature (OnePay / LankaQR / Commercial Bank IPG, D6' §7.1–7.2).
+        Verified before any body parsing; the callback is deduped on `provider_transaction_id`
+        (R-19), not on `Idempotency-Key`.
+
+  # -------------------------------------------------------------------------------------------
+  # Parameters
+  # -------------------------------------------------------------------------------------------
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: |
+        ULID or UUID, at most 128 characters (D3' §0). Replaying a key with an identical payload
+        replays the original response byte-for-byte from the service command log (R-14); replaying
+        it with a different payload is `409 idempotency-key-reuse`.
+      schema:
+        type: string
+        minLength: 16
+        maxLength: 128
+        pattern: '^[A-Za-z0-9_-]{16,128}$'
+      example: 01JQ9F8Z6N5R7T2V4X6Y8A0B2C
+
+    XAttestation:
+      name: X-Attestation
+      in: header
+      required: true
+      description: |
+        Play Integrity (Android) / App Attest (iOS) verdict, validated by gateway middleware on
+        sensitive mutations (D-30). Failure → `401 attestation-failed`.
+      schema:
+        type: string
+        maxLength: 8192
+
+    XAppVersion:
+      name: X-App-Version
+      in: header
+      required: false
+      description: |
+        Client semantic version. The gateway compares it against the per-platform floor and
+        answers `426 upgrade-required` with `{updateUrl, latestVersion, isMandatory}` when the
+        client is below it (D-31, US-17.1/17.2). Portals and service-to-service callers omit it.
+      schema:
+        type: string
+        pattern: '^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$'
+      example: 1.4.0
+
+    XPlatform:
+      name: X-Platform
+      in: header
+      required: false
+      description: Client platform, read alongside `X-App-Version` by the min-version gate (D-31).
+      schema:
+        type: string
+        enum: [android, ios]
+
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: Opaque cursor returned as `cursor` by the previous page. Absent = first page.
+      schema:
+        type: string
+        maxLength: 512
+
+    Limit:
+      name: limit
+      in: query
+      required: false
+      description: Page size (D3' §0).
+      schema:
+        type: integer
+        format: int32
+        minimum: 1
+        maximum: 100
+        default: 20
+
+    Lang:
+      name: lang
+      in: query
+      required: false
+      description: |
+        Requested content language. All user-facing strings exist in Sinhala, Tamil and English
+        (D-26); an unsupported or absent value falls back to the caller's profile language, then
+        to `en`.
+      schema:
+        $ref: '#/components/schemas/LanguageCode'
+
+  # -------------------------------------------------------------------------------------------
+  # Schemas
+  # -------------------------------------------------------------------------------------------
+  schemas:
+
+    # --- errors -------------------------------------------------------------------------------
+    ErrorCode:
+      type: string
+      description: |
+        The stable kebab error-code registry (D3' §0). Mirrors
+        `MageRide.Shared.Errors.MageRideErrors` (C002) — codes are globally unique across
+        services so a client can branch on the code alone, and a shipped code is never renamed
+        or re-purposed.
+
+        A service that needs a code not listed here registers it at start-up
+        (`MageRideErrors.Register`) **and** adds it to this enum in the same change.
+      enum:
+        # cross-cutting (kernel-owned)
+        - validation-failed
+        - bad-request
+        - unauthorized
+        - forbidden
+        - not-found
+        - method-not-allowed
+        - conflict
+        - payload-too-large
+        - unsupported-media-type
+        - internal-error
+        - dependency-unavailable
+        - service-unavailable
+        - upstream-timeout
+        # idempotency (R-14, R-18)
+        - idempotency-key-required
+        - idempotency-key-invalid
+        - idempotency-key-reuse
+        - idempotency-in-progress
+        # gateway edge (D-30, D-31)
+        - attestation-failed
+        - upgrade-required
+        - rate-limited
+        # iam-svc
+        - invalid-phone
+        - otp-expired
+        - invalid-otp
+        - user-blocked
+        - auth-not-found
+        - device-mismatch
+        - otp-locked
+        - otp-rate-limited
+        # registry-svc / provisioning-svc
+        - invalid-vehicle-type
+        - csv-invalid
+        - mode-not-allowed
+        - not-owner
+        - vehicle-not-approved
+        - vehicle-not-found
+        - registration-exists
+        - imei-duplicate
+        - too-many-rows
+        - bulk-in-progress
+        # trip-state-svc / ride-svc / dispatch-svc
+        - invalid-fare-token
+        - illegal-transition
+        - payment-method-invalid
+        - insufficient-wallet
+        - booking-disabled
+        - not-online
+        - not-ride-participant
+        - active-ride-exists
+        - driver-already-live
+        - offer-already-accepted
+        - ride-terminal
+        - version-conflict
+        - directional-limit-reached
+        - offer-expired
+        - loc-request-rate-limited
+        # fare-svc / wallet-svc / fleet-svc
+        - invalid-amount
+        - unserviceable-area
+        - gateway-error
+        - merchant-not-onboarded
+        - payment-already-settled
+        - payout-profile-not-verified
+        - route-unavailable
+        # safety-svc / public-bff
+        - no-emergency-contact
+        - token-unknown
+        - token-expired-or-revoked
+        # transit-svc GTFS Dataset Manager (AL-54) — coined by C007, see the handoff note.
+        - feed-duplicate
+        - feed-not-validated
+        - feed-already-active
+
+    Problem:
+      type: object
+      description: RFC 7807 Problem Details. Always served as `application/problem+json` (D3' §0).
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+          format: uri
+          description: '`https://mageride.lk/errors/{code}` where `{code}` is an `ErrorCode`.'
+          example: https://mageride.lk/errors/offer-expired
+        title:
+          type: string
+          description: |
+            Short English summary for developers. Never localised — user-facing copy is resolved
+            from the code by the client's Si/Ta/En resources.
+          example: Offer has expired
+        status:
+          type: integer
+          format: int32
+          minimum: 400
+          maximum: 599
+        detail:
+          type: string
+          description: Human-readable explanation specific to this occurrence. Never contains PII.
+        instance:
+          type: string
+          description: The request path this occurred on.
+          example: /v1/rides/01JQ.../offer/01JR.../accept
+        traceId:
+          type: string
+          description: W3C `traceparent` of the failing request, for support correlation.
+          example: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
+        errors:
+          type: object
+          description: Field-level detail, present on `validation-failed`.
+          additionalProperties:
+            type: array
+            items:
+              type: string
+      additionalProperties: true
+
+    # --- primitives ---------------------------------------------------------------------------
+    Ulid:
+      type: string
+      description: ULID or UUID identifier, rendered canonically.
+      minLength: 26
+      maxLength: 36
+      pattern: '^[0-9A-HJKMNP-TV-Za-hjkmnp-tv-z-]{26,36}$'
+      example: 01JQ9F8Z6N5R7T2V4X6Y8A0B2C
+
+    PhoneE164:
+      type: string
+      description: Sri Lankan mobile number in E.164 (`+947XXXXXXXX`).
+      pattern: '^\+947\d{8}$'
+      example: '+94771234567'
+
+    PhoneMasked:
+      type: string
+      description: |
+        Role-masked MSISDN for admin directory reads (AL-40/41/42). Only the last two digits are
+        shown; the clear number requires a `PII_READ`-audited detail read.
+      example: '+9477*****67'
+
+    Timestamp:
+      type: string
+      format: date-time
+      description: ISO 8601 instant in UTC.
+      example: '2026-07-27T04:15:00Z'
+
+    BusinessDate:
+      type: string
+      format: date
+      description: |
+        A business date in `Asia/Colombo` (D-13). Every business date the platform persists also
+        records the instant it was derived at (D-38); responses that expose one carry a
+        `…TzAt` companion.
+      example: '2026-07-27'
+
+    LanguageCode:
+      type: string
+      description: Sinhala, Tamil or English. All three are always populated for stored content.
+      enum: [si, ta, en]
+
+    Currency:
+      type: string
+      description: LKR only. The platform transacts in no other currency.
+      const: LKR
+      default: LKR
+
+    Money:
+      type: object
+      description: |
+        An amount in integer minor units (Rs x 100). Never a float — `48000` is Rs 480.00
+        (CLAUDE.md "Money as minor units").
+      required: [amountMinor, currency]
+      properties:
+        amountMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        currency:
+          $ref: '#/components/schemas/Currency'
+
+    GeoPoint:
+      type: object
+      required: [lat, lng]
+      properties:
+        lat:
+          type: number
+          format: double
+          minimum: -90
+          maximum: 90
+        lng:
+          type: number
+          format: double
+          minimum: -180
+          maximum: 180
+
+    GeoPointWithAccuracy:
+      allOf:
+        - $ref: '#/components/schemas/GeoPoint'
+        - type: object
+          properties:
+            accuracy:
+              type: number
+              format: double
+              minimum: 0
+              description: Horizontal accuracy in metres, as reported by the device.
+
+    Place:
+      description: A coordinate plus its optional human address.
+      allOf:
+        - $ref: '#/components/schemas/GeoPoint'
+        - type: object
+          properties:
+            address:
+              type: string
+              maxLength: 512
+
+    CursorPage:
+      type: object
+      description: |
+        Cursor pagination envelope (D3' §0). `cursor` is always present — `null` on the last page,
+        never omitted, so "last page" cannot be confused with "field missing" (C002 decision 9).
+      required: [items, cursor, hasMore]
+      properties:
+        items:
+          type: array
+          items: {}
+        cursor:
+          type: [string, 'null']
+          description: Opaque continuation token; `null` when `hasMore` is false.
+        hasMore:
+          type: boolean
+
+    # --- domain enums shared across services ---------------------------------------------------
+    VehicleType:
+      type: string
+      description: |
+        Canonical vehicle-type enum (AL-09). There is no `car` — it maps to `sedan`. `bus` and
+        `train` are Mode A only and are never onboarded through the Driver App. Matches the
+        `registry.vehicles.vehicle_type` CHECK (C003).
+      enum: [motorbike, three_wheeler, flex, sedan, mini_van, van, truck, mini_truck, bus, train]
+
+    RideVehicleType:
+      type: string
+      description: |
+        The subset bookable as a Mode C ride: passenger types, plus `truck`/`mini_truck` for
+        package delivery (AL-09).
+      enum: [motorbike, three_wheeler, flex, sedan, mini_van, van, truck, mini_truck]
+
+    OperatingMode:
+      type: string
+      description: |
+        `A` = scheduled public transport (bus/train), `B` = shared private vehicle,
+        `C` = on-demand ride. Mode A/B sessions belong to trip-state-svc; Mode C rides belong to
+        ride-svc, and that boundary is never crossed (CLAUDE.md).
+      enum: [A, B, C]
+
+    RideState:
+      type: string
+      description: |
+        The 18 Mode C ride-aggregate states (D5' §6 / ADD Appendix B.2). Matches the
+        `rides.rides.state` CHECK landed by C004.
+      enum:
+        - Requested
+        - Matching
+        - Offered
+        - Accepted
+        - DriverArrived
+        - InProgress
+        - Completed
+        - PaymentPending
+        - Paid
+        - CashSettled
+        - CashOnDeliveryCollected
+        - Disputed
+        - CancelledByRiderBeforeAccept
+        - CancelledByRiderAfterAccept
+        - CancelledByDriver
+        - ExpiredNoDriver
+        - NoShowRider
+        - NoShowDriver
+
+    PaymentState:
+      type: string
+      description: |
+        Ride payment state machine (D-10, §11.8) plus the AL-47 driver-QR attestation pair.
+        Matches the `fares.ride_payments.state` CHECK landed by C005.
+      enum:
+        - Initiated
+        - Pending
+        - Succeeded
+        - Failed
+        - Retried
+        - FellBackToCash
+        - CashOnDelivery
+        - CashOnDeliveryCollected
+        - Overpaid
+        - Refunded
+        - PartiallyRefunded
+        - Disputed
+        - QrClaimedByPassenger
+        - DriverConfirmedQR
+
+    Role:
+      type: string
+      description: The nine canonical roles (AL-06). Effective permissions are their union.
+      enum:
+        - passenger
+        - driver
+        - fleet_owner
+        - admin
+        - super_admin
+        - verification_officer
+        - support_csr
+        - finance_officer
+        - auditor
+
+    FleetRole:
+      type: string
+      description: Org-scoped sub-role carried in the `fleet_role` claim (AL-03).
+      enum: [owner, manager, viewer]
+
+    VerifyStatus:
+      type: string
+      description: |
+        Per-field verification state (AL-29/AL-30). `pending` fields hold the vehicle in the
+        Verification Officer queue and block approval (US-2.10a).
+      enum: [pending, confirmed, rejected]
+
+    FieldSource:
+      type: string
+      description: Where a field's value came from — OCR extraction or driver keystrokes (AL-29).
+      enum: [ocr, manual]
+
+    ExtractedField:
+      type: object
+      description: One OCR-extracted or driver-entered onboarding field (AL-29/AL-30).
+      required: [key, value, source, verifyStatus]
+      properties:
+        key:
+          type: string
+          example: licenceNo
+        value:
+          type: [string, 'null']
+        source:
+          $ref: '#/components/schemas/FieldSource'
+        confidence:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+          description: Gemini Flash 3.0 confidence. Low confidence makes the field `pending`.
+        verifyStatus:
+          $ref: '#/components/schemas/VerifyStatus'
+
+    TokenPair:
+      type: object
+      description: An issued session (D-29). `refreshToken` is opaque and single-use.
+      required: [accessToken, refreshToken, expiresIn]
+      properties:
+        accessToken:
+          type: string
+          description: RS256 JWT, 30-minute lifetime.
+        refreshToken:
+          type: string
+          description: Opaque rotating refresh token.
+        expiresIn:
+          type: integer
+          format: int32
+          description: Access-token lifetime in seconds.
+          const: 1800
+
+  # -------------------------------------------------------------------------------------------
+  # Reusable error responses. Each names the codes it can carry; the operation's `x-error-codes`
+  # extension is the authoritative per-operation list.
+  # -------------------------------------------------------------------------------------------
+  responses:
+    BadRequest:
+      description: Validation or state error.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+
+    Unauthorized:
+      description: Missing/invalid credential, or `attestation-failed` (D-30).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+
+    PaymentRequired:
+      description: The caller's funds or merchant setup block the operation.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+
+    Forbidden:
+      description: Authenticated but not permitted (deny-by-default RBAC, AL-06).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+
+    NotFound:
+      description: No such resource, or none visible to this caller.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+
+    Conflict:
+      description: Optimistic-concurrency, uniqueness or atomic-accept conflict.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+
+    Gone:
+      description: The resource existed and has expired (e.g. a 15-second offer, a share token).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+
+    PayloadTooLarge:
+      description: Upload exceeded its ceiling.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+
+    Locked:
+      description: Attempt budget exhausted (OTP entry, package OTP).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+
+    UnprocessableEntity:
+      description: Well-formed but not satisfiable (e.g. no route between two points).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+
+    UpgradeRequired:
+      description: |
+        Client is below the per-platform minimum version (D-31). Body is a Problem whose
+        extensions carry `updateUrl`, `latestVersion` and `isMandatory`.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+
+    TooManyRequests:
+      description: Rate limit exceeded (Redis token-bucket).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+      headers:
+        Retry-After:
+          description: Seconds until the bucket refills.
+          schema:
+            type: integer
+            format: int32
+
+    InternalError:
+      description: Unhandled failure; `traceId` correlates with the service trace.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'

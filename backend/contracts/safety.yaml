@@ -1,0 +1,424 @@
+openapi: 3.1.0
+
+# =============================================================================================
+# safety-svc — SOS, trip sharing, vehicle reports, driver blocking
+# Source: specs/D3_mageride_api_contracts.md "safety-svc — SOS, trip-share, report, block"
+#         + ADD Appendix C safety-svc
+#
+# The admin report queue and its resolution (`GET /v1/admin/reports/queue`,
+# `POST /v1/admin/reports/{reportId}/resolve`) are **admin-bff** surfaces and live in
+# admin-bff.yaml, exactly where D3' Part 2 puts the resolve route.
+# =============================================================================================
+
+info:
+  title: MageRide safety-svc
+  version: 1.0.0
+  summary: SOS dispatch, trip-share tokens, vehicle reports and driver blocking.
+  description: |
+    **SOS (D-33).** The alert goes out over the **primary and secondary SMS gateways in
+    parallel**, not in sequence — the p99 budget is 5 seconds and a serial fallback cannot meet it.
+    The event is also pushed to the admin live feed and logged to `safety.sos_events` (US-12.11).
+    A user with no emergency contact on file gets `400 no-emergency-contact` rather than a silent
+    no-op.
+
+    **Trip sharing (D-34).** A share token is scoped to one trip, lives until trip end + 1 hour,
+    is rate-limited to 60 requests per minute and is revocable. The public view is **live only —
+    there is no replay**, so a leaked link stops being useful the moment the trip ends.
+
+    **Reports and blocks.** Three confirmed vehicle reports auto-delist (US-12.6). Blocking a
+    driver is passenger-scoped and feeds dispatch's candidate filter through reputation-svc; a
+    passenger cannot block themselves (`ck_blocked_drivers_not_self`, C005).
+  contact:
+    name: MageRide Platform Engineering
+    url: https://mageride.lk
+  license:
+    name: UNLICENSED
+    url: https://mageride.lk/legal/terms
+
+servers:
+  - url: https://api.mageride.lk
+    description: Production gateway (DOKS Singapore)
+  - url: http://localhost:8080
+    description: Docker Compose dev gateway
+
+tags:
+  - name: sos
+    description: Emergency alerts.
+  - name: trip-share
+    description: Public read-only trip-share tokens (D-34).
+  - name: reports
+    description: Vehicle reports and driver blocking.
+
+paths:
+
+  /v1/sos:
+    post:
+      operationId: triggerSos
+      summary: Raise an SOS.
+      description: |
+        Either party may raise it, with or without an active ride. Dispatches SMS over both
+        gateways in parallel (D-33), pushes the admin live feed and writes `safety.sos_events`
+        with `source='app'`; the web equivalent from public-bff writes `source='web'`.
+      tags: [sos]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+        - $ref: './_shared.yaml#/components/parameters/XAttestation'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lat, lng, role]
+              properties:
+                rideId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+                lat:
+                  type: number
+                  format: double
+                  minimum: -90
+                  maximum: 90
+                lng:
+                  type: number
+                  format: double
+                  minimum: -180
+                  maximum: 180
+                role:
+                  type: string
+                  enum: [passenger, driver]
+      responses:
+        '200':
+          description: Alert dispatched.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sosId, dispatchedAt]
+                properties:
+                  sosId:
+                    $ref: './_shared.yaml#/components/schemas/Ulid'
+                  dispatchedAt:
+                    $ref: './_shared.yaml#/components/schemas/Timestamp'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [no-emergency-contact, attestation-failed, unauthorized, forbidden]
+
+  /v1/sos/{userId}/history:
+    get:
+      operationId: listSosHistory
+      summary: A user's past SOS events.
+      description: |
+        Own history only; support and admin read the same events through the admin live feed,
+        which is separately RBAC-gated and audited.
+      tags: [sos]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            $ref: './_shared.yaml#/components/schemas/Ulid'
+        - $ref: './_shared.yaml#/components/parameters/Cursor'
+        - $ref: './_shared.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: SOS history.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './_shared.yaml#/components/schemas/CursorPage'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/SosEvent'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden]
+
+  /v1/trip-share/{tripId}:
+    post:
+      operationId: createTripShare
+      summary: Issue a public share link for a trip.
+      description: |
+        D-34. Mints a `trip_view` token in `safety.trip_share_tokens` valid until trip end plus one
+        hour. Re-issuing while a live token exists replays it rather than minting a second.
+      tags: [trip-share]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TripId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      responses:
+        '201':
+          description: Share link issued.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [token, url, expiresAt]
+                properties:
+                  token:
+                    type: string
+                  url:
+                    type: string
+                    format: uri
+                  expiresAt:
+                    $ref: './_shared.yaml#/components/schemas/Timestamp'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, not-ride-participant, not-found, ride-terminal]
+    delete:
+      operationId: revokeTripShare
+      summary: Revoke a trip's share link.
+      description: Immediate — the next public read is `410 token-expired-or-revoked`.
+      tags: [trip-share]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TripId'
+      responses:
+        '204':
+          description: Revoked.
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, not-ride-participant, not-found]
+
+  /v1/trip-share/public/{token}:
+    get:
+      operationId: getSharedTrip
+      summary: Public live view of a shared trip.
+      description: |
+        **No authentication — the token is the credential** (D-34). Live only: position and status
+        as of now, **never a replay of where the vehicle has been**. Rate-limited per token and per
+        IP; every hit updates `lastAccessAt`/`accessCount`.
+
+        This is the `trip_view` scope. The richer package/proxy/pickup-confirm scopes are the
+        public-bff family at `/public/track/{token}` (AL-44).
+      tags: [trip-share]
+      security: []
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 16
+            maxLength: 128
+      responses:
+        '200':
+          description: Live snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SharedTripView'
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '410': { $ref: './_shared.yaml#/components/responses/Gone' }
+        '429': { $ref: './_shared.yaml#/components/responses/TooManyRequests' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [token-unknown, token-expired-or-revoked, rate-limited]
+
+  /v1/reports/vehicle:
+    post:
+      operationId: reportVehicle
+      summary: Report a vehicle.
+      description: |
+        US-12.5. Opens a `safety.vehicle_reports` row in `PENDING` and reports it to reputation-svc.
+        **Three confirmed reports auto-delist the vehicle** (US-12.6); confirmation is an admin
+        decision, made in admin-bff.
+      tags: [reports]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [vehicleId, reason]
+              properties:
+                vehicleId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+                reason:
+                  type: string
+                  maxLength: 2000
+                tripId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+      responses:
+        '201':
+          description: Report filed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehicleReport'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, vehicle-not-found]
+
+  /v1/drivers/{driverId}/block:
+    post:
+      operationId: blockDriver
+      summary: Block a driver.
+      description: |
+        US-12.10. Passenger-scoped: dispatch will not offer this passenger's rides to this driver.
+        Blocking yourself is rejected (`ck_blocked_drivers_not_self`).
+      tags: [reports]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/DriverId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  maxLength: 500
+      responses:
+        '204':
+          description: Blocked.
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, not-found, conflict]
+    delete:
+      operationId: unblockDriver
+      summary: Unblock a driver.
+      description: The driver becomes an eligible candidate again on the next dispatch round.
+      tags: [reports]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/DriverId'
+      responses:
+        '204':
+          description: Unblocked.
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, not-found]
+
+components:
+  securitySchemes:
+    bearerAuth:
+      $ref: './_shared.yaml#/components/securitySchemes/bearerAuth'
+
+  parameters:
+    TripId:
+      name: tripId
+      in: path
+      required: true
+      description: A Mode C `rides.rides` id or a Mode A/B `trips.sessions` id — the referent is polymorphic.
+      schema:
+        $ref: './_shared.yaml#/components/schemas/Ulid'
+    DriverId:
+      name: driverId
+      in: path
+      required: true
+      schema:
+        $ref: './_shared.yaml#/components/schemas/Ulid'
+
+  schemas:
+    SosEvent:
+      type: object
+      required: [sosId, role, lat, lng, source, dispatchedAt]
+      properties:
+        sosId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        rideId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        role:
+          type: string
+          enum: [passenger, driver]
+        lat:
+          type: number
+          format: double
+          minimum: -90
+          maximum: 90
+        lng:
+          type: number
+          format: double
+          minimum: -180
+          maximum: 180
+        source:
+          type: string
+          description: Matches the `safety.sos_events.source` CHECK (C005).
+          enum: [app, web]
+        acknowledgedAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+        dispatchedAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    SharedTripView:
+      type: object
+      description: Live-only view. No historical track is ever included (D-34).
+      required: [state, position, asOf]
+      properties:
+        state:
+          type: string
+        position:
+          $ref: './_shared.yaml#/components/schemas/GeoPoint'
+        heading:
+          type: integer
+          format: int32
+          minimum: 0
+          maximum: 359
+        vehicle:
+          type: object
+          properties:
+            type:
+              $ref: './_shared.yaml#/components/schemas/VehicleType'
+            registrationNumber:
+              type: string
+        driverName:
+          type: string
+        etaSeconds:
+          type: integer
+          format: int32
+          minimum: 0
+        asOf:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+        expiresAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    VehicleReport:
+      type: object
+      required: [reportId, vehicleId, status, createdAt]
+      properties:
+        reportId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        vehicleId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        reason:
+          type: string
+        tripId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        status:
+          type: string
+          description: Matches the `safety.vehicle_reports.status` CHECK (C005).
+          enum: [PENDING, CONFIRMED, DISMISSED]
+        createdAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'

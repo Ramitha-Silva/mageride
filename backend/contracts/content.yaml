@@ -1,0 +1,266 @@
+openapi: 3.1.0
+
+# =============================================================================================
+# content-svc — public reference data + localised templates & broadcasts
+# Source: specs/D3_mageride_api_contracts.md
+#           "content-svc — public reference data (/v1/config)"  (Change 6/22)
+#           "content-svc — localised templates (/v1/content)"   (D-26)
+#
+# The admin-side city CRUD named in the D3 `GET /v1/config/cities` note
+# (`POST/PATCH /v1/admin/config/cities`) is an **admin-bff** surface and lives in
+# admin-bff.yaml, per that note's own wording.
+# =============================================================================================
+
+info:
+  title: MageRide content-svc
+  version: 1.0.0
+  summary: Operating cities, notification templates and in-app broadcasts, all trilingual.
+  description: |
+    Everything this service returns exists in **Sinhala, Tamil and English** (D-26,
+    CLAUDE.md "Trilingual resources"). `content.broadcasts.message_by_lang` carries a schema
+    constraint requiring all three (C005 decision 7) — a broadcast cannot be published in one
+    language.
+
+    `GET /v1/config/cities` is deliberately public and cacheable (ETag / `Cache-Control`,
+    D6' §7): launching a new city is a database row, not an app release.
+  contact:
+    name: MageRide Platform Engineering
+    url: https://mageride.lk
+  license:
+    name: UNLICENSED
+    url: https://mageride.lk/legal/terms
+
+servers:
+  - url: https://api.mageride.lk
+    description: Production gateway (DOKS Singapore)
+  - url: http://localhost:8080
+    description: Docker Compose dev gateway
+
+tags:
+  - name: config
+    description: Public launch-configuration reference data.
+  - name: content
+    description: Localised notification templates and in-app announcements.
+
+paths:
+
+  /v1/config/cities:
+    get:
+      operationId: listOperatingCities
+      summary: List the launch cities offered on the first-run city screen.
+      description: |
+        Public, read-only, cacheable. Returns active rows only, ordered by `sortOrder`; backs
+        SCR-DA/DI-002. The chosen `code` persists on `iam.users.operatingCityCode`.
+      tags: [config]
+      security: []
+      responses:
+        '200':
+          description: Active operating cities.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [cities]
+                properties:
+                  cities:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OperatingCity'
+          headers:
+            ETag:
+              description: Strong validator; clients revalidate rather than refetch.
+              schema:
+                type: string
+            Cache-Control:
+              schema:
+                type: string
+              example: public, max-age=300
+        '304':
+          description: Not modified.
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [internal-error]
+
+  /v1/content/templates/{key}:
+    get:
+      operationId: renderNotificationTemplate
+      summary: Resolve a notification template in one language.
+      description: |
+        Internal, mTLS only — notification-svc calls it while composing an FCM/APNs payload
+        (D-26, D6' I-29.2). Returns the current version of the template; every key exists in all
+        three languages, so an unsupported `lang` falls back rather than 404s.
+      tags: [content]
+      security:
+        - mtls: []
+      parameters:
+        - name: key
+          in: path
+          required: true
+          description: Template key, e.g. `ride_offer`, `package_on_the_way`, `proxy_ride_link`.
+          schema:
+            type: string
+            pattern: '^[a-z0-9]+(_[a-z0-9]+)*$'
+        - $ref: './_shared.yaml#/components/parameters/Lang'
+      responses:
+        '200':
+          description: Rendered template.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationTemplate'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, not-found]
+
+  /v1/content/broadcasts:
+    get:
+      operationId: listActiveBroadcasts
+      summary: List in-app announcements currently in force.
+      description: |
+        Backs the in-app announcement banner (US-14.8). Only broadcasts whose window covers
+        `now()` are returned, resolved into the requested language.
+      tags: [content]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/Lang'
+      responses:
+        '200':
+          description: Active broadcasts, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Broadcast'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized]
+
+  /v1/admin/content/{key}:
+    put:
+      operationId: updateNotificationTemplate
+      summary: Publish a new version of a notification template.
+      description: |
+        Admin only, audited (D-35). Templates are **versioned, not overwritten**: this creates
+        version `n+1` and makes it current. All three languages are required — a template that
+        would leave a language blank is rejected `validation-failed` (D-26).
+      tags: [content]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[a-z0-9]+(_[a-z0-9]+)*$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [bodyByLang]
+              properties:
+                titleByLang:
+                  $ref: '#/components/schemas/TrilingualText'
+                bodyByLang:
+                  $ref: '#/components/schemas/TrilingualText'
+      responses:
+        '200':
+          description: New version published.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [key, version]
+                properties:
+                  key:
+                    type: string
+                  version:
+                    type: integer
+                    format: int32
+                    minimum: 1
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden, not-found]
+
+components:
+  securitySchemes:
+    bearerAuth:
+      $ref: './_shared.yaml#/components/securitySchemes/bearerAuth'
+    mtls:
+      $ref: './_shared.yaml#/components/securitySchemes/mtls'
+
+  schemas:
+    OperatingCity:
+      type: object
+      required: [code, nameEn, nameSi, nameTa, centroid, sortOrder]
+      properties:
+        code:
+          type: string
+          example: colombo
+        nameEn:
+          type: string
+        nameSi:
+          type: string
+          example: කොළඹ
+        nameTa:
+          type: string
+          example: கொழும்பு
+        centroid:
+          $ref: './_shared.yaml#/components/schemas/GeoPoint'
+        sortOrder:
+          type: integer
+          format: int32
+
+    TrilingualText:
+      type: object
+      description: All three languages are mandatory (D-26; `ck_broadcasts_trilingual`, C005).
+      required: [si, ta, en]
+      properties:
+        si:
+          type: string
+        ta:
+          type: string
+        en:
+          type: string
+
+    NotificationTemplate:
+      type: object
+      required: [key, language, version, body]
+      properties:
+        key:
+          type: string
+        language:
+          $ref: './_shared.yaml#/components/schemas/LanguageCode'
+        version:
+          type: integer
+          format: int32
+          minimum: 1
+        title:
+          type: string
+        body:
+          type: string
+
+    Broadcast:
+      type: object
+      required: [broadcastId, message, startsAt]
+      properties:
+        broadcastId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        message:
+          type: string
+          description: Already resolved into the requested language.
+        startsAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+        endsAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'

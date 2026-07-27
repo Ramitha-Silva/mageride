@@ -1,0 +1,445 @@
+openapi: 3.1.0
+
+# =============================================================================================
+# provisioning-svc — hardware tracker credentials and IMEI binding
+# Source: specs/D3_mageride_api_contracts.md "provisioning-svc — tracker credentials & binding"
+#         (T-02, T-09) + D6' §4.2/§4.3
+#
+# `tcp-adapter` (a.k.a. tracker-adapter-svc, planner finding 5) has **no HTTP surface** — it is a
+# raw TCP/UDP listener per protocol family. Its only inbound contract is
+# `GET /v1/internal/trackers/{imei}/validate` below; its outbound contract is the MQTT topic
+# tree in realtime/mqtt-topics.md.
+# =============================================================================================
+
+info:
+  title: MageRide provisioning-svc
+  version: 1.0.0
+  summary: Tracker binding, per-device credential minting, rotation and revocation.
+  description: |
+    `provisioning-svc` (step-ca + Vault PKI) mints **X.509** client certificates for MQTT-capable
+    trackers (90-day TTL) or a **signed PSK + IMEI-HMAC** for legacy TCP devices, and rotates them
+    on a 90-day cron (T-02, T-12).
+
+    **IMEI resolution** is Redis `imei:{imei}` (24 h) in front of `prov.tracker_bindings` (T-03);
+    the cache is invalidated by `tracker.bound` / `tracker.unbound`.
+
+    **Anti-clone (T-08):** two devices presenting the same IMEI inside 24 h put **both** bindings
+    into `QUARANTINED` and require admin resolution — the endpoint answers `409 imei-duplicate`
+    and neither device keeps publishing.
+
+    **Revocation is sub-second (T-12):** EMQX's dynamic ACL and the TCP adapters both read the
+    same Redis lookup with pub/sub invalidation; a revoked socket is force-closed within 1 s.
+  contact:
+    name: MageRide Platform Engineering
+    url: https://mageride.lk
+  license:
+    name: UNLICENSED
+    url: https://mageride.lk/legal/terms
+
+servers:
+  - url: https://api.mageride.lk
+    description: Production gateway (DOKS Singapore)
+  - url: http://localhost:8080
+    description: Docker Compose dev gateway
+
+tags:
+  - name: trackers
+    description: Per-device binding, credentials and health.
+  - name: fleet-trackers
+    description: Bulk IMEI onboarding for fleet operators (T-09).
+
+paths:
+
+  /v1/trackers/bind:
+    post:
+      operationId: bindTracker
+      summary: Bind an IMEI to a vehicle and mint its credential.
+      description: |
+        T-02, US-3.1. Writes `prov.tracker_bindings`, primes Redis `imei:{imei} → vehicleId` and
+        emits `tracker.bound`. `credentialType` picks the transport: `x509` for MQTT-capable
+        devices that connect to EMQX directly, `psk` for legacy TCP devices that reach the broker
+        through an adapter.
+      tags: [trackers]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+        - $ref: './_shared.yaml#/components/parameters/XAttestation'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [imei, vehicleId, method, credentialType]
+              properties:
+                imei:
+                  $ref: '#/components/schemas/Imei'
+                vehicleId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+                method:
+                  type: string
+                  enum: [manual, qr, admin_code]
+                bindCode:
+                  type: string
+                  maxLength: 64
+                  description: Required when `method=admin_code`.
+                credentialType:
+                  $ref: '#/components/schemas/CredentialType'
+      responses:
+        '201':
+          description: Bound; credential minted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Binding'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, attestation-failed, not-owner, vehicle-not-found, imei-duplicate]
+
+  /v1/trackers/{imei}:
+    get:
+      operationId: getTracker
+      summary: Read a tracker's binding and last-known health.
+      description: |
+        US-3.12. `lastSeen`, `signal`, `battery` and `sats` come from the fleet-health rollup, not
+        from a live device query — a tracker that is offline still answers, with a stale
+        `lastSeen`.
+      tags: [trackers]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ImeiPath'
+      responses:
+        '200':
+          description: Binding and health.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [binding]
+                properties:
+                  binding:
+                    $ref: '#/components/schemas/Binding'
+                  lastSeen:
+                    $ref: './_shared.yaml#/components/schemas/Timestamp'
+                  signal:
+                    type: integer
+                    format: int32
+                    description: Reported signal strength, device-scale.
+                  battery:
+                    type: integer
+                    format: int32
+                    minimum: 0
+                    maximum: 100
+                  sats:
+                    type: integer
+                    format: int32
+                    minimum: 0
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, not-owner, not-found]
+    delete:
+      operationId: decommissionTracker
+      summary: Decommission a tracker and revoke its credential.
+      description: |
+        US-3.8, T-12. Admin only. The credential is revoked and any open socket or MQTT session is
+        force-closed **within 60 s** — in practice within 1 s via the shared Redis revocation
+        cache and its pub/sub invalidation.
+      tags: [trackers]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ImeiPath'
+      responses:
+        '204':
+          description: Decommissioned and revoked.
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, not-found]
+
+  /v1/trackers/{imei}/switch-source:
+    post:
+      operationId: switchTrackerSource
+      summary: Choose whether the phone or the hardware tracker publishes this vehicle.
+      description: |
+        US-3.6. **Exactly one publisher at a time** — switching to `hardware` stops the driver
+        app's MQTT publish and vice versa, so the position stream never interleaves two clocks.
+      tags: [trackers]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ImeiPath'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [source]
+              properties:
+                source:
+                  type: string
+                  enum: [mobile, hardware]
+      responses:
+        '200':
+          description: Active publisher after the switch.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [source]
+                properties:
+                  source:
+                    type: string
+                    enum: [mobile, hardware]
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, not-owner, not-found]
+
+  /v1/fleets/{fleetId}/trackers/bulk:
+    post:
+      operationId: bulkBindTrackers
+      summary: Bulk-bind up to 5,000 IMEIs from a CSV.
+      description: |
+        T-09, US-3.2. Rows are `imei,registrationNumber`. A saga validates every row, materialises
+        the bindings and queues credential-mint jobs; per-row failures land in a downloadable
+        error report rather than failing the batch. NFR-43 budget: 5,000 rows in <= 5 minutes.
+
+        Only one bulk job per fleet may be in flight — a second is `429 bulk-in-progress`.
+      tags: [fleet-trackers]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+        - $ref: './_shared.yaml#/components/parameters/XAttestation'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: '`text/csv`, rows `imei,registrationNumber`, at most 5,000.'
+      responses:
+        '202':
+          description: Job accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkJob'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '413': { $ref: './_shared.yaml#/components/responses/PayloadTooLarge' }
+        '429': { $ref: './_shared.yaml#/components/responses/TooManyRequests' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [csv-invalid, attestation-failed, forbidden, too-many-rows, bulk-in-progress]
+
+  /v1/fleets/{fleetId}/trackers/bulk/{jobId}:
+    get:
+      operationId: getBulkTrackerJob
+      summary: Poll a bulk-binding job.
+      description: '`errorReportUrl` appears once the job leaves `PROCESSING`.'
+      tags: [fleet-trackers]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+        - name: jobId
+          in: path
+          required: true
+          schema:
+            $ref: './_shared.yaml#/components/schemas/Ulid'
+      responses:
+        '200':
+          description: Job state.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkJob'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, not-found]
+
+  /v1/internal/trackers/{imei}/rotate:
+    post:
+      operationId: rotateTrackerCredential
+      summary: Rotate a device credential.
+      description: |
+        Internal, mTLS only. US-3.5 — driven by the 90-day rotation cron. The new credential is
+        pushed to the device with the `revokeCredential` downlink command on `veh/{vehicleId}/cmd`;
+        the old one stops validating as soon as the rotation commits.
+      tags: [trackers]
+      security:
+        - mtls: []
+      parameters:
+        - $ref: '#/components/parameters/ImeiPath'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: New credential.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Credential'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, not-found]
+
+  /v1/internal/trackers/{imei}/validate:
+    get:
+      operationId: validateTracker
+      summary: Resolve an IMEI to its vehicle for an adapter connect.
+      description: |
+        Internal, mTLS only. T-01/T-03 — the tcp-adapter calls this on every device connect and
+        re-validates every 5 minutes on long-lived sockets, so a revoked or quarantined device is
+        dropped mid-session rather than at the next reconnect. Served from the Redis cache with a
+        `prov.tracker_bindings` fallback.
+      tags: [trackers]
+      security:
+        - mtls: []
+      parameters:
+        - $ref: '#/components/parameters/ImeiPath'
+      responses:
+        '200':
+          description: |
+            Validation verdict. `valid: false` covers unknown, quarantined and revoked IMEIs
+            alike — the adapter closes the socket in every case.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [valid]
+                properties:
+                  valid:
+                    type: boolean
+                  vehicleId:
+                    $ref: './_shared.yaml#/components/schemas/Ulid'
+                  state:
+                    $ref: '#/components/schemas/BindingState'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized]
+
+components:
+  securitySchemes:
+    bearerAuth:
+      $ref: './_shared.yaml#/components/securitySchemes/bearerAuth'
+    mtls:
+      $ref: './_shared.yaml#/components/securitySchemes/mtls'
+
+  parameters:
+    ImeiPath:
+      name: imei
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/Imei'
+    FleetId:
+      name: fleetId
+      in: path
+      required: true
+      schema:
+        $ref: './_shared.yaml#/components/schemas/Ulid'
+
+  schemas:
+    Imei:
+      type: string
+      pattern: '^\d{15}$'
+      description: 15-digit IMEI.
+
+    CredentialType:
+      type: string
+      description: '`x509` for MQTT-capable devices, `psk` for legacy TCP devices behind an adapter.'
+      enum: [x509, psk]
+
+    BindingState:
+      type: string
+      description: |
+        `QUARANTINED` is the T-08 anti-clone state — two devices claimed this IMEI inside 24 h and
+        both are held until an admin resolves it.
+      enum: [ACTIVE, QUARANTINED, REVOKED]
+
+    Credential:
+      type: object
+      required: [type, credentialSerial, rotatesAt]
+      properties:
+        type:
+          $ref: '#/components/schemas/CredentialType'
+        credentialSerial:
+          type: string
+        clientCertPem:
+          type: string
+          description: Present for `x509` only. Returned once, at mint or rotation.
+        pskToken:
+          type: string
+          description: Present for `psk` only. Returned once, at mint or rotation.
+        rotatesAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    Binding:
+      type: object
+      required: [bindingId, imei, vehicleId, credentialSerial, credential, rotatesAt]
+      properties:
+        bindingId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        imei:
+          $ref: '#/components/schemas/Imei'
+        vehicleId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        state:
+          $ref: '#/components/schemas/BindingState'
+        credentialSerial:
+          type: string
+        credential:
+          $ref: '#/components/schemas/Credential'
+        rotatesAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    BulkJob:
+      type: object
+      required: [jobId, totalRows, status]
+      properties:
+        jobId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        totalRows:
+          type: integer
+          format: int32
+          minimum: 0
+          maximum: 5000
+        status:
+          type: string
+          enum: [PROCESSING, COMPLETED, FAILED]
+        succeededRows:
+          type: integer
+          format: int32
+          minimum: 0
+        failedRows:
+          type: integer
+          format: int32
+          minimum: 0
+        errorReportUrl:
+          type: string
+          format: uri
+          description: Signed URL of the per-row error report; present once the job finishes.

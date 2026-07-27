@@ -1,0 +1,952 @@
+openapi: 3.1.0
+
+# =============================================================================================
+# registry-svc — driver profile, vehicles, Mode-C onboarding, Mode B sharing, device binding
+# Source: specs/D3_mageride_api_contracts.md "registry-svc — vehicles, sharing, device binding,
+#         merchant (/v1/vehicles)" + ADD Appendix C registry-svc
+#
+# Scope fence: the Driver App onboards **Mode C only**. Mode A/B vehicles, route permits and
+# fleet documents are onboarded in the Fleet Portal (fleet.yaml, SCR-FP-004); a Mode A/B body
+# here is `403 mode-not-allowed`.
+# =============================================================================================
+
+info:
+  title: MageRide registry-svc
+  version: 1.0.0
+  summary: Driver identity, vehicle registration and the Mode-C onboarding state machine.
+  description: |
+    Two separate flows, split by Change 6/22:
+
+    1. **Profile Setup** (`PUT /v1/drivers/profile`, SCR-DA/DI-003a) — driver identity: name,
+       photo, driving licence. Precedes Home and needs no vehicle.
+    2. **Mode-C vehicle onboarding** (`POST /v1/vehicles` then `PUT /v1/vehicles/{id}/onboarding/{step}`,
+       SCR-DA/DI-004 → 004c) — a **persisted four-step state machine** (AL-30). Each step is
+       saved individually and re-opening the wizard resumes at the first non-verified step, not
+       at step 1.
+
+    A step is `PENDING_REVIEW` when any of its fields is doubtful (low OCR confidence),
+    driver-entered, or — on the photos step — the plate OCR does not match the entered
+    registration number (AL-29/AL-30). When all four steps are `VERIFIED` the service
+    **auto-approves**: `status=APPROVED`, `onboardingStatus=approved`, with no Verification
+    Officer step (user decision 6/22). Anything `PENDING_REVIEW` puts the vehicle in the officer
+    queue and it stays Incomplete (US-2.10/2.10a).
+
+    Registration numbers are unique **within the active set** (D-37) — a rejected registration
+    frees its plate.
+  contact:
+    name: MageRide Platform Engineering
+    url: https://mageride.lk
+  license:
+    name: UNLICENSED
+    url: https://mageride.lk/legal/terms
+
+servers:
+  - url: https://api.mageride.lk
+    description: Production gateway (DOKS Singapore)
+  - url: http://localhost:8080
+    description: Docker Compose dev gateway
+
+tags:
+  - name: drivers
+    description: Driver identity and profile setup.
+  - name: vehicles
+    description: Vehicle registration, onboarding steps, lifecycle.
+  - name: sharing
+    description: Mode B share grants and subscriber management (D-22/D-23).
+
+paths:
+
+  # -------------------------------------------------------------------------------------------
+  # Driver identity
+  # -------------------------------------------------------------------------------------------
+  /v1/drivers/profile:
+    put:
+      operationId: upsertDriverProfile
+      summary: Profile Setup — driver name, photo and driving licence.
+      description: |
+        SCR-DA/DI-003a. Writes `registry.driver_profiles` and a vehicle-less
+        `registry.documents(kind='driving_license')`, then queues Gemini Flash 3.0 extraction of
+        **licenceNo, expiry, nicNo and allowedVehicleTypes** (AL-29).
+
+        Any value the driver supplies because the scan was unclear (`nicNo`,
+        `allowedVehicleTypes`) is stored `source='manual'`, `verifyStatus='pending'` and routes
+        to the Verification Officer queue (US-2.4a). **The profile photo is required.**
+      tags: [drivers]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [driverName, profilePhotoFileId, licenseFrontFileId, licenseBackFileId]
+              properties:
+                driverName:
+                  type: string
+                  maxLength: 200
+                profilePhotoFileId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+                licenseFrontFileId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+                licenseBackFileId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+                nicNo:
+                  type: string
+                  maxLength: 20
+                  description: Driver-supplied only when the scan was unclear; stored `manual`/`pending`.
+                allowedVehicleTypes:
+                  type: array
+                  items:
+                    $ref: './_shared.yaml#/components/schemas/VehicleType'
+      responses:
+        '200':
+          description: Profile stored; OCR queued.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [driverId, status, fields]
+                properties:
+                  driverId:
+                    $ref: './_shared.yaml#/components/schemas/Ulid'
+                  status:
+                    $ref: '#/components/schemas/RegistrationStatus'
+                  fields:
+                    type: array
+                    items:
+                      $ref: './_shared.yaml#/components/schemas/ExtractedField'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden, not-found]
+
+  # -------------------------------------------------------------------------------------------
+  # Vehicles
+  # -------------------------------------------------------------------------------------------
+  /v1/vehicles:
+    post:
+      operationId: registerVehicle
+      summary: Start onboarding the driver's own Mode C standby vehicle.
+      description: |
+        SCR-DA/DI-004 → 004c. Creates the vehicle and queues OCR for each of the four documents;
+        emits `vehicle.registered`. Per-document verdicts: insurance (expiry), revenue licence
+        (number + expiry), photos (plate matches `registrationNumber`), vehicle details (entered).
+
+        When all four come back `VERIFIED` the vehicle is auto-approved with no officer step
+        (Change 6/22). Once a vehicle is `approved`, calling this again starts a **new** vehicle
+        at step 1/4 (AL-30).
+
+        Mode A/B and train are rejected `403 mode-not-allowed` — they belong to the Fleet Portal
+        and admin-bff.
+      tags: [vehicles]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+        - $ref: './_shared.yaml#/components/parameters/XAttestation'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VehicleRegistration'
+      responses:
+        '201':
+          description: Vehicle created; OCR queued.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [vehicleId, status, ocrJobId, registrationNumber, verification, onboardingStatus, createdAt]
+                properties:
+                  vehicleId:
+                    $ref: './_shared.yaml#/components/schemas/Ulid'
+                  status:
+                    $ref: '#/components/schemas/RegistrationStatus'
+                  ocrJobId:
+                    $ref: './_shared.yaml#/components/schemas/Ulid'
+                  registrationNumber:
+                    type: string
+                  verification:
+                    type: object
+                    required: [vehicleDetails, insurance, revenueLicense, photos]
+                    properties:
+                      vehicleDetails:
+                        $ref: '#/components/schemas/StepVerdict'
+                      insurance:
+                        $ref: '#/components/schemas/StepVerdict'
+                      revenueLicense:
+                        $ref: '#/components/schemas/StepVerdict'
+                      photos:
+                        $ref: '#/components/schemas/StepVerdict'
+                  onboardingStatus:
+                    $ref: '#/components/schemas/OnboardingStatus'
+                  createdAt:
+                    $ref: './_shared.yaml#/components/schemas/Timestamp'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [invalid-vehicle-type, attestation-failed, mode-not-allowed, registration-exists]
+
+  /v1/vehicles/mine:
+    get:
+      operationId: listMyVehicles
+      summary: List the caller's vehicles.
+      description: US-2.8. Renders My Vehicles as Incomplete / Approved per vehicle (AL-30).
+      tags: [vehicles]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Vehicle summaries.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/VehicleSummary'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized]
+
+  /v1/vehicles/{vehicleId}:
+    get:
+      operationId: getVehicle
+      summary: Read a vehicle with its driver profile and registration status.
+      description: Visible to the owner, an assigned driver, and internal roles.
+      tags: [vehicles]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/VehicleId'
+      responses:
+        '200':
+          description: Vehicle detail.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehicleDetail'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, not-owner, vehicle-not-found]
+
+  /v1/vehicles/{vehicleId}/status:
+    get:
+      operationId: getVehicleStatus
+      summary: Read registration status and rejection reason.
+      description: US-2.13/2.15 — the poll the app uses while a submission is being reviewed.
+      tags: [vehicles]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/VehicleId'
+      responses:
+        '200':
+          description: Status.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    $ref: '#/components/schemas/RegistrationStatus'
+                  rejectionReason:
+                    type: string
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, not-owner, vehicle-not-found]
+
+  /v1/vehicles/{vehicleId}/onboarding-status:
+    get:
+      operationId: getVehicleOnboardingStatus
+      summary: Per-step onboarding verdicts and the step to resume at.
+      description: |
+        SCR-DA/DI-006. `nextStep` drives resume — the wizard opens the first step that is not
+        `VERIFIED` (AL-30), never step 1. `fields` carries per-field `source`, `confidence` and
+        `verifyStatus`, which is what the Verification Officer screen renders.
+      tags: [vehicles]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/VehicleId'
+      responses:
+        '200':
+          description: Onboarding state.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, onboardingStatus, steps, fields]
+                properties:
+                  status:
+                    $ref: '#/components/schemas/RegistrationStatus'
+                  onboardingStatus:
+                    $ref: '#/components/schemas/OnboardingStatus'
+                  nextStep:
+                    description: '`null` when every step is VERIFIED.'
+                    oneOf:
+                      - $ref: '#/components/schemas/OnboardingStep'
+                      - type: 'null'
+                  steps:
+                    type: object
+                    required: [details, insurance, revenue, photos]
+                    properties:
+                      details:
+                        $ref: '#/components/schemas/StepVerdict'
+                      insurance:
+                        $ref: '#/components/schemas/StepVerdict'
+                      revenue:
+                        $ref: '#/components/schemas/StepVerdict'
+                      photos:
+                        $ref: '#/components/schemas/StepVerdict'
+                  fields:
+                    type: array
+                    items:
+                      $ref: './_shared.yaml#/components/schemas/ExtractedField'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, not-owner, vehicle-not-found]
+
+  /v1/vehicles/{vehicleId}/onboarding/{step}:
+    put:
+      operationId: saveVehicleOnboardingStep
+      summary: Save one onboarding step.
+      description: |
+        Persists `registry.onboarding_steps` for this step alone (AL-30, US-2.26/2.27). The
+        multipart form is the same contract the AL-43 drag-crop scanner posts to — that change
+        only improved the client-side capture, not this shape.
+
+        A doubtful or driver-entered field, or a plate OCR that does not match the entered
+        registration number on the `photos` step, makes the step `PENDING_REVIEW`.
+      tags: [vehicles]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/VehicleId'
+        - name: step
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/OnboardingStep'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OnboardingStepInput'
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                registrationNumber:
+                  type: string
+                vehicleType:
+                  $ref: './_shared.yaml#/components/schemas/VehicleType'
+                file:
+                  type: string
+                  format: binary
+                  description: Perspective-corrected document or photo capture (AL-43).
+                fileBack:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Step saved; verdict and resume point.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [stepStatus, onboardingStatus]
+                properties:
+                  stepStatus:
+                    $ref: '#/components/schemas/StepVerdict'
+                  onboardingStatus:
+                    $ref: '#/components/schemas/OnboardingStatus'
+                  nextStep:
+                    oneOf:
+                      - $ref: '#/components/schemas/OnboardingStep'
+                      - type: 'null'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '413': { $ref: './_shared.yaml#/components/responses/PayloadTooLarge' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, not-owner, vehicle-not-found, payload-too-large]
+
+  /v1/vehicles/{vehicleId}/deactivate:
+    post:
+      operationId: deactivateVehicle
+      summary: Deactivate a vehicle and remove it from the map.
+      description: |
+        US-2.16. Sets `status=DEACTIVATED`, which releases the plate from the D-37 active-set
+        uniqueness index, so the same registration can be onboarded again later.
+      tags: [vehicles]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/VehicleId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      responses:
+        '204':
+          description: Deactivated.
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, not-owner, vehicle-not-found, conflict]
+
+  /v1/vehicles/{vehicleId}/driver-profile:
+    put:
+      operationId: updateVehicleDriverProfile
+      summary: Update the driver photo and name shown to passengers for this vehicle.
+      description: US-2.12. Cosmetic only — it does not touch the verified identity fields.
+      tags: [vehicles]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/VehicleId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  maxLength: 200
+                photoUrl:
+                  type: string
+                  format: uri
+      responses:
+        '200':
+          description: Updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VehicleDetail'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, not-owner, vehicle-not-found]
+
+  /v1/vehicles/{vehicleId}/device:
+    post:
+      operationId: bindVehicleDevice
+      summary: Bind a tracker IMEI to this vehicle.
+      description: |
+        US-3.1. A thin owner-facing wrapper that delegates to provisioning-svc
+        `POST /v1/trackers/bind` (T-02) — the credential mint, the anti-clone quarantine and the
+        Redis `imei:{imei}` cache all live there.
+      tags: [vehicles]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/VehicleId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [imei]
+              properties:
+                imei:
+                  $ref: '#/components/schemas/Imei'
+      responses:
+        '201':
+          description: Bound.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [bindingId]
+                properties:
+                  bindingId:
+                    $ref: './_shared.yaml#/components/schemas/Ulid'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, not-owner, vehicle-not-found, imei-duplicate]
+
+  # -------------------------------------------------------------------------------------------
+  # Mode B sharing
+  # -------------------------------------------------------------------------------------------
+  /v1/vehicles/{vehicleId}/share:
+    post:
+      operationId: createShareGrant
+      summary: Grant a passenger Mode B visibility of this vehicle.
+      description: |
+        US-4.1/4.2. Creates a grant the sharee must accept. Entitlement is cached as
+        `share:{userId}` and pub/sub-invalidated, so fan-out checks it on group join (D-23).
+      tags: [sharing]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/VehicleId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId]
+              properties:
+                userId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+                expiresAt:
+                  $ref: './_shared.yaml#/components/schemas/Timestamp'
+      responses:
+        '201':
+          description: Grant created, pending acceptance.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [grantId]
+                properties:
+                  grantId:
+                    $ref: './_shared.yaml#/components/schemas/Ulid'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, not-owner, vehicle-not-found, conflict]
+
+  /v1/vehicles/{vehicleId}/share/{grantId}/accept:
+    post:
+      operationId: acceptShareGrant
+      summary: Sharee accepts a Mode B grant.
+      description: US-4.3b. Visibility begins here, not at grant creation.
+      tags: [sharing]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/VehicleId'
+        - $ref: '#/components/parameters/GrantId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Grant accepted.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [grantId, status]
+                properties:
+                  grantId:
+                    $ref: './_shared.yaml#/components/schemas/Ulid'
+                  status:
+                    type: string
+                    enum: [active]
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, not-found, conflict]
+
+  /v1/vehicles/{vehicleId}/share/{grantId}:
+    delete:
+      operationId: revokeShareGrant
+      summary: Revoke a Mode B grant.
+      description: |
+        Emits `share.revoked`, which fanout-svc turns into a directed `RemoveFromGroupAsync` in
+        under 200 ms — the passenger loses live visibility immediately, without waiting for the
+        next cell crossing (D-22).
+      tags: [sharing]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/VehicleId'
+        - $ref: '#/components/parameters/GrantId'
+      responses:
+        '204':
+          description: Revoked.
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, not-owner, not-found]
+
+  /v1/vehicles/{vehicleId}/subscribers:
+    get:
+      operationId: listVehicleSubscribers
+      summary: List the passengers entitled to see this vehicle.
+      description: US-4.7. Owner/driver view of the Mode B roster held in `subscription.grants`.
+      tags: [sharing]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/VehicleId'
+        - $ref: './_shared.yaml#/components/parameters/Cursor'
+        - $ref: './_shared.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Subscriber page.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './_shared.yaml#/components/schemas/CursorPage'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Subscriber'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, not-owner, vehicle-not-found]
+
+  /v1/vehicles/{vehicleId}/subscribers/{userId}:
+    delete:
+      operationId: unsubscribeFromVehicle
+      summary: Passenger unsubscribes from a Mode B vehicle.
+      description: |
+        US-NEW.1. The grant goes to `unsubscribed` and the passenger loses visibility; the row is
+        **not** deleted — it stays MUTED until the owner hard-deletes it (US-4.12, C005 verify).
+        The owner's delete is `DELETE /v1/mode-b/{vehicleId}/subscribers/{subId}` in
+        subscription.yaml.
+      tags: [sharing]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/VehicleId'
+        - name: userId
+          in: path
+          required: true
+          schema:
+            $ref: './_shared.yaml#/components/schemas/Ulid'
+      responses:
+        '204':
+          description: Unsubscribed.
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, not-found]
+
+  /v1/share-requests:
+    post:
+      operationId: requestVehicleAccess
+      summary: Passenger asks an owner for Mode B access.
+      description: |
+        US-4.5. The generic vehicle-scoped request. The Mode B marker tap on the passenger map
+        uses the richer `POST /v1/mode-b/{vehicleId}/access-requests` (subscription.yaml), which
+        also starts a subscription on acceptance (AL-24, Epic 23).
+      tags: [sharing]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [vehicleId]
+              properties:
+                vehicleId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+      responses:
+        '201':
+          description: Request raised.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [requestId, status]
+                properties:
+                  requestId:
+                    $ref: './_shared.yaml#/components/schemas/Ulid'
+                  status:
+                    type: string
+                    enum: [pending, accepted, rejected]
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, vehicle-not-found, conflict]
+
+  # -------------------------------------------------------------------------------------------
+  # Internal
+  # -------------------------------------------------------------------------------------------
+  /v1/internal/vehicles/{vehicleId}/merchant:
+    post:
+      operationId: bindOnepayMerchant
+      summary: Bind the driver's OnePay merchant account on approval.
+      description: |
+        Internal, mTLS only. D-11 — called when a vehicle reaches `APPROVED`, so that fare
+        settlement has a payee. A driver with no merchant binding causes
+        `402 merchant-not-onboarded` at `POST /v1/fare/pay`.
+      tags: [vehicles]
+      security:
+        - mtls: []
+      parameters:
+        - $ref: '#/components/parameters/VehicleId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [merchantId]
+              properties:
+                merchantId:
+                  type: string
+                  maxLength: 128
+                  description: OnePay merchant identifier.
+                merchantRef:
+                  type: string
+                  maxLength: 128
+      responses:
+        '200':
+          description: Merchant bound.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [vehicleId, merchantId]
+                properties:
+                  vehicleId:
+                    $ref: './_shared.yaml#/components/schemas/Ulid'
+                  merchantId:
+                    type: string
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, vehicle-not-found]
+
+components:
+  securitySchemes:
+    bearerAuth:
+      $ref: './_shared.yaml#/components/securitySchemes/bearerAuth'
+    mtls:
+      $ref: './_shared.yaml#/components/securitySchemes/mtls'
+
+  parameters:
+    VehicleId:
+      name: vehicleId
+      in: path
+      required: true
+      schema:
+        $ref: './_shared.yaml#/components/schemas/Ulid'
+    GrantId:
+      name: grantId
+      in: path
+      required: true
+      schema:
+        $ref: './_shared.yaml#/components/schemas/Ulid'
+
+  schemas:
+    Imei:
+      type: string
+      description: 15-digit IMEI.
+      pattern: '^\d{15}$'
+
+    RegistrationStatus:
+      type: string
+      description: Matches the `registry.vehicles.status` CHECK (C003).
+      enum: [PENDING, APPROVED, REJECTED, DEACTIVATED]
+
+    OnboardingStatus:
+      type: string
+      description: |
+        Derived from the four steps (AL-30): `incomplete` while any step is not verified or
+        confirmed, `approved` once all four are. Only `approved` Mode-C vehicles are go-live
+        eligible.
+      enum: [incomplete, approved]
+
+    OnboardingStep:
+      type: string
+      enum: [details, insurance, revenue, photos]
+
+    StepVerdict:
+      type: string
+      description: |
+        `PENDING_INPUT` = not yet saved. `PENDING_REVIEW` = saved but holding a doubtful,
+        driver-entered or plate-mismatched field, so it sits in the officer queue.
+      enum: [VERIFIED, PENDING_REVIEW, PENDING_INPUT]
+
+    VehicleRegistration:
+      type: object
+      required:
+        - registrationNumber
+        - vehicleType
+        - mode
+        - insuranceFileId
+        - revenueLicenseFileId
+        - vehiclePhotoFrontFileId
+        - vehiclePhotoBackFileId
+      properties:
+        registrationNumber:
+          type: string
+          maxLength: 32
+          description: Unique within the active set (D-37).
+        vehicleType:
+          description: |
+            Mode-C driver-app types only. `bus` and `train` are Mode A and are rejected here
+            (AL-09).
+          allOf:
+            - $ref: './_shared.yaml#/components/schemas/RideVehicleType'
+        mode:
+          type: string
+          description: The Driver App onboards Mode C only; A/B go to the Fleet Portal.
+          const: C
+        insuranceFileId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        revenueLicenseFileId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        vehiclePhotoFrontFileId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        vehiclePhotoBackFileId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        driverName:
+          type: string
+          maxLength: 200
+          description: Defaults from `registry.driver_profiles` (Profile Setup).
+        driverPhotoFileId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+
+    OnboardingStepInput:
+      type: object
+      description: |
+        The step's fields. `details` carries `registrationNumber` + `vehicleType`; the document
+        steps carry the uploaded file ids for that step.
+      properties:
+        registrationNumber:
+          type: string
+          maxLength: 32
+        vehicleType:
+          $ref: './_shared.yaml#/components/schemas/RideVehicleType'
+        fileId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        fileIdBack:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        fields:
+          type: object
+          description: Driver-entered corrections; each lands `source='manual'`, `verifyStatus='pending'`.
+          additionalProperties:
+            type: string
+
+    VehicleSummary:
+      type: object
+      required: [vehicleId, registrationNumber, vehicleType, mode, status, onboardingStatus]
+      properties:
+        vehicleId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        registrationNumber:
+          type: string
+        vehicleType:
+          $ref: './_shared.yaml#/components/schemas/VehicleType'
+        mode:
+          $ref: './_shared.yaml#/components/schemas/OperatingMode'
+        status:
+          $ref: '#/components/schemas/RegistrationStatus'
+        onboardingStatus:
+          $ref: '#/components/schemas/OnboardingStatus'
+        modeBBilling:
+          type: string
+          description: '"Service payment" (AL-51). Null for Mode A and Mode C.'
+          enum: [paid, free]
+        defaultMonthlyFareMinor:
+          type: integer
+          format: int64
+          minimum: 0
+
+    VehicleDetail:
+      allOf:
+        - $ref: '#/components/schemas/VehicleSummary'
+        - type: object
+          properties:
+            dispatchState:
+              type: string
+              description: E-03 document-expiry auto-suspend.
+              enum: [ACTIVE, DISPATCH_SUSPENDED]
+            rejectionReason:
+              type: string
+            fleetId:
+              $ref: './_shared.yaml#/components/schemas/Ulid'
+            driver:
+              type: object
+              properties:
+                driverId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+                name:
+                  type: string
+                photoUrl:
+                  type: string
+                  format: uri
+            documents:
+              type: array
+              items:
+                $ref: '#/components/schemas/VehicleDocument'
+            createdAt:
+              $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    VehicleDocument:
+      type: object
+      required: [docId, kind, status]
+      properties:
+        docId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        kind:
+          type: string
+          description: Matches the `registry.documents.kind` CHECK (C003).
+          enum: [driving_license, registration, permit, insurance, revenue_license]
+        status:
+          type: string
+          enum: [VALID, EXPIRING, EXPIRED, REJECTED]
+        expiresAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    Subscriber:
+      type: object
+      required: [userId, status]
+      properties:
+        userId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        name:
+          type: string
+        phoneMasked:
+          $ref: './_shared.yaml#/components/schemas/PhoneMasked'
+        status:
+          type: string
+          description: Matches the `subscription.grants.status` CHECK (C005).
+          enum: [active, unsubscribed]
+        grantedAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
