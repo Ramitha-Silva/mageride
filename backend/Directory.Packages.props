@@ -19,6 +19,10 @@
     <PackageVersion Include="NetTopologySuite" Version="2.6.0" />
   </ItemGroup>
 
+  <ItemGroup Label="Migrations — versioned .sql scripts, never dotnet ef (AL-53, D7' §1)">
+    <PackageVersion Include="dbup-postgresql" Version="7.0.1" />
+  </ItemGroup>
+
   <ItemGroup Label="Messaging and cache">
     <PackageVersion Include="Confluent.Kafka" Version="2.15.0" />
     <PackageVersion Include="StackExchange.Redis" Version="3.0.17" />

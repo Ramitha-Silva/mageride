@@ -1,0 +1,38 @@
+# Keeps the build context small for every image built from the repository root.
+# The first image to need it is the one-shot `migrate` container (C003); the service and
+# portal images (C009) share it.
+
+# Build output — 100+ MB of it, and it must never leak into an image layer.
+**/bin/
+**/obj/
+**/build/
+**/.gradle/
+**/node_modules/
+**/.next/
+**/out/
+
+.git/
+.github/
+
+# Nothing outside backend/ and db/ contributes to a .NET image.
+apps/
+portals/
+shared/
+specs/
+gradle/
+gradlew
+gradlew.bat
+*.gradle.kts
+gradle.properties
+
+# Never copy a real environment file into an image (infra/CLAUDE.md).
+.env
+.env.*
+!*.env.example
+!.env.*.example
+
+**/*.user
+**/.vs/
+**/.vscode/
+**/.idea/
+**/*.log

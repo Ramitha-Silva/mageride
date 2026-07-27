@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    MageRide.Migrations (C003) — the DbUp runner behind the one-shot `migrate` container.
+    Schema changes ship as versioned .sql scripts under db/migrations (AL-53, D7' §1); this
+    project never generates DDL and there is no `dotnet ef` anywhere in the repo.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>MageRide.Migrations</RootNamespace>
+    <AssemblyName>MageRide.Migrations</AssemblyName>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="dbup-postgresql" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      The scripts are embedded so the migrate image is a single self-contained artifact with
+      no volume mount to get wrong. MIGRATE_SCRIPTS_DIR overrides this with a directory, which
+      is how the verify script iterates without a rebuild.
+      LogicalName pins the resource id: without it the name is derived from the path and would
+      change if the folder moved, silently reordering the scripts.
+    -->
+    <EmbeddedResource Include="$(MSBuildThisFileDirectory)../../../db/migrations/*.sql"
+                      LogicalName="MageRide.Migrations.Scripts.%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>

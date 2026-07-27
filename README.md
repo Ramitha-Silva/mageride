@@ -17,7 +17,7 @@ four native mobile apps, three web surfaces and a .NET microservice backend.
 | `specs/` | The authoritative spec set — ADD v3.5, URD v2.9, D1'–D7', DB schemas, traceability matrix, walkthrough, and the approved wireframes | Markdown + HTML |
 | `build/` | The build plan: `manifest.yaml`, generated per-component prompts, progress log, screen-coverage matrix | YAML + Markdown |
 | `backend/` | .NET solution — one Minimal API project per service, plus the shared kernel and migrations | .NET 10, C# 14, Dapper over Npgsql |
-| `db/` | DbUp/Grate versioned `.sql` migrations (created by C003) | PostgreSQL 16 + PostGIS + TimescaleDB |
+| `db/` | DbUp versioned `.sql` migrations, applied by `backend/src/MageRide.Migrations` | PostgreSQL 16 + PostGIS + TimescaleDB |
 | `shared/kmp/` | Kotlin Multiplatform module — DTOs, API client, domain logic, auth, local DB, test kit. Gradle path `:shared` | KMP (Android + iOS targets) |
 | `apps/driver-android/` | Driver app. Gradle path `:apps:driver-android` | Kotlin, Jetpack Compose |
 | `apps/passenger-android/` | Passenger app. Gradle path `:apps:passenger-android` | Kotlin, Jetpack Compose |

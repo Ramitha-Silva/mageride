@@ -28,7 +28,7 @@ After completing a component, set its Status and append the 3-line handoff under
 |----|-----------|------|--------|--------------|-------|
 | C001 | repo-scaffold | 0 | DONE | 2026-07-27 | verify chain green; 3 spec gaps + root-`build/` collision recorded below |
 | C002 | backend-shared-kernel | 0 | DONE | 2026-07-27 | 152 tests green; 2 micro-change-sets raised (command-log column, direct DSN) |
-| C003 | db-schema-identity-registry | 0 | PENDING | | |
+| C003 | db-schema-identity-registry | 0 | DONE | 2026-07-27 | 13 scripts, 24 tables, 40/40 verify checks; 4 micro-change-sets raised |
 | C004 | db-schema-trips-rides-dispatch | 0 | PENDING | | |
 | C005 | db-schema-business-content | 0 | PENDING | | |
 | C006 | db-schema-telemetry-timescale | 0 | PENDING | | |
@@ -323,3 +323,77 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   DoD items are only *proved* where Docker is available — CI (C010) must provide it. The E-09 test runs one
   unmeasured warm-up round, then asserts the **median** of five commit→publish measurements is under 50 ms;
   the first drain pays one-off connection and JIT cost (~74 ms measured cold) that is not per-offer latency.
+
+- **Component:** C003 db-schema-identity-registry — 2026-07-27
+- **Status:** DONE — `bash infra/scripts/migrate-verify.sh` → **40/40 checks passed**. 13 scripts apply
+  to an empty `timescale/timescaledb-ha:pg16`, no-op on a journalled re-run, and re-apply cleanly with
+  the journal disabled. 24 tables: iam 9, config 1, registry 12, prov 2; the C004/C005/C006 schemas are
+  created but left empty. All six DoD items pass.
+- **Notes:**
+  **Spec gaps — four micro-change-sets, none actioned in `specs/` (the DDL sections are D4'/server_db
+  _schema's to own):**
+  (a) ***`server_db_schema.md` §2 `registry.documents.kind` is missing `revenue_license`.*** Its CHECK
+  lists `('driving_license','registration','permit','insurance')`, but D4' §2 includes `revenue_license`
+  and AL-50 names it as one of the four SCR-FP-004 slots ("kind values already cover the slots"). Without
+  it the AL-10 approval gate — verified registration + insurance + **revenue_license** for all modes —
+  cannot be recorded. **Took D4'.**
+  (b) ***`ck_documents_owner` — the constraint contradicts its own comment.*** D4' Δ 2026-07-18 and
+  server_db_schema §26 both print `CHECK (driver_id IS NOT NULL OR fleet_id IS NOT NULL)` (at least one)
+  while commenting "-- exactly the uploading principal"; this prompt's DoD also says "CHECKs **exactly
+  one** owner". Two of three readings say XOR, so the landed constraint is
+  `num_nonnulls(driver_id, fleet_id) = 1`. **C029 / C058 must not set both columns on one row.** If a
+  fleet-assigned driver ever needs to own a document against a fleet vehicle, loosen this to `>= 1`.
+  (c) ***`iam.saved_addresses` has two incompatible shapes.*** server_db_schema §1 and D4' §2 model
+  Home/Work through `label` and carry `updated_at`; D4' Δ 2026-06-21 (AL-26) models them as
+  `is_home`/`is_work` with partial unique indexes, makes `line1 NOT NULL` and drops `updated_at`. Landed
+  the **union** — only the Δ form can enforce "at most one Home, at most one Work", and only the base
+  form gives a row an addressable label. C027 should collapse this to one representation.
+  (d) ***`iam.user_prefs` does not exist.*** ADD §9.1 and D4' Δ 2026-06-21 both reference it
+  (`ALTER TABLE iam.user_prefs ADD COLUMN language …`), but no `CREATE TABLE` appears in any spec and
+  both runnable DDL sources put `language` and `default_payment_method` on **`iam.users`**. Not created;
+  the columns stay on `iam.users`. The Δ also sets `DEFAULT 'si'` where `iam.users` says `'en'` — kept
+  `'en'`, since AL-26 only makes the onboarding *picker* Sinhala-first. Same class of phantom as planner
+  findings 2 and 5.
+  **Other spec observations (no change needed, worth knowing):**
+  (e) `registry.vehicles` is a **union of the two specs**: server_db_schema §2 has `mode_b_billing` /
+  `default_monthly_fare_minor` (AL-24) and D4' §2 has `onboarding_status` (AL-30); neither carries both.
+  (f) `server_db_schema.md` §1 **is not runnable in its printed order** — `iam.fleet_members` references
+  `registry.fleets` from §2. Hence `0302__iam_fleet_members.sql`, numbered after the registry fleet file.
+  (g) `prov.tracker_bindings.fleet_id` references **`registry.operators`**, not `registry.fleets`, in both
+  specs. Kept as written, along with the legacy `registry.operators` stub. Now that fleet-svc is Phase 1
+  (AL-03) this probably wants repointing — a decision for C030/C043, not a silent change here.
+  (h) The prompt says "all 22 schemas"; §0.1 lists **21** `CREATE SCHEMA` statements and names
+  `analytics` + `transit_staging` in prose. **23 schemas created.**
+  (i) **D7' §2.2's Dockerfile template does not build on the .NET 10 alpine images** — `addgroup -S app`
+  fails with "group 'app' in use" because the base image already ships `app` (uid 1654). Worked around
+  with a `getent`-guarded create. **C009 will hit this on every service image.**
+  **Decisions —**
+  (1) **DbUp, journalling to `public.schema_versions`.** Scripts are **embedded in the assembly** so the
+  migrate image is one self-contained artifact with no volume to get wrong; `MIGRATE_SCRIPTS_DIR` /
+  `--scripts` overrides with a directory. Both sources name a script by its **bare filename**, so a
+  database migrated from one and then the other agrees about what has run.
+  (2) **`--ignore-journal` exists for the verify.** A journalled second run only proves DbUp remembers;
+  pass 3 re-executes every script with the journal disabled, which is what actually proves the DDL is
+  idempotent. Every script is written for it (`IF NOT EXISTS`, `CREATE OR REPLACE`, `ON CONFLICT`).
+  (3) **`--wait` connect polling (default 60 s).** Compose starts the one-shot `migrate` alongside
+  Postgres and a fresh container spends seconds in initdb; polling turns a startup race into a wait.
+  (4) **`runtime:10.0-alpine`, not `aspnet`** — a batch job with no HTTP surface, so no port, no
+  healthcheck. Runs as the base image's non-root `app` (uid 1654).
+  (5) **`public.attach_set_updated_at(schema, table)` helper** in `0002`, so each table migration attaches
+  the §0.2 trigger in one line and the naming stays uniform. The verify asserts **no `updated_at` column
+  anywhere in the four schemas is left without it**.
+  (6) **Seeds:** `iam.roles` (9) and `config.operating_cities` (3, Sinhala/Tamil labels intact) land here
+  because their tables do; the rest of §20 (billing.plans, fares.tariffs, …) is C005's.
+  (7) **`registry.fleet_payout_profiles.proof_upload_id` / `lankaqr_upload_id` are plain UUIDs for now** —
+  their FK target `docs.uploads` is C005's (13xx). **C005 must add the two FK constraints**; AL-49 is
+  already on its ADD list. This is the only place C003 leaves §0's "real FOREIGN KEY constraints" unmet.
+  (8) **The verify does functional tests, not just catalog introspection** — it proves a second live
+  driver session is rejected while a passenger session alongside it is not (AL-08), that `'car'` is
+  rejected (AL-09), that a plate frees up on REJECTED (D-37), that a document with neither or both owners
+  is rejected (AL-50), and that `updated_at` actually moves.
+  (9) Added a repo-root **`.dockerignore`** (the context was 134 MB, almost all `bin/`+`obj/`) and a
+  **`db/CLAUDE.md`** documenting the file-naming ranges and the re-runnability rule, per the
+  every-source-directory-has-one convention from C001.
+  **Build host —** the verify needs Docker and pulls `timescale/timescaledb-ha:pg16` (~853 MB, already
+  cached on this box). Containers are published on `127.0.0.1:0` and removed by an EXIT trap; the replica
+  stack stayed down. CI (C010) must provide a Docker daemon for this verify to run.

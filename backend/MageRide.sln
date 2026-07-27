@@ -9,6 +9,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MageRide.Shared", "src\Mage
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MageRide.Shared.Tests", "src\MageRide.Shared.Tests\MageRide.Shared.Tests.csproj", "{1BC51A7A-9456-4B2E-BC02-0DA402D4369E}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MageRide.Migrations", "src\MageRide.Migrations\MageRide.Migrations.csproj", "{59D6A71B-97F4-4579-87AD-4BFBD8BF21C3}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -43,6 +45,18 @@ Global
 		{1BC51A7A-9456-4B2E-BC02-0DA402D4369E}.Release|x64.Build.0 = Release|Any CPU
 		{1BC51A7A-9456-4B2E-BC02-0DA402D4369E}.Release|x86.ActiveCfg = Release|Any CPU
 		{1BC51A7A-9456-4B2E-BC02-0DA402D4369E}.Release|x86.Build.0 = Release|Any CPU
+		{59D6A71B-97F4-4579-87AD-4BFBD8BF21C3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{59D6A71B-97F4-4579-87AD-4BFBD8BF21C3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{59D6A71B-97F4-4579-87AD-4BFBD8BF21C3}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{59D6A71B-97F4-4579-87AD-4BFBD8BF21C3}.Debug|x64.Build.0 = Debug|Any CPU
+		{59D6A71B-97F4-4579-87AD-4BFBD8BF21C3}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{59D6A71B-97F4-4579-87AD-4BFBD8BF21C3}.Debug|x86.Build.0 = Debug|Any CPU
+		{59D6A71B-97F4-4579-87AD-4BFBD8BF21C3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{59D6A71B-97F4-4579-87AD-4BFBD8BF21C3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{59D6A71B-97F4-4579-87AD-4BFBD8BF21C3}.Release|x64.ActiveCfg = Release|Any CPU
+		{59D6A71B-97F4-4579-87AD-4BFBD8BF21C3}.Release|x64.Build.0 = Release|Any CPU
+		{59D6A71B-97F4-4579-87AD-4BFBD8BF21C3}.Release|x86.ActiveCfg = Release|Any CPU
+		{59D6A71B-97F4-4579-87AD-4BFBD8BF21C3}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -50,5 +64,6 @@ Global
 	GlobalSection(NestedProjects) = preSolution
 		{2E86C7BF-F83F-4BC2-AC43-192BD1FDE289} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{1BC51A7A-9456-4B2E-BC02-0DA402D4369E} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{59D6A71B-97F4-4579-87AD-4BFBD8BF21C3} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 EndGlobal
