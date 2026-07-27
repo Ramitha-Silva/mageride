@@ -80,6 +80,11 @@ kotlin {
             api(libs.kotlinx.datetime)
             api(libs.koin.core)
 
+            // CBOR is the MQTT position payload (`realtime/mqtt-topics.md` §2.1, D6' §3.1).
+            // `implementation`: PositionCodec is the only door to it, so no kotlinx.cbor type
+            // reaches an app or the XCFramework. C017.
+            implementation(libs.kotlinx.serialization.cbor)
+
             // Engine-agnostic Ktor. C013 (kmp-api-client) builds the client itself; the
             // engines live in the platform source sets below because there is no
             // multiplatform engine.
@@ -107,6 +112,13 @@ kotlin {
             // compile against it. The iOS half needs no coordinate at all: App Attest comes from
             // Kotlin/Native's DeviceCheck platform library.
             implementation(libs.play.integrity)
+
+            // H3 geocells (C017). `com.uber:h3` is a JNI wrapper over the reference C library and
+            // ships no Kotlin/Native klib, so it can only live here; the jar carries android-arm
+            // and android-arm64 natives beside the desktop ones, which is what lets the JVM tests
+            // exercise the same code the app runs. `implementation`: H3JavaGrid is internal and
+            // the public surface is our own H3Grid interface, so no com.uber type escapes.
+            implementation(libs.h3)
         }
 
         iosMain.dependencies {

@@ -4,14 +4,9 @@ import lk.mageride.shared.data.models.GeoPoint
 import lk.mageride.shared.data.models.Timestamp
 import lk.mageride.shared.data.models.dispatch.DirectionalConfig
 import lk.mageride.shared.data.models.dispatch.DirectionalFilterState
-import kotlin.math.PI
-import kotlin.math.abs
-import kotlin.math.asin
-import kotlin.math.atan2
-import kotlin.math.cos
-import kotlin.math.min
-import kotlin.math.sin
-import kotlin.math.sqrt
+import lk.mageride.shared.domain.geo.angularDifferenceDegrees
+import lk.mageride.shared.domain.geo.bearingDegrees
+import lk.mageride.shared.domain.geo.distanceMetres
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
@@ -212,50 +207,13 @@ public data class DirectionalStanding(val filter: DirectionalFilterState, val co
 }
 
 // ---------------------------------------------------------------------------------------------
-// Spherical geometry for the predicate.
+// Spherical geometry for the predicate lives in `domain/geo` (C017): `distanceMetres`,
+// `bearingDegrees` and `angularDifferenceDegrees`, imported above.
 //
-// Deliberately not in `domain/geo` — that package is C017's (H3 cells, adaptive rate) and its
-// distance work is JNI-backed on Android. What DT-02 needs is two textbook formulae on a sphere,
-// and pulling in a geocell library to get them would tie this rule to a platform. The server's own
-// evaluation is PostGIS geography, which is an ellipsoid: the two agree to well under a metre at
-// the 2 km and 250 m thresholds in play here, and dispatch-svc is authoritative regardless.
+// C015 carried its own copies because `domain/geo` was expected to be JNI-backed. It is not — the
+// H3 *index* arithmetic is platform-supplied, but the distance and bearing work is plain common
+// Kotlin, and DT-02's thresholds and R-06's exact post-filter are the same two formulae. One
+// implementation, one set of tests. The server's own evaluation is PostGIS geography, which is an
+// ellipsoid: the two agree to well under a metre at the 2 km and 250 m thresholds in play here,
+// and dispatch-svc is authoritative regardless.
 // ---------------------------------------------------------------------------------------------
-
-/** IUGG mean Earth radius, metres. */
-private const val EARTH_RADIUS_M = 6_371_008.8
-
-private const val FULL_TURN_DEG = 360.0
-private const val HALF_TURN_DEG = 180.0
-
-/** Not a `const`: `kotlin.math.PI` is an `expect val` in commonMain, so this cannot fold. */
-private val DEGREES_PER_RADIAN: Double = HALF_TURN_DEG / PI
-
-private fun Double.toRadians(): Double = this / DEGREES_PER_RADIAN
-
-private fun Double.toDegrees(): Double = this * DEGREES_PER_RADIAN
-
-/** Great-circle distance in metres (haversine). */
-internal fun distanceMetres(from: GeoPoint, to: GeoPoint): Double {
-    val dLat = (to.lat - from.lat).toRadians()
-    val dLng = (to.lng - from.lng).toRadians()
-    val lat1 = from.lat.toRadians()
-    val lat2 = to.lat.toRadians()
-    val h = sin(dLat / 2).let { it * it } + cos(lat1) * cos(lat2) * sin(dLng / 2).let { it * it }
-    return 2 * EARTH_RADIUS_M * asin(min(1.0, sqrt(h)))
-}
-
-/** Initial great-circle bearing from [from] to [to], degrees clockwise from north, 0–360. */
-internal fun bearingDegrees(from: GeoPoint, to: GeoPoint): Double {
-    val lat1 = from.lat.toRadians()
-    val lat2 = to.lat.toRadians()
-    val dLng = (to.lng - from.lng).toRadians()
-    val y = sin(dLng) * cos(lat2)
-    val x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(dLng)
-    return (atan2(y, x).toDegrees() + FULL_TURN_DEG) % FULL_TURN_DEG
-}
-
-/** The smaller angle between two bearings, 0–180. */
-internal fun angularDifferenceDegrees(a: Double, b: Double): Double {
-    val raw = abs(a - b) % FULL_TURN_DEG
-    return if (raw > HALF_TURN_DEG) FULL_TURN_DEG - raw else raw
-}

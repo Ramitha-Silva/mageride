@@ -3,6 +3,9 @@ package lk.mageride.shared.domain.dispatch
 import lk.mageride.shared.data.models.GeoPoint
 import lk.mageride.shared.data.models.dispatch.DirectionalConfig
 import lk.mageride.shared.data.models.dispatch.DirectionalFilterState
+import lk.mageride.shared.domain.geo.angularDifferenceDegrees
+import lk.mageride.shared.domain.geo.bearingDegrees
+import lk.mageride.shared.domain.geo.distanceMetres
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.test.Test

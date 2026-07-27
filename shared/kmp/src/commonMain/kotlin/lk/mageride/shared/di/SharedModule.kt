@@ -5,6 +5,7 @@ import lk.mageride.shared.data.api.apiModule
 import lk.mageride.shared.domain.auth.authModule
 import lk.mageride.shared.domain.dispatch.rideDispatchModule
 import lk.mageride.shared.domain.fare.fareWalletModule
+import lk.mageride.shared.domain.geo.geoRealtimeModule
 import lk.mageride.shared.platform.PlatformInfo
 import lk.mageride.shared.platform.platformInfo
 import lk.mageride.shared.serialization.MageRideJson
@@ -44,8 +45,13 @@ public val sharedCoreModule: Module = module {
  * the graph would pin a tariff or a fee tier an operator has since moved. Its KDoc has the
  * reasoning.
  *
+ * [geoRealtimeModule] (C017) binds one thing, an
+ * [lk.mageride.shared.domain.geo.H3Grid]. Android resolves it from `com.uber:h3`; **an iOS app
+ * must bind its own**, and because app modules come last, that binding wins. Nothing else in the
+ * geo, MQTT or SignalR surface is in the graph — same reasoning as C016.
+ *
  * **Order matters here.** `authModule` comes after `apiModule` and overrides its
  * [lk.mageride.shared.data.api.TokenProvider] placeholder with the real session-backed one.
  */
 public val sharedModules: List<Module> =
-    listOf(sharedCoreModule, apiModule, authModule, rideDispatchModule, fareWalletModule)
+    listOf(sharedCoreModule, apiModule, authModule, rideDispatchModule, fareWalletModule, geoRealtimeModule)

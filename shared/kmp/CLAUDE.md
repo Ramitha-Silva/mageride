@@ -52,10 +52,11 @@ src/commonMain/kotlin/lk/mageride/shared/
     domain/fare/      Mode C fare rules, surcharges, payment machine   (C016)
     domain/wallet/    balance, daily fee, vouchers, credit transfer    (C016)
     domain/subscription/  Mode B billing cycle + subscriber payments   (C016)
-    domain/geo/       H3 geocells, adaptive rate logic                 (C017)
+    domain/geo/       H3 geocells, view + hysteresis, exact distance   (C017)
     mqtt/             MqttConfig, PositionPayload, AdaptiveRateEngine  (C017)
+    realtime/         SignalR `/hubs/live` contract + map scope        (C017)
     db/               SQLDelight queries + drivers                     (C018)
-    util/             BusinessCalendar (Asia/Colombo dates, C016)
+    util/             BusinessCalendar (C016), ReconnectBackoff (C017)
     platform/         PlatformInfo, SecureStore, attestation (expect)  (C011, C014)
     (ADD §18.2 draws the first of those two as `domain/trip/`. That layout predates R-01, which
      split the Mode C ride out of the tracking session; `domain/trip` under the current vocabulary
@@ -235,10 +236,48 @@ src/androidHostTest/  JVM-only tests of the Android actuals (NOT `androidUnitTes
   binding would pin whatever the numbers were at launch. Build the value types at the call site
   from the config just read. Read the module's KDoc before adding a binding.
 
+## Geo & real-time plane (`domain/geo` + `mqtt` + `realtime`, C017)
+- **The passenger view is H3 res-7 + `ring(2)` = 19 cells (R-06).** res-8 + ring(1) is the
+  superseded figure and reaches about 1 km; `GeoRealtimeHygieneTest` fails the build if any file in
+  these three packages names resolution 8. Dispatch's coarse pre-filter is res-5 + ring(1–2).
+- **A geocell is never a distance bound.** `exactWithin` (haversine) is mandatory after any cell
+  lookup — ADD §7.4 step 5 in one function. `GeoDistanceTest` demonstrates that some of the 19
+  subscribed cells sit beyond the 3 km the view claims, which is why this is not an optimisation.
+  C015's Directional predicate uses the same three formulae; there is one implementation.
+- **[H3Grid] is a seam, not a re-implementation.** Cell ids must be bit-identical to the ones
+  `position-processor-svc` computes or a client joins `cell:{h3index}` groups nothing publishes to
+  — a failure that looks exactly like an empty map. Android binds `com.uber:h3`; **iOS has no
+  binding yet** (`platformH3Grid()` answers `null`) and C085/C094 must supply one, which an app
+  module can because it is appended after `sharedModules`. Everything else in these packages is
+  common code and needs no engine. The index *layout* — resolution, base cell, the `7` markers — is
+  read in common Kotlin by `H3Cell` and checked against the library in `AndroidH3GridTest`.
+- **Group churn is held for 30 s after a boundary crossing, and a reconnect is not churn.**
+  `GeoCellSubscription` applies the first crossing immediately, then holds; crossing back cancels
+  the held one. `onReconnected()` re-joins everything regardless — after a drop the server holds no
+  membership at all, and rate-limiting recovery would blank the map for half a minute.
+- **The cadence table is data, and its defaults are derived from three sources at once.**
+  `GpsPhase` carries D5' §5.2's ranges; the default is the slow end of the range except inside
+  AL-12's 1 s near-geofence burst, which is the only rule satisfying AL-12 *and* D5' §5.1's base
+  cadence. A `setPosRate` hint overrides it, expires with its envelope, and is dropped by a phase
+  change. `AdaptiveRateEngine` also refuses a publish that would breach the 5 msg/s broker
+  ceiling: being throttled by EMQX emits `mqtt.rate_violation` into `audit.events`, so leaning on
+  the broker to rate-limit the client generates a fraud signal.
+- **`seq` is strictly monotonic per vehicle and must survive a restart.** If `PositionSequencer`
+  rewinds, `position-processor-svc` discards everything published afterwards and the vehicle goes
+  dark while the app believes it is publishing — **C018 persists the watermark**. Replay is a
+  separate topic, unlocked 2 s after a reconnect, capped at 20/s and yielding to live 4:1.
+- **The driver home map joins no geocell group at all (AL-31).** `LiveMapScope.DriverHomeMap` has
+  no cells to join by construction; the driver's own marker comes from the device's own GNSS. A
+  driver on a ride still joins `ride:{rideId}`, which is a different membership rule.
+- **Method and event names on `/hubs/live` are resolved by string.** A typo is a handler that is
+  never invoked, not a compile error — so they are spelled once, in `LiveHub`, and asserted against
+  `backend/contracts/realtime/signalr-hub.md`. The hub credential is the 30-minute API access
+  token, never the MQTT session JWT (E-02).
+
 ## Dependency rules
 - **Every version lives in `gradle/libs.versions.toml`.** Never inline one here.
-- Three catalog entries are declared but deliberately **not applied**: `sqldelight` and its drivers
-  (C018 — it also applies the Gradle plugin), `h3` (C017), and `multiplatform-settings`, which C011
+- Two catalog entries are declared but deliberately **not applied**: `sqldelight` and its drivers
+  (C018 — it also applies the Gradle plugin), and `multiplatform-settings`, which C011
   reserved for C014 and C014 did not take — both of its app-side backends are plain settings
   (`SharedPreferencesSettings`, `NSUserDefaultsSettings`), which is exactly what C014's DoD forbids.
   `ktor-client-auth` is likewise unused: refresh-on-401 is a send-pipeline interceptor (C013), which
@@ -248,8 +287,13 @@ src/androidHostTest/  JVM-only tests of the Android actuals (NOT `androidUnitTes
   App Attest comes from Kotlin/Native's `DeviceCheck` platform library, and the Keychain from
   `Security`.
 - **`com.uber:h3` is JNI, not Kotlin Multiplatform.** Its jar carries android-arm/arm64, linux
-  and darwin natives and no klib, so it is an androidMain/JVM dependency only; the iOS side
-  needs cinterop against the H3 C library. C017 owns that expect/actual.
+  and darwin natives and no klib, so it is an **androidMain-only** dependency (applied by C017,
+  `implementation` — `H3JavaGrid` is internal and the public surface is our own `H3Grid`). The iOS
+  side needs cinterop against an H3 built for `ios-arm64`, which cannot be produced on this Linux
+  host: `platformH3Grid()` therefore answers `null` on iOS and C085/C094 bind their own.
+- **`kotlinx-serialization-cbor` is applied in commonMain** (C017) and is `implementation`:
+  `PositionCodec` is the only door to it, so no CBOR type reaches an app or the XCFramework. It
+  serialises the same `PositionSample` the JSON surface does — one DTO, two wires.
 - Add a Koin module per component and append it to `sharedModules` in `di/SharedModule.kt` —
   do not grow `sharedCoreModule`. Apps are told to use `sharedModules`, so a new binding must
   never require an edit in all four of them.

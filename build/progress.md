@@ -42,7 +42,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C014 | kmp-auth-session | 1 | DONE | 2026-07-27 | 277 tests green (54 new); Keystore/Keychain SecureStore + Play Integrity/App Attest; 3 micro-change-sets raised |
 | C015 | kmp-domain-ride-dispatch | 1 | DONE | 2026-07-27 | 384 tests green (107 new); Appendix B.2 as data + exhaustive 18×20 sweep; 4 micro-change-sets raised |
 | C016 | kmp-domain-fare-wallet | 1 | DONE | 2026-07-27 | 543 tests green (159 new); §1.3 banker's rounding + 14-state payment machine; 6 micro-change-sets raised |
-| C017 | kmp-geo-realtime | 1 | PENDING | | |
+| C017 | kmp-geo-realtime | 1 | DONE | 2026-07-27 | 654 tests green (111 new); H3 is a platform seam — **iOS has no engine yet** (C085/C094 bind one); 3 micro-change-sets raised |
 | C018 | kmp-local-db | 1 | PENDING | | |
 | C019 | kmp-test-kit | 1 | PENDING | | |
 | C020 | ws-iam-minimal ⭑ | 2 | PENDING | | |
@@ -2203,3 +2203,136 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   `shared/kmp/CLAUDE.md` already warns about, hit here for real); and **Koin's `Module.mappings` is
   `@KoinInternalApi`**, so "this module binds nothing" cannot be asserted directly — the graph test
   asserts membership in `sharedModules` and constructibility without the graph instead.
+
+- **Component:** C017 kmp-geo-realtime — 2026-07-27
+- **Status:** DONE — `./gradlew :shared:testDebugUnitTest detekt ktlintCheck` → **654 tests passed,
+  0 failed** (111 new), detekt and ktlint clean, and `:shared:compileKotlinIosArm64` type-checks
+  `src/iosMain`. All four DoD items pass: the 19-cell res-7 + ring(2) set is asserted against real
+  H3 output for Colombo Fort, the cadence engine is swept over all eight D5' §5.2 phases, replay
+  carries a strictly monotonic `seq` with local duplicate drop, and group churn is suppressed for
+  30 s after a boundary crossing.
+- **Notes:**
+  **Spec gaps — three micro-change-sets, none actioned in `specs/`:**
+  (a) ***The `setPosRate` cadence hint has two incompatible printed shapes — and two different
+  units.*** ADD §7.5.1 and D5' §5.2 both write `{"cmd":"setPosRate","intervalMs":2000}` — the
+  interval at the **top level, in milliseconds**. `backend/contracts/realtime/mqtt-topics.md` §2.2
+  and D6' §3.1 write the general envelope `{"cmd":"setPosRate","args":{"seconds":1},"expiresAt":…}`
+  — nested, **in seconds**. A client that understood only one spelling would silently keep
+  publishing at the wrong rate, which is precisely the failure R-07 exists to prevent, so
+  `MqttCommands` is a **tolerant reader**: `args.intervalMs`, `args.seconds`, `args.intervalSec` and
+  a top-level `intervalMs` all decode, into the envelope form. **ADD §7.5.1 and D5' §5.2 should be
+  restated in the envelope form with one unit.**
+  (b) ***The near-geofence burst radius is 150 m in AL-12 and 300 m in the cadence table.*** ADD
+  §7.5.1 and D5' §5.2 print `Near-pickup geofence (<300 m)` in the trigger column; AL-12 (ADD
+  §12.4) says "1 call/s within an **admin-configurable radius (default 150 m)** of pickup/drop-off".
+  Took **AL-12** — it is the later amendment and it is the line this component's ADD list names —
+  as `AdaptiveRateConfig.geofenceRadiusMetres = 150`. The phase itself is server-computed and
+  arrives as a hint, so the radius only decides when the client *anticipates* the burst; the two
+  documents should still agree. **Both trigger columns should read 150 m, admin-configurable.**
+  (c) ***No spec fixes the MQTT keep-alive, the CONNECT credential fields, or the session-expiry
+  interval.*** D6' §3.2 and `mqtt-topics.md` §3 define the *credential* (the E-02 session JWT) but
+  not where it sits in the CONNECT packet, and ADD §7.1 only says MQTT is chosen partly for its
+  "~2-byte keepalives". Landed the EMQX defaults — `password` carries the JWT, `username` is the
+  vehicle id, `clientId` is the device id — with 60 s keep-alive, 30 s connect timeout, persistent
+  session (`cleanStart = false`) and 1 h session expiry, all on `MqttConfig` so an operator can
+  move them. **C038 must confirm these against the EMQX listener config it lands**; if they differ,
+  this is the one file to change.
+  **Other spec observations (no change needed, worth knowing):**
+  (d) *`AdaptiveRateEngine`'s per-phase default is derived, not printed.* D5' §5.2 gives **ranges**;
+  three later lines pin points inside them — AL-12's 1 s burst and 60 s Mode C idle standby, and
+  D5' §5.1's base cadence (4 s moving, 10 s stationary, 60 s idle). The single rule consistent with
+  every one of those is **slow end of the range, except inside the geofence burst**, which is what
+  `GpsPhase.defaultInterval` implements and what `AdaptiveRateEngineTest` re-declares independently
+  and sweeps. Only `CANDIDATE_IN_POOL` (2–5 s → 5 s) has no external anchor.
+  (e) *"Live preempts replay 4:1" (D6' §3.5) is implemented as weighted fair share, not a hard
+  gate.* A strict "one replay per four live publishes" would stall a parked vehicle's backlog
+  forever, because nothing generates live publishes to earn the credit. `PositionReplayQueue.peek`
+  therefore takes `livePending`: the ratio applies while both streams are flowing, and the backlog
+  drains at the full 20/s ceiling when live is idle.
+  (f) *`signalr-hub.md` §2.1 names the `ride:{rideId}` and `booker:{bookerId}:loc-req:{requestId}`
+  groups; no spec names a group for AL-31's driver home map.* None is needed —
+  `LiveMapScope.DriverHomeMap` joins **nothing**, because the driver's own marker comes from the
+  device's own GNSS, which the position publisher already holds. Encoding it as a type with no
+  cells makes the fence structural rather than a rule in a screen.
+  (g) *D5' §5.2's coalesce rule ("skip if Δpos < 25 m") means a stationary vehicle publishes
+  nothing at all, indefinitely.* Implemented exactly as written; `AdaptiveRateConfig
+  .coalesceHeartbeat` is an opt-in escape hatch, **off by default**, for an operator who wants
+  proof-of-life on the position plane rather than from the LWT.
+  **Decisions —**
+  (1) ***H3 is a platform seam, and this is the component's biggest call.*** Cell ids must be
+  **bit-identical** to the ones `position-processor-svc` computes, or a passenger joins
+  `cell:{h3index}` groups nothing publishes to — a failure that renders as an empty map with no
+  error anywhere. H3's grid is defined by constant tables (20 face centres, 122 base cells with
+  their neighbours and rotations); re-deriving them in common Kotlin would be a large piece of
+  unverifiable arithmetic whose failure mode is silent. So `H3Grid` is a four-method interface,
+  Android binds `com.uber:h3` (JNI over the reference C library), and the *rules* — resolutions,
+  ring size, hysteresis, exact post-filter, everything in `mqtt` and `realtime` — are common code
+  that runs unchanged on both platforms. **`AndroidH3GridTest` asserts the 19-cell golden set for
+  Colombo Fort verbatim**, so an H3 upgrade that moved a cell id fails the build instead of moving
+  every SignalR group name on the platform.
+  (2) ***iOS has no H3 engine yet, and `platformH3Grid()` answers `null` there.*** The Kotlin/Native
+  half needs a `cinterop` binding against an H3 compiled for `ios-arm64` / `ios-simulator-arm64`,
+  which can only be produced on macOS with Xcode — committing an unbuilt, untested cinterop from
+  this Linux host would be worse than the gap. **C085 / C094 must bind an `H3Grid` in their own
+  Koin module** (four methods over a Swift H3 package); app modules are appended after
+  `sharedModules`, so that binding overrides `geoRealtimeModule`'s default, and
+  `GeoRealtimeGraphTest` asserts the override path works on every target. Nothing else in the three
+  packages needs an engine.
+  (3) **The index *layout* is read in common Kotlin.** `H3Cell.resolution`, `.baseCell`, `.token`
+  and `.isWellFormed` come from the documented bit layout rather than from the library, so the hex
+  spelling every group name is built from is verified on iOS too; `AndroidH3GridTest` checks that
+  reading against `com.uber:h3` at seven resolutions. `isWellFormed` deliberately stops short of
+  H3's `isValidCell` — it does not reject a pentagon's deleted subsequence, which needs the base
+  cell tables — and says so.
+  (4) **The 30 s hysteresis applies the first crossing immediately, then holds; crossing back
+  cancels the held one; a reconnect is exempt.** The DoD's wording ("suppressed for 30 s *after* a
+  boundary crossing") and the thrash case ADD §7.4 step 6 describes both point the same way. The
+  reconnect exemption matters: after a drop the server holds no membership at all, so rate-limiting
+  `onReconnected()` would leave a passenger's map blank for up to half a minute.
+  (5) **C015's three geometry functions moved into `domain/geo` and its private copies were
+  deleted.** `DirectionalTravel.kt` had its own haversine, bearing and angular-difference because
+  `domain/geo` was expected to be JNI-backed; it is not — only the *index* arithmetic is
+  platform-supplied — and DT-02's thresholds and R-06's exact post-filter are the same two
+  formulae. One implementation, one set of tests, and the stale comment in C015 is corrected in
+  place.
+  (6) **`ReconnectBackoff` lives in `util/`, not in either plane.** R-09 specifies the same
+  1–60 s ±25 % curve for MQTT (D6' §3.5) and SignalR (`signalr-hub.md` §1.2) because the two fail
+  together. The band is symmetric and the jittered result is **not** clamped back to 60 s — the
+  same choice C002 decision 5 made for Polly, and for the same reason.
+  (7) **`geoRealtimeModule` binds exactly one thing, `H3Grid`.** Every other type here is either
+  stateless (`GeoCells`, `MqttTopics`, `LiveHub`) or built from configuration the client has just
+  read (`AdaptiveRateConfig`, `MqttConfig`, `GeoCellSubscription`, `PositionReplayQueue`) — same
+  reasoning as C015 and C016, and the KDoc says so in place.
+  (8) **The four commands this module does not act on stay untyped.** `mqtt-topics.md` §2.2 fixes
+  the *names* of all five downlink commands but the `args` shape of only `setPosRate`; a typed
+  `SetGeofence` would be this module inventing a contract. `MqttCommand.Other` carries the envelope
+  and a nullable name — an unknown command is delivered and logged, never guessed at.
+  **For later components —**
+  **C038 / C039 / C040 / C041 (the real-time services):** `MqttTopics`, `MqttTopicKind` (QoS +
+  retain) and `PositionCodec` are the client half of your contract; `LiveHub.Method` / `.Event` /
+  the three group builders are the client half of the hub. `MqttRateLimits` carries the four
+  ceilings. The `seq` watermark (`veh:seq:{vehicleId}`) is what `PositionSequencer` is generating
+  against — see decision (1) in note (e) about replay ordering.
+  **C018 (kmp-local-db):** **you own the `seq` watermark.** `PositionSequencer(start = …)` must be
+  constructed from persisted state; if it rewinds, `position-processor-svc` discards every sample
+  published afterwards and the vehicle goes dark while the app believes it is publishing. The GPS
+  ring buffer (`sequence_no PK monotonic, vehicleId, lat, lng, ts, accuracy, source`, ADD §11.13) is
+  the storage behind `PositionReplayQueue`.
+  **C067 / C076 (the Android shells):** you own the HiveMQ and SignalR sockets. Build `MqttConfig`
+  once, take the will from `MqttConfig.lastWill(vehicleId)` and the credential from
+  `MqttConfig.credentials(token)` — and **reconnect when `MqttSessionTokenManager.token` changes**,
+  because EMQX validates the JWT at CONNECT only. Drive `AdaptiveRateEngine.decide` from the
+  foreground service and call `onPublished` for retries too.
+  **C085 / C094 (the iOS shells):** as above, plus **bind an `H3Grid`** — see decision (2). Until
+  you do, anything that opens a map throws `H3GridUnavailableException` naming the binding.
+  **C078 / C096 (passenger live map):** `GeoCellSubscription` is the whole subscription lifecycle;
+  send `update.join` / `update.leave`, not the full set. On reconnect follow
+  `LiveHubRecovery.plan` — groups first, `GET /v1/nearby` second, in that order.
+  **C019 (test kit):** `TestH3Grid` in `commonTest` is a deterministic hex grid that satisfies the
+  ring arithmetic without an engine; it is a good candidate to promote.
+  **Build host —** no Docker and no compose stack; the replica stayed down. Two new dependencies:
+  `kotlinx-serialization-cbor` (commonMain) and `com.uber:h3` 4.4.0 (**androidMain only** — its jar
+  ships `linux-x64` natives alongside the Android ones, which is why the JVM host tests can exercise
+  the real engine on this box). A clean gate run takes ~40 s and `compileKotlinIosArm64` another
+  ~18 s. Worth knowing next time: **detekt's `ReturnCount` limit is 2**, which guard-clause parsers
+  trip constantly — four functions carry a justified `@Suppress`, following C013's precedent.
