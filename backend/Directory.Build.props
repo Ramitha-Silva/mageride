@@ -1,0 +1,38 @@
+<Project>
+
+  <!--
+    MageRide — properties shared by every .NET project under backend/ (C001 repo-scaffold).
+    MSBuild imports the nearest Directory.Build.props walking up from each project, so any
+    project at backend/src/<Service>/ picks this up automatically.
+
+    Stack contract (CLAUDE.md, ADD §18.1, AL-53): .NET 10 Minimal API + Dapper over Npgsql.
+    No EF Core, no DbContext, no LINQ-to-SQL. Migrations are DbUp/Grate .sql scripts.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>14.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <!-- Deliberately NOT set: InvariantGlobalization. The platform is trilingual
+         (Si / Ta / En) and settles business dates in Asia/Colombo (D-38), so the ICU
+         data and the tz database must stay in the image. -->
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <!-- Code-style rules from .editorconfig stay IDE suggestions. Turning this on while
+         TreatWarningsAsErrors is true would fail builds on formatting nits. -->
+    <EnforceCodeStyleInBuild>false</EnforceCodeStyleInBuild>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <Product>MageRide</Product>
+    <Company>MageRide</Company>
+    <NeutralLanguage>en</NeutralLanguage>
+    <Copyright>© MageRide</Copyright>
+  </PropertyGroup>
+
+</Project>

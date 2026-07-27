@@ -1,0 +1,7 @@
+{
+  "name": "@mageride/tailwind-preset",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Shared Tailwind preset carrying the D2 §A design tokens (AL-52). Scaffold placeholder — C103 owns the implementation.",
+  "license": "UNLICENSED"
+}

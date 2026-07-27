@@ -1,0 +1,7 @@
+{
+  "name": "@mageride/web-passenger",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Passenger web subview at passenger.mageride.lk, SCR-WT-001…006 (Next.js). Scaffold placeholder — C117 owns the application.",
+  "license": "UNLICENSED"
+}

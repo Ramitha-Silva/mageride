@@ -1,38 +1,111 @@
+# MageRide — ignored paths. Extended by C001 (repo-scaffold).
+
+# ---------------------------------------------------------------------------
 # .NET
+# ---------------------------------------------------------------------------
 **/bin/
 **/obj/
 *.user
 *.suo
+artifacts/
+TestResults/
+*.trx
+*.coverage
+*.coverisxml
+BenchmarkDotNet.Artifacts/
+*.nupkg
+*.snupkg
+msbuild.log
+msbuild.err
+.dotnet/
 
-# Node / Next.js
+# ---------------------------------------------------------------------------
+# Node / Next.js (portals)
+# ---------------------------------------------------------------------------
 node_modules/
 .next/
 out/
+dist/
+.turbo/
+.vercel/
+*.tsbuildinfo
+.eslintcache
+coverage/
+npm-debug.log*
+yarn-error.log*
+.pnpm-store/
 
-# Android
+# ---------------------------------------------------------------------------
+# Gradle / Android / KMP
+# ---------------------------------------------------------------------------
 .gradle/
 build/
 # ...but the top-level build/ is the MageRide build plan (manifest, prompts, progress),
 # not a Gradle output directory.
 !/build/
+# The Gradle wrapper is committed on purpose — never add a blanket *.jar rule above it.
+!gradle/wrapper/gradle-wrapper.jar
 local.properties
+.kotlin/
+.cxx/
+captures/
+*.hprof
+*.klib
+*.apk
+*.aab
+*.ap_
+*.dex
 
-# iOS
+# ---------------------------------------------------------------------------
+# iOS / Xcode
+# ---------------------------------------------------------------------------
 *.xcworkspace/xcuserdata/
+xcuserdata/
+*.xcuserstate
 DerivedData/
 Pods/
+.swiftpm/
+Carthage/Build/
+*.ipa
+*.dSYM.zip
 
-# KMP
-*.klib
+# ---------------------------------------------------------------------------
+# Secrets, keys and local environment
+# `.env.*.example` templates (D7 §4, created by C009) stay tracked.
+# ---------------------------------------------------------------------------
+.env
+.env.*
+!.env.*.example
+!*.example
+*.jks
+*.keystore
+keystore.properties
+*.pem
+*.p12
+*.pfx
+secrets.*.json
 
+# ---------------------------------------------------------------------------
+# Tooling
+# ---------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# ---------------------------------------------------------------------------
 # IDE
+# ---------------------------------------------------------------------------
 .idea/
 .vs/
+.vscode/*
+!.vscode/extensions.json
 *.swp
+*~
 
+# ---------------------------------------------------------------------------
 # OS
+# ---------------------------------------------------------------------------
 .DS_Store
 desktop.ini
 Thumbs.db
-
-

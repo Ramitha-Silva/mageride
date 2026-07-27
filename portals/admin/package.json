@@ -1,0 +1,7 @@
+{
+  "name": "@mageride/admin-portal",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Admin Portal at admin.mageride.lk (Next.js). Scaffold placeholder — C104 owns the application.",
+  "license": "UNLICENSED"
+}

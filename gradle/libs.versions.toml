@@ -1,0 +1,49 @@
+# MageRide — Gradle version catalogue.
+#
+# This file is the single home for every Gradle-side version. Never inline a version
+# in a build script; add it here and reference it with `libs.` / `libs.plugins.`.
+#
+# Ownership (build/manifest.yaml):
+#   C001 repo-scaffold        — the toolchain block, the Android platform levels, the plugin aliases.
+#   C011 kmp-module-scaffold  — appends Ktor, kotlinx.serialization / coroutines / datetime, Koin,
+#                               multiplatform-settings, H3, SQLDelight, Turbine, kotlin-test.
+#   C067 / C076 app shells    — append the Android UI, MapLibre, HiveMQ and SignalR entries.
+# Appending is expected; renaming or removing an existing alias is a breaking change.
+
+[versions]
+
+# ---- toolchain --------------------------------------------------------------------
+# `gradle` mirrors gradle/wrapper/gradle-wrapper.properties — the wrapper is authoritative,
+# this entry exists so the version is discoverable alongside the rest of the toolchain.
+gradle = "9.6.1"
+kotlin = "2.4.10"
+agp = "9.3.1"
+
+# Build host runs OpenJDK 17 and AGP 9.3.1 ships Java-17 bytecode, so 17 is the floor for
+# the whole Gradle side. Raise it only together with the CI image (C010) and the build host.
+jvmToolchain = "17"
+
+# ---- Android platform -------------------------------------------------------------
+# minSdk is a requirement, not a preference: URD NFR-22 — "Minimum Android version:
+# Android 8.0 (API 26)". Do not raise it without a micro-change-set.
+androidMinSdk = "26"
+# compile/target are the newest fully-released platform at scaffold time (2026-07-27).
+# C067 confirms them against the SDK actually installed on the build host.
+androidCompileSdk = "36"
+androidTargetSdk = "36"
+
+# ---- Android UI -------------------------------------------------------------------
+# Kotlin 2.x compiles Compose through the `kotlin-compose` plugin below (versioned with
+# Kotlin itself); the BOM pins the androidx.compose artifacts.
+composeBom = "2026.06.01"
+
+[plugins]
+android-application  = { id = "com.android.application",                   version.ref = "agp" }
+android-library      = { id = "com.android.library",                       version.ref = "agp" }
+kotlin-android       = { id = "org.jetbrains.kotlin.android",              version.ref = "kotlin" }
+kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform",        version.ref = "kotlin" }
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+kotlin-compose       = { id = "org.jetbrains.kotlin.plugin.compose",       version.ref = "kotlin" }
+
+[libraries]
+compose-bom = { module = "androidx.compose:compose-bom", version.ref = "composeBom" }

@@ -1,0 +1,7 @@
+{
+  "name": "@mageride/fleet-portal",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Fleet Portal at fleet.mageride.lk (Next.js). Scaffold placeholder — C111 owns the application.",
+  "license": "UNLICENSED"
+}

@@ -4,3 +4,5 @@
 - Wireframe reference: specs/wireframes/web_admin.html (19 screens, SCR-AP-001…016)
 - API calls go through Admin BFF (backend service)
 - Screens include the GTFS Dataset Manager (SCR-AP-016, Epic 28) — upload/validate/activate/rollback
+- npm workspace member `@mageride/admin-portal` under portals/
+- Verify: `npm --prefix portals run build -w @mageride/admin-portal`

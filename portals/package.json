@@ -1,0 +1,24 @@
+{
+  "name": "@mageride/portals",
+  "version": "0.0.0",
+  "private": true,
+  "description": "npm workspace root for the MageRide web surfaces (Next.js + Tailwind CSS).",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=24.0.0 <25",
+    "npm": ">=11"
+  },
+  "workspaces": [
+    "tailwind-preset",
+    "admin",
+    "fleet",
+    "web-passenger"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "dev": "npm run dev --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present"
+  }
+}

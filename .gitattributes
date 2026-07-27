@@ -1,0 +1,74 @@
+# MageRide — line-ending and diff behaviour (C001 repo-scaffold).
+
+# Normalise to LF in the repository; check out LF everywhere except the Windows-only
+# files listed below.
+* text=auto eol=lf
+
+# Windows-only files keep CRLF on checkout.
+*.bat                             text eol=crlf
+*.cmd                             text eol=crlf
+*.ps1                             text eol=crlf
+*.sln                             text eol=crlf
+
+# Shell and the Gradle wrapper are executed by POSIX shells — always LF.
+*.sh                              text eol=lf
+gradlew                           text eol=lf
+
+# Explicit text types (helps `text=auto` on files git might sniff wrong).
+*.cs                              text diff=csharp
+*.csproj                          text
+*.props                           text
+*.targets                         text
+*.kt                              text diff=kotlin
+*.kts                             text diff=kotlin
+*.java                            text diff=java
+*.swift                           text diff=swift
+*.ts                              text
+*.tsx                             text
+*.js                              text
+*.json                            text
+*.yaml                            text
+*.yml                             text
+*.sql                             text
+*.md                              text diff=markdown
+*.toml                            text
+
+# Binary — never diff, never convert.
+*.jar                             binary
+*.png                             binary
+*.jpg                             binary
+*.jpeg                            binary
+*.gif                             binary
+*.webp                            binary
+*.ico                             binary
+*.pdf                             binary
+*.zip                             binary
+*.keystore                        binary
+*.jks                             binary
+*.apk                             binary
+*.aab                             binary
+*.pmtiles                         binary
+*.ttf                             binary
+*.otf                             binary
+*.woff                            binary
+*.woff2                           binary
+
+# Generated or vendored — keep them out of GitHub's language statistics.
+gradle/wrapper/gradle-wrapper.jar binary linguist-vendored
+gradlew                           linguist-vendored
+gradlew.bat                       linguist-vendored
+portals/package-lock.json         linguist-generated
+build/prompts/*.md                linguist-generated
+build/screen_coverage.md          linguist-generated
+
+# ===================================================================================
+# MUST STAY LAST. Later patterns win in .gitattributes, so this exemption has to sit
+# below every `*.md` / `*.html` rule above or they will silently re-enable conversion.
+#
+# specs/ is imported, team-reviewed source material and eight of its files (the three
+# largest spec documents and five approved wireframes) are stored with CRLF. Leave them
+# byte-for-byte as imported: renormalising would produce a whitespace-only diff across
+# the approved baseline and bury every real spec change under it.
+# ===================================================================================
+specs/**                          -text
+

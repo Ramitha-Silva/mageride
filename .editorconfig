@@ -1,0 +1,106 @@
+# MageRide — editor conventions (C001 repo-scaffold).
+# These are editor/IDE settings. They are deliberately NOT enforced at build time:
+# backend/Directory.Build.props keeps EnforceCodeStyleInBuild off so a formatting nit
+# cannot fail a build that also runs TreatWarningsAsErrors.
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+max_line_length = 120
+
+# ---- imported source material: never reformat -------------------------------------
+# specs/ is the single source of truth and is byte-preserved (see .gitattributes).
+[specs/**]
+end_of_line = unset
+insert_final_newline = unset
+trim_trailing_whitespace = unset
+indent_size = unset
+max_line_length = unset
+
+# ---- generated build plan ----------------------------------------------------------
+# build/prompts/*, build/progress.md and build/screen_coverage.md come out of
+# build/tools/generate_build_plan.py — edit the manifest, not these.
+[build/{prompts/**,progress.md,screen_coverage.md}]
+trim_trailing_whitespace = unset
+
+# ---- backend: C# ------------------------------------------------------------------
+[*.{cs,csx}]
+indent_size = 4
+dotnet_sort_system_directives_first = true
+dotnet_separate_import_directive_groups = false
+csharp_using_directive_placement = outside_namespace:suggestion
+csharp_style_namespace_declarations = file_scoped:suggestion
+csharp_prefer_braces = true:suggestion
+csharp_new_line_before_open_brace = all
+csharp_style_var_for_built_in_types = false:suggestion
+csharp_style_prefer_primary_constructors = true:suggestion
+dotnet_style_prefer_conditional_expression_over_assignment = true:suggestion
+dotnet_naming_rule.private_fields_underscore.severity = suggestion
+dotnet_naming_rule.private_fields_underscore.symbols = private_fields
+dotnet_naming_rule.private_fields_underscore.style = underscore_camel
+dotnet_naming_symbols.private_fields.applicable_kinds = field
+dotnet_naming_symbols.private_fields.applicable_accessibilities = private
+dotnet_naming_style.underscore_camel.capitalization = camel_case
+dotnet_naming_style.underscore_camel.required_prefix = _
+
+[*.{csproj,props,targets,xml,config,resx}]
+indent_size = 2
+
+# ---- mobile: Kotlin / KMP -----------------------------------------------------------
+# Kotlin official code style (gradle.properties sets kotlin.code.style=official).
+[*.{kt,kts}]
+indent_size = 4
+ij_kotlin_allow_trailing_comma = true
+ij_kotlin_allow_trailing_comma_on_call_site = true
+
+[*.java]
+indent_size = 4
+
+# ---- mobile: iOS ---------------------------------------------------------------------
+[*.swift]
+indent_size = 4
+
+[*.{pbxproj,xcscheme,plist,storyboard,xib}]
+indent_size = 2
+trim_trailing_whitespace = false
+
+# ---- web: portals ---------------------------------------------------------------------
+[*.{ts,tsx,js,jsx,mjs,cjs,css,scss}]
+indent_size = 2
+max_line_length = 100
+
+[*.{json,jsonc,json5}]
+indent_size = 2
+
+# ---- data, infra, docs -----------------------------------------------------------------
+[*.{yaml,yml}]
+indent_size = 2
+
+[*.toml]
+indent_size = 2
+
+[*.sql]
+indent_size = 4
+
+[{Dockerfile,Dockerfile.*,*.dockerfile}]
+indent_size = 2
+
+[*.sh]
+indent_size = 2
+
+[*.py]
+indent_size = 4
+
+[*.md]
+# Two trailing spaces are a hard line break in Markdown.
+trim_trailing_whitespace = false
+max_line_length = off
+
+[{Makefile,*.mk}]
+indent_style = tab

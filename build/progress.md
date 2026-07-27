@@ -26,7 +26,7 @@ After completing a component, set its Status and append the 3-line handoff under
 
 | ID | Component | Wave | Status | Session Date | Notes |
 |----|-----------|------|--------|--------------|-------|
-| C001 | repo-scaffold | 0 | PENDING | | |
+| C001 | repo-scaffold | 0 | DONE | 2026-07-27 | verify chain green; 3 spec gaps + root-`build/` collision recorded below |
 | C002 | backend-shared-kernel | 0 | PENDING | | |
 | C003 | db-schema-identity-registry | 0 | PENDING | | |
 | C004 | db-schema-trips-rides-dispatch | 0 | PENDING | | |
@@ -211,4 +211,50 @@ the ones marked **micro-change-set** should be fixed in `specs/` rather than wor
 ## Session Handoffs
 
 _Append 3 lines per completed component (Component / Status / Notes)._
+
+- **Component:** C001 repo-scaffold — 2026-07-27
+- **Status:** DONE — `dotnet build backend/MageRide.sln -c Release && ./gradlew projects && npm --prefix portals ci`
+  exits 0. All four DoD items pass; every source directory now carries a CLAUDE.md naming its stack
+  and a verify command (`shared/kmp` and `apps/driver-android` / `portals/admin` gained the missing
+  Verify lines).
+- **Notes:**
+  **Spec gaps —** (a) *Gradle project paths conflict.* D7' §1/§6/§7 build and CI commands use
+  `:driver-android` / `:passenger-android`; this component's DoD requires `:apps:driver-android` /
+  `:apps:passenger-android`. Followed the DoD (the paths mirror the on-disk layout); **D7' needs a
+  micro-change-set** for those three command lines. `:shared` satisfies both.
+  (b) *No minimum-iOS requirement exists.* URD §5.5 NFR-22 pins minimum Android (8.0 / API 26) but
+  neither URD, ADD nor D2' states an iOS deployment target — C085/C094 will need one.
+  (c) *No spec pins the Gradle-side toolchain* (Gradle / Kotlin / AGP / compileSdk / targetSdk);
+  latest stable at scaffold time was chosen and recorded in `gradle/libs.versions.toml`.
+  (d) Cosmetic: this prompt's scope says "following the two that already exist" — four scoped
+  CLAUDE.md files existed (backend, apps/driver-android, portals/admin, shared/kmp). The deliverable
+  list of six to create was correct.
+  **Decisions —** (1) **The root Gradle build directory is redirected to `.gradle/root-build/`**
+  (`build.gradle.kts`): Gradle's default root buildDir is `<root>/build`, which is the MageRide
+  *build plan* directory — left at the default, Gradle would write output into manifest/prompts.
+  (2) `global.json` sits at the **repo root**, not `backend/` — the SDK resolver walks up from the
+  working directory and the documented verify command runs from the root, so `backend/global.json`
+  would never be honoured. `Directory.Build.props` stays in `backend/`.
+  (3) .NET 10's `dotnet new sln` defaults to `.slnx`; used `-f sln` to produce the `MageRide.sln`
+  the deliverable and verify command name.
+  (4) No plugins are declared in the root `build.gradle.kts`, not even `apply false` — that would
+  pull AGP and the Kotlin compiler onto the buildscript classpath on every invocation. Versions live
+  in `gradle/libs.versions.toml`; modules apply them via `alias(libs.plugins.…)`.
+  (5) Module build scripts are deliberately absent (`shared/kmp` = C011, `apps/*-android` = C067/C076).
+  Consequence: `./gradlew projects` needs no Android SDK today.
+  (6) `.gitattributes` exempts `specs/` from EOL normalisation (`-text`) and **that rule must stay
+  last in the file** — later patterns win, and an earlier placement was silently overridden by
+  `*.md`. Eight tracked spec files are stored CRLF; `* text=auto eol=lf` would have renormalised the
+  three largest spec documents and five approved wireframes into a whitespace-only diff.
+  (7) npm workspace members are dependency-free placeholders so `npm ci` stays fast and offline-safe;
+  C103/C104/C111/C117 add the real dependencies.
+  (8) **No `Directory.Packages.props`** — central package management is not in the deliverable list,
+  and enabling it with no entries would make C002's first `<PackageReference Version="…">` fail
+  NU1008. Recommend C002 adopt it deliberately.
+  (9) `EnforceCodeStyleInBuild=false` alongside `TreatWarningsAsErrors=true`, so .editorconfig style
+  rules cannot fail a build on formatting nits.
+  **Build host —** the **Android SDK is not installed** (`ANDROID_HOME` unset); needed from C011/C067
+  onward for anything that applies AGP. JDK is **17 only** — AGP 9.3.1 ships Java-17 bytecode, so 17
+  is sufficient today. Gradle 9.6.1 is cached in `~/.gradle` and the wrapper jar + distribution were
+  SHA-256 verified against services.gradle.org.
 
