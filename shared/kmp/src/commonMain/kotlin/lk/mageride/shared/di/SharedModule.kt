@@ -1,6 +1,7 @@
 package lk.mageride.shared.di
 
 import kotlinx.serialization.json.Json
+import lk.mageride.shared.data.api.apiModule
 import lk.mageride.shared.platform.PlatformInfo
 import lk.mageride.shared.platform.platformInfo
 import lk.mageride.shared.serialization.MageRideJson
@@ -26,5 +27,10 @@ public val sharedCoreModule: Module = module {
  * The apps pass this to `startKoin { modules(sharedModules + appModules) }`; they must not
  * enumerate the individual modules, or a component added here would need an edit in all four
  * apps.
+ *
+ * [apiModule] (C013) needs two bindings only an app can provide — an
+ * `io.ktor.client.engine.HttpClientEngine` and an
+ * [lk.mageride.shared.data.api.ApiConfig]. Koin resolves lazily, so the graph starts without
+ * them; the first HTTP call is where a missing one is reported.
  */
-public val sharedModules: List<Module> = listOf(sharedCoreModule)
+public val sharedModules: List<Module> = listOf(sharedCoreModule, apiModule)

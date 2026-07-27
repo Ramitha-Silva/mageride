@@ -52,10 +52,17 @@ complexity:
     # A wire DTO's constructor *is* the contract's field list — `RideDetail` has eighteen
     # properties because `ride.yaml#/components/schemas/RideDetail` has eighteen. Splitting one
     # to satisfy a threshold would stop it round-tripping against the contract, which is the
-    # whole point of the type (C012). Applies to the DTO package only; everything else in
-    # `:shared` still obeys the default.
+    # whole point of the type (C012).
+    #
+    # The same argument covers `data/api` (C013): a client function's parameter list *is* the
+    # operation's parameter list — `estimateFare` takes six because `GET /v1/fare/estimate`
+    # declares six query parameters, and `apiRequest` takes ten because that is every
+    # cross-cutting convention D3' §0 applies to a request. Grouping them into invented holder
+    # types would put a layer between the signature and the contract it has to match.
+    # Everything else in `:shared` still obeys the default.
     excludes:
       - '**/data/models/**'
+      - '**/data/api/**'
 
 exceptions:
   TooGenericExceptionCaught:

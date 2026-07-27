@@ -38,7 +38,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C010 | ci-skeleton | 0 | DONE | 2026-07-27 | 7 CI jobs, 3 Dockerfile templates, MageRide.TestKit; 685 tests green; wave 0 complete |
 | C011 | kmp-module-scaffold | 1 | DONE | 2026-07-27 | 10 tests green, detekt + ktlint clean; AGP 9 forced the KMP Android plugin — `testDebugUnitTest` is now an alias (micro-change-set) |
 | C012 | kmp-core-models | 1 | DONE | 2026-07-27 | 300 public types over 16 contracts, 132 tests green; 3 micro-change-sets raised (ADD Appendix A, trip-state enums, §19) |
-| C013 | kmp-api-client | 1 | PENDING | | |
+| C013 | kmp-api-client | 1 | DONE | 2026-07-27 | 16 typed clients covering all 176 operations, 91 new tests (223 total) green; 1 micro-change-set raised (`ReportFormat.wire`) |
 | C014 | kmp-auth-session | 1 | PENDING | | |
 | C015 | kmp-domain-ride-dispatch | 1 | PENDING | | |
 | C016 | kmp-domain-fare-wallet | 1 | PENDING | | |
@@ -1669,3 +1669,122 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   class signature that fits in 120 columns onto one line — write it however and run
   `./gradlew :shared:ktlintFormat` **twice** (the first pass can leave a now-unnecessary trailing
   comma for the second to remove).
+
+- **Component:** C013 kmp-api-client — 2026-07-27
+- **Status:** DONE — `./gradlew :shared:testDebugUnitTest detekt ktlintCheck` green: **223 tests
+  passed, 0 failed, 0 skipped** (91 new, C012's 132 still green), detekt and ktlint clean.
+  Sixteen typed client interfaces + Ktor implementations covering **all 176 operations** of the
+  sixteen app-facing contracts, over one shared request pipeline (~2,000 lines of `data/api`
+  + ~1,600 lines of test). `./gradlew :shared:compileKotlinIosArm64` also passes, so the client
+  type-checks for Kotlin/Native; **iOS is not marked DONE from this host** (klib cross-compilation
+  only — no linking, no `iosTest`).
+- **Notes:**
+  **Spec/model gap — one micro-change-set, not actioned:**
+  (a) ***`ReportFormat` (C012, `data.models.transit`) has lowercase `@SerialName`s but no `wire`
+  property***, which `shared/kmp/CLAUDE.md` requires of every enum whose wire spelling is not upper
+  camel case, "plus a `wire` property for non-serialisation callers (path segments, query strings)".
+  `?format=` on `GET /v1/admin/transit/gtfs/uploads/{id}/report` is exactly such a caller, so
+  `TransitApi` uses two private constants rather than reading a value off the enum. One-line fix in
+  C012's file; deliberately not made here so the model layer stays C012's.
+  **No contract gaps found.** Every operation this client needs exists in `backend/contracts/`, and
+  nothing was improvised. The one shape the contracts leave to the client is `?format=`/`Accept`
+  double-listing — see decision 11.
+  **Decisions —**
+  (1) ***All sixteen contracts, not the fourteen the prompt's deliverable list names.*** The list
+  omits `trip-state` and `version-check`, but the DoD says *"every contract file has a matching
+  typed client covering all its operations"*, C012 modelled sixteen files, and both omissions are
+  load-bearing: trip-state owns Mode A/B (the Driver App's other half) and `version-check` is the
+  D-31 cold-start gate this component's own deliverable list asks for. Coverage: 176/176
+  operations, asserted by `ContractCoverageTest`, not by inspection.
+  (2) **Interface + `internal` Ktor implementation per contract file**, in `data.api.{iam, registry,
+  trip, ride, dispatch, fare, subscription, wallet, query, transit, safety, support, content, comms,
+  version}` — the same package split as C012's models, so `data.api.ride` and `data.models.ride`
+  line up and `comms` again carries voip + notification. `MageRideApi` bundles all sixteen (one
+  object for Swift); `apiModule` also binds each interface on its own so a view model can ask for
+  just `RideApi` and get a fake in a test.
+  (3) ***mTLS and webhook operations are covered too, and say so.*** 24 of the 176 are
+  `/v1/internal/*` (mTLS) or one of the six HMAC-signed provider callbacks — unreachable from an
+  app. Landing them keeps "no half-covered contract file" true and gives C118 a typed caller; each
+  carries a KDoc line saying it is not app-reachable. The six callbacks go through `apiPostExempt`,
+  which sends **no** `Idempotency-Key` (they dedupe on `provider_transaction_id`, R-19) and is
+  therefore never retried.
+  (4) ***The `Idempotency-Key` is minted into the request builder before the first send, never per
+  attempt.*** This is the mechanism behind the DoD line "retrying a POST reuses the original key":
+  Ktor's `HttpSend` replays the same builder, so a transport retry and the post-refresh replay both
+  carry the original key and the service replays its recorded response (R-14/R-18). Every POST
+  method also takes a trailing `idempotencyKey: String? = null`, so a *user*-driven retry can pass
+  the same key rather than issuing a second command. Asserted three ways
+  (`RequestConventionsTest`, `AuthRefreshTest`, `RetryAndBackoffTest`).
+  (5) ***One `HttpSend` interceptor owns the whole send pipeline*** — attestation → circuit breaker
+  → retry/backoff → auth refresh → RFC 7807 mapping — rather than four plugins whose relative
+  ordering is implicit. Ordering between independent `HttpSend` interceptors is the kind of thing
+  that works until someone installs a fifth; this way the order is a numbered list in one KDoc.
+  Written as tail recursion, because "retry after backoff" and "refresh and replay" are two
+  different reasons to send again and a loop with a flag per reason reads worse.
+  (6) **`ktor-client-auth` stays unapplied** (C011 reserved it for C014). Refresh-on-401 is done in
+  the send interceptor instead, which is what makes "same `Idempotency-Key` on the replay" and
+  "exactly one refresh, then `onAuthenticationLost()`" expressible at all — `Auth`'s refresh hook
+  re-runs the request pipeline. C014 therefore only has to implement `TokenProvider` and
+  `AttestationProvider`; both have no-op defaults in `apiModule` so the graph resolves today.
+  (7) ***Errors: status picks the type, the kebab code picks the branch.*** `MageRideError` is a
+  sealed hierarchy — one subtype per status class, plus `AttestationFailed` split out of `401`
+  because D-30's recovery (re-attest) is not `401`'s (sign in again), plus four transport arms
+  (`Network`, `Timeout`, `Serialization`, `CircuitOpen`). The DoD pair lands as `Conflict`
+  (`offer-already-accepted`) vs `Gone` (`offer-expired`) — different types, both carrying their
+  code. **No per-code subtypes**: 66 codes would be 66 classes, and `error.code` in a `when` is
+  what the registry is for. An unknown code resolves to `null` and keeps the status (C002 can
+  register a code this build predates).
+  (8) **A non-problem error body keeps its status** and synthesises a `ProblemDetails` whose code is
+  the *existing* kernel code for that status class. A captive portal answering HTML must not turn a
+  `502` into a `SerializationException`, and the fallback never invents a code outside
+  `_shared.yaml#/components/schemas/ErrorCode`.
+  (9) ***`426` is thrown **and** published.*** The version gate runs at the edge on every route, so
+  all 176 operations can answer it; handling that per call site is 176 chances to forget. The typed
+  error still reaches the caller (its own flow must not continue) and
+  `MageRideApiSignals.upgradeRequired` (replay 1) carries the same payload to the app shell.
+  `GET /v1/version/check` publishes on the same flow, so the cold-start check and a mid-session
+  `426` feed one update screen.
+  (10) ***`followRedirects = false` on the client.*** No contract route redirects except
+  `GET /v1/admin/transit/gtfs/versions/{id}/download`, whose entire payload *is* the `Location`
+  header (a short-lived signed object-storage URL). Ktor 3 has no per-request redirect switch, and
+  following it would stream a GTFS zip through the JSON pipeline. Elsewhere a `/v1/*` route
+  answering `3xx` is a misconfigured gateway, and surfacing that beats chasing it.
+  (11) **Ktor's content negotiation appends `application/json, application/problem+json` to any
+  `Accept` a call sets**, so the two statement downloads and the CSV validation report send the
+  requested type *first* but not exclusively. Recorded in `WalletApi`'s KDoc; **C118 should pin the
+  service's behaviour** rather than the client's, because the client cannot suppress the appended
+  header.
+  (12) ***`data/repository` gets the cursor-paging abstraction, not sixteen repository interfaces.***
+  The typed client interfaces already are the seam the app layer injects, so a second 1:1 layer
+  would be pure indirection; C015–C018 own the repositories that carry domain. What all eighteen
+  paged reads *do* share is the walk, so `CursorPagedSource` + `asFlow`/`asPageFlow`/`loadAll` lives
+  there with a `maxPages` stop — `hasMore = true` with a null cursor would otherwise loop forever.
+  (13) **Three response shapes needed special handling**, and only three: `oneOf(Schema, null)` on
+  the three "active session / active ride" reads decodes through `decodeOrNull` (bypassing content
+  negotiation, because "no active ride" must not depend on how it treats a null body); the ETag'd
+  `GET /v1/config/cities` returns `Conditional<T>` so a `304` is a value rather than an error; and
+  the `302` download returns the header. Everything else is `Page<T>`, a DTO, `Unit` or bytes.
+  (14) ***Two named admin-login functions, not two overloads.*** `POST /v1/admin/auth/login` is
+  `oneOf(PasswordLogin, GoogleAuthCodeLogin)` (C012 decision 4). `adminLoginWithPassword` /
+  `adminLoginWithGoogle` read better than overloads and avoid the `…request:idempotencyKey_:`
+  name-mangling Kotlin/Native would apply at the Objective-C boundary.
+  (15) **`ContractCoverageTest` (androidHostTest) enforces the DoD rather than reviewing it.** It
+  scans the sixteen YAML documents and the `data/api` sources and asserts: every operation is
+  called; the call uses the verb the contract declares (and `apiPostExempt` exactly for the
+  `x-idempotency-exempt` six); every operation declaring `X-Attestation` passes `attested = true`
+  **and no other operation does**; and the counts are still 176 operations / 20 attested. YAML is
+  scanned, not parsed — `androidHostTest` has no YAML library and `spectral` already validates the
+  documents.
+  (16) **One detekt delta**, in place: `complexity.LongParameterList` now also excludes
+  `**/data/api/**`. Same argument C011 wrote for `data/models` — `estimateFare` takes six parameters
+  because `GET /v1/fare/estimate` declares six query parameters, and `apiRequest` takes ten because
+  that is every cross-cutting convention D3' §0 applies to a request. Everything else detekt raised
+  was fixed by refactoring (the pipeline split into `RetryBudget` + a recursive `attempt`,
+  `ApiTransport.kt` split into route helpers and `ApiBodies.kt`, the coverage test split into
+  `ContractScanner.kt`), not by suppression.
+  **Build host —** no Docker and no compose stack; the replica stayed down. Gradle + the cached
+  Kotlin/Native 2.4.10 distribution only. A warm gate run takes ~40 s, `compileKotlinIosArm64`
+  another ~25 s. Two things worth knowing next time: ktlint rejects a **dangling top-level KDoc**
+  (a `/** … */` not attached to a declaration — use `//` for a file header), and detekt's defaults
+  are strict about `ReturnCount` (2), `ThrowsCount` (2) and `LoopWithTooManyJumpStatements` (1), so
+  a decision-tree function wants to be recursion or several small functions rather than one loop.

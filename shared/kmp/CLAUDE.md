@@ -77,6 +77,45 @@ src/androidHostTest/  JVM-only tests of the Android actuals (NOT `androidUnitTes
   `public-bff` and `reputation` are Next.js surfaces, and their DTOs belong to the portals'
   TypeScript client. See the C012 handoff.
 
+## API layer (`data/api`, C013)
+- **One interface per contract file** — `data.api.{iam, registry, trip, ride, dispatch, fare,
+  subscription, wallet, query, transit, safety, support, content, comms, version}`, mirroring
+  C012's model packages (`comms` carries `VoipApi` + `NotificationApi`). The interface is the seam
+  the app layer injects; the `Ktor…Api` implementation next to it is `internal`. [MageRideApi]
+  bundles all sixteen for Swift, and `apiModule` binds each one individually for Kotlin.
+- **All 176 operations are covered, including the mTLS and webhook ones.** They are unreachable
+  from an app and say so in their KDoc; they exist so no contract is half-covered.
+  `ContractCoverageTest` (androidHostTest) fails the build if an operation, its HTTP verb, or its
+  `X-Attestation` flag drifts from the YAML.
+- **The transport applies every D3' §0 convention, so a client never does.** `ApiTransport` +
+  `apiGet/apiPost/apiPostExempt/apiPut/apiDelete` set the absolute URL, `X-App-Version`,
+  `X-Platform`, the `Idempotency-Key`, and the attributes the send pipeline reads. Do not call
+  `HttpClient` directly from a client.
+- **The `Idempotency-Key` is minted before the first send and never re-minted.** Retries and the
+  post-refresh replay reuse the same request builder, which is what makes a repeat a *replay*
+  (R-14/R-18). Every POST method also takes `idempotencyKey: String? = null` so a user-driven
+  retry can pass the original. `apiPostExempt` is for the six `x-idempotency-exempt` provider
+  callbacks only, and those are never retried.
+- **The whole send pipeline lives in one `HttpSend` interceptor** (`MageRideHttpClient.kt`), in
+  this order: attestation → circuit breaker → retry/backoff → auth refresh → RFC 7807 mapping.
+  Read that KDoc before adding a plugin; ordering between two `HttpSend` interceptors is exactly
+  the kind of thing that works until it does not.
+- **C014 supplies `TokenProvider` and `AttestationProvider`; C013 owns when they are called.** A
+  `401` refreshes once and replays once, and a second `401` is `onAuthenticationLost()`. Both
+  default to the no-op binding, so the graph resolves before C014 lands. `ktor-client-auth` is
+  still unapplied and is not needed — the refresh is an `HttpSend` interceptor, which is what
+  makes "same `Idempotency-Key` on the replay" expressible.
+- **Errors are `MageRideError`, keyed on status for the type and on the kebab code for the
+  branch.** `409 offer-already-accepted` is `Conflict`, `410 offer-expired` is `Gone`; never
+  collapse the two. Never render `message`/`title`/`detail` to a user — the apps resolve Si/Ta/En
+  copy from `code` (D-26).
+- **`426` is both thrown and published** on `MageRideApiSignals.upgradeRequired` (replay 1), so an
+  app puts up one update wall instead of handling D-31 at 176 call sites.
+- **The app must bind an `HttpClientEngine` and an `ApiConfig`.** Nothing else in `apiModule`
+  needs the app. `followRedirects = false` is deliberate — see the comment in
+  `mageRideHttpClient`.
+- **Paging goes through `data/repository/CursorPagedSource`**, not a bespoke loop per screen.
+
 ## Dependency rules
 - **Every version lives in `gradle/libs.versions.toml`.** Never inline one here.
 - Four catalog entries are declared but deliberately **not applied yet**, each owned by a later
