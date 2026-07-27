@@ -29,6 +29,10 @@ style:
       - '**/androidHostTest/**'
       - '**/androidDeviceTest/**'
       - '**/iosTest/**'
+    # An enum entry's argument is already named — by the entry. `NMEA_MQTT(4)` is the wire code
+    # of a `SMALLINT CHECK (source BETWEEN 0 AND 4)` column (C006); hoisting it to a constant
+    # would put the number one line further from the name it belongs to. C012.
+    ignoreEnums: true
 
 naming:
   FunctionNaming:
@@ -42,6 +46,16 @@ naming:
       - '**/androidHostTest/**'
       - '**/androidDeviceTest/**'
       - '**/iosTest/**'
+
+complexity:
+  LongParameterList:
+    # A wire DTO's constructor *is* the contract's field list — `RideDetail` has eighteen
+    # properties because `ride.yaml#/components/schemas/RideDetail` has eighteen. Splitting one
+    # to satisfy a threshold would stop it round-tripping against the contract, which is the
+    # whole point of the type (C012). Applies to the DTO package only; everything else in
+    # `:shared` still obeys the default.
+    excludes:
+      - '**/data/models/**'
 
 exceptions:
   TooGenericExceptionCaught:

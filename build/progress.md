@@ -37,7 +37,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C009 | docker-compose-dev | 0 | DONE | 2026-07-27 | slim stack healthy, 66/66 verify checks; 6 blocking spec fixes + 6 micro-change-sets raised |
 | C010 | ci-skeleton | 0 | DONE | 2026-07-27 | 7 CI jobs, 3 Dockerfile templates, MageRide.TestKit; 685 tests green; wave 0 complete |
 | C011 | kmp-module-scaffold | 1 | DONE | 2026-07-27 | 10 tests green, detekt + ktlint clean; AGP 9 forced the KMP Android plugin — `testDebugUnitTest` is now an alias (micro-change-set) |
-| C012 | kmp-core-models | 1 | PENDING | | |
+| C012 | kmp-core-models | 1 | DONE | 2026-07-27 | 300 public types over 16 contracts, 132 tests green; 3 micro-change-sets raised (ADD Appendix A, trip-state enums, §19) |
 | C013 | kmp-api-client | 1 | PENDING | | |
 | C014 | kmp-auth-session | 1 | PENDING | | |
 | C015 | kmp-domain-ride-dispatch | 1 | PENDING | | |
@@ -1545,3 +1545,127 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   Ktor 3.5.1, kotlinx.serialization 1.11.0, coroutines 1.11.0, kotlinx-datetime 0.8.0, Koin 4.2.2,
   multiplatform-settings 1.3.0, SQLDelight 2.3.2, Turbine 1.2.1, H3 4.4.0, detekt 1.23.8,
   ktlint-gradle 14.2.0 driving ktlint 1.8.0.
+
+- **Component:** C012 kmp-core-models — 2026-07-27
+- **Status:** DONE — `./gradlew :shared:testDebugUnitTest detekt ktlintCheck` green: **132 tests
+  passed, 0 failed, 0 skipped**, detekt and ktlint clean. 300 public types across 26 model files
+  (~6,150 lines) plus 9 test files (~3,200 lines), covering the 16 app-facing contracts — every
+  named schema and every inline request/response
+  body of `_shared`, iam, registry, trip-state, ride, dispatch, fare, subscription, wallet, query,
+  transit, safety, support, content, voip, notification and version-check (176 operations).
+  `./gradlew :shared:compileKotlinIosArm64` also passes, so the DTOs type-check for Kotlin/Native;
+  **iOS is not marked DONE from this host** (klib cross-compilation only — no linking, no iosTest).
+- **Notes:**
+  **Spec gaps — three micro-change-sets, none actioned in `specs/`:**
+  (a) ***ADD Appendix A "Position Event Schema (Canonical)" is superseded and unbuildable as
+  printed.*** This component's spec anchor points at it, but it prints `ts` as epoch millis,
+  `source` as a free string (`"mobile_gps | hardware_gt06 | hardware_st901"`), adds `altitude`,
+  `tripSessionId` and `traceId`, and **has no `seq`**. Three later sources agree against it —
+  `backend/contracts/realtime/mqtt-topics.md` §2.1 (the machine-checkable contract, C007), D6' §2.2,
+  and the landed `telemetry.positions` DDL (C006), whose columns are
+  `sample_ts/received_ts/seq/speed_mps/heading_deg/accuracy_m/hdop/sat_count/source SMALLINT CHECK
+  (source BETWEEN 0 AND 4)`. Modelling Appendix A would produce a DTO that cannot be written to its
+  own sink and that omits `seq` — the replay dedupe key R-17/T-05 exists for. **Landed the later,
+  runnable shape**; `PositionSource` is an enum encoded as the `0…4` integer through a small
+  `KSerializer` so it survives CBOR as well as JSON. **ADD Appendix A should be replaced with the
+  §2.1 payload.** C017 owns the MQTT client and the CBOR codec; C012 owns only the shape.
+  (b) ***`trip-state.yaml` and `trips.sessions` disagree on two enums — the contract wins.***
+  The contract's `SessionState` is `ACTIVE | ENDED | AUTO_ENDED` while `ck_sessions_state` (C004,
+  from server_db_schema §4 / D4' §4) is `ACTIVE | COMPLETED`; the contract's `endReason` is
+  `driver_ended | idle_timeout | destination_geofence | mqtt_offline` while
+  `ck_sessions_end_reason` is `driver_ended | idle_timeout | geofence | admin`. Modelled per the
+  contract (`backend/contracts/CLAUDE.md`: "if a service and a contract disagree, the contract
+  wins"), and because the contract's three states are the ones US-5.10 needs — `restartableUntil`
+  is only meaningful on an auto-ended session, which `COMPLETED` cannot express. **C031 must not
+  discover this at runtime:** either the CHECK gains the contract's values or the contract is
+  narrowed, but the client cannot serialise a state the CHECK rejects.
+  (c) ***`server_db_schema.md` §19 is still missing the AL-47 payment states.*** Its `payment.state`
+  row lists twelve values; the landed `ck_ride_payments_state` (C005) has fourteen —
+  `QrClaimedByPassenger` and `DriverConfirmedQR`. `_shared.yaml` already has all fourteen and
+  `PaymentState` asserts the set against the CHECK, so nothing is blocked; §19 is simply stale.
+  C005's handoff raised the same row for the opposite reason (`PartiallyRefunded`).
+  **Other spec observations (no change needed):**
+  (d) *`_shared.yaml#/components/schemas/Money` is defined but never `$ref`'d.* Every payload spells
+  money flat (`amountMinor` + a sibling `currency`). `Money` is landed as the deliverable requires
+  and the flat fields stay flat so they round-trip byte-for-byte; the bridge is a `MoneyHolder`
+  interface each such DTO implements, so C015/C016 never touch a bare `Long`.
+  (e) *Two contracts declare an identical `VoucherDiscountTier`* (`subscription.yaml`,
+  `wallet.yaml`), as C007's handoff records. One Kotlin type serves both; when one route is retired
+  nothing here changes.
+  (f) *`registry.yaml` spells the same verdict `revenueLicense` on create and `revenue` on the
+  onboarding read.* Landed both as written rather than reconciled client-side.
+  **Decisions —**
+  (1) ***Scope: the fifteen app-facing contracts, not all twenty-one.*** The deliverable is "every
+  DTO the **four apps** share", and the four apps are passenger/driver × Android/iOS. `admin-bff`,
+  `fleet`, `provisioning`, `public-bff` and `reputation` are Next.js and web surfaces whose DTOs
+  belong to the portals' TypeScript client; C013's deliverable list names exactly the fourteen
+  services modelled here, and `version-check` was added because the apps poll it at cold start
+  (D-31). A file is modelled **in full or not at all** — the admin operations inside an otherwise
+  app-facing file (`/v1/admin/fees/rates`, `/v1/admin/dispatch/directional-config`, the GTFS
+  Dataset Manager) are landed, so C013 never meets a half-covered contract. **If a portal component
+  later wants shared types, that is a new component, not a silent extension of this one.**
+  (2) **One package per contract file** (`data.models.{iam, registry, trip, ride, …}`) with
+  `_shared.yaml` in the `data.models` root. Recorded in `shared/kmp/CLAUDE.md` so C013–C019 and the
+  four app shells inherit the rule rather than re-deriving it.
+  (3) **`allOf` is flattened into one data class.** kotlinx.serialization cannot compose a
+  `@Serializable` from parts, and an `allOf` *is* one JSON object — `VerifyOtpResponse`,
+  `VehicleDetail`, `TripDetail`, `SavedAddress`, `FaqArticle`, `TicketDetail`, `CancelRideResponse`
+  and `CompleteRideResponse` are all flat here for that reason, each with an accessor
+  (`tokens`, `toTier()`, …) that recomposes the part a caller actually wanted.
+  (4) **`oneOf(A, B)` becomes two types, not one all-nullable class.** `POST /v1/admin/auth/login`
+  is `PasswordLogin | GoogleAuthCodeLogin`; C013 gives it two overloads. A single class with four
+  nullable fields would happily serialise a body the server rejects.
+  (5) ***`@EncodeDefault(ALWAYS)` on every required field that also has a default.*** `MageRideJson`
+  sets `encodeDefaults = false` (C011 decision 7), so `currency: LKR` and `VehicleRegistration.mode`
+  — both `required` **and** `const` in the contract — would otherwise be dropped from the wire.
+  This is the one place the module's Json config and the contract pull in opposite directions, and
+  it is worth knowing before adding a defaulted field to a request DTO.
+  (6) **`ErrorCode` is deliberately NOT `@Serializable`.** No schema carries an `ErrorCode` field —
+  it only ever arrives inside `Problem.type`. `ProblemDetails.code` derives the kebab key from the
+  URI and `ErrorCode.fromWire` resolves it to `null` when unknown, so a service that registers a new
+  code at start-up (`MageRideErrors.Register`, C002) degrades an older build to "unrecognised code"
+  instead of a `SerializationException` **on the body that explains the failure**. All 66 codes are
+  mirrored and asserted unique. `ProblemDetails` also carries the three D-31 `426` extensions, which
+  is the same trio `GET /v1/version/check` returns — one render path for both.
+  (7) **Enum naming is mechanical:** upper-camel wire values keep their exact spelling as the Kotlin
+  entry (`RideState.CashOnDeliveryCollected`), everything else is `UPPER_SNAKE` with an explicit
+  `@SerialName` **plus** a `wire` property for non-serialisation callers (path segments, query
+  strings, C018's SQLDelight columns). `EnumWireFormatTest` asserts the two never drift.
+  (8) **Timestamps are `kotlin.time.Instant`, business dates `kotlinx.datetime.LocalDate`** —
+  both have built-in serializers producing exactly the `2026-07-27T04:15:00Z` / `2026-07-27` forms
+  the contracts print, so no custom serializer is involved. Every D-38 `…TzAt` companion is
+  modelled beside its date. `Ulid`/`PhoneE164`/`PhoneMasked` are **type aliases, not value classes**:
+  a Kotlin `value class` is boxed or erased at the Objective-C boundary, and this module ships as an
+  XCFramework.
+  (9) **`Page<T>` is the one pagination envelope** for all 18 in-scope `allOf(CursorPage, {items})`
+  responses, so C013 writes one helper. `PageRequest` carries the `?cursor=&limit=` pair and the
+  1/20/100 bounds. Note the client cannot reproduce the server's forced `"cursor": null`
+  (C002 decision 9) — `explicitNulls = false` drops it — which is harmless because clients decode
+  pages and never encode them.
+  (10) **`RideState.isTerminal` / `PaymentState.isTerminal` and the four `DRIVER_EXCLUSIVE` states
+  live on the enums.** These are properties of the value set (ADD Appendix B.2, R-05), not
+  transition rules; **C015 still owns every transition** and must not read a state machine into
+  these helpers.
+  (11) **The DoD's "no user-facing string literals" is enforced, not just reviewed.**
+  `ModelSourceHygieneTest` (androidHostTest — the only source set with a filesystem) scans the model
+  tree with a character-level Kotlin scanner (a regex cannot: `"https://mageride.lk/errors/"`
+  contains `//`) and fails on any Sinhala or Tamil code point, any formatted-money literal, any
+  `@SerialName` that is not a machine key, and any multi-word literal outside three named
+  `require` messages. Adding a fourth needs a deliberate edit to that list.
+  (12) **Two detekt deltas were added to `config/detekt/detekt.yml`**, each named in place:
+  `complexity.LongParameterList` is excluded for `**/data/models/**` (a DTO's constructor *is* the
+  contract's field list — `RideDetail` has eighteen properties because the schema has eighteen), and
+  `style.MagicNumber.ignoreEnums` is on (`NMEA_MQTT(4)` is the wire code of a `SMALLINT CHECK
+  (source BETWEEN 0 AND 4)` column; hoisting it to a constant moves the number away from its name).
+  (13) **Test shape: three complementary sweeps.** `ContractPayloadTest` (39) decodes JSON written
+  from the contracts and asserts the fields a wrong reading would silently drop;
+  `DtoRoundTrip*Test` (40) builds every DTO with **every** property populated and asserts
+  encode→decode identity; `EnumWireFormatTest` (19) asserts the wire spellings, and asserts
+  `RideState` and `PaymentState` against the `ck_rides_state` / `ck_ride_payments_state` value sets
+  as sorted lists, so a typo, an omission or a stray extra state fails the build.
+  **Build host —** no Docker and no compose stack; the replica stayed down. Gradle + the cached
+  Kotlin/Native 2.4.10 distribution only. A warm gate run takes ~10 s, a cold one ~75 s;
+  `compileKotlinIosArm64` adds ~40 s. `ktlint`'s `standard:class-signature` rule collapses any
+  class signature that fits in 120 columns onto one line — write it however and run
+  `./gradlew :shared:ktlintFormat` **twice** (the first pass can leave a now-unnecessary trailing
+  comma for the second to remove).

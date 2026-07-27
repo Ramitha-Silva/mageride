@@ -54,6 +54,29 @@ src/commonTest/   runs on every target
 src/androidHostTest/  JVM-only tests of the Android actuals (NOT `androidUnitTest`)
 ```
 
+## Model layer (`data/models`, C012)
+- **One package per service contract**, named after the contract file: `data.models.{iam, registry,
+  trip, ride, dispatch, fare, subscription, wallet, query, transit, safety, support, content,
+  comms, version}`. Everything from `backend/contracts/_shared.yaml` — `Money`, `GeoPoint`,
+  `Place`, `Page<T>`, `ProblemDetails`, `PositionSample` and the canonical enums — sits in the
+  `data.models` root, so nothing service-specific is ever imported to get a primitive.
+- **The contract is the shape.** An `allOf` is flattened into one data class (kotlinx.serialization
+  cannot compose), a `oneOf(X, null)` is a nullable field, and a `oneOf(A, B)` is two types plus two
+  client overloads. Required → non-null, optional → nullable with `= null`. Do not "tidy" a payload
+  into a nicer shape: the round-trip tests compare against the contract, not against taste.
+- **`encodeDefaults = false`, so a defaulted field is not sent.** A field the contract marks
+  `required` *and* gives a `const`/default (`currency: LKR`, `mode: C`) therefore carries
+  `@EncodeDefault(ALWAYS)`. Adding a default to a required field without it silently drops it.
+- **Money is `Long` minor units, never `Double`.** Flat `…Minor` fields stay flat and the DTO
+  implements `MoneyHolder` to expose them as `Money`; the ledger's signed `amountMinor` is
+  deliberately not a `Money`.
+- **Enums match the DB CHECK domain exactly** and are asserted against it in
+  `EnumWireFormatTest`. Wire spellings that are not upper camel case carry an explicit
+  `@SerialName` plus a `wire` property for non-serialisation callers; the two must not drift.
+- **Portal-only contracts are not modelled here** — `admin-bff`, `fleet`, `provisioning`,
+  `public-bff` and `reputation` are Next.js surfaces, and their DTOs belong to the portals'
+  TypeScript client. See the C012 handoff.
+
 ## Dependency rules
 - **Every version lives in `gradle/libs.versions.toml`.** Never inline one here.
 - Four catalog entries are declared but deliberately **not applied yet**, each owned by a later
