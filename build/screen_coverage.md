@@ -251,9 +251,6 @@ Credit / Transfer History); the wireframes realise them as SCR-DA/DI-023 + SCR-D
 
 **Screens that exist in the specs but NOT in the wireframes (correctly absent):**
 
-- `SCR-DA-012` / `SCR-DI-012` `standby_toggle` — re-tagged **[MERGED → SCR-DA/DI-010]** by
-  AL-46 / US-25.8: the Online/Offline toggle is a dashboard *state*, not a screen. It has no
-  wireframe block and must not be built as a separate screen (fenced in C070 and C088).
 - `SCR-DA-005` / `SCR-DI-005` were *removed* by the 2026-06-22 onboarding restructure and then
   **re-introduced** with new meaning (camera document-scanner) by AL-43 / US-24.6. The current
   wireframes carry the AL-43 version, which is what C069 / C087 build.
