@@ -2,6 +2,7 @@ package lk.mageride.shared.di
 
 import kotlinx.serialization.json.Json
 import lk.mageride.shared.data.api.apiModule
+import lk.mageride.shared.domain.auth.authModule
 import lk.mageride.shared.platform.PlatformInfo
 import lk.mageride.shared.platform.platformInfo
 import lk.mageride.shared.serialization.MageRideJson
@@ -30,7 +31,12 @@ public val sharedCoreModule: Module = module {
  *
  * [apiModule] (C013) needs two bindings only an app can provide — an
  * `io.ktor.client.engine.HttpClientEngine` and an
- * [lk.mageride.shared.data.api.ApiConfig]. Koin resolves lazily, so the graph starts without
- * them; the first HTTP call is where a missing one is reported.
+ * [lk.mageride.shared.data.api.ApiConfig]. [authModule] (C014) needs two more — an
+ * [lk.mageride.shared.domain.auth.AuthConfig] and a
+ * [lk.mageride.shared.platform.SecureStore]. Koin resolves lazily, so the graph starts without
+ * them; the first HTTP call, or the first session read, is where a missing one is reported.
+ *
+ * **Order matters here.** `authModule` comes after `apiModule` and overrides its
+ * [lk.mageride.shared.data.api.TokenProvider] placeholder with the real session-backed one.
  */
-public val sharedModules: List<Module> = listOf(sharedCoreModule, apiModule)
+public val sharedModules: List<Module> = listOf(sharedCoreModule, apiModule, authModule)

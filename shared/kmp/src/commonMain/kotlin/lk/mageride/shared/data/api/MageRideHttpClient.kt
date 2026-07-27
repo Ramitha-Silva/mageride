@@ -18,6 +18,7 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.encodedPath
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.util.AttributeKey
 import kotlinx.coroutines.CancellationException
@@ -204,11 +205,20 @@ private class CallPipeline(
         return call
     }
 
-    /** Resolves the `X-Attestation` header for the twenty operations D3' §0 calls sensitive. */
+    /**
+     * Resolves the `X-Attestation` header for the twenty operations D3' §0 calls sensitive.
+     *
+     * The method and path travel with the request because the gateway's App Attest verifier
+     * checks the assertion against `SHA-256("<METHOD> <path>")` — see [AttestationRequest].
+     */
     private suspend fun applyAttestation(request: HttpRequestBuilder) {
         if (request.attributes.getOrNull(AttestedAttribute) != true) return
-        val operationId = request.attributes.getOrNull(OperationIdAttribute).orEmpty()
-        val token = attestation.attestationToken(operationId) ?: return
+        val attested = AttestationRequest(
+            operationId = request.attributes.getOrNull(OperationIdAttribute).orEmpty(),
+            method = request.method.value.uppercase(),
+            path = request.url.encodedPath,
+        )
+        val token = attestation.attestationToken(attested) ?: return
         request.headers[MageRideHeaders.ATTESTATION] = token
     }
 
@@ -231,7 +241,7 @@ private class CallPipeline(
         budget: RetryBudget,
         refreshed: Boolean,
     ): HttpClientCall {
-        attachCredential(request)
+        val attached = attachCredential(request)
         val call = try {
             send(request)
         } catch (cause: CancellationException) {
@@ -248,7 +258,7 @@ private class CallPipeline(
 
         val status = call.response.status
         if (status == HttpStatusCode.Unauthorized && request.credential() == Credential.ACCESS_TOKEN) {
-            if (!refreshed && tokens.refresh()) {
+            if (!refreshed && tokens.refresh(attached)) {
                 return attempt(service, request, send, budget, refreshed = true)
             }
             tokens.onAuthenticationLost()
@@ -265,12 +275,13 @@ private class CallPipeline(
         return call
     }
 
-    private suspend fun attachCredential(request: HttpRequestBuilder) {
-        if (request.credential() != Credential.ACCESS_TOKEN) return
-        val token = tokens.accessToken() ?: return
+    /** @return the token that was attached, so a `401` can say *which* credential failed. */
+    private suspend fun attachCredential(request: HttpRequestBuilder): String? {
+        val token = if (request.credential() == Credential.ACCESS_TOKEN) tokens.accessToken() else null
         // `set`, not `append`: the same builder is reused by every attempt and by the refresh
         // replay, and appending would send two Authorization headers on the second try.
-        request.headers[HttpHeaders.Authorization] = "Bearer $token"
+        if (token != null) request.headers[HttpHeaders.Authorization] = "Bearer $token"
+        return token
     }
 
     private suspend fun throwOnProblem(call: HttpClientCall) {

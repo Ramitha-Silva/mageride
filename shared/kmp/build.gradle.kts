@@ -40,6 +40,15 @@ kotlin {
     // an accidental `internal`-looking public type ends up in the XCFramework.
     explicitApi()
 
+    compilerOptions {
+        // `expect class` is still flagged Beta (KT-61573) even though `expect fun` is stable.
+        // C014 needs the class form: PlatformSecureStore and PlatformAttestationProvider have
+        // genuinely different constructors per platform (a `Context` vs a Keychain service),
+        // which an expect *function* cannot express. Without the flag every build prints five
+        // warnings that say nothing actionable.
+        freeCompilerArgs.add("-Xexpect-actual-classes")
+    }
+
     android {
         namespace = "lk.mageride.shared"
         compileSdk = libs.versions.androidCompileSdk.get().toInt()
@@ -91,6 +100,13 @@ kotlin {
         androidMain.dependencies {
             implementation(libs.kotlinx.coroutines.android)
             implementation(libs.ktor.client.okhttp)
+
+            // D-30, Android half (C014). `implementation` on purpose: no Play Integrity type
+            // appears in this module's public API — `PlatformAttestationProvider` takes a
+            // `Context` and the cloud project number and answers a `String?` — so the apps never
+            // compile against it. The iOS half needs no coordinate at all: App Attest comes from
+            // Kotlin/Native's DeviceCheck platform library.
+            implementation(libs.play.integrity)
         }
 
         iosMain.dependencies {

@@ -174,10 +174,14 @@ internal class FakeTokenProvider(
     var authenticationLostCalls: Int = 0
         private set
 
+    /** The `staleAccessToken` values the pipeline reported, so a test can assert what failed. */
+    val staleTokens: MutableList<String?> = mutableListOf()
+
     override suspend fun accessToken(): String? = token
 
-    override suspend fun refresh(): Boolean {
+    override suspend fun refresh(staleAccessToken: String?): Boolean {
         refreshCalls++
+        staleTokens += staleAccessToken
         if (!refreshSucceeds) return false
         token = rotatedToken
         return true

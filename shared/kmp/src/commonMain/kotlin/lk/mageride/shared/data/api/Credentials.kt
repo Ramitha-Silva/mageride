@@ -26,9 +26,14 @@ public interface TokenProvider {
      * must collapse onto one refresh; the opaque refresh token is single-use, and racing it
      * revokes the whole session family (D-29).
      *
+     * @param staleAccessToken The token this request actually sent, or `null` when it sent none.
+     *   An implementation that has already rotated past it must answer `true` **without**
+     *   rotating again: five requests that go out together produce five `401`s and five calls
+     *   here, and the ones that arrive after the rotation are asking about a token that is
+     *   already replaced. Rotating for each of them is exactly the race D-29 punishes.
      * @return `true` when a new access token is available and the request should be replayed.
      */
-    public suspend fun refresh(): Boolean
+    public suspend fun refresh(staleAccessToken: String?): Boolean
 
     /** The session is unrecoverable: the refresh failed, or a replay still came back `401`. */
     public suspend fun onAuthenticationLost()
@@ -44,11 +49,30 @@ public interface TokenProvider {
         public val Anonymous: TokenProvider = object : TokenProvider {
             override suspend fun accessToken(): String? = null
 
-            override suspend fun refresh(): Boolean = false
+            override suspend fun refresh(staleAccessToken: String?): Boolean = false
 
             override suspend fun onAuthenticationLost() = Unit
         }
     }
+}
+
+/**
+ * The one call an [AttestationProvider] is asked to vouch for.
+ *
+ * [method] and [path] are here because the gateway binds the verdict to them: `AppAttestVerifier`
+ * (C008) verifies the assertion against `SHA-256("<METHOD> <path>")`, so a provider handed only an
+ * `operationId` could not produce a header that verifies. Android's Play Integrity token is not
+ * bound this way today, but the same pair feeds its `requestHash`, which is what a later
+ * hardening pass (C128) would check.
+ *
+ * @property operationId The contract's `operationId`, for per-operation caching and logging.
+ * @property method Upper-case HTTP method, e.g. `POST`.
+ * @property path Request path exactly as it leaves the device, e.g. `/v1/rides/01J…/accept`.
+ */
+public data class AttestationRequest(val operationId: String, val method: String, val path: String) {
+
+    /** The client data the gateway expects the device to have signed: `"<METHOD> <path>"`. */
+    public val clientData: String get() = "$method $path"
 }
 
 /**
@@ -64,11 +88,11 @@ public fun interface AttestationProvider {
     /**
      * A fresh attestation verdict for one call.
      *
-     * @param operationId The contract's `operationId`, so a provider can bind the verdict to
-     *   the operation or cache per operation class.
+     * @param request What is being attested — see [AttestationRequest] for why the method and
+     *   path are part of it.
      * @return The header value, or `null` when this build cannot attest.
      */
-    public suspend fun attestationToken(operationId: String): String?
+    public suspend fun attestationToken(request: AttestationRequest): String?
 
     public companion object {
         /** The default binding: this platform cannot attest. */

@@ -98,12 +98,28 @@ class RequestConventionsTest {
     @Test
     fun a_sensitive_mutation_carries_the_attestation_header() = runTest {
         val test = testApi(
-            attestation = AttestationProvider { operationId -> "verdict-for-$operationId" },
+            attestation = AttestationProvider { attested -> "verdict-for-${attested.operationId}" },
         ) { _, _ -> respondJson("""{"authId":"01A","attemptsRemaining":4,"cooldownSeconds":60,"isBlocked":false}""") }
 
         test.api.iam.requestOtp(RequestOtpRequest(phone = "+94771234567", deviceId = "device-1"))
 
         assertEquals("verdict-for-requestOtp", test.requests.single().headers[MageRideHeaders.ATTESTATION])
+    }
+
+    @Test
+    fun the_attested_call_knows_the_method_and_path_the_gateway_binds_the_verdict_to() = runTest {
+        var seen: AttestationRequest? = null
+        val test = testApi(
+            attestation = AttestationProvider { attested ->
+                seen = attested
+                "verdict"
+            },
+        ) { _, _ -> respondJson("""{"authId":"01A","attemptsRemaining":4,"cooldownSeconds":60,"isBlocked":false}""") }
+
+        test.api.iam.requestOtp(RequestOtpRequest(phone = "+94771234567", deviceId = "device-1"))
+
+        // AppAttestVerifier (C008) verifies the assertion against SHA-256("<METHOD> <path>").
+        assertEquals("POST /v1/auth/otp/request", seen?.clientData)
     }
 
     @Test

@@ -45,9 +45,19 @@ kotlinxSerialization = "1.11.0"   # JSON/CBOR for REST + MQTT payloads
 kotlinxCoroutines = "1.11.0"      # async/concurrency model
 kotlinxDatetime = "0.8.0"         # multiplatform date handling (D-38 business dates)
 koin = "4.2.2"                    # DI
-multiplatformSettings = "1.3.0"   # key-value storage abstraction — wired by C014
+# Declared but deliberately NOT wired. C011 reserved it for C014; C014 did not take it. The
+# session layer stores tokens, and both of this library's app-side backends are plain settings
+# (`SharedPreferencesSettings`, `NSUserDefaultsSettings`) — exactly what C014's DoD forbids. Its
+# Apple `KeychainSettings` would have done, but half a store from here and half hand-rolled is
+# worse than one hand-rolled pair. Free for a later component that needs *non-secret* KV storage.
+multiplatformSettings = "1.3.0"   # key-value storage abstraction — unused, see the note above
 sqldelight = "2.3.2"              # on-device SQL — the plugin is applied by C018, not here
 turbine = "1.2.1"                 # Flow assertions in commonTest
+
+# Play Integrity — the Android half of D-30 (ADD §12.6). androidMain only; the iOS half is
+# App Attest from the DeviceCheck framework, which ships with Kotlin/Native's platform libs and
+# needs no coordinate. C014.
+playIntegrity = "1.6.0"
 
 # H3 geocell computation (ADD §18.2, §7.5). NOTE: `com.uber:h3` is JNI, not Kotlin
 # Multiplatform — its jar carries android-arm/android-arm64/linux/darwin natives and no
@@ -106,6 +116,9 @@ multiplatform-settings       = { module = "com.russhwolf:multiplatform-settings"
 multiplatform-settings-test  = { module = "com.russhwolf:multiplatform-settings-test",    version.ref = "multiplatformSettings" }
 # androidMain / JVM only — see the `h3` version comment.
 h3                           = { module = "com.uber:h3",                                  version.ref = "h3" }
+# androidMain only. Brings com.google.android.gms:play-services-tasks transitively (compile
+# scope), which is where the `Task` the API answers with comes from.
+play-integrity               = { module = "com.google.android.play:integrity",             version.ref = "playIntegrity" }
 
 # ---- SQLDelight (declared here, applied by C018) -------------------------------------
 sqldelight-runtime               = { module = "app.cash.sqldelight:runtime",                version.ref = "sqldelight" }

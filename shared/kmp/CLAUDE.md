@@ -32,6 +32,13 @@
   `detekt` task is pointed at `src`, so new source sets are covered without a build-script edit.
 - **ktlint reads the repo-root `.editorconfig`** (`ktlint_code_style = intellij_idea`). Run
   `./gradlew :shared:ktlintFormat` before arguing with it.
+- **`-Xexpect-actual-classes` is on** (C014). `expect class` is still flagged Beta (KT-61573) even
+  though `expect fun` is stable, and the class form is what `PlatformSecureStore` and
+  `PlatformAttestationProvider` need: their constructors genuinely differ per platform (a `Context`
+  versus a Keychain service name), which an expect *function* cannot express.
+- **A KDoc must not contain `/*`.** Kotlin block comments nest, so `contracts/*.yaml` inside a
+  `/** … */` opens a second comment and the file stops parsing several declarations later. Write
+  the path without the glob.
 
 ## Source-set layout (ADD §18.2)
 ```
@@ -39,7 +46,7 @@ src/commonMain/kotlin/lk/mageride/shared/
     data/models/      DTOs — Position, Trip, Vehicle, Fare, Wallet     (C012)
     data/api/         Ktor client for the REST surfaces                (C013)
     data/repository/  repository abstractions                          (C012-C018)
-    domain/auth/      JWT + refresh, session                           (C014)
+    domain/auth/      OTP sign-in, token lifecycle, MQTT token         (C014)
     domain/trip/      trip + ride state machines                       (C015)
     domain/dispatch/  offer handling, Driver Level System              (C015)
     domain/fare/      Mode C fare rules, surcharges                    (C016)
@@ -48,6 +55,7 @@ src/commonMain/kotlin/lk/mageride/shared/
     mqtt/             MqttConfig, PositionPayload, AdaptiveRateEngine  (C017)
     db/               SQLDelight queries + drivers                     (C018)
     util/             DateTimeUtils, Validators
+    platform/         PlatformInfo, SecureStore, attestation (expect)  (C011, C014)
 src/androidMain/  Android actuals + the OkHttp Ktor engine
 src/iosMain/      iOS actuals + the Darwin Ktor engine
 src/commonTest/   runs on every target
@@ -101,10 +109,12 @@ src/androidHostTest/  JVM-only tests of the Android actuals (NOT `androidUnitTes
   Read that KDoc before adding a plugin; ordering between two `HttpSend` interceptors is exactly
   the kind of thing that works until it does not.
 - **C014 supplies `TokenProvider` and `AttestationProvider`; C013 owns when they are called.** A
-  `401` refreshes once and replays once, and a second `401` is `onAuthenticationLost()`. Both
-  default to the no-op binding, so the graph resolves before C014 lands. `ktor-client-auth` is
-  still unapplied and is not needed — the refresh is an `HttpSend` interceptor, which is what
-  makes "same `Idempotency-Key` on the replay" expressible.
+  `401` refreshes once and replays once, and a second `401` is `onAuthenticationLost()`.
+  `refresh(staleAccessToken)` is told which token failed, so a provider that has already rotated
+  past it can replay without rotating again. Both default to the no-op binding, so the graph
+  resolves before C014's module is added. `ktor-client-auth` is still unapplied and is not needed —
+  the refresh is an `HttpSend` interceptor, which is what makes "same `Idempotency-Key` on the
+  replay" expressible.
 - **Errors are `MageRideError`, keyed on status for the type and on the kebab code for the
   branch.** `409 offer-already-accepted` is `Conflict`, `410 offer-expired` is `Gone`; never
   collapse the two. Never render `message`/`title`/`detail` to a user — the apps resolve Si/Ta/En
@@ -116,11 +126,52 @@ src/androidHostTest/  JVM-only tests of the Android actuals (NOT `androidUnitTes
   `mageRideHttpClient`.
 - **Paging goes through `data/repository/CursorPagedSource`**, not a bespoke loop per screen.
 
+## Session layer (`domain/auth` + `platform`, C014)
+- **[AuthSessionManager] is the only thing that touches a token.** `SessionState.SignedIn` carries
+  a user id, a device id and `isNewUser` — never a token — and the tokens leave the class through
+  exactly one door, `SessionTokenProvider`, which the HTTP pipeline holds. A view model that wants
+  a bearer token is asking the wrong question.
+- **Phone OTP only (AL-07).** `IamApi.signInWithGoogle` / `…Apple` / `…Password` and the admin pair
+  exist for the portals; nothing under `domain/auth` may call one, and
+  `PlatformSecurityHygieneTest` fails the build if something does.
+- **Concurrent refreshes collapse on the token that failed, not on a lock.** `refresh` takes the
+  access token the failing request sent; a caller whose token has already been replaced replays
+  instead of rotating. The refresh token is single-use and racing it revokes the whole session
+  family (D-29) — the mutex alone does not prevent that, because a caller can acquire it *after*
+  the rotation it was waiting for.
+- **Offline is not revoked.** `onAuthenticationLost` ends the session for a refused credential and
+  does nothing for a network failure or 5xx. Never widen that: it is what stops a driver being
+  signed out mid-ride by a tunnel.
+- **The MQTT token is a different token (E-02)** with its own TTL and its own renewal loop; it is
+  never the API access token, and a failed renewal never drops the token already in hand.
+  `MqttSessionTokenManager.token` is a `StateFlow` because EMQX validates the JWT at CONNECT, so a
+  rotation only takes effect on the next connection — C017's client has to reconnect on it.
+- **`SecureStore` is the only place a secret is persisted.** Android encrypts with an Android
+  Keystore AES-GCM key into a private preferences file; iOS uses Keychain items with
+  `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly` (`AfterFirstUnlock`, not `WhenUnlocked`, so a
+  locked handset can still renew mid-ride). C018's SQLite file holds no token —
+  `mobile_db_schema.md` §1.1 stores only expiry timestamps and a `jti`.
+- **Four app-supplied bindings** across C013 + C014: `HttpClientEngine`, `ApiConfig`, `AuthConfig`
+  (the app surface — there is no safe default) and `SecureStore`. Optionally
+  `AttestationProvider` → `PlatformAttestationProvider`; without it D-30's twenty operations fail
+  at the edge, which is the honest outcome.
+- **`X-Attestation` wire format** is the gateway's (C008), not any spec's: Android sends the Play
+  Integrity token unwrapped, iOS sends `base64url(keyId) "." base64url(assertion)` signed over
+  `SHA-256("<METHOD> <path>")`. That last part is why `AttestationRequest` carries the method and
+  path rather than only an `operationId`.
+
 ## Dependency rules
 - **Every version lives in `gradle/libs.versions.toml`.** Never inline one here.
-- Four catalog entries are declared but deliberately **not applied yet**, each owned by a later
-  component: `multiplatform-settings` + `ktor-client-auth` (C014), `sqldelight` and its drivers
-  (C018 — it also applies the Gradle plugin), `h3` (C017).
+- Three catalog entries are declared but deliberately **not applied**: `sqldelight` and its drivers
+  (C018 — it also applies the Gradle plugin), `h3` (C017), and `multiplatform-settings`, which C011
+  reserved for C014 and C014 did not take — both of its app-side backends are plain settings
+  (`SharedPreferencesSettings`, `NSUserDefaultsSettings`), which is exactly what C014's DoD forbids.
+  `ktor-client-auth` is likewise unused: refresh-on-401 is a send-pipeline interceptor (C013), which
+  is what makes "same `Idempotency-Key` on the replay" expressible.
+- **`com.google.android.play:integrity` is androidMain-only** and `implementation`, not `api`: no
+  Play Integrity type appears in this module's public surface. The iOS half needs no coordinate —
+  App Attest comes from Kotlin/Native's `DeviceCheck` platform library, and the Keychain from
+  `Security`.
 - **`com.uber:h3` is JNI, not Kotlin Multiplatform.** Its jar carries android-arm/arm64, linux
   and darwin natives and no klib, so it is an androidMain/JVM dependency only; the iOS side
   needs cinterop against the H3 C library. C017 owns that expect/actual.

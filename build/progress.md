@@ -39,7 +39,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C011 | kmp-module-scaffold | 1 | DONE | 2026-07-27 | 10 tests green, detekt + ktlint clean; AGP 9 forced the KMP Android plugin — `testDebugUnitTest` is now an alias (micro-change-set) |
 | C012 | kmp-core-models | 1 | DONE | 2026-07-27 | 300 public types over 16 contracts, 132 tests green; 3 micro-change-sets raised (ADD Appendix A, trip-state enums, §19) |
 | C013 | kmp-api-client | 1 | DONE | 2026-07-27 | 16 typed clients covering all 176 operations, 91 new tests (223 total) green; 1 micro-change-set raised (`ReportFormat.wire`) |
-| C014 | kmp-auth-session | 1 | PENDING | | |
+| C014 | kmp-auth-session | 1 | DONE | 2026-07-27 | 277 tests green (54 new); Keystore/Keychain SecureStore + Play Integrity/App Attest; 3 micro-change-sets raised |
 | C015 | kmp-domain-ride-dispatch | 1 | PENDING | | |
 | C016 | kmp-domain-fare-wallet | 1 | PENDING | | |
 | C017 | kmp-geo-realtime | 1 | PENDING | | |
@@ -1788,3 +1788,154 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   (a `/** … */` not attached to a declaration — use `//` for a file header), and detekt's defaults
   are strict about `ReturnCount` (2), `ThrowsCount` (2) and `LoopWithTooManyJumpStatements` (1), so
   a decision-tree function wants to be recursion or several small functions rather than one loop.
+
+- **Component:** C014 kmp-auth-session — 2026-07-27
+- **Status:** DONE (common + Android; iOS declared and type-checked, **not** verified) —
+  `./gradlew :shared:testDebugUnitTest detekt ktlintCheck` green from a clean build directory with
+  `--no-build-cache`: **277 tests passed, 0 failed, 0 skipped** (54 new; C011–C013's 223 still
+  green), detekt and ktlint clean. All four DoD items pass, each with a test that fails if the rule
+  is broken. `./gradlew :shared:compileKotlinIosArm64` also passes, so `src/iosMain` type-checks for
+  Kotlin/Native; **iOS is not marked DONE from this host** (klib cross-compilation only — no
+  linking, no `iosTest`). ~1,100 lines of `domain/auth` + `platform` and ~1,500 lines of test.
+- **Notes:**
+  **Spec gaps — three micro-change-sets, none actioned in `specs/`:**
+  (a) ***No spec defines the `X-Attestation` wire format, and C008 already had to invent one.***
+  D3' §0 and `_shared.yaml` declare the header and its `maxLength: 8192` and stop there.
+  `backend/src/ApiGateway/Attestation/AppAttestOptions.cs` records the same gap and defines the
+  format this client now produces: **Android sends the Play Integrity token unwrapped; iOS sends
+  `base64url(keyId) "." base64url(assertion)`**, the assertion signed over
+  `SHA-256("<METHOD> <path>")` (`AppAttestVerifier.ClientData`). Two ends of the platform have now
+  independently implemented an undocumented contract — **D3' §0 should state it**, and C118 should
+  pin it.
+  (b) ***There is no App Attest registration endpoint, so the iOS half of D-30 cannot complete.***
+  The gateway verifies an assertion against a public key it reads through `IAttestedKeyStore`, fed
+  from `iam.devices.attestation_verified_at` — a column **no `iam.yaml` operation writes**. Apple's
+  flow is `generateKey` → `attestKey(challenge)` → *send the attestation object to the relying
+  party* → assertions thereafter; the middle step has nowhere to go, and there is no
+  challenge/nonce route to bind it to either. Landed the client side in full and exposed
+  `PlatformAttestationProvider.prepareRegistration(challenge)` returning an `AppAttestRegistration`
+  so C026/C095 can post it the day the route exists. **`iam.yaml` needs
+  `POST /v1/auth/attestation/challenge` + `POST /v1/auth/attestation/register`.** Until then iOS
+  attestation answers `app-attest-unknown-key` at the edge — which is why `Gateway:Attestation:Mode`
+  has an `Audit` setting (C008).
+  (c) ***`403 device-revoked` is not in the error registry.*** `mobile_db_schema.md` §0.4 names it
+  as the AL-08 displacement signal ("On logout / `403 device-revoked` (AL-08) / PDPA erasure: wipe
+  the whole DB file and Keystore entries"), but it appears in no other document and is absent from
+  `_shared.yaml#/components/schemas/ErrorCode` and from `MageRideErrors` (C002). The client matches
+  it on the **wire spelling** so it works whichever way this is resolved, and falls back to plain
+  `SESSION_REVOKED`. **Either register the code or drop the §0.4 reference** — C026 owns the
+  producing side.
+  **Other spec observations (no change needed):**
+  (d) *`iam.yaml` gives `POST /v1/auth/otp/verify` a `403` response with no `x-error-code`.* The
+  client treats `403` on a refresh as terminal and `403` on verify as an ordinary failure; if
+  iam-svc means "blocked number" there, note that `isBlocked` already comes back on the `200` of
+  `/v1/auth/otp/request`, which is what the login screen reads.
+  (e) *D5' §14.2's "single active device PER APP" is a **server** rule.* The client's half is that
+  the store is namespaced by `app` and a verify for a different `userId` wipes what the previous
+  one left, including the MQTT token. The client cannot detect displacement on its own — it learns
+  about it when a call is refused.
+  **Decisions —**
+  (1) ***`TokenProvider.refresh()` gained a `staleAccessToken` parameter (a C013 API change).***
+  Without it, "collapse concurrent refreshes" is not expressible: a mutex alone lets a caller that
+  acquires the lock *after* a rotation rotate the token that rotation just produced, and D-29
+  punishes a re-presented refresh token by revoking the whole session family. Keying the collapse
+  on the token that actually failed makes it exact — the pipeline now returns the token it attached
+  from `attachCredential` and hands it to `refresh`. `five_concurrent_401s_produce_one_rotation`
+  fails against the previous signature.
+  (2) ***`AttestationProvider.attestationToken` now takes an `AttestationRequest` (method + path),
+  not an `operationId`.*** The gateway binds an App Attest assertion to `SHA-256("<METHOD> <path>")`,
+  so a provider holding only an `operationId` cannot produce a header that verifies. Same value
+  feeds Play Integrity's `requestHash`, which the gateway does not check today but C128 can turn on
+  without an app release.
+  (3) **Offline is not revoked.** `onAuthenticationLost` ends the session for a *refused* credential
+  (`401`, `403`, `400`, `404` on the refresh, or a `401` that survives a successful rotation) and
+  does **nothing** for a network failure, a `5xx`, a timeout or an open breaker — the caller still
+  gets its own `401`. C013's contract for that callback is "the session is unrecoverable", and the
+  literal reading would sign a driver out of a live ride every time they drove through a tunnel.
+  (4) **No token is reachable above this layer.** `SessionState.SignedIn` carries a user id, an app
+  surface, a device id and `isNewUser` — deliberately not a token — and `AuthSession` is `internal`.
+  The one door out is `SessionTokenProvider`, which only the HTTP pipeline holds.
+  (5) **Proactive refresh, with a cooldown.** ADD §12.1 asks for it; the cooldown exists because
+  `accessToken()` runs on *every attempt of every request*, so a handset with no network would
+  otherwise drive one refresh round trip per call forever.
+  (6) ***`SecureStore` and `PlatformAttestationProvider` are `expect class`, not `expect fun`.***
+  Their constructors genuinely differ — Android needs a `Context`, iOS a Keychain service name —
+  which a function cannot express, and common code never constructs one (the app does, as with
+  C013's `HttpClientEngine`). Needed `-Xexpect-actual-classes`; the flag and the reason are in
+  `build.gradle.kts`.
+  (7) **Android: AES-256-GCM under a non-exportable Keystore key, ciphertext in a `MODE_PRIVATE`
+  preferences file — and `setUserAuthenticationRequired` is deliberately OFF.** A driver's handset
+  is locked in a mount for most of a ride and the E-02 renewal loop must read its credential then;
+  requiring an unlock would make the one token designed to survive a long trip the one that cannot
+  be renewed during it. `commit()`, not `apply()`: the rotated refresh token is persisted *before*
+  the in-memory copy moves, and a queued `apply()` lost to a process death is a forced sign-out.
+  (8) **iOS: Keychain items, no app-level crypto.** `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`
+  — `ThisDeviceOnly` keeps the session out of iCloud Keychain and every backup (a restored backup
+  must not resume a session on another handset), `AfterFirstUnlock` for the same locked-in-a-mount
+  reason as (7). ADD §12.1's "Keychain + Secure Enclave" is satisfied by the data-protection class
+  key being wrapped by the SE; adding an app-level AES layer would introduce a key the app then has
+  to protect, which is the problem the Keychain exists to solve.
+  (9) ***`multiplatform-settings` stays unapplied***, despite C011 reserving it for this component:
+  both of its app-side backends are plain settings (`SharedPreferencesSettings`,
+  `NSUserDefaultsSettings`), which is exactly what this DoD forbids. Its Apple `KeychainSettings`
+  would have served, but half a store from a library and half hand-rolled is worse than one
+  hand-rolled pair. The catalog comment now says so; the entry is free for a later component that
+  needs *non-secret* KV storage.
+  (10) **The device id survives a logout; only PDPA erasure takes it.** `iam.yaml` calls it a
+  *per-install* identifier and AL-08's "new device" test is meant to fire when the handset changes,
+  not when a user signs out and back in. Same for the iOS App Attest key id — regenerating it would
+  need re-registration and would look exactly like a cloned device. `mobile_db_schema.md` §0.4's
+  "wipe … Keystore entries" is read as the tokens.
+  (11) **The MQTT renewal loop never drops the token it holds.** Every renewal error — offline,
+  `5xx`, even `401` — is retried with backoff while the current token stays publishable; only
+  `release()` or the session actually ending clears it. `MqttSessionTokenManager.token` is a
+  `StateFlow` because EMQX validates the JWT at CONNECT, so **C017's client has to reconnect when it
+  rotates** — a renewed token does not apply to a live connection.
+  (12) **A `Koin` cycle is broken by a deferred lookup, not by a second graph.** `IamApi` →
+  `HttpClient` → `TokenProvider` → `AuthSessionManager` → `IamApi`. The manager takes `() -> IamApi`
+  and resolves it at first use; `authModule` is appended after `apiModule` in `sharedModules` so its
+  `TokenProvider` overrides C013's `Anonymous` placeholder with no edit in any app. `AuthGraphTest`
+  asserts that ordering, because if it ever flips every request in all four apps goes out
+  unauthenticated.
+  (13) **An unreadable stored record is dropped, not re-read.** A session written by an older build
+  whose shape has changed would otherwise throw on every cold start until the user reinstalls; the
+  recovery from "no session" is a login screen they already know how to use.
+  (14) **Test shape.** The refresh and revocation suites run the **real** `SessionTokenProvider`
+  inside the **real** C013 send pipeline over a `MockEngine` — the DoD is about how those interact,
+  and a fake pipeline would assert the fake. The E-02 renewal suite stubs `issueMqttToken` only
+  (delegating the rest of `IamApi`): renewal is pure timing, Ktor runs a request on its own
+  dispatcher off the virtual scheduler, and a loop making real calls would advance the two clocks
+  independently. `AndroidSecureStoreTest` proves no plaintext reaches the preferences sink — and
+  the stronger guarantee is structural, since `KeyValueSink` accepts only a `SealedValue`.
+  `PlatformSecurityHygieneTest` covers what this host cannot run: that the iOS store uses the
+  Keychain with a `ThisDeviceOnly` class and never `NSUserDefaults`, and that nothing in
+  `domain/auth` calls a portal sign-in (AL-07).
+  **For later components —**
+  **C017:** subscribe to `MqttSessionTokenManager.token` and reconnect on change; call
+  `bind(vehicleId, rideId)` when a ride starts and `release()` when it ends. Do **not** send the API
+  access token to EMQX.
+  **C018:** `mobile_db_schema.md` §1.1 `auth_session` is yours, but the tokens are not — store the
+  expiry timestamps and the `jti` only, and wipe the DB file on `SessionEvent.RouteToLogin`.
+  **C067 / C076:** bind four things — `HttpClientEngine`, `ApiConfig`, `AuthConfig(app = …)` and
+  `PlatformSecureStore(context, namespace)` — plus `PlatformAttestationProvider(context,
+  cloudProjectNumber)` and call its `warmUp()` at start-up; without the warm-up the first sensitive
+  mutation of the session pays the whole Play Integrity preparation cost, and the first sensitive
+  mutation is `POST /v1/auth/otp/request`. Subscribe to `AuthSessionManager.events` once in the app
+  shell.
+  **C085 / C094:** the same, with `PlatformSecureStore(service)` and
+  `PlatformAttestationProvider(secureStore)`. **Everything in `src/iosMain` is compile-checked only**
+  — the Keychain and DeviceCheck calls have never executed. Budget time to verify them on a device
+  (the simulator does not support App Attest at all).
+  **C026:** honour the two gaps above, keep `deviceId` and the `app` claim as the AL-08 key, and note
+  that the client presents the opaque refresh token **both** as the bearer credential and in the
+  body on `POST /v1/auth/refresh`, which is what `iam.yaml`'s `refreshToken` security scheme asks
+  for.
+  **Build host —** no Docker and no compose stack; the replica stayed down. Gradle, the Android SDK
+  and the cached Kotlin/Native 2.4.10 distribution only. One new coordinate,
+  `com.google.android.play:integrity:1.6.0` (androidMain, `implementation`); it brings
+  `play-services-tasks` at `compile` scope, which is where the `Task` the API answers with comes
+  from. A clean gate run takes ~35 s and `compileKotlinIosArm64` another ~40 s cold. Two things
+  worth knowing next time: **Kotlin block comments nest**, so a KDoc containing `contracts/*.yaml`
+  opens a second comment and the file stops parsing (the error surfaces on a later declaration);
+  and `CFBridgingRetain` / `CFBridgingRelease` live in `platform.Foundation`, not
+  `platform.CoreFoundation`.
