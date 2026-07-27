@@ -1,0 +1,335 @@
+# =====================================================================================
+# MageRide — SLIM dev stack (C009)
+#
+# Infrastructure only: everything a MageRide service talks to, and nothing that is itself
+# a MageRide service. This is the stack every later component brings up for its verify
+# command on the shared Contabo box; `docker-compose.dev.yml` adds the application
+# containers on top of the same project, network and volumes.
+#
+#   bash infra/scripts/dev-up.sh                     # slim, waits for healthy
+#   docker compose -f infra/docker-compose.dev.slim.yml config
+#   docker compose -f infra/docker-compose.dev.slim.yml up -d
+#   bash infra/scripts/wait-healthy.sh
+#   bash infra/scripts/dev-down.sh
+#
+# Footprint ~5.9 GB, against the ~16.7 GB of the full replica set. The limits below are
+# deliberately smaller than the canonical per-container budgets in
+# lightweight-production-replica.md "Resource Summary" — those are what
+# docker-compose.dev.yml and the replica (C125) use. This file exists so a component's
+# verify can run alongside a `dotnet build` on a 24 GB box; it is not a load-test rig.
+#
+# Every published port is bound to 127.0.0.1. This box has a public IP and hosts the
+# replica as well; a bare `5432:5432` would put an unauthenticated-by-default dev
+# database on the internet.
+#
+# Spec: D7' §3 (compose), §2.1 (container layout), §5.1 (health checks),
+#       lightweight-production-replica.md Containers 2-5, 10.
+# =====================================================================================
+
+name: mageride
+
+networks:
+  mr:
+    name: mageride_mr
+
+volumes:
+  pgdata:
+  redisdata:
+  redpandadata:
+  emqxdata:
+  miniodata:
+
+services:
+
+  # -----------------------------------------------------------------------------------
+  # Container 5 — PostgreSQL 16 + PostGIS + TimescaleDB (T-06)
+  # -----------------------------------------------------------------------------------
+  postgres:
+    image: timescale/timescaledb-ha:pg16
+    environment:
+      POSTGRES_PASSWORD: ${PG_PASSWORD:-mageride_dev}
+      POSTGRES_DB: ${PG_DATABASE:-mageride}
+      # The dev stack runs everything as the superuser, matching D7' §3's
+      # `postgres://postgres:...@postgres:5432/mageride`. C006's 1804 needs CREATEROLE and
+      # COMMENT ON ROLE needs superuser, so the migrate job cannot be de-privileged
+      # without splitting that script out. C125/C132 must revisit this before pointing
+      # migrations at a managed instance (C006 handoff, "For later components").
+      POSTGRES_USER: ${PG_USER:-postgres}
+    volumes:
+      # D7' §3 mounts `pgdata:/var/lib/postgresql/data`, which is the OFFICIAL postgres
+      # image's data directory. This image is `timescale/timescaledb-ha`, whose
+      # PGDATA is /home/postgres/pgdata/data and which runs as the non-root `postgres`
+      # user — mounting an empty root-owned volume over /var/lib/postgresql/data gives
+      # "mkdir: cannot create directory '.../pgdata': Permission denied" on first boot and
+      # leaves the container in a restart loop. The image path and the T-06 image are both
+      # right; only the pairing is wrong. **Micro-change-set for D7' §3.**
+      - pgdata:/home/postgres/pgdata
+    ports:
+      - "127.0.0.1:${PG_PORT:-5432}:5432"
+    # D7' §3 passes `-c shared_preload_libraries=timescaledb,postgis-3`. PostGIS is a
+    # plain extension and has no preloadable library in this image, so naming it here
+    # makes the postmaster refuse to start. timescaledb alone is what the image's own
+    # entrypoint sets, and it is what T-06 needs. **Micro-change-set for D7' §3.**
+    command: ["-c", "shared_preload_libraries=timescaledb", "-c", "max_connections=200"]
+    healthcheck:
+      # D7' §5.1: pg_isready, 5 s interval, failure threshold 10.
+      test: ["CMD-SHELL", "pg_isready -U ${PG_USER:-postgres} -d ${PG_DATABASE:-mageride}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+    mem_limit: 2g
+    cpus: 1.0
+    networks: [mr]
+    restart: unless-stopped
+
+  # -----------------------------------------------------------------------------------
+  # PgBouncer — transaction-mode pooler (M-5, ADD §9.3)
+  # Every service reaches Postgres through :6432. The one exception is the E-09 outbox
+  # LISTEN, which needs a session and uses ConnectionStrings__PostgresDirect.
+  # -----------------------------------------------------------------------------------
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: ${PG_USER:-postgres}
+      DB_PASSWORD: ${PG_PASSWORD:-mageride_dev}
+      DB_NAME: ${PG_DATABASE:-mageride}
+      POOL_MODE: transaction
+      AUTH_TYPE: scram-sha-256
+      ADMIN_USERS: ${PG_USER:-postgres}
+      LISTEN_PORT: "6432"
+      MAX_CLIENT_CONN: "500"
+      DEFAULT_POOL_SIZE: "25"
+    ports:
+      - "127.0.0.1:${PGBOUNCER_PORT:-6432}:6432"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      # The image carries psql and nothing else that can open a socket, so the check is a
+      # real query through the pooler — which is the useful thing to know anyway: a
+      # PgBouncer that is listening but cannot reach Postgres is not ready.
+      test: ["CMD-SHELL", "PGPASSWORD=$${DB_PASSWORD} psql -h 127.0.0.1 -p 6432 -U $${DB_USER} -d $${DB_NAME} -tAc 'select 1' > /dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    mem_limit: 128m
+    cpus: 0.25
+    networks: [mr]
+    restart: unless-stopped
+
+  # -----------------------------------------------------------------------------------
+  # Container 4 — Redis: live geo, dispatch/ride locks, caches, SignalR backplane
+  # -----------------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    # ADD §9.4 / replica Container 4: appendonly with everysec, so a hard kill loses at
+    # most 1 s of writes.
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - redisdata:/data
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    mem_limit: 512m
+    cpus: 0.5
+    networks: [mr]
+    restart: unless-stopped
+
+  # -----------------------------------------------------------------------------------
+  # Container 3 — Redpanda: the event backbone (D6' §2)
+  #
+  # D7' §2.1/§3 and the replica both write `redpandadata/redpanda:v24.2`. That tag does
+  # not exist — Redpanda publishes only full patch tags — so it is pinned to the last
+  # v24.2 patch. **Micro-change-set for D7' §2.1/§9 and the replica's Container 3.**
+  # -----------------------------------------------------------------------------------
+  redpanda:
+    image: redpandadata/redpanda:v24.2.26
+    # `rpk redpanda mode production` before `start`, because the image's shipped
+    # /etc/redpanda/redpanda.yaml carries `developer_mode: true` and rpk then silently
+    # appends `--unsafe-bypass-fsync=true` to the broker — an acked write is not
+    # necessarily on disk. The replica is explicit that "`--mode dev-container` is **not**
+    # used; replica runs in production mode with `fsync` enabled per partition", which is
+    # what makes "0 data loss on process kill" true. Neither `rpk redpanda start --mode`
+    # (it accepts only `dev-container`) nor `--set redpanda.developer_mode=false` fixes
+    # it: rpk computes the broker flags before applying `--set`.
+    # **D7' §3's command line omits this step.**
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        rpk redpanda mode production
+        exec /usr/bin/rpk redpanda start \
+          --smp=1 \
+          --overprovisioned \
+          --node-id=0 \
+          --memory=1G \
+          --reserve-memory=0M \
+          --check=false \
+          --kafka-addr=internal://0.0.0.0:9092,external://0.0.0.0:19092 \
+          --advertise-kafka-addr=internal://redpanda:9092,external://127.0.0.1:19092 \
+          --pandaproxy-addr=internal://0.0.0.0:8082,external://0.0.0.0:18082 \
+          --advertise-pandaproxy-addr=internal://redpanda:8082,external://127.0.0.1:18082 \
+          --schema-registry-addr=internal://0.0.0.0:8081,external://0.0.0.0:18081 \
+          --rpc-addr=redpanda:33145 \
+          --advertise-rpc-addr=redpanda:33145 \
+          --set redpanda.auto_create_topics_enabled=true
+    # Notes on the flags above:
+    #  * two listeners — `internal` for containers on the mr network, `external` for the
+    #    host, so a `dotnet test` running on the box reaches the same broker. Without the
+    #    advertise pair Redpanda advertises its container hostname and every client
+    #    outside docker fails on the second (metadata-driven) connection, not the first;
+    #  * `--check=false` skips the startup tuning checks — they test kernel settings
+    #    (clocksource, swappiness, IO scheduler) a container cannot change, and
+    #    `rpk redpanda tune` is a host-level step for the replica box (C125). It is
+    #    orthogonal to fsync, which stays on;
+    #  * topics are created explicitly by `redpanda-init` with the D6' §2.1 partition
+    #    count and retention. Auto-create stays on to match D7' §3, but it now only ever
+    #    fires for a topic nobody declared — which is a bug better surfaced as a
+    #    1-partition topic than as a producer error.
+    volumes:
+      - redpandadata:/var/lib/redpanda/data
+      - ./deploy/redpanda/bootstrap-topics.sh:/opt/mageride/bootstrap-topics.sh:ro
+    ports:
+      - "127.0.0.1:${REDPANDA_KAFKA_PORT:-19092}:19092"
+      - "127.0.0.1:${REDPANDA_ADMIN_PORT:-9644}:9644"
+      - "127.0.0.1:${REDPANDA_SR_PORT:-18081}:18081"
+      - "127.0.0.1:${REDPANDA_PROXY_PORT:-18082}:18082"
+    healthcheck:
+      # `rpk cluster health` exits 0 while the cluster is still forming, so the check has
+      # to read the verdict rather than the exit code.
+      test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true'"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    mem_limit: 1500m
+    cpus: 0.5
+    networks: [mr]
+    restart: unless-stopped
+
+  # --- One-shot: create the D6' §2.1 topics --------------------------------------------
+  redpanda-init:
+    image: redpandadata/redpanda:v24.2.26
+    entrypoint: ["/bin/sh", "/opt/mageride/bootstrap-topics.sh"]
+    environment:
+      REDPANDA_BROKERS: redpanda:9092
+      REDPANDA_PARTITIONS: "3"
+      REDPANDA_REPLICAS: "1"
+    volumes:
+      - ./deploy/redpanda/bootstrap-topics.sh:/opt/mageride/bootstrap-topics.sh:ro
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    restart: "no"
+    networks: [mr]
+
+  # -----------------------------------------------------------------------------------
+  # Container 2 — EMQX: the MQTT plane (D6' §3)
+  #
+  # JWT auth + topic ACL come from infra/deploy/emqx/. The one secret is injected here
+  # rather than committed: EMQX_* env beats the mounted emqx.conf.
+  # -----------------------------------------------------------------------------------
+  emqx:
+    image: emqx/emqx:5.8
+    environment:
+      EMQX_AUTHENTICATION__1__SECRET: ${MQTT_JWT_SECRET:-mageride-dev-mqtt-jwt-secret-change-me}
+    volumes:
+      - emqxdata:/opt/emqx/data
+      - ./deploy/emqx/emqx.conf:/opt/emqx/etc/emqx.conf:ro
+      - ./deploy/emqx/acl.conf:/opt/emqx/etc/mageride-acl.conf:ro
+    ports:
+      # 1883 is the in-cluster plaintext listener; it is published on loopback only so a
+      # host-side integration test can use it, and never reaches HAProxy.
+      - "127.0.0.1:${EMQX_MQTT_PORT:-1883}:1883"
+      - "127.0.0.1:${EMQX_MQTTS_PORT:-8883}:8883"
+      - "127.0.0.1:${EMQX_WSS_PORT:-8084}:8084"
+      - "127.0.0.1:${EMQX_DASHBOARD_PORT:-18083}:18083"
+    healthcheck:
+      test: ["CMD", "emqx", "ctl", "status"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 40s
+    mem_limit: 1500m
+    cpus: 1.0
+    networks: [mr]
+    restart: unless-stopped
+
+  # -----------------------------------------------------------------------------------
+  # Container 10 — MinIO: S3-compatible object storage
+  # Driver documents (ocr-svc), proof-of-delivery photos, profile pictures, support
+  # screenshots, pg_dump targets. Production is Cloudflare R2 (D7' §8).
+  # -----------------------------------------------------------------------------------
+  minio:
+    image: minio/minio:latest
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-mageride_dev}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-mageride_dev_secret}
+    volumes:
+      - miniodata:/data
+    ports:
+      - "127.0.0.1:${MINIO_API_PORT:-9000}:9000"
+      - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+    mem_limit: 256m
+    cpus: 0.25
+    networks: [mr]
+    restart: unless-stopped
+
+  # --- One-shot: create the four buckets .env.common names ------------------------------
+  minio-init:
+    image: minio/minio:latest
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"
+        for b in mageride-documents mageride-proofs mageride-profile mageride-screenshots; do
+          mc mb --ignore-existing "local/$$b"
+        done
+        mc ls local
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-mageride_dev}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-mageride_dev_secret}
+    depends_on:
+      minio:
+        condition: service_healthy
+    restart: "no"
+    networks: [mr]
+
+  # -----------------------------------------------------------------------------------
+  # One-shot `migrate` — DbUp, db/migrations/*.sql (C003-C006)
+  #
+  # D7' §3: "SQL-script migrations run as a one-shot `migrate` service before
+  # app-services". It connects DIRECTLY to Postgres, not through PgBouncer: the scripts
+  # create roles, run one transaction per script and take advisory locks, none of which
+  # belong on a transaction-pooled connection.
+  # -----------------------------------------------------------------------------------
+  migrate:
+    build:
+      context: ..
+      dockerfile: backend/src/MageRide.Migrations/Dockerfile
+    image: mageride/migrate:dev
+    environment:
+      ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=${PG_DATABASE:-mageride};Username=${PG_USER:-postgres};Password=${PG_PASSWORD:-mageride_dev}"
+      MIGRATE_WAIT_SECONDS: "90"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    networks: [mr]

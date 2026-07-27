@@ -1,0 +1,318 @@
+# =====================================================================================
+# MageRide — FULL dev stack (C009)
+#
+# D7' §3 "Docker Compose — Full Local Dev": the infrastructure from
+# docker-compose.dev.slim.yml plus the five application containers of the canonical
+# layout (D7' §2.1, lightweight-production-replica.md Containers 1, 6-9), with the API
+# gateway in front of them.
+#
+#   docker compose -f infra/docker-compose.dev.yml config
+#   bash infra/scripts/dev-up.sh full
+#   bash infra/scripts/dev-down.sh full
+#
+# The infrastructure is `include`d rather than copied, so there is exactly one definition
+# of Postgres, Redis, Redpanda, EMQX and MinIO and the two stacks cannot drift. Both files
+# declare the same project (`mageride`), network and volumes, so the full stack is
+# genuinely the slim stack plus applications — bringing it up over a running slim stack
+# adds containers instead of starting a second database.
+#
+# --- NOT YET BUILDABLE ---------------------------------------------------------------
+# Only `api-gateway` (C008) has a Dockerfile today. `app-services`, `hot-path`, `fanout`
+# and `tcp-adapter` are Wave 2 components — this file is `docker compose config`-clean and
+# is the contract those components build against, but `up` on the full stack does not
+# succeed until they land. Each build below names the component that lands it, and
+# `infra/scripts/dev-up.sh full` checks for the Dockerfiles and says which are missing
+# rather than letting docker fail with a bare "cannot read dockerfile".
+#
+# Startup order (D7' §3): infra healthy -> `migrate` completes -> hot-path, app-services,
+# fanout, tcp-adapter -> haproxy. Enforced by healthchecks and depends_on, never by sleeps.
+# =====================================================================================
+
+name: mageride
+
+include:
+  - path: docker-compose.dev.slim.yml
+
+services:
+
+  # -----------------------------------------------------------------------------------
+  # EMQX — override the slim stack's host port publication.
+  #
+  # In the full stack HAProxy owns 8883 and 8084 on the host (D7' §2.1), and two
+  # publishers cannot share a port. The broker keeps 1883 and the dashboard on loopback
+  # for in-cluster work and for a host-side integration test.
+  # -----------------------------------------------------------------------------------
+  emqx:
+    ports: !override
+      - "127.0.0.1:${EMQX_MQTT_PORT:-1883}:1883"
+      - "127.0.0.1:${EMQX_DASHBOARD_PORT:-18083}:18083"
+
+  # -----------------------------------------------------------------------------------
+  # Container 6 — hot-path: mqtt-bridge + position-processor + persistence-writer +
+  # fleet-health, four IHostedServices in one process (T-01, T-05, T-06, D-18).
+  # Lands with C038 / C039 / C040 / C044. No ports: it is a consumer only.
+  # -----------------------------------------------------------------------------------
+  hot-path:
+    build:
+      context: ..
+      dockerfile: backend/src/HotPath/Dockerfile
+    image: mageride/hot-path:dev
+    env_file:
+      - path: env/.env.common.example
+        required: true
+      - path: env/.env.common
+        required: false
+      - path: env/.env.app.example
+        required: true
+      - path: env/.env.app
+        required: false
+    environment:
+      Mqtt__ServiceUsername: svc-mqtt-bridge
+    depends_on:
+      redpanda: { condition: service_healthy }
+      redis:    { condition: service_healthy }
+      postgres: { condition: service_healthy }
+      emqx:     { condition: service_healthy }
+      migrate:  { condition: service_completed_successfully }
+    mem_limit: 2g
+    cpus: 1.0
+    networks: [mr]
+    restart: unless-stopped
+
+  # -----------------------------------------------------------------------------------
+  # Container 7 — app-services: the 21 domain services as class libraries in one process
+  # (replica Container 7), plus provisioning-svc's embedded step-ca on the
+  # `provisioning-ca-data` volume (T-02).
+  # Lands with C026-C066. Reaches Postgres through PgBouncer, never :5432 directly.
+  # -----------------------------------------------------------------------------------
+  app-services:
+    build:
+      context: ..
+      dockerfile: backend/src/AppServices/Dockerfile
+    image: mageride/app-services:dev
+    env_file:
+      - path: env/.env.common.example
+        required: true
+      - path: env/.env.common
+        required: false
+      - path: env/.env.app.example
+        required: true
+      - path: env/.env.app
+        required: false
+    volumes:
+      - provisioning-ca-data:/var/step
+    ports:
+      - "127.0.0.1:${APP_SERVICES_PORT:-5100}:5000"
+    depends_on:
+      pgbouncer: { condition: service_healthy }
+      redis:     { condition: service_healthy }
+      redpanda:  { condition: service_healthy }
+      emqx:      { condition: service_healthy }
+      migrate:   { condition: service_completed_successfully }
+    healthcheck:
+      # D7' §5.1: /health/ready pings DB + Redis + Kafka. 15 s interval, threshold 6.
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:5000/health/ready > /dev/null"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+    mem_limit: 3g
+    cpus: 1.5
+    networks: [mr]
+    restart: unless-stopped
+
+  # -----------------------------------------------------------------------------------
+  # api-gateway (C008) — the edge. D7' §5's Ingress names it as its own backend service;
+  # the replica co-locates it in front of `app-services`, so all 20 HTTP clusters resolve
+  # to that one container and `fanout-svc` resolves to the SignalR container.
+  #
+  # D7' §4.2 has no api-gateway row (C008 gap (d)); the topology lives here and the rest
+  # of the gateway's settings are in env/.env.app.example.
+  # -----------------------------------------------------------------------------------
+  api-gateway:
+    build:
+      context: ..
+      dockerfile: backend/src/ApiGateway/Dockerfile
+    image: mageride/api-gateway:dev
+    env_file:
+      - path: env/.env.common.example
+        required: true
+      - path: env/.env.common
+        required: false
+      - path: env/.env.app.example
+        required: true
+      - path: env/.env.app
+        required: false
+    environment:
+      # 20 domain clusters -> the co-located app-services process.
+      ReverseProxy__Clusters__iam-svc__Destinations__primary__Address:          http://app-services:5000/
+      ReverseProxy__Clusters__registry-svc__Destinations__primary__Address:     http://app-services:5000/
+      ReverseProxy__Clusters__provisioning-svc__Destinations__primary__Address: http://app-services:5000/
+      ReverseProxy__Clusters__query-svc__Destinations__primary__Address:        http://app-services:5000/
+      ReverseProxy__Clusters__trip-state-svc__Destinations__primary__Address:   http://app-services:5000/
+      ReverseProxy__Clusters__ride-svc__Destinations__primary__Address:         http://app-services:5000/
+      ReverseProxy__Clusters__dispatch-svc__Destinations__primary__Address:     http://app-services:5000/
+      ReverseProxy__Clusters__reputation-svc__Destinations__primary__Address:   http://app-services:5000/
+      ReverseProxy__Clusters__fare-svc__Destinations__primary__Address:         http://app-services:5000/
+      ReverseProxy__Clusters__wallet-svc__Destinations__primary__Address:       http://app-services:5000/
+      ReverseProxy__Clusters__subscription-svc__Destinations__primary__Address: http://app-services:5000/
+      ReverseProxy__Clusters__notification-svc__Destinations__primary__Address: http://app-services:5000/
+      ReverseProxy__Clusters__safety-svc__Destinations__primary__Address:       http://app-services:5000/
+      ReverseProxy__Clusters__support-svc__Destinations__primary__Address:      http://app-services:5000/
+      ReverseProxy__Clusters__content-svc__Destinations__primary__Address:      http://app-services:5000/
+      ReverseProxy__Clusters__transit-svc__Destinations__primary__Address:      http://app-services:5000/
+      ReverseProxy__Clusters__fleet-svc__Destinations__primary__Address:        http://app-services:5000/
+      ReverseProxy__Clusters__voip-svc__Destinations__primary__Address:         http://app-services:5000/
+      ReverseProxy__Clusters__admin-bff__Destinations__primary__Address:        http://app-services:5000/
+      ReverseProxy__Clusters__public-bff__Destinations__primary__Address:       http://app-services:5000/
+      # The 21st is the SignalR container, on its own port.
+      ReverseProxy__Clusters__fanout-svc__Destinations__primary__Address:       http://fanout:5001/
+    ports:
+      - "127.0.0.1:${GATEWAY_PORT:-5000}:5000"
+    depends_on:
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:5000/health/ready > /dev/null"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    mem_limit: 1g
+    cpus: 0.5
+    networks: [mr]
+    restart: unless-stopped
+
+  # -----------------------------------------------------------------------------------
+  # Container 8 — fanout: SignalR WebSocket fan-out, Redis backplane (R-06, D-23).
+  # Lands with C041.
+  # -----------------------------------------------------------------------------------
+  fanout:
+    build:
+      context: ..
+      dockerfile: backend/src/Fanout/Dockerfile
+    image: mageride/fanout:dev
+    env_file:
+      - path: env/.env.common.example
+        required: true
+      - path: env/.env.common
+        required: false
+      - path: env/.env.app.example
+        required: true
+      - path: env/.env.app
+        required: false
+    environment:
+      ASPNETCORE_URLS: http://+:5001
+    ports:
+      - "127.0.0.1:${FANOUT_PORT:-5001}:5001"
+    depends_on:
+      redis: { condition: service_healthy }
+    healthcheck:
+      # D7' §5.1: fanout-svc, 10 s interval, threshold 6.
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:5001/health/ready > /dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+    mem_limit: 2g
+    cpus: 1.0
+    networks: [mr]
+    restart: unless-stopped
+
+  # -----------------------------------------------------------------------------------
+  # Container 9 — tcp-adapter: GT06 / JT808 / H02 / NMEA-UDP (T-01, T-03, T-05, T-08).
+  # Lands with C043. `runtime:10.0-alpine`, not `aspnet` — it has no HTTP surface, which
+  # is why D7' §5.1 gives it a TCP-socket liveness probe instead of /health/live.
+  #
+  # 5023-5025 stay inside the network and are published by HAProxy. 5026/UDP is published
+  # HERE because HAProxy has no UDP forwarder — see the header of infra/deploy/haproxy.cfg.
+  # -----------------------------------------------------------------------------------
+  tcp-adapter:
+    build:
+      context: ..
+      dockerfile: backend/src/TcpAdapter/Dockerfile
+    image: mageride/tcp-adapter:dev
+    env_file:
+      - path: env/.env.common.example
+        required: true
+      - path: env/.env.common
+        required: false
+      - path: env/.env.app.example
+        required: true
+      - path: env/.env.app
+        required: false
+    environment:
+      Mqtt__ServiceUsername: svc-tcp-adapter
+    ports:
+      - "127.0.0.1:${ADAPTER_NMEA_UDP_PORT:-5026}:5026/udp"
+    depends_on:
+      emqx:  { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      # D7' §5.1: "TCP socket on 5023", 10 s interval, threshold 5. The alpine runtime
+      # image has busybox nc; -z is a connect-and-close probe.
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 5023"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    mem_limit: 512m
+    cpus: 0.5
+    networks: [mr]
+    restart: unless-stopped
+
+  # -----------------------------------------------------------------------------------
+  # Container 1 — haproxy: the only public edge (D7' §2.1, replica Container 1).
+  #
+  # Host ports are bound to 127.0.0.1 in dev. The replica (C125) publishes the same set
+  # on the public interface with a real certificate; that is the one difference.
+  # -----------------------------------------------------------------------------------
+  haproxy:
+    image: haproxy:2.9-alpine
+    volumes:
+      - ./deploy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+      # Generated by infra/scripts/dev-up.sh; gitignored. HAProxy loads every PEM in the
+      # directory, so an empty one makes it exit at boot.
+      - ./deploy/certs:/usr/local/etc/haproxy/certs:ro
+    ports:
+      - "127.0.0.1:${HAPROXY_HTTPS_PORT:-443}:443"
+      - "127.0.0.1:${HAPROXY_MQTTS_PORT:-8883}:8883"
+      - "127.0.0.1:${HAPROXY_MQTT_WSS_PORT:-8084}:8084"
+      - "127.0.0.1:${HAPROXY_GT06_PORT:-5023}:5023"
+      - "127.0.0.1:${HAPROXY_JT808_PORT:-5024}:5024"
+      - "127.0.0.1:${HAPROXY_H02_PORT:-5025}:5025"
+    depends_on:
+      emqx: { condition: service_healthy }
+    healthcheck:
+      # `monitor-uri /healthz` on the internal stats frontend. The alpine image has
+      # busybox wget.
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8404/healthz > /dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    mem_limit: 256m
+    cpus: 0.25
+    networks: [mr]
+    restart: unless-stopped
+
+# -------------------------------------------------------------------------------------
+# Optional containers, deliberately NOT declared here.
+#
+# D7' §3 ends with "# optional: voip (network_mode: host for UDP 50000-50100),
+# admin-portal (3001), fleet-portal (3002), monitoring (9090/3000)" — a comment, not
+# services, and every one of them belongs to a component that has not run yet:
+#
+#   admin-portal   C104  Next.js, Node 24-alpine, 3001, admin.mageride.lk   (AL-02)
+#   fleet-portal   C111  Next.js, Node 24-alpine, 3002, fleet.mageride.lk   (AL-03)
+#   monitoring     C119  Prometheus + Grafana, 9090 / 3000
+#   voip           C055  LiveKit + coturn; TURN media 50000-50100/UDP must be published
+#                        on the docker HOST, never through HAProxy (replica Container 11)
+#   nominatim      C056  8 GB — hosted on a SEPARATE VPS, never co-located (D-14)
+#
+# infra/deploy/haproxy.cfg already carries the admin./fleet. vhost backends and starts
+# cleanly while they are absent, so adding a portal container needs no HAProxy change.
+# -------------------------------------------------------------------------------------
+
+volumes:
+  # step-ca root and intermediate keys for provisioning-svc (T-02, D7' §2.1/§5).
+  provisioning-ca-data:

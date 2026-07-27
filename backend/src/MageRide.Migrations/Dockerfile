@@ -32,6 +32,11 @@ FROM mcr.microsoft.com/dotnet/runtime:10.0-alpine AS runtime
 # `addgroup -S app` fails with "group 'app' in use". Create it only if the base has not.
 RUN getent group app >/dev/null 2>&1 || addgroup -S app; \
     getent passwd app >/dev/null 2>&1 || adduser -S app -G app
+# Npgsql probes for GSSAPI when it opens a connection. Without krb5-libs the alpine image
+# prints "Error: Error loading shared library libgssapi_krb5.so.2" on every run — harmless
+# (the connection proceeds) but indistinguishable from a real migration failure in a
+# compose log. Added by C009, which runs this image as the one-shot `migrate` service.
+RUN apk add --no-cache krb5-libs
 WORKDIR /app
 COPY --from=build /app .
 USER app

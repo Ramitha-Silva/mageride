@@ -34,7 +34,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C006 | db-schema-telemetry-timescale | 0 | DONE | 2026-07-27 | 4 scripts, 67 total, 187/187 verify checks; 2 micro-change-sets raised (both blocking as printed) |
 | C007 | openapi-contracts | 0 | DONE | 2026-07-27 | 21 service contracts + shared library, 262 operations, spectral 0 errors; 5 micro-change-sets raised |
 | C008 | api-gateway-yarp | 0 | DONE | 2026-07-27 | 59 routes / 21 clusters, 524 tests green; 5 micro-change-sets raised |
-| C009 | docker-compose-dev | 0 | PENDING | | |
+| C009 | docker-compose-dev | 0 | DONE | 2026-07-27 | slim stack healthy, 66/66 verify checks; 6 blocking spec fixes + 6 micro-change-sets raised |
 | C010 | ci-skeleton | 0 | PENDING | | |
 | C011 | kmp-module-scaffold | 1 | PENDING | | |
 | C012 | kmp-core-models | 1 | PENDING | | |
@@ -1084,3 +1084,212 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   **Build host —** no Docker, no database, no replica stack; the suite binds ephemeral loopback
   ports for a stub upstream and the gateway and runs in about 15 s. iOS is not involved — the App
   Attest verification is server-side C# and is tested with locally generated P-256 keys.
+
+- **Component:** C009 docker-compose-dev — 2026-07-27
+- **Status:** DONE — the prompt's verify chain (`config && up -d && wait-healthy.sh && down`) runs
+  green from an empty Docker state, and `bash infra/scripts/slim-verify.sh` → **66/66 checks
+  passed** from a clean slate (volumes removed first). Nine containers in the slim stack: six
+  healthy, three one-shots exited 0; `migrate` applied all **67** C003–C006 scripts in 3.9 s. All
+  five DoD items pass. The replica stack stayed down throughout.
+- **Notes:**
+  **Spec gaps — six of these are not stylistic: the compose block printed in D7' §3 does not
+  start. None are actioned in `specs/`.**
+  (a) ***`volumes: [pgdata:/var/lib/postgresql/data]` is the wrong path for the image on the same
+  line.*** D7' §3 pairs `timescale/timescaledb-ha:pg16` (correct per T-06) with the **official
+  postgres image's** data directory. This image sets `PGDATA=/home/postgres/pgdata/data` and runs
+  as the non-root `postgres` user, so an empty root-owned volume mounted at the §3 path gives
+  `mkdir: cannot create directory '/var/lib/postgresql/data/pgdata': Permission denied` and a
+  restart loop on first boot. Landed as `pgdata:/home/postgres/pgdata`. C003–C006 never hit this
+  because `migrate-verify.sh` runs the image with no volume at all.
+  (b) ***`-c shared_preload_libraries=timescaledb,postgis-3` refuses to start the postmaster.***
+  PostGIS is a plain extension with no preloadable library; only `timescaledb` belongs there, and
+  it is what the image's own entrypoint already sets.
+  (c) ***`redpandadata/redpanda:v24.2` is not a pullable tag*** (D7' §2.1, §9, and the replica's
+  Container 3). Redpanda publishes only full patch tags. Pinned to **`v24.2.26`**, the last v24.2
+  patch. A floating minor tag would not have been reproducible anyway.
+  (d) ***Redpanda does not run with fsync unless it is told to.*** The replica states
+  "`--mode dev-container` is **not** used; replica runs in production mode with `fsync` enabled per
+  partition", which is what makes its "0 data loss on process kill" true. The image's shipped
+  `/etc/redpanda/redpanda.yaml` carries `developer_mode: true`, and rpk then silently appends
+  `--unsafe-bypass-fsync=true` to the broker. Neither `rpk redpanda start --mode` (it accepts only
+  `dev-container`) nor `--set redpanda.developer_mode=false` corrects it — rpk computes the broker
+  flags before applying `--set`. Landed as `rpk redpanda mode production` immediately before
+  `start`, verified by reading the broker's `/proc/<pid>/cmdline`. **D7' §3's command line needs
+  this step.**
+  (e) ***`EMQX_AUTHENTICATION__1__TYPE: jwt` (D7' §3) is not a key EMQX 5 has*** — the field is
+  `mechanism`. Also, `--set=k=v` on `rpk redpanda start` is passed through to the redpanda binary
+  verbatim and dies with "unrecognised option"; `--set` takes its argument as a separate token.
+  (f) ***HAProxy cannot carry port 5026.*** D7' §2.1 and the replica's Container 1 both list
+  `5026 (NMEA UDP)` among HAProxy's ports and call the tracker ports "L4 passthrough". HAProxy has
+  no UDP forwarder — its only UDP support is syslog and DNS resolution. The same document already
+  states this constraint for TURN media ("HAProxy is L4/L7 TCP/HTTP and cannot relay UDP media
+  efficiently"), so the rule exists; the NMEA row just missed it. **5026/udp is published directly
+  off the `tcp-adapter` container**; 5023–5025 stay behind HAProxy as specified.
+  (g) ***`ComBankIpg__WebhookSecret` (D7' §4.2, wallet-svc) contradicts AL-05.*** D7' §9 in the
+  same document says "no bank-transfer IPG, AL-05", and C007 landed no
+  `/v1/wallet/topup/bank-transfer` operation. Listed in the template so the DoD's "every §4
+  variable" holds, but left empty with a comment — nothing reads it. **D7' §4.2 should drop the
+  row.**
+  (h) ***D7' §3 gives `.env.app` to `app-services` only***, yet §4.2 has rows for
+  position-processor, persistence-writer, mqtt-bridge and fleet-health (the four services inside
+  `hot-path`), for fanout-svc and for tcp-adapter. Those variables have to reach the process that
+  reads them, so all four containers load it.
+  (i) ***D7' §4 defines no object-store endpoint or credentials, and no MQTT broker address.***
+  §4.2 gives support-svc `Storage__ScreenshotBucket` while the replica's Container 10 names four
+  distinct uses (ocr-svc documents, proof-of-delivery photos, profile pictures, pg_dump), and
+  mqtt-bridge gets `Emqx__SharedSub` with nothing saying which broker. Added `Storage__S3__*`, the
+  four bucket names and `Mqtt__BrokerUrl` to `.env.common.example`, each flagged as a §4.1
+  micro-change-set candidate in place.
+  **Other spec observations (no change needed):**
+  (j) *`emqx/emqx:5.8` open-source has no Kafka producer bridge.* The replica's Container 2 says
+  the EMQX rule engine "can directly sink to Redpanda via the Kafka-protocol producer, so at light
+  scale we skip deploying a separate `mqtt-bridge-svc`". Data integrations are an **EMQX Enterprise**
+  feature; the community image cannot do it. This costs nothing — D6' §3.3 specifies
+  `mqtt-bridge-svc` with the E-08 shared subscription regardless, and C038 owns it — but the
+  replica's "skip mqtt-bridge-svc" note is not available on this image. **C125 must either accept
+  mqtt-bridge-svc as mandatory (recommended, it is already in `hot-path`) or switch to
+  `emqx/emqx-enterprise`.**
+  (k) *MinIO's API port has no HAProxy entry.* Container 10 says port 9000 is "behind HAProxy
+  passthrough" but Container 1's port list has no line for it. Landed as an `s3.` **vhost on 443**
+  rather than a new port: pre-signed upload/download URLs for driver documents and delivery proofs
+  are handed to a phone, so the object store must be reachable from outside the docker network.
+  (l) *Cosmetic:* D7' §2.1/§9 say `redis:7-alpine`, the replica's Container 4 says `redis:7.4-alpine`.
+  Took D7' §3's spelling (`7-alpine`), which is also what C002's tests already pull.
+  **Decisions —**
+  (1) **Two files, one compose project.** `docker-compose.dev.yml` **`include`s**
+  `docker-compose.dev.slim.yml` rather than copying it, so there is exactly one definition of
+  Postgres, Redis, Redpanda, EMQX and MinIO and the stacks cannot drift; both declare
+  `name: mageride`, the `mageride_mr` network and the same volumes, so `full` is genuinely `slim`
+  plus applications and never a second database. The one thing the full file overrides is EMQX's
+  host ports (`!override`) — HAProxy owns 8883/8084 there, and two publishers cannot share a port.
+  (2) **The committed `.example` files ARE the default config layer**, loaded first by every
+  service, with the gitignored `env/.env.common` / `env/.env.app` loaded second (`required: false`)
+  as the local override. That is what lets `docker compose config` and `up` work on a clean
+  checkout with no setup step. Nothing copies the example to the real file on purpose: a copy made
+  once would silently shadow every later edit to the template.
+  (3) **Compose interpolates `env_file` values.** `Emqx__SharedSub=$share/posGroup/…` reached the
+  container as `/posGroup/…` with a "variable is not set" warning — the E-08 shared subscription
+  silently degraded to an ordinary one. Written `$$share`, verified by reading `printenv` inside a
+  container, and `slim-verify.sh` now **fails on any such warning** so the next `$` cannot slip
+  through.
+  (4) **The slim stack is sized below the canonical replica budgets** (~5.9 GB against ~16.7 GB):
+  postgres 2 GB, redpanda 1.5, emqx 1.5, redis 0.5, minio 0.25, pgbouncer 0.125. Its job is to let
+  a component's verify run *alongside* a `dotnet build` on the shared 24 GB box, not to carry load.
+  `docker-compose.dev.yml` uses the replica's numbers for the app containers.
+  (5) **Every published port is bound to `127.0.0.1`.** This box has a public IP and also hosts the
+  replica; a bare `5432:5432` publishes a dev database to the internet. Every port is
+  `${VAR:-default}` so a second stack can be moved aside without editing the file.
+  (6) **EMQX identity: MQTT username = the principal, and the JWT must agree with it.**
+  `verify_claims = { vehicleId = "${username}" }` refuses the CONNECT unless the session token's
+  `vehicleId` claim equals the connecting username, so the `veh/${username}/…` rules in `acl.conf`
+  are written against a claim the **broker** has verified rather than a self-asserted string. That
+  is D6' §3.1's "EMQX binds the vehicleId JWT/X.509 claim" made mechanical, and it makes the DoD
+  case fail in **both** directions: a token minted for vehicle B cannot connect as vehicle A, and a
+  correctly-bound vehicle A cannot publish to B's topic. Platform components use the same shape
+  with a `svc-*` username; one ACL rule grants that prefix the E-08 shared subscription and the
+  T-04 LWT-emulation publish. Dev signs with a shared HMAC secret because iam-svc (C026) and
+  provisioning-svc (C030) do not exist yet; the RS256 **JWKS block with D-21's 15-minute
+  `refresh_interval` is written out and commented in `emqx.conf`** for C030/C125 to switch on.
+  (7) **`authorization.no_match = deny` and `deny_action = disconnect`.** EMQX's shipped default is
+  *allow*, which would make every rule in `acl.conf` advisory. `disconnect` rather than `ignore`
+  because an MQTT 3.1.1 device gets no error code for a refused publish: silently dropping it would
+  leave a misprovisioned tracker publishing into a void for its whole 90-day credential.
+  (8) **D-17's 5 msg/s is a listener `messages_rate`, not a rule-engine counter.** D6' §3.3
+  specifies it per `vehicleId`; a listener limit is per connection, and since a connection
+  authenticates as exactly one vehicleId the two agree for every case the broker can see, at a
+  fraction of the cost. What it cannot do is emit `mqtt.rate_violation` onto `audit.events` —
+  **that half stays C038/C125's**, and `position-processor`'s second-line 10 msg/s/10 s limit is
+  unaffected.
+  (9) **`migrate` connects directly to Postgres, never through PgBouncer.** The scripts create
+  roles (C006's `1804` needs CREATEROLE), run one transaction per script and take advisory locks —
+  none of which belong on a transaction-pooled connection. Same reasoning as C002's
+  `ConnectionStrings__PostgresDirect`, which is now in `.env.common.example` for ride-svc and
+  dispatch-svc.
+  (10) **Redpanda advertises two listeners, `internal` and `external`.** Without the advertise pair
+  the broker advertises its container hostname, and every client outside docker fails on the
+  *second* (metadata-driven) connection rather than the first — which looks like a broker fault.
+  `redpanda:9092` in-cluster, `127.0.0.1:19092` from the host, so a `dotnet test` on the box and a
+  container hit the same broker.
+  (11) **The bootstrap creates the D6' §2.3 dead-letter partner of every topic** (`<topic>.dlq`,
+  1 partition — a DLQ is drained by a human or a replay tool, and total ordering beats
+  parallelism). 12 topics in total. It is idempotent and re-applies configuration on every run, so
+  a hand-edited retention is corrected on the next `dev-up`; the verify runs it twice and asserts
+  no thirteenth topic appears.
+  (12) **Topic retention is a decision, not a spec value** — no spec pins one. telemetry.* 24 h
+  (already durable in `trips.position_samples` / `telemetry.positions` once persistence-writer has
+  consumed it), `*.events` 7 d (a consumer down over a weekend must still catch up), `*.dlq` 30 d.
+  Each is overridable by an env var and the reasoning is in the script.
+  (13) **HAProxy uses `init-addr none`, not the usual `last,libc,none`.** A dev box routinely runs
+  with some backends absent, and `libc` blocks on a synchronous `getaddrinfo` per unresolvable
+  name: measured **~30 s before HAProxy bound a single port** with six missing backends. With
+  `none` the server starts DOWN at 0.0.0.0 and the `docker` resolver brings it up within a second —
+  healthz answered immediately, and MinIO was marked UP "thanks to valid DNS answer". The resolver
+  is also what makes a `docker compose restart app-services` transparent instead of a blackhole.
+  (14) **HAProxy 404s `/health/live`, `/health/ready`, `/metrics` and `/v1/internal/**`.** C008's
+  handoff asks for the first three: MageRide.Shared maps them anonymously on every service, which
+  is right internally and wrong on the public edge, where `/health/ready` names every dependency it
+  probes and `/metrics` is the internal topology. `/v1/internal/**` is refused at the edge as well
+  as at the gateway so a misconfigured route cannot expose an mTLS-only path. 404 rather than 403 —
+  a 403 confirms the path exists. All four verified against a live HAProxy on the dev network.
+  (15) **`api-gateway` is its own container in the full stack.** The replica co-locates it inside
+  `app-services` ("21 domain services behind a single YARP gateway process") but D7' §5's Ingress
+  names `api-gateway` as its own backend service, and C008 shipped it as its own project and image.
+  Landed as a separate container with **20 clusters pointing at `app-services:5000` and
+  `fanout-svc` at `fanout:5001`** — still exactly one gateway process, which is what the replica
+  sentence is actually about. This is also where `Gateway__ForwardedHeaders__KnownProxies__0` is
+  set to HAProxy, without which every caller collapses into one rate-limit bucket.
+  (16) **Two further one-shots beside `migrate`:** `redpanda-init` (topics) and `minio-init` (the
+  four buckets `.env.common.example` names). Without the second, every `Storage__*` variable points
+  at a bucket that does not exist.
+  (17) **`wait-healthy.sh` reads which services are one-shots out of `docker compose config`**
+  (`restart: "no"`) instead of hard-coding names, so adding a one-shot to either file needs no edit
+  there. It fails fast on `unhealthy` or a non-zero exit rather than burning the timeout — a
+  Postgres that died in initdb is not going to recover by waiting — and dumps the last 40 log lines
+  of whatever failed.
+  (18) **`dev-up.sh` refuses to start while the replica project is running** (root CLAUDE.md
+  fence), generates the self-signed dev certificate HAProxy needs, and — for the full stack —
+  checks each build Dockerfile and names the component that lands the missing ones instead of
+  letting docker fail with a bare "failed to read dockerfile".
+  (19) **One change outside this component's files:** `backend/src/MageRide.Migrations/Dockerfile`
+  gained `apk add --no-cache krb5-libs`. Npgsql probes for GSSAPI on connect, and without it the
+  alpine runtime printed `Error: Error loading shared library libgssapi_krb5.so.2` on **every**
+  migrate run — harmless (the connection proceeded) but indistinguishable from a real migration
+  failure in a compose log, in the stack every later component is told to bring up. C003's own
+  verify runs `dotnet run` on the host and is unaffected.
+  (20) **`slim-verify.sh` is the DoD proof and does functional tests, not container introspection**
+  (66 checks). It mints HS256 tokens with `openssl` alone — no python or PyJWT on the build host —
+  and drives a real `eclipse-mosquitto` client on the compose network. Beyond the two DoD
+  directions it proves the *positive* case first (an ACL that denied everything would pass every
+  negative check and look like a working policy), then that no credentials, a forged signature, an
+  expired token, an off-tree topic, `$SYS/#` and a `veh/+/pos/live` firehose are all refused, while
+  `svc-mqtt-bridge` still gets its E-08 shared subscription. It also asserts the journal holds 67
+  scripts, that PgBouncer really is in transaction mode, that each topic is partitions=3 /
+  replicas=1, and that every D7' §4.1 and §4.2 variable is present — with no `Mfa__*` (AL-37,
+  planner finding 3) and every secret-marked row an empty or `CHANGEME_` placeholder.
+  **For later components —**
+  **C038 / C043 (mqtt-bridge, tcp-adapter):** connect to EMQX with username **`svc-mqtt-bridge`** /
+  **`svc-tcp-adapter`** and a session JWT whose `vehicleId` claim equals that username; the
+  `^svc-` ACL rule is what grants `$share/posGroup/...` and cross-vehicle publish. Any other
+  username is denied by `no_match = deny`.
+  **C030 (provisioning-svc):** owns the switch from the dev HMAC secret to RS256 JWKS — the block
+  is written and commented in `infra/deploy/emqx/emqx.conf`, and D-21's 15-minute cache is its
+  `refresh_interval`.
+  **C040 (persistence-writer):** `Timescale__BatchRows` / `Timescale__FlushMs` are in
+  `.env.app.example`; remember C006's three-column conflict target.
+  **C104 / C111 (portals):** `haproxy.cfg` already carries the `admin.` and `fleet.` vhost backends
+  and starts cleanly while those containers are absent, so adding a portal needs no HAProxy change
+  — only a compose service on 3001 / 3002.
+  **C119 (observability):** `Otel__Endpoint` is empty in the template; the `monitoring` container is
+  not declared in either dev file (D7' §3 has it as a comment, not a service).
+  **C125 (replica):** the six blocking fixes above are the difference between D7' §3 as printed and
+  a stack that boots — take `docker-compose.dev.yml` as the starting point, not the spec listing.
+  Also: bind ports on the public interface with a real certificate rather than `127.0.0.1`, decide
+  the enterprise-vs-mqtt-bridge question in (j), replace `Gateway__Attestation__Mode=Disabled` with
+  `Audit`, and re-examine running Postgres as the superuser (C006's `1804` needs CREATEROLE).
+  **Build host —** Docker only; no .NET build beyond the `migrate` image (which needs
+  `mcr.microsoft.com/dotnet/sdk:10.0`, pulled once). New images cached: `redpandadata/redpanda:v24.2.26`,
+  `emqx/emqx:5.8`, `edoburu/pgbouncer`, `minio/minio`, `haproxy:2.9-alpine`, `eclipse-mosquitto:2`
+  (~700 MB in total). Peak footprint of the slim stack is ~5.9 GB and the replica stack stayed down
+  throughout; `slim-verify.sh` removes the stack and its volumes on exit, including on failure, and
+  the box was left with nothing running. The full verify takes roughly 3 minutes, most of it EMQX's
+  ~40 s start-up and the fifteen throwaway MQTT client containers.
