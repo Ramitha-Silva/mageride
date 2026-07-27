@@ -15,7 +15,8 @@
 - Ranges: `00xx` bootstrap · `01xx` iam · `02xx` config · `03xx` registry · `04xx` prov ·
   `05xx` trips · `06xx` rides · `07xx` dispatch · `08xx` reputation · `09xx` safety ·
   `10xx` fares · `11xx` billing · `12xx` subscription · `13xx` comms/docs/support/content/
-  audit/pdpa · `14xx` spatial/transit/analytics · `15xx` telemetry.
+  audit/pdpa · `14xx` spatial/transit/analytics · `15xx` telemetry · `19xx` seed /
+  reference data (§20).
 - A file may create objects in another schema when a foreign key forces the order; name it for
   what it creates and say why in the header (see `0302__iam_fleet_members.sql`).
 - **Every script must be re-runnable**: `CREATE TABLE IF NOT EXISTS`, `CREATE INDEX IF NOT
@@ -32,6 +33,19 @@
 - Money is integer minor units (`*_minor`), enumerations are `TEXT` + `CHECK` (never a PG enum
   type), and every table with an `updated_at` calls
   `SELECT public.attach_set_updated_at('<schema>','<table>');`.
+  The verify enforces that every `*_minor` column is an integer type with a `>= 0` CHECK and
+  every `currency` column defaults to `'LKR'`. The only exemption is the five signed ledger
+  columns §0 names (`billing.accounts.balance_minor`, `journal_postings.amount_minor`, and the
+  two `wallets` / `wallet_transactions` mirrors) — they are BIGINT and may be negative.
+- A seed `INSERT` is re-runnable or it is wrong: use `ON CONFLICT DO NOTHING` where a key
+  exists, `WHERE NOT EXISTS` where the PK is a generated UUID, and pin any column that would
+  otherwise default to `now()` into the conflict target (see `1901`'s `effective_from`).
+  Seeds are admin-editable in production — a re-run must never revert an operator's change.
+- `transit_staging.gtfs_*` mirrors `transit.gtfs_*` via `LIKE ... INCLUDING DEFAULTS INCLUDING
+  CONSTRAINTS INCLUDING COMMENTS` rather than a copied column list, because the AL-54 activation
+  swap renames one schema into the other and silent column drift would corrupt the live feed.
+  Keys, indexes and FKs are not copied by `LIKE`; declare them explicitly, pointing *within*
+  `transit_staging`. The verify asserts the two sides stay column-for-column identical.
 
 ## Running
 

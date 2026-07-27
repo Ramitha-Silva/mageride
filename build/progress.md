@@ -30,7 +30,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C002 | backend-shared-kernel | 0 | DONE | 2026-07-27 | 152 tests green; 2 micro-change-sets raised (command-log column, direct DSN) |
 | C003 | db-schema-identity-registry | 0 | DONE | 2026-07-27 | 13 scripts, 24 tables, 40/40 verify checks; 4 micro-change-sets raised |
 | C004 | db-schema-trips-rides-dispatch | 0 | DONE | 2026-07-27 | 21 scripts, 26 tables, 84/84 verify checks; 2 micro-change-sets raised, 1 actioned |
-| C005 | db-schema-business-content | 0 | PENDING | | |
+| C005 | db-schema-business-content | 0 | DONE | 2026-07-27 | 29 scripts, 53 tables, 151/151 verify checks; 3 micro-change-sets raised |
 | C006 | db-schema-telemetry-timescale | 0 | PENDING | | |
 | C007 | openapi-contracts | 0 | PENDING | | |
 | C008 | api-gateway-yarp | 0 | PENDING | | |
@@ -503,3 +503,151 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   **Build host —** same footprint as C003: Docker plus the cached `timescale/timescaledb-ha:pg16`; the
   container is published on `127.0.0.1:0` and removed by an EXIT trap. The replica stack stayed down
   throughout. The verify now runs 84 checks in roughly 40 s.
+
+- **Component:** C005 db-schema-business-content — 2026-07-27
+- **Status:** DONE — `bash infra/scripts/migrate-verify.sh` → **151/151 checks passed**, run end to end
+  twice. 29 new scripts (63 total) apply to an empty `timescale/timescaledb-ha:pg16`, no-op on a
+  journalled re-run, and re-apply cleanly with the journal disabled. 53 new tables: safety 5, fares 5,
+  billing 12, subscription 4, comms 3, docs 2, support 1, content 3, audit 1, pdpa 2, spatial 3,
+  transit 6, transit_staging 5, analytics 1. All six DoD items pass. `telemetry` is left empty for C006.
+- **Notes:**
+  **Spec gaps — three micro-change-sets, none actioned in `specs/`:**
+  (a) ***`transit.gtfs_feed_versions.uploaded_by` references a column that does not exist.*** Both
+  `server_db_schema.md` §27 and D4' Δ 2026-07-22 #2 write
+  `uploaded_by UUID NOT NULL REFERENCES iam.users(user_id)`, but `iam.users` has no `user_id` — its
+  primary key is `id`, in §1 of the same document and in every other FK in both specs. Landed against
+  `iam.users(id)`. **Both DDL sources need the one-word edit.**
+  (b) ***The AL-47 rewrite of `fares.ride_payments.state` silently drops `PartiallyRefunded`.*** §25 /
+  D4' Δ 2026-07-05 #2 replace the CHECK to add the two driver-QR attestation states and, in doing so,
+  omit `PartiallyRefunded` — which the base §9 DDL, §19's enumeration reference and ADD §9.1 all still
+  list, and which `fares.refunds.kind = 'partial'` (E-05) has no other terminal state to land in. Three
+  sources say keep it, one later rewrite drops it while changing something unrelated. **Landed the union
+  (14 states).** A state nothing writes costs nothing; a missing one makes a partial refund
+  unrepresentable. §25 should re-include it, and §19 should gain `QrClaimedByPassenger` /
+  `DriverConfirmedQR`, which it is still missing.
+  (c) ***`fares.invoices` and `fares.payouts` do not exist anywhere but one ADD line.*** ADD §9.1's
+  schema listing names both as bare table names with no column list; neither `server_db_schema.md` §9
+  nor D4' §9 has DDL, no D3' endpoint touches them, and this prompt's deliverable line echoes the ADD
+  listing. **Not created** — the same phantom class as `iam.user_prefs` (C003 note (d)) and
+  `scheduling.scheduled_rides` (planner finding 2), and inventing columns would be worse than the gap.
+  The functions are already covered: fleet invoicing by `billing.fleet_invoices` (AL-03), driver payout
+  binding by `registry.driver_payouts` (D-11, C003) and org payout by `registry.fleet_payout_profiles`
+  (AL-49, C003). **ADD §9.1 should drop the two lines.**
+  **Other spec observations (no change needed):**
+  (d) **Planner finding 1 is stale and can be closed.** It records that `server_db_schema.md` carries no
+  DDL for `config.operating_cities`, `subscription.*` or the `transit.gtfs_*` core tables. The
+  **2026-07-26 back-fill** (recorded in §22) added all of them as §17b / §18b / §18c, and §0.1 now
+  creates the three schemas. D4' and `server_db_schema.md` agree on every one of these tables; the fence
+  in this prompt ("take the DDL from D4 and record the gap") no longer had a gap to record.
+  (e) *`comms.voip_sessions.masked_sms_fallback` is deliberately absent.* §11 prints it; §25 (AL-48)
+  drops it with D-25. Landed in the final post-Δ shape, as with every other Δ in this component — these
+  change sets are migration history, not a sequence this repo replays.
+  (f) *`comms.call_log.caller_id` is now nullable with nothing to fall back on.* AL-44 made it nullable
+  and added `share_token` as the alternative identity; AL-48 then dropped `share_token` but left the
+  column nullable in both specs. Landed as printed — the log is explicitly best-effort — but it means a
+  row can identify no caller at all. Harmless here, worth knowing in C055.
+  (g) *§20 seeds no voucher tiers and no FAQ, and only one notification template.* See decisions (9)
+  and (10) for what was seeded and on what authority.
+  **Decisions —**
+  (1) **Six business-date columns gained a D-38 `*_tz_at` companion**, continuing C004's convention and
+  ADD §9.1's wording ("persisted as `DATE` *plus* a `tz_at TIMESTAMPTZ` audit field"):
+  `fares.driver_earnings.earn_date`, `billing.daily_fee_charges.fee_date`,
+  `billing.monthly_subscriptions.period_month`, `billing.fleet_invoices.period_month`,
+  `subscription.subscriptions.next_due`, `subscription.payments.period_month` and
+  `analytics.daily_metrics.metric_date`. **`transit.gtfs_feed_versions` is the one exemption** —
+  `service_start` / `service_end` are read out of an uploaded GTFS feed rather than computed in
+  Asia/Colombo, so there is no derivation instant to record. The exemption is named explicitly in the
+  verify rather than left to a silently narrowed schema list.
+  (2) **The balance trigger fires on DELETE as well as INSERT/UPDATE.** Both specs print
+  `AFTER INSERT OR UPDATE`; deleting one leg of a balanced entry would then leave the ledger quietly
+  unbalanced. `billing.assert_balanced()` takes `COALESCE(NEW.entry_id, OLD.entry_id)`, so deleting the
+  *entry* still passes (`ON DELETE CASCADE` removes every leg and an empty entry sums to zero) while
+  removing a single posting raises. Verified both ways. Note the inherent limit of a row trigger: an
+  entry with **zero** postings is never checked, because nothing fires.
+  (3) **`billing.accounts` gained a singleton guarantee for the platform-side accounts.** §0/§20 seed one
+  `platform` and one `suspense` row and neither carries an `owner_id`, but nothing in the printed DDL
+  stops a second one being created — after which postings would split across two accounts and every
+  reconciliation would be silently wrong. Landed `ck_accounts_owner_id` (driver/fleet must have an owner,
+  platform/suspense must not) plus `ux_accounts_platform` / `ux_accounts_owner`. The §20 platform rows
+  are seeded in `1101` beside those indexes rather than in `1901`.
+  (4) **`billing.daily_fee_charges` deliberately has no `journal_entry_id`.** Every other money row in
+  `billing` carries one, but neither spec prints it here and the link is derivable from the PK via the
+  ledger idempotency key — `'daily_fee:' || driver_id || ':' || vehicle_id || ':' || fee_date`, spelled
+  out in a column comment. **C047 must use exactly that spelling.** Same reasoning as C004's note on the
+  penalty key `penalty_id || ':' || rideId` (D5 §7.1), which `billing.journal_entries.idempotency_key`
+  now documents in place.
+  (5) **`transit_staging.gtfs_*` is declared with `LIKE ... INCLUDING DEFAULTS INCLUDING CONSTRAINTS
+  INCLUDING COMMENTS`, not a copied column list.** AL-54 activation renames one schema into the other in
+  a single transaction, so column drift between the two sides would corrupt the live feed rather than
+  fail loudly. `LIKE` copies neither keys nor FKs, so those are declared explicitly and point **within**
+  `transit_staging` — the verify asserts no staging FK reaches into `transit`, which would drag live rows
+  through the swap. **C057 should know** the staging indexes are named `ix_staging_*`: after a swap the
+  live tables carry those names, so either rename on activate or stop depending on the index names.
+  (6) **CHECK constraints are explicitly named `ck_*`**, as in C004, so the verify can assert exact value
+  sets. This renames two constraints the specs spell out (`trip_share_tokens_scope_check`,
+  `trip_share_tokens_subject_check`) — those are Postgres's own auto-generated names carried into an
+  `ALTER`, not names any application references.
+  (7) **Constraints beyond the printed DDL, each encoding a rule the specs state in prose:** waived
+  daily fees and FREE monthly/fleet invoices must carry no amount (D-13, "first month free");
+  `period_month` must be the first of its month (otherwise the UNIQUE admits two rows per month and the
+  free period can be re-claimed); a voucher credits its full face value (`credited_minor =
+  denomination_minor`, US-9.19); no self credit-transfer and no self block; a `pending` access request
+  claims no decision maker; a `join_anniversary` cycle needs a `join_day`; a `FulfilledHold` PDPA request
+  needs a `hold_reason`; `content.broadcasts.message_by_lang` must contain all three languages (D-26 —
+  the platform's trilingual rule made a schema constraint); lat/lng bounds on `safety.sos_events`.
+  (8) **Twenty-two indexes exist that neither spec prints**, each backing a query the specs name — the
+  unacked SOS queue, the pending vehicle-report and support queues, the driver-QR attestation timer, the
+  refund and PDPA SLA queues, the monthly billing sweeps, the credit-transfer approval inbox, the
+  subscription due-date scan and the owner's slip-verification queue, the NFR-28 upload sweeper, the
+  share-token expiry sweep, and the `content.notification_templates` current-version lookup. Three are
+  uniqueness rather than performance and are worth calling out: `ux_notif_tokens_token` (FCM/APNs reissue
+  a token to whichever install owns it — without this a reinstall leaves a dead handle receiving E-01
+  offers), `ux_wallet_tx_account_entry` (the ledger event stream is at-least-once per C002 decision 3, so
+  a redelivered entry must not append a second history line) and `ux_refunds_provider_ref`. No index
+  either spec prints was omitted.
+  (9) **Voucher tier seed: denominations are spec, percentages are not.** URD US-9.19 pins the five
+  denominations (Rs 1,000 / 2,000 / 3,000 / 5,000 / 10,000) and every spec that mentions the rate says it
+  is admin-configurable per denomination with larger values typically earning more — giving exactly one
+  worked example, `100000 → 1000 bps = 10%` (ADD §9.1 and URD US-9.19 both). That point is seeded
+  literally; the 11/12/13/15% ladder above it is a **defensible default for Finance to edit in
+  SCR-AP-007, not a spec value**, and is flagged as such in `1901`.
+  (10) **Only the four template keys the specs actually name are seeded** — `ride_offer` (§20) and
+  `package_on_the_way` / `proxy_ride_link` / `pickup_confirm_link` (D6' I-29.2) — each in Si, Ta and En,
+  and the verify fails if any key is missing a language. Inventing further keys would put strings in the
+  database that no service resolves. **C045 (content-svc) and C051 (notification-svc) own the rest, and
+  must add all three languages per key.** The four FAQ topics are the ones US-16.1 names (wallet top-up,
+  daily fee, vehicle registration, ride booking), 12 rows in total.
+  (11) **`fares.tariffs.effective_from` is pinned to the epoch in the seed.** The column defaults to
+  `now()` and is half of the UNIQUE key, so an unpinned seed would write a *new tariff version* on every
+  re-run instead of conflicting — and `migrate-verify.sh` pass 3 re-executes every script. This is the
+  general hazard for any seed whose conflict target includes a defaulted timestamp; recorded in
+  `db/CLAUDE.md`.
+  (12) **Both deferred FKs from earlier components are now closed:** `trips.sessions.route_id →
+  spatial.routes(id)` (C004 note (d), `ON DELETE SET NULL` so retiring a route does not delete its trips)
+  and `registry.fleet_payout_profiles.proof_upload_id` / `lankaqr_upload_id → docs.uploads(id)` (C003
+  decision 7, AL-49). Both are added by `DO` blocks guarded on `pg_constraint` so pass 3 stays a no-op.
+  §0's "real FOREIGN KEY constraints everywhere" now has no outstanding exceptions.
+  (13) **The three platform-wide verify rules are now scoped by one `OWNED_SCHEMAS` list**, not a
+  hand-maintained list per check — TIMESTAMPTZ-only, a `tz_at` companion per business `DATE`, and
+  `set_updated_at` on every mutable table. A later component that adds a schema must add it there, which
+  is a visible edit; previously it could opt out by omission. Two money rules were added to the same
+  sweep (DoD item 4): every `*_minor` column is an integer type with a `>= 0` CHECK, and every `currency`
+  column defaults to `'LKR'` — with the five signed ledger columns §0 exempts listed explicitly.
+  (14) **The verify does functional tests, not just catalog introspection** (67 new checks). It proves
+  the balance trigger rejects a single-leg entry *at COMMIT* and rejects deleting one leg of a balanced
+  one, that a replayed gateway callback id is refused (R-19), that charging the daily fee twice in one
+  Colombo day is a no-op and lands on the Colombo date (D-13/D-38), that a voucher cannot credit less
+  than its face value, that a `pickup_confirm` token without a location request and a token-less web SOS
+  are both refused while a legitimate `proxy_rider` token and token-only web SOS are accepted (AL-44),
+  that `normal_masked` is refused (AL-48), that an unsubscribed Mode B grant stays MUTED until the owner
+  deletes it (US-4.12), and that exactly one GTFS feed can be active — and that archiving it lets the
+  next one activate (BR-32.2/32.3). Each rejection was checked by hand to fire on its *intended*
+  constraint, not incidentally.
+  **For later components —** truck / mini_truck have **no seeded daily-fee plan and no seeded tariff**
+  (§20 leaves package-delivery rates to admin configuration), so Finance must set both before a delivery
+  vehicle can go online; C060/C062 should surface that. `subscription.payments` must **never** post to
+  `billing.journal_entries` (§18b — the platform takes no commission on the Mode B pass-through), and
+  there is deliberately no column tempting C048 to.
+  **Build host —** same footprint as C003/C004: Docker plus the cached `timescale/timescaledb-ha:pg16`,
+  published on `127.0.0.1:0` and removed by an EXIT trap. The replica stack stayed down throughout. The
+  verify now runs 151 checks in roughly 55 s.

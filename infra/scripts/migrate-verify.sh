@@ -24,6 +24,14 @@ PROJECT="$REPO_ROOT/backend/src/MageRide.Migrations/MageRide.Migrations.csproj"
 FAILURES=0
 CHECKS=0
 
+# Every schema whose tables have been landed so far (C003 + C004 + C005). The platform-wide
+# rules — TIMESTAMPTZ only, a tz_at companion per business DATE, set_updated_at on every
+# mutable table — are asserted across all of them at once, so a later component cannot
+# quietly opt out by adding a schema. `telemetry` joins this list with C006.
+OWNED_SCHEMAS="'iam','registry','prov','config','trips','rides','dispatch','reputation',
+               'safety','fares','billing','subscription','comms','docs','support','content',
+               'audit','pdpa','spatial','transit','transit_staging','analytics'"
+
 RED=''; GREEN=''; YELLOW=''; RESET=''
 if [[ -t 1 ]]; then RED=$'\033[31m'; GREEN=$'\033[32m'; YELLOW=$'\033[33m'; RESET=$'\033[0m'; fi
 
@@ -160,11 +168,8 @@ check_eq "12 dispatch tables" "12" \
 check_eq "3 reputation tables" "3" \
   "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
     WHERE n.nspname='reputation' AND c.relkind IN ('r','p') AND NOT c.relispartition;"
-check_eq "C005/C006 schemas left empty" "0" \
-  "SELECT count(*) FROM information_schema.tables
-    WHERE table_schema IN ('safety','fares','billing','comms',
-                           'docs','support','content','audit','pdpa','spatial','telemetry',
-                           'subscription','transit','analytics','transit_staging');"
+check_eq "C006 schema left empty" "0" \
+  "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'telemetry';"
 
 step "AL-08 — single active device per app"
 check_eq "ux_sessions_active_app is a unique partial index on (user_id, app)" "1" \
@@ -241,14 +246,19 @@ check_eq "prov.tracker_bindings.rotates_at is NOT NULL" "NO" \
 step "D-38 — temporal columns"
 check_eq "no 'timestamp without time zone' columns" "0" \
   "SELECT count(*) FROM information_schema.columns
-    WHERE table_schema IN ('iam','registry','prov','config','trips','rides','dispatch','reputation')
+    WHERE table_schema IN ($OWNED_SCHEMAS)
       AND data_type = 'timestamp without time zone';"
-# dispatch.directional_filters.used_date is the first business-date column in the schema; any
+# dispatch.directional_filters.used_date was the first business-date column in the schema; any
 # later one that appears without its Asia/Colombo tz_at audit companion fails here (D-38).
+#
+# transit.gtfs_feed_versions is the one documented exemption: service_start / service_end are
+# read out of an uploaded GTFS feed rather than computed in Asia/Colombo, so there is no
+# derivation instant for a companion to record.
 check_eq "every DATE column has a tz_at companion" "0" \
   "SELECT count(*) FROM information_schema.columns c
-    WHERE c.table_schema IN ('iam','registry','prov','config','trips','rides','dispatch','reputation')
+    WHERE c.table_schema IN ($OWNED_SCHEMAS)
       AND c.data_type = 'date'
+      AND NOT (c.table_schema = 'transit' AND c.table_name = 'gtfs_feed_versions')
       AND NOT EXISTS (SELECT 1 FROM information_schema.columns t
                        WHERE t.table_schema = c.table_schema AND t.table_name = c.table_name
                          AND t.column_name LIKE '%tz\_at');"
@@ -256,7 +266,7 @@ check_eq "every DATE column has a tz_at companion" "0" \
 step "§0.2 — set_updated_at attached to every mutable table"
 check_eq "no updated_at column is left without its trigger" "0" \
   "SELECT count(*) FROM information_schema.columns c
-    WHERE c.table_schema IN ('iam','registry','prov','config','trips','rides','dispatch','reputation')
+    WHERE c.table_schema IN ($OWNED_SCHEMAS)
       AND c.column_name = 'updated_at'
       AND NOT EXISTS (
         SELECT 1 FROM pg_trigger tg
@@ -615,6 +625,377 @@ check_rejects "a driver level outside 1–3 is rejected (US-6A.6)" \
 
 check_rejects "an unknown block state is rejected (D-04)" \
   "INSERT INTO reputation.block_states(user_id, state) VALUES ('$PAX_1','SHADOWBANNED');"
+
+# ---------------------------------------------------------------------------------------
+# C005 — safety / fares / billing / subscription / comms / docs / support / content /
+#        audit / pdpa / spatial / transit / analytics
+# ---------------------------------------------------------------------------------------
+step "Tables owned by C005"
+check_eq "5 safety tables" "5" \
+  "SELECT count(*) FROM information_schema.tables WHERE table_schema='safety' AND table_type='BASE TABLE';"
+check_eq "5 fares tables" "5" \
+  "SELECT count(*) FROM information_schema.tables WHERE table_schema='fares' AND table_type='BASE TABLE';"
+check_eq "12 billing tables" "12" \
+  "SELECT count(*) FROM information_schema.tables WHERE table_schema='billing' AND table_type='BASE TABLE';"
+check_eq "4 subscription tables" "4" \
+  "SELECT count(*) FROM information_schema.tables WHERE table_schema='subscription' AND table_type='BASE TABLE';"
+check_eq "3 comms, 2 docs, 1 support, 3 content, 1 audit, 2 pdpa, 3 spatial tables" "15" \
+  "SELECT count(*) FROM information_schema.tables
+    WHERE table_schema IN ('comms','docs','support','content','audit','pdpa','spatial')
+      AND table_type='BASE TABLE';"
+check_eq "6 transit + 5 transit_staging + 1 analytics tables" "12" \
+  "SELECT count(*) FROM information_schema.tables
+    WHERE table_schema IN ('transit','transit_staging','analytics') AND table_type='BASE TABLE';"
+check_eq "billing.bank_transfer_topups does not exist (AL-05)" "0" \
+  "SELECT count(*) FROM information_schema.tables
+    WHERE table_schema='billing' AND table_name='bank_transfer_topups';"
+
+step "Deferred FKs from C003 and C004 are now closed"
+check_eq "trips.sessions.route_id references spatial.routes (C004 note (d))" "1" \
+  "SELECT count(*) FROM pg_constraint
+    WHERE conrelid='trips.sessions'::regclass AND conname='fk_sessions_route' AND contype='f';"
+check_eq "fleet_payout_profiles both upload columns reference docs.uploads (AL-49)" "2" \
+  "SELECT count(*) FROM pg_constraint
+    WHERE conrelid='registry.fleet_payout_profiles'::regclass AND contype='f'
+      AND confrelid='docs.uploads'::regclass;"
+
+step "§0 Money — integer minor units, non-negative, LKR"
+check_eq "every *_minor column is an integer type" "0" \
+  "SELECT count(*) FROM information_schema.columns
+    WHERE table_schema IN ($OWNED_SCHEMAS)
+      AND column_name LIKE '%\_minor'
+      AND data_type NOT IN ('integer','bigint');"
+# §0 exempts exactly the ledger balances and postings: those are signed BIGINT because the
+# suspense account and the debit leg of every entry are negative by construction. Every
+# other *_minor column in the platform must carry a >= 0 (or > 0) CHECK.
+check_eq "every non-ledger *_minor column has a non-negative CHECK" "0" \
+  "SELECT count(*) FROM information_schema.columns c
+    WHERE c.table_schema IN ($OWNED_SCHEMAS)
+      AND c.column_name LIKE '%\_minor'
+      AND (c.table_schema||'.'||c.table_name||'.'||c.column_name) NOT IN (
+            'billing.accounts.balance_minor',
+            'billing.journal_postings.amount_minor',
+            'billing.wallets.balance_minor',
+            'billing.wallet_transactions.amount_minor',
+            'billing.wallet_transactions.balance_after_minor')
+      AND NOT EXISTS (
+        SELECT 1 FROM pg_constraint k
+         WHERE k.conrelid = format('%I.%I', c.table_schema, c.table_name)::regclass
+           AND k.contype = 'c'
+           AND pg_get_constraintdef(k.oid) ~ ('\\m' || c.column_name || '\\M[[:space:]]*>=?[[:space:]]*0'));"
+check_eq "every currency column defaults to LKR" "0" \
+  "SELECT count(*) FROM information_schema.columns
+    WHERE table_schema IN ($OWNED_SCHEMAS) AND column_name = 'currency'
+      AND (column_default IS NULL OR column_default NOT LIKE '%LKR%');"
+
+step "D-09 — the double-entry ledger"
+check_eq "journal_entries.idempotency_key is UNIQUE" "1" \
+  "SELECT count(*) FROM pg_constraint
+    WHERE conrelid='billing.journal_entries'::regclass AND contype='u'
+      AND pg_get_constraintdef(oid) LIKE '%(idempotency_key)%';"
+check_eq "journal.kind has no reseller_commission (AL-01)" "0" \
+  "SELECT count(*) FROM pg_constraint
+    WHERE conrelid='billing.journal_entries'::regclass AND contype='c'
+      AND pg_get_constraintdef(oid) LIKE '%reseller%';"
+check_eq "accounts.owner_type has no 'reseller' (AL-01)" "0" \
+  "SELECT count(*) FROM pg_constraint
+    WHERE conrelid='billing.accounts'::regclass AND contype='c'
+      AND pg_get_constraintdef(oid) LIKE '%reseller%';"
+check_eq "accounts.owner_type is exactly the four AL-01/AL-03 values" "driver,fleet,platform,suspense" \
+  "SELECT string_agg(m[1], ',' ORDER BY m[1] COLLATE \"C\")
+     FROM pg_constraint c, LATERAL regexp_matches(pg_get_constraintdef(c.oid), '''([a-z_]+)''', 'g') AS m
+    WHERE c.conrelid='billing.accounts'::regclass AND c.conname='ck_accounts_owner_type';"
+check_eq "trg_balanced is a DEFERRABLE INITIALLY DEFERRED constraint trigger" "1" \
+  "SELECT count(*) FROM pg_trigger
+    WHERE tgrelid='billing.journal_postings'::regclass AND tgname='trg_balanced'
+      AND tgconstraint <> 0 AND tgdeferrable AND tginitdeferred;"
+
+step "R-19 / AL-47 — payment idempotency and driver-QR attestation"
+check_eq "ride_payments.provider_transaction_id is UNIQUE" "1" \
+  "SELECT count(*) FROM pg_constraint
+    WHERE conrelid='fares.ride_payments'::regclass AND contype='u'
+      AND pg_get_constraintdef(oid) LIKE '%(provider_transaction_id)%';"
+check_eq "ride_payments.state carries both AL-47 attestation states and PartiallyRefunded" "1" \
+  "SELECT count(*) FROM pg_constraint
+    WHERE conrelid='fares.ride_payments'::regclass AND conname='ck_ride_payments_state'
+      AND pg_get_constraintdef(oid) LIKE '%QrClaimedByPassenger%'
+      AND pg_get_constraintdef(oid) LIKE '%DriverConfirmedQR%'
+      AND pg_get_constraintdef(oid) LIKE '%PartiallyRefunded%';"
+check_eq "ride_payments.method is exactly the five AL-22 values" "cash,cod,lankaqr,onepay,scan_driver_qr" \
+  "SELECT string_agg(m[1], ',' ORDER BY m[1] COLLATE \"C\")
+     FROM pg_constraint c, LATERAL regexp_matches(pg_get_constraintdef(c.oid), '''([a-z_]+)''', 'g') AS m
+    WHERE c.conrelid='fares.ride_payments'::regclass AND c.conname='ck_ride_payments_method';"
+check_eq "qr_claim_artifact_id references rides.proof_artifacts" "1" \
+  "SELECT count(*) FROM pg_constraint
+    WHERE conrelid='fares.ride_payments'::regclass AND contype='f'
+      AND confrelid='rides.proof_artifacts'::regclass;"
+
+step "AL-54 — GTFS feed lifecycle"
+check_eq "ux_gtfs_feed_one_active is a unique partial index on status='active'" "1" \
+  "SELECT count(*) FROM pg_indexes
+    WHERE schemaname='transit' AND indexname='ux_gtfs_feed_one_active'
+      AND indexdef LIKE 'CREATE UNIQUE INDEX%WHERE (status = ''active''::text)%';"
+check_eq "gtfs_feed_versions.uploaded_by references iam.users (not the phantom user_id)" "1" \
+  "SELECT count(*) FROM pg_constraint
+    WHERE conrelid='transit.gtfs_feed_versions'::regclass AND contype='f'
+      AND confrelid='iam.users'::regclass;"
+# The activation swap renames staging into transit.* wholesale, so any column drift between
+# the two sides would corrupt the live feed rather than fail loudly.
+check_eq "transit_staging mirrors the five gtfs_* tables column-for-column" "0" \
+  "SELECT count(*) FROM (
+     SELECT table_name, column_name, data_type FROM information_schema.columns
+      WHERE table_schema='transit'
+        AND table_name IN ('gtfs_routes','gtfs_trips','gtfs_stops','gtfs_stop_times','gtfs_shapes')
+     EXCEPT
+     SELECT table_name, column_name, data_type FROM information_schema.columns
+      WHERE table_schema='transit_staging') d;"
+check_eq "no transit_staging FK points at a live transit table" "0" \
+  "SELECT count(*) FROM pg_constraint k
+     JOIN pg_class c ON c.oid = k.conrelid
+     JOIN pg_namespace n ON n.oid = c.relnamespace
+     JOIN pg_class f ON f.oid = k.confrelid
+     JOIN pg_namespace fn ON fn.oid = f.relnamespace
+    WHERE n.nspname='transit_staging' AND k.contype='f' AND fn.nspname <> 'transit_staging';"
+
+step "Seed data (§20)"
+check_eq "six Mode C fare tiers seeded" "6" "SELECT count(*) FROM fares.tariffs;"
+check_eq "every Mode-C-bookable type has a tariff (AL-09)" \
+  "flex,mini_van,motorbike,sedan,three_wheeler,van" \
+  "SELECT string_agg(vehicle_type, ',' ORDER BY vehicle_type COLLATE \"C\") FROM fares.tariffs;"
+check_eq "eight daily-fee plan rows across seven rate tiers" "8|7" \
+  "SELECT count(*)||'|'||count(DISTINCT daily_fee_minor) FROM billing.plans;"
+check_eq "Mode A is free" "0" \
+  "SELECT count(*) FROM billing.plans WHERE mode='A' AND daily_fee_minor <> 0;"
+check_eq "three peak/night windows seeded" "3" "SELECT count(*) FROM fares.peak_windows;"
+check_eq "five voucher denominations seeded (US-9.19)" "5" \
+  "SELECT count(*) FROM billing.voucher_discount_tiers;"
+check_eq "Rs 1,000 voucher carries the spec's worked 10% rate" "1000" \
+  "SELECT discount_bps FROM billing.voucher_discount_tiers WHERE denomination_minor = 100000;"
+check_eq "two platform ledger accounts seeded" "2" \
+  "SELECT count(*) FROM billing.accounts WHERE owner_id IS NULL;"
+check_eq "every seeded notification template exists in all three languages (D-26)" "0" \
+  "SELECT count(*) FROM (
+     SELECT template_key FROM content.notification_templates
+      GROUP BY template_key HAVING count(DISTINCT language) <> 3) t;"
+check_eq "four notification template keys seeded" "4" \
+  "SELECT count(DISTINCT template_key) FROM content.notification_templates;"
+check_eq "every FAQ category exists in all three languages (US-16.1, D-26)" "0" \
+  "SELECT count(*) FROM (
+     SELECT category FROM content.faq_articles
+      GROUP BY category HAVING count(DISTINCT language) <> 3) t;"
+check_eq "the Sinhala wallet FAQ survived three migration passes intact" "1" \
+  "SELECT count(*) FROM content.faq_articles
+    WHERE language='si' AND category='wallet' AND title LIKE 'මගේ පසුම්බියට%';"
+
+# ---------------------------------------------------------------------------------------
+step "C005 constraints actually bite"
+
+ACC_PLATFORM="$(psql_q "SELECT id FROM billing.accounts WHERE owner_type='platform';")"
+ACC_DRIVER='c0000007-0000-0000-0000-000000000001'
+ENTRY_BAD='c0000008-0000-0000-0000-000000000001'
+ENTRY_OK='c0000008-0000-0000-0000-000000000002'
+RIDE_1='c0000004-0000-0000-0000-000000000001'
+
+psql_run "INSERT INTO billing.accounts(id, owner_type, owner_id, currency)
+            VALUES ('$ACC_DRIVER','driver','$DRV_A','LKR');" >/dev/null \
+  || die "could not seed the ledger fixture account."
+
+# The trigger is DEFERRABLE INITIALLY DEFERRED, so it fires at COMMIT. psql -c runs the
+# whole batch in one implicit transaction, which is exactly the shape a real two-leg write
+# has: the single posting below is only detectable once the transaction tries to commit.
+check_rejects "an unbalanced journal entry is rejected at COMMIT (D-09)" \
+  "INSERT INTO billing.journal_entries(id, kind, idempotency_key)
+     VALUES ('$ENTRY_BAD','adjustment','verify:unbalanced');
+   INSERT INTO billing.journal_postings(entry_id, account_id, amount_minor)
+     VALUES ('$ENTRY_BAD','$ACC_PLATFORM',100);"
+
+CHECKS=$((CHECKS + 1))
+if psql_run "INSERT INTO billing.journal_entries(id, kind, idempotency_key)
+               VALUES ('$ENTRY_OK','topup','verify:balanced');
+             INSERT INTO billing.journal_postings(entry_id, account_id, amount_minor)
+               VALUES ('$ENTRY_OK','$ACC_PLATFORM',-50000),
+                      ('$ENTRY_OK','$ACC_DRIVER', 50000);" >/dev/null 2>&1; then
+  printf '  %s✓%s a two-leg entry summing to zero is accepted (D-09)\n' "$GREEN" "$RESET"
+else
+  printf '  %s✗%s a balanced two-leg entry was rejected\n' "$RED" "$RESET"
+  FAILURES=$((FAILURES + 1))
+fi
+
+check_rejects "deleting one leg of a balanced entry is rejected (D-09)" \
+  "DELETE FROM billing.journal_postings
+    WHERE entry_id='$ENTRY_OK' AND amount_minor = 50000;"
+
+check_rejects "a duplicate ledger idempotency_key is rejected (D-09)" \
+  "INSERT INTO billing.journal_entries(kind, idempotency_key)
+     VALUES ('topup','verify:balanced');"
+
+check_rejects "a second 'platform' ledger account is rejected" \
+  "INSERT INTO billing.accounts(owner_type, currency) VALUES ('platform','LKR');"
+
+psql_run "INSERT INTO fares.ride_payments(ride_id, method, amount_minor, provider_transaction_id)
+            VALUES ('$RIDE_1','onepay',150000,'OP-VERIFY-0001');" >/dev/null \
+  || die "could not insert the fixture ride payment."
+
+check_rejects "a replayed gateway callback id is rejected (R-19)" \
+  "INSERT INTO fares.ride_payments(ride_id, method, amount_minor, provider_transaction_id)
+     VALUES ('$RIDE_1','onepay',150000,'OP-VERIFY-0001');"
+
+check_rejects "a daily fee waived as the first trip cannot carry an amount (D-13)" \
+  "INSERT INTO billing.daily_fee_charges(driver_id, vehicle_id, amount_minor, status)
+     VALUES ('$DRV_A','$VEH_A',10000,'WAIVED_FIRST_TRIP');"
+
+CHECKS=$((CHECKS + 1))
+if psql_run "INSERT INTO billing.daily_fee_charges(driver_id, vehicle_id, amount_minor)
+               VALUES ('$DRV_A','$VEH_A',10000)
+             ON CONFLICT (driver_id, vehicle_id, fee_date) DO NOTHING;
+             INSERT INTO billing.daily_fee_charges(driver_id, vehicle_id, amount_minor)
+               VALUES ('$DRV_A','$VEH_A',10000)
+             ON CONFLICT (driver_id, vehicle_id, fee_date) DO NOTHING;" >/dev/null 2>&1 \
+   && [[ "$(psql_q "SELECT count(*) FROM billing.daily_fee_charges WHERE driver_id='$DRV_A';")" == "1" ]]; then
+  printf '  %s✓%s charging the daily fee twice in one Colombo day is a no-op (D-13)\n' "$GREEN" "$RESET"
+else
+  printf '  %s✗%s the daily fee is not idempotent per (driver, vehicle, Colombo date)\n' "$RED" "$RESET"
+  FAILURES=$((FAILURES + 1))
+fi
+
+check_eq "fee_date landed on the Asia/Colombo business date (D-38)" "t" \
+  "SELECT fee_date = (now() AT TIME ZONE 'Asia/Colombo')::date
+     FROM billing.daily_fee_charges WHERE driver_id='$DRV_A';"
+
+check_rejects "a voucher that credits less than its face value is rejected (US-9.19)" \
+  "INSERT INTO billing.voucher_purchases(buyer_id, denomination_minor, discount_bps_applied,
+                                          paid_minor, credited_minor)
+     VALUES ('$DRV_A',100000,1000,90000,90000);"
+
+check_rejects "a credit transfer to yourself is rejected (AL-01)" \
+  "INSERT INTO billing.credit_transfers(sender_driver_id, recipient_driver_id, amount_minor)
+     VALUES ('$DRV_A','$DRV_A',50000);"
+
+check_rejects "a monthly subscription period that is not the 1st is rejected (D-38)" \
+  "INSERT INTO billing.monthly_subscriptions(vehicle_id, period_month)
+     VALUES ('$VEH_A', DATE '2026-08-15');"
+
+check_rejects "a pickup_confirm token with no location request is rejected (AL-44)" \
+  "INSERT INTO safety.trip_share_tokens(token, scope, expires_at)
+     VALUES ('tok-verify-1','pickup_confirm', now() + interval '5 minutes');"
+
+CHECKS=$((CHECKS + 1))
+if psql_run "INSERT INTO safety.trip_share_tokens(token, trip_id, scope, expires_at)
+               VALUES ('tok-verify-2','$RIDE_1','proxy_rider', now() + interval '1 hour');" >/dev/null 2>&1; then
+  printf '  %s✓%s a proxy_rider token against a trip is accepted (AL-44)\n' "$GREEN" "$RESET"
+else
+  printf '  %s✗%s a valid proxy_rider token was rejected\n' "$RED" "$RESET"
+  FAILURES=$((FAILURES + 1))
+fi
+
+check_rejects "an SOS with neither a user nor a share token is rejected (AL-44)" \
+  "INSERT INTO safety.sos_events(role, lat, lng) VALUES ('passenger',6.9271,79.8612);"
+
+CHECKS=$((CHECKS + 1))
+if psql_run "INSERT INTO safety.sos_events(role, lat, lng, source, share_token)
+               VALUES ('passenger',6.9271,79.8612,'web','tok-verify-2');" >/dev/null 2>&1; then
+  printf '  %s✓%s a web SOS identified only by share token is accepted (US-25.5)\n' "$GREEN" "$RESET"
+else
+  printf '  %s✗%s a token-only web SOS was rejected\n' "$RED" "$RESET"
+  FAILURES=$((FAILURES + 1))
+fi
+
+check_rejects "a passenger blocking themselves is rejected" \
+  "INSERT INTO safety.blocked_drivers(passenger_id, driver_id) VALUES ('$PAX_1','$PAX_1');"
+
+check_rejects "a masked call type is rejected — masking was removed (AL-48)" \
+  "INSERT INTO comms.call_log(caller_id, callee_role, call_type)
+     VALUES ('$PAX_1','driver','normal_masked');"
+
+check_rejects "a broadcast missing a language is rejected (D-26)" \
+  "INSERT INTO content.broadcasts(message_by_lang)
+     VALUES ('{\"en\":\"Service update\",\"si\":\"සේවා යාවත්කාලීන\"}'::jsonb);"
+
+psql_run "INSERT INTO registry.vehicles(id, owner_id, registration_number, vehicle_type, mode,
+                                        driver_name, mode_b_billing)
+            VALUES ('c0000003-0000-0000-0000-000000000003','$DRV_B','WP-BUS-0001','bus','B',
+                    'Driver B','paid');
+          INSERT INTO subscription.access_requests(vehicle_id, passenger_id)
+            VALUES ('c0000003-0000-0000-0000-000000000003','$PAX_1');" >/dev/null \
+  || die "could not seed the subscription fixtures."
+
+check_rejects "a second open access request for the same (vehicle, passenger) is rejected (AL-23)" \
+  "INSERT INTO subscription.access_requests(vehicle_id, passenger_id)
+     VALUES ('c0000003-0000-0000-0000-000000000003','$PAX_1');"
+
+check_rejects "a pending access request cannot claim a decision maker" \
+  "INSERT INTO subscription.access_requests(vehicle_id, passenger_id, decided_by)
+     VALUES ('c0000003-0000-0000-0000-000000000003','$PAX_2','$DRV_B');"
+
+psql_run "INSERT INTO subscription.grants(id, vehicle_id, passenger_id)
+            VALUES ('c0000009-0000-0000-0000-000000000001',
+                    'c0000003-0000-0000-0000-000000000003','$PAX_1');" >/dev/null \
+  || die "could not insert the fixture grant."
+
+check_rejects "a second live grant for the same (vehicle, passenger) is rejected (US-4.11)" \
+  "INSERT INTO subscription.grants(vehicle_id, passenger_id)
+     VALUES ('c0000003-0000-0000-0000-000000000003','$PAX_1');"
+
+CHECKS=$((CHECKS + 1))
+if psql_run "UPDATE subscription.grants
+                SET status='unsubscribed', unsubscribed_at=now()
+              WHERE id='c0000009-0000-0000-0000-000000000001';
+             INSERT INTO subscription.grants(vehicle_id, passenger_id)
+               VALUES ('c0000003-0000-0000-0000-000000000003','$PAX_1');" >/dev/null 2>&1; then
+  printf '  %s✗%s an unsubscribed grant freed its slot before the owner deleted it\n' "$RED" "$RESET"
+  FAILURES=$((FAILURES + 1))
+else
+  printf '  %s✓%s an unsubscribed grant stays MUTED until the fleet owner deletes it (US-4.12)\n' "$GREEN" "$RESET"
+fi
+
+check_rejects "a paid subscription with no fare is rejected (AL-24)" \
+  "INSERT INTO subscription.subscriptions(grant_id, vehicle_id, passenger_id, billing, join_day)
+     VALUES ('c0000009-0000-0000-0000-000000000001','c0000003-0000-0000-0000-000000000003',
+             '$PAX_1','paid',5);"
+
+check_rejects "a join_anniversary cycle with no join day is rejected" \
+  "INSERT INTO subscription.subscriptions(grant_id, vehicle_id, passenger_id, billing)
+     VALUES ('c0000009-0000-0000-0000-000000000001','c0000003-0000-0000-0000-000000000003',
+             '$PAX_1','free');"
+
+psql_run "INSERT INTO transit.gtfs_feed_versions(file_name, file_size_bytes, sha256, storage_key,
+                                                  uploaded_by, status, activated_at)
+            VALUES ('day0.zip', 1024, 'sha-verify-0001', 's3://gtfs/day0.zip', '$PAX_1',
+                    'active', now());" >/dev/null \
+  || die "could not insert the fixture GTFS feed version."
+
+check_rejects "a second active GTFS feed version is rejected (AL-54 / BR-32.2)" \
+  "INSERT INTO transit.gtfs_feed_versions(file_name, file_size_bytes, sha256, storage_key,
+                                          uploaded_by, status, activated_at)
+     VALUES ('day1.zip', 2048, 'sha-verify-0002', 's3://gtfs/day1.zip', '$PAX_1',
+             'active', now());"
+
+check_rejects "re-uploading an identical GTFS feed is rejected (US-28.1)" \
+  "INSERT INTO transit.gtfs_feed_versions(file_name, file_size_bytes, sha256, storage_key, uploaded_by)
+     VALUES ('day0-again.zip', 1024, 'sha-verify-0001', 's3://gtfs/day0b.zip', '$PAX_1');"
+
+CHECKS=$((CHECKS + 1))
+if psql_run "UPDATE transit.gtfs_feed_versions SET status='archived', archived_at=now()
+              WHERE sha256='sha-verify-0001';
+             INSERT INTO transit.gtfs_feed_versions(file_name, file_size_bytes, sha256, storage_key,
+                                                    uploaded_by, status, activated_at)
+               VALUES ('day1.zip', 2048, 'sha-verify-0002', 's3://gtfs/day1.zip', '$PAX_1',
+                       'active', now());" >/dev/null 2>&1; then
+  printf '  %s✓%s archiving the active feed lets the next one activate (BR-32.3)\n' "$GREEN" "$RESET"
+else
+  printf '  %s✗%s a new feed could not activate after the previous was archived\n' "$RED" "$RESET"
+  FAILURES=$((FAILURES + 1))
+fi
+
+check_rejects "a PDPA FulfilledHold with no stated reason is rejected (E-06)" \
+  "INSERT INTO pdpa.requests(user_id, kind, status) VALUES ('$PAX_1','erasure','FulfilledHold');"
+
+psql_run "INSERT INTO pdpa.requests(user_id, kind) VALUES ('$PAX_1','export');" >/dev/null \
+  || die "could not insert the fixture PDPA request."
+
+check_eq "a PDPA request defaults to the 30-day statutory deadline (E-06)" "30" \
+  "SELECT EXTRACT(DAY FROM (due_by - requested_at))::int FROM pdpa.requests
+    WHERE user_id='$PAX_1' LIMIT 1;"
 
 # ---------------------------------------------------------------------------------------
 printf '\n'
