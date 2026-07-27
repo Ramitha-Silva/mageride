@@ -43,6 +43,14 @@ build/
 # ...but the top-level build/ is the MageRide build plan (manifest, prompts, progress),
 # not a Gradle output directory.
 !/build/
+# C001 redirects the root project's buildDir to .gradle/root-build, but that override only
+# takes effect once the root project is evaluated. A configuration failure earlier than that
+# (a build-script compile error, for example) still drops Gradle's problems report into the
+# default location — which is the build plan. Re-ignore the directories Gradle owns so a
+# stray report can never be committed alongside the manifest. (C011)
+/build/reports/
+/build/tmp/
+/build/kotlin/
 # The Gradle wrapper is committed on purpose — never add a blanket *.jar rule above it.
 !gradle/wrapper/gradle-wrapper.jar
 local.properties

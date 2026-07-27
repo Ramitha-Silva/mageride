@@ -36,7 +36,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C008 | api-gateway-yarp | 0 | DONE | 2026-07-27 | 59 routes / 21 clusters, 524 tests green; 5 micro-change-sets raised |
 | C009 | docker-compose-dev | 0 | DONE | 2026-07-27 | slim stack healthy, 66/66 verify checks; 6 blocking spec fixes + 6 micro-change-sets raised |
 | C010 | ci-skeleton | 0 | DONE | 2026-07-27 | 7 CI jobs, 3 Dockerfile templates, MageRide.TestKit; 685 tests green; wave 0 complete |
-| C011 | kmp-module-scaffold | 1 | PENDING | | |
+| C011 | kmp-module-scaffold | 1 | DONE | 2026-07-27 | 10 tests green, detekt + ktlint clean; AGP 9 forced the KMP Android plugin — `testDebugUnitTest` is now an alias (micro-change-set) |
 | C012 | kmp-core-models | 1 | PENDING | | |
 | C013 | kmp-api-client | 1 | PENDING | | |
 | C014 | kmp-auth-session | 1 | PENDING | | |
@@ -1422,3 +1422,126 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   vendored into the repo — CI does not run it today; it is documented as a pre-push check.
   The replica stack stayed down throughout and no dev stack was left running. The full local
   reproduction of every job takes about six minutes, most of it `migrate-verify.sh`.
+
+- **Component:** C011 kmp-module-scaffold — 2026-07-27
+- **Status:** DONE (common + Android targets; iOS declared and type-checked, **not** verified) —
+  `./gradlew :shared:testDebugUnitTest detekt ktlintCheck` → **BUILD SUCCESSFUL, 10 tests passed,
+  0 failed, 0 skipped**, run from a clean build directory with `--no-build-cache` (22 tasks
+  executed). All three DoD items pass: the test task runs green, `:shared:assembleXCFramework` is
+  defined and fails fast off macOS, detekt and ktlint are clean. `./gradlew projects` (C001's
+  verify) and `:shared:build` (D7' §6) both still pass.
+- **Notes:**
+  **Spec gaps / micro-change-sets —**
+  (a) ***`:shared:testDebugUnitTest` no longer exists as a real task — micro-change-set for
+  `build/manifest.yaml`.*** **AGP 9 refuses to apply `com.android.library` to a Kotlin
+  Multiplatform project at all** — it fails with "not compatible with the
+  'org.jetbrains.kotlin.multiplatform' plugin since AGP 9.0" and offers exactly two ways out:
+  the replacement plugin `com.android.kotlin.multiplatform.library`, or setting
+  `android.builtInKotlin=false` + `android.newDsl=false` to "temporarily bypass this issue".
+  Took the replacement plugin — the bypass is a deprecation shim that dies at AGP 10 and would
+  also have to be carried by C067/C076. The consequence: **the new plugin has no build variants**,
+  so there is no `debug`, the local unit-test task is `testAndroidHostTest`, and the source set is
+  `androidHostTest` rather than `androidUnitTest`. `:shared:testDebugUnitTest` is registered as a
+  **lifecycle alias** for it so the manifest's `verify_cmd`, this wave's gate, the four wave-1
+  prompts and `ci.yml` all keep working unchanged. It is not a weaker check — `androidHostTest`
+  dependsOn `commonTest`, so the alias runs exactly what the variant-era task ran. **The manifest
+  should retarget the wave-1 `verify_cmd` (and the wave gate line) at
+  `:shared:testAndroidHostTest`**, after which the alias can go. D7' §7's `android` matrix step is
+  unaffected (it names `:shared:build`, which works).
+  (b) ***ADD §18.2's "H3 Kotlin" library does not exist.*** The table lists H3 under "KMP Shared
+  Libraries", implying a multiplatform artifact. There is none on Maven Central: `com.uber:h3`
+  4.4.0 is **JNI** — its jar ships `android-arm/`, `android-arm64/`, `linux-*`, `darwin-*` and
+  `windows-*` natives and no klib, and the only other candidate (`io.github.luneo7:h3`) is a
+  rebuild of the same Java bindings. So H3 is an **androidMain/JVM-only** dependency and **C017
+  needs an expect/actual**: Android on `com.uber:h3`, iOS on cinterop against the H3 C library (or
+  a pure-Kotlin port of the handful of functions §7.5 actually needs — `latLngToCell`,
+  `gridDisk`). Two further consequences for C017: the jar carries **no android-x86_64 native**, so
+  H3 will not work on an x86_64 emulator, and the JVM natives are extracted to a temp file at
+  runtime. Declared in the catalog, deliberately **not wired into a source set** here.
+  (c) *Cosmetic:* `gradle/libs.versions.toml` calls compile/target SDK 36 "the newest fully-released
+  platform at scaffold time (2026-07-27)". As of this session `platforms;android-37.0` and `37.1`
+  are both released. Left at 36 — C001's comment reserves that call for C067, and 36 is what the
+  SDK on this host now carries.
+  **Decisions —**
+  (1) **`explicitApi()` is on.** This module is the API surface for four apps and two languages;
+  an inferred return type crosses into the XCFramework as whatever the compiler guessed. Every
+  wave-1 component now has to write `public` and a return type. Tests are exempt automatically.
+  (2) **The XCFramework is static and named `MageRideShared`** (`import MageRideShared` on the
+  Swift side). Dynamic would have to be embedded and re-signed by both Xcode projects and breaks
+  SwiftUI previews. `XCFramework("MageRideShared")` registers
+  `assembleMageRideSharedReleaseXCFramework`; **`assembleXCFramework` is registered by hand** on
+  top of it because that bare name is what D7' §6/§7 and `ci.yml`'s iOS leg invoke. Off macOS it
+  fails with a message naming the Linux verify command instead of dying inside the linker —
+  verified by running it here.
+  (3) **iOS klib cross-compilation is ON** (`kotlin.native.enableKlibsCrossCompilation=true` in
+  `gradle.properties`). Kotlin/Native can build Apple *klibs* on Linux even though it cannot link
+  a framework or run a simulator test, so `./gradlew :shared:compileKotlinIosArm64` **type-checks
+  `src/iosMain` on this box** — verified, and `:shared:build` compiled all three iOS klibs here.
+  Every wave-1 component that writes an iOS `actual` should run it; a compile error found now is
+  a compile error not found in wave 4b. **This does not make iOS verified** and the fence stands:
+  linking, `assembleXCFramework` and `iosTest` are macOS-only, and no iOS target is marked DONE
+  from this host. Cost is a one-off ~1 GB Kotlin/Native distribution in `~/.konan`.
+  (4) **Wired vs. declared.** The scaffold wires what it is: coroutines, serialization, datetime,
+  Koin, Ktor (core/content-negotiation/logging/json + OkHttp on Android + Darwin on iOS) and the
+  test stack (kotlin-test, coroutines-test, Turbine, koin-test, ktor-client-mock). Four entries are
+  **declared in the catalog and left unapplied**, each with its owner named in the file:
+  `multiplatform-settings` + `ktor-client-auth` (C014), SQLDelight — plugin, runtime, coroutines
+  extensions and all three drivers (C018), `h3` (C017). **The SQLDelight Gradle plugin is not
+  applied here** — with no `.sq` file it configures an empty database and generates nothing; C018
+  applies it. Every unapplied coordinate was resolved against Maven Central by hand this session.
+  (5) **`kotlinx-serialization-json`, `kotlinx-datetime` and `koin-core` are `api`, not
+  `implementation`** — DTOs (C012) expose `@Serializable` types and `LocalDate`, and the apps
+  start Koin themselves. The rest, including all of Ktor, is `implementation`: nothing outside
+  this module should be able to reach for an `HttpClient` directly.
+  (6) **One Koin module per component, appended to `sharedModules`.** `sharedCoreModule` holds only
+  what the scaffold owns (the shared `Json`, `PlatformInfo`). Apps are told to use `sharedModules`,
+  never the individual modules, so a binding added in C015 needs no edit in any of the four apps.
+  `initKoin()` exists mainly for iOS — Swift cannot express Koin's trailing-lambda DSL comfortably.
+  (7) **`MageRideJson` is `ignoreUnknownKeys` + `explicitNulls=false` + `encodeDefaults=false`, and
+  deliberately NOT lenient and NOT `coerceInputValues`.** The first three mirror the backend
+  (C002 serialises with `WhenWritingNull`) and keep an additive server change from crashing an
+  older build; the last two are the point — a malformed number or an unknown enum is a contract
+  violation and must surface, not silently become a default.
+  (8) **Only one expect/actual exists: `platformInfo()`.** The fence allows expect/actual for secure
+  storage, attestation and crypto; device identity is the same class of thing (the gateway's
+  version gate and attestation key off it, C008) and it is the one piece of DI wiring that cannot
+  be common. It needs no `Context`, which is why it, and not `Settings`, is what the scaffold
+  binds — a `Settings` binding would force every app to put a `Context` in the graph before C014
+  has decided how secure storage works.
+  (9) **detekt is pointed at `src`, not at enumerated source sets**, so C012–C019 add source sets
+  without touching the build script. Config is `config/detekt/detekt.yml` with
+  `buildUponDefaultConfig = true` and `config.validation` on — it carries only deltas (five), and
+  an unknown key fails the build rather than being ignored. It lives at the repo root because
+  C067/C076 will share it.
+  (10) **ktlint's rules live in the repo-root `.editorconfig`**, which gained
+  `ktlint_code_style = intellij_idea`. `android_studio` (ktlint-gradle's `android = true`) would
+  have contradicted `kotlin.code.style=official` in `gradle.properties` and quietly moved the line
+  limit from the .editorconfig's 120 to 100. detekt's `MaxLineLength` is set to the same 120: three
+  tools, one number. `./gradlew :shared:ktlintFormat` fixes what it complains about.
+  (11) **The ten tests are wiring proofs, not placeholders.** They assert that the Koin graph
+  resolves, that the four `MageRideJson` settings behave, that Turbine + `runTest`'s virtual clock
+  work, that `TimeZone.of("Asia/Colombo")` resolves to UTC+5:30 on the target's tz database (D-38
+  depends on it), and that the Android actual survives `android.os.Build` returning null for every
+  field — which is exactly what it does in a local unit test.
+  (12) **`ci.yml`'s android leg now installs `platforms;android-36` + `build-tools;36.0.0`
+  explicitly**, as C010's handoff asked. The runner image ships an SDK but its contents rotate and
+  AGP 9 will not download a missing platform, so the leg would otherwise be able to go red because
+  GitHub refreshed `ubuntu-latest`. Used the preinstalled `sdkmanager` rather than adding a
+  third-party action. `actionlint` v1.7.7 clean; no other workflow change was needed — C010's
+  build-file probe already runs the wave-1 command the moment `shared/kmp/build.gradle.kts` exists.
+  (13) **`.gitignore` re-ignores `/build/reports/`, `/build/tmp/` and `/build/kotlin/`.** C001
+  redirects the root project's buildDir away from the build-plan directory, but that override only
+  applies once the root project is *evaluated* — a Kotlin-DSL script compilation error earlier than
+  that still dropped Gradle 9's problems report into `build/reports/` during this session. Caught
+  and deleted; the ignore makes it uncommittable rather than relying on noticing it.
+  **Build host —** **the Android SDK is now installed** at `/opt/android-sdk` (489 MB:
+  `cmdline-tools;latest` 22.0 — SHA-1 verified against `dl.google.com` — plus `platform-tools`,
+  `platforms;android-36`, `build-tools;36.0.0`, all licences accepted). Gradle finds it through an
+  untracked `local.properties` (`sdk.dir=/opt/android-sdk`); `ANDROID_HOME` is **not** exported
+  system-wide, and the verify was re-run with it unset to prove `local.properties` alone is enough.
+  `~/.konan` now holds the ~1 GB Kotlin/Native 2.4.10 distribution. No Docker, no compose stack; the
+  replica stayed down. A cold verify takes ~50 s, a warm one ~30 s. **Versions chosen** (all newest
+  stable that work with the pinned Kotlin 2.4.10, all appended to `gradle/libs.versions.toml`):
+  Ktor 3.5.1, kotlinx.serialization 1.11.0, coroutines 1.11.0, kotlinx-datetime 0.8.0, Koin 4.2.2,
+  multiplatform-settings 1.3.0, SQLDelight 2.3.2, Turbine 1.2.1, H3 4.4.0, detekt 1.23.8,
+  ktlint-gradle 14.2.0 driving ktlint 1.8.0.

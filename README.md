@@ -94,8 +94,8 @@ Pinned by `global.json` (.NET), `gradle/wrapper/gradle-wrapper.properties` +
 # backend
 dotnet build backend/MageRide.sln -c Release
 
-# mobile / KMP  (Android targets additionally need an Android SDK on the host)
-./gradlew projects
+# mobile / KMP  (needs an Android SDK; point at it with ANDROID_HOME or local.properties)
+./gradlew :shared:testDebugUnitTest detekt ktlintCheck
 
 # web portals
 npm --prefix portals ci
@@ -107,11 +107,15 @@ npm --prefix portals run build
 - This repo is built on the **same Contabo VPS that hosts the lightweight production replica**.
   Keep the replica stack **down** during waves 0–4 — ~17–20 GB of replica plus a heavy build will
   not fit in 24 GB. Use the slim dev compose for per-component verification.
-- **iOS and KMP-iOS targets do not compile on this Linux host.** iOS prompts generate code here;
-  compiling and verifying happens on a Mac or a macOS CI runner. A KMP verify on this host covers
-  the common and Android targets only.
-- The **Android SDK is not installed** on the build host yet. `./gradlew projects` works without it;
-  anything that applies the Android Gradle Plugin does not.
+- **iOS is not verified on this Linux host.** `gradle.properties` turns on Kotlin/Native klib
+  cross-compilation, so `./gradlew :shared:compileKotlinIosArm64` *type-checks* `src/iosMain`
+  here — but linking a framework, `:shared:assembleXCFramework` and any `iosTest` still need
+  macOS with Xcode. `assembleXCFramework` fails with that message rather than a linker error.
+  A KMP verify on this host covers the common and Android targets only.
+- **An Android SDK is required** from C011 onward — anything that applies the Android Gradle
+  Plugin needs `platforms;android-36` and `build-tools;36.0.0`. Point Gradle at it with
+  `ANDROID_HOME` or an untracked `local.properties` carrying `sdk.dir=…`. GitHub's
+  `ubuntu-latest` runner ships one preinstalled, so CI needs no extra step.
 
 ---
 

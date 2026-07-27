@@ -134,6 +134,23 @@ jobs:
         if: matrix.target == 'android'
         uses: gradle/actions/setup-gradle@v4
 
+      # C010's handoff flagged this for C011: from wave 1 on, `:shared` applies the Android
+      # Gradle Plugin and needs a real SDK. The runner image ships one, but which platforms
+      # and build-tools it carries rotates with the image, and AGP 9 will not silently
+      # download a missing platform. Install exactly what gradle/libs.versions.toml pins so
+      # the leg cannot go red because GitHub refreshed ubuntu-latest.
+      - name: android — SDK packages
+        if: matrix.target == 'android'
+        run: |
+          set -euo pipefail
+          test -n "${ANDROID_HOME:-}" || { echo "::error::the runner has no Android SDK"; exit 1; }
+          sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$sdkmanager" || { echo "::error::no sdkmanager at $sdkmanager"; exit 1; }
+          # `yes |` dies of SIGPIPE once sdkmanager stops reading, which pipefail would treat
+          # as a failure; the install below is what actually has to succeed.
+          yes 2>/dev/null | "$sdkmanager" --licenses > /dev/null || true
+          "$sdkmanager" "platforms;android-36" "build-tools;36.0.0"
+
       # `projects` is the wave-0 command (C001: the modules are declared in
       # settings.gradle.kts but carry no build script yet, which is why this needs no Android
       # SDK). The probe is the build FILE, not the project list — `projects` already prints

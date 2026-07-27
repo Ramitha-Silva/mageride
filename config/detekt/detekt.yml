@@ -1,0 +1,53 @@
+# MageRide — detekt rule deltas (C011 kmp-module-scaffold).
+#
+# shared/kmp/build.gradle.kts sets `buildUponDefaultConfig = true`, so this file carries only
+# what differs from detekt's shipped defaults. Every entry names why. Keep it that way: a
+# copied-out full default config silently freezes the ruleset at the version it was copied
+# from.
+#
+# `config.validation` is on, so an unknown key here fails the build rather than being ignored.
+# When a wave-4a component needs a Compose-specific rule, add it here — this file is shared by
+# every Gradle module that applies detekt.
+#
+# Test source-set names follow AGP 9's Kotlin-Multiplatform library plugin: `androidHostTest`
+# (local JVM unit tests) and `androidDeviceTest` (instrumented), not the variant-era
+# `androidUnitTest` / `androidInstrumentedTest`.
+
+config:
+  validation: true
+  warningsAsErrors: false
+
+style:
+  MaxLineLength:
+    # Matches .editorconfig `max_line_length = 120` and ktlint. Three tools, one number.
+    maxLineLength: 120
+  MagicNumber:
+    # A test's whole job is to name a concrete value; forcing every one into a constant makes
+    # the expectation harder to read, not easier.
+    excludes:
+      - '**/commonTest/**'
+      - '**/androidHostTest/**'
+      - '**/androidDeviceTest/**'
+      - '**/iosTest/**'
+
+naming:
+  FunctionNaming:
+    # KMP factory functions read as the type they build — `platformInfo()`, `Settings()`.
+    # detekt's default pattern rejects the capitalised form.
+    functionPattern: '[a-zA-Z][a-zA-Z0-9]*'
+    # Test names are sentences: `an_absent_field_and_an_explicit_null_mean_the_same_thing`.
+    # No camelCase spelling of that is more readable in a failure report.
+    excludes:
+      - '**/commonTest/**'
+      - '**/androidHostTest/**'
+      - '**/androidDeviceTest/**'
+      - '**/iosTest/**'
+
+exceptions:
+  TooGenericExceptionCaught:
+    # A shared client that is about to surface a D3' problem+details error to four apps has to
+    # catch whatever the platform threw; the rule fires on the boundary, which is the one place
+    # the broad catch is correct.
+    excludes:
+      - '**/commonTest/**'
+      - '**/androidHostTest/**'

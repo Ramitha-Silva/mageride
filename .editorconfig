@@ -54,10 +54,15 @@ indent_size = 2
 
 # ---- mobile: Kotlin / KMP -----------------------------------------------------------
 # Kotlin official code style (gradle.properties sets kotlin.code.style=official).
+# Unlike the rest of this file, these ARE enforced at build time: `./gradlew ktlintCheck`
+# is part of the wave-1 gate and ktlint reads its rules from here (C011). `intellij_idea`
+# is ktlint's name for the official style — do not set `android_studio`, which would
+# contradict kotlin.code.style and shorten the line limit to 100.
 [*.{kt,kts}]
 indent_size = 4
 ij_kotlin_allow_trailing_comma = true
 ij_kotlin_allow_trailing_comma_on_call_site = true
+ktlint_code_style = intellij_idea
 
 [*.java]
 indent_size = 4

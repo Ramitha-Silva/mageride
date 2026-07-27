@@ -37,13 +37,83 @@ androidTargetSdk = "36"
 # Kotlin itself); the BOM pins the androidx.compose artifacts.
 composeBom = "2026.06.01"
 
+# ---- KMP shared module (C011) -------------------------------------------------------
+# ADD §18.2 "KMP Shared Libraries" names the concern; the version is the newest stable
+# release that works with Kotlin 2.4.10 at scaffold time.
+ktor = "3.5.1"                    # HTTP client — C013 builds the API client on it
+kotlinxSerialization = "1.11.0"   # JSON/CBOR for REST + MQTT payloads
+kotlinxCoroutines = "1.11.0"      # async/concurrency model
+kotlinxDatetime = "0.8.0"         # multiplatform date handling (D-38 business dates)
+koin = "4.2.2"                    # DI
+multiplatformSettings = "1.3.0"   # key-value storage abstraction — wired by C014
+sqldelight = "2.3.2"              # on-device SQL — the plugin is applied by C018, not here
+turbine = "1.2.1"                 # Flow assertions in commonTest
+
+# H3 geocell computation (ADD §18.2, §7.5). NOTE: `com.uber:h3` is JNI, not Kotlin
+# Multiplatform — its jar carries android-arm/android-arm64/linux/darwin natives and no
+# Kotlin/Native klib. It is therefore an **androidMain/JVM** dependency; the iOS side needs
+# cinterop against the H3 C library. C017 owns that expect/actual. See the C011 handoff.
+h3 = "4.4.0"
+
+# ---- static analysis (C011) ---------------------------------------------------------
+# `ktlint` is the engine version the Gradle plugin drives; pin both so a plugin bump cannot
+# silently change what is considered formatted.
+detekt = "1.23.8"
+ktlintGradle = "14.2.0"
+ktlint = "1.8.0"
+
 [plugins]
 android-application  = { id = "com.android.application",                   version.ref = "agp" }
 android-library      = { id = "com.android.library",                       version.ref = "agp" }
+# AGP 9 refuses `com.android.library` in a Kotlin Multiplatform project; this is its
+# replacement and the only way :shared can carry an Android target. C011.
+android-kmp-library  = { id = "com.android.kotlin.multiplatform.library",  version.ref = "agp" }
 kotlin-android       = { id = "org.jetbrains.kotlin.android",              version.ref = "kotlin" }
 kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform",        version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 kotlin-compose       = { id = "org.jetbrains.kotlin.plugin.compose",       version.ref = "kotlin" }
+detekt               = { id = "io.gitlab.arturbosch.detekt",               version.ref = "detekt" }
+ktlint               = { id = "org.jlleitschuh.gradle.ktlint",             version.ref = "ktlintGradle" }
+# Applied by C018 (kmp-local-db) — applying it with no `.sq` file configures nothing.
+sqldelight           = { id = "app.cash.sqldelight",                       version.ref = "sqldelight" }
 
 [libraries]
 compose-bom = { module = "androidx.compose:compose-bom", version.ref = "composeBom" }
+
+# ---- Ktor -----------------------------------------------------------------------------
+# commonMain gets the engine-agnostic pieces; each platform source set gets its engine.
+ktor-client-core                = { module = "io.ktor:ktor-client-core",                 version.ref = "ktor" }
+ktor-client-content-negotiation = { module = "io.ktor:ktor-client-content-negotiation",  version.ref = "ktor" }
+ktor-client-logging             = { module = "io.ktor:ktor-client-logging",              version.ref = "ktor" }
+ktor-client-auth                = { module = "io.ktor:ktor-client-auth",                 version.ref = "ktor" }
+ktor-serialization-json         = { module = "io.ktor:ktor-serialization-kotlinx-json",  version.ref = "ktor" }
+ktor-client-okhttp              = { module = "io.ktor:ktor-client-okhttp",               version.ref = "ktor" }
+ktor-client-darwin              = { module = "io.ktor:ktor-client-darwin",               version.ref = "ktor" }
+ktor-client-mock                = { module = "io.ktor:ktor-client-mock",                 version.ref = "ktor" }
+
+# ---- kotlinx --------------------------------------------------------------------------
+kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
+kotlinx-serialization-cbor = { module = "org.jetbrains.kotlinx:kotlinx-serialization-cbor", version.ref = "kotlinxSerialization" }
+kotlinx-coroutines-core    = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core",    version.ref = "kotlinxCoroutines" }
+kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "kotlinxCoroutines" }
+kotlinx-coroutines-test    = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test",    version.ref = "kotlinxCoroutines" }
+kotlinx-datetime           = { module = "org.jetbrains.kotlinx:kotlinx-datetime",           version.ref = "kotlinxDatetime" }
+
+# ---- DI, storage, geo -------------------------------------------------------------------
+koin-core                    = { module = "io.insert-koin:koin-core",                     version.ref = "koin" }
+koin-test                    = { module = "io.insert-koin:koin-test",                     version.ref = "koin" }
+multiplatform-settings       = { module = "com.russhwolf:multiplatform-settings",         version.ref = "multiplatformSettings" }
+multiplatform-settings-test  = { module = "com.russhwolf:multiplatform-settings-test",    version.ref = "multiplatformSettings" }
+# androidMain / JVM only — see the `h3` version comment.
+h3                           = { module = "com.uber:h3",                                  version.ref = "h3" }
+
+# ---- SQLDelight (declared here, applied by C018) -------------------------------------
+sqldelight-runtime               = { module = "app.cash.sqldelight:runtime",                version.ref = "sqldelight" }
+sqldelight-coroutines-extensions = { module = "app.cash.sqldelight:coroutines-extensions",  version.ref = "sqldelight" }
+sqldelight-android-driver        = { module = "app.cash.sqldelight:android-driver",         version.ref = "sqldelight" }
+sqldelight-native-driver         = { module = "app.cash.sqldelight:native-driver",          version.ref = "sqldelight" }
+sqldelight-sqlite-driver         = { module = "app.cash.sqldelight:sqlite-driver",          version.ref = "sqldelight" }
+
+# ---- test ---------------------------------------------------------------------------
+kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
+turbine     = { module = "app.cash.turbine:turbine",         version.ref = "turbine" }
