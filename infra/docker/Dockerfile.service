@@ -1,0 +1,91 @@
+# =====================================================================================
+# MageRide — HTTP service image (C010, D7' §2.2).
+#
+# One template for every ASP.NET service: the API gateway, `app-services` and, in
+# production, each of the 21 domain services split out of it. The service is selected by
+# build argument, so CI's per-service loop (D7' §7) is one `docker build` with a different
+# --build-arg rather than 21 Dockerfiles.
+#
+#   docker build -f infra/docker/Dockerfile.service --build-arg SERVICE=MageRide.Shared -t mageride/shared:ci .
+#   docker build -f infra/docker/Dockerfile.service --build-arg SERVICE=ApiGateway -t mageride/api-gateway:dev .
+#
+# Build context is the REPOSITORY ROOT, not backend/ — the restore needs global.json and
+# backend/Directory.*.props, which sit above the project directory.
+#
+# Deviations from the D7' §2.2 listing, both forced:
+#   * `addgroup -S app` is guarded. The .NET 10 alpine images already ship a non-root `app`
+#     user (uid 1654), so the unconditional form fails with "group 'app' in use" (C003).
+#   * the restore copies the whole `backend/src` project graph rather than a hand-listed
+#     pair of csproj files: with central package management (backend/Directory.Packages.props)
+#     a partial graph fails NU1008 before it reaches the build.
+# =====================================================================================
+
+ARG DOTNET_SDK_IMAGE=mcr.microsoft.com/dotnet/sdk:10.0
+ARG DOTNET_RUNTIME_IMAGE=mcr.microsoft.com/dotnet/aspnet:10.0-alpine
+
+# ---- build --------------------------------------------------------------------------
+FROM ${DOTNET_SDK_IMAGE} AS build
+ARG SERVICE
+ARG BUILD_CONFIGURATION=Release
+WORKDIR /src
+
+RUN test -n "$SERVICE" || (echo "error: --build-arg SERVICE=<project directory name> is required" >&2; exit 1)
+
+# Restore against the project graph alone, so a source-only change reuses the package layer.
+COPY ["global.json", "./"]
+COPY ["backend/Directory.Build.props", "backend/Directory.Packages.props", "backend/"]
+COPY ["backend/src/", "backend/src/"]
+# MageRide.Migrations globs db/migrations/*.sql as embedded resources; anything that
+# references it — directly or through MageRide.TestKit — needs them present to restore.
+COPY ["db/migrations/", "db/migrations/"]
+
+RUN dotnet restore "backend/src/${SERVICE}/${SERVICE}.csproj"
+
+RUN dotnet publish "backend/src/${SERVICE}/${SERVICE}.csproj" \
+      -c ${BUILD_CONFIGURATION} \
+      -o /app \
+      --no-restore \
+      /p:UseAppHost=false
+
+# The entry assembly is not always named after the directory — ApiGateway publishes
+# MageRide.ApiGateway.dll — so resolve it at build time rather than guessing at run time.
+# Exactly one assembly in a published application has a .runtimeconfig.json, and that is the
+# one `dotnet` can launch. A class library publishes none; the fallback keeps the template
+# usable for the library build the C010 verify does, and such an image is structurally
+# complete (non-root, port, healthcheck) but has no Main to start.
+RUN set -eu; \
+    cd /app; \
+    entry="$(ls *.runtimeconfig.json 2>/dev/null | head -1 | sed 's/\.runtimeconfig\.json$/.dll/')"; \
+    [ -n "$entry" ] || entry="${SERVICE}.dll"; \
+    test -f "$entry" || (echo "error: ${SERVICE} published no assembly named $entry" >&2; exit 1); \
+    printf '%s' "$entry" > /app/.entrypoint; \
+    echo "entry point: $entry"
+
+# ---- runtime ------------------------------------------------------------------------
+FROM ${DOTNET_RUNTIME_IMAGE} AS runtime
+
+# D7' §2.2 prints `addgroup -S app && adduser -S app -G app` unguarded; the base image
+# already ships `app`, so that form fails the build (C003 note (i)).
+RUN getent group app >/dev/null 2>&1 || addgroup -S app; \
+    getent passwd app >/dev/null 2>&1 || adduser -S app -G app
+
+WORKDIR /app
+COPY --from=build /app .
+
+# Non-root, and the app directory stays read-only to it — nothing in a service writes to
+# its own image.
+USER app
+
+ENV ASPNETCORE_URLS=http://+:5000 \
+    DOTNET_gcServer=1 \
+    TZ=Asia/Colombo
+EXPOSE 5000
+
+# D7' §5.1: /health/ready pings DB + Redis + Kafka; MageRide.Shared maps it on every service.
+HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=3 \
+  CMD wget -qO- http://localhost:5000/health/ready || exit 1
+
+# `sh -c` so the published entry assembly resolved above is used. exec, so the process is
+# PID 1 and gets SIGTERM directly — without it a rolling update waits out the grace period
+# on every pod.
+ENTRYPOINT ["/bin/sh", "-c", "exec dotnet \"$(cat /app/.entrypoint)\""]

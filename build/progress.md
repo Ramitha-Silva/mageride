@@ -35,7 +35,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C007 | openapi-contracts | 0 | DONE | 2026-07-27 | 21 service contracts + shared library, 262 operations, spectral 0 errors; 5 micro-change-sets raised |
 | C008 | api-gateway-yarp | 0 | DONE | 2026-07-27 | 59 routes / 21 clusters, 524 tests green; 5 micro-change-sets raised |
 | C009 | docker-compose-dev | 0 | DONE | 2026-07-27 | slim stack healthy, 66/66 verify checks; 6 blocking spec fixes + 6 micro-change-sets raised |
-| C010 | ci-skeleton | 0 | PENDING | | |
+| C010 | ci-skeleton | 0 | DONE | 2026-07-27 | 7 CI jobs, 3 Dockerfile templates, MageRide.TestKit; 685 tests green; wave 0 complete |
 | C011 | kmp-module-scaffold | 1 | PENDING | | |
 | C012 | kmp-core-models | 1 | PENDING | | |
 | C013 | kmp-api-client | 1 | PENDING | | |
@@ -1293,3 +1293,132 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   throughout; `slim-verify.sh` removes the stack and its volumes on exit, including on failure, and
   the box was left with nothing running. The full verify takes roughly 3 minutes, most of it EMQX's
   ~40 s start-up and the fifteen throwaway MQTT client containers.
+
+- **Component:** C010 ci-skeleton — 2026-07-27
+- **Status:** DONE — the prompt's verify (`yaml.safe_load(ci.yml) && docker build -f
+  infra/docker/Dockerfile.service --build-arg SERVICE=MageRide.Shared`) exits 0, and every job the
+  workflow declares was run by hand against this tree: `dotnet test backend/MageRide.sln -c Release`
+  with `MAGERIDE_REQUIRE_CONTAINERS=1` → **685 passed** (161 kernel + 524 gateway, 0 skipped),
+  `bash infra/scripts/migrate-verify.sh` → **187/187**, spectral → 0 errors, the portal and android
+  legs → 0, and `actionlint` → 0. All four DoD items pass. **Wave 0 is complete.**
+- **Notes:**
+  **Spec gaps —**
+  (a) ***D7' §7's `runs-on` expression cannot express the iOS fence.*** The spec writes one
+  conditional — `runs-on: ${{ matrix.target == 'ios' && 'macos-14' || 'ubuntu-latest' }}` — so the
+  runner for every leg is decided by one string, and a typo in it silently reschedules the iOS leg
+  onto Ubuntu where Xcode does not exist and every step that matters is skipped into a green build.
+  Landed as a `matrix.include` with a literal `runner:` per leg, and the iOS leg's first step fails
+  the job unless `RUNNER_OS = macOS`. This also satisfies the DoD's "every job has an explicit
+  runs-on" without relying on how GitHub evaluates a conditional. **D7' §7's snippet should adopt
+  the include form.**
+  (b) ***D7' §2.2's Dockerfile template does not survive contact with central package
+  management.*** It copies exactly two `.csproj` files before `dotnet restore`; with
+  `backend/Directory.Packages.props` in force (C002 decision 1) a partial project graph fails
+  **NU1008** before the build starts. The templates copy `backend/src/` whole. The same template
+  also still carries the unconditional `addgroup -S app` that C003 note (i) recorded as broken on
+  the .NET 10 alpine images — fixed here for the third time, so **D7' §2.2 needs both edits**.
+  (c) ***`ENTRYPOINT ["dotnet", "${SERVICE}.dll"]` is wrong for at least one existing service.***
+  D7' §2.2 assumes the entry assembly is named after the project directory; `ApiGateway` publishes
+  `MageRide.ApiGateway.dll`. Resolved at build time from the published `*.runtimeconfig.json` —
+  exactly one assembly in a published application has one, and that is the one `dotnet` can launch.
+  (d) ***The prompt's verify builds a class library.*** `MageRide.Shared` has no `Main`, so the
+  image it produces is structurally complete — `aspnet:10.0-alpine`, user `app`, port 5000, the D7'
+  §5.1 healthcheck — but cannot be started. The template falls back to `${SERVICE}.dll` when no
+  runtimeconfig is published so that build still succeeds. **"Runnable" was proved separately**: the
+  same template built `ApiGateway`, and the container came up in 2 s as uid `app` and answered
+  `GET /health/live` with `{"status":"Healthy"}`.
+  (e) *`Testcontainers.PostgreSql` 4.13 obsoletes the parameterless builder constructor*, so
+  `new PostgreSqlBuilder(image)` is the supported form. With `TreatWarningsAsErrors=true` the
+  obsolete call is a build error, not a warning — worth knowing before a wave-2 component copies an
+  older snippet.
+  **Decisions —**
+  (1) **`MageRide.Migrations` gained a public `MigrationEngine`, and `Program.cs` now calls it.**
+  The DbUp pipeline — journal `public.schema_versions`, one transaction per script, filename
+  ordering, the `--ignore-journal` null-journal swap — was 15 lines of top-level statements, so a
+  test could only have re-implemented it. A second DbUp configuration would drift on exactly the
+  things that matter and the drift would surface as a *deploy* failure. Nothing about the pipeline
+  changed; `migrate-verify.sh` still passes 187/187, which is the proof.
+  (2) **`MageRide.TestKit` uses `timescale/timescaledb-ha:pg16`, not `postgis/postgis:16-3.4`.**
+  C002's fixtures ran PostGIS-only, which was right when no migration touched TimescaleDB; C006's
+  DDL creates a hypertable and four continuous aggregates, so the migration set cannot be applied on
+  that image at all. Every TestKit image now matches `infra/docker-compose.dev.slim.yml` exactly
+  (redis 7-alpine, redpanda v24.2.26), and a test asserts the container really carries postgis +
+  timescaledb + pgcrypto + citext — the difference between "migrations are broken" and "the harness
+  is testing the wrong server".
+  (3) **C002's `DockerFixtures.cs` was deleted and its tests re-pointed at the TestKit.** A harness
+  the one existing test project does not use is a fiction, and two `PostgresFixture` types in one
+  assembly is worse. The 152 C002 tests are unchanged in substance and still pass.
+  (4) **`[Collection<T>]`, not `[Collection("name")]`.** xUnit resolves a string collection name
+  against definitions *in the test assembly only*; the definitions now live in the TestKit, so the
+  string form fails discovery with "the following constructor parameters did not have matching
+  fixture data" — which is how the first run of the moved tests failed. The generic form resolves
+  the definition by type and works across assemblies. **Recorded in `MageRide.TestKit/CLAUDE.md`
+  because every wave-2 component will hit it.**
+  (5) **Skip-on-no-Docker stays, but CI cannot skip.** The fixtures still `Assert.Skip` when the
+  daemon is unreachable so a developer without Docker runs the unit tests; `ContainerFixture` reads
+  **`MAGERIDE_REQUIRE_CONTAINERS=1`** and turns that into a hard failure, and the backend job sets
+  it. Without this a runner with broken Docker reports green having run no integration test at all —
+  the failure mode a skip-based harness is *designed* to produce.
+  (6) **Three templates, one build context: the repository root.** Restore needs `global.json` and
+  `backend/Directory.*.props` from above the project directory, and a portal needs the workspace
+  lockfile and the shared Tailwind preset from above its own directory. `Dockerfile.worker` is
+  `runtime`, not `aspnet` — pulling the ASP.NET shared framework into a process that never serves a
+  request costs size and CVE surface for nothing, which is precisely why D7' §5.1 probes tcp-adapter
+  with a TCP socket instead of `/health/live`.
+  (7) **`HEALTH_PORT=none` turns the worker healthcheck off** for `hot-path`, which listens on
+  nothing. A healthcheck that cannot observe the process is worse than none, because compose and
+  Kubernetes both read "healthy" as "ready to serve". Both modes were verified against running
+  containers: `none` → healthy, a live listener on 5023 → healthy, and nothing listening →
+  unhealthy.
+  (8) **`Dockerfile.portal` fails the build when the standalone bundle is missing.** Next.js only
+  emits `.next/standalone` with `output: 'standalone'` in `next.config`; without it the build
+  succeeds and the runtime stage has no `server.js`, i.e. a crash-looping container. **C104 / C111 /
+  C117 must set it.**
+  (9) **The android and iOS legs probe for a build *file*, not for the project.** `./gradlew
+  projects` already prints `':shared'` and `':apps:driver-android'` — C001 declared the modules in
+  `settings.gradle.kts` and deliberately left their build scripts to C011/C067 — so a probe on the
+  project list would run wave-1 tasks that do not exist and fail today. Probing
+  `shared/kmp/build.gradle.kts` and `apps/driver-android/build.gradle.kts` means the jobs grow with
+  the repository instead of needing an edit in three later components. Caught by dry-running both
+  legs, not by reading them.
+  (10) **The AL-53 guard matches declarations, not words.** The first version grepped for
+  `Microsoft.EntityFrameworkCore|DbContext|dotnet ef` and failed on `Directory.Build.props` and
+  `Directory.Packages.props` — the two files whose *comments* forbid EF Core. It now matches a
+  `using`, a `<PackageReference>`/`<PackageVersion>`, a `: DbContext` base type and an invocation of
+  the tool in a script. Proved both ways: clean on this tree, and it rejects a deliberately-bad tree
+  carrying all four shapes.
+  (11) **A `compose` job exists that the deliverable list does not name.** Wave 0's gate includes
+  "slim compose healthy", C009 shipped `slim-verify.sh`, and nothing else would ever run it. It is
+  the most expensive job (~5 GB of image pulls, ~3 min) and is flagged as such in the workflow.
+  (12) **`migrate-verify.sh` is the migration job, unchanged.** Its pass 2 already fails the build
+  with "expected the second run to apply 0 scripts", which is the DoD verbatim; pass 3 re-runs every
+  script with the journal disabled. The same property is *also* asserted in-process by
+  `MigrationHarnessTests`, so a broken migration fails the fast backend job (~20 s) rather than
+  waiting for the slow one.
+  (13) **`concurrency` cancels superseded runs on branches but never on `main`** — every commit on
+  main is a release candidate and needs its own result.
+  (14) **`actionlint` is the second check on the workflow**, beyond the DoD's YAML parse. A workflow
+  that parses can still name a context that does not exist or a shell variable that is never set;
+  both checks are in `.github/workflows/README.md` so they can be run before pushing.
+  **For later components —**
+  **C011 / C067 / C076 (Gradle):** the android leg starts running `:shared:testDebugUnitTest detekt
+  ktlintCheck` the moment `shared/kmp/build.gradle.kts` exists, and the app assemble when
+  `apps/driver-android/build.gradle.kts` does. **A GitHub runner has no Android SDK preinstalled for
+  AGP 9** — C011 should add `android-actions/setup-android` to that leg if the build needs it.
+  **C085 / C094 (iOS):** the leg archives `apps/{driver,passenger}-ios/<Scheme>.xcodeproj` with
+  `CODE_SIGNING_ALLOWED=NO`; signing and TestFlight upload are C124's, along with the
+  `APPLE_API_KEY` / `ANDROID_KEYSTORE` secrets D7' §13 lists.
+  **C104 / C111 / C117 (portals):** set `output: 'standalone'`, and give each workspace a `lint`,
+  `test` and `build` script — the portal leg fans out with `--workspaces --if-present`, so a missing
+  script is silently skipped rather than failed.
+  **Every wave-2 service:** add the project to `backend/MageRide.sln` (CI runs the solution, not a
+  list), reference `MageRide.TestKit` for integration tests, and use `[Collection<T>]`.
+  **C124 (full CD):** wave 5/6's verify commands — `infra/replica/deploy.sh`, `chaos/run-drills.sh`,
+  `k6 run load/*.js`, `kubectl apply --dry-run -k`, `acceptance/sg/run.sh` — are deliberately absent
+  here; they need a deployed replica, a load generator or the Singapore region. The mapping table in
+  `.github/workflows/README.md` says so explicitly so they are not mistaken for an omission.
+  **Build host —** Docker plus the .NET SDK. New images pulled: `mcr.microsoft.com/dotnet/runtime:10.0-alpine`
+  (the worker base). `actionlint` v1.7.7 was downloaded to the scratchpad for linting and is **not**
+  vendored into the repo — CI does not run it today; it is documented as a pre-push check.
+  The replica stack stayed down throughout and no dev stack was left running. The full local
+  reproduction of every job takes about six minutes, most of it `migrate-verify.sh`.

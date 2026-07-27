@@ -1,0 +1,97 @@
+# =====================================================================================
+# MageRide — Next.js portal image (C010, D7' §2.1 + Δ 2026-07-23).
+#
+# One template for the three web surfaces, selected by build argument:
+#   admin           Admin Portal, admin.mageride.lk, port 3001  (AL-02, C104)
+#   fleet           Fleet Portal, fleet.mageride.lk, port 3002  (AL-03, C111)
+#   web-passenger   Passenger Web subview /public/track/*       (AL-44, C117)
+#
+#   docker build -f infra/docker/Dockerfile.portal --build-arg PORTAL=admin --build-arg PORT=3001 \
+#     -t mageride/admin-portal:dev .
+#
+# Build context is the REPOSITORY ROOT: portals/ is one npm workspace
+# (`portals/package.json` -> tailwind-preset, admin, fleet, web-passenger), so a portal
+# cannot be installed without the lockfile and the shared preset above it.
+#
+# Node 24-alpine, not 20: Node 20 reached EOL in April 2026 (micro-change-set 2026-07-23,
+# mirrored in D7' §1/§2.1 and the replica's portal containers).
+#
+# Tailwind is compiled at build through PostCSS and there is no runtime styling dependency
+# (AL-52), so the runtime stage carries no CSS toolchain at all.
+#
+# --- Requires `output: 'standalone'` in next.config -----------------------------------
+# The runner stage copies Next.js's standalone bundle, which is the only output that does
+# not need node_modules at runtime. C104 / C111 / C117 must set it; without it the build
+# succeeds and the runtime stage has no server.js to start, which this Dockerfile turns
+# into a build-time error rather than a crash-looping container.
+# =====================================================================================
+
+ARG NODE_IMAGE=node:24-alpine
+
+# ---- dependencies -------------------------------------------------------------------
+FROM ${NODE_IMAGE} AS deps
+WORKDIR /repo
+
+# The workspace root plus every member manifest, so `npm ci` resolves the same tree the
+# lockfile pins without pulling in application source (which would bust this layer on
+# every edit).
+COPY ["portals/package.json", "portals/package-lock.json", "./portals/"]
+COPY ["portals/tailwind-preset/package.json", "./portals/tailwind-preset/"]
+COPY ["portals/admin/package.json", "./portals/admin/"]
+COPY ["portals/fleet/package.json", "./portals/fleet/"]
+COPY ["portals/web-passenger/package.json", "./portals/web-passenger/"]
+
+WORKDIR /repo/portals
+RUN npm ci
+
+# ---- build --------------------------------------------------------------------------
+FROM ${NODE_IMAGE} AS build
+ARG PORTAL
+WORKDIR /repo/portals
+
+RUN test -n "$PORTAL" || (echo "error: --build-arg PORTAL=<admin|fleet|web-passenger> is required" >&2; exit 1)
+
+COPY --from=deps /repo/portals/node_modules ./node_modules
+COPY ["portals/", "./"]
+
+ENV NEXT_TELEMETRY_DISABLED=1 \
+    NODE_ENV=production
+
+RUN npm run build --workspace "$PORTAL"
+
+RUN test -f "${PORTAL}/.next/standalone/portals/${PORTAL}/server.js" \
+    || (echo "error: ${PORTAL} produced no standalone bundle. Set output: 'standalone' in its next.config." >&2; exit 1)
+
+# ---- runtime ------------------------------------------------------------------------
+FROM ${NODE_IMAGE} AS runtime
+ARG PORTAL
+ARG PORT=3000
+WORKDIR /app
+
+# node:alpine already ships a non-root `node` user (uid 1000). Same guarded-create shape as
+# the .NET images so the three templates read alike.
+RUN getent group node >/dev/null 2>&1 || addgroup -S node; \
+    getent passwd node >/dev/null 2>&1 || adduser -S node -G node
+
+# The standalone bundle carries its own minimal node_modules; `static` and `public` are not
+# included in it and have to come across separately.
+COPY --from=build --chown=node:node /repo/portals/${PORTAL}/.next/standalone/ ./
+COPY --from=build --chown=node:node /repo/portals/${PORTAL}/.next/static ./portals/${PORTAL}/.next/static
+COPY --from=build --chown=node:node /repo/portals/${PORTAL}/public ./portals/${PORTAL}/public
+
+USER node
+
+ENV NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1 \
+    TZ=Asia/Colombo \
+    HOSTNAME=0.0.0.0 \
+    PORT=${PORT} \
+    PORTAL=${PORTAL}
+EXPOSE ${PORT}
+
+# Next.js answers / once the server is listening. No wget in node:alpine, so the check runs
+# in node itself.
+HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:'+process.env.PORT+'/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+
+ENTRYPOINT ["/bin/sh", "-c", "exec node portals/$PORTAL/server.js"]

@@ -1,0 +1,296 @@
+# =====================================================================================
+# MageRide CI (C010) — D7' §7.
+#
+# The entry point only. Full CD — ArgoCD, image promotion by SHA tag, rollback — is C124.
+#
+# Jobs, and the component verify each one runs (see .github/workflows/README.md):
+#   build (backend)   C001 C002 C008 C010   dotnet build + test + the container templates
+#   build (android)   C001 C011-C019        gradle; grows as the KMP modules land
+#   build (ios)       C085-C102             macos-14 ONLY; never scheduled on Linux
+#   build (portal)    C001 C103-C117        npm ci + build + lint
+#   contracts         C007                  spectral lint over backend/contracts/*.yaml
+#   migrations        C003-C006             apply twice; a non-no-op second run fails
+#   compose           C009                  slim stack healthy + the EMQX/topic assertions
+# =====================================================================================
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A second push to the same branch supersedes the first. main is excluded: every commit
+# there is a release candidate and must have its own result.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: "true"
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "true"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+  NEXT_TELEMETRY_DISABLED: "1"
+  # D-38: business dates settle in Asia/Colombo, so a runner in UTC must not be the thing
+  # that makes a date test pass.
+  TZ: Asia/Colombo
+
+jobs:
+
+  # ===================================================================================
+  # D7' §7's matrix. `runs-on` is a literal per leg rather than the spec's inline
+  # `${{ matrix.target == 'ios' && 'macos-14' || 'ubuntu-latest' }}` conditional: the iOS
+  # toolchain cannot run on Linux at all, and a literal cannot be silently broken by an
+  # expression change. See the C010 handoff.
+  # ===================================================================================
+  build:
+    name: build (${{ matrix.target }})
+    runs-on: ${{ matrix.runner }}
+    # One value for every leg rather than a per-leg expression: `timeout-minutes` accepts
+    # the matrix context, but a wrong timeout is a flaky red build hours later and the
+    # slowest leg (ios, Xcode archive) is the only one that needs the headroom.
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: backend
+            runner: ubuntu-latest
+          - target: android
+            runner: ubuntu-latest
+          # macos-14 is a literal and must stay one — see the comment above the job.
+          - target: ios
+            runner: macos-14
+          - target: portal
+            runner: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # --- iOS fence (root CLAUDE.md, C010 prompt) ---------------------------------
+      # iOS and KMP-iOS targets do not compile on Linux. If this leg is ever scheduled
+      # somewhere without Xcode the job must stop here, loudly, rather than "succeed" by
+      # skipping every step that matters.
+      - name: assert the ios leg is on macOS
+        if: matrix.target == 'ios'
+        run: |
+          test "$RUNNER_OS" = "macOS" \
+            || { echo "::error::the ios leg must run on macos-14, not $RUNNER_OS"; exit 1; }
+          xcodebuild -version
+
+      # --- backend -------------------------------------------------------------------
+      - name: setup .NET
+        if: matrix.target == 'backend'
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: backend — restore and build
+        if: matrix.target == 'backend'
+        run: dotnet build backend/MageRide.sln -c Release
+
+      - name: backend — test
+        if: matrix.target == 'backend'
+        # Containers are mandatory here. Without this the Testcontainers fixtures fall back
+        # to Assert.Skip when the daemon is unreachable, and a runner with a broken Docker
+        # would report a green build having run none of the integration tests.
+        env:
+          MAGERIDE_REQUIRE_CONTAINERS: "1"
+        run: dotnet test backend/MageRide.sln -c Release --no-build --logger "console;verbosity=normal"
+
+      # D7' §7 builds one image per service in a shell loop. Only three .NET projects exist
+      # in wave 0, so the loop is over what the repository actually has; wave 2 adds
+      # AppServices / HotPath / Fanout / TcpAdapter and they join it automatically.
+      - name: backend — container templates
+        if: matrix.target == 'backend'
+        run: |
+          set -euo pipefail
+          docker build -f infra/docker/Dockerfile.service \
+            --build-arg SERVICE=ApiGateway -t mageride/api-gateway:${GITHUB_SHA::7} .
+          docker build -f infra/docker/Dockerfile.worker \
+            --build-arg SERVICE=MageRide.Migrations --build-arg HEALTH_PORT=none \
+            -t mageride/migrate:${GITHUB_SHA::7} .
+          # Structural assertions the templates promise: non-root, and a healthcheck.
+          for image in mageride/api-gateway mageride/migrate; do
+            user=$(docker image inspect "$image:${GITHUB_SHA::7}" --format '{{.Config.User}}')
+            test "$user" = "app" || { echo "::error::$image runs as '${user:-root}', not app"; exit 1; }
+          done
+          hc=$(docker image inspect mageride/api-gateway:${GITHUB_SHA::7} --format '{{json .Config.Healthcheck}}')
+          test "$hc" != "null" || { echo "::error::the service image has no HEALTHCHECK"; exit 1; }
+
+      # --- android -------------------------------------------------------------------
+      - name: setup JDK
+        if: matrix.target == 'android'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: setup Gradle
+        if: matrix.target == 'android'
+        uses: gradle/actions/setup-gradle@v4
+
+      # `projects` is the wave-0 command (C001: the modules are declared in
+      # settings.gradle.kts but carry no build script yet, which is why this needs no Android
+      # SDK). The probe is the build FILE, not the project list — `projects` already prints
+      # ':shared' and ':apps:driver-android', so probing the list would run wave-1 tasks that
+      # do not exist. The job grows with the repository instead of being edited in C011/C067.
+      - name: android — gradle
+        if: matrix.target == 'android'
+        run: |
+          set -euo pipefail
+          ./gradlew --no-daemon projects
+          if [ -f shared/kmp/build.gradle.kts ]; then
+            ./gradlew --no-daemon :shared:testDebugUnitTest detekt ktlintCheck
+          else
+            echo "::notice::':shared' has no build script yet (C011) — wave-1 verify skipped"
+          fi
+          if [ -f apps/driver-android/build.gradle.kts ]; then
+            ./gradlew --no-daemon :apps:driver-android:assembleRelease :apps:passenger-android:assembleRelease
+          else
+            echo "::notice::the Android app modules have no build scripts yet (C067/C076)"
+          fi
+
+      # --- ios -----------------------------------------------------------------------
+      - name: setup JDK (KMP)
+        if: matrix.target == 'ios'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # Same build-file probe as the android leg. D7' §6: KMP XCFramework, then xcodebuild.
+      - name: ios — XCFramework and archive
+        if: matrix.target == 'ios'
+        run: |
+          set -euo pipefail
+          if [ ! -f shared/kmp/build.gradle.kts ]; then
+            echo "::notice::':shared' has no build script yet (C011) — nothing to assemble"
+            exit 0
+          fi
+          ./gradlew --no-daemon :shared:assembleXCFramework
+          for app in driver:DriverApp passenger:PassengerApp; do
+            dir="apps/${app%%:*}-ios"
+            scheme="${app##*:}"
+            if [ -f "$dir/$scheme.xcodeproj/project.pbxproj" ]; then
+              xcodebuild -project "$dir/$scheme.xcodeproj" -scheme "$scheme" \
+                -destination 'generic/platform=iOS' archive \
+                -archivePath "build/$scheme.xcarchive" CODE_SIGNING_ALLOWED=NO
+            else
+              echo "::notice::$scheme has no Xcode project yet (C085/C094)"
+            fi
+          done
+
+      # --- portal --------------------------------------------------------------------
+      - name: setup Node
+        if: matrix.target == 'portal'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: portals/package-lock.json
+
+      - name: portal — install, lint, build
+        if: matrix.target == 'portal'
+        run: |
+          set -euo pipefail
+          npm --prefix portals ci
+          npm --prefix portals run lint
+          npm --prefix portals run build
+
+  # ===================================================================================
+  # C007 — the OpenAPI contracts are the source of truth for 262 operations and for the
+  # gateway route table, so they are linted on their own rather than inside a matrix leg.
+  # ===================================================================================
+  contracts:
+    name: contracts (spectral)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      # C007's handoff: this fetches @stoplight/spectral-cli from the registry, so the job
+      # needs network. Pinned rather than floating — a ruleset that lints clean today must
+      # not start failing because the linter moved.
+      - name: spectral lint
+        run: |
+          npx --yes @stoplight/spectral-cli@6.16.2 lint 'backend/contracts/*.yaml' \
+            --ruleset backend/contracts/.spectral.yaml
+
+  # ===================================================================================
+  # C003-C006 — the migration gate.
+  #
+  # migrate-verify.sh runs three passes against a throwaway timescaledb-ha:pg16 and FAILS
+  # if pass 2 applies anything: "expected the second run to apply 0 scripts". Pass 3
+  # re-executes every script with the journal disabled, which is what proves the DDL
+  # itself is idempotent rather than only proving DbUp remembers. It then asserts the
+  # objects C003-C006 promised (187 checks).
+  #
+  # Schema changes are versioned .sql applied twice — never `dotnet ef` (AL-53, D7' §1).
+  # ===================================================================================
+  migrations:
+    name: migrations (apply twice)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      # AL-53 is a stack rule, not a preference: the whole data-access layer is Dapper over
+      # Npgsql and the schema is versioned .sql. The patterns match real declarations only —
+      # a `using`, a package reference, a `: DbContext` base type, an invocation of the tool —
+      # because both Directory.*.props carry comments that say "no EF Core", and a grep for
+      # the bare words fails on the very files that forbid it.
+      - name: no EF Core anywhere
+        run: |
+          set -uo pipefail
+          found=0
+          if grep -rInE '^[[:space:]]*(global[[:space:]]+)?using[[:space:]]+Microsoft\.EntityFrameworkCore' \
+               --include='*.cs' backend/; then found=1; fi
+          if grep -rInE '<Package(Reference|Version)[^>]*Include="Microsoft\.EntityFrameworkCore' \
+               --include='*.csproj' --include='*.props' backend/; then found=1; fi
+          if grep -rInE ':[[:space:]]*DbContext\b|\bIDbContextFactory\b' --include='*.cs' backend/; then found=1; fi
+          if grep -rInE '(^|[^[:alnum:]_-])dotnet[[:space:]]+ef[[:space:]]' \
+               --include='*.sh' --include='*.yml' --include='*.yaml' --include='*.ps1' \
+               backend/ infra/ .github/ db/; then found=1; fi
+          if [ "$found" -ne 0 ]; then
+            echo "::error::EF Core is forbidden (AL-53). Data access is Dapper over Npgsql; migrations are DbUp .sql scripts."
+            exit 1
+          fi
+          echo "no EF Core references found"
+
+      - name: apply, re-apply, and assert the schema
+        run: bash infra/scripts/migrate-verify.sh
+
+  # ===================================================================================
+  # C009 — the dev stack every later component's verify runs against. Wave 0's gate
+  # includes "slim compose healthy", so it is checked here rather than being left to
+  # whoever next runs dev-up locally.
+  #
+  # Heavier than the other jobs: it pulls postgres/redpanda/emqx/minio (~5 GB) and takes
+  # about three minutes on a hosted runner.
+  # ===================================================================================
+  compose:
+    name: compose (slim stack)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: slim stack — config, healthy, EMQX ACL, topics, env templates
+        run: bash infra/scripts/slim-verify.sh

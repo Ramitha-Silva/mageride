@@ -1,0 +1,80 @@
+# =====================================================================================
+# MageRide — background-worker image (C010, D7' §2.2).
+#
+# For the .NET services that have no HTTP surface: `tcp-adapter` (GT06 / JT808 / H02 /
+# NMEA-UDP, T-01) and the `hot-path` consumers (mqtt-bridge, position-processor,
+# persistence-writer, fleet-health). D7' §2.2: "`tcp-adapter` uses
+# mcr.microsoft.com/dotnet/runtime:10.0-alpine (no ASP.NET) and exposes 5023-5026".
+#
+#   docker build -f infra/docker/Dockerfile.worker --build-arg SERVICE=TcpAdapter -t mageride/tcp-adapter:dev .
+#   docker build -f infra/docker/Dockerfile.worker --build-arg SERVICE=HotPath \
+#     --build-arg HEALTH_PORT=none -t mageride/hot-path:dev .
+#
+# Build context is the REPOSITORY ROOT. See Dockerfile.service for why.
+#
+# `runtime`, not `aspnet`: pulling in the ASP.NET shared framework for a process that never
+# serves a request costs image size and CVE surface for nothing. The consequence is that
+# these containers have no /health/live or /health/ready, which is exactly why D7' §5.1
+# gives tcp-adapter "TCP socket on 5023" as its liveness probe instead.
+# =====================================================================================
+
+ARG DOTNET_SDK_IMAGE=mcr.microsoft.com/dotnet/sdk:10.0
+ARG DOTNET_RUNTIME_IMAGE=mcr.microsoft.com/dotnet/runtime:10.0-alpine
+
+# ---- build --------------------------------------------------------------------------
+FROM ${DOTNET_SDK_IMAGE} AS build
+ARG SERVICE
+ARG BUILD_CONFIGURATION=Release
+WORKDIR /src
+
+RUN test -n "$SERVICE" || (echo "error: --build-arg SERVICE=<project directory name> is required" >&2; exit 1)
+
+COPY ["global.json", "./"]
+COPY ["backend/Directory.Build.props", "backend/Directory.Packages.props", "backend/"]
+COPY ["backend/src/", "backend/src/"]
+COPY ["db/migrations/", "db/migrations/"]
+
+RUN dotnet restore "backend/src/${SERVICE}/${SERVICE}.csproj"
+
+RUN dotnet publish "backend/src/${SERVICE}/${SERVICE}.csproj" \
+      -c ${BUILD_CONFIGURATION} \
+      -o /app \
+      --no-restore \
+      /p:UseAppHost=false
+
+RUN set -eu; \
+    cd /app; \
+    entry="$(ls *.runtimeconfig.json 2>/dev/null | head -1 | sed 's/\.runtimeconfig\.json$/.dll/')"; \
+    [ -n "$entry" ] || entry="${SERVICE}.dll"; \
+    test -f "$entry" || (echo "error: ${SERVICE} published no assembly named $entry" >&2; exit 1); \
+    printf '%s' "$entry" > /app/.entrypoint; \
+    echo "entry point: $entry"
+
+# ---- runtime ------------------------------------------------------------------------
+FROM ${DOTNET_RUNTIME_IMAGE} AS runtime
+
+RUN getent group app >/dev/null 2>&1 || addgroup -S app; \
+    getent passwd app >/dev/null 2>&1 || adduser -S app -G app
+
+WORKDIR /app
+COPY --from=build /app .
+USER app
+
+# D7' §5.1 probes tcp-adapter by opening a socket on 5023. `HEALTH_PORT=none` turns the
+# check off for a worker that listens on nothing at all (hot-path), which is honest: a
+# healthcheck that cannot observe the process is worse than no healthcheck, because compose
+# and Kubernetes both treat "healthy" as a statement about readiness to serve.
+ARG HEALTH_PORT=5023
+ENV HEALTH_PORT=${HEALTH_PORT} \
+    DOTNET_gcServer=1 \
+    TZ=Asia/Colombo
+
+# T-01 tracker ingest. UDP is called out separately: 5026 is NMEA-over-UDP and HAProxy
+# cannot forward it, so that port is published straight off this container (C009).
+EXPOSE 5023 5024 5025 5026/udp
+
+# busybox nc; the runtime alpine image ships no wget or curl.
+HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=5 \
+  CMD sh -c 'if [ "$HEALTH_PORT" = "none" ]; then exit 0; fi; nc -z 127.0.0.1 "$HEALTH_PORT"'
+
+ENTRYPOINT ["/bin/sh", "-c", "exec dotnet \"$(cat /app/.entrypoint)\""]

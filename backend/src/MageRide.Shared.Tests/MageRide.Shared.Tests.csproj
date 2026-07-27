@@ -30,12 +30,13 @@
     <PackageReference Include="xunit.v3" />
     <PackageReference Include="xunit.runner.visualstudio" />
     <PackageReference Include="Microsoft.AspNetCore.TestHost" />
-    <PackageReference Include="Testcontainers.PostgreSql" />
-    <PackageReference Include="Testcontainers.Redis" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\MageRide.Shared\MageRide.Shared.csproj" />
+    <!-- C010: the Postgres / Redis / Redpanda container fixtures live in the TestKit so every
+         service's integration tests share one definition of the throwaway stack. -->
+    <ProjectReference Include="..\MageRide.TestKit\MageRide.TestKit.csproj" />
   </ItemGroup>
 
   <ItemGroup>

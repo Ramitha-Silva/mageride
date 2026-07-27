@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    MageRide.TestKit (C010) — the Testcontainers harness every service's integration tests
+    build on. One definition of "a throwaway Postgres / Redis / Redpanda that matches the
+    deployed stack", so a wave-2 service does not hand-roll its own and drift from
+    infra/docker-compose.dev.slim.yml.
+
+    This is a library, not a test project: it has no tests of its own and is never collected
+    by `dotnet test`. Consumers reference it and use its fixtures.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.TestKit</RootNamespace>
+    <AssemblyName>MageRide.TestKit</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <!-- Explicitly NOT a test project: without this the SDK would look for a test runner. -->
+    <IsTestProject>false</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- xunit.v3 for IAsyncLifetime and [CollectionDefinition]; the fixtures are xUnit
+         collection fixtures, which is how a container is shared across a test class. -->
+    <PackageReference Include="xunit.v3.extensibility.core" />
+    <PackageReference Include="Testcontainers.PostgreSql" />
+    <PackageReference Include="Testcontainers.Redis" />
+    <PackageReference Include="Testcontainers.Redpanda" />
+    <PackageReference Include="Npgsql" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The migration fixture applies the real db/migrations set through the same DbUp
+         pipeline the `migrate` container uses (MageRide.Migrations.MigrationEngine), so a
+         test database and a deployed database can never be migrated differently. The scripts
+         travel as embedded resources in that assembly — no path resolution from a test. -->
+    <ProjectReference Include="..\MageRide.Migrations\MageRide.Migrations.csproj" />
+  </ItemGroup>
+
+</Project>

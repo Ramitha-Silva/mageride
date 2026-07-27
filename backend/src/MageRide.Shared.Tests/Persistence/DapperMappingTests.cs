@@ -2,6 +2,7 @@ using Dapper;
 using MageRide.Shared.Persistence;
 using MageRide.Shared.Primitives;
 using MageRide.Shared.Tests.Infrastructure;
+using MageRide.TestKit;
 
 namespace MageRide.Shared.Tests.Persistence;
 
@@ -9,7 +10,7 @@ namespace MageRide.Shared.Tests.Persistence;
 /// snake_case mapping and the platform type handlers against a real PostGIS-enabled Postgres 16
 /// (D3' §0 "Data access", ADD §9.1/§9.5).
 /// </summary>
-[Collection(PostgresCollection.Name)]
+[Collection<PostgresCollection>]
 public sealed class DapperMappingTests(PostgresFixture postgres)
 {
     /// <summary>A record shaped like a row from ADD §9.1 — snake_case columns, PascalCase members.</summary>

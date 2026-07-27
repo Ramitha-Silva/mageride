@@ -1,6 +1,7 @@
 using MageRide.Shared.RateLimiting;
 using MageRide.Shared.Tests.Infrastructure;
 using StackExchange.Redis;
+using MageRide.TestKit;
 
 namespace MageRide.Shared.Tests.RateLimiting;
 
@@ -8,7 +9,7 @@ namespace MageRide.Shared.Tests.RateLimiting;
 /// The distributed token bucket behind the OTP limits (D-32) and the proxy location-request
 /// limits (P-12), against a real Redis.
 /// </summary>
-[Collection(RedisCollection.Name)]
+[Collection<RedisCollection>]
 public sealed class RedisTokenBucketTests(RedisFixture redis) : IAsyncLifetime
 {
     private IConnectionMultiplexer? _connection;

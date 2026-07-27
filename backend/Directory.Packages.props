@@ -63,7 +63,13 @@
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
     <PackageVersion Include="Testcontainers.PostgreSql" Version="4.13.0" />
     <PackageVersion Include="Testcontainers.Redis" Version="4.13.0" />
+    <!-- C010: the TestKit's Redpanda fixture, so a service's integration tests get the same
+         broker the dev stack runs instead of a hand-rolled container. -->
+    <PackageVersion Include="Testcontainers.Redpanda" Version="4.13.0" />
     <PackageVersion Include="xunit.v3" Version="3.2.2" />
+    <!-- C010: MageRide.TestKit is a library, not a test project — it needs IAsyncLifetime and
+         [CollectionDefinition] but no runner, so it takes the extensibility package alone. -->
+    <PackageVersion Include="xunit.v3.extensibility.core" Version="3.2.2" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
     <!-- C008: the gateway's route table is asserted against backend/contracts/*.yaml, and the
          SignalR passthrough test drives a real HubConnection through the proxy. -->

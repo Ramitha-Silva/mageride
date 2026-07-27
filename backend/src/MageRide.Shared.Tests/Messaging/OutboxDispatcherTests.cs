@@ -6,6 +6,7 @@ using MageRide.Shared.Persistence;
 using MageRide.Shared.Tests.Infrastructure;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using MageRide.TestKit;
 
 namespace MageRide.Shared.Tests.Messaging;
 
@@ -17,7 +18,7 @@ namespace MageRide.Shared.Tests.Messaging;
 /// The publisher is a capture double rather than a real Redpanda: what E-09 measures is the
 /// commit-to-dispatch wake-up, and a broker in the path would measure Kafka's ack latency instead.
 /// </remarks>
-[Collection(PostgresCollection.Name)]
+[Collection<PostgresCollection>]
 public sealed class OutboxDispatcherTests(PostgresFixture postgres)
 {
     /// <summary>The <c>rides.outbox</c> DDL from D4' §5, verbatim.</summary>

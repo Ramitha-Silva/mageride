@@ -6,6 +6,7 @@ using MageRide.Shared.Http.Idempotency.Postgres;
 using MageRide.Shared.Tests.Infrastructure;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using MageRide.TestKit;
 
 namespace MageRide.Shared.Tests.Idempotency;
 
@@ -13,7 +14,7 @@ namespace MageRide.Shared.Tests.Idempotency;
 /// The command log against a real Postgres — the store that actually has to deliver R-14's
 /// verbatim replay (ADD §11.13).
 /// </summary>
-[Collection(PostgresCollection.Name)]
+[Collection<PostgresCollection>]
 public sealed class PostgresCommandLogTests(PostgresFixture postgres)
 {
     /// <summary>
