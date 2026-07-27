@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    C008 verify target: dotnet test backend/src/ApiGateway.Tests -c Release
+
+    The gateway and its stub upstreams are hosted on real Kestrel sockets rather than TestServer:
+    YARP forwards over a real HttpMessageInvoker, and the SignalR passthrough test needs a genuine
+    WebSocket upgrade to travel end to end. Nothing here needs Docker.
+
+    Microsoft.NET.Sdk.Web, not Microsoft.NET.Sdk: the stub upstreams are WebApplications.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.ApiGateway.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <OutputType>Exe</OutputType>
+    <!--
+      xUnit1051: every test is bounded by its own fixture's lifetime or an explicit timeout, so
+                 threading TestContext.Current.CancellationToken through each HTTP call would add
+                 noise without changing behaviour. Matches MageRide.Shared.Tests.
+    -->
+    <NoWarn>$(NoWarn);xUnit1051</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" />
+    <PackageReference Include="YamlDotNet" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ApiGateway\ApiGateway.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

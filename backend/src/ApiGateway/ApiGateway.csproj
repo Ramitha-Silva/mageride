@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    ApiGateway (C008) — the single public HTTP entry point.
+
+    YARP reverse proxy + the four edge concerns D3' §0 / D6' §8.2 put here and nowhere else:
+    the D-31 minimum-version gate, D-30 attestation enforcement, per-route rate limiting and
+    request-id / traceparent propagation. No business logic, no database, no Kafka.
+
+    Verify: dotnet test backend/src/ApiGateway.Tests -c Release
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.ApiGateway</RootNamespace>
+    <AssemblyName>MageRide.ApiGateway</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <UserSecretsId>mageride-api-gateway</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Yarp.ReverseProxy" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MageRide.Shared\MageRide.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The route table is its own reviewable artifact rather than a section of appsettings.json.
+         Cluster addresses still layer over it from the environment
+         (ReverseProxy__Clusters__ride-svc__Destinations__primary__Address). The Web SDK already
+         globs *.json as Content; this only pins it to the output directory. -->
+    <Content Update="gateway-routes.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="ApiGateway.Tests" />
+  </ItemGroup>
+
+</Project>

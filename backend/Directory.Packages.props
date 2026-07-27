@@ -32,6 +32,15 @@
     <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.10" />
   </ItemGroup>
 
+  <ItemGroup Label="Edge gateway (C008; ADD §18.1 picks YARP over Kong/Envoy)">
+    <!-- 2.3.0 is the current stable and ships a net8.0 lib; it runs on the net10.0 shared
+         framework. There is no net10.0-targeted build of YARP yet. -->
+    <PackageVersion Include="Yarp.ReverseProxy" Version="2.3.0" />
+    <!-- App Attest assertions are CBOR (D-30, iOS half). First-party decoder rather than a
+         hand-rolled one — the parse runs on attacker-supplied bytes. -->
+    <PackageVersion Include="System.Formats.Cbor" Version="10.0.10" />
+  </ItemGroup>
+
   <ItemGroup Label="Resilience (D6' §8.3)">
     <PackageVersion Include="Polly.Core" Version="8.7.0" />
     <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="10.8.0" />
@@ -56,6 +65,10 @@
     <PackageVersion Include="Testcontainers.Redis" Version="4.13.0" />
     <PackageVersion Include="xunit.v3" Version="3.2.2" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
+    <!-- C008: the gateway's route table is asserted against backend/contracts/*.yaml, and the
+         SignalR passthrough test drives a real HubConnection through the proxy. -->
+    <PackageVersion Include="YamlDotNet" Version="18.1.0" />
+    <PackageVersion Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.10" />
   </ItemGroup>
 
 </Project>

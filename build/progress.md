@@ -33,7 +33,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C005 | db-schema-business-content | 0 | DONE | 2026-07-27 | 29 scripts, 53 tables, 151/151 verify checks; 3 micro-change-sets raised |
 | C006 | db-schema-telemetry-timescale | 0 | DONE | 2026-07-27 | 4 scripts, 67 total, 187/187 verify checks; 2 micro-change-sets raised (both blocking as printed) |
 | C007 | openapi-contracts | 0 | DONE | 2026-07-27 | 21 service contracts + shared library, 262 operations, spectral 0 errors; 5 micro-change-sets raised |
-| C008 | api-gateway-yarp | 0 | PENDING | | |
+| C008 | api-gateway-yarp | 0 | DONE | 2026-07-27 | 59 routes / 21 clusters, 524 tests green; 5 micro-change-sets raised |
 | C009 | docker-compose-dev | 0 | PENDING | | |
 | C010 | ci-skeleton | 0 | PENDING | | |
 | C011 | kmp-module-scaffold | 1 | PENDING | | |
@@ -906,3 +906,181 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   **Build host —** no Docker, no database, no replica stack. `npx` fetched
   `@stoplight/spectral-cli@6.16.2` from the registry, so **CI (C010) needs network for this verify**
   or must vendor the CLI. The verify runs in roughly 10 s.
+
+- **Component:** C008 api-gateway-yarp — 2026-07-27
+- **Status:** DONE — `dotnet test backend/src/ApiGateway.Tests -c Release` → **524 passed, 0 failed,
+  0 skipped** (many are per-route theory cases). 59 routes across 21 clusters plus the locally served
+  `/v1/version/check`. All four DoD items pass: a below-floor request gets 426 with
+  `{updateUrl, latestVersion, isMandatory}`; a sensitive route without a valid `X-Attestation` gets
+  401 `attestation-failed` while a non-sensitive one is untouched; **every one of the 262 operations
+  in `backend/contracts/*.yaml` is driven through a running gateway and asserted to reach its own
+  service**; and a real SignalR `HubConnection` completes a WebSocket handshake and a round trip
+  through the proxy. `dotnet test backend/src/MageRide.Shared.Tests -c Release` still 152/152.
+- **Notes:**
+  **Spec gaps — five micro-change-sets, none actioned in `specs/`:**
+  (a) ***Attestation failure is 401 in D3' and 403 in the ADD, and the ADD's route list is a path
+  family that does not exist.*** D3' §0 and this prompt's DoD both say `401 attestation-failed`;
+  ADD §12.6's threat matrix says "requests without a valid token are rejected **403**" and scopes
+  D-30 to `/api/payments/**`, `/api/wallet/**`, `/api/dispatch/**`. No MageRide path begins `/api`
+  (C007 pinned `/v1` and `/public`), and that set omits **auth** and **SOS** — which D3' §0 names —
+  while adding dispatch, which it does not. **Resolution taken: D3' + the contracts win.** The
+  status is 401, and the enforced set is exactly the operations declaring the `X-Attestation`
+  parameter in `backend/contracts/*.yaml`. **ADD §12.6 needs the status and the path family
+  corrected**; a test asserts the two sets stay equal in both directions, so the drift cannot
+  reopen silently.
+  (b) ***No spec defines what is inside `X-Attestation`.*** `_shared.yaml` types it
+  `string, maxLength 8192` and nothing anywhere says how a platform encodes its verdict. Android
+  needs no encoding — a Play Integrity token is self-contained — but an App Attest **assertion** is
+  meaningless without the key id that identifies which registered public key verifies it. Defined
+  here as **`base64url(keyId) "." base64url(assertion CBOR)`**, with the signed client data being
+  the request binding **`"{METHOD} {path}"`**. **D3' §0 needs this written down**, and
+  **C013 / C067 / C085 must emit exactly this** or every iOS assertion fails.
+  (c) ***ADD §9.4's Redis key space has no entry for a registered App Attest key.*** Apple publishes
+  no server API for App Attest: the relying party verifies each assertion itself against the public
+  key kept at registration. Added **`attest:appattest:{keyId}`** (HASH: `pk` = base64
+  SubjectPublicKeyInfo DER for P-256, `counter` = uint32). **C026 (iam-svc) writes `pk`** when a
+  device completes registration — it already owns `iam.devices.attestation_verified_at`
+  (`server_db_schema.md` §1); the gateway only reads the key and moves `counter` forward. **ADD
+  §9.4 and `MageRide.Shared`'s `RedisKeys` both need the entry.**
+  (d) ***D7' §4.2 has no `api-gateway` row*** — every other service has one. The variables this
+  service reads are: `ReverseProxy__Clusters__{cluster}__Destinations__primary__Address` (21, req),
+  `Gateway__StateStore` (`Redis`|`Memory`), `Gateway__ForwardedHeaders__KnownProxies__0` (HAProxy,
+  req), `Gateway__VersionGate__Platforms__{android|ios}__{MinimumVersion,RecommendedVersion,
+  LatestVersion,UpdateUrl}`, `Gateway__Attestation__Mode`,
+  `Gateway__Attestation__PlayIntegrity__{PackageName,ServiceAccountJson}` (**secret**),
+  `Gateway__Attestation__AppAttest__AppId`, plus the common `ConnectionStrings__Redis` and
+  `Otel__Endpoint`. **`Jwt__JwksUrl` is deliberately *not* one of them** — see decision (2).
+  (e) ***`version-check` is not a deployable service.*** D3' Part 1 lists it in the service map and
+  C007 produced `version-check.yaml`, but a client below the floor cannot reach a separate service
+  *through the gate that is rejecting it*. `GET /v1/version/check` is served by the gateway itself
+  from the same floor table the transparent gate uses, so the two can never disagree. **C009 must
+  not create a version-check container**, and the contract's `servers` block already points at the
+  gateway.
+  **Other spec observations (no change needed):**
+  (f) *C007's handoff says attestation is declared on 29 operations; the contracts carry **22**.*
+  Counted mechanically both ways (all POST). The 22 are what is enforced.
+  (g) *D6' §8.2's rule list is explicitly "illustrative" and is loose in two places:* it maps
+  `/v1/wallet/**,/v1/fees/**` onto "wallet/subscription-svc" and `/v1/vehicles/**,/v1/trackers/**`
+  onto "registry/provisioning" as if each pair were one target. They are four different services,
+  and the landed table splits them. Nothing to change — the heading says illustrative.
+  (h) *`/v1/drivers` has no owner.* Three services each own leaves of it — `profile` (registry-svc),
+  `{driverId}/level` and `{driverId}/stats` (dispatch-svc), `{driverId}/block` (safety-svc) — and no
+  spec assigns the prefix. Landed as three exact routes with **no catch-all**, so an unclaimed
+  `/v1/drivers/...` path 404s at the edge rather than being guessed at.
+  **Decisions —**
+  (1) **The route table is its own artifact, `gateway-routes.json`, in four explicit order tiers.**
+  Lower `Order` wins: **10** the cross-service literal overrides (the six C007 flagged, of which
+  `/v1/rides/job-board`, `/v1/rides/schedule*` and `/v1/rides/scheduled/{driverId}` cross from
+  ride-svc to dispatch-svc, plus `/v1/fleets/{fleetId}/trackers/bulk` crossing from fleet-svc to
+  provisioning-svc and the three-way split of `/v1/geo`); **20** the `/v1/admin` sub-trees owned by
+  iam / dispatch / reputation / fare / subscription / content / transit; **50** ordinary per-service
+  prefixes; **90** the admin-bff catch-all, which must stay last or it swallows tier 20. ASP.NET's
+  own literal-beats-parameter precedence would resolve most of these, but relying on it makes a
+  cross-service boundary an emergent property; the tiers make it a reviewable one.
+  (2) **The gateway does not validate JWTs, despite D6' §8.1 listing "JWT validate" among its
+  jobs.** AL-06 is deny-by-default *authorization*, which needs the caller's effective role set and
+  the target resource together — only the owning service has both, and it must re-validate the
+  token anyway. Validating a second time at the edge buys nothing, puts a JWKS dependency on
+  iam-svc in every request path, and opens a window during a 90-day signing-key rotation (D7' §13)
+  in which the edge rejects a token the owning service would have accepted. The edge is therefore
+  authentication-free and every route is explicitly `"AuthorizationPolicy": "anonymous"`.
+  **Consequence:** the kernel's deny-by-default fallback policy is cleared here
+  (`AuthorizationOptions.FallbackPolicy = null`). Without that, `UseAuthorization` challenges on any
+  request with no matched endpoint, finds no `IAuthenticationService`, and turns **every unrouted
+  path into a 500** — which is what the first run of the route-table test caught.
+  (3) **`/v1/internal/**` is refused `404 not-found` ahead of routing**, not merely left unrouted.
+  Ten contract operations live there and D3' §0 puts service-to-service traffic on mTLS
+  (Linkerd/SPIFFE); they are in the contracts so a *calling service* knows their shape. 404 rather
+  than 403: confirming that an internal path exists maps the internal surface for free.
+  (4) **The D-31 gate runs inside the YARP proxy pipeline**, so the gateway's own endpoints —
+  `/v1/version/check`, `/health/live`, `/health/ready`, `/metrics` — are exempt *by construction*
+  rather than by an exemption list somebody has to maintain. `/public/**` (AL-44, opened in a
+  browser from an SMS link) carries an explicit `VersionGate: exempt` metadata value.
+  (5) **A caller that names a platform must name a version; a caller that names neither is not
+  gated.** `X-Platform: android` with a missing or unparsable `X-App-Version` is a broken build and
+  gets 426. A request with no `X-Platform` at all is a browser (both portals, the public track
+  pages) and passes. Stripping the header is not a bypass worth closing by default: the floor exists
+  for client/server compatibility (US-17.1/17.2), while the control against a tampered client is
+  attestation, which cannot be evaded by omitting a header. `RequirePlatformHeader` makes the strict
+  reading available and is tested.
+  (6) **`ClientVersion` wraps C002's `AppVersion` rather than changing it.** Two rules the kernel
+  type does not have: a semver **pre-release sorts below its release**, so a `1.6.0-rc.1` TestFlight
+  build does not satisfy a floor of `1.6.0`; and the version must be **exactly three numeric
+  segments**, because `AppVersion.TryParse("1.4")` silently yields `1.4.0` while the contract's
+  regex forbids it. Non-numeric build metadata (`+exp.sha.5114f85`, legal semver and legal per the
+  contract) is dropped for comparison since `AppVersion` cannot hold it; a numeric build code is
+  kept, because that is exactly what distinguishes two shipped builds of one version. **C002's
+  `AppVersion` is deliberately left alone** — it is a released record struct with its own tests.
+  (7) **Attestation modes are `Disabled | Audit | Enforce`, with a per-platform override.** Android
+  ships in Wave 4a and iOS in 4b; one global switch would mean either enforcing against an app that
+  does not exist yet or leaving D-30 off for the platform that does. The dev compose profile runs
+  `Disabled`; `Audit` logs the verdict and forwards, for staged rollout.
+  (8) **Play Integrity is decoded server-side through Google's `decodeIntegrityToken`**, not by
+  unwrapping the JWE locally, so the decryption and verification keys never leave Play Console. The
+  JWT-bearer grant (RFC 7523) is hand-rolled rather than pulling in `Google.Apis.Auth` for one
+  signed assertion and one form post. Verdicts are cached **positive-only** and keyed on a hash of
+  the token — caching a rejection would pin a device out after a transient failure, and caching the
+  token itself would put an attestation credential in Redis in clear. Any failure to reach or parse
+  Google is a **rejection**, not a pass: an open failure mode makes D-30 a control that any outage
+  switches off. **Open hardening item for C128:** there is no server-issued nonce today, so the
+  binding is package + verdicts + a 5-minute token-age window rather than a challenge; adding a
+  challenge endpoint is an iam-svc change, not a gateway one.
+  (9) **App Attest is verified locally per Apple's assertion algorithm** — CBOR decode
+  (`System.Formats.Cbor`, first-party, because the parse runs on attacker-supplied bytes), `rpIdHash
+  == SHA-256(appId)`, ECDSA P-256 over `SHA-256(authenticatorData || clientDataHash)`, and a
+  **strictly increasing signature counter**. The counter is the replay defence and it is advanced
+  through a Lua CAS so two replicas verifying concurrently cannot let the lower value win. Because
+  the signed client data is `"{METHOD} {path}"`, an assertion captured from
+  `POST /v1/auth/otp/request` cannot be lifted onto `POST /v1/wallet/topup/onepay` — proved by a
+  test that builds real assertions with a generated P-256 key.
+  (10) **Edge rate limits are coarse ceilings, keyed `route|clientAddress`, and fail open.** They
+  reuse C002's `ITokenBucketRateLimiter` (Redis, so N replicas share one bucket) with an in-process
+  implementation for a single-instance gateway. The named business limits stay in the services that
+  own them — OTP 5/h + 60 s cooldown (D-32) keys on a phone number, proxy location requests 5/h +
+  30/d (P-12) key on a booker id, and the edge can see neither. **Fail-open is deliberate:** a
+  limiter that fails closed turns a Redis blip into a total platform outage, and the services behind
+  it still enforce their own limits. **The partition key is the address, never the JWT `sub`** —
+  the gateway does not validate tokens, so a `sub` read here would be unverified and a caller could
+  mint a fresh one per request to reset its own bucket. `/v1/sos` has its own policy so an SOS
+  cannot run out of budget behind ordinary reads (D-33's 5 s p99).
+  (11) **`X-MageRide-Upstream` is a config-gated diagnostic, off by default.** Turning it on is how
+  the DoD's "route table resolves every service" assertion is made against a *running* gateway with
+  one stub upstream instead of 21 — the cluster that served each of the 262 contract paths is read
+  back off the response. Off in production: the cluster map is internal topology.
+  (12) **A failed forward becomes problem+json.** YARP answers an unreachable destination with a
+  bare 502 and no body; every other error a client can see is `application/problem+json` with a
+  registry code, so a naked 502 would be the one response a client cannot parse — and the one most
+  likely to arrive during an incident. Mapped onto the codes D6' §8.3 already implies:
+  `upstream-timeout` (504) for a timeout, `dependency-unavailable` (503) otherwise, and nothing at
+  all when the caller has hung up.
+  (13) **`X-Request-Id` is written from an `OnStarting` callback, not set up front.**
+  `UseExceptionHandler` clears the response before re-running the pipeline, which drops a header set
+  earlier — precisely on the responses whose id matters most. The gateway also rewrites the outbound
+  `traceparent` from its own span, so a backend trace parents to the gateway hop instead of to
+  whatever the client sent, and the edge does not vanish from the trace.
+  (14) **Route metadata is load-bearing, never decorative.** `RateLimit`, `VersionGate: exempt` and
+  `Streaming: true` are all read or asserted: `RouteConfigurationTests` fails the build if a route
+  names an undefined policy, uses an unknown metadata key, points at an undeclared cluster, omits
+  `AuthorizationPolicy: anonymous`, sits outside `/v1` `/public` `/hubs`, or — for a streaming route
+  — has a cluster that would still drop a quiet WebSocket on YARP's 100 s default or negotiate
+  HTTP/2 (over which an upgrade cannot happen at all).
+  (15) **The Dockerfile carries C003's `getent`-guarded user creation**, since D7' §2.2's
+  unconditional `addgroup -S app` fails on the .NET 10 alpine images. Same fix, second image.
+  **For later components —**
+  **C009 (compose):** build `backend/src/ApiGateway/Dockerfile` from the repo root; set
+  `Gateway__ForwardedHeaders__KnownProxies__0` to HAProxy's address or **every caller collapses into
+  one rate-limit bucket**; keep `Gateway__StateStore=Redis` for any multi-replica deployment; and
+  **HAProxy must not publish `/health/live`, `/health/ready` or `/metrics` from the gateway to the
+  internet** — the shared kernel maps all three anonymously on every service, which is right for an
+  internal service and wrong for the public edge. No version-check container (gap (e)).
+  **C013 / C067 / C085 (clients):** send `X-App-Version` **and** `X-Platform` on every request, and
+  the `X-Attestation` wire format from gap (b) on the 22 sensitive operations.
+  **C026 (iam-svc):** owns App Attest registration and writes `attest:appattest:{keyId}` (gap (c)).
+  **C118 (contract tests):** `ContractCatalog` here already parses every contract and derives the
+  owning service from the file name; the same sweep is the cheapest form of "no endpoint is
+  unroutable" and can be lifted wholesale.
+  **C128 (anti-spoof):** the Play Integrity nonce challenge in decision (8), and a review of whether
+  `RequiredLicensingVerdicts` should become non-empty in production.
+  **Build host —** no Docker, no database, no replica stack; the suite binds ephemeral loopback
+  ports for a stub upstream and the gateway and runs in about 15 s. iOS is not involved — the App
+  Attest verification is server-side C# and is tested with locally generated P-256 keys.

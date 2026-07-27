@@ -1,0 +1,493 @@
+{
+  "//": [
+    "MageRide edge route table (C008). One entry per public path family in backend/contracts/*.yaml.",
+    "",
+    "Ordering — lower Order wins. Three tiers, because six path families are literal-vs-template",
+    "overlaps and two of them cross a service boundary (C007 handoff):",
+    "  10  cross-service literal overrides, e.g. /v1/rides/job-board (dispatch-svc) under the",
+    "      /v1/rides prefix that otherwise belongs to ride-svc.",
+    "  20  /v1/admin sub-trees owned by a service other than admin-bff.",
+    "  50  ordinary per-service prefixes.",
+    "  90  the admin-bff catch-all, which must be last or it swallows tier 20.",
+    "",
+    "AuthorizationPolicy is 'anonymous' on every route on purpose: the gateway does not authorize.",
+    "AL-06 deny-by-default lives in the services, which are the only place the caller's effective",
+    "role set and the target resource are both known. Leaving it unset would apply the kernel's",
+    "fallback policy and 401 every public endpoint at the edge.",
+    "",
+    "/v1/internal/** appears in the contracts but in no route here: it is mTLS-only (D3' §0) and is",
+    "refused ahead of routing by BlockedPathMiddleware.",
+    "",
+    "/v1/version/check is served by the gateway itself (VersionCheckEndpoints), so it has no route:",
+    "a client below the D-31 floor could not reach a separate service through the gate rejecting it."
+  ],
+
+  "ReverseProxy": {
+
+    "Routes": {
+
+      "dispatch-ride-schedule": {
+        "ClusterId": "dispatch-svc",
+        "Order": 10,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/rides/schedule" },
+        "Metadata": { "RateLimit": "write" }
+      },
+      "dispatch-ride-schedule-item": {
+        "ClusterId": "dispatch-svc",
+        "Order": 10,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/rides/schedule/{scheduledRideId}" },
+        "Metadata": { "RateLimit": "write" }
+      },
+      "dispatch-ride-scheduled-by-driver": {
+        "ClusterId": "dispatch-svc",
+        "Order": 10,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/rides/scheduled/{driverId}" },
+        "Metadata": { "RateLimit": "default" }
+      },
+      "dispatch-job-board": {
+        "ClusterId": "dispatch-svc",
+        "Order": 10,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/rides/job-board/{**remainder}" },
+        "Metadata": { "RateLimit": "default" }
+      },
+      "dispatch-driver-level": {
+        "ClusterId": "dispatch-svc",
+        "Order": 10,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/drivers/{driverId}/level" },
+        "Metadata": { "RateLimit": "default" }
+      },
+      "dispatch-driver-stats": {
+        "ClusterId": "dispatch-svc",
+        "Order": 10,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/drivers/{driverId}/stats" },
+        "Metadata": { "RateLimit": "default" }
+      },
+      "safety-driver-block": {
+        "ClusterId": "safety-svc",
+        "Order": 10,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/drivers/{driverId}/block" },
+        "Metadata": { "RateLimit": "write" }
+      },
+      "registry-driver-profile": {
+        "ClusterId": "registry-svc",
+        "Order": 10,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/drivers/profile" },
+        "Metadata": { "RateLimit": "write" }
+      },
+      "provisioning-fleet-tracker-bulk": {
+        "ClusterId": "provisioning-svc",
+        "Order": 10,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/fleets/{fleetId}/trackers/bulk/{**remainder}" },
+        "Metadata": { "RateLimit": "write" }
+      },
+      "transit-geo-parse-maps-link": {
+        "ClusterId": "transit-svc",
+        "Order": 10,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/geo/parse-maps-link" },
+        "Metadata": { "RateLimit": "geo" }
+      },
+      "query-geo-search": {
+        "ClusterId": "query-svc",
+        "Order": 10,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/geo/search" },
+        "Metadata": { "RateLimit": "geo" }
+      },
+      "query-geo-reverse": {
+        "ClusterId": "query-svc",
+        "Order": 10,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/geo/reverse" },
+        "Metadata": { "RateLimit": "geo" }
+      },
+
+      "iam-admin-auth": {
+        "ClusterId": "iam-svc",
+        "Order": 20,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/admin/auth/{**remainder}" },
+        "Metadata": { "RateLimit": "auth" }
+      },
+      "dispatch-admin": {
+        "ClusterId": "dispatch-svc",
+        "Order": 20,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/admin/dispatch/{**remainder}" },
+        "Metadata": { "RateLimit": "admin" }
+      },
+      "dispatch-admin-driver-level-config": {
+        "ClusterId": "dispatch-svc",
+        "Order": 20,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/admin/drivers/level-config" },
+        "Metadata": { "RateLimit": "admin" }
+      },
+      "reputation-admin": {
+        "ClusterId": "reputation-svc",
+        "Order": 20,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/admin/reputation/{**remainder}" },
+        "Metadata": { "RateLimit": "admin" }
+      },
+      "reputation-admin-level-restore": {
+        "ClusterId": "reputation-svc",
+        "Order": 20,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/admin/drivers/{driverId}/level/restore" },
+        "Metadata": { "RateLimit": "admin" }
+      },
+      "fare-admin": {
+        "ClusterId": "fare-svc",
+        "Order": 20,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/admin/fare/{**remainder}" },
+        "Metadata": { "RateLimit": "admin" }
+      },
+      "subscription-admin-fees": {
+        "ClusterId": "subscription-svc",
+        "Order": 20,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/admin/fees/{**remainder}" },
+        "Metadata": { "RateLimit": "admin" }
+      },
+      "subscription-admin-voucher-tiers": {
+        "ClusterId": "subscription-svc",
+        "Order": 20,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/admin/voucher-discount-tiers" },
+        "Metadata": { "RateLimit": "admin" }
+      },
+      "content-admin": {
+        "ClusterId": "content-svc",
+        "Order": 20,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/admin/content/{**remainder}" },
+        "Metadata": { "RateLimit": "admin" }
+      },
+      "transit-admin": {
+        "ClusterId": "transit-svc",
+        "Order": 20,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/admin/transit/{**remainder}" },
+        "Metadata": { "RateLimit": "admin" }
+      },
+
+      "iam-auth": {
+        "ClusterId": "iam-svc",
+        "Order": 50,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/auth/{**remainder}" },
+        "Metadata": { "RateLimit": "auth" }
+      },
+      "iam-users": {
+        "ClusterId": "iam-svc",
+        "Order": 50,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/users/{**remainder}" },
+        "Metadata": { "RateLimit": "default" }
+      },
+      "iam-me": {
+        "ClusterId": "iam-svc",
+        "Order": 50,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/me/{**remainder}" },
+        "Metadata": { "RateLimit": "default" }
+      },
+      "registry-vehicles": {
+        "ClusterId": "registry-svc",
+        "Order": 50,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/vehicles/{**remainder}" },
+        "Metadata": { "RateLimit": "default" }
+      },
+      "registry-share-requests": {
+        "ClusterId": "registry-svc",
+        "Order": 50,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/share-requests/{**remainder}" },
+        "Metadata": { "RateLimit": "default" }
+      },
+      "provisioning-trackers": {
+        "ClusterId": "provisioning-svc",
+        "Order": 50,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/trackers/{**remainder}" },
+        "Metadata": { "RateLimit": "default" }
+      },
+      "trip-state-sessions": {
+        "ClusterId": "trip-state-svc",
+        "Order": 50,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/sessions/{**remainder}" },
+        "Metadata": { "RateLimit": "write" }
+      },
+      "ride-rides": {
+        "ClusterId": "ride-svc",
+        "Order": 50,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/rides/{**remainder}" },
+        "Metadata": { "RateLimit": "write" }
+      },
+      "ride-location-requests": {
+        "ClusterId": "ride-svc",
+        "Order": 50,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/location-requests/{**remainder}" },
+        "Metadata": { "RateLimit": "write" }
+      },
+      "dispatch-standby": {
+        "ClusterId": "dispatch-svc",
+        "Order": 50,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/standby/{**remainder}" },
+        "Metadata": { "RateLimit": "write" }
+      },
+      "fare": {
+        "ClusterId": "fare-svc",
+        "Order": 50,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/fare/{**remainder}" },
+        "Metadata": { "RateLimit": "write" }
+      },
+      "wallet": {
+        "ClusterId": "wallet-svc",
+        "Order": 50,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/wallet/{**remainder}" },
+        "Metadata": { "RateLimit": "write" }
+      },
+      "subscription-fees": {
+        "ClusterId": "subscription-svc",
+        "Order": 50,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/fees/{**remainder}" },
+        "Metadata": { "RateLimit": "default" }
+      },
+      "subscription-credit-transfers": {
+        "ClusterId": "subscription-svc",
+        "Order": 50,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/subscriptions/{**remainder}" },
+        "Metadata": { "RateLimit": "write" }
+      },
+      "subscription-driver-transfers": {
+        "ClusterId": "subscription-svc",
+        "Order": 50,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/transfers/{**remainder}" },
+        "Metadata": { "RateLimit": "write" }
+      },
+      "subscription-vouchers": {
+        "ClusterId": "subscription-svc",
+        "Order": 50,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/vouchers/{**remainder}" },
+        "Metadata": { "RateLimit": "write" }
+      },
+      "subscription-mode-b": {
+        "ClusterId": "subscription-svc",
+        "Order": 50,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/mode-b/{**remainder}" },
+        "Metadata": { "RateLimit": "write" }
+      },
+      "safety-sos": {
+        "ClusterId": "safety-svc",
+        "Order": 50,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/sos/{**remainder}" },
+        "Metadata": { "RateLimit": "sos" }
+      },
+      "safety-trip-share": {
+        "ClusterId": "safety-svc",
+        "Order": 50,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/trip-share/{**remainder}" },
+        "Metadata": { "RateLimit": "public-track" }
+      },
+      "safety-reports": {
+        "ClusterId": "safety-svc",
+        "Order": 50,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/reports/{**remainder}" },
+        "Metadata": { "RateLimit": "write" }
+      },
+      "support": {
+        "ClusterId": "support-svc",
+        "Order": 50,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/support/{**remainder}" },
+        "Metadata": { "RateLimit": "default" }
+      },
+      "notification": {
+        "ClusterId": "notification-svc",
+        "Order": 50,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/notify/{**remainder}" },
+        "Metadata": { "RateLimit": "default" }
+      },
+      "content": {
+        "ClusterId": "content-svc",
+        "Order": 50,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/content/{**remainder}" },
+        "Metadata": { "RateLimit": "default" }
+      },
+      "content-config": {
+        "ClusterId": "content-svc",
+        "Order": 50,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/config/{**remainder}" },
+        "Metadata": { "RateLimit": "default" }
+      },
+      "voip-token": {
+        "ClusterId": "voip-svc",
+        "Order": 50,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/voip/{**remainder}" },
+        "Metadata": { "RateLimit": "write" }
+      },
+      "voip-calls": {
+        "ClusterId": "voip-svc",
+        "Order": 50,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/calls/{**remainder}" },
+        "Metadata": { "RateLimit": "write" }
+      },
+      "transit": {
+        "ClusterId": "transit-svc",
+        "Order": 50,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/transit/{**remainder}" },
+        "Metadata": { "RateLimit": "geo" }
+      },
+      "query-nearby": {
+        "ClusterId": "query-svc",
+        "Order": 50,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/nearby" },
+        "Metadata": { "RateLimit": "geo" }
+      },
+      "query-transport-options": {
+        "ClusterId": "query-svc",
+        "Order": 50,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/transport-options" },
+        "Metadata": { "RateLimit": "geo" }
+      },
+      "query-routes": {
+        "ClusterId": "query-svc",
+        "Order": 50,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/routes/{**remainder}" },
+        "Metadata": { "RateLimit": "geo" }
+      },
+      "query-trips": {
+        "ClusterId": "query-svc",
+        "Order": 50,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/trips/{**remainder}" },
+        "Metadata": { "RateLimit": "default" }
+      },
+      "query-earnings": {
+        "ClusterId": "query-svc",
+        "Order": 50,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/earnings/{**remainder}" },
+        "Metadata": { "RateLimit": "default" }
+      },
+      "fleet": {
+        "ClusterId": "fleet-svc",
+        "Order": 50,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/fleets/{**remainder}" },
+        "Metadata": { "RateLimit": "default" }
+      },
+      "public-bff": {
+        "ClusterId": "public-bff",
+        "Order": 50,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/public/{**remainder}" },
+        "//": "AL-44: opened from an SMS link in a browser, so it carries neither D-31 header.",
+        "Metadata": {
+          "RateLimit": "public-track",
+          "VersionGate": "exempt"
+        }
+      },
+      "fanout-hubs": {
+        "ClusterId": "fanout-svc",
+        "Order": 50,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/hubs/{**remainder}" },
+        "//": "SignalR: WebSocket upgrade, streamed both ways, never buffered.",
+        "Metadata": {
+          "RateLimit": "realtime",
+          "Streaming": "true"
+        }
+      },
+
+      "admin-bff": {
+        "ClusterId": "admin-bff",
+        "Order": 90,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/admin/{**remainder}" },
+        "Metadata": { "RateLimit": "admin" }
+      },
+      "admin-bff-pdpa": {
+        "ClusterId": "admin-bff",
+        "Order": 90,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/pdpa/{**remainder}" },
+        "Metadata": { "RateLimit": "default" }
+      }
+    },
+
+    "Clusters": {
+      "iam-svc": { "Destinations": { "primary": { "Address": "http://iam-svc:5000/" } } },
+      "registry-svc": { "Destinations": { "primary": { "Address": "http://registry-svc:5000/" } } },
+      "provisioning-svc": { "Destinations": { "primary": { "Address": "http://provisioning-svc:5000/" } } },
+      "trip-state-svc": { "Destinations": { "primary": { "Address": "http://trip-state-svc:5000/" } } },
+      "ride-svc": { "Destinations": { "primary": { "Address": "http://ride-svc:5000/" } } },
+      "dispatch-svc": { "Destinations": { "primary": { "Address": "http://dispatch-svc:5000/" } } },
+      "reputation-svc": { "Destinations": { "primary": { "Address": "http://reputation-svc:5000/" } } },
+      "fare-svc": { "Destinations": { "primary": { "Address": "http://fare-svc:5000/" } } },
+      "wallet-svc": { "Destinations": { "primary": { "Address": "http://wallet-svc:5000/" } } },
+      "subscription-svc": { "Destinations": { "primary": { "Address": "http://subscription-svc:5000/" } } },
+      "safety-svc": { "Destinations": { "primary": { "Address": "http://safety-svc:5000/" } } },
+      "support-svc": { "Destinations": { "primary": { "Address": "http://support-svc:5000/" } } },
+      "notification-svc": { "Destinations": { "primary": { "Address": "http://notification-svc:5000/" } } },
+      "content-svc": { "Destinations": { "primary": { "Address": "http://content-svc:5000/" } } },
+      "voip-svc": { "Destinations": { "primary": { "Address": "http://voip-svc:5000/" } } },
+      "transit-svc": { "Destinations": { "primary": { "Address": "http://transit-svc:5000/" } } },
+      "query-svc": { "Destinations": { "primary": { "Address": "http://query-svc:5000/" } } },
+      "fleet-svc": { "Destinations": { "primary": { "Address": "http://fleet-svc:5000/" } } },
+      "admin-bff": { "Destinations": { "primary": { "Address": "http://admin-bff:5000/" } } },
+      "public-bff": { "Destinations": { "primary": { "Address": "http://public-bff:5000/" } } },
+
+      "fanout-svc": {
+        "//": [
+          "SignalR (D7' §2.1: the fanout container listens on 5001). HTTP/1.1 is pinned because a",
+          "WebSocket upgrade cannot be negotiated over HTTP/2, and ActivityTimeout is raised well",
+          "past YARP's 100 s default so a quiet-but-live hub connection is not torn down. It is",
+          "raised, not removed: without a ceiling every half-open socket leaks a connection slot."
+        ],
+        "HttpRequest": {
+          "ActivityTimeout": "00:30:00",
+          "Version": "1.1",
+          "VersionPolicy": "RequestVersionOrLower"
+        },
+        "Destinations": { "primary": { "Address": "http://fanout-svc:5001/" } }
+      }
+    }
+  }
+}
