@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    Fare.Api (C022, ws-ride-svc-happy-path) — **a stub, and only a stub.**
+
+    The walking skeleton needs one thing from fare-svc: an upfront price and the
+    `fareEstimateToken` that binds it, so `POST /v1/rides/request` has something to accept and
+    the booked ride can carry a number through to PaymentPending. That is all this project does.
+
+    NOT here, and fenced out of C022 on purpose: the `fares.tariffs` / `fares.peak_windows`
+    tables (C005 landed the DDL, nothing reads it yet), peak and night surcharge windows in
+    Asia/Colombo (D5' §1.1, D-38), OSRM/Valhalla route distance (D5' §1.2), the Kalman-filtered
+    final fare, `POST /v1/fare/calculate`, and the whole payment state machine with OnePay,
+    LankaQR, cash, COD and driver-QR (D-10, AL-22, AL-47).
+
+    **C049 and C050 replace this.** Every stubbed decision is marked `STUB (C049/C050)` in the
+    source next to the spec line it stands in for.
+
+    Verify: dotnet test backend/src/Ride.Api.Tests -c Release
+            (the C022 verify target; it drives this service end to end into POST /v1/rides/request)
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.Fare</RootNamespace>
+    <AssemblyName>MageRide.Fare.Api</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <UserSecretsId>mageride-fare-api</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MageRide.Shared\MageRide.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Ride.Api.Tests" />
+  </ItemGroup>
+
+</Project>

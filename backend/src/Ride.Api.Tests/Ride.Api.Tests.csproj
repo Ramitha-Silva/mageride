@@ -1,0 +1,66 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    C022 verify target: dotnet test backend/src/Ride.Api.Tests -c Release
+
+    Three halves, and the middle one is the point of the component.
+
+      * Pure tests — the state-machine table against ADD Appendix B.2, the ULID reader, the fare
+        token codec. No container.
+      * Integration against a real Postgres, because every guarantee C022 owns is a database
+        one: the ADD §11.11 conditional UPDATE, ux_rides_idem (R-18), ux_rides_open_passenger and
+        ux_rides_driver_busy. None of them is provable against a fake, and the concurrent-accept
+        test in particular exists to prove the *database* picks the winner.
+      * One class against a real Redpanda, because the DoD says ride.* events must reach the
+        broker THROUGH the outbox — a captured publisher would prove the dispatcher was called,
+        not that anything was produced.
+
+    Fare.Api is referenced so the fare stub's own token crosses into POST /v1/rides/request in a
+    test rather than a hand-minted one: the two services meet on the fareEstimateToken and nothing
+    else checks that they agree.
+
+    Tokens are minted here rather than fetched from iam-svc: ride-svc is a token *consumer*, and
+    C025 is where the services meet end to end.
+
+    Microsoft.NET.Sdk.Web, not Microsoft.NET.Sdk: the harness builds a WebApplication.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.Ride.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <OutputType>Exe</OutputType>
+    <!--
+      xUnit1041: collection-fixture ctor args are consumed through the primary constructor.
+      xUnit1051: every test is bounded by its own harness lifetime, so threading
+                 TestContext.Current.CancellationToken through each HTTP call would add noise
+                 without changing behaviour. Matches Iam.Api.Tests and Registry.Api.Tests.
+    -->
+    <NoWarn>$(NoWarn);xUnit1041;xUnit1051</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+    <!-- The fare token's expiry is a clock rule; FakeTimeProvider is how it is asserted without
+         a Thread.Sleep. -->
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+    <!-- The Redpanda assertion consumes the topic the outbox dispatcher produced to. -->
+    <PackageReference Include="Confluent.Kafka" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Ride.Api\Ride.Api.csproj" />
+    <ProjectReference Include="..\Fare.Api\Fare.Api.csproj" />
+    <!-- C010: the Postgres and Redpanda fixtures, so this suite runs against the same server
+         builds the dev stack and the replica do rather than hand-written copies. -->
+    <ProjectReference Include="..\MageRide.TestKit\MageRide.TestKit.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    Ride.Api (C022, ws-ride-svc-happy-path) — the Mode C ride aggregate, happy path only.
+
+    ride-svc is the SOLE writer of rides.state (R-01, D5' §6). Mode A/B tracking sessions are
+    trip-state-svc's and that boundary is never crossed.
+
+    What this slice implements: Requested -> Matching -> Offered -> Accepted -> DriverArrived ->
+    InProgress -> Completed -> PaymentPending, with the ADD §11.11 atomic single-winner accept,
+    R-18's dual-key idempotency, the rides.command_log replay and the rides.outbox writes the
+    LISTEN/NOTIFY dispatcher drains to Redpanda (E-09, R-13).
+
+    NOT here: the §11.12 cancellation and no-show matrix (C032), proxy booking and location
+    requests (C032), package delivery and its OTPs (C037), durable Quartz timers and the R-04
+    offer-expiry backstop (C037), the payment terminals (C049/C050) and ride history (C048).
+
+    Verify: dotnet test backend/src/Ride.Api.Tests -c Release
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.Ride</RootNamespace>
+    <AssemblyName>MageRide.Ride.Api</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <UserSecretsId>mageride-ride-api</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MageRide.Shared\MageRide.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Ride.Api.Tests" />
+  </ItemGroup>
+
+</Project>

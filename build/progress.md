@@ -47,7 +47,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C019 | kmp-test-kit | 1 | DONE | 2026-07-27 | 817 tests green (50 new); MockEngine fake covering all 176 operations + descriptor-driven fixtures; contract checks over 176 responses and 85 request bodies |
 | C020 | ws-iam-minimal ⭑ | 2 | DONE | 2026-07-28 | 91 tests green; 3 iam migrations added (0104–0106) — 3 micro-change-sets raised |
 | C021 | ws-registry-minimal ⭑ | 2 | DONE | 2026-07-28 | 92 tests green; 2 registry migrations added (0307–0308) — 3 micro-change-sets raised |
-| C022 | ws-ride-svc-happy-path ⭑ | 2 | PENDING | | |
+| C022 | ws-ride-svc-happy-path ⭑ | 2 | DONE | 2026-07-28 | 109 tests green; 1 rides migration added (0608) + 2 internal contract routes — 5 micro-change-sets raised |
 | C023 | ws-dispatch-stub ⭑ | 2 | PENDING | | |
 | C024 | ws-realtime-pipeline ⭑ | 2 | PENDING | | |
 | C025 | ws-e2e-android-slice ⭑ | 2 | PENDING | | |
@@ -2785,3 +2785,129 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   throughout. The 92 tests take ~39 s, of which most is 30 harness start-ups — each integration test
   builds a fresh `WebApplication` so its test signing key cannot leak into another test. Redis is not
   needed by this suite at all.
+
+- **Component:** C022 ws-ride-svc-happy-path — 2026-07-28
+- **Status:** DONE — `dotnet test backend/src/Ride.Api.Tests -c Release` → **109 passed, 0 failed,
+  0 skipped**. All four DoD items pass against a real Postgres *and* a real Redpanda
+  (Testcontainers). Wave-0/1/2 gates re-run green after the new migration and the contract change:
+  `bash infra/scripts/migrate-verify.sh` → **190/190**, spectral → **0 errors**,
+  `MageRide.Shared.Tests` → 161, `ApiGateway.Tests` → 524, `Iam.Api.Tests` → 91,
+  `Registry.Api.Tests` → 92.
+- **Notes:**
+  **Spec gaps — five micro-change-sets. Two are actioned in this repo (one migration, one
+  contract); three are contract gaps left for later components to decide.**
+  (a) ***The offer has no owner in the ride aggregate, and the ride cannot remember its own
+  quote*** (`0608__rides_offer_and_fare.sql`). ADD §11.11 gives `rides.rides` only
+  `current_offer_id` and `offer_expires_at`, so ride-svc knows an offer is live but not whose it
+  is — yet `GET /v1/rides/{id}` and `/state` are exactly what the driver app reads to render the
+  offer card and the 15-second countdown, and both answer `403 not-ride-participant` to a
+  non-party. Without `offered_driver_id` the only choices are "every driver may read every offered
+  ride" or "the offered driver may read nothing". `dispatch.offers` (0702) holds the same fact but
+  belongs to dispatch-svc. Separately, `POST /v1/rides/request` **requires** `estimatedFare` in its
+  202, `RideDetail.fare` and the `complete` response carry it, and R-18 makes a retry replay the
+  *existing* ride — impossible if the amount lived only in the caller's `fareEstimateToken`.
+  Added `offered_driver_id`, `offered_vehicle_id`, `fare_estimate_minor`, `fare_surcharge_minor`
+  and `currency`. **D4' §5 and `server_db_schema.md` §5 need all five.** No table count changed, so
+  `migrate-verify.sh` is still 190/190.
+  (b) ***`ride-svc` is the sole writer of `rides.state`, but nothing gives dispatch-svc a way to
+  move it*** (`backend/contracts/ride.yaml`: `POST /v1/internal/rides/{id}/matching` and
+  `/offer`). ADD §11.11's sequence diagram draws dispatch-svc running
+  `UPDATE rides SET state='Offered' …` itself; §11.12 says in the same document that "`ride-svc` is
+  the **sole writer** of `rides.state`", and the C023 prompt's fence repeats it. Sole-writer wins —
+  two services issuing conditional updates against one aggregate is the race R-02 exists to
+  remove — so the two moves dispatch drives are commands on ride-svc. **D3' ride-svc needs both
+  routes**, and ADD §11.11's diagram should show the call rather than the UPDATE.
+  **Contract gaps (no change made; the named component should decide):**
+  (c) *`RideDetail.counterpartyPhone` (AL-48) is never populated.* It needs an `iam.users` read
+  ride-svc does not make, and the field is optional. **C032/C048** should decide whether ride-svc
+  crosses that boundary or query-svc owns the projection — the same question as
+  `DriverSummaryRepository`, which does cross it for `RideDetail.driver` because the passenger's
+  live-ride screen has nowhere else to learn who is coming.
+  (d) *`Place.address` is accepted and dropped.* `rides.rides` stores geography only and the field
+  is optional in the contract, so a booking's typed address is not persisted. Deliberately **not**
+  added to the migration: no rule depends on it and D4' §5 keeps presentation text off the
+  aggregate. C032 should add the columns if the live-ride screen needs the string back.
+  (e) *`POST /v1/rides/{id}/start` accepts an `otp` and ignores it.* The contract says a passenger
+  or proxy ride "requires the rider's start OTP", but **nothing anywhere issues one** — no
+  endpoint, no column (`rides.rides`'s two OTP hashes are the package pickup/delivery pair, P-07),
+  and no notification. C032 must either add the issuing half or drop the field.
+  Also noted, not raised: *the contract's `start` allows `Accepted | DriverArrived → InProgress`
+  while ADD Appendix B.2 draws only the second edge.* The contract wins
+  (`backend/contracts/CLAUDE.md`) — a driver who reached the rider without the geofence firing must
+  still be able to start — and `RideTransitions` carries both.
+  **Decisions —**
+  (1) **The accept is ADD §11.11's conditional UPDATE and nothing else** — no advisory lock, no
+  pre-flight `SELECT`, no application ordering. In particular there is **no
+  `offered_driver_id = :driverId` predicate on it**: adding one would turn the concurrent
+  double-accept the DoD requires ("exactly one 200 and one 409") into two 403s and move the
+  guarantee out of the database. The compensating change is
+  `accepted_vehicle_id = CASE WHEN offered_driver_id = :driverId THEN offered_vehicle_id END`, so a
+  winner who was never offered the ride records **no** vehicle rather than somebody else's; that
+  path is only reachable if an `offerId` leaks, and C023's `ux_offers_driver_live` closes it
+  properly. `ConcurrentAcceptTests` races two drivers, then ten.
+  (2) **`Completed` is not terminal in the domain**, even though `ux_rides_open_passenger` exempts
+  it (C004 note (b)). The ride still owes a payment, so `complete` moves
+  `InProgress → Completed → PaymentPending` inside **one** transaction — the ride never rests in
+  Completed, which also means the window C004 warned about (the open-ride guard lifting and
+  re-applying across the pair) is never observable from outside a transaction.
+  (3) **One `ride.completed` event, not two.** D6' §2.2 registers no name for the fare hand-off;
+  the envelope's `state` is `PaymentPending`, which is where the ride actually is by the time a
+  consumer reads it. Both moves are still audited in `rides.transitions`.
+  (4) **`offer.created` and `offer.declined` are emitted on `ride.events`.** D6' §2.2 lists
+  `offer.created` in the `ride.events` type set and ADD §11.11 writes it to `rides.outbox`;
+  `offer.declined` is named by §11.12 without a topic and rides alongside it, because ride-svc is
+  what performed the `Offered → Matching` move dispatch needs to hear about. `Requested → Matching`
+  emits **nothing** — dispatch drove that move itself and the registry has no name for one.
+  (5) **The offer deadline is stamped from ride-svc's clock**, not taken from dispatch-svc's
+  request body. It is ride-svc's `offer_expires_at > now()` that decides an accept; two clocks
+  would make the boundary unfalsifiable. dispatch sends `ttlSeconds` and gets the instant back to
+  mirror onto `dispatch.offers.expires_at`.
+  (6) **`fareEstimateToken` is a real HMAC token, and its codec is in the kernel**
+  (`MageRide.Shared.Fares`) because fare-svc signs and ride-svc verifies — that is the definition
+  of cross-cutting in `backend/CLAUDE.md`. Format `mrf1.<b64url(claims)>.<b64url(hmac)>`, keyed by
+  `Fare:EstimateTokenKey`, **no default** (a well-known key is one a client can mint for itself).
+  The claims bind tier and trip; ride-svc rejects a token issued for another `vehicleType` or
+  `kind`. C049/C050 replace what fills the token, not the format.
+  (7) **`clientRequestId` accepts a ULID as well as a UUID.** ADD §11.13 has the apps generate
+  ULIDs and the contract types the field `Ulid`, but `rides.rides.client_request_id` is a Postgres
+  `UUID`. `Ulids.TryParse` decodes Crockford base32 to the same 128 bits, so a correct client is
+  not a 400 on every booking. Nothing converts back — the value is only ever compared.
+  (8) **`/v1/internal/rides/**` is guarded by a shared secret and is not mapped without one.**
+  D3' §0 puts the internal family on mTLS and the gateway refuses the prefix at the edge (C008),
+  but no mesh exists until C042. Unset `Ride:InternalApiKey` means the routes do not exist at all —
+  404s, not an open door. `ride.yaml` declares an interim `internalKey` scheme that C042 deletes.
+  (9) **Only `kind: passenger` is bookable.** Proxy needs a rider identity
+  (`ck_rides_proxy_identity`) and package a size plus both OTP hashes
+  (`ck_rides_package_complete`); a booking that skipped either would be refused by the database as
+  a 500 rather than answered. `scheduledAt` is refused for the same reason — accepting it and
+  dispatching immediately would send a driver to a passenger who asked for tomorrow (C035 owns
+  scheduling).
+  (10) **`UseRedis = false`.** The `lock:driver-offer:{driverId}` fast path in §11.11 is
+  dispatch-svc's reservation (D5' §3.6); the authoritative accept here is pure Postgres, so a Redis
+  dependency would be a readiness probe that can fail while every route still serves.
+  (11) **The fare stub's `truck` / `mini_truck` rates are invented.** D5' §1.1 prints no delivery
+  rates ("admin-configured, Epic 20") and `RideVehicleType` still lets a caller ask for them, so
+  refusing would break the contract. Marked `PLACEHOLDER` in `FareTariff`; **no spec has been read
+  as authorising those two numbers.**
+  **For C023 (dispatch-svc) —**
+  Consume `ride.requested` off `ride.events`, then call
+  `POST /v1/internal/rides/{rideId}/matching` and `POST /v1/internal/rides/{rideId}/offer`
+  (`X-MageRide-Internal-Key`, `Idempotency-Key`). `ride.requested`'s payload already carries
+  `vehicleType`, `paymentMethod`, `fareEstimateMinor` and `currency` so the candidate build and the
+  D6' §2.2 `offer.created` push need no second read. The offer route returns `version` and
+  `offerExpiresAt` — **put the `version` on your own `dispatch.events` `offer.created`**: C013's
+  note (6) records that the envelope lacks one today and that `OfferSession.accept()` pays a
+  `GET /v1/rides/{id}/state` for it. `offer.declined` on `ride.events` is your cue to release the
+  driver and offer the next candidate; ride-svc has already cleared `current_offer_id`,
+  `offered_driver_id`, `offered_vehicle_id` and `offer_expires_at`.
+  **For C037 —**
+  The R-04 backstop must decide what `Offered → Matching` does with `current_offer_id`. Leaving it
+  set makes ADD §11.11's second origin (`state IN ('Matching','Offered')`) reachable, and the
+  accept's audit row — which records `from_state='Offered'` because nothing in this slice can
+  produce a Matching ride with a live offer — starts lying. `RideTransitions` already draws the
+  edge; `RideService.AcceptOfferAsync` carries the note.
+  **Build host —** Docker is used by the test suite only (Testcontainers
+  `timescale/timescaledb-ha:pg16` and `redpandadata/redpanda:v24.2.26`, both already pulled by
+  C002/C009); the replica stack stayed down throughout. The 109 tests take ~55 s, of which most is
+  ~35 harness start-ups — each integration test builds a fresh `WebApplication` so its test signing
+  key cannot leak into another test.

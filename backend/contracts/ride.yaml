@@ -916,6 +916,108 @@ paths:
   # -------------------------------------------------------------------------------------------
   # Internal (mTLS)
   # -------------------------------------------------------------------------------------------
+  /v1/internal/rides/{rideId}/matching:
+    post:
+      operationId: markRideMatching
+      summary: dispatch-svc has begun building the candidate set.
+      description: |
+        **Δ C022 (micro-change-set into D3' ride-svc).** `Requested → Matching`.
+
+        ADD §11.11's sequence diagram draws dispatch-svc running `UPDATE rides SET state=…`
+        itself, but §11.12 states in the same document that "`ride-svc` is the **sole writer** of
+        `rides.state`". Sole-writer wins: two services issuing conditional updates against one
+        aggregate is the race R-02 exists to remove. So the two moves dispatch drives are commands
+        on ride-svc, and dispatch keeps `dispatch.offers` and `dispatch.candidate_scores` to
+        itself.
+
+        `version` is optional — dispatch may retry this call, and a retry that raced its own first
+        attempt should not need to re-read the ride to find out it already succeeded.
+      tags: [rides]
+      security:
+        - internalKey: []
+      parameters:
+        - $ref: '#/components/parameters/RideId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                version:
+                  $ref: '#/components/schemas/Version'
+      responses:
+        '200':
+          description: The ride is Matching.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RideStateChange'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, not-found, illegal-transition, version-conflict]
+
+  /v1/internal/rides/{rideId}/offer:
+    post:
+      operationId: placeRideOffer
+      summary: dispatch-svc reserved a driver; arm the offer window.
+      description: |
+        **Δ C022 (micro-change-set into D3' ride-svc).** `Matching → Offered`, and the write that
+        makes `offer.created` reach Redpanda through `rides.outbox` after COMMIT rather than
+        before it (R-13).
+
+        The deadline is stamped from **ride-svc's** clock, not from the request: it is ride-svc's
+        `offer_expires_at > now()` that decides an accept (§11.11), and two clocks would make the
+        boundary unfalsifiable. dispatch-svc sends the window it wants (`ttlSeconds`, default 15
+        per D5' §3.5) and gets the resulting instant back to mirror onto `dispatch.offers`.
+
+        `driverId` and `vehicleId` are recorded on the ride so the offered driver can read it
+        during the countdown (`GET /v1/rides/{rideId}` answers `403 not-ride-participant`
+        otherwise) and so the accept can set `accepted_vehicle_id` without a second lookup.
+      tags: [rides]
+      security:
+        - internalKey: []
+      parameters:
+        - $ref: '#/components/parameters/RideId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [offerId, driverId, vehicleId]
+              properties:
+                offerId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+                driverId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+                vehicleId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+                ttlSeconds:
+                  type: integer
+                  format: int32
+                  minimum: 1
+                  maximum: 120
+                  default: 15
+                version:
+                  $ref: '#/components/schemas/Version'
+      responses:
+        '200':
+          description: The offer is live until `offerExpiresAt`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfferPlaced'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, not-found, illegal-transition, version-conflict]
+
   /v1/internal/rides/{rideId}/system-cancel:
     post:
       operationId: systemCancelRide
@@ -1055,6 +1157,16 @@ components:
       $ref: './_shared.yaml#/components/securitySchemes/bearerAuth'
     mtls:
       $ref: './_shared.yaml#/components/securitySchemes/mtls'
+    internalKey:
+      type: apiKey
+      in: header
+      name: X-MageRide-Internal-Key
+      description: |
+        **Interim (C022).** The two dispatch-driven routes above are on the same mTLS-only
+        `/v1/internal/**` family as their siblings — the gateway refuses the prefix at the edge
+        (C008) — but no service mesh exists yet, so the in-cluster hop is guarded by a shared
+        secret (`Ride:InternalApiKey`). Unset, the routes are not mapped at all. **C042 replaces
+        this with `mtls`, and this scheme is deleted with it.**
 
   parameters:
     RideId:
@@ -1183,6 +1295,20 @@ components:
           $ref: './_shared.yaml#/components/schemas/RideState'
         version:
           $ref: '#/components/schemas/Version'
+
+    OfferPlaced:
+      description: |
+        Δ C022. A state change plus the deadline dispatch-svc must mirror onto
+        `dispatch.offers.expires_at` — ride-svc's clock is the authoritative one (§11.11).
+      allOf:
+        - $ref: '#/components/schemas/RideStateChange'
+        - type: object
+          required: [offerId, offerExpiresAt]
+          properties:
+            offerId:
+              $ref: './_shared.yaml#/components/schemas/Ulid'
+            offerExpiresAt:
+              $ref: './_shared.yaml#/components/schemas/Timestamp'
 
     RideDetail:
       type: object
