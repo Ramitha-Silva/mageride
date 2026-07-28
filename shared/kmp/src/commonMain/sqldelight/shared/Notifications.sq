@@ -1,0 +1,47 @@
+import kotlin.time.Instant;
+import kotlin.Boolean;
+
+-- mobile_db_schema.md §1.6 — local push inbox (Epic 10, E-01).
+CREATE TABLE notifications (
+    id          TEXT NOT NULL PRIMARY KEY,                          -- server msg id or client UUID
+    type        TEXT NOT NULL,                                      -- 'ride_offer','payment_ok','doc_expiring','sos_ack',...
+    title       TEXT,
+    body        TEXT,
+    data_json   TEXT,                                               -- FCM/APNs data payload
+    ride_id     TEXT,
+    read        INTEGER AS Boolean NOT NULL DEFAULT 0,
+    received_at INTEGER AS Instant NOT NULL
+);
+CREATE INDEX ix_notif_unread ON notifications(read, received_at DESC);
+
+selectAll:
+SELECT * FROM notifications ORDER BY received_at DESC;
+
+selectUnread:
+SELECT * FROM notifications WHERE read = 0 ORDER BY received_at DESC;
+
+countUnread:
+SELECT COUNT(*) FROM notifications WHERE read = 0;
+
+upsert:
+INSERT OR REPLACE INTO notifications (id, type, title, body, data_json, ride_id, read, received_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+
+markRead:
+UPDATE notifications SET read = 1 WHERE id = ?;
+
+count:
+SELECT COUNT(*) FROM notifications;
+
+-- §4.3: keep 30 days or the last 200, whichever bites first.
+deleteBefore:
+DELETE FROM notifications WHERE received_at < ?;
+
+deleteBeyondCap:
+DELETE FROM notifications
+WHERE rowid IN (
+    SELECT rowid FROM notifications ORDER BY received_at DESC, id LIMIT -1 OFFSET :keep
+);
+
+deleteAll:
+DELETE FROM notifications;

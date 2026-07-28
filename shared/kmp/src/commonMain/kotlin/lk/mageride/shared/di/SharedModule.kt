@@ -2,6 +2,7 @@ package lk.mageride.shared.di
 
 import kotlinx.serialization.json.Json
 import lk.mageride.shared.data.api.apiModule
+import lk.mageride.shared.db.localDbModule
 import lk.mageride.shared.domain.auth.authModule
 import lk.mageride.shared.domain.dispatch.rideDispatchModule
 import lk.mageride.shared.domain.fare.fareWalletModule
@@ -45,6 +46,11 @@ public val sharedCoreModule: Module = module {
  * the graph would pin a tariff or a fee tier an operator has since moved. Its KDoc has the
  * reasoning.
  *
+ * [localDbModule] (C018) binds two: the SQLCipher key manager and the database factory. It needs
+ * one more thing from the app — a [lk.mageride.shared.db.DatabaseDriverFactory], which only the app
+ * can build (an Android `Context`) — and it deliberately does **not** bind the open database, since
+ * opening it is suspending. Read its KDoc before adding one.
+ *
  * [geoRealtimeModule] (C017) binds one thing, an
  * [lk.mageride.shared.domain.geo.H3Grid]. Android resolves it from `com.uber:h3`; **an iOS app
  * must bind its own**, and because app modules come last, that binding wins. Nothing else in the
@@ -54,4 +60,12 @@ public val sharedCoreModule: Module = module {
  * [lk.mageride.shared.data.api.TokenProvider] placeholder with the real session-backed one.
  */
 public val sharedModules: List<Module> =
-    listOf(sharedCoreModule, apiModule, authModule, rideDispatchModule, fareWalletModule, geoRealtimeModule)
+    listOf(
+        sharedCoreModule,
+        apiModule,
+        authModule,
+        rideDispatchModule,
+        fareWalletModule,
+        geoRealtimeModule,
+        localDbModule,
+    )

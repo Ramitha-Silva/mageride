@@ -1,0 +1,40 @@
+import kotlin.time.Instant;
+import kotlin.Int;
+
+-- mobile_db_schema.md §3.5 — completed rides, the driver's earnings detail (US-8.7).
+CREATE TABLE ride_history (
+    id                TEXT NOT NULL PRIMARY KEY,
+    state             TEXT NOT NULL,
+    kind              INTEGER AS Int NOT NULL DEFAULT 0,
+    pickup_label      TEXT,
+    dropoff_label     TEXT,
+    fare_amount_minor INTEGER,
+    tip_amount_minor  INTEGER NOT NULL DEFAULT 0,
+    payment_method    TEXT,
+    completed_at      INTEGER AS Instant,
+    synced_at         INTEGER AS Instant
+);
+CREATE INDEX ix_dride_hist ON ride_history(completed_at DESC);
+
+selectRecent:
+SELECT * FROM ride_history ORDER BY completed_at DESC LIMIT :limit OFFSET :offset;
+
+count:
+SELECT COUNT(*) FROM ride_history;
+
+upsert:
+INSERT OR REPLACE INTO ride_history (
+    id, state, kind, pickup_label, dropoff_label, fare_amount_minor, tip_amount_minor,
+    payment_method, completed_at, synced_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+-- §4.3: last 90 days or 100 rows, whichever bites first.
+deleteBefore:
+DELETE FROM ride_history WHERE completed_at IS NOT NULL AND completed_at < ?;
+
+deleteBeyondCap:
+DELETE FROM ride_history
+WHERE rowid IN (SELECT rowid FROM ride_history ORDER BY completed_at DESC, id LIMIT -1 OFFSET :keep);
+
+deleteAll:
+DELETE FROM ride_history;

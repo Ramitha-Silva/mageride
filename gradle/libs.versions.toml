@@ -51,7 +51,7 @@ koin = "4.2.2"                    # DI
 # Apple `KeychainSettings` would have done, but half a store from here and half hand-rolled is
 # worse than one hand-rolled pair. Free for a later component that needs *non-secret* KV storage.
 multiplatformSettings = "1.3.0"   # key-value storage abstraction — unused, see the note above
-sqldelight = "2.3.2"              # on-device SQL — the plugin is applied by C018, not here
+sqldelight = "2.3.2"              # on-device SQL — the plugin is applied by C018
 turbine = "1.2.1"                 # Flow assertions in commonTest
 
 # Play Integrity — the Android half of D-30 (ADD §12.6). androidMain only; the iOS half is
@@ -64,6 +64,16 @@ playIntegrity = "1.6.0"
 # Kotlin/Native klib. It is therefore an **androidMain/JVM** dependency; the iOS side needs
 # cinterop against the H3 C library. C017 owns that expect/actual. See the C011 handoff.
 h3 = "4.4.0"
+
+# SQLCipher — the Android half of `mobile_db_schema.md` §0.4 ("the database file SHOULD be
+# encrypted at rest with SQLCipher; the key is wrapped by the hardware keystore"). androidMain
+# only: it is an AAR with per-ABI native libraries and has no Kotlin/Native counterpart. iOS gets
+# NSFileProtection instead — §0.4 allows "SQLCipher or GRDB encryption" there. C018.
+#
+# It also raises the SQLite the app runs on: SQLCipher bundles its own build (3.4x), where the
+# platform SQLite on the API-26 floor is 3.19. The schema and migrations are still written to the
+# 3.19 floor, because an unencrypted debug build falls back to the platform engine.
+sqlcipher = "4.17.0"
 
 # ---- static analysis (C011) ---------------------------------------------------------
 # `ktlint` is the engine version the Gradle plugin drives; pin both so a plugin bump cannot
@@ -120,12 +130,21 @@ h3                           = { module = "com.uber:h3",                        
 # scope), which is where the `Task` the API answers with comes from.
 play-integrity               = { module = "com.google.android.play:integrity",             version.ref = "playIntegrity" }
 
-# ---- SQLDelight (declared here, applied by C018) -------------------------------------
+# ---- SQLDelight (applied by C018) ------------------------------------------------------
 sqldelight-runtime               = { module = "app.cash.sqldelight:runtime",                version.ref = "sqldelight" }
 sqldelight-coroutines-extensions = { module = "app.cash.sqldelight:coroutines-extensions",  version.ref = "sqldelight" }
+# `INTEGER AS Int` needs an explicit ColumnAdapter — SQLDelight 2.x dropped the implicit
+# primitive mappings for everything except Boolean, which the SQLite dialect still handles
+# natively. This artifact is where IntColumnAdapter lives.
+sqldelight-primitive-adapters    = { module = "app.cash.sqldelight:primitive-adapters",     version.ref = "sqldelight" }
 sqldelight-android-driver        = { module = "app.cash.sqldelight:android-driver",         version.ref = "sqldelight" }
 sqldelight-native-driver         = { module = "app.cash.sqldelight:native-driver",          version.ref = "sqldelight" }
+# JVM/JDBC driver — androidHostTest only. It is a REAL SQLite (xerial), so the schema, the
+# migration and every query in this module are exercised against the engine that ships on a
+# handset rather than against a mock.
 sqldelight-sqlite-driver         = { module = "app.cash.sqldelight:sqlite-driver",          version.ref = "sqldelight" }
+# androidMain only — see the `sqlcipher` version comment.
+sqlcipher-android                = { module = "net.zetetic:sqlcipher-android",              version.ref = "sqlcipher" }
 
 # ---- test ---------------------------------------------------------------------------
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }

@@ -43,7 +43,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C015 | kmp-domain-ride-dispatch | 1 | DONE | 2026-07-27 | 384 tests green (107 new); Appendix B.2 as data + exhaustive 18×20 sweep; 4 micro-change-sets raised |
 | C016 | kmp-domain-fare-wallet | 1 | DONE | 2026-07-27 | 543 tests green (159 new); §1.3 banker's rounding + 14-state payment machine; 6 micro-change-sets raised |
 | C017 | kmp-geo-realtime | 1 | DONE | 2026-07-27 | 654 tests green (111 new); H3 is a platform seam — **iOS has no engine yet** (C085/C094 bind one); 3 micro-change-sets raised |
-| C018 | kmp-local-db | 1 | PENDING | | |
+| C018 | kmp-local-db | 1 | DONE | 2026-07-27 | 767 tests green (113 new); two SQLDelight databases, schema v2 with a tested migration; 4 micro-change-sets raised |
 | C019 | kmp-test-kit | 1 | PENDING | | |
 | C020 | ws-iam-minimal ⭑ | 2 | PENDING | | |
 | C021 | ws-registry-minimal ⭑ | 2 | PENDING | | |
@@ -2336,3 +2336,136 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   the real engine on this box). A clean gate run takes ~40 s and `compileKotlinIosArm64` another
   ~18 s. Worth knowing next time: **detekt's `ReturnCount` limit is 2**, which guard-clause parsers
   trip constantly — four functions carry a justified `@Suppress`, following C013's precedent.
+
+- **Component:** C018 kmp-local-db — 2026-07-27
+- **Status:** DONE — `./gradlew :shared:testDebugUnitTest detekt ktlintCheck` → **767 tests passed, 0
+  failed, 0 skipped** (113 new), detekt and ktlint clean, `compileKotlinIosArm64` green. All four DoD
+  items pass: every §1–§3 table exists with its documented columns and indexes (`MobileSchemaTest`), a
+  queued command survives a real close-and-reopen and is replayed exactly once
+  (`CommandOutboxDurabilityTest`, file-backed SQLite), `gps_buffer` evicts by age and size without
+  losing ordering (`GpsBufferSqlTest`), and the v1→v2 migration is tested against a real engine
+  (`SchemaMigrationTest`).
+- **Notes:**
+  **Spec gaps — four micro-change-sets, none actioned in `specs/`:**
+  (a) ***`sync_state` does not exist.*** §1.12's heading reads "`sync_state` / `meta`" and §1.5 says
+  the GPS sequence is kept "in `meta`/`sync_state`", but the section prints DDL for **`meta` only**
+  and nothing else in the document references a `sync_state` table. **Only `meta` created** — the
+  same phantom-table class as C003's `iam.user_prefs` and planner finding 2. §1.12 should drop the
+  `sync_state` half of its heading, or print the table.
+  (b) ***`meta('gps.seq')` cannot be a single key.*** §1.12 gives `'gps.seq'` as the illustrative
+  spelling, but §1.5 requires the sequence to be "monotonic **per vehicle_id**" and `gps_buffer`'s
+  primary key is `(vehicle_id, seq)`. One counter across two vehicles is fatal for the first one a
+  driver comes back to: its counter has moved on without the server ever seeing the gap, so
+  `position-processor-svc` discards everything it publishes. **Landed `gps.seq.{vehicleId}`**
+  (`MetaKeys.gpsSeq`). §1.12's example key should be corrected.
+  (c) ***No retry budget is fixed for `ABANDONED`.*** §1.4 declares the state and §4.1 says "backoff
+  is jittered exponential (§7.5.3)", but nothing says when a command stops being retried, and §4.3
+  gives retention rules for `ACKED` and `FAILED` and none for `ABANDONED`. **C018 chose 24 h of age
+  (primary) plus 50 attempts (a backstop for a command failing fast in a loop)**, both on
+  `OutboxRetryPolicy` and both overridable. §4.1/§4.3 should state a figure.
+  (d) ***§4.3 has no rule for three tables that grow without bound.*** `trip_shares` (a token per
+  share, D-34), `place_recents` (a row per search, local-only) and `job_board` (a row per scheduled
+  ride whose pickup time passes). Added as **explicitly labelled C018 additions** on
+  `RetentionPolicy` — `tripShareGrace` 1 d, `placeRecentsMax` 50, `jobBoardGrace` 6 h. Everything
+  else in `RetentionPolicy` is a figure §4.3 prints.
+  **Other spec observations (no change needed):**
+  (e) §0.1 offers Room (Android) / GRDB (iOS) / **SQLDelight** ("recommended, optional") and this
+  prompt's scope makes SQLDelight the choice, so the `.sq` files are the canonical DDL and there is
+  no Room `@Entity` anywhere. §0.1's first two rows are now historical.
+  (f) `mobile_db_schema.md` is landed in its **post-Δ shape** — §6's `driver_phone` and `ui_prefs`,
+  §7's widened `documents.kind`, §8's `qr_claimed_at` and AL-48 renames — with **one exception**: §8
+  is *also* replayed as migration `1.sqm` (see decision 3). C005 note (e) established that these Δs
+  are history rather than a sequence the repo replays; that holds for a server DDL created fresh by
+  DbUp, and does not hold for a device that is already carrying the old schema.
+  (g) `rides.state` and `payment_state` are deliberately left **without a CHECK**, as the spec prints
+  them. ride-svc and fare-svc are the sole writers, and a client that rejected a state its build had
+  not heard of would strand a passenger on a ride that had already moved on (the C015/C016 rule).
+  **Decisions —**
+  (1) **Two SQLDelight databases, and the §1 tables are authored once.** §0.2's "one database file
+  per app" is encoded as `MageRidePassengerDatabase` + `MageRideDriverDatabase`, so a passenger file
+  physically cannot contain `dispatch_offers`. The thirteen shared tables live in
+  `src/commonMain/sqldelight/shared/` and a Gradle `Sync` materialises them into each database's own
+  package. **That indirection is required, not stylistic:** SQLDelight derives a generated type's
+  package from its path under the source root, so pointing both databases at one directory emits
+  `…db.core.Command_outbox` twice into one commonMain compilation and the module does not compile
+  (verified — "Redeclaration"). Also verified: SQLDelight reads `srcDirs` at configuration time and
+  drops any task dependency a provider carries, so the `Sync` needs an explicit `dependsOn` or it
+  silently never runs and both databases generate with the §1 tables missing.
+  (2) **The SQLite dialect is the 3.18 default, on purpose.** URD NFR-22 pins minSdk 26 and Android
+  8.0 ships SQLite **3.19**, so `ALTER TABLE … RENAME COLUMN` (3.25), UPSERT (3.24) and row-value
+  `IN` (3.15) are all unavailable. Everything is written to that floor. SQLCipher links its own
+  ~3.4x SQLite, but an unencrypted build falls through to the platform engine, so the floor stands.
+  (3) **Schema version is 2, and `1.sqm` is §8 (AL-47 + AL-48).** A fresh install creates the final
+  shape directly; a handset carrying the Δ 2026-06-28 schema migrates to the same place. The renames
+  are done by **rebuild** (`RENAME TO` aside, `CREATE`, copy, `DROP`) rather than `RENAME COLUMN` per
+  decision (2), and `proof_upload_queue`'s widened `kind` CHECK needs a rebuild in any SQLite version.
+  `SchemaMigrationTest` asserts the migrated database is **structurally identical** to a fresh one —
+  table set, columns, indexes and normalised DDL — which is the guard that stops `.sqm` and `.sq`
+  drifting. The v1 fixture writes out only the **six tables migration 1 touches**; every other table
+  comes from the shipped `.sq`, so a future migration that touches a seventh fails loudly rather than
+  quietly skipping it.
+  (4) **`INSERT OR IGNORE` suppresses every constraint, not just the primary key**, so
+  `command_outbox` and `proof_upload_queue` use a plain `INSERT` — a swallowed command is a lost user
+  action and a swallowed proof is lost delivery evidence (P-10). R-18's "one key, one command" moved
+  into `CommandOutbox.enqueue`, inside the same transaction. `gps_buffer.append` keeps `OR IGNORE`:
+  a repeated `(vehicle_id, seq)` is the designed path (R-17 local dedupe) and the only CHECK on the
+  table is written from our own enum. Both choices are commented at the query.
+  (5) **`seq` is reserved in blocks of 100.** Persisting per fix would be a database write per second
+  inside AL-12's 1 s near-geofence burst. A crash skips the unused tail, which is correct: `seq` must
+  be strictly increasing, not gapless — the server's watermark is a floor and
+  `ux_positions_vehicle_seq` only rejects exact duplicates. The start is
+  `max(persisted watermark, highest seq still on disk)`, so a restored backup cannot rewind either.
+  (6) **Encryption differs per platform and iOS is not a gap.** Android is SQLCipher
+  (`net.zetetic:sqlcipher-android` 4.17.0) keyed from 32 CSPRNG bytes in C014's Keystore-backed
+  `SecureStore` — exactly §0.4's "key is wrapped by the hardware keystore". **iOS uses
+  `NSFileProtectionCompleteUntilFirstUserAuthentication`**, which §0.4 explicitly permits ("SQLCipher
+  **or GRDB encryption**"): iOS encrypts the file with a class key held in the Secure Enclave, so
+  there is no application-held key to leak at all. `AfterFirstUserAuthentication`, not `Complete`,
+  matching C014's Keychain accessibility — the driver app writes `gps_buffer` from a background
+  location session with the handset locked, and `Complete` would fail every one of those writes. The
+  `DatabasePassphrase` seam is carried and unapplied on iOS; a SQLCipher cinterop for `ios-arm64`
+  cannot be built on this Linux host (same shape as C017's H3 seam), and that one function is all
+  C085/C094 would change.
+  (7) **Only the machinery has a store interface.** `CommandOutbox`, `GpsBuffer`, `MetaStore` and
+  `Retention` are implemented twice (once per generated package) because `:shared` implements logic
+  over them; the projections are not, because `rides` has exactly one consumer and so does
+  `dispatch_offers`. Apps reach those through `PassengerDb.sql` / `DriverDb.sql`.
+  (8) **The wipe and the row counts are driven off `sqlite_master`**, not a per-app table list, so a
+  table added to one schema and not the other cannot be missed. §0.4's real erase is still
+  `DatabaseDriverFactory.delete(app)` + `DatabaseKeyManager.forget(app)` — the whole file plus the
+  key, because an emptied SQLite file keeps its old pages until something overwrites them.
+  `MageRideDb.wipe()` is the in-place fallback for a caller that cannot close the connection.
+  (9) **`offline_map_bundles` rows are reported, not deleted.** §4.3 says to evict stale bundles, but
+  the row is the only pointer to a PMTiles file the app must delete first — dropping it would orphan
+  tens of megabytes on disk. `RetentionReport.mapBundlesToRelease` hands the caller the paths.
+  (10) **`localDbModule` deliberately does not bind an open database.** Opening one is `suspend` (the
+  key is unwrapped from the Keystore) and a `runBlocking` single would put that on
+  `Application.onCreate`. The app binds a `DatabaseDriverFactory` — the fifth app-supplied binding
+  across C013/C014/C017/C018 — and opens the database during start-up.
+  (11) **Everything is blocking.** `Dispatchers.IO` is not resolvable from `commonMain` for this
+  module's target set, and an `expect val` for it would be a platform seam that buys nothing an app
+  cannot express better. Documented at `MageRideDb` and in `shared/kmp/CLAUDE.md`.
+  (12) **§0.5's schema-revision row is written on open**, not left to the app:
+  `MageRideDatabaseFactory` stamps `meta('schema.rev')` when it differs from the schema version, so
+  a routine open costs a read rather than a write. `PRAGMA user_version` stays authoritative — it is
+  what SQLDelight reads to decide whether to migrate; the `meta` row is the one a support bundle or
+  a crash report can see.
+  (13) `detekt.yml` gains a **`TooManyFunctions`** exclusion for `**/db/**` and the test source sets:
+  a repository interface's function count is its table's operation set (`OutboxStore` has thirteen
+  because §1.4's write path needs thirteen statements), and a test class's is its assertion count.
+  Same argument the existing `LongParameterList` exclusions make for `data/models` and `data/api`.
+  **Two SQLDelight gotchas worth knowing before the next `.sq` edit:** an aggregate with a column
+  alias (`SELECT MAX(seq) AS seq`) generates a one-field wrapper data class instead of returning the
+  scalar, and **`SUM()` is typed REAL**, so a money or byte total comes back as a `Double` unless it
+  is `CAST(… AS INTEGER)`. Both were caught by the compiler here; the second would otherwise have
+  reached an eviction threshold as a floating-point comparison.
+  **Build host —** a cold gate (`:shared:clean` + `--no-build-cache`) runs 767 tests in ~75 s.
+  `org.gradle.caching=true` turns a repeat run into a 3 s cache restore, test results included —
+  **clean before quoting a gate time.** New coordinates fetched: SQLDelight 2.3.2
+  (runtime, primitive-adapters, coroutines-extensions, android-driver, native-driver,
+  **sqlite-driver** — androidHostTest only, a real xerial SQLite, which is what makes the schema and
+  migration testable on Linux) and `net.zetetic:sqlcipher-android` 4.17.0 (androidMain only; the AAR
+  is not loadable in a JVM host test, so the SQLCipher path is compiled here and exercised on a
+  device). `compileKotlinIosArm64` type-checks the iOS actuals in ~30 s; **iOS is not marked DONE
+  from this host** — `NativeSqliteDriver` and the `NSFileProtection` call need a Mac to run.
+

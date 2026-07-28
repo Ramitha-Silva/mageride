@@ -1,0 +1,24 @@
+import kotlin.time.Instant;
+import kotlin.Int;
+
+-- mobile_db_schema.md §3.11 — Driver Level System cache (single row, US-6A.6).
+-- Level 3 is the DEFAULT — every driver starts at the top and falls (D5' §11), which is why the
+-- column defaults to 3 rather than 1. Thresholds are admin-tunable, so `level_up_threshold` is
+-- cached rather than baked (C015's rule).
+CREATE TABLE driver_level (
+    id                 INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
+    level              INTEGER AS Int NOT NULL DEFAULT 3 CHECK (level BETWEEN 1 AND 3),
+    rating_points      INTEGER AS Int NOT NULL DEFAULT 0,
+    level_up_threshold INTEGER AS Int NOT NULL DEFAULT 500,
+    synced_at          INTEGER AS Instant
+);
+
+select:
+SELECT * FROM driver_level WHERE id = 1;
+
+upsert:
+INSERT OR REPLACE INTO driver_level (id, level, rating_points, level_up_threshold, synced_at)
+VALUES (1, ?, ?, ?, ?);
+
+deleteAll:
+DELETE FROM driver_level;

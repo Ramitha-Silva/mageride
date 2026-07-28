@@ -1,0 +1,27 @@
+import kotlin.time.Instant;
+import kotlin.Int;
+
+-- mobile_db_schema.md §1.8 — cached in-app help (Epic 16).
+CREATE TABLE faq_articles (
+    id         TEXT NOT NULL PRIMARY KEY,
+    category   TEXT NOT NULL,
+    title      TEXT NOT NULL,
+    body       TEXT NOT NULL,
+    language   TEXT NOT NULL CHECK (language IN ('si','ta','en')),
+    sort_order INTEGER AS Int NOT NULL DEFAULT 0,
+    synced_at  INTEGER AS Instant
+);
+CREATE INDEX ix_faq_cat ON faq_articles(language, category, sort_order);
+
+selectByLanguage:
+SELECT * FROM faq_articles WHERE language = ? ORDER BY category, sort_order;
+
+selectByCategory:
+SELECT * FROM faq_articles WHERE language = ? AND category = ? ORDER BY sort_order;
+
+upsert:
+INSERT OR REPLACE INTO faq_articles (id, category, title, body, language, sort_order, synced_at)
+VALUES (?, ?, ?, ?, ?, ?, ?);
+
+deleteAll:
+DELETE FROM faq_articles;

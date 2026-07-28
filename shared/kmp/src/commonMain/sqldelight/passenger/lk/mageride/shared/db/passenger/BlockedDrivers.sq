@@ -1,0 +1,28 @@
+import kotlin.time.Instant;
+import kotlin.Boolean;
+
+-- mobile_db_schema.md §2.6 — cached block list (US-12.10). The server enforces the block during
+-- matching; this copy is what lets the settings screen render offline.
+CREATE TABLE blocked_drivers (
+    driver_id   TEXT NOT NULL PRIMARY KEY,
+    driver_name TEXT,
+    dirty       INTEGER AS Boolean NOT NULL DEFAULT 0,
+    created_at  INTEGER AS Instant NOT NULL,
+    synced_at   INTEGER AS Instant
+);
+
+selectAll:
+SELECT * FROM blocked_drivers ORDER BY created_at DESC;
+
+isBlocked:
+SELECT COUNT(*) FROM blocked_drivers WHERE driver_id = ?;
+
+upsert:
+INSERT OR REPLACE INTO blocked_drivers (driver_id, driver_name, dirty, created_at, synced_at)
+VALUES (?, ?, ?, ?, ?);
+
+delete:
+DELETE FROM blocked_drivers WHERE driver_id = ?;
+
+deleteAll:
+DELETE FROM blocked_drivers;

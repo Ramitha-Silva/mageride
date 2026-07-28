@@ -1,0 +1,43 @@
+import kotlin.time.Instant;
+import kotlin.Boolean;
+
+-- mobile_db_schema.md §2.1 — Home/Work + labelled addresses (AL-14, US-22.1/22.2).
+--
+-- SPEC NOTE (C018): the server side of this table has two incompatible shapes — `label`-based in
+-- `server_db_schema.md` §1 / D4' §2, `is_home`/`is_work` with partial unique indexes in D4'
+-- Δ 2026-06-21 (AL-26); C003 landed the union. The on-device schema only ever printed the
+-- `label` form, so that is what is here. 'home' and 'work' are label values, not flags.
+CREATE TABLE saved_addresses (
+    id         TEXT NOT NULL PRIMARY KEY,
+    label      TEXT NOT NULL,                                      -- 'home' | 'work' | custom
+    line1      TEXT,
+    line2      TEXT,
+    line3      TEXT,
+    lat        REAL NOT NULL,
+    lng        REAL NOT NULL,
+    dirty      INTEGER AS Boolean NOT NULL DEFAULT 0,
+    synced_at  INTEGER AS Instant,
+    updated_at INTEGER AS Instant NOT NULL
+);
+
+selectAll:
+SELECT * FROM saved_addresses ORDER BY label;
+
+selectByLabel:
+SELECT * FROM saved_addresses WHERE label = ?;
+
+selectDirty:
+SELECT * FROM saved_addresses WHERE dirty = 1 ORDER BY updated_at;
+
+upsert:
+INSERT OR REPLACE INTO saved_addresses (id, label, line1, line2, line3, lat, lng, dirty, synced_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+markSynced:
+UPDATE saved_addresses SET dirty = 0, synced_at = ?, updated_at = ? WHERE id = ?;
+
+delete:
+DELETE FROM saved_addresses WHERE id = ?;
+
+deleteAll:
+DELETE FROM saved_addresses;

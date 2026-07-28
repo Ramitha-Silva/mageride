@@ -1,0 +1,104 @@
+import kotlin.time.Instant;
+import kotlin.Int;
+
+-- mobile_db_schema.md §1.5 — local GPS ring buffer for MQTT replay (R-17, ADD §7.5.3, US-15.1).
+--
+-- The foreground service writes EVERY sample here, publishes live on `veh/{id}/pos/live`, and on
+-- reconnect replays the backlog on `veh/{id}/pos/replay` ORDERED BY `seq`. `position-processor-svc`
+-- discards `seq <= last_seen_seq` per vehicle, so replay is idempotent server-side; ordering by
+-- `seq` on the way out is what keeps that watermark from swallowing samples it has not seen.
+--
+-- `seq` is monotonic PER VEHICLE and must survive a restart — if it rewinds the vehicle goes
+-- silently dark. The watermark lives in `meta('gps.seq')`; PersistentPositionSequencer owns it.
+CREATE TABLE gps_buffer (
+    seq          INTEGER NOT NULL,                                 -- monotonic per vehicle_id (replay dedup key)
+    vehicle_id   TEXT NOT NULL,
+    lat          REAL NOT NULL,
+    lng          REAL NOT NULL,
+    accuracy_m   REAL,
+    speed_mps    REAL,
+    heading_deg  INTEGER AS Int,
+    hdop         REAL,
+    sat_count    INTEGER AS Int,
+    sample_ts    INTEGER AS Instant NOT NULL,                       -- epoch ms, GNSS UTC
+    source       INTEGER AS Int NOT NULL DEFAULT 0,                 -- 0=mobile (matches telemetry.positions.source)
+    state        TEXT NOT NULL DEFAULT 'PENDING'
+                   CHECK (state IN ('PENDING','PUBLISHED','REPLAY_PENDING','ACKED')),
+    created_at   INTEGER AS Instant NOT NULL,
+    PRIMARY KEY (vehicle_id, seq)
+);
+CREATE INDEX ix_gps_replay ON gps_buffer(vehicle_id, state, seq);
+
+-- `OR IGNORE` on purpose here, unlike command_outbox: a repeated `(vehicle_id, seq)` is the
+-- DESIGNED path (a replayed sample being re-admitted, R-17's local dedupe), it happens often, and
+-- the only CHECK on the table is `state`, which is written from GpsSampleState and can therefore
+-- never be violated. A dropped duplicate fix costs nothing; a dropped command costs a user action.
+append:
+INSERT OR IGNORE INTO gps_buffer (
+    seq, vehicle_id, lat, lng, accuracy_m, speed_mps, heading_deg, hdop, sat_count,
+    sample_ts, source, state, created_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+-- The replay batch, in `seq` order. PUBLISHED rows are excluded: they went out live and the
+-- server already holds them.
+selectReplayBatch:
+SELECT * FROM gps_buffer
+WHERE vehicle_id = :vehicleId AND state IN ('PENDING','REPLAY_PENDING')
+ORDER BY seq
+LIMIT :limit;
+
+selectByVehicle:
+SELECT * FROM gps_buffer WHERE vehicle_id = ? ORDER BY seq;
+
+-- Every vehicle with a backlog. The retention sweep has to bound the ring PER VEHICLE (the row
+-- cap and the seq ordering are both per vehicle), and a driver who changed vehicle mid-shift
+-- leaves rows behind under the old one.
+distinctVehicles:
+SELECT DISTINCT vehicle_id FROM gps_buffer ORDER BY vehicle_id;
+
+highestSeq:
+SELECT MAX(seq) AS highest FROM gps_buffer WHERE vehicle_id = ?;
+
+countByState:
+SELECT state, COUNT(*) AS count FROM gps_buffer WHERE vehicle_id = ? GROUP BY state;
+
+countBuffered:
+SELECT COUNT(*) FROM gps_buffer WHERE vehicle_id = ?;
+
+markPending:
+UPDATE gps_buffer SET state = 'PENDING' WHERE vehicle_id = ? AND seq = ?;
+
+markPublished:
+UPDATE gps_buffer SET state = 'PUBLISHED' WHERE vehicle_id = ? AND seq = ?;
+
+markReplayPending:
+UPDATE gps_buffer SET state = 'REPLAY_PENDING' WHERE vehicle_id = ? AND seq = ?;
+
+-- The broker took everything up to and including :seq.
+markAckedThrough:
+UPDATE gps_buffer SET state = 'ACKED' WHERE vehicle_id = :vehicleId AND seq <= :seq;
+
+-- Every un-replayed sample goes back to PENDING when the link drops mid-drain.
+resetInFlight:
+UPDATE gps_buffer SET state = 'PENDING' WHERE vehicle_id = ? AND state = 'REPLAY_PENDING';
+
+-- §4.3 ring buffer, step 1: ACKED rows go immediately after replay-confirm.
+deleteAcked:
+DELETE FROM gps_buffer WHERE vehicle_id = ? AND state IN ('ACKED','PUBLISHED');
+
+-- §4.3 step 2: age cap (the worked example is 6 h per vehicle). Oldest-first by construction —
+-- `created_at` and `seq` rise together, so an age sweep never punches a hole in the middle.
+deleteOlderThan:
+DELETE FROM gps_buffer WHERE vehicle_id = ? AND created_at < ?;
+
+-- §4.3 step 3: hard row cap. Deletes the :count oldest rows BY SEQ, so the surviving backlog is
+-- still a contiguous ascending run and the server's watermark advances over it cleanly.
+deleteOldestBeyond:
+DELETE FROM gps_buffer
+WHERE rowid IN (SELECT rowid FROM gps_buffer WHERE vehicle_id = :vehicleId ORDER BY seq LIMIT :count);
+
+deleteVehicle:
+DELETE FROM gps_buffer WHERE vehicle_id = ?;
+
+deleteAll:
+DELETE FROM gps_buffer;

@@ -1,0 +1,30 @@
+import kotlinx.datetime.LocalDate;
+import kotlin.time.Instant;
+import kotlin.Int;
+
+-- mobile_db_schema.md §3.10 — daily earnings cache (US-9.x). `earn_date` is Asia/Colombo (D-38),
+-- same rule as `daily_fee_status.fee_date`.
+CREATE TABLE driver_earnings (
+    earn_date       TEXT AS LocalDate NOT NULL PRIMARY KEY,        -- 'YYYY-MM-DD' Asia/Colombo
+    trips           INTEGER AS Int NOT NULL DEFAULT 0,
+    gross_minor     INTEGER NOT NULL DEFAULT 0,
+    daily_fee_minor INTEGER NOT NULL DEFAULT 0,
+    net_minor       INTEGER NOT NULL DEFAULT 0,
+    synced_at       INTEGER AS Instant
+);
+
+selectForDate:
+SELECT * FROM driver_earnings WHERE earn_date = ?;
+
+selectRange:
+SELECT * FROM driver_earnings WHERE earn_date >= ? AND earn_date <= ? ORDER BY earn_date DESC;
+
+upsert:
+INSERT OR REPLACE INTO driver_earnings (earn_date, trips, gross_minor, daily_fee_minor, net_minor, synced_at)
+VALUES (?, ?, ?, ?, ?, ?);
+
+deleteBefore:
+DELETE FROM driver_earnings WHERE earn_date < ?;
+
+deleteAll:
+DELETE FROM driver_earnings;

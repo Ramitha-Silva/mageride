@@ -1,0 +1,49 @@
+import kotlin.time.Instant;
+
+-- mobile_db_schema.md §1.9 — downloaded PMTiles bundle metadata (MAP-09).
+-- Metadata only: the tiles themselves are a file at `local_path`, which is why eviction has to
+-- respect a disk budget rather than a row count (§4.3).
+CREATE TABLE offline_map_bundles (
+    id            TEXT NOT NULL PRIMARY KEY,
+    region_name   TEXT NOT NULL,
+    bbox_json     TEXT NOT NULL,                                   -- [minLng,minLat,maxLng,maxLat]
+    pmtiles_url   TEXT NOT NULL,                                   -- signed Cloudflare R2 URL
+    local_path    TEXT,                                            -- on-device file path once downloaded
+    size_bytes    INTEGER,
+    state         TEXT NOT NULL DEFAULT 'QUEUED'
+                    CHECK (state IN ('QUEUED','DOWNLOADING','READY','STALE','FAILED')),
+    downloaded_at INTEGER AS Instant,
+    expires_at    INTEGER AS Instant
+);
+
+selectAll:
+SELECT * FROM offline_map_bundles ORDER BY region_name;
+
+selectReady:
+SELECT * FROM offline_map_bundles WHERE state = 'READY' ORDER BY region_name;
+
+-- §4.3: evict STALE and expired bundles, newest kept last so the caller deletes files in the
+-- order it is safe to lose them.
+selectEvictable:
+SELECT * FROM offline_map_bundles
+WHERE state = 'STALE' OR (expires_at IS NOT NULL AND expires_at <= ?)
+ORDER BY COALESCE(downloaded_at, 0);
+
+-- CAST because SQLite's SUM() is typed REAL, and a byte budget compared as a Double is a bug
+-- waiting to be reported as "the eviction threshold is off by one file".
+totalSizeBytes:
+SELECT CAST(COALESCE(SUM(size_bytes), 0) AS INTEGER) FROM offline_map_bundles WHERE local_path IS NOT NULL;
+
+upsert:
+INSERT OR REPLACE INTO offline_map_bundles (
+    id, region_name, bbox_json, pmtiles_url, local_path, size_bytes, state, downloaded_at, expires_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+updateState:
+UPDATE offline_map_bundles SET state = ? WHERE id = ?;
+
+delete:
+DELETE FROM offline_map_bundles WHERE id = ?;
+
+deleteAll:
+DELETE FROM offline_map_bundles;

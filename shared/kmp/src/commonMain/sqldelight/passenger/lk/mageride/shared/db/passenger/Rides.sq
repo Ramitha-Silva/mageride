@@ -1,0 +1,112 @@
+import kotlin.time.Instant;
+import kotlin.Boolean;
+import kotlin.Int;
+
+-- mobile_db_schema.md §2.3 — active ride + trip-history projection (the rider's view of
+-- `rides.rides`), in its post-Δ shape: §6 (2026-06-28) added the driver's number for the
+-- post-trip Call action, §8 (2026-07-05 #2) added `qr_claimed_at` for AL-47 and renamed both
+-- masked phone columns to the real MSISDN under AL-48.
+--
+-- One row per ride the passenger booked. The single live ride (`is_active = 1`) drives the
+-- active-ride screen and survives an app restart; terminal rows are the trip-history list.
+--
+-- `state` and `payment_state` mirror the server enums and deliberately carry NO CHECK: ride-svc
+-- is the sole writer of both, and a client that rejected a state its build had not heard of
+-- would strand a passenger on a ride that had already moved on (the C015/C016 rule — a
+-- server-confirmed move is applied and flagged, never dropped).
+CREATE TABLE rides (
+    id                    TEXT NOT NULL PRIMARY KEY,
+    client_request_id     TEXT NOT NULL,                           -- idempotency partner (R-18)
+    state                 TEXT NOT NULL,                           -- mirrors rides.rides.state
+    is_active             INTEGER AS Boolean NOT NULL DEFAULT 1,   -- 1 until terminal
+    kind                  INTEGER AS Int NOT NULL DEFAULT 0,       -- 0=passenger,1=proxy,2=package
+    is_proxy              INTEGER AS Boolean NOT NULL DEFAULT 0,
+    vehicle_type          TEXT NOT NULL,                           -- requested tier
+    pickup_lat            REAL NOT NULL,
+    pickup_lng            REAL NOT NULL,
+    pickup_label          TEXT,
+    dropoff_lat           REAL NOT NULL,
+    dropoff_lng           REAL NOT NULL,
+    dropoff_label         TEXT,
+    -- proxy / package
+    rider_name            TEXT,
+    rider_phone           TEXT,                                    -- AL-48: real MSISDN, NULL until Accepted
+    package_size          TEXT CHECK (package_size IS NULL OR package_size IN ('S','M','L')),
+    package_description   TEXT,
+    -- assigned driver/vehicle snapshot (shown on map)
+    accepted_driver_id    TEXT,
+    driver_name           TEXT,
+    driver_photo_url      TEXT,
+    driver_rating         REAL,
+    driver_phone          TEXT,                                    -- US-24.4 post-trip Call; AL-48 unmasked
+    vehicle_reg           TEXT,
+    vehicle_actual_type   TEXT,
+    vehicle_lat           REAL,
+    vehicle_lng           REAL,
+    vehicle_heading_deg   INTEGER AS Int,                          -- last-known marker (offline US-15.2)
+    offer_expires_at      INTEGER AS Instant,
+    -- fare / payment
+    fare_amount_minor     INTEGER,
+    surcharge_minor       INTEGER NOT NULL DEFAULT 0,
+    tip_amount_minor      INTEGER NOT NULL DEFAULT 0,
+    payment_method        TEXT CHECK (payment_method IN ('cash','lankaqr','onepay','cod')),
+    payment_state         TEXT,                                    -- mirrors fares.ride_payments.state
+    qr_claimed_at         INTEGER AS Instant,                      -- AL-47: passenger tapped "I've paid"
+    created_at            INTEGER AS Instant NOT NULL,
+    updated_at            INTEGER AS Instant NOT NULL,
+    terminal_at           INTEGER AS Instant,
+    server_updated_at     INTEGER AS Instant,
+    synced_at             INTEGER AS Instant
+);
+CREATE INDEX ix_prides_active ON rides(is_active, updated_at DESC);
+CREATE INDEX ix_prides_history ON rides(created_at DESC);
+
+selectActive:
+SELECT * FROM rides WHERE is_active = 1 ORDER BY updated_at DESC LIMIT 1;
+
+selectById:
+SELECT * FROM rides WHERE id = ?;
+
+selectByClientRequestId:
+SELECT * FROM rides WHERE client_request_id = ?;
+
+selectHistory:
+SELECT * FROM rides WHERE is_active = 0 ORDER BY created_at DESC LIMIT :limit OFFSET :offset;
+
+count:
+SELECT COUNT(*) FROM rides;
+
+upsert:
+INSERT OR REPLACE INTO rides (
+    id, client_request_id, state, is_active, kind, is_proxy, vehicle_type,
+    pickup_lat, pickup_lng, pickup_label, dropoff_lat, dropoff_lng, dropoff_label,
+    rider_name, rider_phone, package_size, package_description,
+    accepted_driver_id, driver_name, driver_photo_url, driver_rating, driver_phone,
+    vehicle_reg, vehicle_actual_type, vehicle_lat, vehicle_lng, vehicle_heading_deg, offer_expires_at,
+    fare_amount_minor, surcharge_minor, tip_amount_minor, payment_method, payment_state, qr_claimed_at,
+    created_at, updated_at, terminal_at, server_updated_at, synced_at
+) VALUES (
+    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+);
+
+updateState:
+UPDATE rides SET state = ?, is_active = ?, terminal_at = ?, updated_at = ?, server_updated_at = ? WHERE id = ?;
+
+-- US-15.2: the frozen marker the "connection lost" banner renders over.
+updateVehiclePosition:
+UPDATE rides SET vehicle_lat = ?, vehicle_lng = ?, vehicle_heading_deg = ?, updated_at = ? WHERE id = ?;
+
+updatePayment:
+UPDATE rides SET payment_state = ?, payment_method = ?, fare_amount_minor = ?, tip_amount_minor = ?,
+    qr_claimed_at = ?, updated_at = ? WHERE id = ?;
+
+-- §4.3: keep the last 90 days or 100 rows, whichever bites first. Never evicts the live ride.
+deleteTerminalBefore:
+DELETE FROM rides WHERE is_active = 0 AND created_at < ?;
+
+deleteTerminalBeyondCap:
+DELETE FROM rides
+WHERE rowid IN (SELECT rowid FROM rides WHERE is_active = 0 ORDER BY created_at DESC, id LIMIT -1 OFFSET :keep);
+
+deleteAll:
+DELETE FROM rides;

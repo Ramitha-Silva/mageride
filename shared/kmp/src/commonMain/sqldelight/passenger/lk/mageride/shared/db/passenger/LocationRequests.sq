@@ -1,0 +1,42 @@
+import kotlin.time.Instant;
+import kotlin.Int;
+
+-- mobile_db_schema.md §2.5 — proxy GPS round-trip as booker (P-02, P-13), post-Δ§8: the phone
+-- column carries the real MSISDN (AL-48), and is NULL until the server chooses to expose it.
+CREATE TABLE location_requests (
+    request_id          TEXT NOT NULL PRIMARY KEY,
+    ride_id             TEXT,
+    rider_phone         TEXT,
+    state               TEXT NOT NULL DEFAULT 'Pending'
+                          CHECK (state IN ('Pending','Confirmed','Declined','Expired','RiderNotRegistered')),
+    issued_at           INTEGER AS Instant NOT NULL,
+    ttl_seconds         INTEGER AS Int NOT NULL DEFAULT 300,
+    resolved_lat        REAL,
+    resolved_lng        REAL,
+    resolved_accuracy_m REAL,
+    resolved_at         INTEGER AS Instant
+);
+
+selectById:
+SELECT * FROM location_requests WHERE request_id = ?;
+
+selectPending:
+SELECT * FROM location_requests WHERE state = 'Pending' ORDER BY issued_at DESC;
+
+upsert:
+INSERT OR REPLACE INTO location_requests (
+    request_id, ride_id, rider_phone, state, issued_at, ttl_seconds,
+    resolved_lat, resolved_lng, resolved_accuracy_m, resolved_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+resolve:
+UPDATE location_requests SET state = ?, resolved_lat = ?, resolved_lng = ?, resolved_accuracy_m = ?,
+    resolved_at = ? WHERE request_id = ?;
+
+-- P-13: the request dies with its TTL whether or not the rider ever answered.
+expire:
+UPDATE location_requests SET state = 'Expired'
+WHERE state = 'Pending' AND (issued_at + (ttl_seconds * 1000)) <= ?;
+
+deleteAll:
+DELETE FROM location_requests;

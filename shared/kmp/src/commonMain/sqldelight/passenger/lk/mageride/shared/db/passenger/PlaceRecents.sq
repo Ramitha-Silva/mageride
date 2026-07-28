@@ -1,0 +1,35 @@
+import kotlin.time.Instant;
+import kotlin.Int;
+
+-- mobile_db_schema.md §2.2 — recent / searched locations. Local-only UX: nothing here syncs, so
+-- there is no `dirty`, no `synced_at` and no outbox partner.
+CREATE TABLE place_recents (
+    id           TEXT NOT NULL PRIMARY KEY,
+    label        TEXT NOT NULL,
+    line1        TEXT,
+    lat          REAL NOT NULL,
+    lng          REAL NOT NULL,
+    use_count    INTEGER AS Int NOT NULL DEFAULT 1,
+    last_used_at INTEGER AS Instant NOT NULL
+);
+CREATE INDEX ix_recents_recent ON place_recents(last_used_at DESC);
+
+selectRecent:
+SELECT * FROM place_recents ORDER BY last_used_at DESC LIMIT ?;
+
+selectFrequent:
+SELECT * FROM place_recents ORDER BY use_count DESC, last_used_at DESC LIMIT ?;
+
+insert:
+INSERT OR REPLACE INTO place_recents (id, label, line1, lat, lng, use_count, last_used_at)
+VALUES (?, ?, ?, ?, ?, ?, ?);
+
+touch:
+UPDATE place_recents SET use_count = use_count + 1, last_used_at = ? WHERE id = ?;
+
+deleteBeyondCap:
+DELETE FROM place_recents
+WHERE rowid IN (SELECT rowid FROM place_recents ORDER BY last_used_at DESC, id LIMIT -1 OFFSET :keep);
+
+deleteAll:
+DELETE FROM place_recents;

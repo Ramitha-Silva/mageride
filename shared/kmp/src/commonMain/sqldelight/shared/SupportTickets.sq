@@ -1,0 +1,33 @@
+import kotlin.time.Instant;
+import kotlin.Boolean;
+
+-- mobile_db_schema.md §1.10 — cached own tickets (Epic 16).
+CREATE TABLE support_tickets (
+    id             TEXT NOT NULL PRIMARY KEY,
+    category       TEXT NOT NULL,
+    description    TEXT NOT NULL,
+    ride_id        TEXT,
+    screenshot_url TEXT,
+    status         TEXT NOT NULL DEFAULT 'OPEN' CHECK (status IN ('OPEN','IN_PROGRESS','RESOLVED')),
+    admin_response TEXT,
+    dirty          INTEGER AS Boolean NOT NULL DEFAULT 0,
+    created_at     INTEGER AS Instant NOT NULL,
+    synced_at      INTEGER AS Instant
+);
+
+selectAll:
+SELECT * FROM support_tickets ORDER BY created_at DESC;
+
+selectOpen:
+SELECT * FROM support_tickets WHERE status != 'RESOLVED' ORDER BY created_at DESC;
+
+upsert:
+INSERT OR REPLACE INTO support_tickets (
+    id, category, description, ride_id, screenshot_url, status, admin_response, dirty, created_at, synced_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+markSynced:
+UPDATE support_tickets SET dirty = 0, synced_at = ? WHERE id = ?;
+
+deleteAll:
+DELETE FROM support_tickets;

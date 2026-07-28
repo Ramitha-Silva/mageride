@@ -1,0 +1,32 @@
+import kotlin.time.Instant;
+import kotlin.Boolean;
+
+-- mobile_db_schema.md §2.7 — active live-trip share tokens (D-34, US-12.8).
+--
+-- `token` is a PUBLIC share handle, not a credential of the signed-in user: it authorises the
+-- read-only `passenger.mageride.lk` track view and nothing else. It is deliberately the one
+-- token-shaped value the on-device DB is allowed to hold (see the §0.4 fence in AuthSession.sq).
+CREATE TABLE trip_shares (
+    token      TEXT NOT NULL PRIMARY KEY,
+    ride_id    TEXT NOT NULL,
+    share_url  TEXT NOT NULL,
+    expires_at INTEGER AS Instant NOT NULL,
+    revoked    INTEGER AS Boolean NOT NULL DEFAULT 0,
+    created_at INTEGER AS Instant NOT NULL
+);
+
+selectLiveForRide:
+SELECT * FROM trip_shares WHERE ride_id = ? AND revoked = 0 AND expires_at > ? ORDER BY created_at DESC;
+
+insert:
+INSERT OR REPLACE INTO trip_shares (token, ride_id, share_url, expires_at, revoked, created_at)
+VALUES (?, ?, ?, ?, ?, ?);
+
+revoke:
+UPDATE trip_shares SET revoked = 1 WHERE token = ?;
+
+deleteExpired:
+DELETE FROM trip_shares WHERE expires_at <= ?;
+
+deleteAll:
+DELETE FROM trip_shares;

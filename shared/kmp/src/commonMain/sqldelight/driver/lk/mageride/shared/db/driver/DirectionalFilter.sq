@@ -1,0 +1,36 @@
+import kotlin.time.Instant;
+import kotlin.Boolean;
+import kotlin.Int;
+
+-- mobile_db_schema.md §3.12 — active Directional Travel filter (single row, DT-01, US-6A.21).
+-- `uses_today` / `max_uses_per_day` drive the "uses left" banner (DT-03). Server-side the limit
+-- is counted per activation, so a manual turn-off still consumes its use (US-6A.19, C004 note g).
+CREATE TABLE directional_filter (
+    id               INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
+    server_id        TEXT,
+    destination_lat  REAL,
+    destination_lng  REAL,
+    label            TEXT,
+    set_at           INTEGER AS Instant,
+    expires_at       INTEGER AS Instant,                           -- drives "time left" banner
+    uses_today       INTEGER AS Int NOT NULL DEFAULT 0,
+    max_uses_per_day INTEGER AS Int NOT NULL DEFAULT 2,            -- "uses left" banner (DT-03)
+    active           INTEGER AS Boolean NOT NULL DEFAULT 0,
+    updated_at       INTEGER AS Instant NOT NULL
+);
+
+select:
+SELECT * FROM directional_filter WHERE id = 1;
+
+upsert:
+INSERT OR REPLACE INTO directional_filter (
+    id, server_id, destination_lat, destination_lng, label, set_at, expires_at,
+    uses_today, max_uses_per_day, active, updated_at
+) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+clear:
+UPDATE directional_filter SET active = 0, server_id = NULL, set_at = NULL, expires_at = NULL,
+    updated_at = ? WHERE id = 1;
+
+deleteAll:
+DELETE FROM directional_filter;

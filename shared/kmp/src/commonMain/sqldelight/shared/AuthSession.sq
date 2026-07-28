@@ -1,0 +1,39 @@
+import kotlin.time.Instant;
+
+-- mobile_db_schema.md §1.1 — who is signed in (single row).
+--
+-- FENCE (C018 scope): no token is ever stored here. §0.4 puts the access token, the rotating
+-- refresh token and the MQTT session JWT in Android Keystore / iOS Keychain — C014's SecureStore
+-- — and leaves this row holding only *references* and *expiry hints*: the refresh session id and
+-- the two expiry instants that drive proactive refresh (D-29) and MQTT renewal (E-02).
+-- `SchemaSecretsTest` fails the build if a token-shaped column appears in any table.
+CREATE TABLE auth_session (
+    id                      INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),                  -- singleton row
+    user_id                 TEXT NOT NULL,
+    app                     TEXT NOT NULL CHECK (app IN ('passenger','driver')),          -- AL-08 (per-app device)
+    device_id               TEXT NOT NULL,
+    jti                     TEXT,                                                          -- refresh session id (token itself in Keystore)
+    access_token_expires_at INTEGER AS Instant,                                            -- epoch ms; drives proactive refresh (D-29)
+    mqtt_token_expires_at   INTEGER AS Instant,                                            -- E-02: max(ride+2h, 4h)
+    last_refresh_at         INTEGER AS Instant,
+    created_at              INTEGER AS Instant NOT NULL,
+    updated_at              INTEGER AS Instant NOT NULL
+);
+
+select:
+SELECT * FROM auth_session WHERE id = 1;
+
+upsert:
+INSERT OR REPLACE INTO auth_session (
+    id, user_id, app, device_id, jti,
+    access_token_expires_at, mqtt_token_expires_at, last_refresh_at, created_at, updated_at
+) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+updateAccessExpiry:
+UPDATE auth_session SET access_token_expires_at = ?, last_refresh_at = ?, updated_at = ? WHERE id = 1;
+
+updateMqttExpiry:
+UPDATE auth_session SET mqtt_token_expires_at = ?, updated_at = ? WHERE id = 1;
+
+deleteAll:
+DELETE FROM auth_session;

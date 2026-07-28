@@ -1,0 +1,25 @@
+import kotlin.time.Instant;
+import kotlin.Boolean;
+
+-- mobile_db_schema.md §1.3 — cached SOS contacts (D-33, US-12.x).
+CREATE TABLE emergency_contacts (
+    id         TEXT NOT NULL PRIMARY KEY,
+    name       TEXT NOT NULL,
+    phone      TEXT NOT NULL,
+    dirty      INTEGER AS Boolean NOT NULL DEFAULT 0,
+    synced_at  INTEGER AS Instant,
+    updated_at INTEGER AS Instant NOT NULL
+);
+
+selectAll:
+SELECT * FROM emergency_contacts ORDER BY name;
+
+upsert:
+INSERT OR REPLACE INTO emergency_contacts (id, name, phone, dirty, synced_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?);
+
+delete:
+DELETE FROM emergency_contacts WHERE id = ?;
+
+deleteAll:
+DELETE FROM emergency_contacts;

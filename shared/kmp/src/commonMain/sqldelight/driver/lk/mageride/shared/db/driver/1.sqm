@@ -1,0 +1,161 @@
+-- Migration 1 -> 2 · mobile_db_schema.md §8 Δ 2026-07-05 #2 (URD v2.7 Epic 26, ADD v3.1 §1.13):
+-- driver-QR attestation settlement (AL-47) and number-masking removal (AL-48).
+--
+-- Version 1 is the on-device schema as of Δ 2026-06-28 (§1-§3 plus §6). Renames and the
+-- `proof_upload_queue.kind` CHECK widening are done by rebuild rather than
+-- `ALTER TABLE … RENAME COLUMN` (SQLite 3.25) — see the passenger 1.sqm for the minSdk-26
+-- reasoning. A CHECK can never be altered in place in any SQLite version, so `qr_receipt`
+-- needs the rebuild regardless.
+
+-- ---- active_ride (§3.4): +qr_claimed_at, rider_phone_masked -> rider_phone.
+ALTER TABLE active_ride RENAME TO active_ride_v1;
+
+CREATE TABLE active_ride (
+    id                  TEXT NOT NULL PRIMARY KEY,
+    state               TEXT NOT NULL,
+    kind                INTEGER AS Int NOT NULL DEFAULT 0,
+    is_proxy            INTEGER AS Boolean NOT NULL DEFAULT 0,
+    rider_name          TEXT,
+    rider_phone         TEXT,
+    pickup_lat          REAL NOT NULL,
+    pickup_lng          REAL NOT NULL,
+    pickup_label        TEXT,
+    dropoff_lat         REAL NOT NULL,
+    dropoff_lng         REAL NOT NULL,
+    dropoff_label       TEXT,
+    package_size        TEXT CHECK (package_size IS NULL OR package_size IN ('S','M','L')),
+    package_description TEXT,
+    needs_pickup_otp    INTEGER AS Boolean NOT NULL DEFAULT 0,
+    needs_delivery_otp  INTEGER AS Boolean NOT NULL DEFAULT 0,
+    needs_proof         INTEGER AS Boolean NOT NULL DEFAULT 0,
+    payment_method      TEXT CHECK (payment_method IN ('cash','lankaqr','onepay','cod')),
+    payment_state       TEXT,
+    fare_amount_minor   INTEGER,
+    surcharge_minor     INTEGER NOT NULL DEFAULT 0,
+    tip_amount_minor    INTEGER NOT NULL DEFAULT 0,
+    qr_claimed_at       INTEGER AS Instant,
+    created_at          INTEGER AS Instant NOT NULL,
+    updated_at          INTEGER AS Instant NOT NULL,
+    server_updated_at   INTEGER AS Instant
+);
+
+INSERT INTO active_ride (
+    id, state, kind, is_proxy, rider_name, rider_phone,
+    pickup_lat, pickup_lng, pickup_label, dropoff_lat, dropoff_lng, dropoff_label,
+    package_size, package_description, needs_pickup_otp, needs_delivery_otp, needs_proof,
+    payment_method, payment_state, fare_amount_minor, surcharge_minor, tip_amount_minor,
+    qr_claimed_at, created_at, updated_at, server_updated_at
+)
+SELECT
+    id, state, kind, is_proxy, rider_name, rider_phone_masked,
+    pickup_lat, pickup_lng, pickup_label, dropoff_lat, dropoff_lng, dropoff_label,
+    package_size, package_description, needs_pickup_otp, needs_delivery_otp, needs_proof,
+    payment_method, payment_state, fare_amount_minor, surcharge_minor, tip_amount_minor,
+    NULL, created_at, updated_at, server_updated_at
+FROM active_ride_v1;
+
+DROP TABLE active_ride_v1;
+
+-- ---- dispatch_offers (§3.3): rider_phone_masked -> rider_phone (P-05 — the RIDER's number).
+DROP INDEX ix_offers_live;
+ALTER TABLE dispatch_offers RENAME TO dispatch_offers_v1;
+
+CREATE TABLE dispatch_offers (
+    id                   TEXT NOT NULL PRIMARY KEY,
+    ride_id              TEXT NOT NULL,
+    vehicle_type         TEXT NOT NULL,
+    pickup_lat           REAL NOT NULL,
+    pickup_lng           REAL NOT NULL,
+    pickup_label         TEXT,
+    dropoff_lat          REAL NOT NULL,
+    dropoff_lng          REAL NOT NULL,
+    dropoff_label        TEXT,
+    est_fare_minor       INTEGER,
+    distance_to_pickup_m INTEGER AS Int,
+    kind                 INTEGER AS Int NOT NULL DEFAULT 0,
+    is_proxy             INTEGER AS Boolean NOT NULL DEFAULT 0,
+    rider_name           TEXT,
+    rider_phone          TEXT,
+    package_size         TEXT CHECK (package_size IS NULL OR package_size IN ('S','M','L')),
+    package_description  TEXT,
+    status               TEXT NOT NULL DEFAULT 'OFFERED'
+                           CHECK (status IN ('OFFERED','ACCEPTED','DECLINED','EXPIRED')),
+    sent_at              INTEGER AS Instant NOT NULL,
+    expires_at           INTEGER AS Instant NOT NULL
+);
+
+INSERT INTO dispatch_offers (
+    id, ride_id, vehicle_type, pickup_lat, pickup_lng, pickup_label,
+    dropoff_lat, dropoff_lng, dropoff_label, est_fare_minor, distance_to_pickup_m,
+    kind, is_proxy, rider_name, rider_phone, package_size, package_description,
+    status, sent_at, expires_at
+)
+SELECT
+    id, ride_id, vehicle_type, pickup_lat, pickup_lng, pickup_label,
+    dropoff_lat, dropoff_lng, dropoff_label, est_fare_minor, distance_to_pickup_m,
+    kind, is_proxy, rider_name, rider_phone_masked, package_size, package_description,
+    status, sent_at, expires_at
+FROM dispatch_offers_v1;
+
+DROP TABLE dispatch_offers_v1;
+CREATE INDEX ix_offers_live ON dispatch_offers(status, expires_at);
+
+-- ---- proof_upload_queue (§3.6): kind CHECK gains 'qr_receipt' (the AL-47 receipt screenshot).
+DROP INDEX ix_proof_dispatch;
+ALTER TABLE proof_upload_queue RENAME TO proof_upload_queue_v1;
+
+CREATE TABLE proof_upload_queue (
+    id            TEXT NOT NULL PRIMARY KEY,
+    ride_id       TEXT NOT NULL,
+    kind          TEXT NOT NULL CHECK (kind IN ('delivery_photo','signature','pickup_photo','qr_receipt')),
+    local_path    TEXT NOT NULL,
+    sha256_hex    TEXT,
+    captured_lat  REAL,
+    captured_lng  REAL,
+    captured_at   INTEGER AS Instant NOT NULL,
+    state         TEXT NOT NULL DEFAULT 'PENDING'
+                    CHECK (state IN ('PENDING','UPLOADING','UPLOADED','FAILED')),
+    attempts      INTEGER AS Int NOT NULL DEFAULT 0,
+    storage_url   TEXT,
+    next_retry_at INTEGER AS Instant
+);
+
+INSERT INTO proof_upload_queue (
+    id, ride_id, kind, local_path, sha256_hex, captured_lat, captured_lng, captured_at,
+    state, attempts, storage_url, next_retry_at
+)
+SELECT
+    id, ride_id, kind, local_path, sha256_hex, captured_lat, captured_lng, captured_at,
+    state, attempts, storage_url, next_retry_at
+FROM proof_upload_queue_v1;
+
+DROP TABLE proof_upload_queue_v1;
+CREATE INDEX ix_proof_dispatch ON proof_upload_queue(state, next_retry_at);
+
+-- ---- credit_transfers (§3.15): counterparty_phone_masked -> counterparty_phone.
+DROP INDEX ix_credit_transfers_recent;
+ALTER TABLE credit_transfers RENAME TO credit_transfers_v1;
+
+CREATE TABLE credit_transfers (
+    id                     TEXT NOT NULL PRIMARY KEY,
+    direction              TEXT NOT NULL CHECK (direction IN ('incoming','outgoing')),
+    counterparty_driver_id TEXT,
+    counterparty_name      TEXT,
+    counterparty_phone     TEXT,
+    amount_minor           INTEGER NOT NULL,
+    status                 TEXT NOT NULL CHECK (status IN ('PENDING','APPROVED','REJECTED')),
+    created_at             INTEGER AS Instant NOT NULL,
+    synced_at              INTEGER AS Instant
+);
+
+INSERT INTO credit_transfers (
+    id, direction, counterparty_driver_id, counterparty_name, counterparty_phone,
+    amount_minor, status, created_at, synced_at
+)
+SELECT
+    id, direction, counterparty_driver_id, counterparty_name, counterparty_phone_masked,
+    amount_minor, status, created_at, synced_at
+FROM credit_transfers_v1;
+
+DROP TABLE credit_transfers_v1;
+CREATE INDEX ix_credit_transfers_recent ON credit_transfers(created_at DESC);

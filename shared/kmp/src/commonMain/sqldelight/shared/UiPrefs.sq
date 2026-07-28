@@ -1,0 +1,28 @@
+-- mobile_db_schema.md §6 Δ 2026-06-28 item 4 (US-24.3) — remembered UI choices.
+--
+-- Deliberately separate from `meta`: `meta` is sync machinery that a reconcile may rewrite,
+-- `ui_prefs` is the user's own last choice and survives a cache wipe of everything else.
+-- 'last_call_type' takes 'free_voip' | 'direct_dial' — 'normal_masked' was withdrawn by AL-48
+-- (§8), so a stored value of it must be read as 'direct_dial'.
+CREATE TABLE ui_prefs (
+    key   TEXT NOT NULL PRIMARY KEY,
+    value TEXT
+);
+
+select:
+SELECT value FROM ui_prefs WHERE key = ?;
+
+selectRow:
+SELECT * FROM ui_prefs WHERE key = ?;
+
+selectAll:
+SELECT * FROM ui_prefs ORDER BY key;
+
+put:
+INSERT OR REPLACE INTO ui_prefs (key, value) VALUES (?, ?);
+
+delete:
+DELETE FROM ui_prefs WHERE key = ?;
+
+deleteAll:
+DELETE FROM ui_prefs;

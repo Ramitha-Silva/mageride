@@ -1,0 +1,34 @@
+import kotlin.time.Instant;
+
+-- mobile_db_schema.md §3.14 — document expiry cache (E-03, US-2.x), with the Δ§7 hygiene fix that
+-- added `revenue_license` (mandatory per vehicle since US-2.20, AL-10/AL-50) and `vehicle_photo`.
+-- The CHECK mirrors server-side `registry.documents.kind` (C003).
+CREATE TABLE documents (
+    id         TEXT NOT NULL PRIMARY KEY,
+    vehicle_id TEXT,
+    kind       TEXT NOT NULL CHECK (kind IN ('driving_license','registration','permit','insurance','revenue_license','vehicle_photo')),
+    status     TEXT NOT NULL CHECK (status IN ('VALID','EXPIRING','EXPIRED','REJECTED')),
+    expires_at INTEGER AS Instant,
+    synced_at  INTEGER AS Instant
+);
+CREATE INDEX ix_docs_expiry ON documents(expires_at);
+
+selectAll:
+SELECT * FROM documents ORDER BY expires_at;
+
+-- E-03: the expiry warning feed — everything already flagged, plus anything expiring inside the
+-- caller's window, oldest first.
+selectExpiringBefore:
+SELECT * FROM documents
+WHERE status IN ('EXPIRING','EXPIRED','REJECTED') OR (expires_at IS NOT NULL AND expires_at <= ?)
+ORDER BY expires_at;
+
+selectForVehicle:
+SELECT * FROM documents WHERE vehicle_id = ? ORDER BY kind;
+
+upsert:
+INSERT OR REPLACE INTO documents (id, vehicle_id, kind, status, expires_at, synced_at)
+VALUES (?, ?, ?, ?, ?, ?);
+
+deleteAll:
+DELETE FROM documents;

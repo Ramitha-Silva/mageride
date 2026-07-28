@@ -1,0 +1,38 @@
+import kotlin.time.Instant;
+import kotlin.Int;
+
+-- mobile_db_schema.md §2.4 — cached upfront estimates (US-8.2/8.4).
+-- A cache of what fare-svc quoted, never a computed price: the client never prices a ride
+-- (C016), and an expired row must be re-quoted rather than re-derived.
+CREATE TABLE fare_estimates (
+    id              TEXT NOT NULL PRIMARY KEY,
+    pickup_lat      REAL NOT NULL,
+    pickup_lng      REAL NOT NULL,
+    dropoff_lat     REAL NOT NULL,
+    dropoff_lng     REAL NOT NULL,
+    vehicle_type    TEXT NOT NULL,
+    estimated_minor INTEGER NOT NULL,
+    surcharge_pct   INTEGER AS Int NOT NULL DEFAULT 0,
+    distance_m      INTEGER AS Int,
+    computed_at     INTEGER AS Instant NOT NULL,
+    expires_at      INTEGER AS Instant NOT NULL                    -- short TTL; re-quote on expiry
+);
+
+selectLive:
+SELECT * FROM fare_estimates WHERE expires_at > ? ORDER BY computed_at DESC;
+
+selectById:
+SELECT * FROM fare_estimates WHERE id = ?;
+
+upsert:
+INSERT OR REPLACE INTO fare_estimates (
+    id, pickup_lat, pickup_lng, dropoff_lat, dropoff_lng, vehicle_type,
+    estimated_minor, surcharge_pct, distance_m, computed_at, expires_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+-- §4.3: delete on expires_at.
+deleteExpired:
+DELETE FROM fare_estimates WHERE expires_at <= ?;
+
+deleteAll:
+DELETE FROM fare_estimates;

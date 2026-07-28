@@ -1,0 +1,113 @@
+import kotlin.time.Instant;
+import kotlin.Int;
+
+-- mobile_db_schema.md §1.4 — durable idempotent command queue (R-14, R-18, ADD §11.13).
+--
+-- Every mutating API call is persisted here BEFORE it is issued, in the same transaction as the
+-- optimistic local write (§4.1 step 2). `idempotency_key` is a client ULID and travels as the
+-- `Idempotency-Key` header; on network loss the app retries with the SAME key and the server
+-- replays the original response out of `rides.command_log` (C004). That is what makes a queued
+-- command survive a process kill and still be applied exactly once.
+--
+-- `state` is the local delivery state, not the server's: ACKED means a 2xx (or a replayed 2xx)
+-- came back, FAILED means a non-retryable 4xx that the UI has to surface, ABANDONED means the
+-- retry budget ran out (see OutboxRetryPolicy — the cap is C018's, no spec fixes one).
+CREATE TABLE command_outbox (
+    idempotency_key  TEXT NOT NULL PRIMARY KEY,                    -- client ULID, monotonic
+    endpoint         TEXT NOT NULL,                                -- e.g. '/v1/rides/{id}/offer/{d}/accept'
+    http_method      TEXT NOT NULL CHECK (http_method IN ('POST','PUT','PATCH','DELETE')),
+    command          TEXT NOT NULL,                                -- logical command name (e.g. 'ride.accept')
+    entity_type      TEXT,                                         -- 'ride' | 'address' | 'rating' | 'topup' | ...
+    entity_id        TEXT,
+    request_body     TEXT NOT NULL,                                -- JSON payload
+    request_headers  TEXT,                                         -- JSON (non-secret headers only)
+    state            TEXT NOT NULL DEFAULT 'PENDING'
+                       CHECK (state IN ('PENDING','INFLIGHT','ACKED','FAILED','ABANDONED')),
+    attempts         INTEGER AS Int NOT NULL DEFAULT 0,
+    response_status  INTEGER AS Int,
+    response_body    TEXT,
+    created_at       INTEGER AS Instant NOT NULL,
+    last_attempt_at  INTEGER AS Instant,
+    next_retry_at    INTEGER AS Instant                            -- jittered exponential backoff
+);
+CREATE INDEX ix_outbox_dispatchable ON command_outbox(state, next_retry_at);
+
+-- Plain INSERT, deliberately not `INSERT OR IGNORE`: `OR IGNORE` suppresses EVERY constraint
+-- failure, not just the primary-key one, so a row with a bad `http_method` or a NULL body would
+-- be dropped without a word — the one thing an outbox must never do. CommandOutbox.enqueue checks
+-- for the key inside the same transaction, which is where R-18's "one key, one command" belongs.
+enqueue:
+INSERT INTO command_outbox (
+    idempotency_key, endpoint, http_method, command, entity_type, entity_id,
+    request_body, request_headers, state, attempts, created_at, next_retry_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', 0, ?, ?);
+
+selectByKey:
+SELECT * FROM command_outbox WHERE idempotency_key = ?;
+
+-- The drain query (§4.1 step 3). ULIDs sort by mint time, so ordering by the key after
+-- created_at breaks ties in the order the user acted — two commands minted in the same
+-- millisecond still reach the server the way they were issued.
+selectDispatchable:
+SELECT * FROM command_outbox
+WHERE state = 'PENDING' AND (next_retry_at IS NULL OR next_retry_at <= :now)
+ORDER BY created_at, idempotency_key
+LIMIT :limit;
+
+selectByState:
+SELECT * FROM command_outbox WHERE state = ? ORDER BY created_at, idempotency_key;
+
+-- Is there an unACKed local edit for this row? The §4.2 conflict rule needs the answer before
+-- it may let a newer server `updated_at` overwrite a `dirty` projection.
+selectPendingForEntity:
+SELECT * FROM command_outbox
+WHERE entity_type = ? AND entity_id = ? AND state IN ('PENDING','INFLIGHT')
+ORDER BY created_at, idempotency_key;
+
+-- Claim: PENDING -> INFLIGHT, guarded on the state so two drainers cannot both take a row.
+claim:
+UPDATE command_outbox
+SET state = 'INFLIGHT', attempts = attempts + 1, last_attempt_at = :now
+WHERE idempotency_key = :key AND state = 'PENDING';
+
+markAcked:
+UPDATE command_outbox
+SET state = 'ACKED', response_status = ?, response_body = ?, next_retry_at = NULL, last_attempt_at = ?
+WHERE idempotency_key = ?;
+
+markFailed:
+UPDATE command_outbox
+SET state = 'FAILED', response_status = ?, response_body = ?, next_retry_at = NULL, last_attempt_at = ?
+WHERE idempotency_key = ?;
+
+markAbandoned:
+UPDATE command_outbox
+SET state = 'ABANDONED', response_status = ?, response_body = ?, next_retry_at = NULL, last_attempt_at = ?
+WHERE idempotency_key = ?;
+
+-- Retryable outcome: back to PENDING with the next jittered delay. The attempt was already
+-- counted by `claim`, so nothing here touches `attempts`.
+reschedule:
+UPDATE command_outbox
+SET state = 'PENDING', response_status = ?, next_retry_at = ?, last_attempt_at = ?
+WHERE idempotency_key = ?;
+
+-- Cold start (R-14). An INFLIGHT row is one the process died holding: it may or may not have
+-- reached the server, and the honest recovery is to send it again under the same key — the
+-- server replays its stored response rather than executing twice (ADD §11.13).
+recoverInflight:
+UPDATE command_outbox SET state = 'PENDING', next_retry_at = ? WHERE state = 'INFLIGHT';
+
+countByState:
+SELECT state, COUNT(*) AS count FROM command_outbox GROUP BY state;
+
+-- §4.3: delete ACKED after 24 h — kept briefly so a duplicate user tap replays locally instead
+-- of minting a second key.
+deleteAckedBefore:
+DELETE FROM command_outbox WHERE state = 'ACKED' AND COALESCE(last_attempt_at, created_at) < ?;
+
+dismiss:
+DELETE FROM command_outbox WHERE idempotency_key = ?;
+
+deleteAll:
+DELETE FROM command_outbox;

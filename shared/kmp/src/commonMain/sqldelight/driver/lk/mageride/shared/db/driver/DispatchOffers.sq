@@ -1,0 +1,61 @@
+import kotlin.time.Instant;
+import kotlin.Boolean;
+import kotlin.Int;
+
+-- mobile_db_schema.md §3.3 — incoming offers (15 s TTL, US-6A.2, R-10), post-Δ§8 (AL-48: the
+-- rider's real number, which is P-05's rule — the driver calls the RIDER, never the booker).
+--
+-- R-10: only one offer is live at a time. The invariant is dispatch-svc's; this table caches
+-- what arrived so the offer sheet survives a screen rotation or a process death inside the 15 s.
+CREATE TABLE dispatch_offers (
+    id                   TEXT NOT NULL PRIMARY KEY,                -- offer id
+    ride_id              TEXT NOT NULL,
+    vehicle_type         TEXT NOT NULL,
+    pickup_lat           REAL NOT NULL,
+    pickup_lng           REAL NOT NULL,
+    pickup_label         TEXT,
+    dropoff_lat          REAL NOT NULL,
+    dropoff_lng          REAL NOT NULL,
+    dropoff_label        TEXT,
+    est_fare_minor       INTEGER,
+    distance_to_pickup_m INTEGER AS Int,
+    kind                 INTEGER AS Int NOT NULL DEFAULT 0,        -- 0=passenger,1=proxy,2=package
+    is_proxy             INTEGER AS Boolean NOT NULL DEFAULT 0,
+    rider_name           TEXT,
+    rider_phone          TEXT,                                     -- P-05; driver calls rider, not booker
+    package_size         TEXT CHECK (package_size IS NULL OR package_size IN ('S','M','L')),
+    package_description  TEXT,
+    status               TEXT NOT NULL DEFAULT 'OFFERED'
+                           CHECK (status IN ('OFFERED','ACCEPTED','DECLINED','EXPIRED')),
+    sent_at              INTEGER AS Instant NOT NULL,
+    expires_at           INTEGER AS Instant NOT NULL
+);
+CREATE INDEX ix_offers_live ON dispatch_offers(status, expires_at);
+
+selectLive:
+SELECT * FROM dispatch_offers WHERE status = 'OFFERED' AND expires_at > ? ORDER BY sent_at DESC LIMIT 1;
+
+selectById:
+SELECT * FROM dispatch_offers WHERE id = ?;
+
+upsert:
+INSERT OR REPLACE INTO dispatch_offers (
+    id, ride_id, vehicle_type, pickup_lat, pickup_lng, pickup_label,
+    dropoff_lat, dropoff_lng, dropoff_label, est_fare_minor, distance_to_pickup_m,
+    kind, is_proxy, rider_name, rider_phone, package_size, package_description,
+    status, sent_at, expires_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+updateStatus:
+UPDATE dispatch_offers SET status = ? WHERE id = ?;
+
+-- The 15 s ran out while the app was backgrounded; the sheet must not reappear as live.
+expire:
+UPDATE dispatch_offers SET status = 'EXPIRED' WHERE status = 'OFFERED' AND expires_at <= ?;
+
+-- §4.3: delete on expires_at plus a small grace.
+deleteExpiredBefore:
+DELETE FROM dispatch_offers WHERE expires_at <= ?;
+
+deleteAll:
+DELETE FROM dispatch_offers;

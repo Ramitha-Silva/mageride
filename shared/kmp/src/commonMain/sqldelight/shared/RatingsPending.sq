@@ -1,0 +1,33 @@
+import kotlin.time.Instant;
+import kotlin.Boolean;
+
+-- mobile_db_schema.md §1.11 — completed rides awaiting a rating (US-18.1/18.2).
+-- `subject_id` is a ride id (Mode C) or a tracking-session id (Mode A/B), which is why
+-- `subject_kind` exists and why there is no foreign key — R-01 keeps the two aggregates apart.
+CREATE TABLE ratings_pending (
+    subject_id   TEXT NOT NULL PRIMARY KEY,                        -- ride_id or session_id
+    subject_kind TEXT NOT NULL CHECK (subject_kind IN ('ride','session')),
+    ratee_id     TEXT NOT NULL,
+    direction    TEXT NOT NULL CHECK (direction IN ('passenger_to_driver','driver_to_passenger')),
+    prompt_shown INTEGER AS Boolean NOT NULL DEFAULT 0,
+    created_at   INTEGER AS Instant NOT NULL
+);
+
+selectAll:
+SELECT * FROM ratings_pending ORDER BY created_at;
+
+selectNextPrompt:
+SELECT * FROM ratings_pending WHERE prompt_shown = 0 ORDER BY created_at LIMIT 1;
+
+upsert:
+INSERT OR REPLACE INTO ratings_pending (subject_id, subject_kind, ratee_id, direction, prompt_shown, created_at)
+VALUES (?, ?, ?, ?, ?, ?);
+
+markPromptShown:
+UPDATE ratings_pending SET prompt_shown = 1 WHERE subject_id = ?;
+
+delete:
+DELETE FROM ratings_pending WHERE subject_id = ?;
+
+deleteAll:
+DELETE FROM ratings_pending;

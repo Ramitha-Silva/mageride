@@ -1,0 +1,36 @@
+import kotlinx.datetime.LocalDate;
+import kotlin.time.Instant;
+import kotlin.Boolean;
+import kotlin.Int;
+
+-- mobile_db_schema.md §3.9 — first-trip-free + daily fee state (D-13, US-9.4).
+--
+-- `fee_date` is a BUSINESS DATE in Asia/Colombo (§0.3, D-38), not the device's local date: a fee
+-- answered from the handset's zone is wrong for five and a half hours a day. Derive it through
+-- C016's `util/BusinessCalendar`, never through `Clock.System.todayIn(TimeZone.currentSystemDefault())`.
+CREATE TABLE daily_fee_status (
+    fee_date             TEXT AS LocalDate NOT NULL PRIMARY KEY,   -- 'YYYY-MM-DD' Asia/Colombo
+    trips_that_day       INTEGER AS Int NOT NULL DEFAULT 0,
+    first_trip_free_used INTEGER AS Boolean NOT NULL DEFAULT 0,
+    fee_charged          INTEGER AS Boolean NOT NULL DEFAULT 0,
+    amount_minor         INTEGER NOT NULL DEFAULT 0,
+    updated_at           INTEGER AS Instant NOT NULL,
+    synced_at            INTEGER AS Instant
+);
+
+selectForDate:
+SELECT * FROM daily_fee_status WHERE fee_date = ?;
+
+selectRecent:
+SELECT * FROM daily_fee_status ORDER BY fee_date DESC LIMIT ?;
+
+upsert:
+INSERT OR REPLACE INTO daily_fee_status (
+    fee_date, trips_that_day, first_trip_free_used, fee_charged, amount_minor, updated_at, synced_at
+) VALUES (?, ?, ?, ?, ?, ?, ?);
+
+deleteBefore:
+DELETE FROM daily_fee_status WHERE fee_date < ?;
+
+deleteAll:
+DELETE FROM daily_fee_status;

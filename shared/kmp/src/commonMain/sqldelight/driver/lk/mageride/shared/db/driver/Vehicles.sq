@@ -1,0 +1,46 @@
+import kotlin.time.Instant;
+import kotlin.Boolean;
+
+-- mobile_db_schema.md §3.1 — the driver's registered vehicles cache (Epic 2).
+-- `vehicle_type` is canonical (AL-09): 'car' is not one of them, and the server's CHECK is the
+-- authority — this column carries whatever registry-svc returned.
+CREATE TABLE vehicles (
+    id                  TEXT NOT NULL PRIMARY KEY,
+    registration_number TEXT NOT NULL,
+    vehicle_type        TEXT NOT NULL,                             -- canonical (AL-09)
+    mode                TEXT NOT NULL CHECK (mode IN ('A','B','C')),
+    status              TEXT NOT NULL CHECK (status IN ('PENDING','APPROVED','REJECTED','DEACTIVATED')),
+    dispatch_state      TEXT NOT NULL DEFAULT 'ACTIVE'
+                          CHECK (dispatch_state IN ('ACTIVE','DISPATCH_SUSPENDED')),
+    rejection_reason    TEXT,
+    driver_name         TEXT,
+    driver_photo_url    TEXT,
+    vehicle_photo_url   TEXT,
+    is_selected         INTEGER AS Boolean NOT NULL DEFAULT 0,     -- the vehicle the driver goes live on
+    synced_at           INTEGER AS Instant,
+    updated_at          INTEGER AS Instant NOT NULL
+);
+
+selectAll:
+SELECT * FROM vehicles ORDER BY registration_number;
+
+selectSelected:
+SELECT * FROM vehicles WHERE is_selected = 1 LIMIT 1;
+
+selectDispatchable:
+SELECT * FROM vehicles WHERE status = 'APPROVED' AND dispatch_state = 'ACTIVE' ORDER BY registration_number;
+
+upsert:
+INSERT OR REPLACE INTO vehicles (
+    id, registration_number, vehicle_type, mode, status, dispatch_state, rejection_reason,
+    driver_name, driver_photo_url, vehicle_photo_url, is_selected, synced_at, updated_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+clearSelection:
+UPDATE vehicles SET is_selected = 0;
+
+select:
+UPDATE vehicles SET is_selected = 1, updated_at = ? WHERE id = ?;
+
+deleteAll:
+DELETE FROM vehicles;

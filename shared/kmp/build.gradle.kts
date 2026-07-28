@@ -23,9 +23,76 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.detekt)
     alias(libs.plugins.ktlint)
-    // C018 (kmp-local-db) adds `alias(libs.plugins.sqldelight)` and the `sqldelight { }`
-    // block. The plugin is in the catalog already; applying it here with no `.sq` file
-    // would configure an empty database and generate nothing.
+    alias(libs.plugins.sqldelight)
+}
+
+// ---------------------------------------------------------------------------------------
+// C018 kmp-local-db — the two on-device databases.
+//
+// `mobile_db_schema.md` §0.2: each app ships its OWN database file and its own table set —
+// passenger gets §1 + §2, driver gets §1 + §3, and the two never merge even when both apps
+// are installed on one handset (AL-08 is per app). Two SQLDelight databases is the faithful
+// encoding of that: `MageRidePassengerDatabase.Schema.create()` physically cannot create a
+// driver table.
+//
+// The §1 SHARED tables are authored ONCE, in src/commonMain/sqldelight/shared/, and are
+// materialised into each database's own package by the Sync tasks below. That indirection is
+// not decoration: SQLDelight derives a generated type's package from its path *under the
+// source root*, so pointing both databases at one directory emits
+// `…db.core.Command_outbox` twice into the same commonMain compilation and the module stops
+// compiling ("Redeclaration", verified). Copying gives `…db.passenger.Command_outbox` and
+// `…db.driver.Command_outbox` — one authored schema, two packages, no collision.
+//
+// Dialect: the SQLDelight default (SQLite 3.18). That is a floor, not an oversight —
+// URD NFR-22 pins minSdk 26 and Android 8.0 ships SQLite 3.19, so `ALTER TABLE … RENAME
+// COLUMN` (3.25), row-value IN (3.15) and UPSERT (3.24) are all off the table. Migration 1
+// rebuilds its tables the portable way for exactly this reason; see the .sqm files.
+// ---------------------------------------------------------------------------------------
+private val sharedSqlDir = layout.projectDirectory.dir("src/commonMain/sqldelight/shared")
+
+/** Where the §1 tables are staged for [app] — this directory is the SQLDelight source root. */
+private fun sharedSchemaRoot(app: String) = layout.buildDirectory.dir("generated/sqldelight-shared/$app")
+
+private fun sharedSchemaSync(app: String) = tasks.register<Sync>(
+    "syncSharedSqlSchema${app.replaceFirstChar(Char::titlecase)}",
+) {
+    group = "sqldelight"
+    description = "Materialises the mobile_db_schema.md §1 shared tables into the $app database's package."
+    from(sharedSqlDir)
+    // The path under the source root IS the generated package.
+    into(sharedSchemaRoot(app).map { it.dir("lk/mageride/shared/db/$app") })
+}
+
+private val sharedSchemaTasks = listOf("passenger", "driver").associateWith { sharedSchemaSync(it) }
+
+sqldelight {
+    databases {
+        // `mageride_passenger.db` — §1 shared + §2 passenger.
+        create("MageRidePassengerDatabase") {
+            packageName.set("lk.mageride.shared.db.passenger")
+            srcDirs.setFrom(
+                sharedSchemaRoot("passenger"),
+                layout.projectDirectory.dir("src/commonMain/sqldelight/passenger"),
+            )
+        }
+        // `mageride_driver.db` — §1 shared + §3 driver.
+        create("MageRideDriverDatabase") {
+            packageName.set("lk.mageride.shared.db.driver")
+            srcDirs.setFrom(
+                sharedSchemaRoot("driver"),
+                layout.projectDirectory.dir("src/commonMain/sqldelight/driver"),
+            )
+        }
+    }
+}
+
+// SQLDelight reads `srcDirs` into its own task inputs at configuration time, which drops any
+// task dependency a provider would otherwise carry — without this the staging Sync simply never
+// runs and both databases silently generate with the §1 tables missing (observed).
+sharedSchemaTasks.forEach { (app, sync) ->
+    val database = "MageRide${app.replaceFirstChar(Char::titlecase)}Database"
+    tasks.matching { it.name.contains(database) && it.name.startsWith("generate") }
+        .configureEach { dependsOn(sync) }
 }
 
 // The Swift-side module name: `import MageRideShared`. C085/C094 consume the XCFramework
@@ -92,6 +159,13 @@ kotlin {
             implementation(libs.ktor.client.content.negotiation)
             implementation(libs.ktor.client.logging)
             implementation(libs.ktor.serialization.json)
+
+            // On-device SQLite (C018). `api`, not `implementation`: `SqlDriver`,
+            // `ColumnAdapter` and the generated `MageRide*Database` types are all in this
+            // module's public surface — an app builds the driver and holds the database.
+            api(libs.sqldelight.runtime)
+            api(libs.sqldelight.primitive.adapters)
+            implementation(libs.sqldelight.coroutines.extensions)
         }
 
         commonTest.dependencies {
@@ -102,9 +176,20 @@ kotlin {
             implementation(libs.ktor.client.mock)
         }
 
+        // JVM-only tests of the Android actuals — and the only place a real SQLite engine is
+        // reachable on this build host, so every schema, migration and query test lives here.
+        getByName("androidHostTest").dependencies {
+            implementation(libs.sqldelight.sqlite.driver)
+        }
+
         androidMain.dependencies {
             implementation(libs.kotlinx.coroutines.android)
             implementation(libs.ktor.client.okhttp)
+
+            // C018. The driver is `implementation`: `PlatformDatabaseDriverFactory` answers a
+            // common `SqlDriver`, so no androidx.sqlite or SQLCipher type reaches the apps.
+            implementation(libs.sqldelight.android.driver)
+            implementation(libs.sqlcipher.android)
 
             // D-30, Android half (C014). `implementation` on purpose: no Play Integrity type
             // appears in this module's public API — `PlatformAttestationProvider` takes a
@@ -123,6 +208,10 @@ kotlin {
 
         iosMain.dependencies {
             implementation(libs.ktor.client.darwin)
+
+            // C018. SQLiter under the hood; it links the system SQLite, which is why iOS gets
+            // NSFileProtection rather than SQLCipher — see PlatformDatabaseDriverFactory.ios.kt.
+            implementation(libs.sqldelight.native.driver)
         }
     }
 }

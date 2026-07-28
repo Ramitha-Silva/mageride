@@ -1,0 +1,35 @@
+import kotlin.time.Instant;
+import kotlin.Int;
+
+-- mobile_db_schema.md §1.7 — offline i18n notification templates (D-26).
+-- Trilingual is a platform rule, not a nicety: a device with no link still has to render Si/Ta/En
+-- copy for a push it has already received.
+CREATE TABLE content_templates (
+    template_key TEXT NOT NULL,
+    language     TEXT NOT NULL CHECK (language IN ('si','ta','en')),
+    subject      TEXT,
+    body         TEXT NOT NULL,
+    version      INTEGER AS Int NOT NULL DEFAULT 1,
+    synced_at    INTEGER AS Instant,
+    PRIMARY KEY (template_key, language)
+);
+
+select:
+SELECT * FROM content_templates WHERE template_key = ? AND language = ?;
+
+selectKey:
+SELECT * FROM content_templates WHERE template_key = ? ORDER BY language;
+
+selectAll:
+SELECT * FROM content_templates ORDER BY template_key, language;
+
+-- D-26: a key is only usable offline when all three languages are present.
+countLanguagesFor:
+SELECT COUNT(*) FROM content_templates WHERE template_key = ?;
+
+upsert:
+INSERT OR REPLACE INTO content_templates (template_key, language, subject, body, version, synced_at)
+VALUES (?, ?, ?, ?, ?, ?);
+
+deleteAll:
+DELETE FROM content_templates;

@@ -1,0 +1,73 @@
+import kotlin.time.Instant;
+import kotlin.Int;
+
+-- mobile_db_schema.md §3.6 — delivery-proof capture queue (P-10), post-Δ§8 (`qr_receipt`).
+--
+-- Same durable-drain shape as `command_outbox`, but the payload is a FILE and the transport is
+-- an object-storage upload, not the REST outbox (§4.1 step 4). The row survives a restart; the
+-- file at `local_path` has to survive with it, so the eviction rule deletes the row only after
+-- the server confirms.
+CREATE TABLE proof_upload_queue (
+    id            TEXT NOT NULL PRIMARY KEY,
+    ride_id       TEXT NOT NULL,
+    kind          TEXT NOT NULL CHECK (kind IN ('delivery_photo','signature','pickup_photo','qr_receipt')),
+    local_path    TEXT NOT NULL,
+    sha256_hex    TEXT,
+    captured_lat  REAL,
+    captured_lng  REAL,
+    captured_at   INTEGER AS Instant NOT NULL,
+    state         TEXT NOT NULL DEFAULT 'PENDING'
+                    CHECK (state IN ('PENDING','UPLOADING','UPLOADED','FAILED')),
+    attempts      INTEGER AS Int NOT NULL DEFAULT 0,
+    storage_url   TEXT,
+    next_retry_at INTEGER AS Instant
+);
+CREATE INDEX ix_proof_dispatch ON proof_upload_queue(state, next_retry_at);
+
+selectDispatchable:
+SELECT * FROM proof_upload_queue
+WHERE state = 'PENDING' AND (next_retry_at IS NULL OR next_retry_at <= :now)
+ORDER BY captured_at
+LIMIT :limit;
+
+selectForRide:
+SELECT * FROM proof_upload_queue WHERE ride_id = ? ORDER BY captured_at;
+
+selectFailed:
+SELECT * FROM proof_upload_queue WHERE state = 'FAILED' ORDER BY captured_at;
+
+-- Plain INSERT — same reasoning as command_outbox: P-10 proof is delivery evidence and a photo
+-- silently not queued is evidence lost.
+enqueue:
+INSERT INTO proof_upload_queue (
+    id, ride_id, kind, local_path, sha256_hex, captured_lat, captured_lng, captured_at,
+    state, attempts, next_retry_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', 0, ?);
+
+claim:
+UPDATE proof_upload_queue SET state = 'UPLOADING', attempts = attempts + 1
+WHERE id = :id AND state = 'PENDING';
+
+markUploaded:
+UPDATE proof_upload_queue SET state = 'UPLOADED', storage_url = ?, next_retry_at = NULL WHERE id = ?;
+
+reschedule:
+UPDATE proof_upload_queue SET state = 'PENDING', next_retry_at = ? WHERE id = ?;
+
+markFailed:
+UPDATE proof_upload_queue SET state = 'FAILED', next_retry_at = NULL WHERE id = ?;
+
+-- Cold start: an UPLOADING row is one the process died holding. The upload is content-addressed
+-- by sha256, so re-offering it is safe.
+recoverInFlight:
+UPDATE proof_upload_queue SET state = 'PENDING', next_retry_at = ? WHERE state = 'UPLOADING';
+
+-- §4.3: delete UPLOADED once the server confirms; keep FAILED for manual retry.
+deleteUploaded:
+DELETE FROM proof_upload_queue WHERE state = 'UPLOADED';
+
+delete:
+DELETE FROM proof_upload_queue WHERE id = ?;
+
+deleteAll:
+DELETE FROM proof_upload_queue;

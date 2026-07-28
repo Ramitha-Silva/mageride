@@ -55,7 +55,7 @@ src/commonMain/kotlin/lk/mageride/shared/
     domain/geo/       H3 geocells, view + hysteresis, exact distance   (C017)
     mqtt/             MqttConfig, PositionPayload, AdaptiveRateEngine  (C017)
     realtime/         SignalR `/hubs/live` contract + map scope        (C017)
-    db/               SQLDelight queries + drivers                     (C018)
+    db/               SQLDelight schema, outbox, GPS ring, retention   (C018)
     util/             BusinessCalendar (C016), ReconnectBackoff (C017)
     platform/         PlatformInfo, SecureStore, attestation (expect)  (C011, C014)
     (ADD §18.2 draws the first of those two as `domain/trip/`. That layout predates R-01, which
@@ -274,10 +274,64 @@ src/androidHostTest/  JVM-only tests of the Android actuals (NOT `androidUnitTes
   `backend/contracts/realtime/signalr-hub.md`. The hub credential is the 30-minute API access
   token, never the MQTT session JWT (E-02).
 
+## On-device database (`db` + `src/commonMain/sqldelight`, C018)
+- **Two databases, not one, and they must never merge.** `mobile_db_schema.md` §0.2 gives each app
+  its own file — passenger gets §1 + §2, driver gets §1 + §3 — so `:shared` builds
+  `MageRidePassengerDatabase` and `MageRideDriverDatabase` separately.
+  `MageRidePassengerDatabase.Schema.create()` physically cannot make a `dispatch_offers` table.
+- **The §1 shared tables are authored ONCE**, in `src/commonMain/sqldelight/shared/`, and a Gradle
+  `Sync` materialises them into each database's own package under `build/generated/`. That step is
+  not optional: SQLDelight derives a generated type's package from its path under the source root,
+  so pointing both databases at one directory emits `…Command_outbox` twice into one commonMain
+  compilation and the module stops compiling. **Edit the file in `sqldelight/shared/`, never a copy
+  under `build/`.**
+- **The SQLite dialect is pinned at the 3.18 default because minSdk 26 is.** Android 8.0 ships
+  SQLite 3.19, so `ALTER TABLE … RENAME COLUMN` (3.25), UPSERT (3.24) and row-value `IN` (3.15) are
+  all unavailable. Migrations rebuild tables the portable way. SQLCipher links its own newer SQLite,
+  but an unencrypted build falls through to the platform engine, so the floor still applies.
+- **Schema version 2. `1.sqm` is `mobile_db_schema.md` §8** (Δ 2026-07-05 #2 — AL-47 `qr_claimed_at`,
+  AL-48's unmasked phone columns, `qr_receipt`). `SchemaMigrationTest` builds a v1 database, migrates
+  it, and asserts the result is **structurally identical** to a fresh `create()` — table set, columns,
+  indexes and normalised DDL. That comparison is what stops `.sq` and `.sqm` drifting; keep it.
+- **Only `Instant` and `LocalDate` have column adapters.** Timestamps are epoch **milliseconds**
+  (§0.3), business dates are `'YYYY-MM-DD'` **already in Asia/Colombo** (D-38 — derive them through
+  `util/BusinessCalendar`, never the handset's zone). `INTEGER AS Boolean` needs no adapter;
+  `INTEGER AS Int` needs SQLDelight's `IntColumnAdapter`. Enum-ish columns stay `TEXT` on purpose —
+  an adapter that threw on an unknown server state would crash the app on a deploy.
+- **`INSERT OR IGNORE` suppresses every constraint, not just the primary key.** `command_outbox` and
+  `proof_upload_queue` therefore use a plain `INSERT` (a swallowed command is a lost user action);
+  `gps_buffer` keeps `OR IGNORE` because a repeated `(vehicle_id, seq)` is the designed path and the
+  only CHECK on it is written from our own enum.
+- **`seq` must never rewind.** `PersistentPositionSequencer` reserves blocks of 100 and persists the
+  high-water mark to `meta('gps.seq.{vehicleId}')` — **per vehicle**, which §1.12's illustrative
+  `'gps.seq'` is not. A restart skips the unused tail, which is fine: `seq` has to be strictly
+  increasing, not gapless. A rewind makes `position-processor-svc` discard everything published
+  afterwards and the vehicle goes dark while the app believes it is publishing.
+- **The projections are not behind an abstraction, and that is deliberate.** Only the machinery
+  `:shared` itself implements — `CommandOutbox`, `GpsBuffer`, `MetaStore`, `Retention` — has a store
+  interface with two implementations. `rides` has one consumer (the passenger app) and
+  `dispatch_offers` has one (the driver app), so they are reached through the generated queries on
+  `PassengerDb.sql` / `DriverDb.sql`.
+- **Everything is blocking.** SQLDelight's Android and Native drivers are synchronous and this module
+  does not pick a dispatcher for four apps. Run the drain worker and the retention sweep off the main
+  thread.
+- **No secret is ever a column.** §0.4 keeps tokens in C014's `SecureStore`; `auth_session` holds
+  expiry hints and a `jti`, and the package OTPs (P-07) are typed in and POSTed. `MobileSchemaTest`
+  fails the build if a token- or OTP-shaped column appears — `trip_shares.token` is the one
+  exception, and it is a public share handle, not a credential.
+- **Encryption is per platform.** Android is SQLCipher (`net.zetetic:sqlcipher-android`) keyed from
+  `DatabaseKeyManager` over the Keystore-backed `SecureStore`; **iOS is
+  `NSFileProtectionCompleteUntilFirstUserAuthentication`**, which §0.4 permits ("SQLCipher or GRDB
+  encryption") and which needs no third party. The passphrase seam is carried but unapplied on iOS —
+  same shape as C017's H3 seam. `AfterFirstUserAuthentication`, not `Complete`, because the driver
+  app writes `gps_buffer` with the handset locked.
+- **`localDbModule` binds two things and deliberately not the database.** Opening it is `suspend`
+  (the key comes out of the Keystore), and a `runBlocking` single would put that round trip on
+  `Application.onCreate`. The app binds a `DatabaseDriverFactory` and opens the database itself.
+
 ## Dependency rules
 - **Every version lives in `gradle/libs.versions.toml`.** Never inline one here.
-- Two catalog entries are declared but deliberately **not applied**: `sqldelight` and its drivers
-  (C018 — it also applies the Gradle plugin), and `multiplatform-settings`, which C011
+- One catalog entry is declared but deliberately **not applied**: `multiplatform-settings`, which C011
   reserved for C014 and C014 did not take — both of its app-side backends are plain settings
   (`SharedPreferencesSettings`, `NSUserDefaultsSettings`), which is exactly what C014's DoD forbids.
   `ktor-client-auth` is likewise unused: refresh-on-401 is a send-pipeline interceptor (C013), which
@@ -291,6 +345,13 @@ src/androidHostTest/  JVM-only tests of the Android actuals (NOT `androidUnitTes
   `implementation` — `H3JavaGrid` is internal and the public surface is our own `H3Grid`). The iOS
   side needs cinterop against an H3 built for `ios-arm64`, which cannot be produced on this Linux
   host: `platformH3Grid()` therefore answers `null` on iOS and C085/C094 bind their own.
+- **SQLDelight is `api` in commonMain** (C018): `SqlDriver`, `ColumnAdapter` and the generated
+  `MageRide*Database` types are all in this module's public surface, because an app builds the driver
+  and holds the database. The platform drivers are `implementation` — no androidx.sqlite or SQLiter
+  type reaches an app. `net.zetetic:sqlcipher-android` is **androidMain-only** (an AAR with per-ABI
+  natives, no Kotlin/Native counterpart) and `app.cash.sqldelight:sqlite-driver` is
+  **androidHostTest-only** — it is a real SQLite, which is what lets the schema, the migration and
+  every query be tested on this Linux host.
 - **`kotlinx-serialization-cbor` is applied in commonMain** (C017) and is `implementation`:
   `PositionCodec` is the only door to it, so no CBOR type reaches an app or the XCFramework. It
   serialises the same `PositionSample` the JSON surface does — one DTO, two wires.

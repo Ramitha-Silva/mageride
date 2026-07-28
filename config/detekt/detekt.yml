@@ -63,6 +63,22 @@ complexity:
     excludes:
       - '**/data/models/**'
       - '**/data/api/**'
+  TooManyFunctions:
+    # A repository interface's function count IS the operation set of the table behind it:
+    # `OutboxStore` declares thirteen because `mobile_db_schema.md` §1.4's write path needs
+    # thirteen statements, and `GpsBufferStore` fifteen because §1.5 plus §4.3's three eviction
+    # rules need fifteen. Splitting either into a reader and a writer would move the number
+    # without removing a single query, and would put a seam between two halves of one table.
+    # Same argument LongParameterList makes above for `data/models` and `data/api` (C018).
+    #
+    # Test sources are excluded outright: a test class's function count is its assertion count,
+    # and merging two tests to get under a threshold is strictly worse than having two.
+    excludes:
+      - '**/db/**'
+      - '**/commonTest/**'
+      - '**/androidHostTest/**'
+      - '**/androidDeviceTest/**'
+      - '**/iosTest/**'
 
 exceptions:
   TooGenericExceptionCaught:

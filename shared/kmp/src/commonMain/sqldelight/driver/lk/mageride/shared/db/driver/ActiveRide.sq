@@ -1,0 +1,62 @@
+import kotlin.time.Instant;
+import kotlin.Boolean;
+import kotlin.Int;
+
+-- mobile_db_schema.md §3.4 — the driver's view of the accepted ride (R-01, P-06), post-Δ§8
+-- (AL-47 `qr_claimed_at`, AL-48 unmasked `rider_phone`).
+--
+-- OTP VALUES ARE NEVER STORED. The package pickup/delivery OTPs (P-07) are typed in and POSTed
+-- for server-side validation; the three `needs_*` flags say only that a step is required.
+CREATE TABLE active_ride (
+    id                  TEXT NOT NULL PRIMARY KEY,
+    state               TEXT NOT NULL,                             -- mirrors rides.rides.state
+    kind                INTEGER AS Int NOT NULL DEFAULT 0,
+    is_proxy            INTEGER AS Boolean NOT NULL DEFAULT 0,
+    rider_name          TEXT,
+    rider_phone         TEXT,
+    pickup_lat          REAL NOT NULL,
+    pickup_lng          REAL NOT NULL,
+    pickup_label        TEXT,
+    dropoff_lat         REAL NOT NULL,
+    dropoff_lng         REAL NOT NULL,
+    dropoff_label       TEXT,
+    package_size        TEXT CHECK (package_size IS NULL OR package_size IN ('S','M','L')),
+    package_description TEXT,
+    needs_pickup_otp    INTEGER AS Boolean NOT NULL DEFAULT 0,     -- package: enter OTP at pickup (P-07)
+    needs_delivery_otp  INTEGER AS Boolean NOT NULL DEFAULT 0,     -- package: enter OTP at drop (P-07)
+    needs_proof         INTEGER AS Boolean NOT NULL DEFAULT 0,     -- package: delivery photo/signature (P-10)
+    payment_method      TEXT CHECK (payment_method IN ('cash','lankaqr','onepay','cod')),
+    payment_state       TEXT,
+    fare_amount_minor   INTEGER,
+    surcharge_minor     INTEGER NOT NULL DEFAULT 0,
+    tip_amount_minor    INTEGER NOT NULL DEFAULT 0,
+    qr_claimed_at       INTEGER AS Instant,                        -- AL-47: claim received, confirm pending
+    created_at          INTEGER AS Instant NOT NULL,
+    updated_at          INTEGER AS Instant NOT NULL,
+    server_updated_at   INTEGER AS Instant
+);
+
+select:
+SELECT * FROM active_ride LIMIT 1;
+
+selectById:
+SELECT * FROM active_ride WHERE id = ?;
+
+upsert:
+INSERT OR REPLACE INTO active_ride (
+    id, state, kind, is_proxy, rider_name, rider_phone,
+    pickup_lat, pickup_lng, pickup_label, dropoff_lat, dropoff_lng, dropoff_label,
+    package_size, package_description, needs_pickup_otp, needs_delivery_otp, needs_proof,
+    payment_method, payment_state, fare_amount_minor, surcharge_minor, tip_amount_minor,
+    qr_claimed_at, created_at, updated_at, server_updated_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+updateState:
+UPDATE active_ride SET state = ?, updated_at = ?, server_updated_at = ? WHERE id = ?;
+
+updatePayment:
+UPDATE active_ride SET payment_state = ?, fare_amount_minor = ?, tip_amount_minor = ?,
+    qr_claimed_at = ?, updated_at = ? WHERE id = ?;
+
+deleteAll:
+DELETE FROM active_ride;

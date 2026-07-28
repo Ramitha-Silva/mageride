@@ -1,0 +1,38 @@
+import kotlin.time.Instant;
+
+-- mobile_db_schema.md §1.12 — key-value app state (single store).
+--
+-- Holds the monotonic GPS `seq` watermark, the server-pushed cadence hint, the per-entity
+-- last-sync cursors (§4.2), the D-31 minimum-app-version gate and the schema revision. The keys
+-- themselves are named in `MetaKeys` so two components cannot spell 'gps.seq' differently.
+--
+-- SPEC NOTE (C018): §1.12's heading reads "`sync_state` / `meta`" and §1.5 says the sequence is
+-- kept "in `meta`/`sync_state`", but the section prints DDL for `meta` only and nothing else in
+-- the document references a `sync_state` table. Only `meta` is created — see the C018 handoff.
+CREATE TABLE meta (
+    key        TEXT NOT NULL PRIMARY KEY,                          -- e.g. 'gps.seq', 'cadence.intervalMs',
+                                                                   --      'sync.cursor.rides', 'min_app_version'
+    value      TEXT,
+    updated_at INTEGER AS Instant NOT NULL
+);
+
+select:
+SELECT value FROM meta WHERE key = ?;
+
+selectRow:
+SELECT * FROM meta WHERE key = ?;
+
+selectAll:
+SELECT * FROM meta ORDER BY key;
+
+selectPrefixed:
+SELECT * FROM meta WHERE key LIKE ? ESCAPE '\' ORDER BY key;
+
+put:
+INSERT OR REPLACE INTO meta (key, value, updated_at) VALUES (?, ?, ?);
+
+delete:
+DELETE FROM meta WHERE key = ?;
+
+deleteAll:
+DELETE FROM meta;

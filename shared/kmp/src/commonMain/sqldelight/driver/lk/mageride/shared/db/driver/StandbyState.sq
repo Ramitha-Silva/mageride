@@ -1,0 +1,31 @@
+import kotlin.time.Instant;
+import kotlin.Int;
+
+-- mobile_db_schema.md §3.2 — online/offline + cadence (single row, US-6A.1, ADD §7.5).
+-- `pos_rate_interval_ms` is the SERVER's cadence hint, arriving on `veh/{id}/cmd`; C017's
+-- AdaptiveRateEngine reads it and applies its own phase floor, so this column is the last hint
+-- received, not the rate in force.
+CREATE TABLE standby_state (
+    id                   INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
+    state                TEXT NOT NULL DEFAULT 'OFFLINE'
+                           CHECK (state IN ('OFFLINE','AVAILABLE','OFFERED','ON_RIDE')),
+    active_vehicle_id    TEXT,
+    pos_rate_interval_ms INTEGER AS Int NOT NULL DEFAULT 60000,    -- server cadence hint (veh/{id}/cmd)
+    updated_at           INTEGER AS Instant NOT NULL
+);
+
+select:
+SELECT * FROM standby_state WHERE id = 1;
+
+upsert:
+INSERT OR REPLACE INTO standby_state (id, state, active_vehicle_id, pos_rate_interval_ms, updated_at)
+VALUES (1, ?, ?, ?, ?);
+
+updateState:
+UPDATE standby_state SET state = ?, updated_at = ? WHERE id = 1;
+
+updateCadence:
+UPDATE standby_state SET pos_rate_interval_ms = ?, updated_at = ? WHERE id = 1;
+
+deleteAll:
+DELETE FROM standby_state;

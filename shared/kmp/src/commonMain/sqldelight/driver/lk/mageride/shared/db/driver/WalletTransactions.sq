@@ -1,0 +1,28 @@
+import kotlin.time.Instant;
+
+-- mobile_db_schema.md §3.8 — cached ledger projection (US-9.x). `amount_minor` is SIGNED, as the
+-- server's posting is; this is a projection of one side of a balanced entry, not the entry.
+CREATE TABLE wallet_transactions (
+    id                  TEXT NOT NULL PRIMARY KEY,                 -- server transaction id
+    kind                TEXT NOT NULL,                             -- journal.kind
+    amount_minor        INTEGER NOT NULL,                          -- signed
+    balance_after_minor INTEGER,
+    description         TEXT,
+    ts                  INTEGER AS Instant NOT NULL,
+    synced_at           INTEGER AS Instant
+);
+CREATE INDEX ix_wtx_ts ON wallet_transactions(ts DESC);
+
+selectRecent:
+SELECT * FROM wallet_transactions ORDER BY ts DESC LIMIT :limit OFFSET :offset;
+
+upsert:
+INSERT OR REPLACE INTO wallet_transactions (
+    id, kind, amount_minor, balance_after_minor, description, ts, synced_at
+) VALUES (?, ?, ?, ?, ?, ?, ?);
+
+deleteBefore:
+DELETE FROM wallet_transactions WHERE ts < ?;
+
+deleteAll:
+DELETE FROM wallet_transactions;

@@ -1,0 +1,43 @@
+import kotlin.time.Instant;
+import kotlin.Boolean;
+import kotlin.Int;
+
+-- mobile_db_schema.md §3.13 — scheduled rides available + intents (US-6A.4/6A.5).
+-- `intent_submitted` mirrors `dispatch.job_board_intents`; the actual submission goes through
+-- `command_outbox` so it survives an offline tap (§4.1).
+CREATE TABLE job_board (
+    scheduled_ride_id TEXT NOT NULL PRIMARY KEY,
+    pickup_lat        REAL NOT NULL,
+    pickup_lng        REAL NOT NULL,
+    pickup_label      TEXT,
+    dropoff_lat       REAL NOT NULL,
+    dropoff_lng       REAL NOT NULL,
+    dropoff_label     TEXT,
+    vehicle_type      TEXT NOT NULL,
+    pickup_time       INTEGER AS Instant NOT NULL,
+    distance_m        INTEGER AS Int,
+    intent_submitted  INTEGER AS Boolean NOT NULL DEFAULT 0,       -- mirrors dispatch.job_board_intents
+    synced_at         INTEGER AS Instant
+);
+CREATE INDEX ix_jobboard_time ON job_board(pickup_time);
+
+selectUpcoming:
+SELECT * FROM job_board WHERE pickup_time >= ? ORDER BY pickup_time;
+
+selectById:
+SELECT * FROM job_board WHERE scheduled_ride_id = ?;
+
+upsert:
+INSERT OR REPLACE INTO job_board (
+    scheduled_ride_id, pickup_lat, pickup_lng, pickup_label, dropoff_lat, dropoff_lng, dropoff_label,
+    vehicle_type, pickup_time, distance_m, intent_submitted, synced_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+markIntentSubmitted:
+UPDATE job_board SET intent_submitted = 1 WHERE scheduled_ride_id = ?;
+
+deletePast:
+DELETE FROM job_board WHERE pickup_time < ?;
+
+deleteAll:
+DELETE FROM job_board;

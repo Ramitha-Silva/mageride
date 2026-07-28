@@ -1,0 +1,38 @@
+import kotlin.time.Instant;
+import kotlin.Boolean;
+
+-- mobile_db_schema.md §1.2 — cached account (single row).
+-- `dirty` pairs with a command_outbox row (§0.5, §4.1): a local edit is optimistic and the
+-- outbox entry is authoritative until it ACKs (§4.2 conflict rule).
+CREATE TABLE user_profile (
+    id                      TEXT NOT NULL PRIMARY KEY,                                    -- = auth_session.user_id
+    phone                   TEXT,
+    email                   TEXT,
+    role                    TEXT NOT NULL,
+    first_name              TEXT,
+    photo_url               TEXT,
+    language                TEXT NOT NULL DEFAULT 'en' CHECK (language IN ('si','ta','en')),
+    default_payment_method  TEXT NOT NULL DEFAULT 'cash'
+                              CHECK (default_payment_method IN ('cash','lankaqr','onepay')),  -- AL-14
+    notif_prefs_json        TEXT NOT NULL DEFAULT '{}',
+    emergency_contact_name  TEXT,
+    emergency_contact_phone TEXT,
+    dirty                   INTEGER AS Boolean NOT NULL DEFAULT 0,                        -- local edit pending upload
+    synced_at               INTEGER AS Instant,
+    updated_at              INTEGER AS Instant NOT NULL
+);
+
+select:
+SELECT * FROM user_profile LIMIT 1;
+
+upsert:
+INSERT OR REPLACE INTO user_profile (
+    id, phone, email, role, first_name, photo_url, language, default_payment_method,
+    notif_prefs_json, emergency_contact_name, emergency_contact_phone, dirty, synced_at, updated_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+markSynced:
+UPDATE user_profile SET dirty = 0, synced_at = ? WHERE id = ?;
+
+deleteAll:
+DELETE FROM user_profile;
