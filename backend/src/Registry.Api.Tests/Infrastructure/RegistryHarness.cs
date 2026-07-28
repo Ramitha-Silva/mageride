@@ -34,17 +34,26 @@ internal sealed class RegistryHarness : IAsyncDisposable
     private readonly WebApplication _app;
     private readonly PostgresFixture _postgres;
 
-    private RegistryHarness(WebApplication app, HttpClient client, TestTokenIssuer tokens, PostgresFixture postgres)
+    private RegistryHarness(
+        WebApplication app,
+        HttpClient client,
+        TestTokenIssuer tokens,
+        PostgresFixture postgres,
+        FakeDocumentExtractionClient ocr)
     {
         _app = app;
         _postgres = postgres;
         Client = client;
         Tokens = tokens;
+        Ocr = ocr;
     }
 
     public HttpClient Client { get; }
 
     public TestTokenIssuer Tokens { get; }
+
+    /// <summary>The ocr-svc stand-in (C054's seam). Configure it before the request under test.</summary>
+    public FakeDocumentExtractionClient Ocr { get; }
 
     public IServiceProvider Services => _app.Services;
 
@@ -85,6 +94,10 @@ internal sealed class RegistryHarness : IAsyncDisposable
             ["Kafka:BootstrapServers"] = "127.0.0.1:1",
             ["Outbox:DispatcherEnabled"] = "false",
             ["Registry:InternalApiKey"] = InternalApiKey,
+            // C029. E-03's sweep is driven a tick at a time by the tests that care, for the same
+            // reason dispatch-svc's offer backstop is: a ticker would make every other suite's
+            // timing part of the assertion.
+            ["Registry:DocumentExpiryEnabled"] = "false",
             // One /metrics endpoint per harness would collide across concurrently running tests.
             ["Otel:PrometheusEnabled"] = "false",
         };
@@ -97,6 +110,8 @@ internal sealed class RegistryHarness : IAsyncDisposable
             }
         }
 
+        var ocr = new FakeDocumentExtractionClient();
+
         var app = RegistryApplication.Build(
             new WebApplicationOptions
             {
@@ -105,6 +120,10 @@ internal sealed class RegistryHarness : IAsyncDisposable
             },
             builder =>
             {
+                // Ahead of AddRegistryServices, whose TryAddSingleton then stands down — the same
+                // registration order ocr-svc (C054) will use in the composed deployment.
+                builder.Services.AddSingleton<MageRide.Registry.Onboarding.IDocumentExtractionClient>(ocr);
+
                 // MAGERIDE_TEST_LOGS=1 keeps the console provider when a failure needs a trace.
                 if (Environment.GetEnvironmentVariable("MAGERIDE_TEST_LOGS") != "1")
                 {
@@ -133,7 +152,7 @@ internal sealed class RegistryHarness : IAsyncDisposable
 
         var client = new HttpClient { BaseAddress = new Uri(baseAddress), Timeout = TimeSpan.FromSeconds(60) };
 
-        return new RegistryHarness(app, client, tokens, postgres);
+        return new RegistryHarness(app, client, tokens, postgres, ocr);
     }
 
     /// <summary>
@@ -367,6 +386,169 @@ internal sealed class RegistryHarness : IAsyncDisposable
             new { VehicleId = vehicleId });
 
         return [.. rows];
+    }
+
+    /// <summary>
+    /// Seeds the <c>docs.uploads</c> row a document step needs, as the upload surface would. No
+    /// service owns that table yet; registry-svc only reads it to resolve a file id to its bytes.
+    /// </summary>
+    public async Task<string> SeedUploadAsync(Guid ownerId, string kind = "insurance")
+    {
+        var uploadId = Guid.NewGuid();
+
+        await using var connection = await _postgres.OpenAsync();
+
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO docs.uploads (id, owner_id, storage_url, kind, captured_via)
+            VALUES (@Id, @OwnerId, @Url, @Kind, 'camera_dragcrop');
+            """,
+            new { Id = uploadId, OwnerId = ownerId, Url = $"s3://mageride-docs/{uploadId}.jpg", Kind = kind });
+
+        return uploadId.ToString();
+    }
+
+    /// <summary>Walks Profile Setup with clean uploads — AL-27's phase 1, which precedes any vehicle.</summary>
+    public async Task<JsonElement> CompleteProfileSetupAsync(
+        Guid driverId, string bearer, string driverName = "Nimal Perera", object? overrides = null)
+    {
+        var body = new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["driverName"] = driverName,
+            ["profilePhotoFileId"] = await SeedUploadAsync(driverId, "profile_photo"),
+            ["licenseFrontFileId"] = await SeedUploadAsync(driverId, "driving_license"),
+            ["licenseBackFileId"] = await SeedUploadAsync(driverId, "driving_license"),
+        };
+
+        if (overrides is not null)
+        {
+            foreach (var property in JsonSerializer.SerializeToElement(overrides).EnumerateObject())
+            {
+                body[property.Name] = property.Value.ValueKind == JsonValueKind.Null ? null : property.Value;
+            }
+        }
+
+        var response = await PutAsync("/v1/drivers/profile", body, bearer);
+        Assert.Equal(System.Net.HttpStatusCode.OK, response.StatusCode);
+
+        return await ReadJsonAsync(response);
+    }
+
+    /// <summary>Saves one onboarding step, seeding whatever uploads it needs.</summary>
+    public async Task<HttpResponseMessage> SaveStepAsync(
+        Guid driverId, string bearer, string vehicleId, string step, object? extra = null)
+    {
+        var body = new Dictionary<string, object?>(StringComparer.Ordinal);
+
+        if (step != "details")
+        {
+            body["fileId"] = await SeedUploadAsync(driverId, step);
+
+            if (step == "photos")
+            {
+                body["fileIdBack"] = await SeedUploadAsync(driverId, step);
+            }
+        }
+
+        if (extra is not null)
+        {
+            foreach (var property in JsonSerializer.SerializeToElement(extra).EnumerateObject())
+            {
+                body[property.Name] = property.Value.ValueKind == JsonValueKind.Null ? null : property.Value;
+            }
+        }
+
+        return await PutAsync($"/v1/vehicles/{vehicleId}/onboarding/{step}", body, bearer);
+    }
+
+    /// <summary>Saves the three document steps and asserts each was accepted.</summary>
+    public async Task<JsonElement> CompleteOnboardingAsync(Guid driverId, string bearer, string vehicleId)
+    {
+        JsonElement last = default;
+
+        foreach (var step in new[] { "insurance", "revenue", "photos" })
+        {
+            var response = await SaveStepAsync(driverId, bearer, vehicleId, step);
+            Assert.Equal(System.Net.HttpStatusCode.OK, response.StatusCode);
+            last = await ReadJsonAsync(response);
+        }
+
+        return last;
+    }
+
+    /// <summary>Runs one E-03 sweep, as tonight's job would. Returns how many notices it emitted.</summary>
+    public Task<int> SweepDocumentExpiryAsync() =>
+        Services.GetRequiredService<MageRide.Registry.Onboarding.DocumentExpiryWorker>()
+            .SweepOnceAsync(CancellationToken.None);
+
+    /// <summary>Rewrites a document's expiry, as a certificate ageing would.</summary>
+    public async Task SetDocumentExpiryAsync(Guid vehicleId, string kind, DateTimeOffset expiresAt)
+    {
+        await using var connection = await _postgres.OpenAsync();
+
+        await connection.ExecuteAsync(
+            """
+            UPDATE registry.documents SET expires_at = @ExpiresAt
+             WHERE vehicle_id = @VehicleId AND kind = @Kind;
+            """,
+            new { VehicleId = vehicleId, Kind = kind, ExpiresAt = expiresAt });
+    }
+
+    /// <summary>The <c>(kind, status, expires_at)</c> of every document on a vehicle, newest first.</summary>
+    public async Task<IReadOnlyList<(string Kind, string Status, DateTimeOffset? ExpiresAt)>> DocumentsAsync(Guid vehicleId)
+    {
+        await using var connection = await _postgres.OpenAsync();
+
+        var rows = await connection.QueryAsync<(string, string, DateTimeOffset?)>(
+            """
+            SELECT kind, status, expires_at FROM registry.documents
+             WHERE vehicle_id = @VehicleId ORDER BY created_at DESC, id DESC;
+            """,
+            new { VehicleId = vehicleId });
+
+        return [.. rows];
+    }
+
+    /// <summary>Every <c>(field_key, source, verify_status)</c> recorded for a driver's documents.</summary>
+    public async Task<IReadOnlyList<(string Key, string Source, string VerifyStatus)>> DriverFieldsAsync(Guid driverId)
+    {
+        await using var connection = await _postgres.OpenAsync();
+
+        var rows = await connection.QueryAsync<(string, string, string)>(
+            """
+            SELECT f.field_key, f.source, f.verify_status
+              FROM registry.document_fields f
+              JOIN registry.documents d ON d.id = f.document_id
+             WHERE d.driver_id = @DriverId AND d.vehicle_id IS NULL
+             ORDER BY f.created_at, f.id;
+            """,
+            new { DriverId = driverId });
+
+        return [.. rows];
+    }
+
+    /// <summary>The vehicle's dispatch state — E-03's gate (US-9.6 via the eligibility view).</summary>
+    public async Task<string> DispatchStateAsync(Guid vehicleId)
+    {
+        await using var connection = await _postgres.OpenAsync();
+
+        return await connection.QuerySingleAsync<string>(
+            "SELECT dispatch_state FROM registry.vehicles WHERE id = @Id;", new { Id = vehicleId });
+    }
+
+    /// <summary>Confirms every pending field on a vehicle, as a Verification Officer would (C062).</summary>
+    public async Task<int> ConfirmPendingFieldsAsync(Guid vehicleId, Guid officerId)
+    {
+        await using var connection = await _postgres.OpenAsync();
+
+        return await connection.ExecuteAsync(
+            """
+            UPDATE registry.document_fields f
+               SET verify_status = 'confirmed', confirmed_by = @OfficerId, confirmed_at = now()
+              FROM registry.documents d
+             WHERE d.id = f.document_id AND d.vehicle_id = @VehicleId AND f.verify_status = 'pending';
+            """,
+            new { VehicleId = vehicleId, OfficerId = officerId });
     }
 
     /// <summary>Registers a vehicle and returns the 201 body, failing the test on anything else.</summary>

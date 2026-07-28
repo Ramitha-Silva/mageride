@@ -29,8 +29,11 @@ public sealed class ShareGrantTests(PostgresFixture postgres)
         var grantId = (await RegistryHarness.ReadJsonAsync(created)).GetProperty("grantId").GetString();
 
         // US-4.3b: nothing is published until the sharee accepts, because a PENDING grant confers
-        // no visibility for fanout to act on.
-        Assert.Empty(await harness.OutboxAsync(Guid.Parse(vehicleId)));
+        // no visibility for fanout to act on. Scoped to the share events since C029: registration
+        // itself now emits `vehicle.registered` into the same table (D3' POST /v1/vehicles).
+        Assert.DoesNotContain(
+            await harness.OutboxAsync(Guid.Parse(vehicleId)),
+            e => e.EventType.StartsWith("share.", StringComparison.Ordinal));
 
         var accepted = await harness.PostAsync(
             $"/v1/vehicles/{vehicleId}/share/{grantId}/accept", null, harness.Tokens.Driver(granteeId));
@@ -39,7 +42,7 @@ public sealed class ShareGrantTests(PostgresFixture postgres)
         Assert.Equal("active", (await RegistryHarness.ReadJsonAsync(accepted)).GetProperty("status").GetString());
 
         var events = await harness.OutboxAsync(Guid.Parse(vehicleId));
-        Assert.Equal("share.granted", Assert.Single(events).EventType);
+        Assert.Single(events, e => e.EventType == "share.granted");
     }
 
     /// <summary>

@@ -73,6 +73,17 @@ public static class RegistrationStatuses
     public const string Deactivated = "DEACTIVATED";
 }
 
+/// <summary>
+/// The <c>registry.vehicles.dispatch_state</c> CHECK (0303) — E-03's document-expiry gate, which
+/// is separate from <see cref="RegistrationStatuses"/> because an approved vehicle whose insurance
+/// lapsed is not un-approved, it is off the road until the certificate is renewed.
+/// </summary>
+public static class DispatchStates
+{
+    public const string Active = "ACTIVE";
+    public const string Suspended = "DISPATCH_SUSPENDED";
+}
+
 /// <summary>The AL-30 derived onboarding state (<c>registry.vehicles.onboarding_status</c>).</summary>
 public static class OnboardingStatuses
 {

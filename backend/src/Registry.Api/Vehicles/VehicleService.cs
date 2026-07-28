@@ -15,8 +15,32 @@ namespace MageRide.Registry.Vehicles;
 /// through Profile Setup; required when they have not, because
 /// <c>registry.vehicles.driver_name</c> is NOT NULL and is what a passenger sees (US-2.12).
 /// </param>
+/// <param name="InsuranceFileId">
+/// Optional, and so are the three that follow. D3' marks all four required on this body, which
+/// contradicts AL-30 in the same specification: US-2.27 has the wizard entry point "create a NEW
+/// vehicle at Step 1/4", and a vehicle that must arrive with four documents has no Step 2/4 to go
+/// to. They are honoured when sent — the one-shot onboarding D3' describes — and their absence
+/// leaves the wizard to save each step. Recorded in the C029 handoff.
+/// </param>
 public sealed record RegisterVehicleCommand(
-    Guid OwnerId, string? RegistrationNumber, string? VehicleType, string? Mode, string? DriverName);
+    Guid OwnerId,
+    string? RegistrationNumber,
+    string? VehicleType,
+    string? Mode,
+    string? DriverName,
+    string? InsuranceFileId = null,
+    string? RevenueLicenseFileId = null,
+    string? VehiclePhotoFrontFileId = null,
+    string? VehiclePhotoBackFileId = null);
+
+/// <summary>A new registration and the onboarding state it starts in.</summary>
+/// <remarks>
+/// Registration saves Step 1/4: <c>POST /v1/vehicles</c> carries the type and registration number,
+/// which <em>is</em> the details step (D5' §14.1a, SCR-DA/DI-004). So a fresh vehicle already has
+/// one saved step, reads Incomplete on My Vehicles and resumes at <c>insurance</c> — BR-25.4's
+/// rule working from the first screen rather than from the second.
+/// </remarks>
+public sealed record RegisteredVehicle(Vehicle Vehicle, Onboarding.OnboardingState Onboarding);
 
 /// <summary>A vehicle plus whether it is the driver's currently selected one (US-9.6).</summary>
 public sealed record OwnedVehicle(Vehicle Vehicle, bool IsSelected);
@@ -43,7 +67,7 @@ public sealed record UpdateVehicleDriverProfileCommand(Guid DriverId, Guid Vehic
 /// </summary>
 public interface IVehicleService
 {
-    Task<Vehicle> RegisterAsync(RegisterVehicleCommand command, CancellationToken cancellationToken);
+    Task<RegisteredVehicle> RegisterAsync(RegisterVehicleCommand command, CancellationToken cancellationToken);
 
     /// <summary>
     /// Everything the driver may operate — their own registrations and the vehicles a fleet has
@@ -75,6 +99,9 @@ public sealed class VehicleService(
     IDriverProfileRepository profiles,
     IEligibilityRepository eligibility,
     IShareRepository shares,
+    IDocumentRepository documents,
+    IOnboardingStepRepository onboardingSteps,
+    Onboarding.IOnboardingService onboarding,
     IOutboxWriter outbox,
     IDriverLiveVehicleCache liveVehicles,
     TimeProvider clock,
@@ -83,7 +110,7 @@ public sealed class VehicleService(
     /// <summary><c>registry.yaml</c>'s <c>maxLength: 200</c> on the driver-profile name.</summary>
     private const int MaxDriverNameLength = 200;
 
-    public async Task<Vehicle> RegisterAsync(RegisterVehicleCommand command, CancellationToken cancellationToken)
+    public async Task<RegisteredVehicle> RegisterAsync(RegisterVehicleCommand command, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(command);
 
@@ -91,38 +118,149 @@ public sealed class VehicleService(
         RequireDriverAppVehicleType(command.VehicleType);
         RequireModeC(command.Mode);
 
-        await using var unitOfWork = await unitOfWorkFactory.BeginAsync(cancellationToken: cancellationToken);
+        // Before the vehicle exists, not after. The document steps run in their own transactions
+        // once the registration is durable (see below), so an unresolvable file id discovered
+        // there would leave a vehicle holding the plate and answer 400 — and the driver's retry
+        // would then be refused `registration-exists` for their own vehicle (D-37).
+        await RequireSuppliedUploadsExistAsync(command, cancellationToken);
 
-        // The profile and the vehicle commit together: a registration that failed on the plate
-        // must not leave a profile row behind naming a driver who registered nothing.
-        var profile = await ResolveProfileAsync(unitOfWork, command, cancellationToken);
+        Vehicle vehicle;
 
-        var vehicle = await vehicles.CreateAsync(
-            unitOfWork.Connection,
-            unitOfWork.Transaction,
-            command.OwnerId,
-            registrationNumber,
-            command.VehicleType!,
-            OperatingModes.C,
-            profile.DisplayName,
-            profile.PhotoUrl,
-            cancellationToken);
-
-        if (vehicle is null)
+        await using (var unitOfWork = await unitOfWorkFactory.BeginAsync(cancellationToken: cancellationToken))
         {
-            throw new MageRideException(
-                MageRideErrors.RegistrationExists,
-                $"Registration {registrationNumber} is already held by a live vehicle. A rejected or " +
-                "deactivated registration frees its plate (D-37).");
-        }
+            // The profile and the vehicle commit together: a registration that failed on the plate
+            // must not leave a profile row behind naming a driver who registered nothing.
+            var profile = await ResolveProfileAsync(unitOfWork, command, cancellationToken);
 
-        await unitOfWork.CommitAsync(cancellationToken);
+            vehicle = await vehicles.CreateAsync(
+                unitOfWork.Connection,
+                unitOfWork.Transaction,
+                command.OwnerId,
+                registrationNumber,
+                command.VehicleType!,
+                OperatingModes.C,
+                profile.DisplayName,
+                profile.PhotoUrl,
+                cancellationToken)
+                ?? throw new MageRideException(
+                    MageRideErrors.RegistrationExists,
+                    $"Registration {registrationNumber} is already held by a live vehicle. A rejected or " +
+                    "deactivated registration frees its plate (D-37).");
+
+            // Step 1/4, saved with the vehicle it describes. The type and registration number this
+            // request carried are exactly what the details step stores, and D5' §14.1a verifies
+            // that step on entry — so the wizard opens at `insurance`, which is what SCR-DA/DI-004
+            // → 004a does, rather than asking the driver for the plate a second time.
+            await onboardingSteps.SaveAsync(
+                unitOfWork.Connection,
+                unitOfWork.Transaction,
+                vehicle.Id,
+                OnboardingSteps.Details,
+                StepStatuses.Verified,
+                System.Text.Json.JsonSerializer.Serialize(
+                    new { registrationNumber, vehicleType = vehicle.VehicleType },
+                    MageRide.Shared.Http.MageRideJson.StorageOptions),
+                cancellationToken);
+
+            // D3' POST /v1/vehicles: "Side Effects: emits `vehicle.registered`". C021 and C028 had
+            // no outbox and no topic; both exist now (migration 0309), so the event that every
+            // downstream projection of the vehicle set depends on is finally published.
+            await outbox.WriteAsync(unitOfWork, Onboarding.OnboardingEvents.VehicleRegistered(vehicle), cancellationToken);
+
+            await unitOfWork.CommitAsync(cancellationToken);
+        }
 
         logger.LogInformation(
             "Registered {VehicleType} {VehicleId} for driver {DriverId}",
             vehicle.VehicleType, vehicle.Id, command.OwnerId);
 
-        return vehicle;
+        // Each document step is its own transaction, after the vehicle is durable. A one-shot
+        // registration that dies on the third upload therefore leaves the same state the wizard
+        // would have — two steps saved and a resume point — rather than no vehicle at all.
+        var state = await SaveSuppliedDocumentsAsync(command, vehicle, cancellationToken);
+
+        return new RegisteredVehicle(state.Vehicle, state);
+    }
+
+    /// <summary>
+    /// Checks that every upload id on the registration body names an upload this driver owns.
+    /// </summary>
+    private async Task RequireSuppliedUploadsExistAsync(
+        RegisterVehicleCommand command, CancellationToken cancellationToken)
+    {
+        var supplied = new (string Field, string? FileId)[]
+        {
+            (nameof(command.InsuranceFileId), command.InsuranceFileId),
+            (nameof(command.RevenueLicenseFileId), command.RevenueLicenseFileId),
+            (nameof(command.VehiclePhotoFrontFileId), command.VehiclePhotoFrontFileId),
+            (nameof(command.VehiclePhotoBackFileId), command.VehiclePhotoBackFileId),
+        };
+
+        var present = supplied.Where(entry => entry.FileId is not null).ToArray();
+
+        if (present.Length == 0)
+        {
+            return;
+        }
+
+        var errors = new Dictionary<string, string[]>(StringComparer.Ordinal);
+
+        await using var connection = await connectionFactory.OpenAsync(cancellationToken);
+
+        foreach (var (field, fileId) in present)
+        {
+            var name = char.ToLowerInvariant(field[0]) + field[1..];
+
+            if (!Guid.TryParse(fileId, out var uploadId)
+                || await documents.FindUploadAsync(connection, null, uploadId, cancellationToken) is not { } upload
+                || upload.OwnerId != command.OwnerId)
+            {
+                errors[name] = [$"{name} does not name an upload belonging to this driver."];
+            }
+        }
+
+        if (errors.Count > 0)
+        {
+            throw new MageRideValidationException(errors);
+        }
+
+        // The photos step needs both sides, and discovering that after two documents were written
+        // would leave the vehicle half-onboarded on a body that was wrong when it arrived.
+        if (command.VehiclePhotoFrontFileId is null != (command.VehiclePhotoBackFileId is null))
+        {
+            throw new MageRideValidationException(new Dictionary<string, string[]>(StringComparer.Ordinal)
+            {
+                ["vehiclePhotoFrontFileId"] =
+                    ["Both vehicle photos are required together: the plate must be legible on each (D5' §14.1a)."],
+            });
+        }
+    }
+
+    /// <summary>
+    /// Runs the document steps whose uploads came with the registration, and returns the resulting
+    /// onboarding state. With none supplied this is one read.
+    /// </summary>
+    private async Task<Onboarding.OnboardingState> SaveSuppliedDocumentsAsync(
+        RegisterVehicleCommand command, Vehicle vehicle, CancellationToken cancellationToken)
+    {
+        var supplied = new (string Step, string? FileId, string? FileIdBack)[]
+        {
+            (OnboardingSteps.Insurance, command.InsuranceFileId, null),
+            (OnboardingSteps.Revenue, command.RevenueLicenseFileId, null),
+            (OnboardingSteps.Photos, command.VehiclePhotoFrontFileId, command.VehiclePhotoBackFileId),
+        };
+
+        Onboarding.OnboardingState? state = null;
+
+        foreach (var (step, fileId, fileIdBack) in supplied.Where(entry => entry.FileId is not null))
+        {
+            state = await onboarding.SaveStepAsync(
+                new Onboarding.SaveOnboardingStepCommand(
+                    command.OwnerId, vehicle.Id, step, null, null, fileId, fileIdBack, null),
+                cancellationToken);
+        }
+
+        return state ?? await onboarding.GetStateAsync(command.OwnerId, vehicle.Id, cancellationToken);
     }
 
     public async Task<IReadOnlyList<DriverVehicle>> ListMineAsync(Guid driverId, CancellationToken cancellationToken)

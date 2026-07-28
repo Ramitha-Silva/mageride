@@ -192,8 +192,10 @@ check_eq "13 iam tables" "13" \
 # 12 from C003 + registry.command_log, added by C021 for the same reason iam.command_log was
 # (C021 handoff micro-change-set); + registry.outbox, added by C028 because `share.revoked` (D-22)
 # has a producer and a consumer in the specs and neither a topic nor a table
-# (C028 handoff micro-change-set).
-check_eq "14 registry tables" "14" \
+# (C028 handoff micro-change-set); + registry.document_notices, added by C029 because E-03 names
+# four distinct notices per document and registry.documents.status can only remember one
+# (C029 handoff micro-change-set).
+check_eq "15 registry tables" "15" \
   "SELECT count(*) FROM information_schema.tables WHERE table_schema='registry' AND table_type='BASE TABLE';"
 check_eq "2 prov tables" "2" \
   "SELECT count(*) FROM information_schema.tables WHERE table_schema='prov' AND table_type='BASE TABLE';"
@@ -321,6 +323,18 @@ check_eq "registry.onboarding_steps status domain" "1" \
 check_eq "registry.vehicles.onboarding_status exists" "1" \
   "SELECT count(*) FROM information_schema.columns
     WHERE table_schema='registry' AND table_name='vehicles' AND column_name='onboarding_status';"
+# E-03's four notices per document (C029, migration 0312). The primary key is the idempotency:
+# a nightly job that runs twice must not push the same reminder twice.
+check_eq "registry.document_notices threshold domain" "1" \
+  "SELECT count(*) FROM pg_constraint
+    WHERE conrelid='registry.document_notices'::regclass AND contype='c'
+      AND pg_get_constraintdef(oid) LIKE '%30%7%1%0%';"
+check_eq "registry.document_notices is keyed per (document, threshold)" "document_id,threshold_days" \
+  "SELECT string_agg(a.attname, ',' ORDER BY k.ord)
+     FROM pg_constraint c
+     JOIN LATERAL unnest(c.conkey) WITH ORDINALITY AS k(attnum, ord) ON true
+     JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = k.attnum
+    WHERE c.conrelid='registry.document_notices'::regclass AND c.contype='p';"
 
 step "T-08 / T-02 — tracker anti-clone and rotation"
 check_eq "ux_tracker_imei_active is unique on ACTIVE only" "1" \

@@ -27,13 +27,18 @@ public sealed class VehicleRegistrationTests(PostgresFixture postgres)
         Assert.Equal("three_wheeler", body.GetProperty("vehicleType").GetString());
         Assert.Equal("C", body.GetProperty("mode").GetString());
 
-        // A brand-new registration is PENDING and Incomplete: nothing has been verified, and
-        // AL-30 only reaches "approved" once all four steps are VERIFIED (C029).
+        // A brand-new registration is PENDING and Incomplete: no document has been verified, and
+        // AL-30 only reaches "approved" once all four steps are VERIFIED.
         Assert.Equal("PENDING", body.GetProperty("status").GetString());
         Assert.Equal("incomplete", body.GetProperty("onboardingStatus").GetString());
 
+        // Δ C029. Step 1/4 is the type and registration number, which this request carried, and
+        // D5' §14.1a verifies that step on entry — so `vehicleDetails` is VERIFIED here and the
+        // three document steps are not. `VehicleOnboardingTests` carries the rest.
         var verification = body.GetProperty("verification");
-        foreach (var step in new[] { "vehicleDetails", "insurance", "revenueLicense", "photos" })
+        Assert.Equal("VERIFIED", verification.GetProperty("vehicleDetails").GetString());
+
+        foreach (var step in new[] { "insurance", "revenueLicense", "photos" })
         {
             Assert.Equal("PENDING_INPUT", verification.GetProperty(step).GetString());
         }

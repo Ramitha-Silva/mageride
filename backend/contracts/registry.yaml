@@ -106,12 +106,27 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [driverId, status, fields]
+                required: [driverId, status, displayName, allowedVehicleTypes, fields]
                 properties:
                   driverId:
                     $ref: './_shared.yaml#/components/schemas/Ulid'
                   status:
                     $ref: '#/components/schemas/RegistrationStatus'
+                  # Δ C029. The screen that follows Profile Setup shows the driver their own
+                  # name and photo back; without these it would have to guess that the values
+                  # it sent are the values that were stored, which is untrue whenever OCR
+                  # supplied a NIC or a licence class the request did not carry.
+                  displayName:
+                    type: string
+                  photoUrl:
+                    type: string
+                    format: uri
+                  nicNo:
+                    type: string
+                  allowedVehicleTypes:
+                    type: array
+                    items:
+                      $ref: './_shared.yaml#/components/schemas/VehicleType'
                   fields:
                     type: array
                     items:
@@ -160,7 +175,10 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [vehicleId, status, ocrJobId, registrationNumber, verification, onboardingStatus, createdAt]
+                # Δ C029. `ocrJobId` left `required` in D3' even though a registration that
+                # carried no documents queues no extraction; inventing an identifier no service
+                # recognises would leave a client polling it forever. See the C029 handoff.
+                required: [vehicleId, status, registrationNumber, verification, onboardingStatus, createdAt]
                 properties:
                   vehicleId:
                     $ref: './_shared.yaml#/components/schemas/Ulid'
@@ -184,6 +202,13 @@ paths:
                         $ref: '#/components/schemas/StepVerdict'
                   onboardingStatus:
                     $ref: '#/components/schemas/OnboardingStatus'
+                  # Δ C029. Registration saves Step 1/4 — this request carries exactly the type
+                  # and registration number the `details` step stores — so a fresh vehicle
+                  # resumes at `insurance`, and the client should not have to ask.
+                  nextStep:
+                    oneOf:
+                      - $ref: '#/components/schemas/OnboardingStep'
+                      - type: 'null'
                   createdAt:
                     $ref: './_shared.yaml#/components/schemas/Timestamp'
         '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
@@ -381,7 +406,7 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [stepStatus, onboardingStatus]
+                required: [stepStatus, onboardingStatus, status]
                 properties:
                   stepStatus:
                     $ref: '#/components/schemas/StepVerdict'
@@ -391,6 +416,12 @@ paths:
                     oneOf:
                       - $ref: '#/components/schemas/OnboardingStep'
                       - type: 'null'
+                  # Δ C029. Saving the fourth verified step auto-approves the vehicle (AL-27),
+                  # so the response that caused it says so rather than making the app poll.
+                  status:
+                    $ref: '#/components/schemas/RegistrationStatus'
+                  ocrJobId:
+                    $ref: './_shared.yaml#/components/schemas/Ulid'
         '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
         '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
         '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
@@ -760,6 +791,63 @@ paths:
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
       x-error-codes: [validation-failed, unauthorized, vehicle-not-found]
 
+  # Δ C029 — not in D3'; see the C029 handoff.
+  /v1/internal/vehicles/{vehicleId}/onboarding/recompute:
+    post:
+      operationId: recomputeVehicleOnboarding
+      summary: Re-derive the onboarding state after a Verification Officer confirmed a field.
+      description: |
+        Internal, mTLS only. AL-30 says "Approve unlocks only when all Pending fields are
+        confirmed", and admin-bff is what confirms them — it writes
+        `registry.document_fields.verify_status='confirmed'` and then has no way to tell
+        registry-svc, so a vehicle whose last doubtful field was just cleared would sit at
+        `PENDING_REVIEW` until the driver happened to re-save a step.
+
+        Takes no input and re-derives from what is stored, so it is idempotent.
+      tags: [vehicles]
+      security:
+        - mtls: []
+      parameters:
+        - $ref: '#/components/parameters/VehicleId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: The re-derived onboarding state.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, onboardingStatus, steps, fields]
+                properties:
+                  status:
+                    $ref: '#/components/schemas/RegistrationStatus'
+                  onboardingStatus:
+                    $ref: '#/components/schemas/OnboardingStatus'
+                  nextStep:
+                    oneOf:
+                      - $ref: '#/components/schemas/OnboardingStep'
+                      - type: 'null'
+                  steps:
+                    type: object
+                    required: [details, insurance, revenue, photos]
+                    properties:
+                      details:
+                        $ref: '#/components/schemas/StepVerdict'
+                      insurance:
+                        $ref: '#/components/schemas/StepVerdict'
+                      revenue:
+                        $ref: '#/components/schemas/StepVerdict'
+                      photos:
+                        $ref: '#/components/schemas/StepVerdict'
+                  fields:
+                    type: array
+                    items:
+                      $ref: './_shared.yaml#/components/schemas/ExtractedField'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, vehicle-not-found]
+
 components:
   securitySchemes:
     bearerAuth:
@@ -813,14 +901,15 @@ components:
 
     VehicleRegistration:
       type: object
+      # Δ C029. The four document ids were `required` here and AL-30 in the same specification
+      # has the wizard entry point "create a NEW vehicle at Step 1/4" (US-2.27) — a vehicle that
+      # must arrive with four documents has no Step 2/4 to walk to. Supplied, they are onboarded
+      # in one shot; absent, `PUT /v1/vehicles/{vehicleId}/onboarding/{step}` saves each step.
+      # See the C029 handoff.
       required:
         - registrationNumber
         - vehicleType
         - mode
-        - insuranceFileId
-        - revenueLicenseFileId
-        - vehiclePhotoFrontFileId
-        - vehiclePhotoBackFileId
       properties:
         registrationNumber:
           type: string

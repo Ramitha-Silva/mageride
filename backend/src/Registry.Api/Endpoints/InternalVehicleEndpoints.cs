@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using MageRide.Registry.Onboarding;
 using MageRide.Registry.Vehicles;
 using MageRide.Shared.Errors;
 using Microsoft.AspNetCore.Builder;
@@ -39,8 +40,33 @@ public static class InternalVehicleEndpoints
             .AddEndpointFilter(new RegistryInternalApiKeyFilter(apiKey));
 
         internalVehicles.MapPost("/{vehicleId}/merchant", BindMerchantAsync).WithName("bindOnepayMerchant");
+        internalVehicles.MapPost("/{vehicleId}/onboarding/recompute", RecomputeOnboardingAsync)
+            .WithName("recomputeVehicleOnboarding");
 
         return endpoints;
+    }
+
+    /// <summary>
+    /// Re-derives the AL-30 state after somebody else changed a field this service owns the
+    /// consequences of.
+    /// </summary>
+    /// <remarks>
+    /// <b>Not in D3'; a micro-change-set, raised in the C029 handoff.</b> AL-30 says "Approve
+    /// unlocks only when all Pending fields are confirmed" and admin-bff (C062) is what confirms
+    /// them — it writes <c>registry.document_fields.verify_status='confirmed'</c> and then has no
+    /// way to tell registry-svc, so a vehicle whose last doubtful field was just cleared would sit
+    /// at <c>pending_review</c> until the driver happened to re-save a step. Idempotent: it takes
+    /// no input and re-derives from what is stored, so calling it twice changes nothing.
+    /// </remarks>
+    private static async Task<Ok<OnboardingStatusResponse>> RecomputeOnboardingAsync(
+        string vehicleId, IOnboardingService onboarding, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(onboarding);
+
+        var state = await onboarding.RecomputeAsync(
+            VehicleEndpoints.RequireVehicleId(vehicleId), cancellationToken);
+
+        return TypedResults.Ok(OnboardingStatusResponse.From(state));
     }
 
     private static async Task<Ok<BindMerchantResponse>> BindMerchantAsync(

@@ -61,11 +61,21 @@ public static class VehicleEndpoints
 
         var driverId = context.User.RequireSubjectId();
 
-        var vehicle = await service.RegisterAsync(
-            new RegisterVehicleCommand(driverId, body?.RegistrationNumber, body?.VehicleType, body?.Mode, body?.DriverName),
+        var registered = await service.RegisterAsync(
+            new RegisterVehicleCommand(
+                driverId,
+                body?.RegistrationNumber,
+                body?.VehicleType,
+                body?.Mode,
+                body?.DriverName,
+                body?.InsuranceFileId,
+                body?.RevenueLicenseFileId,
+                body?.VehiclePhotoFrontFileId,
+                body?.VehiclePhotoBackFileId),
             cancellationToken);
 
-        return TypedResults.Created($"/v1/vehicles/{vehicle.Id}", RegisterVehicleResponse.From(vehicle));
+        return TypedResults.Created(
+            $"/v1/vehicles/{registered.Vehicle.Id}", RegisterVehicleResponse.From(registered));
     }
 
     private static async Task<Ok<MyVehiclesResponse>> ListMineAsync(

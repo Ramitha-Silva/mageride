@@ -57,6 +57,52 @@ public interface IVehicleRepository
         string? driverName,
         string? driverPhotoUrl,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Step 1/4's write: the registration number and type the driver entered (AL-30). Returns
+    /// <see langword="null"/> when <c>ux_vehicles_regno_active</c> already holds the plate (D-37),
+    /// for the same reason <see cref="CreateAsync"/> does.
+    /// </summary>
+    Task<Vehicle?> UpdateDetailsAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction? transaction,
+        Guid vehicleId,
+        string registrationNumber,
+        string vehicleType,
+        CancellationToken cancellationToken);
+
+    /// <summary>Step 4/4's side effect: the front photo becomes the vehicle's picture.</summary>
+    Task<Vehicle?> UpdateVehiclePhotoAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction? transaction,
+        Guid vehicleId,
+        string photoUrl,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Moves the AL-30 derived <c>onboarding_status</c> on its own, without touching
+    /// <c>status</c>. The two travel together on the way up (<see cref="ApproveAsync"/>) and apart
+    /// on the way down: a verified step that stops being verified makes a vehicle Incomplete on My
+    /// Vehicles, and does not un-approve a registration a Verification Officer may have signed.
+    /// </summary>
+    Task<bool> SetOnboardingStatusAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction? transaction,
+        Guid vehicleId,
+        string onboardingStatus,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// E-03's auto-suspension and its release. Returns <see langword="true"/> only when the state
+    /// actually moved, so the caller publishes one event per real transition rather than one per
+    /// nightly sweep.
+    /// </summary>
+    Task<bool> SetDispatchStateAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction? transaction,
+        Guid vehicleId,
+        string dispatchState,
+        CancellationToken cancellationToken);
 }
 
 /// <inheritdoc cref="IVehicleRepository"/>
@@ -211,5 +257,95 @@ public sealed class VehicleRepository : IVehicleRepository
             },
             transaction,
             cancellationToken: cancellationToken));
+    }
+
+    public async Task<Vehicle?> UpdateDetailsAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction? transaction,
+        Guid vehicleId,
+        string registrationNumber,
+        string vehicleType,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+
+        try
+        {
+            return await connection.QuerySingleOrDefaultAsync<Vehicle>(new CommandDefinition(
+                $"""
+                 UPDATE registry.vehicles
+                    SET registration_number = @RegistrationNumber,
+                        vehicle_type = @VehicleType
+                  WHERE id = @VehicleId
+                 RETURNING {Columns};
+                 """,
+                new { VehicleId = vehicleId, RegistrationNumber = registrationNumber, VehicleType = vehicleType },
+                transaction,
+                cancellationToken: cancellationToken));
+        }
+        catch (PostgresException ex) when (ex.SqlState == UniqueViolation && ex.ConstraintName == "ux_vehicles_regno_active")
+        {
+            return null;
+        }
+    }
+
+    public Task<Vehicle?> UpdateVehiclePhotoAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction? transaction,
+        Guid vehicleId,
+        string photoUrl,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+
+        return connection.QuerySingleOrDefaultAsync<Vehicle>(new CommandDefinition(
+            $"UPDATE registry.vehicles SET vehicle_photo_url = @PhotoUrl WHERE id = @VehicleId RETURNING {Columns};",
+            new { VehicleId = vehicleId, PhotoUrl = photoUrl },
+            transaction,
+            cancellationToken: cancellationToken));
+    }
+
+    public async Task<bool> SetOnboardingStatusAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction? transaction,
+        Guid vehicleId,
+        string onboardingStatus,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+
+        var updated = await connection.ExecuteAsync(new CommandDefinition(
+            """
+            UPDATE registry.vehicles
+               SET onboarding_status = @OnboardingStatus
+             WHERE id = @VehicleId AND onboarding_status <> @OnboardingStatus;
+            """,
+            new { VehicleId = vehicleId, OnboardingStatus = onboardingStatus },
+            transaction,
+            cancellationToken: cancellationToken));
+
+        return updated == 1;
+    }
+
+    public async Task<bool> SetDispatchStateAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction? transaction,
+        Guid vehicleId,
+        string dispatchState,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+
+        var updated = await connection.ExecuteAsync(new CommandDefinition(
+            """
+            UPDATE registry.vehicles
+               SET dispatch_state = @DispatchState
+             WHERE id = @VehicleId AND dispatch_state <> @DispatchState;
+            """,
+            new { VehicleId = vehicleId, DispatchState = dispatchState },
+            transaction,
+            cancellationToken: cancellationToken));
+
+        return updated == 1;
     }
 }

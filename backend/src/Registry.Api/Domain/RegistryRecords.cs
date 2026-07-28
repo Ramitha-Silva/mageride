@@ -36,9 +36,22 @@ public sealed record Vehicle(
 /// registering a vehicle. Profile Setup proper (<c>PUT /v1/drivers/profile</c>: driving-licence
 /// upload, AL-29 field extraction, the NIC and licence-class fields) is C029's.
 /// </remarks>
+/// <param name="NicNo">
+/// AL-29. Extracted from the licence scan, or typed by the driver when it was unclear. The value
+/// itself carries no provenance — <c>registry.document_fields</c> does — so a NIC here is the
+/// current best answer and not necessarily a verified one.
+/// </param>
+/// <param name="AllowedVehicleTypes">The licence classes (AL-29). Same provenance caveat.</param>
+/// <param name="VerifiedAt">
+/// When Profile Setup last came back with nothing pending. Cleared again by a re-submission that
+/// introduces a manual or doubtful field, because "verified" has to mean the current values.
+/// </param>
 public sealed record DriverProfile(
     Guid DriverId,
     string DisplayName,
     string? PhotoUrl,
     Guid? ActiveVehicleId,
-    DateTimeOffset? ActiveVehicleSelectedAt);
+    DateTimeOffset? ActiveVehicleSelectedAt,
+    string? NicNo = null,
+    string[]? AllowedVehicleTypes = null,
+    DateTimeOffset? VerifiedAt = null);

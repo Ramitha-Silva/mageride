@@ -68,11 +68,20 @@ public static class RegistryApplication
         builder.AddMageRideDefaults(serviceOptions);
         builder.Services.AddRegistryServices(builder.Configuration);
 
+        // Bound after AddRegistryServices so the section is available; hosted separately from the
+        // registration above so a test can resolve the worker without it also ticking.
+        if (builder.Configuration.GetSection(RegistryOptions.SectionName).GetValue("DocumentExpiryEnabled", true))
+        {
+            builder.Services.AddHostedService(
+                services => services.GetRequiredService<Onboarding.DocumentExpiryWorker>());
+        }
+
         var app = builder.Build();
 
         app.UseMageRideDefaults(serviceOptions);
 
         app.MapVehicleEndpoints();
+        app.MapOnboardingEndpoints();
         app.MapSharingEndpoints();
 
         var internalApiKey = app.Services.GetRequiredService<IOptions<RegistryOptions>>().Value.InternalApiKey;

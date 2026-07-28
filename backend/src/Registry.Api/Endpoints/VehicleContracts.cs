@@ -1,4 +1,6 @@
+using System.Text.Json.Serialization;
 using MageRide.Registry.Domain;
+using MageRide.Registry.Onboarding;
 using MageRide.Registry.Vehicles;
 
 namespace MageRide.Registry.Endpoints;
@@ -8,9 +10,15 @@ namespace MageRide.Registry.Endpoints;
 /// (<c>registry.yaml#/components/schemas/VehicleRegistration</c>).
 /// </summary>
 /// <param name="InsuranceFileId">
-/// Accepted and ignored. The four document ids are required by the contract, but this slice has
-/// no upload surface to obtain one from and no ocr-svc to hand it to (C029/C054). They are
-/// declared so a client written against the contract compiles and its request is not rejected.
+/// Optional, with the three ids that follow. The contract marks all four required and AL-30 in the
+/// same specification has the wizard "create a NEW vehicle at Step 1/4" — a vehicle that must
+/// arrive with four documents has no Step 2/4 to walk to. Sent, they are onboarded here in one
+/// shot; absent, the wizard saves each step. See the C029 handoff.
+/// </param>
+/// <param name="DriverPhotoFileId">
+/// Accepted and ignored. Profile Setup owns the driver's photo (<c>PUT /v1/drivers/profile</c>,
+/// AL-27) and per-vehicle overrides are <c>PUT /v1/vehicles/{id}/driver-profile</c> (US-2.12);
+/// honouring it here would give the same picture three writers.
 /// </param>
 public sealed record RegisterVehicleBody(
     string? RegistrationNumber,
@@ -27,22 +35,26 @@ public sealed record RegisterVehicleBody(
 public sealed record VerificationResponse(
     string VehicleDetails, string Insurance, string RevenueLicense, string Photos)
 {
-    /// <summary>
-    /// What every registration this slice creates looks like: nothing has been saved, so every
-    /// step is <c>PENDING_INPUT</c> and the vehicle is Incomplete. C029 moves them.
-    /// </summary>
-    public static readonly VerificationResponse NothingSubmitted = new(
-        StepVerdicts.PendingInput, StepVerdicts.PendingInput, StepVerdicts.PendingInput, StepVerdicts.PendingInput);
+    public static VerificationResponse From(OnboardingState state)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+
+        return new VerificationResponse(
+            state.StepStatus(OnboardingSteps.Details),
+            state.StepStatus(OnboardingSteps.Insurance),
+            state.StepStatus(OnboardingSteps.Revenue),
+            state.StepStatus(OnboardingSteps.Photos));
+    }
 }
 
 /// <summary>
 /// 201 body of <c>POST /v1/vehicles</c>.
 /// </summary>
 /// <remarks>
-/// The contract also makes <c>ocrJobId</c> required, and it is absent here: no OCR is queued, so
-/// any value would be an identifier no service will ever recognise and a client polling it would
-/// wait forever. Recorded as a contract gap in the C021 handoff — <c>ocrJobId</c> belongs to the
-/// responses that actually queued a job.
+/// <c>ocrJobId</c> is present only when an extraction was actually queued. The contract makes it
+/// required; a registration that carried no documents queued nothing, and inventing an identifier
+/// no service will ever recognise would leave a client polling it forever. Recorded as a contract
+/// gap in the C021 handoff and unchanged by C029.
 /// </remarks>
 public sealed record RegisterVehicleResponse(
     string VehicleId,
@@ -52,11 +64,15 @@ public sealed record RegisterVehicleResponse(
     string Mode,
     VerificationResponse Verification,
     string OnboardingStatus,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? NextStep,
+    string? OcrJobId,
     DateTimeOffset CreatedAt)
 {
-    public static RegisterVehicleResponse From(Vehicle vehicle)
+    public static RegisterVehicleResponse From(RegisteredVehicle registered)
     {
-        ArgumentNullException.ThrowIfNull(vehicle);
+        ArgumentNullException.ThrowIfNull(registered);
+
+        var vehicle = registered.Vehicle;
 
         return new RegisterVehicleResponse(
             vehicle.Id.ToString(),
@@ -64,8 +80,12 @@ public sealed record RegisterVehicleResponse(
             vehicle.RegistrationNumber,
             vehicle.VehicleType,
             vehicle.Mode,
-            VerificationResponse.NothingSubmitted,
+            VerificationResponse.From(registered.Onboarding),
             vehicle.OnboardingStatus,
+            // Additive: AL-30's resume point is what the app opens next, and a client that has
+            // just registered would otherwise have to call onboarding-status to learn it.
+            registered.Onboarding.NextStep,
+            registered.Onboarding.OcrJobId?.ToString(),
             vehicle.CreatedAt);
     }
 }

@@ -1,4 +1,5 @@
 using MageRide.Registry.Configuration;
+using MageRide.Registry.Onboarding;
 using MageRide.Registry.Persistence;
 using MageRide.Registry.Sharing;
 using MageRide.Registry.Vehicles;
@@ -23,6 +24,10 @@ public static class RegistryServiceCollectionExtensions
 
         services.TryAddSingleton(TimeProvider.System);
 
+        // E-03's tracker. Registered as a concrete type as well, so a test can drive one sweep
+        // deterministically instead of waiting on the ticker (the shape OfferExpiryWorker uses).
+        services.AddSingleton<DocumentExpiryWorker>();
+
         services.AddSingleton<IVehicleRepository, VehicleRepository>();
         services.AddSingleton<IDriverProfileRepository, DriverProfileRepository>();
 
@@ -33,10 +38,20 @@ public static class RegistryServiceCollectionExtensions
         services.AddSingleton<IDriverPayoutRepository, DriverPayoutRepository>();
         services.AddSingleton<IDriverLiveVehicleCache, DriverLiveVehicleCache>();
 
+        // C029.
+        services.AddSingleton<IDocumentRepository, DocumentRepository>();
+        services.AddSingleton<IOnboardingStepRepository, OnboardingStepRepository>();
+
+        // TryAdd, so ocr-svc's real client (C054) registering ahead of this wins. Without one
+        // every document comes back unread and every document step lands pending_review — the
+        // honest outcome, and the one D5' §14.1a prescribes for a document that did not extract.
+        services.TryAddSingleton<IDocumentExtractionClient, UnconfiguredDocumentExtractionClient>();
+
         // Scoped: each opens a unit of work per command, so its lifetime is the request's.
         services.AddScoped<IVehicleService, VehicleService>();
         services.AddScoped<IShareService, ShareService>();
         services.AddScoped<IMerchantService, MerchantService>();
+        services.AddScoped<IOnboardingService, OnboardingService>();
 
         return services;
     }

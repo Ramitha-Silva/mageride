@@ -1,4 +1,4 @@
-# registry-svc (C021 ws-registry-minimal + C028 registry-svc-vehicles) — vehicle conventions
+# registry-svc (C021 ws-registry-minimal + C028 registry-svc-vehicles + C029 registry-svc-onboarding)
 
 Stack: .NET 10 Minimal API + Dapper over Npgsql + StackExchange.Redis + Confluent.Kafka.
 References `MageRide.Shared` (C002).
@@ -8,15 +8,19 @@ References `MageRide.Shared` (C002).
 ## What this is
 
 Vehicle identity and lifecycle: registration, the one-live-publisher rule, deactivation, Mode B
-sharing, and the OnePay merchant binding fare settlement needs. Everything here matches
+sharing, the OnePay merchant binding fare settlement needs, driver-identity Profile Setup, the
+four-step Mode-C onboarding machine and the E-03 document-expiry tracker. Everything here matches
 `backend/contracts/registry.yaml`, which wins over this file and over the code — except
 `select-live`, which the contract does not have (see below).
 
 | Endpoint | Spec |
 |---|---|
+| `PUT /v1/drivers/profile` | D3' route table, AL-27, AL-29 (SCR-DA/DI-003a) |
 | `POST /v1/vehicles` | D3' registry-svc, AL-09, D-37 |
 | `GET /v1/vehicles/mine` | D3' route table, US-2.8, **US-13.9** |
 | `GET /v1/vehicles/{id}` · `/status` | D3' route table, US-2.13/2.15 |
+| `PUT /v1/vehicles/{id}/onboarding/{step}` | AL-30, US-2.26/2.27 (SCR-DA/DI-004→004c) |
+| `GET /v1/vehicles/{id}/onboarding-status` | AL-30 (SCR-DA/DI-006) |
 | `POST /v1/vehicles/{id}/deactivate` | US-2.16, D-37 |
 | `PUT /v1/vehicles/{id}/driver-profile` | US-2.12 |
 | `POST /v1/vehicles/{id}/select-live` | **not in D3'** — US-9.6/US-9.7 (C021 micro-change-set) |
@@ -24,16 +28,21 @@ sharing, and the OnePay merchant binding fare settlement needs. Everything here 
 | `GET /v1/vehicles/{id}/subscribers` · `DELETE /subscribers/{userId}` | US-4.7, US-NEW.1 |
 | `POST /v1/share-requests` | US-4.5 |
 | `POST /v1/internal/vehicles/{id}/merchant` | D-11 |
+| `POST /v1/internal/vehicles/{id}/onboarding/recompute` | **not in D3'** — AL-30 (C029 micro-change-set) |
 | `POST /v1/dev/vehicles/{id}/approve` | dev seed path only; **not a contract route** |
 
-**Not here, on purpose.** Document upload, Gemini OCR, the four-step onboarding machine
-(`PUT /v1/vehicles/{id}/onboarding/{step}`, `GET /onboarding-status`, AL-29/AL-30),
-`PUT /v1/drivers/profile`, the rejection path and the E-03 expiry job are **C029**.
-`POST /v1/vehicles/{id}/device` is a thin wrapper over provisioning-svc's `POST /v1/trackers/bind`
-(T-02) and belongs with the service that mints the credential — **C030**. Mode A/B vehicle
-onboarding, route permits and writing `registry.fleet_assignments` are the Fleet Portal's
-(**C059**); this service only *reads* assignments. The Verification-Officer queue is skipped
-entirely. All are left unmapped rather than stubbed.
+**Not here, on purpose.** Gemini extraction, the PII redaction pre-pass and the Tesseract fallback
+are **C054**, behind `IDocumentExtractionClient`. The upload surface that fills `docs.uploads` is
+not this service's either — registry-svc resolves a file id and never sees the bytes, which is
+what keeps an unredacted image on the far side of the D-36 perimeter. The Verification-Officer
+queue screens are **C062**; this service feeds them (`document.review_required`,
+`registry.document_fields.verify_status='pending'`) and takes their answer back through the
+internal recompute route. The rejection path (`registry.vehicles.rejection_reason`, US-2.15) is
+C062's too — nothing here writes the column. `POST /v1/vehicles/{id}/device` is a thin wrapper over
+provisioning-svc's `POST /v1/trackers/bind` (T-02) and belongs with the service that mints the
+credential — **C030**. Mode A/B vehicle onboarding, route permits and writing
+`registry.fleet_assignments` are the Fleet Portal's (**C059**); this service only *reads*
+assignments. All are left unmapped rather than stubbed.
 
 ## Rules that are load-bearing
 
@@ -104,12 +113,69 @@ entirely. All are left unmapped rather than stubbed.
 - **A service method must not be called `BindAsync`.** Minimal APIs treat any parameter type
   carrying one as custom-bound, so a handler taking that service as a dependency fails to build
   the route table at start-up. `IMerchantService.BindMerchantAsync` is named for that reason.
+- **Registration saves Step 1/4.** `POST /v1/vehicles` carries the type and registration number,
+  which *is* the `details` step, and D5' §14.1a verifies that step on entry ("entered"). So a
+  fresh vehicle already has one saved step, reads Incomplete on My Vehicles and resumes at
+  `insurance` — BR-25.4 working from the first screen rather than from the second. D3' marks the
+  four document ids **required** on that body while AL-30 in the same specification has the wizard
+  "create a NEW vehicle at Step 1/4"; they are optional here and honoured when sent.
+- **Every verdict is one rule, applied to fields.** A step is `pending_review` iff any of *its*
+  fields is `pending`, and nothing else. The plate mismatch, the low-confidence read, the
+  driver-typed correction and the field that failed to extract all arrive as a pending field, so
+  there is one clause rather than four that can drift. A required key extraction did not return is
+  still written — null value, `source='ai'`, `pending` — so the officer queue shows a row to fill
+  rather than an absence to notice.
+- **The driver's own typing on Step 1 is not a manual field.** D5' §14.1a marks vehicle details
+  "(entered)". Treating the type and plate as `source='manual'` would be consistent with AL-29 and
+  would make AL-30's auto-approve unreachable for every vehicle ever onboarded.
+- **A step's verdict is derived from the documents that step saved**, recorded as `documentIds` in
+  `registry.onboarding_steps.fields`. That is what makes a re-upload supersede cleanly: the failed
+  attempt stays in the audit trail without holding the step down forever.
+- **`onboarding_status` comes back down; `status` does not.** Both move up together at
+  auto-approval. When a verified step stops being verified — a renewal whose scan was blurry, an
+  edited plate — the vehicle reads Incomplete on My Vehicles and stays APPROVED, because the
+  certificate the driver is carrying has not lapsed. E-03 is what takes them off the road when one
+  actually does, and un-approving would also overturn a Verification Officer's decision.
+- **Editing the registration number re-judges the photos.** `reg_no_match` is recomputed against
+  the stored `plate_text`; without it a vehicle could be approved with front and back photos of a
+  different plate, which is the one thing Step 4 exists to rule out.
+- **AL-10 is checked at the gate, not inferred from the steps.** Approval re-reads the current
+  insurance and revenue-licence documents and refuses on a missing, expired or expiry-less one, so
+  a step that verified weeks ago cannot approve a vehicle whose cover has since lapsed.
+- **"Current document" is the newest saved *batch* per (owner, kind), not the newest row.** A step
+  can save two documents of one kind — the licence's two sides, the vehicle's two photos — and
+  they are equally current. Both are inserted in one transaction, so `DEFAULT now()` (the
+  transaction timestamp) gives them the same `created_at` and makes the batch exactly expressible.
+- **E-03 suspends vehicles, because that is where the column is.** ADD §6 says expiry "flips
+  driver to `DISPATCH_SUSPENDED`" and `dispatch_state` lives on `registry.vehicles`: a per-vehicle
+  document suspends its own vehicle, and a vehicle-less driving licence suspends every vehicle
+  that driver owns. The release is strict — both mandatory documents current and unexpired with a
+  real expiry, and no lapsed identity document.
+- **The extraction call happens outside the transaction.** ocr-svc is a network hop; holding a
+  Postgres transaction open across it would put another service's latency on this one's connection
+  pool. Nothing is written until every document has come back.
+- **An extractor that is down must not stop a driver saving a step.** `ExtractAsync` throwing is
+  caught and treated as `DocumentExtraction.Unavailable`; the step saves, lands `pending_review`
+  and a Verification Officer takes it — which is what D5' §14.1a does with a document that failed
+  to extract. `UnconfiguredDocumentExtractionClient` is the same answer for a deployment with no
+  ocr-svc at all, and it says so once per document in the log.
 
 ## Configuration
 
 `Registry:DevApprovalEnabled` unset means Development only. The lightweight production replica
 runs synthetic data under the Production environment name and sets it to `true` explicitly; the
 service logs a warning at start-up whenever it is on outside Development.
+
+`Registry:OcrConfidenceThreshold` (default **0.80**) is the confidence at or above which an
+ocr-svc field is `auto_verified` rather than sent to an officer. **No spec pins the number** —
+AL-29, BR-25.2 and D6' §7.5 all say "below threshold" and none of them says what it is, the same
+situation as `Dispatch:SearchRadiusM`. Bounded at 0.5 so it cannot be turned into "trust
+everything". A field with **no** confidence is treated exactly like a low one.
+
+`Registry:DocumentExpiryEnabled` (default **on**) gates the E-03 sweep;
+`Registry:DocumentExpiryInterval` (default 1 h) and `Registry:DocumentExpiryBatchSize` (500) size
+it. E-03 says "nightly" and the interval is hourly on purpose: `registry.document_notices` makes
+every extra pass free, and a restart or a deployment window cannot cost a night.
 
 `Registry:InternalApiKey` **unset means `/v1/internal/vehicles/**` is not mapped at all** — a
 deployment that forgets it gets 404s rather than an unauthenticated write to
@@ -139,10 +205,27 @@ micro-change-sets in the C021 and C028 handoffs in `build/progress.md`.
 | 0309 | `registry.outbox` | `share.revoked` (D-22) had a producer and a consumer and no topic or table |
 | 0310 | `registry.driver_eligible_vehicles` | US-13.9's entitlement spans three tables and every consumer would re-derive it |
 | 0311 | relaxes 0308's composite FK | US-13.9 admits non-owners, which the composite key rejected |
+| 0312 | `registry.document_notices` | E-03 names four notices per document and `documents.status` can remember one |
 
 `EventTopics.RegistryEvents` (`registry.events`, key vehicleId) is **not** one of D6' §2.1's six
 topics; it is added to `infra/deploy/redpanda/bootstrap-topics.sh` and `slim-verify.sh` alongside
 them.
+
+## Events on `registry.events`
+
+`share.granted` · `share.revoked` · `vehicle.deactivated` (C028) and, from C029,
+`vehicle.registered` · `vehicle.approved` · `document.review_required` · `document.expiring` ·
+`document.expired` · `vehicle.dispatch_resumed`. Only `vehicle.registered` is named by a spec
+(D3' `POST /v1/vehicles` side effects) and only `document.expiring`/`document.expired` are named
+by E-03; **none of the six has an envelope anywhere in D6' §2.2**, so the shapes in
+`Onboarding/OnboardingEvents.cs` are registry-svc's and are raised as micro-change-sets in the
+C029 handoff.
+
+The aggregate id is the **vehicle**, matching the topic's partition key. Two events have no
+vehicle to key by and use the **driver** instead: `document.review_required` for Profile Setup,
+whose pending fields belong to a person rather than a vehicle, and `document.expiring` for a
+driving licence lapsing before the driver has onboarded anything. Ordering per driver is the right
+guarantee for both.
 
 ## The seed
 
