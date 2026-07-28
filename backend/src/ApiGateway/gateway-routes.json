@@ -118,6 +118,13 @@
         "Match": { "Path": "/v1/admin/auth/{**remainder}" },
         "Metadata": { "RateLimit": "auth" }
       },
+      "iam-admin-rbac": {
+        "ClusterId": "iam-svc",
+        "Order": 20,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/admin/rbac/{**remainder}" },
+        "Metadata": { "RateLimit": "admin" }
+      },
       "dispatch-admin": {
         "ClusterId": "dispatch-svc",
         "Order": 20,

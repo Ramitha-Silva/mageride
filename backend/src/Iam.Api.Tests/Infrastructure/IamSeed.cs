@@ -94,6 +94,16 @@ internal sealed class IamSeed(string connectionString, PasswordHasher passwords)
             new { Id = userId });
     }
 
+    /// <summary>Blocks an account, as moderation would (URD §2.3 "End-user account management").</summary>
+    public async Task BlockAsync(Guid userId)
+    {
+        await using var connection = await OpenAsync();
+
+        await connection.ExecuteAsync(
+            "UPDATE iam.users SET is_blocked = true WHERE id = @Id;",
+            new { Id = userId });
+    }
+
     /// <summary>Grants a second canonical role, as a Super Admin would (AL-06).</summary>
     public async Task GrantRoleAsync(Guid userId, string role)
     {
@@ -246,6 +256,96 @@ internal sealed class IamSeed(string connectionString, PasswordHasher passwords)
             new { Id = userId, Phone = phone });
 
         return userId;
+    }
+
+    /// <summary>A Mode A/B tracking session, as trip-state-svc would leave it (C038's table).</summary>
+    public async Task<Guid> ActiveTripSessionAsync(Guid driverId, Guid vehicleId, string mode = "B")
+    {
+        var sessionId = Guid.NewGuid();
+
+        await using var connection = await OpenAsync();
+
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO trips.sessions (id, vehicle_id, driver_id, mode, state)
+            VALUES (@Id, @VehicleId, @DriverId, @Mode, 'ACTIVE');
+            """,
+            new { Id = sessionId, VehicleId = vehicleId, DriverId = driverId, Mode = mode });
+
+        return sessionId;
+    }
+
+    /// <summary>A day's <c>fares.driver_earnings</c> rollup, as fare-svc would leave it (C047's table).</summary>
+    public async Task EarningsAsync(Guid driverId, DateOnly businessDate, int trips, int grossMinor, int dailyFeeMinor)
+    {
+        await using var connection = await OpenAsync();
+
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO fares.driver_earnings (driver_id, earn_date, trips, gross_minor, daily_fee_minor)
+            VALUES (@DriverId, @EarnDate, @Trips, @Gross, @Fee)
+            ON CONFLICT (driver_id, earn_date) DO UPDATE
+              SET trips = EXCLUDED.trips, gross_minor = EXCLUDED.gross_minor, daily_fee_minor = EXCLUDED.daily_fee_minor;
+            """,
+            new { DriverId = driverId, EarnDate = businessDate, Trips = trips, Gross = grossMinor, Fee = dailyFeeMinor });
+    }
+
+    /// <summary>
+    /// The denormalised SOS contact on <c>iam.users</c> — the two columns <c>POST /v1/sos</c> reads
+    /// inside D-33's five-second budget.
+    /// </summary>
+    public async Task<(string? Name, string? Phone)> PrimaryEmergencyContactAsync(Guid userId)
+    {
+        await using var connection = await OpenAsync();
+
+        return await connection.QuerySingleAsync<(string?, string?)>(
+            "SELECT emergency_contact_name, emergency_contact_phone FROM iam.users WHERE id = @Id;",
+            new { Id = userId });
+    }
+
+    /// <summary>The raw <c>notif_prefs</c> document, so a test can prove a key survived the round trip.</summary>
+    public async Task<string?> NotificationPreferencesJsonAsync(Guid userId)
+    {
+        await using var connection = await OpenAsync();
+
+        return await connection.QuerySingleOrDefaultAsync<string?>(
+            "SELECT notif_prefs::text FROM iam.users WHERE id = @Id;",
+            new { Id = userId });
+    }
+
+    /// <summary>Every column of <c>iam.phone_lookups</c> a test cares about (P-03, 0108).</summary>
+    public async Task<IReadOnlyList<(byte[] PhoneHash, bool Registered, Guid? UserId, string? Caller)>>
+        PhoneLookupsAsync()
+    {
+        await using var connection = await OpenAsync();
+
+        var rows = await connection.QueryAsync<(byte[], bool, Guid?, string?)>(
+            "SELECT phone_hash, registered, user_id, caller FROM iam.phone_lookups ORDER BY looked_up_at;");
+
+        return [.. rows];
+    }
+
+    /// <summary>The caller's PDPA rows (E-06).</summary>
+    public async Task<IReadOnlyList<(Guid Id, string Kind, string Status, DateTimeOffset DueBy)>>
+        PdpaRequestsAsync(Guid userId)
+    {
+        await using var connection = await OpenAsync();
+
+        var rows = await connection.QueryAsync<(Guid, string, string, DateTimeOffset)>(
+            "SELECT id, kind, status, due_by FROM pdpa.requests WHERE user_id = @Id ORDER BY requested_at;",
+            new { Id = userId });
+
+        return [.. rows];
+    }
+
+    /// <summary>The <c>granted_by</c> provenance AL-06 wants on an internal role grant.</summary>
+    public async Task<Guid?> RoleGrantedByAsync(Guid userId, string role)
+    {
+        await using var connection = await OpenAsync();
+
+        return await connection.QuerySingleOrDefaultAsync<Guid?>(
+            "SELECT granted_by FROM iam.user_roles WHERE user_id = @Id AND role = @Role;",
+            new { Id = userId, Role = role });
     }
 
     private async Task<NpgsqlConnection> OpenAsync()

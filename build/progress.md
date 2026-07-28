@@ -52,7 +52,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C024 | ws-realtime-pipeline ⭑ | 2 | DONE | 2026-07-28 | 35 tests green (3 new services + EMQX fixture); p95 EMQX→SignalR 2.1 s; H3 grid + Kafka consumer promoted to the kernel; 4 micro-change-sets raised |
 | C025 | ws-e2e-android-slice ⭑ | 3 | DONE | 2026-07-28 | **WALKING SKELETON REACHED** — one booked ride end to end on the real stack; 2 Android shells assemble; `:shared` gained a jvm() target; wave-1 gate repaired |
 | C026 | iam-svc-auth | 2 | DONE | 2026-07-28 | 209 tests green (118 new); 1 iam migration added (0107) — 4 micro-change-sets raised; `POST /v1/auth/mqtt-token` closes C025 gap (c) |
-| C027 | iam-svc-profile-rbac | 2 | PENDING | | |
+| C027 | iam-svc-profile-rbac | 2 | DONE | 2026-07-28 | 330 tests green (121 new); 1 iam migration added (0108); 8 routes D3' does not carry raised as micro-change-sets; URD §2.3 matrix parsed from `specs/` by the test |
 | C028 | registry-svc-vehicles | 2 | PENDING | | |
 | C029 | registry-svc-onboarding | 2 | PENDING | | |
 | C030 | provisioning-svc | 2 | PENDING | | |
@@ -3426,3 +3426,152 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   tests take ~65 s, of which most is 40-odd harness start-ups — each integration test builds a
   fresh `WebApplication` so its ephemeral signing key, its OIDC provider and its Redis buckets
   cannot leak into another test.
+
+- **Component:** C027 iam-svc-profile-rbac — 2026-07-28
+- **Status:** DONE — `dotnet test backend/src/Iam.Api.Tests -c Release` → **330 passed, 0 failed,
+  0 skipped** (209 → 330; 121 new). All four DoD items pass against a real Postgres and Redis
+  (Testcontainers). Gates re-run green after the new migration and the contract additions:
+  `bash infra/scripts/migrate-verify.sh` → **199/199** (was 195), `ApiGateway.Tests` → 530
+  (was 524; `RouteConfigurationTests` runs six theories per gateway route and C027 added one —
+  `iam-admin-rbac`, tier 20, without which `RouteTableTests` would send `/v1/admin/rbac/**` to
+  admin-bff and fail), Spectral lint on `backend/contracts/*.yaml` → 0 errors, so the 13 new
+  contract operations all route to `iam-svc`. `MageRide.Shared.Tests` → 235, `Registry.Api.Tests` → 92,
+  `Ride.Api.Tests` → 117, `Dispatch.Api.Tests` → 64, `HotPath.Tests` → 35,
+  `dotnet build backend/MageRide.sln -c Release` → 0 warnings.
+- **Notes:**
+  **Spec gaps — eight endpoints D3' does not carry, all landed in `backend/contracts/iam.yaml`
+  and none actioned in `specs/` (D3' owns the route tables).** Each is argued at its path in the
+  contract. The pattern is the same in every case: the ADD states the *fact*, D4'/`server_db_
+  schema.md` gives it a *column*, D2 draws the *screen* — and no route writes it.
+  (a) ***AL-14's default payment method has no setter.*** `iam.users.default_payment_method`
+  exists (D4' §1), D2 SCR-PA-027 draws the Cash/LankaQR/OnePay picker and US-22.4 requires it,
+  but `PUT /v1/users/me` carries only name, photo, language and notification switches. Added
+  `PUT /v1/me/prefs/payment-method`.
+  (b) ***AL-27's launch city has no setter.*** The read side was given a route
+  (`GET /v1/config/cities`, content-svc) and `iam.users.operating_city_code` was given a column;
+  nothing writes it. Added `PUT /v1/me/prefs/operating-city`, which checks `is_active` rather than
+  leaving it to the foreign key — a withdrawn city still satisfies the constraint.
+  (c) ***AL-13's emergency contacts have no routes at all.*** `iam.emergency_contacts` exists
+  (C003), D2 SCR-PA/PI-027b draws add/edit/delete, and `POST /v1/sos` answers
+  `400 no-emergency-contact` when there is none — but nothing can put one on file, so that 400 was
+  unavoidable for every driver on the platform. Added the four `/v1/me/emergency-contacts` routes.
+  (d) ***AL-14's eager-fetch payload has no endpoint.*** The ADD specifies it and NFR-51 bounds it;
+  US-1.14 makes it the thing a driver's replacement handset restores a live trip from. Assembling
+  it client-side is four round trips (`/v1/users/me`, `/v1/me/saved-addresses`,
+  `/v1/rides/*/active`, `/v1/config/cities`) and cannot satisfy "restores trip state instantly" on
+  a Sri Lankan mobile network. Added `GET /v1/me/bootstrap`.
+  (e) ***URD §2.2 requires the portals to render menus from the model the API enforces, and there
+  is no way to read it.*** Added `GET /v1/me/permissions` (self, ungated) and
+  `GET /v1/admin/rbac/matrix` · `/roles` · `/users/{id}` plus role grant/revoke — the last five
+  gated on §2.3's RBAC row. **C062 fronts these; it does not need to re-derive the matrix.**
+  (f) ***`GET /v1/users/lookup` is a registration oracle sitting on a public gateway route.***
+  D3' §0 puts it on mTLS and the gateway refuses `/v1/internal/**` at the edge — but this path is
+  not under that prefix and the `iam-users` route forwards `/v1/users/{**remainder}` from the
+  internet. Guarded with the same shared-secret filter ride-svc uses (`Auth:InternalApiKey`,
+  unset ⇒ route not mapped). **The cleanest fix is to move it to `/v1/internal/users/lookup` in
+  D3' and the contract**; that is a client-visible rename and belongs to whoever owns D3'.
+  (g) ***`iam.phone_lookups` did not exist*** — landed as `db/migrations/0108`. P-03 hashes the
+  unregistered *rider's* number into `rides.rides.rider_phone_hash`, but says nothing about the
+  lookup that decides whether there is an account at all. D-35 wants that answerable after the
+  fact and E-06 wants the answer to hold no PII; one row does both. HMAC-keyed under
+  `Auth:PhoneHashKey`, because an unkeyed digest of `+947XXXXXXXX` is a 10^8 offline search.
+  (h) ***No feature-flag store exists anywhere.*** ADD §1.12 gives a Super Admin "feature flags"
+  and no spec models a table. `config.featureFlags` in the bootstrap payload is an empty object so
+  a client can rely on the field; it starts answering the day the store lands. **Needs a
+  `config.feature_flags` table in D4' §17b.**
+  **Decisions —**
+  (1) **URD §2.3 is compiled in and read-only.** `Rbac/PermissionMatrix.cs` is the 21×9 table
+  transcribed cell for cell, and `PermissionMatrixTests` **parses §2.3 out of
+  `specs/user-requirements-document.md`** and compares all 189 cells rather than restating them —
+  hand-copying the table into the test would only prove two copies of my typing agree. It is not
+  runtime-editable on purpose: the principal who would edit it is the principal it constrains, so
+  a writable matrix is one `UPDATE` away from a Super Admin granting themselves what §2.3 forbids.
+  "Assign roles" is the writable half and is `iam.user_roles`.
+  (2) **The legend is parsed, not hard-coded.** A cell keeps its URD symbol verbatim (`◐ own org`,
+  `⚙ rates`, `✅ read`) and derives its capability flags from the glyph, with three qualifier
+  narrowings for the three cells that write a verb into the qualifier and mean it: `✅ read` drops
+  write (URD §2.4 — the Auditor has "no write access anywhere"), `◐ raise/recommend` trades write
+  for raise (the same row gives Finance `✅ approve/execute`, and the pair only makes sense if the
+  CSR cannot), `◐ subset` trades it for configure.
+  (3) **`ownScope` is a restriction and is tracked per capability, not per row.** Folding it into
+  the union with the other flags is wrong: a caller who holds a capability unscoped from one role
+  and own-scoped from another holds it unscoped. Getting this wrong made an Admin who happens to
+  own a fleet see *less* than an Admin — caught by `Scope_is_tracked_per_capability_not_per_area`.
+  `EffectivePermission.ScopedGrants` is the subset that must be bounded and `qualifier` names how;
+  iam-svc cannot know whether ride 7 belongs to the caller, so this is a fence for the owning
+  service, not an answer. `PermissionEntry.scopedGrants` carries it on the wire.
+  (4) **The fleet sub-role narrows the `fleet_owner` column and nothing else** (URD §2.1 makes
+  Owner/Manager/Viewer "an org-scoped sub-model of the Fleet Owner role"). Narrowing the union
+  instead would let a Viewer sub-role silently demote a Support CSR role it has no business
+  touching — `The_fleet_sub_role_never_narrows_another_role`.
+  (5) **`iam.saved_addresses` keeps both spellings of Home/Work — C003 note (c) asked C027 to
+  collapse them and the answer is that they cannot be.** `iam.yaml`'s `SavedAddressInput` requires
+  `label` *and* carries `isHome`/`isWork`, and the two are not redundant: only the booleans can
+  express "at most one Home" as an index, only the label gives D2 SCR-PA-026's "Save Address As"
+  somewhere to go. The service reconciles them and refuses the one combination that cannot be
+  honoured (`{label:"work", isHome:true}`) rather than silently discarding half the request.
+  (6) **The primary emergency contact is the oldest row, and it is denormalised inside the same
+  transaction.** D-33 budgets five seconds for the whole SOS fan-out, so safety-svc reads two flat
+  columns and never joins; two copies of one fact is only safe if they cannot be observed
+  disagreeing. Deleting the primary promotes the next, deleting the last clears both columns.
+  "Oldest" makes promotion deterministic without a column the schema does not have.
+  (7) **`GET /v1/me/bootstrap` reads four other services' tables directly**, on one connection,
+  read-only — the same argument as C026's `PublisherRepository`, only stronger. Four synchronous
+  HTTP calls would make a *login* fail whenever any of four services is redeploying. The universal
+  rule it does not break is the one about state changes.
+  (8) **`DELETE /v1/users/me` records and does nothing else.** No block, no revoked session, no
+  anonymised column: erasure may be rejected or held (`FulfilledHold`), and a user whose request is
+  refused must find their account as they left it. A second request while one is open is a `409` —
+  two 30-day clocks against one obligation leave whichever C065 does not fulfil permanently overdue
+  in `ix_pdpa_requests_due`.
+  (9) **Notification-type keys are data, not property names.** `MageRideJson` sets
+  `DictionaryKeyPolicy = CamelCase`, which would rewrite `SCHEDULED_REMINDER` as
+  `sCHEDULED_REMINDER` on the way out and read it back verbatim — corrupting a mute exactly once,
+  silently. `LiteralKeyDictionaryConverter` is applied to the column and to the wire.
+  **C061's `PUT /v1/notify/preferences` writes the same column and needs the same treatment**; it
+  is one file (`Domain/LiteralKeyDictionaryConverter.cs`) and probably belongs in the kernel the
+  second service that needs it.
+  (10) **`Auth:PhoneHashKey` is deliberately not `Otp:PepperKey`.** The OTP pepper guards a code
+  that lives five minutes and can be rotated the moment it leaks; this one keys rows that outlive
+  the accounts they name, so a rotation partitions the table rather than re-keying it. Two
+  lifetimes, two keys — documented as not-rotatable-in-place in `.env.app.example`.
+  (11) **A blocked account still reads as `registered:true`** from the lookup. Answering false
+  would push a proxy rider down the unregistered SMS path — where nothing checks the block either —
+  and would disclose the account's standing to a caller with no business knowing it.
+  (12) **Revoking a role has two refusals, both `409`.** A primary role cannot be revoked as a
+  grant (`RolesAsync` unions `iam.users.role`, so the delete would change nothing an evaluator can
+  see while the console showed it gone), and a Super Admin cannot revoke their own `super_admin`
+  (AL-06 makes them the only principal who can grant it back). Another Super Admin can.
+  **Spec conflicts found (no change made) —**
+  (i) *D2 SCR-PA/PI-027b still draws a language picker on **Edit profile**, which AL-26 removed.*
+  The Δ 2026-06-21 change set is later and wins, and the C027 fence repeats it — but it is a rule
+  about **screens**, and the server cannot tell which screen a `PUT` came from. `iam.yaml` lists
+  `language` on `PUT /v1/users/me`, so it is honoured there (the contract wins over the code) and
+  `PUT /v1/me/prefs/language` is the route onboarding and Settings use. The fence is enforced in
+  the apps — **C068/C069 must not bind the Edit-profile segmented control**, and **D2 §SCR-PA-027b
+  needs a micro-change-set** removing the Language row from its component table.
+  (j) *Two routes now write `iam.users.notif_prefs`* — `PUT /v1/users/me` (iam, D3' route table)
+  and `PUT /v1/notify/preferences` (notification-svc, D3' comms). Both are in D3'; neither
+  document mentions the other. They must agree on the unmutable set (`SOS_*`, `RIDE_CANCELLED`)
+  or the last writer wins with different rules. **D3' should name one owner**; iam enforces the
+  `notification.yaml` rule in the meantime.
+  (k) *`GET /v1/users/lookup` returns `userId` but P-03 never uses it.* ride-svc needs the boolean
+  to choose a flow and the id to set `rides.rider_id`; the contract already carries both, so this
+  is only worth noting because widening this response further is the easy mistake — a booker who
+  mistypes a digit would learn the name of whoever owns the number they reached.
+  **A trap for the next service that reads a money rollup —**
+  Dapper matches a record's primary constructor against the **column** types exactly. Declaring
+  `DriverEarnings.GrossMinor` as `long` against an `INTEGER` column fails materialisation with
+  "a constructor matching signature (…) is required" and surfaces as a 500, not a mapping warning.
+  `fares.driver_earnings` money columns are `INTEGER`; they widen into `Money.AmountMinor` at the
+  call site instead. **C047 and C063 will hit this on the same table.**
+  **For C062 (admin-bff) —** the RBAC model is done and consumable: `GET /v1/me/permissions`
+  returns the caller's effective set and `GET /v1/admin/rbac/matrix` the whole table, both in the
+  shape the role-scoped menu manifest needs. Use `RequireFeature(area, capability)` rather than
+  naming roles at call sites. The audit interceptor (D-35) is still C062's — iam records a role
+  grant's provenance in `iam.user_roles.granted_by` and writes no `audit.events` row.
+  **For C029 / C053 —** `iam.emergency_contacts` now has an editable list and
+  `iam.users.emergency_contact_name`/`_phone` is guaranteed to be the oldest row or NULL, so
+  safety-svc's SOS fan-out can read the two columns without a join and trust them.
+  **Build host —** Docker for Testcontainers only; the replica stayed down throughout. The 330
+  tests take ~3 min, of which most is ~90 harness start-ups.

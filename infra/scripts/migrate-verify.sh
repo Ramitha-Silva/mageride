@@ -183,8 +183,11 @@ step "Tables owned by C003"
 # idempotency log and D4' §5 prints one only for rides (C020 handoff micro-change-set);
 # + iam.user_credentials and iam.federated_identities, which C026 added because AL-07 gives the
 # two portals password / Google / Apple sign-in and D4' §1 stores no verifier and no provider
-# binding (C026 handoff micro-change-set).
-check_eq "12 iam tables" "12" \
+# binding (C026 handoff micro-change-set);
+# + iam.phone_lookups, which C027 added because P-03's registration oracle
+# (GET /v1/users/lookup) answers a question about a person who never signed up and no spec gives
+# it a record — hashed, never the number (C027 handoff micro-change-set).
+check_eq "13 iam tables" "13" \
   "SELECT count(*) FROM information_schema.tables WHERE table_schema='iam' AND table_type='BASE TABLE';"
 # 12 from C003 + registry.command_log, added by C021 for the same reason iam.command_log was
 # (C021 handoff micro-change-set).
@@ -244,6 +247,21 @@ check_eq "the lock-out counter is durable, not cached" "2" \
   "SELECT count(*) FROM information_schema.columns
     WHERE table_schema='iam' AND table_name='user_credentials'
       AND column_name IN ('failed_attempts','locked_until');"
+
+step "P-03 — the phone-lookup log stores a hash, never a number (C027, 0108)"
+# BYTEA on purpose: a TEXT column is one careless INSERT away from holding the number it exists
+# to avoid holding.
+check_eq "phone_lookups.phone_hash is bytea" "1" \
+  "SELECT count(*) FROM information_schema.columns
+    WHERE table_schema='iam' AND table_name='phone_lookups'
+      AND column_name='phone_hash' AND data_type='bytea';"
+check_eq "phone_lookups has no clear-text phone column" "0" \
+  "SELECT count(*) FROM information_schema.columns
+    WHERE table_schema='iam' AND table_name='phone_lookups' AND column_name IN ('phone','msisdn');"
+# No ON DELETE CASCADE from iam.users: the audit row must outlive the account it may name.
+check_eq "phone_lookups.user_id nulls rather than cascades" "1" \
+  "SELECT count(*) FROM pg_constraint
+    WHERE conrelid='iam.phone_lookups'::regclass AND contype='f' AND confdeltype='n';"
 
 step "AL-09 / D-37 — vehicle type and registration uniqueness"
 check_eq "vehicle_type CHECK lists the 10 canonical types" "1" \
@@ -371,6 +389,13 @@ else
   printf '  %s✗%s a passenger session alongside a driver session was rejected\n' "$RED" "$RESET"
   FAILURES=$((FAILURES + 1))
 fi
+
+# P-03: an unregistered answer names nobody (ck_phone_lookups_identity, C027/0108). Asserted here
+# rather than with the rest of the 0108 checks because it needs a real account to try to name —
+# otherwise the foreign key could reject the row and the CHECK would go untested.
+check_rejects "an unregistered lookup cannot name an account (P-03)" \
+  "INSERT INTO iam.phone_lookups(phone_hash, registered, user_id)
+     VALUES (decode('00','hex'), false, '11111111-1111-1111-1111-111111111111');"
 
 check_rejects "vehicle_type 'car' is rejected (AL-09)" \
   "INSERT INTO registry.vehicles(owner_id, registration_number, vehicle_type, mode, driver_name)

@@ -3,6 +3,7 @@ using MageRide.Shared;
 using MageRide.Shared.Http.Idempotency;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace MageRide.Iam;
 
@@ -58,12 +59,30 @@ public static class IamApplication
         _ = app.Services.GetRequiredService<Auth.SigningKeyRing>();
         _ = app.Services.GetRequiredService<Otp.OtpCodes>();
         _ = app.Services.GetRequiredService<Otp.SmsTemplates>();
+        _ = app.Services.GetRequiredService<Domain.PhoneHasher>();
         _ = app.Services.GetRequiredService<MageRide.Shared.Mqtt.MqttSessionTokenIssuer>();
 
         app.UseMageRideDefaults(serviceOptions);
 
         app.MapJwks();
         app.MapAuthEndpoints();
+
+        // C027 — the identity data plane.
+        app.MapUserEndpoints();
+        app.MapSavedAddressEndpoints();
+        app.MapEmergencyContactEndpoints();
+        app.MapRbacEndpoints();
+
+        // Unset means /v1/users/lookup is not mapped at all. The route is not under the
+        // /v1/internal/** prefix the gateway refuses, so a deployment that forgot the secret and
+        // got the route anyway would be publishing a registration oracle (P-03).
+        var internalApiKey = app.Services
+            .GetRequiredService<IOptions<Configuration.AuthPolicyOptions>>().Value.InternalApiKey;
+
+        if (!string.IsNullOrWhiteSpace(internalApiKey))
+        {
+            app.MapUserLookupEndpoints(internalApiKey);
+        }
 
         return app;
     }

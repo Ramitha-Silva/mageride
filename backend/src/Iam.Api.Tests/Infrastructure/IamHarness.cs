@@ -31,6 +31,15 @@ internal sealed class IamHarness : IAsyncDisposable
     /// <summary>MqttOptions requires 32 characters; EMQX would validate against the same value.</summary>
     private const string MqttSecret = "c026-mqtt-session-secret-not-a-real-one";
 
+    /// <summary>
+    /// Deterministic key for <c>iam.phone_lookups.phone_hash</c> (P-03), so a test can recompute a
+    /// digest the service wrote and prove the number itself is nowhere in the row.
+    /// </summary>
+    public const string TestPhoneHashKey = "c027-phone-hash-key-not-a-secret";
+
+    /// <summary>The shared secret <c>GET /v1/users/lookup</c> demands until C042 lands a mesh.</summary>
+    public const string InternalApiKey = "c027-internal-key-not-a-secret";
+
     private static int _phoneCounter = Random.Shared.Next(1_000, 9_000) * 1_000;
 
     private readonly WebApplication _app;
@@ -119,6 +128,10 @@ internal sealed class IamHarness : IAsyncDisposable
             // and the verifier behaves identically either way; AuthPolicyOptions refuses to go
             // lower, which is the point of the floor being in the options and not here.
             ["Auth:PasswordIterations"] = "100000",
+            // C027. Both are required outside Development and both are fail-fast singletons, so a
+            // harness without them would not start.
+            ["Auth:PhoneHashKey"] = TestPhoneHashKey,
+            ["Auth:InternalApiKey"] = InternalApiKey,
             // One /metrics endpoint per harness would collide across concurrently running tests.
             ["Otel:PrometheusEnabled"] = "false",
         };
@@ -232,6 +245,66 @@ internal sealed class IamHarness : IAsyncDisposable
         Assert.Equal(System.Net.HttpStatusCode.OK, response.StatusCode);
 
         return SignedIn.From(await ReadJsonAsync(response));
+    }
+
+    /// <summary>GETs with a bearer token.</summary>
+    public Task<HttpResponseMessage> GetAsync(string path, string? bearer = null) =>
+        SendAsync(HttpMethod.Get, path, null, bearer);
+
+    /// <summary>PUTs JSON with a bearer token. No <c>Idempotency-Key</c> — D3' requires it on POST only.</summary>
+    public Task<HttpResponseMessage> PutAsync(string path, object? body, string? bearer = null) =>
+        SendAsync(HttpMethod.Put, path, body, bearer);
+
+    public Task<HttpResponseMessage> DeleteAsync(string path, string? bearer = null) =>
+        SendAsync(HttpMethod.Delete, path, null, bearer);
+
+    /// <summary>GETs a service-to-service route with the shared secret ride-svc would carry.</summary>
+    public Task<HttpResponseMessage> GetInternalAsync(string path, string? apiKey = InternalApiKey, string? caller = "ride-svc")
+    {
+        var request = new HttpRequestMessage(HttpMethod.Get, path);
+
+        if (apiKey is not null)
+        {
+            request.Headers.Add(Iam.Endpoints.UserLookupEndpoints.ApiKeyHeader, apiKey);
+        }
+
+        if (caller is not null)
+        {
+            request.Headers.Add(Iam.Endpoints.UserLookupEndpoints.CallerHeader, caller);
+        }
+
+        return Client.SendAsync(request);
+    }
+
+    /// <summary>
+    /// Signs a provisioned portal account in and returns its access token — the only way to hold a
+    /// token for one of the six internal roles or for a fleet owner, since no portal sign-in
+    /// creates an account (AL-06, AL-03).
+    /// </summary>
+    public async Task<string> PortalTokenAsync(string email, string password)
+    {
+        var response = await PostFromBrowserAsync("/v1/auth/password", new { email, password });
+        Assert.Equal(System.Net.HttpStatusCode.OK, response.StatusCode);
+
+        var body = await ReadJsonAsync(response);
+        return body.GetProperty("accessToken").GetString()!;
+    }
+
+    private Task<HttpResponseMessage> SendAsync(HttpMethod method, string path, object? body, string? bearer)
+    {
+        var request = new HttpRequestMessage(method, path);
+
+        if (body is not null)
+        {
+            request.Content = JsonContent.Create(body);
+        }
+
+        if (bearer is not null)
+        {
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", bearer);
+        }
+
+        return Client.SendAsync(request);
     }
 
     /// <summary>POSTs a portal sign-in body from a browser — no <c>X-Platform</c>, a user agent.</summary>

@@ -93,13 +93,18 @@ public sealed record AuthSessionResponse(
 }
 
 /// <summary>
-/// <c>iam.yaml#/components/schemas/UserProfile</c>, as far as the skeleton populates it.
+/// <c>iam.yaml#/components/schemas/UserProfile</c>.
 /// </summary>
 /// <remarks>
-/// <c>notifPrefs</c> is absent: notification preferences are part of the profile surface C027
-/// owns. Every field the contract marks required — <c>userId</c>, <c>phone</c>, <c>role</c> — is
-/// here, and <c>phone</c> is an empty string for a portal identity, which has an email instead
+/// Every field the contract marks required — <c>userId</c>, <c>phone</c>, <c>role</c> — is here,
+/// and <c>phone</c> is an empty string for a portal identity, which has an email instead
 /// (<c>iam.users</c> requires one credential or the other, not both).
+/// <para>
+/// <c>notifPrefs</c> is optional in the contract and is populated only by the C027 profile
+/// routes, which read the whole row. A sign-in response omits it rather than inventing an empty
+/// object: the auth half reads <see cref="IamUser"/>, which deliberately does not carry the
+/// column, and the client's next call is <c>GET /v1/me/bootstrap</c>, which does.
+/// </para>
 /// </remarks>
 public sealed record UserProfileResponse(
     string UserId,
@@ -113,6 +118,8 @@ public sealed record UserProfileResponse(
     string Language,
     string? OperatingCityCode,
     string DefaultPaymentMethod,
+    [property: System.Text.Json.Serialization.JsonConverter(typeof(LiteralKeyDictionaryConverter))]
+    IReadOnlyDictionary<string, bool>? NotifPrefs,
     DateTimeOffset CreatedAt)
 {
     public static UserProfileResponse From(IamUser user, IReadOnlyList<string> roles, FleetMembership? fleet = null)
@@ -132,6 +139,30 @@ public sealed record UserProfileResponse(
             Language: user.Language,
             OperatingCityCode: user.OperatingCityCode,
             DefaultPaymentMethod: user.DefaultPaymentMethod,
+            NotifPrefs: null,
             CreatedAt: user.CreatedAt);
+    }
+
+    /// <summary>The profile half's projection — the whole row, notification switches included.</summary>
+    public static UserProfileResponse From(
+        UserProfile profile, IReadOnlyList<string> roles, FleetMembership? fleet = null)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        ArgumentNullException.ThrowIfNull(roles);
+
+        return new UserProfileResponse(
+            UserId: profile.Id.ToString(),
+            Phone: profile.Phone ?? string.Empty,
+            Email: profile.Email,
+            FirstName: profile.FirstName,
+            PhotoUrl: profile.PhotoUrl,
+            Role: profile.Role,
+            Roles: roles,
+            FleetRole: fleet?.FleetRole,
+            Language: profile.Language,
+            OperatingCityCode: profile.OperatingCityCode,
+            DefaultPaymentMethod: profile.DefaultPaymentMethod,
+            NotifPrefs: profile.NotifPrefs,
+            CreatedAt: profile.CreatedAt);
     }
 }

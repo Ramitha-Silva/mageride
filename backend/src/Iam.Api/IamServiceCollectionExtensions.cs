@@ -1,14 +1,18 @@
 using System.Net.Http.Headers;
 using MageRide.Iam.Auth;
 using MageRide.Iam.Configuration;
+using MageRide.Iam.Domain;
 using MageRide.Iam.Mqtt;
 using MageRide.Iam.Otp;
 using MageRide.Iam.Persistence;
+using MageRide.Iam.Profiles;
+using MageRide.Iam.Rbac;
 using MageRide.Iam.Sessions;
 using MageRide.Iam.SignIn;
 using MageRide.Shared.Mqtt;
 using MageRide.Shared.Resilience;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -65,6 +69,7 @@ public static class IamServiceCollectionExtensions
         services.AddSingleton<OtpCodes>();
         services.AddSingleton<SmsTemplates>();
         services.AddSingleton<PasswordHasher>();
+        services.AddSingleton<PhoneHasher>();
         services.AddSingleton<InternalAccessPolicy>();
         services.AddSingleton<IAccessTokenIssuer, AccessTokenIssuer>();
 
@@ -75,10 +80,30 @@ public static class IamServiceCollectionExtensions
         services.AddSingleton<ICredentialRepository, CredentialRepository>();
         services.AddSingleton<IPublisherRepository, PublisherRepository>();
 
+        // C027 — the profile data plane.
+        services.AddSingleton<IProfileRepository, ProfileRepository>();
+        services.AddSingleton<ISavedAddressRepository, SavedAddressRepository>();
+        services.AddSingleton<IEmergencyContactRepository, EmergencyContactRepository>();
+        services.AddSingleton<IRoleGrantRepository, RoleGrantRepository>();
+        services.AddSingleton<IPdpaRequestRepository, PdpaRequestRepository>();
+        services.AddSingleton<IPhoneLookupRepository, PhoneLookupRepository>();
+        services.AddSingleton<IBootstrapRepository, BootstrapRepository>();
+
+        // Pure and stateless — the URD §2.3 matrix is compiled in and holds no per-request state.
+        services.AddSingleton<IPolicyEvaluator, PolicyEvaluator>();
+        services.AddSingleton<IAuthorizationHandler, FeatureAuthorizationHandler>();
+
         services.AddScoped<ISessionService, SessionService>();
         services.AddScoped<IOtpService, OtpService>();
         services.AddScoped<IPortalSignInService, PortalSignInService>();
         services.AddScoped<IMqttTokenService, MqttTokenService>();
+
+        services.AddScoped<IProfileService, ProfileService>();
+        services.AddScoped<ISavedAddressService, SavedAddressService>();
+        services.AddScoped<IEmergencyContactService, EmergencyContactService>();
+        services.AddScoped<IBootstrapService, BootstrapService>();
+        services.AddScoped<IUserLookupService, UserLookupService>();
+        services.AddScoped<IRoleAdminService, RoleAdminService>();
 
         AddOidc(services);
         AddOtpSender(services, configuration);

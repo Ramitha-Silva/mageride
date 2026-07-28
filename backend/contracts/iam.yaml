@@ -54,6 +54,12 @@ tags:
     description: Profile read/update, internal lookup, account deletion.
   - name: saved-addresses
     description: Passenger Home/Work and free-form saved places (AL-26, US-22.x).
+  - name: emergency-contacts
+    description: Driver SOS contacts, fanned out by safety-svc (AL-13, US-12.1/12.9).
+  - name: rbac
+    description: |
+      The nine-role deny-by-default permission model (AL-06). The matrix is URD §2.3 compiled
+      into the service — the same model the portals render their menus from (URD §2.2).
 
 paths:
 
@@ -754,6 +760,420 @@ paths:
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
       x-error-codes: [validation-failed, unauthorized]
 
+  /v1/me/prefs/payment-method:
+    put:
+      operationId: setDefaultPaymentMethod
+      summary: Set the caller's default payment method.
+      description: |
+        US-22.4 / AL-14. Cash is the platform default; `lankaqr` and `onepay` are the two
+        gateway-backed methods (AL-15). Writes `iam.users.default_payment_method`, which
+        ride-svc reads as the pre-selected method when a booking names none.
+
+        Δ **Not in D3'.** AL-14 puts a default payment method on the passenger profile and D2
+        SCR-PA-027 draws the picker, but no route sets it — `PUT /v1/users/me` carries only
+        name, photo, language and notification switches. Raised in the C027 handoff.
+      tags: [users]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [defaultPaymentMethod]
+              properties:
+                defaultPaymentMethod:
+                  $ref: '#/components/schemas/DefaultPaymentMethod'
+      responses:
+        '200':
+          description: Preference stored.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [defaultPaymentMethod]
+                properties:
+                  defaultPaymentMethod:
+                    $ref: '#/components/schemas/DefaultPaymentMethod'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized]
+
+  /v1/me/prefs/operating-city:
+    put:
+      operationId: setOperatingCity
+      summary: Set the caller's launch city.
+      description: |
+        AL-27 / US-1.3a. The code chosen on the first-run language/city screen
+        (SCR-DA/DI-002); it keys `config.operating_cities` and seeds the map centroid. An
+        unknown or deactivated code is `400 validation-failed` — a city the platform does not
+        operate in is not a preference, it is a client working from a stale list.
+
+        Δ **Not in D3'.** AL-27 moved launch cities out of the app into
+        `config.operating_cities` and persists the choice on `iam.users.operating_city_code`,
+        but only the read side (`GET /v1/config/cities`, content-svc) was given a route.
+      tags: [users]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [operatingCityCode]
+              properties:
+                operatingCityCode:
+                  type: string
+                  maxLength: 60
+                  example: colombo
+      responses:
+        '200':
+          description: Preference stored.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [operatingCityCode]
+                properties:
+                  operatingCityCode:
+                    type: string
+                    example: colombo
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized]
+
+  # -------------------------------------------------------------------------------------------
+  # Emergency contacts (AL-13)
+  #
+  # Δ **Not in D3'.** AL-13 stores a driver emergency contact "consumed by safety-svc SOS
+  # fan-out", D2 SCR-PA/PI-027b draws the add/edit list, and `POST /v1/sos` answers
+  # `400 no-emergency-contact` when there is none — but no route ever puts one on file. C003
+  # landed `iam.emergency_contacts` for the list and `iam.users.emergency_contact_name/phone`
+  # for the D-33 SOS fast path; these four routes are what write them. C027 handoff.
+  # -------------------------------------------------------------------------------------------
+  /v1/me/emergency-contacts:
+    get:
+      operationId: listEmergencyContacts
+      summary: List the caller's SOS contacts.
+      description: Primary first — the one denormalised onto `iam.users` for the D-33 fast path.
+      tags: [emergency-contacts]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Emergency contacts.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/EmergencyContact'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized]
+    post:
+      operationId: createEmergencyContact
+      summary: Add an SOS contact.
+      description: |
+        The first contact added becomes the primary and is copied onto
+        `iam.users.emergency_contact_name/phone`, which is what `POST /v1/sos` reads inside its
+        5-second budget (D-33) rather than joining.
+      tags: [emergency-contacts]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmergencyContactInput'
+      responses:
+        '201':
+          description: Contact saved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmergencyContact'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, invalid-phone, unauthorized, conflict]
+
+  /v1/me/emergency-contacts/{contactId}:
+    put:
+      operationId: updateEmergencyContact
+      summary: Edit an SOS contact.
+      description: |
+        Full replacement of the row. Editing the primary contact rewrites the denormalised copy
+        on `iam.users` in the same transaction, so the SOS fast path and the list never disagree.
+      tags: [emergency-contacts]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ContactId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmergencyContactInput'
+      responses:
+        '200':
+          description: Updated contact.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmergencyContact'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, invalid-phone, unauthorized, not-found]
+    delete:
+      operationId: deleteEmergencyContact
+      summary: Remove an SOS contact.
+      description: |
+        Deleting the primary promotes the next contact into
+        `iam.users.emergency_contact_name/phone`; deleting the last one clears both columns, and
+        `POST /v1/sos` goes back to `400 no-emergency-contact`.
+      tags: [emergency-contacts]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ContactId'
+      responses:
+        '204':
+          description: Deleted.
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, not-found]
+
+  # -------------------------------------------------------------------------------------------
+  # Eager-fetch login payload (AL-14, US-1.14/1.15, NFR-51)
+  # -------------------------------------------------------------------------------------------
+  /v1/me/bootstrap:
+    get:
+      operationId: getLoginBootstrap
+      summary: The whole eager-fetch set, in one round trip.
+      description: |
+        AL-14's login payload and US-1.15's six items: profile, saved addresses,
+        payment-method metadata, the **active trip**, the driver's shift and today's earnings,
+        and app config. Nothing here is unbounded — trip history, earnings breakdowns and
+        receipts are lazy-fetched per screen (US-1.16, NFR-51).
+
+        The active trip is always present when there is one, because a driver who switches
+        handsets mid-trip restores state from this call alone (US-1.14). `driver` is absent for
+        an account that holds no driver role.
+
+        Δ **Not in D3'.** AL-14 specifies the payload and NFR-51 bounds it, but no route
+        returns it; a client assembling it from `/v1/users/me`, `/v1/me/saved-addresses`,
+        `/v1/rides/*/active` and `/v1/config/cities` makes four round trips on a Sri Lankan
+        mobile network and cannot satisfy "restores trip state instantly". C027 handoff.
+      tags: [users]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: The eager-fetch set.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginBootstrap'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized]
+
+  # -------------------------------------------------------------------------------------------
+  # RBAC — the URD §2.3 permission model (AL-06)
+  # -------------------------------------------------------------------------------------------
+  /v1/me/permissions:
+    get:
+      operationId: getMyPermissions
+      summary: The caller's effective permissions.
+      description: |
+        The union of every granted role, bounded by the URD §2.3 matrix and narrowed by the
+        org-scoped fleet sub-role (AL-03: Owner = full org control + billing, Manager = no
+        billing, Viewer = read-only). URD §2.2 requires the portal menus to be rendered from
+        the same model the API enforces — this is that model.
+
+        Δ **Not in D3'.** C027 handoff.
+      tags: [rbac]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Effective permissions.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EffectivePermissions'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized]
+
+  /v1/admin/rbac/matrix:
+    get:
+      operationId: getPermissionMatrix
+      summary: The whole URD §2.3 feature-permission matrix.
+      description: |
+        Read-only, and deliberately so: the matrix is a specification, not configuration. A
+        Super Admin who could edit it could grant themselves something URD §2.3 forbids, which
+        is the one thing the matrix exists to prevent. Changing it is a spec change followed by
+        a deploy.
+
+        Δ **Not in D3'.** C027 handoff.
+      tags: [rbac]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Every (feature area, role) cell.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PermissionMatrix'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden]
+
+  /v1/admin/rbac/roles:
+    get:
+      operationId: listRoles
+      summary: The nine canonical roles.
+      description: '`iam.roles`. Internal roles (4–9) are provisioned by a Super Admin only (AL-06).'
+      tags: [rbac]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Role catalog.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RoleCatalogEntry'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden]
+
+  /v1/admin/rbac/users/{userId}:
+    get:
+      operationId: getUserRoleGrants
+      summary: A user's role grants, fleet membership and effective permissions.
+      description: |
+        What a Super Admin sees before changing anything, and what an Auditor may read and not
+        change. The effective set is resolved the same way the request path resolves it, so the
+        console cannot show a permission the API would refuse.
+      tags: [rbac]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: Grants.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserRoleGrants'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, not-found]
+
+  /v1/admin/rbac/users/{userId}/roles:
+    post:
+      operationId: grantRole
+      summary: Grant a canonical role.
+      description: |
+        Super Admin only — URD §2.3's "User & role management (RBAC)" row grants ✅ to
+        `super_admin` and 👁 to `auditor`, and ➖ to everybody else including `admin` ("**No**
+        RBAC/role management", URD §2.4). Idempotent: `iam.user_roles`' primary key settles a
+        repeat, and the granting Super Admin is recorded in `granted_by`.
+      tags: [rbac]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role]
+              properties:
+                role:
+                  $ref: './_shared.yaml#/components/schemas/Role'
+      responses:
+        '200':
+          description: Grants after the change.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserRoleGrants'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden, not-found]
+
+  /v1/admin/rbac/users/{userId}/roles/{role}:
+    delete:
+      operationId: revokeRole
+      summary: Revoke a canonical role.
+      description: |
+        Super Admin only. Two refusals, both `409`: the account's **primary** role
+        (`iam.users.role`) cannot be revoked as a grant, because the union in
+        `IUserRepository.RolesAsync` would keep handing it back; and a Super Admin cannot
+        revoke their own `super_admin`, because AL-06 makes them the only principal who can
+        grant it back.
+      tags: [rbac]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - name: role
+          in: path
+          required: true
+          schema:
+            $ref: './_shared.yaml#/components/schemas/Role'
+      responses:
+        '200':
+          description: Grants after the change.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserRoleGrants'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, not-found, conflict]
+
 components:
   # Re-declared by $ref so this document is self-contained for tooling that validates
   # `security` against a local `components.securitySchemes` (Spectral, most codegens).
@@ -768,6 +1188,20 @@ components:
   parameters:
     AddressId:
       name: addressId
+      in: path
+      required: true
+      schema:
+        $ref: './_shared.yaml#/components/schemas/Ulid'
+
+    ContactId:
+      name: contactId
+      in: path
+      required: true
+      schema:
+        $ref: './_shared.yaml#/components/schemas/Ulid'
+
+    UserId:
+      name: userId
       in: path
       required: true
       schema:
@@ -870,3 +1304,286 @@ components:
             addressId:
               $ref: './_shared.yaml#/components/schemas/Ulid'
         - $ref: '#/components/schemas/SavedAddressInput'
+
+    DefaultPaymentMethod:
+      type: string
+      description: |
+        Cash is the platform default (US-22.4). `lankaqr` opens the AL-15 Pay deep link and
+        `onepay` the hosted gateway; the driver-QR method is a *settlement* choice made during
+        a ride, not a stored preference.
+      enum: [cash, lankaqr, onepay]
+      default: cash
+
+    EmergencyContactInput:
+      type: object
+      required: [name, phone]
+      properties:
+        name:
+          type: string
+          maxLength: 120
+        phone:
+          $ref: './_shared.yaml#/components/schemas/PhoneE164'
+
+    EmergencyContact:
+      allOf:
+        - type: object
+          required: [contactId, isPrimary]
+          properties:
+            contactId:
+              $ref: './_shared.yaml#/components/schemas/Ulid'
+            isPrimary:
+              type: boolean
+              description: |
+                The contact denormalised onto `iam.users.emergency_contact_name/phone` for the
+                D-33 SOS fast path. Exactly one per account that has any.
+        - $ref: '#/components/schemas/EmergencyContactInput'
+
+    # Mirrors content.yaml#/components/schemas/OperatingCity. Duplicated rather than $ref'd
+    # across service documents on purpose — the eager-fetch payload exists to save a round trip
+    # to content-svc, not to couple the two contracts. The two shapes must stay identical.
+    OperatingCity:
+      type: object
+      required: [code, nameEn, nameSi, nameTa, centroid, sortOrder]
+      properties:
+        code:
+          type: string
+          example: colombo
+        nameEn:
+          type: string
+        nameSi:
+          type: string
+          example: කොළඹ
+        nameTa:
+          type: string
+          example: கொழும்பු
+        centroid:
+          $ref: './_shared.yaml#/components/schemas/GeoPoint'
+        sortOrder:
+          type: integer
+          format: int32
+
+    ActiveTrip:
+      type: object
+      description: |
+        The non-terminal journey the caller is part of, whichever plane it lives on — a Mode C
+        `rides.rides` row (ride-svc) or a Mode A/B `trips.sessions` row (trip-state-svc). Always
+        part of the eager set so a mid-trip device switch restores state (US-1.14).
+      required: [tripId, kind, role, state, startedAt]
+      properties:
+        tripId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        kind:
+          type: string
+          description: '`ride` = Mode C booking; `session` = Mode A/B tracking session (R-01).'
+          enum: [ride, session]
+        role:
+          type: string
+          description: Which end of the trip the caller is on.
+          enum: [passenger, driver]
+        state:
+          type: string
+          description: '`rides.rides.state` or `trips.sessions.state`, verbatim.'
+        mode:
+          type: string
+          enum: [A, B, C]
+        vehicleId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        counterpartyId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        pickup:
+          $ref: './_shared.yaml#/components/schemas/GeoPoint'
+        dropoff:
+          $ref: './_shared.yaml#/components/schemas/GeoPoint'
+        startedAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    DriverShift:
+      type: object
+      description: |
+        US-1.15 item 5 — shift/online status and today's earnings summary. `todayTrips`,
+        `todayGross` and `todayDailyFee` come from the `fares.driver_earnings` rollup for the
+        current **Asia/Colombo** business day (D-38), never from aggregating the ledger.
+      required: [isOnline, todayTrips, todayGross, todayDailyFee]
+      properties:
+        isOnline:
+          type: boolean
+        activeSessionId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        activeVehicleId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        businessDate:
+          $ref: './_shared.yaml#/components/schemas/BusinessDate'
+        todayTrips:
+          type: integer
+          format: int32
+          minimum: 0
+        todayGross:
+          $ref: './_shared.yaml#/components/schemas/Money'
+        todayDailyFee:
+          $ref: './_shared.yaml#/components/schemas/Money'
+
+    AppConfig:
+      type: object
+      description: US-1.15 item 6 — app config and feature flags.
+      required: [cities, featureFlags]
+      properties:
+        cities:
+          type: array
+          description: Active launch cities, `sortOrder` first (AL-27).
+          items:
+            $ref: '#/components/schemas/OperatingCity'
+        featureFlags:
+          type: object
+          description: |
+            Server-driven flags. Empty until a store exists — ADD §1.12 gives Super Admin
+            "feature flags" but no spec models a table for them (C027 handoff).
+          additionalProperties:
+            type: boolean
+
+    LoginBootstrap:
+      type: object
+      required: [profile, savedAddresses, emergencyContacts, defaultPaymentMethod, paymentMethods, config, permissions]
+      properties:
+        profile:
+          $ref: '#/components/schemas/UserProfile'
+        savedAddresses:
+          type: array
+          items:
+            $ref: '#/components/schemas/SavedAddress'
+        emergencyContacts:
+          type: array
+          items:
+            $ref: '#/components/schemas/EmergencyContact'
+        defaultPaymentMethod:
+          $ref: '#/components/schemas/DefaultPaymentMethod'
+        paymentMethods:
+          type: array
+          description: Payment-method *metadata* (US-1.15 item 3) — what this account may pay with.
+          items:
+            $ref: '#/components/schemas/DefaultPaymentMethod'
+        activeTrip:
+          $ref: '#/components/schemas/ActiveTrip'
+        driver:
+          $ref: '#/components/schemas/DriverShift'
+        config:
+          $ref: '#/components/schemas/AppConfig'
+        permissions:
+          $ref: '#/components/schemas/EffectivePermissions'
+
+    PermissionGrant:
+      type: string
+      description: |
+        One capability from the URD §2.3 legend. A cell holds a set of these:
+        ✅ Full = `read`+`write`, ⚙ Configure = `read`+`configure`, 👁 Read-only = `read`,
+        ◐ Own-scope = the same set plus `ownScope`, "raise"/"report" = `raise`, ➖ = empty.
+      enum: [read, write, configure, raise, ownScope]
+
+    PermissionEntry:
+      type: object
+      required: [featureArea, label, grants, scopedGrants, symbol]
+      properties:
+        featureArea:
+          type: string
+          description: Stable key for a URD §2.3 row, e.g. `driver-wallet-adjustments`.
+          example: end-user-account-management
+        label:
+          type: string
+          description: The row's URD §2.3 wording.
+        grants:
+          type: array
+          description: Every capability the caller holds here, from any role.
+          items:
+            $ref: '#/components/schemas/PermissionGrant'
+        scopedGrants:
+          type: array
+          description: |
+            The subset of `grants` available **only** within the caller's own records or
+            organisation — what `qualifier` describes. Empty when nothing is scope-limited.
+            Per capability rather than per cell, because a caller who is both an Admin (👁
+            platform-wide) and a Fleet Owner (◐ own org) may read everything and write only
+            their own organisation.
+          items:
+            $ref: '#/components/schemas/PermissionGrant'
+        symbol:
+          type: string
+          description: The URD §2.3 cell verbatim, qualifier included.
+          example: ◐ on tickets
+        qualifier:
+          type: string
+          description: The scope note the cell carries, if any — `own`, `own org`, `financial`, `rates`.
+
+    EffectivePermissions:
+      type: object
+      required: [userId, roles, permissions]
+      properties:
+        userId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        roles:
+          type: array
+          items:
+            $ref: './_shared.yaml#/components/schemas/Role'
+        fleetRole:
+          $ref: './_shared.yaml#/components/schemas/FleetRole'
+        fleetId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        permissions:
+          type: array
+          description: One entry per URD §2.3 feature area. Areas with no grant are present and empty.
+          items:
+            $ref: '#/components/schemas/PermissionEntry'
+
+    PermissionMatrix:
+      type: object
+      required: [roles, areas]
+      properties:
+        roles:
+          type: array
+          items:
+            $ref: './_shared.yaml#/components/schemas/Role'
+        areas:
+          type: array
+          items:
+            type: object
+            required: [featureArea, label, cells]
+            properties:
+              featureArea:
+                type: string
+              label:
+                type: string
+              cells:
+                type: object
+                description: Role to cell. Every one of the nine roles is present — there is no default.
+                additionalProperties:
+                  $ref: '#/components/schemas/PermissionEntry'
+
+    RoleCatalogEntry:
+      type: object
+      required: [role, label, isInternal]
+      properties:
+        role:
+          $ref: './_shared.yaml#/components/schemas/Role'
+        label:
+          type: string
+        isInternal:
+          type: boolean
+          description: Roles 4–9, provisioned only by a Super Admin (AL-06).
+
+    UserRoleGrants:
+      type: object
+      required: [userId, primaryRole, roles, permissions]
+      properties:
+        userId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        primaryRole:
+          $ref: './_shared.yaml#/components/schemas/Role'
+        roles:
+          type: array
+          description: The union that decides permissions — grants plus the primary role (AL-06).
+          items:
+            $ref: './_shared.yaml#/components/schemas/Role'
+        fleetRole:
+          $ref: './_shared.yaml#/components/schemas/FleetRole'
+        fleetId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        permissions:
+          $ref: '#/components/schemas/EffectivePermissions'

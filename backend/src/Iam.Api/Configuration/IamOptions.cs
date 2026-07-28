@@ -214,6 +214,30 @@ public sealed class AuthPolicyOptions
     /// <summary>The contract's <c>PasswordLogin.password</c> <c>minLength: 12</c>.</summary>
     [Range(8, 256)]
     public int MinimumPasswordLength { get; set; } = 12;
+
+    /// <summary>
+    /// HMAC key for <c>iam.phone_lookups.phone_hash</c> (P-03, migration 0108). Required outside
+    /// Development; see <see cref="MageRide.Iam.Domain.PhoneHasher"/> for why an unkeyed digest of
+    /// a Sri Lankan mobile number is not a hash of anything.
+    /// </summary>
+    /// <remarks>
+    /// <b>Not rotatable in place.</b> Every existing digest is keyed with the old value, so a new
+    /// key partitions the table rather than re-keying it. That is the trade for a lookup log that
+    /// can correlate repeats without storing a number, and it is the reason this is not
+    /// <c>Otp:PepperKey</c>, which is rotated freely.
+    /// </remarks>
+    public string? PhoneHashKey { get; set; }
+
+    /// <summary>
+    /// Shared secret for <c>GET /v1/users/lookup</c>, presented in
+    /// <c>X-MageRide-Internal-Key</c>. D3' §0 puts the route on service-to-service mTLS and the
+    /// gateway refuses <c>/v1/internal/**</c> at the edge — but this route is not under that
+    /// prefix and <b>is</b> forwarded by the <c>iam-users</c> gateway route, so leaving it on the
+    /// edge's good manners would publish a registration oracle. Unset means the route is not
+    /// mapped at all: a deployment that forgets it gets 404s, not an open door. Replaced by the
+    /// mTLS peer identity in C042.
+    /// </summary>
+    public string? InternalApiKey { get; set; }
 }
 
 /// <summary>

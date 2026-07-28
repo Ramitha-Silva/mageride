@@ -1,4 +1,4 @@
-# iam-svc — auth conventions (C020 ws-iam-minimal + C026 iam-svc-auth)
+# iam-svc (C020 ws-iam-minimal + C026 iam-svc-auth + C027 iam-svc-profile-rbac)
 
 Stack: .NET 10 Minimal API + Dapper over Npgsql. References `MageRide.Shared` (C002).
 
@@ -6,9 +6,11 @@ Stack: .NET 10 Minimal API + Dapper over Npgsql. References `MageRide.Shared` (C
 
 ## What this is
 
-iam-svc's **authentication** half: every sign-in surface AL-07 lists, the full token model, device
-binding, and the MQTT session JWT E-02 decouples from the API token. Everything here matches
-`backend/contracts/iam.yaml`, which wins over this file and over the code.
+Two halves that share one account. **Authentication** (C026): every sign-in surface AL-07 lists,
+the token model, device binding, and the MQTT session JWT E-02 decouples from the API token.
+**The identity data plane** (C027): profile, preferences, saved addresses, emergency contacts,
+the eager-fetch login payload, the nine-role deny-by-default RBAC and the PDPA erasure request.
+Everything here matches `backend/contracts/iam.yaml`, which wins over this file and over the code.
 
 | Endpoint | Surface | Spec |
 |---|---|---|
@@ -20,9 +22,26 @@ binding, and the MQTT session JWT E-02 decouples from the API token. Everything 
 | `POST /v1/auth/refresh` · `/logout` | all | D-29, US-1.7 |
 | `POST /v1/auth/mqtt-token` | Driver app | E-02, D-21 |
 | `GET /.well-known/jwks.json` | infrastructure | D-29, D-21 |
+| `GET` · `PUT /v1/users/me` | all | US-1.5, AL-06 |
+| `DELETE /v1/users/me` | apps | US-1.8, E-06 |
+| `GET /v1/users/lookup` | ride-svc (mTLS) | P-03 |
+| `GET · POST · PUT · DELETE /v1/me/saved-addresses` | Passenger app | AL-14, AL-26, US-22.x |
+| `GET · POST · PUT · DELETE /v1/me/emergency-contacts` | both apps | **Δ C027** — AL-13 |
+| `PUT /v1/me/prefs/language` | onboarding + Settings | AL-26, D-26 |
+| `PUT /v1/me/prefs/payment-method` | Passenger Settings | **Δ C027** — AL-14, US-22.4 |
+| `PUT /v1/me/prefs/operating-city` | first-run city screen | **Δ C027** — AL-27, US-1.3a |
+| `GET /v1/me/bootstrap` | both apps, on login | **Δ C027** — AL-14, US-1.14/1.15 |
+| `GET /v1/me/permissions` | both portals | **Δ C027** — URD §2.2, AL-06 |
+| `GET /v1/admin/rbac/matrix` · `/roles` · `/users/{id}` · role grant/revoke | Admin Portal | **Δ C027** — URD §2.3 |
 
-**Not here, on purpose.** Profile (`/v1/users/me`), saved addresses, the language preference,
-`/v1/users/lookup` and PDPA are **C027**. They are left unmapped rather than stubbed.
+**Δ C027** marks the eight routes D3' does not carry; each is argued in `iam.yaml` and recorded as
+a micro-change-set in the C027 handoff in `build/progress.md`.
+
+**Not here, on purpose.** PDPA *fulfilment* — the export ZIP, the anonymisation, the statutory
+hold list — is admin-bff's (C065); `DELETE /v1/users/me` writes a `pdpa.requests` row and touches
+nothing else. Driver identity (name, photo, licence) is `PUT /v1/drivers/profile` in registry-svc
+(C029). Notification *delivery* preferences also have a notification-svc route (C061) over the
+same `iam.users.notif_prefs` column.
 
 **No MFA, ever (AL-37).** The endpoints AL-37 removed are listed at the top of
 `backend/contracts/iam.yaml`; do not re-add them. Both password routes answer with a token pair or
@@ -77,6 +96,73 @@ D3' §0 and D7' §4.2 still carry pre-AL-37 wording; AL-37 is later and wins (pl
   the app it came from; an existing account is never escalated. Holding `driver` is what
   registry-svc onboarding grants (C029).
 
+### The RBAC model (C027)
+
+- **URD §2.3 is compiled in, not configured.** `Rbac/PermissionMatrix.cs` is the 21×9 table
+  transcribed cell for cell; `PermissionMatrixTests` **parses §2.3 out of
+  `specs/user-requirements-document.md`** and compares all 189 cells, so a slip here or a change
+  there fails the build. It is read-only on purpose: the principal who would edit it is the
+  principal it constrains, so a writable matrix is one `UPDATE` away from a Super Admin granting
+  themselves what §2.3 forbids. "Assign roles" is the writable half — `iam.user_roles`.
+- **Deny-by-default has no fall-through.** `PermissionMatrix.Cell` answers ➖ for a pair it does
+  not hold and `FeatureAuthorizationHandler` never succeeds a requirement whose feature area is
+  not one of the twenty-one. An endpoint that names an area nobody transcribed answers **403**,
+  not "authenticated is good enough".
+- **Effective permissions are the union of every role held** (URD §2.1), and the union is
+  strictly additive over capabilities. `RequireFeature(area, capability)` is preferred over
+  `RequireMageRideRole` wherever §2.3 has a row: naming `super_admin` at a call site duplicates a
+  decision the spec already made and drifts the day the spec adds a role to the cell.
+- **`ownScope` is a fence, not an answer, and it is per capability.** iam-svc knows the caller's
+  roles; it cannot know whether ride 7 is theirs. A service that sees it has been told "allowed,
+  and you must bound it", and `qualifier` names how (`own`, `own org`, `financial`, …). It is
+  tracked per verb because a caller who is both an Admin (👁 platform-wide) and a Fleet Owner
+  (◐ own org) reads every fleet and writes only their own — one flag for the whole row would be
+  wrong in one direction or the other.
+- **The fleet sub-role narrows the `fleet_owner` column and nothing else** (URD §2.1): Manager
+  loses billing, Viewer is read-only. A Viewer who is also a Support CSR keeps every CSR cell at
+  full strength.
+- **An Admin is refused role management.** URD §2.3's RBAC row gives `admin` ➖ and §2.4 spells it
+  out. It is the most surprising cell in the matrix, so `RbacEndpointTests` asserts it by name.
+- **A role grant reaches its holder at the next refresh, not instantly.** C026's rotation re-reads
+  the principal; revoking the live session instead would sign out an admin who was granted an
+  *extra* role.
+
+### The profile data plane (C027)
+
+- **`iam.saved_addresses` keeps both spellings of Home and Work, and that is the answer to C003
+  note (c).** `label` and `is_home`/`is_work` are not redundant: only the booleans can express
+  "at most one Home" as an index (`uq_saved_home`), and only the label gives D2 SCR-PA-026's
+  "Save Address As" somewhere to go — and `iam.yaml` requires both. The service reconciles them
+  (a `home` label sets the flag and vice versa) and refuses the one combination that cannot be
+  honoured rather than guessing.
+- **The primary emergency contact is denormalised on purpose.** D-33 budgets five seconds for the
+  whole SOS fan-out, so safety-svc reads `iam.users.emergency_contact_name`/`_phone` and never
+  joins. Every mutation re-derives the primary (oldest row) and rewrites those columns **in the
+  same transaction**, so the two copies can never be observed disagreeing. Deleting the last
+  contact clears them, which puts `POST /v1/sos` back to `400 no-emergency-contact`.
+- **`GET /v1/me/bootstrap` is one connection and nothing unbounded** (NFR-51). It reads across
+  bounded-context lines — `rides.rides`, `trips.sessions`, `fares.driver_earnings`,
+  `config.operating_cities` — for the same reason `PublisherRepository` does: four synchronous
+  HTTP calls would make a login fail whenever any of four services is redeploying, on the one
+  request a user cannot proceed without. Read-only; the outbox rule is about state changes. Trip
+  history, earnings breakdowns and receipts are lazy-fetched (US-1.16) and must never be added.
+- **`DELETE /v1/users/me` records and does not act.** Erasure may be rejected or held
+  (`FulfilledHold`), so the account, its columns and its live session are left exactly as they
+  were; a second request while one is open is a `409`, because two 30-day clocks against one
+  obligation leave whichever C065 does not fulfil permanently overdue.
+- **`GET /v1/users/lookup` authenticates itself.** It is a registration oracle and it is **not**
+  under the `/v1/internal/**` prefix the gateway refuses — the `iam-users` route forwards it from
+  the public internet. `Auth:InternalApiKey` unset means the route is not mapped at all.
+- **Notification-type keys are data, not property names.** `MageRideJson`'s camelCase
+  dictionary-key policy would rewrite `SCHEDULED_REMINDER` as `sCHEDULED_REMINDER` once, silently;
+  `LiteralKeyDictionaryConverter` is applied to the column and to the wire so it cannot.
+  Safety-critical types (`SOS_*`, `RIDE_CANCELLED`) are dropped rather than stored (US-10.7).
+- **Language is accepted on two routes and the AL-26 fence is a UI one.** AL-26 removed the
+  picker from Edit-profile and kept it in onboarding and Settings — a rule about screens, which
+  the server cannot see. `iam.yaml` lists `language` on `PUT /v1/users/me`, so it is honoured
+  there; `PUT /v1/me/prefs/language` is the route the two allowed screens use. D2 SCR-PA/PI-027b
+  still draws the control on Edit profile and is the earlier document (C027 handoff).
+
 ## Configuration
 
 `Sms:Provider=dev` logs the OTP instead of sending it and is refused outside Development unless
@@ -92,10 +178,22 @@ broker refuses every CONNECT.
 `Auth:InternalRoleIpAllowList` is off while empty (the ADD calls it optional). `Auth:TrustForwardedFor`
 is on because every request arrives through the C008 gateway.
 
+Two more are resolved during `IamApplication.Build` for the same reason as the other four:
+`Auth:PhoneHashKey` (required outside Development — an unkeyed digest of a `+947XXXXXXXX` number
+is a 10^8 offline search, and it is **not rotatable in place**, since a new key partitions
+`iam.phone_lookups` rather than re-keying it) and `Auth:InternalApiKey`, whose absence unmaps
+`GET /v1/users/lookup` entirely.
+
 ## Schema this service added
 
-`db/migrations/0104`–`0107` close four gaps D4' leaves open; each file's header says why, and all
-four are recorded as micro-change-sets in the C020 and C026 handoffs in `build/progress.md`.
+`db/migrations/0104`–`0108` close five gaps D4' leaves open; each file's header says why, and all
+five are recorded as micro-change-sets in the C020, C026 and C027 handoffs in `build/progress.md`.
 `iam.devices` carries `device_key` and admits `web`; `iam.otp_attempts` carries
 `device_id`/`app`/`fcm_token`; `iam.sessions` carries `family_id` and admits `admin`/`fleet`;
-`iam.command_log`, `iam.user_credentials` and `iam.federated_identities` exist at all.
+`iam.command_log`, `iam.user_credentials`, `iam.federated_identities` and `iam.phone_lookups`
+exist at all.
+
+`iam.user_prefs` does **not** exist, despite ADD §9.1 and D4' Δ 2026-06-21 naming it: no
+`CREATE TABLE` appears in any spec and both runnable DDL sources put `language` and
+`default_payment_method` on `iam.users` (C003 note (d)). C027 kept that decision; the three
+preference routes write columns.
