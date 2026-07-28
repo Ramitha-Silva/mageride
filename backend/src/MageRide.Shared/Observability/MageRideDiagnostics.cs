@@ -40,6 +40,36 @@ public static class MageRideDiagnostics
     public static readonly Counter<long> RateLimitRejections =
         Meter.CreateCounter<long>("mageride.ratelimit.rejections", "{request}", "Requests rejected by a token-bucket rate limiter.");
 
+    // --- Ride aggregate (C032): the R-20 stuck-state business SLOs --------------------------------
+    // ADD §13.3.1 computes each one as `count(rides WHERE state=S AND age > T)` rolling 1 min, so
+    // the gauge is the metric and the alert rule is the threshold. Published by ride-svc, tagged by
+    // state; the counters either side of it are what says a backstop noticed before an operator did.
+
+    /// <summary>
+    /// Rides sitting in one state past its ADD §13.3.1 window, tagged <c>state</c>. Any sustained
+    /// non-zero reading pages on-call and points at <c>runbooks/ride-stuck.md</c>.
+    /// </summary>
+    public const string RidesStuckGauge = "mageride.rides.stuck";
+
+    /// <summary>A durable backstop found a ride stuck and reported it, tagged <c>state</c>.</summary>
+    public static readonly Counter<long> RideStuckDetected =
+        Meter.CreateCounter<long>("mageride.rides.stuck_detected", "{ride}",
+            "Rides a durable timer found past their expected window (R-20).");
+
+    /// <summary>
+    /// Ride timers that fired and moved a ride, tagged <c>kind</c> — the no-show and grace
+    /// transitions §11.12 makes the platform's responsibility rather than a client's.
+    /// </summary>
+    public static readonly Counter<long> RideTimersFired =
+        Meter.CreateCounter<long>("mageride.rides.timers_fired", "{timer}",
+            "Durable ride timers that fired and changed the aggregate (R-04).");
+
+    /// <summary>
+    /// Unfired <c>rides.timers</c> rows more than 30 s overdue — ADD §13.4's backlog runbook
+    /// trigger ("&gt; 100 ⇒ scheduler ill").
+    /// </summary>
+    public const string RideTimerBacklogGauge = "mageride.rides.timer_backlog";
+
     // --- Hot path (C024): EMQX -> Redpanda -> Redis -> SignalR ------------------------------------
     // ADD §13.2's golden signals for the position plane. The end-to-end histogram is the one that
     // answers this component's SLO ("a position reaches the passenger's group in under 5 s, p95");

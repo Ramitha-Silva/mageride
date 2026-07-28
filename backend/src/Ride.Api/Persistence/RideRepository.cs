@@ -133,6 +133,46 @@ public interface IRideRepository
         long? expectedVersion,
         Guid? requiredDriverId,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// A move to a terminal state (§11.12): stamps <c>terminal_at</c> and drops the live offer, so
+    /// a finished ride carries neither a countdown nor something to accept.
+    /// </summary>
+    Task<RideRow?> TerminateAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction? transaction,
+        Guid rideId,
+        string fromState,
+        string toState,
+        long? expectedVersion,
+        CancellationToken cancellationToken);
+
+    /// <summary>The driver's live ride on a given vehicle, for the R-15 last-will path.</summary>
+    /// <remarks>
+    /// Keyed on <c>accepted_vehicle_id</c> rather than the driver: the last will names a vehicle,
+    /// and a driver may own several. <c>ux_rides_driver_busy</c> makes at most one ride per driver
+    /// busy at a time, so at most one row can come back.
+    /// </remarks>
+    Task<RideRow?> FindBusyByVehicleAsync(
+        NpgsqlConnection connection, NpgsqlTransaction? transaction, Guid vehicleId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// How many post-acceptance rider cancellations this passenger has run up since their last
+    /// completed ride (AL-16, US-6A.10b).
+    /// </summary>
+    Task<int> CountConsecutiveRiderCancellationsAsync(
+        NpgsqlConnection connection, NpgsqlTransaction? transaction, Guid passengerId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// How many rides have sat in <paramref name="state"/> longer than <paramref name="age"/> —
+    /// one row of ADD §13.3.1's stuck-state table (R-20).
+    /// </summary>
+    Task<int> CountStuckAsync(
+        NpgsqlConnection connection, string state, TimeSpan age, CancellationToken cancellationToken);
+
+    /// <summary>Outbox rows for this ride that the dispatcher has not published yet (saga diagnostics).</summary>
+    Task<int> CountPendingOutboxAsync(
+        NpgsqlConnection connection, NpgsqlTransaction? transaction, Guid rideId, CancellationToken cancellationToken);
 }
 
 /// <summary>The fields <c>POST /v1/rides/request</c> writes.</summary>
@@ -163,6 +203,24 @@ public sealed class RideRepository : IRideRepository
 
     /// <summary>The ten states a ride never leaves (D5' §6); anything else is live.</summary>
     private static readonly string[] TerminalStates = [.. RideStates.Terminal];
+
+    /// <summary>The four states <c>ux_rides_driver_busy</c> holds a driver in (O2, R-10).</summary>
+    private static readonly string[] DriverBusyStates = [.. RideStates.DriverBusy];
+
+    /// <summary>
+    /// The only outcomes AL-16's consecutive counter reads: a post-acceptance rider cancel, and a
+    /// ride that got far enough to be "successfully completed" — which is Completed and everything
+    /// downstream of it, because a ride that reached PaymentPending was driven and delivered.
+    /// </summary>
+    private static readonly string[] CountedOutcomeStates =
+    [
+        RideStates.CancelledByRiderAfterAccept,
+        RideStates.Completed,
+        RideStates.PaymentPending,
+        RideStates.Paid,
+        RideStates.CashSettled,
+        RideStates.CashOnDeliveryCollected,
+    ];
 
     public async Task<RideCreateResult> CreateAsync(
         NpgsqlConnection connection,
@@ -503,6 +561,139 @@ public sealed class RideRepository : IRideRepository
                 ExpectedVersion = expectedVersion,
                 RequiredDriverId = requiredDriverId,
             },
+            transaction,
+            cancellationToken: cancellationToken));
+    }
+
+    public Task<RideRow?> TerminateAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction? transaction,
+        Guid rideId,
+        string fromState,
+        string toState,
+        long? expectedVersion,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+
+        // One origin state per call, not `= ANY(...)`: the §11.12 matrix resolves the outcome from
+        // the state the caller believed the ride was in, so binding the UPDATE to that same state
+        // is what stops a ride that moved on between the read and the write from being terminated
+        // under the wrong row's rules. Row count 0 sends the caller back to the matrix.
+        //
+        // `accepted_driver_id` is deliberately kept: the audit and every consumer need to know who
+        // was driving when it ended, and ux_rides_driver_busy releases the driver by itself the
+        // moment the state leaves its four-state list.
+        //
+        // The offer columns that describe a *live* offer are cleared, exactly as a decline clears
+        // them; `offered_driver_id`/`offered_vehicle_id` stay, because they are the record of who
+        // was asked and RideRow.IsParticipant lets that driver read the ride they were offered.
+        return connection.QuerySingleOrDefaultAsync<RideRow>(new CommandDefinition(
+            $"""
+             UPDATE rides.rides
+                SET state = @ToState,
+                    current_offer_id = NULL,
+                    offer_expires_at = NULL,
+                    terminal_at = now(),
+                    version = version + 1,
+                    updated_at = now()
+              WHERE id = @RideId
+                AND state = @FromState
+                AND (@ExpectedVersion::bigint IS NULL OR version = @ExpectedVersion)
+             RETURNING {Columns};
+             """,
+            new
+            {
+                RideId = rideId,
+                FromState = fromState,
+                ToState = toState,
+                ExpectedVersion = expectedVersion,
+            },
+            transaction,
+            cancellationToken: cancellationToken));
+    }
+
+    public Task<RideRow?> FindBusyByVehicleAsync(
+        NpgsqlConnection connection, NpgsqlTransaction? transaction, Guid vehicleId, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+
+        return connection.QuerySingleOrDefaultAsync<RideRow>(new CommandDefinition(
+            $"""
+             SELECT {Columns} FROM rides.rides
+              WHERE accepted_vehicle_id = @VehicleId
+                AND state = ANY(@BusyStates)
+              ORDER BY updated_at DESC
+              LIMIT 1;
+             """,
+            new { VehicleId = vehicleId, BusyStates = DriverBusyStates },
+            transaction,
+            cancellationToken: cancellationToken));
+    }
+
+    public async Task<int> CountConsecutiveRiderCancellationsAsync(
+        NpgsqlConnection connection, NpgsqlTransaction? transaction, Guid passengerId, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+
+        // US-6A.10b, read literally: "the counter is consecutive — it resets to zero on any
+        // successfully completed ride", and "only cancellations made after a driver has accepted
+        // count; pre-acceptance cancellations never count".
+        //
+        // So the sequence is filtered to the two outcomes that mean anything — a post-acceptance
+        // cancel and a ride that completed — and the answer is the length of the run of cancels at
+        // its head. Everything else (a pre-acceptance cancel, a driver cancel, ExpiredNoDriver, a
+        // no-show) neither increments nor resets, which is what "never count" has to mean: an
+        // event that reset the counter would be an event that *helped* the passenger, and the URD
+        // grants that only to a completed ride.
+        //
+        // Derived from this service's own rides rather than stored, because reputation-svc (C033)
+        // owns `reputation.counters.cancellations_continuous` and "counters live there and nowhere
+        // else". This is the same question answered from the aggregate that produced the facts;
+        // when C033 lands, ride-svc asks it over gRPC instead. Recorded in the C032 handoff.
+        return await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+            $"""
+             WITH outcomes AS (
+               SELECT state,
+                      row_number() OVER (ORDER BY COALESCE(terminal_at, updated_at) DESC, id DESC) AS rn
+                 FROM rides.rides
+                WHERE passenger_id = @PassengerId
+                  AND state = ANY(@CountedStates))
+             SELECT COALESCE(min(rn) - 1, (SELECT count(*) FROM outcomes))::int
+               FROM outcomes
+              WHERE state <> '{RideStates.CancelledByRiderAfterAccept}';
+             """,
+            new { PassengerId = passengerId, CountedStates = CountedOutcomeStates },
+            transaction,
+            cancellationToken: cancellationToken));
+    }
+
+    public async Task<int> CountStuckAsync(
+        NpgsqlConnection connection, string state, TimeSpan age, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+
+        // ADD §13.3.1: `count(rides WHERE state=S AND age > T)`, where age is time in the state.
+        // `updated_at` is that instant — every transition writes it — and it is cheaper than
+        // joining rides.transitions on the scrape path.
+        return await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+            """
+            SELECT count(*)::int FROM rides.rides
+             WHERE state = @State
+               AND updated_at < now() - make_interval(secs => @Seconds);
+            """,
+            new { State = state, Seconds = age.TotalSeconds },
+            cancellationToken: cancellationToken));
+    }
+
+    public async Task<int> CountPendingOutboxAsync(
+        NpgsqlConnection connection, NpgsqlTransaction? transaction, Guid rideId, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+
+        return await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+            "SELECT count(*)::int FROM rides.outbox WHERE aggregate_id = @RideId AND dispatched_at IS NULL;",
+            new { RideId = rideId },
             transaction,
             cancellationToken: cancellationToken));
     }

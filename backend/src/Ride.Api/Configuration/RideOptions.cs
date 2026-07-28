@@ -12,8 +12,8 @@ public sealed class RideOptions
 
     /// <summary>
     /// How long an offer stays acceptable when dispatch-svc does not say (D5' §3.5: 15 s).
-    /// <c>offer_expires_at</c> is the authoritative deadline; the Redis key is the fast path and
-    /// the Quartz backstop (R-04, C037) is what fires when nobody answers.
+    /// <c>offer_expires_at</c> is the authoritative deadline; the Redis key is dispatch-svc's fast
+    /// path and its <c>rides.timers</c> <c>offer_expiry</c> row is the R-04 backstop (C023).
     /// </summary>
     [Range(typeof(TimeSpan), "00:00:01", "00:02:00")]
     public TimeSpan OfferTtl { get; set; } = TimeSpan.FromSeconds(15);
@@ -29,4 +29,136 @@ public sealed class RideOptions
     /// </para>
     /// </summary>
     public string? InternalApiKey { get; set; }
+
+    // -----------------------------------------------------------------------------------------
+    // The §11.12 matrix's money column
+    // -----------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// The post-acceptance cancellation fee, in LKR minor units (D-05, US-6A.9: Rs 50).
+    /// </summary>
+    /// <remarks>
+    /// Accrued, never collected here: it becomes the passenger's outstanding balance and settles
+    /// against their next completed trip (D5' §7.1). ride-svc states that it is owed and to whom;
+    /// the ledger entry is fare-svc's and billing's.
+    /// </remarks>
+    [Range(0, 1_000_000)]
+    public long CancellationPenaltyMinor { get; set; } = 5_000;
+
+    /// <summary>
+    /// The rider no-show fee, in LKR minor units (§11.12: "Rs 100 (configurable)").
+    /// </summary>
+    [Range(0, 1_000_000)]
+    public long NoShowPenaltyMinor { get; set; } = 10_000;
+
+    /// <summary>
+    /// How many consecutive post-acceptance cancellations disable booking (US-6A.10b, AL-16: 3).
+    /// </summary>
+    [Range(1, 100)]
+    public int CancellationDisableThreshold { get; set; } = 3;
+
+    // -----------------------------------------------------------------------------------------
+    // Durable timers (R-04). Windows first, then the worker that fires them.
+    // -----------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// How long a driver who accepted has to reach the pickup before the ride becomes
+    /// <c>NoShowDriver</c> (§11.12's "rider waits, grace exceeded" row).
+    /// </summary>
+    /// <remarks>
+    /// <b>No spec pins this.</b> §11.12 gives the row and stops at "grace exceeded"; the URD has no
+    /// number either. Fifteen minutes is longer than any Colombo pickup ETA the dispatch radius can
+    /// produce, so a driver stuck in traffic is not punished for traffic, and short enough that a
+    /// passenger standing on a pavement is released to book again rather than left waiting on a
+    /// driver who is not coming. It is deliberately several times the five-minute rider no-show
+    /// window, because the two are not symmetric: the rider's clock only starts once the driver has
+    /// actually arrived, and the driver's is running while they are still travelling.
+    /// </remarks>
+    [Range(typeof(TimeSpan), "00:01:00", "02:00:00")]
+    public TimeSpan ArrivalGrace { get; set; } = TimeSpan.FromMinutes(15);
+
+    /// <summary>
+    /// How long the rider has to appear after the driver arrives (D5' §7: "rider no-show 5min").
+    /// </summary>
+    /// <remarks>
+    /// §11.12 adds "+ 2 SMS reminders" to the same row. The reminders are notification-svc's
+    /// (C051): ride-svc has no SMS channel and D5' §14.4 routes every user-facing message through
+    /// content-svc templates. <c>ride.driver_arrived</c> carries the instant this window opened,
+    /// which is what a reminder schedule is built from.
+    /// </remarks>
+    [Range(typeof(TimeSpan), "00:01:00", "01:00:00")]
+    public TimeSpan RiderNoShowGrace { get; set; } = TimeSpan.FromMinutes(5);
+
+    /// <summary>
+    /// How long a ride may sit in <c>PaymentPending</c> before it is reported stuck (R-20's
+    /// <c>Completed+PaymentPending &gt; 10 min</c> row; R-16's "at-payment 10 min").
+    /// </summary>
+    /// <remarks>
+    /// The fire <b>moves nothing</b>. No row of the §11.12 matrix authorises a state change out of
+    /// <c>PaymentPending</c> on a timeout — R-05 reserves that for fare-svc reporting a terminal
+    /// payment state — so what this timer produces is the ADD §13.3.1 alert, named per ride instead
+    /// of as a count, plus the <c>runbooks/ride-stuck.md</c> pointer ADD §13.4 asks for.
+    /// </remarks>
+    [Range(typeof(TimeSpan), "00:01:00", "06:00:00")]
+    public TimeSpan PaymentPendingGrace { get; set; } = TimeSpan.FromMinutes(10);
+
+    /// <summary>Whether the durable-timer worker runs in this process.</summary>
+    /// <remarks>
+    /// On by default: the no-show and grace transitions are platform guarantees, and a deployment
+    /// that silently skipped them would strand every ride whose driver stopped answering. Off in
+    /// tests, which drive one pass directly rather than waiting on a ticker.
+    /// </remarks>
+    public bool TimersEnabled { get; set; } = true;
+
+    /// <summary>How often the worker looks for due timers.</summary>
+    /// <remarks>
+    /// R-04 wants a fire "≤1 s after expiry"; the sweep's precision is its interval, so it is a
+    /// second. The scan is one index-only claim against <c>ix_timers_due</c>, which is proportional
+    /// to the backlog rather than to the table.
+    /// </remarks>
+    [Range(typeof(TimeSpan), "00:00:00.100", "00:05:00")]
+    public TimeSpan TimerInterval { get; set; } = TimeSpan.FromSeconds(1);
+
+    /// <summary>How many timers one pass claims.</summary>
+    [Range(1, 10_000)]
+    public int TimerBatchSize { get; set; } = 100;
+
+    /// <summary>
+    /// How long a claimed timer is hidden from other replicas before it becomes due again.
+    /// </summary>
+    /// <remarks>
+    /// Long enough for one transition to commit, short enough that a worker killed mid-fire costs a
+    /// ride half a minute rather than its only backstop.
+    /// </remarks>
+    [Range(typeof(TimeSpan), "00:00:01", "00:10:00")]
+    public TimeSpan TimerLease { get; set; } = TimeSpan.FromSeconds(30);
+
+    // -----------------------------------------------------------------------------------------
+    // The device plane (R-15) and the R-20 gauges
+    // -----------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Whether the EMQX presence subscriber runs in this process (R-15).
+    /// </summary>
+    /// <remarks>
+    /// ADD §6's ride-svc row lists <c>veh/{vehicleId}/status</c> (LWT) among what this service
+    /// consumes, so the subscription is this service's own rather than something dispatch-svc
+    /// relays. **Off by default**, like trip-state-svc's: it is the only part that needs a broker
+    /// connection, and a deployment without EMQX reachable should run the ride lifecycle rather
+    /// than log a connection failure every few seconds. With it off, the grace path is still
+    /// reachable through <c>POST /v1/internal/rides/{rideId}/system-cancel</c>, which is how
+    /// §11.12 describes dispatch-svc driving it.
+    /// </remarks>
+    public bool VehicleStatusEnabled { get; set; }
+
+    /// <summary>MQTT service-account name; <c>svc-</c> is prefixed by the token issuer.</summary>
+    public string MqttServiceName { get; set; } = "ride";
+
+    /// <summary>Whether the ADD §13.3.1 stuck-state gauges are published (R-20).</summary>
+    /// <remarks>
+    /// On by default and cheap: one indexed count per state per scrape, only while something is
+    /// scraping. Off in tests, where a dozen harnesses share one database and each would otherwise
+    /// report the others' rides.
+    /// </remarks>
+    public bool StuckStateMetricsEnabled { get; set; } = true;
 }

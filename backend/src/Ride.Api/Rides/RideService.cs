@@ -16,11 +16,16 @@ namespace MageRide.Ride.Rides;
 /// The Mode C ride aggregate's command side — ride-svc is its sole writer (R-01, D5' §6).
 /// </summary>
 /// <remarks>
-/// Every mutation is one transaction containing three writes: the conditional <c>UPDATE</c> on
-/// <c>rides.rides</c>, the <c>rides.transitions</c> audit row (ADD Appendix B.2 invariant 4) and
-/// the <c>rides.outbox</c> row (D6' §2.4, R-13). Nothing publishes directly to Redpanda — the
-/// dispatcher does that after COMMIT, which is what makes "no event describes a rolled-back
-/// change" true.
+/// Every mutation is one transaction: the conditional <c>UPDATE</c> on <c>rides.rides</c>, then
+/// <see cref="RideStateWriter"/> for the <c>rides.transitions</c> audit row (ADD Appendix B.2
+/// invariant 4), the ride's durable timers (R-04) and the <c>rides.outbox</c> row (D6' §2.4,
+/// R-13). Nothing publishes directly to Redpanda — the dispatcher does that after COMMIT, which is
+/// what makes "no event describes a rolled-back change" true.
+/// <para>
+/// The §11.12 cancellation and no-show matrix lives in <see cref="RideCancellationService"/> and
+/// the R-05 payment terminals in <see cref="RideSettlementService"/>; all three write through the
+/// same <see cref="RideStateWriter"/>.
+/// </para>
 /// </remarks>
 public interface IRideService
 {
@@ -54,7 +59,13 @@ public interface IRideService
 
     /// <summary>Internal: the 15 s window closed unanswered, so the ride re-enters the pool (R-04).</summary>
     Task<RideRow> ExpireOfferAsync(Guid rideId, Guid offerId, CancellationToken cancellationToken);
+
+    /// <summary>Internal: the saga diagnostics an operator reads instead of querying Postgres.</summary>
+    Task<RideSagaState> GetSagaStateAsync(Guid rideId, CancellationToken cancellationToken);
 }
+
+/// <summary>The answer to <c>GET /v1/internal/rides/{rideId}/saga-state</c>.</summary>
+public sealed record RideSagaState(RideRow Ride, IReadOnlyList<RideTransitionRow> Transitions, int PendingOutbox);
 
 /// <inheritdoc cref="IRideService"/>
 public sealed class RideService(
@@ -63,7 +74,8 @@ public sealed class RideService(
     IRideRepository rides,
     IRideTransitionRepository transitions,
     IDriverSummaryRepository drivers,
-    IOutboxWriter outbox,
+    RideStateWriter stateWriter,
+    IBookingEligibility eligibility,
     FareEstimateTokenCodec fareTokens,
     IOptions<RideOptions> options,
     TimeProvider timeProvider,
@@ -86,6 +98,24 @@ public sealed class RideService(
         var quote = RequireFareEstimate(command.FareEstimateToken, vehicleType, kind);
 
         await using var unitOfWork = await unitOfWorkFactory.BeginAsync(cancellationToken: cancellationToken);
+
+        // AL-16, before anything is written. Checked ahead of the insert rather than after it, so a
+        // disabled passenger is refused rather than booked-then-rolled-back — and so the answer is
+        // the same whether or not this is an R-18 retry. A passenger with three consecutive
+        // post-acceptance cancellations has no live ride by definition (each of the three ended
+        // terminally), so nothing recoverable is behind this 403.
+        var standing = await eligibility.EvaluateAsync(
+            unitOfWork.Connection, unitOfWork.Transaction, command.PassengerId, cancellationToken);
+
+        if (standing.IsDisabled)
+        {
+            await unitOfWork.RollbackAsync(cancellationToken);
+
+            throw new MageRideException(
+                MageRideErrors.BookingDisabled,
+                $"Booking is disabled after {standing.ConsecutiveCancellations} consecutive cancellations made " +
+                "after a driver had accepted (US-6A.10b). Completing a ride clears it.");
+        }
 
         var result = await rides.CreateAsync(
             unitOfWork.Connection,
@@ -129,20 +159,14 @@ public sealed class RideService(
 
         var ride = result.Ride!;
 
-        await transitions.RecordAsync(
-            unitOfWork.Connection,
-            unitOfWork.Transaction,
-            ride.Id,
+        await stateWriter.RecordAsync(
+            unitOfWork,
+            ride,
             fromState: null,
-            toState: ride.State,
             actorType: RideTransitions.Actors.Rider,
             actorId: command.PassengerId,
             reasonCode: null,
-            cancellationToken);
-
-        await outbox.WriteAsync(
-            unitOfWork,
-            RideEvents.Build(RideEventTypes.Requested, ride, Guid.NewGuid(), timeProvider.GetUtcNow()),
+            [RideEvents.Build(RideEventTypes.Requested, ride, Guid.NewGuid(), timeProvider.GetUtcNow())],
             cancellationToken);
 
         await unitOfWork.CommitAsync(cancellationToken);
@@ -224,25 +248,17 @@ public sealed class RideService(
         }
 
         // ADD §11.11's UPDATE also matches a ride in `Matching`, so the origin is not structurally
-        // pinned. It is `Offered` here because the only thing in this slice that returns a ride to
-        // Matching is `decline`, which clears `current_offer_id` — and the accept cannot match
-        // without one. **C037 must revisit this** when the R-04 offer-expiry backstop lands: if
-        // that job moves `Offered → Matching` while leaving `current_offer_id` set, the second
-        // origin becomes reachable and this audit row starts lying.
-        await transitions.RecordAsync(
-            unitOfWork.Connection,
-            unitOfWork.Transaction,
-            accepted.Id,
+        // pinned. It is `Offered` here because everything that returns a ride to Matching —
+        // `decline`, the R-04 expiry — clears `current_offer_id`, and the accept cannot match
+        // without one.
+        await stateWriter.RecordAsync(
+            unitOfWork,
+            accepted,
             fromState: RideStates.Offered,
-            toState: accepted.State,
             actorType: RideTransitions.Actors.Driver,
             actorId: driverId,
             reasonCode: null,
-            cancellationToken);
-
-        await outbox.WriteAsync(
-            unitOfWork,
-            RideEvents.Build(RideEventTypes.Accepted, accepted, Guid.NewGuid(), timeProvider.GetUtcNow()),
+            [RideEvents.Build(RideEventTypes.Accepted, accepted, Guid.NewGuid(), timeProvider.GetUtcNow())],
             cancellationToken);
 
         var driver = await drivers.FindByVehicleAsync(
@@ -275,21 +291,16 @@ public sealed class RideService(
             throw DiagnoseFailedDecline(current, rideId, driverId, offerId);
         }
 
-        await transitions.RecordAsync(
-            unitOfWork.Connection,
-            unitOfWork.Transaction,
-            declined.Id,
+        // The outbox row is dispatch-svc's cue to release the driver and offer the next candidate
+        // (§11.12).
+        await stateWriter.RecordAsync(
+            unitOfWork,
+            declined,
             fromState: RideStates.Offered,
-            toState: declined.State,
             actorType: RideTransitions.Actors.Driver,
             actorId: driverId,
-            reasonCode: "OFFER_DECLINED",
-            cancellationToken);
-
-        // dispatch-svc's cue to release the driver and offer the next candidate (§11.12).
-        await outbox.WriteAsync(
-            unitOfWork,
-            RideEvents.Build(RideEventTypes.OfferDeclined, declined, Guid.NewGuid(), timeProvider.GetUtcNow()),
+            reasonCode: RideReasonCodes.OfferDeclined,
+            [RideEvents.Build(RideEventTypes.OfferDeclined, declined, Guid.NewGuid(), timeProvider.GetUtcNow())],
             cancellationToken);
 
         await unitOfWork.CommitAsync(cancellationToken);
@@ -342,10 +353,9 @@ public sealed class RideService(
             throw DiagnoseFailedAdvance(current, rideId, driverId, [RideStates.InProgress], expectedVersion);
         }
 
-        await transitions.RecordAsync(
-            unitOfWork.Connection, unitOfWork.Transaction, rideId,
-            RideStates.InProgress, RideStates.Completed,
-            RideTransitions.Actors.Driver, driverId, null, cancellationToken);
+        await stateWriter.RecordAsync(
+            unitOfWork, completed, RideStates.InProgress,
+            RideTransitions.Actors.Driver, driverId, reasonCode: null, [], cancellationToken);
 
         // The fare is owed the moment the trip ends, so the ride never rests in Completed: D5' §6
         // draws `Completed --> PaymentPending: fare finalised` and the contract's `complete`
@@ -364,18 +374,15 @@ public sealed class RideService(
                 MageRideErrors.InternalError,
                 "The ride moved out of Completed inside its own completion transaction.");
 
-        await transitions.RecordAsync(
-            unitOfWork.Connection, unitOfWork.Transaction, rideId,
-            RideStates.Completed, RideStates.PaymentPending,
-            RideTransitions.Actors.System, null, "FARE_HANDOFF", cancellationToken);
-
         // One event, not two. D6' §2.2 registers `ride.completed` and nothing for the payment
         // hand-off; the state on the envelope is PaymentPending, which is where the ride actually
         // is by the time a consumer reads it. fare-svc's `POST /v1/fare/calculate` is C049/C050 —
-        // until then this event is the entire hand-off, and no earning posts (R-05).
-        await outbox.WriteAsync(
-            unitOfWork,
-            RideEvents.Build(RideEventTypes.Completed, pending, Guid.NewGuid(), timeProvider.GetUtcNow()),
+        // until then this event is the entire hand-off, and no earning posts until fare-svc reports
+        // a terminal payment state through `payment-settled` (R-05).
+        await stateWriter.RecordAsync(
+            unitOfWork, pending, RideStates.Completed,
+            RideTransitions.Actors.System, null, RideReasonCodes.FareHandoff,
+            [RideEvents.Build(RideEventTypes.Completed, pending, Guid.NewGuid(), timeProvider.GetUtcNow())],
             cancellationToken);
 
         await unitOfWork.CommitAsync(cancellationToken);
@@ -400,13 +407,12 @@ public sealed class RideService(
             throw DiagnoseFailedAdvance(current, rideId, actorId: null, [RideStates.Requested], expectedVersion);
         }
 
-        await transitions.RecordAsync(
-            unitOfWork.Connection, unitOfWork.Transaction, rideId,
-            RideStates.Requested, RideStates.Matching,
-            RideTransitions.Actors.System, null, "DISPATCH_CANDIDATE_BUILD", cancellationToken);
-
         // No outbox row: dispatch-svc drove this move, so an event would only tell it what it just
         // did, and D6' §2.2 registers no name for one.
+        await stateWriter.RecordAsync(
+            unitOfWork, matching, RideStates.Requested,
+            RideTransitions.Actors.System, null, RideReasonCodes.DispatchCandidateBuild, [], cancellationToken);
+
         await unitOfWork.CommitAsync(cancellationToken);
 
         return matching;
@@ -456,16 +462,12 @@ public sealed class RideService(
                 current, command.RideId, actorId: null, [RideStates.Matching], command.ExpectedVersion);
         }
 
-        await transitions.RecordAsync(
-            unitOfWork.Connection, unitOfWork.Transaction, command.RideId,
-            RideStates.Matching, RideStates.Offered,
-            RideTransitions.Actors.System, command.DriverId, "OFFER_SENT", cancellationToken);
-
         // R-13: the driver's push is sent by whoever consumes this row, which cannot happen before
         // COMMIT — so there is no such thing as a phantom offer.
-        await outbox.WriteAsync(
-            unitOfWork,
-            RideEvents.Build(RideEventTypes.OfferCreated, offered, Guid.NewGuid(), timeProvider.GetUtcNow()),
+        await stateWriter.RecordAsync(
+            unitOfWork, offered, RideStates.Matching,
+            RideTransitions.Actors.System, command.DriverId, RideReasonCodes.OfferSent,
+            [RideEvents.Build(RideEventTypes.OfferCreated, offered, Guid.NewGuid(), timeProvider.GetUtcNow())],
             cancellationToken);
 
         await unitOfWork.CommitAsync(cancellationToken);
@@ -492,23 +494,17 @@ public sealed class RideService(
             throw DiagnoseFailedExpiry(current, rideId, offerId);
         }
 
-        await transitions.RecordAsync(
-            unitOfWork.Connection,
-            unitOfWork.Transaction,
-            expired.Id,
-            fromState: RideStates.Offered,
-            toState: expired.State,
-            actorType: RideTransitions.Actors.System,
-            actorId: null,
-            reasonCode: "OFFER_EXPIRED",
-            cancellationToken);
-
         // D5' §6's Offered row names `offer.expired`, and ADD §11.11's R-04 paragraph makes it
         // dispatch-svc's cue to re-offer to the next candidate — the same role `offer.declined`
         // plays, so it rides the same topic.
-        await outbox.WriteAsync(
+        await stateWriter.RecordAsync(
             unitOfWork,
-            RideEvents.Build(RideEventTypes.OfferExpired, expired, Guid.NewGuid(), timeProvider.GetUtcNow()),
+            expired,
+            fromState: RideStates.Offered,
+            actorType: RideTransitions.Actors.System,
+            actorId: null,
+            reasonCode: RideReasonCodes.OfferExpired,
+            [RideEvents.Build(RideEventTypes.OfferExpired, expired, Guid.NewGuid(), timeProvider.GetUtcNow())],
             cancellationToken);
 
         await unitOfWork.CommitAsync(cancellationToken);
@@ -570,25 +566,33 @@ public sealed class RideService(
             throw DiagnoseFailedAdvance(current, rideId, driverId, fromStates, expectedVersion);
         }
 
-        await transitions.RecordAsync(
-            unitOfWork.Connection,
-            unitOfWork.Transaction,
-            rideId,
+        await stateWriter.RecordAsync(
+            unitOfWork,
+            advanced,
             fromState: fromState,
-            toState: toState,
             actorType: RideTransitions.Actors.Driver,
             actorId: driverId,
             reasonCode: null,
-            cancellationToken);
-
-        await outbox.WriteAsync(
-            unitOfWork,
-            RideEvents.Build(eventType, advanced, Guid.NewGuid(), timeProvider.GetUtcNow()),
+            [RideEvents.Build(eventType, advanced, Guid.NewGuid(), timeProvider.GetUtcNow())],
             cancellationToken);
 
         await unitOfWork.CommitAsync(cancellationToken);
 
         return advanced;
+    }
+
+    public async Task<RideSagaState> GetSagaStateAsync(Guid rideId, CancellationToken cancellationToken)
+    {
+        await using var connection = await connectionFactory.OpenAsync(cancellationToken);
+
+        // No participant check: the route is on the mTLS-only internal plane (ADD Appendix C), and
+        // the caller is an operator diagnosing a stuck ride, not a party to it.
+        var ride = await rides.FindAsync(connection, null, rideId, cancellationToken) ?? throw NotFound(rideId);
+
+        return new RideSagaState(
+            ride,
+            await transitions.ListAsync(connection, null, rideId, cancellationToken),
+            await rides.CountPendingOutboxAsync(connection, null, rideId, cancellationToken));
     }
 
     private async Task<RideView> ProjectAsync(

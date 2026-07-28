@@ -3,9 +3,8 @@ using MageRide.Ride.Domain;
 namespace MageRide.Ride.Tests.Domain;
 
 /// <summary>
-/// The aggregate's vocabulary and the moves this slice permits, against ADD Appendix B.2 and
-/// D5' §6. These are the fences C032/C037/C049 will widen, so they are asserted rather than
-/// described.
+/// The aggregate's vocabulary and every move it permits, against ADD Appendix B.2, D5' §6 and the
+/// §11.12 matrix.
 /// </summary>
 public sealed class RideStateMachineTests
 {
@@ -55,12 +54,16 @@ public sealed class RideStateMachineTests
             RideStates.DriverBusy.Order(StringComparer.Ordinal));
     }
 
-    /// <summary>The happy path of the C022 scope, end to end and nothing else.</summary>
+    /// <summary>
+    /// The whole machine, edge for edge. Every entry is traceable to a printed line: the happy path
+    /// to D5' §6's diagram, the terminals to the §11.12 matrix, the four money states to R-05.
+    /// </summary>
     [Fact]
-    public void The_slice_implements_exactly_the_happy_path()
+    public void The_service_implements_exactly_the_specified_machine()
     {
         (string From, string To)[] expected =
         [
+            // --- D5' §6's happy path -------------------------------------------------------
             ("Requested", "Matching"),
             ("Matching", "Offered"),
             // §11.11's UPDATE guards on state IN ('Matching','Offered'); C015's client table
@@ -73,6 +76,28 @@ public sealed class RideStateMachineTests
             ("DriverArrived", "InProgress"),
             ("InProgress", "Completed"),
             ("Completed", "PaymentPending"),
+
+            // --- §11.12's terminals --------------------------------------------------------
+            ("Requested", "CancelledByRiderBeforeAccept"),
+            ("Matching", "CancelledByRiderBeforeAccept"),
+            ("Offered", "CancelledByRiderBeforeAccept"),
+            ("Matching", "ExpiredNoDriver"),
+            ("Accepted", "CancelledByRiderAfterAccept"),
+            ("DriverArrived", "CancelledByRiderAfterAccept"),
+            ("InProgress", "CancelledByRiderAfterAccept"),
+            ("Accepted", "CancelledByDriver"),
+            ("DriverArrived", "CancelledByDriver"),
+            ("InProgress", "CancelledByDriver"),
+            ("Accepted", "NoShowDriver"),
+            ("DriverArrived", "NoShowDriver"),
+            ("DriverArrived", "NoShowRider"),
+            ("InProgress", "Disputed"),
+
+            // --- R-05's payment terminals --------------------------------------------------
+            ("PaymentPending", "Paid"),
+            ("PaymentPending", "CashSettled"),
+            ("PaymentPending", "CashOnDeliveryCollected"),
+            ("PaymentPending", "Disputed"),
         ];
 
         Assert.Equal(
@@ -80,11 +105,6 @@ public sealed class RideStateMachineTests
             RideTransitions.All.Order());
     }
 
-    /// <summary>
-    /// Every move the slice claims is one D5' §6 draws. The <c>Accepted → InProgress</c> edge is
-    /// the single exception and it comes from the contract's `start` description, not from a
-    /// liberty taken here (C022 handoff, gap (e)).
-    /// </summary>
     [Fact]
     public void Every_permitted_move_lands_on_a_real_state()
     {
@@ -97,19 +117,78 @@ public sealed class RideStateMachineTests
     }
 
     [Theory]
-    // The cancellation matrix is C032; none of its edges may be reachable from here.
-    [InlineData("Accepted", "CancelledByRiderAfterAccept")]
-    [InlineData("Matching", "ExpiredNoDriver")]
-    [InlineData("DriverArrived", "NoShowRider")]
-    // The payment terminals are fare-svc's (R-05, C049/C050).
-    [InlineData("PaymentPending", "Paid")]
-    [InlineData("PaymentPending", "CashSettled")]
-    // And nothing skips the machine.
+    // Nothing skips the machine.
     [InlineData("Requested", "Accepted")]
     [InlineData("Accepted", "Completed")]
     [InlineData("Completed", "InProgress")]
-    public void Moves_outside_the_slice_are_refused(string from, string to) =>
+    // A rider cancel is pre- or post-acceptance, never the other one.
+    [InlineData("Matching", "CancelledByRiderAfterAccept")]
+    [InlineData("Accepted", "CancelledByRiderBeforeAccept")]
+    // ExpiredNoDriver means the cascade ran out, which can only have happened while Matching.
+    [InlineData("Requested", "ExpiredNoDriver")]
+    [InlineData("Offered", "ExpiredNoDriver")]
+    // A rider cannot be a no-show before the driver has arrived.
+    [InlineData("Accepted", "NoShowRider")]
+    [InlineData("InProgress", "NoShowRider")]
+    // A driver who is already driving the passenger cannot have failed to reach them.
+    [InlineData("InProgress", "NoShowDriver")]
+    // R-05: only a ride awaiting payment settles, and only into the four money states.
+    [InlineData("Completed", "Paid")]
+    [InlineData("InProgress", "Paid")]
+    [InlineData("PaymentPending", "Completed")]
+    // Nothing may be cancelled once the money is owed — that is a dispute (§11.14).
+    [InlineData("PaymentPending", "CancelledByRiderAfterAccept")]
+    [InlineData("PaymentPending", "CancelledByDriver")]
+    public void Moves_the_machine_does_not_draw_are_refused(string from, string to) =>
         Assert.False(RideTransitions.IsAllowed(from, to));
+
+    /// <summary>
+    /// The two tables that describe the same machine agree: every outcome the §11.12 matrix can
+    /// produce is an edge <see cref="RideTransitions"/> draws.
+    /// </summary>
+    [Fact]
+    public void Every_matrix_outcome_is_a_move_the_machine_allows()
+    {
+        foreach (var (state, trigger, outcome) in RideCancellationMatrix.All)
+        {
+            Assert.True(
+                RideTransitions.IsAllowed(state, outcome.ToState),
+                $"The matrix takes {state} + {trigger} to {outcome.ToState}, which the state machine does not draw.");
+        }
+    }
+
+    /// <summary>R-16's four windows, and only those four.</summary>
+    [Fact]
+    public void The_offline_graces_are_the_four_R16_windows()
+    {
+        Assert.Equal(TimeSpan.FromSeconds(60), RideGracePolicy.For("Accepted"));
+        Assert.Equal(TimeSpan.FromSeconds(120), RideGracePolicy.For("DriverArrived"));
+        Assert.Equal(TimeSpan.FromMinutes(5), RideGracePolicy.For("InProgress"));
+        Assert.Equal(TimeSpan.FromMinutes(10), RideGracePolicy.For("PaymentPending"));
+
+        // Before acceptance nobody is assigned, so a last will takes nothing away; after a terminal
+        // there is nothing left to take.
+        Assert.Null(RideGracePolicy.For("Requested"));
+        Assert.Null(RideGracePolicy.For("Matching"));
+        Assert.Null(RideGracePolicy.For("Offered"));
+        Assert.Null(RideGracePolicy.For("Completed"));
+        Assert.Null(RideGracePolicy.For("Paid"));
+    }
+
+    /// <summary>
+    /// ride-svc claims four of <c>ck_timers_kind</c>'s eight. <c>offer_expiry</c> is dispatch-svc's
+    /// (ADD §6, C023) and the other three are C037's — a claim that widened silently would take
+    /// another service's backstop.
+    /// </summary>
+    [Fact]
+    public void The_timer_kinds_this_service_owns_are_the_four_it_arms()
+    {
+        Assert.Equal(
+            new[] { "arrival_grace", "no_show", "offline_grace", "payment_pending" }.Order(StringComparer.Ordinal),
+            RideTimerKinds.Owned.Order(StringComparer.Ordinal));
+
+        Assert.DoesNotContain(RideTimerKinds.OfferExpiry, (IReadOnlySet<string>)RideTimerKinds.Owned);
+    }
 
     [Fact]
     public void An_unknown_state_is_never_allowed() =>

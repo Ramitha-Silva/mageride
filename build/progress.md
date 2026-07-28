@@ -57,7 +57,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C029 | registry-svc-onboarding | 2 | DONE | 2026-07-28 | 175 tests green (30 new); 1 registry migration (0312) + the `IDocumentExtractionClient` port C054 implements; `vehicle.registered` finally emitted; 6 new `registry.events` types, none with a spec'd envelope |
 | C030 | provisioning-svc | 2 | DONE | 2026-07-28 | 99 tests green; 4 prov migrations (0402–0405); device mTLS enabled on EMQX 8883 (`peer_cert_as_username = cn`) so a tracker's certificate *is* its topic grant; 7 micro-change-sets |
 | C031 | trip-state-svc | 2 | DONE | 2026-07-28 | 46 tests green; 2 trips migrations (0504–0505); the D-03 mutex is the partial unique index and the Redis half needed a new key — `lock:driver:{driverId}` was already registry's; 6 micro-change-sets |
-| C032 | ride-svc-core | 2 | PENDING | | |
+| C032 | ride-svc-core | 2 | DONE | 2026-07-28 | 252 tests green; the §11.12 matrix is data, not a switch; no new migration — 0605's timer kinds and `terminal_at` were already right; 4 micro-change-sets |
 | C033 | reputation-svc | 2 | PENDING | | |
 | C034 | dispatch-svc-core | 2 | PENDING | | |
 | C035 | dispatch-svc-scheduling-levels | 2 | PENDING | | |
@@ -4123,3 +4123,156 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   `telemetry.positions`.
   **Build host —** Docker for Testcontainers (Postgres, Redis, Redpanda and EMQX); the replica
   stayed down throughout. The 46 tests take ~45 s.
+
+- **Component:** C032 ride-svc-core — 2026-07-28
+- **Status:** DONE — `dotnet test backend/src/Ride.Api.Tests -c Release` is 252/252 green (was 57).
+  All four DoD items pass, each with named tests. (1) Every cell of the D5' §7 / ADD §11.12 matrix
+  is covered twice: `RideCancellationMatrixTests` restates each printed row against the table the
+  service consults, and `CancellationMatrixTests` drives the same rows through HTTP against a real
+  Postgres, asserting the target state, the Penalty column and the Events column. (2) Three
+  consecutive post-acceptance cancellations return `403 booking-disabled` and a completed ride
+  resets the counter (`BookingDisableTests`, five facts including "pre-acceptance never counts" and
+  "a driver-side cancel is not the passenger's fault"). (3) The durable backstop outlives the
+  process that armed it — `A_backstop_outlives_the_process_that_armed_it` stops the whole service
+  and starts a new one against the same database — and there is no cache to lose a timer to, which
+  is asserted rather than described. (4) `PaymentSettlementTests` walks every `PaymentState`: the
+  three D5' §8.1 terminals settle with `earningPayable: true`, `Disputed` settles with `false`, and
+  the seven in-flight states move nothing. Dispatch (64), Shared (235) and the solution build were
+  re-run green; Spectral clean.
+- **Notes:**
+  **Spec gaps — micro-change-sets (4).**
+  (a) *§11.12 has no row for a rider cancelling at `DriverArrived`.* The table jumps from the
+  `Accepted` rider-cancel straight to the no-show, which would leave a rider unable to cancel
+  precisely while a driver is waiting at their door. Appendix B.2's catch-all is stated by
+  *acceptance*, not by state — "Any pre-Accepted state + rider cancel → CancelledByRiderBeforeAccept"
+  — so a cancel after acceptance is the after-accept terminal wherever it lands. Landed that way,
+  with the Rs 50. **§11.12 needs the row.**
+  (b) *R-16 gives an "at-payment 10 min" grace with no landing.* D5' §6.3 ends every expired grace
+  in "`CancelledByDriver`/`Disputed`" and §11.12 prints neither for `PaymentPending`. A cancel is
+  not available once the trip has happened and a fare is owed, so it is the dispute — the same
+  landing the in-progress row uses. **§11.12 needs the row.**
+  (c) *`ride.yaml`'s `system-cancel` declares `fraud_lock` and `admin_intervention`, and §11.12
+  covers neither.* Mapped onto the three landings the matrix already uses, chosen by how far the
+  ride has got: nobody assigned ⇒ the no-penalty terminal, a driver assigned ⇒ the driver terminal,
+  money owed ⇒ the dispute. There is no "cancelled by admin" state among the eighteen and inventing
+  one would break `ck_rides_state`. **ADD §11.12 should name the mapping.**
+  (d) *`ride.settled` is a name no spec prints.* D6' §2.2's `eventType` list is partial and §11.12's
+  Events column names six more, all used verbatim; but R-05's "driver earning posts only on payment
+  terminal" needs an event and nothing names one. Coined here, carrying `earningPayable` so a
+  consumer never has to re-derive D5' §8.1's three-terminal rule. **D6' §2.2 should register it.**
+  Two `x-error-codes` widenings went into `ride.yaml` in the same change (`cancelRide` and
+  `systemCancelRide` gain `ride-terminal` and `conflict`, `cancelRide` also `validation-failed`) —
+  all three codes were already in the registry, so nothing was coined.
+  **Spec conflict resolved.** *How long a ride waits for a driver.* ADD §11.12 says "timeout (60 s)";
+  D5' §7 and URD US-6A.11 say two minutes. Resolved toward the URD, and the two are coherent read
+  that way: R-20's `Matching > 60 s` alert would be unreachable if the ride expired at 60 s. Either
+  way the number is dispatch-svc's — ride-svc exposes `ExpiredNoDriver` through `system-cancel`
+  (`no_driver_found`), which C034 drives.
+  **Decisions —**
+  (1) **The matrix is data, and it is the authority.** `POST /cancel` takes a `reason`, and the
+  reason decides nothing: the outcome is (state × trigger), the trigger comes from which party is
+  authenticated, and the guarded `UPDATE` is bound to the same state the matrix was resolved from.
+  A client cannot ask for a cheaper terminal, and a ride that moved between the read and the write
+  is answered 409 rather than terminated under another row's rules. The client's reason is recorded
+  and published because reputation-svc and support want it.
+  (2) **A lease-poll, not Quartz — the second time this decision has been made.** ADD §6 names
+  "Quartz.NET clustered scheduler" and this was the component that was to bring it. What R-04
+  actually requires is that the durable row decides and that a fire lands within about a second on
+  any replica; Quartz's contribution would be a job store holding one recurring trigger whose job
+  is to scan `rides.timers`, and that scan is already multi-replica safe because it claims
+  `FOR UPDATE SKIP LOCKED`. Clustering the trigger would *remove* parallelism, in exchange for
+  eleven `qrtz_*` tables no DDL spec declares. C023 reached the same conclusion for `offer_expiry`;
+  running two different timer mechanisms over one table would have been worse than either.
+  **ADD §6 / §13.4 should stop naming Quartz for ride-svc and dispatch-svc.**
+  (3) **`offer_expiry` stays dispatch-svc's; ride-svc owns the other four kinds.** ADD §6 gives
+  dispatch "Quartz.NET (scheduled rides **+ offer backstop**)" and C023 built it — arming the row
+  and calling `POST /internal/rides/{id}/offer/expire` when it fires. Arming a second row for the
+  same offer would have put two timers on one deadline and made "the ride's timer" ambiguous to
+  everything that reads the table (Dispatch's own `OfferExpiryTests` reads it that way). Every query
+  in `RideTimerRepository` is scoped by kind, and `RequireOwned` makes arming somebody else's kind a
+  programming error rather than a silent theft of their backstop.
+  (4) **A last will starts a clock; it does not cancel a ride.** R-16's four windows exist because a
+  driver in an underpass has not abandoned anybody. An `offline` arms `offline_grace`, an `online`
+  retires it, and only the timer expiring reaches the matrix. Redelivery cannot restart the clock —
+  `ArmIfAbsentAsync` settles that in the `INSERT` rather than with a prior read, because EMQX
+  redelivers a retained will to every replica and again on reconnect, and a broker retrying would
+  otherwise push the deadline forward forever.
+  (5) **A grace re-plans itself when the ride moves beneath it.** A driver who goes dark while
+  `Accepted` and then taps Arrive (a phone with mobile data but a dead broker session does exactly
+  this) gets the 120-second window — computed from the *same* `offlineSince`, so moving the ride
+  along is not a way to earn a fresh grace and the re-plan terminates. `offline_grace` is therefore
+  the one kind a non-terminal transition does **not** retire.
+  (6) **"GPS not advancing" is the same fact, not a second one.** §11.12's in-progress row reads
+  "LWT → offline > 5 min, GPS not advancing". A vehicle whose broker session has been dead for five
+  minutes publishes no positions by construction — the will fires when the session dies and
+  positions travel on that session. ride-svc holds no telemetry and deliberately consumes none
+  (R-01's boundary is what keeps this aggregate small).
+  (7) **`payment_pending` moves nothing.** No row of §11.12 takes a ride out of `PaymentPending` on
+  a timeout and R-05 reserves that door for fare-svc, so the timer produces ADD §13.3.1's alert with
+  a ride id on it and the `runbooks/ride-stuck.md` pointer, and nothing else. A timer that
+  auto-cancelled here would erase a fare for a trip that happened.
+  (8) **AL-16 is derived, not stored.** C033's fence says counters live in reputation-svc "and
+  nowhere else", and C033 does not exist; a component whose DoD is "three consecutive cancellations
+  disable booking" cannot ship without an answer. So `IBookingEligibility` counts the run of
+  `CancelledByRiderAfterAccept` at the head of the passenger's own ride history — not a second copy
+  of the counter, because the rides *are* the facts it would be computed from. **C033 replaces the
+  implementation and deletes the query; nothing else in this service changes.** AL-16's re-enable
+  path (clear the outstanding Rs 50, cooldown or CSR reinstatement) needs billing's balance and an
+  admin surface and is not implemented — a passenger disabled here is re-enabled by completing a
+  ride, which is also what US-6A.10b says resets the counter.
+  (9) **A no-show is not a cancellation.** US-6A.10b counts "cancellations made after a driver has
+  accepted" and reputation-svc keeps a separate no-show counter (D5' §4.2), so `NoShowRider` does
+  not increment the AL-16 run. Charging one event to both tallies would disable booking in two
+  rides, not three.
+  (10) **Money travels as a rule where ride-svc does not hold the number.** A mid-trip cancel
+  accrues the *quoted* fare with `basis: full_fare`, and the rider no-show carries
+  `driverCompensationBasis: base_fare_half` — §11.12's "driver compensation = base fare/2", where
+  the base fare is per tier and lives in `fares.tariffs`. fare-svc resolves both. ride-svc writes no
+  ledger entry and no `dispatch.cancellation_penalties` row: those are other bounded contexts, and
+  the fence for this component is that cross-service state changes go through the outbox.
+  (11) **A redelivered settlement is a 200, not a 409.** fare-svc's delivery is at least once and
+  R-14's replay only covers an identical `Idempotency-Key`, so the same terminal arriving under a
+  fresh key is answered with the settled ride and writes no second transition and no second earning
+  authorisation. The alternative would have been `payment-already-settled`, which
+  `notifyPaymentSettled` does not declare — and a duplicate callback is not an error anyway.
+  **Two bugs the DoD tests caught —**
+  (a) `ux_rides_open_passenger` exempts `Completed` but **not** `PaymentPending`, so the AL-16 reset
+  test could not book its next ride: a passenger whose last trip is awaiting payment is wedged until
+  fare-svc settles. Known and landed verbatim (C004 note (b)) but never *exercised* before, because
+  C022 had no way to leave `PaymentPending`. The test settles the ride the way fare-svc does; the
+  wedge is real for any deployment where fare-svc is down, and is worth an index change if the
+  exempt list is ever revisited.
+  (b) `updated_at` is maintained by the `trg_rides_updated` BEFORE UPDATE trigger (migration 0002),
+  so the R-20 gauge's "age in state" cannot be forged — which is the property that makes the column
+  usable for the SLO, and which meant the metrics test had to reach for
+  `session_replication_role = replica` to age a ride at all.
+  **Three R-20 rows are approximated, and the approximation is stated in code.** ADD §13.3.1's
+  "Accepted AND no live pos > 60 s" and "InProgress AND no GPS sample > 5 min" both ask about
+  telemetry ride-svc does not hold; what is published is time in state, which is a superset (every
+  ride whose driver has gone dark is in it, along with rides that are merely slow). **The precise
+  version belongs with whoever owns the position index (C039/C040).**
+  **For C037 (proxy + package) —** the aggregate is kind-agnostic and the machine already is:
+  nothing below needs a new state. `RideTimerKinds` has the three kinds left for you
+  (`location_request_expiry`, `otp_attempt_window`, `cod_uncollected`) and `RequireOwned` is where
+  you widen the claim. The P-14 "uncollected COD > 24 h → Disputed" rule is a matrix row you add to
+  `RideCancellationMatrix`, not a new code path. `RideStateWriter.RecordAsync` is the only way a
+  state change may be written — audit row, timer plan and outbox in one call.
+  **For C033 (reputation-svc) —** `reputation.driver_cancelled` is on `ride.events`, keyed by
+  rideId, carrying `driverId`, `fromState`, `reasonCode` and `systemInitiated` (a driver who tapped
+  Cancel versus one whose phone died — §11.12 gives both the same effect and you may want to tell
+  them apart). `ride.no_show_driver` and `ride.no_show_rider` are the no-show counters' input. When
+  you land, replace `IBookingEligibility` with a gRPC read of `block_status` — see decision (8).
+  **For C034 (dispatch-svc-core) —** `POST /v1/internal/rides/{rideId}/system-cancel` with
+  `{reason: "no_driver_found"}` is how a ride reaches `ExpiredNoDriver`, and it is legal **only**
+  from `Matching`. The two-minute cascade budget is yours (US-6A.11); see the spec conflict above.
+  `driver_offline_grace_expired` is also available to you if you would rather drive the R-15 path
+  from dispatch than rely on ride-svc's own `veh/+/status` subscription — whichever reaches the
+  matrix first settles it and the other finds no row, which is the normal race.
+  **For C049/C050 (fare-svc) —** `POST /v1/internal/rides/{rideId}/payment-settled` with
+  `{paymentId, paymentState, settledMinor}`; only `Succeeded`, `FellBackToCash`,
+  `CashOnDeliveryCollected` and `Disputed` are accepted. `cancellation.penalty.accrued` carries
+  `basis` (`cancellation_fee` | `no_show_fee` | `full_fare`) and `affectedDriverId` — D5' §7.1's
+  settlement is yours, keyed `penaltyId:rideId`. A mid-trip cancel's `amountMinor` is the *quote*;
+  replace it with the metered fare.
+  **Build host —** Docker for Testcontainers (Postgres, Redpanda); the replica stayed down
+  throughout. The 252 tests take ~2 min 20 s.

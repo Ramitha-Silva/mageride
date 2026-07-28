@@ -1,4 +1,5 @@
 using MageRide.Ride.Domain;
+using MageRide.Ride.Persistence;
 using MageRide.Ride.Rides;
 
 namespace MageRide.Ride.Endpoints;
@@ -174,6 +175,71 @@ public sealed record OfferPlacedResponse(Guid RideId, string State, long Version
 {
     public static OfferPlacedResponse From(RideRow ride) =>
         new(ride.Id, ride.State, ride.Version, ride.CurrentOfferId, ride.OfferExpiresAt);
+}
+
+/// <summary>The body of <c>POST /v1/rides/{rideId}/cancel</c>.</summary>
+/// <param name="Reason">
+/// <c>RIDER_CHANGED_MIND | DRIVER_TOO_FAR | EMERGENCY | OTHER</c>. Recorded and published; it does
+/// not choose the outcome — the §11.12 matrix does, from the ride's state and who is calling.
+/// </param>
+public sealed record CancelRideBody(long? Version, string? Reason);
+
+/// <summary>The accrued debt a cancellation left behind (D3' <c>cancel</c> 200 <c>penalty</c>).</summary>
+public sealed record RidePenaltyResponse(long AmountMinor, string Currency, string SettledOn);
+
+/// <summary>The 200 of <c>POST /v1/rides/{rideId}/cancel</c>.</summary>
+/// <remarks>
+/// <c>penalty</c> is absent when the matrix's Penalty column says None — a pre-acceptance cancel
+/// (US-6A.9) and every driver-side one. Present with the amount otherwise, so the app can show the
+/// passenger what they now owe without a second call.
+/// </remarks>
+public sealed record RideCancelledResponse(Guid RideId, string State, long Version, RidePenaltyResponse? Penalty)
+{
+    public static RideCancelledResponse From(RideCancellation cancellation)
+    {
+        ArgumentNullException.ThrowIfNull(cancellation);
+
+        var ride = cancellation.Ride;
+
+        return new RideCancelledResponse(
+            ride.Id,
+            ride.State,
+            ride.Version,
+            cancellation.Outcome.Penalty is RidePenaltyBasis.None
+                ? null
+                : new RidePenaltyResponse(cancellation.PenaltyMinor, ride.Currency, RideSettlement.NextTrip));
+    }
+}
+
+/// <summary>The body of <c>POST /v1/internal/rides/{rideId}/system-cancel</c>.</summary>
+public sealed record SystemCancelBody(string? Reason);
+
+/// <summary>The body of <c>POST /v1/internal/rides/{rideId}/payment-settled</c>.</summary>
+public sealed record PaymentSettledBody(string? PaymentId, string? PaymentState, long? SettledMinor);
+
+/// <summary>One row of the saga diagnostics' transition log.</summary>
+public sealed record SagaTransitionResponse(string? From, string To, DateTimeOffset At, string Actor, string? Reason);
+
+/// <summary>The 200 of <c>GET /v1/internal/rides/{rideId}/saga-state</c>.</summary>
+public sealed record SagaStateResponse(
+    Guid RideId,
+    string State,
+    long Version,
+    IReadOnlyList<SagaTransitionResponse> Transitions,
+    int PendingOutbox)
+{
+    public static SagaStateResponse From(RideSagaState saga)
+    {
+        ArgumentNullException.ThrowIfNull(saga);
+
+        return new SagaStateResponse(
+            saga.Ride.Id,
+            saga.Ride.State,
+            saga.Ride.Version,
+            [.. saga.Transitions.Select(row =>
+                new SagaTransitionResponse(row.FromState, row.ToState, row.Ts, row.ActorType, row.ReasonCode))],
+            saga.PendingOutbox);
+    }
 }
 
 /// <summary>The body of <c>POST /v1/internal/rides/{rideId}/offer/expire</c>.</summary>

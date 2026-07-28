@@ -91,6 +91,12 @@ internal sealed class RideHarness : IAsyncDisposable
             ["Outbox:DispatcherEnabled"] = "false",
             // One /metrics endpoint per harness would collide across concurrently running tests.
             ["Otel:PrometheusEnabled"] = "false",
+            // The R-04 sweep is driven one pass at a time by RideTimerTests rather than left
+            // ticking: a background worker firing a no-show mid-assertion is the kind of flake that
+            // is impossible to read afterwards.
+            ["Ride:TimersEnabled"] = "false",
+            // A dozen harnesses share one database, so each would otherwise gauge the others' rides.
+            ["Ride:StuckStateMetricsEnabled"] = "false",
         };
 
         if (settings is not null)
@@ -239,9 +245,19 @@ internal sealed class RideHarness : IAsyncDisposable
         return Client.SendAsync(request);
     }
 
-    public Task<HttpResponseMessage> GetAsync(string path, string? bearer)
+    /// <summary>
+    /// GETs a path. <paramref name="apiKey"/> is for the internal plane's read routes, which carry
+    /// the shared secret instead of a bearer until C042 lands a mesh.
+    /// </summary>
+    public Task<HttpResponseMessage> GetAsync(string path, string? bearer, string? apiKey = null)
     {
         var request = new HttpRequestMessage(HttpMethod.Get, path);
+
+        if (apiKey is not null)
+        {
+            request.Headers.Add(InternalRideEndpoints.ApiKeyHeader, apiKey);
+        }
+
         Authorize(request, bearer);
         return Client.SendAsync(request);
     }
@@ -298,6 +314,14 @@ internal sealed class RideHarness : IAsyncDisposable
         var matching = await PostInternalAsync($"/v1/internal/rides/{rideId}/matching", new { });
         Assert.Equal(HttpStatusCode.OK, matching.StatusCode);
 
+        return await OfferOnlyAsync(rideId, driver, ttlSeconds);
+    }
+
+    /// <summary>The second half of <see cref="OfferAsync"/>, for a ride already in Matching.</summary>
+    public async Task<LiveOffer> OfferOnlyAsync(Guid rideId, SeededDriver driver, int? ttlSeconds = null)
+    {
+        ArgumentNullException.ThrowIfNull(driver);
+
         var offerId = Guid.NewGuid();
         var offered = await PostInternalAsync(
             $"/v1/internal/rides/{rideId}/offer",
@@ -314,6 +338,145 @@ internal sealed class RideHarness : IAsyncDisposable
 
         return new LiveOffer(rideId, offerId, body.GetProperty("version").GetInt64());
     }
+
+    /// <summary>
+    /// Books a ride and walks it to <paramref name="state"/> through the real HTTP surface.
+    /// </summary>
+    /// <remarks>
+    /// Every §11.12 test needs a ride sitting in one particular state, and hand-rolling the walk in
+    /// each of them is how the setup and the assertion start disagreeing. Driven through the
+    /// endpoints rather than by <c>UPDATE</c> so the ride under test carries the audit trail, the
+    /// outbox rows and the durable timers it would carry in production — which is exactly what the
+    /// cancellation and timer tests then assert about.
+    /// </remarks>
+    public async Task<LiveRide> DriveToAsync(string state, string? vehicleType = null)
+    {
+        var passengerId = await CreatePassengerAsync();
+        var passenger = Tokens.Passenger(passengerId);
+        var driver = await CreateDriverAsync(vehicleType ?? "three_wheeler");
+
+        var booked = await RequestRideAsync(passenger, vehicleType: vehicleType ?? "three_wheeler");
+        var rideId = booked.GetProperty("rideId").GetGuid();
+        var ride = new LiveRide(rideId, passengerId, passenger, driver, booked.GetProperty("version").GetInt64());
+
+        if (state == "Requested")
+        {
+            return ride;
+        }
+
+        var matching = await PostInternalAsync($"/v1/internal/rides/{rideId}/matching", new { });
+        Assert.Equal(HttpStatusCode.OK, matching.StatusCode);
+        ride = ride with { Version = (await ReadJsonAsync(matching)).GetProperty("version").GetInt64() };
+
+        if (state == "Matching")
+        {
+            return ride;
+        }
+
+        var offer = await OfferOnlyAsync(rideId, driver);
+        ride = ride with { Version = offer.Version, OfferId = offer.OfferId };
+
+        if (state == "Offered")
+        {
+            return ride;
+        }
+
+        var accepted = await PostAsync(
+            $"/v1/rides/{rideId}/offer/{driver.DriverId}/accept",
+            new { offerId = offer.OfferId.ToString(), version = offer.Version },
+            driver.Bearer);
+
+        Assert.Equal(HttpStatusCode.OK, accepted.StatusCode);
+        ride = ride with { Version = (await ReadJsonAsync(accepted)).GetProperty("version").GetInt64() };
+
+        if (state == "Accepted")
+        {
+            return ride;
+        }
+
+        if (state is not ("DriverArrived" or "InProgress" or "PaymentPending"))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(state), state,
+                "DriveToAsync walks the non-terminal states only; a terminal state is what a test asserts, " +
+                "and Completed is transient — `complete` moves through it to PaymentPending in one transaction.");
+        }
+
+        ride = ride with { Version = await AdvanceAsync(ride, "arrive") };
+
+        if (state == "DriverArrived")
+        {
+            return ride;
+        }
+
+        ride = ride with { Version = await AdvanceAsync(ride, "start") };
+
+        if (state == "InProgress")
+        {
+            return ride;
+        }
+
+        return ride with { Version = await AdvanceAsync(ride, "complete") };
+    }
+
+    /// <summary>One driver-side move, asserting the 200 and returning the new version.</summary>
+    public async Task<long> AdvanceAsync(LiveRide ride, string command)
+    {
+        ArgumentNullException.ThrowIfNull(ride);
+
+        var response = await PostAsync(
+            $"/v1/rides/{ride.RideId}/{command}", new { version = ride.Version }, ride.Driver.Bearer);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        return (await ReadJsonAsync(response)).GetProperty("version").GetInt64();
+    }
+
+    /// <summary>The current state and version, read straight from the row.</summary>
+    public async Task<(string State, long Version)> ReadRideAsync(Guid rideId)
+    {
+        await using var connection = await OpenAsync();
+
+        return await connection.QuerySingleAsync<(string, long)>(
+            "SELECT state, version FROM rides.rides WHERE id = @RideId;", new { RideId = rideId });
+    }
+
+    /// <summary>The outbox rows this ride has produced, oldest first.</summary>
+    public async Task<IReadOnlyList<string>> ReadEventsAsync(Guid rideId)
+    {
+        await using var connection = await OpenAsync();
+
+        return [.. await connection.QueryAsync<string>(
+            "SELECT event_type FROM rides.outbox WHERE aggregate_id = @RideId ORDER BY id;",
+            new { RideId = rideId })];
+    }
+
+    /// <summary>One outbox payload, as JSON.</summary>
+    public async Task<JsonElement> ReadEventPayloadAsync(Guid rideId, string eventType)
+    {
+        await using var connection = await OpenAsync();
+
+        var payload = await connection.QuerySingleOrDefaultAsync<string>(
+            "SELECT payload::text FROM rides.outbox WHERE aggregate_id = @RideId AND event_type = @EventType ORDER BY id DESC LIMIT 1;",
+            new { RideId = rideId, EventType = eventType });
+
+        Assert.NotNull(payload);
+
+        using var document = JsonDocument.Parse(payload);
+        return document.RootElement.Clone();
+    }
+
+    /// <summary>
+    /// Drives one pass of the R-04 durable-timer sweep, the way the hosted worker would.
+    /// </summary>
+    /// <remarks>
+    /// The worker is registered but not hosted in tests (<c>Ride:TimersEnabled=false</c>), so a
+    /// sweep happens exactly when a test asks for one. Waiting on a ticker instead would make every
+    /// timer assertion a race against the assertion before it.
+    /// </remarks>
+    public Task<Timers.RideTimerSweep> SweepTimersAsync() =>
+        Services.GetRequiredService<Timers.RideTimerWorker>()
+            .SweepOnceAsync(TestContext.Current.CancellationToken);
 
     public Task<NpgsqlConnection> OpenAsync() => _postgres.OpenAsync();
 
@@ -355,3 +518,14 @@ internal sealed record SeededDriver(Guid DriverId, Guid VehicleId, string Plate,
 /// <summary>An offer that has been placed and not yet answered.</summary>
 /// <param name="Version">The ride version the driver must echo on the accept.</param>
 internal sealed record LiveOffer(Guid RideId, Guid OfferId, long Version);
+
+/// <summary>A ride sitting in a known state, with both parties' credentials to hand.</summary>
+/// <param name="Version">What the next mutation must echo.</param>
+/// <param name="OfferId">Set once the ride has reached Offered.</param>
+internal sealed record LiveRide(
+    Guid RideId,
+    Guid PassengerId,
+    string PassengerBearer,
+    SeededDriver Driver,
+    long Version,
+    Guid? OfferId = null);

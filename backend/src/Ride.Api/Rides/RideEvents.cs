@@ -5,38 +5,6 @@ using MageRide.Shared.Messaging;
 
 namespace MageRide.Ride.Rides;
 
-/// <summary>
-/// The <c>ride.events</c> types this slice emits (D6' §2.2 event registry).
-/// </summary>
-/// <remarks>
-/// D6' §2.2 lists <c>offer.created</c> on <c>ride.events</c> as well as on <c>dispatch.events</c>,
-/// and ADD §11.11 writes it to <c>rides.outbox</c> — so the ride-side row is the one that commits
-/// with the state change, which is the whole point of R-13. <c>offer.declined</c> is named by
-/// §11.12's matrix without a topic; it rides here for the same reason, because ride-svc is what
-/// performed the <c>Offered → Matching</c> move dispatch-svc needs to hear about.
-/// <para>
-/// Not emitted: anything for <c>Requested → Matching</c>. dispatch-svc drives that move itself, so
-/// an event would only tell it what it just did, and the registry has no name for one.
-/// </para>
-/// </remarks>
-public static class RideEventTypes
-{
-    public const string Requested = "ride.requested";
-    public const string OfferCreated = "offer.created";
-    public const string OfferDeclined = "offer.declined";
-
-    /// <summary>
-    /// The 15 s window closed with no answer (D5' §6's <c>Offered | Offer expires 15 s | →Matching
-    /// | … | offer.expired</c> row, ADD §11.11's R-04 backstop). Emitted here for the same reason as
-    /// <see cref="OfferDeclined"/>: ride-svc is what performed the <c>Offered → Matching</c> move.
-    /// </summary>
-    public const string OfferExpired = "offer.expired";
-    public const string Accepted = "ride.accepted";
-    public const string DriverArrived = "ride.driver_arrived";
-    public const string Started = "ride.started";
-    public const string Completed = "ride.completed";
-}
-
 /// <summary>A coordinate as D6' §2.2 renders one.</summary>
 public sealed record EventGeoPoint(double Lat, double Lng);
 
@@ -63,7 +31,20 @@ public sealed record RideEventPayload(
     EventGeoPoint Pickup,
     EventGeoPoint Dropoff,
     Guid? OfferId,
-    DateTimeOffset? OfferExpiresAt);
+    DateTimeOffset? OfferExpiresAt,
+
+    /// <summary>
+    /// The server-owned §11.12 reason (<c>RIDER_CANCELLED_AFTER_ACCEPT</c>, …). Present on the
+    /// terminal events; absent on the lifecycle ones, which have no reason beyond the move itself.
+    /// </summary>
+    string? ReasonCode = null,
+
+    /// <summary>
+    /// What the client said when it asked (<c>RIDER_CHANGED_MIND</c> | <c>DRIVER_TOO_FAR</c> |
+    /// <c>EMERGENCY</c> | <c>OTHER</c>). Recorded and published because reputation-svc and support
+    /// both care about it, and decided nothing — the matrix did.
+    /// </summary>
+    string? CancellationReason = null);
 
 /// <summary>The full <c>ride.events</c> envelope (D6' §2.2).</summary>
 /// <param name="EventId">Consumers deduplicate on this; delivery is at least once (D6' §2.3).</param>
@@ -75,6 +56,61 @@ public sealed record RideEventEnvelope(
     DateTimeOffset Ts,
     RideEventPayload Payload);
 
+/// <summary>
+/// The <c>cancellation.penalty.accrued</c> payload (§11.12, D5' §7.1, D-05).
+/// </summary>
+/// <param name="AmountMinor">
+/// LKR minor units. For <see cref="RidePenaltyBasis.FullFare"/> this is the <em>quoted</em> fare —
+/// the only number ride-svc holds. fare-svc replaces it with the metered amount when it settles;
+/// <paramref name="Basis"/> is what tells it to.
+/// </param>
+/// <param name="AffectedDriverId">
+/// Who the money is owed to. D5' §7.1 credits the driver whose accepted ride was cancelled, paid
+/// through the passenger's next trip.
+/// </param>
+/// <param name="DriverCompensationBasis">
+/// How the driver's side is computed when the matrix names one — §11.12's "driver compensation =
+/// base fare/2" on a rider no-show. The base fare is per tier (D5' §1.1) and is fare-svc's, so the
+/// rule travels rather than a number.
+/// </param>
+public sealed record RidePenaltyPayload(
+    Guid PassengerId,
+    Guid? AffectedDriverId,
+    long AmountMinor,
+    string Currency,
+    string Basis,
+    string ReasonCode,
+    string FromState,
+    string SettledOn,
+    string? DriverCompensationBasis);
+
+/// <summary>The <c>reputation.driver_cancelled</c> payload (§11.12).</summary>
+/// <param name="SystemInitiated">
+/// <see langword="true"/> when the last-will grace expired rather than the driver tapping Cancel.
+/// §11.12 gives both rows the same effect ("same"), and reputation-svc still wants to be able to
+/// tell a driver who quit from a driver whose phone died.
+/// </param>
+public sealed record RideReputationPayload(
+    Guid DriverId,
+    Guid? VehicleId,
+    Guid PassengerId,
+    string FromState,
+    string ToState,
+    string ReasonCode,
+    bool SystemInitiated);
+
+/// <summary>The <c>ride.settled</c> payload (R-05).</summary>
+public sealed record RideSettlementPayload(
+    Guid PassengerId,
+    Guid? DriverId,
+    Guid? VehicleId,
+    Guid PaymentId,
+    string PaymentState,
+    string State,
+    long? SettledMinor,
+    string Currency,
+    bool EarningPayable);
+
 /// <summary>Builds the outbox row for a ride state change.</summary>
 public static class RideEvents
 {
@@ -82,7 +118,13 @@ public static class RideEvents
     /// Wraps <paramref name="ride"/> as it stands <em>after</em> the change, so the event's
     /// <c>state</c> and <c>version</c> are the ones a consumer will find if it reads back.
     /// </summary>
-    public static OutboxRecord Build(string eventType, RideRow ride, Guid eventId, DateTimeOffset ts)
+    public static OutboxRecord Build(
+        string eventType,
+        RideRow ride,
+        Guid eventId,
+        DateTimeOffset ts,
+        string? reasonCode = null,
+        string? cancellationReason = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(eventType);
         ArgumentNullException.ThrowIfNull(ride);
@@ -109,7 +151,9 @@ public static class RideEvents
                 Pickup: new EventGeoPoint(ride.PickupGeo.Latitude, ride.PickupGeo.Longitude),
                 Dropoff: new EventGeoPoint(ride.DropoffGeo.Latitude, ride.DropoffGeo.Longitude),
                 OfferId: ride.CurrentOfferId,
-                OfferExpiresAt: ride.OfferExpiresAt));
+                OfferExpiresAt: ride.OfferExpiresAt,
+                ReasonCode: reasonCode,
+                CancellationReason: cancellationReason));
 
         // MageRideJson.StorageOptions: camelCase, and nulls are omitted — which is what makes an
         // absent `driverId` on a ride.requested an absent member rather than a claim about one.
@@ -117,5 +161,50 @@ public static class RideEvents
             ride.Id,
             eventType,
             JsonSerializer.Serialize(envelope, MageRideJson.StorageOptions));
+    }
+
+    /// <summary>The <c>cancellation.penalty.accrued</c> row that rides alongside a §11.12 terminal.</summary>
+    public static OutboxRecord BuildPenalty(
+        RideRow ride, RidePenaltyPayload payload, Guid eventId, DateTimeOffset ts) =>
+        BuildSibling(ride, RideEventTypes.PenaltyAccrued, payload, eventId, ts);
+
+    /// <summary>The <c>reputation.driver_cancelled</c> row reputation-svc (C033) counts.</summary>
+    public static OutboxRecord BuildReputation(
+        RideRow ride, RideReputationPayload payload, Guid eventId, DateTimeOffset ts) =>
+        BuildSibling(ride, RideEventTypes.DriverCancelled, payload, eventId, ts);
+
+    /// <summary>The <c>ride.settled</c> row that authorises the driver's earning (R-05).</summary>
+    public static OutboxRecord BuildSettlement(
+        RideRow ride, RideSettlementPayload payload, Guid eventId, DateTimeOffset ts) =>
+        BuildSibling(ride, RideEventTypes.Settled, payload, eventId, ts);
+
+    /// <summary>
+    /// An event about the ride that is not a state snapshot of it — the penalty, the reputation hit
+    /// and the settlement.
+    /// </summary>
+    /// <remarks>
+    /// Same envelope shape, same <c>aggregate_id</c>, so every one of them is keyed by
+    /// <c>rideId</c> on <c>ride.events</c> (D6' §2.1) and reaches a consumer in the order the
+    /// transaction wrote it. A separate topic would let a penalty overtake the cancellation that
+    /// caused it.
+    /// </remarks>
+    private static OutboxRecord BuildSibling<TPayload>(
+        RideRow ride, string eventType, TPayload payload, Guid eventId, DateTimeOffset ts)
+    {
+        ArgumentNullException.ThrowIfNull(ride);
+        ArgumentNullException.ThrowIfNull(payload);
+
+        var envelope = new
+        {
+            eventId,
+            eventType,
+            rideId = ride.Id,
+            version = ride.Version,
+            ts,
+            payload,
+        };
+
+        return OutboxRecord.Create(
+            ride.Id, eventType, JsonSerializer.Serialize(envelope, MageRideJson.StorageOptions));
     }
 }

@@ -19,13 +19,10 @@ namespace MageRide.Ride.Endpoints;
 /// <c>PaymentPending</c>.
 /// </para>
 /// <para>
-/// Left unmapped rather than stubbed, each with the component that owns it:
-/// <c>POST /cancel</c> and <c>/internal/{id}/system-cancel</c> (the §11.12 matrix, C032),
-/// <c>/dispute</c> and <c>/internal/{id}/payment-settled</c> (E-05 and R-05, C049/C050),
-/// <c>GET /history</c> (AL-36, C048), the five package routes (P-06..P-08, C037), the four
-/// location-request routes (P-02/P-13, C032) and <c>/internal/{id}/saga-state</c> (ops, C037).
-/// A stubbed cancel is worse than an absent one — it would answer 200 to a passenger and leave a
-/// driver en route.
+/// Left unmapped rather than stubbed, each with the component that owns it: <c>/dispute</c>
+/// (E-05, C049/C050), <c>GET /history</c> (AL-36, C048), the five package routes (P-06..P-08,
+/// C037) and the four location-request routes (P-02/P-13, C037). A stubbed route is worse than an
+/// absent one — it answers 200 to a passenger and changes nothing.
 /// </para>
 /// </remarks>
 public static class RideEndpoints
@@ -52,6 +49,13 @@ public static class RideEndpoints
         reads.MapGet("/{rideId}/state", GetStateAsync).WithName("getRideState");
         reads.MapGet("/passenger/{passengerId}/active", GetActivePassengerRideAsync).WithName("getActivePassengerRide");
         reads.MapGet("/driver/{driverId}/active", GetActiveDriverRideAsync).WithName("getActiveDriverRide");
+
+        // D3' spells the auth on `cancel` as "Bearer" without a role: §11.12 gives both sides a row
+        // and the passenger's Rs 50 and the driver's reputation hit are different rows of the same
+        // table. Which one applies is decided from the ride, not from the token's role — a driver
+        // who is not the accepted driver of *this* ride is 403 not-ride-participant, not 403
+        // forbidden.
+        reads.MapPost("/{rideId}/cancel", CancelAsync).WithName("cancelRide");
 
         var driver = endpoints.MapGroup("/v1/rides")
             .WithTags("rides")
@@ -239,6 +243,26 @@ public static class RideEndpoints
             context.User.RequireSubjectId(), RequireRideId(rideId), RequireVersion(body?.Version), cancellationToken);
 
         return TypedResults.Ok(RideCompletedResponse.From(ride));
+    }
+
+    private static async Task<Ok<RideCancelledResponse>> CancelAsync(
+        string rideId,
+        CancelRideBody? body,
+        HttpContext context,
+        IRideCancellationService service,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(service);
+
+        var cancellation = await service.CancelAsync(
+            context.User.RequireSubjectId(),
+            RequireRideId(rideId),
+            body?.Reason,
+            RequireVersion(body?.Version),
+            cancellationToken);
+
+        return TypedResults.Ok(RideCancelledResponse.From(cancellation));
     }
 
     private static RidePlace? ToPlace(PlaceBody? place) =>

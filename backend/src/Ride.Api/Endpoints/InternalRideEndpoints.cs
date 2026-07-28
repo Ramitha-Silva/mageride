@@ -57,6 +57,13 @@ public static class InternalRideEndpoints
         internalRides.MapPost("/{rideId}/offer", PlaceOfferAsync).WithName("placeRideOffer");
         internalRides.MapPost("/{rideId}/offer/expire", ExpireOfferAsync).WithName("expireRideOffer");
 
+        // These three are D3' §0's mTLS family proper — unlike the three above, they are in the
+        // contract already. They share the interim shared-secret filter because no mesh exists yet
+        // (C042); the gateway refuses the whole `/v1/internal/**` prefix at the edge either way.
+        internalRides.MapPost("/{rideId}/system-cancel", SystemCancelAsync).WithName("systemCancelRide");
+        internalRides.MapPost("/{rideId}/payment-settled", PaymentSettledAsync).WithName("notifyPaymentSettled");
+        internalRides.MapGet("/{rideId}/saga-state", SagaStateAsync).WithName("getRideSagaState");
+
         return endpoints;
     }
 
@@ -97,6 +104,44 @@ public static class InternalRideEndpoints
             RequireRideId(rideId), RequireId(body?.OfferId, "offerId"), cancellationToken);
 
         return TypedResults.Ok(RideStateChangeResponse.From(ride));
+    }
+
+    private static async Task<Ok<RideStateChangeResponse>> SystemCancelAsync(
+        string rideId, SystemCancelBody? body, IRideCancellationService service, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(service);
+
+        var cancellation = await service.SystemCancelAsync(
+            RequireRideId(rideId), body?.Reason, cancellationToken);
+
+        // No `penalty` member: §11.12 accrues nothing on a system cancel, and the contract's 200 is
+        // a bare RideStateChange for exactly that reason.
+        return TypedResults.Ok(RideStateChangeResponse.From(cancellation.Ride));
+    }
+
+    private static async Task<Ok<RideStateChangeResponse>> PaymentSettledAsync(
+        string rideId, PaymentSettledBody? body, IRideSettlementService service, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(service);
+
+        var ride = await service.SettleAsync(
+            new PaymentSettledCommand(
+                RideId: RequireRideId(rideId),
+                PaymentId: RequireId(body?.PaymentId, "paymentId"),
+                PaymentState: body?.PaymentState,
+                SettledMinor: body?.SettledMinor),
+            cancellationToken);
+
+        return TypedResults.Ok(RideStateChangeResponse.From(ride));
+    }
+
+    private static async Task<Ok<SagaStateResponse>> SagaStateAsync(
+        string rideId, IRideService service, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(service);
+
+        return TypedResults.Ok(
+            SagaStateResponse.From(await service.GetSagaStateAsync(RequireRideId(rideId), cancellationToken)));
     }
 
     private static Guid RequireRideId(string? rideId) =>

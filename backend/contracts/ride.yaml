@@ -566,7 +566,7 @@ paths:
         '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
         '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
-      x-error-codes: [illegal-transition, unauthorized, not-ride-participant, not-found, version-conflict]
+      x-error-codes: [validation-failed, illegal-transition, unauthorized, not-ride-participant, not-found, version-conflict, ride-terminal, conflict]
 
   /v1/rides/{rideId}/dispute:
     post:
@@ -1084,6 +1084,7 @@ paths:
       tags: [rides]
       security:
         - mtls: []
+        - internalKey: []
       parameters:
         - $ref: '#/components/parameters/RideId'
         - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
@@ -1110,7 +1111,7 @@ paths:
         '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
         '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
-      x-error-codes: [validation-failed, unauthorized, not-found, illegal-transition]
+      x-error-codes: [validation-failed, unauthorized, not-found, illegal-transition, ride-terminal, conflict]
 
   /v1/internal/rides/{rideId}/payment-settled:
     post:
@@ -1123,6 +1124,7 @@ paths:
       tags: [rides]
       security:
         - mtls: []
+        - internalKey: []
       parameters:
         - $ref: '#/components/parameters/RideId'
         - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
@@ -1166,6 +1168,7 @@ paths:
       tags: [rides]
       security:
         - mtls: []
+        - internalKey: []
       parameters:
         - $ref: '#/components/parameters/RideId'
       responses:
@@ -1217,11 +1220,14 @@ components:
       in: header
       name: X-MageRide-Internal-Key
       description: |
-        **Interim (C022).** The two dispatch-driven routes above are on the same mTLS-only
-        `/v1/internal/**` family as their siblings — the gateway refuses the prefix at the edge
-        (C008) — but no service mesh exists yet, so the in-cluster hop is guarded by a shared
-        secret (`Ride:InternalApiKey`). Unset, the routes are not mapped at all. **C042 replaces
-        this with `mtls`, and this scheme is deleted with it.**
+        **Interim (C022, widened by C032).** Every `/v1/internal/rides/**` route is mTLS-only by
+        D3' §0 and the gateway refuses the prefix at the edge (C008) — but no service mesh exists
+        yet, so the in-cluster hop is guarded by a shared secret (`Ride:InternalApiKey`). Unset,
+        the routes are not mapped at all. The three routes D3' declares (`system-cancel`,
+        `payment-settled`, `saga-state`) list **both** schemes because either satisfies the
+        deployed service today; the three Δ routes list this one alone because they were coined
+        after the mesh decision. **C042 replaces all of it with `mtls`, and this scheme is deleted
+        with it.**
 
   parameters:
     RideId:

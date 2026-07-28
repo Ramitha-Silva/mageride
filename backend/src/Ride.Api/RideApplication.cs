@@ -36,8 +36,10 @@ public static class RideApplication
 
             // The Redis fast path in ADD §11.11 — `lock:driver-offer:{driverId}` — is
             // dispatch-svc's reservation (D5' §3.6, C023). The authoritative accept this service
-            // performs is pure Postgres, so a Redis dependency here would be a readiness probe
-            // that can fail while every route still works. C032 turns it on with the offer cache.
+            // performs is pure Postgres, and so is every R-04 timer, so a Redis dependency here
+            // would be a readiness probe that can fail while every route still works. It also
+            // makes R-04's "the backstop fires independently of any Redis TTL" structural rather
+            // than merely tested: there is no cache in this process to flush.
             UseRedis = false,
         };
 
@@ -46,13 +48,47 @@ public static class RideApplication
         builder.AddMageRideDefaults(serviceOptions);
         builder.Services.AddRideServices(builder.Configuration);
 
+        var ride = builder.Configuration.GetSection(RideOptions.SectionName);
+
+        // Hosted separately from the registrations in AddRideServices so a test can resolve a
+        // worker and drive one pass without it also ticking.
+        if (ride.GetValue("TimersEnabled", true))
+        {
+            builder.Services.AddHostedService(services => services.GetRequiredService<Timers.RideTimerWorker>());
+        }
+
+        if (ride.GetValue("VehicleStatusEnabled", false))
+        {
+            builder.Services.AddHostedService(services => services.GetRequiredService<Mqtt.VehiclePresenceWorker>());
+        }
+
         var app = builder.Build();
 
         app.UseMageRideDefaults(serviceOptions);
 
         app.MapRideEndpoints();
 
-        var internalApiKey = app.Services.GetRequiredService<IOptions<RideOptions>>().Value.InternalApiKey;
+        var settings = app.Services.GetRequiredService<IOptions<RideOptions>>().Value;
+
+        if (settings.StuckStateMetricsEnabled)
+        {
+            // Resolved eagerly: the gauges are registered in the constructor, and a lazily-resolved
+            // observer would publish nothing until something else happened to ask for it.
+            _ = app.Services.GetRequiredService<Observability.StuckStateObserver>();
+        }
+
+        if (!settings.TimersEnabled)
+        {
+            // §11.12 makes the no-show and grace outcomes the platform's job, not a client's. With
+            // the sweep off, a rider who never appears keeps a driver waiting forever and a driver
+            // whose phone died keeps a passenger's ride open forever — neither of which any client
+            // can fix, so it is said loudly here.
+            app.Logger.LogWarning(
+                "Ride:TimersEnabled is off: no ride will reach NoShowRider, NoShowDriver or the R-15/R-16 " +
+                "offline-grace terminals in this process (R-04, §11.12).");
+        }
+
+        var internalApiKey = settings.InternalApiKey;
         if (!string.IsNullOrWhiteSpace(internalApiKey))
         {
             app.MapInternalRideEndpoints(internalApiKey);
@@ -60,10 +96,12 @@ public static class RideApplication
         else
         {
             // dispatch-svc cannot move a ride to Matching or Offered without these, so a stack
-            // that is missing the key looks like "no driver ever gets an offer" from the outside.
+            // that is missing the key looks like "no driver ever gets an offer" from the outside;
+            // and fare-svc has no way to settle a ride, so every completed ride stalls in
+            // PaymentPending and no driver earning ever posts (R-05).
             app.Logger.LogWarning(
                 "Ride:InternalApiKey is not configured, so /v1/internal/rides/** is unmapped. " +
-                "dispatch-svc cannot place offers against this instance.");
+                "dispatch-svc cannot place offers against this instance and fare-svc cannot settle a ride.");
         }
 
         return app;

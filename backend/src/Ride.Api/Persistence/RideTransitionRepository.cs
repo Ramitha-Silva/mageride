@@ -24,7 +24,19 @@ public interface IRideTransitionRepository
         Guid? actorId,
         string? reasonCode,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The ride's audit, oldest first — the transition log
+    /// <c>GET /v1/internal/rides/{rideId}/saga-state</c> serves so an operator can see why a ride
+    /// is stuck without querying Postgres directly.
+    /// </summary>
+    Task<IReadOnlyList<RideTransitionRow>> ListAsync(
+        NpgsqlConnection connection, NpgsqlTransaction? transaction, Guid rideId, CancellationToken cancellationToken);
 }
+
+/// <summary>One row of <c>rides.transitions</c>.</summary>
+public sealed record RideTransitionRow(
+    string? FromState, string ToState, string? ReasonCode, string ActorType, Guid? ActorId, DateTimeOffset Ts);
 
 /// <inheritdoc cref="IRideTransitionRepository"/>
 public sealed class RideTransitionRepository : IRideTransitionRepository
@@ -62,5 +74,25 @@ public sealed class RideTransitionRepository : IRideTransitionRepository
             },
             transaction,
             cancellationToken: cancellationToken));
+    }
+
+    public async Task<IReadOnlyList<RideTransitionRow>> ListAsync(
+        NpgsqlConnection connection, NpgsqlTransaction? transaction, Guid rideId, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+
+        var rows = await connection.QueryAsync<RideTransitionRow>(new CommandDefinition(
+            """
+            SELECT from_state AS FromState, to_state AS ToState, reason_code AS ReasonCode,
+                   actor_type AS ActorType, actor_id AS ActorId, ts AS Ts
+              FROM rides.transitions
+             WHERE ride_id = @RideId
+             ORDER BY ts, id;
+            """,
+            new { RideId = rideId },
+            transaction,
+            cancellationToken: cancellationToken));
+
+        return [.. rows];
     }
 }
