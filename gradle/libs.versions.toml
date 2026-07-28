@@ -53,6 +53,11 @@ koin = "4.2.2"                    # DI
 multiplatformSettings = "1.3.0"   # key-value storage abstraction — unused, see the note above
 sqldelight = "2.3.2"              # on-device SQL — the plugin is applied by C018
 turbine = "1.2.1"                 # Flow assertions in commonTest
+# androidHostTest only (C019). The test kit's contract checks read `backend/contracts/*.yaml`
+# and compare every fake response against the OpenAPI schema it claims to satisfy; that needs a
+# real YAML parser rather than the line scanner C013 uses to find operation ids. Never reaches a
+# main source set, so no YAML library ships in the XCFramework or an app.
+snakeyaml = "2.6"                 # OpenAPI reader for the C019 contract tests
 
 # Play Integrity — the Android half of D-30 (ADD §12.6). androidMain only; the iOS half is
 # App Attest from the DeviceCheck framework, which ships with Kotlin/Native's platform libs and
@@ -149,3 +154,5 @@ sqlcipher-android                = { module = "net.zetetic:sqlcipher-android",  
 # ---- test ---------------------------------------------------------------------------
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
 turbine     = { module = "app.cash.turbine:turbine",         version.ref = "turbine" }
+# androidHostTest only — see the `snakeyaml` version comment.
+snakeyaml   = { module = "org.yaml:snakeyaml",               version.ref = "snakeyaml" }

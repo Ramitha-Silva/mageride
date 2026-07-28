@@ -178,8 +178,11 @@ kotlin {
 
         // JVM-only tests of the Android actuals — and the only place a real SQLite engine is
         // reachable on this build host, so every schema, migration and query test lives here.
+        // It is also the only source set that can read `backend/contracts/*.yaml` off disk,
+        // which is why C019's contract checks live here rather than in commonTest.
         getByName("androidHostTest").dependencies {
             implementation(libs.sqldelight.sqlite.driver)
+            implementation(libs.snakeyaml)
         }
 
         androidMain.dependencies {
@@ -271,6 +274,60 @@ tasks.register("testDebugUnitTest") {
     description = "Alias for testAndroidHostTest — the name build/manifest.yaml and CI use."
     dependsOn("testAndroidHostTest")
 }
+
+// ---------------------------------------------------------------------------------------
+// C019 kmp-test-kit — the test kit as a consumable artifact.
+//
+// The component's fence is "the test kit ships in a test source set / separate artifact — it must
+// not leak into release app binaries", and `lk.mageride.shared.testing` lives in `commonTest`,
+// which settles that half: nothing there is on any main compile classpath, so none of it reaches
+// an app's release build or the XCFramework.
+//
+// The other half is that C025/C067/C076 have to be able to USE it. A Gradle test source set is not
+// consumable by another project on its own, and `java-test-fixtures` is JVM-only and does not
+// apply to a KMP module. So the kit is published as its own jar on its own consumable
+// configuration, and an Android app module asks for it with:
+//
+//     testImplementation(project(path = ":shared", configuration = "testKitElements"))
+//
+// Scope, stated plainly: this covers the JVM/Android consumers, which is every consumer that
+// exists before wave 4b. The iOS side compiles the same `commonTest` sources into the iOS test
+// klibs; packaging those for an external consumer needs a Mac and a real iOS consumer to verify
+// against, and neither exists yet (root CLAUDE.md "Build Host"). See the C019 handoff.
+// ---------------------------------------------------------------------------------------
+val testKitJar = tasks.register<Jar>("testKitJar") {
+    group = "build"
+    description = "Packages lk.mageride.shared.testing for app modules to depend on in their tests."
+    archiveClassifier.set("test-kit")
+    from(
+        tasks.named("compileAndroidHostTest").map { compile ->
+            compile.outputs.files.asFileTree.matching {
+                include("lk/mageride/shared/testing/**")
+                // The kit's OWN tests compile into the same output and have no business on an
+                // app's classpath. Nothing the kit publishes ends in `Test` — `TestClock` and
+                // `TestTime` start with it — so the suffix separates the two cleanly.
+                exclude("**/*Test.class", "**/*Test\$*.class")
+                // `testing/contract` is this module's own OpenAPI reader: internal, JVM-only, and
+                // dependent on a YAML library that is not on this configuration. It checks the
+                // kit; it is not part of it.
+                exclude("lk/mageride/shared/testing/contract/**")
+            }
+        },
+    )
+}
+
+val testKitElements: Configuration by configurations.creating {
+    isCanBeConsumed = true
+    isCanBeResolved = false
+    description = "The C019 test kit, for an app module's unit tests."
+    // A consumer needs what the kit's public surface is built on. `:shared` itself comes through
+    // the app's ordinary dependency on it.
+    dependencies.add(project.dependencies.create(libs.kotlin.test.get()))
+    dependencies.add(project.dependencies.create(libs.kotlinx.coroutines.test.get()))
+    dependencies.add(project.dependencies.create(libs.ktor.client.mock.get()))
+}
+
+artifacts.add(testKitElements.name, testKitJar)
 
 // ---------------------------------------------------------------------------------------
 // Static analysis. The wave-1 gate is `./gradlew :shared:testDebugUnitTest detekt ktlintCheck`

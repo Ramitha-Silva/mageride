@@ -329,6 +329,51 @@ src/androidHostTest/  JVM-only tests of the Android actuals (NOT `androidUnitTes
   (the key comes out of the Keystore), and a `runBlocking` single would put that round trip on
   `Application.onCreate`. The app binds a `DatabaseDriverFactory` and opens the database itself.
 
+## Test kit (`src/commonTest/.../testing`, C019)
+- **The fake is the BACKEND, not the clients.** `FakeApiBackend` is a MockEngine; the sixteen
+  clients over it are the production ones. "Every typed client has a fake with the same surface" is
+  therefore true by construction — there is no second `RideApi` to keep in step — and a test still
+  exercises the idempotency key, the one-refresh-on-401 rule, the `426` wall and the real
+  serializers. Build one with `FakeApiBackend().mageRideApi()`.
+- **Routing is by `operationId`, never by path.** `ApiTransport` already puts the contract's own id
+  in every request's attributes, so `backend.fails("acceptRideOffer", Gone, "offer-expired")` cannot
+  be attached to the wrong route by a mistyped URL. An unknown id throws rather than 404s.
+- **`ApiOperations` is the 176-row route table** — id, service, verb, path, success status, and the
+  **typed client's own return and body types**. `ApiOperationTableTest` (androidHostTest) asserts
+  every row against the YAML, so an operation added to a contract fails the build here.
+  Regenerate rather than hand-extend: the table is derived from the client interfaces plus the
+  contracts, and the derivation is described in the C019 handoff.
+- **Fixtures are derived from `SerialDescriptor`, not typed out.** `DtoFixtures.of<T>()` populates
+  **every** field of any `@Serializable` DTO — required, optional and nullable — with values chosen
+  from the field's *name* (`driverPhone` is `+947…`, `otp` is four digits, a `…Minor` field is
+  cents). That is what makes a new DTO field appear in its fixture, and in the contract checks, the
+  moment it compiles. A fixture is a **shape**, not a story — when the meaning matters, use a
+  scenario.
+- **`Fixtures` is the one set of canonical values** (`01JQ9F8Z6N…0003` is *the* ride everywhere,
+  `NOW` is `09:45` Colombo). `data/models`'s C012-local `Sample` predates it and is not a second
+  source of truth.
+- **Two clocks, and picking the wrong one is the bug they exist to prevent.** `TestClock` is wound
+  by a statement; `TestTime` (`TestScope.testTime()`) reads the **scheduler's** virtual time, so a
+  `delay(25.minutes)` in the code under test *is* twenty-five minutes on the clock it compares
+  against. Anything with a coroutine in it wants `TestTime`. Its `advanceBy` is inclusive of the
+  instant it lands on (`advanceTimeBy` alone is not).
+- **Four canonical scenarios**: `ModeCRide`, `ProxyRide`, `PackageDelivery` (all `RideScenario`) and
+  `ModeBSubscription`. A `RideScenario` carries the booking, every server-confirmed step and the
+  fake programming; `drive(projection)` walks the machine and `install(backend)` reproduces the
+  journey over HTTP. Their edges are checked against `RideTransitions`, not against themselves.
+- **Contract checks live in `androidHostTest/.../testing/contract`** because they read the YAML off
+  disk. `ContractShapeTest` validates all 176 synthesised responses and all 85 request bodies
+  against `backend/contracts`, **strictly**: an undeclared property is an error even where OpenAPI
+  would allow it, because the document came from the DTO and an undeclared property means the DTO
+  has a field the contract does not. `pattern`/`format`/bounds are deliberately not checked — they
+  constrain values a server rejects, not shapes a client must match.
+- **The kit ships as its own jar.** `:shared:testKitJar` packages `lk.mageride.shared.testing` (its
+  own `*Test` classes and the `contract` reader excluded) onto the `testKitElements` configuration;
+  an app module asks for it with
+  `testImplementation(project(path = ":shared", configuration = "testKitElements"))`. Nothing in
+  the kit is on any main compile classpath, so none of it reaches a release binary or the
+  XCFramework.
+
 ## Dependency rules
 - **Every version lives in `gradle/libs.versions.toml`.** Never inline one here.
 - One catalog entry is declared but deliberately **not applied**: `multiplatform-settings`, which C011
@@ -355,6 +400,9 @@ src/androidHostTest/  JVM-only tests of the Android actuals (NOT `androidUnitTes
 - **`kotlinx-serialization-cbor` is applied in commonMain** (C017) and is `implementation`:
   `PositionCodec` is the only door to it, so no CBOR type reaches an app or the XCFramework. It
   serialises the same `PositionSample` the JSON surface does — one DTO, two wires.
+- **`org.yaml:snakeyaml` is androidHostTest-only** (C019). C013's `ContractScanner` line-scans the
+  contracts because it only has to find operation ids; C019's checks have to compare a *tree* with
+  `$ref`s and `allOf`s, which needs a real parser. It never reaches a main source set.
 - Add a Koin module per component and append it to `sharedModules` in `di/SharedModule.kt` —
   do not grow `sharedCoreModule`. Apps are told to use `sharedModules`, so a new binding must
   never require an edit in all four of them.

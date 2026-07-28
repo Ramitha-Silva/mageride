@@ -44,7 +44,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C016 | kmp-domain-fare-wallet | 1 | DONE | 2026-07-27 | 543 tests green (159 new); §1.3 banker's rounding + 14-state payment machine; 6 micro-change-sets raised |
 | C017 | kmp-geo-realtime | 1 | DONE | 2026-07-27 | 654 tests green (111 new); H3 is a platform seam — **iOS has no engine yet** (C085/C094 bind one); 3 micro-change-sets raised |
 | C018 | kmp-local-db | 1 | DONE | 2026-07-27 | 767 tests green (113 new); two SQLDelight databases, schema v2 with a tested migration; 4 micro-change-sets raised |
-| C019 | kmp-test-kit | 1 | PENDING | | |
+| C019 | kmp-test-kit | 1 | DONE | 2026-07-27 | 817 tests green (50 new); MockEngine fake covering all 176 operations + descriptor-driven fixtures; contract checks over 176 responses and 85 request bodies |
 | C020 | ws-iam-minimal ⭑ | 2 | PENDING | | |
 | C021 | ws-registry-minimal ⭑ | 2 | PENDING | | |
 | C022 | ws-ride-svc-happy-path ⭑ | 2 | PENDING | | |
@@ -2469,3 +2469,110 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   device). `compileKotlinIosArm64` type-checks the iOS actuals in ~30 s; **iOS is not marked DONE
   from this host** — `NativeSqliteDriver` and the `NSFileProtection` call need a Mac to run.
 
+- **Component:** C019 kmp-test-kit — 2026-07-27
+- **Status:** DONE — `./gradlew :shared:testDebugUnitTest detekt ktlintCheck` green on a cold run:
+  **817 tests passed, 0 failed, 0 skipped** (50 new; C011–C018's 767 still green), detekt and
+  ktlint clean. `compileTestKotlinIosArm64` also passes, so the kit type-checks for Kotlin/Native;
+  **iOS is not marked DONE from this host** (klib cross-compilation only). C019 added **no line to
+  any main source set** — `git diff shared/kmp/src/{commonMain,androidMain,iosMain}` is empty for
+  this component, which is the fence discharged rather than argued.
+- **Notes:**
+  (1) **The fake is the BACKEND, not the clients.** The DoD asks that "every typed client has a
+  fake with the same surface"; the obvious reading — sixteen hand-written `RideApi`-shaped stubs,
+  ~176 methods — produces a second implementation that must be kept in step with the first and
+  that silently skips everything interesting about a call. `FakeApiBackend` is a `MockEngine`
+  instead, and the clients above it are the **production** ones. The surface is identical because
+  it is the same interfaces, and a test still exercises the minted-once `Idempotency-Key`, the
+  one-refresh-on-401 replay, the `426` update wall and the real serializers.
+  (2) **Routing is by `operationId`, not by path.** C013's `ApiTransport` already puts the
+  contract's own id in every request's attributes (`OperationIdAttribute`), so the engine reads it
+  straight off the request. A stub therefore cannot be attached to the wrong route by a mistyped
+  URL, and an unknown id throws with a message rather than 404-ing into a client that would read it
+  as "not found". This was the single largest simplification in the component.
+  (3) **`ApiOperations` is the contract's route table as Kotlin** — 176 rows of
+  (id, service, verb, path, success status, response serializer, request serializer). The response
+  and request columns are the **typed client's own declared types**, so a body the fake synthesises
+  always decodes into exactly what the caller is handed; that is what makes "same surface" a
+  property of the code rather than of a review. It has to be Kotlin because the fake needs a
+  compile-time `KSerializer` and `commonTest` cannot read a file — so `ApiOperationTableTest`
+  (androidHostTest) asserts every row's id, verb, path, status and body-or-not against the YAML.
+  An operation added to a contract fails the build there. It was **generated** by joining the
+  sixteen client interfaces (return type, body parameter) to the contracts (verb, path, status);
+  regenerate the same way rather than hand-extending.
+  (4) **Fixtures are derived from `SerialDescriptor` rather than typed out.** The deliverable says
+  "fixture builders for every DTO"; there are 289 DTOs, and 289 hand-written builders would be 289
+  things to forget when a contract changes. `DtoFixtures.of<T>()` walks the descriptor
+  kotlinx.serialization already generates and populates **every** field — required, optional and
+  nullable — choosing values from the field's *name*, so `driverPhone` is `+947…`, `otp` is four
+  digits and a `…Minor` field is cents. A DTO that gains a field has a fixture with that field on
+  the next build, with no edit anywhere. This is also what makes (7) exhaustive.
+  (5) **A fixture is a shape; a scenario is a story.** Populating every field produces a
+  `RideDetail` that is `Requested` with a driver attached, which no real ride ever is. The four
+  canonical journeys are therefore hand-written: `ModeCRide` (→ `Paid`), `ProxyRide` (→
+  `CashSettled`, booker ≠ rider, P-05's counterparty phone), `PackageDelivery` (→
+  `CashOnDeliveryCollected`, two OTP handoffs) and `ModeBSubscription` (two billing cycles, no ride
+  aggregate anywhere in it). Their edges are checked against `RideTransitions` rather than against
+  themselves, and the three ride journeys are asserted to traverse the *same* states up to
+  settlement — ADD Appendix B.2 invariant 6 as a test rather than a comment.
+  (6) **Two clocks, and choosing the wrong one is the bug they exist to prevent.** `TestClock` is
+  wound by a statement. `TestTime` (`TestScope.testTime()`) reads the **scheduler's** virtual time,
+  so a `delay(25.minutes)` inside the code under test *is* twenty-five minutes on the clock that
+  code compares against; a test that drives `runTest` and a hand-wound clock has two notions of
+  "now", and the flake that produces looks exactly like a real one. `TestTime.advanceBy` follows
+  `advanceTimeBy` with `runCurrent`, because `advanceTimeBy` alone stops just short of its target
+  and leaves a task scheduled at exactly that instant un-run — which reads as "the renewal did not
+  fire" when the point of the assertion is that it did.
+  (7) **The contract checks run the whole chain, both directions.**
+  `client return type → SerialDescriptor → fully-populated document → the operation's own schema in
+  backend/contracts`. All 176 responses and all 85 request bodies. A field the DTO stopped sending
+  is `required, but absent`; a field it gained or renamed is `not declared by the schema`; a
+  changed type is a type mismatch; a misspelt enum is `not one of`. Two tests deliberately corrupt
+  a good fixture and assert the checker notices, so "the sweep passes" cannot mean "the sweep
+  checks nothing".
+  (8) **The validator is stricter than OpenAPI, on purpose.** An undeclared property is an error
+  even though a schema without `additionalProperties: false` technically permits anything — because
+  the document under test was generated *from the DTO*, so an undeclared property means the DTO has
+  a field the contract does not, which is precisely the drift being hunted. A schema that is
+  genuinely open says so, and that is honoured. Not checked: `pattern`, `format`,
+  `min/maxLength`, `minimum`/`maximum` — those constrain values a **server** must reject, not
+  shapes a client must match. The fixture values satisfy them anyway.
+  (9) **`snakeyaml`, androidHostTest-only.** C013's `ContractScanner` line-scans because it only has
+  to find operation ids; comparing a *tree* with cross-file `$ref`s and `allOf`s needs a real
+  parser. It never reaches a main source set, so no YAML library ships anywhere.
+  (10) **A synthesised page is closed.** `DtoFixtures` populates every field, which for a `Page`
+  means `hasMore = true` and a cursor — a page claiming another one exists, which `CursorPagedSource`
+  would follow forever. The fake overrides both to "one complete page"; a test that is *about*
+  paging queues the two calls it wants.
+  (11) **C013's `FakeTokenProvider` and `SequentialIdempotencyKeys` are now typealiases** into the
+  kit. A fake that every module reuses belongs in the kit, and keeping C013's tests compiling
+  unchanged against the moved versions is the cheapest possible proof that they are drop-in.
+  (12) **The kit ships as its own jar.** `:shared:testKitJar` packages `lk.mageride.shared.testing`
+  onto the `testKitElements` configuration, excluding its own `*Test` classes and the
+  androidHostTest-only `contract` reader; C025/C067/C076 consume it with
+  `testImplementation(project(path = ":shared", configuration = "testKitElements"))`. **Scope
+  stated plainly:** that covers every consumer that exists before wave 4b. Packaging the same
+  `commonTest` sources as an iOS klib for an external consumer needs a Mac and a real iOS consumer
+  to verify against, and neither exists yet — deferred rather than faked.
+  (13) `detekt.yml` gains a **`LargeClass`** exclusion for the test source sets: `ApiOperations` is
+  176 one-line rows because the contracts declare 176 operations, and splitting it by service would
+  produce sixteen files of identical combined size joined by a `+`. Same argument the existing
+  `LongParameterList` and `TooManyFunctions` exclusions make.
+  (14) **Fixed a data race in C013's request recorder, found by this component's gate.**
+  `ApiTestKit.testApi` appended to a plain `mutableListOf` from the MockEngine handler, and
+  MockEngine serves concurrent requests on several threads — so `five_concurrent_401s_produce_one`
+  `_rotation` (C014, D-29) intermittently recorded ten requests instead of eleven and failed. It is
+  a test *about* concurrency, so it was the one place a lost append was certain to matter. Both
+  recorders — C013's and `FakeApiBackend`'s — are now behind a `Mutex`; the handler is `suspend`,
+  so it costs nothing and needs no platform primitive. Five consecutive `--rerun-tasks` runs of the
+  affected class pass. Worth knowing because the flake predates C019 and would have been blamed on
+  whatever landed next.
+  **Two things worth knowing before the next fixture edit:** a **nullable** field's descriptor is
+  the same descriptor with a `?` appended to its `serialName`, so a rule keyed on
+  `"kotlin.time.Instant"` silently misses `scheduledAt` and fills it with the string
+  `"scheduledAt"` — strip the marker first. And `kotlinx.serialization.json.JsonObject` fields (the
+  provider-callback `raw`, the push `data`) walk into a **SEALED** `JsonElement` descriptor; they
+  are free-form by contract and are synthesised empty.
+  **Build host —** no Docker and no compose stack; the replica stayed down. A cold gate
+  (`:shared:clean` + `--no-build-cache`) runs 817 tests in ~86 s; `compileTestKotlinIosArm64` adds
+  ~2.5 min the first time it links the test klibs. One new coordinate fetched:
+  `org.yaml:snakeyaml` 2.6 (androidHostTest only).

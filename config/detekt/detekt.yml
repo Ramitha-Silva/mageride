@@ -63,6 +63,18 @@ complexity:
     excludes:
       - '**/data/models/**'
       - '**/data/api/**'
+  LargeClass:
+    # `ApiOperations` (C019) is 176 one-line rows because `backend/contracts` declares 176
+    # operations — the fake backend needs a compile-time serializer per operation and commonTest
+    # cannot read a YAML file, so the table is Kotlin. Splitting it by service would produce
+    # sixteen files whose combined size is identical and whose join is a `+`. Same argument
+    # LongParameterList and TooManyFunctions make below: the count is the contract's, not a
+    # design choice. Test sources only — nothing in a main source set is exempt.
+    excludes:
+      - '**/commonTest/**'
+      - '**/androidHostTest/**'
+      - '**/androidDeviceTest/**'
+      - '**/iosTest/**'
   TooManyFunctions:
     # A repository interface's function count IS the operation set of the table behind it:
     # `OutboxStore` declares thirteen because `mobile_db_schema.md` §1.4's write path needs

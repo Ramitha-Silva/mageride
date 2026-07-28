@@ -10,6 +10,8 @@ import io.ktor.http.Headers
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.Parameters
 import io.ktor.http.headersOf
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import lk.mageride.shared.data.models.ClientPlatform
 import lk.mageride.shared.data.models.ProblemDetails
 import kotlin.random.Random
@@ -78,18 +80,26 @@ internal fun testApi(
     respond: suspend MockRequestHandleScope.(Int, HttpRequestData) -> HttpResponseData,
 ): TestApi {
     val recorded = mutableListOf<RecordedRequest>()
+    // MockEngine serves concurrent requests on several threads, and an ArrayList append is not
+    // atomic — five requests fired at once could record four. That produced an intermittent
+    // failure in `five_concurrent_401s_produce_one_rotation`, which is a test *about* concurrency
+    // and so the one place the loss was guaranteed to matter. The handler is `suspend`, so a
+    // Mutex costs nothing and needs no platform primitive.
+    val lock = Mutex()
     val engine = MockEngine { request ->
-        val index = recorded.size
-        recorded += RecordedRequest(
-            method = request.method.value,
-            path = request.url.encodedPath,
-            query = request.url.parameters,
-            headers = request.headers,
-            // Ktor carries the request's own media type on the body, not in `headers` — a
-            // multipart boundary is part of the OutgoingContent, not something a caller sets.
-            contentType = request.body.contentType?.toString(),
-            body = request.body.toByteArray().decodeToString(),
-        )
+        val index = lock.withLock {
+            recorded += RecordedRequest(
+                method = request.method.value,
+                path = request.url.encodedPath,
+                query = request.url.parameters,
+                headers = request.headers,
+                // Ktor carries the request's own media type on the body, not in `headers` — a
+                // multipart boundary is part of the OutgoingContent, not something a caller sets.
+                contentType = request.body.contentType?.toString(),
+                body = request.body.toByteArray().decodeToString(),
+            )
+            recorded.size - 1
+        }
         respond(index, request)
     }
     val client = mageRideHttpClient(
@@ -138,59 +148,15 @@ internal fun MockRequestHandleScope.respondProblem(
     return respond(body, status, merged)
 }
 
+// Both fakes below moved to the C019 test kit, which is where a fake every module reuses belongs.
+// The aliases keep C013's own tests reading as they did — and they are what proves the kit's
+// versions are drop-in for the pipeline tests that motivated them in the first place.
+
 /** Keys a test can predict, so "the retry reused the key" is an equality assertion. */
-internal class SequentialIdempotencyKeys : IdempotencyKeyGenerator {
-    private var minted = 0
+internal typealias SequentialIdempotencyKeys = lk.mageride.shared.testing.fake.SequentialIdempotencyKeys
 
-    val count: Int get() = minted
-
-    override fun next(): String {
-        minted++
-        return PREFIX + minted.toString().padStart(SUFFIX_WIDTH, '0')
-    }
-
-    private companion object {
-        const val PREFIX = "TESTIDEMPOTENCYKEY"
-        const val SUFFIX_WIDTH = 8
-    }
-}
-
-/**
- * A [TokenProvider] that counts what the pipeline asked of it.
- *
- * C014 owns the real one; this exists so the "exactly one refresh, then give up" rule is asserted
- * here, where the rule lives.
- */
-internal class FakeTokenProvider(
-    initialToken: String? = "access-1",
-    private val rotatedToken: String? = "access-2",
-    private val refreshSucceeds: Boolean = true,
-) : TokenProvider {
-    private var token: String? = initialToken
-
-    var refreshCalls: Int = 0
-        private set
-
-    var authenticationLostCalls: Int = 0
-        private set
-
-    /** The `staleAccessToken` values the pipeline reported, so a test can assert what failed. */
-    val staleTokens: MutableList<String?> = mutableListOf()
-
-    override suspend fun accessToken(): String? = token
-
-    override suspend fun refresh(staleAccessToken: String?): Boolean {
-        refreshCalls++
-        staleTokens += staleAccessToken
-        if (!refreshSucceeds) return false
-        token = rotatedToken
-        return true
-    }
-
-    override suspend fun onAuthenticationLost() {
-        authenticationLostCalls++
-    }
-}
+/** A [TokenProvider] that counts what the pipeline asked of it. */
+internal typealias FakeTokenProvider = lk.mageride.shared.testing.fake.FakeTokenProvider
 
 /** Seeded so a jitter assertion is reproducible. */
 private const val SEED = 20260727
