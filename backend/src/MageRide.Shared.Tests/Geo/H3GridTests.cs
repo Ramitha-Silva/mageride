@@ -1,14 +1,14 @@
 using H3;
 using H3.Extensions;
-using MageRide.Dispatch.Domain;
 using MageRide.Shared.Caching;
+using MageRide.Shared.Geo;
 using MageRide.Shared.Primitives;
 using NetTopologySuite.Geometries;
 
-namespace MageRide.Dispatch.Tests.Domain;
+namespace MageRide.Shared.Tests.Geo;
 
 /// <summary>
-/// The H3 arithmetic the candidate index is keyed by (ADD §9.4, R-06, D-06).
+/// The H3 arithmetic both cell-keyed indexes are built on (ADD §7.4/§9.4, R-06, D-06).
 /// </summary>
 /// <remarks>
 /// These assert against <b>known-good H3 v4 values</b> rather than against whatever the library

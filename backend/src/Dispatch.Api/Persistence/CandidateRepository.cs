@@ -11,7 +11,7 @@ namespace MageRide.Dispatch.Persistence;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The H3 pre-filter (<see cref="Domain.H3Grid"/> plus the Redis GEO sets) hands this repository a
+/// The H3 pre-filter (<see cref="Shared.Geo.H3Grid"/> plus the Redis GEO sets) hands this repository a
 /// raw list of driver ids drawn from a <c>gridDisk(2)</c> of res-5 cells. That disk spans roughly
 /// 40 km, so it is a *set of keys to read*, never a distance bound (R-06). What decides is
 /// <c>ST_DWithin(geo, pickup, radius)</c> on <c>dispatch.driver_presence</c>, exactly as ADD §6

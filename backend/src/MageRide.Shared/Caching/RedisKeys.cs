@@ -22,6 +22,16 @@ public static class RedisKeys
     /// <summary>STREAM of per-cell position events for fan-out consumers.</summary>
     public static string Cell(string h3Index) => $"cell:{h3Index}";
 
+    /// <summary>
+    /// Highest <c>seq</c> seen for a vehicle — layer 1 of the replay dedupe (R-17, T-05).
+    /// </summary>
+    /// <remarks>
+    /// <c>backend/contracts/realtime/mqtt-topics.md</c> §5: position-processor discards
+    /// <c>seq &lt;= last_seen</c>. A fast filter, not the guarantee — layer 3 is
+    /// <c>ux_positions_vehicle_seq</c> on the hypertable, which is what survives a Redis flush.
+    /// </remarks>
+    public static string VehicleSeq(Guid vehicleId) => $"veh:seq:{vehicleId}";
+
     /// <summary>HASH of live trip state (start time, seats, mode).</summary>
     public static string ActiveTrip(Guid vehicleId) => $"trip:active:{vehicleId}";
 

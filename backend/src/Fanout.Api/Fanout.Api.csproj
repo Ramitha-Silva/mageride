@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    Fanout.Api (C024, ws-realtime-pipeline) — the SignalR hub `/hubs/live`.
+
+    Passengers join `cell:{h3index}` groups (res-7 self + ring(2) = 19 cells for the 3 km view,
+    R-06); this service reads the matching Redis streams position-processor-svc writes and pushes
+    `VehiclePositions` batches into those groups. Method and event names come from
+    MageRide.Shared.Realtime.LiveHub, which is the .NET half of
+    `backend/contracts/realtime/signalr-hub.md` — SignalR resolves both by string, so a typo is a
+    silent no-op rather than a compile error.
+
+    NOT here, and named rather than stubbed: the D-22/D-23 visibility filters (Mode A always,
+    Mode B on entitlement, Mode C hidden on active hire), `VehicleRemoved`, `SubscribeRide`,
+    `SubscribeLocRequest`, `RideStateChanged`, `ShareRevoked` and the `share:{userId}` entitlement
+    cache — all C041. Implementing a group join with no entitlement check and calling it done would
+    read like a filter that works.
+
+    Verify: dotnet test backend/src/HotPath.Tests -c Release
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.Fanout</RootNamespace>
+    <AssemblyName>MageRide.Fanout.Api</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <UserSecretsId>mageride-fanout-api</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MageRide.Shared\MageRide.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- SignalR itself comes from the ASP.NET Core shared framework. -->
+    <PackageReference Include="StackExchange.Redis" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="HotPath.Tests" />
+  </ItemGroup>
+
+</Project>

@@ -22,6 +22,9 @@
     <!-- xunit.v3 for IAsyncLifetime and [CollectionDefinition]; the fixtures are xUnit
          collection fixtures, which is how a container is shared across a test class. -->
     <PackageReference Include="xunit.v3.extensibility.core" />
+    <!-- C024: EMQX has no Testcontainers module, so EmqxFixture builds it from the generic
+         ContainerBuilder in the base package. -->
+    <PackageReference Include="Testcontainers" />
     <PackageReference Include="Testcontainers.PostgreSql" />
     <PackageReference Include="Testcontainers.Redis" />
     <PackageReference Include="Testcontainers.Redpanda" />
@@ -30,6 +33,22 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- C024: EmqxFixture bind-mounts the SAME broker policy infra/docker-compose.dev.slim.yml
+         mounts, so a test asserts against the ACL that is actually deployed. Copied into the
+         output rather than resolved by walking up to the repository root: a test's working
+         directory depends on how it was launched, and a fixture that silently found nothing would
+         start EMQX on its shipped defaults — which allow every topic, and would turn the ACL
+         assertion green for the worst possible reason. Link keeps them in an `emqx/` folder so the
+         two file names stay as they are on disk. -->
+    <Content Include="..\..\..\infra\deploy\emqx\emqx.conf" Link="emqx\emqx.conf">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\..\..\infra\deploy\emqx\acl.conf" Link="emqx\acl.conf">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>

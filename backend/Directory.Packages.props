@@ -26,15 +26,22 @@
   <ItemGroup Label="Messaging and cache">
     <PackageVersion Include="Confluent.Kafka" Version="2.15.0" />
     <PackageVersion Include="StackExchange.Redis" Version="3.0.17" />
+    <!-- C024: the MQTT plane (D6' §3). mqtt-bridge-svc holds the EMQX shared subscription
+         `$share/posGroup/veh/+/pos/live`, so it needs an MQTT 5 client that exposes shared
+         subscriptions and manual acknowledgement — the ack is what keeps EMQX → Redpanda
+         at-least-once instead of at-most-once (E-08). MQTTnet is the only mature managed .NET
+         client; the Android/iOS halves use HiveMQ / CocoaMQTT per D6' §3. -->
+    <PackageVersion Include="MQTTnet" Version="5.2.0.1603" />
   </ItemGroup>
 
-  <ItemGroup Label="Geospatial — H3 (C023; R-06, R-08, D-06)">
-    <!-- The dispatch candidate index is keyed by H3 res-5 cell (ADD §9.4), so dispatch-svc has to
-         compute the same cell ids the KMP module does. `com.uber:h3` is JNI with no .NET binding;
-         pocketken.H3 is a managed port of the same v4 algorithms, ships a net10.0 lib and depends
-         only on NetTopologySuite, which is already pinned above. Cell ids are asserted against
-         known-good v4 values in Dispatch.Api.Tests so a port bug cannot silently reshape the
-         index. -->
+  <ItemGroup Label="Geospatial — H3 (C023/C024; R-06, R-08, D-06)">
+    <!-- Two indexes are keyed by H3 cell and both must agree with the ids the KMP module computes:
+         the dispatch candidate index at res 5 (ADD §9.4) and the fan-out `cell:{h3index}` groups
+         at res 7 (ADD §7.4). `com.uber:h3` is JNI with no .NET binding; pocketken.H3 is a managed
+         port of the same v4 algorithms, ships a net10.0 lib and depends only on NetTopologySuite,
+         which is already pinned above. C024 moved the grid itself into MageRide.Shared.Geo so the
+         two resolutions cannot drift apart; cell ids are asserted against known-good v4 values in
+         MageRide.Shared.Tests so a port bug cannot silently reshape either index. -->
     <PackageVersion Include="pocketken.H3" Version="4.5.0.1" />
   </ItemGroup>
 
@@ -71,6 +78,10 @@
     <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="10.0.10" />
     <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.8.0" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
+    <!-- C024: EMQX has no Testcontainers module, so EmqxFixture builds it from the generic
+         ContainerBuilder. Same 4.13.0 as the modules below — they all resolve this package
+         transitively anyway, and a mismatch between them is a runtime cast error. -->
+    <PackageVersion Include="Testcontainers" Version="4.13.0" />
     <PackageVersion Include="Testcontainers.PostgreSql" Version="4.13.0" />
     <PackageVersion Include="Testcontainers.Redis" Version="4.13.0" />
     <!-- C010: the TestKit's Redpanda fixture, so a service's integration tests get the same

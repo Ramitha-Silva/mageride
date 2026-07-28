@@ -1,0 +1,65 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    C024 verify target: dotnet test backend/src/HotPath.Tests -c Release
+
+    One suite for three services, because the thing under test is the seam between them. The
+    definition of done is a sentence about the whole pipeline — "a position published to EMQX
+    appears on the passenger's SignalR group in under 5 s" — and no per-service suite can assert
+    it. So the harness builds a real mqtt-bridge, a real position-processor and a real fanout-svc
+    through their own `*Application.Build`, against a real EMQX, a real Redpanda and a real Redis.
+
+    NO IN-MEMORY SHORTCUTS. That is this component's first fence, and it is the point: the
+    skeleton exists to prove the substrate works. A fake broker would agree with the bridge about
+    shared subscriptions by construction, and E-08 — "two replicas share the subscription with no
+    duplicate ingest" — is a claim about EMQX, not about our code.
+
+    No Postgres anywhere in this suite: none of the three services owns a table.
+
+    Microsoft.NET.Sdk.Web, not Microsoft.NET.Sdk: the harness builds three WebApplications.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.HotPath.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <OutputType>Exe</OutputType>
+    <!--
+      xUnit1041: collection-fixture ctor args are consumed through the primary constructor.
+      xUnit1051: every test is bounded by its own harness lifetime, so threading
+                 TestContext.Current.CancellationToken through each call would add noise without
+                 changing behaviour. Matches Iam/Registry/Ride/Dispatch.Api.Tests.
+    -->
+    <NoWarn>$(NoWarn);xUnit1041;xUnit1051</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+    <!-- The passenger half of the end-to-end assertion is a real SignalR client over a real
+         WebSocket, not a hub method called in-process. -->
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" />
+    <!-- The driver half is a real MQTT client presenting a real session JWT to a real ACL. -->
+    <PackageReference Include="MQTTnet" />
+    <!-- `telemetry.raw` and `telemetry.normalized` are asserted by consuming them, so the E-08
+         "exactly one copy" claim is made against the broker rather than against our counters. -->
+    <PackageReference Include="Confluent.Kafka" />
+    <PackageReference Include="StackExchange.Redis" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\HotPath.MqttBridge\HotPath.MqttBridge.csproj" />
+    <ProjectReference Include="..\HotPath.PositionProcessor\HotPath.PositionProcessor.csproj" />
+    <ProjectReference Include="..\Fanout.Api\Fanout.Api.csproj" />
+    <!-- C010: the EMQX, Redis and Redpanda fixtures, so this suite runs the same server builds and
+         — for EMQX — the same broker policy the dev stack does. -->
+    <ProjectReference Include="..\MageRide.TestKit\MageRide.TestKit.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

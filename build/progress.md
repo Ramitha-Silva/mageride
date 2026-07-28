@@ -49,7 +49,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C021 | ws-registry-minimal ⭑ | 2 | DONE | 2026-07-28 | 92 tests green; 2 registry migrations added (0307–0308) — 3 micro-change-sets raised |
 | C022 | ws-ride-svc-happy-path ⭑ | 2 | DONE | 2026-07-28 | 109 tests green; 1 rides migration added (0608) + 2 internal contract routes — 5 micro-change-sets raised |
 | C023 | ws-dispatch-stub ⭑ | 2 | DONE | 2026-07-28 | 78 tests green; 1 dispatch migration added (0710) + 1 internal contract route — 11 micro-change-sets raised |
-| C024 | ws-realtime-pipeline ⭑ | 2 | PENDING | | |
+| C024 | ws-realtime-pipeline ⭑ | 2 | DONE | 2026-07-28 | 35 tests green (3 new services + EMQX fixture); p95 EMQX→SignalR 2.1 s; H3 grid + Kafka consumer promoted to the kernel; 4 micro-change-sets raised |
 | C025 | ws-e2e-android-slice ⭑ | 2 | PENDING | | |
 | C026 | iam-svc-auth | 2 | PENDING | | |
 | C027 | iam-svc-profile-rbac | 2 | PENDING | | |
@@ -3088,3 +3088,121 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   already pulled by C002/C009); the replica stack stayed down throughout. The 78 tests take ~80 s,
   of which most is ~40 harness start-ups — each integration test builds a fresh ride-svc *and*
   dispatch-svc so a test signing key or a background worker cannot leak into another test.
+
+- **Component:** C024 ws-realtime-pipeline — 2026-07-28
+- **Status:** DONE — `dotnet test backend/src/HotPath.Tests -c Release` → **35 passed, 0 failed**
+  (~110 s). All four DoD items assert directly. **p95 EMQX → passenger's SignalR group = 2102 ms**
+  over 20 positions published a second apart (median 1352 ms, max 2184 ms), against the 5 s SLO and
+  at the **shipped** 2 s batch interval, which dominates the number — the DoD says p95, so the test
+  measures one rather than timing a single observation. Two mqtt-bridge replicas share
+  `$share/posGroup/…` with **exactly one** copy on `telemetry.raw` and both take a share; a device
+  publishing to another vehicle's topic is **disconnected by the deployed ACL**; the passenger joins
+  **exactly 19** res-7 + ring(2) cells. Full solution: **1158 passed, 0 failed** — Dispatch's 64
+  confirm the two kernel promotions below changed no behaviour.
+- **Notes:**
+  **Micro-change-sets raised —**
+  (a) *`infra/env/.env.app.example`'s `Emqx__SharedSub` is replaced by a group NAME.* C009 wrote the
+  whole filter (`$$share/posGroup/veh/+/pos/live`, needing `$$` to survive compose interpolation).
+  The service now takes `MqttBridge__LiveShareGroup=posGroup` and builds the filter itself. This
+  removes the two ways E-08 breaks silently: a filter that lost its `$share/` prefix makes every
+  replica receive every message — one copy per replica on `telemetry.raw`, no error anywhere — and
+  a filter pointed at the wrong topic subscribes successfully to nothing. **D7' §4.2's
+  `Emqx__SharedSub` row should follow.** Also renamed: `Mqtt__BrokerUrl` → `Mqtt__Host`/`__Port`,
+  `Mqtt__DevJwtSecret` → `Mqtt__SessionTokenSecret`, and the replay group is `posReplayGroup`, not
+  C009's `replayGroup`. C009 flagged that whole block as invented-before-use.
+  (b) *`Mqtt__ServiceUsername` was defined twice in `.env.app.example`* — once for mqtt-bridge and
+  once for tcp-adapter. `env_file` is one flat map, so the tcp-adapter value won for every container
+  reading the file, and the compose `hot-path` service sets it again in `environment:` purely to
+  undo that. The bridge now reads `MqttBridge__ServiceName`; **C043 should give tcp-adapter its own
+  prefixed key** rather than rely on ordering.
+  (c) *`SignalR__BackplaneRedis` and `Geocell__Res` are gone, for opposite reasons* — see decision 3
+  and R-06. Neither is a setting this platform should have.
+  (d) *ADD §7.5.1 / D5' §5.2 vs `mqtt-topics.md` §2.2 still print the `setPosRate` hint two ways*
+  (top-level `intervalMs` vs `args.seconds`). Not touched here — C017 already recorded it and the
+  downlink is C038's — but it is still open.
+  **Decisions —**
+  (1) **Two things were promoted into `MageRide.Shared`, both because C024 was the second caller.**
+  `H3Grid` moved out of `Dispatch.Api/Domain` into `MageRide.Shared.Geo` beside a new `GeoCells`
+  holding the resolutions: dispatch keys its candidate index at res 5 and the fan-out plane keys
+  `cell:{h3index}` at res 7, and two copies of a grid whose ids must be *bit-identical* to the KMP
+  module's is exactly the drift that shows up as an empty map. `RideEventConsumer`'s consume loop
+  became `MageRide.Shared.Messaging.KafkaTopicConsumer` — the promotion C023's own handoff asked
+  C024 to make. `Dispatch.Api.Tests/Domain/H3GridTests.cs` moved to `MageRide.Shared.Tests/Geo/`
+  with it (dispatch 78 → 64 tests, the kernel 221 → 235).
+  (2) **`AutoOffsetReset.Latest` on `telemetry.raw`, alone on the platform.** dispatch-svc reads
+  `ride.events` from the earliest offset because a booking committed while it was down still has to
+  be dispatched. A position is not like that: `geo:live` and `cell:{h3index}` are a *current-state*
+  index, and a processor that woke after ten minutes down would replay ten minutes of stale samples
+  and push every one to passengers as current, oldest last. History is Timescale's (T-06).
+  `PositionProcessor:StartFromEarliest` reverses it; only the test harness sets it, and it is there
+  so a test never races its consumer's group assignment.
+  (3) **fanout-svc has NO SignalR backplane, and that is a correctness decision, not an omission.**
+  Every replica reads the cell streams it has members in and pushes to its own local group, so
+  coverage is already complete; a Redis backplane on top would re-broadcast each replica's send to
+  every other replica and a passenger would get one copy of every frame *per replica*. D6' §5's
+  backplane earns its place for the **directed** sends C041 owes — `ShareRevoked`'s targeted
+  removal under 200 ms (D-22), `RideStateChanged`, `DriverPosition` — where the replica holding a
+  connection is unknown. **C041 must add it for those and keep the per-cell batches off it.**
+  (4) **A cell's stream read position is fixed at JOIN, not on the pump's first tick**, and this was
+  a real bug found by the end-to-end test rather than a precaution. Resolving it on the first tick
+  advances past everything written between the join and that tick and sends nothing, because a batch
+  with no frames is not a batch — a 2-second hole at exactly the moment a passenger opens the map.
+  Related: **`$` is never used as a stream position.** A non-blocking `XREAD` from `$` resolves to
+  the stream's last id and so always returns nothing — a pump that appears to run and never delivers.
+  (5) **`Fanout:JoinSeedFrames` (32) is scope I added deliberately and C041/C042 should remove.**
+  `signalr-hub.md` §1.1 makes `GET /v1/nearby` (query-svc, C042) the snapshot path and says the
+  socket carries only deltas. Until C042 exists, a passenger who opens the map sees *nothing* until
+  each nearby vehicle's next sample, which is indistinguishable from a broken map — and C025's
+  Android slice opens exactly that map. The seed replays the tail of each joined cell to the
+  **joining connection only**, so it is bounded and costs the group nothing. Two snapshot paths is
+  one more than the contract has; delete it when `/v1/nearby` lands.
+  (6) **The MQTT session JWT is minted in the kernel** (`MageRide.Shared.Mqtt`) as HS256 against
+  EMQX's shared secret, with the D6' §3.2 claim set (`vehicleId`, `deviceId`, `rideId?`, TTL
+  `max(ride + 2 h, 4 h)`). C030 replaces the *signature* with RS256 over provisioning-svc's JWKS and
+  nothing else — the claims are already right, and `emqx.conf` already carries the commented JWKS
+  block. Anything holding the dev secret can mint a token for any vehicle, which is why it does not
+  survive into the replica.
+  (7) **The bridge decodes nothing and keys on the topic, never the payload.** EMQX authenticated
+  the topic; the payload is self-asserted. position-processor rebinds a sample whose `vehicleId`
+  disagrees with its topic and logs it — trusting the payload would undo the ACL, and a bridge that
+  parsed payloads would drop a sample it merely failed to understand before anyone could see it on
+  `telemetry.raw` and find out why.
+  (8) **`telemetry.raw` acknowledgement is manual and follows the produce.** MQTTnet acks on handler
+  return, which would make EMQX → Redpanda at-most-once. An unproducible payload is left
+  unacknowledged and EMQX redispatches it to another group member when the session ends.
+  (9) **`EmqxFixture` bind-mounts the deployed `infra/deploy/emqx/*.conf`**, copied into the test
+  output by the TestKit csproj, and throws if they are absent — EMQX's shipped defaults allow every
+  topic, so a fixture that silently found no configuration would turn every ACL assertion green for
+  the worst possible reason.
+  **Spec gaps —** (i) **No spec pins `veh:seq:{vehicleId}`'s TTL.** `mqtt-topics.md` §5 gives the
+  tracker a 50,000-sample flash ring and no expiry for the watermark; 24 h is chosen and marked.
+  (ii) **R-09's priority half is not implemented** — live preempting replay 4:1 needs broker-side
+  priority the C009 EMQX configuration does not set, and faking it client-side would throttle replay
+  without protecting live. The *separation* (two share groups) is in place. (iii) `telemetry.normalized`
+  is written and **nothing reads it** — D6' §2.1 registers persistence-writer, trip-state and
+  fleet-health as its consumers and none exists. That is the right way round: C040 finds the data
+  already there. (iv) No `<topic>.dlq` anywhere (D6' §2.3); `KafkaTopicConsumer` commits past a
+  poison message and stalls a partition on a retryable failure, which is loud rather than lossy.
+  **For C025 (ws-e2e-android-slice) —**
+  The passenger half of the live map is ready: connect to `/hubs/live` with the **API access token
+  in the `access_token` query parameter** (never the MQTT token, E-02), call
+  `JoinGeocells(GeoCells.ViewCells(here))` — 19 res-7 ids — and handle `VehiclePositions`. The
+  driver half publishes **CBOR** `PositionSample` to `veh/{vehicleId}/pos/live` with an MQTT session
+  JWT whose username **is** the vehicleId. `POST /v1/auth/mqtt-token` (iam.yaml) is **not
+  implemented** — C026 owns it — so C025 must either mint the token itself against
+  `Mqtt:SessionTokenSecret` or add that route; `MqttSessionTokenIssuer` is the piece to call either
+  way. **Still no Dockerfiles**, and the compose paths do not match the landed projects:
+  `docker-compose.dev.yml` expects `backend/src/HotPath/Dockerfile` (a combined
+  bridge + processor + persistence-writer + fleet-health container, C038–C044) and
+  `backend/src/Fanout/Dockerfile`, against `HotPath.MqttBridge` / `HotPath.PositionProcessor` /
+  `Fanout.Api` on disk. Whoever writes them reconciles the two.
+  **For C038/C039/C040/C041 —** each service's `CLAUDE.md` lists what was deliberately left out in
+  fence order. Three that are easy to miss: fanout fans out **every** vehicle (no D-22/D-23
+  visibility filter at all, so nothing here claims to implement D-22); position-processor does
+  **not** refresh `driver:availability:{driverId}`, so C023 decision 10 still holds; and
+  `KafkaTopicConsumer`/`MqttBridgeWorker` have no DLQ.
+  **Build host —** Docker is used by the test suite only. `emqx/emqx:5.8` was already pulled by
+  C009; no new images. The replica stack stayed down throughout. The 34 tests take ~70 s, most of it
+  harness start-ups — the end-to-end tests build five processes (two brokers' clients plus three
+  services) per test so a background pump or consumer cannot leak into another test. MQTTnet
+  5.2.0.1603 and the `Testcontainers` base package are the only new NuGet dependencies.

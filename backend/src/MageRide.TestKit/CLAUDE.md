@@ -14,12 +14,23 @@ the `migrate` container.
 | `PostgresFixture` | `timescale/timescaledb-ha:pg16` | the system of record; `EnsureMigratedAsync()` applies `db/migrations/*.sql` |
 | `RedisFixture` | `redis:7-alpine` | live geo, locks, rate limits, caches, SignalR backplane (ADD §9.4) |
 | `RedpandaFixture` | `redpandadata/redpanda:v24.2.26` | the D6' §2.1 event backbone; `CreateRegistryTopicsAsync()` |
+| `EmqxFixture` (C024) | `emqx/emqx:5.8` | the D6' §3 MQTT plane, running the **deployed** broker policy |
 
 Every image matches `infra/docker-compose.dev.slim.yml` exactly. **Keep them in step** — a
 test that passes against a different server build than the dev stack runs is worth very
 little, and the Postgres image in particular is load-bearing: C006's DDL creates a
 hypertable and four continuous aggregates, so `postgis/postgis` cannot apply the migration
 set at all.
+
+`EmqxFixture` goes further than matching an image: the csproj copies
+`infra/deploy/emqx/emqx.conf` and `acl.conf` into the test output and the fixture bind-mounts
+them, so an ACL assertion is made against the file the dev stack mounts rather than a copy
+that can drift from it. It throws if they are missing — EMQX's shipped defaults allow every
+topic, which would turn every ACL test green for the worst possible reason. There is no
+Testcontainers module for EMQX, so it is built from the generic `ContainerBuilder`; the wait
+strategy is `emqx ctl status`, the same command the compose health check runs, because a
+broker whose port is open has not necessarily finished loading its authentication chain and
+connecting early produces a `NotAuthorized` indistinguishable from a wrong secret.
 
 ## Using it
 

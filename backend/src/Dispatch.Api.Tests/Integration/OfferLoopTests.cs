@@ -1,3 +1,4 @@
+using MageRide.Shared.Geo;
 using System.Text.Json;
 using Dapper;
 using MageRide.Dispatch.Configuration;

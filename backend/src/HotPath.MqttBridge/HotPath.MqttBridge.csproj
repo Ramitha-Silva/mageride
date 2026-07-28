@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    HotPath.MqttBridge (C024, ws-realtime-pipeline) — EMQX -> Redpanda `telemetry.raw`.
+
+    The narrowest service on the platform: hold the E-08 shared subscription
+    `$share/posGroup/veh/+/pos/live` (and the parallel replay group), key each payload by the
+    vehicleId in its topic, produce it to `telemetry.raw`, acknowledge. It decodes nothing —
+    normalisation, dedupe and anti-spoof are position-processor-svc's, and a bridge that parsed
+    payloads would drop a sample it merely failed to understand.
+
+    Microsoft.NET.Sdk.Web rather than Worker: D7' §5.1 wants /health/live and /health/ready on
+    every service, and readiness here has to answer for both the broker connection and the Kafka
+    producer. There are no other endpoints.
+
+    NOT here: the D-17 rate ceiling (EMQX's rule engine and listener enforce it, and the
+    `mqtt.rate_violation` audit event is C038/C125), the LWT consumers (R-15/T-04 — trip-state,
+    dispatch and fleet-health each consume `veh/+/status` themselves), and the `<topic>.dlq`
+    (D6' §2.3, C039).
+
+    Verify: dotnet test backend/src/HotPath.Tests -c Release
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.HotPath.MqttBridge</RootNamespace>
+    <AssemblyName>MageRide.HotPath.MqttBridge</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <UserSecretsId>mageride-hotpath-mqtt-bridge</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MageRide.Shared\MageRide.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Shared subscriptions and manual acknowledgement are both MQTT 5 features and both are
+         load-bearing here — see MqttBridgeWorker. -->
+    <PackageReference Include="MQTTnet" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="HotPath.Tests" />
+  </ItemGroup>
+
+</Project>

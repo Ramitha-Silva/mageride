@@ -13,10 +13,12 @@
 - **Central package management** (`backend/Directory.Packages.props`): `<PackageReference>` carries
   no `Version`. Add a `<PackageVersion>` entry there first or the build fails NU1008.
 - **Integration tests use `src/MageRide.TestKit`** (C010) — Testcontainers fixtures for
-  Postgres (`timescale/timescaledb-ha:pg16`), Redis and Redpanda, all matching
-  `infra/docker-compose.dev.slim.yml`. Reference it, use `[Collection<PostgresCollection>]`
-  (the generic form — the string form cannot resolve a definition in another assembly), and
-  call `EnsureMigratedAsync()` for a migrated schema. Do not hand-roll a container.
+  Postgres (`timescale/timescaledb-ha:pg16`), Redis, Redpanda and EMQX (C024), all matching
+  `infra/docker-compose.dev.slim.yml`; the EMQX one bind-mounts the deployed
+  `infra/deploy/emqx/*.conf` so a test asserts against the real broker policy. Reference it, use
+  `[Collection<PostgresCollection>]` (the generic form — the string form cannot resolve a
+  definition in another assembly), and call `EnsureMigratedAsync()` for a migrated schema. Do not
+  hand-roll a container.
 - **Add every new project to `backend/MageRide.sln`.** CI runs the solution, not a list of
   projects, so a test project outside it is never executed.
 - Verify: `dotnet build && dotnet test`

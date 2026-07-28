@@ -3,6 +3,7 @@ using MageRide.Dispatch.Domain;
 using MageRide.Dispatch.Persistence;
 using MageRide.Dispatch.Redis;
 using MageRide.Shared.Errors;
+using MageRide.Shared.Geo;
 using MageRide.Shared.Persistence;
 using MageRide.Shared.Primitives;
 using Microsoft.Extensions.Logging;

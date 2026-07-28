@@ -4,6 +4,7 @@ using MageRide.Dispatch.Domain;
 using MageRide.Dispatch.Tests.Infrastructure;
 using MageRide.Dispatch.Timers;
 using MageRide.Shared.Caching;
+using MageRide.Shared.Geo;
 using MageRide.Shared.Primitives;
 using MageRide.TestKit;
 using Microsoft.Extensions.DependencyInjection;

@@ -1,0 +1,60 @@
+namespace MageRide.Shared.Messaging;
+
+/// <summary>
+/// The D6' §2.1 topic registry, spelled once.
+/// </summary>
+/// <remarks>
+/// <para>
+/// A producer and a consumer that disagree about a topic name do not fail — Redpanda's
+/// <c>auto_create_topics_enabled</c> is on in the dev stack, so the typo becomes a real,
+/// empty, one-partition topic and the pipeline simply goes quiet. That is the failure these
+/// constants exist to prevent; <c>infra/deploy/redpanda/bootstrap-topics.sh</c> creates the same
+/// six with their spec'd partition counts.
+/// </para>
+/// <para>
+/// <b>Partition keys are part of the contract.</b> The telemetry and trip topics are keyed by
+/// <c>vehicleId</c> and the ride/dispatch topics by <c>rideId</c>, which is what makes ordering
+/// per aggregate hold end to end (D6' §2.3).
+/// </para>
+/// </remarks>
+public static class EventTopics
+{
+    /// <summary>Device payloads verbatim, as mqtt-bridge-svc lifted them off EMQX. Key: vehicleId.</summary>
+    public const string TelemetryRaw = "telemetry.raw";
+
+    /// <summary>Canonical <see cref="Telemetry.PositionSample"/>s. Key: vehicleId.</summary>
+    public const string TelemetryNormalized = "telemetry.normalized";
+
+    /// <summary>Mode A/B session transitions from trip-state-svc. Key: vehicleId.</summary>
+    public const string TripEvents = "trip.events";
+
+    /// <summary>ride-svc's outbox. Key: rideId.</summary>
+    public const string RideEvents = "ride.events";
+
+    /// <summary>dispatch-svc's outbox — <c>offer.created</c> and friends. Key: rideId.</summary>
+    public const string DispatchEvents = "dispatch.events";
+
+    /// <summary>Audit trail (D-35). Key: entityId.</summary>
+    public const string AuditEvents = "audit.events";
+
+    /// <summary>The registry, in the order <c>bootstrap-topics.sh</c> creates them.</summary>
+    public static readonly IReadOnlyList<string> All =
+    [
+        TelemetryRaw, TelemetryNormalized, TripEvents, RideEvents, DispatchEvents, AuditEvents,
+    ];
+
+    /// <summary>
+    /// The dead-letter topic for <paramref name="topic"/> — <c>&lt;topic&gt;.dlq</c>, carrying
+    /// <c>{originalOffset, error, attempts}</c> (D6' §2.3).
+    /// </summary>
+    /// <remarks>
+    /// Named here so the convention is fixed before anything writes one. No component owns the DLQ
+    /// yet: C024's consumers stall a partition on a retryable failure and commit past a poison
+    /// message, which is loud rather than lossy, and C034/C039 land the durable form.
+    /// </remarks>
+    public static string DeadLetter(string topic)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(topic);
+        return $"{topic}.dlq";
+    }
+}

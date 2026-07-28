@@ -2,6 +2,7 @@ using MageRide.Dispatch.Configuration;
 using MageRide.Dispatch.Domain;
 using MageRide.Dispatch.Persistence;
 using MageRide.Dispatch.Redis;
+using MageRide.Shared.Geo;
 using MageRide.Shared.Messaging;
 using MageRide.Shared.Persistence;
 using MageRide.Shared.Primitives;

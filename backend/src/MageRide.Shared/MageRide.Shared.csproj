@@ -24,6 +24,9 @@
     <PackageReference Include="Npgsql.NetTopologySuite" />
     <PackageReference Include="Npgsql.OpenTelemetry" />
     <PackageReference Include="NetTopologySuite" />
+    <!-- C024: the H3 grid moved up here when the fan-out plane (res 7) became the second caller
+         beside the dispatch candidate index (res 5). See Geo/H3Grid.cs. -->
+    <PackageReference Include="pocketken.H3" />
     <PackageReference Include="Confluent.Kafka" />
     <PackageReference Include="StackExchange.Redis" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />

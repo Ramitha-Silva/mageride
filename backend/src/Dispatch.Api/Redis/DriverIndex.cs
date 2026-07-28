@@ -1,3 +1,4 @@
+using MageRide.Shared.Geo;
 using System.Globalization;
 using MageRide.Dispatch.Configuration;
 using MageRide.Dispatch.Domain;

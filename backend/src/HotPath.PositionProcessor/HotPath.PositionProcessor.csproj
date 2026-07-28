@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    HotPath.PositionProcessor (C024, ws-realtime-pipeline) — telemetry.raw -> live indexes.
+
+    Consume `telemetry.raw`, decode the device payload, discard replayed samples on the R-17/T-05
+    `seq` watermark, and write the three things the live map is made of: the `geo:live` GEO set,
+    the `veh:meta:{vehicleId}` hash, and the `cell:{h3index}` stream fanout-svc reads (ADD §7.4,
+    §9.4). The normalised sample is republished onto `telemetry.normalized` for the consumers that
+    do not want the raw device encoding.
+
+    NOT here, and named rather than stubbed: the anti-spoof gates and the Kalman pass (C039), the
+    second-line 10 msg/s ceiling (D-17), the Timescale write path (C040), the
+    `driver:availability:{driverId}` heartbeat that R-08 gives this service (C039 — dispatch-svc's
+    freshness gate reads the durable row for exactly that reason, C023 decision 10), the LWT
+    consumers (R-15/T-04) and `telemetry.raw.dlq` (D6' §2.3).
+
+    Verify: dotnet test backend/src/HotPath.Tests -c Release
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.HotPath.PositionProcessor</RootNamespace>
+    <AssemblyName>MageRide.HotPath.PositionProcessor</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <UserSecretsId>mageride-hotpath-position-processor</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MageRide.Shared\MageRide.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The consume loop is the kernel's KafkaTopicConsumer; this is the client it is built on. -->
+    <PackageReference Include="Confluent.Kafka" />
+    <PackageReference Include="StackExchange.Redis" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="HotPath.Tests" />
+  </ItemGroup>
+
+</Project>
