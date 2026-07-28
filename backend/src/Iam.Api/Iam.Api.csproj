@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    Iam.Api (C020, ws-iam-minimal) — the walking skeleton's slice of iam-svc.
+
+    Phone-OTP sign-in for the passenger and driver apps, RS256 access tokens with a published
+    JWKS, opaque rotating refresh, and one session per (user, app) (D-29, D-32, AL-08).
+
+    Full RBAC, Google/Apple/password sign-in, profile, saved addresses and PDPA are C026/C027.
+    There is no MFA here and never will be (AL-37).
+
+    Verify: dotnet test backend/src/Iam.Api.Tests -c Release
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.Iam</RootNamespace>
+    <AssemblyName>MageRide.Iam.Api</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <UserSecretsId>mageride-iam-api</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- iam-svc both mints and validates these tokens, so it uses the handler directly rather
+         than only through the kernel's AddMageRideAuth. -->
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MageRide.Shared\MageRide.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Iam.Api.Tests" />
+  </ItemGroup>
+
+</Project>

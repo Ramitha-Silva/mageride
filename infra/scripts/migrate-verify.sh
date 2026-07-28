@@ -179,7 +179,9 @@ check_eq "all 23 schemas created" "23" \
      'subscription','transit','analytics','transit_staging');"
 
 step "Tables owned by C003"
-check_eq "9 iam tables" "9" \
+# 9 from C003 + iam.command_log, which C020 added because D3' §0 mandates a per-service
+# idempotency log and D4' §5 prints one only for rides (C020 handoff micro-change-set).
+check_eq "10 iam tables" "10" \
   "SELECT count(*) FROM information_schema.tables WHERE table_schema='iam' AND table_type='BASE TABLE';"
 check_eq "12 registry tables" "12" \
   "SELECT count(*) FROM information_schema.tables WHERE table_schema='registry' AND table_type='BASE TABLE';"

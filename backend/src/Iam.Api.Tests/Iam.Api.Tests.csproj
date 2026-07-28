@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    C020 verify target: dotnet test backend/src/Iam.Api.Tests -c Release
+
+    Two halves. The pure tests (phone normalisation, OTP hashing, refresh-token codec, token
+    issuance against the published JWKS) need nothing. The sign-in tests run the real service on
+    a Kestrel socket against a Testcontainers Postgres and Redis, because the AL-08 invariant is
+    a partial unique index and the D-32 budget is a Redis Lua script — neither is provable
+    against a fake.
+
+    Microsoft.NET.Sdk.Web, not Microsoft.NET.Sdk: the harness builds a WebApplication.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.Iam.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <OutputType>Exe</OutputType>
+    <!--
+      xUnit1041: collection-fixture ctor args are consumed through the primary constructor.
+      xUnit1051: every test is bounded by its own harness lifetime, so threading
+                 TestContext.Current.CancellationToken through each HTTP call would add noise
+                 without changing behaviour. Matches MageRide.Shared.Tests and ApiGateway.Tests.
+    -->
+    <NoWarn>$(NoWarn);xUnit1041;xUnit1051</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Iam.Api\Iam.Api.csproj" />
+    <!-- C010: the Postgres / Redis fixtures, so this suite migrates the same schema the dev
+         stack and the replica do rather than a hand-written copy. -->
+    <ProjectReference Include="..\MageRide.TestKit\MageRide.TestKit.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

@@ -45,7 +45,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C017 | kmp-geo-realtime | 1 | DONE | 2026-07-27 | 654 tests green (111 new); H3 is a platform seam — **iOS has no engine yet** (C085/C094 bind one); 3 micro-change-sets raised |
 | C018 | kmp-local-db | 1 | DONE | 2026-07-27 | 767 tests green (113 new); two SQLDelight databases, schema v2 with a tested migration; 4 micro-change-sets raised |
 | C019 | kmp-test-kit | 1 | DONE | 2026-07-27 | 817 tests green (50 new); MockEngine fake covering all 176 operations + descriptor-driven fixtures; contract checks over 176 responses and 85 request bodies |
-| C020 | ws-iam-minimal ⭑ | 2 | PENDING | | |
+| C020 | ws-iam-minimal ⭑ | 2 | DONE | 2026-07-28 | 91 tests green; 3 iam migrations added (0104–0106) — 3 micro-change-sets raised |
 | C021 | ws-registry-minimal ⭑ | 2 | PENDING | | |
 | C022 | ws-ride-svc-happy-path ⭑ | 2 | PENDING | | |
 | C023 | ws-dispatch-stub ⭑ | 2 | PENDING | | |
@@ -2576,3 +2576,96 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   (`:shared:clean` + `--no-build-cache`) runs 817 tests in ~86 s; `compileTestKotlinIosArm64` adds
   ~2.5 min the first time it links the test klibs. One new coordinate fetched:
   `org.yaml:snakeyaml` 2.6 (androidHostTest only).
+
+- **Component:** C020 ws-iam-minimal — 2026-07-28
+- **Status:** DONE — `dotnet test backend/src/Iam.Api.Tests -c Release` → **91 passed, 0 failed,
+  0 skipped**. All four DoD items pass against a real Postgres and Redis (Testcontainers). Wave-0
+  gates re-run green after the three new migrations: `bash infra/scripts/migrate-verify.sh` →
+  **187/187**, `MageRide.Shared.Tests` → 161, `ApiGateway.Tests` → 524.
+- **Notes:**
+  **Spec gaps — three micro-change-sets, none actioned in `specs/` (D4' §1 owns the iam DDL).**
+  All three are landed as migrations because the endpoints cannot meet their own contract without
+  them; each file's header carries the argument.
+  (a) ***No per-service command log exists except `rides.command_log`*** (`0104__iam_command_log.sql`).
+  D3' §0 requires `Idempotency-Key` on every POST and says duplicates "replay the original response
+  from a **per-service** command log"; the iam contract makes `POST /v1/auth/otp/verify` idempotent
+  ("Idempotent: yes (replay token)"). D4' §5 / server_db_schema §5 print DDL for `rides` only.
+  Pointing iam-svc at `rides.command_log` would give two bounded contexts one shared primary key.
+  **D4' should print one command-log table per service that has idempotent POSTs.** Shape copies
+  0603 minus `ride_id`; `CommandLog:AggregateIdColumn` is null, which the C002 kernel supports.
+  **This changes a C003 assertion:** `migrate-verify.sh` now expects **10** iam tables, not 9.
+  (b) ***Nothing records which handset a row or an attempt belongs to*** (`0105__iam_device_binding.sql`).
+  `iam.devices` keys only on a generated UUID, so the required `deviceId` from otp/request — the
+  `device_id` claim (D3' §0) that AL-08 binds a session to — has nowhere to live, and a second
+  sign-in from one install would create a second device row. `iam.otp_attempts` likewise records
+  neither the `deviceId` (needed for `409 device-mismatch`) nor the app the OTP was for (needed to
+  open a passenger vs a driver session). Added `iam.devices.device_key` + a partial unique index on
+  `(user_id, device_key)`, and `iam.otp_attempts.device_id` / `.app`. Redis was rejected for the
+  latter two: a flush would strand every in-flight login.
+  (c) ***"Revoke the session family" is not implementable as `iam.sessions` stands***
+  (`0106__iam_session_families.sql`). D3' `/v1/auth/refresh` says replaying a spent refresh token
+  revokes the whole family, but no column links a rotated session to the one it replaced, so
+  "family" could only mean "everything active for this `(user, app)`" — which **livelocks**: device
+  A signs in, device B signs in and revokes A (AL-08), A's background refresh presents its
+  now-revoked token and takes B's brand-new session with it, forever. Added
+  `iam.sessions.family_id`; a sign-in starts a family, a rotation keeps it, and replay revokes only
+  its own lineage. `SessionLifecycleTests.Replaying_a_token_from_an_older_sign_in_does_not_end_the`
+  `_newer_session` is the regression test.
+  **Contract gaps (no change made, C026 should decide):**
+  (d) *`iam.devices.platform` is `NOT NULL CHECK (android|ios)` but no auth request carries a
+  platform.* The value is read from the gateway's `X-Platform` (D-31), which D3' does not mark
+  required on these operations and the gateway does not enforce (`RequirePlatformHeader: false`).
+  Defaults to `android` — the only platform the skeleton ships. Either add `platform` to the
+  otp/request body or make the header required on this route.
+  (e) *`fcmToken` on otp/request is accepted and dropped.* Its home is
+  `iam.devices.fcm_apns_token`, which cannot exist before verify identifies the user, and nothing
+  in the skeleton sends an FCM message. C026/C051 should either carry it through the attempt or
+  move push registration onto its own endpoint.
+  (f) *`attemptsRemaining` is undefined by D3'.* Read as the **send** budget (D-32's 5/h), which is
+  what the endpoint's own `429 otp-rate-limited` mapping describes; the C013 KDoc reads it as
+  entries-before-lock-out instead. One of the two should be corrected.
+  (g) *No spec fixes the OTP TTL or the wrong-entry budget behind the 423.* Chose 5 minutes and 5
+  entries (`Otp:Ttl`, `Otp:MaxVerifyAttempts`). D7' §4.2 should carry both.
+  (h) *D7' §4.2 has no `Jwt__RefreshTokenKey` row.* Optional; unset, the refresh HMAC is derived
+  from the signing key, so a 90-day signing rotation (D7' §13) logs everybody out. Deployments
+  should set it.
+  **Decisions —**
+  (1) **The opaque refresh token is `mr1.{jti}.{hmac}`.** `iam.sessions` has no token column and
+  ADD §12.1 calls the row the canonical record, so the token carries its own session id under an
+  HMAC instead of a stored secret. Opaque to the client (no claims, nothing decodable), unforgeable
+  without the key, and worthless unless its row is unrevoked — which keeps Postgres authoritative
+  and Redis `refresh:{jti}` a pure O(1) cache, exactly as the ADD describes.
+  (2) **iam-svc resolves its own signing keys locally** rather than fetching its own JWKS over
+  HTTP. `AddMageRideAuth` is still what wires the bearer handler — a `PostConfigure` swaps the
+  `ConfigurationManager` for an `IssuerSigningKeyResolver` over `SigningKeyRing`. `Jwt:JwksUrl`
+  stays configured because it is what *other* services read and the kernel binds it.
+  (3) **D-32 fails closed.** An unreachable Redis bucket answers `503 dependency-unavailable`
+  rather than letting the send through; the gateway's coarse limiter fails *open* on purpose, but
+  this one is the only thing between an attacker and an SMS bill.
+  (4) **Roles are not granted by opening an app.** A first sign-in creates the account with the
+  role of the app it came from; an existing account keeps its roles and only the `app` claim
+  follows the surface. So a passenger who opens the Driver App gets `app=driver, role=passenger`
+  and is denied by deny-by-default — holding `driver` is C029's grant to make. **C021's seed
+  therefore has to sign its skeleton driver in for the first time with `role=driver`, or grant the
+  role directly.**
+  (5) **Both start-up secrets are resolved during `IamApplication.Build`** (`SigningKeyRing`,
+  `OtpCodes`), so a missing `Jwt:SigningKeyPem` or `Otp:PepperKey` is a deploy that refuses to come
+  up rather than a 500 on the first user. Development mints ephemeral ones and warns.
+  (6) **`Sms:Provider=notifylk` fails at start-up**, as an options validation, instead of being
+  accepted and silently dropping every OTP. Same mechanism refuses `dev` outside Development unless
+  `Sms:AllowDevSenderOutsideDevelopment=true` (the replica will want that; it runs synthetic
+  numbers).
+  (7) **Phone input is normalised, not just validated.** `0771234567` and `+94 77 123 4567` both
+  become `+94771234567`; a leading `0` after an explicit `+94` is treated as a typo and rejected
+  rather than "fixed" into somebody else's number.
+  **For C021–C025 —**
+  `infra/docker-compose.dev.yml` expects one `app-services` container built from
+  `backend/src/AppServices/Dockerfile` (C026–C066), but the walking skeleton's manifest gives each
+  slice its own `*.Api` project. **No Dockerfile was added here** — whoever wires the compose stack
+  for C025 has to decide between a per-slice container and an early `AppServices` host, and doing
+  it now would have guessed at that. `dev-up.sh full` still names the missing pieces correctly.
+  **Build host —** Docker is used by the test suite (Testcontainers `timescale/timescaledb-ha:pg16`
+  and `redis:7-alpine`, both already pulled by C002/C003); the replica stack stayed down
+  throughout. The 91 tests take ~49 s, of which ~35 s is 25 harness start-ups — each integration
+  test builds a fresh `WebApplication` so its ephemeral signing key and its Redis buckets cannot
+  leak into another test.
