@@ -24,7 +24,17 @@ public sealed class RedpandaFixture : ContainerFixture
     /// <summary>The image tag the dev stack runs.</summary>
     public const string Image = "redpandadata/redpanda:v24.2.26";
 
-    /// <summary>The D6' §2.1 topic registry, in the order the bootstrap script creates them.</summary>
+    /// <summary>
+    /// The topic registry, in the order <c>infra/deploy/redpanda/bootstrap-topics.sh</c> creates
+    /// them.
+    /// </summary>
+    /// <remarks>
+    /// Six of these are D6' §2.1's. <c>registry.events</c> (C028) and <c>provisioning.events</c>
+    /// (C030) are not — each is a micro-change-set raised in its own handoff, and both are in the
+    /// bootstrap script and in <c>MageRide.Shared.Messaging.EventTopics</c>. Kept as a literal
+    /// rather than read from <c>EventTopics.All</c> so the assertion is against what the script
+    /// creates and not against the same constant the producer uses.
+    /// </remarks>
     public static readonly IReadOnlyList<string> Topics =
     [
         "telemetry.raw",
@@ -32,6 +42,8 @@ public sealed class RedpandaFixture : ContainerFixture
         "trip.events",
         "ride.events",
         "dispatch.events",
+        "registry.events",
+        "provisioning.events",
         "audit.events",
     ];
 

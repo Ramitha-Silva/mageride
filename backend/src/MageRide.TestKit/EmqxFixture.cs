@@ -43,6 +43,7 @@ public sealed class EmqxFixture : ContainerFixture
     public const string SessionTokenSecret = "mageride-testkit-mqtt-jwt-secret-0123456789";
 
     private const int MqttPort = 1883;
+    private const int MqttsPort = 8883;
 
     private IContainer? _container;
 
@@ -56,12 +57,39 @@ public sealed class EmqxFixture : ContainerFixture
     public int Port => _container?.GetMappedPublicPort(MqttPort)
         ?? throw new InvalidOperationException($"EMQX container is not running: {SkipReason ?? "not started"}");
 
+    /// <summary>
+    /// Host port the container's 8883 is published on — the hardware-tracker listener (T-02).
+    /// </summary>
+    /// <remarks>
+    /// Mutual TLS, not JWT: a client here presents an X.509 certificate signed by
+    /// <see cref="DeviceCaDirectory"/>'s chain, and <c>emqx.conf</c>'s
+    /// <c>peer_cert_as_username = cn</c> turns its CN into the MQTT username the ACL is written
+    /// against.
+    /// </remarks>
+    public int TlsPort => _container?.GetMappedPublicPort(MqttsPort)
+        ?? throw new InvalidOperationException($"EMQX container is not running: {SkipReason ?? "not started"}");
+
+    /// <summary>
+    /// The device CA this broker trusts — <c>StepCa:RootKeyPath</c> for a provisioning-svc under
+    /// test.
+    /// </summary>
+    /// <remarks>
+    /// Generated before the container starts, because EMQX reads its <c>cacertfile</c> when the
+    /// 8883 listener comes up and a service cannot create it in time. That is the same ordering
+    /// the dev stack has, where <c>dev-up.sh</c> writes the CA and both containers mount it.
+    /// </remarks>
+    public string DeviceCaDirectory { get; } = Path.Combine(
+        Path.GetTempPath(), "mageride-testkit-device-ca-" + Guid.NewGuid().ToString("N")[..12]);
+
     protected override async Task StartAsync()
     {
         var configuration = ConfigurationDirectory();
 
+        DeviceCa.Create(DeviceCaDirectory);
+
         _container = new ContainerBuilder(Image)
             .WithPortBinding(MqttPort, assignRandomHostPort: true)
+            .WithPortBinding(MqttsPort, assignRandomHostPort: true)
             .WithEnvironment("EMQX_AUTHENTICATION__1__SECRET", SessionTokenSecret)
             // A fixed node name keeps the Erlang cookie/nodename pair stable across the container's
             // own restarts; the compose file sets the same one.
@@ -70,16 +98,30 @@ public sealed class EmqxFixture : ContainerFixture
             .WithBindMount(Path.Combine(configuration, "emqx.conf"), "/opt/emqx/etc/emqx.conf", AccessMode.ReadOnly)
             .WithBindMount(
                 Path.Combine(configuration, "acl.conf"), "/opt/emqx/etc/mageride-acl.conf", AccessMode.ReadOnly)
+            .WithBindMount(DeviceCaDirectory, "/opt/emqx/etc/device-ca", AccessMode.ReadOnly)
             .WithWaitStrategy(Wait.ForUnixContainer()
                 .UntilInternalTcpPortIsAvailable(MqttPort)
+                .UntilInternalTcpPortIsAvailable(MqttsPort)
                 .UntilCommandIsCompleted("emqx", "ctl", "status"))
             .Build();
 
         await _container.StartAsync();
     }
 
-    protected override Task StopAsync() =>
-        _container is null ? Task.CompletedTask : _container.DisposeAsync().AsTask();
+    protected override async Task StopAsync()
+    {
+        if (_container is not null)
+        {
+            await _container.DisposeAsync();
+        }
+
+        // The device CA is key material in a temp directory; leaving it behind would accumulate a
+        // root key per test run on the build host.
+        if (Directory.Exists(DeviceCaDirectory))
+        {
+            Directory.Delete(DeviceCaDirectory, recursive: true);
+        }
+    }
 
     /// <summary>Broker logs, for a failure that needs to know why a CONNECT was refused.</summary>
     public async Task<string> ReadLogsAsync()

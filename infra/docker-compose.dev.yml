@@ -100,7 +100,11 @@ services:
       - path: env/.env.app
         required: false
     volumes:
-      - provisioning-ca-data:/var/step
+      # C030: the device CA, in step-ca's layout. A bind mount rather than the named volume
+      # this used to be, because the EMQX container has to read the same certs/ca_chain.crt
+      # as its 8883 cacertfile and it is generated on the host by dev-up.sh — EMQX reads it
+      # at listener start, long before this container exists.
+      - ./deploy/device-ca:/var/step
     ports:
       - "127.0.0.1:${APP_SERVICES_PORT:-5100}:5000"
     depends_on:
@@ -314,5 +318,7 @@ services:
 # -------------------------------------------------------------------------------------
 
 volumes:
-  # step-ca root and intermediate keys for provisioning-svc (T-02, D7' §2.1/§5).
-  provisioning-ca-data:
+  # C030 replaced the `provisioning-ca-data` named volume with a bind mount of
+  # infra/deploy/device-ca (gitignored): EMQX loads the same CA as its 8883 cacertfile and
+  # a named volume is not readable by the host script that has to create it first. See the
+  # app-services `volumes:` block above and infra/scripts/dev-up.sh.

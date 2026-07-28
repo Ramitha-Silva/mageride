@@ -260,6 +260,11 @@ services:
       - emqxdata:/opt/emqx/data
       - ./deploy/emqx/emqx.conf:/opt/emqx/etc/emqx.conf:ro
       - ./deploy/emqx/acl.conf:/opt/emqx/etc/mageride-acl.conf:ro
+      # provisioning-svc's device CA (C030, T-02). The 8883 listener loads
+      # certs/ca_chain.crt as its cacertfile, so this must exist BEFORE the broker starts —
+      # dev-up.sh generates it, and app-services mounts the same directory at /var/step.
+      # A missing chain does not degrade the listener, it stops the broker booting.
+      - ./deploy/device-ca:/opt/emqx/etc/device-ca:ro
     ports:
       # 1883 is the in-cluster plaintext listener; it is published on loopback only so a
       # host-side integration test can use it, and never reaches HAProxy.

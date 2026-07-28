@@ -197,7 +197,14 @@ check_eq "13 iam tables" "13" \
 # (C029 handoff micro-change-set).
 check_eq "15 registry tables" "15" \
   "SELECT count(*) FROM information_schema.tables WHERE table_schema='registry' AND table_type='BASE TABLE';"
-check_eq "2 prov tables" "2" \
+# 2 from server_db_schema.md §3 (tracker_bindings, device_certs) + 5 added by C030, each a
+# micro-change-set raised in its handoff: prov.command_log (D3' §0 mandates a per-service
+# idempotency log and D4' prints one for rides only), prov.outbox (tracker.bound/tracker.unbound
+# have a producer and a consumer in D6' §4.3 and no topic or table), prov.imei_sightings (T-08 is a
+# 24 h window and nothing recorded a presentation to measure it against), and
+# prov.bulk_jobs + prov.bulk_job_rows (D3' specifies the T-09 endpoint completely and D4' has no
+# table for any of it).
+check_eq "7 prov tables" "7" \
   "SELECT count(*) FROM information_schema.tables WHERE table_schema='prov' AND table_type='BASE TABLE';"
 check_eq "1 config table" "1" \
   "SELECT count(*) FROM information_schema.tables WHERE table_schema='config' AND table_type='BASE TABLE';"

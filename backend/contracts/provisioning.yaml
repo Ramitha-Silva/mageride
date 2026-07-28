@@ -101,6 +101,44 @@ paths:
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
       x-error-codes: [validation-failed, attestation-failed, not-owner, vehicle-not-found, imei-duplicate]
 
+  /v1/trackers/unbind:
+    post:
+      operationId: unbindTracker
+      summary: Release an IMEI from its vehicle so the tracker can be bound elsewhere.
+      description: |
+        **[C030 micro-change-set — not in D3'.]** D6' §4.3 makes `tracker.unbound` half of the IMEI
+        cache's invalidation pair and gives it no producer: the only route that could emit it is
+        `DELETE /v1/trackers/{imei}`, which D3' marks *admin* decommission. An owner moving their
+        tracker from one vehicle to another had no way to release it, and the anti-clone rule
+        (T-08) would then quarantine the vehicle they moved it to.
+
+        Revokes every credential on the binding and emits `tracker.unbound` + `tracker.revoked`.
+        The IMEI is immediately bindable again — `ux_tracker_imei_active` only covers `ACTIVE`.
+      tags: [trackers]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [imei]
+              properties:
+                imei:
+                  $ref: '#/components/schemas/Imei'
+      responses:
+        '204':
+          description: Released; credentials revoked.
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, not-owner, not-found]
+
   /v1/trackers/{imei}:
     get:
       operationId: getTracker
@@ -238,6 +276,16 @@ paths:
                   type: string
                   format: binary
                   description: '`text/csv`, rows `imei,registrationNumber`, at most 5,000.'
+                credentialType:
+                  allOf:
+                    - $ref: '#/components/schemas/CredentialType'
+                  default: x509
+                  description: |
+                    **[C030 micro-change-set — not in D3'.]** D3' makes `credentialType` required on
+                    the single bind and gives the bulk body a `file` and nothing else. A fleet is
+                    one hardware generation more often than not, so the choice belongs to the batch
+                    rather than to the row. Defaults to `x509`, which is what an MQTT-capable
+                    tracker needs and what D6' §4.1 lists as the current-firmware path.
       responses:
         '202':
           description: Job accepted.
@@ -281,6 +329,56 @@ paths:
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
       x-error-codes: [unauthorized, forbidden, not-found]
 
+  /v1/fleets/{fleetId}/trackers/bulk/{jobId}/errors.csv:
+    get:
+      operationId: downloadBulkTrackerErrorReport
+      summary: Download a bulk job's per-row report.
+      description: |
+        **[C030 micro-change-set — not in D3'.]** D3' promises an `errorReportUrl` and calls it "a
+        signed URL", which in a deployment with object storage would be a pre-signed S3 link. There
+        is no bucket in front of provisioning-svc and the report is a projection of
+        `prov.bulk_job_rows` that would have to be materialised to put one there, so the service
+        serves it and the link carries an HMAC instead. The properties D3' wanted hold: the link is
+        unguessable, it expires, and following it needs no bearer — which is what lets the Admin
+        Portal hand it straight to a browser download.
+
+        Every row is listed, not only the failures: an operator reconciling 5,000 trackers needs to
+        diff the report against the file they uploaded.
+
+        An absent, tampered or expired signature answers **404**, not 403 — the link *is* the
+        credential, so a bad one has not established that the job exists.
+      tags: [fleet-trackers]
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+        - name: jobId
+          in: path
+          required: true
+          schema:
+            $ref: './_shared.yaml#/components/schemas/Ulid'
+        - name: expires
+          in: query
+          required: true
+          description: Unix seconds after which the link stops working.
+          schema:
+            type: string
+        - name: signature
+          in: query
+          required: true
+          description: Base64url HMAC over `fleetId|jobId|expires`.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The per-row report.
+          content:
+            text/csv:
+              schema:
+                type: string
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [not-found]
+
   /v1/internal/trackers/{imei}/rotate:
     post:
       operationId: rotateTrackerCredential
@@ -321,6 +419,19 @@ paths:
         - mtls: []
       parameters:
         - $ref: '#/components/parameters/ImeiPath'
+        - name: credentialSerial
+          in: query
+          required: false
+          description: |
+            **[C030 micro-change-set — not in D3'.]** The credential the device presented. Optional,
+            so an adapter that does not send one still resolves normally. When present it is
+            checked against the binding's ledger, which is where T-12 lands on the TCP path: a
+            revoked or foreign serial stops authenticating here whether or not the adapter ever saw
+            the Redis revocation message. It is *not* a clone check — a rotation leaves two valid
+            serials on one binding during the overlap window, and a clone copies the certificate
+            and so presents the same one.
+          schema:
+            type: string
       responses:
         '200':
           description: |
@@ -341,6 +452,101 @@ paths:
         '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
       x-error-codes: [unauthorized]
+
+  /v1/internal/trackers/{imei}/quarantine:
+    post:
+      operationId: quarantineTracker
+      summary: Report one IMEI seen on two devices (T-08).
+      description: |
+        **[C030 micro-change-set — not in D3'.]** T-08's second half. D6' §4.3's "two devices
+        presenting the same IMEI within 24 h" is decidable inside provisioning-svc only at
+        `bind`, where two claims arrive with two identities. At the adapter a clone presents a
+        **copy** of the genuine credential, so what distinguishes it is two live sockets holding
+        one identity — state the adapter has and this service does not. Without this route the
+        anti-clone rule only ever fires at bind, which is the path a determined cloner never takes.
+
+        Holds the ACTIVE binding, puts its credentials on `certificate_hold` — the one RFC 5280
+        reason a CA may lift, which is what US-3.4's admin resolution does — drops the Redis cache
+        entry and emits `tracker.quarantined`.
+
+        **Idempotent.** An adapter re-reports on every reconnect; the second report answers 204 and
+        raises nothing, because the first already took the device off the air.
+      tags: [trackers]
+      security:
+        - mtls: []
+      parameters:
+        - $ref: '#/components/parameters/ImeiPath'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reportedBy:
+                  type: string
+                  maxLength: 64
+                  description: 'Which adapter saw it, e.g. `adapter-gt06`. Shown on the US-3.4 queue.'
+                detail:
+                  type: string
+                  maxLength: 512
+                  description: What it saw — peer addresses, session ids.
+      responses:
+        '204':
+          description: Held, or already held.
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, not-found]
+
+  /v1/internal/trackers/crl.der:
+    get:
+      operationId: getDeviceCrl
+      summary: The device certificate revocation list, DER.
+      description: |
+        **[C030 micro-change-set — not in D3'.]** The MQTT half of T-12. An adapter terminates the
+        device's socket and can be told to drop it; a broker cannot, and X.509's answer to "this
+        certificate is no longer good" is a CRL. EMQX fetches this from the distribution point
+        written into each certificate and re-fetches on `crl_cache.refresh_interval`, which is what
+        puts a number on the 60 s.
+
+        **Deliberately unauthenticated.** A CRL is signed, public by design (RFC 5280) and fetched
+        during a TLS handshake, where there is nowhere to put a header. It reveals nothing a
+        certificate holder does not already have.
+
+        This is the URL written into each certificate's distribution point, because DER is what a
+        TLS stack fetching a CRL mid-handshake expects. `crl.pem` below is the same list armoured,
+        for `openssl crl -text` and for an operator with a browser.
+      tags: [trackers]
+      security: []
+      responses:
+        '200':
+          description: DER-encoded CRL, signed by the issuing intermediate.
+          content:
+            application/pkix-crl:
+              schema:
+                type: string
+                format: binary
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [internal-error]
+
+  /v1/internal/trackers/crl.pem:
+    get:
+      operationId: getDeviceCrlPem
+      summary: The device certificate revocation list, PEM.
+      description: The same list as `crl.der`, PEM-armoured. See that operation.
+      tags: [trackers]
+      security: []
+      responses:
+        '200':
+          description: PEM-armoured CRL, signed by the issuing intermediate.
+          content:
+            application/x-pem-file:
+              schema:
+                type: string
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [internal-error]
 
 components:
   securitySchemes:

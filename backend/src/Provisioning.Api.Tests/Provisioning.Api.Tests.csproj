@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    C030 verify target: dotnet test backend/src/Provisioning.Api.Tests -c Release
+
+    Two halves. The pure tests (IMEI validation, CSV parsing, the device PKI) need nothing but a
+    temp directory — a certificate either chains to the root or it does not, and that is provable
+    without a broker. The rest run the real service on a Kestrel socket against a Testcontainers
+    Postgres, Redis and Redpanda, because every rule this component owns is either a database
+    constraint or a cross-store invariant: ux_tracker_imei_active is T-08's floor, the Redis
+    deletion is T-12's fast path, and the outbox row is what makes a revocation durable.
+
+    Microsoft.NET.Sdk.Web, not Microsoft.NET.Sdk: the harness builds a WebApplication.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.Provisioning.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <OutputType>Exe</OutputType>
+    <!--
+      xUnit1041: collection-fixture ctor args are consumed through the primary constructor.
+      xUnit1051: every test is bounded by its own harness lifetime, so threading
+                 TestContext.Current.CancellationToken through each HTTP call would add noise
+                 without changing behaviour. Matches Registry.Api.Tests and Iam.Api.Tests.
+    -->
+    <NoWarn>$(NoWarn);xUnit1041;xUnit1051</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+    <!-- The DoD's first line is asserted against a real broker: a bound tracker connects to EMQX
+         with the certificate this service minted and is confined to its own vehicle's topics. -->
+    <PackageReference Include="MQTTnet" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Provisioning.Api\Provisioning.Api.csproj" />
+    <ProjectReference Include="..\MageRide.TestKit\MageRide.TestKit.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

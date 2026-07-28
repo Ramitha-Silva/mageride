@@ -55,7 +55,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C027 | iam-svc-profile-rbac | 2 | DONE | 2026-07-28 | 330 tests green (121 new); 1 iam migration added (0108); 8 routes D3' does not carry raised as micro-change-sets; URD §2.3 matrix parsed from `specs/` by the test |
 | C028 | registry-svc-vehicles | 2 | DONE | 2026-07-28 | 145 tests green (53 new); 3 registry migrations (0309–0311) + a 7th Redpanda topic; 0308's composite FK relaxed for US-13.9; dispatch-svc now reads the eligibility projection |
 | C029 | registry-svc-onboarding | 2 | DONE | 2026-07-28 | 175 tests green (30 new); 1 registry migration (0312) + the `IDocumentExtractionClient` port C054 implements; `vehicle.registered` finally emitted; 6 new `registry.events` types, none with a spec'd envelope |
-| C030 | provisioning-svc | 2 | PENDING | | |
+| C030 | provisioning-svc | 2 | DONE | 2026-07-28 | 99 tests green; 4 prov migrations (0402–0405); device mTLS enabled on EMQX 8883 (`peer_cert_as_username = cn`) so a tracker's certificate *is* its topic grant; 7 micro-change-sets |
 | C031 | trip-state-svc | 2 | PENDING | | |
 | C032 | ride-svc-core | 2 | PENDING | | |
 | C033 | reputation-svc | 2 | PENDING | | |
@@ -3859,3 +3859,148 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   that table.
   **Build host —** Docker for Testcontainers (Postgres, Redis and Redpanda); the replica stayed
   down throughout. The 175 tests take ~3 min.
+
+- **Component:** C030 provisioning-svc — 2026-07-28
+- **Status:** DONE — `dotnet test backend/src/Provisioning.Api.Tests -c Release` is 99/99 green.
+  All four DoD items pass, each with a named test: a bound tracker authenticates to EMQX with its
+  minted certificate and is ACL-scoped to its own vehicle topics
+  (`EmqxDeviceCertificateTests`, against the **deployed** `emqx.conf`/`acl.conf`); a duplicate-IMEI
+  presentation quarantines both bindings and emits the admin alert (`AntiCloneTests`); a revoked
+  credential stops authenticating within 60 s on both paths (`RevocationTests`); a 1,000-row CSV
+  validates atomically and queues its mint jobs with no partial commits (`BulkOnboardingTests`).
+  `bash infra/scripts/migrate-verify.sh` 205/205, Spectral clean, and HotPath (35), Shared (235)
+  and ApiGateway (530) re-run green against the changed broker config and topic registry.
+- **Notes:**
+  **Spec gaps — micro-change-sets (7).**
+  (a) *No outbox table or topic for the tracker plane.* D3' lists "emit `tracker.bound`" as a bind
+  side effect and D6' §4.3 makes `tracker.bound`/`tracker.unbound` the IMEI cache's invalidation
+  pair — a producer and a consumer, and no topic and no table. **D6' §2.1 should carry
+  `provisioning.events`** (key vehicleId) **and D4' §3 a `prov.outbox`** (migration 0403). Same
+  shape C028 raised for `registry.events`; that makes two, so §2.1's "six topics" is really eight.
+  (b) *No `prov.command_log`.* Third instance of the one C020 (iam) and C021 (registry) raised, so
+  it is settled as a pattern rather than a one-off: **D4' §5 should print one command-log table per
+  service with idempotent POSTs**, not for rides alone (migration 0402).
+  (c) *T-08 is a time window with nothing to measure it against.* `prov.tracker_bindings` (0401)
+  carries `state` but not when or why it changed, and D6' §4.3 quarantines on "within 24 h".
+  0404 adds `state_changed_at` / `state_reason`, `prov.imei_sightings`, a `certificate_hold`
+  revocation reason and a CHECK on `source`. **D4' §3 should carry them.**
+  (d) *`prov.tracker_bindings.fleet_id` referenced `registry.operators`*, a stub 0306 creates only
+  to satisfy that one key — the open question finding (g) left "for C030/C043". Resolved:
+  **0404 repoints it at `registry.fleets`**, because `{fleetId}` in D3''s bulk route is a
+  `registry.fleets` id and T-11 scopes tracker positions by RLS on this column; two id spaces meant
+  bulk onboarding wrote a fleet id the predicate could not match and the scoping silently returned
+  nothing. `registry.operators` is left in place (released table) and is now unreferenced.
+  (e) *T-09 has a fully specified endpoint and no tables.* 0405 adds `prov.bulk_jobs` +
+  `prov.bulk_job_rows`; the "one job per fleet" 429 is a partial unique index, not a SELECT-then-
+  INSERT, because two Admin Portal tabs is exactly the race that check loses.
+  (f) *`tracker.unbound` had no producer.* The only route that could emit it is
+  `DELETE /v1/trackers/{imei}`, which D3' marks **admin** decommission — so an owner moving a
+  tracker between their own vehicles could not release it, and the anti-clone rule would then
+  quarantine the vehicle they moved it to. Added `POST /v1/trackers/unbind`.
+  (g) *T-08 is unimplementable on the path where clones actually appear.* See decision (3).
+  Added `POST /v1/internal/trackers/{imei}/quarantine`, an optional `credentialSerial` on
+  `validate`, `GET /v1/internal/trackers/crl.der|.pem`, a `credentialType` form field on the bulk
+  upload and the `errors.csv` route D3''s `errorReportUrl` promises. All in `provisioning.yaml`.
+  **A finding that changed the design — D6' §4.2's Redis-backed dynamic ACL cannot deny.**
+  §4.2 specifies revocation as "EMQX dynamic ACL backed by provisioning-svc Redis lookup + pub/sub
+  invalidation". Tried against a real `emqx/emqx:5.8`: the Redis authz source is **allow-only** —
+  neither `HSET mqtt_acl:{user} {topic} deny` nor a rich-JSON `{"permission":"deny"}` value denies
+  anything, both fall through to the file source, and the device keeps publishing. Making Redis the
+  *only* grant would fix that and break every mobile client, which is not in this service's schema.
+  So T-12 is implemented as the two mechanisms the two transports actually admit: TCP — the adapter
+  re-validates through `validate` and force-closes on the `prov:tracker` pub/sub message (this is
+  §4.2's Redis half, and it works); MQTT — the serial goes on a CRL EMQX fetches from the
+  distribution point in the certificate. **§4.2 should say CRL for the broker.**
+  **Decisions —**
+  (1) **The certificate's CN is the authorisation boundary.** A leaf is `CN={vehicleId}`;
+  `emqx.conf`'s 8883 listener now runs `verify_peer` + `fail_if_no_peer_cert` against the device CA
+  with `peer_cert_as_username = cn`, so `acl.conf`'s existing `veh/${username}/*` rules confine a
+  tracker exactly as they confine a phone — **C030 added no ACL rule**. `peer_cert_as_username` is
+  an `mqtt` setting and EMQX 5.8 rejects it on a listener outright, so it goes in a `zone` the
+  listener references; `enable_authn = false` on that listener because the mTLS handshake *is* the
+  authentication and a tracker has no session token to present as a password. Verified against the
+  real image before it was written, and asserted by four tests. The C009 handoff left this to C030
+  ("T-02 device mTLS … is provisioning-svc's to enable once it mints client certs").
+  (2) **Rotation is not revocation.** The replacement is minted 14 days before expiry and the
+  outgoing credential stays valid until its own `expires_at`, so `prov.device_certs` holds several
+  live rows per binding and `validate` accepts any of them. A sweep that revoked as it rotated
+  would take every tracker out of GSM coverage off the air — the population least able to come back
+  for a new credential. **This is why the anti-clone rule cannot key on serial diversity.**
+  (3) **Anti-clone is decidable at `bind`, and at the adapter it is not.** Two claims on one live
+  IMEI arrive at `bind` with two identities, so both are held there. At the adapter a clone
+  presents a *copy* of the genuine credential — same serial — and what distinguishes it is two live
+  sockets holding one identity, which is the adapter's state and not this service's. So the adapter
+  reports and this service adjudicates (gap (g)). An earlier draft quarantined on two serials at
+  `validate`; **it would have quarantined every device the 90-day cron renews**, and the test that
+  now guards it is `Both_serials_validate_across_a_rotation_overlap`.
+  (4) **Outside the 24 h window the incumbent is superseded, not quarantined.** An operator moving
+  a tracker to another vehicle a week later has cloned nothing. Inside it, both are held — an IMEI
+  is globally unique by construction, so a second claim on a live one needs a human either way.
+  (5) **The 409 is reported after the quarantine commits.** A 409 that rolled it back would leave
+  the incumbent publishing and the operator with nothing to escalate.
+  (6) **A bind race is re-run rather than reported.** `ux_tracker_imei_active` rejecting the insert
+  means somebody bound the IMEI in between, which *is* the T-08 signal; re-running makes the rule
+  fire deliberately instead of by accident.
+  (7) **A bulk row already bound to the vehicle it names fails at validation, not at the minter.**
+  Re-uploading last week's CSV is the likeliest thing an operator will do here, and the bind path
+  would hand every row to the anti-clone rule and quarantine a working fleet. A row naming a
+  *different* vehicle is left to the minter on purpose — that is a genuine second claim.
+  (8) **No event payload carries credential material.** A rotation names serials only; the secret
+  half goes to the caller that minted it, once, over TLS. D6' §4.2's downlink `revokeCredential` is
+  the instruction to re-enrol, not the delivery — 100k device secrets on a topic with a week's
+  retention would undo the point of minting them per device.
+  (9) **`battery_mv` → `battery` percent.** D3' types the field 0–100 and the column stores
+  millivolts; they are different quantities and something had to convert. A linear map over a
+  single-cell Li-ion's 3.3–4.2 V range, documented at the constant. **No spec pins the curve.**
+  (10) **The Luhn check digit is not enforced** — the contract's `^\d{15}$` is the contract, and
+  D6' §4.1's grey-import GT06/JT808 units report IMEIs that fail Luhn.
+  **Infrastructure that changed —** `infra/deploy/emqx/emqx.conf` (the zone + mTLS listener above;
+  `enable_crl_check` and `crl_cache.refresh_interval` written out and **commented**, for the same
+  reason C009 commented the JWKS block — EMQX refuses a certificate whose CRL it cannot fetch and
+  the broker starts before this service, so the CDP and the check are turned on together or not at
+  all). `dev-up.sh` now generates the device CA into `infra/deploy/device-ca/` (gitignored) before
+  the stack comes up, and both the `emqx` container and `app-services` mount it — **the ordering is
+  forced**: EMQX reads its `cacertfile` at listener start and a missing one does not degrade the
+  listener, it stops the broker booting. That replaced the `provisioning-ca-data` named volume,
+  which the host script could not write. `bootstrap-topics.sh` gained `provisioning.events`;
+  `slim-verify.sh`'s topic loop and count follow it (**the count was already stale at 12 — C028 added
+  `registry.events` without bumping it — and is now 16**), and its prov-table count is 7.
+  `MageRide.TestKit` gained `DeviceCa` and an 8883 port on `EmqxFixture` for the same reason.
+  **A cross-test trap worth knowing —** the harness deleted its CA directory on dispose, including
+  one handed to it by `EmqxFixture`; the symptom was a bare `unexpected EOF` on the *second* test's
+  TLS handshake, with nothing in the broker log, because every credential minted after the first
+  disposal chained to a root the broker had never seen. **A fixture-supplied resource is not the
+  harness's to clean up.** Separately, .NET caches TLS sessions per target host: a process that
+  makes both certificate-ful and certificate-less connections to one `fail_if_no_peer_cert`
+  listener poisons itself, so each connection uses a fresh SNI name.
+  **For C043 (tcp-adapter) —** call `GET /v1/internal/trackers/{imei}/validate` on every connect and
+  every 5 minutes on a long socket, passing `credentialSerial` when the device presented one — that
+  is where a revoked credential stops authenticating on your path. Subscribe to the Redis channel
+  `prov:tracker` (`RedisKeys.TrackerCredentialChannel`); a `tracker.revoked` message names the IMEI
+  and the serials, and force-closing the matching socket inside 1 s is yours. `imei:{imei}` present
+  means ACTIVE and absent means "ask Postgres" — there is no cached "revoked". When you see one
+  credential on two live sockets, `POST /v1/internal/trackers/{imei}/quarantine` with what you saw;
+  it is idempotent, so report it on every reconnect. PSK tokens verify **offline** against
+  `secrets/psk_signing_key` — the signature covers the IMEI, so a token lifted off one device does
+  not verify for another; spend the round trip on revocation, not on authentication.
+  **For C044 (fleet-health-svc) —** `prov.tracker_bindings.last_seen_at` / `signal_strength` /
+  `battery_mv` / `sat_count` are read by `GET /v1/trackers/{imei}` and written by nobody. They are
+  yours, and `battery_mv` is millivolts (decision 9).
+  **For C062 (admin-bff) —** the US-3.4 queue is `prov.tracker_bindings.state = 'QUARANTINED'`
+  (index `ix_tracker_quarantined`), pushed `tracker.quarantined` with **both** holders and the
+  competing serials. Resolution is: pick a holder, `TransitionAsync` it back to ACTIVE, rotate it
+  (the old credential is on `certificate_hold`, the one RFC 5280 reason a CA may lift) and revoke
+  the other. **No route does that yet** — it is yours to define.
+  **For C125 —** turn on `StepCa:CrlDistributionPoint` and `enable_crl_check` together, and
+  replace the embedded issuer with a real step-ca by pointing `StepCa:RootKeyPath` at its
+  `$STEPPATH` — the layout already matches. `StepCa:Url` is refused at start-up until a client
+  exists. The root key is on disk unencrypted; Vault (D7' §13) is yours.
+  **Build host —** Docker for Testcontainers (Postgres, Redis, Redpanda and EMQX); the replica
+  stayed down throughout. The 99 tests take ~2 min.
+  **One more bug the suite caught late —** the leaf's `notBefore` is backdated five minutes for a
+  tracker with a drifted RTC, and a CA written by `openssl req -x509` (which is what `dev-up.sh`
+  and a real step-ca both produce) is valid from *now* with no backdating of its own. **Every mint
+  in the first five minutes of a fresh stack was refused outright**, and nothing would have caught
+  it, because the suite's own CA comes from `MageRide.TestKit.DeviceCa`. `GeneratedCaLoadTests`
+  now runs the real `dev-up.sh` block and loads what it wrote, and the leaf's `notBefore` is
+  clamped to the issuer's.

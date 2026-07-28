@@ -36,7 +36,32 @@ public static class RedisKeys
     public static string ActiveTrip(Guid vehicleId) => $"trip:active:{vehicleId}";
 
     /// <summary>IMEI → vehicleId lookup cache (T-03).</summary>
+    /// <remarks>
+    /// <para>
+    /// Written by provisioning-svc (C030) on bind and deleted on unbind, revoke or quarantine;
+    /// <c>prov.tracker_bindings</c> is the source of truth and this is only a cache (D6' §4.3,
+    /// 24 h TTL). <b>Present means ACTIVE</b> — there is no "revoked" value, because a lookup
+    /// that missed and a lookup that found a revoked binding must produce the same answer from a
+    /// reader that has not been told the difference.
+    /// </para>
+    /// <para>
+    /// The tcp-adapter reads this on every device connect and re-reads it every 5 minutes on a
+    /// long socket (T-01), which is what makes a deletion here a disconnection there.
+    /// </para>
+    /// </remarks>
     public static string Imei(string imei) => $"imei:{imei}";
+
+    /// <summary>
+    /// Pub/sub channel carrying tracker credential lifecycle changes — the sub-second half of
+    /// T-12 (D6' §4.2).
+    /// </summary>
+    /// <remarks>
+    /// Fire-and-forget beside the durable <c>provisioning.events</c> outbox, not instead of it:
+    /// a subscriber that was down misses the message and falls back to the cache TTL and the
+    /// topic. Subscribers force-close any socket whose IMEI or credential serial the message
+    /// names, inside the 1 s the ADD §7.7.3 budget allows.
+    /// </remarks>
+    public const string TrackerCredentialChannel = "prov:tracker";
 
     /// <summary>Publish-rate token bucket for a vehicle (D-17, E-08).</summary>
     public static string VehicleRateLimit(Guid vehicleId) => $"rate:{vehicleId}";

@@ -46,13 +46,29 @@ public static class EventTopics
     /// </remarks>
     public const string RegistryEvents = "registry.events";
 
+    /// <summary>
+    /// provisioning-svc's outbox — <c>tracker.bound</c>, <c>tracker.unbound</c>,
+    /// <c>tracker.revoked</c>, <c>tracker.quarantined</c>. Key: vehicleId.
+    /// </summary>
+    /// <remarks>
+    /// <b>Not in D6' §2.1's six-topic registry</b> either — a micro-change-set raised in the C030
+    /// handoff, the same shape as <see cref="RegistryEvents"/>. D3' `POST /v1/trackers/bind` lists
+    /// "emit <c>tracker.bound</c>" as a side effect and D6' §4.3 has the IMEI cache "invalidated by
+    /// <c>tracker.bound</c>/<c>tracker.unbound</c>", so both have a producer and a consumer and
+    /// neither has a topic. Keyed by vehicleId rather than by IMEI or binding id: a re-bind of the
+    /// same IMEI to a new vehicle emits an unbind and a bind, and only the vehicle key keeps a
+    /// consumer's cache rebuild in the order the two happened.
+    /// </remarks>
+    public const string ProvisioningEvents = "provisioning.events";
+
     /// <summary>Audit trail (D-35). Key: entityId.</summary>
     public const string AuditEvents = "audit.events";
 
     /// <summary>The registry, in the order <c>bootstrap-topics.sh</c> creates them.</summary>
     public static readonly IReadOnlyList<string> All =
     [
-        TelemetryRaw, TelemetryNormalized, TripEvents, RideEvents, DispatchEvents, RegistryEvents, AuditEvents,
+        TelemetryRaw, TelemetryNormalized, TripEvents, RideEvents, DispatchEvents, RegistryEvents,
+        ProvisioningEvents, AuditEvents,
     ];
 
     /// <summary>

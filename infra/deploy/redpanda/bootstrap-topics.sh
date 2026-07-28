@@ -94,6 +94,10 @@ ensure_pair dispatch.events      "$EVENT_RETENTION_MS"       # key rideId    —
 # Not one of D6' §2.1's six. share.revoked (D-22) has a producer and a consumer in the specs and
 # no topic; C028 added it, and the handoff raises the micro-change-set against §2.1.
 ensure_pair registry.events      "$EVENT_RETENTION_MS"       # key vehicleId — registry-svc (outbox)
+# Not one of D6' §2.1's six either. tracker.bound/tracker.unbound (D6' §4.3) and
+# tracker.revoked (T-12) have producers and consumers in the specs and no topic; C030 added
+# it, and the handoff raises the micro-change-set against §2.1.
+ensure_pair provisioning.events  "$EVENT_RETENTION_MS"       # key vehicleId — provisioning-svc (outbox)
 ensure_pair audit.events         "$EVENT_RETENTION_MS"       # key entityId  — all (admin-bff)
 
 echo
