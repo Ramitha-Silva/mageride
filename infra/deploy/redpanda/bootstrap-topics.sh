@@ -91,6 +91,9 @@ ensure_pair telemetry.normalized "$TELEMETRY_RETENTION_MS"   # key vehicleId —
 ensure_pair trip.events          "$EVENT_RETENTION_MS"       # key vehicleId — trip-state-svc
 ensure_pair ride.events          "$EVENT_RETENTION_MS"       # key rideId    — ride-svc (outbox)
 ensure_pair dispatch.events      "$EVENT_RETENTION_MS"       # key rideId    — dispatch-svc
+# Not one of D6' §2.1's six. share.revoked (D-22) has a producer and a consumer in the specs and
+# no topic; C028 added it, and the handoff raises the micro-change-set against §2.1.
+ensure_pair registry.events      "$EVENT_RETENTION_MS"       # key vehicleId — registry-svc (outbox)
 ensure_pair audit.events         "$EVENT_RETENTION_MS"       # key entityId  — all (admin-bff)
 
 echo

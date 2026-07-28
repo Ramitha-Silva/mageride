@@ -25,4 +25,18 @@ public sealed class RegistryOptions
     /// </para>
     /// </remarks>
     public bool? DevApprovalEnabled { get; set; }
+
+    /// <summary>
+    /// Shared secret for <c>/v1/internal/vehicles/**</c>, presented in
+    /// <c>X-MageRide-Internal-Key</c>.
+    /// </summary>
+    /// <remarks>
+    /// D3' §0 puts the internal family on service-to-service mTLS and the gateway refuses the
+    /// prefix at the edge (C008); this is the interim until C042 lands a mesh, and it must equal
+    /// whatever fare-svc (C046) sends. <b>Unset means the routes are not mapped at all</b> — a
+    /// deployment that forgets it gets 404s rather than an unauthenticated write to
+    /// <c>registry.driver_payouts</c>, and the missing merchant binding then surfaces as
+    /// <c>402 merchant-not-onboarded</c> at <c>POST /v1/fare/pay</c> (D-11).
+    /// </remarks>
+    public string? InternalApiKey { get; set; }
 }

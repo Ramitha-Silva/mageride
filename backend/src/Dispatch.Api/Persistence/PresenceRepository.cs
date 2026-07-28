@@ -65,14 +65,22 @@ public sealed class PresenceRepository : IPresenceRepository
     {
         ArgumentNullException.ThrowIfNull(connection);
 
-        // Scoped by owner in the statement rather than checked afterwards: "somebody else's
-        // vehicle" and "no such vehicle" are the same answer to a caller, and a WHERE clause is
-        // the only version of that rule a later refactor cannot drop.
+        // registry.driver_eligible_vehicles, not registry.vehicles (C028, migration 0310).
+        // Scoping by owner_id — which is what this read used to do — cannot see a vehicle a fleet
+        // has *assigned* to the driver, and US-13.9 says an assigned driver may go online with
+        // one. The projection is registry-svc's answer to "which vehicles may this driver
+        // operate", and it is scoped by driver_id, so "somebody else's vehicle" and "no such
+        // vehicle" stay the same answer to a caller.
+        //
+        // The raw columns are read rather than the view's `is_go_live_eligible`, deliberately:
+        // PresenceService maps an unapproved vehicle to `vehicle-not-approved` and a Mode A/B one
+        // to `mode-not-allowed`, and a pre-filtered read would collapse both into
+        // `vehicle-not-found`.
         return connection.QuerySingleOrDefaultAsync<OnlineVehicle>(new CommandDefinition(
             """
-            SELECT id, owner_id, vehicle_type, mode, status
-              FROM registry.vehicles
-             WHERE id = @VehicleId AND owner_id = @DriverId;
+            SELECT vehicle_id AS id, owner_id, vehicle_type, mode, status
+              FROM registry.driver_eligible_vehicles
+             WHERE vehicle_id = @VehicleId AND driver_id = @DriverId;
             """,
             new { VehicleId = vehicleId, DriverId = driverId },
             cancellationToken: cancellationToken));

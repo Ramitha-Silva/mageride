@@ -25,11 +25,33 @@ public interface IDriverProfileRepository
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// Points the driver at <paramref name="vehicleId"/> as their single live publisher
-    /// (US-9.6). Returns <see langword="false"/> when the driver has no profile row; the
-    /// composite foreign key added by 0308 is what rejects a vehicle they do not own.
+    /// Points the driver at <paramref name="vehicleId"/> as their single live publisher (US-9.6).
+    /// Returns <see langword="false"/> when the driver has no profile row.
     /// </summary>
+    /// <remarks>
+    /// <b>Entitlement is the caller's to check.</b> 0308 made ownership a composite foreign key;
+    /// 0311 relaxed it to a plain one when US-13.9 gave an assigned non-owner the right to select
+    /// a fleet vehicle. What the database still guarantees is that the selection names a real
+    /// vehicle and is cleared if that vehicle is deleted. Who may select it is
+    /// <c>registry.driver_eligible_vehicles</c>, read by <c>VehicleService</c>.
+    /// </remarks>
     Task<bool> SelectActiveVehicleAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction? transaction,
+        Guid driverId,
+        Guid vehicleId,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Clears the selection when it names <paramref name="vehicleId"/>, and says whether it did.
+    /// </summary>
+    /// <remarks>
+    /// Deactivating the selected vehicle (US-2.16) has to unpick the selection, because the
+    /// foreign key fires on DELETE and a status change is not one. A vehicle that stayed selected
+    /// while DEACTIVATED would fail the eligibility gate on every go-online with nothing on the
+    /// screen to explain why.
+    /// </remarks>
+    Task<bool> ClearActiveVehicleAsync(
         NpgsqlConnection connection,
         NpgsqlTransaction? transaction,
         Guid driverId,
@@ -96,6 +118,32 @@ public sealed class DriverProfileRepository : IDriverProfileRepository
                SET active_vehicle_id = @VehicleId,
                    active_vehicle_selected_at = now()
              WHERE driver_id = @DriverId;
+            """,
+            new { DriverId = driverId, VehicleId = vehicleId },
+            transaction,
+            cancellationToken: cancellationToken));
+
+        return updated == 1;
+    }
+
+    public async Task<bool> ClearActiveVehicleAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction? transaction,
+        Guid driverId,
+        Guid vehicleId,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+
+        // Conditional on the vehicle, so deactivating a vehicle the driver had not selected does
+        // not silently take away the selection of one they had. Both columns move together —
+        // ck_driver_profiles_active_vehicle_pair rejects a half-cleared row.
+        var updated = await connection.ExecuteAsync(new CommandDefinition(
+            """
+            UPDATE registry.driver_profiles
+               SET active_vehicle_id = NULL,
+                   active_vehicle_selected_at = NULL
+             WHERE driver_id = @DriverId AND active_vehicle_id = @VehicleId;
             """,
             new { DriverId = driverId, VehicleId = vehicleId },
             transaction,

@@ -1,8 +1,11 @@
 using MageRide.Registry.Domain;
 using MageRide.Registry.Persistence;
+using MageRide.Registry.Sharing;
 using MageRide.Shared.Errors;
+using MageRide.Shared.Messaging;
 using MageRide.Shared.Persistence;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 
 namespace MageRide.Registry.Vehicles;
 
@@ -18,20 +21,47 @@ public sealed record RegisterVehicleCommand(
 /// <summary>A vehicle plus whether it is the driver's currently selected one (US-9.6).</summary>
 public sealed record OwnedVehicle(Vehicle Vehicle, bool IsSelected);
 
+/// <summary>
+/// One entry of <c>GET /v1/vehicles/mine</c> — an entitlement, how it was come by, and whether it
+/// is the selected one.
+/// </summary>
+/// <param name="Entitlement">
+/// The <c>registry.driver_eligible_vehicles</c> row. <c>Source</c> is what splits the response
+/// into US-13.9's two groups: the driver's own registrations, and the ones a fleet lent them.
+/// </param>
+public sealed record DriverVehicle(EligibleVehicle Entitlement, bool IsSelected);
+
 /// <summary>The outcome of <see cref="IVehicleService.SelectLiveAsync"/>.</summary>
-public sealed record LiveSelection(Vehicle Vehicle, DateTimeOffset SelectedAt);
+public sealed record LiveSelection(EligibleVehicle Vehicle, Guid? ReleasedVehicleId, DateTimeOffset SelectedAt);
+
+/// <summary>Body of <c>PUT /v1/vehicles/{vehicleId}/driver-profile</c> (US-2.12).</summary>
+public sealed record UpdateVehicleDriverProfileCommand(Guid DriverId, Guid VehicleId, string? Name, string? PhotoUrl);
 
 /// <summary>
-/// The walking skeleton's vehicle identity: register a Mode C vehicle, list what a driver owns,
-/// and choose the single one they may go live on.
+/// Vehicle identity and lifecycle: register, read, list, deactivate, and choose the single
+/// vehicle a driver may go live on.
 /// </summary>
 public interface IVehicleService
 {
     Task<Vehicle> RegisterAsync(RegisterVehicleCommand command, CancellationToken cancellationToken);
 
-    Task<IReadOnlyList<OwnedVehicle>> ListMineAsync(Guid ownerId, CancellationToken cancellationToken);
+    /// <summary>
+    /// Everything the driver may operate — their own registrations and the vehicles a fleet has
+    /// lent them (US-2.8, US-13.9).
+    /// </summary>
+    Task<IReadOnlyList<DriverVehicle>> ListMineAsync(Guid driverId, CancellationToken cancellationToken);
+
+    /// <summary>One vehicle, visible to the owner and to an assigned driver.</summary>
+    Task<DriverVehicle> GetAsync(Guid driverId, Guid vehicleId, CancellationToken cancellationToken);
 
     Task<LiveSelection> SelectLiveAsync(Guid driverId, Guid vehicleId, CancellationToken cancellationToken);
+
+    /// <summary>Takes a vehicle off the map and revokes every live share on it (US-2.16).</summary>
+    Task DeactivateAsync(Guid ownerId, Guid vehicleId, CancellationToken cancellationToken);
+
+    /// <summary>Updates the driver name and photo passengers see for this vehicle (US-2.12).</summary>
+    Task<DriverVehicle> UpdateDriverProfileAsync(
+        UpdateVehicleDriverProfileCommand command, CancellationToken cancellationToken);
 
     /// <summary>The dev seed path's approval. See <see cref="Configuration.RegistryOptions"/>.</summary>
     Task<Vehicle> ApproveAsync(Guid driverId, Guid vehicleId, CancellationToken cancellationToken);
@@ -43,8 +73,16 @@ public sealed class VehicleService(
     IUnitOfWorkFactory unitOfWorkFactory,
     IVehicleRepository vehicles,
     IDriverProfileRepository profiles,
+    IEligibilityRepository eligibility,
+    IShareRepository shares,
+    IOutboxWriter outbox,
+    IDriverLiveVehicleCache liveVehicles,
+    TimeProvider clock,
     ILogger<VehicleService> logger) : IVehicleService
 {
+    /// <summary><c>registry.yaml</c>'s <c>maxLength: 200</c> on the driver-profile name.</summary>
+    private const int MaxDriverNameLength = 200;
+
     public async Task<Vehicle> RegisterAsync(RegisterVehicleCommand command, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(command);
@@ -87,53 +125,192 @@ public sealed class VehicleService(
         return vehicle;
     }
 
-    public async Task<IReadOnlyList<OwnedVehicle>> ListMineAsync(Guid ownerId, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<DriverVehicle>> ListMineAsync(Guid driverId, CancellationToken cancellationToken)
     {
         await using var connection = await connectionFactory.OpenAsync(cancellationToken);
 
-        var owned = await vehicles.ListByOwnerAsync(connection, null, ownerId, cancellationToken);
-        var profile = await profiles.FindAsync(connection, null, ownerId, cancellationToken);
+        // The projection, not registry.vehicles: US-13.9's assigned driver did not register the
+        // vehicle and would not appear in an owner-scoped read at all.
+        var entitlements = await eligibility.ListAsync(connection, null, driverId, cancellationToken);
+        var profile = await profiles.FindAsync(connection, null, driverId, cancellationToken);
 
-        return [.. owned.Select(vehicle => new OwnedVehicle(vehicle, vehicle.Id == profile?.ActiveVehicleId))];
+        return
+        [
+            .. entitlements.Select(entitlement =>
+                new DriverVehicle(entitlement, entitlement.VehicleId == profile?.ActiveVehicleId)),
+        ];
+    }
+
+    public async Task<DriverVehicle> GetAsync(Guid driverId, Guid vehicleId, CancellationToken cancellationToken)
+    {
+        await using var connection = await connectionFactory.OpenAsync(cancellationToken);
+
+        var entitlement = await RequireEntitlementAsync(connection, null, driverId, vehicleId, cancellationToken);
+        var profile = await profiles.FindAsync(connection, null, driverId, cancellationToken);
+
+        return new DriverVehicle(entitlement, entitlement.VehicleId == profile?.ActiveVehicleId);
     }
 
     public async Task<LiveSelection> SelectLiveAsync(Guid driverId, Guid vehicleId, CancellationToken cancellationToken)
     {
+        Guid? released;
+        EligibleVehicle vehicle;
+        DateTimeOffset selectedAt;
+
+        await using (var unitOfWork = await unitOfWorkFactory.BeginAsync(cancellationToken: cancellationToken))
+        {
+            vehicle = await RequireEntitlementAsync(
+                unitOfWork.Connection, unitOfWork.Transaction, driverId, vehicleId, cancellationToken);
+
+            if (!vehicle.IsGoLiveEligible)
+            {
+                throw new MageRideException(
+                    MageRideErrors.VehicleNotApproved,
+                    $"Vehicle {vehicleId} is {vehicle.Status}/{vehicle.DispatchState}. Only an APPROVED vehicle that " +
+                    "is not document-suspended can be taken live (US-9.6, E-03).");
+            }
+
+            // A driver who registered a vehicle has a profile — RegisterAsync creates one — but an
+            // assigned driver (US-13.9) may never have registered anything, and a row seeded
+            // straight into registry.vehicles need not have one either. Create it rather than 404
+            // on an account that plainly exists.
+            await profiles.EnsureAsync(
+                unitOfWork.Connection, unitOfWork.Transaction, driverId, vehicle.DriverName, cancellationToken);
+
+            var before = await profiles.FindAsync(
+                unitOfWork.Connection, unitOfWork.Transaction, driverId, cancellationToken);
+            released = before?.ActiveVehicleId == vehicleId ? null : before?.ActiveVehicleId;
+
+            // One UPDATE of one column on a row whose primary key is the driver. That is what
+            // makes "selecting a vehicle live releases the previous one atomically" true — there
+            // is no window in which two are selected, because there is only one place to put the
+            // answer (US-9.6, migration 0308).
+            if (!await profiles.SelectActiveVehicleAsync(
+                    unitOfWork.Connection, unitOfWork.Transaction, driverId, vehicleId, cancellationToken))
+            {
+                throw new MageRideException(
+                    MageRideErrors.InternalError, "The driver profile disappeared while the selection was being written.");
+            }
+
+            var after = await profiles.FindAsync(
+                unitOfWork.Connection, unitOfWork.Transaction, driverId, cancellationToken);
+
+            // The instant comes back from the row rather than from the process clock, so the value
+            // a caller is told is the value the dashboard will read (US-9.7).
+            selectedAt = after?.ActiveVehicleSelectedAt ?? clock.GetUtcNow();
+
+            await unitOfWork.CommitAsync(cancellationToken);
+        }
+
+        // After COMMIT. Publishing the selection before it is durable would let a rolled-back
+        // transaction leave the dispatch and tracking planes pointing at a vehicle the registry
+        // never selected — the same ordering the outbox exists to enforce (D-03).
+        await liveVehicles.PublishAsync(driverId, vehicleId, cancellationToken);
+
+        logger.LogInformation(
+            "Driver {DriverId} selected {Source} vehicle {VehicleId} as their live publisher (released {ReleasedVehicleId})",
+            driverId, vehicle.Source, vehicleId, released);
+
+        return new LiveSelection(vehicle, released, selectedAt);
+    }
+
+    public async Task DeactivateAsync(Guid ownerId, Guid vehicleId, CancellationToken cancellationToken)
+    {
+        var now = clock.GetUtcNow();
+        bool wasSelected;
+
+        await using (var unitOfWork = await unitOfWorkFactory.BeginAsync(cancellationToken: cancellationToken))
+        {
+            // Ownership, not entitlement: an assigned driver may operate a fleet vehicle and may
+            // not retire it (US-13.7 puts that on the fleet operator, in the Fleet Portal).
+            var vehicle = await RequireOwnedVehicleAsync(unitOfWork, ownerId, vehicleId, cancellationToken);
+
+            var deactivated = await vehicles.DeactivateAsync(
+                unitOfWork.Connection, unitOfWork.Transaction, vehicle.Id, cancellationToken);
+
+            if (deactivated is null)
+            {
+                throw new MageRideException(
+                    MageRideErrors.Conflict, $"Vehicle {vehicleId} is already deactivated.");
+            }
+
+            // Everybody watching it loses visibility with it. Doing this in the same transaction
+            // is the point: a vehicle that is off the map while a grant still says otherwise is
+            // exactly the leak D-22 is about.
+            var revoked = await shares.RevokeAllForVehicleAsync(
+                unitOfWork.Connection, unitOfWork.Transaction, vehicle.Id, now, cancellationToken);
+
+            var events = new List<OutboxRecord>(revoked.Count + 1)
+            {
+                ShareEvents.VehicleDeactivated(vehicle.Id, ownerId),
+            };
+
+            events.AddRange(revoked.Select(grant => ShareEvents.ShareRevoked(grant, "vehicle-deactivated")));
+
+            await outbox.WriteAsync(unitOfWork, events, cancellationToken);
+
+            // fk_driver_profiles_active_vehicle is ON DELETE SET NULL, not ON UPDATE, so a status
+            // change does not clear the selection — the C021 handoff left this to C028 and this is
+            // it. A DEACTIVATED vehicle that stayed selected would fail the eligibility gate on
+            // every go-online with no way for the driver to see why.
+            wasSelected = await profiles.ClearActiveVehicleAsync(
+                unitOfWork.Connection, unitOfWork.Transaction, ownerId, vehicle.Id, cancellationToken);
+
+            await unitOfWork.CommitAsync(cancellationToken);
+
+            logger.LogInformation(
+                "Vehicle {VehicleId} deactivated by {OwnerId}; revoked {RevokedCount} live share grants",
+                vehicleId, ownerId, revoked.Count);
+        }
+
+        if (wasSelected)
+        {
+            await liveVehicles.ClearAsync(ownerId, cancellationToken);
+        }
+    }
+
+    public async Task<DriverVehicle> UpdateDriverProfileAsync(
+        UpdateVehicleDriverProfileCommand command, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+
+        var name = command.Name?.Trim();
+
+        if (name is { Length: > MaxDriverNameLength } or "")
+        {
+            throw new MageRideValidationException(new Dictionary<string, string[]>
+            {
+                ["name"] = [$"name must be between 1 and {MaxDriverNameLength} characters."],
+            });
+        }
+
+        var photoUrl = command.PhotoUrl?.Trim();
+
+        // An empty string clears the photo; anything else has to be a URL a client can render.
+        if (!string.IsNullOrEmpty(photoUrl) && !Uri.TryCreate(photoUrl, UriKind.Absolute, out _))
+        {
+            throw new MageRideValidationException(new Dictionary<string, string[]>
+            {
+                ["photoUrl"] = ["photoUrl must be an absolute URI, or empty to clear it."],
+            });
+        }
+
         await using var unitOfWork = await unitOfWorkFactory.BeginAsync(cancellationToken: cancellationToken);
 
-        var vehicle = await RequireOwnedVehicleAsync(unitOfWork, driverId, vehicleId, cancellationToken);
+        var vehicle = await RequireOwnedVehicleAsync(unitOfWork, command.DriverId, command.VehicleId, cancellationToken);
 
-        if (!vehicle.IsSelectable)
-        {
-            throw new MageRideException(
-                MageRideErrors.VehicleNotApproved,
-                $"Vehicle {vehicleId} is {vehicle.Status}. Only an APPROVED vehicle can be taken live (US-9.6).");
-        }
+        _ = await vehicles.UpdateDriverProfileAsync(
+            unitOfWork.Connection, unitOfWork.Transaction, vehicle.Id, name, photoUrl, cancellationToken);
 
-        // A driver who has a vehicle has a profile — RegisterAsync creates one — but a row
-        // seeded straight into registry.vehicles need not, so create it rather than 404 on an
-        // account that plainly exists.
-        await profiles.EnsureAsync(
-            unitOfWork.Connection, unitOfWork.Transaction, driverId, vehicle.DriverName, cancellationToken);
+        var entitlement = await RequireEntitlementAsync(
+            unitOfWork.Connection, unitOfWork.Transaction, command.DriverId, command.VehicleId, cancellationToken);
 
-        // EnsureAsync just guaranteed the row, so a miss here means something removed it between
-        // the two statements inside one transaction — an invariant break, not a caller error.
-        if (!await profiles.SelectActiveVehicleAsync(
-                unitOfWork.Connection, unitOfWork.Transaction, driverId, vehicleId, cancellationToken))
-        {
-            throw new MageRideException(
-                MageRideErrors.InternalError, "The driver profile disappeared while the selection was being written.");
-        }
-
-        var profile = await profiles.FindAsync(unitOfWork.Connection, unitOfWork.Transaction, driverId, cancellationToken);
+        var profile = await profiles.FindAsync(
+            unitOfWork.Connection, unitOfWork.Transaction, command.DriverId, cancellationToken);
 
         await unitOfWork.CommitAsync(cancellationToken);
 
-        logger.LogInformation("Driver {DriverId} selected vehicle {VehicleId} as their live publisher", driverId, vehicleId);
-
-        // The instant comes back from the row rather than from the process clock, so the value a
-        // caller is told is the value the dashboard will read (US-9.7).
-        return new LiveSelection(vehicle, profile?.ActiveVehicleSelectedAt ?? DateTimeOffset.UtcNow);
+        return new DriverVehicle(entitlement, entitlement.VehicleId == profile?.ActiveVehicleId);
     }
 
     public async Task<Vehicle> ApproveAsync(Guid driverId, Guid vehicleId, CancellationToken cancellationToken)
@@ -178,6 +355,27 @@ public sealed class VehicleService(
             ? vehicle
             : throw new MageRideException(MageRideErrors.NotOwner, "This vehicle belongs to another driver.");
     }
+
+    /// <summary>
+    /// Loads the caller's entitlement to a vehicle — owned, or assigned by a fleet (US-13.9).
+    /// </summary>
+    /// <remarks>
+    /// The distinction <see cref="RequireOwnedVehicleAsync"/> makes between 404 and 403 is not
+    /// available here and must not be faked. The projection is scoped by driver, so a vehicle the
+    /// caller has no entitlement to and a vehicle that does not exist are literally the same
+    /// query result; answering 403 for one of them would require a second read whose only purpose
+    /// is to tell a stranger that somebody else's plate is registered.
+    /// </remarks>
+    private async Task<EligibleVehicle> RequireEntitlementAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction? transaction,
+        Guid driverId,
+        Guid vehicleId,
+        CancellationToken cancellationToken) =>
+        await eligibility.FindAsync(connection, transaction, driverId, vehicleId, cancellationToken)
+        ?? throw new MageRideException(
+            MageRideErrors.VehicleNotFound,
+            $"No vehicle {vehicleId} that this driver owns or is assigned to.");
 
     private async Task<DriverProfile> ResolveProfileAsync(
         IUnitOfWork unitOfWork, RegisterVehicleCommand command, CancellationToken cancellationToken)

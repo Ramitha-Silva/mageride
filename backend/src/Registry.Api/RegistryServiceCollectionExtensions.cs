@@ -1,5 +1,6 @@
 using MageRide.Registry.Configuration;
 using MageRide.Registry.Persistence;
+using MageRide.Registry.Sharing;
 using MageRide.Registry.Vehicles;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -25,8 +26,17 @@ public static class RegistryServiceCollectionExtensions
         services.AddSingleton<IVehicleRepository, VehicleRepository>();
         services.AddSingleton<IDriverProfileRepository, DriverProfileRepository>();
 
-        // Scoped: it opens a unit of work per command, so its lifetime is the request's.
+        // C028.
+        services.AddSingleton<IEligibilityRepository, EligibilityRepository>();
+        services.AddSingleton<IShareRepository, ShareRepository>();
+        services.AddSingleton<ISubscriptionRepository, SubscriptionRepository>();
+        services.AddSingleton<IDriverPayoutRepository, DriverPayoutRepository>();
+        services.AddSingleton<IDriverLiveVehicleCache, DriverLiveVehicleCache>();
+
+        // Scoped: each opens a unit of work per command, so its lifetime is the request's.
         services.AddScoped<IVehicleService, VehicleService>();
+        services.AddScoped<IShareService, ShareService>();
+        services.AddScoped<IMerchantService, MerchantService>();
 
         return services;
     }

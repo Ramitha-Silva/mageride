@@ -43,6 +43,13 @@ public static class VehicleEndpoints
         vehicles.MapGet("/mine", ListMineAsync).WithName("listMyVehicles");
         vehicles.MapPost("/{vehicleId}/select-live", SelectLiveAsync).WithName("selectLiveVehicle");
 
+        // C028 — the rest of the vehicle lifecycle.
+        vehicles.MapGet("/{vehicleId}", GetAsync).WithName("getVehicle");
+        vehicles.MapGet("/{vehicleId}/status", GetStatusAsync).WithName("getVehicleStatus");
+        vehicles.MapPost("/{vehicleId}/deactivate", DeactivateAsync).WithName("deactivateVehicle");
+        vehicles.MapPut("/{vehicleId}/driver-profile", UpdateDriverProfileAsync)
+            .WithName("updateVehicleDriverProfile");
+
         return endpoints;
     }
 
@@ -67,9 +74,66 @@ public static class VehicleEndpoints
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(service);
 
-        var owned = await service.ListMineAsync(context.User.RequireSubjectId(), cancellationToken);
+        var mine = await service.ListMineAsync(context.User.RequireSubjectId(), cancellationToken);
 
-        return TypedResults.Ok(new MyVehiclesResponse([.. owned.Select(VehicleSummaryResponse.From)]));
+        return TypedResults.Ok(MyVehiclesResponse.From(mine));
+    }
+
+    private static async Task<Ok<VehicleDetailResponse>> GetAsync(
+        string vehicleId, HttpContext context, IVehicleService service, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(service);
+
+        var vehicle = await service.GetAsync(
+            context.User.RequireSubjectId(), RequireVehicleId(vehicleId), cancellationToken);
+
+        return TypedResults.Ok(VehicleDetailResponse.From(vehicle));
+    }
+
+    /// <summary><c>GET /v1/vehicles/{vehicleId}/status</c> — the US-2.13/2.15 poll.</summary>
+    private static async Task<Ok<VehicleStatusResponse>> GetStatusAsync(
+        string vehicleId, HttpContext context, IVehicleService service, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(service);
+
+        var vehicle = await service.GetAsync(
+            context.User.RequireSubjectId(), RequireVehicleId(vehicleId), cancellationToken);
+
+        // rejectionReason is absent rather than null while the vehicle is not REJECTED, and the
+        // column itself is C029's to write — this slice has no rejection path.
+        return TypedResults.Ok(new VehicleStatusResponse(vehicle.Entitlement.Status, null));
+    }
+
+    private static async Task<NoContent> DeactivateAsync(
+        string vehicleId, HttpContext context, IVehicleService service, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(service);
+
+        await service.DeactivateAsync(
+            context.User.RequireSubjectId(), RequireVehicleId(vehicleId), cancellationToken);
+
+        return TypedResults.NoContent();
+    }
+
+    private static async Task<Ok<VehicleDetailResponse>> UpdateDriverProfileAsync(
+        string vehicleId,
+        UpdateDriverProfileBody? body,
+        HttpContext context,
+        IVehicleService service,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(service);
+
+        var vehicle = await service.UpdateDriverProfileAsync(
+            new UpdateVehicleDriverProfileCommand(
+                context.User.RequireSubjectId(), RequireVehicleId(vehicleId), body?.Name, body?.PhotoUrl),
+            cancellationToken);
+
+        return TypedResults.Ok(VehicleDetailResponse.From(vehicle));
     }
 
     private static async Task<Ok<LiveSelectionResponse>> SelectLiveAsync(

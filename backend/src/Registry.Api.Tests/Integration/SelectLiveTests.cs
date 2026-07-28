@@ -77,6 +77,17 @@ public sealed class SelectLiveTests(PostgresFixture postgres)
         await ProblemDocument.AssertAsync(response, HttpStatusCode.Forbidden, "vehicle-not-approved");
     }
 
+    /// <summary>
+    /// A driver with no entitlement to a vehicle cannot take it live.
+    /// </summary>
+    /// <remarks>
+    /// <b>404, not 403 — changed by C028.</b> C021 answered <c>not-owner</c>, because ownership
+    /// was the whole rule and the vehicle was read unscoped. US-13.9 made the rule "owned <b>or</b>
+    /// assigned", which registry-svc reads out of <c>registry.driver_eligible_vehicles</c> — a
+    /// projection scoped by driver, so a vehicle the caller has no entitlement to and one that does
+    /// not exist are literally the same query result. Answering 403 again would need a second read
+    /// whose only purpose is to tell a stranger that somebody else's plate is registered.
+    /// </remarks>
     [Fact]
     public async Task A_driver_cannot_take_another_drivers_vehicle_live()
     {
@@ -89,25 +100,30 @@ public sealed class SelectLiveTests(PostgresFixture postgres)
         var intruder = harness.Tokens.Driver(await harness.CreateDriverAsync());
         var response = await harness.PostAsync($"/v1/vehicles/{vehicleId}/select-live", null, intruder);
 
-        await ProblemDocument.AssertAsync(response, HttpStatusCode.Forbidden, "not-owner");
+        await ProblemDocument.AssertAsync(response, HttpStatusCode.NotFound, "vehicle-not-found");
     }
 
+    /// <summary>
+    /// What the database still guarantees about the selection after C028.
+    /// </summary>
+    /// <remarks>
+    /// C021 asserted migration 0308's composite foreign key to
+    /// <c>registry.vehicles(id, owner_id)</c> — "a driver may only select a vehicle they own",
+    /// enforced by Postgres. <b>Migration 0311 relaxed that</b>, because US-13.9 gives an assigned
+    /// non-owner the right to select a fleet vehicle and the composite key rejected exactly that.
+    /// The invariant was restated, not dropped: entitlement now spans two tables and is enforced
+    /// by registry-svc against the projection every consumer reads, and the database still refuses
+    /// a selection that names no real vehicle at all.
+    /// </remarks>
     [Fact]
-    public async Task The_database_refuses_a_selection_of_someone_elses_vehicle_even_without_the_service()
+    public async Task The_database_still_refuses_a_selection_that_names_no_vehicle()
     {
         Assert.SkipWhen(!postgres.IsAvailable, postgres.SkipReason ?? string.Empty);
         await using var harness = await RegistryHarness.StartAsync(postgres);
 
-        var ownerId = await harness.CreateDriverAsync();
-        var ownerBearer = harness.Tokens.Driver(ownerId);
-        var vehicleId = Guid.Parse(await harness.RegisterApprovedVehicleAsync(ownerBearer));
+        var driverId = await harness.CreateDriverAsync();
+        await harness.RegisterVehicleAsync(harness.Tokens.Driver(driverId));
 
-        var intruderId = await harness.CreateDriverAsync();
-        await harness.RegisterVehicleAsync(harness.Tokens.Driver(intruderId));
-
-        // The service check above is the useful error; this is the backstop that means a future
-        // component cannot reintroduce the hole by writing the column directly (migration 0308's
-        // composite FK to registry.vehicles(id, owner_id)).
         await using var connection = await harness.OpenAsync();
         var exception = await Assert.ThrowsAsync<Npgsql.PostgresException>(() => connection.ExecuteAsync(
             """
@@ -115,10 +131,44 @@ public sealed class SelectLiveTests(PostgresFixture postgres)
                SET active_vehicle_id = @VehicleId, active_vehicle_selected_at = now()
              WHERE driver_id = @DriverId;
             """,
-            new { VehicleId = vehicleId, DriverId = intruderId }));
+            new { VehicleId = Guid.NewGuid(), DriverId = driverId }));
 
         Assert.Equal("23503", exception.SqlState);
-        Assert.Equal("fk_driver_profiles_active_vehicle", exception.ConstraintName);
+        Assert.Equal("fk_driver_profiles_active_vehicle_id", exception.ConstraintName);
+    }
+
+    /// <summary>
+    /// And the half 0311 gave up is genuinely gone, so nobody reads the relaxation as an accident:
+    /// the schema now permits a non-owner's selection, and registry-svc is what refuses one.
+    /// </summary>
+    [Fact]
+    public async Task The_database_no_longer_scopes_the_selection_to_the_owner()
+    {
+        Assert.SkipWhen(!postgres.IsAvailable, postgres.SkipReason ?? string.Empty);
+        await using var harness = await RegistryHarness.StartAsync(postgres);
+
+        var ownerBearer = harness.Tokens.Driver(await harness.CreateDriverAsync());
+        var vehicleId = Guid.Parse(await harness.RegisterApprovedVehicleAsync(ownerBearer));
+
+        var otherId = await harness.CreateDriverAsync();
+        await harness.RegisterVehicleAsync(harness.Tokens.Driver(otherId));
+
+        await using var connection = await harness.OpenAsync();
+        await connection.ExecuteAsync(
+            """
+            UPDATE registry.driver_profiles
+               SET active_vehicle_id = @VehicleId, active_vehicle_selected_at = now()
+             WHERE driver_id = @DriverId;
+            """,
+            new { VehicleId = vehicleId, DriverId = otherId });
+
+        Assert.Equal(1, await harness.ActiveSelectionCountAsync(otherId));
+
+        // The route still refuses it — that is where the rule lives now.
+        await ProblemDocument.AssertAsync(
+            await harness.PostAsync($"/v1/vehicles/{vehicleId}/select-live", null, harness.Tokens.Driver(otherId)),
+            HttpStatusCode.NotFound,
+            "vehicle-not-found");
     }
 
     [Fact]

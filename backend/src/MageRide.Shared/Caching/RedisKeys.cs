@@ -67,6 +67,20 @@ public static class RedisKeys
     /// <summary>Single-writer lock held for the duration of a ride state transition.</summary>
     public static string RideLock(Guid rideId) => $"lock:ride:{rideId}";
 
+    /// <summary>
+    /// The vehicle a driver has selected to go live on — <c>lock:driver:{driverId}</c> (D-03,
+    /// US-9.6). Holds the vehicle id, not a token.
+    /// </summary>
+    /// <remarks>
+    /// A published fact rather than a mutual-exclusion lock, despite the <c>lock:</c> prefix the
+    /// ADD gives it: the one-vehicle-at-a-time invariant is
+    /// <c>registry.driver_profiles.active_vehicle_id</c>, whose primary key enforces it without
+    /// anybody's cooperation. This is what the two downstream planes read so they agree with the
+    /// registry about which vehicle that is (D-03 names both
+    /// <c>ux_sessions_active_driver</c> and <c>dispatch.driver_presence</c>).
+    /// </remarks>
+    public static string DriverLiveVehicle(Guid driverId) => $"lock:driver:{driverId}";
+
     /// <summary>Opaque refresh token mirror for O(1) revocation (D-29).</summary>
     public static string RefreshToken(string jti) => $"refresh:{jti}";
 

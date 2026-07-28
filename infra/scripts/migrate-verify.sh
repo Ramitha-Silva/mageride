@@ -190,8 +190,10 @@ step "Tables owned by C003"
 check_eq "13 iam tables" "13" \
   "SELECT count(*) FROM information_schema.tables WHERE table_schema='iam' AND table_type='BASE TABLE';"
 # 12 from C003 + registry.command_log, added by C021 for the same reason iam.command_log was
-# (C021 handoff micro-change-set).
-check_eq "13 registry tables" "13" \
+# (C021 handoff micro-change-set); + registry.outbox, added by C028 because `share.revoked` (D-22)
+# has a producer and a consumer in the specs and neither a topic nor a table
+# (C028 handoff micro-change-set).
+check_eq "14 registry tables" "14" \
   "SELECT count(*) FROM information_schema.tables WHERE table_schema='registry' AND table_type='BASE TABLE';"
 check_eq "2 prov tables" "2" \
   "SELECT count(*) FROM information_schema.tables WHERE table_schema='prov' AND table_type='BASE TABLE';"
@@ -431,9 +433,13 @@ psql_run "INSERT INTO iam.users(id, phone, role) VALUES
             ('55555555-5555-5555-5555-555555555555','Other Driver');" >/dev/null \
   || die "could not seed the selection fixtures."
 
-check_rejects "selecting a vehicle owned by someone else is rejected (US-9.6)" \
+# 0308 made "a driver may only select a vehicle they own" a composite foreign key. 0311 relaxed
+# it to a plain one, because US-13.9 gives an *assigned* non-owner the right to select a fleet
+# vehicle and the composite key rejected exactly that. What the schema still guarantees is below;
+# who may select what is registry.driver_eligible_vehicles, enforced by registry-svc (C028).
+check_rejects "a selection must name a real vehicle (fk_driver_profiles_active_vehicle_id)" \
   "UPDATE registry.driver_profiles
-      SET active_vehicle_id='66666666-6666-6666-6666-666666666666', active_vehicle_selected_at=now()
+      SET active_vehicle_id='99999999-9999-9999-9999-999999999999', active_vehicle_selected_at=now()
     WHERE driver_id='11111111-1111-1111-1111-111111111111';"
 check_rejects "a selected vehicle with no selection instant is rejected (US-9.7)" \
   "UPDATE registry.driver_profiles
@@ -444,12 +450,47 @@ CHECKS=$((CHECKS + 1))
 if psql_run "UPDATE registry.driver_profiles
                 SET active_vehicle_id='66666666-6666-6666-6666-666666666666', active_vehicle_selected_at=now()
               WHERE driver_id='55555555-5555-5555-5555-555555555555';" >/dev/null 2>&1 \
-   && [[ "$(psql_q "SELECT count(*) FROM registry.driver_profiles WHERE active_vehicle_id IS NOT NULL;")" == "1" ]]; then
+   && [[ "$(psql_q "SELECT count(*) FROM registry.driver_profiles
+                     WHERE driver_id='55555555-5555-5555-5555-555555555555'
+                       AND active_vehicle_id IS NOT NULL;")" == "1" ]]; then
   printf '  %s✓%s a driver may select their own vehicle, and only one (US-9.6)\n' "$GREEN" "$RESET"
 else
   printf '  %s✗%s selecting an owned vehicle failed, or more than one selection survived\n' "$RED" "$RESET"
   FAILURES=$((FAILURES + 1))
 fi
+
+# US-13.9 / C028 (0310, 0311): the projection is what answers "which vehicles may this driver
+# operate", and an assignment puts a vehicle the driver does not own into their list.
+psql_run "INSERT INTO registry.fleets(id, owner_id, name)
+            VALUES ('47474747-4747-4747-4747-474747474747','55555555-5555-5555-5555-555555555555','Assign Fleet');
+          INSERT INTO registry.fleet_assignments(fleet_id, vehicle_id, driver_id)
+            VALUES ('47474747-4747-4747-4747-474747474747',
+                    '66666666-6666-6666-6666-666666666666',
+                    '11111111-1111-1111-1111-111111111111');" >/dev/null \
+  || die "could not seed the fleet assignment fixture."
+
+check_eq "an assigned driver appears in the eligibility projection as 'assigned' (US-13.9)" "assigned" \
+  "SELECT source FROM registry.driver_eligible_vehicles
+    WHERE driver_id='11111111-1111-1111-1111-111111111111'
+      AND vehicle_id='66666666-6666-6666-6666-666666666666';"
+check_eq "the owner of that same vehicle appears as 'owned'" "owned" \
+  "SELECT source FROM registry.driver_eligible_vehicles
+    WHERE driver_id='55555555-5555-5555-5555-555555555555'
+      AND vehicle_id='66666666-6666-6666-6666-666666666666';"
+# A PENDING vehicle is entitled-to and not go-live eligible: the projection reports both facts so
+# dispatch can still answer `vehicle-not-approved` rather than `vehicle-not-found`.
+check_eq "a PENDING vehicle is listed but not go-live eligible (US-9.6, AL-30)" "f" \
+  "SELECT is_go_live_eligible FROM registry.driver_eligible_vehicles
+    WHERE driver_id='55555555-5555-5555-5555-555555555555'
+      AND vehicle_id='66666666-6666-6666-6666-666666666666';"
+# US-13.8: revoking the assignment takes the entitlement away the moment it is written.
+psql_run "UPDATE registry.fleet_assignments SET revoked_at = now()
+           WHERE driver_id='11111111-1111-1111-1111-111111111111';" >/dev/null \
+  || die "could not revoke the fixture assignment."
+check_eq "a revoked assignment leaves the projection at once (US-13.8)" "0" \
+  "SELECT count(*) FROM registry.driver_eligible_vehicles
+    WHERE driver_id='11111111-1111-1111-1111-111111111111'
+      AND vehicle_id='66666666-6666-6666-6666-666666666666';"
 
 check_rejects "a document with neither owner is rejected (AL-50)" \
   "INSERT INTO registry.documents(kind, file_url) VALUES ('insurance','s3://x');"

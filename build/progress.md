@@ -53,7 +53,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C025 | ws-e2e-android-slice ⭑ | 3 | DONE | 2026-07-28 | **WALKING SKELETON REACHED** — one booked ride end to end on the real stack; 2 Android shells assemble; `:shared` gained a jvm() target; wave-1 gate repaired |
 | C026 | iam-svc-auth | 2 | DONE | 2026-07-28 | 209 tests green (118 new); 1 iam migration added (0107) — 4 micro-change-sets raised; `POST /v1/auth/mqtt-token` closes C025 gap (c) |
 | C027 | iam-svc-profile-rbac | 2 | DONE | 2026-07-28 | 330 tests green (121 new); 1 iam migration added (0108); 8 routes D3' does not carry raised as micro-change-sets; URD §2.3 matrix parsed from `specs/` by the test |
-| C028 | registry-svc-vehicles | 2 | PENDING | | |
+| C028 | registry-svc-vehicles | 2 | DONE | 2026-07-28 | 145 tests green (53 new); 3 registry migrations (0309–0311) + a 7th Redpanda topic; 0308's composite FK relaxed for US-13.9; dispatch-svc now reads the eligibility projection |
 | C029 | registry-svc-onboarding | 2 | PENDING | | |
 | C030 | provisioning-svc | 2 | PENDING | | |
 | C031 | trip-state-svc | 2 | PENDING | | |
@@ -3575,3 +3575,128 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   safety-svc's SOS fan-out can read the two columns without a join and trust them.
   **Build host —** Docker for Testcontainers only; the replica stayed down throughout. The 330
   tests take ~3 min, of which most is ~90 harness start-ups.
+
+- **Component:** C028 registry-svc-vehicles — 2026-07-28
+- **Status:** DONE — `dotnet test backend/src/Registry.Api.Tests -c Release` → **145 passed, 0
+  failed, 0 skipped** (92 → 145; 53 new). All four DoD items pass against a real Postgres, Redis
+  and Redpanda (Testcontainers). Gates re-run green after three migrations, a seventh Kafka topic
+  and a one-statement change to dispatch-svc: `bash infra/scripts/migrate-verify.sh` →
+  **203/203** (was 199), `Dispatch.Api.Tests` → 64, `Ride.Api.Tests` → 117, `Iam.Api.Tests` → 330,
+  `ApiGateway.Tests` → 530, `MageRide.Shared.Tests` → 235, `HotPath.Tests` → 35, Spectral on
+  `backend/contracts/*.yaml` → 0 errors, `dotnet build backend/MageRide.sln -c Release` →
+  0 warnings.
+- **Notes:**
+  **Spec gaps — three micro-change-sets landed as `db/migrations/0309`–`0311`, plus one topic.**
+  (a) ***`share.revoked` had a producer, a consumer, and neither a topic nor a table.*** D3' has
+  `DELETE /v1/vehicles/{id}/share/{grantId}` "revoke → `share.revoked` (D-22)" and D6' §5.2 has
+  fanout-svc turn it into a directed `RemoveFromGroupAsync` inside 200 ms — but D6' §2.1's
+  registry lists six topics and none is registry-svc's, and no DDL source has `registry.outbox`.
+  Added both: `0309` and **`registry.events`** (key vehicleId), wired into
+  `EventTopics`, `bootstrap-topics.sh` and `slim-verify.sh`. **D6' §2.1 should carry the topic and
+  D4' §2 the table.** This is the second half of the gap the C021 handoff left open.
+  (b) ***`share.revoked`'s payload cannot do the job D6' §5.2 gives it.*** §5.1's hub-event table
+  gives it `{vehicleId}`; §5.2 in the same document requires a **directed** removal "to affected
+  passenger". A vehicle id alone leaves fanout two options, both wrong — remove everybody watching
+  the vehicle, or query registry-svc on the hot path. The envelope carries `passengerId`,
+  `grantId` and a `reason` (`revoked` | `unsubscribed` | `vehicle-deactivated`).
+  **D6' §5.1's payload column should say `{vehicleId, passengerId}`.**
+  (c) ***"Which vehicles may this driver operate" is spread over three tables and nothing answers
+  it.*** US-13.9 gives an assigned driver the right to "select one and go online" with a fleet
+  vehicle in a separate "Temporarily assigned to me" group, and every consumer that needs the fact
+  — registry's `select-live`, dispatch's standby gate, trip-state's session start — would
+  re-derive the join. dispatch-svc **was** the drift already: it read
+  `registry.vehicles WHERE owner_id = :driver`, which cannot see an assigned vehicle at all, so
+  US-13.9 was unimplementable against it. `0310` adds the view
+  `registry.driver_eligible_vehicles` (driver, vehicle, `source`, the raw status columns, and one
+  computed `is_go_live_eligible`), and dispatch's `PresenceRepository.FindVehicleAsync` now reads
+  it. **D4' §2 should carry the projection.**
+  (d) ***`registry.fleet_assignments` has no expiry column,*** although US-13.9 says the
+  assignment "auto-expires". The view honours revocation (US-13.8) and cannot honour expiry.
+  **C059 owns assignment writes and should add `expires_at`**; the view then gains one predicate.
+  **A landed invariant had to be relaxed, and that is the biggest decision here —**
+  `0308` (C021) made "a driver may only select a vehicle they own" a **composite foreign key** to
+  `registry.vehicles(id, owner_id)`. US-13.9 admits a non-owner, so the key rejected exactly the
+  case the requirement is about. `0311` drops it for a plain FK to `registry.vehicles(id)`. The
+  invariant is **restated, not dropped**: what must hold is "a driver may only select a vehicle
+  they are *entitled* to", entitlement spans two tables and is not expressible as one foreign key,
+  and it is enforced against the same projection every other consumer reads. The database still
+  refuses a selection naming no real vehicle and still nulls one whose vehicle is deleted.
+  `ux_vehicles_id_owner` is deliberately **left in place** — nothing references it, and a UNIQUE
+  is not free to re-add on a live table. Three C021 assertions were restated rather than deleted:
+  two in `SelectLiveTests` (one now proves the relaxation is real and that registry-svc is what
+  refuses the non-owner) and one in `migrate-verify.sh`.
+  **A behaviour change downstream components should know about —** a driver with no entitlement to
+  a vehicle now gets **`404 vehicle-not-found`** from `select-live`, where C021 answered
+  `403 not-owner`. The projection is scoped by driver, so "not yours" and "does not exist" are the
+  same query result; answering 403 again would need a second read whose only purpose is to tell a
+  stranger that somebody else's plate is registered. `deactivate` and the share routes still
+  answer `not-owner`, because those genuinely read the vehicle unscoped first.
+  **Decisions —**
+  (1) **`lock:driver:{driverId}` is a published fact, not a lock**, despite the ADD's prefix.
+  US-9.6 is one column on a row whose primary key is the driver, so selecting a second vehicle
+  releases the first in a single `UPDATE` and there is no window in which two are set — D-03's two
+  enforcement points (`ux_sessions_active_driver`, `dispatch.driver_presence`) are both downstream
+  of the choice and need to know what it was. Written **after COMMIT** and **best effort**: an
+  unreachable Redis costs a cache, not a driver's shift, and a test proves a selection still
+  succeeds against a dead address.
+  (2) **Deactivation is one transaction with four writes** — status, the revocation of every live
+  grant, one outbox row per grantee plus `vehicle.deactivated`, and clearing the driver's
+  selection. A vehicle off the map while a grant still says otherwise is the leak D-22 exists to
+  close. Clearing the selection is the item the C021 handoff left to C028: the FK fires on DELETE
+  and a status change is not one, so the vehicle would have stayed selected and failed every
+  go-online with nothing on screen to explain why.
+  (3) **A grant publishes nothing until it is accepted** (US-4.3b). Publishing at creation would
+  have fanout add a passenger to a group they may never accept into.
+  (4) **`registry.shares` is visibility; `registry.fleet_assignments` is operation.** US-4.1
+  shares "tracking access" with any driver-app user; US-13.9 lends a vehicle to drive. The DoD's
+  phrase "assigned/**shared** Mode A/B" is read as the temp-hired case (US-4.10's "temporarily
+  hired with a Mode A/Mode B vehicle assigned"), because a share confers no right to drive —
+  conflating them would let a passenger take a bus live.
+  (5) **`DELETE /subscribers/{userId}` is the passenger's own unsubscribe and only theirs.** The
+  owner's removal keeps the row MUTED until they delete it (US-4.12) and is a different verb on
+  subscription-svc; an owner reaching this route is 403 rather than silently performing the wrong
+  one. The roster read crosses into `subscription.grants` — the contract says outright that the
+  roster "is held in subscription.grants", and the alternative is a synchronous hop to a service
+  that does not exist yet.
+  (6) **Three routes deliberately do not require the `driver` role** — accept, unsubscribe and
+  share-request are the *counterparty's* actions and the counterparty is usually a passenger. They
+  require authentication and check ownership or grantee identity, which is stronger than a role.
+  (7) **`merchantRef` is accepted and logged, not stored.** `registry.driver_payouts` (0304) has
+  `onepay_merchant_id` and nothing else; inventing a column for a field no reader has would be
+  worse. **D4' §2 should either add it or D3' should drop it.** The binding is keyed on the
+  **driver**, not the vehicle, because settlement pays a person — so a driver's second vehicle
+  reaching APPROVED rebinds rather than failing.
+  **A live configuration trap, found and fixed —**
+  `infra/env/.env.app.example` is one flat namespace shared by every co-located service, and it
+  carried **unprefixed** `Outbox__Channel=ride_outbox` / `__Schema` / `__Topic` under the ride-svc
+  heading. The kernel binds the `Outbox` section *after* each service's own code defaults, so
+  those three silently pointed **dispatch-svc's and registry-svc's** dispatchers at ride-svc's
+  channel, table and topic — `DispatchApplication` has set its own since C023 and was overridden
+  anyway. Renamed to `Ride__Outbox__*` (binding nothing, like the `Dispatch__Outbox__*` block
+  C023 added for the same reason); ride-svc needs none of them because the kernel's defaults
+  already describe `rides` / `ride_outbox` / `ride.events`. Latent rather than observed — the full
+  compose stack is not buildable until Wave 2 — but it would have surfaced as ride-svc's
+  dispatcher waking on other services' events. **C009 should keep this file prefix-only.**
+  **A trap for the next Minimal API service —**
+  A service method named `BindAsync` makes Minimal APIs treat that service as a custom-bound
+  *parameter*, and every route taking it as a dependency fails at start-up with "BindAsync method
+  found on IMerchantService with incorrect format" — a routing error that says nothing about DI.
+  `IMerchantService.BindMerchantAsync` is named for that reason.
+  **Contract additions (all additive, Spectral-clean) —** `VehicleSummary` gained `source`,
+  `fleetId`, `isSelected` and `isGoLiveEligible`, and `GET /v1/vehicles/mine` gained an `assigned`
+  array. US-13.9's group and US-9.6's marker are not expressible in the contract's shape, so a
+  client could not render My Vehicles from it. **D3' registry-svc should carry both.**
+  **For C029 —** `VehicleRepository.ApproveAsync` and `DeactivateAsync` are the two transitions
+  the onboarding machine needs; deactivation's cascade (revoke grants, clear selection, emit) is
+  in `VehicleService` and rejection will want the same. `registry.outbox` is live, so the E-03
+  `document.expiring` events have somewhere to go. `GET /v1/vehicles/{id}/status` returns a null
+  `rejectionReason` because no path writes the column yet.
+  **For C030 —** `POST /v1/vehicles/{id}/device` is left unmapped. It is a thin wrapper over
+  `POST /v1/trackers/bind`, and a wrapper over nothing would answer 201 to a driver whose tracker
+  was never bound.
+  **For C034/C038 —** read `registry.driver_eligible_vehicles`, not `registry.vehicles`. It
+  carries `is_go_live_eligible` for the simple gate and the raw columns when you need your own
+  error mapping, which is why dispatch still answers `vehicle-not-approved` rather than
+  `vehicle-not-found`.
+  **Build host —** Docker for Testcontainers (Postgres, Redis and Redpanda); the replica stayed
+  down throughout. The 145 tests take ~2.5 min.

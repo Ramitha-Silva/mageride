@@ -227,7 +227,7 @@ step "4. Redpanda topics (D6 §2.1)"
 topics=$(docker compose -f "$SLIM" exec -T redpanda rpk topic list --brokers redpanda:9092 2>/dev/null \
            | awk 'NR > 1 && NF { print $1 }' | sort || true)
 
-for t in telemetry.raw telemetry.normalized ride.events dispatch.events trip.events audit.events; do
+for t in telemetry.raw telemetry.normalized ride.events dispatch.events registry.events trip.events audit.events; do
   found=$(grep -Fx "$t" <<<"$topics" || true)
   check "topic $t exists" "$t" "${found:-<missing>}"
   # RF=1, partitions=3 in the replica (lightweight-production-replica.md Container 3).

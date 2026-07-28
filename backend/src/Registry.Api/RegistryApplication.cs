@@ -32,20 +32,28 @@ public static class RegistryApplication
         {
             ServiceName = ServiceName,
 
-            // registry-svc has no hot path in this slice: no candidate index, no presence, no
-            // cache. Postgres is the only store it touches, so a Redis dependency would be a
-            // readiness probe that can fail without anything here being unable to serve.
-            UseRedis = false,
+            // C028: `lock:driver:{driverId}` coordinates the go-live selection with the two
+            // downstream planes that also key off "one vehicle at a time" (D-03). Postgres is
+            // still the authority — see VehicleService.SelectLiveAsync.
+            UseRedis = true,
 
-            // D3' has POST /v1/vehicles emit `vehicle.registered`, but no `registry.outbox` table
-            // exists in either DDL source and nothing in the walking skeleton consumes the event —
-            // dispatch reads the vehicle row directly. Publishing outside a transaction to satisfy
-            // the letter of it would break the very guarantee the outbox exists for (R-13), so the
-            // event is not emitted here at all. C028 lands the table and the publish together;
-            // recorded in the C021 handoff.
-            UseKafka = false,
-            UseOutbox = false,
+            // C028 lands the table and the publish together, as the C021 handoff said it would.
+            // `share.revoked` (D-22) is written into registry.outbox inside the transaction that
+            // revokes the grant, and the kernel's LISTEN/NOTIFY dispatcher drains it to
+            // `registry.events` after COMMIT (E-09, R-13).
+            UseKafka = true,
+            UseOutbox = true,
         };
+
+        // Ahead of AddMageRideDefaults for the same reason the CommandLog section is: an
+        // operator's setting still wins, but registry's own outbox is the default. The kernel's
+        // defaults describe rides.outbox on `ride_outbox` → `ride.events`.
+        builder.Services.Configure<MageRide.Shared.Messaging.OutboxOptions>(outbox =>
+        {
+            outbox.Schema = "registry";
+            outbox.Channel = "registry_outbox";
+            outbox.Topic = MageRide.Shared.Messaging.EventTopics.RegistryEvents;
+        });
 
         // Ahead of AddMageRideDefaults so an operator's CommandLog section still wins, but the
         // registry defaults apply when nobody sets one. The kernel's defaults describe
@@ -65,6 +73,21 @@ public static class RegistryApplication
         app.UseMageRideDefaults(serviceOptions);
 
         app.MapVehicleEndpoints();
+        app.MapSharingEndpoints();
+
+        var internalApiKey = app.Services.GetRequiredService<IOptions<RegistryOptions>>().Value.InternalApiKey;
+        if (!string.IsNullOrWhiteSpace(internalApiKey))
+        {
+            app.MapInternalVehicleEndpoints(internalApiKey);
+        }
+        else
+        {
+            // fare-svc cannot bind a driver's OnePay merchant without this, and the symptom is a
+            // 402 merchant-not-onboarded on somebody's fare rather than anything that points here.
+            app.Logger.LogWarning(
+                "Registry:InternalApiKey is not configured, so /v1/internal/vehicles/** is unmapped. " +
+                "No OnePay merchant binding can be recorded against this instance (D-11).");
+        }
 
         if (DevApprovalEnabled(app))
         {

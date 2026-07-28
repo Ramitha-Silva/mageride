@@ -37,6 +37,26 @@ public interface IVehicleRepository
     /// </summary>
     Task<Vehicle?> ApproveAsync(
         NpgsqlConnection connection, NpgsqlTransaction? transaction, Guid vehicleId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Takes a vehicle off the map (US-2.16). Returns <see langword="null"/> when it is already
+    /// DEACTIVATED, so a repeat is a <c>409</c> rather than a silent success that emits a second
+    /// round of revocations.
+    /// </summary>
+    Task<Vehicle?> DeactivateAsync(
+        NpgsqlConnection connection, NpgsqlTransaction? transaction, Guid vehicleId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Updates the driver name and photo a passenger sees for this vehicle (US-2.12). Cosmetic —
+    /// it does not touch the AL-29 verified identity fields on <c>registry.driver_profiles</c>.
+    /// </summary>
+    Task<Vehicle?> UpdateDriverProfileAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction? transaction,
+        Guid vehicleId,
+        string? driverName,
+        string? driverPhotoUrl,
+        CancellationToken cancellationToken);
 }
 
 /// <inheritdoc cref="IVehicleRepository"/>
@@ -131,6 +151,64 @@ public sealed class VehicleRepository : IVehicleRepository
              RETURNING {Columns};
              """,
             new { VehicleId = vehicleId },
+            transaction,
+            cancellationToken: cancellationToken));
+    }
+
+    public Task<Vehicle?> DeactivateAsync(
+        NpgsqlConnection connection, NpgsqlTransaction? transaction, Guid vehicleId, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+
+        // Conditional on not already being deactivated, so the second call returns nothing and the
+        // caller answers 409 — deactivating twice would otherwise emit a second `vehicle.deactivated`
+        // and a second round of share revocations for grants that are already gone.
+        //
+        // DEACTIVATED is outside ux_vehicles_regno_active's predicate, so this releases the plate
+        // (D-37) and the same registration can be onboarded again later — which is exactly what
+        // US-2.16 asks for and the reason the index is partial.
+        return connection.QuerySingleOrDefaultAsync<Vehicle>(new CommandDefinition(
+            $"""
+             UPDATE registry.vehicles
+                SET status = '{RegistrationStatuses.Deactivated}',
+                    onboarding_status = '{OnboardingStatuses.Incomplete}'
+              WHERE id = @VehicleId
+                AND status <> '{RegistrationStatuses.Deactivated}'
+             RETURNING {Columns};
+             """,
+            new { VehicleId = vehicleId },
+            transaction,
+            cancellationToken: cancellationToken));
+    }
+
+    public Task<Vehicle?> UpdateDriverProfileAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction? transaction,
+        Guid vehicleId,
+        string? driverName,
+        string? driverPhotoUrl,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+
+        // COALESCE on the name and a sentinel on the photo: the contract makes both optional, but
+        // a driver clearing their photo is a real edit, so `photoUrl: ""` must be able to null the
+        // column while an absent field leaves it alone.
+        return connection.QuerySingleOrDefaultAsync<Vehicle>(new CommandDefinition(
+            $"""
+             UPDATE registry.vehicles
+                SET driver_name = COALESCE(@DriverName, driver_name),
+                    driver_photo_url = CASE WHEN @UpdatePhoto THEN @DriverPhotoUrl ELSE driver_photo_url END
+              WHERE id = @VehicleId
+             RETURNING {Columns};
+             """,
+            new
+            {
+                VehicleId = vehicleId,
+                DriverName = driverName,
+                UpdatePhoto = driverPhotoUrl is not null,
+                DriverPhotoUrl = string.IsNullOrEmpty(driverPhotoUrl) ? null : driverPhotoUrl,
+            },
             transaction,
             cancellationToken: cancellationToken));
     }

@@ -26,6 +26,9 @@ namespace MageRide.Registry.Tests.Infrastructure;
 /// </remarks>
 internal sealed class RegistryHarness : IAsyncDisposable
 {
+    /// <summary>The shared secret <c>/v1/internal/vehicles/**</c> demands until C042 lands a mesh.</summary>
+    public const string InternalApiKey = "c028-registry-internal-key-not-a-secret";
+
     private static int _plateCounter = Random.Shared.Next(1_000, 9_000) * 1_000;
 
     private readonly WebApplication _app;
@@ -73,6 +76,15 @@ internal sealed class RegistryHarness : IAsyncDisposable
             ["Jwt:JwksUrl"] = "http://127.0.0.1:1/.well-known/jwks.json",
             ["Jwt:Issuer"] = tokens.IssuerName,
             ["Jwt:RequireHttpsMetadata"] = "false",
+            // C028. Redis and Redpanda are both optional to a registry-svc *test*: the D-03 lock
+            // is best-effort (Postgres holds the invariant) and the outbox dispatcher is off
+            // unless a test asks for it, so the C021 classes still run on Postgres alone. A dead
+            // address rather than an empty one, so a code path that reaches either fails loudly
+            // instead of connecting to whatever happens to be on localhost.
+            ["ConnectionStrings:Redis"] = "127.0.0.1:1,abortConnect=false,connectTimeout=200,syncTimeout=200",
+            ["Kafka:BootstrapServers"] = "127.0.0.1:1",
+            ["Outbox:DispatcherEnabled"] = "false",
+            ["Registry:InternalApiKey"] = InternalApiKey,
             // One /metrics endpoint per harness would collide across concurrently running tests.
             ["Otel:PrometheusEnabled"] = "false",
         };
@@ -165,6 +177,196 @@ internal sealed class RegistryHarness : IAsyncDisposable
         var request = new HttpRequestMessage(HttpMethod.Get, path);
         Authorize(request, bearer);
         return Client.SendAsync(request);
+    }
+
+    /// <summary>PUTs JSON. No <c>Idempotency-Key</c> — D3' §0 requires it on POST only.</summary>
+    public Task<HttpResponseMessage> PutAsync(string path, object? body, string? bearer)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Put, path)
+        {
+            Content = JsonContent.Create(body ?? new { }),
+        };
+
+        Authorize(request, bearer);
+        return Client.SendAsync(request);
+    }
+
+    public Task<HttpResponseMessage> DeleteAsync(string path, string? bearer)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Delete, path);
+        Authorize(request, bearer);
+        return Client.SendAsync(request);
+    }
+
+    /// <summary>POSTs to a service-to-service route with the shared secret fare-svc would carry.</summary>
+    public Task<HttpResponseMessage> PostInternalAsync(string path, object? body, string? apiKey = InternalApiKey)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, path)
+        {
+            Content = JsonContent.Create(body ?? new { }),
+        };
+
+        request.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString());
+
+        if (apiKey is not null)
+        {
+            request.Headers.Add(Registry.Endpoints.InternalVehicleEndpoints.ApiKeyHeader, apiKey);
+        }
+
+        return Client.SendAsync(request);
+    }
+
+    /// <summary>
+    /// Creates a fleet and assigns <paramref name="driverId"/> to <paramref name="vehicleId"/> —
+    /// the US-13.9 "temporarily assigned" state. fleet-svc (C059) owns writing these; registry-svc
+    /// only reads them through the eligibility projection.
+    /// </summary>
+    public async Task<Guid> AssignToFleetAsync(Guid vehicleId, Guid driverId, Guid fleetOwnerId)
+    {
+        var fleetId = Guid.NewGuid();
+
+        await using var connection = await _postgres.OpenAsync();
+
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO registry.fleets (id, owner_id, name, status)
+            VALUES (@FleetId, @OwnerId, 'Test Fleet', 'APPROVED');
+
+            INSERT INTO registry.fleet_vehicles (fleet_id, vehicle_id, mode)
+            VALUES (@FleetId, @VehicleId, 'B');
+
+            INSERT INTO registry.fleet_assignments (fleet_id, vehicle_id, driver_id)
+            VALUES (@FleetId, @VehicleId, @DriverId);
+            """,
+            new { FleetId = fleetId, OwnerId = fleetOwnerId, VehicleId = vehicleId, DriverId = driverId });
+
+        return fleetId;
+    }
+
+    /// <summary>Revokes every assignment a driver holds — US-13.8's "immediately loses the ability".</summary>
+    public async Task RevokeAssignmentsAsync(Guid driverId)
+    {
+        await using var connection = await _postgres.OpenAsync();
+
+        await connection.ExecuteAsync(
+            "UPDATE registry.fleet_assignments SET revoked_at = now() WHERE driver_id = @DriverId;",
+            new { DriverId = driverId });
+    }
+
+    /// <summary>
+    /// Registers a vehicle in a mode the Driver App refuses, as the Fleet Portal (C059) would.
+    /// </summary>
+    public async Task<Guid> SeedFleetVehicleAsync(
+        Guid ownerId, string mode = "B", string vehicleType = "van", string status = "APPROVED")
+    {
+        var vehicleId = Guid.NewGuid();
+
+        await using var connection = await _postgres.OpenAsync();
+
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO registry.vehicles
+              (id, owner_id, registration_number, vehicle_type, mode, status, onboarding_status, driver_name)
+            VALUES
+              (@Id, @OwnerId, @Plate, @VehicleType, @Mode, @Status,
+               CASE WHEN @Status = 'APPROVED' THEN 'approved' ELSE 'incomplete' END, 'Fleet Driver');
+            """,
+            new { Id = vehicleId, OwnerId = ownerId, Plate = NextPlate(), VehicleType = vehicleType, Mode = mode, Status = status });
+
+        return vehicleId;
+    }
+
+    /// <summary>An active <c>subscription.grants</c> row, as subscription-svc would leave it (AL-23).</summary>
+    public async Task<Guid> SeedSubscriptionGrantAsync(Guid vehicleId, Guid passengerId)
+    {
+        var grantId = Guid.NewGuid();
+
+        await using var connection = await _postgres.OpenAsync();
+
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO subscription.grants (id, vehicle_id, passenger_id, status)
+            VALUES (@Id, @VehicleId, @PassengerId, 'active');
+            """,
+            new { Id = grantId, VehicleId = vehicleId, PassengerId = passengerId });
+
+        return grantId;
+    }
+
+    /// <summary>Grants a Mode B share and has the grantee accept it — a live grant (US-4.1/4.3b).</summary>
+    public async Task<string> GrantShareAsync(string vehicleId, Guid granteeId, string ownerBearer)
+    {
+        var created = await PostAsync($"/v1/vehicles/{vehicleId}/share", new { userId = granteeId.ToString() }, ownerBearer);
+        Assert.Equal(System.Net.HttpStatusCode.Created, created.StatusCode);
+
+        var grantId = (await ReadJsonAsync(created)).GetProperty("grantId").GetString()!;
+
+        var accepted = await PostAsync(
+            $"/v1/vehicles/{vehicleId}/share/{grantId}/accept", null, Tokens.Driver(granteeId));
+        Assert.Equal(System.Net.HttpStatusCode.OK, accepted.StatusCode);
+
+        return grantId;
+    }
+
+    /// <summary>Suspends a vehicle from dispatch, as the E-03 document-expiry job (C029) would.</summary>
+    public async Task SuspendDispatchAsync(Guid vehicleId)
+    {
+        await using var connection = await _postgres.OpenAsync();
+
+        await connection.ExecuteAsync(
+            "UPDATE registry.vehicles SET dispatch_state = 'DISPATCH_SUSPENDED' WHERE id = @Id;",
+            new { Id = vehicleId });
+    }
+
+    /// <summary>How many vehicles the driver has selected. US-9.6 makes the answer 0 or 1, always.</summary>
+    public async Task<int> ActiveSelectionCountAsync(Guid driverId)
+    {
+        await using var connection = await _postgres.OpenAsync();
+
+        return await connection.ExecuteScalarAsync<int>(
+            """
+            SELECT count(*) FROM registry.driver_profiles
+             WHERE driver_id = @DriverId AND active_vehicle_id IS NOT NULL;
+            """,
+            new { DriverId = driverId });
+    }
+
+    /// <summary>The vehicle published into <c>lock:driver:{driverId}</c> for the downstream planes (D-03).</summary>
+    public async Task<string?> PublishedLiveVehicleAsync(Guid driverId)
+    {
+        var redis = Services.GetRequiredService<StackExchange.Redis.IConnectionMultiplexer>();
+
+        var value = await redis.GetDatabase()
+            .StringGetAsync(MageRide.Shared.Caching.RedisKeys.DriverLiveVehicle(driverId));
+
+        return value.IsNullOrEmpty ? null : value.ToString();
+    }
+
+    /// <summary>The driver's bound OnePay merchant, or null — <c>registry.driver_payouts</c> (D-11).</summary>
+    public async Task<string?> MerchantIdAsync(Guid driverId)
+    {
+        await using var connection = await _postgres.OpenAsync();
+
+        return await connection.QuerySingleOrDefaultAsync<string?>(
+            "SELECT onepay_merchant_id FROM registry.driver_payouts WHERE driver_id = @DriverId;",
+            new { DriverId = driverId });
+    }
+
+    /// <summary>The rows registry-svc queued for <c>registry.events</c> (migration 0309).</summary>
+    public async Task<IReadOnlyList<(string EventType, Guid AggregateId, string Payload)>> OutboxAsync(Guid vehicleId)
+    {
+        await using var connection = await _postgres.OpenAsync();
+
+        var rows = await connection.QueryAsync<(string, Guid, string)>(
+            """
+            SELECT event_type, aggregate_id, payload::text
+              FROM registry.outbox
+             WHERE aggregate_id = @VehicleId
+             ORDER BY id;
+            """,
+            new { VehicleId = vehicleId });
+
+        return [.. rows];
     }
 
     /// <summary>Registers a vehicle and returns the 201 body, failing the test on anything else.</summary>

@@ -212,6 +212,15 @@ paths:
                 properties:
                   items:
                     type: array
+                    description: Everything the caller may operate, their own registrations first.
+                    items:
+                      $ref: '#/components/schemas/VehicleSummary'
+                  assigned:
+                    type: array
+                    description: |
+                      Δ C028. US-13.9's "Temporarily assigned to me" group — the subset of
+                      `items` a fleet has lent the caller, split out so the app renders the
+                      group header without filtering. Empty for a driver with no assignments.
                     items:
                       $ref: '#/components/schemas/VehicleSummary'
         '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
@@ -887,6 +896,27 @@ components:
           type: integer
           format: int64
           minimum: 0
+        # Δ C028. US-13.9 puts the vehicles a fleet has lent a driver in a separate
+        # "Temporarily assigned to me" group, and US-9.6 marks the one that is currently
+        # selected — neither is expressible in the shape above, so a client could not render
+        # My Vehicles from it. See the C028 handoff.
+        source:
+          type: string
+          description: |
+            How the caller came by this vehicle. `owned` is their own registration;
+            `assigned` is a fleet's, lent to them and revocable (US-13.9, AL-23).
+          enum: [owned, assigned]
+        fleetId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        isSelected:
+          type: boolean
+          description: The one vehicle the driver may go live on right now (US-9.6, US-9.7).
+        isGoLiveEligible:
+          type: boolean
+          description: |
+            APPROVED and not E-03 document-suspended. Whether `select-live` would accept it —
+            answered by `registry.driver_eligible_vehicles` so registry, dispatch and
+            trip-state cannot derive the rule differently.
 
     VehicleDetail:
       allOf:

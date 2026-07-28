@@ -34,13 +34,25 @@ public static class EventTopics
     /// <summary>dispatch-svc's outbox — <c>offer.created</c> and friends. Key: rideId.</summary>
     public const string DispatchEvents = "dispatch.events";
 
+    /// <summary>
+    /// registry-svc's outbox — <c>share.revoked</c> (D-22) and friends. Key: vehicleId.
+    /// </summary>
+    /// <remarks>
+    /// <b>Not in D6' §2.1's six-topic registry</b> — a micro-change-set raised in the C028
+    /// handoff. D3' gives <c>share.revoked</c> a producer (registry-svc) and D6' §5.2 a consumer
+    /// (fanout-svc, which turns it into a directed <c>RemoveFromGroupAsync</c> inside 200 ms) and
+    /// neither gives it a topic. Publishing it on <c>trip.events</c> instead would put a registry
+    /// event on trip-state-svc's stream, where its consumers are the wrong set.
+    /// </remarks>
+    public const string RegistryEvents = "registry.events";
+
     /// <summary>Audit trail (D-35). Key: entityId.</summary>
     public const string AuditEvents = "audit.events";
 
     /// <summary>The registry, in the order <c>bootstrap-topics.sh</c> creates them.</summary>
     public static readonly IReadOnlyList<string> All =
     [
-        TelemetryRaw, TelemetryNormalized, TripEvents, RideEvents, DispatchEvents, AuditEvents,
+        TelemetryRaw, TelemetryNormalized, TripEvents, RideEvents, DispatchEvents, RegistryEvents, AuditEvents,
     ];
 
     /// <summary>

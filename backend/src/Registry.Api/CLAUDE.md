@@ -1,56 +1,109 @@
-# registry-svc (C021 ws-registry-minimal) — vehicle conventions
+# registry-svc (C021 ws-registry-minimal + C028 registry-svc-vehicles) — vehicle conventions
 
-Stack: .NET 10 Minimal API + Dapper over Npgsql. References `MageRide.Shared` (C002).
+Stack: .NET 10 Minimal API + Dapper over Npgsql + StackExchange.Redis + Confluent.Kafka.
+References `MageRide.Shared` (C002).
 
 **Verify:** `dotnet test backend/src/Registry.Api.Tests -c Release`
 
-## What this slice is
+## What this is
 
-The walking skeleton's vehicle identity: enough for a driver to have one approved Mode C
-vehicle that the dispatcher can offer a ride to. Everything here matches
+Vehicle identity and lifecycle: registration, the one-live-publisher rule, deactivation, Mode B
+sharing, and the OnePay merchant binding fare settlement needs. Everything here matches
 `backend/contracts/registry.yaml`, which wins over this file and over the code — except
 `select-live`, which the contract does not have (see below).
 
 | Endpoint | Spec |
 |---|---|
 | `POST /v1/vehicles` | D3' registry-svc, AL-09, D-37 |
-| `GET /v1/vehicles/mine` | D3' route table, US-2.8 |
+| `GET /v1/vehicles/mine` | D3' route table, US-2.8, **US-13.9** |
+| `GET /v1/vehicles/{id}` · `/status` | D3' route table, US-2.13/2.15 |
+| `POST /v1/vehicles/{id}/deactivate` | US-2.16, D-37 |
+| `PUT /v1/vehicles/{id}/driver-profile` | US-2.12 |
 | `POST /v1/vehicles/{id}/select-live` | **not in D3'** — US-9.6/US-9.7 (C021 micro-change-set) |
+| `POST /v1/vehicles/{id}/share` · `/share/{grantId}/accept` · `DELETE /share/{grantId}` | US-4.1/4.2/4.3b, D-22 |
+| `GET /v1/vehicles/{id}/subscribers` · `DELETE /subscribers/{userId}` | US-4.7, US-NEW.1 |
+| `POST /v1/share-requests` | US-4.5 |
+| `POST /v1/internal/vehicles/{id}/merchant` | D-11 |
 | `POST /v1/dev/vehicles/{id}/approve` | dev seed path only; **not a contract route** |
 
 **Not here, on purpose.** Document upload, Gemini OCR, the four-step onboarding machine
-(`PUT /v1/vehicles/{id}/onboarding/{step}`, AL-29/AL-30), `PUT /v1/drivers/profile`, status
-polling, deactivate, the E-03 expiry job, Mode B sharing and subscribers, IMEI binding and the
-OnePay merchant bind (D-11) are **C028/C029**. They are left unmapped rather than stubbed. The
-Verification-Officer queue is skipped entirely.
+(`PUT /v1/vehicles/{id}/onboarding/{step}`, `GET /onboarding-status`, AL-29/AL-30),
+`PUT /v1/drivers/profile`, the rejection path and the E-03 expiry job are **C029**.
+`POST /v1/vehicles/{id}/device` is a thin wrapper over provisioning-svc's `POST /v1/trackers/bind`
+(T-02) and belongs with the service that mints the credential — **C030**. Mode A/B vehicle
+onboarding, route permits and writing `registry.fleet_assignments` are the Fleet Portal's
+(**C059**); this service only *reads* assignments. The Verification-Officer queue is skipped
+entirely. All are left unmapped rather than stubbed.
 
 ## Rules that are load-bearing
 
 - **AL-09's set is exact, and `car` is refused.** AL-09 maps `car → sedan` as a one-time data
   migration, not an input alias — rewriting it silently would hide an un-updated client until a
   fare tariff or a map marker disagreed. `bus` and `train` are real types but Mode A, so they
-  are `403 mode-not-allowed`, not `400`. `VehicleTypes` must stay identical to the
-  `registry.vehicles.vehicle_type` CHECK in `db/migrations/0303`.
+  are `403 mode-not-allowed`, not `400`: **the Driver App is the wrong surface, not the value.**
+  `VehicleTypes` must stay identical to the `registry.vehicles.vehicle_type` CHECK in
+  `db/migrations/0303`.
 - **Registration numbers are canonicalised, not just validated.** `wp qa-1234` and `WP-QA-1234`
   both become `WP-QA-1234`. `ux_vehicles_regno_active` (D-37) is a unique index over the stored
   text, so without this the rule is bypassed by retyping the plate. A character a plate cannot
   contain is refused rather than stripped — deleting it would let two different plates collide.
-- **One selected vehicle per driver (US-9.6).** The selection is
-  `registry.driver_profiles.active_vehicle_id` (migration 0308) and the invariant is that
-  table's primary key, not application code. Ownership is the composite FK to
-  `registry.vehicles(id, owner_id)`; **APPROVED-ness is not expressible as a constraint** and is
-  enforced here. C029 must clear the selection when a selected vehicle is DEACTIVATED or
-  REJECTED.
-- **`owner_id` comes from the token's `sub`, never from the body.** There is no field to supply
-  somebody else's id in, and `VehicleRegistrationTests` asserts a body that tries anyway is
-  ignored.
-- **Every route requires the `driver` role.** Opening the Driver App does not grant it (C020
-  decision 4): a passenger who signs in there carries `app=driver, role=passenger` and is
-  refused. Granting `driver` on approval is C029's.
+- **`registry.driver_eligible_vehicles` is the one answer to "which vehicles may this driver
+  operate"** (migration 0310). registry-svc's `select-live`, dispatch-svc's standby gate and
+  trip-state-svc's session start all read it, so the three cannot derive the rule differently.
+  It carries `source` (`owned` | `assigned`), the raw status columns, and one computed
+  `is_go_live_eligible` (APPROVED + not E-03 suspended). **Consumers read the raw columns when
+  they need their own error mapping** — dispatch answers `vehicle-not-approved` where a
+  pre-filtered read would have collapsed it into `vehicle-not-found`.
+- **Ownership stopped being the selection rule when US-13.9 landed.** 0308 made "a driver may
+  only select a vehicle they own" a composite foreign key; **0311 relaxed it**, because an
+  assigned non-owner may go online with a fleet vehicle and the composite key rejected exactly
+  that. The invariant was restated, not dropped: entitlement spans two tables and is enforced
+  here against the projection, and the database still refuses a selection that names no vehicle.
+  A missing entitlement is **404, not 403** — the projection is driver-scoped, so "not yours" and
+  "does not exist" are the same query result and telling them apart would leak a stranger's plate.
+- **One selected vehicle per driver (US-9.6), and the release is the acquire.** The selection is
+  one column on `registry.driver_profiles`, whose primary key is the driver, so selecting a
+  second releases the first in a single `UPDATE` — there is no window in which two are set. Ten
+  concurrent selections leave exactly one (`GoLiveEligibilityTests`).
+- **`lock:driver:{driverId}` is a published fact, not a lock** (D-03). Despite the ADD's
+  `lock:` prefix, Postgres holds the invariant; Redis is how the dispatch and tracking planes
+  learn which vehicle it is. Written **after COMMIT** and **best effort** — an unreachable Redis
+  costs a cache, not a driver's shift.
+- **Deactivation is a cascade, in one transaction** (US-2.16). The status change, the revocation
+  of every live share on the vehicle, the outbox row per grantee and the clearing of the driver's
+  selection commit together. A vehicle off the map while a grant still says otherwise is exactly
+  the leak D-22 is about. DEACTIVATED is outside `ux_vehicles_regno_active`'s predicate, so this
+  also frees the plate (D-37).
+- **`share.revoked` goes through the outbox and names the passenger.** A revoke that committed
+  and then failed to publish leaves somebody watching a vehicle they lost access to (R-13). The
+  payload carries `passengerId`, which **D6' §5.1's `{vehicleId}` does not** — §5.2 in the same
+  document requires a *directed* `RemoveFromGroupAsync`, and a vehicle id alone leaves fanout
+  removing everybody or querying this service on the hot path. The aggregate id is the vehicle,
+  because it is the partition key and keying by grant would let a later `share.granted` overtake
+  the revoke that preceded it.
+- **A grant confers nothing until it is accepted** (US-4.3b). `POST /share` publishes no event;
+  `share.granted` is written when the grantee accepts. Only the named grantee may accept, and
+  that is a predicate in the `UPDATE`, not a check afterwards.
+- **A share is visibility; an assignment is operation.** US-4.1 shares "tracking access" with any
+  driver-app user (`registry.shares`); the right to *drive* a fleet vehicle is
+  `registry.fleet_assignments` (US-13.9). Two tables, two screens, and conflating them would let
+  a passenger take a bus live.
+- **`DELETE /subscribers/{userId}` is the passenger's own unsubscribe, and only theirs**
+  (US-NEW.1). The owner's removal keeps the row MUTED until they delete it (US-4.12) and is
+  `DELETE /v1/mode-b/{vehicleId}/subscribers/{subId}` in subscription.yaml — a different verb on
+  a different service, so an owner reaching this route is `403` rather than silently performing
+  the wrong one.
+- **Every vehicle route requires the `driver` role; the three counterparty routes do not.**
+  Opening the Driver App does not grant the role (C020 decision 4). Accepting a grant,
+  unsubscribing and requesting access are things a *passenger* does, so those demand
+  authentication and check ownership or grantee identity instead — which is stronger than a role.
+- **`owner_id` comes from the token's `sub`, never from the body.**
 - **The dev approve endpoint is not approval.** Real approval is AL-30's auto-approve once all
   four steps are VERIFIED, gated by AL-10's mandatory insurance document. This one checks
-  neither, and it is **not mapped at all** unless `Registry:DevApprovalEnabled` resolves true
-  (Development by default, plus whatever the replica sets).
+  neither, and it is **not mapped at all** unless `Registry:DevApprovalEnabled` resolves true.
+- **A service method must not be called `BindAsync`.** Minimal APIs treat any parameter type
+  carrying one as custom-bound, so a handler taking that service as a dependency fails to build
+  the route table at start-up. `IMerchantService.BindMerchantAsync` is named for that reason.
 
 ## Configuration
 
@@ -58,15 +111,38 @@ Verification-Officer queue is skipped entirely.
 runs synthetic data under the Production environment name and sets it to `true` explicitly; the
 service logs a warning at start-up whenever it is on outside Development.
 
+`Registry:InternalApiKey` **unset means `/v1/internal/vehicles/**` is not mapped at all** — a
+deployment that forgets it gets 404s rather than an unauthenticated write to
+`registry.driver_payouts`, and the missing binding then surfaces as `402 merchant-not-onboarded`
+at `POST /v1/fare/pay` (D-11). It must equal what fare-svc (C046) sends. D3' §0 puts the internal
+family on mTLS and the gateway refuses the prefix at the edge (C008); the shared secret is the
+interim until C042 lands a mesh.
+
+`Outbox:*` defaults to `registry` / `registry_outbox` / `registry.events` (set in
+`RegistryApplication`, overridable). `CommandLog:Schema` defaults to `registry`.
+
+Redis is **on** from C028 (`lock:driver:{driverId}`), but every use is best-effort, so a Redis
+outage degrades coordination rather than refusing requests.
+
 `Jwt:Issuer` must match what iam-svc signs with or every request is a 401. registry-svc holds no
 signing key — it resolves iam-svc's public half through `Jwt:JwksUrl` like every other consumer.
 
 ## Schema this service added
 
-`db/migrations/0307`–`0308`; each file's header says why, and both are recorded as
-micro-change-sets in the C021 handoff in `build/progress.md`. `registry.command_log` exists at
-all, and `registry.driver_profiles` carries `active_vehicle_id` /
-`active_vehicle_selected_at`.
+`db/migrations/0307`–`0311`; each file's header says why, and all are recorded as
+micro-change-sets in the C021 and C028 handoffs in `build/progress.md`.
+
+| Migration | What | Why |
+|---|---|---|
+| 0307 | `registry.command_log` | D3' §0 mandates a per-service idempotency log; D4' prints one for rides only |
+| 0308 | `driver_profiles.active_vehicle_id` | US-9.6/9.7 need the selection stored and no spec stores it |
+| 0309 | `registry.outbox` | `share.revoked` (D-22) had a producer and a consumer and no topic or table |
+| 0310 | `registry.driver_eligible_vehicles` | US-13.9's entitlement spans three tables and every consumer would re-derive it |
+| 0311 | relaxes 0308's composite FK | US-13.9 admits non-owners, which the composite key rejected |
+
+`EventTopics.RegistryEvents` (`registry.events`, key vehicleId) is **not** one of D6' §2.1's six
+topics; it is added to `infra/deploy/redpanda/bootstrap-topics.sh` and `slim-verify.sh` alongside
+them.
 
 ## The seed
 
