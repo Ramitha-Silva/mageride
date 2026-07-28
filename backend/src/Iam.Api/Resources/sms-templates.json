@@ -1,0 +1,20 @@
+{
+  "$comment": [
+    "Trilingual SMS bodies (Si/Ta/En) — the platform rule is that no user-facing string is",
+    "hardcoded (CLAUDE.md, D-26). Embedded in the assembly rather than read from disk so a",
+    "container image cannot ship without them.",
+    "",
+    "Placeholders are {code} and {minutes}. Keep every body inside 70 characters of Unicode if",
+    "you can: Sinhala and Tamil force UCS-2, where one SMS segment is 70 characters rather than",
+    "160, and a two-segment OTP costs twice as much on every sign-in in the country.",
+    "",
+    "Language keys are the iam.users.language values si | ta | en (C003 CHECK)."
+  ],
+  "templates": {
+    "otp": {
+      "en": "{code} is your MageRide code. Valid {minutes} min. Never share it.",
+      "si": "{code} ඔබගේ MageRide කේතයයි. මිනිත්තු {minutes}ක් වලංගුයි. කිසිවෙකුට නොදෙන්න.",
+      "ta": "{code} — MageRide குறியீடு. {minutes} நிமிடம் செல்லும். பகிர வேண்டாம்."
+    }
+  }
+}

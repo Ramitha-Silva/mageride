@@ -180,8 +180,11 @@ check_eq "all 23 schemas created" "23" \
 
 step "Tables owned by C003"
 # 9 from C003 + iam.command_log, which C020 added because D3' §0 mandates a per-service
-# idempotency log and D4' §5 prints one only for rides (C020 handoff micro-change-set).
-check_eq "10 iam tables" "10" \
+# idempotency log and D4' §5 prints one only for rides (C020 handoff micro-change-set);
+# + iam.user_credentials and iam.federated_identities, which C026 added because AL-07 gives the
+# two portals password / Google / Apple sign-in and D4' §1 stores no verifier and no provider
+# binding (C026 handoff micro-change-set).
+check_eq "12 iam tables" "12" \
   "SELECT count(*) FROM information_schema.tables WHERE table_schema='iam' AND table_type='BASE TABLE';"
 # 12 from C003 + registry.command_log, added by C021 for the same reason iam.command_log was
 # (C021 handoff micro-change-set).
@@ -215,6 +218,32 @@ check_eq "ux_sessions_active_app is a unique partial index on (user_id, app)" "1
   "SELECT count(*) FROM pg_indexes
     WHERE schemaname='iam' AND indexname='ux_sessions_active_app'
       AND indexdef LIKE 'CREATE UNIQUE INDEX%(user_id, app)%WHERE (revoked_at IS NULL)%';"
+
+step "AL-07 / AL-37 — portal sign-in surfaces (C026, 0107)"
+# The apps' two surfaces plus the two portals. Widened by 0107 so a browser sign-in has a legal
+# row at all; ux_sessions_active_app then also gives one live portal session per person, which is
+# the "session binding" AL-37 keeps as a compensating control.
+check_eq "sessions.app admits both apps and both portals" "1" \
+  "SELECT count(*) FROM pg_constraint
+    WHERE conrelid='iam.sessions'::regclass AND conname='ck_sessions_app'
+      AND pg_get_constraintdef(oid) LIKE '%passenger%driver%admin%fleet%';"
+check_eq "devices.platform admits web" "1" \
+  "SELECT count(*) FROM pg_constraint
+    WHERE conrelid='iam.devices'::regclass AND conname='ck_devices_platform'
+      AND pg_get_constraintdef(oid) LIKE '%android%ios%web%';"
+check_eq "one MageRide account per federated (provider, subject)" "1" \
+  "SELECT count(*) FROM pg_indexes
+    WHERE schemaname='iam' AND indexname='ux_federated_provider_subject'
+      AND indexdef LIKE 'CREATE UNIQUE INDEX%(provider, subject)%';"
+# AL-37 removed the MFA/TOTP step and replaced it with a lock-out. There is no iam.user_mfa and
+# there must never be one — the counter that replaced it lives on the credential it counts.
+check_eq "no MFA table exists anywhere (AL-37)" "0" \
+  "SELECT count(*) FROM information_schema.tables
+    WHERE table_schema='iam' AND table_name IN ('user_mfa','mfa_enrolments','user_totp');"
+check_eq "the lock-out counter is durable, not cached" "2" \
+  "SELECT count(*) FROM information_schema.columns
+    WHERE table_schema='iam' AND table_name='user_credentials'
+      AND column_name IN ('failed_attempts','locked_until');"
 
 step "AL-09 / D-37 — vehicle type and registration uniqueness"
 check_eq "vehicle_type CHECK lists the 10 canonical types" "1" \

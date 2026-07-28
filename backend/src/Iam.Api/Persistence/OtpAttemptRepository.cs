@@ -45,7 +45,7 @@ public interface IOtpAttemptRepository
 public sealed class OtpAttemptRepository : IOtpAttemptRepository
 {
     private const string Columns =
-        "id, phone, auth_id, otp_hash, attempts, expires_at, verified, device_id, app, created_at";
+        "id, phone, auth_id, otp_hash, attempts, expires_at, verified, device_id, app, fcm_token, created_at";
 
     public Task InsertAsync(
         NpgsqlConnection connection, NpgsqlTransaction? transaction, OtpAttempt attempt, CancellationToken cancellationToken)
@@ -56,9 +56,9 @@ public sealed class OtpAttemptRepository : IOtpAttemptRepository
         return connection.ExecuteAsync(new CommandDefinition(
             """
             INSERT INTO iam.otp_attempts
-              (id, phone, auth_id, otp_hash, attempts, expires_at, verified, device_id, app, created_at)
+              (id, phone, auth_id, otp_hash, attempts, expires_at, verified, device_id, app, fcm_token, created_at)
             VALUES
-              (@Id, @Phone, @AuthId, @OtpHash, @Attempts, @ExpiresAt, @Verified, @DeviceId, @App, @CreatedAt);
+              (@Id, @Phone, @AuthId, @OtpHash, @Attempts, @ExpiresAt, @Verified, @DeviceId, @App, @FcmToken, @CreatedAt);
             """,
             new
             {
@@ -71,6 +71,7 @@ public sealed class OtpAttemptRepository : IOtpAttemptRepository
                 attempt.Verified,
                 attempt.DeviceId,
                 attempt.App,
+                attempt.FcmToken,
                 attempt.CreatedAt,
             },
             transaction,

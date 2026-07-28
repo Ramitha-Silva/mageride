@@ -34,7 +34,12 @@ public static class JwksEndpoints
                 var seconds = (int)jwt.Value.JwksCacheDuration.TotalSeconds;
                 context.Response.Headers.CacheControl =
                     string.Create(CultureInfo.InvariantCulture, $"public, max-age={seconds}");
-                context.Response.Headers[HeaderNames.ETag] = $"\"{keys.KeyId}\"";
+
+                // Every published kid, not just the active one: during a rotation overlap the
+                // document changes while the signing key does not, and an ETag that only tracked
+                // the signer would let an intermediary serve a key set missing the retired key
+                // half the fleet's tokens still name.
+                context.Response.Headers[HeaderNames.ETag] = $"\"{string.Join('.', keys.KeyIds)}\"";
 
                 return TypedResults.Ok(JsonWebKeySetDocument.From(keys));
             })

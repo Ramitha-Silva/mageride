@@ -41,7 +41,10 @@ public sealed class OtpOptions
     public string? PepperKey { get; set; }
 }
 
-/// <summary>SMS delivery for the OTP (D7' §4.2 <c>Sms__NotifyLkApiKey</c>).</summary>
+/// <summary>
+/// SMS delivery for the OTP (D6' §7.3, D7' §4.2 <c>Sms__NotifyLkApiKey</c> /
+/// <c>Sms__SecondaryGateway</c>).
+/// </summary>
 public sealed class SmsOptions
 {
     public const string SectionName = "Sms";
@@ -50,13 +53,49 @@ public sealed class SmsOptions
     public const string NotifyLkProvider = "notifylk";
 
     /// <summary>
-    /// <c>dev</c> logs the code instead of sending it; <c>notifylk</c> is the real gateway and
-    /// lands with C026.
+    /// <c>dev</c> logs the code instead of sending it; <c>notifylk</c> is the real gateway
+    /// (D6' §7.3 "Primary: Notify.lk REST").
     /// </summary>
     [Required]
     public string Provider { get; set; } = DevProvider;
 
+    /// <summary>Notify.lk REST base address.</summary>
+    [Required]
+    public string NotifyLkBaseUrl { get; set; } = "https://app.notify.lk/api/v1/";
+
+    /// <summary>Notify.lk account id (their <c>user_id</c> parameter).</summary>
+    public string? NotifyLkUserId { get; set; }
+
+    /// <summary>D7' §4.2 <c>Sms__NotifyLkApiKey</c>.</summary>
     public string? NotifyLkApiKey { get; set; }
+
+    /// <summary>Registered alphanumeric sender mask. <c>NotifyDEMO</c> is their sandbox one.</summary>
+    [Required]
+    public string NotifyLkSenderId { get; set; } = "MageRide";
+
+    /// <summary>
+    /// D7' §4.2 <c>Sms__SecondaryGateway</c> — the Dialog/Mobitel fallback of D6' §7.3. Empty
+    /// disables the fallback, which is legal: a deployment with one gateway is a deployment with
+    /// one gateway, not a broken one.
+    /// </summary>
+    public string? SecondaryGateway { get; set; }
+
+    /// <summary>Bearer credential for <see cref="SecondaryGateway"/>.</summary>
+    public string? SecondaryApiKey { get; set; }
+
+    /// <summary>Sender mask on the secondary gateway, when it differs from the primary's.</summary>
+    public string? SecondarySenderId { get; set; }
+
+    /// <summary>
+    /// Sends attempted against one gateway before the fallback is tried. D6' §7.3: "Retry:
+    /// 2 attempts".
+    /// </summary>
+    [Range(1, 5)]
+    public int MaxAttemptsPerGateway { get; set; } = 2;
+
+    /// <summary>Per-attempt budget. An OTP that lands after the user has given up is not an OTP.</summary>
+    [Range(typeof(TimeSpan), "00:00:01", "00:01:00")]
+    public TimeSpan RequestTimeout { get; set; } = TimeSpan.FromSeconds(10);
 
     /// <summary>
     /// Guard rail: the dev sender writes a live OTP into the log, so outside Development it has
@@ -87,6 +126,19 @@ public sealed class TokenOptions
     /// </summary>
     public string? SigningKeyId { get; set; }
 
+    /// <summary>
+    /// Keys that have been rotated out but whose tokens are still alive (D7' §13, 90 days).
+    /// Published in the JWKS and accepted on validation; never used to sign.
+    /// </summary>
+    /// <remarks>
+    /// A rotation is two deploys, not one: the incoming key becomes
+    /// <see cref="SigningKeyPem"/> and the outgoing one moves here, where it stays for at least
+    /// one <see cref="AccessTokenLifetime"/> plus the D-21 JWKS cache window. Dropping it in the
+    /// same deploy that promotes the new key would 401 every token issued in the previous
+    /// half hour.
+    /// </remarks>
+    public IList<string> RetiredSigningKeyPems { get; init; } = [];
+
     /// <summary><c>iss</c>. Must match <c>Jwt:Issuer</c> wherever these tokens are validated.</summary>
     public string Issuer { get; set; } = "https://iam.mageride.lk";
 
@@ -110,4 +162,127 @@ public sealed class TokenOptions
     /// rotation (D7' §13) does not invalidate every live refresh token.
     /// </summary>
     public string? RefreshTokenKey { get; set; }
+}
+
+/// <summary>
+/// The three controls AL-37 kept when it removed the MFA/TOTP step: failed-attempt lock-out,
+/// session binding and an optional IP allow-list on internal roles.
+/// </summary>
+/// <remarks>
+/// Session binding is not configurable and so is not here — it is the <c>device_id</c> claim plus
+/// the C003 partial unique index, which is why a portal sign-in from a second browser ends the
+/// first (0107).
+/// </remarks>
+public sealed class AuthPolicyOptions
+{
+    public const string SectionName = "Auth";
+
+    /// <summary>
+    /// Consecutive wrong passwords before the account locks. No spec fixes the number; five
+    /// matches D-32's OTP budget, which is the closest thing the platform has to a precedent.
+    /// </summary>
+    [Range(1, 20)]
+    public int MaxFailedAttempts { get; set; } = 5;
+
+    /// <summary>
+    /// How long a locked account stays locked. Long enough to make online guessing pointless,
+    /// short enough that an admin locked out by a fat-fingered password is not paging anybody.
+    /// </summary>
+    [Range(typeof(TimeSpan), "00:00:30", "24:00:00")]
+    public TimeSpan LockoutDuration { get; set; } = TimeSpan.FromMinutes(15);
+
+    /// <summary>
+    /// Optional CIDRs the six internal roles may sign in from (AL-37). Empty disables the check
+    /// — the ADD calls it optional, and a platform whose only admin is at home on DHCP would
+    /// otherwise be one lease renewal from locked out.
+    /// </summary>
+    public IList<string> InternalRoleIpAllowList { get; init; } = [];
+
+    /// <summary>
+    /// Read the caller's address from <c>X-Forwarded-For</c>. True because every request arrives
+    /// through the YARP gateway (C008), where the socket address is the gateway's own.
+    /// </summary>
+    public bool TrustForwardedFor { get; set; } = true;
+
+    /// <summary>
+    /// PBKDF2 iterations for new password hashes. Existing rows carry their own count, so raising
+    /// this is safe and takes effect the next time a password is set.
+    /// </summary>
+    [Range(100_000, 5_000_000)]
+    public int PasswordIterations { get; set; } = 600_000;
+
+    /// <summary>The contract's <c>PasswordLogin.password</c> <c>minLength: 12</c>.</summary>
+    [Range(8, 256)]
+    public int MinimumPasswordLength { get; set; } = 12;
+}
+
+/// <summary>
+/// The two external identity providers AL-07 puts on the portals: Google (Admin + Fleet) and
+/// Apple (Fleet).
+/// </summary>
+public sealed class OidcOptions
+{
+    public const string SectionName = "Oidc";
+
+    public GoogleOidcOptions Google { get; init; } = new();
+
+    public AppleOidcOptions Apple { get; init; } = new();
+}
+
+/// <summary>Google OIDC — ID-token sign-in and the Admin Portal's authorization-code arm.</summary>
+public sealed class GoogleOidcOptions
+{
+    /// <summary>
+    /// Accepted <c>aud</c> values — the portals' OAuth client ids. An ID token minted for
+    /// somebody else's client is a valid Google token and must not be a MageRide session.
+    /// </summary>
+    public IList<string> ClientIds { get; init; } = [];
+
+    /// <summary>Client secret for the <c>/v1/admin/auth/login</c> authorization-code exchange.</summary>
+    public string? ClientSecret { get; set; }
+
+    /// <summary>Where the code is exchanged for an <c>id_token</c>.</summary>
+    public string TokenEndpoint { get; set; } = "https://oauth2.googleapis.com/token";
+
+    /// <summary>Google's signing keys.</summary>
+    public string JwksUrl { get; set; } = "https://www.googleapis.com/oauth2/v3/certs";
+
+    /// <summary>Google mints both spellings and has done for years.</summary>
+    public IList<string> Issuers { get; init; } = ["https://accounts.google.com", "accounts.google.com"];
+
+    /// <summary>Fallback redirect when the request body carries none.</summary>
+    public string? RedirectUri { get; set; }
+}
+
+/// <summary>Apple "Sign in with Apple" — Fleet Portal only (AL-07).</summary>
+public sealed class AppleOidcOptions
+{
+    /// <summary>Accepted <c>aud</c> values — the Services ID of the Fleet Portal.</summary>
+    public IList<string> ClientIds { get; init; } = [];
+
+    public string JwksUrl { get; set; } = "https://appleid.apple.com/auth/keys";
+
+    public IList<string> Issuers { get; init; } = ["https://appleid.apple.com"];
+}
+
+/// <summary>
+/// The one MQTT fact iam-svc owns that the kernel's <see cref="MageRide.Shared.Mqtt.MqttOptions"/>
+/// cannot: how long a ride is assumed to run when E-02 asks for <c>active-ride + 2 h</c>.
+/// </summary>
+/// <remarks>
+/// Bound to the same <c>Mqtt</c> section, because it is the same knob-set from an operator's
+/// point of view. See <c>MqttTokenService</c> for why an assumption is needed at all — nothing in
+/// D4' §5 stores a ride's expected end.
+/// </remarks>
+public sealed class IamMqttOptions
+{
+    public const string SectionName = "Mqtt";
+
+    /// <summary>
+    /// The longest a Mode C ride is assumed to run, measured from its creation. The session
+    /// token covers this plus <c>Mqtt:SessionTokenRideGrace</c>, floored at
+    /// <c>Mqtt:SessionTokenMinimumTtl</c> (E-02).
+    /// </summary>
+    [Range(typeof(TimeSpan), "00:15:00", "24:00:00")]
+    public TimeSpan MaxRideDuration { get; set; } = TimeSpan.FromHours(4);
 }

@@ -16,14 +16,17 @@ namespace MageRide.Iam.Otp;
 /// <param name="DeviceId">Stable per-install identifier (AL-08).</param>
 /// <param name="App"><c>passenger</c> | <c>driver</c>.</param>
 /// <param name="Platform"><c>android</c> | <c>ios</c>, from the gateway's <c>X-Platform</c> (D-31).</param>
-public sealed record RequestOtpCommand(string? Phone, string? DeviceId, string App, string Platform);
+/// <param name="FcmToken">Optional push token. Held on the attempt until verify identifies the
+/// user, because <c>iam.devices</c> has no row to write it to before that (0107).</param>
+public sealed record RequestOtpCommand(
+    string? Phone, string? DeviceId, string App, string Platform, string? FcmToken = null);
 
 /// <param name="AttemptsRemaining">Sends left in this hour (D-32).</param>
 /// <param name="CooldownSeconds">Seconds before the next send is allowed (D-32).</param>
 public sealed record OtpDispatched(Guid AuthId, int AttemptsRemaining, int CooldownSeconds);
 
 /// <summary>The outcome of a successful verify.</summary>
-public sealed record VerifiedSignIn(IssuedSession Session, IamUser User, IReadOnlyList<string> Roles, bool IsNewUser);
+public sealed record VerifiedSignIn(IssuedSession Session, IamUser User, SessionPrincipal Principal, bool IsNewUser);
 
 /// <summary>
 /// Phone-OTP sign-in for the passenger and driver apps — the only sign-in those surfaces have
@@ -103,9 +106,10 @@ public sealed class OtpService(
             Verified: false,
             DeviceId: deviceId,
             App: command.App,
+            FcmToken: NormaliseFcmToken(command.FcmToken),
             CreatedAt: now), cancellationToken);
 
-        await sender.SendAsync(phone, code, existing?.Language ?? "en", cancellationToken);
+        await DeliverAsync(phone, code, existing?.Language ?? "en", cancellationToken);
 
         return new OtpDispatched(authId, allowance, _options.ResendCooldownSec);
     }
@@ -131,7 +135,7 @@ public sealed class OtpService(
         }
 
         var user = await users.FindByPhoneAsync(connection, null, attempt.Phone, cancellationToken);
-        await sender.SendAsync(attempt.Phone, code, user?.Language ?? "en", cancellationToken);
+        await DeliverAsync(attempt.Phone, code, user?.Language ?? "en", cancellationToken);
 
         return new OtpDispatched(authId, allowance, _options.ResendCooldownSec);
     }
@@ -180,7 +184,7 @@ public sealed class OtpService(
         var app = attempt.App ?? MageRideApps.Passenger;
         Guid deviceRowId;
         IamUser user;
-        IReadOnlyList<string> roles;
+        SessionPrincipal principal;
         bool isNewUser;
 
         await using (var unitOfWork = await unitOfWorkFactory.BeginAsync(cancellationToken: cancellationToken))
@@ -209,7 +213,7 @@ public sealed class OtpService(
             }
 
             user = found;
-            roles = await users.RolesAsync(unitOfWork.Connection, unitOfWork.Transaction, user.Id, cancellationToken);
+            principal = await users.PrincipalAsync(unitOfWork.Connection, unitOfWork.Transaction, user.Id, cancellationToken);
 
             deviceRowId = await devices.EnsureAsync(
                 unitOfWork.Connection,
@@ -217,22 +221,57 @@ public sealed class OtpService(
                 user.Id,
                 presentedDevice,
                 platform,
-                // The contract's optional fcmToken is accepted and dropped: push registration
-                // belongs to notification-svc (C051) and nothing in the skeleton sends an FCM
-                // message. Recorded in the C020 handoff.
-                fcmToken: null,
+                // The contract's optional fcmToken, carried from otp/request on the attempt row
+                // (0107). It cannot be written before this point: iam.devices.fcm_apns_token
+                // lives on a row that does not exist until verify identifies the user.
+                // notification-svc (C051) is what eventually sends to it.
+                attempt.FcmToken,
                 cancellationToken);
 
             await unitOfWork.CommitAsync(cancellationToken);
         }
 
-        var session = await sessionService.IssueAsync(user.Id, deviceRowId, presentedDevice, app, roles, cancellationToken);
+        var session = await sessionService.IssueAsync(principal, deviceRowId, presentedDevice, app, cancellationToken);
 
         logger.LogInformation(
             "Issued a {App} session for {UserId} (new user: {IsNewUser})", app, user.Id, isNewUser);
 
-        return new VerifiedSignIn(session, user, roles, isNewUser);
+        return new VerifiedSignIn(session, user, principal, isNewUser);
     }
+
+    /// <summary>
+    /// Hands the code to the SMS transport and turns a delivery failure into the 503 the caller
+    /// can act on.
+    /// </summary>
+    /// <remarks>
+    /// Without this a gateway outage is a 500 — an internal error the client is told nothing
+    /// about and its retry policy treats as a bug. It is not a bug: it is Notify.lk being down,
+    /// and "try again shortly" is both true and actionable. <see cref="FallbackOtpSender"/> has
+    /// already tried the secondary gateway by the time this catches anything (D6' §7.3).
+    /// </remarks>
+    private async Task DeliverAsync(string phone, string code, string language, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await sender.SendAsync(phone, code, language, cancellationToken);
+        }
+        catch (Exception ex) when (ex is OtpDeliveryException or HttpRequestException or TaskCanceledException
+                                       && !cancellationToken.IsCancellationRequested)
+        {
+            logger.LogError(ex, "The SMS gateway ({Provider}) could not deliver an OTP", sender.Provider);
+            throw new MageRideException(
+                MageRideErrors.DependencyUnavailable, "The SMS gateway is unavailable; try again shortly.");
+        }
+    }
+
+    /// <summary>An empty or oversized push token is dropped rather than rejected.</summary>
+    /// <remarks>
+    /// The contract caps <c>fcmToken</c> at 512 characters and marks it optional. A bad one is
+    /// not a reason to refuse a sign-in — the worst case is that a device gets no push until it
+    /// registers again, and notification-svc (C051) owns that path anyway.
+    /// </remarks>
+    private static string? NormaliseFcmToken(string? fcmToken) =>
+        string.IsNullOrWhiteSpace(fcmToken) || fcmToken.Length > 512 ? null : fcmToken;
 
     private static string RequireDeviceId(string? deviceId)
     {

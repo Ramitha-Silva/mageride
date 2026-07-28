@@ -1,13 +1,19 @@
+using System.Net.Http.Headers;
 using MageRide.Iam.Auth;
 using MageRide.Iam.Configuration;
+using MageRide.Iam.Mqtt;
 using MageRide.Iam.Otp;
 using MageRide.Iam.Persistence;
 using MageRide.Iam.Sessions;
+using MageRide.Iam.SignIn;
+using MageRide.Shared.Mqtt;
+using MageRide.Shared.Resilience;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 
 namespace MageRide.Iam;
 
@@ -33,24 +39,49 @@ public static class IamServiceCollectionExtensions
             .ValidateDataAnnotations()
             .ValidateOnStart();
 
+        services.AddOptions<AuthPolicyOptions>()
+            .Bind(configuration.GetSection(AuthPolicyOptions.SectionName))
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+
+        services.AddOptions<OidcOptions>()
+            .Bind(configuration.GetSection(OidcOptions.SectionName))
+            .ValidateOnStart();
+
+        services.AddOptions<IamMqttOptions>()
+            .Bind(configuration.GetSection(IamMqttOptions.SectionName))
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+
         services.TryAddSingleton(TimeProvider.System);
+
+        // The session-token issuer and the broker settings behind POST /v1/auth/mqtt-token. iam-svc
+        // is one of the few services with any business holding the secret that mints one (E-02) —
+        // D6' §3.2 eventually moves that to provisioning-svc (C030) and only the signature changes.
+        services.AddMageRideMqtt(configuration);
 
         services.AddSingleton<SigningKeyRing>();
         services.AddSingleton<RefreshTokenCodec>();
         services.AddSingleton<OtpCodes>();
+        services.AddSingleton<SmsTemplates>();
+        services.AddSingleton<PasswordHasher>();
+        services.AddSingleton<InternalAccessPolicy>();
         services.AddSingleton<IAccessTokenIssuer, AccessTokenIssuer>();
 
         services.AddSingleton<IUserRepository, UserRepository>();
         services.AddSingleton<IDeviceRepository, DeviceRepository>();
         services.AddSingleton<ISessionRepository, SessionRepository>();
         services.AddSingleton<IOtpAttemptRepository, OtpAttemptRepository>();
+        services.AddSingleton<ICredentialRepository, CredentialRepository>();
+        services.AddSingleton<IPublisherRepository, PublisherRepository>();
 
         services.AddScoped<ISessionService, SessionService>();
         services.AddScoped<IOtpService, OtpService>();
+        services.AddScoped<IPortalSignInService, PortalSignInService>();
+        services.AddScoped<IMqttTokenService, MqttTokenService>();
 
-        // TryAdd: a host that already chose a transport keeps it. The options validation above is
-        // what rejects an unimplemented or unsafe provider, so only the dev sender is reachable.
-        services.TryAddSingleton<IOtpSender>(sp => ActivatorUtilities.CreateInstance<DevLoggingOtpSender>(sp));
+        AddOidc(services);
+        AddOtpSender(services, configuration);
 
         // iam-svc validates the tokens it just signed. Resolving them from its own JWKS over HTTP
         // would make the service depend on itself to answer a request and would break the moment
@@ -67,7 +98,7 @@ public static class IamServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Binds and vets <c>Sms</c>. All three rules run at host start rather than on the first OTP:
+    /// Binds and vets <c>Sms</c>. Every rule runs at host start rather than on the first OTP:
     /// a service that boots healthy and then cannot deliver a code is a service nobody can sign
     /// in to, discovered by a user rather than by a deploy.
     /// </summary>
@@ -79,9 +110,15 @@ public static class IamServiceCollectionExtensions
                 static sms => IsProvider(sms, SmsOptions.DevProvider) || IsProvider(sms, SmsOptions.NotifyLkProvider),
                 $"Sms:Provider must be '{SmsOptions.DevProvider}' or '{SmsOptions.NotifyLkProvider}'.")
             .Validate(
-                static sms => !IsProvider(sms, SmsOptions.NotifyLkProvider),
-                "Sms:Provider=notifylk is not implemented in C020 (ws-iam-minimal). The Notify.lk gateway, its " +
-                "Si/Ta/En templates (D-26) and the D-33 secondary gateway land with C026/C051.")
+                static sms => !IsProvider(sms, SmsOptions.NotifyLkProvider)
+                              || (!string.IsNullOrWhiteSpace(sms.NotifyLkApiKey)
+                                  && !string.IsNullOrWhiteSpace(sms.NotifyLkUserId)),
+                "Sms:Provider=notifylk needs Sms:NotifyLkApiKey and Sms:NotifyLkUserId (D7' §4.2). Without them " +
+                "every OTP is refused by the gateway and nobody can sign in.")
+            .Validate(
+                static sms => string.IsNullOrWhiteSpace(sms.SecondaryGateway)
+                              || Uri.TryCreate(sms.SecondaryGateway, UriKind.Absolute, out _),
+                "Sms:SecondaryGateway must be an absolute URL (D6' §7.3 Dialog/Mobitel fallback).")
             .Validate(
                 sms => !IsProvider(sms, SmsOptions.DevProvider)
                        || environment.IsDevelopment()
@@ -90,6 +127,101 @@ public static class IamServiceCollectionExtensions
                 "to be asked for explicitly with Sms:AllowDevSenderOutsideDevelopment=true.")
             .ValidateDataAnnotations()
             .ValidateOnStart();
+    }
+
+    /// <summary>
+    /// The SMS transport, its per-gateway retry (D6' §8.3) and the secondary-gateway fallback
+    /// (D6' §7.3).
+    /// </summary>
+    /// <remarks>
+    /// <c>TryAdd</c> on <see cref="IOtpSender"/>: a host that already chose a transport keeps it,
+    /// which is how the test suite substitutes a capturing sender for the whole pipeline.
+    /// </remarks>
+    private static void AddOtpSender(IServiceCollection services, IConfiguration configuration)
+    {
+        // The resilience pipeline is built once, at registration, so the retry budget is read
+        // here rather than from the validated IOptions the request path uses. Same section, same
+        // value; a bad one is still caught by ValidateOnStart before a request reaches either.
+        var sms = configuration.GetSection(SmsOptions.SectionName).Get<SmsOptions>() ?? new SmsOptions();
+
+        // D6' §7.3: "Retry: 2 attempts" — the first plus one more, then the fallback gateway takes
+        // over. A third try against a gateway that has refused twice only delays the OTP the user
+        // is waiting for.
+        var perGateway = new ResilienceOptions
+        {
+            MaxRetryAttempts = Math.Max(0, sms.MaxAttemptsPerGateway - 1),
+            AttemptTimeout = sms.RequestTimeout,
+        };
+
+        services.AddHttpClient(NotifyLkOtpSender.HttpClientName)
+            .ConfigureHttpClient(static (provider, client) =>
+            {
+                var sms = provider.GetRequiredService<IOptions<SmsOptions>>().Value;
+
+                // A relative "send" resolves against a base that ends in '/'; without the slash
+                // Uri would drop the last path segment and post to the wrong endpoint.
+                var baseUrl = sms.NotifyLkBaseUrl.EndsWith('/') ? sms.NotifyLkBaseUrl : sms.NotifyLkBaseUrl + "/";
+                client.BaseAddress = new Uri(baseUrl);
+                client.Timeout = sms.RequestTimeout;
+            })
+            .AddMageRideResilience(perGateway);
+
+        services.AddHttpClient(SecondaryGatewayOtpSender.HttpClientName)
+            .ConfigureHttpClient(static (provider, client) =>
+            {
+                var sms = provider.GetRequiredService<IOptions<SmsOptions>>().Value;
+
+                if (!string.IsNullOrWhiteSpace(sms.SecondaryGateway))
+                {
+                    client.BaseAddress = new Uri(sms.SecondaryGateway);
+                }
+
+                if (!string.IsNullOrWhiteSpace(sms.SecondaryApiKey))
+                {
+                    client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", sms.SecondaryApiKey);
+                }
+
+                client.Timeout = sms.RequestTimeout;
+            })
+            .AddMageRideResilience(perGateway);
+
+        services.TryAddSingleton<IOtpSender>(static provider =>
+        {
+            var sms = provider.GetRequiredService<IOptions<SmsOptions>>().Value;
+
+            if (!string.Equals(sms.Provider, SmsOptions.NotifyLkProvider, StringComparison.OrdinalIgnoreCase))
+            {
+                return ActivatorUtilities.CreateInstance<DevLoggingOtpSender>(provider);
+            }
+
+            var primary = ActivatorUtilities.CreateInstance<NotifyLkOtpSender>(provider);
+
+            if (string.IsNullOrWhiteSpace(sms.SecondaryGateway))
+            {
+                return primary;
+            }
+
+            return ActivatorUtilities.CreateInstance<FallbackOtpSender>(
+                provider, primary, ActivatorUtilities.CreateInstance<SecondaryGatewayOtpSender>(provider));
+        });
+    }
+
+    /// <summary>Google and Apple sign-in (AL-07).</summary>
+    private static void AddOidc(IServiceCollection services)
+    {
+        services.AddHttpClient(HttpOidcKeySource.HttpClientName)
+            .ConfigureHttpClient(static client => client.Timeout = TimeSpan.FromSeconds(10))
+            .AddMageRideResilience();
+
+        // Deliberately no retry pipeline. An authorization code is single-use: a retry after a
+        // response we did not see spends the code and returns invalid_grant, turning a blip into
+        // a definite failure. One attempt, one timeout, and the operator signs in again.
+        services.AddHttpClient(GoogleAuthCodeExchange.HttpClientName)
+            .ConfigureHttpClient(static client => client.Timeout = TimeSpan.FromSeconds(15));
+
+        services.TryAddSingleton<IOidcKeySource, HttpOidcKeySource>();
+        services.TryAddSingleton<IOidcTokenVerifier, OidcTokenVerifier>();
+        services.TryAddSingleton<IGoogleAuthCodeExchange, GoogleAuthCodeExchange>();
     }
 
     private static bool IsProvider(SmsOptions options, string provider) =>

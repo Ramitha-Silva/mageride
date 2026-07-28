@@ -50,11 +50,15 @@ public static class IamApplication
 
         var app = builder.Build();
 
-        // Fail fast. Both are singletons that would otherwise be built on the first sign-in, so a
-        // missing Jwt:SigningKeyPem or Otp:PepperKey would surface as a 500 on a user's login
-        // rather than as a deploy that refused to come up.
+        // Fail fast. All four are singletons that would otherwise be built on the first request
+        // that needed them, so a missing Jwt:SigningKeyPem, Otp:PepperKey or
+        // Mqtt:SessionTokenSecret — or an SMS template file that did not make it into the image —
+        // would surface as a 500 on somebody's sign-in rather than as a deploy that refused to
+        // come up.
         _ = app.Services.GetRequiredService<Auth.SigningKeyRing>();
         _ = app.Services.GetRequiredService<Otp.OtpCodes>();
+        _ = app.Services.GetRequiredService<Otp.SmsTemplates>();
+        _ = app.Services.GetRequiredService<MageRide.Shared.Mqtt.MqttSessionTokenIssuer>();
 
         app.UseMageRideDefaults(serviceOptions);
 

@@ -69,12 +69,53 @@ public sealed class OtpSenderSelectionTests
     }
 
     [Fact]
-    public void Selecting_notify_lk_fails_fast_rather_than_swallowing_every_otp()
+    public void Selecting_notify_lk_without_credentials_fails_fast_rather_than_swallowing_every_otp()
     {
         var exception = Assert.Throws<OptionsValidationException>(
             () => Resolve(TestEnvironment.Development, ("Sms:Provider", SmsOptions.NotifyLkProvider)));
 
-        Assert.Contains("C026", string.Join(' ', exception.Failures), StringComparison.Ordinal);
+        Assert.Contains("Sms:NotifyLkApiKey", string.Join(' ', exception.Failures), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Notify_lk_is_the_sender_once_it_is_configured()
+    {
+        var sender = ResolveSender(
+            ("Sms:Provider", SmsOptions.NotifyLkProvider),
+            ("Sms:NotifyLkUserId", "12345"),
+            ("Sms:NotifyLkApiKey", "not-a-real-key"));
+
+        Assert.IsType<NotifyLkOtpSender>(sender);
+    }
+
+    /// <summary>
+    /// D6' §7.3's secondary gateway is only wired in when one is configured — a deployment with
+    /// one gateway is a deployment with one gateway, not a broken one.
+    /// </summary>
+    [Fact]
+    public void A_configured_secondary_gateway_wraps_notify_lk_in_the_fallback()
+    {
+        var sender = ResolveSender(
+            ("Sms:Provider", SmsOptions.NotifyLkProvider),
+            ("Sms:NotifyLkUserId", "12345"),
+            ("Sms:NotifyLkApiKey", "not-a-real-key"),
+            ("Sms:SecondaryGateway", "https://sms.example.lk/send"),
+            ("Sms:SecondaryApiKey", "also-not-real"));
+
+        Assert.IsType<FallbackOtpSender>(sender);
+        Assert.Equal("notifylk+secondary", sender.Provider);
+    }
+
+    [Fact]
+    public void A_secondary_gateway_that_is_not_a_url_is_a_configuration_error()
+    {
+        var exception = Assert.Throws<OptionsValidationException>(
+            () => Resolve(
+                TestEnvironment.Development,
+                ("Sms:Provider", SmsOptions.DevProvider),
+                ("Sms:SecondaryGateway", "dialog-sms-gateway")));
+
+        Assert.Contains("Sms:SecondaryGateway", string.Join(' ', exception.Failures), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -84,5 +125,19 @@ public sealed class OtpSenderSelectionTests
             () => Resolve(TestEnvironment.Development, ("Sms:Provider", "twilio")));
 
         Assert.Contains("Sms:Provider", string.Join(' ', exception.Failures), StringComparison.Ordinal);
+    }
+
+    private static IOtpSender ResolveSender(params (string Key, string Value)[] settings)
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(settings.Select(s => new KeyValuePair<string, string?>(s.Key, s.Value)))
+            .Build();
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddIamServices(configuration, TestEnvironment.Development);
+
+        var provider = services.BuildServiceProvider();
+        return provider.GetRequiredService<IOtpSender>();
     }
 }

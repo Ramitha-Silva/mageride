@@ -80,11 +80,32 @@ public static class FleetRoles
     public static bool Satisfies(string? held, string required) => Rank(held) >= Rank(required) && Rank(required) > 0;
 }
 
-/// <summary>The apps a session may belong to (AL-08). Portals are not app-scoped.</summary>
+/// <summary>
+/// The surfaces a session may belong to — the <c>app</c> claim and <c>iam.sessions.app</c>
+/// (AL-08, migration 0107).
+/// </summary>
+/// <remarks>
+/// The two apps sign in by Phone OTP and the two portals by password / Google / Apple (AL-07),
+/// but every surface gets the same session shape, so every surface names itself here. The C003
+/// partial unique index on <c>(user_id, app)</c> then reads as AL-08 for the apps — a new handset
+/// ends the old one, per app — and as the "session binding" AL-37 keeps for the portals.
+/// </remarks>
 public static class MageRideApps
 {
     public const string Passenger = "passenger";
     public const string Driver = "driver";
+
+    /// <summary>Admin Portal, <c>admin.mageride.lk</c> (AL-02).</summary>
+    public const string Admin = "admin";
+
+    /// <summary>Fleet Portal, <c>fleet.mageride.lk</c> (AL-03).</summary>
+    public const string Fleet = "fleet";
+
+    /// <summary>The two phone-OTP surfaces (AL-07).</summary>
+    public static readonly IReadOnlySet<string> Apps = new HashSet<string>(StringComparer.Ordinal) { Passenger, Driver };
+
+    /// <summary>The two browser surfaces (AL-07).</summary>
+    public static readonly IReadOnlySet<string> Portals = new HashSet<string>(StringComparer.Ordinal) { Admin, Fleet };
 }
 
 /// <summary>Reads MageRide claims off the authenticated principal.</summary>

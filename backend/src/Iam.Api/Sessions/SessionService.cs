@@ -22,11 +22,12 @@ public sealed record IssuedSession(Guid SessionId, Guid UserId, string App, Acce
 public interface ISessionService
 {
     /// <summary>
-    /// Opens a session, revoking whatever session this user had <em>for this app</em> first.
-    /// A driver signing in does not end the same person's passenger session (AL-08, US-1.12).
+    /// Opens a session, revoking whatever session this user had <em>for this surface</em> first.
+    /// A driver signing in does not end the same person's passenger session, and neither ends
+    /// their Fleet Portal session (AL-08, US-1.12, migration 0107).
     /// </summary>
     Task<IssuedSession> IssueAsync(
-        Guid userId, Guid deviceRowId, string deviceKey, string app, IReadOnlyList<string> roles, CancellationToken cancellationToken);
+        SessionPrincipal principal, Guid deviceRowId, string deviceKey, string app, CancellationToken cancellationToken);
 
     /// <summary>
     /// Spends a refresh token and issues its successor (D-29). Replaying an already-spent token
@@ -55,29 +56,28 @@ public sealed class SessionService(
     private readonly TokenOptions _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
 
     public async Task<IssuedSession> IssueAsync(
-        Guid userId,
+        SessionPrincipal principal,
         Guid deviceRowId,
         string deviceKey,
         string app,
-        IReadOnlyList<string> roles,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(principal);
         ArgumentException.ThrowIfNullOrWhiteSpace(deviceKey);
         ArgumentException.ThrowIfNullOrWhiteSpace(app);
-        ArgumentNullException.ThrowIfNull(roles);
 
         var now = timeProvider.GetUtcNow();
         var jti = Guid.NewGuid();
 
         // A sign-in starts its own rotation family, so a refresh token left over from a previous
         // sign-in cannot reach this session's lineage when it is replayed (0106).
-        var session = new AuthSession(jti, userId, deviceRowId, app, FamilyId: jti, now, null, null);
+        var session = new AuthSession(jti, principal.UserId, deviceRowId, app, FamilyId: jti, now, null, null);
 
         IReadOnlyList<Guid> superseded;
         await using (var unitOfWork = await unitOfWorkFactory.BeginAsync(cancellationToken: cancellationToken))
         {
             superseded = await sessions.RevokeActiveAsync(
-                unitOfWork.Connection, unitOfWork.Transaction, userId, app, now, cancellationToken);
+                unitOfWork.Connection, unitOfWork.Transaction, principal.UserId, app, now, cancellationToken);
 
             await sessions.InsertAsync(unitOfWork.Connection, unitOfWork.Transaction, session, cancellationToken);
             await unitOfWork.CommitAsync(cancellationToken);
@@ -86,7 +86,7 @@ public sealed class SessionService(
         await ForgetAsync(superseded, cancellationToken);
         await RememberAsync(session, cancellationToken);
 
-        return Build(session, deviceKey, roles);
+        return Build(session, deviceKey, principal);
     }
 
     public async Task<IssuedSession> RotateAsync(string? refreshToken, CancellationToken cancellationToken)
@@ -143,8 +143,11 @@ public sealed class SessionService(
         var deviceKey = await devices.FindKeyAsync(
             unitOfWork.Connection, unitOfWork.Transaction, existing.DeviceId, cancellationToken);
 
-        var roles = await users.RolesAsync(unitOfWork.Connection, unitOfWork.Transaction, existing.UserId, cancellationToken);
-        if (roles.Count == 0)
+        // Re-read rather than carry forward: a role granted (C029's driver grant) or revoked
+        // since the last rotation has to reach the token within one refresh, not at next sign-in.
+        var principal = await users.PrincipalAsync(
+            unitOfWork.Connection, unitOfWork.Transaction, existing.UserId, cancellationToken);
+        if (principal.Roles.Count == 0)
         {
             // The account was deleted or stripped of every role while the session was alive.
             await unitOfWork.CommitAsync(cancellationToken);
@@ -159,7 +162,7 @@ public sealed class SessionService(
         await ForgetAsync([existing.Jti], cancellationToken);
         await RememberAsync(rotated, cancellationToken);
 
-        return Build(rotated, deviceKey ?? string.Empty, roles);
+        return Build(rotated, deviceKey ?? string.Empty, principal);
     }
 
     public async Task LogoutAsync(Guid userId, string app, Guid? sessionId, CancellationToken cancellationToken)
@@ -191,10 +194,16 @@ public sealed class SessionService(
         await ForgetAsync(revoked, cancellationToken);
     }
 
-    private IssuedSession Build(AuthSession session, string deviceKey, IReadOnlyList<string> roles)
+    private IssuedSession Build(AuthSession session, string deviceKey, SessionPrincipal principal)
     {
         var access = accessTokens.Issue(new AccessTokenRequest(
-            session.UserId, roles, deviceKey, session.App, session.Jti));
+            session.UserId,
+            principal.Roles,
+            deviceKey,
+            session.App,
+            session.Jti,
+            principal.Fleet?.FleetRole,
+            principal.Fleet?.FleetId));
 
         return new IssuedSession(session.Jti, session.UserId, session.App, access, refreshTokens.Issue(session.Jti));
     }

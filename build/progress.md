@@ -51,7 +51,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C023 | ws-dispatch-stub ⭑ | 2 | DONE | 2026-07-28 | 78 tests green; 1 dispatch migration added (0710) + 1 internal contract route — 11 micro-change-sets raised |
 | C024 | ws-realtime-pipeline ⭑ | 2 | DONE | 2026-07-28 | 35 tests green (3 new services + EMQX fixture); p95 EMQX→SignalR 2.1 s; H3 grid + Kafka consumer promoted to the kernel; 4 micro-change-sets raised |
 | C025 | ws-e2e-android-slice ⭑ | 3 | DONE | 2026-07-28 | **WALKING SKELETON REACHED** — one booked ride end to end on the real stack; 2 Android shells assemble; `:shared` gained a jvm() target; wave-1 gate repaired |
-| C026 | iam-svc-auth | 2 | PENDING | | |
+| C026 | iam-svc-auth | 2 | DONE | 2026-07-28 | 209 tests green (118 new); 1 iam migration added (0107) — 4 micro-change-sets raised; `POST /v1/auth/mqtt-token` closes C025 gap (c) |
 | C027 | iam-svc-profile-rbac | 2 | PENDING | | |
 | C028 | registry-svc-vehicles | 2 | PENDING | | |
 | C029 | registry-svc-onboarding | 2 | PENDING | | |
@@ -3302,3 +3302,127 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   Google repository yet. Nine service images (~340 MB each) plus the slim stack fit alongside a build;
   the replica stayed down. A full `run.sh` takes ~6 minutes, most of it the image build and the
   15-second offer window it deliberately waits out.
+
+- **Component:** C026 iam-svc-auth — 2026-07-28
+- **Status:** DONE — `dotnet test backend/src/Iam.Api.Tests -c Release` → **209 passed, 0 failed,
+  0 skipped** (91 → 209; 118 new). All four DoD items pass against a real Postgres and Redis
+  (Testcontainers). Gates re-run green after the new migration: `bash infra/scripts/migrate-verify.sh`
+  → **195/195** (was 190), `MageRide.Shared.Tests` → 235, `ApiGateway.Tests` → 524,
+  `Registry.Api.Tests` → 92, `Ride.Api.Tests` → 117, `Dispatch.Api.Tests` → 64, `HotPath.Tests` → 35.
+- **Notes:**
+  **Spec gaps — four micro-change-sets, all landed as `0107__iam_portal_credentials.sql`, none
+  actioned in `specs/` (D4' §1 owns the iam DDL).** AL-07 gives the Admin Portal password-or-Google
+  and the Fleet Portal email/Google/Apple, and AL-37 replaces the removed MFA step with a
+  failed-attempt lock-out — and **the schema has nowhere to put any of it.** Each is argued in the
+  file header.
+  (a) ***No password is storable.*** `iam.users` has `email` and no verifier, so two of the four
+  sign-in surfaces the ADD lists are unimplementable as printed. Added `iam.user_credentials`, a
+  1:1 side table so reading a profile never reads a verifier and an app account simply has no row.
+  (b) ***The AL-37 lock-out has no counter.*** It is named as one of the three controls
+  compensating for the removed second factor and D3' maps it to `423 otp-locked`, but nothing
+  counts. `failed_attempts`/`locked_until` live on the credential. **Deliberately not Redis:** a
+  flush would hand an attacker a clean slate on every internal account at once, which is the
+  guarantee the control exists to give.
+  (c) ***A Google or Apple identity has nowhere to bind.*** Matching on `iam.users.email` alone
+  would mean anybody who can get a provider to assert an address owns the account. Added
+  `iam.federated_identities`, unique on `(provider, subject)`.
+  (d) ***A portal session cannot be stored.*** `iam.sessions.app` was `CHECK (passenger|driver)`
+  and `iam.devices.platform` `CHECK (android|ios)`, so a browser sign-in had **no legal row** —
+  yet ADD §12.1 issues portals the same RS256 + opaque refresh pair. Widened to add `admin`/`fleet`
+  and `web`. The AL-08 partial unique index is untouched, and that is the point: it now also means
+  "one live Admin Portal session per person", which is exactly the **session binding** AL-37 keeps.
+  Also closes C020 gap (e): `iam.otp_attempts.fcm_token` parks the push token until verify creates
+  the device row it belongs on.
+  **Decisions —**
+  (1) **One session shape for four surfaces.** `iam.sessions.app` became the *surface*, not the
+  app, so portal sign-in reuses issue/rotate/revoke wholesale and every consumer downstream sees
+  one kind of token. The claim set is fixed: `sub`, repeated `role`, `fleet_role`+`fleet_id` when
+  there is a fleet membership, `device_id`, `app`, `jti`. `MageRideApps` in the kernel grew
+  `Admin`/`Fleet` to match — the only shared-kernel change in this component.
+  (2) **A browser's `device_id` is derived from its user agent**, not its address. The portal
+  sign-in bodies carry no `deviceId` (the contract's schemas are `{email,password}` and
+  `{idToken}`) but every session needs one. Hashing the address instead would sign an admin out
+  when their laptop hands off from Wi-Fi to a hotspot. That makes the binding coarse — it separates
+  browsers, not people — which is the honest description of a cookie-less server-side binding.
+  (3) **No portal sign-in creates an account.** Internal roles are provisioned by a Super Admin
+  (AL-06) and fleet users by their owner (AL-03), so an unknown email or an unlinked Google subject
+  is a `403`, never a first sign-in. This is the one place the portal flow diverges from the app
+  flow, where a first OTP verify does create the account.
+  (4) **The lock-out gates the password path only.** Locking Google sign-in from failed *password*
+  guesses would hand an attacker a denial of service against an admin who never uses one. Covered
+  by `LockoutTests.A_locked_password_does_not_lock_google_sign_in`.
+  (5) **The IP allow-list is config, not a table** (`Auth:InternalRoleIpAllowList`, CIDRs), and is
+  **off while empty** — the ADD calls it optional, and a platform whose only Super Admin is on a
+  dynamic address would otherwise be one DHCP lease from having nobody who can sign in. A malformed
+  entry is dropped and logged loudly rather than disabling the list: a security control that
+  quietly stops working is worse than one that refuses a legitimate admin.
+  (6) **PBKDF2-HMAC-SHA256 at 600 000 iterations, PHC-encoded.** Argon2id is the stronger
+  primitive but is a third-party package for one consumer; PBKDF2 is in the BCL and FIPS-approved.
+  The parameters live in the stored string, so raising the work factor needs no migration. Sign-in
+  runs a real derivation even when the address does not exist, so response time does not leak which
+  addresses are registered. The 12-character floor is enforced where a password is *set*, not where
+  one is presented.
+  (7) **Key rotation is an overlap, not a switch.** `Jwt:SigningKeyPem` signs;
+  `Jwt:RetiredSigningKeyPems` stays published and accepted for one deploy. Promoting a new key with
+  no overlap 401s every session issued in the previous 30 minutes across every service at once —
+  `KeyRotationTests` is the regression test. Set `Jwt:RefreshTokenKey` or the 90-day rotation logs
+  everybody out (still the C020 gap (h) recommendation; now also in `.env.app.example`).
+  (8) **The OIDC verifier is real in the tests; only the provider's key source is faked.**
+  `TestOidcProvider` mints tokens with a local key and serves it as the JWKS, so issuer, audience,
+  expiry and signature are all checked by production code. Faking `IOidcTokenVerifier` instead
+  would have left every one of those untested — including the audience check, without which an ID
+  token minted for anybody else's OAuth client would be a MageRide admin session.
+  (9) **The Google authorization-code exchange gets no retry pipeline.** A code is single-use: a
+  retry after a response we did not see spends it and returns `invalid_grant`, turning a blip into
+  a definite failure. Every other outbound client keeps D6' §8.3's retry.
+  (10) **`POST /v1/auth/mqtt-token` honours `rideId` rather than inferring it.** A caller that
+  sends one gets the extended TTL and the claim; a caller that omits one gets the four-hour floor —
+  which is what C014's `MqttSessionTokenManager` documents and re-issues against. Binding to a ride
+  the client did not name would make its renewal logic wrong. The endpoint also requires `deviceId`
+  to equal the session's `device_id` claim, or a stolen access token could mint a publishing
+  credential for a different handset.
+  **Contract/spec gaps found (no change made) —**
+  (e) *Nothing in `rides.rides` records a ride's expected end* — no ETA, no estimated duration,
+  only `created_at`. E-02's `max(active-ride + 2 h, 4 h)` is therefore not computable as printed,
+  so `Mqtt:MaxRideDuration` (default 4 h) stands in for how long a Mode C ride is assumed to run
+  and the token covers that plus the 2 h grace, floored at 4 h. **D4' §5 should carry an
+  `expected_end_at` or an ETA**; the day it lands, `MqttTokenService` reads it and nothing else
+  changes.
+  (f) *No spec prints the secondary SMS gateway's request shape.* D6' §7.3 names "Dialog/Mobitel"
+  and D7' §4.2 gives one URL key; the two candidates do not share an API. `SecondaryGatewayOtpSender`
+  posts `{to, from, message}` JSON under a bearer, which every candidate accepts in some form — a
+  deployment whose gateway wants otherwise replaces the class. **D6' §7.3 should name the provider
+  and its contract.**
+  (g) *`.env.app.example` carried `Google__ClientId` / `Apple__ClientId`, which bind to nothing.*
+  Replaced with the four `Oidc__*` keys the service reads, plus the `Auth__*` and
+  `Sms__NotifyLkUserId` rows D7' §4.2 does not list. `Sms__SecondaryGateway` was filed under
+  notification-svc; iam-svc reads the same flat map, and the comment now says so.
+  (h) *`iam.fleet_members` allows several memberships; the token carries one pair.* The most
+  privileged wins (owner > manager > viewer) and the rest are reachable per-fleet through fleet-svc
+  (C058). No spec says which one a token should name.
+  **A pre-existing failure found and fixed —**
+  `MageRide.Shared.Tests`'s `The_reported_lifetime_never_drops_below_iam_yaml_s_documented_14400_`
+  `seconds` (C024) read `ExpiresInSeconds` — which measures against the **system** clock — off a
+  token minted at a fixed *fake* instant of 09:00 UTC on 2026-07-28. It passed when C024 ran and
+  has drifted red every hour since. Now asserted twice: the minted lifetime on the fake clock, the
+  reported one on an issuer using the real clock. `MqttTokenService` never trusted the property —
+  it computes `expiresIn` from its own `TimeProvider`, and with `Math.Ceiling`, because truncation
+  reports 14399 against a contract that says "never less than 14400".
+  **For C025's open gaps —** gap (c) is **closed**: `POST /v1/auth/mqtt-token` exists, and the
+  skeleton stack needs no new configuration for it (`Mqtt__SessionTokenSecret` already arrives from
+  `.env.common.example` and is the same secret EMQX validates with). `apps/driver-android` and
+  `e2e/walking-skeleton` still type the token in by hand; **C067/C068 and C125 can delete that.**
+  Gaps (a) `offerId` and (b) presence heartbeat are untouched — they belong to C034/C041/C051 and
+  C039.
+  **For C027 —** `UserProfileResponse` already carries `roles` and `fleetRole`; it is missing only
+  `notifPrefs`. `IUserRepository.PrincipalAsync` is the one call that yields roles + fleet scope,
+  and `iam.users` is otherwise untouched, so the profile surface is additive.
+  **For C062 (admin-bff) —** provisioning an internal account means an `iam.users` row, a
+  `iam.user_roles` grant and a `iam.user_credentials` verifier written through
+  `PasswordHasher.Hash`, which is where the 12-character floor is enforced. There is no MFA
+  enrolment to build and `Mfa__RequiredForInternal` in D7' §4.2 stays unimplemented (planner
+  finding 3).
+  **Build host —** Docker for Testcontainers only; the replica stayed down throughout. The 209
+  tests take ~65 s, of which most is 40-odd harness start-ups — each integration test builds a
+  fresh `WebApplication` so its ephemeral signing key, its OIDC provider and its Redis buckets
+  cannot leak into another test.

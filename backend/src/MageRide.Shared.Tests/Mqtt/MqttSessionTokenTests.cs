@@ -81,9 +81,26 @@ public sealed class MqttSessionTokenTests
         Assert.Equal(Now.AddHours(4), token.ExpiresAt);
     }
 
+    /// <summary>
+    /// <c>iam.yaml</c> documents <c>expiresIn</c> as "never less than 14400".
+    /// </summary>
+    /// <remarks>
+    /// Asserted twice, because <see cref="MqttSessionToken.ExpiresInSeconds"/> measures against
+    /// the <em>system</em> clock rather than the issuer's: the minted lifetime is checked on the
+    /// fake clock, and the reported one on an issuer whose clock is the real one. Reading the
+    /// reported value off a token minted at a fixed fake instant would drift as the day went on —
+    /// it did, which is how this was found.
+    /// </remarks>
     [Fact]
-    public void The_reported_lifetime_never_drops_below_iam_yaml_s_documented_14400_seconds() =>
-        Assert.True(Issuer().IssueForVehicle(Vehicle, "device-1").ExpiresInSeconds >= 14_400 - 60);
+    public void The_reported_lifetime_never_drops_below_iam_yaml_s_documented_14400_seconds()
+    {
+        Assert.Equal(TimeSpan.FromSeconds(14_400), Issuer().IssueForVehicle(Vehicle, "device-1").ExpiresAt - Now);
+
+        var live = new MqttSessionTokenIssuer(
+            Options.Create(new MqttOptions { SessionTokenSecret = Secret }), TimeProvider.System);
+
+        Assert.True(live.IssueForVehicle(Vehicle, "device-1").ExpiresInSeconds >= 14_400 - 60);
+    }
 
     [Fact]
     public void A_service_credential_takes_the_svc_prefix_acl_conf_grants_the_share_subscription_to()

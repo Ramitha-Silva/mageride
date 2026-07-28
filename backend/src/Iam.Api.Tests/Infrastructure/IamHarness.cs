@@ -28,21 +28,39 @@ internal sealed class IamHarness : IAsyncDisposable
     /// <summary>Deterministic pepper, so a hash computed in a test matches one the service made.</summary>
     private const string TestPepper = "c020-otp-pepper-not-a-secret";
 
+    /// <summary>MqttOptions requires 32 characters; EMQX would validate against the same value.</summary>
+    private const string MqttSecret = "c026-mqtt-session-secret-not-a-real-one";
+
     private static int _phoneCounter = Random.Shared.Next(1_000, 9_000) * 1_000;
 
     private readonly WebApplication _app;
 
-    private IamHarness(WebApplication app, HttpClient client, CapturingOtpSender sms, string baseAddress)
+    private IamHarness(
+        WebApplication app,
+        HttpClient client,
+        CapturingOtpSender sms,
+        TestOidcProvider oidc,
+        string baseAddress,
+        string connectionString)
     {
         _app = app;
         Client = client;
         Sms = sms;
+        Oidc = oidc;
         BaseAddress = baseAddress;
+        Seed = new IamSeed(
+            connectionString, app.Services.GetRequiredService<MageRide.Iam.Auth.PasswordHasher>());
     }
 
     public HttpClient Client { get; }
 
     public CapturingOtpSender Sms { get; }
+
+    /// <summary>Stands in for Google and Apple — see <see cref="TestOidcProvider"/>.</summary>
+    public TestOidcProvider Oidc { get; }
+
+    /// <summary>Direct database access, for the accounts a portal sign-in cannot create itself.</summary>
+    public IamSeed Seed { get; }
 
     public string BaseAddress { get; }
 
@@ -65,7 +83,10 @@ internal sealed class IamHarness : IAsyncDisposable
         StartAsync(postgres, redis, new Dictionary<string, string?> { ["Otp:ResendCooldownSec"] = "0" });
 
     public static async Task<IamHarness> StartAsync(
-        PostgresFixture postgres, RedisFixture redis, IDictionary<string, string?>? settings = null)
+        PostgresFixture postgres,
+        RedisFixture redis,
+        IDictionary<string, string?>? settings = null,
+        TimeProvider? clock = null)
     {
         ArgumentNullException.ThrowIfNull(postgres);
         ArgumentNullException.ThrowIfNull(redis);
@@ -85,6 +106,19 @@ internal sealed class IamHarness : IAsyncDisposable
             ["Jwt:JwksUrl"] = "http://127.0.0.1:1/.well-known/jwks.json",
             ["Jwt:RequireHttpsMetadata"] = "false",
             ["Otp:PepperKey"] = TestPepper,
+            // Without an accepted audience the verifier refuses every token, which is the
+            // deliberate default (see OidcTokenVerifier) and would make every portal test a 403.
+            ["Oidc:Google:ClientIds:0"] = TestOidcProvider.GoogleClientId,
+            ["Oidc:Google:ClientSecret"] = "c026-google-client-secret",
+            ["Oidc:Google:RedirectUri"] = "https://admin.mageride.lk/auth/callback",
+            ["Oidc:Apple:ClientIds:0"] = TestOidcProvider.AppleClientId,
+            // POST /v1/auth/mqtt-token mints against this (E-02); MqttOptions validates it on
+            // start, so every harness needs one whether or not its test asks for a token.
+            ["Mqtt:SessionTokenSecret"] = MqttSecret,
+            // The configured floor. Production's 600 000 costs a fifth of a second per sign-in
+            // and the verifier behaves identically either way; AuthPolicyOptions refuses to go
+            // lower, which is the point of the floor being in the options and not here.
+            ["Auth:PasswordIterations"] = "100000",
             // One /metrics endpoint per harness would collide across concurrently running tests.
             ["Otel:PrometheusEnabled"] = "false",
         };
@@ -98,6 +132,7 @@ internal sealed class IamHarness : IAsyncDisposable
         }
 
         var sms = new CapturingOtpSender();
+        var oidc = new TestOidcProvider();
 
         var app = IamApplication.Build(
             new WebApplicationOptions
@@ -116,8 +151,21 @@ internal sealed class IamHarness : IAsyncDisposable
                 builder.Configuration.AddInMemoryCollection(overrides);
                 builder.WebHost.UseUrls("http://127.0.0.1:0");
 
-                // Registered before AddIamServices, whose sender registration is a TryAdd.
+                // Registered before AddIamServices, whose registrations are TryAdds.
                 builder.Services.AddSingleton<IOtpSender>(sms);
+
+                // Every TimeProvider registration in the kernel and in AddIamServices is a
+                // TryAdd, so this one wins for the whole graph — which is what a test about the
+                // AL-37 lock-out expiring needs, since its shortest legal duration is 30 seconds.
+                if (clock is not null)
+                {
+                    builder.Services.AddSingleton(clock);
+                }
+
+                // The verifier under test is the real one — issuer, audience, expiry and
+                // signature are all checked for real. Only where the *provider's* keys come from
+                // is faked, because the alternative is a test that reaches accounts.google.com.
+                builder.Services.AddSingleton<MageRide.Iam.Auth.IOidcKeySource>(oidc);
             });
 
         await app.StartAsync();
@@ -127,7 +175,7 @@ internal sealed class IamHarness : IAsyncDisposable
 
         var client = new HttpClient { BaseAddress = new Uri(baseAddress), Timeout = TimeSpan.FromSeconds(60) };
 
-        return new IamHarness(app, client, sms, baseAddress);
+        return new IamHarness(app, client, sms, oidc, baseAddress, postgres.ConnectionString);
     }
 
     /// <summary>
@@ -186,9 +234,30 @@ internal sealed class IamHarness : IAsyncDisposable
         return SignedIn.From(await ReadJsonAsync(response));
     }
 
+    /// <summary>POSTs a portal sign-in body from a browser — no <c>X-Platform</c>, a user agent.</summary>
+    public Task<HttpResponseMessage> PostFromBrowserAsync(
+        string path, object? body, string? userAgent = null, string? forwardedFor = null)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, path)
+        {
+            Content = JsonContent.Create(body ?? new { }),
+        };
+
+        request.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString());
+        request.Headers.Add("User-Agent", userAgent ?? "Mozilla/5.0 (MageRide portal tests)");
+
+        if (forwardedFor is not null)
+        {
+            request.Headers.Add("X-Forwarded-For", forwardedFor);
+        }
+
+        return Client.SendAsync(request);
+    }
+
     public async ValueTask DisposeAsync()
     {
         Client.Dispose();
+        Oidc.Dispose();
         await _app.StopAsync();
         await _app.DisposeAsync();
     }

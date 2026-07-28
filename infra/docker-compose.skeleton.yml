@@ -77,7 +77,14 @@ x-common-env: &common-env
 services:
 
   # -----------------------------------------------------------------------------------
-  # iam-svc (C020) — phone OTP, the RS256 key ring, and the JWKS every other service reads.
+  # iam-svc (C020, C026) — phone OTP, the RS256 key ring, the JWKS every other service
+  # reads, and POST /v1/auth/mqtt-token.
+  #
+  # No extra environment for the MQTT token: `Mqtt__SessionTokenSecret` already arrives from
+  # `.env.common.example`, and it is the same secret EMQX validates with
+  # (EMQX_AUTHENTICATION__1__SECRET), which is exactly the point — iam-svc mints what the
+  # broker accepts. iam-svc refuses to start without it (C026), so a stack that drops the
+  # key fails at boot rather than at a driver's first publish.
   # -----------------------------------------------------------------------------------
   iam-svc:
     build:

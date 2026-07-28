@@ -1,12 +1,16 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
   <!--
-    Iam.Api (C020, ws-iam-minimal) — the walking skeleton's slice of iam-svc.
+    Iam.Api — iam-svc's authentication half (C020 ws-iam-minimal, completed by C026 iam-svc-auth).
 
-    Phone-OTP sign-in for the passenger and driver apps, RS256 access tokens with a published
-    JWKS, opaque rotating refresh, and one session per (user, app) (D-29, D-32, AL-08).
+    Every sign-in surface AL-07 lists: Phone OTP for the passenger and driver apps over the
+    Notify.lk gateway with a Dialog/Mobitel fallback (D6' §7.3), password or Google for the Admin
+    Portal, email+password / Google / Apple for the Fleet Portal. RS256 access tokens over a
+    rotating key ring with a published JWKS, opaque single-use refresh with reuse detection
+    (D-29), device binding and one session per surface (AL-08), and the MQTT session JWT E-02
+    decouples from all of it.
 
-    Full RBAC, Google/Apple/password sign-in, profile, saved addresses and PDPA are C026/C027.
+    Profile, saved addresses, the nine-role RBAC surface and PDPA are C027.
     There is no MFA here and never will be (AL-37).
 
     Verify: dotnet test backend/src/Iam.Api.Tests -c Release
@@ -27,6 +31,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\MageRide.Shared\MageRide.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The trilingual OTP bodies (D-26). Embedded rather than copied to the output directory so
+         an image cannot ship without them and fail at the first sign-in. -->
+    <EmbeddedResource Include="Resources\sms-templates.json" />
   </ItemGroup>
 
   <ItemGroup>

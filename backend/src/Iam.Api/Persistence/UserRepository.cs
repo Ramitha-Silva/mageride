@@ -13,6 +13,14 @@ public interface IUserRepository
     Task<IamUser?> FindByIdAsync(
         NpgsqlConnection connection, NpgsqlTransaction? transaction, Guid userId, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// The portal identity for an address (AL-07). Case-insensitive: an email address is
+    /// case-insensitive in practice and a sign-in that fails on a capital letter is a support
+    /// ticket.
+    /// </summary>
+    Task<IamUser?> FindByEmailAsync(
+        NpgsqlConnection connection, NpgsqlTransaction? transaction, string email, CancellationToken cancellationToken);
+
     /// <summary>Creates the account a first sign-in implies, with <paramref name="role"/> as its primary role.</summary>
     Task<IamUser> CreateAsync(
         NpgsqlConnection connection, NpgsqlTransaction? transaction, string phone, string role, CancellationToken cancellationToken);
@@ -23,6 +31,17 @@ public interface IUserRepository
 
     /// <summary>Every role held. Effective permissions are their union (AL-06).</summary>
     Task<IReadOnlyList<string>> RolesAsync(
+        NpgsqlConnection connection, NpgsqlTransaction? transaction, Guid userId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The account's fleet membership, or <see langword="null"/>. Becomes the
+    /// <c>fleet_role</c>/<c>fleet_id</c> claim pair (AL-03).
+    /// </summary>
+    Task<FleetMembership?> FleetMembershipAsync(
+        NpgsqlConnection connection, NpgsqlTransaction? transaction, Guid userId, CancellationToken cancellationToken);
+
+    /// <summary>The roles and fleet scope one access token needs, in one round trip.</summary>
+    Task<SessionPrincipal> PrincipalAsync(
         NpgsqlConnection connection, NpgsqlTransaction? transaction, Guid userId, CancellationToken cancellationToken);
 }
 
@@ -53,6 +72,22 @@ public sealed class UserRepository : IUserRepository
         return connection.QuerySingleOrDefaultAsync<IamUser>(new CommandDefinition(
             $"SELECT {Columns} FROM iam.users WHERE id = @UserId;",
             new { UserId = userId },
+            transaction,
+            cancellationToken: cancellationToken));
+    }
+
+    public Task<IamUser?> FindByEmailAsync(
+        NpgsqlConnection connection, NpgsqlTransaction? transaction, string email, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+        ArgumentException.ThrowIfNullOrWhiteSpace(email);
+
+        // lower() on both sides rather than citext: `iam.users.email` is TEXT with a UNIQUE
+        // index (C003), so a citext comparison would not use it and every portal sign-in would
+        // be a sequential scan of the user table.
+        return connection.QuerySingleOrDefaultAsync<IamUser>(new CommandDefinition(
+            $"SELECT {Columns} FROM iam.users WHERE lower(email) = lower(@Email);",
+            new { Email = email.Trim() },
             transaction,
             cancellationToken: cancellationToken));
     }
@@ -112,5 +147,35 @@ public sealed class UserRepository : IUserRepository
             cancellationToken: cancellationToken));
 
         return [.. roles];
+    }
+
+    public Task<FleetMembership?> FleetMembershipAsync(
+        NpgsqlConnection connection, NpgsqlTransaction? transaction, Guid userId, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+
+        // A person can be a member of more than one fleet; the token carries one pair, so the
+        // most privileged membership wins and the rest are reachable per-fleet through fleet-svc
+        // (C058). owner > manager > viewer, matching FleetRoles.Rank.
+        return connection.QuerySingleOrDefaultAsync<FleetMembership>(new CommandDefinition(
+            """
+            SELECT fleet_id, fleet_role
+              FROM iam.fleet_members
+             WHERE user_id = @UserId
+             ORDER BY CASE fleet_role WHEN 'owner' THEN 0 WHEN 'manager' THEN 1 ELSE 2 END, fleet_id
+             LIMIT 1;
+            """,
+            new { UserId = userId },
+            transaction,
+            cancellationToken: cancellationToken));
+    }
+
+    public async Task<SessionPrincipal> PrincipalAsync(
+        NpgsqlConnection connection, NpgsqlTransaction? transaction, Guid userId, CancellationToken cancellationToken)
+    {
+        var roles = await RolesAsync(connection, transaction, userId, cancellationToken);
+        var fleet = await FleetMembershipAsync(connection, transaction, userId, cancellationToken);
+
+        return new SessionPrincipal(userId, roles, fleet);
     }
 }
