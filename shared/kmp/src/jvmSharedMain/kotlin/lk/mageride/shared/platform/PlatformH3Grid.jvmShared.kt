@@ -7,7 +7,14 @@ import lk.mageride.shared.domain.geo.H3Grid
 import lk.mageride.shared.domain.geo.H3GridUnavailableException
 import java.io.IOException
 
-/** Android/JVM: the reference H3 implementation through `com.uber:h3`. */
+/**
+ * Android and the JVM: the reference H3 implementation through `com.uber:h3`.
+ *
+ * One actual for both targets, in the shared `jvmShared` source set, because the cell ids it
+ * produces have to be identical on a handset and in the e2e harness — and identical to the ones
+ * `MageRide.Shared.Geo` computes server-side, or a passenger joins `cell:{h3index}` groups that
+ * nothing ever publishes to (C025 moved it here from androidMain).
+ */
 public actual fun platformH3Grid(): H3Grid? = H3JavaGrid
 
 /**
@@ -18,7 +25,7 @@ public actual fun platformH3Grid(): H3Grid? = H3JavaGrid
  * `System.load`s it, which is not work to do on a cold start for an app that may never open a map.
  *
  * The jar carries `android-arm` and `android-arm64` natives alongside the desktop ones, so the
- * same code serves the app and this module's JVM tests. If the extraction fails the failure is
+ * same code serves the app, this module's JVM tests and the e2e harness. If the extraction fails the failure is
  * reported as [H3GridUnavailableException] rather than an `IOException` from a call that looks
  * like pure geometry.
  */

@@ -26,9 +26,13 @@ import lk.mageride.shared.data.models.ride.CreateLocationRequestRequest
 import lk.mageride.shared.data.models.ride.CreateLocationRequestResponse
 import lk.mageride.shared.data.models.ride.DeclineRideOfferRequest
 import lk.mageride.shared.data.models.ride.DisputeRideRequest
+import lk.mageride.shared.data.models.ride.ExpireRideOfferRequest
 import lk.mageride.shared.data.models.ride.LocationRequest
+import lk.mageride.shared.data.models.ride.MarkRideMatchingRequest
 import lk.mageride.shared.data.models.ride.NotifyPaymentSettledRequest
+import lk.mageride.shared.data.models.ride.OfferPlaced
 import lk.mageride.shared.data.models.ride.OtpAttempt
+import lk.mageride.shared.data.models.ride.PlaceRideOfferRequest
 import lk.mageride.shared.data.models.ride.ProofArtifactResponse
 import lk.mageride.shared.data.models.ride.RequestRideResponse
 import lk.mageride.shared.data.models.ride.RideDetail
@@ -211,6 +215,44 @@ public interface RideApi {
 
     /** `POST /v1/location-requests/{requestId}/decline` — the rider refuses. */
     public suspend fun declineLocationRequest(requestId: Ulid, idempotencyKey: String? = null): LocationRequest
+
+    /**
+     * `POST /v1/internal/rides/{rideId}/matching` — dispatch-svc has begun building candidates.
+     *
+     * **Service-to-service (`internalKey`).** Present for contract coverage; not reachable from
+     * an app. `Requested → Matching`, driven by dispatch because ride-svc is the sole writer of
+     * `rides.state` (ADD §11.12).
+     */
+    public suspend fun markRideMatching(
+        rideId: Ulid,
+        request: MarkRideMatchingRequest,
+        idempotencyKey: String? = null,
+    ): RideStateChange
+
+    /**
+     * `POST /v1/internal/rides/{rideId}/offer` — arm the 15 s offer window (`Matching → Offered`).
+     *
+     * **Service-to-service (`internalKey`).** Present for contract coverage; not reachable from
+     * an app. The deadline in [OfferPlaced] is ride-svc's, not the caller's.
+     */
+    public suspend fun placeRideOffer(
+        rideId: Ulid,
+        request: PlaceRideOfferRequest,
+        idempotencyKey: String? = null,
+    ): OfferPlaced
+
+    /**
+     * `POST /v1/internal/rides/{rideId}/offer/expire` — the window closed unanswered (R-04).
+     *
+     * **Service-to-service (`internalKey`).** Present for contract coverage; not reachable from
+     * an app. `Offered → Matching`, bound to `offer_expires_at <= now()` evaluated by Postgres so
+     * a sweeper whose clock ran ahead cannot take a driver's window away.
+     */
+    public suspend fun expireRideOffer(
+        rideId: Ulid,
+        request: ExpireRideOfferRequest,
+        idempotencyKey: String? = null,
+    ): RideStateChange
 
     /**
      * `POST /v1/internal/rides/{rideId}/system-cancel` — dispatch or a timeout kills the ride.
@@ -428,6 +470,39 @@ internal class KtorRideApi(private val transport: ApiTransport) : RideApi {
             path = "$LOCATION_REQUESTS_PATH/$requestId/decline",
             idempotencyKey = idempotencyKey,
         ).decode()
+
+    override suspend fun markRideMatching(
+        rideId: Ulid,
+        request: MarkRideMatchingRequest,
+        idempotencyKey: String?,
+    ): RideStateChange = transport.apiPost(
+        service = SERVICE,
+        operationId = "markRideMatching",
+        path = "$INTERNAL_RIDES_PATH/$rideId/matching",
+        idempotencyKey = idempotencyKey,
+    ) { jsonBody(request) }.decode()
+
+    override suspend fun placeRideOffer(
+        rideId: Ulid,
+        request: PlaceRideOfferRequest,
+        idempotencyKey: String?,
+    ): OfferPlaced = transport.apiPost(
+        service = SERVICE,
+        operationId = "placeRideOffer",
+        path = "$INTERNAL_RIDES_PATH/$rideId/offer",
+        idempotencyKey = idempotencyKey,
+    ) { jsonBody(request) }.decode()
+
+    override suspend fun expireRideOffer(
+        rideId: Ulid,
+        request: ExpireRideOfferRequest,
+        idempotencyKey: String?,
+    ): RideStateChange = transport.apiPost(
+        service = SERVICE,
+        operationId = "expireRideOffer",
+        path = "$INTERNAL_RIDES_PATH/$rideId/offer/expire",
+        idempotencyKey = idempotencyKey,
+    ) { jsonBody(request) }.decode()
 
     override suspend fun systemCancelRide(
         rideId: Ulid,

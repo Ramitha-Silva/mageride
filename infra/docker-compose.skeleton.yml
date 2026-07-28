@@ -1,0 +1,405 @@
+# =====================================================================================
+# MageRide — WALKING-SKELETON stack (C025)
+#
+# The slim infrastructure plus the eight services the walking skeleton actually needs,
+# behind the API gateway. This is what `e2e/walking-skeleton/run.sh` brings up.
+#
+#   bash e2e/walking-skeleton/run.sh                    # up, seed, run, assert, down
+#   docker compose -f infra/docker-compose.skeleton.yml up -d --build
+#   docker compose -f infra/docker-compose.skeleton.yml down
+#
+# --- WHY THIS FILE EXISTS BESIDE docker-compose.dev.yml -------------------------------
+# D7' §2.1 and the replica's Container 7 put all 21 domain services in ONE `app-services`
+# process behind YARP, and `docker-compose.dev.yml` is written against that shape. The
+# landed code is not that shape: each service is its own `WebApplication` built by its own
+# `*Application.Build()`, and folding five of them into one process is blocked on the
+# kernel, not on effort —
+#
+#   ride-svc needs `Outbox:Schema=rides` / `Topic=ride.events` while dispatch-svc needs
+#   `dispatch` / `dispatch.events`, and iam, registry and dispatch each need a different
+#   `CommandLog:Schema`. Both are singleton `IOptions<T>`, so one process can hold exactly
+#   one of each. Keying them per service is a C002 change and is outside C025's fences.
+#
+# So the skeleton runs one container per service, which the code already supports, and
+# `docker-compose.dev.yml` is left untouched as the contract C125 builds `app-services`
+# against. Everything here is a Wave-2 arrangement, not a decision about production.
+#
+# --- WHY THE ENV OVERRIDES ------------------------------------------------------------
+# `env/.env.app.example` is one FLAT map loaded by every container, because it was written
+# for a world with one app process. Several keys therefore collide between services —
+# `Outbox__*` carries ride-svc's values, `Otp__PepperKey` means two different things to
+# iam-svc and ride-svc — and the last definition in the file wins for everyone. Per-service
+# `environment:` blocks below are what disentangle them; each override says which key it is
+# rescuing and from what.
+# =====================================================================================
+
+name: mageride
+
+include:
+  - path: docker-compose.dev.slim.yml
+
+# The build is identical for all eight; only SERVICE differs (C010's template). YAML anchors
+# keep that visible rather than repeating nine lines each time.
+x-service-build: &service-build
+  context: ..
+  dockerfile: infra/docker/Dockerfile.service
+
+x-env-files: &env-files
+  - path: env/.env.common.example
+    required: true
+  - path: env/.env.common
+    required: false
+  - path: env/.env.app.example
+    required: true
+  - path: env/.env.app
+    required: false
+
+# Every service reads these, and every one of them is a correction to a value the flat env
+# file gets wrong for a per-service layout.
+x-common-env: &common-env
+  # `.env.common.example` says `Username=mageride`, but the slim stack's Postgres runs as
+  # `POSTGRES_USER=postgres` and PgBouncer's userlist is built from the same variable — so a
+  # service connecting as `mageride` is refused by SCRAM before it reaches a database.
+  # **Micro-change-set for `.env.common.example` / D7' §4.1.**
+  ConnectionStrings__Postgres: "Host=pgbouncer;Port=6432;Database=mageride;Username=postgres;Password=mageride_dev;Pooling=true;Maximum Pool Size=20"
+  ConnectionStrings__PostgresDirect: "Host=postgres;Port=5432;Database=mageride;Username=postgres;Password=mageride_dev;Pooling=true;Maximum Pool Size=5"
+
+  # `.env.common.example` points this at `app-services` on a path iam-svc does not serve.
+  # The landed endpoint is RFC 8615's well-known path on iam-svc itself (C020).
+  # **Micro-change-set for `.env.common.example` / D7' §4.1.**
+  Jwt__JwksUrl: "http://iam-svc:5000/.well-known/jwks.json"
+  Jwt__Issuer: "https://iam.mageride.lk"
+  Jwt__RequireHttpsMetadata: "false"
+
+  # Nothing scrapes in this stack and the exporter binds a second listener per container.
+  Otel__PrometheusEnabled: "false"
+
+services:
+
+  # -----------------------------------------------------------------------------------
+  # iam-svc (C020) — phone OTP, the RS256 key ring, and the JWKS every other service reads.
+  # -----------------------------------------------------------------------------------
+  iam-svc:
+    build:
+      <<: *service-build
+      args:
+        SERVICE: Iam.Api
+    image: mageride/iam-svc:dev
+    env_file: *env-files
+    environment:
+      <<: *common-env
+      CommandLog__Schema: iam
+
+      # `.env.app.example` ships `CHANGEME_rs256_private_key_pem`, which is not a PEM and
+      # fails `RSA.ImportFromPem` at start-up. Blanked so C020's Development path mints an
+      # ephemeral key instead — correct here precisely because there is one replica and the
+      # tokens are meant to die with the stack.
+      Jwt__SigningKeyPem: ""
+
+      # C020's dev sender writes the OTP to this container's log at Information, which is
+      # how the scripted run signs anybody in. Never outside Development.
+      Sms__Provider: dev
+      Otp__PepperKey: mageride-skeleton-iam-otp-pepper
+
+      # Rate limits sized for a script, not a person: the run signs in two accounts back to
+      # back and would otherwise trip the 60 s D-32 resend cooldown.
+      Otp__ResendCooldownSec: "0"
+      Otp__MaxPerHour: "100"
+    depends_on:
+      pgbouncer: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:5000/health/ready > /dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    mem_limit: 512m
+    cpus: 0.5
+    networks: [mr]
+    restart: unless-stopped
+
+  # -----------------------------------------------------------------------------------
+  # registry-svc (C021) — the driver's vehicle. The skeleton's is seeded, not registered.
+  # -----------------------------------------------------------------------------------
+  registry-svc:
+    build:
+      <<: *service-build
+      args:
+        SERVICE: Registry.Api
+    image: mageride/registry-svc:dev
+    env_file: *env-files
+    environment:
+      <<: *common-env
+      CommandLog__Schema: registry
+      Registry__DevApprovalEnabled: "true"
+    depends_on:
+      pgbouncer: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:5000/health/ready > /dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    mem_limit: 512m
+    cpus: 0.5
+    networks: [mr]
+    restart: unless-stopped
+
+  # -----------------------------------------------------------------------------------
+  # fare-svc (C022 stub) — the estimate token ride-svc verifies a booking's quote against.
+  # No database, no broker: it computes and signs.
+  # -----------------------------------------------------------------------------------
+  fare-svc:
+    build:
+      <<: *service-build
+      args:
+        SERVICE: Fare.Api
+    image: mageride/fare-svc:dev
+    env_file: *env-files
+    environment:
+      <<: *common-env
+      # MUST equal ride-svc's. The token is an HMAC and ride-svc rejects a booking whose
+      # quote it cannot verify, so a mismatch here is "every booking is a 400".
+      Fare__EstimateTokenKey: mageride-skeleton-fare-estimate-token-key
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:5000/health/ready > /dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    mem_limit: 384m
+    cpus: 0.25
+    networks: [mr]
+    restart: unless-stopped
+
+  # -----------------------------------------------------------------------------------
+  # ride-svc (C022) — the Mode C ride aggregate and the ONLY writer of `rides.state`.
+  # -----------------------------------------------------------------------------------
+  ride-svc:
+    build:
+      <<: *service-build
+      args:
+        SERVICE: Ride.Api
+    image: mageride/ride-svc:dev
+    env_file: *env-files
+    environment:
+      <<: *common-env
+      # The flat env file already carries ride-svc's outbox values; they are repeated here
+      # so this container does not depend on being the service the file was written for.
+      Outbox__Schema: rides
+      Outbox__Channel: ride_outbox
+      Outbox__Topic: ride.events
+      Outbox__DispatcherEnabled: "true"
+      CommandLog__Schema: rides
+
+      Fare__EstimateTokenKey: mageride-skeleton-fare-estimate-token-key
+
+      # Guards /v1/internal/rides/** until C042 lands a mesh. dispatch-svc presents it; the
+      # gateway refuses to proxy /v1/internal at all (C008), so it never leaves the network.
+      Ride__InternalApiKey: mageride-skeleton-ride-internal-key
+
+      # ride-svc's pickup OTP pepper — a different secret from iam-svc's login pepper of the
+      # same name. One flat env file cannot hold both; this is the collision that override
+      # exists for.
+      Otp__PepperKey: mageride-skeleton-ride-pickup-pepper
+    depends_on:
+      pgbouncer: { condition: service_healthy }
+      postgres: { condition: service_healthy }
+      redpanda: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:5000/health/ready > /dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    mem_limit: 640m
+    cpus: 0.5
+    networks: [mr]
+    restart: unless-stopped
+
+  # -----------------------------------------------------------------------------------
+  # dispatch-svc (C023) — presence and the offer loop. Drives ride-svc; never writes state.
+  # -----------------------------------------------------------------------------------
+  dispatch-svc:
+    build:
+      <<: *service-build
+      args:
+        SERVICE: Dispatch.Api
+    image: mageride/dispatch-svc:dev
+    env_file: *env-files
+    environment:
+      <<: *common-env
+      # The flat file's `Outbox__*` are ride-svc's. dispatch-svc hard-codes its own in
+      # DispatchApplication *before* the kernel binds configuration, deliberately so an
+      # operator can still override — which means ride-svc's values would win here without
+      # these three lines, and `offer.created` would be published onto ride.events and wake
+      # ride-svc's own dispatcher.
+      Outbox__Schema: dispatch
+      Outbox__Channel: dispatch_outbox
+      Outbox__Topic: dispatch.events
+      Outbox__DispatcherEnabled: "true"
+      CommandLog__Schema: dispatch
+
+      # Service to service, straight across the network — not through the gateway, which
+      # blocks /v1/internal.
+      Dispatch__RideServiceBaseUrl: http://ride-svc:5000
+      Dispatch__RideServiceInternalKey: mageride-skeleton-ride-internal-key
+
+      # Unset in the flat file's dispatch block; without it the ride.events consumer never
+      # starts and no booking is ever offered to anyone.
+      Dispatch__ConsumerEnabled: "true"
+      Dispatch__ExpiryWorkerEnabled: "true"
+      Dispatch__KeyspaceNotificationsEnabled: "true"
+    depends_on:
+      pgbouncer: { condition: service_healthy }
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      redpanda: { condition: service_healthy }
+      ride-svc: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:5000/health/ready > /dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    mem_limit: 640m
+    cpus: 0.5
+    networks: [mr]
+    restart: unless-stopped
+
+  # -----------------------------------------------------------------------------------
+  # mqtt-bridge-svc (C024) — EMQX `$share/posGroup/…` -> Redpanda `telemetry.raw` (E-08).
+  #
+  # Dockerfile.service, not Dockerfile.worker: C024 built it on the Web SDK precisely so it
+  # answers /health/ready for the broker connection and the producer. A worker image would
+  # have no probe, and compose would call a bridge that cannot reach EMQX "healthy".
+  # -----------------------------------------------------------------------------------
+  mqtt-bridge:
+    build:
+      <<: *service-build
+      args:
+        SERVICE: HotPath.MqttBridge
+    image: mageride/mqtt-bridge:dev
+    env_file: *env-files
+    environment:
+      <<: *common-env
+    depends_on:
+      emqx: { condition: service_healthy }
+      redpanda: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:5000/health/ready > /dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    mem_limit: 384m
+    cpus: 0.5
+    networks: [mr]
+    restart: unless-stopped
+
+  # -----------------------------------------------------------------------------------
+  # position-processor-svc (C024) — telemetry.raw -> geo:live + veh:meta + cell:{h3index}.
+  # -----------------------------------------------------------------------------------
+  position-processor:
+    build:
+      <<: *service-build
+      args:
+        SERVICE: HotPath.PositionProcessor
+    image: mageride/position-processor:dev
+    env_file: *env-files
+    environment:
+      <<: *common-env
+    depends_on:
+      redis: { condition: service_healthy }
+      redpanda: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:5000/health/ready > /dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    mem_limit: 384m
+    cpus: 0.5
+    networks: [mr]
+    restart: unless-stopped
+
+  # -----------------------------------------------------------------------------------
+  # fanout-svc (C024) — SignalR /hubs/live. Listens on 5001 (D7' §2.1).
+  # -----------------------------------------------------------------------------------
+  fanout-svc:
+    build:
+      <<: *service-build
+      args:
+        SERVICE: Fanout.Api
+    image: mageride/fanout-svc:dev
+    env_file: *env-files
+    environment:
+      <<: *common-env
+      ASPNETCORE_URLS: http://+:5001
+    depends_on:
+      redis: { condition: service_healthy }
+      iam-svc: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:5001/health/ready > /dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    mem_limit: 512m
+    cpus: 0.5
+    networks: [mr]
+    restart: unless-stopped
+
+  # -----------------------------------------------------------------------------------
+  # api-gateway (C008) — the one public entry point, and the only published app port.
+  #
+  # Only the six clusters the skeleton uses are repointed. The other fifteen still resolve
+  # to `app-services`, which does not exist here: a call to one of them fails at the proxy
+  # instead of being answered by whichever service happened to be listening, which is the
+  # honest behaviour for a service this stack does not run.
+  # -----------------------------------------------------------------------------------
+  api-gateway:
+    build:
+      <<: *service-build
+      args:
+        SERVICE: ApiGateway
+    image: mageride/api-gateway:dev
+    env_file: *env-files
+    environment:
+      <<: *common-env
+      ReverseProxy__Clusters__iam-svc__Destinations__primary__Address: http://iam-svc:5000/
+      ReverseProxy__Clusters__registry-svc__Destinations__primary__Address: http://registry-svc:5000/
+      ReverseProxy__Clusters__ride-svc__Destinations__primary__Address: http://ride-svc:5000/
+      ReverseProxy__Clusters__dispatch-svc__Destinations__primary__Address: http://dispatch-svc:5000/
+      ReverseProxy__Clusters__fare-svc__Destinations__primary__Address: http://fare-svc:5000/
+      ReverseProxy__Clusters__fanout-svc__Destinations__primary__Address: http://fanout-svc:5001/
+
+      # D-30. The skeleton's clients carry no Play Integrity or App Attest token, and there
+      # is no device to mint one from — an emulator-free Linux box and a JVM harness. Off
+      # here and nowhere else; C025 does not touch the gateway's default.
+      Gateway__Attestation__Mode: Disabled
+    ports:
+      - "127.0.0.1:${GATEWAY_PORT:-5000}:5000"
+    depends_on:
+      redis: { condition: service_healthy }
+      iam-svc: { condition: service_healthy }
+      ride-svc: { condition: service_healthy }
+      dispatch-svc: { condition: service_healthy }
+      fare-svc: { condition: service_healthy }
+      fanout-svc: { condition: service_healthy }
+      registry-svc: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:5000/health/ready > /dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    mem_limit: 512m
+    cpus: 0.5
+    networks: [mr]
+    restart: unless-stopped

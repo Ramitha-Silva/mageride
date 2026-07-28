@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Passenger Android — walking-skeleton shell (C025).
+
+  INTERNET is the only permission. The real app needs location (C077's map centres on the
+  passenger) and notifications (E-01's ride pushes), and both belong with the screens that
+  justify them: a permission asked for by a shell nobody ships is a permission nobody reviews.
+
+  `usesCleartextTraffic` is on for the debug build alone, because the dev gateway is
+  `http://10.0.2.2:5000` — plain HTTP inside the emulator's loopback. Production is HTTPS at
+  HAProxy (ADD §12.2) and the release manifest must not carry this.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <application
+        android:allowBackup="false"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:usesCleartextTraffic="true"
+        android:theme="@android:style/Theme.Material.Light.NoActionBar">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:label="@string/app_name">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

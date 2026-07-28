@@ -107,9 +107,13 @@ import lk.mageride.shared.data.models.ride.CreateLocationRequestRequest
 import lk.mageride.shared.data.models.ride.CreateLocationRequestResponse
 import lk.mageride.shared.data.models.ride.DeclineRideOfferRequest
 import lk.mageride.shared.data.models.ride.DisputeRideRequest
+import lk.mageride.shared.data.models.ride.ExpireRideOfferRequest
 import lk.mageride.shared.data.models.ride.LocationRequest
+import lk.mageride.shared.data.models.ride.MarkRideMatchingRequest
 import lk.mageride.shared.data.models.ride.NotifyPaymentSettledRequest
+import lk.mageride.shared.data.models.ride.OfferPlaced
 import lk.mageride.shared.data.models.ride.OtpAttempt
+import lk.mageride.shared.data.models.ride.PlaceRideOfferRequest
 import lk.mageride.shared.data.models.ride.ProofArtifactResponse
 import lk.mageride.shared.data.models.ride.RequestRideResponse
 import lk.mageride.shared.data.models.ride.RideDetail
@@ -575,6 +579,32 @@ internal object ApiOperations {
             "POST",
             "/v1/location-requests/{requestId}/decline",
             200,
+        ),
+        // The three commands dispatch-svc drives (Δ C022/C023). Added by C025 — the operations
+        // reached `ride.yaml` without the matching client rows, so this table was three short.
+        op<RideStateChange>(
+            "markRideMatching",
+            ApiService.RIDE,
+            "POST",
+            "/v1/internal/rides/{rideId}/matching",
+            200,
+            sends<MarkRideMatchingRequest>(),
+        ),
+        op<OfferPlaced>(
+            "placeRideOffer",
+            ApiService.RIDE,
+            "POST",
+            "/v1/internal/rides/{rideId}/offer",
+            200,
+            sends<PlaceRideOfferRequest>(),
+        ),
+        op<RideStateChange>(
+            "expireRideOffer",
+            ApiService.RIDE,
+            "POST",
+            "/v1/internal/rides/{rideId}/offer/expire",
+            200,
+            sends<ExpireRideOfferRequest>(),
         ),
         op<RideStateChange>(
             "systemCancelRide",

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Walking-skeleton strings only.
+
+  NOT trilingual, and that is this component's fence rather than an oversight: the platform rule
+  is Si/Ta/En from resource files with no hard-coded literals (CLAUDE.md), and C078 owns the
+  passenger app's real string catalogue. Three half-written translations of screens Wave 4a will
+  delete would be worse than none.
+-->
+<resources>
+    <string name="app_name">MageRide (skeleton)</string>
+</resources>

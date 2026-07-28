@@ -50,7 +50,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C022 | ws-ride-svc-happy-path ⭑ | 2 | DONE | 2026-07-28 | 109 tests green; 1 rides migration added (0608) + 2 internal contract routes — 5 micro-change-sets raised |
 | C023 | ws-dispatch-stub ⭑ | 2 | DONE | 2026-07-28 | 78 tests green; 1 dispatch migration added (0710) + 1 internal contract route — 11 micro-change-sets raised |
 | C024 | ws-realtime-pipeline ⭑ | 2 | DONE | 2026-07-28 | 35 tests green (3 new services + EMQX fixture); p95 EMQX→SignalR 2.1 s; H3 grid + Kafka consumer promoted to the kernel; 4 micro-change-sets raised |
-| C025 | ws-e2e-android-slice ⭑ | 2 | PENDING | | |
+| C025 | ws-e2e-android-slice ⭑ | 3 | DONE | 2026-07-28 | **WALKING SKELETON REACHED** — one booked ride end to end on the real stack; 2 Android shells assemble; `:shared` gained a jvm() target; wave-1 gate repaired |
 | C026 | iam-svc-auth | 2 | PENDING | | |
 | C027 | iam-svc-profile-rbac | 2 | PENDING | | |
 | C028 | registry-svc-vehicles | 2 | PENDING | | |
@@ -160,6 +160,9 @@ After completing a component, set its Status and append the 3-line handoff under
 | C132 | production-readiness-doks | 6 | PENDING | | |
 
 ⭑ = walking-skeleton milestone (C020–C025): one booked ride end to end on Docker Compose.
+**REACHED 2026-07-28 (C025).** `bash e2e/walking-skeleton/run.sh` brings up
+`infra/docker-compose.skeleton.yml` from nothing and drives one Mode C ride to `PaymentPending`
+through real EMQX, Redpanda, Redis and SignalR, using the KMP module the two Android apps use.
 
 ## Planner findings — spec gaps & conflicts (from C000)
 
@@ -3206,3 +3209,96 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   harness start-ups — the end-to-end tests build five processes (two brokers' clients plus three
   services) per test so a background pump or consumer cannot leak into another test. MQTTnet
   5.2.0.1603 and the `Testcontainers` base package are the only new NuGet dependencies.
+
+- **Component:** C025 ws-e2e-android-slice — 2026-07-28
+- **Status:** DONE — **the walking-skeleton milestone is reached.**
+  `bash e2e/walking-skeleton/run.sh` brings the stack up from nothing and all four DoD items assert:
+  a booked ride reaches **PaymentPending**; the driver's live position reaches the **booking
+  passenger's** SignalR group through real EMQX → mqtt-bridge → Redpanda → position-processor →
+  `cell:{h3index}` → fanout; an ignored offer **expires at 15 s and the ride re-enters Matching**;
+  and the passenger joins **exactly 19** res-7 + ring(2) cells. Both apps assemble
+  (`:apps:driver-android:assembleDebug`, `:apps:passenger-android:assembleDebug`). The wave-1 KMP
+  gate is green again — see decision 6.
+- **Notes:**
+  **Two things this component had to build that its prompt does not list, because nothing else had —**
+  (i) *the stack itself.* Only `api-gateway` had a Dockerfile; `infra/docker-compose.dev.yml`'s
+  `app-services` / `hot-path` / `fanout` containers have never been buildable. C010's parameterised
+  `infra/docker/Dockerfile.service` builds all nine services unchanged, so the new file is
+  `infra/docker-compose.skeleton.yml` — slim infrastructure plus eight services behind the gateway.
+  (ii) *a way to drive it.* See decision 1.
+  **Decisions —**
+  (1) **`:shared` gained a `jvm()` target and the e2e is a Kotlin/JVM program on top of it.** The
+  alternative — an Android instrumentation test — cannot run on this headless box and would never
+  run in CI either, and a curl script would prove the backend while leaving the *app contracts*
+  untested. The harness now drives the same api-client, the same `LiveHub` names and the same
+  `MqttTopics`/`PositionCodec` the two shells do. Four JVM `actual`s were needed and each is honest
+  about what a server is not: an in-memory `SecureStore` (no keystore), an attestation provider that
+  always returns `null` (D-30's "fail soft, never fake"), and a database driver that **rejects** a
+  passphrase rather than silently opening an unencrypted file. `platformH3Grid` and
+  `secureRandomBytes` moved into a new `jvmShared` intermediate source set — they were identical on
+  both targets, and H3 cell ids that drifted would show up as an empty map, not an error.
+  (2) **Per-service containers, not the `app-services` single process** D7' §2.1 and the replica draw.
+  This is a Wave-2 arrangement and not a decision about production: folding five services into one
+  process is blocked on the kernel, not on effort — ride-svc needs `Outbox:Schema=rides` while
+  dispatch needs `dispatch`, and iam/registry/dispatch each need a different `CommandLog:Schema`.
+  Both are singleton `IOptions<T>`, so one process can hold exactly one of each. Keying them per
+  service is a C002 change and outside this component's fences. `docker-compose.dev.yml` is left
+  untouched as the contract C125 builds `app-services` against.
+  (3) **The e2e drives TWO rides, and both the split and the order are forced by the platform.** A
+  ride whose offer was ignored can never be offered to that driver again (the `NOT EXISTS` against
+  `dispatch.offers` in C023's `CandidateRepository`, D5' §3.5), so the expiry cannot be shown on the
+  ride that gets completed; and the expiry ride must come **first**, because `PaymentPending` is not
+  terminal and a driver who has just completed a ride still holds an active one (R-02) and correctly
+  gets no further offers. Two passengers, for the same reason.
+  (4) **`run.sh` tears down `--volumes`.** Not tidiness: `POST /v1/rides/{rideId}/cancel` does not
+  exist yet (C022 shipped the happy path, cancellation is C035), so a run that dies mid-ride leaves a
+  ride the platform offers **no way to clear** and every later run for that driver fails at the
+  offer. The passenger sidesteps it by being a new account each run; the driver cannot, being seeded.
+  (5) **The apps claim no wireframe id and say so in their own `CLAUDE.md`.** No MapLibre (the
+  "live map" is a list), no trilingual resources, no Koin, no navigation, no foreground service.
+  What *is* real is the wiring: 19 cells computed by `:shared`, `LiveHub` names taken from `:shared`,
+  CBOR payloads through `:shared`'s `PositionCodec`, and the offer countdown rendered from ride-svc's
+  `offerExpiresAt` rather than a local timer.
+  (6) **The wave-1 KMP gate had been red since C022/C023 and is now green.** They added
+  `markRideMatching`, `placeRideOffer` and `expireRideOffer` to `ride.yaml` without the matching
+  typed client, so `ContractCoverageTest` counted 179 operations against a hard-coded 176 and
+  `ApiOperationTableTest` was three rows short. Fixed additively: three DTOs, three `RideApi`
+  functions, three `ApiOperations` rows, and the two counts. 817 tests pass, detekt and ktlint clean.
+  **Gaps found, all recorded at the point of the workaround —**
+  (a) **No REST response returns an `offerId`.** A driver accepts with a body that requires it, and
+  neither `RideDetail` nor `RideStateSnapshot` carries one — only `offerExpiresAt`. It reaches a
+  handset on the `offer.created` push (dispatch outbox → `dispatch.events` → notification-svc C051 as
+  FCM, → fanout-svc C041 as a socket event) and **neither exists yet**. The harness reads the Kafka
+  topic those two will read; the driver shell, which cannot, asks the user to paste it.
+  **Recommend adding `offerId` to `RideStateSnapshot`** — `signalr-hub.md` §1.1 already makes REST
+  the snapshot path, and without it a driver who misses the push can never accept.
+  (b) **Nothing refreshes driver presence.** D5' §3.2 drops a candidate whose `last_seen_at` is older
+  than `Dispatch:PresenceTtl` (60 s) and R-08 gives that heartbeat to position-processor-svc, which
+  C024 deliberately left to C039. So a driver ages out of the pool a minute after going online and
+  the cascade finds nobody — a ride sitting in `Matching` with a driver parked fifty metres away. The
+  harness re-asserts presence every 15 s; delete that the day C039 lands.
+  (c) **`POST /v1/auth/mqtt-token` is not implemented** (C020 left it to C026), so nothing can hand a
+  device its MQTT credential. The harness mints one against EMQX's shared secret; the driver shell
+  asks for it. `:shared`'s `MqttSessionTokenManager` is already written against that endpoint.
+  (d) **`:shared:assemble` is broken and predates this component.**
+  `compileCommonMainKotlinMetadata` rejects the three `expect class`es that inherit an interface
+  (C014/C018). It reproduces on a pristine checkout; the wave-1 gate never runs `assemble`, which is
+  why it went unseen. Nothing in the skeleton needs it — apps resolve the Android variant, the
+  harness the JVM one — but **`assembleXCFramework` does**, so C085/C094 will hit it. Not fixed here:
+  the repair touches iOS actuals this host cannot link.
+  **Micro-change-sets raised —**
+  `.env.common.example`'s `ConnectionStrings__Postgres` authenticates as `mageride`, but the slim
+  stack's Postgres and PgBouncer both run as `postgres` — every service is refused by SCRAM;
+  `Jwt__JwksUrl` points at `app-services` on `/v1/internal/iam/.well-known/jwks.json`, while the
+  landed endpoint is `/.well-known/jwks.json` on iam-svc. Both are overridden in the skeleton compose
+  with the reason inline. `androidCompileSdk` stays **36**: `androidx.core:1.19.0` demands 37, which
+  is not a published platform, so the catalogue pins **1.18.0** — the newest whose AAR metadata still
+  says `minCompileSdk=36`. This is the confirmation C001 asked C067 to make.
+  **For C026 (iam-svc) —** implement `POST /v1/auth/mqtt-token` and gap (c) closes for both the app
+  shell and the harness. **For C039 —** the presence heartbeat closes gap (b). **For C034/C041/C051 —**
+  gap (a) is the one that blocks a real Driver App.
+  **Build host —** the Android SDK is now installed (`platforms;android-36`, `build-tools;36.0.0`);
+  `local.properties` points at `/opt/android-sdk`. **`platforms;android-37` does not exist** in the
+  Google repository yet. Nine service images (~340 MB each) plus the slim stack fit alongside a build;
+  the replica stayed down. A full `run.sh` takes ~6 minutes, most of it the image build and the
+  15-second offer window it deliberately waits out.

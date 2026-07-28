@@ -277,6 +277,79 @@ public data class RequestRideResponse(
 @Serializable
 public data class RideStateChange(val rideId: Ulid, val state: RideState, val version: RideVersion)
 
+// -------------------------------------------------------------------------------------------
+// The three commands dispatch-svc drives (Δ C022/C023, `/v1/internal/rides/**`).
+//
+// ADD §11.11's sequence diagram draws dispatch-svc running `UPDATE rides SET state=…` itself;
+// §11.12 states in the same document that ride-svc is the SOLE writer of `rides.state`.
+// Sole-writer won, so the moves dispatch drives are commands on ride-svc — which is why they are
+// modelled here at all. Nothing in an app may call them (mTLS / internalKey); they exist so no
+// contract is half-covered. Added by C025, which found `ContractCoverageTest` red: C022 and C023
+// added the operations to `ride.yaml` without the matching client, and the wave-1 gate has been
+// failing since.
+// -------------------------------------------------------------------------------------------
+
+/**
+ * `POST /v1/internal/rides/{rideId}/matching` — dispatch-svc has begun building candidates.
+ *
+ * @property version Optional. dispatch may retry the call, and a retry that raced its own first
+ *   attempt should not have to re-read the ride to discover it already succeeded.
+ */
+@Serializable
+public data class MarkRideMatchingRequest(val version: RideVersion? = null)
+
+/**
+ * `POST /v1/internal/rides/{rideId}/offer` — dispatch reserved a driver; arm the offer window.
+ *
+ * @property offerId dispatch's own offer row, mirrored onto the ride.
+ * @property driverId The offered driver — recorded so they can read the ride during the countdown.
+ * @property vehicleId Their vehicle, so the accept sets `accepted_vehicle_id` without a lookup.
+ * @property ttlSeconds The window dispatch *asks* for (D5' §3.5 default 15). The deadline that
+ *   comes back is stamped from ride-svc's clock, because it is ride-svc's
+ *   `offer_expires_at > now()` that decides an accept and two clocks would make the boundary
+ *   unfalsifiable.
+ * @property version Optimistic-concurrency echo.
+ */
+@Serializable
+public data class PlaceRideOfferRequest(
+    val offerId: Ulid,
+    val driverId: Ulid,
+    val vehicleId: Ulid,
+    val ttlSeconds: Int? = null,
+    val version: RideVersion? = null,
+)
+
+/**
+ * `POST /v1/internal/rides/{rideId}/offer/expire` — the window closed unanswered (R-04).
+ *
+ * @property offerId The offer being expired. Two triggers race deliberately — the durable
+ *   `rides.timers` row and the `offer:{rideId}` Redis key (D-07) — and whichever loses gets
+ *   `410 offer-expired`, which is normal, not a fault.
+ */
+@Serializable
+public data class ExpireRideOfferRequest(val offerId: Ulid)
+
+/**
+ * The 200 of `placeRideOffer` (`ride.yaml#/components/schemas/OfferPlaced`).
+ *
+ * `allOf(RideStateChange, …)` flattened into one class — kotlinx.serialization cannot compose.
+ *
+ * @property rideId The ride.
+ * @property state `Offered`.
+ * @property version The new version.
+ * @property offerId The offer that was armed.
+ * @property offerExpiresAt **ride-svc's** instant, which dispatch mirrors onto
+ *   `dispatch.offers.expires_at` and a client renders its countdown from.
+ */
+@Serializable
+public data class OfferPlaced(
+    val rideId: Ulid,
+    val state: RideState,
+    val version: RideVersion,
+    val offerId: Ulid,
+    val offerExpiresAt: Timestamp,
+)
+
 /**
  * `GET /v1/rides/{rideId}/state` — the cheap poll the driver app runs while an offer is live.
  *

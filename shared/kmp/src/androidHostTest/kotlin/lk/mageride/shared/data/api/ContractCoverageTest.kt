@@ -111,8 +111,14 @@ class ContractCoverageTest {
         const val API_SOURCE_DIR = "shared/kmp/src/commonMain/kotlin/lk/mageride/shared/data/api"
         const val ATTESTED_ARGUMENT = "attested = true"
 
-        /** 176 operations across the sixteen in-scope contracts, as of C013. */
-        const val EXPECTED_OPERATIONS = 176
+        /**
+         * Operations across the sixteen in-scope contracts.
+         *
+         * 176 at C013; **179** since C022 and C023 added ride-svc's three internal commands
+         * (`markRideMatching`, `placeRideOffer`, `expireRideOffer`) to `ride.yaml`. Neither
+         * updated the client, so this test — the wave-1 gate — was red until C025 closed it.
+         */
+        const val EXPECTED_OPERATIONS = 179
 
         /** D3' §0's sensitive mutations: auth, payments, ride accept, wallet, SOS. */
         const val EXPECTED_ATTESTED = 20

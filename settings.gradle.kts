@@ -47,3 +47,9 @@ project(":shared").projectDir = file("shared/kmp")
 
 include(":apps:driver-android")
 include(":apps:passenger-android")
+
+// C025 — the walking-skeleton end-to-end run. A plain JVM program, not an app: it drives the
+// SAME api-client, SignalR and MQTT contracts the two Android shells do, against the real
+// Docker Compose stack, so the run proves the contracts and not a second implementation of them.
+// `:shared` grew a `jvm()` target for it.
+include(":e2e:walking-skeleton")

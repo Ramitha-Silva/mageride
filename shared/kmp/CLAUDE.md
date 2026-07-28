@@ -406,3 +406,41 @@ src/androidHostTest/  JVM-only tests of the Android actuals (NOT `androidUnitTes
 - Add a Koin module per component and append it to `sharedModules` in `di/SharedModule.kt` —
   do not grow `sharedCoreModule`. Apps are told to use `sharedModules`, so a new binding must
   never require an edit in all four of them.
+
+## The `jvm` target (C025)
+
+`:shared` has a **third target beside Android and iOS**, and it ships to nobody. ADD §18.2 names
+Android and iOS because those are the *apps*; the JVM target exists so the same api-client, the same
+`LiveHub` and MQTT contracts and the same ride state machine can be driven **headlessly** — which is
+what `e2e/walking-skeleton` does, and what any later component wanting to exercise this module on a
+server or in CI can do without an emulator.
+
+- **`jvmShared` is a real intermediate source set**, holding the two `actual`s that are identical on
+  Android and the JVM and must stay that way: `platformH3Grid()` (its cell ids have to match the ones
+  `MageRide.Shared.Geo` computes server-side, or a passenger joins `cell:{h3index}` groups nothing
+  publishes to) and `secureRandomBytes`. Both moved out of `androidMain`.
+- **It is declared by EXTENDING the default hierarchy template**, never by calling `dependsOn` by
+  hand. A manual `androidMain.dependsOn(...)` makes the plugin drop the default template entirely,
+  and the first casualty is silent: `iosMain` stops belonging to any compilation and the three iOS
+  targets compile without it. `withAndroidTarget()` does not match this module's target either — it
+  is on `com.android.kotlin.multiplatform.library`, whose target is named `android`, so the group
+  uses `withCompilations { it.target.name == "android" }`.
+- **The four JVM-only actuals are honest about what a server is not.** `PlatformSecureStore` is
+  in-memory and says so (there is no hardware keystore; it is for a process-lifetime harness and
+  nothing else), `PlatformAttestationProvider` always returns `null` (D-30's "fail soft, never
+  fake"), and `PlatformDatabaseDriverFactory` **rejects** a passphrase rather than quietly opening an
+  unencrypted file.
+
+### Known defect: `:shared:assemble` fails, and it predates this target
+
+`compileCommonMainKotlinMetadata` fails with "Class 'PlatformSecureStore' is not abstract and does
+not implement abstract members" for the three `expect class`es that inherit an interface
+(`PlatformSecureStore`, `PlatformAttestationProvider`, `PlatformDatabaseDriverFactory`). It
+reproduces on a pristine checkout with no JVM target, so it arrived with C014/C018; the wave-1 gate
+is `testDebugUnitTest detekt ktlintCheck` and never runs `assemble`, which is why nobody saw it.
+
+Nothing in the walking skeleton needs it — an app resolves `:shared`'s Android variant and the e2e
+harness its JVM one, neither of which compiles common metadata — but **`assembleXCFramework` does**,
+so C085/C094 will hit it. The fix is to re-declare the inherited members on each `expect class` and
+mark the actuals `actual override`; that touches iOS actuals this host cannot link, so it belongs to
+whoever owns the module rather than to C025.

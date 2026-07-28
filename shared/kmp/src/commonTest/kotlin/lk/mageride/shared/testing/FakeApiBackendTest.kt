@@ -167,7 +167,7 @@ class FakeApiBackendTest {
     }
 
     private companion object {
-        /** `ContractCoverageTest` (C013) counts the same 176 from the YAML. */
-        const val EXPECTED_OPERATIONS = 176
+        /** `ContractCoverageTest` (C013) counts the same number from the YAML. */
+        const val EXPECTED_OPERATIONS = 179
     }
 }

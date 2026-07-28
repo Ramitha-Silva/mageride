@@ -129,6 +129,54 @@ kotlin {
         }
     }
 
+    // ---------------------------------------------------------------------------------
+    // C025 — a plain JVM target beside Android and iOS.
+    //
+    // It ships to nobody. ADD §18.2 names Android and iOS because those are the *apps*;
+    // this target exists so the same api-client, the same SignalR and MQTT contracts and
+    // the same ride state machine can be driven headlessly — which is what
+    // `e2e/walking-skeleton` does, and what any later component wanting to exercise this
+    // module on a server or in CI can do without an emulator.
+    //
+    // It is NOT a second Android. The four `expect` declarations it has to satisfy are
+    // satisfied honestly: there is no hardware keystore on a server, so PlatformSecureStore
+    // is in-memory and says so; there is no Play Integrity, so the attestation provider
+    // returns null exactly as the "fail soft, never fake" rule requires.
+    // ---------------------------------------------------------------------------------
+    jvm()
+
+    // ---------------------------------------------------------------------------------
+    // `jvmShared` — the code Android and the JVM target genuinely share (C025).
+    //
+    // Two `actual`s are byte-for-byte the same on both and must stay that way:
+    // `platformH3Grid()` wraps `com.uber:h3`, whose cell ids have to match the ones
+    // `MageRide.Shared.Geo` computes server-side or a passenger joins `cell:{h3index}`
+    // groups nothing publishes to; and `secureRandomBytes` is `java.security.SecureRandom`
+    // either way. A copy in each source set would be two places for those to drift.
+    //
+    // Everything that genuinely differs stays in its own leaf source set: PlatformInfo
+    // reads `android.os.Build`, SecureStore needs a `Context`, the SQLite driver is
+    // SQLCipher against JDBC.
+    //
+    // EXTENDING the default template rather than wiring `dependsOn` by hand. A manual
+    // `androidMain.dependsOn(...)` makes the plugin drop the default template entirely,
+    // and the first casualty is silent: `iosMain` stops belonging to any compilation and
+    // the three iOS targets compile without it. `applyDefaultHierarchyTemplate { }` adds
+    // this group on top of the defaults and leaves the rest alone.
+    // ---------------------------------------------------------------------------------
+    applyDefaultHierarchyTemplate {
+        common {
+            group("jvmShared") {
+                withJvm()
+                // `withAndroidTarget()` matches the OLD `com.android.library` KMP target.
+                // This module is on `com.android.kotlin.multiplatform.library` (AGP 9 refuses
+                // the other in a KMP project — see the plugins block), whose target is a
+                // different type and is named `android`.
+                withCompilations { it.target.name == "android" }
+            }
+        }
+    }
+
     val xcf = XCFramework(frameworkName)
     listOf(iosX64(), iosArm64(), iosSimulatorArm64()).forEach { target ->
         target.binaries.framework {
@@ -207,6 +255,25 @@ kotlin {
             // exercise the same code the app runs. `implementation`: H3JavaGrid is internal and
             // the public surface is our own H3Grid interface, so no com.uber type escapes.
             implementation(libs.h3)
+        }
+
+        // C025. See the `jvmShared` group above — `com.uber:h3` is JNI with no Kotlin/Native
+        // klib, so it can only live on the JVM side of the hierarchy, and both targets that
+        // share `platformH3Grid()` need it.
+        getByName("jvmSharedMain").dependencies {
+            implementation(libs.h3)
+        }
+
+        // C025. OkHttp rather than CIO for the same reason androidMain uses it: the e2e harness
+        // should exercise the engine the Android app ships, not a second one.
+        jvmMain.dependencies {
+            implementation(libs.ktor.client.okhttp)
+
+            // The JDBC/xerial SQLite driver — a real SQLite, the same one androidHostTest
+            // opens. There is no SQLCipher here: `mobile_db_schema.md` §0.4 encrypts the file
+            // on a handset, and a server-side harness has neither a keystore to wrap the key
+            // with nor a user's data to protect. See PlatformDatabaseDriverFactory.jvm.kt.
+            implementation(libs.sqldelight.sqlite.driver)
         }
 
         iosMain.dependencies {

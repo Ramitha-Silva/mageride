@@ -8,6 +8,10 @@
 #   C011 kmp-module-scaffold  — appends Ktor, kotlinx.serialization / coroutines / datetime, Koin,
 #                               multiplatform-settings, H3, SQLDelight, Turbine, kotlin-test.
 #   C067 / C076 app shells    — append the Android UI, MapLibre, HiveMQ and SignalR entries.
+#   C025 ws-e2e-android-slice — took the SignalR, HiveMQ and androidx-UI entries early: the
+#                               walking skeleton needs a real socket and a real broker client
+#                               before either app shell exists. MapLibre is deliberately NOT
+#                               here — the skeleton's map is a list, and C077 owns the real one.
 # Appending is expected; renaming or removing an existing alias is a breaking change.
 
 [versions]
@@ -36,6 +40,28 @@ androidTargetSdk = "36"
 # Kotlin 2.x compiles Compose through the `kotlin-compose` plugin below (versioned with
 # Kotlin itself); the BOM pins the androidx.compose artifacts.
 composeBom = "2026.06.01"
+# C025. Not covered by the Compose BOM — these are the activity/lifecycle host the two app
+# shells put a composable in, and androidx.core for the manifest-level basics.
+androidxCore = "1.18.0"      # newest whose AAR metadata still says minCompileSdk=36; 1.19.0 demands 37, which is unreleased
+androidxActivity = "1.11.0"
+androidxLifecycle = "2.10.0"
+
+# ---- Realtime clients (C025) ---------------------------------------------------------
+# D6' §5: "Client = SignalR Java client (Android) / SignalR Swift client (iOS)". Microsoft
+# versions this artifact with ASP.NET Core, so 10.0.x is the line that matches the .NET 10
+# fanout-svc. JVM/Android only; the iOS half is C094's Swift client.
+signalr = "10.0.9"
+# D6' §3: "Driver App client = HiveMQ (Android) / CocoaMQTT (iOS) in a native foreground
+# service". Same artifact on plain JVM, which is what lets the e2e harness publish exactly
+# what the driver app publishes.
+hivemqMqtt = "1.3.17"
+
+# C025, e2e harness only — NOT an app dependency and never will be. `offer.created` carries the
+# `offerId` a driver needs to accept, and it exists on `dispatch.events` and nowhere else: no REST
+# response returns it (see the C025 handoff, contract gap (a)). Until notification-svc (C051) and
+# the fanout push (C041) land, reading the topic is the only way a scripted driver can accept an
+# offer, and it is what those services will do too.
+kafkaClients = "4.3.1"
 
 # ---- KMP shared module (C011) -------------------------------------------------------
 # ADD §18.2 "KMP Shared Libraries" names the concern; the version is the newest stable
@@ -95,6 +121,8 @@ android-library      = { id = "com.android.library",                       versi
 android-kmp-library  = { id = "com.android.kotlin.multiplatform.library",  version.ref = "agp" }
 kotlin-android       = { id = "org.jetbrains.kotlin.android",              version.ref = "kotlin" }
 kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform",        version.ref = "kotlin" }
+# C025 — the e2e harness is a plain JVM program, not an Android or multiplatform one.
+kotlin-jvm           = { id = "org.jetbrains.kotlin.jvm",                  version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 kotlin-compose       = { id = "org.jetbrains.kotlin.plugin.compose",       version.ref = "kotlin" }
 detekt               = { id = "io.gitlab.arturbosch.detekt",               version.ref = "detekt" }
@@ -104,6 +132,25 @@ sqldelight           = { id = "app.cash.sqldelight",                       versi
 
 [libraries]
 compose-bom = { module = "androidx.compose:compose-bom", version.ref = "composeBom" }
+
+# ---- Android UI (C025 app shells) -------------------------------------------------------
+# Versionless: the BOM above pins every androidx.compose artifact, so a version here would
+# silently override it for that one module.
+compose-ui                 = { module = "androidx.compose.ui:ui" }
+compose-ui-graphics        = { module = "androidx.compose.ui:ui-graphics" }
+compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview" }
+compose-material3          = { module = "androidx.compose.material3:material3" }
+androidx-core-ktx          = { module = "androidx.core:core-ktx",                              version.ref = "androidxCore" }
+androidx-activity-compose  = { module = "androidx.activity:activity-compose",                  version.ref = "androidxActivity" }
+androidx-lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-runtime-compose", version.ref = "androidxLifecycle" }
+androidx-lifecycle-viewmodel-compose = { module = "androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "androidxLifecycle" }
+
+# ---- Realtime clients (C025) -------------------------------------------------------------
+# JVM/Android only. See the version comments: the iOS halves are C094's Swift clients.
+signalr     = { module = "com.microsoft.signalr:signalr",       version.ref = "signalr" }
+hivemq-mqtt = { module = "com.hivemq:hivemq-mqtt-client",       version.ref = "hivemqMqtt" }
+# e2e harness only — see the `kafkaClients` version comment.
+kafka-clients = { module = "org.apache.kafka:kafka-clients",    version.ref = "kafkaClients" }
 
 # ---- Ktor -----------------------------------------------------------------------------
 # commonMain gets the engine-agnostic pieces; each platform source set gets its engine.
