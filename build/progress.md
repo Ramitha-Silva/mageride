@@ -46,7 +46,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C018 | kmp-local-db | 1 | DONE | 2026-07-27 | 767 tests green (113 new); two SQLDelight databases, schema v2 with a tested migration; 4 micro-change-sets raised |
 | C019 | kmp-test-kit | 1 | DONE | 2026-07-27 | 817 tests green (50 new); MockEngine fake covering all 176 operations + descriptor-driven fixtures; contract checks over 176 responses and 85 request bodies |
 | C020 | ws-iam-minimal ⭑ | 2 | DONE | 2026-07-28 | 91 tests green; 3 iam migrations added (0104–0106) — 3 micro-change-sets raised |
-| C021 | ws-registry-minimal ⭑ | 2 | PENDING | | |
+| C021 | ws-registry-minimal ⭑ | 2 | DONE | 2026-07-28 | 92 tests green; 2 registry migrations added (0307–0308) — 3 micro-change-sets raised |
 | C022 | ws-ride-svc-happy-path ⭑ | 2 | PENDING | | |
 | C023 | ws-dispatch-stub ⭑ | 2 | PENDING | | |
 | C024 | ws-realtime-pipeline ⭑ | 2 | PENDING | | |
@@ -2669,3 +2669,119 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   throughout. The 91 tests take ~49 s, of which ~35 s is 25 harness start-ups — each integration
   test builds a fresh `WebApplication` so its ephemeral signing key and its Redis buckets cannot
   leak into another test.
+
+- **Component:** C021 ws-registry-minimal — 2026-07-28
+- **Status:** DONE — `dotnet test backend/src/Registry.Api.Tests -c Release` → **92 passed, 0 failed,
+  0 skipped**. All three DoD items pass against a real Postgres (Testcontainers). Wave-0 and wave-2
+  gates re-run green after the two new migrations: `bash infra/scripts/migrate-verify.sh` →
+  **190/190** (was 187), `MageRide.Shared.Tests` → 161, `ApiGateway.Tests` → 524, `Iam.Api.Tests`
+  → 91. `db/seed/skeleton.sql` was applied twice through `infra/scripts/seed-skeleton.sh` against a
+  freshly migrated database.
+- **Notes:**
+  **Spec gaps — three micro-change-sets, none actioned in `specs/` (D3' §registry-svc and D4' §2
+  own these).** Two are landed as migrations because the endpoints cannot meet their own contract
+  without them; each file's header carries the argument.
+  (a) ***US-9.6 has no storage and no endpoint*** (`0308__registry_active_vehicle.sql`). US-9.6 is
+  P0 — "if a driver has registered multiple vehicles, **only one vehicle can go live at a time**" —
+  and US-9.7 puts "the registration number of the vehicle currently live/online (**the single
+  active vehicle selected in vehicle management**)" on the driver dashboard. Nothing in D4' §2 or
+  `server_db_schema.md` §2 stores that selection and no D3' route sets it. D-03's two enforcement
+  points are both *downstream* of the choice: `ux_sessions_active_driver` (0501) is the Mode A/B
+  tracking plane and `dispatch.driver_presence` (0701) only exists once a driver is already online
+  **with a `vehicle_id` in hand**. Something has to answer "which vehicle?" first. Added
+  `registry.driver_profiles.active_vehicle_id` + `active_vehicle_selected_at` and
+  `POST /v1/vehicles/{id}/select-live`. **D4' §2 should carry the columns and D3' the route.**
+  (b) ***No per-service command log exists except `rides.command_log`***
+  (`0307__registry_command_log.sql`). Identical to C020's finding (a), now a pattern rather than a
+  one-off: D3' §0 requires `Idempotency-Key` on every POST and replays from a **per-service** log,
+  the registry contract marks `POST /v1/vehicles` "Idempotent: yes", and D4' §5 prints DDL for
+  `rides` only. Sharing that table would let a registration and a ride collide on one
+  client-generated key. **This changes a C003 assertion:** `migrate-verify.sh` now expects **13**
+  registry tables, not 12. The convention is now recorded in `db/CLAUDE.md` so C022–C044 stop
+  rediscovering it.
+  (c) ***`vehicle.registered` has no outbox to be written to.*** D3' says `POST /v1/vehicles` emits
+  it and D6' §2.4 makes the transactional outbox mandatory for cross-service events, but neither
+  DDL source declares `registry.outbox` — the same gap C004 found for `dispatch` and closed there.
+  **Not created here:** nothing in the walking skeleton consumes the event (dispatch reads the
+  vehicle row directly), and publishing outside a transaction to satisfy the letter of the contract
+  would break the exact guarantee R-13 exists for. `UseKafka`/`UseOutbox` are off. **C028 must land
+  the table and the publish together, and D4' §2 needs the DDL.**
+  **Contract gaps (no change made to `backend/contracts/registry.yaml`; C028 should decide):**
+  (d) *`ocrJobId` is required by the 201 of `POST /v1/vehicles` and is not returned.* No OCR is
+  queued in this slice, so any value would be an identifier no service recognises and a client
+  polling it would wait forever. It belongs on the responses that actually queued a job.
+  (e) *The four document file ids are required by `VehicleRegistration` and are accepted-and-ignored.*
+  There is no upload surface in the skeleton to obtain a ULID from (C029/C054 own it). They are
+  declared on the request record so a client written against the contract still compiles.
+  (f) *`VehicleSummary` has nowhere to say which vehicle is selected*, which is exactly what the
+  US-9.7 dashboard renders. Added `isSelected`; `dispatchState` is also surfaced, which the
+  contract has on `VehicleDetail` but not on the summary.
+  (g) *Profile Setup precedes vehicle onboarding in D3' but is C029's endpoint.*
+  `registry.vehicles.driver_name` is NOT NULL and is what a passenger sees (US-2.12), so
+  `POST /v1/vehicles` takes `driverName` from the body and creates the minimal
+  `registry.driver_profiles` row when the driver has none; a second vehicle then needs no name.
+  A first vehicle with no name anywhere is refused rather than written blank.
+  **Decisions —**
+  (1) **The selection lives on `registry.driver_profiles`, not in a table of its own.** That row is
+  already 1:1 with the driver, so its primary key *is* the "only one at a time" half of US-9.6 —
+  free and unbypassable. The ownership half is a **composite FK to `registry.vehicles(id, owner_id)`**,
+  which needed a (redundant-for-lookups) `UNIQUE (id, owner_id)` on `registry.vehicles`. That turns
+  "a driver may only select a vehicle they own" from a repository `WHERE` clause into an invariant
+  Postgres keeps; `SelectLiveTests` asserts it holds against a direct `UPDATE`.
+  `ON DELETE SET NULL (active_vehicle_id)` names its column (PostgreSQL 15+) — without the list
+  Postgres would try to null `driver_id`, which is the primary key. **APPROVED-ness is not
+  expressible as a constraint** and is enforced in the service; **C029 must clear the selection when
+  a selected vehicle is DEACTIVATED or REJECTED.**
+  (2) **`car` is rejected, not rewritten (DoD).** AL-09 maps `car → sedan` as a one-time data
+  migration, not an input alias — silently rewriting would hide an un-updated client until a fare
+  tariff or a map marker disagreed. `bus`/`train` are *canonical* types but Mode A, so they are
+  `403 mode-not-allowed` rather than `400 invalid-vehicle-type`; the 400's detail names the
+  replacement so a client learns what to send.
+  (3) **Registration numbers are canonicalised, not just validated** (`wp qa-1234` → `WP-QA-1234`),
+  following C020's phone-normalisation precedent. `ux_vehicles_regno_active` is a unique index over
+  the *stored text*, so without this D-37 is bypassed by retyping the plate — proved by
+  `The_same_plate_typed_differently_is_still_a_duplicate`. A character a plate cannot contain is
+  **refused rather than stripped**: deleting it would let two genuinely different plates collide.
+  Whitespace of any kind is a separator, so a stray tab or newline is copy-paste noise, not a
+  rejection.
+  (4) **The dev approve endpoint is not mapped when it is off**, rather than answering 403 — an
+  unmapped route is undiscoverable. `Registry:DevApprovalEnabled` unset means Development only;
+  the replica sets it `true` explicitly because it runs synthetic data under the Production
+  environment name (added to `infra/env/.env.app.example`, which D7' §4.2 does not list). It still
+  requires a driver bearer that owns the vehicle — a seed path that skipped authentication would
+  be the one thing here reachable without a session. **It bypasses AL-10's mandatory insurance
+  document and the AL-30 step machine**, says so in its own logging, and warns at start-up whenever
+  it is on outside Development.
+  (5) **The seed is `db/seed/skeleton.sql`, deliberately outside `db/migrations/`.** DbUp applies
+  that directory to every database including production, and this file invents an account and
+  approves a vehicle with no insurance document. The distinction is now recorded in `db/CLAUDE.md`
+  alongside why the §20 reference seeds stay in `19xx`. It ends with a `DO` block that raises unless
+  exactly one selected, approved Mode C vehicle exists, so a half-seeded database fails the script
+  instead of reporting success.
+  (6) **`infra/scripts/seed-skeleton.sh` falls back to running `psql` inside
+  `timescale/timescaledb-ha:pg16`** when the host has no `postgresql-client` — which this build host
+  does not. Installing a client package to run a seed would be odd in a repo that already pulls that
+  image for every migration, and the fallback is what let the wrapper be proved here rather than
+  assumed.
+  (7) **`UseRedis = false`.** This slice has no candidate index, no presence and no cache, so a Redis
+  dependency would only add a readiness probe that can fail while everything here still serves.
+  (8) **Tokens are minted in the test suite, not fetched from iam-svc.** registry-svc holds no
+  signing key; standing a real iam-svc up would re-test C020 and make this suite fail for reasons
+  that are not registry's. The claim shape matches `Iam.Api/Auth/AccessTokenIssuer` exactly, and
+  **C025 is where a real iam token crosses into a real registry-svc**.
+  **For C022–C025 —**
+  The skeleton driver is `00000000-0000-4000-8000-00000000d001` on `+94770000001`; the vehicle is
+  `00000000-0000-4000-8000-00000000c001`, plate `WP-QA-0001`, `three_wheeler`, Mode C, APPROVED and
+  already selected. The seed **grants the `driver` role explicitly** — C020 decision (4) means
+  opening the Driver App does not confer it, so a driver seeded without the grant signs in fine and
+  is then refused by every route here.
+  Two things C025 has to decide, neither guessed at here: **there is still no Dockerfile** (C020 left
+  the same choice open — per-slice container vs. an early `AppServices` host), and **the gateway has
+  no route for `/v1/dev/**`**, so the dev approve endpoint is reachable only by talking to
+  registry-svc directly. The SQL seed needs no HTTP at all, which is why it is the path the skeleton
+  should use.
+  **Build host —** Docker is used by the test suite (Testcontainers `timescale/timescaledb-ha:pg16`,
+  already pulled by C002/C003) and by the seed-script fallback; the replica stack stayed down
+  throughout. The 92 tests take ~39 s, of which most is 30 harness start-ups — each integration test
+  builds a fresh `WebApplication` so its test signing key cannot leak into another test. Redis is not
+  needed by this suite at all.

@@ -37,6 +37,11 @@
   every `currency` column defaults to `'LKR'`. The only exemption is the five signed ledger
   columns §0 names (`billing.accounts.balance_minor`, `journal_postings.amount_minor`, and the
   two `wallets` / `wallet_transactions` mirrors) — they are BIGINT and may be negative.
+- **A service with idempotent POSTs owns its own `command_log`** (`iam` 0104, `registry` 0307),
+  shaped like `rides.command_log` (0603) minus the aggregate-id column. D4' §5 prints DDL for
+  `rides` only; pointing a second bounded context at that table would give two services one
+  shared primary key, so a registration and a ride could collide on an identical
+  client-generated `Idempotency-Key`. Both are raised as micro-change-sets in `build/progress.md`.
 - A seed `INSERT` is re-runnable or it is wrong: use `ON CONFLICT DO NOTHING` where a key
   exists, `WHERE NOT EXISTS` where the PK is a generated UUID, and pin any column that would
   otherwise default to `now()` into the conflict target (see `1901`'s `effective_from`).
@@ -68,6 +73,18 @@ were found by running it; see the C006 handoff in `build/progress.md`.
   `create_hypertable`, `add_compression_policy`, `add_retention_policy` and
   `add_continuous_aggregate_policy` all take one, and `CREATE MATERIALIZED VIEW IF NOT EXISTS`
   works for the aggregates themselves.
+
+## Seeds that are not migrations (`db/seed/`)
+
+DbUp applies **everything** in `db/migrations/` to every database, production included. A
+script that invents an account, or that puts a row into a state the real service would refuse,
+belongs in `db/seed/` instead and is applied by its own shell script — never by the `migrate`
+container. `db/seed/skeleton.sql` (C021) is the first: it creates the walking skeleton's driver
+and one APPROVED vehicle with no insurance document, which AL-10 forbids in production.
+
+The §20 reference data (`iam.roles`, `config.operating_cities`, `billing.plans`,
+`fares.tariffs`, notification templates) is the opposite case and stays in `19xx` migrations —
+it is real data every environment needs.
 
 ## Running
 

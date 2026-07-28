@@ -183,7 +183,9 @@ step "Tables owned by C003"
 # idempotency log and D4' §5 prints one only for rides (C020 handoff micro-change-set).
 check_eq "10 iam tables" "10" \
   "SELECT count(*) FROM information_schema.tables WHERE table_schema='iam' AND table_type='BASE TABLE';"
-check_eq "12 registry tables" "12" \
+# 12 from C003 + registry.command_log, added by C021 for the same reason iam.command_log was
+# (C021 handoff micro-change-set).
+check_eq "13 registry tables" "13" \
   "SELECT count(*) FROM information_schema.tables WHERE table_schema='registry' AND table_type='BASE TABLE';"
 check_eq "2 prov tables" "2" \
   "SELECT count(*) FROM information_schema.tables WHERE table_schema='prov' AND table_type='BASE TABLE';"
@@ -359,6 +361,37 @@ if psql_run "UPDATE registry.vehicles SET status='REJECTED' WHERE id='33333333-3
   printf '  %s✓%s a plate frees up once the old registration is REJECTED (D-37)\n' "$GREEN" "$RESET"
 else
   printf '  %s✗%s a REJECTED registration still blocks its plate\n' "$RED" "$RESET"
+  FAILURES=$((FAILURES + 1))
+fi
+
+step "US-9.6 — one selected vehicle per driver (C021)"
+psql_run "INSERT INTO iam.users(id, phone, role) VALUES
+            ('55555555-5555-5555-5555-555555555555','+94770000555','driver');
+          INSERT INTO registry.vehicles(id, owner_id, registration_number, vehicle_type, mode, driver_name)
+            VALUES ('66666666-6666-6666-6666-666666666666','55555555-5555-5555-5555-555555555555',
+                    'WP-QQ-5555','three_wheeler','C','Other Driver');
+          INSERT INTO registry.driver_profiles(driver_id, display_name) VALUES
+            ('11111111-1111-1111-1111-111111111111','Test Driver'),
+            ('55555555-5555-5555-5555-555555555555','Other Driver');" >/dev/null \
+  || die "could not seed the selection fixtures."
+
+check_rejects "selecting a vehicle owned by someone else is rejected (US-9.6)" \
+  "UPDATE registry.driver_profiles
+      SET active_vehicle_id='66666666-6666-6666-6666-666666666666', active_vehicle_selected_at=now()
+    WHERE driver_id='11111111-1111-1111-1111-111111111111';"
+check_rejects "a selected vehicle with no selection instant is rejected (US-9.7)" \
+  "UPDATE registry.driver_profiles
+      SET active_vehicle_id='66666666-6666-6666-6666-666666666666'
+    WHERE driver_id='55555555-5555-5555-5555-555555555555';"
+
+CHECKS=$((CHECKS + 1))
+if psql_run "UPDATE registry.driver_profiles
+                SET active_vehicle_id='66666666-6666-6666-6666-666666666666', active_vehicle_selected_at=now()
+              WHERE driver_id='55555555-5555-5555-5555-555555555555';" >/dev/null 2>&1 \
+   && [[ "$(psql_q "SELECT count(*) FROM registry.driver_profiles WHERE active_vehicle_id IS NOT NULL;")" == "1" ]]; then
+  printf '  %s✓%s a driver may select their own vehicle, and only one (US-9.6)\n' "$GREEN" "$RESET"
+else
+  printf '  %s✗%s selecting an owned vehicle failed, or more than one selection survived\n' "$RED" "$RESET"
   FAILURES=$((FAILURES + 1))
 fi
 

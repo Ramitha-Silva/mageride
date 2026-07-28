@@ -1,0 +1,56 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    C021 verify target: dotnet test backend/src/Registry.Api.Tests -c Release
+
+    Two halves. The pure tests (AL-09 type sets, registration-number canonicalisation) need
+    nothing. The rest run the real service on a Kestrel socket against a Testcontainers
+    Postgres, because every rule this component owns is a database constraint —
+    ux_vehicles_regno_active is D-37, the vehicle_type CHECK is AL-09, and the composite FK
+    added by 0308 is US-9.6's ownership half. None of them is provable against a fake.
+
+    Tokens are minted here rather than fetched from iam-svc: registry-svc is a token
+    *consumer*, and C025 is where the two services meet end to end.
+
+    Microsoft.NET.Sdk.Web, not Microsoft.NET.Sdk: the harness builds a WebApplication.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.Registry.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <OutputType>Exe</OutputType>
+    <!--
+      xUnit1041: collection-fixture ctor args are consumed through the primary constructor.
+      xUnit1051: every test is bounded by its own harness lifetime, so threading
+                 TestContext.Current.CancellationToken through each HTTP call would add noise
+                 without changing behaviour. Matches Iam.Api.Tests and ApiGateway.Tests.
+    -->
+    <NoWarn>$(NoWarn);xUnit1041;xUnit1051</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Registry.Api\Registry.Api.csproj" />
+    <!-- C010: the Postgres fixture, so this suite migrates the same schema the dev stack and
+         the replica do rather than a hand-written copy. -->
+    <ProjectReference Include="..\MageRide.TestKit\MageRide.TestKit.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The seed under test. Copied rather than read from the source tree so the assertion
+         about "after seeding" runs against the file that ships. -->
+    <Content Include="..\..\..\db\seed\skeleton.sql" Link="Seed\skeleton.sql" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

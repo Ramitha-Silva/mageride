@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    Registry.Api (C021, ws-registry-minimal) — the walking skeleton's slice of registry-svc.
+
+    The minimum vehicle identity the dispatcher and the ride flow need: register a Mode C
+    vehicle, approve it through a dev seed path, list a driver's vehicles, and pick the single
+    one they may go live on (AL-09, D-03/US-9.6, D-37).
+
+    Document upload, Gemini OCR, the four-step onboarding machine (AL-29/AL-30), the expiry
+    job (E-03), Mode B sharing and the OnePay merchant bind (D-11) are C028/C029. The
+    Verification-Officer queue is skipped entirely here.
+
+    Verify: dotnet test backend/src/Registry.Api.Tests -c Release
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.Registry</RootNamespace>
+    <AssemblyName>MageRide.Registry.Api</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <UserSecretsId>mageride-registry-api</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MageRide.Shared\MageRide.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Registry.Api.Tests" />
+  </ItemGroup>
+
+</Project>
