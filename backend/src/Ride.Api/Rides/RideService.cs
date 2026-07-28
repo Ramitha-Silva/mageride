@@ -51,6 +51,9 @@ public interface IRideService
 
     /// <summary>Internal: dispatch-svc reserved a driver and is about to push the offer.</summary>
     Task<RideRow> PlaceOfferAsync(PlaceOfferCommand command, CancellationToken cancellationToken);
+
+    /// <summary>Internal: the 15 s window closed unanswered, so the ride re-enters the pool (R-04).</summary>
+    Task<RideRow> ExpireOfferAsync(Guid rideId, Guid offerId, CancellationToken cancellationToken);
 }
 
 /// <inheritdoc cref="IRideService"/>
@@ -474,6 +477,48 @@ public sealed class RideService(
         return offered;
     }
 
+    public async Task<RideRow> ExpireOfferAsync(Guid rideId, Guid offerId, CancellationToken cancellationToken)
+    {
+        await using var unitOfWork = await unitOfWorkFactory.BeginAsync(cancellationToken: cancellationToken);
+
+        var expired = await rides.ExpireOfferAsync(
+            unitOfWork.Connection, unitOfWork.Transaction, rideId, offerId, cancellationToken);
+
+        if (expired is null)
+        {
+            var current = await rides.FindAsync(unitOfWork.Connection, unitOfWork.Transaction, rideId, cancellationToken);
+            await unitOfWork.RollbackAsync(cancellationToken);
+
+            throw DiagnoseFailedExpiry(current, rideId, offerId);
+        }
+
+        await transitions.RecordAsync(
+            unitOfWork.Connection,
+            unitOfWork.Transaction,
+            expired.Id,
+            fromState: RideStates.Offered,
+            toState: expired.State,
+            actorType: RideTransitions.Actors.System,
+            actorId: null,
+            reasonCode: "OFFER_EXPIRED",
+            cancellationToken);
+
+        // D5' §6's Offered row names `offer.expired`, and ADD §11.11's R-04 paragraph makes it
+        // dispatch-svc's cue to re-offer to the next candidate — the same role `offer.declined`
+        // plays, so it rides the same topic.
+        await outbox.WriteAsync(
+            unitOfWork,
+            RideEvents.Build(RideEventTypes.OfferExpired, expired, Guid.NewGuid(), timeProvider.GetUtcNow()),
+            cancellationToken);
+
+        await unitOfWork.CommitAsync(cancellationToken);
+
+        logger.LogInformation("Offer {OfferId} on ride {RideId} expired unanswered; the ride is Matching again",
+            offerId, rideId);
+
+        return expired;
+    }
+
     // -------------------------------------------------------------------------------------------
     // Shared machinery
     // -------------------------------------------------------------------------------------------
@@ -636,6 +681,33 @@ public sealed class RideService(
 
         return new MageRideException(
             MageRideErrors.IllegalTransition, $"A ride in {ride.State} has no offer to decline.");
+    }
+
+    /// <summary>
+    /// Why a backstop fire did nothing. Every one of these is a normal race, not a fault: the
+    /// sweeper and the driver's answer are always in flight together, and the sweeper is what has
+    /// to give way.
+    /// </summary>
+    private MageRideException DiagnoseFailedExpiry(RideRow? ride, Guid rideId, Guid offerId)
+    {
+        if (ride is null)
+        {
+            return NotFound(rideId);
+        }
+
+        if (ride.CurrentOfferId != offerId || ride.State != RideStates.Offered)
+        {
+            // Accepted, declined, cancelled, or already expired by the other trigger (the Redis
+            // keyspace notification and the durable timer both fire, deliberately — D-07 + R-04).
+            return new MageRideException(
+                MageRideErrors.OfferExpired, $"Offer {offerId} is no longer the live offer on this ride.");
+        }
+
+        // Still inside the window. The caller's clock ran ahead of ride-svc's, which is exactly the
+        // disagreement `offer_expires_at <= now()` exists to settle in Postgres's favour.
+        return new MageRideException(
+            MageRideErrors.Conflict,
+            $"Offer {offerId} has not expired yet; it runs until {ride.OfferExpiresAt:O}.");
     }
 
     private MageRideException DiagnoseFailedAdvance(

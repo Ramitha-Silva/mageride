@@ -108,6 +108,18 @@ public interface IRideRepository
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// <c>Offered → Matching</c> because the 15 s window closed unanswered (R-04). Bound to
+    /// <c>offer_expires_at &lt;= now()</c>, evaluated by Postgres — the caller's clock never
+    /// decides an expiry.
+    /// </summary>
+    Task<RideRow?> ExpireOfferAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction? transaction,
+        Guid rideId,
+        Guid offerId,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// A move along the happy path, guarded on the states it is legal from, on <c>version</c> and
     /// — when <paramref name="requiredDriverId"/> is given — on the ride already belonging to that
     /// driver.
@@ -413,6 +425,46 @@ public sealed class RideRepository : IRideRepository
              RETURNING {Columns};
              """,
             new { RideId = rideId, OfferId = offerId, DriverId = driverId },
+            transaction,
+            cancellationToken: cancellationToken));
+    }
+
+    public Task<RideRow?> ExpireOfferAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction? transaction,
+        Guid rideId,
+        Guid offerId,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+
+        // Deliberately NOT bound to a driver: nobody acts here, the deadline does. It IS bound to
+        // `offer_expires_at <= now()`, which is the same predicate — negated — that decides an
+        // accept, and it is Postgres that evaluates both. A backstop that trusted the sweeping
+        // node's clock could cancel an offer a driver was still inside the window to accept.
+        //
+        // The offer columns are cleared exactly as on a decline, so `Offered → Matching` leaves the
+        // ride with no live offer either way. Leaving `current_offer_id` set would make the second
+        // origin of the ADD §11.11 accept (`state IN ('Matching','Offered')`) reachable and the
+        // accept's `from_state='Offered'` audit row start lying — the question C022's handoff left
+        // open for whoever landed R-04.
+        return connection.QuerySingleOrDefaultAsync<RideRow>(new CommandDefinition(
+            $"""
+             UPDATE rides.rides
+                SET state = '{RideStates.Matching}',
+                    current_offer_id = NULL,
+                    offer_expires_at = NULL,
+                    offered_driver_id = NULL,
+                    offered_vehicle_id = NULL,
+                    version = version + 1,
+                    updated_at = now()
+              WHERE id = @RideId
+                AND state = '{RideStates.Offered}'
+                AND current_offer_id = @OfferId
+                AND offer_expires_at <= now()
+             RETURNING {Columns};
+             """,
+            new { RideId = rideId, OfferId = offerId },
             transaction,
             cancellationToken: cancellationToken));
     }

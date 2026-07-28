@@ -1,4 +1,4 @@
-# ride-svc (C022 ws-ride-svc-happy-path) — Mode C ride aggregate
+# ride-svc (C022 ws-ride-svc-happy-path, + C023 Δ) — Mode C ride aggregate
 
 Stack: .NET 10 Minimal API + Dapper over Npgsql. References `MageRide.Shared` (C002).
 
@@ -18,12 +18,11 @@ DriverArrived → InProgress → Completed → PaymentPending`. Everything here 
 | `POST /v1/rides/{id}/offer/{driverId}/accept` · `/decline` | ADD §11.11, §11.12 |
 | `POST /v1/rides/{id}/arrive` · `/start` · `/complete` | D3' route table |
 | `POST /v1/internal/rides/{id}/matching` · `/offer` | **Δ C022** — see below |
+| `POST /v1/internal/rides/{id}/offer/expire` | **Δ C023** — see below |
 
 **Not here, on purpose.** The §11.12 cancellation and no-show matrix, `POST /cancel`,
 `/internal/{id}/system-cancel` and the P-02 location-request family are **C032**. Package
-delivery and its two OTP gates are **C037**. The durable Quartz offer-expiry backstop (R-04) is
-**C037** — `offer_expires_at` is already authoritative, but nothing fires on it yet, so a ride
-whose offer lapses sits in `Offered` until dispatch re-offers. `/dispute`,
+delivery and its two OTP gates are **C037**. `/dispute`,
 `/internal/{id}/payment-settled` and the payment terminals are **C049/C050**. `GET /v1/rides/history`
 is **C048**. All are left unmapped rather than stubbed: a stubbed `cancel` answers 200 to a
 passenger and leaves a driver en route.
@@ -33,8 +32,16 @@ passenger and leaves a driver en route.
 - **ride-svc is the sole writer of `rides.state`** (R-01, D5' §6). ADD §11.11's diagram draws
   dispatch-svc updating the row itself; §11.12 in the same document says sole-writer, and
   sole-writer wins — two services issuing conditional updates against one aggregate is the race
-  R-02 exists to remove. The two moves dispatch drives are therefore commands on
+  R-02 exists to remove. The three moves dispatch drives are therefore commands on
   `/v1/internal/rides/**`, and `dispatch.offers` / `dispatch.candidate_scores` stay dispatch's.
+- **The R-04 offer-expiry backstop is a command, not a write** (`offer/expire`, Δ C023). ADD
+  §11.11 has the durable job "transition the ride back to `Matching`" and dispatch-svc owns the job
+  (ADD §6, D5' §3.5) — but not the row. The `UPDATE` is bound to `offer_expires_at <= now()`
+  evaluated by **Postgres**, the negation of the predicate that decides an accept, so a sweeping
+  node whose clock ran ahead is answered `409` instead of taking a window away from a driver. It
+  clears `current_offer_id` exactly as a decline does: leaving it set makes §11.11's second accept
+  origin (`state IN ('Matching','Offered')`) reachable and the accept's `from_state='Offered'`
+  audit row start lying, which is the question this file used to leave open for C037.
 - **The accept is one conditional UPDATE and nothing else** (`RideRepository.AcceptAsync`). No
   advisory lock, no pre-flight `SELECT`, no application-side ordering — the database picks the
   winner. There is deliberately **no `offered_driver_id` predicate** on it: adding one turns a

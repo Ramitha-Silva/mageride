@@ -1018,6 +1018,61 @@ paths:
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
       x-error-codes: [validation-failed, not-found, illegal-transition, version-conflict]
 
+  /v1/internal/rides/{rideId}/offer/expire:
+    post:
+      operationId: expireRideOffer
+      summary: The 15 s offer window closed unanswered; return the ride to the pool.
+      description: |
+        **Δ C023 (micro-change-set into D3' ride-svc).** `Offered → Matching`, and the third
+        command in the pair C022 opened — for the same reason as the other two: ADD §11.11's
+        durable backstop paragraph has the R-04 job "transition the ride back to `Matching`", and
+        `ride-svc` is the sole writer of `rides.state`.
+
+        The caller is dispatch-svc's offer-expiry backstop, driven by the `rides.timers`
+        `offer_expiry` row it wrote when it armed the offer (and, when Redis keyspace
+        notifications are on, by the `offer:{rideId}` key expiring first — D-07). Both triggers
+        fire deliberately; whichever loses gets `410 offer-expired`, which is a normal race and
+        not a fault.
+
+        **The deadline decides, not the caller.** The `UPDATE` is bound to
+        `offer_expires_at <= now()` evaluated by Postgres — the negation of the predicate that
+        decides an accept — so a sweeping node whose clock ran ahead cannot cancel an offer the
+        driver is still inside the window to accept. That case answers `409 conflict` and the
+        backstop simply tries again.
+
+        The offer columns are cleared exactly as on a decline, so `Matching` never carries a stale
+        `current_offer_id`. Emits `offer.expired` on `ride.events` (D5' §6's `Offered` row), which
+        is dispatch-svc's cue to release the driver and offer the next candidate.
+      tags: [rides]
+      security:
+        - internalKey: []
+      parameters:
+        - $ref: '#/components/parameters/RideId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [offerId]
+              properties:
+                offerId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+      responses:
+        '200':
+          description: The ride is Matching again and holds no offer.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RideStateChange'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '410': { $ref: './_shared.yaml#/components/responses/Gone' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, not-found, conflict, offer-expired]
+
   /v1/internal/rides/{rideId}/system-cancel:
     post:
       operationId: systemCancelRide

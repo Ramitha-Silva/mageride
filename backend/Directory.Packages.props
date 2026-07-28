@@ -28,6 +28,16 @@
     <PackageVersion Include="StackExchange.Redis" Version="3.0.17" />
   </ItemGroup>
 
+  <ItemGroup Label="Geospatial — H3 (C023; R-06, R-08, D-06)">
+    <!-- The dispatch candidate index is keyed by H3 res-5 cell (ADD §9.4), so dispatch-svc has to
+         compute the same cell ids the KMP module does. `com.uber:h3` is JNI with no .NET binding;
+         pocketken.H3 is a managed port of the same v4 algorithms, ships a net10.0 lib and depends
+         only on NetTopologySuite, which is already pinned above. Cell ids are asserted against
+         known-good v4 values in Dispatch.Api.Tests so a port bug cannot silently reshape the
+         index. -->
+    <PackageVersion Include="pocketken.H3" Version="4.5.0.1" />
+  </ItemGroup>
+
   <ItemGroup Label="Auth (D-29)">
     <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.10" />
   </ItemGroup>

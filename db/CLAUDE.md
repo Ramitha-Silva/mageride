@@ -37,11 +37,12 @@
   every `currency` column defaults to `'LKR'`. The only exemption is the five signed ledger
   columns §0 names (`billing.accounts.balance_minor`, `journal_postings.amount_minor`, and the
   two `wallets` / `wallet_transactions` mirrors) — they are BIGINT and may be negative.
-- **A service with idempotent POSTs owns its own `command_log`** (`iam` 0104, `registry` 0307),
-  shaped like `rides.command_log` (0603) minus the aggregate-id column. D4' §5 prints DDL for
-  `rides` only; pointing a second bounded context at that table would give two services one
-  shared primary key, so a registration and a ride could collide on an identical
-  client-generated `Idempotency-Key`. Both are raised as micro-change-sets in `build/progress.md`.
+- **A service with idempotent POSTs owns its own `command_log`** (`iam` 0104, `registry` 0307,
+  `dispatch` 0710), shaped like `rides.command_log` (0603) minus the aggregate-id column. D4' §5
+  prints DDL for `rides` only; pointing a second bounded context at that table would give two
+  services one shared primary key, so a registration and a ride could collide on an identical
+  client-generated `Idempotency-Key`. All three are raised as micro-change-sets in
+  `build/progress.md`.
 - A seed `INSERT` is re-runnable or it is wrong: use `ON CONFLICT DO NOTHING` where a key
   exists, `WHERE NOT EXISTS` where the PK is a generated UUID, and pin any column that would
   otherwise default to `now()` into the conflict target (see `1901`'s `effective_from`).

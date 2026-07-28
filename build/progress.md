@@ -48,7 +48,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C020 | ws-iam-minimal ⭑ | 2 | DONE | 2026-07-28 | 91 tests green; 3 iam migrations added (0104–0106) — 3 micro-change-sets raised |
 | C021 | ws-registry-minimal ⭑ | 2 | DONE | 2026-07-28 | 92 tests green; 2 registry migrations added (0307–0308) — 3 micro-change-sets raised |
 | C022 | ws-ride-svc-happy-path ⭑ | 2 | DONE | 2026-07-28 | 109 tests green; 1 rides migration added (0608) + 2 internal contract routes — 5 micro-change-sets raised |
-| C023 | ws-dispatch-stub ⭑ | 2 | PENDING | | |
+| C023 | ws-dispatch-stub ⭑ | 2 | DONE | 2026-07-28 | 78 tests green; 1 dispatch migration added (0710) + 1 internal contract route — 11 micro-change-sets raised |
 | C024 | ws-realtime-pipeline ⭑ | 2 | PENDING | | |
 | C025 | ws-e2e-android-slice ⭑ | 2 | PENDING | | |
 | C026 | iam-svc-auth | 2 | PENDING | | |
@@ -2911,3 +2911,180 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   C002/C009); the replica stack stayed down throughout. The 109 tests take ~55 s, of which most is
   ~35 harness start-ups — each integration test builds a fresh `WebApplication` so its test signing
   key cannot leak into another test.
+
+- **Component:** C023 ws-dispatch-stub — 2026-07-28
+- **Status:** DONE — `dotnet test backend/src/Dispatch.Api.Tests -c Release` → **78 passed, 0 failed,
+  0 skipped**. All four DoD items pass against a real Postgres, a real Redis *and* a real Redpanda
+  (Testcontainers), with a real ride-svc standing beside dispatch-svc rather than a fake. Wave-0/2
+  gates re-run green after the new migration, the contract route and the TestKit change:
+  `bash infra/scripts/migrate-verify.sh` → **190/190**, spectral → **0 errors**,
+  `MageRide.Shared.Tests` → 161, `ApiGateway.Tests` → 524, `Iam.Api.Tests` → 91,
+  `Registry.Api.Tests` → 92, `Ride.Api.Tests` → **117** (was 109; `InternalOfferExpiryTests` covers
+  the route this component added to ride-svc).
+- **Notes:**
+  **Spec gaps — eleven micro-change-sets. Two are actioned in this repo (one migration, one
+  contract route); the rest are gaps recorded for the component that owns the affected spec.**
+  (a) ***The R-04 backstop has nothing to call*** (`backend/contracts/ride.yaml`:
+  `POST /v1/internal/rides/{rideId}/offer/expire`). ADD §11.11's durable-backstop paragraph has the
+  Quartz job "transition the ride back to `Matching`" itself, but §11.12 in the same document makes
+  ride-svc the **sole writer** of `rides.state` and this prompt's fence repeats it. C022 opened the
+  internal family for exactly this reason and left two routes; expiry is the third. The `UPDATE` is
+  bound to `offer_expires_at <= now()` **evaluated by Postgres** — the negation of the predicate
+  that decides an accept — so a sweeping node whose clock ran ahead is answered `409` and cannot
+  take a window away from a driver who is still inside it. It also clears `current_offer_id`, which
+  answers the question the C022 handoff left open for whoever landed R-04: leaving it set makes
+  §11.11's second accept origin (`state IN ('Matching','Offered')`) reachable and the accept's
+  `from_state='Offered'` audit row start lying. **D3' ride-svc needs the route.**
+  (b) ***`dispatch.command_log` does not exist*** (`0710__dispatch_command_log.sql`). The third
+  instance of the same gap — iam (0104, C020), registry (0307, C021). D3' §0 requires an
+  `Idempotency-Key` on every POST and replays from a **per-service** log; `dispatch.yaml` declares
+  the header on four POSTs. D4' §5 still prints DDL for `rides` only, and sharing that table would
+  let a driver going online and a passenger booking collide on one client-generated key. **This
+  changes a C004 assertion:** `migrate-verify.sh` now expects **13** dispatch tables, not 12.
+  **D4' §5 should print one command-log table per service with idempotent POSTs.**
+  (c) ***`offer.declined` and `offer.expired` identify neither the driver nor the offer.***
+  D6' §2.2's `ride.events` payload has `driverId`, and §11.12 makes `offer.declined` dispatch's cue
+  to release the driver — but ride-svc builds the envelope from the row **after** the update, and
+  both moves clear `offered_driver_id` and `current_offer_id`, so both fields are absent. Nothing is
+  lost here (`dispatch.offers` already knows, and `ReleaseLiveOfferAsync` is keyed by ride), but a
+  consumer that is not dispatch-svc cannot act on either event. **Either D6' §2.2 should say the
+  fields are absent on these two types, or ride-svc should build the payload from the pre-update
+  row.** `RideEventEnvelopeTests` pins the current behaviour so the choice is deliberate.
+  (d) ***D5' §3.1's `searchRadius` has no value anywhere.*** The line reads
+  `near = [d in raw where ST_DWithin(d.geo, pickup, searchRadius)]` and no spec — D5', ADD §7.4,
+  the URD — ever gives the number. **`Dispatch:SearchRadiusM` defaults to 5000**, chosen to sit
+  inside the res-5 ring(2) reach (~40 km) so the pre-filter stays genuinely coarse, and above the
+  ~3 km passenger live-map view (R-06). **No spec has been read as authorising 5 km.**
+  (e) ***D6' §2.2's `dispatch.events` offer envelope carries no `version`,*** which forces the KMP
+  `OfferSession.accept()` to spend a `GET /v1/rides/{id}/state` inside a 15-second window just to
+  learn the number the ADD §11.11 accept demands (C013 note 6; the C022 handoff asks C023 to fix
+  it). **Added**, as the ride version at the moment the offer was armed — which is exactly the
+  `expectedVersion` the accept wants. **D6' §2.2 should print it.**
+  (f) ***D3' §route table's `{state:online}` is not a value the contract allows.***
+  `dispatch.yaml`'s `PresenceState` enum is `OFFLINE|AVAILABLE|OFFERED|ON_RIDE`, mirroring the
+  `dispatch.driver_presence` CHECK (C004). The contract wins (`backend/contracts/CLAUDE.md`) — a
+  driver who is `OFFERED` or `ON_RIDE` has no way to say so in a two-value vocabulary. **D3' should
+  print the enum.**
+  (g) ***`409 driver-already-live` on `POST /v1/standby/online` has no stated trigger.*** It is in
+  the operation's `x-error-codes` and the description says going online on a second vehicle
+  *overwrites* `vehicleId`, which is not a 409. Read as: switching vehicles while `OFFERED` or
+  `ON_RIDE` is refused — that would silently rewrite which vehicle is serving a live ride,
+  including the plate the passenger is watching for. Going online again on the **same** vehicle, or
+  on a different one while merely `AVAILABLE`, is the overwrite the description describes.
+  (h) ***`rides.timers` rows of kind `offer_expiry` are written by dispatch-svc.*** The table is
+  ride-svc's by name; the job is dispatch's by every spec that names an owner — ADD §6 gives
+  dispatch-svc "Quartz.NET (scheduled rides **+ offer backstop**)", D5' §3.5 files the durable
+  backstop under *Offer TTL & cascade*, and this component's deliverable list says so outright.
+  Nothing here touches `rides.rides`. **If the schemas are ever split across databases the timer
+  has to move to `dispatch.timers`** (0708 already exists for the DT-04 case) and `ck_timers_kind`
+  in 0605 becomes the only place `offer_expiry` is spelled.
+  (i) ***ADD §6/§11.11 specify Quartz.NET clustered; this is a leased poll.*** What R-04 actually
+  requires is "fires ≤1 s after expiry independent of Redis", which one indexed
+  `UPDATE … WHERE id IN (SELECT … FOR UPDATE SKIP LOCKED)` per half-second gives with the same
+  multi-replica safety and none of Quartz's schema, clustering protocol or second scheduler.
+  **C034/C037 should decide** when the scheduled-ride and no-show timers arrive and there is a
+  second and third caller to justify the dependency.
+  (j) ***D-07 needs a Redis setting no spec mentions.*** Redis publishes no keyspace events by
+  default, and `CONFIG SET notify-keyspace-events` needs an admin connection the kernel's
+  multiplexer deliberately does not open (nor does a managed Redis allow it). Added
+  `--notify-keyspace-events Ex` to `infra/docker-compose.dev.slim.yml` **and** to
+  `MageRide.TestKit`'s `RedisFixture`, so the fixture and the compose file do not disagree about
+  whether the path is reachable. **D7' §3's Redis command line needs the same flag**, and the
+  replica's Container 4 with it.
+  (k) ***`.env.app.example`'s `Dispatch__Outbox__*` keys bind nothing.*** The file is one flat
+  namespace shared by every co-located service (its own header says so), so the `Dispatch__` prefix
+  C009 used to avoid clobbering ride-svc's `Outbox__Channel=ride_outbox` also stops the kernel from
+  ever reading them. `DispatchApplication` sets the three values in code instead, so the service is
+  correct either way; the keys are kept and the reason is now written beside them.
+  **Decisions —**
+  (1) **The H3 pre-filter reads whole cell sets and applies no radius at all.** D5' §3.1 offers
+  "PostGIS / GEOSEARCH BYRADIUS" for the exact post-filter; a `GEOSEARCH BYRADIUS` on the Redis side
+  as well would make the mandatory post-filter look optional to the next person to read the code.
+  So `PreFilterAsync` is `SortedSetRangeByRank` over the 19 keys and nothing else, and
+  `ST_DWithin` on `dispatch.driver_presence` (ADD §6, D-06) is the only thing that decides. The
+  DoD's fourth item is proved by a driver **in the pickup's own res-5 cell, 15 km away**: same Redis
+  key as the driver 70 m away, `PreFilterCount = 1`, `CandidateCount = 0`. A second test widens
+  `SearchRadiusM` to 20 km and the same driver comes back, which is what pins the decision to the
+  post-filter rather than to H3.
+  (2) **The cascade is entirely event-driven and needs no cross-service read.** Every `ride.events`
+  envelope carries the whole payload, so `offer.declined` / `offer.expired` already contain the
+  pickup, the tier, the payment method and the fare — enough to run the next round without
+  dispatch-svc ever reading `rides.rides`. That is what keeps R-01's boundary honest: this service
+  reads and writes nothing in the `rides` schema except its own `offer_expiry` timers.
+  (3) **Ordering: Lua lock → (`dispatch.offers` + `rides.timers` + presence, one transaction) →
+  ride-svc → (realign + `dispatch.outbox`, second transaction).** The backstop is armed *before*
+  ride-svc is called, deliberately: a process that dies in between leaves a timer for an offer the
+  ride never got, which the sweep expires, is answered 410, settles and frees the driver. The other
+  order leaves a ride `Offered` with nothing watching the deadline. A ride-svc refusal unwinds
+  everything (`UnwindAsync`) rather than holding the driver.
+  (4) **Timers are leased, not marked fired on claim.** Holding the claim's row lock across the
+  expiry would deadlock against the expiry's own `rides.timers` writes on another connection;
+  marking `fired_at` on claim would let a worker killed mid-expiry take the ride's only backstop
+  with it. One statement pushes `fire_at` out by `Dispatch:TimerLease` (30 s) and returns the rows.
+  (5) **The `ride.events` consumer lives in `Dispatch.Api`, not in the kernel.** C002 shipped a
+  producer and no consumer, and `backend/CLAUDE.md` says cross-cutting code belongs in
+  `MageRide.Shared` — but a consumer promoted there today would be untested code in the kernel with
+  one caller. It reads the kernel's `KafkaOptions` so a deployment still configures one broker in
+  one place. **C024/C034/C039 should promote `RideEventConsumer` once there is a second caller.**
+  (6) **No dedupe table.** D6' §2.3 makes delivery at-least-once and says consumers key on
+  `eventId`; every action here is idempotent by construction instead — deterministic
+  `Idempotency-Key`s on the three ride-svc commands (`dispatch-{operation}-{subject}`, so a retry
+  after a timeout replays rather than issuing a second command) and conditional `UPDATE`s guarded
+  on the status they expect. **C034 must revisit if it adds an action that is not naturally
+  idempotent.** There is also **no DLQ** (D6' §2.3): an unparseable envelope is logged and
+  committed, a failing handler is retried by not committing — which stalls its partition, loudly,
+  rather than losing a booking.
+  (7) **`dispatch.candidate_scores` is written at `dispatch_algorithm_version = 0`,** for every
+  candidate considered rather than only the winner (R-11). The fence forbids weighted scoring, and
+  version 0 is how a later audit of a version-0 decision is told apart from a scoring bug; the
+  breakdown names the algorithm (`nearest-only`) in as many words. **C034 lands version 1.**
+  (8) **`ExpiredNoDriver` is not implemented.** D5' §3.5's 120-second global timeout (US-6A.11) is a
+  ride *state*, and no route exists to write it — C032 owns `system-cancel` and C034 the timeout.
+  The cascade stops at `Dispatch:MaxOfferRounds` (8) and the ride stays in `Matching`, which is the
+  honest answer: the passenger sees "searching", not a driver who is not coming.
+  (9) **`pocketken.H3` 4.5.0.1**, a managed port of the same H3 v4 algorithms `com.uber:h3` gives
+  the KMP module (C017) — that library is JNI with no .NET binding. It ships a `net10.0` lib and
+  depends only on `NetTopologySuite`, already pinned. Cell ids are asserted against **known-good v4
+  values** rather than against whatever the library returns, because a port that disagreed by one
+  bit would not fail loudly: it would produce an empty candidate set and a map with no vehicles on
+  it. `H3GridTests` also pins that res-5 is the res-7 passenger cell's ancestor, which is what lets
+  one position feed both indexes.
+  (10) **The GPS-freshness gate reads the durable row, not the Redis TTL.**
+  `driver:availability:{driverId}` has R-08's 60 s TTL but **nothing refreshes it in this slice** —
+  position-processor-svc (C039) owns the heartbeat — while `dispatch.driver_presence` has no TTL at
+  all. So D5' §3.2's "GPS sample older than 2×expectedInterval" is enforced as
+  `last_seen_at >= now() - Dispatch:PresenceTtl` inside the post-filter, where it cannot be lost.
+  (11) **The hard gates this slice does *not* have are absent rather than stubbed.** No wallet gate
+  (D-08), no Driver Level, no `reputation.block_state` (D-04), no `safety.blocked_drivers`, no
+  package-size compatibility (P-11), no `DISPATCH_SUSPENDED` (E-03), no Directional predicate
+  (DT-02). A gate that always passes reads like a gate that works; `CandidateRepository` names all
+  seven and says whose they are.
+  (12) **The test suite runs a real ride-svc beside dispatch-svc.** Everything this component has to
+  prove lives in the seam — who may write `rides.state`, whose clock stamps `offer_expires_at`,
+  whether `offer.created` can precede a commit — and a stubbed ride-svc would agree with dispatch
+  about all three by construction. The harness resets `dispatch.*`, the `offer_expiry` timers and
+  the Redis keyspace per test, and **drains `rides.outbox`**: most tests run with ride-svc's
+  dispatcher off, so their `ride.requested` rows sit undispatched and the first test to turn the
+  dispatcher on would otherwise replay a backlog of finished rides and reserve its own driver.
+  **For C024 (ws-realtime-pipeline) —**
+  `offer.created` on `dispatch.events` is the driver's push, and it is committed before it exists
+  (R-13). The envelope is D6' §2.2's plus `version` (gap (e)); `expiresAt` on it is **ride-svc's**
+  instant, so a countdown rendered from it agrees with the accept. `RideEventConsumer` is the
+  pattern to copy and the thing to promote into `MageRide.Shared.Messaging` (decision 5).
+  **For C025 (ws-e2e-android-slice) —**
+  The skeleton driver from C021's seed needs `POST /v1/standby/online` with a position before any
+  ride can be offered — presence is not implied by the vehicle being selected. The gateway already
+  routes `/v1/standby/**` to `dispatch-svc` (C008), and both new services still have **no
+  Dockerfile** (C020/C021 left the same choice open). `Dispatch:RideServiceInternalKey` must equal
+  ride-svc's `Ride:InternalApiKey` or the skeleton silently books rides no driver is ever offered.
+  **For C034 (dispatch-svc-core) —**
+  Everything in fence-list order is listed in `backend/src/Dispatch.Api/CLAUDE.md`. Three that are
+  easy to miss: `RideEventConsumer` has no DLQ, the `ExpiredNoDriver` timeout has no route to write
+  it, and `dispatch.driver_presence.state` is currently moved by dispatch alone — once
+  position-processor-svc (C039) starts refreshing `driver:availability:{driverId}`, the two writers
+  have to agree on who owns the transition.
+  **Build host —** Docker is used by the test suite only (Testcontainers
+  `timescale/timescaledb-ha:pg16`, `redis:7-alpine` and `redpandadata/redpanda:v24.2.26`, all
+  already pulled by C002/C009); the replica stack stayed down throughout. The 78 tests take ~80 s,
+  of which most is ~40 harness start-ups — each integration test builds a fresh ride-svc *and*
+  dispatch-svc so a test signing key or a background worker cannot leak into another test.

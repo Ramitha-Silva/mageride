@@ -201,7 +201,9 @@ check_eq "4 trips tables" "4" \
 check_eq "7 rides tables" "7" \
   "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
     WHERE n.nspname='rides' AND c.relkind IN ('r','p') AND NOT c.relispartition;"
-check_eq "12 dispatch tables" "12" \
+# 13, not C004's 12: 0710 added dispatch.command_log — the third per-service command log
+# (iam 0104, registry 0307), for the reason recorded in db/CLAUDE.md.
+check_eq "13 dispatch tables" "13" \
   "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
     WHERE n.nspname='dispatch' AND c.relkind IN ('r','p') AND NOT c.relispartition;"
 check_eq "3 reputation tables" "3" \

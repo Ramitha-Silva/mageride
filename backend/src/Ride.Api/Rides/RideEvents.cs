@@ -24,6 +24,13 @@ public static class RideEventTypes
     public const string Requested = "ride.requested";
     public const string OfferCreated = "offer.created";
     public const string OfferDeclined = "offer.declined";
+
+    /// <summary>
+    /// The 15 s window closed with no answer (D5' §6's <c>Offered | Offer expires 15 s | →Matching
+    /// | … | offer.expired</c> row, ADD §11.11's R-04 backstop). Emitted here for the same reason as
+    /// <see cref="OfferDeclined"/>: ride-svc is what performed the <c>Offered → Matching</c> move.
+    /// </summary>
+    public const string OfferExpired = "offer.expired";
     public const string Accepted = "ride.accepted";
     public const string DriverArrived = "ride.driver_arrived";
     public const string Started = "ride.started";

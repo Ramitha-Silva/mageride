@@ -11,7 +11,7 @@ using Microsoft.AspNetCore.Routing;
 namespace MageRide.Ride.Endpoints;
 
 /// <summary>
-/// <c>/v1/internal/rides</c> — the two moves dispatch-svc needs and cannot make itself.
+/// <c>/v1/internal/rides</c> — the three moves dispatch-svc needs and cannot make itself.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -22,8 +22,11 @@ namespace MageRide.Ride.Endpoints;
 /// two services issuing conditional updates against one aggregate is precisely the race R-02
 /// exists to remove. So the moves dispatch drives are exposed as commands here, and dispatch keeps
 /// its own tables (<c>dispatch.offers</c>, <c>dispatch.candidate_scores</c>) to itself.
-/// <b>Neither route is in <c>backend/contracts/ride.yaml</c> yet — C022 adds both, and D3' needs
-/// the same micro-change-set (recorded in the C022 handoff).</b>
+/// <b>None of these routes is in D3' — C022 added <c>matching</c> and <c>offer</c>, C023 added
+/// <c>offer/expire</c>, and all three are recorded as micro-change-sets in
+/// <c>build/progress.md</c>.</b> The same argument makes <c>offer/expire</c> a command rather than
+/// something the R-04 backstop writes for itself: ADD §11.11 says the durable job "transitions the
+/// ride back to <c>Matching</c>", and only ride-svc may do that.
 /// </para>
 /// <para>
 /// <b>How they are protected.</b> D3' §0 puts the whole <c>/v1/internal/**</c> family on
@@ -52,6 +55,7 @@ public static class InternalRideEndpoints
 
         internalRides.MapPost("/{rideId}/matching", MarkMatchingAsync).WithName("markRideMatching");
         internalRides.MapPost("/{rideId}/offer", PlaceOfferAsync).WithName("placeRideOffer");
+        internalRides.MapPost("/{rideId}/offer/expire", ExpireOfferAsync).WithName("expireRideOffer");
 
         return endpoints;
     }
@@ -82,6 +86,17 @@ public static class InternalRideEndpoints
             cancellationToken);
 
         return TypedResults.Ok(OfferPlacedResponse.From(ride));
+    }
+
+    private static async Task<Ok<RideStateChangeResponse>> ExpireOfferAsync(
+        string rideId, ExpireOfferBody? body, IRideService service, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(service);
+
+        var ride = await service.ExpireOfferAsync(
+            RequireRideId(rideId), RequireId(body?.OfferId, "offerId"), cancellationToken);
+
+        return TypedResults.Ok(RideStateChangeResponse.From(ride));
     }
 
     private static Guid RequireRideId(string? rideId) =>

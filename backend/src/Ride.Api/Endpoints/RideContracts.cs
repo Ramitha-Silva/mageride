@@ -175,3 +175,10 @@ public sealed record OfferPlacedResponse(Guid RideId, string State, long Version
     public static OfferPlacedResponse From(RideRow ride) =>
         new(ride.Id, ride.State, ride.Version, ride.CurrentOfferId, ride.OfferExpiresAt);
 }
+
+/// <summary>The body of <c>POST /v1/internal/rides/{rideId}/offer/expire</c>.</summary>
+/// <param name="OfferId">
+/// Which offer expired. Required: the backstop fires against the offer it armed, and by the time
+/// it runs the ride may be holding a later one.
+/// </param>
+public sealed record ExpireOfferBody(string? OfferId);

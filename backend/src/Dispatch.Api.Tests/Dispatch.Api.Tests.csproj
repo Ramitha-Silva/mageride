@@ -1,0 +1,67 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    C023 verify target: dotnet test backend/src/Dispatch.Api.Tests -c Release
+
+    Three halves again, and the middle one is the point of the component.
+
+      * Pure tests — the H3 arithmetic against known-good v4 cell ids, the Redis key shapes, the
+        ride.events envelope reader. No container.
+      * Integration against a real Postgres AND a real Redis, because every guarantee C023 owns
+        needs both: the H3 pre-filter is a Redis read, the exact post-filter is a PostGIS
+        ST_DWithin, and the R-10 reservation is deliberately BOTH (a Lua SET NX and the
+        ux_offers_driver_live partial unique index — ADD §11.11 says neither alone is
+        sufficient, so neither alone can be tested).
+      * One class against a real Redpanda, because "a ride request produces exactly one offer"
+        is only end-to-end if ride.requested actually crosses a broker.
+
+    Ride.Api is referenced so the offer loop drives a REAL ride-svc rather than a fake. That is
+    not convenience: the two services meet on /v1/internal/rides/**, on who may write
+    rides.state, and on whose clock stamps offer_expires_at — a stubbed ride-svc would agree
+    with dispatch about all three by construction, which is exactly what must not be assumed.
+
+    Tokens are minted here rather than fetched from iam-svc: dispatch-svc is a token *consumer*,
+    and C025 is where the services meet end to end.
+
+    Microsoft.NET.Sdk.Web, not Microsoft.NET.Sdk: the harness builds two WebApplications.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.Dispatch.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <OutputType>Exe</OutputType>
+    <!--
+      xUnit1041: collection-fixture ctor args are consumed through the primary constructor.
+      xUnit1051: every test is bounded by its own harness lifetime, so threading
+                 TestContext.Current.CancellationToken through each HTTP call would add noise
+                 without changing behaviour. Matches Iam/Registry/Ride.Api.Tests.
+    -->
+    <NoWarn>$(NoWarn);xUnit1041;xUnit1051</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+    <PackageReference Include="StackExchange.Redis" />
+    <!-- The Redpanda assertion consumes the topic ride-svc's outbox dispatcher produced to. -->
+    <PackageReference Include="Confluent.Kafka" />
+    <!-- Cell ids are asserted against known-good H3 v4 values, so the test needs the library too. -->
+    <PackageReference Include="pocketken.H3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Dispatch.Api\Dispatch.Api.csproj" />
+    <ProjectReference Include="..\Ride.Api\Ride.Api.csproj" />
+    <!-- C010: the Postgres, Redis and Redpanda fixtures, so this suite runs against the same
+         server builds the dev stack and the replica do rather than hand-written copies. -->
+    <ProjectReference Include="..\MageRide.TestKit\MageRide.TestKit.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

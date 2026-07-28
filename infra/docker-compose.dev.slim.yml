@@ -128,7 +128,22 @@ services:
     image: redis:7-alpine
     # ADD §9.4 / replica Container 4: appendonly with everysec, so a hard kill loses at
     # most 1 s of writes.
-    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec", "--maxmemory-policy", "noeviction"]
+    #
+    # `--notify-keyspace-events Ex` (C023) is D-07's other half: dispatch-svc subscribes to
+    # `__keyevent@0__:expired` so an `offer:{rideId}` key lapsing reassigns the offer without
+    # waiting for the next durable sweep. Redis publishes nothing by default, and CONFIG SET
+    # needs an admin connection the services deliberately do not open, so it is set here.
+    # Turning it off costs latency only — the R-04 `rides.timers` backstop is the guarantee.
+    command:
+      - "redis-server"
+      - "--appendonly"
+      - "yes"
+      - "--appendfsync"
+      - "everysec"
+      - "--maxmemory-policy"
+      - "noeviction"
+      - "--notify-keyspace-events"
+      - "Ex"
     volumes:
       - redisdata:/data
     ports:

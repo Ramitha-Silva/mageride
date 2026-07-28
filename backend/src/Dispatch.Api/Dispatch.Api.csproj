@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    Dispatch.Api (C023, ws-dispatch-stub) — Mode C presence and a single-candidate offer loop.
+
+    dispatch-svc offers; it never writes rides.state (R-01, ADD §11.12 "ride-svc is the sole
+    writer"). The two state moves it drives are commands on ride-svc's /v1/internal/rides/**.
+    Mode A/B is trip-state-svc's and that boundary is never crossed.
+
+    What this slice implements: POST /v1/standby/online + /offline, the R-08 Redis candidate
+    index (geo:drivers:available:{type}:{h3res5cell} + driver:availability:{driverId}), the
+    D5' §3.1 H3 res-5 ring(2) pre-filter followed by the MANDATORY exact PostGIS ST_DWithin
+    post-filter, the R-10 reservation pair (Redis Lua lock + the UNIQUE partial index on
+    dispatch.offers), the D-07 15 s offer key with PEXPIRE, the R-04 durable rides.timers
+    backstop and the R-13 dispatch.outbox `offer.created`.
+
+    NOT here: weighted scoring, driver levels, the Job Board, Directional Travel, the D-08
+    wallet gate, scheduled rides and no-show reporting (C034/C035/C036). The FCM/SignalR push
+    that turns `offer.created` into a phone buzzing is C024/C051 — this service's job ends at
+    the committed outbox row.
+
+    Verify: dotnet test backend/src/Dispatch.Api.Tests -c Release
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.Dispatch</RootNamespace>
+    <AssemblyName>MageRide.Dispatch.Api</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <UserSecretsId>mageride-dispatch-api</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MageRide.Shared\MageRide.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The candidate index is keyed by H3 res-5 cell (ADD §9.4, R-06). -->
+    <PackageReference Include="pocketken.H3" />
+    <!-- ride.events is consumed directly: the kernel ships a producer (C002) but no consumer,
+         and this is the first service that needs one. See Messaging/KafkaEventConsumer.cs. -->
+    <PackageReference Include="Confluent.Kafka" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Dispatch.Api.Tests" />
+  </ItemGroup>
+
+</Project>

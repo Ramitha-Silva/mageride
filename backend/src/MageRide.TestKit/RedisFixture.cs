@@ -30,7 +30,12 @@ public sealed class RedisFixture : ContainerFixture
         _container = new RedisBuilder(Image)
             // appendonly matches the deployed configuration, so a test that asserts anything
             // about persistence behaviour sees the same durability window (<= 1 s).
-            .WithCommand("--appendonly", "yes", "--appendfsync", "everysec")
+            //
+            // `--notify-keyspace-events Ex` matches it too (C023): Redis publishes no expiry
+            // events by default, and dispatch-svc's D-07 accelerator subscribes to
+            // `__keyevent@0__:expired`. Without it here the fixture would quietly disagree with
+            // the compose file about whether that path is even reachable.
+            .WithCommand("--appendonly", "yes", "--appendfsync", "everysec", "--notify-keyspace-events", "Ex")
             .Build();
 
         await _container.StartAsync();
