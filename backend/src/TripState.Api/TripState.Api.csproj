@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    TripState.Api (C031, trip-state-svc) — the Mode A / Mode B tracking-session lifecycle.
+
+    A session is a driver's live tracking window: Start/End Journey, the active-session mutex
+    (D-03), the 30-minute idle and 100-metre destination auto-ends, the 5-minute grace restart
+    and both directions of the journey rating. For tracker-equipped vehicles the session
+    auto-starts and auto-ends on ignition (AL-32, US-3.22/3.23) and the dashboard overrides the
+    device.
+
+    R-01 fence: Mode C rides are NOT here. `mode` admits A and B only, in the contract, in the
+    service and in the `ck_sessions_mode` CHECK — a Mode C journey is a `rides.rides` row owned
+    by ride-svc (C032/C037).
+
+    Verify: dotnet test backend/src/TripState.Api.Tests -c Release
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.TripState</RootNamespace>
+    <AssemblyName>MageRide.TripState.Api</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <UserSecretsId>mageride-tripstate-api</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MageRide.Shared\MageRide.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The EMQX last will (R-15, T-04) ends a session, and the adaptive cadence hint
+         (D5' §5.2, R-07) goes back out on veh/{vehicleId}/cmd. Both need a broker client. -->
+    <PackageReference Include="MQTTnet" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="TripState.Api.Tests" />
+  </ItemGroup>
+
+</Project>

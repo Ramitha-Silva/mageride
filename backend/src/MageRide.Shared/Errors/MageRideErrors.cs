@@ -136,6 +136,17 @@ public static partial class MageRideErrors
     public static readonly ErrorCode VersionConflict = new("version-conflict", 409, "Optimistic concurrency conflict");
     public static readonly ErrorCode DirectionalLimitReached = new("directional-limit-reached", 409, "Directional Travel daily use limit reached");
     public static readonly ErrorCode OfferExpired = new("offer-expired", 410, "Offer has expired");
+
+    /// <summary>
+    /// The US-5.10 grace window for restarting an auto-ended session has closed (C031).
+    /// </summary>
+    /// <remarks>
+    /// 410 rather than 409: the request was well formed and would have succeeded a minute ago,
+    /// which is exactly what Gone means. <c>trip-state.yaml</c> declared the 410 response before
+    /// any code existed to carry it.
+    /// </remarks>
+    public static readonly ErrorCode SessionRestartExpired =
+        new("session-restart-expired", 410, "The session restart window has closed");
     public static readonly ErrorCode LocRequestRateLimited = new("loc-request-rate-limited", 429, "Location-request rate limit exceeded");
 
     // ---------------------------------------------------------------------------------------

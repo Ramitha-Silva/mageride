@@ -106,6 +106,29 @@ public static class RedisKeys
     /// </remarks>
     public static string DriverLiveVehicle(Guid driverId) => $"lock:driver:{driverId}";
 
+    /// <summary>
+    /// The Mode A/B tracking session a driver currently holds — trip-state-svc's half of the
+    /// D-03 active-session mutex (C031).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>D-03 and ADD §6 both name <c>lock:driver:{driverId}</c> SETNX for this, and that key was
+    /// already taken.</b> <see cref="DriverLiveVehicle"/> is registry-svc's published go-live
+    /// selection (C028) and is written with an unconditional <c>SET</c> at the moment the driver
+    /// picks a vehicle — which is necessarily *before* they start a session. A <c>SETNX</c> against
+    /// it would therefore fail every single time, and the mutex would refuse every start rather
+    /// than every second one. Raised as a micro-change-set in the C031 handoff: <b>the two are
+    /// different facts at different phases and need different keys.</b>
+    /// </para>
+    /// <para>
+    /// Like registry's, this is a published fact rather than the invariant.
+    /// <c>ux_sessions_active_driver</c> is what actually stops a driver holding two live sessions;
+    /// this is how the planes that need the answer quickly get it without a query, and it is
+    /// written after COMMIT and best effort.
+    /// </para>
+    /// </remarks>
+    public static string DriverSession(Guid driverId) => $"lock:session:{driverId}";
+
     /// <summary>Opaque refresh token mirror for O(1) revocation (D-29).</summary>
     public static string RefreshToken(string jti) => $"refresh:{jti}";
 

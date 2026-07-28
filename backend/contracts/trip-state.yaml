@@ -91,7 +91,7 @@ paths:
         '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
         '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
-      x-error-codes: [validation-failed, unauthorized, vehicle-not-approved, vehicle-not-found, driver-already-live]
+      x-error-codes: [validation-failed, unauthorized, mode-not-allowed, vehicle-not-approved, vehicle-not-found, driver-already-live]
 
   /v1/sessions/{sessionId}/end:
     post:
@@ -116,7 +116,7 @@ paths:
         '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
         '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
-      x-error-codes: [unauthorized, forbidden, not-found, illegal-transition]
+      x-error-codes: [unauthorized, forbidden, not-found]
 
   /v1/sessions/{sessionId}/restart:
     post:
@@ -145,7 +145,7 @@ paths:
         '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
         '410': { $ref: './_shared.yaml#/components/responses/Gone' }
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
-      x-error-codes: [unauthorized, forbidden, not-found, driver-already-live, illegal-transition]
+      x-error-codes: [unauthorized, forbidden, not-found, driver-already-live, conflict, session-restart-expired]
 
   /v1/sessions/{vehicleId}/active:
     get:
@@ -284,7 +284,72 @@ paths:
         '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
         '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
-      x-error-codes: [validation-failed, unauthorized, not-found, illegal-transition]
+      x-error-codes: [validation-failed, unauthorized, not-found, conflict]
+
+  /v1/internal/sessions/ignition:
+    post:
+      operationId: reportIgnition
+      summary: Report an ACC on/off transition from a paired tracker.
+      description: |
+        **[C031 micro-change-set — not in D3'.]** D6' §I-25.3 routes "ACC-on/off ingest events
+        (Epic 3 ingest → `trip-state-svc`)" and AL-32 makes them auto-start and auto-end the
+        session for tracker-equipped Mode A/B vehicles (US-3.22/3.23) — and no endpoint carried
+        them. The tracker plane decodes ACC out of a GT06/JT808 frame (`tcp-adapter`, C043) and
+        had nowhere to say so.
+
+        Internal, mTLS only. **ACC on** opens a session for the vehicle's owner when the vehicle is
+        Mode A/B and go-live eligible; **ACC off** closes one the *device* started. It does not
+        close one the driver started from the dashboard — AL-32 makes the dashboard authoritative
+        in both directions, and a driver waiting at a depot with the engine off has said what they
+        want.
+
+        **202, and the outcome is informational.** Whether the report opens a session, closes one
+        or does nothing is this service's decision; the adapter has no use for the answer and must
+        not treat `declined` as a failure to retry.
+      tags: [sessions]
+      security:
+        - mtls: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [vehicleId, state]
+              properties:
+                vehicleId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+                state:
+                  type: string
+                  enum: [on, off]
+                at:
+                  description: |
+                    When the ignition changed, as the device timestamped it. Falls back to receipt
+                    time — a tracker with a flat backup cell reports 2016.
+                  $ref: './_shared.yaml#/components/schemas/Timestamp'
+      responses:
+        '202':
+          description: Reported.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [outcome]
+                properties:
+                  outcome:
+                    description: |
+                      `started` / `ended` — a session opened or closed. `nochange` — the vehicle was
+                      already in the state the ignition implies, or the session is the dashboard's.
+                      `declined` — not a Mode A/B vehicle, not eligible, or its owner is live
+                      elsewhere and D-03 gives them one session at a time.
+                    type: string
+                    enum: [started, ended, nochange, declined]
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized]
 
 components:
   securitySchemes:
@@ -303,6 +368,13 @@ components:
 
   schemas:
     SessionState:
+      description: |
+        `ENDED` is the driver's own End Journey; `AUTO_ENDED` is every other reason, and only an
+        `AUTO_ENDED` session opens the US-5.10 restart grace.
+
+        **Stored as two values, served as three.** `trips.sessions.state` is `ACTIVE | COMPLETED`
+        (server_db_schema.md §4) and the third value here is derived from `endReason` — a stored
+        `AUTO_ENDED` would duplicate the reason and the two could then contradict each other.
       type: string
       enum: [ACTIVE, ENDED, AUTO_ENDED]
 
@@ -330,8 +402,13 @@ components:
         endedAt:
           $ref: './_shared.yaml#/components/schemas/Timestamp'
         endReason:
+          description: |
+            `ignition_off` is ACC off on a tracker-equipped vehicle (US-3.22/3.23) and `admin` a
+            support force-end; both are C031 micro-change-sets against this enum and against
+            server_db_schema.md §4, which spells the geofence reason `geofence` and has neither
+            `mqtt_offline` nor these two.
           type: string
-          enum: [driver_ended, idle_timeout, destination_geofence, mqtt_offline]
+          enum: [driver_ended, idle_timeout, destination_geofence, mqtt_offline, ignition_off, admin]
         restartableUntil:
           description: End of the 5-minute grace window; present only on an auto-ended session.
           oneOf:

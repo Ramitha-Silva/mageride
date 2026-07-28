@@ -56,7 +56,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C028 | registry-svc-vehicles | 2 | DONE | 2026-07-28 | 145 tests green (53 new); 3 registry migrations (0309–0311) + a 7th Redpanda topic; 0308's composite FK relaxed for US-13.9; dispatch-svc now reads the eligibility projection |
 | C029 | registry-svc-onboarding | 2 | DONE | 2026-07-28 | 175 tests green (30 new); 1 registry migration (0312) + the `IDocumentExtractionClient` port C054 implements; `vehicle.registered` finally emitted; 6 new `registry.events` types, none with a spec'd envelope |
 | C030 | provisioning-svc | 2 | DONE | 2026-07-28 | 99 tests green; 4 prov migrations (0402–0405); device mTLS enabled on EMQX 8883 (`peer_cert_as_username = cn`) so a tracker's certificate *is* its topic grant; 7 micro-change-sets |
-| C031 | trip-state-svc | 2 | PENDING | | |
+| C031 | trip-state-svc | 2 | DONE | 2026-07-28 | 46 tests green; 2 trips migrations (0504–0505); the D-03 mutex is the partial unique index and the Redis half needed a new key — `lock:driver:{driverId}` was already registry's; 6 micro-change-sets |
 | C032 | ride-svc-core | 2 | PENDING | | |
 | C033 | reputation-svc | 2 | PENDING | | |
 | C034 | dispatch-svc-core | 2 | PENDING | | |
@@ -4004,3 +4004,122 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   it, because the suite's own CA comes from `MageRide.TestKit.DeviceCa`. `GeneratedCaLoadTests`
   now runs the real `dev-up.sh` block and loads what it wrote, and the leaf's `notBefore` is
   clamped to the issuer's.
+
+- **Component:** C031 trip-state-svc — 2026-07-28
+- **Status:** DONE — `dotnet test backend/src/TripState.Api.Tests -c Release` is 46/46 green.
+  All four DoD items pass, each with a named test: ten concurrent starts leave exactly one live
+  session and the other nine get `409 driver-already-live` (`SessionMutexTests`); an idle session
+  auto-ends at 30 minutes and restarts inside the 5-minute grace (`AutoEndTests`); ignition-on
+  auto-starts a session for a paired tracker and `GET /v1/sessions/{vehicleId}/active` then reads
+  ACTIVE, which is US-5.12's "journey started" (`IgnitionTests`); and a dashboard End closes a
+  device-started session while the device is still publishing (`IgnitionTests`). `migrate-verify`
+  205/205, Spectral clean, and ApiGateway (530), Shared (235) and Registry (175) re-run green
+  against the shared-kernel changes.
+- **Notes:**
+  **Spec gaps — micro-change-sets (6).**
+  (a) *`lock:driver:{driverId}` was already taken, and D-03's SETNX against it could never have
+  worked.* ADD §6 and D-03 both specify the active-session mutex as "Redis
+  `lock:driver:{driverId}` SETNX + Postgres UNIQUE partial index". C028 uses that exact key for
+  registry-svc's published go-live selection, written with an **unconditional `SET`** at the moment
+  the driver picks a vehicle — necessarily *before* they start a session. A `SETNX` against it
+  would therefore fail every single time, and the mutex would refuse **every** start rather than
+  every second one. trip-state-svc uses `lock:session:{driverId}` (added to `RedisKeys`);
+  **ADD §6 and D-03 should name a different key from registry's.** The invariant is the index
+  either way — see decision (1).
+  (b) *`end_reason`'s two vocabularies.* server_db_schema.md §4 / D4' §4 print
+  `('driver_ended','idle_timeout','geofence','admin')`; `trip-state.yaml` (D3''s machine-checkable
+  form) prints `[driver_ended, idle_timeout, destination_geofence, mqtt_offline]`. Two of four
+  agree, `geofence`/`destination_geofence` are one reason under two names, and each document has a
+  value the other lacks — the DDL cannot record R-15/T-04's last-will end at all, and the contract
+  has no `admin`. Migration 0504 resolves toward the **contract** (it is what a client branches on)
+  plus `admin` and plus `ignition_off`, which AL-32/US-3.23 require and *neither* document has.
+  **server_db_schema.md §4 and D4' §4 should rename and extend.**
+  (c) *US-5.3's idle timer had no input.* "Auto-ends after 30 minutes of idle (no movement
+  detected)" needs a last-moved instant per session, and no column in either spec holds one;
+  deriving it from `telemetry.positions` would put a hypertable scan on a sweep that runs every
+  minute. 0504 adds `last_movement_at` (plus `last_position_geo`/`last_position_at`, which US-5.4
+  needs anyway), written by a `telemetry.normalized` consumer. **D4' §4 should carry them.**
+  (d) *US-5.4's fence had no centre.* `destination_geo` (0501) is the fence a session ends at and
+  US-5.4 defines it as "a 100 m radius of **the previous journey's end position**" — and nothing
+  recorded where a journey ended. 0504 adds `end_geo`, copied from the session's last position when
+  it closes. Also `offline_since` (R-15/T-04 give the broker a last will and no grace) and
+  `started_by`/`ended_by` (AL-32 has both the device and the dashboard writing the same transition,
+  and the row could not say which). **D4' §4 should carry all four.**
+  (e) *`trips.ratings` had no uniqueness* and the contract answers 409 to a second rating. Without
+  the index that rule is a race. 0504 adds `ux_ratings_once`.
+  (f) *`trips.command_log` and `trips.outbox`.* The command log is the **fourth** instance of the
+  one C020, C021 and C030 raised — settled: **D4' §5 should print one per service with idempotent
+  POSTs.** The outbox is narrower and worth separating from C028's and C030's: **the topic already
+  exists** — D6' §2.1 has `trip.events`, "Mode A/B session transitions from trip-state-svc" — so
+  nothing new is claimed; what is missing is the table on this side of it, so the one producer §2.1
+  names has no transactional way to write to the topic it names. **D4' §4 should carry it.**
+  (g) *No endpoint carried ignition.* D6' §I-25.3 routes "ACC-on/off ingest events (Epic 3 ingest →
+  trip-state-svc)" and AL-32 makes them auto-start/end the session, and D3' has no route. Added
+  `POST /v1/internal/sessions/ignition` to `trip-state.yaml`; C043 calls it.
+  **Decisions —**
+  (1) **The mutex is `ux_sessions_active_driver` and Redis is a published fact.** ADD §6 says
+  "SETNX **+** index" and only one can be the invariant: the index settles ten concurrent starts
+  with no cooperation, survives a cache flush and cannot be bypassed. So the start does not
+  pre-check — a SELECT-then-INSERT loses exactly that race — it inserts and maps `23505` to
+  `409 driver-already-live`. Same reasoning C028 records for its own key.
+  (2) **Two stored states, three on the wire, and no migration for it.** `trips.sessions.state` is
+  `ACTIVE | COMPLETED` in both DDL specs; `SessionState` in the contract is
+  `ACTIVE | ENDED | AUTO_ENDED`. The third value is *derived* from `end_reason` in one place
+  (`SessionViews.From`). A stored `AUTO_ENDED` would duplicate the reason and the two could then
+  contradict each other, which is worse than the mapping. **Both specs are honoured as written.**
+  (3) **Reporting is not moving.** A parked bus keeps publishing at its standby cadence, and
+  counting those fixes as activity would make US-5.3's timer unreachable — the exact failure it
+  exists to prevent. A fix always advances the position and advances the idle clock only on
+  movement, judged by two independent signals (speed ≥ 1.4 m/s **or** displacement ≥ 50 m) because
+  a cheap tracker reports no speed and consumer GNSS wanders while stationary. **No spec pins
+  either number.**
+  (4) **A last will starts a clock, it does not end a session.** R-15/T-04 say nothing about how
+  long a tunnel may last, and ending on the first `offline` would close a journey every time a bus
+  passes under a bridge. `offline_since` is recorded, the sweep decides after two minutes, and a
+  redelivered will keeps the *earliest* instant or a retrying broker would push the deadline
+  forward forever. **No spec pins the grace.**
+  (5) **AL-32 is symmetric.** A dashboard End closes a device-started session and logs
+  `device.overridden`; an ACC-off leaves a *dashboard*-started session alone, because a driver
+  waiting at a depot with the engine off has said what they want. The device is never authoritative
+  in either direction.
+  (6) **Ignition declines rather than guesses a driver.** A tracker knows its vehicle and nothing
+  else (US-3.22: "the mobile app is not needed"), so the driver is the vehicle's owner — and when
+  the vehicle is not Mode A/B, not eligible, or its owner is already live elsewhere, the report is
+  declined. Attributing a session to the wrong driver takes their D-03 mutex and blocks the journey
+  they are trying to start themselves.
+  (7) **Only an auto-ended session is restartable, and the restart is in place.** A driver who
+  pressed End meant it; offering to undo it makes the button ambiguous. The restart keeps the id
+  and `started_at` because passengers hold that id, and every US-5.10 condition is in the `WHERE`
+  clause — the index still decides whether the driver may take the mutex back.
+  (8) **Every sweep close goes through the service, not a bulk UPDATE.** Closing also writes the
+  domain log, the outbox row, the Redis key and the standby cadence hint; a shortcut would leave
+  half-closed sessions no consumer heard about. The claim transaction is released before the closes
+  — holding it would nest two transactions on one pooled connection.
+  (9) **`session-restart-expired` (410) is a new error code**, registered in the three places the
+  contracts CLAUDE.md requires. `trip-state.yaml` declared a 410 response for the restart with no
+  410-status code to carry it; `illegal-transition` is a 400 and the operation declares no 400, so
+  the "state has moved on" cases became `409 conflict` and the expired grace its own 410.
+  (10) **A passenger's rating has no participation check.** Mode A is a public bus and this service
+  holds no manifest, so "was this person aboard" is a question it cannot answer and must not
+  pretend to. The driver's side is checked, because the session names the driver.
+  **A bug the DoD test caught —** `StartAsync` was the one path that did **not** catch the unique
+  violation, so nine of ten concurrent starts returned 500 instead of 409. The three other paths
+  that take the mutex (restart, ignition, and the bulk equivalent in C030) had it; the main one did
+  not. `Ten_concurrent_starts_leave_exactly_one_live_session` is what found it, and it is the exact
+  case a SELECT-then-INSERT would also have got wrong.
+  **For C043 (tcp-adapter) —** `POST /v1/internal/sessions/ignition` with
+  `{vehicleId, state: on|off, at?}` and the `X-MageRide-Internal-Key` header. It is 202 and the
+  `outcome` is informational: `declined` is a decision, not a failure, and must not be retried.
+  Send `at` from the device's own clock when it has one. You do **not** need to publish presence —
+  this service holds its own `veh/+/status` subscription (R-15, T-04).
+  **For C051 (notification-svc) —** US-5.9's push is yours. `session.ended` on `trip.events`
+  carries `driverId`, `endReason` and `restartableUntil`; the last is null exactly when the driver
+  ended it themselves, which is when there is nothing to offer.
+  **For C041 (fanout-svc) —** `session.started` / `session.ended` are keyed by vehicleId, so an end
+  and the start that follows it cannot be reordered. That ordering is the reason the aggregate id
+  is the vehicle rather than the session.
+  **For C040 (persistence-writer) —** `trips.position_samples` (0503) still has no writer. It is
+  the 1/min Mode A/B history sample, and it is the same decision you own for
+  `telemetry.positions`.
+  **Build host —** Docker for Testcontainers (Postgres, Redis, Redpanda and EMQX); the replica
+  stayed down throughout. The 46 tests take ~45 s.

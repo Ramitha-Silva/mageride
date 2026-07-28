@@ -212,7 +212,12 @@ check_eq "1 config table" "1" \
 step "Tables owned by C004"
 # relispartition filters out the trips.position_samples monthly partitions, which are tables
 # in their own right but not schema objects anyone declared.
-check_eq "4 trips tables" "4" \
+# 4 from server_db_schema.md §4 (sessions, events, ratings, position_samples) + 2 added by C031,
+# both micro-change-sets raised in its handoff: trips.command_log (D3' §0 mandates a per-service
+# idempotency log and D4' prints one for rides only — the fourth service to need it) and
+# trips.outbox (D6' §2.1 names trip.events and trip-state-svc as its producer, and neither D4' §4
+# nor server_db_schema.md §4 gives that producer a transactional table to write into).
+check_eq "6 trips tables" "6" \
   "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
     WHERE n.nspname='trips' AND c.relkind IN ('r','p') AND NOT c.relispartition;"
 check_eq "7 rides tables" "7" \

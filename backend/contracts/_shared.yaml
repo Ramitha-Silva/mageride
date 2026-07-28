@@ -262,6 +262,10 @@ components:
         - version-conflict
         - directional-limit-reached
         - offer-expired
+        # C031: the US-5.10 restart grace has closed. 410 rather than 409 because the request was
+        # well formed and would have worked a minute ago, which is what Gone means — and
+        # trip-state.yaml already declared a 410 response for the operation with no code to carry it.
+        - session-restart-expired
         - loc-request-rate-limited
         # fare-svc / wallet-svc / fleet-svc
         - invalid-amount
