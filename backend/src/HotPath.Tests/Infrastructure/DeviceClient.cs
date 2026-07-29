@@ -71,7 +71,13 @@ internal sealed class DeviceClient : IAsyncDisposable
 
         var options = new MqttClientOptionsBuilder()
             .WithTcpServer(emqx.Host, emqx.Port)
-            .WithClientId($"device-{vehicleId:N}-{Guid.NewGuid():N}"[..40])
+            // Genuinely unique per connection. `device-{vehicleId:N}-` is already 40 characters, so
+            // truncating to 40 cut the random suffix off entirely and every connection for one
+            // vehicle presented the same client id — which makes EMQX disconnect the earlier one.
+            // Two sessions under one vehicle credential is a case D-17 exists for (the listener's
+            // messages_rate ceiling is per connection; the ceiling is per vehicleId), so it has to
+            // be expressible here.
+            .WithClientId($"device-{vehicleId.ToString("N")[..8]}-{Guid.NewGuid().ToString("N")[..12]}")
             // The MQTT username is the principal: emqx.conf refuses the CONNECT unless the token's
             // vehicleId claim equals it, and acl.conf writes every device rule as ${username}.
             .WithCredentials(vehicleId.ToString(), credential.Jwt)

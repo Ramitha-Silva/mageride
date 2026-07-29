@@ -44,6 +44,21 @@ internal sealed record HotPathHarnessOptions
 
     /// <summary>Also consume <c>veh/+/pos/replay</c>.</summary>
     public bool ConsumeReplay { get; init; } = true;
+
+    /// <summary>Hold the backlog to T-05's per-device rate (C038).</summary>
+    public bool ThrottleReplay { get; init; } = true;
+
+    /// <summary>T-05's per-device backlog rate. 20/s is the spec'd value.</summary>
+    public int ReplaySamplesPerSecond { get; init; } = 20;
+
+    /// <summary>Watch <c>pos/live</c> for D-17's ceiling and raise <c>mqtt.rate_violation</c>.</summary>
+    public bool MonitorPublishRate { get; init; }
+
+    /// <summary>
+    /// How long the D-17 monitor waits before folding a closed second into Redis. Shortened from
+    /// the deployed 500 ms only where a test is waiting on the fold itself.
+    /// </summary>
+    public TimeSpan? RateFlushInterval { get; init; }
 }
 
 /// <summary>
@@ -114,6 +129,10 @@ internal sealed class HotPathHarness : IAsyncDisposable
         // with one partition, which silently changes the ordering guarantee under test.
         await redpanda.CreateTopicAsync(Shared.Messaging.EventTopics.TelemetryRaw);
         await redpanda.CreateTopicAsync(Shared.Messaging.EventTopics.TelemetryNormalized);
+
+        // D-17's mqtt.rate_violation lands here (C038). Declared for the same reason as the other
+        // two: an auto-created topic comes up with one partition.
+        await redpanda.CreateTopicAsync(Shared.Messaging.EventTopics.AuditEvents);
 
         var harness = new HotPathHarness(emqx, redpanda, redis, new TestTokenIssuer());
         var group = $"hotpath-{Guid.NewGuid():N}";
@@ -209,28 +228,58 @@ internal sealed class HotPathHarness : IAsyncDisposable
 
     private async Task StartBridgeAsync(HotPathHarnessOptions options, int replica)
     {
-        var app = MqttBridgeApplication.Build(
-            NewOptions(),
-            builder => Configure(builder, new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
-            {
-                ["Kafka:BootstrapServers"] = Redpanda.BootstrapServers,
-                ["Mqtt:Host"] = Emqx.Host,
-                ["Mqtt:Port"] = Emqx.Port.ToString(),
-                ["Mqtt:SessionTokenSecret"] = EmqxFixture.SessionTokenSecret,
-                ["MqttBridge:Enabled"] = "true",
-                ["MqttBridge:ConsumeReplay"] = options.ConsumeReplay ? "true" : "false",
-                ["MqttBridge:ClientIdPrefix"] = $"test-bridge-{replica}",
-                // A failed CONNECT should surface as a test failure inside its timeout, not as a
-                // minute of exponential backoff.
-                ["MqttBridge:ReconnectDelayMin"] = "00:00:00.250",
-                ["MqttBridge:ReconnectDelayMax"] = "00:00:02",
-                ["Otel:PrometheusEnabled"] = "false",
-            }));
+        var settings = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Kafka:BootstrapServers"] = Redpanda.BootstrapServers,
+            // T-05's replay bucket and D-17's publish window are both cluster-wide counters, so the
+            // bridge needs Redis as of C038.
+            ["ConnectionStrings:Redis"] = _redis.ConnectionString,
+            ["Mqtt:Host"] = Emqx.Host,
+            ["Mqtt:Port"] = Emqx.Port.ToString(),
+            ["Mqtt:SessionTokenSecret"] = EmqxFixture.SessionTokenSecret,
+            ["MqttBridge:Enabled"] = "true",
+            ["MqttBridge:ConsumeReplay"] = options.ConsumeReplay ? "true" : "false",
+            ["MqttBridge:ThrottleReplay"] = options.ThrottleReplay ? "true" : "false",
+            ["MqttBridge:ReplaySamplesPerSecond"] = options.ReplaySamplesPerSecond.ToString(),
+            ["MqttBridge:MonitorPublishRate"] = options.MonitorPublishRate ? "true" : "false",
+            ["MqttBridge:ClientIdPrefix"] = $"test-bridge-{replica}",
+            // A failed CONNECT should surface as a test failure inside its timeout, not as a
+            // minute of exponential backoff.
+            ["MqttBridge:ReconnectDelayMin"] = "00:00:00.250",
+            ["MqttBridge:ReconnectDelayMax"] = "00:00:02",
+            ["Otel:PrometheusEnabled"] = "false",
+        };
+
+        if (options.RateFlushInterval is { } flush)
+        {
+            settings["MqttBridge:RateFlushInterval"] = flush.ToString();
+        }
+
+        var app = MqttBridgeApplication.Build(NewOptions(), builder => Configure(builder, settings));
 
         await app.StartAsync();
 
         _apps.Add(app);
         _bridges.Add(app.Services.GetRequiredService<MqttBridgeWorker>());
+    }
+
+    /// <summary>
+    /// Stops one bridge replica the way a rolling deploy would, and leaves the rest running.
+    /// </summary>
+    /// <remarks>
+    /// The C038 claim under this is "graceful rebalance on replica loss with no duplicate ingest":
+    /// a replica that unsubscribes, drains what it already took and only then disconnects hands
+    /// nothing back to EMQX that <c>telemetry.raw</c> has already got.
+    /// </remarks>
+    public async Task StopBridgeAsync(int replica)
+    {
+        var app = _apps[replica];
+
+        await app.StopAsync(TimeSpan.FromSeconds(30));
+        await app.DisposeAsync();
+
+        _apps.RemoveAt(replica);
+        _bridges.RemoveAt(replica);
     }
 
     private async Task StartProcessorAsync(string group)

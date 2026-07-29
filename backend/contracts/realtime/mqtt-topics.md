@@ -106,20 +106,57 @@ long-lived sockets and **force-closes a matching socket within 1 s** of a revoke
 
 ## 4. Rate limits (D-17, E-08)
 
-| Limit | Where | Effect on breach |
-|---|---|---|
-| **5 msg/s per `vehicleId`** on `veh/+/pos/live` | EMQX rule engine | Suppressed + `mqtt.rate_violation` → `audit.events` |
-| **10 msg/s per 10 s** | position-processor, second line | Drop + flag |
-| **20 samples/s per device** on `pos/replay` | EMQX + adapter | Throttled |
-| **500 connections/s per listener**, plus a per-ASN cap | EMQX | Connection refused |
+| Limit | Enforced by | Reported by | Effect on breach |
+|---|---|---|---|
+| **5 msg/s per `vehicleId`** on `veh/+/pos/live` | EMQX `listeners.*.messages_rate` | **mqtt-bridge-svc** | Publisher paused by the broker + `mqtt.rate_violation` → `audit.events` |
+| **10 msg/s per 10 s** | position-processor, second line | position-processor | Drop + flag |
+| **20 samples/s per device** on `pos/replay` | **mqtt-bridge-svc** (`ReplayPacer`, one lane per device) | — | Held back, never dropped |
+| **500 connections/s per listener**, plus a per-ASN cap | EMQX `max_conn_rate` | — | Connection refused |
 
 The 5/s ceiling is sized to accommodate the 1-second near-geofence cadence plus retries — it is a
 misbehaviour ceiling, not the expected rate. Normal cadence is adaptive (US-5.5).
 
+**Enforcement and detection are split for the live ceiling (C038).** D6' §3.3 puts both in the EMQX
+rule engine, with a `TUMBLINGWINDOW` aggregate the spec itself prints as illustrative — open-source
+EMQX 5.8 has no windowed aggregation, and the listener limiter that does the enforcing emits no
+event. The limiter is also **per connection** while D-17 is written **per `vehicleId`**: a device
+opening four sessions under one vehicle credential is four compliant clients to the broker and one
+vehicle publishing at 20 msg/s to the platform. `mqtt-bridge-svc` sees every live sample exactly
+once (E-08) across all of a vehicle's connections, which makes it the only component that can
+measure the rate D-17 names. It **does not drop** — a position dropped there is one anti-spoof never
+gets to look at.
+
+**Backlog throttling waits rather than drops.** A backlog is a vehicle's history. Over-rate samples
+are left unacknowledged, which fills the replay session's MQTT inflight window and stops EMQX
+dispatching — ADD §7.5.2's "server-issued back-pressure token", arrived at through the protocol
+rather than through a heap. A device that floods far past the limit for long enough will have its
+oldest backlog shed by the broker's own `max_mqueue_len`, which is what a hard limit means.
+
+Both counters live in **Redis**, keyed by vehicleId, not in a replica: a shared subscription hands
+each replica a random slice of one device's stream, so an in-process counter lets N replicas pass N
+times the limit.
+
 **Consumption is a shared subscription.** `mqtt-bridge-svc` subscribes
-`$share/posGroup/veh/+/pos/live` (and a parallel group for `/pos/replay`), so N replicas
-load-balance with **exactly-once dispatch and no duplicate ingest** (E-08); Redpanda offsets are
-committed per partition and EMQX redistributes on replica loss.
+`$share/posGroup/veh/+/pos/live` and `$share/posReplayGroup/veh/+/pos/replay` **on two separate
+broker sessions**, so N replicas load-balance with **exactly-once dispatch and no duplicate ingest**
+(E-08) and the backlog cannot starve the live path. Separate sessions, not just separate groups: the
+MQTT inflight window is per session, so one session holding both filters would let throttled backlog
+samples stall live delivery on the same socket.
+
+**`mqtt.shared_subscription_strategy = sticky`** (set by C038 in `infra/deploy/emqx/emqx.conf`).
+EMQX 5.8 defaults to `round_robin` — the next group member for *every* message — under which two
+replicas take one vehicle's samples alternately and race each other to `telemetry.raw`, so the
+per-vehicle ordering §8 promises end to end is decided by which process wins. Sticky binds a
+publishing session to one member: load balancing is per device, which is how a fleet distributes,
+and a vehicle's stream stays ordered. On replica loss the pick is invalidated and re-made, and
+messages a terminating session never acknowledged are redispatched to the rest of the group.
+
+> **"Replicas commit Redpanda offsets per partition" (ADD §7.3) describes something a producer
+> cannot do** — committing offsets is a consumer-group operation and the bridge only writes. What
+> the sentence's guarantee actually needs is that the bridge learns *where the broker put a record*
+> before it acknowledges the MQTT message, so an acknowledged payload is never one Redpanda did not
+> take. C038 implements that (`PartitionOffsetLog`, metric
+> `mageride.mqtt.bridge.partition_offset`) and records the wording as a micro-change-set candidate.
 
 ---
 
@@ -133,6 +170,10 @@ Three layers of dedupe, in order:
 1. **position-processor** keeps `veh:seq:{vehicleId}` in Redis and discards `seq <= last_seen`.
 2. **On reconnect the client drains live for 2 seconds before unlocking replay**, and live preempts
    replay 4:1 (R-09) — a returning vehicle's current position is more valuable than its history.
+   *The 4:1 ratio is not implemented as a ratio (C038):* the bridge separates the two streams onto
+   independent broker sessions and caps the backlog at 20/s per device, which is what actually keeps
+   live from being starved. A literal preemption ratio needs broker-side priority the C009
+   configuration does not set.
 3. **The database** rejects an exact duplicate:
    `ux_positions_vehicle_seq (vehicle_id, seq, sample_ts)`.
 

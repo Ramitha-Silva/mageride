@@ -280,11 +280,16 @@ services:
     restart: unless-stopped
 
   # -----------------------------------------------------------------------------------
-  # mqtt-bridge-svc (C024) — EMQX `$share/posGroup/…` -> Redpanda `telemetry.raw` (E-08).
+  # mqtt-bridge-svc (C024, production form C038) — EMQX `$share/posGroup/…` and
+  # `$share/posReplayGroup/…` -> Redpanda `telemetry.raw` (E-08).
   #
   # Dockerfile.service, not Dockerfile.worker: C024 built it on the Web SDK precisely so it
   # answers /health/ready for the broker connection and the producer. A worker image would
   # have no probe, and compose would call a bridge that cannot reach EMQX "healthy".
+  #
+  # Redis since C038: T-05's 20 samples/s/device backlog bucket and D-17's per-vehicle
+  # publish window are both cluster-wide counters, because a shared subscription hands each
+  # replica a random slice of one device's stream.
   # -----------------------------------------------------------------------------------
   mqtt-bridge:
     build:
@@ -298,6 +303,7 @@ services:
     depends_on:
       emqx: { condition: service_healthy }
       redpanda: { condition: service_healthy }
+      redis: { condition: service_healthy }
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:5000/health/ready > /dev/null"]
       interval: 10s

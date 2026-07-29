@@ -83,6 +83,46 @@ public static class MageRideDiagnostics
     public static readonly Counter<long> MqttBridgeFailures =
         Meter.CreateCounter<long>("mageride.mqtt.bridge.failures", "{message}", "MQTT payloads the bridge failed to forward.");
 
+    // --- mqtt-bridge-svc, production form (C038): T-05 replay throttle, D-17 ceiling -------------
+
+    /// <summary>
+    /// Replay samples the T-05 bucket made wait for a token. A sustained non-zero reading is a
+    /// fleet draining its backlog, which is the state R-09 exists to keep off the live path.
+    /// </summary>
+    public static readonly Counter<long> MqttReplayThrottled =
+        Meter.CreateCounter<long>("mageride.mqtt.bridge.replay_throttled", "{sample}",
+            "Replay samples held back by the 20/s per-device limit (T-05).");
+
+    /// <summary>
+    /// Replay samples dropped without forwarding, tagged by reason — the lane was full or the wait
+    /// exceeded its ceiling. Not acknowledged, so EMQX still holds them.
+    /// </summary>
+    public static readonly Counter<long> MqttReplayShed =
+        Meter.CreateCounter<long>("mageride.mqtt.bridge.replay_shed", "{sample}",
+            "Replay samples the bridge shed rather than queue without bound.");
+
+    /// <summary>
+    /// Time a replay sample spent waiting on its device's token bucket, in milliseconds. The
+    /// counterpart to <see cref="PositionIngestLatencyMs"/>: latency here is intentional.
+    /// </summary>
+    public static readonly Histogram<double> MqttReplayWaitMs =
+        Meter.CreateHistogram<double>("mageride.mqtt.bridge.replay_wait", "ms",
+            "Time a backlog sample waited for a T-05 token before being forwarded.");
+
+    /// <summary>
+    /// Vehicles reported over D-17's 5 msg/s <c>pos/live</c> ceiling. One per vehicle per cooldown,
+    /// however many replicas saw it, and one <c>mqtt.rate_violation</c> on <c>audit.events</c> each.
+    /// </summary>
+    public static readonly Counter<long> MqttRateViolations =
+        Meter.CreateCounter<long>("mageride.mqtt.bridge.rate_violations", "{violation}",
+            "Vehicles observed publishing above the D-17 per-vehicle ceiling.");
+
+    /// <summary>
+    /// Highest <c>telemetry.raw</c> offset this replica has written, tagged <c>partition</c> — the
+    /// producer half of ADD §7.3's per-partition offset management.
+    /// </summary>
+    public const string MqttBridgePartitionOffsetGauge = "mageride.mqtt.bridge.partition_offset";
+
     /// <summary>Samples normalised onto <c>telemetry.normalized</c> and the live indexes.</summary>
     public static readonly Counter<long> PositionsProcessed =
         Meter.CreateCounter<long>("mageride.positions.processed", "{sample}", "Position samples normalised and indexed.");

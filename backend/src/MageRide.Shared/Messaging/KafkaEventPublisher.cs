@@ -42,27 +42,32 @@ public sealed class KafkaEventPublisher : IEventPublisher, IDisposable
             .Build();
     }
 
-    public async Task PublishAsync(EventMessage message, CancellationToken cancellationToken = default)
+    public async Task<PublishReceipt> PublishAsync(EventMessage message, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(message);
-        await ProduceAsync(message, cancellationToken);
+        return await ProduceAsync(message, cancellationToken);
     }
 
-    public async Task PublishAsync(IReadOnlyCollection<EventMessage> messages, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<PublishReceipt>> PublishAsync(
+        IReadOnlyCollection<EventMessage> messages, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(messages);
 
         if (messages.Count == 0)
         {
-            return;
+            return [];
         }
+
+        var receipts = new List<PublishReceipt>(messages.Count);
 
         // Awaiting each delivery in turn keeps per-key ordering intact and, with LingerMs, still
         // batches on the wire.
         foreach (var message in messages)
         {
-            await ProduceAsync(message, cancellationToken);
+            receipts.Add(await ProduceAsync(message, cancellationToken));
         }
+
+        return receipts;
     }
 
     public void Dispose()
@@ -72,7 +77,14 @@ public sealed class KafkaEventPublisher : IEventPublisher, IDisposable
         _producer.Dispose();
     }
 
-    private async Task ProduceAsync(EventMessage message, CancellationToken cancellationToken)
+    /// <remarks>
+    /// The enqueue into librdkafka's send queue happens synchronously inside
+    /// <c>IProducer.ProduceAsync</c>, before the returned task can complete — so a caller that
+    /// starts several of these without awaiting still hands them to the broker in call order, and
+    /// with <see cref="KafkaOptions.EnableIdempotence"/> a retry cannot reorder them either. That is
+    /// what lets mqtt-bridge-svc keep several produces in flight without losing per-vehicle order.
+    /// </remarks>
+    private async Task<PublishReceipt> ProduceAsync(EventMessage message, CancellationToken cancellationToken)
     {
         var kafkaMessage = new Message<string, byte[]>
         {
@@ -97,6 +109,8 @@ public sealed class KafkaEventPublisher : IEventPublisher, IDisposable
                 new Error(ErrorCode.Local_Fail, $"Broker did not persist a message on {message.Topic}."),
                 result);
         }
+
+        return new PublishReceipt(result.Topic, result.Partition.Value, result.Offset.Value);
     }
 
     private static Acks ParseAcks(string value) => value.ToLowerInvariant() switch

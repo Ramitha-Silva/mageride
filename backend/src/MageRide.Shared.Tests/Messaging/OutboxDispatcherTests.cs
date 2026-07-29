@@ -46,18 +46,23 @@ public sealed class OutboxDispatcherTests(PostgresFixture postgres)
         public Task<bool> WaitForBatchAsync(TimeSpan timeout, CancellationToken cancellationToken) =>
             _batches.WaitAsync(timeout, cancellationToken);
 
-        public Task PublishAsync(EventMessage message, CancellationToken cancellationToken = default) =>
-            PublishAsync([message], cancellationToken);
+        public async Task<PublishReceipt> PublishAsync(
+            EventMessage message, CancellationToken cancellationToken = default) =>
+            (await PublishAsync([message], cancellationToken))[0];
 
-        public Task PublishAsync(IReadOnlyCollection<EventMessage> messages, CancellationToken cancellationToken = default)
+        public Task<IReadOnlyList<PublishReceipt>> PublishAsync(
+            IReadOnlyCollection<EventMessage> messages, CancellationToken cancellationToken = default)
         {
+            var receipts = new List<PublishReceipt>(messages.Count);
+
             foreach (var message in messages)
             {
                 Published.Enqueue(message);
+                receipts.Add(PublishReceipt.None(message.Topic));
             }
 
             _batches.Release();
-            return Task.CompletedTask;
+            return Task.FromResult<IReadOnlyList<PublishReceipt>>(receipts);
         }
     }
 
@@ -65,10 +70,11 @@ public sealed class OutboxDispatcherTests(PostgresFixture postgres)
     {
         public int Attempts;
 
-        public Task PublishAsync(EventMessage message, CancellationToken cancellationToken = default) =>
-            PublishAsync([message], cancellationToken);
+        public Task<PublishReceipt> PublishAsync(EventMessage message, CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("broker unreachable");
 
-        public Task PublishAsync(IReadOnlyCollection<EventMessage> messages, CancellationToken cancellationToken = default)
+        public Task<IReadOnlyList<PublishReceipt>> PublishAsync(
+            IReadOnlyCollection<EventMessage> messages, CancellationToken cancellationToken = default)
         {
             Interlocked.Increment(ref Attempts);
             throw new InvalidOperationException("broker unreachable");

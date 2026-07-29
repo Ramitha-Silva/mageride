@@ -63,7 +63,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C035 | dispatch-svc-scheduling-levels | 2 | DONE | 2026-07-29 | 143 tests green (35 new); 1 dispatch migration (0713, +`dispatch.level_config`) + a fifth internal command on ride-svc (`/v1/internal/rides/scheduled`); the C033/C034 "sole writer of `dispatch.driver_levels`" fence narrowed to counter-driven rules; 11 micro-change-sets |
 | C036 | dispatch-svc-directional | 2 | DONE | 2026-07-29 | 180 tests green (37 new); **no migration** — 0707/0708 already carried every table and the open `kind` column; the DT-02 predicate reads the durable row rather than ADD §7.4's Redis hint, argued below; `GeoMath` promoted to the kernel; 8 micro-change-sets |
 | C037 | ride-svc-proxy-package | 2 | DONE | 2026-07-29 | 314 tests green (62 new); 1 rides migration (0609 — the package recipient + the location-request sweep index) and a `ServiceUnavailable` response in `_shared.yaml`; **no new ride state** — ADD Appendix B.2 invariant 6 held literally, the OTP gates take the edges `start`/`complete` already take; 11 micro-change-sets and one genuine P-03-versus-AL-48 conflict |
-| C038 | mqtt-bridge-svc | 2 | PENDING | | |
+| C038 | mqtt-bridge-svc | 2 | DONE | 2026-07-29 | 43 HotPath tests green (13 tagged `Category=MqttBridge`, 8 new); **one broker-config change** — `mqtt.shared_subscription_strategy = sticky`, because EMQX 5.8's `round_robin` default makes two replicas race one vehicle's samples and the end-to-end ordering DoD unreachable; live and replay now hold **separate broker sessions**, not just separate share groups; the bridge became the D-17 *detector* (EMQX stays the enforcer); `IEventPublisher` now returns a `PublishReceipt`; 4 micro-change-sets |
 | C039 | position-processor-svc | 2 | PENDING | | |
 | C040 | persistence-writer-svc | 2 | PENDING | | |
 | C041 | fanout-svc | 2 | PENDING | | |
@@ -4987,3 +4987,171 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   **Build host —** Docker for Testcontainers (Postgres, Redpanda) and one throwaway
   `timescaledb-ha:pg16` for `migrate-verify.sh`; the replica stayed down throughout. The ride suite
   takes ~2 min 55 s, the migration verify ~4 min.
+
+- **Component:** C038 mqtt-bridge-svc — 2026-07-29
+- **Status:** DONE — `dotnet test backend/src/HotPath.Tests -c Release --filter Category=MqttBridge`
+  is **13/13 green**; the whole suite is **43/43** (was 35). All four DoD items have a named test.
+  (1) *N replicas ingest each message exactly once under load* —
+  `Three_replicas_under_load_ingest_each_message_exactly_once` publishes 240 samples from 30
+  devices across 3 replicas and asserts the delivered `(vehicleId, seq)` pairs are 240 **distinct**
+  values, not merely 240 records: a bridge that dropped one and duplicated another passes a count
+  and fails this. (2) *A replay flood is rate-limited without measurable added latency on live
+  samples* — `The_backlog_stream_is_held_to_its_per_device_rate` (nothing lost, paced to the
+  configured rate, and `ReplayThrottled > 0` so it was **this** bridge that paced it) plus
+  `A_backlog_flood_does_not_delay_live_samples` (every live sample under 1 s bridge-side while the
+  backlog is still queued — the read of `ForwardedReplay` happens *before* the flood is awaited, so
+  a drained backlog cannot make it pass vacuously). (3) *Per-vehicle order preserved end to end* —
+  `Per_vehicle_ordering_holds_across_replicas`, 30 samples through **two** replicas, which is the
+  case that can actually break. (4) *A rate_violation for a client publishing above 5 msg/s* —
+  `A_vehicle_over_the_ceiling_raises_a_rate_violation_on_audit_events`, with
+  `A_vehicle_within_the_ceiling_raises_nothing` as its negative. `MageRide.Shared.Tests` (235) and
+  `Dispatch.Api.Tests` (180) were re-run green after the `IEventPublisher` change; the solution
+  builds clean.
+- **Notes:**
+  **The one thing to read first: this component changed a broker setting.**
+  `infra/deploy/emqx/emqx.conf` now sets **`mqtt.shared_subscription_strategy = sticky`**. EMQX 5.8
+  defaults to `round_robin` — verified against the image, not assumed — which picks the next member
+  of the group for **every message**. Two bridge replicas then take one vehicle's samples
+  alternately and race each other to `telemetry.raw`, so the per-vehicle ordering ADD §7.3 and
+  D6' §2.1 promise *end to end* is decided by which process wins. A Redpanda partition key keeps a
+  partition ordered; it cannot reorder what arrived scrambled, and C038's DoD asks for the
+  end-to-end property explicitly. `sticky` binds a publishing session to one group member, so load
+  balancing becomes per **device** rather than per **message** — which is how a fleet actually
+  distributes — and E-08's substance (exactly-once dispatch, no duplicate ingest, redistribution on
+  replica loss) is untouched. **C024's E-08 test had to change shape with it**: "both replicas took
+  a share of one handset's 40 messages" is no longer true by construction, so it now publishes from
+  16 devices and asserts both replicas took a share of *those* (the sticky pick is random per
+  publishing session, so the chance of either taking none is 2 × 2⁻¹⁶). The exactly-once half of
+  the assertion is unchanged and is still the important half. **C125 owns the deployed broker
+  policy — carry this setting forward.**
+
+  **Spec gaps and conflicts — micro-change-sets (4).**
+  (a) *"Replicas commit Redpanda offsets per partition" (ADD §7.3) describes something a producer
+  cannot do.* Committing offsets is a consumer-group operation against offsets you have **read**;
+  the bridge only writes. The guarantee the sentence is reaching for is real and is now
+  implemented: the bridge learns *where the broker put a record* — partition and offset, off the
+  delivery report — **before** it acknowledges the MQTT message, so an acknowledged payload is
+  never one Redpanda did not take. `PartitionOffsetLog` records the per-partition high-water mark
+  and publishes it as `mageride.mqtt.bridge.partition_offset`. **ADD §7.3 and
+  `mqtt-topics.md` §4 should say "confirm the per-partition write before acknowledging", not
+  "commit offsets".**
+  (b) *D-17's detection cannot live where D6' §3.3 puts it, and the ceiling it names cannot be
+  enforced where the ceiling actually is.* Three separate problems with one fix. The spec asks the
+  EMQX rule engine for a `TUMBLINGWINDOW` aggregate — which the spec itself prints as
+  *illustrative*, and which open-source EMQX 5.8 has no windowed aggregation for. The listener
+  limiter that **does** enforce (`messages_rate = "5/s"`, measured at 4.9/s on a single socket with
+  no burst) emits no event at all. And that limiter is **per connection** while D-17 is written
+  **per `vehicleId`**: `acl.conf` confines every session presenting one vehicle credential to that
+  vehicle's topics but does not stop a device opening four of them, at which point the broker sees
+  four compliant clients and the platform sees one vehicle publishing at 20 msg/s. mqtt-bridge-svc
+  sees every live sample exactly once (E-08) across *all* of a vehicle's connections, which makes
+  it the only component that can measure the rate D-17 names — so **the bridge counts and reports,
+  EMQX enforces**, and the bridge never drops a sample (a position dropped here is one anti-spoof
+  never gets to look at). The test raises the violation exactly that way, over four connections.
+  **D6' §3.3 should name mqtt-bridge-svc as the detector and drop the rule-engine SQL.**
+  (c) *`audit.events` had a schema and no producer, so the envelope is now in the kernel.*
+  D6' §2.2 gives it `{eventId, actorId, action, entityType, entityId, before, after, ts}` and §2.1
+  names the producer as "all (admin-bff interceptor)" — which does not exist yet, and `mqtt.rate_
+  violation` has no admin request behind it in any case: the actor is a **device**. `AuditEvent`
+  lives in `MageRide.Shared.Messaging` beside `EventTopics` so the interceptor and everything after
+  it inherit the shape rather than inventing a second one; it is keyed by `entityId` per the §2.1
+  registry. `actorId` is the vehicleId, because a `rate_violation` with no actor is a fact nobody
+  can be asked about.
+  (d) *R-09's "live preempts replay 4:1" is still not implemented as a ratio*, and C024 recorded
+  that. It is now moot for the DoD rather than outstanding: the two streams hold **independent
+  broker sessions** and the backlog is hard-capped at 20/s per device, which is what actually keeps
+  live from being starved (`A_backlog_flood_does_not_delay_live_samples` measures it). A literal
+  4:1 preemption still needs broker-side priority the C009 configuration does not set. **D6' §3.5
+  should either specify the mechanism or restate the requirement as isolation plus a cap.**
+
+  **Design decisions worth knowing about.**
+  *Separate sessions, not just separate share groups.* This is the correction that made R-09 real.
+  MQTT's **inflight window is per session** (EMQX's default `max_inflight = 32`), so one session
+  holding both filters would let 32 unacknowledged backlog samples — each parked on a T-05 token —
+  stop EMQX delivering live positions on the same socket for the length of the wait. The share
+  groups alone never addressed that. Two sessions have two windows and the backlog can only starve
+  itself.
+  *The throttle waits; it does not drop.* A backlog is a vehicle's history and the flash ring
+  buffered it for a reason. Over-rate samples are left unacknowledged, which fills the replay
+  session's inflight window and stops the broker dispatching — ADD §7.5.2's "server-issued
+  back-pressure token", arrived at through the protocol instead of through this process's heap.
+  One **lane per device** (`ReplayPacer`), because a single ordered queue would let one vehicle's
+  backlog block every other vehicle's behind it and turn a per-device limit into a global one.
+  A device that floods far past the limit long enough will have its oldest backlog shed by EMQX's
+  own `max_mqueue_len` (1000) — which is what a hard limit means, and is now said out loud in
+  `mqtt-topics.md` §4.
+  *Both counters are in Redis, so the bridge now needs Redis* (`UseRedis = true`, and the skeleton
+  compose gained the dependency). A shared subscription hands each replica a random slice of one
+  device's stream: an in-process bucket lets N replicas pass N × the limit, and for D-17 no replica
+  would ever observe the rate the vehicle is really publishing at. Both **fail open** — Redis
+  unreachable means the sample is forwarded and readiness goes red, because losing telemetry to a
+  cache outage is worse than losing a limit the broker still half-enforces. The D-17 counter costs
+  **one Redis round trip per vehicle per second**, not one per message: counts accumulate in a
+  dictionary on the hot path and a background loop folds each closed second into `INCRBY`.
+  *Produces are pipelined.* `TelemetryForwarder.Forward` hands the record to librdkafka
+  synchronously and waits for the delivery report on a continuation, so the receive loop takes the
+  next message immediately. Awaiting each produce in turn caps a replica at one broker round trip
+  per sample — a few hundred a second against ADD §7.6's 1 200/s sustained and 6 000/s burst
+  budget. Ordering survives because the enqueue is synchronous *and in call order* and
+  `EnableIdempotence` will not reorder a retry; the cross-replica ordering test is what proves the
+  whole chain.
+  *Stopping is unsubscribe → drain → disconnect.* That sequence **is** "graceful rebalance with no
+  duplicate ingest": EMQX stops routing the group's messages here, the forwards already started
+  finish and acknowledge, and only then does the socket close. Skip the drain and every payload
+  produced but not yet acknowledged comes back to a surviving replica and `telemetry.raw` carries
+  it twice. Produces are deliberately **not** cancelled on shutdown for the same reason — the
+  producer's own `MessageTimeoutMs` is the bound. An unplanned kill still falls back to
+  at-least-once, which is the guarantee MQTT QoS 1 actually offers.
+
+  **Kernel change other components will see.** `IEventPublisher.PublishAsync` now returns
+  `Task<PublishReceipt>` / `Task<IReadOnlyList<PublishReceipt>>` instead of `Task`. Source-compatible
+  for every existing caller (`await publisher.PublishAsync(...)` is unchanged); the three test fakes
+  that implement the interface were updated, and `PublishReceipt.None(topic)` is there for a
+  publisher with no broker behind it. `Dispatch.Api.Tests` and `MageRide.Shared.Tests` were re-run
+  green to confirm.
+
+  **A pre-existing bug this uncovered.** `DeviceClient`'s client id was
+  `$"device-{vehicleId:N}-{Guid.NewGuid():N}"[..40]` — and `device-{vehicleId:N}-` is *exactly* 40
+  characters, so the random suffix was truncated away entirely and every connection for one vehicle
+  presented the same client id. EMQX disconnects the earlier one, so a second connection silently
+  killed the first. Harmless while no test opened two sessions for one vehicle; fatal to the D-17
+  test, which must. Fixed to a genuinely unique 28-character id.
+
+  **For C039 (position-processor-svc) —** the record you consume now carries four headers:
+  `mqttTopic`, `stream` (`live` | `replay`), `receivedTs` (the bridge's receive clock, ISO-8601
+  round-trip) and `bridge` (the replica's id). `stream` is the one that matters — the R-17/T-05
+  `seq` watermark is *layer 1* of the dedupe and the bridge deliberately implements none of it, so
+  a replayed sample reaching you is expected, not a bug. Two things the bridge does **not** do and
+  you own: `telemetry.raw.dlq` (D6' §2.3 — the bridge leaves a failed produce unacknowledged and
+  EMQX redispatches it, which is loud rather than lossy but is not a DLQ), and the second-line
+  10 msg/s-per-10 s check (`mqtt-topics.md` §4). For that second one, `AuditEvent.Observed(...)` in
+  the kernel is the shape to reuse — do not invent a second `audit.events` envelope. Per-vehicle
+  ordering now holds through the bridge under multiple replicas, so your `veh:seq:{vehicleId}`
+  watermark will see monotone live sequences in the ordinary case and out-of-order ones only from
+  `stream=replay`.
+
+  **For C043 (tcp-adapter) —** the adapter publishes as a `svc-` principal on behalf of trackers,
+  so it is **one connection carrying many vehicles** and the broker's per-connection
+  `messages_rate = "5/s"` will throttle the whole adapter at five messages a second. That ceiling
+  was written for a handset publishing one vehicle's positions; it is wrong for a multiplexing
+  adapter and `emqx.conf` has no per-principal exemption today. Either give the 8883/5023-family
+  listeners their own zone with a higher `messages_rate`, or accept that D-17's bridge-side counter
+  is the only limit on the adapter path. Note also that the counter keys on the vehicleId in the
+  **topic**, so an adapter publishing correctly to `veh/{vehicleId}/pos/live` is measured per
+  vehicle exactly as a handset is — no adapter-side work needed for that half.
+
+  **For C044 (fleet-health-svc) and the R-15/T-04 LWT consumers —** still nobody's. The bridge
+  subscribes to two position filters and nothing else; `veh/+/status` has three named consumers in
+  `mqtt-topics.md` §6 and no implementation in any component so far.
+
+  **For C125 (infra hardening) —** three things. The `shared_subscription_strategy = sticky` above.
+  The RS256/JWKS authentication block that is still commented out in `emqx.conf` (D6' §3.2, D-21's
+  15-minute cache) — the dev HMAC secret is what every test and the slim stack use today. And
+  `mqtt-topics.md` §4's per-ASN connection guardrail, which `max_conn_rate = "500/s"` only half
+  covers.
+
+  **Build host —** Docker for the three Testcontainers fixtures (EMQX, Redpanda, Redis); the
+  replica stayed down throughout. The `Category=MqttBridge` filter takes ~2 min 36 s and the whole
+  HotPath suite ~3 min 53 s. Note that the suite's wall-clock is dominated by the broker's own
+  5 msg/s publish ceiling rather than by anything under test: the load test spends most of its time
+  waiting for 30 devices to be allowed to publish 8 samples each.

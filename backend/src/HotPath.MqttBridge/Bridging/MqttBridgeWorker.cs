@@ -1,61 +1,29 @@
-using System.Buffers;
-using System.Diagnostics;
-using System.Globalization;
 using MageRide.HotPath.MqttBridge.Configuration;
+using MageRide.HotPath.MqttBridge.Throttling;
 using MageRide.Shared.Messaging;
 using MageRide.Shared.Mqtt;
-using MageRide.Shared.Observability;
 using Microsoft.Extensions.Options;
-using MQTTnet;
-using MQTTnet.Formatter;
-using MQTTnet.Protocol;
 
 namespace MageRide.HotPath.MqttBridge.Bridging;
 
 /// <summary>
-/// Holds the EMQX shared subscription and forwards every device payload to <c>telemetry.raw</c>
-/// (ADD §7.3, D6' §3.3, E-08).
+/// Holds the EMQX shared subscriptions and forwards every device payload to <c>telemetry.raw</c>
+/// (ADD §7.3, D6' §3.3, E-08, R-09, T-05, D-17).
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>The shared subscription is the whole component.</b> N replicas all subscribe
-/// <c>$share/posGroup/veh/+/pos/live</c>; EMQX dispatches each message to <b>exactly one</b> of
-/// them, so the bridge scales horizontally with no coordinator and no duplicate ingest. Dropping
-/// the <c>$share/</c> prefix would not fail — every replica would simply receive every message and
-/// <c>telemetry.raw</c> would carry one copy per replica, which is why
-/// <c>MqttTopics.SharedPositionLive</c> builds the filter and nothing here writes it by hand.
+/// Two broker sessions, not one. <c>$share/posGroup/veh/+/pos/live</c> is the hot path and goes
+/// straight to the producer; <c>$share/posReplayGroup/veh/+/pos/replay</c> is a backlog and goes
+/// through <see cref="ReplayPacer"/> at T-05's 20 samples/s/device. Separate sessions are what make
+/// the second one incapable of starving the first — see <see cref="MqttStreamSession"/>.
 /// </para>
 /// <para>
-/// <b>It decodes nothing.</b> The payload crosses as opaque bytes. CBOR is what the driver app
-/// sends today, but a tracker's firmware is not something this platform gets to revise, and a
-/// bridge that parsed payloads would drop a sample it merely failed to understand — before anyone
-/// could see it on <c>telemetry.raw</c> and find out why. Normalisation, the <c>seq</c> dedupe and
-/// the anti-spoof gates are position-processor-svc's.
-/// </para>
-/// <para>
-/// <b>The partition key comes from the topic, never from the payload.</b> The topic is the half
-/// EMQX authenticated — <c>acl.conf</c> binds a device to <c>veh/${username}/*</c> and
-/// <c>emqx.conf</c> binds <c>${username}</c> to the token's <c>vehicleId</c> claim — while the
-/// payload is whatever the device chose to write. Keying on the payload would let a compromised
-/// handset write into another vehicle's partition, which is exactly the impersonation the ACL
-/// exists to stop.
-/// </para>
-/// <para>
-/// <b>Acknowledgement is manual and follows the produce.</b> MQTTnet acknowledges automatically as
-/// soon as the handler returns; that would make EMQX → Redpanda at-most-once, so a Redpanda blip
-/// would lose positions the broker had already been told were safe. Here the PUBACK goes out only
-/// after the broker has persisted the record. A payload that cannot be produced is <b>not</b>
-/// acknowledged, and EMQX redispatches it to another member of the group when this session ends.
-/// There is no in-process retry and no <c>telemetry.raw.dlq</c> — D6' §2.3 specifies one and C039
-/// owns it.
+/// The <c>$share/</c> prefix, the topic-derived partition key, the opaque payload and the
+/// acknowledge-after-produce rule are all load-bearing and are each explained where they live:
+/// <see cref="MqttStreamSession"/>, <see cref="TelemetryForwarder"/>, <see cref="BridgedMessage"/>.
 /// </para>
 /// </remarks>
-internal sealed class MqttBridgeWorker(
-    IEventPublisher publisher,
-    MqttSessionTokenIssuer tokens,
-    IOptions<MqttOptions> mqttOptions,
-    IOptions<MqttBridgeOptions> bridgeOptions,
-    ILogger<MqttBridgeWorker> logger) : BackgroundService
+internal sealed class MqttBridgeWorker : BackgroundService, IAsyncDisposable
 {
     /// <summary>Header naming the concrete MQTT topic a record came off.</summary>
     public const string TopicHeader = "mqttTopic";
@@ -75,260 +43,171 @@ internal sealed class MqttBridgeWorker(
     /// <summary><see cref="StreamHeader"/> value for <c>veh/+/pos/replay</c>.</summary>
     public const string ReplayStream = "replay";
 
-    private readonly MqttOptions _mqtt = mqttOptions?.Value ?? throw new ArgumentNullException(nameof(mqttOptions));
-    private readonly MqttBridgeOptions _bridge =
-        bridgeOptions?.Value ?? throw new ArgumentNullException(nameof(bridgeOptions));
+    private readonly MqttBridgeOptions _bridge;
+    private readonly TelemetryForwarder _forwarder;
+    private readonly ReplayPacer? _pacer;
+    private readonly List<MqttStreamSession> _sessions = [];
+    private readonly ILogger<MqttBridgeWorker> _logger;
+
+    public MqttBridgeWorker(
+        IEventPublisher publisher,
+        MqttSessionTokenIssuer tokens,
+        IOptions<MqttOptions> mqttOptions,
+        IOptions<MqttBridgeOptions> bridgeOptions,
+        ReplayThrottle replayThrottle,
+        PublishRateMonitor rateMonitor,
+        ILogger<MqttBridgeWorker> logger,
+        ILoggerFactory loggerFactory)
+    {
+        ArgumentNullException.ThrowIfNull(mqttOptions);
+        ArgumentNullException.ThrowIfNull(bridgeOptions);
+        ArgumentNullException.ThrowIfNull(loggerFactory);
+
+        _bridge = bridgeOptions.Value;
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+
+        ClientId = $"{_bridge.ClientIdPrefix}-{Guid.NewGuid():N}";
+
+        _forwarder = new TelemetryForwarder(
+            publisher,
+            new PartitionOffsetLog(ClientId).Register(),
+            // Null when the monitor is not hosted: unflushed observations would otherwise accumulate
+            // one dictionary entry per vehicle per second, forever.
+            _bridge.MonitorPublishRate ? rateMonitor : null,
+            ClientId,
+            loggerFactory.CreateLogger<TelemetryForwarder>());
+
+        _sessions.Add(new MqttStreamSession(
+            LiveStream,
+            MqttTopics.SharedPositionLive(_bridge.LiveShareGroup),
+            $"{ClientId}-live",
+            // Not awaited: the produce is enqueued synchronously and in receive order, and the wait
+            // for the delivery report happens on a continuation. Awaiting here would cap the replica
+            // at one broker round trip per sample.
+            bridged => { _ = _forwarder.Forward(bridged); return Task.CompletedTask; },
+            mqttOptions.Value,
+            _bridge,
+            tokens,
+            loggerFactory.CreateLogger<MqttStreamSession>())
+        {
+            DrainWithinAsync = _forwarder.DrainAsync,
+        });
+
+        if (!_bridge.ConsumeReplay)
+        {
+            return;
+        }
+
+        _pacer = _bridge.ThrottleReplay
+            ? new ReplayPacer(
+                replayThrottle,
+                bridgeOptions,
+                bridged => _forwarder.Forward(bridged),
+                loggerFactory.CreateLogger<ReplayPacer>())
+            : null;
+
+        _sessions.Add(new MqttStreamSession(
+            ReplayStream,
+            MqttTopics.SharedPositionReplay(_bridge.ReplayShareGroup),
+            $"{ClientId}-replay",
+            ReceiveReplayAsync,
+            mqttOptions.Value,
+            _bridge,
+            tokens,
+            loggerFactory.CreateLogger<MqttStreamSession>())
+        {
+            DrainWithinAsync = DrainReplayAsync,
+        });
+    }
 
     /// <summary>
-    /// This replica's MQTT client id. Unique per process: two clients presenting one id make the
-    /// broker disconnect the first, which across replicas looks exactly like a flapping bridge.
+    /// This replica's identity. Each stream's MQTT client id is derived from it, because two clients
+    /// presenting one id make the broker disconnect the first — which, across replicas, looks
+    /// exactly like a flapping bridge.
     /// </summary>
-    public string ClientId { get; } =
-        $"{bridgeOptions?.Value.ClientIdPrefix ?? "mageride-bridge"}-{Guid.NewGuid():N}";
+    public string ClientId { get; }
 
     /// <summary>Payloads this replica has forwarded. Read by the E-08 test, which has to show that
     /// two replicas <i>shared</i> the stream rather than each seeing all of it.</summary>
-    public long Forwarded => Interlocked.Read(ref _forwarded);
+    public long Forwarded => _forwarder.Forwarded;
 
-    /// <summary>True once the subscription is live, so a test can wait for readiness rather than sleep.</summary>
-    public bool IsSubscribed => Volatile.Read(ref _subscribed);
+    /// <summary>Payloads forwarded off the live stream alone.</summary>
+    public long ForwardedLive => _forwarder.ForwardedLive;
 
-    private long _forwarded;
-    private bool _subscribed;
+    /// <summary>Payloads forwarded off the backlog stream alone.</summary>
+    public long ForwardedReplay => _forwarder.ForwardedReplay;
+
+    /// <summary>Backlog samples that had to wait for a T-05 token — the throttle's own evidence.</summary>
+    public long ReplayThrottled => _pacer?.Throttled ?? 0;
+
+    /// <summary>Highest <c>telemetry.raw</c> offset this replica has written, per partition.</summary>
+    public IReadOnlyDictionary<int, long> PartitionOffsets => _forwarder.PartitionOffsets;
+
+    /// <summary>True once every stream holds its subscription, so a test can wait rather than sleep.</summary>
+    public bool IsSubscribed => _sessions.TrueForAll(session => session.IsSubscribed);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         await Task.Yield();
+        await Task.WhenAll(_sessions.Select(session => session.RunAsync(stoppingToken)));
+    }
 
-        var attempt = 0;
+    public override async Task StopAsync(CancellationToken cancellationToken)
+    {
+        // Cancels ExecuteAsync's token, which is what puts each session into its
+        // unsubscribe-drain-disconnect sequence. The base call returns once they are through it.
+        await base.StopAsync(cancellationToken);
 
-        while (!stoppingToken.IsCancellationRequested)
+        if (_forwarder.InFlight > 0)
         {
-            try
-            {
-                await RunSessionAsync(stoppingToken);
-                attempt = 0;
-            }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                return;
-            }
-            catch (Exception ex)
-            {
-                attempt++;
-                logger.LogError(ex, "MQTT bridge session {Attempt} ended; reconnecting", attempt);
-            }
-            finally
-            {
-                Volatile.Write(ref _subscribed, false);
-            }
-
-            if (stoppingToken.IsCancellationRequested)
-            {
-                return;
-            }
-
-            try
-            {
-                await Task.Delay(BackoffFor(attempt), stoppingToken);
-            }
-            catch (OperationCanceledException)
-            {
-                return;
-            }
+            _logger.LogWarning(
+                "{Bridge} stopped with {InFlight} forward(s) still in flight", ClientId, _forwarder.InFlight);
         }
     }
 
-    private async Task RunSessionAsync(CancellationToken stoppingToken)
+    public override void Dispose()
     {
-        var factory = new MqttClientFactory();
-        using var client = factory.CreateMqttClient();
+        _forwarder.Dispose();
+        base.Dispose();
+    }
 
-        // Signalled when the broker (or the network) drops us, so the supervision loop above can
-        // reconnect instead of sitting on a dead socket.
-        var disconnected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        client.DisconnectedAsync += args =>
+    public async ValueTask DisposeAsync()
+    {
+        if (_pacer is not null)
         {
-            logger.LogWarning(
-                "MQTT bridge {ClientId} disconnected: {Reason}", ClientId, args.ReasonString ?? args.Reason.ToString());
+            await _pacer.DisposeAsync();
+        }
 
-            disconnected.TrySetResult();
+        Dispose();
+    }
+
+    private Task ReceiveReplayAsync(BridgedMessage bridged)
+    {
+        if (_pacer is null)
+        {
+            // Throttling off. Only a test that is measuring something else asks for this — a bridge
+            // with no T-05 limit is the reconnect storm R-09 exists to prevent.
+            _ = _forwarder.Forward(bridged);
             return Task.CompletedTask;
-        };
-
-        client.ApplicationMessageReceivedAsync += args => ForwardAsync(args, stoppingToken);
-
-        var credential = tokens.IssueForService(_bridge.ServiceName);
-
-        var options = new MqttClientOptionsBuilder()
-            .WithTcpServer(_mqtt.Host, _mqtt.Port)
-            .WithClientId(ClientId)
-            // The bridge authenticates exactly as a device does — username plus session JWT — and
-            // `acl.conf` grants the `svc-` prefix the wildcard and `$share/#` privileges E-08 needs.
-            .WithCredentials(credential.Username, credential.Jwt)
-            // Shared subscriptions and the reason codes that report them are MQTT 5 features.
-            .WithProtocolVersion(MqttProtocolVersion.V500)
-            .WithKeepAlivePeriod(_bridge.KeepAlive)
-            .WithTimeout(_bridge.ConnectTimeout)
-            // Clean start with no session expiry: a bridge replica holds no state worth resuming,
-            // and ending the session promptly is what makes EMQX redispatch anything this replica
-            // took but never acknowledged to another member of the group.
-            .WithCleanStart(true)
-            .WithSessionExpiryInterval(0);
-
-        if (_mqtt.UseTls)
-        {
-            options = options.WithTlsOptions(tls => tls.UseTls(true).WithTargetHost(_mqtt.Host));
         }
 
-        using var connectCancellation =
-            CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
-        connectCancellation.CancelAfter(_bridge.ConnectTimeout);
-
-        var result = await client.ConnectAsync(options.Build(), connectCancellation.Token);
-
-        if (result.ResultCode != MqttClientConnectResultCode.Success)
-        {
-            throw new InvalidOperationException(
-                $"EMQX refused the bridge CONNECT: {result.ResultCode} ({result.ReasonString}). " +
-                "Check that Mqtt:SessionTokenSecret matches EMQX_AUTHENTICATION__1__SECRET.");
-        }
-
-        await SubscribeAsync(client, stoppingToken);
-
-        Volatile.Write(ref _subscribed, true);
-        logger.LogInformation(
-            "MQTT bridge {ClientId} subscribed to {Filter}", ClientId, MqttTopics.SharedPositionLive(_bridge.LiveShareGroup));
-
-        // Park until the broker goes away or the host stops. The receive loop runs on MQTTnet's own
-        // thread; there is nothing for this one to do but supervise.
-        var stopped = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        await using (stoppingToken.Register(() => stopped.TrySetResult()))
-        {
-            await Task.WhenAny(disconnected.Task, stopped.Task);
-        }
-
-        if (stoppingToken.IsCancellationRequested && client.IsConnected)
-        {
-            // A clean DISCONNECT rather than a dropped socket, so EMQX redispatches this replica's
-            // share immediately instead of waiting out the keep-alive.
-            await client.DisconnectAsync(new MqttClientDisconnectOptionsBuilder().Build(), CancellationToken.None);
-        }
+        // Refused samples are left unacknowledged on purpose: EMQX still holds them.
+        _pacer.TryEnqueue(bridged);
+        return Task.CompletedTask;
     }
 
-    private async Task SubscribeAsync(IMqttClient client, CancellationToken cancellationToken)
+    private async Task<bool> DrainReplayAsync(TimeSpan timeout)
     {
-        var builder = new MqttClientSubscribeOptionsBuilder()
-            .WithTopicFilter(filter => filter
-                .WithTopic(MqttTopics.SharedPositionLive(_bridge.LiveShareGroup))
-                .WithQualityOfServiceLevel(MqttQualityOfServiceLevel.AtLeastOnce));
+        var deadline = DateTime.UtcNow + timeout;
 
-        if (_bridge.ConsumeReplay)
+        // The queue first — a sample still on a lane has not been produced, so waiting on the
+        // forwarder alone would report a drained bridge with work left to do.
+        if (_pacer is not null && !await _pacer.DrainAsync(timeout))
         {
-            builder = builder.WithTopicFilter(filter => filter
-                .WithTopic(MqttTopics.SharedPositionReplay(_bridge.ReplayShareGroup))
-                .WithQualityOfServiceLevel(MqttQualityOfServiceLevel.AtLeastOnce));
+            return false;
         }
 
-        var result = await client.SubscribeAsync(builder.Build(), cancellationToken);
-
-        foreach (var item in result.Items)
-        {
-            // A refused shared subscription is the one failure that looks like success from the
-            // outside: the bridge stays connected and simply never receives anything.
-            if (item.ResultCode is not (MqttClientSubscribeResultCode.GrantedQoS0
-                or MqttClientSubscribeResultCode.GrantedQoS1
-                or MqttClientSubscribeResultCode.GrantedQoS2))
-            {
-                throw new InvalidOperationException(
-                    $"EMQX refused the subscription to '{item.TopicFilter.Topic}': {item.ResultCode}.");
-            }
-        }
-    }
-
-    private async Task ForwardAsync(MqttApplicationMessageReceivedEventArgs args, CancellationToken cancellationToken)
-    {
-        // Before anything can throw: MQTTnet acknowledges on return unless this is cleared first.
-        args.AutoAcknowledge = false;
-
-        var topic = args.ApplicationMessage.Topic;
-
-        if (!MqttTopics.TryParse(topic, out var reference)
-            || reference.Kind is not (MqttTopicKind.PositionLive or MqttTopicKind.PositionReplay))
-        {
-            // Not a position topic. Acknowledged so it does not sit in flight forever — the bridge
-            // subscribes to two filters and neither can deliver anything else, so this is a
-            // misconfiguration worth saying out loud.
-            logger.LogWarning("Ignoring a message on an unexpected topic '{Topic}'", topic);
-            await args.AcknowledgeAsync(cancellationToken);
-            return;
-        }
-
-        var stream = reference.Kind == MqttTopicKind.PositionLive ? LiveStream : ReplayStream;
-        var receivedAt = DateTimeOffset.UtcNow;
-
-        var message = new EventMessage(
-            EventTopics.TelemetryRaw,
-            // vehicleId keys the partition, so every sample from one vehicle stays in order
-            // end to end (D6' §2.1).
-            reference.VehicleId.ToString(),
-            // The payload is a ReadOnlySequence over MQTTnet's receive buffer, which is recycled the
-            // moment this handler returns. The producer's send is asynchronous, so the bytes have
-            // to be copied out rather than referenced.
-            BuffersExtensions.ToArray(args.ApplicationMessage.Payload),
-            new Dictionary<string, string>(StringComparer.Ordinal)
-            {
-                [TopicHeader] = topic,
-                [StreamHeader] = stream,
-                [ReceivedAtHeader] = receivedAt.ToString("O", CultureInfo.InvariantCulture),
-                [BridgeHeader] = ClientId,
-            });
-
-        using var activity = MageRideDiagnostics.ActivitySource.StartActivity(
-            "mqtt-bridge.forward", ActivityKind.Producer);
-        activity?.SetTag("mageride.vehicle_id", reference.VehicleId);
-        activity?.SetTag("messaging.destination.name", EventTopics.TelemetryRaw);
-
-        try
-        {
-            await publisher.PublishAsync(message, cancellationToken);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            // Deliberately not acknowledged. EMQX still holds it, and redispatches it to another
-            // member of the group when this session ends.
-            MageRideDiagnostics.MqttBridgeFailures.Add(1, new KeyValuePair<string, object?>("stream", stream));
-            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-
-            logger.LogError(
-                ex, "Could not forward {Topic} to {RawTopic}; leaving it unacknowledged",
-                topic, EventTopics.TelemetryRaw);
-            return;
-        }
-
-        await args.AcknowledgeAsync(cancellationToken);
-
-        Interlocked.Increment(ref _forwarded);
-        MageRideDiagnostics.MqttBridgeForwarded.Add(1, new KeyValuePair<string, object?>("stream", stream));
-    }
-
-    /// <summary>
-    /// R-09's jittered exponential backoff: 1 s to 60 s with ±25 %. The same symmetric band the
-    /// kernel uses for Polly — a decorrelated curve would let a fleet re-synchronise into a second
-    /// thundering herd.
-    /// </summary>
-    private TimeSpan BackoffFor(int attempt)
-    {
-        if (attempt <= 0)
-        {
-            return _bridge.ReconnectDelayMin;
-        }
-
-        var exponential = _bridge.ReconnectDelayMin * Math.Pow(2, Math.Min(attempt - 1, 16));
-        var capped = exponential > _bridge.ReconnectDelayMax ? _bridge.ReconnectDelayMax : exponential;
-        var jitter = 1 + ((Random.Shared.NextDouble() - 0.5) / 2);
-
-        return capped * jitter;
+        var remaining = deadline - DateTime.UtcNow;
+        return remaining > TimeSpan.Zero && await _forwarder.DrainAsync(remaining);
     }
 }

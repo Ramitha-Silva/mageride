@@ -86,4 +86,24 @@ public static class RateLimitPolicies
     /// <summary>Proxy location requests: 30 per day (P-12).</summary>
     public static readonly TokenBucketPolicy LocationRequestDaily =
         new("loc-request-day", capacity: 30, refillTokens: 30, refillPeriod: TimeSpan.FromDays(1));
+
+    /// <summary>
+    /// Backlog replay: 20 samples per second per device on <c>veh/{vehicleId}/pos/replay</c>
+    /// (T-05, ADD §7.5.2, D6' §3.3).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Held by mqtt-bridge-svc, and held in <b>Redis</b> rather than per replica: the replay share
+    /// group spreads one vehicle's backlog across every replica, so an in-process bucket would let
+    /// N replicas pass N × 20 samples/s and the "hard rate limit" R-09 asks for would be a limit on
+    /// nothing.
+    /// </para>
+    /// <para>
+    /// Capacity equals the per-second rate, so the bucket carries no burst credit for an idle
+    /// vehicle. A tracker that has been offline for an hour is exactly the case this exists for —
+    /// letting it spend an hour's worth of accumulated tokens in one go is the reconnect storm.
+    /// </para>
+    /// </remarks>
+    public static readonly TokenBucketPolicy MqttReplay =
+        new("mqtt-replay", capacity: 20, refillTokens: 20, refillPeriod: TimeSpan.FromSeconds(1));
 }

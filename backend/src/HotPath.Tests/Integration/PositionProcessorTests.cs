@@ -264,10 +264,10 @@ public sealed class PositionProcessorTests(EmqxFixture emqx, RedpandaFixture red
     /// </summary>
     private sealed class UnusedPublisher : IEventPublisher
     {
-        public Task PublishAsync(EventMessage message, CancellationToken cancellationToken = default) =>
+        public Task<PublishReceipt> PublishAsync(EventMessage message, CancellationToken cancellationToken = default) =>
             throw new InvalidOperationException("This test disabled telemetry.normalized; nothing should publish.");
 
-        public Task PublishAsync(
+        public Task<IReadOnlyList<PublishReceipt>> PublishAsync(
             IReadOnlyCollection<EventMessage> messages, CancellationToken cancellationToken = default) =>
             throw new InvalidOperationException("This test disabled telemetry.normalized; nothing should publish.");
     }

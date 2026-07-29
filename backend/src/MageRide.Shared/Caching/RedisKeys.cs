@@ -69,6 +69,26 @@ public static class RedisKeys
     /// <summary>Generic token-bucket key: <c>rate:{policy}:{subject}</c>.</summary>
     public static string RateLimit(string policy, string subject) => $"rate:{policy}:{subject}";
 
+    /// <summary>
+    /// Cluster-wide count of a vehicle's <c>pos/live</c> publishes inside one wall-clock second —
+    /// D-17's 5 msg/s ceiling, counted across every mqtt-bridge replica (C038).
+    /// </summary>
+    /// <remarks>
+    /// A plain <c>INCRBY</c>+<c>EXPIRE</c> counter rather than a token bucket, because the question
+    /// is "what rate did this vehicle actually publish at" and the answer has to be reported, not
+    /// enforced — the bridge observes, EMQX's listener limiter enforces. It has to be shared: a
+    /// shared subscription hands each replica a random slice of one vehicle's stream, so no replica
+    /// on its own ever sees the rate the vehicle is really publishing at.
+    /// </remarks>
+    public static string VehiclePublishWindow(Guid vehicleId, long unixSecond) =>
+        $"rate:mqtt-live:{vehicleId}:{unixSecond.ToString(CultureInfo.InvariantCulture)}";
+
+    /// <summary>
+    /// Debounce for D-17's <c>mqtt.rate_violation</c> audit event — one report per vehicle per
+    /// cooldown, however many replicas noticed (C038).
+    /// </summary>
+    public static string VehicleRateViolation(Guid vehicleId) => $"rate:mqtt-violation:{vehicleId}";
+
     /// <summary>GEO index of dispatch candidates for a vehicle type in an H3 res-5 cell (R-08).</summary>
     public static string AvailableDrivers(string vehicleType, string h3Res5Cell) =>
         $"geo:drivers:available:{vehicleType}:{h3Res5Cell}";
