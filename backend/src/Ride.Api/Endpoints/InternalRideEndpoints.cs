@@ -3,6 +3,7 @@ using System.Text;
 using MageRide.Ride.Domain;
 using MageRide.Ride.Rides;
 using MageRide.Shared.Errors;
+using MageRide.Shared.Primitives;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;

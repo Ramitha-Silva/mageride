@@ -227,7 +227,7 @@ step "4. Redpanda topics (D6 §2.1)"
 topics=$(docker compose -f "$SLIM" exec -T redpanda rpk topic list --brokers redpanda:9092 2>/dev/null \
            | awk 'NR > 1 && NF { print $1 }' | sort || true)
 
-for t in telemetry.raw telemetry.normalized ride.events dispatch.events registry.events provisioning.events trip.events audit.events; do
+for t in telemetry.raw telemetry.normalized ride.events dispatch.events registry.events provisioning.events reputation.events trip.events audit.events; do
   found=$(grep -Fx "$t" <<<"$topics" || true)
   check "topic $t exists" "$t" "${found:-<missing>}"
   # RF=1, partitions=3 in the replica (lightweight-production-replica.md Container 3).
@@ -245,9 +245,9 @@ if docker compose -f "$SLIM" run --rm redpanda-init >/dev/null 2>&1; then s=ok; 
 check "topic bootstrap is re-runnable" "ok" "$s"
 count=$(docker compose -f "$SLIM" exec -T redpanda rpk topic list --brokers redpanda:9092 2>/dev/null \
           | awk 'NR > 1 && NF' | wc -l | tr -d '[:space:]' || true)
-# Eight topics, each with its .dlq partner (D6' §2.3). The literal was 12 until C030 —
-# stale since C028 added registry.events without bumping it.
-check "re-running the bootstrap created no extra topics" "16" "$count"
+# Nine topics, each with its .dlq partner (D6' §2.3). The literal was 12 until C030 and 16
+# until C033 — it went stale twice, once per topic a component added outside §2.1's six.
+check "re-running the bootstrap created no extra topics" "18" "$count"
 
 # =====================================================================================
 step "5. env templates cover D7 §4"

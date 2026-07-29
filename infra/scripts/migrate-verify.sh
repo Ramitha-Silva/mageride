@@ -228,7 +228,10 @@ check_eq "7 rides tables" "7" \
 check_eq "13 dispatch tables" "13" \
   "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
     WHERE n.nspname='dispatch' AND c.relkind IN ('r','p') AND NOT c.relispartition;"
-check_eq "3 reputation tables" "3" \
+# 7, not C004's 3: 0803 added reputation.intake_log / outbox / command_log and 0805 added
+# reputation.network_observations, for the reasons recorded in each file header and in the
+# C033 handoff.
+check_eq "7 reputation tables" "7" \
   "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
     WHERE n.nspname='reputation' AND c.relkind IN ('r','p') AND NOT c.relispartition;"
 

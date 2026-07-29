@@ -129,6 +129,26 @@ public static class RedisKeys
     /// </remarks>
     public static string DriverSession(Guid driverId) => $"lock:session:{driverId}";
 
+    /// <summary>
+    /// The D-04 block status for one user — <c>OK | WARN | BOOKING_DISABLED | DELISTED</c> plus the
+    /// counters behind it, TTL <c>Reputation:BlockStatusCacheTtl</c> (5 s).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Not in ADD §9.4's key space</b> — a micro-change-set raised in the C033 handoff. D5' §3.2
+    /// makes <c>reputation.block_state</c> a hard gate dispatch-svc applies to every candidate, and
+    /// the C033 DoD requires the gRPC call to answer inside 20 ms p95 "against a warm cache", so a
+    /// cache has to exist; ADD §9.4 gives it no key. Sits beside D-08's wallet gate, which is the
+    /// other per-candidate lookup on the same hot path.
+    /// </para>
+    /// <para>
+    /// Written and deleted by reputation-svc alone (C033) and never read directly by anybody else:
+    /// dispatch-svc and fanout-svc ask over gRPC, because a second reader would have to agree about
+    /// the record shape and about what a miss means.
+    /// </para>
+    /// </remarks>
+    public static string BlockStatus(Guid userId) => $"reputation:block:{userId}";
+
     /// <summary>Opaque refresh token mirror for O(1) revocation (D-29).</summary>
     public static string RefreshToken(string jti) => $"refresh:{jti}";
 

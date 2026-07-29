@@ -6,8 +6,18 @@ openapi: 3.1.0
 #
 # The load-bearing surface of this service is **gRPC over mTLS**, not HTTP: dispatch-svc calls
 # GetBlockStatus/GetDriverLevel as a hard gate before candidate scoring, on the offer hot path.
-# OpenAPI cannot express gRPC, so the proto is reproduced under `x-grpc-service` below and will
-# be generated from `reputation.v1` by C033. Only the two admin HTTP routes are paths here.
+# OpenAPI cannot express gRPC, so the proto is reproduced under `x-grpc-service` below and the
+# generated-from file landed with C033 at **`backend/contracts/proto/reputation.v1.proto`** —
+# server and client both compile that one file, so a caller cannot drift from the server.
+#
+# Δ C033 (micro-change-sets into D3' reputation-svc, recorded in build/progress.md):
+#   * GET  /v1/admin/reputation/users/{userId}          — what an override is being applied to
+#   * PUT  /v1/admin/reputation/users/{userId}/block-state — the deliverable's "manual state
+#     override with audit"; D3' names no route for it
+#   * POST /v1/admin/reputation/flags/{flagId}/resolve  — `FraudFlag.status` has a
+#     `dismissed | actioned` enum below and D3' gives no route that could ever set it
+#   * POST /v1/internal/reputation/observations         — the E-07 IP/ASN clustering input; see
+#     db/migrations/0805 for why nothing else in the schema records a client address
 # =============================================================================================
 
 info:
@@ -163,10 +173,226 @@ paths:
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
       x-error-codes: [validation-failed, unauthorized, forbidden, not-found]
 
+  /v1/admin/reputation/flags/{flagId}/resolve:
+    post:
+      operationId: resolveFraudFlag
+      summary: Dismiss or action an anti-collusion flag.
+      description: |
+        **Δ C033.** `FraudFlag.status` has three values and D3' gives no route that could ever
+        move one off `open`, so the review queue could only ever grow.
+
+        Resolving a flag is a **review decision, not an enforcement action**: E-07 signals never
+        block anybody by themselves (a pair-frequency hit is as often two neighbours as it is
+        ride-farming). `actioned` records that an admin acted; the act itself is a separate
+        `PUT …/block-state` call, and both are audited.
+
+        Re-resolving an already-resolved flag with the same status is a no-op that still records
+        the decision; changing a resolved flag's status is `409 conflict`.
+      tags: [reputation]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FlagId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [dismissed, actioned]
+                note:
+                  type: string
+                  maxLength: 500
+      responses:
+        '200':
+          description: The flag as it now stands.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FraudFlag'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden, not-found, conflict]
+
+  /v1/admin/reputation/users/{userId}:
+    get:
+      operationId: getReputationSubject
+      summary: Everything reputation-svc holds about one user.
+      description: |
+        **Δ C033.** The counters, the effective block state and the driver level in one read —
+        what an admin looks at before overriding anything, and what the AL-41 driver-directory
+        "reports" tab joins (`admin-bff`, C052).
+
+        The same verdict `GetBlockStatus` serves over gRPC, so an admin screen and dispatch-svc
+        can never disagree about whether somebody is blocked.
+      tags: [reputation]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: The subject's reputation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReputationSubject'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, not-found]
+
+  /v1/admin/reputation/users/{userId}/block-state:
+    put:
+      operationId: overrideBlockState
+      summary: Manually set a user's block state.
+      description: |
+        **Δ C033.** The component's "admin surfaces for manual state override with audit".
+
+        A manual state is **pinned**: the automatic recompute that runs on every counted report
+        may not overwrite it, or lifting a block would be undone by the next report already in
+        the queue. It returns to automatic control when `expiresAt` passes, or when an admin
+        sets `state: OK` with no expiry, which clears the override.
+
+        Writes `audit.events` naming the deciding admin, the before and after states and the
+        reason (D-35), and publishes `reputation.block_state_changed` so dispatch-svc's cache
+        does not have to wait out its TTL.
+
+        This route does not cancel rides or suspend drivers — reputation-svc publishes state and
+        dispatch and admin act on it.
+      tags: [reputation]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [state, reason]
+              properties:
+                state:
+                  $ref: '#/components/schemas/BlockStatus'
+                reason:
+                  type: string
+                  maxLength: 500
+                expiresAt:
+                  description: |
+                    When the override lapses. Absent = until another admin decision. Ignored for
+                    `OK`, which always clears the override outright.
+                  $ref: './_shared.yaml#/components/schemas/Timestamp'
+      responses:
+        '200':
+          description: The subject after the override.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReputationSubject'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden, not-found]
+
+  /v1/internal/reputation/observations:
+    post:
+      operationId: recordNetworkObservation
+      summary: Record the network address a request was seen from.
+      description: |
+        **Δ C033.** E-07 asks for "IP/ASN clustering" and **nothing in the schema records a
+        client address** — the one `INET` column that exists belongs to a tracker, not a user
+        (`prov.tracker_bindings.remote_addr`). This is the detector's input.
+
+        The caller is whoever terminates the client connection and can therefore see the real
+        address: the API gateway (C008) or iam-svc (C020). **No producer exists yet** — the
+        detector runs against whatever this table holds, and an empty table means the clustering
+        signal simply does not fire.
+
+        The address is personal data (E-06): rows are kept 90 days and are deleted by `userId`
+        on erasure.
+      tags: [reputation]
+      security:
+        - internalKey: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId, ip]
+              properties:
+                userId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+                rideId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+                ip:
+                  type: string
+                  description: IPv4 or IPv6 literal, as the terminating hop saw it.
+                  maxLength: 45
+                asn:
+                  type: integer
+                  format: int32
+                  description: |
+                    Autonomous system the address belonged to. Absent when the caller could not
+                    resolve one — the detector falls back to the /24 or /48 prefix.
+                userAgent:
+                  type: string
+                  maxLength: 400
+      responses:
+        '202':
+          description: Recorded.
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, not-found]
+
 components:
   securitySchemes:
     bearerAuth:
       $ref: './_shared.yaml#/components/securitySchemes/bearerAuth'
+
+    internalKey:
+      type: apiKey
+      in: header
+      name: X-MageRide-Internal-Key
+      description: |
+        **Interim (C033), the same scheme ride-svc's `/v1/internal/**` family uses.** D3' §0 puts
+        the internal plane on service-to-service mTLS and the gateway refuses the prefix at the
+        edge (C008), but no mesh exists yet, so the in-cluster hop is guarded by a shared secret
+        (`Reputation:InternalApiKey`). Unset, the route is not mapped at all. The same header
+        guards the `reputation.v1` gRPC service, presented as `x-mageride-internal-key` metadata.
+        **C042 replaces all of it with mTLS, and this scheme is deleted with it.**
+
+  parameters:
+    UserId:
+      name: userId
+      in: path
+      required: true
+      description: The passenger or driver whose reputation this is.
+      schema:
+        $ref: './_shared.yaml#/components/schemas/Ulid'
+
+    FlagId:
+      name: flagId
+      in: path
+      required: true
+      schema:
+        $ref: './_shared.yaml#/components/schemas/Ulid'
 
   schemas:
     BlockStatus:
@@ -196,5 +422,72 @@ components:
           $ref: '#/components/schemas/BlockStatus'
         detail:
           type: string
+          description: |
+            The detector's evidence, rendered for the queue — e.g. "14 completed rides with the
+            same driver in 30 days (threshold 8)". The structured form is `reputation.
+            fraud_flags.detail`; this is the sentence an admin reads.
+        windowKey:
+          type: string
+          description: |
+            The detection window this signal belongs to. One flag per
+            (kind, subject, counterparty, window), so a pattern that persists across two windows
+            is two flags and a pattern re-detected inside one window is still one.
+        resolvedAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+        resolvedBy:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
         createdAt:
           $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    ReputationSubject:
+      type: object
+      description: |
+        Everything reputation-svc holds about one user: the counters, the effective block state
+        and — when they are a driver — the level. Δ C033.
+      required: [userId, state, counters]
+      properties:
+        userId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        state:
+          $ref: '#/components/schemas/BlockStatus'
+        stateReason:
+          type: string
+          description: |
+            Which rule set the state — `cancellations_disabled`, `reports_delist`,
+            `driver_cancel_delist`, `no_show_warn` or `manual`.
+        stateSource:
+          type: string
+          description: |
+            `auto` when derived from the counters, `manual` when an admin pinned it. A manual
+            state is not recomputed away.
+          enum: [auto, manual]
+        expiresAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+        counters:
+          type: object
+          required: [cancellationsContinuous, reportsTotal, noShows]
+          properties:
+            cancellationsContinuous:
+              type: integer
+              format: int32
+              description: |
+                Consecutive post-acceptance cancellations (US-6A.10b, AL-16). **Not**
+                window-scoped — any completed ride resets it to 0.
+            reportsTotal:
+              type: integer
+              format: int32
+            noShows:
+              type: integer
+              format: int32
+            windowStartedAt:
+              description: Start of the rolling window `reportsTotal` and `noShows` are counted in.
+              $ref: './_shared.yaml#/components/schemas/Timestamp'
+        level:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 3
+          description: Absent for a user who has no driver level.
+        points:
+          type: integer
+          format: int32

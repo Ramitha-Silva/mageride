@@ -29,11 +29,12 @@ public sealed class RedpandaFixture : ContainerFixture
     /// them.
     /// </summary>
     /// <remarks>
-    /// Six of these are D6' §2.1's. <c>registry.events</c> (C028) and <c>provisioning.events</c>
-    /// (C030) are not — each is a micro-change-set raised in its own handoff, and both are in the
-    /// bootstrap script and in <c>MageRide.Shared.Messaging.EventTopics</c>. Kept as a literal
-    /// rather than read from <c>EventTopics.All</c> so the assertion is against what the script
-    /// creates and not against the same constant the producer uses.
+    /// Six of these are D6' §2.1's. <c>registry.events</c> (C028), <c>provisioning.events</c>
+    /// (C030) and <c>reputation.events</c> (C033) are not — each is a micro-change-set raised in
+    /// its own handoff, and all three are in the bootstrap script and in
+    /// <c>MageRide.Shared.Messaging.EventTopics</c>. Kept as a literal rather than read from
+    /// <c>EventTopics.All</c> so the assertion is against what the script creates and not against
+    /// the same constant the producer uses.
     /// </remarks>
     public static readonly IReadOnlyList<string> Topics =
     [
@@ -44,6 +45,7 @@ public sealed class RedpandaFixture : ContainerFixture
         "dispatch.events",
         "registry.events",
         "provisioning.events",
+        "reputation.events",
         "audit.events",
     ];
 
@@ -114,7 +116,7 @@ public sealed class RedpandaFixture : ContainerFixture
         }
     }
 
-    /// <summary>Creates the six D6' §2.1 topics.</summary>
+    /// <summary>Creates every topic in <see cref="Topics"/>.</summary>
     public async Task CreateRegistryTopicsAsync()
     {
         foreach (var topic in Topics)

@@ -13,6 +13,7 @@ a micro-change-set against `specs/D3_mageride_api_contracts.md` and update both.
 |---|---|
 | `_shared.yaml` | Problem+json, the `ErrorCode` registry, pagination, money, geo, the edge headers, security schemes, reusable error responses. Every service file `$ref`s into it. |
 | `{service}.yaml` | One document per service — 21 of them. |
+| `proto/*.proto` | The gRPC IDL, for the internal surfaces OpenAPI cannot express. `reputation.v1.proto` (C033) is the D-04 block-status / driver-level service; the owning `.yaml` reproduces it under `x-grpc-service` and points here. Server and callers compile the same file — a copied proto is how two services start disagreeing. Not linted by Spectral (the glob is `*.yaml`); `dotnet build` is what checks it. |
 | `realtime/signalr-hub.md` | `/hubs/live` methods, events, groups, entitlement (D3 §3.1, D6 §5). |
 | `realtime/mqtt-topics.md` | EMQX topic tree, payloads, ACL, rate limits, replay (D3 §3.2, D6 §3/§4). |
 | `.spectral.yaml` | Lint rules. |

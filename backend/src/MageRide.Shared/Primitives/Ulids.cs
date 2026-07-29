@@ -1,17 +1,24 @@
 using System.Buffers.Binary;
 
-namespace MageRide.Ride.Domain;
+namespace MageRide.Shared.Primitives;
 
 /// <summary>
 /// Reads the identifiers D3' types as <c>Ulid</c> ("ULID or UUID, rendered canonically").
 /// </summary>
 /// <remarks>
+/// <para>
+/// Promoted out of <c>Ride.Api/Domain</c> by C033, the second service that needed it — the same
+/// move C024 made with <c>KafkaTopicConsumer</c>. Every id on every surface is typed this way by
+/// D3' §0, so a second copy would eventually accept a value the first one rejected.
+/// </para>
+/// <para>
 /// <c>rides.rides.client_request_id</c> is a Postgres <c>UUID</c>, but ADD §11.13 has the mobile
 /// apps generate **ULIDs** ("Idempotency-Key = ULID (local, monotonic)") and the contract types
 /// <c>clientRequestId</c> as <c>Ulid</c>. A ULID is 128 bits in Crockford base32 — the same value
 /// as a UUID in a different alphabet — so decoding it here is what stops a correct client from
 /// getting a 400 on every booking. Nothing converts back: the value is only ever compared, and
 /// <c>ux_rides_idem</c> compares the decoded bits.
+/// </para>
 /// </remarks>
 public static class Ulids
 {

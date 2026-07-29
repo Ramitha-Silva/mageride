@@ -1,0 +1,68 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    C033 verify target: dotnet test backend/src/Reputation.Api.Tests -c Release
+
+    Three halves again, and the shapes follow the DoD.
+
+      * Pure tests — the D5' rule table, the event→fact mapping and the detection-window key.
+        Those are the parts that have to be readable next to the spec, and none of them needs a
+        container.
+      * Integration against a real Postgres, because every guarantee this component owns is a
+        database one: reputation.intake_log's exactly-once claim, ux_fraud_flags_window's
+        "exactly once per detection window", the FOR UPDATE lock order and the audit row that
+        commits with the decision. None is provable against a fake.
+      * gRPC over a real socket with a real Redis, because the DoD's "under 20 ms p95 against a
+        warm cache" is a statement about a network call and a cache, and an in-process call
+        through the service interface would measure neither.
+
+    Ride.Api is referenced so the ride.events envelopes under test are built by ride-svc's own
+    RideEvents rather than hand-written JSON: the two services meet on that envelope and nothing
+    else checks that they agree about it.
+
+    Microsoft.NET.Sdk.Web, not Microsoft.NET.Sdk: the harness builds a WebApplication.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.Reputation.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <OutputType>Exe</OutputType>
+    <!--
+      xUnit1041: collection-fixture ctor args are consumed through the primary constructor.
+      xUnit1051: every test is bounded by its own harness lifetime, so threading
+                 TestContext.Current.CancellationToken through each call would add noise without
+                 changing behaviour. Matches Ride.Api.Tests and Dispatch.Api.Tests.
+    -->
+    <NoWarn>$(NoWarn);xUnit1041;xUnit1051</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+    <!-- The rolling window and the time-boxed states are clock rules; FakeTimeProvider is how
+         they are asserted without a Thread.Sleep. -->
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+    <!-- The channel the generated client rides. The generated types themselves come from
+         Reputation.Api, which compiles backend/contracts/proto/reputation.v1.proto with
+         GrpcServices="Both" — compiling it again here would define every message twice. -->
+    <PackageReference Include="Grpc.Net.Client" />
+    <!-- The fraud.suspected assertion consumes the topic the outbox dispatcher produced to. -->
+    <PackageReference Include="Confluent.Kafka" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Reputation.Api\Reputation.Api.csproj" />
+    <ProjectReference Include="..\Ride.Api\Ride.Api.csproj" />
+    <!-- C010: the Postgres, Redis and Redpanda fixtures, so this suite runs against the same
+         server builds the dev stack and the replica do. -->
+    <ProjectReference Include="..\MageRide.TestKit\MageRide.TestKit.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

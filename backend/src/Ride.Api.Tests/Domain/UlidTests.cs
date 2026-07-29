@@ -1,4 +1,4 @@
-using MageRide.Ride.Domain;
+using MageRide.Shared.Primitives;
 
 namespace MageRide.Ride.Tests.Domain;
 

@@ -1,0 +1,177 @@
+// =============================================================================================
+// reputation.v1 — the D-04 block-status / driver-level gRPC surface.
+//
+// Source: specs/D3_mageride_api_contracts.md "reputation-svc — counters & gRPC", reproduced in
+// backend/contracts/reputation.yaml under `x-grpc-service`. The service name, the five RPC names
+// and their request/response type names are D3' verbatim and may not be renamed here; the field
+// sets are this file's, because D3' prints the service block and no messages.
+//
+// Transport: gRPC over mTLS (Linkerd/SPIFFE, C042), never exposed through the API gateway —
+// `backend/src/ApiGateway/gateway-routes.json` routes only the two `/v1/admin` HTTP paths at
+// reputation-svc. Until the mesh lands the in-cluster hop is guarded by the same interim shared
+// secret ride-svc's `/v1/internal/**` family uses, presented as the `x-mageride-internal-key`
+// metadata header.
+//
+// Callers (reputation.yaml `x-grpc-service.callers`):
+//   dispatch-svc  GetBlockStatus / GetDriverLevel — the hard gate before candidate scoring (D5' §3.2)
+//   fanout-svc    GetBlockStatus — before a directed push (C033 deliverable list)
+//   ride-svc      ReportCancellation on a driver-side cancel (D-05, ADD §11.12)
+//   dispatch-svc  ReportNoShow from the scheduled-ride no-show timer (US-6A.7)
+//   safety-svc    ReportVehicle on a passenger report (US-12.5, US-12.6)
+//
+// Identifiers travel as strings: protobuf has no UUID and D3' types every id as "ULID or UUID,
+// rendered canonically" — the server accepts either and compares the decoded 128 bits.
+// =============================================================================================
+
+syntax = "proto3";
+
+package reputation.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option csharp_namespace = "MageRide.Reputation.Grpc";
+
+service Reputation {
+  // OK|WARN|BOOKING_DISABLED|DELISTED. dispatch-svc calls this on every candidate build, so it
+  // is served from a warm cache and must answer inside the C033 DoD's 20 ms p95.
+  rpc GetBlockStatus(DriverRef) returns (BlockStatus);
+
+  // 1..3 + points (D5' §4.2). Level 1 loses Job Board / scheduled-ride access (US-6A.8).
+  rpc GetDriverLevel(DriverRef) returns (Level);
+
+  // A post-acceptance cancellation. Pre-acceptance cancels are never reported: D5' §7.2 says
+  // they never count, and a caller that reported them would move a counter that must not move.
+  rpc ReportCancellation(CancellationEvent) returns (Ack);
+
+  // A no-show, either side of the ride (D5' §4.2 driver-side level−1; §11.12 rider-side).
+  rpc ReportNoShow(NoShowEvent) returns (Ack);
+
+  // A passenger's vehicle report. Three CONFIRMED ones auto-delist (US-12.6); safety-svc owns
+  // the confirmation decision and `safety.vehicle_reports`, this service owns the tally.
+  rpc ReportVehicle(VehicleReport) returns (Ack);
+}
+
+// The subject of a query. Named DriverRef by D3'; `reputation.counters` is keyed by user and
+// covers both roles, so a passenger id is equally valid here.
+message DriverRef {
+  string user_id = 1;
+}
+
+// The four states `reputation.block_states.state` may hold (server_db_schema.md §7).
+enum BlockState {
+  BLOCK_STATE_UNSPECIFIED = 0;
+  BLOCK_STATE_OK = 1;
+  BLOCK_STATE_WARN = 2;
+  BLOCK_STATE_BOOKING_DISABLED = 3;
+  BLOCK_STATE_DELISTED = 4;
+}
+
+message BlockStatus {
+  string user_id = 1;
+  BlockState state = 2;
+
+  // When a time-boxed state lapses; absent when it holds until a rule or an admin lifts it.
+  google.protobuf.Timestamp expires_at = 3;
+
+  // Which rule set the state — cancellations_disabled | reports_delist | driver_cancel_delist |
+  // no_show_warn | manual. For the admin UI and for a driver-facing explanation; a caller
+  // gating on the state must branch on `state` alone.
+  string reason = 4;
+
+  // The counters behind the verdict, so a caller that wants to explain the block does not need
+  // a second round trip. D5' §7.2's consecutive run, then the two window-scoped tallies.
+  int32 cancellations_continuous = 5;
+  int32 reports_total = 6;
+  int32 no_shows = 7;
+
+  // False for BOOKING_DISABLED and DELISTED — the two states D5' §3.2 excludes a driver on.
+  // Precomputed so every caller applies the same rule.
+  bool dispatch_eligible = 8;
+}
+
+message Level {
+  string user_id = 1;
+
+  // 1..3, everyone starts at 3 (D5' §4.2).
+  int32 level = 2;
+
+  // Rating points toward the next level-up. 500 = +1 level.
+  int32 points = 3;
+
+  int32 level_up_threshold = 4;
+
+  // False at Level 1 — no Job Board, no scheduled rides (US-6A.8). NOT a ban: immediate Mode C
+  // still works, which is why this is its own field and not a block state.
+  bool job_board_eligible = 5;
+}
+
+// Whose counter a report moves. A ride has one of each and the rules differ per side.
+enum SubjectRole {
+  SUBJECT_ROLE_UNSPECIFIED = 0;
+  SUBJECT_ROLE_PASSENGER = 1;
+  SUBJECT_ROLE_DRIVER = 2;
+}
+
+message CancellationEvent {
+  // Who cancelled — the user whose counter moves.
+  string user_id = 1;
+  string ride_id = 2;
+  SubjectRole role = 3;
+
+  // The server-owned §11.12 reason (RIDER_CANCELLED_AFTER_ACCEPT, DRIVER_CANCELLED, …).
+  string reason_code = 4;
+
+  // True when a grace timer expired rather than the party tapping Cancel (R-15/R-16). §11.12
+  // gives both rows the same effect; the flag is recorded so an appeal can tell them apart.
+  bool system_initiated = 5;
+
+  // The caller's event id, when it has one. Reports are deduplicated on it; a caller with none
+  // is deduplicated on (kind, ride_id, user_id), which is what makes a retry safe either way.
+  string event_id = 6;
+}
+
+message NoShowEvent {
+  // Who failed to appear.
+  string user_id = 1;
+  string ride_id = 2;
+  SubjectRole role = 3;
+  string event_id = 4;
+}
+
+// The report status safety-svc reached (safety.vehicle_reports.status). Only CONFIRMED moves a
+// counter — PENDING and DISMISSED are recorded and ignored, so a report under review cannot
+// delist anybody.
+enum ReportStatus {
+  REPORT_STATUS_UNSPECIFIED = 0;
+  REPORT_STATUS_PENDING = 1;
+  REPORT_STATUS_CONFIRMED = 2;
+  REPORT_STATUS_DISMISSED = 3;
+}
+
+message VehicleReport {
+  // safety.vehicle_reports.id — the natural dedupe key for this RPC.
+  string report_id = 1;
+
+  // The driver the report lands on. The vehicle is what the passenger reported; the counter is
+  // the driver's, because `reputation.counters` is keyed by user.
+  string driver_id = 2;
+  string vehicle_id = 3;
+  string reporter_id = 4;
+  string ride_id = 5;
+  string reason = 6;
+  ReportStatus status = 7;
+}
+
+message Ack {
+  // False when the report was recorded but moved no counter — a non-CONFIRMED vehicle report,
+  // or a pre-acceptance cancellation a caller sent anyway.
+  bool counted = 1;
+
+  // True when this exact fact had already been counted. Not an error: delivery is at-least-once
+  // (D6' §2.3) and a retried RPC is expected.
+  bool duplicate = 2;
+
+  // The subject's block state after the report, so a caller that wants to react immediately
+  // does not need a second round trip.
+  BlockState state = 3;
+}

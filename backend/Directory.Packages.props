@@ -49,6 +49,19 @@
     <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.10" />
   </ItemGroup>
 
+  <ItemGroup Label="gRPC — the D-04 internal plane (C033)">
+    <!-- reputation-svc's block_status/driver_level surface is gRPC over mTLS, not HTTP (D3'
+         reputation-svc, D7' §4.2 `Grpc__ListenPort`=5005). Grpc.AspNetCore is the server half and
+         pulls Google.Protobuf + Grpc.Tools, whose bundled protoc generates from
+         backend/contracts/proto/*.proto at build time — no checked-in generated code, so the
+         contract file is the only place the wire format is written down.
+         Grpc.Net.Client is the caller half: dispatch-svc (C034) and fanout-svc (C039) compile the
+         same proto with GrpcServices="Client", and this component's tests use it to prove the
+         20 ms p95 against a real socket. -->
+    <PackageVersion Include="Grpc.AspNetCore" Version="2.80.0" />
+    <PackageVersion Include="Grpc.Net.Client" Version="2.80.0" />
+  </ItemGroup>
+
   <ItemGroup Label="Edge gateway (C008; ADD §18.1 picks YARP over Kong/Envoy)">
     <!-- 2.3.0 is the current stable and ships a net8.0 lib; it runs on the net10.0 shared
          framework. There is no net10.0-targeted build of YARP yet. -->

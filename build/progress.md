@@ -58,7 +58,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C030 | provisioning-svc | 2 | DONE | 2026-07-28 | 99 tests green; 4 prov migrations (0402–0405); device mTLS enabled on EMQX 8883 (`peer_cert_as_username = cn`) so a tracker's certificate *is* its topic grant; 7 micro-change-sets |
 | C031 | trip-state-svc | 2 | DONE | 2026-07-28 | 46 tests green; 2 trips migrations (0504–0505); the D-03 mutex is the partial unique index and the Redis half needed a new key — `lock:driver:{driverId}` was already registry's; 6 micro-change-sets |
 | C032 | ride-svc-core | 2 | DONE | 2026-07-28 | 252 tests green; the §11.12 matrix is data, not a switch; no new migration — 0605's timer kinds and `terminal_at` were already right; 4 micro-change-sets |
-| C033 | reputation-svc | 2 | PENDING | | |
+| C033 | reputation-svc | 2 | DONE | 2026-07-28 | 84 tests green; 3 reputation migrations (0803–0805) + an 8th Redpanda topic; the platform's first gRPC service, which needs a port of its own (cleartext has no ALPN); 8 micro-change-sets |
 | C034 | dispatch-svc-core | 2 | PENDING | | |
 | C035 | dispatch-svc-scheduling-levels | 2 | PENDING | | |
 | C036 | dispatch-svc-directional | 2 | PENDING | | |
@@ -4276,3 +4276,131 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   replace it with the metered fare.
   **Build host —** Docker for Testcontainers (Postgres, Redpanda); the replica stayed down
   throughout. The 252 tests take ~2 min 20 s.
+
+- **Component:** C033 reputation-svc — 2026-07-28
+- **Status:** DONE — `dotnet test backend/src/Reputation.Api.Tests -c Release` → **84 passed, 0
+  failed** (~1 min). All four DoD items are covered by named tests: the D5' transitions
+  (`BlockStatusTests`), the 20 ms p95 over a real socket against a warm Redis
+  (`GrpcSurfaceTests.The_block_status_call_answers_under_20ms_at_p95`), one `fraud.suspected` per
+  detection window (`CollusionDetectionTests`), and the completed-ride reset — proven twice, once
+  in-process and once through a real `ride.events` topic (`RideEventPipelineTests`).
+  `MageRide.Shared.Tests` (235) and `Ride.Api.Tests` (252) re-run green after the kernel changes
+  below.
+- **Notes:**
+  **Micro-change-sets — (1) `reputation.events` is not in D6' §2.1.** `fraud.suspected` has a
+  producer (ADD §6 "emits `fraud.suspected` for admin review") and a consumer (ADD §12.6's admin
+  fraud queue) and no topic, the third time this shape has come up (C028 `registry.events`, C030
+  `provisioning.events`). Added to `EventTopics`, `bootstrap-topics.sh`, `RedpandaFixture.Topics`
+  and `slim-verify.sh` (now **9** topics / 18 with DLQs). Keyed by **userId**, not rideId — a
+  block state is a fact about a person. `reputation.block_state_changed` is this service's own
+  name; no spec prints one.
+  **(2) `reputation.intake_log` (0803).** D6' §2.3 is at-least-once and a gRPC retry has the same
+  shape; counting a redelivered driver-cancel twice would booking-disable a passenger in two rides
+  instead of three. The ledger is also the answer to "why is this counter 2?", which is the first
+  question an appeal asks. **(3) `reputation.outbox` (0803)** — R-13, same argument as
+  `dispatch.outbox` (0709). **(4) `reputation.command_log` (0803)** — the fourth per-service
+  command log (iam 0104, registry 0307, dispatch 0710); `db/CLAUDE.md` updated.
+  **(5) Block-state provenance and the fraud-flag lifecycle (0804).** `reputation.block_states`
+  records the state and not who decided it, so an admin lifting a block would be undone by the
+  next report already in the queue — `source`/`reason`/`set_by` are what make an override stick.
+  `reputation.fraud_flags` had no `status` even though `reputation.yaml`'s `FraudFlag` types one
+  and the list route filters on it, so nothing could ever leave the review queue. `window_key` +
+  `ux_fraud_flags_window … NULLS NOT DISTINCT` is what makes the DoD's "exactly once per detection
+  window" a database property rather than a scheduler one.
+  **(6) `reputation.network_observations` (0805).** E-07 names three detectors and only two had an
+  input: pair frequency (this service's ledger) and device binding (`iam.devices.device_key`,
+  0105) exist, and **nothing in the whole schema records a client IP** — the one `INET` column is
+  `prov.tracker_bindings.remote_addr`, which is a tracker's. A detector with no input is a gate
+  that always passes, so the table and `POST /v1/internal/reputation/observations` landed. **No
+  producer exists yet**: the gateway (C008) and iam-svc (C020) are the two that see the address.
+  The clustering detector is proven against seeded rows.
+  **(7) Three admin routes D3' does not carry.** `PUT /v1/admin/reputation/users/{userId}/
+  block-state` is the "manual state override with audit" deliverable and D3' names no route for
+  it; `POST /v1/admin/reputation/flags/{flagId}/resolve` exists because `FraudFlag.status` has a
+  `dismissed | actioned` enum and no way to reach it; `GET /v1/admin/reputation/users/{userId}` is
+  what an admin reads before overriding. All three are under `/v1/admin/reputation/**`, which
+  `gateway-routes.json` already routes here, so C008 needed no change. `backend/contracts/
+  reputation.yaml` updated; spectral 0 errors.
+  **(8) `dispatch.driver_levels` has the wrong owner in D4' §6.** Every rule that *changes* a
+  level is D5' §4.2's — three reports take one, a no-show takes one (US-6A.7) — and D3' puts both
+  `GetDriverLevel` and the appeal restore on reputation-svc. **reputation-svc is now the sole
+  writer of that table** and dispatch-svc reads it; a second `reputation.driver_levels` would be
+  two tables for one fact, which is what this component's fence exists to prevent. D4' §6 /
+  `server_db_schema.md` §6 should move it to the `reputation` schema.
+  **Decisions —**
+  (1) **gRPC has to have a port of its own, and that is not a preference.** Cleartext HTTP has no
+  ALPN, so Kestrel cannot negotiate HTTP/1.1 and HTTP/2 on one socket — the admin endpoint answers
+  a gRPC client's preface with `GOAWAY HTTP_1_1_REQUIRED`. D7' §4.2's `Grpc__ListenPort`=5005 was
+  right and the "share one endpoint" shortcut is not viable. reputation-svc is therefore the one
+  service that binds its own Kestrel listeners; `ASPNETCORE_URLS` still decides the HTTP side.
+  **C034/C039 will hit this the moment they add a gRPC client** — the proto is at
+  `backend/contracts/proto/reputation.v1.proto`, compiled by the server with
+  `GrpcServices="Both"`; add the same `<Protobuf>` item with `GrpcServices="Client"`.
+  (2) **The gRPC service is `AllowAnonymous` and idempotency-exempt, and both were bugs first.**
+  The kernel's deny-by-default fallback answers `Unauthenticated` to a caller with no bearer, and
+  `IdempotencyMiddleware` answers `400 idempotency-key-required` to a gRPC POST — which reaches
+  the client as an unreadable "Bad gRPC response. HTTP status code: 400". The RPCs carry their own
+  dedupe key, which is stronger than the header's anyway because it also survives a retry that
+  regenerated it.
+  (3) **The live intake is `ride.events`, not the five D3' RPCs.** D3' declares
+  `ReportCancellation`/`ReportNoShow` with ride-svc as the caller; ride-svc (C032) publishes and
+  calls nothing, which is also what CLAUDE.md's universal outbox rule requires. Both paths are
+  implemented and both go through `reputation.intake_log`, so wiring the gRPC side later counts
+  each fact once rather than twice.
+  (4) **A completed ride produces two facts, one per side.** D5' §7.2 names no role and both runs
+  have to reset. The pair is also the E-07 pair-frequency detector's input, which is why the
+  detector reads this service's own ledger rather than `rides.rides` — it stays inside the bounded
+  context and survives a ride row being erased under PDPA (E-06).
+  (5) **A derived state follows its counters; only an event-imposed one is sticky.** §11.12's
+  brief delist has no threshold to fall back below, so it survives its time box;
+  `cancellations_disabled` and `reports_delist` are derived, and protecting them the same way
+  would mean a completed ride could not re-enable a booking-disabled passenger — which is
+  precisely what §7.2 says it must.
+  (6) **Reinstatement forgives the counters.** `PUT …/block-state` with `OK` clears all three and
+  returns the user to automatic control. Leaving them at three would restore access for exactly as
+  long as it took to recompute, and the admin's decision would look like it had silently failed.
+  AL-16's other half — "clear outstanding Rs 50 balance" — is billing's and is **not** implemented
+  here; what is implemented is the cooldown, the admin reinstatement and §7.2's completed-ride
+  reset.
+  (7) **A served time box forgives what caused it.** When a 3-report delisting lapses, the sweep
+  resets `reports_total` with it; otherwise the recompute would re-delist the driver the instant
+  the box ended and "temporary" would mean permanent.
+  (8) **Four numbers no spec pins**, all configurable and argued at their declaration: the
+  7-day report delisting ("temporary", D5' §4.2), the 30-minute driver-cancel delisting ("brief",
+  §11.12), the 24-hour booking-disable cooldown ("a configurable cooldown", AL-16) and E-07's
+  pair threshold N ("> N rides / 30 d"). **And WARN: no rule in D5' produces it at all**, so it is
+  "one short of a hard threshold" and every bound is configuration.
+  **Two bugs the DoD tests caught —**
+  (a) **A lock-order deadlock, and the fix is not a retry.** `SELECT … FOR UPDATE` that matches
+  nothing takes no lock, so two concurrent first facts for one user could each hold one of
+  `block_states`/`counters` and wait for the other. `IBlockStateRepository.LockAsync` now
+  materialises an `OK` row before locking, which removes the cycle; reads still use `FindAsync`,
+  because a dispatch round asking about a thousand drivers must not create a thousand rows.
+  (b) **Dapper matches a record constructor on exact field types**, so a `SMALLINT` column and an
+  `int` parameter do not bind — `reputation.counters.cancellations_continuous` and
+  `dispatch.driver_levels.level` are both cast `::int` in the SELECT, and the reason is stated at
+  each one. Separately, an optional filter needs `@p::text IS NULL` rather than `@p IS NULL` or
+  Postgres answers 42P08 for the whole query.
+  **Kernel changes —** `Ulids` was promoted from `Ride.Api/Domain` to
+  `MageRide.Shared.Primitives` (second caller; the same move C024 made with
+  `KafkaTopicConsumer`), and `RedisKeys.BlockStatus(userId)` was added — **ADD §9.4 has no key for
+  it**, although D5' §3.2 makes the block state a per-candidate gate and the DoD requires a warm
+  cache. Both are micro-change-sets in spirit; ride-svc's four call sites were updated and its 252
+  tests re-run green.
+  **For C034 (dispatch-svc-core) —** the D5' §3.2 gate is
+  `GetBlockStatus(DriverRef{user_id}).dispatch_eligible`, precomputed server-side so every caller
+  applies the same rule, and `GetDriverLevel(...).job_board_eligible` is US-6A.8's L1 exclusion.
+  Both need `x-mageride-internal-key` metadata equal to `Reputation:InternalApiKey`. Subscribe to
+  `reputation.events` if you want to invalidate a local cache on the fact rather than on a TTL.
+  `dispatch.driver_levels` is read-only for you now — see micro-change-set (8).
+  **For C044 (safety-svc) —** `ReportVehicle` with `status = REPORT_STATUS_CONFIRMED` is the only
+  thing that moves `reports_total`; send `PENDING` too, under the same `report_id`, and the
+  confirmation is then correctly ignored as a duplicate rather than counted a second time. Three
+  confirmed reports delist and cost a level, and the `Ack` carries the resulting state.
+  **For C052 (admin-bff) —** the fraud-review queue is
+  `GET /v1/admin/reputation/flags?status=open`, or the `fraud.suspected` stream on
+  `reputation.events`. Actioning a flag and blocking the subject are two calls on purpose: a flag
+  is a review item and never an action (ADD §12.6 reserves the auto-suspend for a Tier-2 admin
+  decision). Both write `audit.events` inside the same transaction as the decision.
+  **Build host —** Docker for Testcontainers (Postgres, Redis, Redpanda); the replica stayed down
+  throughout. The 84 tests take ~1 min.

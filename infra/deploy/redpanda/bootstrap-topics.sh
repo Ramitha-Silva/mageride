@@ -98,6 +98,10 @@ ensure_pair registry.events      "$EVENT_RETENTION_MS"       # key vehicleId —
 # tracker.revoked (T-12) have producers and consumers in the specs and no topic; C030 added
 # it, and the handoff raises the micro-change-set against §2.1.
 ensure_pair provisioning.events  "$EVENT_RETENTION_MS"       # key vehicleId — provisioning-svc (outbox)
+# Not one of D6' §2.1's six either. fraud.suspected (E-07) has a producer (ADD §6
+# "emits fraud.suspected for admin review") and a consumer (ADD §12.6's admin fraud queue)
+# and no topic; C033 added it, and the handoff raises the micro-change-set against §2.1.
+ensure_pair reputation.events    "$EVENT_RETENTION_MS"       # key userId    — reputation-svc (outbox)
 ensure_pair audit.events         "$EVENT_RETENTION_MS"       # key entityId  — all (admin-bff)
 
 echo

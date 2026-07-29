@@ -61,6 +61,20 @@ public static class EventTopics
     /// </remarks>
     public const string ProvisioningEvents = "provisioning.events";
 
+    /// <summary>
+    /// reputation-svc's outbox — <c>fraud.suspected</c> (E-07) and
+    /// <c>reputation.block_state_changed</c> (D-04). Key: userId.
+    /// </summary>
+    /// <remarks>
+    /// <b>Not in D6' §2.1's six-topic registry</b> — a micro-change-set raised in the C033 handoff,
+    /// the same shape as <see cref="RegistryEvents"/> and <see cref="ProvisioningEvents"/>. ADD §6
+    /// gives <c>fraud.suspected</c> a producer (reputation-svc "emits <c>fraud.suspected</c> for
+    /// admin review") and §12.6 a consumer (the admin fraud queue), and neither gives it a topic.
+    /// Keyed by userId rather than by flag or ride id: a block state is a fact about a person, and
+    /// only the user key keeps two consequences for one person in the order they happened.
+    /// </remarks>
+    public const string ReputationEvents = "reputation.events";
+
     /// <summary>Audit trail (D-35). Key: entityId.</summary>
     public const string AuditEvents = "audit.events";
 
@@ -68,7 +82,7 @@ public static class EventTopics
     public static readonly IReadOnlyList<string> All =
     [
         TelemetryRaw, TelemetryNormalized, TripEvents, RideEvents, DispatchEvents, RegistryEvents,
-        ProvisioningEvents, AuditEvents,
+        ProvisioningEvents, ReputationEvents, AuditEvents,
     ];
 
     /// <summary>

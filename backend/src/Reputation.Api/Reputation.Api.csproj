@@ -1,0 +1,66 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    Reputation.Api (C033 reputation-svc) — the single home for cancellation, no-show and report
+    counters, the effective block state, and the E-07 anti-collusion detector.
+
+    Two fences, both from the component prompt:
+      * Counters live here and nowhere else. Other services read block_status over gRPC; they do
+        not keep their own tallies. (ride-svc's IBookingEligibility is the interim this replaces —
+        see the C032 handoff and this project's CLAUDE.md.)
+      * This service cancels no ride and suspends no driver. It publishes state; dispatch-svc
+        gates on it and admin acts on it.
+
+    What this implements: reputation.counters with the D-04 rolling window, reputation.block_states
+    and the D5' §4.2 / §7.2 transitions that drive it, the reputation.v1 gRPC service D3' declares,
+    the ride.events intake D6' §2.1 lists this service as a consumer of, the E-07 detector and its
+    fraud.suspected outbox rows, and the admin surfaces.
+
+    NOT here: safety.vehicle_reports and the confirm/dismiss decision on a report (safety-svc,
+    C044) — this service is told a report was CONFIRMED and tallies it. Rating collection and the
+    level-*up* points (D5' §4.1, trips.ratings) belong to whoever writes ratings; this service owns
+    the level-*down* rules and the appeal restore. The Rs 50 settlement is fare-svc's (D5' §7.1).
+
+    Verify: dotnet test backend/src/Reputation.Api.Tests -c Release
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.Reputation</RootNamespace>
+    <AssemblyName>MageRide.Reputation.Api</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <UserSecretsId>mageride-reputation-api</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MageRide.Shared\MageRide.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Grpc.AspNetCore" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      Compiled straight out of backend/contracts/, not copied in. The contract directory is the
+      source of truth for the API (contracts/CLAUDE.md) and a proto is an interface definition, not
+      code; a copy under this project would be the first step towards a caller and a server that
+      disagree. C034/C039 add the same Include with GrpcServices="Client".
+
+      GrpcServices="Both", not "Server": the client stub costs one generated class and is what
+      Reputation.Api.Tests calls the running service through. Compiling the proto a second time in
+      the test project would define every message type twice and be ambiguous at the call site.
+
+      ProtoRoot fixes the import path so `google/protobuf/timestamp.proto` resolves out of the
+      Grpc.Tools well-known set rather than relative to this project.
+    -->
+    <Protobuf Include="..\..\contracts\proto\reputation.v1.proto"
+              ProtoRoot="..\..\contracts\proto"
+              GrpcServices="Both"
+              Link="Protos\reputation.v1.proto" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Reputation.Api.Tests" />
+  </ItemGroup>
+
+</Project>
