@@ -149,6 +149,26 @@ public static class RedisKeys
     /// </remarks>
     public static string BlockStatus(Guid userId) => $"reputation:block:{userId}";
 
+    /// <summary>
+    /// The D-08 pre-dispatch wallet balance for one driver, in LKR minor units, TTL 5 s.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// ADD §6's dispatch-svc row and D5' §9.2 both name it: "reads <c>wallet:bal:{driverId}</c>
+    /// Redis cache (5 s TTL); first trip of day always allowed; 2nd+ refused if balance &lt;
+    /// daily-fee". The master is <c>billing.journal_postings</c> and the read model is
+    /// <c>billing.wallets</c> (D-09, §10) — this is a cache in front of the read model, never a
+    /// third copy of the number.
+    /// </para>
+    /// <para>
+    /// <b>Debit-invalidated</b> (D5' §9.2: "<c>wallet.debited</c> event clears"), which is
+    /// wallet-svc's (C046) to publish and to honour. dispatch-svc reads it and populates it
+    /// read-through on a miss (C034); a miss it cannot resolve is <em>not</em> treated as a zero
+    /// balance — see D-08's degraded-mode rule.
+    /// </para>
+    /// </remarks>
+    public static string WalletBalance(Guid driverId) => $"wallet:bal:{driverId}";
+
     /// <summary>Opaque refresh token mirror for O(1) revocation (D-29).</summary>
     public static string RefreshToken(string jti) => $"refresh:{jti}";
 

@@ -40,8 +40,32 @@ public interface IRideServiceClient
     Task<OfferPlacedResult> PlaceOfferAsync(
         Guid rideId, Guid offerId, Guid driverId, Guid vehicleId, int ttlSeconds, CancellationToken cancellationToken);
 
-    /// <summary><c>Offered → Matching</c> because the window closed unanswered (R-04).</summary>
-    Task<RideCommandResult> ExpireOfferAsync(Guid rideId, Guid offerId, CancellationToken cancellationToken);
+    /// <summary>
+    /// <c>Offered → Matching</c> because the window closed unanswered (R-04) or because the
+    /// driver's EMQX session is gone (R-15).
+    /// </summary>
+    /// <param name="driverUnreachable">
+    /// R-15. The only way to revoke an offer <em>inside</em> its 15 s window, and only because the
+    /// grace has already proved the driver cannot answer it. ride-svc validates the reason; a
+    /// caller that sets it wrongly gets the ordinary deadline guard back.
+    /// </param>
+    Task<RideCommandResult> ExpireOfferAsync(
+        Guid rideId, Guid offerId, bool driverUnreachable, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// <c>Matching → ExpiredNoDriver</c>: the cascade ran out of candidates or out of time
+    /// (US-6A.11, ADD §11.12's "No candidates after N rounds OR timeout").
+    /// </summary>
+    /// <remarks>
+    /// The fourth command, and the only one of the four already in D3' — <c>system-cancel</c> is
+    /// part of the contract's internal family and C032 mapped it, naming dispatch-svc as a caller
+    /// ("dispatch-svc on an expired grace or an exhausted candidate cascade"). The reason is
+    /// <c>no_driver_found</c>, which is the single matrix cell that produces
+    /// <c>ExpiredNoDriver</c>, and it resolves from <c>Matching</c> alone: a ride that is
+    /// <c>Offered</c> still has a live candidate and is answered 400, which is the correct answer
+    /// and the reason the caller waits for the offer to settle first.
+    /// </remarks>
+    Task<RideCommandResult> SystemCancelAsync(Guid rideId, string reason, CancellationToken cancellationToken);
 }
 
 /// <param name="Succeeded"><see langword="true"/> only on a 2xx.</param>
@@ -104,12 +128,39 @@ public sealed class RideServiceClient(
         return (OfferPlacedResult)result;
     }
 
-    public Task<RideCommandResult> ExpireOfferAsync(Guid rideId, Guid offerId, CancellationToken cancellationToken) =>
-        SendAsync(
+    /// <summary>The two values <c>ride.yaml</c>'s <c>offer/expire</c> body accepts (Δ C034).</summary>
+    private const string DeadlineReason = "deadline";
+    private const string DriverUnreachableReason = "driver_unreachable";
+
+    public Task<RideCommandResult> ExpireOfferAsync(
+        Guid rideId, Guid offerId, bool driverUnreachable, CancellationToken cancellationToken)
+    {
+        var reason = driverUnreachable ? DriverUnreachableReason : DeadlineReason;
+
+        // The reason is part of the key. The two are different commands against the same offer —
+        // one waited for the deadline and one did not — and a shared key would replay the first
+        // answer for the second: a backstop that lost a race to the grace would be told 409 for
+        // ever instead of finding the offer already settled.
+        return SendAsync(
             $"/v1/internal/rides/{rideId}/offer/expire",
-            new { offerId = offerId.ToString() },
-            IdempotencyKey("expire", offerId),
+            new { offerId = offerId.ToString(), reason },
+            IdempotencyKey($"expire-{reason}", offerId),
             cancellationToken);
+    }
+
+    public Task<RideCommandResult> SystemCancelAsync(Guid rideId, string reason, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(reason);
+
+        // Keyed by the ride and the reason, not by the ride alone: a ride can in principle be
+        // system-cancelled for two different reasons over its life, and a key that collapsed them
+        // would replay the first answer for the second command.
+        return SendAsync(
+            $"/v1/internal/rides/{rideId}/system-cancel",
+            new { reason },
+            IdempotencyKey($"syscancel-{reason}", rideId),
+            cancellationToken);
+    }
 
     /// <summary>
     /// A stable key per (operation, subject). Long enough for the kernel's 16-character minimum and

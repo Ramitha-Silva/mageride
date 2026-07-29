@@ -1,23 +1,26 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
   <!--
-    Dispatch.Api (C023, ws-dispatch-stub) — Mode C presence and a single-candidate offer loop.
+    Dispatch.Api (C023 ws-dispatch-stub, C034 core) — the Mode C dispatcher.
 
     dispatch-svc offers; it never writes rides.state (R-01, ADD §11.12 "ride-svc is the sole
-    writer"). The two state moves it drives are commands on ride-svc's /v1/internal/rides/**.
+    writer"). The four state moves it drives are commands on ride-svc's /v1/internal/rides/**.
     Mode A/B is trip-state-svc's and that boundary is never crossed.
 
-    What this slice implements: POST /v1/standby/online + /offline, the R-08 Redis candidate
-    index (geo:drivers:available:{type}:{h3res5cell} + driver:availability:{driverId}), the
-    D5' §3.1 H3 res-5 ring(2) pre-filter followed by the MANDATORY exact PostGIS ST_DWithin
-    post-filter, the R-10 reservation pair (Redis Lua lock + the UNIQUE partial index on
-    dispatch.offers), the D-07 15 s offer key with PEXPIRE, the R-04 durable rides.timers
-    backstop and the R-13 dispatch.outbox `offer.created`.
+    What this implements: POST /v1/standby/online + /offline; the R-08 Redis candidate index
+    (geo:drivers:available:{type}:{h3res5cell} + driver:availability:{driverId}) kept live by
+    telemetry.normalized; the D5' §3.1 H3 res-5 ring(2) pre-filter followed by the MANDATORY exact
+    PostGIS ST_DWithin post-filter; D5' §3.2's hard gates (reputation block state over gRPC, the
+    D-08 wallet/daily-fee gate, vehicle category, safety.blocked_drivers, the E-03 document
+    suspension, P-11 package-size compatibility and the 2x-expectedInterval GPS freshness rule);
+    D5' §3.3's versioned weighted score persisted to dispatch.candidate_scores (R-11); the R-10
+    reservation pair (Redis Lua lock + the UNIQUE partial index on dispatch.offers); the D-07 15 s
+    offer key with PEXPIRE; the R-04 durable rides.timers backstop; US-6A.11's 120 s global
+    timeout; R-15's EMQX last-will release; and the R-13 dispatch.outbox `offer.created`.
 
-    NOT here: weighted scoring, driver levels, the Job Board, Directional Travel, the D-08
-    wallet gate, scheduled rides and no-show reporting (C034/C035/C036). The FCM/SignalR push
-    that turns `offer.created` into a phone buzzing is C024/C051 — this service's job ends at
-    the committed outbox row.
+    NOT here: Directional Travel (C036), scheduled rides / the Job Board / the Driver Level engine
+    / no-show reporting (C035). The FCM/SignalR push that turns `offer.created` into a phone
+    buzzing is C024/C051 — this service's job ends at the committed outbox row.
 
     Verify: dotnet test backend/src/Dispatch.Api.Tests -c Release
   -->
@@ -39,6 +42,31 @@
     <!-- ride.events is consumed directly: the kernel ships a producer (C002) but no consumer,
          and this is the first service that needs one. See Messaging/KafkaEventConsumer.cs. -->
     <PackageReference Include="Confluent.Kafka" />
+    <!-- C034: the R-15 last-will subscription on veh/+/status. -->
+    <PackageReference Include="MQTTnet" />
+    <!-- C034: the D5' §3.2 block-status gate is gRPC (D3' reputation-svc). Client half only —
+         dispatch-svc serves no gRPC of its own. -->
+    <PackageReference Include="Google.Protobuf" />
+    <PackageReference Include="Grpc.Net.ClientFactory" />
+    <PackageReference Include="Grpc.Tools">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      Compiled straight out of backend/contracts/, not copied in — the same Include C033 wrote,
+      with GrpcServices="Client" as its comment anticipated. A copied proto is how a caller and a
+      server start disagreeing about a wire format neither of them owns.
+
+      ProtoRoot fixes the import path so `google/protobuf/timestamp.proto` resolves out of the
+      Grpc.Tools well-known set rather than relative to this project.
+    -->
+    <Protobuf Include="..\..\contracts\proto\reputation.v1.proto"
+              ProtoRoot="..\..\contracts\proto"
+              GrpcServices="Client"
+              Link="Protos\reputation.v1.proto" />
   </ItemGroup>
 
   <ItemGroup>

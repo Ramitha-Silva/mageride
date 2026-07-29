@@ -24,11 +24,13 @@ public static class DispatchEventTypes
 /// armed*, which is precisely the <c>expectedVersion</c> the accept wants.
 /// </para>
 /// <para>
-/// The fields this slice cannot fill are carried at their honest values rather than omitted, so a
-/// client written against D6' §2.2 finds every member it expects: <c>isProxy</c> and
-/// <c>isPackage</c> are false because only <c>kind: passenger</c> is bookable (C022 decision 9),
-/// <c>riderName</c>/<c>riderPhoneMasked</c> are the P-05 proxy fields, <c>packageSize</c> is P-06,
-/// and <c>directionalMatched</c> is false because no filter can be set until C036.
+/// The fields this service cannot fill are carried at their honest values rather than omitted, so a
+/// client written against D6' §2.2 finds every member it expects: <c>isProxy</c> is false and
+/// <c>riderName</c>/<c>riderPhoneMasked</c> are absent because the P-05 proxy fields are not on
+/// <c>ride.requested</c> (C037 adds them), and <c>directionalMatched</c> is false because no filter
+/// can be set until C036. <c>isPackage</c> and <c>packageSize</c> are C034's: the P-11 gate that
+/// decided the driver could carry it puts the size on the offer card, which is what P-11's "drivers
+/// still see incoming requests with size + description and can reject" requires.
 /// </para>
 /// </remarks>
 public sealed record OfferCreatedEvent(
@@ -70,7 +72,9 @@ public static class DispatchEvents
         long? fareEstimateMinor,
         string currency,
         string paymentMethod,
-        double distanceToPickupM)
+        double distanceToPickupM,
+        string kind,
+        string? packageSize)
     {
         var envelope = new OfferCreatedEvent(
             EventType: DispatchEventTypes.OfferCreated,
@@ -82,11 +86,11 @@ public static class DispatchEvents
             Version: version,
             Ts: ts,
             ExpiresAt: expiresAt,
-            IsProxy: false,
+            IsProxy: string.Equals(kind, Domain.RideKinds.Proxy, StringComparison.Ordinal),
             RiderName: null,
             RiderPhoneMasked: null,
-            IsPackage: false,
-            PackageSize: null,
+            IsPackage: string.Equals(kind, Domain.RideKinds.Package, StringComparison.Ordinal),
+            PackageSize: packageSize,
             DirectionalMatched: false,
             FareEstimateMinor: fareEstimateMinor,
             Currency: currency,

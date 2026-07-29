@@ -14,6 +14,13 @@ public static class RideEventTypes
     public const string Accepted = "ride.accepted";
     public const string Completed = "ride.completed";
     public const string Cancelled = "ride.cancelled";
+
+    /// <summary>
+    /// US-6A.11's terminal. Emitted by ride-svc when the <c>system-cancel</c> this service sent
+    /// lands — or when another replica's did. Consumed so a redelivery retires the deadline that
+    /// caused it rather than leaving a live timer against a terminal ride.
+    /// </summary>
+    public const string ExpiredNoDriver = "ride.expired_no_driver";
 }
 
 /// <summary>The <c>payload</c> member of a <c>ride.events</c> envelope.</summary>
@@ -37,7 +44,24 @@ public sealed record RideEventPayload(
     RideEventPoint? Pickup,
     RideEventPoint? Dropoff,
     Guid? OfferId,
-    DateTimeOffset? OfferExpiresAt);
+    DateTimeOffset? OfferExpiresAt,
+
+    /// <summary>
+    /// <c>S</c> | <c>M</c> | <c>L</c> for a <c>kind=package</c> ride — the P-11 compatibility
+    /// gate's only input.
+    /// </summary>
+    /// <remarks>
+    /// <b>ride-svc does not produce it yet.</b> <c>rides.rides.package_size</c> exists (migration
+    /// 0601) and its CHECK is <c>S|M|L</c>, but C022's <c>RideEventPayload</c> carries <c>kind</c>
+    /// and not the size, and only <c>kind: passenger</c> is bookable until C037 lands package
+    /// delivery. The member is here rather than waiting for it because the gate it feeds is this
+    /// component's deliverable and because the read model has to tolerate a producer that has grown
+    /// a field either way (D6' §2.3). Until C037 adds it the gate simply has nothing to reject —
+    /// which is a missing input, not a gate that always passes:
+    /// <c>candidate_scores.package_size_compatible</c> stays NULL and says so. Raised as a
+    /// micro-change-set in the C034 handoff.
+    /// </remarks>
+    string? PackageSize = null);
 
 /// <summary>A coordinate as D6' §2.2 renders one.</summary>
 public sealed record RideEventPoint(double Lat, double Lng);
@@ -92,6 +116,9 @@ public sealed record RideEventEnvelope(
             VehicleType: Payload.VehicleType,
             PaymentMethod: Payload.PaymentMethod ?? "cash",
             FareEstimateMinor: Payload.FareEstimateMinor,
-            Currency: Payload.Currency ?? "LKR");
+            Currency: Payload.Currency ?? "LKR",
+            PassengerId: Payload.PassengerId,
+            Kind: Payload.Kind ?? Domain.RideKinds.Passenger,
+            PackageSize: Payload.PackageSize);
     }
 }

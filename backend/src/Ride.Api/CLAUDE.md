@@ -21,7 +21,7 @@ payment terminals and the R-20 stuck-state SLOs. Everything here matches
 | `POST /v1/rides/{id}/cancel` | **Δ C032** — the §11.12 matrix |
 | `POST /v1/internal/rides/{id}/system-cancel` · `/payment-settled` · `GET /saga-state` | **Δ C032** — D3' internal family |
 | `POST /v1/internal/rides/{id}/matching` · `/offer` | **Δ C022** — see below |
-| `POST /v1/internal/rides/{id}/offer/expire` | **Δ C023** — see below |
+| `POST /v1/internal/rides/{id}/offer/expire` | **Δ C023**, `reason` **Δ C034** — see below |
 
 **Not here, on purpose.** Proxy booking and the P-02 location-request family, package delivery and
 its two OTP gates are **C037**. `/dispute` is **C049/C050** (it opens a support ticket, which is
@@ -33,6 +33,14 @@ support-svc's). `GET /v1/rides/history` is **C048**. All are left unmapped rathe
   dispatch-svc updating the row itself; §11.12 in the same document says sole-writer, and
   sole-writer wins. The moves other services drive are therefore commands on
   `/v1/internal/rides/**`, and `dispatch.offers` / `dispatch.candidate_scores` stay dispatch's.
+- **The offer-expiry deadline decides, and `driver_unreachable` is its one exception** (Δ C034).
+  `offer/expire` is bound to `offer_expires_at <= now()` evaluated by Postgres, so a sweeping node
+  whose clock ran ahead cannot take an offer from a driver still inside the window. R-15 is the
+  only caller allowed past it: dispatch-svc has watched the driver's EMQX session stay dead for a
+  whole grace period, so there is no window left to protect. `RideOfferExpiryReasons` is a closed
+  set rather than a boolean, so `rides.transitions.reason_code` records which of the two happened
+  (`OFFER_EXPIRED` / `DRIVER_UNREACHABLE`). Both emit `offer.expired` — the consumer's reaction is
+  identical.
 - **The matrix decides, not the caller.** `POST /cancel` takes a `reason`, and the reason decides
   nothing: `RideCancellationMatrix` resolves (state × trigger) → (target, penalty, reputation hit),
   the trigger comes from which party is authenticated, and the guarded `UPDATE` is bound to the

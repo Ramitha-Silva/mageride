@@ -247,4 +247,10 @@ public sealed record SagaStateResponse(
 /// Which offer expired. Required: the backstop fires against the offer it armed, and by the time
 /// it runs the ride may be holding a later one.
 /// </param>
-public sealed record ExpireOfferBody(string? OfferId);
+/// <param name="Reason">
+/// <c>deadline</c> (the default, R-04's durable backstop) or <c>driver_unreachable</c> (R-15's
+/// last-will grace). <b>Only the second one may revoke an offer before its deadline</b>, and only
+/// because the driver's broker session is confirmed gone — see
+/// <c>IRideService.ExpireOfferAsync</c>.
+/// </param>
+public sealed record ExpireOfferBody(string? OfferId, string? Reason = null);

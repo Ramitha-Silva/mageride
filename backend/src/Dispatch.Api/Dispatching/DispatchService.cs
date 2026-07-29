@@ -1,5 +1,6 @@
 using MageRide.Dispatch.Configuration;
 using MageRide.Dispatch.Domain;
+using MageRide.Dispatch.Eligibility;
 using MageRide.Dispatch.Persistence;
 using MageRide.Dispatch.Redis;
 using MageRide.Shared.Geo;
@@ -18,13 +19,24 @@ namespace MageRide.Dispatch.Dispatching;
 /// payload (C022's <c>RideEventPayload</c>), so <c>offer.declined</c> and <c>offer.expired</c> are
 /// enough to re-run a round without a single cross-service read.
 /// </remarks>
+/// <param name="PassengerId">
+/// Whose ride it is — the US-12.10 <c>safety.blocked_drivers</c> gate is per (passenger, driver)
+/// pair and cannot be applied without it.
+/// </param>
+/// <param name="PackageSize">
+/// <c>S</c> | <c>M</c> | <c>L</c> for a <c>kind=package</c> ride, else <see langword="null"/>. The
+/// P-11 compatibility gate's input.
+/// </param>
 public sealed record RideDispatchRequest(
     Guid RideId,
     GeoPoint Pickup,
     string VehicleType,
     string PaymentMethod,
     long? FareEstimateMinor,
-    string Currency);
+    string Currency,
+    Guid? PassengerId = null,
+    string Kind = RideKinds.Passenger,
+    string? PackageSize = null);
 
 /// <summary>How a dispatch round ended.</summary>
 public enum DispatchResult
@@ -32,18 +44,22 @@ public enum DispatchResult
     /// <summary>An offer is live and <c>offer.created</c> is committed.</summary>
     Offered,
 
-    /// <summary>Nobody eligible was near enough. The ride stays in Matching.</summary>
+    /// <summary>Nobody eligible was near enough. The ride stays in Matching until the global timeout.</summary>
     NoCandidate,
 
     /// <summary>ride-svc would not move the ride — accepted, cancelled, or already offered.</summary>
     RideNotDispatchable,
 
-    /// <summary>The cascade bound was reached (<c>Dispatch:MaxOfferRounds</c>).</summary>
-    RoundsExhausted,
+    /// <summary>
+    /// The cascade is over and the ride was system-cancelled into <c>ExpiredNoDriver</c> — either
+    /// the 120 s global timeout or <c>Dispatch:MaxOfferRounds</c> (US-6A.11, ADD §11.12).
+    /// </summary>
+    ExpiredNoDriver,
 }
 
 /// <param name="PreFilterCount">Drivers the H3 ring returned, before any distance was applied.</param>
 /// <param name="CandidateCount">Drivers that survived the exact <c>ST_DWithin</c> post-filter.</param>
+/// <param name="EligibleCount">Of those, how many survived the D5' §3.2 hard gates.</param>
 public sealed record DispatchOutcome(
     DispatchResult Result,
     Guid? OfferId,
@@ -51,23 +67,33 @@ public sealed record DispatchOutcome(
     DateTimeOffset? ExpiresAt,
     long? Version,
     int PreFilterCount,
-    int CandidateCount);
+    int CandidateCount,
+    int EligibleCount = 0);
 
 /// <summary>
-/// The Mode C offer loop: candidate build, reservation, offer, cascade (D5' §3, ADD §11.11).
+/// The Mode C offer loop: candidate build, hard gates, weighted scoring, reservation and the
+/// cascade (D5' §3, ADD §11.11).
 /// </summary>
 public interface IDispatchService
 {
-    /// <summary>Runs one round: pick the nearest eligible driver and offer them the ride.</summary>
+    /// <summary>Runs one round: score the eligible candidates and offer the ride to the best one.</summary>
     Task<DispatchOutcome> DispatchAsync(RideDispatchRequest ride, CancellationToken cancellationToken);
 
     /// <summary>
-    /// <c>Requested → Matching</c> then a first round. What <c>ride.requested</c> triggers.
+    /// <c>Requested → Matching</c>, arm the US-6A.11 global deadline, then a first round. What
+    /// <c>ride.requested</c> triggers.
     /// </summary>
     Task<DispatchOutcome> BeginAsync(RideDispatchRequest ride, CancellationToken cancellationToken);
 
-    /// <summary>Fires the R-04 backstop for one due timer.</summary>
-    Task ExpireAsync(DueOfferTimer timer, CancellationToken cancellationToken);
+    /// <summary>Fires the R-04 backstop for one due offer timer.</summary>
+    /// <param name="driverUnreachable">
+    /// R-15's path rather than R-04's: the driver's session is gone, so the offer may be revoked
+    /// inside its own window.
+    /// </param>
+    Task ExpireAsync(DueOfferTimer timer, bool driverUnreachable, CancellationToken cancellationToken);
+
+    /// <summary>Fires one due <c>dispatch.timers</c> row — the global timeout or an R-15 grace.</summary>
+    Task RunTimerAsync(DueDispatchTimer timer, CancellationToken cancellationToken);
 
     /// <summary>
     /// Settles whichever offer is live on a ride and puts its driver back in the pool (§11.12,
@@ -83,11 +109,20 @@ public interface IDispatchService
     /// </remarks>
     Task ReleaseLiveOfferAsync(Guid rideId, string toStatus, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// R-15: the driver's EMQX session dropped and the grace ran out. Releases whichever offer they
+    /// are holding so the ride can cascade, and takes them out of the pool.
+    /// </summary>
+    Task<bool> ReleaseDriverOfferAsync(Guid driverId, CancellationToken cancellationToken);
+
     /// <summary>The driver won the ride: the offer is ACCEPTED and they leave the pool.</summary>
     Task MarkAcceptedAsync(Guid rideId, Guid driverId, CancellationToken cancellationToken);
 
     /// <summary>The ride is over: the driver goes back into the pool where they stand.</summary>
     Task ReturnToPoolAsync(Guid driverId, CancellationToken cancellationToken);
+
+    /// <summary>The ride left dispatch's hands — retire its global cascade deadline.</summary>
+    Task RetireRideAsync(Guid rideId, CancellationToken cancellationToken);
 }
 
 /// <inheritdoc cref="IDispatchService"/>
@@ -98,8 +133,12 @@ public sealed class DispatchService(
     ICandidateRepository candidates,
     IOfferRepository offers,
     IOfferTimerRepository timers,
+    IDispatchTimerRepository dispatchTimers,
     IDriverIndex index,
     IRideServiceClient rideService,
+    IReputationGate reputationGate,
+    IWalletGate walletGate,
+    ICandidateScorer scorer,
     IOutboxWriter outbox,
     IOptions<DispatchOptions> options,
     TimeProvider timeProvider,
@@ -111,6 +150,12 @@ public sealed class DispatchService(
     /// <c>offer_expires_at &lt;= now()</c> and would answer 409 to a premature sweep.
     /// </summary>
     private static readonly TimeSpan BackstopGrace = TimeSpan.FromMilliseconds(250);
+
+    /// <summary>
+    /// The <c>system-cancel</c> reason that resolves to <c>ExpiredNoDriver</c> — one of the four
+    /// <c>ride.yaml</c> accepts, and the only cell of §11.12's matrix that produces that state.
+    /// </summary>
+    private const string NoDriverFound = "no_driver_found";
 
     private readonly DispatchOptions _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
 
@@ -132,6 +177,20 @@ public sealed class DispatchService(
             return Nothing(DispatchResult.RideNotDispatchable);
         }
 
+        // US-6A.11's clock starts here, not on the first offer: the two minutes are the passenger's
+        // wait, and a ride nobody was ever near has to end as well as one that was declined eight
+        // times. Armed *before* the first round so a process that dies mid-round still leaves a
+        // deadline behind; ux_dispatch_timers_ride_live absorbs the redelivery.
+        await using (var connection = await connectionFactory.OpenAsync(cancellationToken))
+        {
+            var deadline = await dispatchTimers.ArmRideTimeoutAsync(
+                connection, null, ride.RideId, timeProvider.GetUtcNow().Add(_options.GlobalTimeout), cancellationToken);
+
+            logger.LogInformation(
+                "Ride {RideId} is Matching; the cascade must produce a driver by {Deadline:O}",
+                ride.RideId, deadline);
+        }
+
         // A 409 means the ride is already past Requested — a redelivery, or another replica got
         // there first. Dispatching anyway is correct: the offer call is guarded on `Matching`, so
         // a ride that has moved further along simply refuses it.
@@ -145,18 +204,27 @@ public sealed class DispatchService(
         await using var connection = await connectionFactory.OpenAsync(cancellationToken);
 
         var round = await offers.CountForRideAsync(connection, ride.RideId, cancellationToken);
+        var deadline = await dispatchTimers.FindRideDeadlineAsync(connection, ride.RideId, cancellationToken);
+        var now = timeProvider.GetUtcNow();
+
+        // §11.12: "No candidates after N rounds OR timeout". Both ends of the OR land here, and
+        // both end the ride the same way — the passenger is told nobody is coming rather than left
+        // watching a spinner (US-6A.11).
         if (round >= _options.MaxOfferRounds)
         {
-            // D5' §3.5 ends the cascade at `ExpiredNoDriver` after 120 s (US-6A.11). That is a ride
-            // *state*, and no route exists to write it — C032's system-cancel and C034's global
-            // timeout own it. Stopping here leaves the ride in Matching with no offer, which is
-            // honest: a passenger sees "searching", not a driver who is not coming.
-            logger.LogWarning(
-                "Ride {RideId} has been through {Rounds} offers; stopping. The US-6A.11 ExpiredNoDriver " +
-                "timeout is C034 — the ride stays in Matching until then",
+            logger.LogInformation(
+                "Ride {RideId} has been through {Rounds} offers, the configured maximum; giving up",
                 ride.RideId, round);
 
-            return Nothing(DispatchResult.RoundsExhausted);
+            return await GiveUpAsync(ride.RideId, "rounds-exhausted", cancellationToken);
+        }
+
+        if (deadline is { } expiresAt && expiresAt <= now)
+        {
+            logger.LogInformation("Ride {RideId} passed its {Timeout} cascade deadline; giving up",
+                ride.RideId, _options.GlobalTimeout);
+
+            return await GiveUpAsync(ride.RideId, "global-timeout", cancellationToken);
         }
 
         // --- H3 coarse pre-filter (R-06, D-06) -------------------------------------------------
@@ -166,40 +234,68 @@ public sealed class DispatchService(
 
         // --- exact-distance post-filter, MANDATORY (D5' §3.1) ----------------------------------
         // The cell set above spans tens of kilometres; it decided which KEYS to read and nothing
-        // else. ST_DWithin on dispatch.driver_presence is what decides who is actually near.
-        var ranked = await candidates.NarrowAsync(
+        // else. ST_DWithin on dispatch.driver_presence is what decides who is actually near, and
+        // the same query applies the five §3.2 gates that are predicates on rows it already holds.
+        var nearby = await candidates.NarrowAsync(
             connection,
-            ride.RideId,
+            new CandidateQuery(
+                ride.RideId,
+                ride.PassengerId,
+                ride.Pickup,
+                ride.VehicleType,
+                _options.SearchRadiusM,
+                _options.PositionFreshness),
             raw,
-            ride.Pickup,
-            ride.VehicleType,
-            _options.SearchRadiusM,
-            _options.PresenceTtl,
             cancellationToken);
 
         logger.LogInformation(
-            "Ride {RideId}: {Cells} H3 res-{Resolution} cells → {Raw} indexed drivers → {Ranked} within {RadiusM} m",
-            ride.RideId, cells.Count, _options.H3Resolution, raw.Count, ranked.Count, _options.SearchRadiusM);
+            "Ride {RideId}: {Cells} H3 res-{Resolution} cells → {Raw} indexed drivers → {Nearby} within {RadiusM} m",
+            ride.RideId, cells.Count, _options.H3Resolution, raw.Count, nearby.Count, _options.SearchRadiusM);
 
-        if (ranked.Count == 0)
+        if (nearby.Count == 0)
         {
             return new DispatchOutcome(DispatchResult.NoCandidate, null, null, null, null, raw.Count, 0);
         }
 
-        // R-11: the audit records everyone considered, not just the winner.
+        // --- the two gates that need another service, then the §3.3 score ----------------------
+        var identities = nearby.Select(c => (c.DriverId, c.VehicleId, c.VehicleType)).ToList();
+
+        var reputation = await reputationGate.EvaluateAsync(
+            [.. nearby.Select(static c => c.DriverId)], cancellationToken);
+
+        var wallet = await walletGate.EvaluateAsync(connection, identities, cancellationToken);
+
+        var scored = scorer.Score(ride, nearby, reputation, wallet);
+        var eligible = scored.Where(static c => c.Eligible).ToList();
+
+        // R-11: the audit records everyone considered — including everyone excluded, and by which
+        // gate. Committed before any offer goes out, so the record of the decision cannot be lost
+        // by whatever happens to the offer.
         await using (var scoring = await unitOfWorkFactory.BeginAsync(cancellationToken: cancellationToken))
         {
             await candidates.RecordScoresAsync(
-                scoring.Connection, scoring.Transaction, ride.RideId, ranked, _options.AlgorithmVersion, cancellationToken);
+                scoring.Connection, scoring.Transaction, ride.RideId, scored, _options.AlgorithmVersion,
+                cancellationToken);
+
             await scoring.CommitAsync(cancellationToken);
         }
 
-        // R-12 Phase 1 is sequential: exactly one offer goes out. Walking down the ranked list is
-        // not a second offer — it is finding the actual top-1 *eligible* driver, since a candidate
-        // whose reservation loses to another ride was never eligible for this one.
-        foreach (var candidate in ranked)
+        if (eligible.Count == 0)
         {
-            var outcome = await TryOfferAsync(ride, candidate, raw.Count, ranked.Count, cancellationToken);
+            logger.LogInformation(
+                "Ride {RideId}: all {Nearby} nearby drivers were excluded by a hard gate ({Reasons})",
+                ride.RideId, nearby.Count,
+                string.Join(", ", scored.Select(static c => c.RejectedBy).Distinct()));
+
+            return new DispatchOutcome(DispatchResult.NoCandidate, null, null, null, null, raw.Count, nearby.Count);
+        }
+
+        // R-12 Phase 1 is sequential: exactly one offer goes out. Walking down the ranked list is
+        // not a second offer — it is finding the actual top-1 *reservable* driver, since a
+        // candidate whose reservation loses to another ride was never available for this one.
+        foreach (var candidate in eligible)
+        {
+            var outcome = await TryOfferAsync(ride, candidate, raw.Count, nearby.Count, eligible.Count, cancellationToken);
 
             if (outcome is not null)
             {
@@ -208,12 +304,46 @@ public sealed class DispatchService(
         }
 
         logger.LogInformation(
-            "Ride {RideId}: every one of the {Ranked} nearby drivers was already reserved", ride.RideId, ranked.Count);
+            "Ride {RideId}: every one of the {Eligible} eligible drivers was already reserved",
+            ride.RideId, eligible.Count);
 
-        return new DispatchOutcome(DispatchResult.NoCandidate, null, null, null, null, raw.Count, ranked.Count);
+        return new DispatchOutcome(
+            DispatchResult.NoCandidate, null, null, null, null, raw.Count, nearby.Count, eligible.Count);
     }
 
-    public async Task ExpireAsync(DueOfferTimer timer, CancellationToken cancellationToken)
+    /// <summary>
+    /// The cascade is over with nobody found: end the ride in <c>ExpiredNoDriver</c> (US-6A.11).
+    /// </summary>
+    private async Task<DispatchOutcome> GiveUpAsync(Guid rideId, string why, CancellationToken cancellationToken)
+    {
+        // ride-svc is the sole writer of rides.state (R-01), so the ride ends through the contract's
+        // own internal command rather than through an UPDATE here. `no_driver_found` resolves from
+        // `Matching` alone (§11.12); a ride that has moved on is answered 400 or 409, which is
+        // information and not a failure — something better than a timeout already happened to it.
+        var cancelled = await rideService.SystemCancelAsync(rideId, NoDriverFound, cancellationToken);
+
+        await using var connection = await connectionFactory.OpenAsync(cancellationToken);
+        await dispatchTimers.RetireForRideAsync(
+            connection, null, rideId, DispatchTimerKinds.RideTimeout, cancellationToken);
+
+        if (cancelled.Succeeded)
+        {
+            logger.LogInformation(
+                "Ride {RideId} ended ExpiredNoDriver ({Why}); the passenger has been told nobody is coming",
+                rideId, why);
+
+            return Nothing(DispatchResult.ExpiredNoDriver);
+        }
+
+        logger.LogInformation(
+            "Ride {RideId} could not be expired ({Why}): ride-svc answered {Status}/{ErrorCode} — it has moved on",
+            rideId, why, (int)cancelled.Status, cancelled.ErrorCode);
+
+        return Nothing(DispatchResult.RideNotDispatchable);
+    }
+
+    public async Task ExpireAsync(
+        DueOfferTimer timer, bool driverUnreachable, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(timer);
 
@@ -228,7 +358,8 @@ public sealed class DispatchService(
             return;
         }
 
-        var result = await rideService.ExpireOfferAsync(timer.RideId, timer.OfferId, cancellationToken);
+        var result = await rideService.ExpireOfferAsync(
+            timer.RideId, timer.OfferId, driverUnreachable, cancellationToken);
 
         if (result.Status == System.Net.HttpStatusCode.Conflict)
         {
@@ -266,6 +397,36 @@ public sealed class DispatchService(
             timer.OfferId, (int)result.Status, result.ErrorCode);
     }
 
+    public async Task RunTimerAsync(DueDispatchTimer timer, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(timer);
+
+        switch (timer.Kind)
+        {
+            case DispatchTimerKinds.RideTimeout when timer.RideId is { } rideId:
+                await RunGlobalTimeoutAsync(timer, rideId, cancellationToken);
+                break;
+
+            case DispatchTimerKinds.OfferReleaseGrace when timer.DriverId is { } driverId:
+                await RunReleaseGraceAsync(timer, driverId, cancellationToken);
+                break;
+
+            default:
+                // A kind this sweep claimed but cannot act on, or a row whose subject column is
+                // null. Retired rather than left due, so it cannot spin the sweep forever.
+                logger.LogWarning(
+                    "dispatch.timers row {TimerId} of kind {Kind} has no usable subject; retiring it",
+                    timer.Id, timer.Kind);
+
+                await using (var connection = await connectionFactory.OpenAsync(cancellationToken))
+                {
+                    await dispatchTimers.MarkFiredAsync(connection, null, timer.Id, cancellationToken);
+                }
+
+                break;
+        }
+    }
+
     public async Task ReleaseLiveOfferAsync(Guid rideId, string toStatus, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(toStatus);
@@ -292,6 +453,43 @@ public sealed class DispatchService(
             live.Id, rideId, toStatus, live.DriverId);
     }
 
+    public async Task<bool> ReleaseDriverOfferAsync(Guid driverId, CancellationToken cancellationToken)
+    {
+        await using var connection = await connectionFactory.OpenAsync(cancellationToken);
+
+        var live = await offers.FindLiveForDriverAsync(connection, null, driverId, cancellationToken);
+
+        if (live is null || live.Status != OfferStatuses.Offered)
+        {
+            // Nothing offered, or the driver has ACCEPTED and is mid-ride — in which case the
+            // last will is ride-svc's `offline_grace` and §11.12's business, not dispatch's. R-15
+            // says "releases active offer"; an accepted ride is no longer an offer.
+            return false;
+        }
+
+        // Reuse of the one expiry implementation, not a second one: ride-svc still has to perform
+        // Offered → Matching and emit offer.expired, or the ride sits Offered to a driver who is
+        // not there. The rides.timers row is claimed first so the R-04 sweep and this path cannot
+        // both fire against the same offer.
+        var claimed = await timers.TryClaimForOfferAsync(
+            connection, null, live.Id, _options.TimerLease, cancellationToken);
+
+        var timer = claimed ?? new DueOfferTimer(
+            Guid.Empty, live.RideId, live.Id, live.DriverId, timeProvider.GetUtcNow());
+
+        // The one caller allowed to revoke an offer inside its own 15 s window: the grace has
+        // already established that this driver's broker session is dead, so there is no window left
+        // to protect and the ride would otherwise wait out the rest of it on nobody.
+        await ExpireAsync(timer, driverUnreachable: true, cancellationToken);
+
+        logger.LogInformation(
+            "Driver {DriverId}'s EMQX session stayed down past the {Grace} grace; offer {OfferId} on ride " +
+            "{RideId} released (R-15)",
+            driverId, _options.OfferReleaseGrace, live.Id, live.RideId);
+
+        return true;
+    }
+
     public async Task MarkAcceptedAsync(Guid rideId, Guid driverId, CancellationToken cancellationToken)
     {
         await using var connection = await connectionFactory.OpenAsync(cancellationToken);
@@ -303,6 +501,11 @@ public sealed class DispatchService(
         {
             await timers.CancelForOfferAsync(connection, null, accepted.Id, cancellationToken);
         }
+
+        // The cascade is over: a driver is on their way, so the 120 s deadline must not fire behind
+        // them and cancel a ride that has already been accepted.
+        await dispatchTimers.RetireForRideAsync(
+            connection, null, rideId, DispatchTimerKinds.RideTimeout, cancellationToken);
 
         // ADD §9.4: an accepted driver comes out of geo:drivers:available. The presence row moves
         // with them so the exact post-filter — which reads state, not Redis — agrees.
@@ -319,6 +522,25 @@ public sealed class DispatchService(
     {
         await using var connection = await connectionFactory.OpenAsync(cancellationToken);
 
+        // ADD §11.12's three duties on a terminal event, and all three have to happen or the driver
+        // is "ghost-busy" — the failure the R-20 stuck-state alert catches.
+        //
+        // (a) The offer that started the ride stops counting against R-10's one-live-offer rule
+        //     (migration 0712). Without it the driver's *first* accepted offer blocks
+        //     ux_offers_driver_live for ever and they can never be offered a second ride.
+        // (b) `lock:driver-offer:{driverId}` is dropped, rather than left to run its 15-second TTL
+        //     out. The TTL means the bug self-heals in a quarter of a minute, which is exactly long
+        //     enough to lose the driver the next ride and short enough that nobody notices why.
+        // (c) The presence row and the GEO index put them back where they stand, below.
+        if (await offers.ReleaseAcceptedAsync(connection, null, driverId, cancellationToken) is { } released)
+        {
+            await index.ReleaseReservationAsync(driverId, released.RideId, released.Id, cancellationToken);
+
+            logger.LogDebug(
+                "Driver {DriverId}'s offer {OfferId} on ride {RideId} is released; they can hold a new one",
+                driverId, released.Id, released.RideId);
+        }
+
         var row = await presence.TransitionAsync(
             connection, null, driverId, [PresenceStates.Offered, PresenceStates.OnRide], PresenceStates.Available,
             cancellationToken);
@@ -332,15 +554,78 @@ public sealed class DispatchService(
         }
     }
 
+    public async Task RetireRideAsync(Guid rideId, CancellationToken cancellationToken)
+    {
+        await using var connection = await connectionFactory.OpenAsync(cancellationToken);
+
+        await dispatchTimers.RetireForRideAsync(
+            connection, null, rideId, DispatchTimerKinds.RideTimeout, cancellationToken);
+    }
+
+    // -----------------------------------------------------------------------------------------
+
+    /// <summary>US-6A.11's deadline arrived.</summary>
+    private async Task RunGlobalTimeoutAsync(
+        DueDispatchTimer timer, Guid rideId, CancellationToken cancellationToken)
+    {
+        OfferRow? live;
+
+        await using (var connection = await connectionFactory.OpenAsync(cancellationToken))
+        {
+            live = await offers.FindLiveForRideAsync(connection, null, rideId, cancellationToken);
+        }
+
+        if (live is { Status: OfferStatuses.Offered })
+        {
+            // A driver is looking at the offer right now. Killing the ride under them would waste
+            // the one candidate the cascade actually found, and §11.12 has no `Offered → Expired`
+            // cell anyway — the transition is legal from `Matching` alone. Let the 15 s window
+            // finish; whichever way it settles, the next round comes back here immediately.
+            await using var connection = await connectionFactory.OpenAsync(cancellationToken);
+
+            await dispatchTimers.RescheduleAsync(
+                connection, null, timer.Id, live.ExpiresAt.Add(BackstopGrace), cancellationToken);
+
+            logger.LogInformation(
+                "Ride {RideId} reached its cascade deadline with offer {OfferId} still live; waiting for the " +
+                "offer to settle at {ExpiresAt:O}",
+                rideId, live.Id, live.ExpiresAt);
+
+            return;
+        }
+
+        await GiveUpAsync(rideId, "global-timeout", cancellationToken);
+    }
+
+    /// <summary>R-15's grace ran out.</summary>
+    private async Task RunReleaseGraceAsync(
+        DueDispatchTimer timer, Guid driverId, CancellationToken cancellationToken)
+    {
+        await ReleaseDriverOfferAsync(driverId, cancellationToken);
+
+        // Presence follows the session. A driver whose broker connection has been dead for the
+        // whole grace cannot be sent an offer they could answer, so they leave the pool the same
+        // way `POST /v1/standby/offline` would take them out of it — and their app puts them back
+        // by going online again, which is the one signal that means "I am here".
+        await using (var connection = await connectionFactory.OpenAsync(cancellationToken))
+        {
+            await presence.GoOfflineAsync(connection, null, driverId, cancellationToken);
+            await dispatchTimers.MarkFiredAsync(connection, null, timer.Id, cancellationToken);
+        }
+
+        await index.ForgetAsync(driverId, cancellationToken);
+    }
+
     /// <summary>
     /// One offer attempt. Returns <see langword="null"/> when this candidate could not be reserved
     /// and the caller should try the next one.
     /// </summary>
     private async Task<DispatchOutcome?> TryOfferAsync(
         RideDispatchRequest ride,
-        Candidate candidate,
+        ScoredCandidate candidate,
         int preFilterCount,
         int candidateCount,
+        int eligibleCount,
         CancellationToken cancellationToken)
     {
         var offerId = Guid.NewGuid();
@@ -408,7 +693,8 @@ public sealed class DispatchService(
             // The ride itself would not move — accepted, cancelled, or offered by another replica.
             // Walking to the next candidate would just be refused again.
             return new DispatchOutcome(
-                DispatchResult.RideNotDispatchable, null, null, null, null, preFilterCount, candidateCount);
+                DispatchResult.RideNotDispatchable, null, null, null, null, preFilterCount, candidateCount,
+                eligibleCount);
         }
 
         var expiresAt = placed.OfferExpiresAt ?? provisionalExpiry;
@@ -435,7 +721,9 @@ public sealed class DispatchService(
                     ride.FareEstimateMinor,
                     ride.Currency,
                     ride.PaymentMethod,
-                    candidate.DistanceM),
+                    candidate.DistanceM,
+                    ride.Kind,
+                    ride.PackageSize),
                 cancellationToken);
 
             await unitOfWork.CommitAsync(cancellationToken);
@@ -444,12 +732,12 @@ public sealed class DispatchService(
         await index.RefreshOfferDeadlineAsync(ride.RideId, expiresAt, cancellationToken);
 
         logger.LogInformation(
-            "Ride {RideId} offered to driver {DriverId} ({DistanceM:0} m away) until {ExpiresAt:O}",
-            ride.RideId, candidate.DriverId, candidate.DistanceM, expiresAt);
+            "Ride {RideId} offered to driver {DriverId} ({DistanceM:0} m away, score {Score:0.0000}) until {ExpiresAt:O}",
+            ride.RideId, candidate.DriverId, candidate.DistanceM, candidate.Score, expiresAt);
 
         return new DispatchOutcome(
             DispatchResult.Offered, offerId, candidate.DriverId, expiresAt, placed.Version,
-            preFilterCount, candidateCount);
+            preFilterCount, candidateCount, eligibleCount);
     }
 
     /// <summary>
@@ -457,7 +745,11 @@ public sealed class DispatchService(
     /// arming, so the driver is not visible as available while an OFFERED row still names them.
     /// </summary>
     private async Task UnwindAsync(
-        RideDispatchRequest ride, Candidate candidate, Guid offerId, Guid timerId, CancellationToken cancellationToken)
+        RideDispatchRequest ride,
+        ScoredCandidate candidate,
+        Guid offerId,
+        Guid timerId,
+        CancellationToken cancellationToken)
     {
         await using var unitOfWork = await unitOfWorkFactory.BeginAsync(cancellationToken: cancellationToken);
 
@@ -474,7 +766,7 @@ public sealed class DispatchService(
 
         await index.ReleaseReservationAsync(candidate.DriverId, ride.RideId, offerId, cancellationToken);
         await index.IndexAvailableAsync(
-            candidate.DriverId, candidate.VehicleId, candidate.VehicleType, candidate.Geo, cancellationToken);
+            candidate.DriverId, candidate.VehicleId, candidate.VehicleType, candidate.Candidate.Geo, cancellationToken);
     }
 
     private static DispatchOutcome Nothing(DispatchResult result) => new(result, null, null, null, null, 0, 0);

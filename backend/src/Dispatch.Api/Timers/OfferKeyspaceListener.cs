@@ -140,7 +140,9 @@ public sealed class OfferKeyspaceListener(
 
         if (claimed is not null)
         {
-            await dispatch.ExpireAsync(claimed, cancellationToken);
+            // D-07 is an accelerator for R-04, so it takes R-04's path: the Redis key expiring is a
+            // hint that the deadline has passed, and ride-svc's own predicate is what confirms it.
+            await dispatch.ExpireAsync(claimed, driverUnreachable: false, cancellationToken);
         }
     }
 

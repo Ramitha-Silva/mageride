@@ -112,11 +112,16 @@ public interface IRideRepository
     /// <c>offer_expires_at &lt;= now()</c>, evaluated by Postgres — the caller's clock never
     /// decides an expiry.
     /// </summary>
+    /// <param name="ignoreDeadline">
+    /// R-15 only. Drops the <c>offer_expires_at &lt;= now()</c> predicate, which no other caller may
+    /// do — see <c>RideOfferExpiryReasons</c>.
+    /// </param>
     Task<RideRow?> ExpireOfferAsync(
         NpgsqlConnection connection,
         NpgsqlTransaction? transaction,
         Guid rideId,
         Guid offerId,
+        bool ignoreDeadline,
         CancellationToken cancellationToken);
 
     /// <summary>
@@ -492,6 +497,7 @@ public sealed class RideRepository : IRideRepository
         NpgsqlTransaction? transaction,
         Guid rideId,
         Guid offerId,
+        bool ignoreDeadline,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(connection);
@@ -500,6 +506,11 @@ public sealed class RideRepository : IRideRepository
         // `offer_expires_at <= now()`, which is the same predicate — negated — that decides an
         // accept, and it is Postgres that evaluates both. A backstop that trusted the sweeping
         // node's clock could cancel an offer a driver was still inside the window to accept.
+        //
+        // @IgnoreDeadline is R-15's exception and nothing else's: dispatch-svc has watched the
+        // driver's broker session stay dead for a whole grace period, so there is no window left to
+        // protect — the driver could not accept if they wanted to. It is a parameter rather than
+        // two statements so the rest of the guard cannot drift between them.
         //
         // The offer columns are cleared exactly as on a decline, so `Offered → Matching` leaves the
         // ride with no live offer either way. Leaving `current_offer_id` set would make the second
@@ -519,10 +530,10 @@ public sealed class RideRepository : IRideRepository
               WHERE id = @RideId
                 AND state = '{RideStates.Offered}'
                 AND current_offer_id = @OfferId
-                AND offer_expires_at <= now()
+                AND (@IgnoreDeadline OR offer_expires_at <= now())
              RETURNING {Columns};
              """,
-            new { RideId = rideId, OfferId = offerId },
+            new { RideId = rideId, OfferId = offerId, IgnoreDeadline = ignoreDeadline },
             transaction,
             cancellationToken: cancellationToken));
     }

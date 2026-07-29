@@ -57,8 +57,17 @@ public interface IRideService
     /// <summary>Internal: dispatch-svc reserved a driver and is about to push the offer.</summary>
     Task<RideRow> PlaceOfferAsync(PlaceOfferCommand command, CancellationToken cancellationToken);
 
-    /// <summary>Internal: the 15 s window closed unanswered, so the ride re-enters the pool (R-04).</summary>
-    Task<RideRow> ExpireOfferAsync(Guid rideId, Guid offerId, CancellationToken cancellationToken);
+    /// <summary>
+    /// Internal: the offer is over and the ride re-enters the pool. Either the 15 s window closed
+    /// unanswered (R-04) or the driver's EMQX session is confirmed gone (R-15).
+    /// </summary>
+    /// <param name="reason">
+    /// <see cref="RideOfferExpiryReasons.Deadline"/> or
+    /// <see cref="RideOfferExpiryReasons.DriverUnreachable"/>. <see langword="null"/> means the
+    /// deadline, which is what C023's backstop sends and what keeps the older call shape working.
+    /// </param>
+    Task<RideRow> ExpireOfferAsync(
+        Guid rideId, Guid offerId, string? reason, CancellationToken cancellationToken);
 
     /// <summary>Internal: the saga diagnostics an operator reads instead of querying Postgres.</summary>
     Task<RideSagaState> GetSagaStateAsync(Guid rideId, CancellationToken cancellationToken);
@@ -479,12 +488,21 @@ public sealed class RideService(
         return offered;
     }
 
-    public async Task<RideRow> ExpireOfferAsync(Guid rideId, Guid offerId, CancellationToken cancellationToken)
+    public async Task<RideRow> ExpireOfferAsync(
+        Guid rideId, Guid offerId, string? reason, CancellationToken cancellationToken)
     {
+        // Two callers, two clocks. R-04's backstop must be bound to `offer_expires_at <= now()` —
+        // Postgres decides, never the sweeping node — because a driver inside the window may still
+        // be about to accept. R-15's last-will grace is the one case where that driver provably
+        // cannot: their broker session has been dead for the whole grace, so nothing is taken away
+        // from them and the ride would otherwise sit Offered to somebody who is not there. The
+        // reason is a closed set for exactly that reason; anything else is the deadline.
+        var unreachable = RideOfferExpiryReasons.IsDriverUnreachable(reason);
+
         await using var unitOfWork = await unitOfWorkFactory.BeginAsync(cancellationToken: cancellationToken);
 
         var expired = await rides.ExpireOfferAsync(
-            unitOfWork.Connection, unitOfWork.Transaction, rideId, offerId, cancellationToken);
+            unitOfWork.Connection, unitOfWork.Transaction, rideId, offerId, unreachable, cancellationToken);
 
         if (expired is null)
         {
@@ -496,21 +514,27 @@ public sealed class RideService(
 
         // D5' §6's Offered row names `offer.expired`, and ADD §11.11's R-04 paragraph makes it
         // dispatch-svc's cue to re-offer to the next candidate — the same role `offer.declined`
-        // plays, so it rides the same topic.
+        // plays, so it rides the same topic. An unreachable driver produces the same event with a
+        // different reason code: the consumer's reaction is identical, and the audit still says
+        // which of the two happened.
+        var reasonCode = unreachable ? RideReasonCodes.DriverUnreachable : RideReasonCodes.OfferExpired;
+
         await stateWriter.RecordAsync(
             unitOfWork,
             expired,
             fromState: RideStates.Offered,
             actorType: RideTransitions.Actors.System,
             actorId: null,
-            reasonCode: RideReasonCodes.OfferExpired,
-            [RideEvents.Build(RideEventTypes.OfferExpired, expired, Guid.NewGuid(), timeProvider.GetUtcNow())],
+            reasonCode: reasonCode,
+            [RideEvents.Build(
+                RideEventTypes.OfferExpired, expired, Guid.NewGuid(), timeProvider.GetUtcNow(), reasonCode)],
             cancellationToken);
 
         await unitOfWork.CommitAsync(cancellationToken);
 
-        logger.LogInformation("Offer {OfferId} on ride {RideId} expired unanswered; the ride is Matching again",
-            offerId, rideId);
+        logger.LogInformation(
+            "Offer {OfferId} on ride {RideId} ended ({ReasonCode}); the ride is Matching again",
+            offerId, rideId, reasonCode);
 
         return expired;
     }

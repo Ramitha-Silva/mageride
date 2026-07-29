@@ -69,16 +69,21 @@ public static class DispatchApplication
 
         app.MapStandbyEndpoints();
 
-        WarnAboutMissingInternalKey(app);
+        WarnAboutGatesThatCannotClose(app);
 
         return app;
     }
 
     /// <summary>
-    /// Without ride-svc's shared secret every offer is answered 404 and no driver is ever asked.
-    /// From the outside that looks like "nobody is online", so it is said once, loudly, at start-up.
+    /// Says, once and loudly, which of this service's guarantees are switched off.
     /// </summary>
-    private static void WarnAboutMissingInternalKey(WebApplication app)
+    /// <remarks>
+    /// Every one of these misconfigurations looks like success from the outside — the service
+    /// starts, answers health checks and serves presence — and each removes something a spec
+    /// requires. A gate that is off is not a gate that passes, and the log line is the only place
+    /// the difference is visible.
+    /// </remarks>
+    private static void WarnAboutGatesThatCannotClose(WebApplication app)
     {
         var options = app.Services.GetRequiredService<IOptions<DispatchOptions>>().Value;
 
@@ -87,6 +92,45 @@ public static class DispatchApplication
             app.Logger.LogWarning(
                 "Dispatch:RideServiceInternalKey is not configured. ride-svc answers 404 to /v1/internal/rides/** " +
                 "without it, so presence works but no ride will ever be offered to anyone.");
+        }
+
+        if (!options.ReputationGateEnabled)
+        {
+            app.Logger.LogWarning(
+                "Dispatch:ReputationGateEnabled is off. D5' §3.2's block-state gate does not run: a " +
+                "BOOKING_DISABLED or DELISTED driver will be offered rides, and every candidate is scored " +
+                "at Driver Level 3.");
+        }
+        else if (string.IsNullOrWhiteSpace(options.ReputationInternalKey))
+        {
+            app.Logger.LogInformation(
+                "Dispatch:ReputationInternalKey is not configured. reputation-svc accepts any in-cluster " +
+                "caller when its own key is unset (C033); if it is set, every gRPC call is answered " +
+                "Unauthenticated and the gate fails open.");
+        }
+
+        if (!options.WalletGateEnabled)
+        {
+            app.Logger.LogWarning(
+                "Dispatch:WalletGateEnabled is off. The D-08 daily-fee gate does not run: a driver below the " +
+                "daily platform fee is offered their second and later trips of the day.");
+        }
+
+        if (!options.LastWillEnabled)
+        {
+            app.Logger.LogInformation(
+                "Dispatch:LastWillEnabled is off, so R-15's EMQX last will is not consumed. A driver whose " +
+                "session drops mid-offer holds it until the 15 s window expires instead of the {Grace} grace.",
+                options.OfferReleaseGrace);
+        }
+
+        if (!options.PositionConsumerEnabled)
+        {
+            app.Logger.LogWarning(
+                "Dispatch:PositionConsumerEnabled is off, so nothing refreshes dispatch.driver_presence from " +
+                "telemetry.normalized (R-08). Every driver falls out of the candidate pool {Freshness} after " +
+                "going online and no position ever moves them.",
+                options.PositionFreshness);
         }
     }
 }

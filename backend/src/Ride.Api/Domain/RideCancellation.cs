@@ -300,6 +300,31 @@ public static class RideCancellationMatrix
 }
 
 /// <summary>
+/// Why an offer ended, as <c>POST /v1/internal/rides/{id}/offer/expire</c> accepts it.
+/// </summary>
+/// <remarks>
+/// <b>Δ C034 — a micro-change-set.</b> C023's route took an offer id and nothing else, because
+/// R-04's backstop is bound to <c>offer_expires_at &lt;= now()</c> and Postgres is what decides
+/// — a backstop that trusted the sweeping node's clock could cancel an offer a driver was still
+/// inside the window to accept. R-15's last-will grace is the one caller that has to revoke an
+/// offer *inside* that window: dispatch-svc has watched the driver's broker session stay dead for
+/// the whole grace, so the driver cannot accept, and leaving the ride Offered would spend the rest
+/// of the 15 s on somebody who is not there. A closed set rather than a boolean, so the audit row
+/// records which of the two happened.
+/// </remarks>
+public static class RideOfferExpiryReasons
+{
+    /// <summary>R-04's durable backstop. The default, and the only one bound to the deadline.</summary>
+    public const string Deadline = "deadline";
+
+    /// <summary>R-15: the driver's EMQX session is gone. May revoke inside the window.</summary>
+    public const string DriverUnreachable = "driver_unreachable";
+
+    public static bool IsDriverUnreachable(string? reason) =>
+        string.Equals(reason, DriverUnreachable, StringComparison.Ordinal);
+}
+
+/// <summary>
 /// <c>rides.transitions.reason_code</c> values. Stable strings: a support engineer reading the
 /// audit six weeks later, and reputation-svc counting cancels, both branch on them.
 /// </summary>
@@ -308,6 +333,13 @@ public static class RideReasonCodes
     public const string OfferSent = "OFFER_SENT";
     public const string OfferDeclined = "OFFER_DECLINED";
     public const string OfferExpired = "OFFER_EXPIRED";
+
+    /// <summary>
+    /// The offer ended because the driver's EMQX session was confirmed gone, not because the 15 s
+    /// window ran out (R-15). Same transition and same event as <see cref="OfferExpired"/>; the
+    /// audit row is what tells the two apart. <b>Δ C034</b>.
+    /// </summary>
+    public const string DriverUnreachable = "DRIVER_UNREACHABLE";
     public const string DispatchCandidateBuild = "DISPATCH_CANDIDATE_BUILD";
     public const string FareHandoff = "FARE_HANDOFF";
 

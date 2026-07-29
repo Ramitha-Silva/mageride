@@ -53,6 +53,13 @@ public interface IOfferRepository
     Task<OfferRow?> FindLiveForRideAsync(
         NpgsqlConnection connection, NpgsqlTransaction? transaction, Guid rideId, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// The live offer a driver is holding, if any. At most one row can match — that is exactly what
+    /// <c>ux_offers_driver_live</c> guarantees — so this needs no <c>LIMIT</c> and no tie-break.
+    /// </summary>
+    Task<OfferRow?> FindLiveForDriverAsync(
+        NpgsqlConnection connection, NpgsqlTransaction? transaction, Guid driverId, CancellationToken cancellationToken);
+
     Task<OfferRow?> FindAsync(
         NpgsqlConnection connection, NpgsqlTransaction? transaction, Guid offerId, CancellationToken cancellationToken);
 
@@ -66,6 +73,23 @@ public interface IOfferRepository
         Guid driverId,
         string toStatus,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Stamps <c>released_at</c> on the driver's ACCEPTED offer — the ride is over and they are no
+    /// longer on the hook for it (migration 0712).
+    /// </summary>
+    /// <remarks>
+    /// Without this the partial unique index would treat a finished ride as a live offer for ever
+    /// and refuse the driver's second ride, and every one after it. The status is deliberately left
+    /// at ACCEPTED: it is what the driver did, and DECLINED or EXPIRED would make the audit lie.
+    /// </remarks>
+    /// <returns>
+    /// The offer that was released, so the caller can drop its Redis reservation as well — ADD
+    /// §11.12 makes both dispatch-svc's job on a terminal event, and the lock names the ride and
+    /// the offer it belongs to.
+    /// </returns>
+    Task<OfferRow?> ReleaseAcceptedAsync(
+        NpgsqlConnection connection, NpgsqlTransaction? transaction, Guid driverId, CancellationToken cancellationToken);
 }
 
 /// <inheritdoc cref="IOfferRepository"/>
@@ -169,6 +193,21 @@ public sealed class OfferRepository : IOfferRepository
             cancellationToken: cancellationToken));
     }
 
+    public Task<OfferRow?> FindLiveForDriverAsync(
+        NpgsqlConnection connection, NpgsqlTransaction? transaction, Guid driverId, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+
+        return connection.QuerySingleOrDefaultAsync<OfferRow>(new CommandDefinition(
+            $"""
+             SELECT {Columns} FROM dispatch.offers
+              WHERE driver_id = @DriverId AND status = ANY(@LiveStatuses) AND released_at IS NULL;
+             """,
+            new { DriverId = driverId, LiveStatuses },
+            transaction,
+            cancellationToken: cancellationToken));
+    }
+
     public Task<OfferRow?> FindAsync(
         NpgsqlConnection connection, NpgsqlTransaction? transaction, Guid offerId, CancellationToken cancellationToken)
     {
@@ -201,15 +240,36 @@ public sealed class OfferRepository : IOfferRepository
         ArgumentNullException.ThrowIfNull(connection);
 
         // At most one row can match — that is exactly what ux_offers_driver_live guarantees — so
-        // this needs no LIMIT and cannot settle an offer that belongs to a different round.
+        // this needs no LIMIT and cannot settle an offer that belongs to a different round. The
+        // `released_at IS NULL` predicate is the index's own (migration 0712), spelled the same way
+        // here so a driver's finished rides are never candidates for settlement.
         return connection.QuerySingleOrDefaultAsync<OfferRow>(new CommandDefinition(
             $"""
              UPDATE dispatch.offers
                 SET status = @ToStatus, responded_at = now()
-              WHERE driver_id = @DriverId AND status = ANY(@LiveStatuses)
+              WHERE driver_id = @DriverId AND status = ANY(@LiveStatuses) AND released_at IS NULL
              RETURNING {Columns};
              """,
             new { DriverId = driverId, ToStatus = toStatus, LiveStatuses },
+            transaction,
+            cancellationToken: cancellationToken));
+    }
+
+    public Task<OfferRow?> ReleaseAcceptedAsync(
+        NpgsqlConnection connection, NpgsqlTransaction? transaction, Guid driverId, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+
+        return connection.QuerySingleOrDefaultAsync<OfferRow>(new CommandDefinition(
+            $"""
+             UPDATE dispatch.offers
+                SET released_at = now()
+              WHERE driver_id = @DriverId
+                AND status = '{OfferStatuses.Accepted}'
+                AND released_at IS NULL
+             RETURNING {Columns};
+             """,
+            new { DriverId = driverId },
             transaction,
             cancellationToken: cancellationToken));
     }

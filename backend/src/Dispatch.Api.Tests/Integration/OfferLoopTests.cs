@@ -301,14 +301,7 @@ public sealed class OfferLoopTests(PostgresFixture postgres, RedisFixture redis)
         var rideId = await harness.RequestRideAsync(await harness.CreatePassengerAsync());
         await DispatchAsync(harness, rideId);
 
-        await using var connection = await harness.OpenAsync();
-        var scores = (await connection.QueryAsync<ScoreRow>(
-            """
-            SELECT driver_id AS DriverId, score AS Score, breakdown::text AS Breakdown,
-                   dispatch_algorithm_version AS Version
-              FROM dispatch.candidate_scores WHERE ride_id = @RideId ORDER BY score DESC;
-            """,
-            new { RideId = rideId })).ToList();
+        var scores = await harness.ReadScoresAsync(rideId);
 
         // R-11: "written for every scored candidate, not only the winner".
         Assert.Equal(2, scores.Count);
@@ -316,14 +309,18 @@ public sealed class OfferLoopTests(PostgresFixture postgres, RedisFixture redis)
         Assert.Equal(far.DriverId, scores[1].DriverId);
         Assert.True(scores[0].Score > scores[1].Score);
 
-        // Version 0 says "not the D5' §3.3 weighted algorithm" — the fence this component sits
-        // behind. C034 lands version 1 and up.
-        Assert.All(scores, s => Assert.Equal(0, s.Version));
+        // Version 1 is the D5' §3.3 weighted algorithm C034 landed. The number is on every row so a
+        // decision taken under a later formula is never reproduced with today's.
+        Assert.All(scores, s => Assert.Equal(1, s.Version));
 
         using var breakdown = JsonDocument.Parse(scores[0].Breakdown);
-        Assert.Equal("nearest-only", breakdown.RootElement.GetProperty("algorithm").GetString());
+        Assert.Equal("weighted-v1", breakdown.RootElement.GetProperty("algorithm").GetString());
         Assert.Equal(0, breakdown.RootElement.GetProperty("rank").GetInt32());
         Assert.InRange(breakdown.RootElement.GetProperty("distanceM").GetDouble(), 0, 200);
+
+        // A passenger ride consulted no package table, and 0703's own comment says NULL is what
+        // that means — a stored `true` would claim the P-11 gate had run and agreed.
+        Assert.All(scores, s => Assert.Null(s.PackageSizeCompatible));
     }
 
     [Fact]
@@ -476,14 +473,18 @@ public sealed class OfferLoopTests(PostgresFixture postgres, RedisFixture redis)
             """
             SELECT ST_Y(pickup_geo::geometry) AS Lat, ST_X(pickup_geo::geometry) AS Lng,
                    vehicle_type AS VehicleType, payment_method AS PaymentMethod,
-                   fare_estimate_minor AS FareEstimateMinor, currency AS Currency
+                   fare_estimate_minor AS FareEstimateMinor, currency AS Currency,
+                   passenger_id AS PassengerId, package_size AS PackageSize,
+                   -- 0=passenger, 1=proxy, 2=package (ck_rides_kind, migration 0601). The event
+                   -- payload carries the name, so the test builds the same value the envelope would.
+                   CASE kind WHEN 1 THEN 'proxy' WHEN 2 THEN 'package' ELSE 'passenger' END AS Kind
               FROM rides.rides WHERE id = @RideId;
             """,
             new { RideId = rideId });
 
         return new RideDispatchRequest(
             rideId, new GeoPoint(row.Lat, row.Lng), row.VehicleType, row.PaymentMethod,
-            row.FareEstimateMinor, row.Currency);
+            row.FareEstimateMinor, row.Currency, row.PassengerId, row.Kind, row.PackageSize);
     }
 
     private Task<DispatchHarness> StartAsync(IDictionary<string, string?>? settings = null)
@@ -501,8 +502,14 @@ public sealed class OfferLoopTests(PostgresFixture postgres, RedisFixture redis)
     private sealed record OutboxRowText(
         string EventType, Guid AggregateId, string Payload, DateTimeOffset? DispatchedAt);
 
-    private sealed record ScoreRow(Guid DriverId, decimal Score, string Breakdown, short Version);
-
     private sealed record BookedRide(
-        double Lat, double Lng, string VehicleType, string PaymentMethod, long? FareEstimateMinor, string Currency);
+        double Lat,
+        double Lng,
+        string VehicleType,
+        string PaymentMethod,
+        long? FareEstimateMinor,
+        string Currency,
+        Guid PassengerId,
+        string? PackageSize,
+        string Kind);
 }

@@ -23,6 +23,14 @@ public interface IPresenceRepository
     Task<PresenceRow?> FindAsync(
         NpgsqlConnection connection, NpgsqlTransaction? transaction, Guid driverId, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// The presence row a vehicle is on standby under. The EMQX plane knows only vehicles — the
+    /// topic is <c>veh/{vehicleId}/status</c> and the ACL binds it to the device credential — so
+    /// this is how a last will reaches a driver (R-15).
+    /// </summary>
+    Task<PresenceRow?> FindByVehicleAsync(
+        NpgsqlConnection connection, Guid vehicleId, CancellationToken cancellationToken);
+
     /// <summary>Upserts presence to AVAILABLE — the driver is in the pool as of now.</summary>
     Task<PresenceRow> GoOnlineAsync(
         NpgsqlConnection connection,
@@ -49,7 +57,28 @@ public interface IPresenceRepository
     /// <summary>Unconditional move to OFFLINE — <c>POST /v1/standby/offline</c> always succeeds.</summary>
     Task<PresenceRow?> GoOfflineAsync(
         NpgsqlConnection connection, NpgsqlTransaction? transaction, Guid driverId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// R-08: a live GPS sample refreshes the driver's presence. Returns <see langword="null"/> when
+    /// the vehicle is not on standby, or when the sample is older than what the row already holds.
+    /// </summary>
+    Task<PositionUpdate?> RecordPositionAsync(
+        NpgsqlConnection connection,
+        Guid vehicleId,
+        GeoPoint position,
+        DateTimeOffset sampledAt,
+        int moveThresholdM,
+        CancellationToken cancellationToken);
 }
+
+/// <summary>What one position sample did to a presence row.</summary>
+/// <param name="Moved">
+/// The driver travelled more than <c>Dispatch:PositionMoveThresholdM</c> since the row was last
+/// written, so <c>geo</c> changed and the Redis GEO index needs the new coordinate. False means only
+/// <c>last_seen_at</c> advanced, which is the common case for a driver waiting at a rank.
+/// </param>
+public sealed record PositionUpdate(
+    Guid DriverId, Guid VehicleId, string VehicleType, string State, GeoPoint? Geo, bool Moved);
 
 /// <summary>What <c>POST /v1/standby/online</c> found when it looked the vehicle up.</summary>
 public sealed record OnlineVehicle(Guid Id, Guid OwnerId, string VehicleType, string Mode, string Status);
@@ -95,6 +124,25 @@ public sealed class PresenceRepository : IPresenceRepository
             $"SELECT {Columns} FROM dispatch.driver_presence WHERE driver_id = @DriverId;",
             new { DriverId = driverId },
             transaction,
+            cancellationToken: cancellationToken));
+    }
+
+    public Task<PresenceRow?> FindByVehicleAsync(
+        NpgsqlConnection connection, Guid vehicleId, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+
+        // At most one row: `driver_id` is the primary key and a vehicle is on standby under one
+        // driver at a time (D-03's one-live-vehicle-per-driver rule, seen from the other side).
+        // ORDER BY updated_at is the tie-break for a row left behind by a handover.
+        return connection.QuerySingleOrDefaultAsync<PresenceRow>(new CommandDefinition(
+            $"""
+             SELECT {Columns} FROM dispatch.driver_presence
+              WHERE vehicle_id = @VehicleId
+              ORDER BY updated_at DESC
+              LIMIT 1;
+             """,
+            new { VehicleId = vehicleId },
             cancellationToken: cancellationToken));
     }
 
@@ -184,6 +232,60 @@ public sealed class PresenceRepository : IPresenceRepository
              """,
             new { DriverId = driverId },
             transaction,
+            cancellationToken: cancellationToken));
+    }
+
+    public Task<PositionUpdate?> RecordPositionAsync(
+        NpgsqlConnection connection,
+        Guid vehicleId,
+        GeoPoint position,
+        DateTimeOffset sampledAt,
+        int moveThresholdM,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+
+        // `moved` has to be computed from the row as it stands BEFORE the update, and an
+        // `UPDATE … RETURNING` returns the new values — hence the CTE. It is also what decides
+        // whether the caller issues a GEOADD, so getting it from the same statement that did the
+        // write is what keeps Postgres and Redis describing one position rather than two.
+        //
+        // `last_seen_at` advances on every accepted sample while `geo` only advances on a real
+        // move: D5' §3.2's freshness gate is about liveness, and a driver sitting at a rank for ten
+        // minutes is the candidate this service most wants to keep, not the first one to drop.
+        //
+        // The `sampledAt >= last_seen_at` guard is the reorder defence. `telemetry.normalized` is
+        // keyed by vehicleId so one consumer owns a vehicle and ordering holds — except for the
+        // seconds around a group rebalance, which is exactly when a stale sample could otherwise
+        // teleport a driver backwards.
+        return connection.QuerySingleOrDefaultAsync<PositionUpdate>(new CommandDefinition(
+            $"""
+             WITH before AS (
+               SELECT driver_id,
+                      (geo IS NULL OR NOT ST_DWithin(geo, @Geo, @ThresholdM)) AS moved
+                 FROM dispatch.driver_presence
+                WHERE vehicle_id = @VehicleId)
+             UPDATE dispatch.driver_presence p
+                SET last_seen_at = @SampledAt,
+                    geo = CASE WHEN b.moved THEN @Geo ELSE p.geo END
+               FROM before b
+              WHERE p.driver_id = b.driver_id
+                AND p.state <> '{PresenceStates.Offline}'
+                AND (p.last_seen_at IS NULL OR @SampledAt >= p.last_seen_at)
+             RETURNING p.driver_id AS DriverId,
+                       p.vehicle_id AS VehicleId,
+                       p.vehicle_type AS VehicleType,
+                       p.state AS State,
+                       p.geo AS Geo,
+                       b.moved AS Moved;
+             """,
+            new
+            {
+                VehicleId = vehicleId,
+                Geo = position,
+                SampledAt = sampledAt,
+                ThresholdM = (double)moveThresholdM,
+            },
             cancellationToken: cancellationToken));
     }
 }

@@ -1040,6 +1040,15 @@ paths:
         driver is still inside the window to accept. That case answers `409 conflict` and the
         backstop simply tries again.
 
+        **Δ C034 — `reason`.** R-15 gives dispatch-svc one case where the deadline must *not*
+        decide: the driver's EMQX last will fired and their session stayed dead for the whole
+        configured grace, so they provably cannot accept and leaving the ride `Offered` would spend
+        the rest of the 15 s on somebody who is not there. `reason: driver_unreachable` is the only
+        value that drops the deadline predicate; it is a closed set rather than a boolean so
+        `rides.transitions.reason_code` records which of the two happened
+        (`OFFER_EXPIRED` / `DRIVER_UNREACHABLE`). Everything else about the transition, the cleared
+        offer columns and the emitted event is identical.
+
         The offer columns are cleared exactly as on a decline, so `Matching` never carries a stale
         `current_offer_id`. Emits `offer.expired` on `ride.events` (D5' §6's `Offered` row), which
         is dispatch-svc's cue to release the driver and offer the next candidate.
@@ -1059,6 +1068,13 @@ paths:
               properties:
                 offerId:
                   $ref: './_shared.yaml#/components/schemas/Ulid'
+                reason:
+                  type: string
+                  default: deadline
+                  enum: [deadline, driver_unreachable]
+                  description: |
+                    `deadline` — R-04's durable backstop; the `offer_expires_at <= now()` guard
+                    applies. `driver_unreachable` — R-15's last-will grace; the guard is dropped.
       responses:
         '200':
           description: The ride is Matching again and holds no offer.

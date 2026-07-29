@@ -60,8 +60,22 @@ public sealed class RideEventHandler(IDispatchService dispatch, ILogger<RideEven
             // ADD §9.4: on a terminal event the driver's availability is restored — decrement
             // currentRideId, re-add to the GEO index, release the lock. Skipping any of these
             // leaves a "ghost-busy" driver, which is what the R-20 stuck-state alert catches.
-            case RideEventTypes.Completed or RideEventTypes.Cancelled when envelope.Payload?.DriverId is { } driverId:
-                await dispatch.ReturnToPoolAsync(driverId, cancellationToken);
+            //
+            // The US-6A.11 deadline is retired with it, and unconditionally: a terminal ride with a
+            // live 120-second timer behind it would have the sweep try to system-cancel a ride that
+            // is already over, once per poll, until the lease expired.
+            case RideEventTypes.Completed or RideEventTypes.Cancelled:
+                await dispatch.RetireRideAsync(envelope.RideId, cancellationToken);
+
+                if (envelope.Payload?.DriverId is { } driverId)
+                {
+                    await dispatch.ReturnToPoolAsync(driverId, cancellationToken);
+                }
+
+                break;
+
+            case RideEventTypes.ExpiredNoDriver:
+                await dispatch.RetireRideAsync(envelope.RideId, cancellationToken);
                 break;
 
             default:

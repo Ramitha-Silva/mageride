@@ -338,10 +338,14 @@ public sealed class ReservationTests(PostgresFixture postgres, RedisFixture redi
         await dispatch.ReleaseLiveOfferAsync(rideId, OfferStatuses.Declined, TestContext.Current.CancellationToken);
 
         // A driver is available and near, and the ride is back in Matching — the round bound is
-        // the only thing stopping a second offer.
+        // the only thing stopping a second offer. C034 made that ending terminal: §11.12's
+        // "No candidates after N rounds OR timeout (…)" row produces ExpiredNoDriver either way,
+        // so the passenger is told rather than left watching a spinner (US-6A.11).
         Assert.Equal(
-            DispatchResult.RoundsExhausted,
+            DispatchResult.ExpiredNoDriver,
             (await dispatch.DispatchAsync(request, TestContext.Current.CancellationToken)).Result);
+
+        Assert.Equal("ExpiredNoDriver", (await harness.ReadRideAsync(rideId)).State);
     }
 
     private Task<DispatchHarness> StartAsync(IDictionary<string, string?>? settings = null)

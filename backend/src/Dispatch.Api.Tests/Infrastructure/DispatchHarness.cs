@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Dapper;
+using MageRide.Reputation;
 using MageRide.Ride;
 using MageRide.Shared.Fares;
 using MageRide.Shared.Primitives;
@@ -20,15 +21,22 @@ using StackExchange.Redis;
 namespace MageRide.Dispatch.Tests.Infrastructure;
 
 /// <summary>
-/// A running dispatch-svc <b>and</b> a running ride-svc on real sockets, against a real Postgres
-/// and a real Redis.
+/// A running dispatch-svc, a running ride-svc <b>and</b> a running reputation-svc on real sockets,
+/// against a real Postgres and a real Redis.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Both are built through their own <c>*Application.Build</c>, so the pipelines under test are the
-/// ones the processes run. ride-svc is real rather than faked because everything this component
+/// All three are built through their own <c>*Application.Build</c>, so the pipelines under test are
+/// the ones the processes run. ride-svc is real rather than faked because everything the offer loop
 /// has to prove lives in the seam between them: who may write <c>rides.state</c>, whose clock
 /// stamps <c>offer_expires_at</c>, and whether <c>offer.created</c> can precede a commit.
+/// </para>
+/// <para>
+/// <b>reputation-svc is real for a different reason.</b> D5' §3.2's block-state gate is a gRPC call
+/// on the hot path, and its failure mode is silent: an unreachable reputation-svc, a wrong port or
+/// a rejected internal key all fail *open*, so a stub would prove only that the code calls what it
+/// calls. Every dispatch test in this assembly therefore runs with the gate genuinely on and
+/// answering — which is also what stops the wiring from rotting between here and C036.
 /// </para>
 /// <para>
 /// Background workers are <b>off by default</b>. A sweep or a consumer running underneath an
@@ -44,6 +52,9 @@ internal sealed class DispatchHarness : IAsyncDisposable
     /// <summary>Guards ride-svc's <c>/v1/internal/rides/**</c> until C042 lands a mesh.</summary>
     public const string InternalApiKey = "mageride-c023-test-internal-key";
 
+    /// <summary>Guards reputation-svc's gRPC service and its own internal routes (C033).</summary>
+    public const string ReputationInternalKey = "mageride-c034-test-reputation-key";
+
     /// <summary>Colombo Fort — every test's pickup unless it says otherwise.</summary>
     public static readonly GeoPoint Pickup = new(6.9344, 79.8428);
 
@@ -53,18 +64,21 @@ internal sealed class DispatchHarness : IAsyncDisposable
     private static int _plateCounter = Random.Shared.Next(1_000, 9_000) * 1_000;
 
     private readonly WebApplication _rideApp;
+    private readonly WebApplication _reputationApp;
     private readonly WebApplication _dispatchApp;
     private readonly PostgresFixture _postgres;
     private readonly string _redisConnectionString;
 
     private DispatchHarness(
         WebApplication rideApp,
+        WebApplication reputationApp,
         WebApplication dispatchApp,
         TestTokenIssuer tokens,
         PostgresFixture postgres,
         string redisConnectionString)
     {
         _rideApp = rideApp;
+        _reputationApp = reputationApp;
         _dispatchApp = dispatchApp;
         _postgres = postgres;
         _redisConnectionString = redisConnectionString;
@@ -96,7 +110,8 @@ internal sealed class DispatchHarness : IAsyncDisposable
         PostgresFixture postgres,
         RedisFixture redis,
         IDictionary<string, string?>? dispatchSettings = null,
-        IDictionary<string, string?>? rideSettings = null)
+        IDictionary<string, string?>? rideSettings = null,
+        IDictionary<string, string?>? reputationSettings = null)
     {
         ArgumentNullException.ThrowIfNull(postgres);
         ArgumentNullException.ThrowIfNull(redis);
@@ -117,10 +132,15 @@ internal sealed class DispatchHarness : IAsyncDisposable
         var rideApp = BuildRideService(postgres, tokens, rideSettings);
         await rideApp.StartAsync();
 
-        var dispatchApp = BuildDispatchService(postgres, redis, tokens, BaseAddressOf(rideApp), dispatchSettings);
+        var reputationApp = BuildReputationService(postgres, redis, tokens, reputationSettings);
+        await reputationApp.StartAsync();
+
+        var dispatchApp = BuildDispatchService(
+            postgres, redis, tokens, BaseAddressOf(rideApp), GrpcAddressOf(reputationApp), dispatchSettings);
+
         await dispatchApp.StartAsync();
 
-        return new DispatchHarness(rideApp, dispatchApp, tokens, postgres, redis.ConnectionString);
+        return new DispatchHarness(rideApp, reputationApp, dispatchApp, tokens, postgres, redis.ConnectionString);
     }
 
     // -----------------------------------------------------------------------------------------
@@ -185,6 +205,111 @@ internal sealed class DispatchHarness : IAsyncDisposable
         return driver;
     }
 
+    /// <summary>
+    /// Writes a <c>reputation.block_states</c> row directly, as reputation-svc's own rules would
+    /// have left it after three confirmed reports or a run of cancellations (C033, D-04).
+    /// </summary>
+    /// <remarks>
+    /// The state and not the counters: reproducing "three reports" through
+    /// <c>ReportVehicle</c> would test C033's rules a second time, and what this component has to
+    /// prove is that it reads whatever verdict reputation-svc reached.
+    /// </remarks>
+    public async Task SetBlockStateAsync(Guid userId, string state, string reason = "reports_delist")
+    {
+        await using var connection = await _postgres.OpenAsync();
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO reputation.block_states (user_id, state, reason, source)
+            VALUES (@UserId, @State, @Reason, 'auto')
+                ON CONFLICT (user_id) DO UPDATE
+               SET state = EXCLUDED.state, reason = EXCLUDED.reason;
+            """,
+            new { UserId = userId, State = state, Reason = reason });
+    }
+
+    /// <summary>Sets a driver's level (D5' §4.2). reputation-svc is the sole writer in production.</summary>
+    public async Task SetDriverLevelAsync(Guid driverId, int level)
+    {
+        await using var connection = await _postgres.OpenAsync();
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO dispatch.driver_levels (driver_id, level) VALUES (@DriverId, @Level)
+                ON CONFLICT (driver_id) DO UPDATE SET level = EXCLUDED.level;
+            """,
+            new { DriverId = driverId, Level = (short)level });
+    }
+
+    /// <summary>
+    /// Gives a driver a wallet with <paramref name="balanceMinor"/> in it — a <c>billing.accounts</c>
+    /// row and its <c>billing.wallets</c> mirror, which is what the D-08 gate reads (§10).
+    /// </summary>
+    /// <remarks>
+    /// No journal postings: the ledger is the master of money (D-09) and wallet-svc (C046) is what
+    /// will move it. What this gate needs is the read model, and writing it directly is the only way
+    /// to set a balance before that service exists.
+    /// </remarks>
+    public async Task SetWalletBalanceAsync(Guid driverId, long balanceMinor)
+    {
+        await using var connection = await _postgres.OpenAsync();
+        await connection.ExecuteAsync(
+            """
+            WITH account AS (
+              INSERT INTO billing.accounts (owner_type, owner_id, currency, balance_minor)
+              VALUES ('driver', @DriverId, 'LKR', @BalanceMinor)
+                  ON CONFLICT (owner_type, owner_id, currency) WHERE owner_id IS NOT NULL
+                  DO UPDATE SET balance_minor = EXCLUDED.balance_minor
+              RETURNING id)
+            INSERT INTO billing.wallets (account_id, balance_minor)
+            SELECT id, @BalanceMinor FROM account
+                ON CONFLICT (account_id) DO UPDATE SET balance_minor = EXCLUDED.balance_minor;
+            """,
+            new { DriverId = driverId, BalanceMinor = balanceMinor });
+    }
+
+    /// <summary>Blocks a driver for one passenger — <c>safety.blocked_drivers</c> (US-12.10).</summary>
+    public async Task BlockDriverAsync(Guid passengerId, Guid driverId)
+    {
+        await using var connection = await _postgres.OpenAsync();
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO safety.blocked_drivers (passenger_id, driver_id) VALUES (@PassengerId, @DriverId)
+                ON CONFLICT (passenger_id, driver_id) DO NOTHING;
+            """,
+            new { PassengerId = passengerId, DriverId = driverId });
+    }
+
+    /// <summary>E-03: registry auto-suspends a vehicle whose documents lapsed (migration 0312).</summary>
+    public async Task SuspendVehicleAsync(Guid vehicleId)
+    {
+        await using var connection = await _postgres.OpenAsync();
+        await connection.ExecuteAsync(
+            "UPDATE registry.vehicles SET dispatch_state = 'DISPATCH_SUSPENDED' WHERE id = @VehicleId;",
+            new { VehicleId = vehicleId });
+    }
+
+    /// <summary>Ages a driver's presence so D5' §3.2's GPS-freshness gate sees them as stale.</summary>
+    public async Task AgePresenceAsync(Guid driverId, TimeSpan by)
+    {
+        await using var connection = await _postgres.OpenAsync();
+        await connection.ExecuteAsync(
+            "UPDATE dispatch.driver_presence SET last_seen_at = now() - @By WHERE driver_id = @DriverId;",
+            new { DriverId = driverId, By = by });
+    }
+
+    /// <summary>The rows <c>dispatch.candidate_scores</c> holds for one ride, best score first.</summary>
+    public async Task<IReadOnlyList<ScoreRow>> ReadScoresAsync(Guid rideId)
+    {
+        await using var connection = await _postgres.OpenAsync();
+
+        return [.. await connection.QueryAsync<ScoreRow>(
+            """
+            SELECT driver_id AS DriverId, score AS Score, package_size_compatible AS PackageSizeCompatible,
+                   breakdown::text AS Breakdown, dispatch_algorithm_version AS Version
+              FROM dispatch.candidate_scores WHERE ride_id = @RideId ORDER BY score DESC, driver_id;
+            """,
+            new { RideId = rideId })];
+    }
+
     // -----------------------------------------------------------------------------------------
     // HTTP
     // -----------------------------------------------------------------------------------------
@@ -229,7 +354,6 @@ internal sealed class DispatchHarness : IAsyncDisposable
 
         return Client.SendAsync(request);
     }
-
     // -----------------------------------------------------------------------------------------
     // ride-svc, driven directly — the passenger half of the skeleton
     // -----------------------------------------------------------------------------------------
@@ -344,8 +468,12 @@ internal sealed class DispatchHarness : IAsyncDisposable
         Client.Dispose();
         RideClient.Dispose();
 
+        // Reverse start order: dispatch is the one holding gRPC and HTTP connections to the other
+        // two, so stopping it first means neither of them is torn down under an in-flight call.
         await _dispatchApp.StopAsync();
         await _dispatchApp.DisposeAsync();
+        await _reputationApp.StopAsync();
+        await _reputationApp.DisposeAsync();
         await _rideApp.StopAsync();
         await _rideApp.DisposeAsync();
     }
@@ -382,11 +510,59 @@ internal sealed class DispatchHarness : IAsyncDisposable
             builder => Configure(builder, tokens, overrides));
     }
 
+    /// <summary>
+    /// reputation-svc, standing beside the other two so D5' §3.2's gate is genuinely asked on every
+    /// candidate build. Its own workers are off — nothing here counts a cancellation; the tests that
+    /// need a block state write it.
+    /// </summary>
+    private static WebApplication BuildReputationService(
+        PostgresFixture postgres, RedisFixture redis, TestTokenIssuer tokens, IDictionary<string, string?>? settings)
+    {
+        var overrides = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["ConnectionStrings:Postgres"] = postgres.ConnectionString,
+            ["ConnectionStrings:Redis"] = redis.ConnectionString,
+            ["Postgres:PgBouncerTransactionMode"] = "false",
+            ["Jwt:JwksUrl"] = "http://127.0.0.1:1/.well-known/jwks.json",
+            ["Jwt:Issuer"] = tokens.IssuerName,
+            ["Jwt:RequireHttpsMetadata"] = "false",
+            ["Kafka:BootstrapServers"] = "127.0.0.1:1",
+            ["Outbox:DispatcherEnabled"] = "false",
+            ["Otel:PrometheusEnabled"] = "false",
+            ["Reputation:InternalApiKey"] = ReputationInternalKey,
+
+            // 0 = an ephemeral port. D7' §4.2's fixed 5005 would collide the moment two test classes
+            // ran at once, and this assembly runs several.
+            ["Reputation:GrpcListenPort"] = "0",
+            ["Reputation:ConsumerEnabled"] = "false",
+            ["Reputation:ExpiryWorkerEnabled"] = "false",
+            ["Reputation:DetectorEnabled"] = "false",
+
+            // As short as C033's own Range allows, so a status a test wrote straight into
+            // reputation.block_states is not shadowed by the cache C033 puts in front of it. Every
+            // test mints fresh user ids, so nothing is cached for them before the write in any
+            // case; this is belt as well as braces. The gate's own memo is off on the dispatch side
+            // for the same reason.
+            ["Reputation:BlockStatusCacheTtl"] = "00:00:00.100",
+        };
+
+        Merge(overrides, settings);
+
+        return ReputationApplication.Build(
+            new WebApplicationOptions
+            {
+                EnvironmentName = Environments.Development,
+                ContentRootPath = AppContext.BaseDirectory,
+            },
+            builder => Configure(builder, tokens, overrides));
+    }
+
     private static WebApplication BuildDispatchService(
         PostgresFixture postgres,
         RedisFixture redis,
         TestTokenIssuer tokens,
         string rideBaseUrl,
+        string reputationGrpcUrl,
         IDictionary<string, string?>? settings)
     {
         var overrides = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
@@ -402,11 +578,20 @@ internal sealed class DispatchHarness : IAsyncDisposable
             ["Otel:PrometheusEnabled"] = "false",
             ["Dispatch:RideServiceBaseUrl"] = rideBaseUrl,
             ["Dispatch:RideServiceInternalKey"] = InternalApiKey,
+            ["Dispatch:ReputationGrpcAddress"] = reputationGrpcUrl,
+            ["Dispatch:ReputationInternalKey"] = ReputationInternalKey,
+
+            // The gate's local memo is off so a block state a test has just written is seen by the
+            // very next round. reputation-svc's own cache is zeroed for the same reason; what stays
+            // real is the gRPC call itself, which is the part that silently fails open.
+            ["Dispatch:ReputationCacheTtl"] = "00:00:00",
 
             // Off unless a test asks: a background sweep or consumer running under an assertion
             // makes "the backstop fired" indistinguishable from "something fired".
             ["Dispatch:ExpiryWorkerEnabled"] = "false",
+            ["Dispatch:DispatchTimerWorkerEnabled"] = "false",
             ["Dispatch:ConsumerEnabled"] = "false",
+            ["Dispatch:PositionConsumerEnabled"] = "false",
             ["Dispatch:KeyspaceNotificationsEnabled"] = "false",
         };
 
@@ -479,7 +664,7 @@ internal sealed class DispatchHarness : IAsyncDisposable
             await connection.ExecuteAsync(
                 """
                 TRUNCATE dispatch.candidate_scores, dispatch.offers, dispatch.driver_presence,
-                         dispatch.outbox, dispatch.command_log;
+                         dispatch.timers, dispatch.outbox, dispatch.command_log;
                 DELETE FROM rides.timers WHERE kind = 'offer_expiry';
                 UPDATE rides.outbox SET dispatched_at = now() WHERE dispatched_at IS NULL;
                 """);
@@ -501,10 +686,19 @@ internal sealed class DispatchHarness : IAsyncDisposable
         return await ConnectionMultiplexer.ConnectAsync(config);
     }
 
-    private static string BaseAddressOf(WebApplication app) =>
+    private static string BaseAddressOf(WebApplication app) => AddressesOf(app).First();
+
+    /// <summary>
+    /// reputation-svc's HTTP/2-only endpoint. <c>ReputationApplication</c> binds the HTTP/1.1 one
+    /// first and the gRPC one second, and <c>IServerAddressesFeature</c> reports them in
+    /// <c>Listen</c> order — which is the only way to tell them apart when both took port 0.
+    /// </summary>
+    private static string GrpcAddressOf(WebApplication app) => AddressesOf(app).Last();
+
+    private static IReadOnlyList<string> AddressesOf(WebApplication app) =>
         // Fully qualified: StackExchange.Redis has its own IServer, and this file needs both.
-        app.Services.GetRequiredService<Microsoft.AspNetCore.Hosting.Server.IServer>()
-            .Features.Get<IServerAddressesFeature>()!.Addresses.First();
+        [.. app.Services.GetRequiredService<Microsoft.AspNetCore.Hosting.Server.IServer>()
+            .Features.Get<IServerAddressesFeature>()!.Addresses];
 
     private static HttpClient NewClient(WebApplication app) =>
         new() { BaseAddress = new Uri(BaseAddressOf(app)), Timeout = TimeSpan.FromSeconds(60) };
@@ -515,6 +709,10 @@ internal sealed class DispatchHarness : IAsyncDisposable
 
 /// <summary>A driver plus the one vehicle they were seeded with.</summary>
 internal sealed record SeededDriver(Guid DriverId, Guid VehicleId, string Plate, string Bearer);
+
+/// <summary>A row of the R-11 scoring audit, as a test reads it back.</summary>
+internal sealed record ScoreRow(
+    Guid DriverId, decimal Score, bool? PackageSizeCompatible, string Breakdown, short Version);
 
 /// <summary>The slice of <c>rides.rides</c> a dispatch assertion cares about.</summary>
 internal sealed record RideSnapshot(

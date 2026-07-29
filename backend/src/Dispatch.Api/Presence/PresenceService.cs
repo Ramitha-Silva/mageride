@@ -25,6 +25,14 @@ public interface IPresenceService
     Task<PresenceRow> GoOfflineAsync(Guid driverId, CancellationToken cancellationToken);
 
     Task<PresenceRow?> GetAsync(Guid driverId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// R-08: one live GPS sample keeps a standing-by driver in the candidate pool and at the right
+    /// coordinate. Driven by <c>telemetry.normalized</c>, never by a client.
+    /// </summary>
+    /// <returns>What the sample did, or <see langword="null"/> when the vehicle is not on standby.</returns>
+    Task<PositionUpdate?> RecordPositionAsync(
+        Guid vehicleId, GeoPoint position, DateTimeOffset sampledAt, CancellationToken cancellationToken);
 }
 
 /// <inheritdoc cref="IPresenceService"/>
@@ -158,6 +166,47 @@ public sealed class PresenceService(
     {
         await using var connection = await connectionFactory.OpenAsync(cancellationToken);
         return await presence.FindAsync(connection, null, driverId, cancellationToken);
+    }
+
+    public async Task<PositionUpdate?> RecordPositionAsync(
+        Guid vehicleId, GeoPoint position, DateTimeOffset sampledAt, CancellationToken cancellationToken)
+    {
+        await using var connection = await connectionFactory.OpenAsync(cancellationToken);
+
+        var update = await presence.RecordPositionAsync(
+            connection, vehicleId, position, sampledAt, _options.PositionMoveThresholdM, cancellationToken);
+
+        if (update is null)
+        {
+            // Not a Mode C standby vehicle, or a sample older than the row already holds. Both are
+            // ordinary: `telemetry.normalized` carries every Mode A bus and every Mode B shared
+            // vehicle on the platform, and dispatch has no presence row for any of them.
+            return null;
+        }
+
+        // Only an AVAILABLE driver belongs in geo:drivers:available (ADD §9.4). An OFFERED or
+        // ON_RIDE driver still gets their liveness refreshed — they are coming back to the pool and
+        // their `last_seen_at` decides whether they are a candidate when they do — but re-adding
+        // them to the GEO set would offer them a second ride while they hold the first.
+        if (update.State != PresenceStates.Available)
+        {
+            await index.TouchAvailabilityAsync(update.DriverId, sampledAt, cancellationToken);
+            return update;
+        }
+
+        // A missing availability hash means the 60 s TTL lapsed while the durable row stayed —
+        // the driver was in the pool and quietly fell out of the hot index. Re-indexing is what
+        // puts them back, and it is why the heartbeat reports whether it found anything.
+        var refreshed = !update.Moved
+                        && await index.TouchAvailabilityAsync(update.DriverId, sampledAt, cancellationToken);
+
+        if (!refreshed && update.Geo is { } geo)
+        {
+            await index.IndexAvailableAsync(
+                update.DriverId, update.VehicleId, update.VehicleType, geo, cancellationToken);
+        }
+
+        return update;
     }
 
     private static Guid RequireVehicleId(string? value) =>

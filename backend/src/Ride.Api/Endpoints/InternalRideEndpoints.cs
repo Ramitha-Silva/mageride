@@ -102,7 +102,7 @@ public static class InternalRideEndpoints
         ArgumentNullException.ThrowIfNull(service);
 
         var ride = await service.ExpireOfferAsync(
-            RequireRideId(rideId), RequireId(body?.OfferId, "offerId"), cancellationToken);
+            RequireRideId(rideId), RequireId(body?.OfferId, "offerId"), body?.Reason, cancellationToken);
 
         return TypedResults.Ok(RideStateChangeResponse.From(ride));
     }

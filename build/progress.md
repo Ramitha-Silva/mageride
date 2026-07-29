@@ -59,7 +59,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C031 | trip-state-svc | 2 | DONE | 2026-07-28 | 46 tests green; 2 trips migrations (0504–0505); the D-03 mutex is the partial unique index and the Redis half needed a new key — `lock:driver:{driverId}` was already registry's; 6 micro-change-sets |
 | C032 | ride-svc-core | 2 | DONE | 2026-07-28 | 252 tests green; the §11.12 matrix is data, not a switch; no new migration — 0605's timer kinds and `terminal_at` were already right; 4 micro-change-sets |
 | C033 | reputation-svc | 2 | DONE | 2026-07-28 | 84 tests green; 3 reputation migrations (0803–0805) + an 8th Redpanda topic; the platform's first gRPC service, which needs a port of its own (cleartext has no ALPN); 8 micro-change-sets |
-| C034 | dispatch-svc-core | 2 | PENDING | | |
+| C034 | dispatch-svc-core | 2 | DONE | 2026-07-29 | 108 tests green (30 new); 2 dispatch migrations (0711–0712) + a `reason` on ride-svc's `/offer/expire`; **0712 fixes a live bug — an ACCEPTED offer stayed live for ever, so a driver could take exactly one ride**; 9 micro-change-sets |
 | C035 | dispatch-svc-scheduling-levels | 2 | PENDING | | |
 | C036 | dispatch-svc-directional | 2 | PENDING | | |
 | C037 | ride-svc-proxy-package | 2 | PENDING | | |
@@ -4404,3 +4404,148 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   decision). Both write `audit.events` inside the same transaction as the decision.
   **Build host —** Docker for Testcontainers (Postgres, Redis, Redpanda); the replica stayed down
   throughout. The 84 tests take ~1 min.
+
+- **Component:** C034 dispatch-svc-core — 2026-07-29
+- **Status:** DONE — `dotnet test backend/src/Dispatch.Api.Tests -c Release` is **108/108 green**
+  (30 new). All four DoD items have a test that fails without the code: a score recomputed from its
+  own persisted breakdown, a driver refused from the 2nd trip of the Colombo day and allowed the
+  1st, a cascade walked in score order that ends `ExpiredNoDriver` on the 120-second deadline, and
+  a real EMQX last will releasing a live offer inside the configured grace. `Ride.Api.Tests` (252),
+  `Reputation.Api.Tests` (84), `MageRide.Shared.Tests` (235) and `ApiGateway.Tests` (530) re-run
+  green; `infra/scripts/migrate-verify.sh` is 205/205 twice; spectral is 0 errors.
+- **Notes:**
+  **A live bug, found by the wallet DoD and fixed by migration 0712 —**
+  `ux_offers_driver_live` is printed in server_db_schema.md §6 as
+  `ON dispatch.offers(driver_id) WHERE status IN ('OFFERED','ACCEPTED')`, and nothing in the
+  `status` CHECK is terminal for an accepted offer. So a completed ride left its row at ACCEPTED
+  for ever and **the second ride a driver was ever offered was refused by a unique violation
+  against the first one they finished — and every ride after it.** C023 could not see it (no test
+  accepted and then dispatched again) and C025's walking skeleton books exactly one ride. Both
+  ways of fixing it inside the printed DDL lose something real: settling the row to DECLINED or
+  EXPIRED makes the audit lie about what the driver did, and dropping ACCEPTED from the predicate
+  would let a driver hold an offer for a second ride while carrying a passenger on the first —
+  the exact race R-10 exists to prevent. 0712 therefore gives *liveness* the dimension it was
+  missing (`released_at`) and changes neither printed list. **§6 / D4' §6 should carry it.**
+  Two more halves of the same fact were also missing and are now done in `ReturnToPoolAsync`:
+  ADD §11.12 makes dispatch-svc responsible for three things on a terminal event and C023 did one
+  of them — `lock:driver-offer:{driverId}` was left to its 15-second TTL, which self-heals just
+  slowly enough to lose the driver the next ride and just fast enough that nobody sees why.
+  **Micro-change-sets raised —**
+  (1) **`dispatch.timers` had no ride subject** (migration 0711). 0708 printed it for DT-04 alone,
+  so `driver_id` is NOT NULL — and US-6A.11's 120-second deadline has to fire in exactly the case
+  where no driver was ever found. `rides.timers` cannot hold it either: its `ck_timers_kind` is a
+  closed list of eight ride-svc kinds. 0711 adds `ride_id`, `payload`, a subject CHECK and the two
+  live-timer partial unique indexes that make arming idempotent under at-least-once delivery.
+  (2) **`dispatch.offers.released_at`** (migration 0712) — above.
+  (3) **`POST /v1/internal/rides/{id}/offer/expire` gained a `reason`.** R-04's guard is
+  `offer_expires_at <= now()` evaluated by Postgres, and it must stay that way — a backstop
+  trusting its own clock could cancel an offer a driver is still inside the window to accept. R-15
+  is the one caller that has to revoke *inside* the window: the grace has already established the
+  driver's broker session is dead. `reason: driver_unreachable` drops the predicate and nothing
+  else; a closed set rather than a boolean so `rides.transitions.reason_code` records which of the
+  two happened. `backend/contracts/ride.yaml` updated; **D3' ride-svc should carry it** alongside
+  C022/C023's three routes.
+  (4) **D5' §5 gives two different position intervals for the same driver.** §3.2 excludes a
+  candidate whose GPS sample is older than `2×expectedInterval`; §5.1 says "Idle standby (Mode C) =
+  1 / 60 s" and §5.2's table repeats it, while the row below says "Candidate in pool |
+  availability=AVAILABLE | 2–5 s" — and a Mode C driver on standby is *both* at once. Took §5.1's
+  60 s (⇒ a 120 s bound), because it is the number R-08's `driver:availability` TTL already agrees
+  with and because 5 s would put the bound at 10 s and exclude every driver whose app is on the
+  standby cadence the same document asks it to use. Both halves are configuration.
+  (5) **The 120 s global timeout contradicts ADD §11.12's 60 s.** D5' §3.5, US-6A.11 and this
+  component's DoD all say two minutes; §11.12's matrix row says "(60 s)" in a parenthesis. Took
+  120 s.
+  (6) **No spec gives the §3.3 weights, the distance normaliser or N in "N rounds".** `w_dist`
+  0.60 / `w_level` 0.25 / `w_cat` 0.15 sum to 1 so a score reads as a fraction of the best possible
+  candidate; `normalize(1/d)` is `1/(1 + d/halfLife)` with a 1 km half-life, which is finite for a
+  driver standing on the pickup — the literal `1/d` is not. All are admin-config and travel *on the
+  audit row*, so a decision stays reproducible after a retune.
+  (7) **P-11's `vehicle_type × package_size` table is not printed anywhere.** ADD §11 and D5' §11
+  give exactly one cell of it (`Motorbike × L = false`). The other 23 are in
+  `Domain/PackageCompatibility.cs`, derived from AL-09's own split of the eight tiers. **It belongs
+  in D5' §11 or as §20 seed data** — it is commercial policy and will be edited far more often than
+  code.
+  (8) **`ride.requested` carries no `packageSize`.** `rides.rides.package_size` exists (0601,
+  CHECK `S|M|L`) but C022's event payload carries `kind` and not the size, and only
+  `kind: passenger` is bookable until C037. The P-11 gate is implemented and tested against the
+  envelope directly; until C037 adds the field it simply has nothing to reject, which is a missing
+  input and not a gate that passes — `candidate_scores.package_size_compatible` stays NULL and says
+  so.
+  (9) **`RedisKeys.WalletBalance` was added to the kernel.** ADD §6 and D5' §9.2 both name
+  `wallet:bal:{driverId}` and `RedisKeys` had no entry; same shape as the `BlockStatus` key C033
+  added, on the same hot path.
+  **Decisions —**
+  (1) **An excluded candidate is written to the audit, not dropped.** R-11's table is asked "why did
+  this driver *not* get the ride" more often than the converse, and a row set containing only
+  survivors cannot answer it. Every evaluated driver gets a row; `breakdown.rejectedBy` names the
+  gate and `rank` is −1, which is a different fact from ranking last.
+  (2) **The weights travel with the decision.** `dispatch_algorithm_version` says which formula ran
+  and the breakdown says what it ran *with*, so an audit six months later does not need this
+  service's configuration — that is what makes DoD 1 a property of the row rather than of the
+  process.
+  (3) **The reputation gate fails open and says so.** An outage that excluded every driver would
+  take the platform down for a signal that removes a handful of them; ADD §12.6 already reserves
+  punitive action for a decision somebody made. An unanswered candidate carries
+  `blockState: UNKNOWN`, which is a different fact from `OK`.
+  (4) **`tripsToday` is counted from `dispatch.offers`, not `rides.rides`.** D5' §2.2 writes it as
+  "count(completed+accepted today for driver)", and an ACCEPTED offer is this service's own record
+  of exactly that — reading ride-svc's aggregate for a number this bounded context already holds
+  would cross the R-01 fence. It also makes D-08's degraded rule work as written: the first-trip
+  half survives a billing outage and only the *balance* is ever unconfirmable.
+  (5) **A driver with no `billing.accounts` row has a balance of zero, not an unknown one.** D-08's
+  "until balance confirmable" is about a read that *failed*; a returned row is a read that
+  succeeded. A tier with no `billing.plans` row is refused from the second trip instead, because
+  1901 leaves `truck` / `mini_truck` unseeded on purpose.
+  (6) **An empty round leaves the ride in Matching.** Only the 120-second deadline or
+  `MaxOfferRounds` ends it, because a driver who comes online inside the remaining window is still
+  a candidate. And a deadline that arrives while an offer is live reschedules itself past that
+  offer's own — §11.12's `ExpiredNoDriver` cell resolves from `Matching` alone, and the one
+  candidate the cascade found should get their fifteen seconds.
+  (7) **dispatch-svc consumes `telemetry.normalized` itself.** C024's position-processor stopped at
+  the three live-map indexes and its CLAUDE.md says why: "a sample carries no driverId, so writing
+  `driver:availability:{driverId}` would need a registry lookup this component has no business
+  doing on the hot path". dispatch needs no lookup — `dispatch.driver_presence` already holds the
+  (driver, vehicle) pair, because the driver told this service which vehicle they went online with.
+  It is the platform's second `AutoOffsetReset.Latest` consumer, for position-processor's reason:
+  a presence index is current state, and replaying an hour of positions would describe where
+  everybody *was*.
+  (8) **`last_seen_at` advances on every sample; `geo` only past 25 m.** The freshness gate is about
+  liveness, and a driver waiting at a rank is the candidate this service most wants to keep — not
+  the first one to drop.
+  (9) **A last will starts a clock and an ON_RIDE driver is skipped entirely.** §11.12 gives
+  ride-svc four graces on an accepted ride; two services acting on one fact would race, so
+  `VehicleStatusService` checks the state before arming anything. A repeated `offline` does not
+  extend the grace, or an unstable connection would hold an offer for as long as the instability
+  lasted.
+  (10) **Two timer tables, two workers, two flags.** `rides.timers.offer_expiry` strands one driver
+  when it sticks; the `dispatch.timers` deadline strands a passenger watching a spinner for ever.
+  Different failure modes, so an operator can stop one without stopping the other.
+  **Test harness —** `DispatchHarness` now starts a **real reputation-svc** beside ride-svc and
+  dispatch-svc, so D5' §3.2's gate is a genuine gRPC call on every dispatch test in the assembly.
+  That is not thoroughness for its own sake: the gate fails *open*, so an unreachable service, a
+  wrong port and a rejected internal key all look like "OK" to a stub. `EmqxFixture` joined
+  `DispatchCollection` for the same reason — a refused subscription leaves the client connected and
+  simply never delivers a driver going offline. Both `Dispatch.Api` and `Reputation.Api` compile
+  `backend/contracts/proto/reputation.v1.proto` (Client / Both); that is only ambiguous if the test
+  project *names* one of the generated types, and it does not — if a later test needs to, give the
+  `Reputation.Api` reference an `Aliases` rather than copying the proto.
+  **For C035 (dispatch-svc-scheduling-levels) —** `dispatch.driver_levels` is read-only for you as
+  well (C033 is its sole writer); the level reaches you through
+  `IReputationGate` → `GetDriverLevel(...).job_board_eligible`, which is US-6A.8's L1 exclusion
+  already precomputed. `dispatch.timers` has `ride_id` and `payload` since 0711, so a T-30 scheduled
+  dispatch needs no migration — add a kind and a branch in `DispatchService.RunTimerAsync`, and add
+  the kind to `DispatchTimerRepository.ClaimDueAsync`'s `Kinds` array or your rows will never be
+  claimed.
+  **For C036 (dispatch-svc-directional) —** the DT-02 predicate goes between the hard gates and the
+  score (`CandidateScorer.Evaluate`), and `ScoreBreakdown.Directional` is the audit slot DT-02 asks
+  for, deliberately left null rather than fabricated. `PresenceService.GoOfflineAsync` and
+  `VehicleStatusService` are the two DT-04 clearing points that currently do nothing.
+  **For C037 (ride-svc-proxy-package) —** put `packageSize` on the `ride.requested` payload; the
+  P-11 gate on this side is finished and waiting for it. `isProxy` / `isPackage` / `packageSize` are
+  already carried on `offer.created`.
+  **For C046/C047 (wallet, daily fee) —** `wallet:bal:{driverId}` is read-through-populated here
+  with a 5 s TTL; you own the `wallet.debited` invalidation. This service only *gates*; the charge
+  itself (`billing.daily_fee_charges` + the ledger entry, D5' §2.2) is yours, and a `PAID` row is
+  what makes trips 3..N of a day free.
+  **Build host —** Docker for Testcontainers (Postgres, Redis, Redpanda, EMQX); the replica stayed
+  down throughout. The 108 tests take ~3 min, most of it EMQX start-up.

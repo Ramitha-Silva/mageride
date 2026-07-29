@@ -43,6 +43,16 @@ public interface IDriverIndex
     /// <param name="newState">One of <see cref="PresenceStates"/> — OFFERED or ON_RIDE.</param>
     Task RemoveFromPoolAsync(Guid driverId, string newState, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// R-08's heartbeat: refreshes <c>driver:availability:{driverId}</c>'s 60 s TTL from a live GPS
+    /// sample without touching the GEO set.
+    /// </summary>
+    /// <returns>
+    /// <see langword="false"/> when there was no hash to refresh — it had already expired, or Redis
+    /// was flushed — so the caller re-indexes the driver from the durable presence row instead.
+    /// </returns>
+    Task<bool> TouchAvailabilityAsync(Guid driverId, DateTimeOffset seenAt, CancellationToken cancellationToken);
+
     /// <summary>Drops the availability hash as well — the driver is off duty.</summary>
     Task ForgetAsync(Guid driverId, CancellationToken cancellationToken);
 
@@ -120,6 +130,23 @@ public sealed class DriverIndex(
         return 1
         """;
 
+    /// <summary>
+    /// The R-08 heartbeat, as one script. <c>HSET</c> on its own would resurrect an expired hash
+    /// with a single field and no TTL, which reads to every later caller as "this driver is online,
+    /// position unknown" — so the existence check and the write have to be one round trip.
+    ///
+    /// KEYS[1] = driver:availability:{driverId}   ARGV[1] = lastSeen (ISO-8601)  ARGV[2] = ttl ms
+    /// </summary>
+    private const string TouchScript =
+        """
+        if redis.call('EXISTS', KEYS[1]) == 1 then
+          redis.call('HSET', KEYS[1], 'lastSeen', ARGV[1])
+          redis.call('PEXPIRE', KEYS[1], ARGV[2])
+          return 1
+        end
+        return 0
+        """;
+
     private readonly DispatchOptions _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
 
     private IDatabase Db => redis.GetDatabase();
@@ -154,17 +181,20 @@ public sealed class DriverIndex(
             new HashEntry(CellField, cell),
 
             // `level` and `walletOk` are part of ADD §9.4's shape and are written so the hash is
-            // the documented one from the start. Both are placeholders: the Driver Level engine is
-            // C034 and the D-08 wallet cache is C034/C046, and NOTHING in this slice reads either
-            // — the candidate build applies no level and no wallet gate (see CandidateRepository).
+            // the documented one. **Nothing reads them, and nothing should.** Both are per-round
+            // facts owned elsewhere — the level comes from reputation-svc's GetDriverLevel and the
+            // wallet verdict from the D-08 gate over `wallet:bal:{driverId}` — and a copy cached
+            // here at go-online time would be hours stale by the time a candidate build saw it,
+            // which is the worst possible failure for a gate. They are the driver's *last known*
+            // values, for an operator reading the keyspace, and are marked as such.
             new HashEntry("level", 3),
             new HashEntry("walletOk", true),
         ]);
 
-        // TTL 60 s, refreshed on every live GPS sample (R-08). Nothing here refreshes it yet:
-        // position-processor-svc (C039) owns the heartbeat, so in this slice a driver drops out of
-        // the hash a minute after going online while the durable presence row stays. That is why
-        // the exact post-filter reads dispatch.driver_presence and not this hash.
+        // TTL 60 s, refreshed on every live GPS sample (R-08) — by this service's own
+        // telemetry.normalized consumer, which is what C034 added. The exact post-filter still
+        // reads dispatch.driver_presence rather than this hash: the durable row is what survives a
+        // flush, and D5' §3.2's freshness rule is a bound on its `last_seen_at`.
         await db.KeyExpireAsync(availability, _options.PresenceTtl);
     }
 
@@ -183,6 +213,22 @@ public sealed class DriverIndex(
             // TTL, which reads to every later caller as "this driver is online, position unknown".
             await db.HashSetAsync(RedisKeys.DriverAvailability(driverId), "state", newState);
         }
+    }
+
+    public async Task<bool> TouchAvailabilityAsync(
+        Guid driverId, DateTimeOffset seenAt, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var result = await Db.ScriptEvaluateAsync(
+            TouchScript,
+            [RedisKeys.DriverAvailability(driverId)],
+            [
+                seenAt.ToString("O", CultureInfo.InvariantCulture),
+                (long)_options.PresenceTtl.TotalMilliseconds,
+            ]);
+
+        return (long)result == 1;
     }
 
     public async Task ForgetAsync(Guid driverId, CancellationToken cancellationToken)

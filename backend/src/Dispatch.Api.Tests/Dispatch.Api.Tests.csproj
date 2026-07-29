@@ -20,10 +20,15 @@
     rides.state, and on whose clock stamps offer_expires_at — a stubbed ride-svc would agree
     with dispatch about all three by construction, which is exactly what must not be assumed.
 
+    C034 added a real reputation-svc and a real EMQX for the same reason twice over: D5' §3.2's
+    block-state gate and R-15's last-will subscription both fail SILENTLY when they are
+    misconfigured — an unreachable gRPC service reads as "OK" and a refused topic filter leaves the
+    client connected and simply never delivers a driver going offline.
+
     Tokens are minted here rather than fetched from iam-svc: dispatch-svc is a token *consumer*,
     and C025 is where the services meet end to end.
 
-    Microsoft.NET.Sdk.Web, not Microsoft.NET.Sdk: the harness builds two WebApplications.
+    Microsoft.NET.Sdk.Web, not Microsoft.NET.Sdk: the harness builds three WebApplications.
   -->
 
   <PropertyGroup>
@@ -55,7 +60,22 @@
   <ItemGroup>
     <ProjectReference Include="..\Dispatch.Api\Dispatch.Api.csproj" />
     <ProjectReference Include="..\Ride.Api\Ride.Api.csproj" />
-    <!-- C010: the Postgres, Redis and Redpanda fixtures, so this suite runs against the same
+    <!--
+      C034: reputation-svc runs beside the other two so D5' §3.2's block-state gate is a real gRPC
+      call over a real socket. It fails *open* — an unreachable service, a wrong port and a rejected
+      internal key all look like "OK" to the candidate build — so a stub would prove only that the
+      code calls what it calls.
+
+      Both assemblies compile backend/contracts/proto/reputation.v1.proto (Dispatch.Api as Client,
+      Reputation.Api as Both), so the generated types exist twice here. That is not ambiguous unless
+      this project *names* one, and it does not: the harness starts the service through
+      ReputationApplication.Build and seeds block states over SQL. If a future test needs to call
+      reputation.v1 directly from here, give this reference an Alias rather than dropping either
+      Protobuf Include — the contract directory is the single source of the wire format and neither
+      service may carry a copy.
+    -->
+    <ProjectReference Include="..\Reputation.Api\Reputation.Api.csproj" />
+    <!-- C010: the Postgres, Redis, Redpanda and EMQX fixtures, so this suite runs against the same
          server builds the dev stack and the replica do rather than hand-written copies. -->
     <ProjectReference Include="..\MageRide.TestKit\MageRide.TestKit.csproj" />
   </ItemGroup>
