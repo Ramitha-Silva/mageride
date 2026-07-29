@@ -472,6 +472,7 @@ public sealed class OfferLoopTests(PostgresFixture postgres, RedisFixture redis)
         var row = await connection.QuerySingleAsync<BookedRide>(
             """
             SELECT ST_Y(pickup_geo::geometry) AS Lat, ST_X(pickup_geo::geometry) AS Lng,
+                   ST_Y(dropoff_geo::geometry) AS DropoffLat, ST_X(dropoff_geo::geometry) AS DropoffLng,
                    vehicle_type AS VehicleType, payment_method AS PaymentMethod,
                    fare_estimate_minor AS FareEstimateMinor, currency AS Currency,
                    passenger_id AS PassengerId, package_size AS PackageSize,
@@ -484,7 +485,12 @@ public sealed class OfferLoopTests(PostgresFixture postgres, RedisFixture redis)
 
         return new RideDispatchRequest(
             rideId, new GeoPoint(row.Lat, row.Lng), row.VehicleType, row.PaymentMethod,
-            row.FareEstimateMinor, row.Currency, row.PassengerId, row.Kind, row.PackageSize);
+            row.FareEstimateMinor, row.Currency, row.PassengerId, row.Kind, row.PackageSize,
+
+            // Δ C036: `ride.requested` has always carried the drop-off (D6' §2.2) and the DT-02
+            // predicate is the first thing in this service to need it. Read from the same row as
+            // the pickup so the request a test drives is the one the envelope would have produced.
+            new GeoPoint(row.DropoffLat, row.DropoffLng));
     }
 
     private Task<DispatchHarness> StartAsync(IDictionary<string, string?>? settings = null)
@@ -505,6 +511,8 @@ public sealed class OfferLoopTests(PostgresFixture postgres, RedisFixture redis)
     private sealed record BookedRide(
         double Lat,
         double Lng,
+        double DropoffLat,
+        double DropoffLng,
         string VehicleType,
         string PaymentMethod,
         long? FareEstimateMinor,

@@ -371,6 +371,166 @@ internal sealed class DispatchHarness : IAsyncDisposable
         return Client.SendAsync(request);
     }
 
+    /// <summary>PUTs JSON to dispatch-svc — the two admin configuration routes.</summary>
+    public Task<HttpResponseMessage> PutAsync(string path, object? body, string? bearer)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Put, path)
+        {
+            Content = JsonContent.Create(body ?? new { }),
+        };
+
+        if (bearer is not null)
+        {
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", bearer);
+        }
+
+        return Client.SendAsync(request);
+    }
+
+    /// <summary>DELETEs from dispatch-svc as <paramref name="bearer"/>.</summary>
+    public Task<HttpResponseMessage> DeleteAsync(string path, string? bearer)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Delete, path);
+
+        if (bearer is not null)
+        {
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", bearer);
+        }
+
+        return Client.SendAsync(request);
+    }
+
+    // -----------------------------------------------------------------------------------------
+    // Directional Travel (C036)
+    // -----------------------------------------------------------------------------------------
+
+    /// <summary>Sets a Destination Filter through <c>POST /v1/standby/directional</c> (DT-01).</summary>
+    public Task<HttpResponseMessage> SetDirectionalAsync(
+        SeededDriver driver, GeoPoint destination, string? label = null)
+    {
+        ArgumentNullException.ThrowIfNull(driver);
+
+        return PostAsync(
+            "/v1/standby/directional",
+            new { destination = new { lat = destination.Latitude, lng = destination.Longitude }, label },
+            driver.Bearer);
+    }
+
+    /// <summary>Sets a filter and asserts it took, returning the 201 body.</summary>
+    public async Task<JsonElement> SetDirectionalForAsync(
+        SeededDriver driver, GeoPoint destination, string? label = null)
+    {
+        using var response = await SetDirectionalAsync(driver, destination, label);
+        Assert.Equal(System.Net.HttpStatusCode.Created, response.StatusCode);
+
+        return await ReadJsonAsync(response);
+    }
+
+    public Task<HttpResponseMessage> GetDirectionalAsync(SeededDriver driver)
+    {
+        ArgumentNullException.ThrowIfNull(driver);
+        return GetAsync("/v1/standby/directional", driver.Bearer);
+    }
+
+    public Task<HttpResponseMessage> ClearDirectionalAsync(SeededDriver driver)
+    {
+        ArgumentNullException.ThrowIfNull(driver);
+        return DeleteAsync("/v1/standby/directional", driver.Bearer);
+    }
+
+    /// <summary>Every activation row for a driver, oldest first — cleared ones included (DT-03).</summary>
+    public async Task<IReadOnlyList<DirectionalSnapshot>> ReadDirectionalFiltersAsync(Guid driverId)
+    {
+        await using var connection = await OpenAsync();
+
+        return [.. await connection.QueryAsync<DirectionalSnapshot>(
+            """
+            SELECT id AS Id,
+                   ST_Y(destination_geo::geometry) AS DestLat,
+                   ST_X(destination_geo::geometry) AS DestLng,
+                   label AS Label,
+                   expires_at AS ExpiresAt,
+                   cleared_at AS ClearedAt,
+                   cleared_reason AS ClearedReason,
+                   used_date AS UsedDate
+              FROM dispatch.directional_filters WHERE driver_id = @DriverId
+             ORDER BY created_at, id;
+            """,
+            new { DriverId = driverId })];
+    }
+
+    /// <summary>The live <c>dispatch.timers</c> rows for a driver, by kind.</summary>
+    public async Task<IReadOnlyList<DispatchTimerSnapshot>> ReadDriverTimersAsync(Guid driverId)
+    {
+        await using var connection = await OpenAsync();
+
+        return [.. await connection.QueryAsync<DispatchTimerSnapshot>(
+            """
+            SELECT id AS Id, kind AS Kind, fire_at AS FireAt, fired_at AS FiredAt
+              FROM dispatch.timers WHERE driver_id = @DriverId ORDER BY kind, fire_at;
+            """,
+            new { DriverId = driverId })];
+    }
+
+    /// <summary>Every <c>dispatch.outbox</c> row for one aggregate, oldest first.</summary>
+    public async Task<IReadOnlyList<OutboxSnapshot>> ReadOutboxAsync(Guid aggregateId)
+    {
+        await using var connection = await OpenAsync();
+
+        return [.. await connection.QueryAsync<OutboxSnapshot>(
+            """
+            SELECT event_type AS EventType, aggregate_id AS AggregateId, payload::text AS Payload
+              FROM dispatch.outbox WHERE aggregate_id = @AggregateId ORDER BY id;
+            """,
+            new { AggregateId = aggregateId })];
+    }
+
+    /// <summary>
+    /// Moves a driver's Directional Travel timers into the past so one sweep fires them, without
+    /// making the test wait out a two-hour duration.
+    /// </summary>
+    /// <remarks>
+    /// The filter's own <c>expires_at</c> is left alone on purpose where the caller wants the
+    /// <em>reminder</em> path: DT-08's warning is about a filter that is still live.
+    /// </remarks>
+    public async Task DueDirectionalTimerAsync(Guid driverId, string kind, bool expireFilter = false)
+    {
+        await using var connection = await OpenAsync();
+
+        await connection.ExecuteAsync(
+            "UPDATE dispatch.timers SET fire_at = now() - interval '1 second' " +
+            " WHERE driver_id = @DriverId AND kind = @Kind AND fired_at IS NULL;",
+            new { DriverId = driverId, Kind = kind });
+
+        if (expireFilter)
+        {
+            await connection.ExecuteAsync(
+                "UPDATE dispatch.directional_filters SET expires_at = now() - interval '1 second' " +
+                " WHERE driver_id = @DriverId AND cleared_at IS NULL;",
+                new { DriverId = driverId });
+        }
+    }
+
+    /// <summary>Fires one <c>dispatch.timers</c> sweep without waiting on the worker's ticker.</summary>
+    /// <remarks>
+    /// The worker opens its own scope per sweep, so the root provider is the right one to build it
+    /// from — the same shape <c>CascadeTests</c> and <c>LastWillTests</c> use.
+    /// </remarks>
+    public Task<int> SweepDispatchTimersAsync() =>
+        ActivatorUtilities
+            .CreateInstance<MageRide.Dispatch.Timers.DispatchTimerWorker>(Services)
+            .SweepOnceAsync(TestContext.Current.CancellationToken);
+
+    /// <summary>Backdates a driver's activation rows to another Colombo day (D-38).</summary>
+    public async Task BackdateDirectionalUsesAsync(Guid driverId, int days)
+    {
+        await using var connection = await OpenAsync();
+
+        await connection.ExecuteAsync(
+            "UPDATE dispatch.directional_filters SET used_date = used_date - @Days WHERE driver_id = @DriverId;",
+            new { DriverId = driverId, Days = days });
+    }
+
     /// <summary>Calls one of dispatch-svc's own <c>/v1/internal/**</c> routes with the shared secret.</summary>
     public Task<HttpResponseMessage> InternalAsync(
         HttpMethod method, string path, object? body = null, string? apiKey = DispatchInternalKey)
@@ -947,10 +1107,14 @@ internal sealed class DispatchHarness : IAsyncDisposable
                          dispatch.timers, dispatch.outbox, dispatch.command_log,
                          dispatch.job_board_intents, dispatch.scheduled_rides,
                          dispatch.driver_levels, dispatch.no_show_events,
-                         dispatch.cancellation_penalties;
+                         dispatch.cancellation_penalties, dispatch.directional_filters;
                 UPDATE dispatch.level_config
                    SET level_up_threshold = 500, no_show_penalty_points = 0,
                        cancellation_penalty_points = 0, job_board_min_level = 2
+                 WHERE id = 1;
+                UPDATE dispatch.directional_config
+                   SET theta_max_deg = 45, detour_max_m = 2000, progress_min_m = 250,
+                       max_uses_per_day = 2, max_duration_sec = 7200, clear_on_first_trip = false
                  WHERE id = 1;
                 DELETE FROM rides.timers WHERE kind = 'offer_expiry';
                 DELETE FROM trips.ratings WHERE subject_kind = 'ride';
@@ -1015,3 +1179,20 @@ internal sealed record DriverLevelSnapshot(int Level, int RatingPoints, int Poin
 /// <summary>The slice of <c>dispatch.cancellation_penalties</c> the D-05 assertions read (C035).</summary>
 internal sealed record PenaltySnapshot(
     Guid Id, long AmountMinor, string Basis, string Status, Guid? AppliedRideId);
+
+/// <summary>The slice of <c>dispatch.directional_filters</c> the DT-01..DT-04 assertions read (C036).</summary>
+internal sealed record DirectionalSnapshot(
+    Guid Id,
+    double DestLat,
+    double DestLng,
+    string? Label,
+    DateTimeOffset ExpiresAt,
+    DateTimeOffset? ClearedAt,
+    string? ClearedReason,
+    DateOnly UsedDate);
+
+/// <summary>A <c>dispatch.timers</c> row, as a test reads it back (C036).</summary>
+internal sealed record DispatchTimerSnapshot(Guid Id, string Kind, DateTimeOffset FireAt, DateTimeOffset? FiredAt);
+
+/// <summary>A <c>dispatch.outbox</c> row, as a test reads it back (C036).</summary>
+internal sealed record OutboxSnapshot(string EventType, Guid AggregateId, string Payload);

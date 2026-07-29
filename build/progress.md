@@ -61,7 +61,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C033 | reputation-svc | 2 | DONE | 2026-07-28 | 84 tests green; 3 reputation migrations (0803–0805) + an 8th Redpanda topic; the platform's first gRPC service, which needs a port of its own (cleartext has no ALPN); 8 micro-change-sets |
 | C034 | dispatch-svc-core | 2 | DONE | 2026-07-29 | 108 tests green (30 new); 2 dispatch migrations (0711–0712) + a `reason` on ride-svc's `/offer/expire`; **0712 fixes a live bug — an ACCEPTED offer stayed live for ever, so a driver could take exactly one ride**; 9 micro-change-sets |
 | C035 | dispatch-svc-scheduling-levels | 2 | DONE | 2026-07-29 | 143 tests green (35 new); 1 dispatch migration (0713, +`dispatch.level_config`) + a fifth internal command on ride-svc (`/v1/internal/rides/scheduled`); the C033/C034 "sole writer of `dispatch.driver_levels`" fence narrowed to counter-driven rules; 11 micro-change-sets |
-| C036 | dispatch-svc-directional | 2 | PENDING | | |
+| C036 | dispatch-svc-directional | 2 | DONE | 2026-07-29 | 180 tests green (37 new); **no migration** — 0707/0708 already carried every table and the open `kind` column; the DT-02 predicate reads the durable row rather than ADD §7.4's Redis hint, argued below; `GeoMath` promoted to the kernel; 8 micro-change-sets |
 | C037 | ride-svc-proxy-package | 2 | PENDING | | |
 | C038 | mqtt-bridge-svc | 2 | PENDING | | |
 | C039 | position-processor-svc | 2 | PENDING | | |
@@ -4688,5 +4688,101 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   **For whoever collects Mode C ride ratings —** write `trips.ratings` with
   `subject_kind='ride'`, `direction='passenger_to_driver'`; the level engine needs no event and no
   call, it recomputes.
+  **Build host —** Docker for Testcontainers (Postgres, Redis, Redpanda, EMQX); the replica stayed
+  down throughout. The suite takes ~4 min, most of it EMQX start-up.
+
+- **Component:** C036 dispatch-svc-directional — 2026-07-29
+- **Status:** DONE — `dotnet test backend/src/Dispatch.Api.Tests -c Release` exits 0 (180 tests, 37
+  new); `MageRide.Shared.Tests` (235) still green after the `GeoMath` addition, and the whole
+  solution builds. All four DoD items pass: a ride heading away from the driver's destination is
+  filtered out and the decision is recomputable from `candidate_scores.breakdown.directional` (both
+  bearings, the three measurements, the three thresholds that were live); the third activation in
+  one Asia/Colombo day is `409 directional-limit-reached` with two rows written and not three;
+  going offline clears the filter with reason `offline` and emits `directional.cleared`; and a
+  driver who sits out three rides on a filter loses no acceptance rate, gains no no-show, and
+  collects no block state.
+- **Notes:**
+  **No migration.** 0707 already had `dispatch.directional_filters` (one row per activation, the
+  `used_date` + `used_date_tz_at` D-38 pair, `ux_directional_active`) and the seeded singleton
+  `dispatch.directional_config`; 0708 left `dispatch.timers.kind` deliberately without a CHECK, so
+  `directional_reminder` joined `directional_expiry` without one either. `migrate-verify.sh`'s
+  14-table count is unchanged.
+
+  **Decisions —**
+  (1) **The predicate reads Postgres, not `driver:directional:{driverId}`.** ADD §7.4 and §11.11
+  both say dispatch reads the Redis hash "for each surviving candidate". A Redis miss and "this
+  driver has no filter" are the same answer to a reader, so a flushed keyspace would switch the
+  feature off in silence — the predicate would stop excluding anything while the durable rows still
+  said otherwise, and the only visible symptom would be drivers getting rides the wrong way with
+  nothing anywhere saying why. One indexed batched query per round, on a path that already takes
+  several, buys a failure mode that is loud instead. The hash and the day counter are still written
+  with ADD §9.4's shape and its PEXPIRE, and are read by nothing here — the same position C034
+  recorded for `driver:availability`'s `level`/`walletOk`. **Micro-change-set:** ADD §7.4/§11.11
+  should say the durable row is the read and the key is a hint, which is what §9.4's own
+  "authoritative expiry in `dispatch.timers`" already implies for the other half of the same key.
+  (2) **DT-03 is `COUNT(*)` inside the INSERT that consumes it.** The count is a subquery in the
+  activation's `WHERE`, so two taps arriving together cannot both spend the last use and zero rows
+  back *is* the 409. This is also what makes US-6A.19 fall out of the schema rather than out of a
+  decrement somebody has to remember: a turn-off marks the row cleared and leaves it counted.
+  **Micro-change-set:** ADD §1.15's DT-03 cell still mentions a `use_count` column that neither
+  DDL source has; §9.1 and 0707 use the row-per-activation form and are right.
+  (3) **A second filter while one is live is a 409, not a replacement.** No spec says. Replacing
+  would make re-pointing a destination free, which is exactly the gaming US-6A.19 exists to stop,
+  and `ux_directional_active` refuses it in any case. The message says to `DELETE` first and that
+  doing so still costs the use.
+  (4) **Directional is last in the `rejectedBy` chain, and that ordering is DT-05 itself.** A driver
+  the block-state or wallet gate already refused reads as refused by that; the clause has no branch
+  that re-admits anybody. Asserted directly — a delisted driver whose filter matches perfectly is
+  audited as `block_state`, with `directional.matched: true` on the same row.
+  (5) **Two timer kinds, because `ux_dispatch_timers_driver_live` is per (driver, kind).** One row
+  cannot carry two fire times. Both are retired when the filter clears, so a driver who turns theirs
+  off after two minutes is not warned eight minutes later. `ClaimDueAsync` now names four kinds:
+  a claimed row's `fire_at` is pushed out by the lease, so an unhandled kind would be deferred for
+  ever rather than left visibly due.
+  (6) **Every one of DT-04's four paths is the same conditional `UPDATE … WHERE cleared_at IS
+  NULL`.** They race by construction — a driver going offline as their filter expires triggers two —
+  so first writer wins the reason and the others emit nothing. Tested.
+  (7) **`directional.cleared` / `directional.expiring` are keyed by the driver.** `dispatch.events`
+  is keyed by `rideId` (D6' §2.1) and neither event has a ride. **Micro-change-set:** D6' §2.2
+  prints no schema for either event and §2.1's partition-key column has no cell for a dispatch event
+  that is not about a ride; 0709's `aggregate_id` comment still reads "rideId".
+  (8) **A ride with no drop-off keeps the candidate.** `rides.rides.dropoff_geo` is NOT NULL and
+  every `ride.events` payload carries it, so this is unreachable today — but DT-05 bounds this
+  predicate to *removing* candidates, and a removal justified by a measurement never taken is a
+  guess. The audit row says `failedOn: "unevaluable"`.
+  (9) **`clear_on_first_trip` fires on the accept, not the offer**, and stays off by default. D5'
+  §12 asks for neither behaviour; the column exists, so the flag is honoured and nothing more. A
+  filter ended by a ride the driver went on to decline would be spent on nothing.
+  (10) **`GeoMath` went into the kernel, not into dispatch-svc.** A bearing is not a dispatch
+  concept and `Fare.Api`'s private `HaversineKm` is already a second copy of half of it.
+  **Micro-change-set:** collapse `FareEstimator.HaversineKm` onto `GeoMath.DistanceM` — not done
+  from under fare-svc, whose own component owns that file.
+
+  **Δ on the shared kernel and the test harness —** `MageRide.Shared/Geo/GeoMath.cs` is new
+  (distance, initial bearing, compass angular difference). `RideDispatchRequest` gained a nullable
+  `Dropoff`, which is the first thing in this service to need one — the candidate set is still built
+  entirely from the pickup. `OfferLoopTests.BuildRequestAsync` now reads `dropoff_geo` alongside
+  `pickup_geo` so every suite drives the envelope ride-svc would actually produce.
+
+  **A note on the geometry the tests use —** a "wrong way" destination is not enough to isolate the
+  bearing clause: Negombo (north) also fails the progress test, because Dehiwala is further from it
+  than Colombo Fort is. Widening θ_max therefore changes nothing for that pair, and the admin-config
+  test needs a destination — ~84 km due east — for which the bearing is genuinely the only clause
+  that refuses. Both the unit and the integration test assert `failedOn` before asserting the flip,
+  so neither can silently start proving something else.
+
+  **For C037 (ride-svc-proxy-package) —** `RideEventPayload.PackageSize` is still the member
+  ride-svc does not produce (C034's gap, unchanged); the P-11 gate and the DT-07 predicate both
+  compose with it already and neither needs a change when you add it. `DirectionalBreakdown` and
+  `PackageCompatibility` are independent — a package ride is filtered directionally on the same
+  pickup→dropoff vector as any other kind.
+  **For C051 (driver app) —** `GET /v1/standby/directional` is the banner (US-6A.21):
+  `timeRemainingSec` and `usesRemaining` are both there, and `usesRemaining` also rides on
+  `directional.cleared` so the banner can repaint from the push alone. The DT-08 badge on the
+  incoming-request overlay is `directionalMatched` on `offer.created`.
+  **For notification-svc (C049) —** `directional.expiring` on `dispatch.events`, partition-keyed by
+  driver, carries `notificationType: DIRECTIONAL_EXPIRING`, `minutesRemaining` and `expiresAt` and
+  no rendered text. The trilingual template, the channel and the driver's preferences are yours;
+  dispatch-svc owns only the clock. `directional.cleared` is the other one, carrying its `reason`.
   **Build host —** Docker for Testcontainers (Postgres, Redis, Redpanda, EMQX); the replica stayed
   down throughout. The suite takes ~4 min, most of it EMQX start-up.

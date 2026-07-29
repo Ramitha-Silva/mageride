@@ -383,6 +383,37 @@ public sealed class DispatchOptions
     public TimeSpan WalletCacheTtl { get; set; } = TimeSpan.FromSeconds(5);
 
     // -------------------------------------------------------------------------------------------
+    // Directional Travel (D5' §12, DT-01..DT-08 — C036)
+    // -------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Apply the DT-02 Destination Filter predicate during candidate generation.
+    /// </summary>
+    /// <remarks>
+    /// <b>Off means the filters are still settable and stop doing anything.</b> Drivers spend their
+    /// daily uses, the banner counts down, and every ride is offered to them regardless — the one
+    /// failure mode of this feature a driver cannot see. It is a flag rather than an unconditional
+    /// behaviour so a deployment can switch off a candidate-set narrowing without a redeploy if it
+    /// is ever implicated in an empty-pool incident, and
+    /// <see cref="DispatchApplication"/> says so loudly at start-up. The rest of DT-01..DT-08 —
+    /// activation, limits, expiry, clearing, the reminder — is unaffected by it.
+    /// </remarks>
+    public bool DirectionalGateEnabled { get; set; } = true;
+
+    /// <summary>
+    /// How long before a Destination Filter expires the driver is warned (DT-08, US-10.14:
+    /// "pre-expiry reminder 10 min").
+    /// </summary>
+    /// <remarks>
+    /// The one number in §12 that no admin surface exposes — <c>dispatch.directional_config</c> has
+    /// no column for it and <c>DirectionalConfig</c> in <c>dispatch.yaml</c> has no member — so it
+    /// lives here. A lead longer than the configured <c>max_duration</c> simply arms no reminder
+    /// rather than firing one immediately.
+    /// </remarks>
+    [Range(typeof(TimeSpan), "00:00:30", "01:00:00")]
+    public TimeSpan DirectionalReminderLead { get; set; } = TimeSpan.FromMinutes(10);
+
+    // -------------------------------------------------------------------------------------------
     // EMQX last will (R-15)
     // -------------------------------------------------------------------------------------------
 

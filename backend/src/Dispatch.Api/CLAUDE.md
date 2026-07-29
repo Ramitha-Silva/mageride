@@ -1,4 +1,4 @@
-# dispatch-svc (C023 ws-dispatch-stub, C034 core, C035 scheduling + levels) — Mode C presence, the offer loop, the Job Board
+# dispatch-svc (C023 ws-dispatch-stub, C034 core, C035 scheduling + levels, C036 Directional Travel) — Mode C presence, the offer loop, the Job Board
 
 Stack: .NET 10 Minimal API + Dapper over Npgsql + StackExchange.Redis + Confluent.Kafka +
 MQTTnet + a `reputation.v1` gRPC client + `pocketken.H3`. References `MageRide.Shared` (C002).
@@ -17,6 +17,8 @@ which wins over this file and over the code.
 |---|---|
 | `POST /v1/standby/online` | D3' dispatch-svc route table, US-6A.1 |
 | `POST /v1/standby/offline` | D3' dispatch-svc route table |
+| `POST`/`GET`/`DELETE /v1/standby/directional` | **Δ C036** — DT-01, DT-03, DT-08 |
+| `PUT /v1/admin/dispatch/directional-config` | **Δ C036** — DT-02, DT-03 |
 | `POST /v1/rides/schedule` · `DELETE /v1/rides/schedule/{id}` | D3' Δ 2026-06-28 AL-36, US-6A.4 |
 | `GET /v1/rides/job-board` · `POST /v1/rides/job-board/{id}/intent` | D-06, US-6A.5 |
 | `GET /v1/rides/scheduled/{driverId}` | US-6A.15 |
@@ -28,13 +30,12 @@ which wins over this file and over the code.
 The offer loop itself is still driven by `ride.events`, `telemetry.normalized` and `veh/+/status`,
 not by HTTP. None of the routes above places an offer.
 
-**Not here, on purpose.** Directional Travel (DT-01..DT-08) and
-`PUT /v1/admin/dispatch/directional-config` are **C036**; the FCM/SignalR push that turns
-`offer.created` into a phone buzzing is **C024/C051**; the money that settles a penalty is
-**fare-svc's** — this service records the debt and exposes it, and writes no ledger entry. The
-Driver Level's *level-down-on-reports* rule and the admin appeal restore are **reputation-svc's**
-(C033). All are left out rather than stubbed — a gate that always passes reads like a gate that
-works.
+**Not here, on purpose.** The FCM/SignalR push that turns `offer.created` — or
+`directional.expiring` — into a phone buzzing is **C024/C051**; this service's job ends at the
+committed outbox row. The money that settles a penalty is **fare-svc's** — this service records the
+debt and exposes it, and writes no ledger entry. The Driver Level's *level-down-on-reports* rule and
+the admin appeal restore are **reputation-svc's** (C033). All are left out rather than stubbed — a
+gate that always passes reads like a gate that works.
 
 ## Rules that are load-bearing
 
@@ -76,9 +77,12 @@ works.
 - **The deadline is ride-svc's, everywhere.** `dispatch.offers.expires_at`, the `rides.timers`
   fire time and the Redis `PEXPIRE` are all realigned to the instant `POST /offer` returned.
 - **Two clocks, two tables.** `rides.timers.offer_expiry` is R-04's per-offer backstop
-  (`OfferExpiryWorker`). `dispatch.timers` holds the two whose subject is the ride or the driver —
-  US-6A.11's 120 s cascade deadline and R-15's release grace (`DispatchTimerWorker`). Both lease
-  with `FOR UPDATE SKIP LOCKED` and push `fire_at` out rather than marking fired on claim.
+  (`OfferExpiryWorker`). `dispatch.timers` holds the four whose subject is the ride or the driver —
+  US-6A.11's 120 s cascade deadline, R-15's release grace, and C036's `directional_expiry` +
+  `directional_reminder` (`DispatchTimerWorker`). Both lease with `FOR UPDATE SKIP LOCKED` and push
+  `fire_at` out rather than marking fired on claim. **`ClaimDueAsync` names its kinds**, and must
+  keep doing so: a claimed row's `fire_at` is pushed out by the lease, so a kind nobody handles
+  would be silently deferred for ever instead of sitting visibly due.
 - **The global deadline waits for a live offer.** §11.12's `ExpiredNoDriver` cell resolves from
   `Matching` alone, and the one candidate the cascade found should get their 15 seconds; the timer
   reschedules itself to just past the offer's deadline and comes back.
@@ -182,6 +186,62 @@ works.
   deliberately, because an amount reported twice is an amount charged twice. The accrual side is
   guarded by `ux_penalty_accrual(original_ride_id, basis)` (0713).
 
+## Directional Travel (C036)
+
+- **The predicate is a subtraction and nothing else** (DT-05). `DirectionalGate` runs *after* every
+  hard-gate input has been collected and produces one verdict per candidate;
+  `CandidateScorer` puts `EligibilityGates.Directional` **last** in the `rejectedBy` chain, so a
+  driver the wallet or block-state gate already refused still reads as refused by that. The clause
+  can only ever write a rejection — there is no branch in which it re-admits anybody or widens a
+  bound.
+- **DT-02's three clauses are three different questions.** The bearing says the ride points the
+  driver's way; the detour says reaching the pickup does not undo that; the progress test says the
+  drop-off actually leaves them closer to their destination, which a ride running *parallel* to
+  their route would not. `DirectionalPredicate` is pure, so each boundary is asserted directly
+  rather than inferred from which driver won a round.
+- **The detour metres are the post-filter's, not a second measurement.** `ST_Distance` on the
+  spheroid already ranked the candidate; recomputing it on a sphere would put a number in the audit
+  row that does not reproduce the decision beside it. The progress clause computes its own two
+  distances the same way as each other, so the sphere/spheroid difference cancels out of the
+  subtraction.
+- **The filters are read from Postgres, and ADD §7.4/§11.11 say Redis.** A Redis miss and "this
+  driver has no filter" are the same answer to a reader, so a flushed keyspace would switch the
+  whole feature off in silence — the predicate would stop excluding anything while the durable rows
+  still said otherwise. `driver:directional:{driverId}` and the day counter are still written with
+  the ADD §9.4 shape and the PEXPIRE it asks for, and are read by nothing here, exactly as
+  `driver:availability`'s `level` and `walletOk` are. Micro-change-set in the C036 handoff.
+- **The daily limit is `COUNT(*)` over activation rows, inside the INSERT that consumes it.** That
+  is what makes US-6A.19 fall out of the schema: a manual turn-off marks the row cleared and leaves
+  it counted, so there is no counter anywhere to decrement and no way to buy a third activation by
+  turning the second off. Zero rows back from `TryActivateAsync` *is* the 409 — every other failure
+  raises.
+- **A second filter is a 409, not a replacement.** Re-pointing a live filter would otherwise be
+  free, which is the gaming US-6A.19 exists to stop; `ux_directional_active` refuses it in any case.
+- **Clearing is one conditional UPDATE, and every one of DT-04's four paths goes through it.**
+  Expiry, the manual `DELETE`, going offline and the R-15 last will race by construction — a driver
+  going offline as their filter expires triggers two — so first writer wins the reason and the
+  others update nothing, emit nothing and log nothing.
+- **Two timers, because `ux_dispatch_timers_driver_live` is per (driver, kind).** One row cannot
+  carry two fire times and a filter needs both the DT-04 expiry and the US-10.14 reminder ten
+  minutes ahead of it. Both are retired when the filter clears, so a driver who turns theirs off
+  after two minutes is not warned eight minutes later that it is ending.
+- **`directional.cleared` / `directional.expiring` are keyed by the driver.** `dispatch.events` is
+  keyed by `rideId` (D6' §2.1) and neither event has a ride; the driver is the aggregate they are
+  about and the ordering that matters. D6' §2.2 prints no schema for either — raised as a
+  micro-change-set.
+- **The reminder is a hand-off, not a notification.** The event carries
+  `notificationType: DIRECTIONAL_EXPIRING` and no rendered text: the trilingual template, the
+  channel and the driver's preferences are notification-svc's, and dispatch-svc owns only the clock.
+- **`clear_on_first_trip` fires on the accept, not on the offer**, and is off by default. A filter
+  ended by a ride the driver went on to decline would be spent on nothing, and D5' §12 asks for
+  neither behaviour — the column exists, so the flag is honoured and nothing more.
+- **`directionalMatched` on `offer.created` is read off the audit breakdown**, so the DT-08 badge on
+  the driver's screen and the row an operator reads back cannot disagree.
+- **Nothing about being filtered out costs the driver anything** (US-6A.23). No offer row is
+  written, so `dispatch.offers` — which is where the US-6A.14 acceptance rate is counted from —
+  never sees it; the `candidate_scores` row exists because "why did I get no rides today" is a
+  question somebody has to be able to answer.
+
 ## Configuration
 
 `Dispatch:RideServiceInternalKey` must equal ride-svc's `Ride:InternalApiKey`. Unset means every
@@ -215,7 +275,15 @@ that is switched off; `DispatchApplication.WarnAboutGatesThatCannotClose` is the
 | `ScheduledDispatchGrace` | 30 min | **no spec** — how long a booking that will not materialise is retried before it is abandoned |
 | `ScheduledPollInterval` / `ScheduledBatchSize` | 30 s / 50 | a booking is placed half an hour early; this is not the R-04 backstop |
 | `LevelSweepInterval` / `LevelSweepBatchSize` | 1 min / 200 | 500 points is a hundred five-star rides — a level is a slow fact |
+| `DirectionalGateEnabled` | on | DT-02. **Off ⇒ filters are settable, still cost a use, and filter nothing** |
+| `DirectionalReminderLead` | 10 min | DT-08 / US-10.14. The one §12 number no admin surface exposes |
 | `InternalApiKey` | *(unset)* | D3' §0's mTLS family, interim shared secret. **Unset ⇒ `/v1/internal/**` is not mapped** |
+
+The rest of Directional Travel is **not** in this section: `theta_max_deg`, `detour_max_m`,
+`progress_min_m`, `max_uses_per_day`, `max_duration_sec` and `clear_on_first_trip` live in
+`dispatch.directional_config` (0707, seeded at the D5' §12.1 defaults) because
+`PUT /v1/admin/dispatch/directional-config` changes them at runtime and every replica has to agree
+instantly. The gate reads them once per round, and only when a candidate actually has a filter.
 
 Each of `ExpiryWorkerEnabled`, `DispatchTimerWorkerEnabled`, `ConsumerEnabled`,
 `PositionConsumerEnabled`, `KeyspaceNotificationsEnabled`, `LastWillEnabled`,
@@ -234,6 +302,10 @@ itself, which needs an admin connection the kernel deliberately does not open.
 `Jwt:Issuer` must match what iam-svc signs with or every request is a 401.
 
 ## Schema this service added
+
+**C036 added none** — 0707 already had `dispatch.directional_filters`, `dispatch.directional_config`
+and the `directional_expiry` timer kind (0708 left `kind` deliberately without a CHECK, which is
+what let `directional_reminder` join it without a migration).
 
 `db/migrations/0710` (C023) — `dispatch.command_log`. **`0711`** (C034) — `dispatch.timers` gains
 `ride_id`, a nullable `driver_id`, a `payload` and the two live-timer partial unique indexes.

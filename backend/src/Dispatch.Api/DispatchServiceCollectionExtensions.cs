@@ -1,4 +1,5 @@
 using MageRide.Dispatch.Configuration;
+using MageRide.Dispatch.Directional;
 using MageRide.Dispatch.Dispatching;
 using MageRide.Dispatch.Eligibility;
 using MageRide.Dispatch.Levels;
@@ -48,7 +49,9 @@ public static class DispatchServiceCollectionExtensions
         services.AddSingleton<IScheduledRideRepository, ScheduledRideRepository>();
         services.AddSingleton<IDriverLevelRepository, DriverLevelRepository>();
         services.AddSingleton<IPenaltyRepository, PenaltyRepository>();
+        services.AddSingleton<IDirectionalRepository, DirectionalRepository>();
         services.AddSingleton<IDriverIndex, DriverIndex>();
+        services.AddSingleton<IDirectionalCache, DirectionalCache>();
 
         // Pure: everything it scores has already been fetched by the caller.
         services.AddSingleton<ICandidateScorer, CandidateScorer>();
@@ -60,6 +63,13 @@ public static class DispatchServiceCollectionExtensions
         services.AddScoped<IDispatchService, DispatchService>();
         services.AddScoped<IRideEventHandler, RideEventHandler>();
         services.AddScoped<IWalletGate, WalletGate>();
+
+        // Scoped like the other two per-round gates, though it holds no state: it is read on the
+        // same connection the round already has open, and a singleton would invite somebody to
+        // memoise the configuration row that PUT /v1/admin/dispatch/directional-config exists to
+        // change at runtime.
+        services.AddScoped<IDirectionalGate, DirectionalGate>();
+        services.AddScoped<IDirectionalService, DirectionalService>();
         services.AddScoped<IScheduledRideService, ScheduledRideService>();
         services.AddScoped<IDriverLevelService, DriverLevelService>();
         services.AddScoped<IPenaltyService, PenaltyService>();

@@ -1,4 +1,5 @@
 using MageRide.Dispatch.Configuration;
+using MageRide.Dispatch.Directional;
 using MageRide.Dispatch.Domain;
 using MageRide.Dispatch.Eligibility;
 using MageRide.Dispatch.Persistence;
@@ -27,6 +28,15 @@ namespace MageRide.Dispatch.Dispatching;
 /// <c>S</c> | <c>M</c> | <c>L</c> for a <c>kind=package</c> ride, else <see langword="null"/>. The
 /// P-11 compatibility gate's input.
 /// </param>
+/// <param name="Dropoff">
+/// Where the ride ends (Δ C036). <b>Dispatch does not route to it</b> — the candidate set is built
+/// entirely from the pickup, and that has not changed. It is here because the DT-02 Directional
+/// Travel predicate is a statement about the ride's <em>vector</em>: <c>bearing(pickup→dropoff)</c>
+/// and the progress the drop-off makes toward the driver's destination cannot be computed from a
+/// pickup alone. <c>rides.rides.dropoff_geo</c> is NOT NULL (migration 0601) and every
+/// <c>ride.events</c> payload carries it (D6' §2.2), so <see langword="null"/> here means an
+/// envelope that predates the field — the predicate says so on the audit row rather than guessing.
+/// </param>
 public sealed record RideDispatchRequest(
     Guid RideId,
     GeoPoint Pickup,
@@ -36,7 +46,8 @@ public sealed record RideDispatchRequest(
     string Currency,
     Guid? PassengerId = null,
     string Kind = RideKinds.Passenger,
-    string? PackageSize = null);
+    string? PackageSize = null,
+    GeoPoint? Dropoff = null);
 
 /// <summary>How a dispatch round ended.</summary>
 public enum DispatchResult
@@ -139,6 +150,8 @@ public sealed class DispatchService(
     IRideServiceClient rideService,
     IReputationGate reputationGate,
     IWalletGate walletGate,
+    IDirectionalGate directionalGate,
+    IDirectionalService directionalFilters,
     ICandidateScorer scorer,
     IOutboxWriter outbox,
     IOptions<DispatchOptions> options,
@@ -282,7 +295,12 @@ public sealed class DispatchService(
 
         var wallet = await walletGate.EvaluateAsync(connection, identities, cancellationToken);
 
-        var scored = scorer.Score(ride, nearby, reputation, wallet, ordering);
+        // DT-02, and its position in this method is DT-05: after every hard gate's input has been
+        // collected, never before. It reads only the drivers this round already produced, so a
+        // Destination Filter can subtract from the candidate set and can do nothing else to it.
+        var directional = await directionalGate.EvaluateAsync(connection, ride, nearby, cancellationToken);
+
+        var scored = scorer.Score(ride, nearby, reputation, wallet, directional, ordering);
         var eligible = scored.Where(static c => c.Eligible).ToList();
 
         // R-11: the audit records everyone considered — including everyone excluded, and by which
@@ -450,6 +468,14 @@ public sealed class DispatchService(
                 await RunReleaseGraceAsync(timer, driverId, cancellationToken);
                 break;
 
+            // DT-04's durable expiry and DT-08's 10-minute reminder. Routed here rather than swept
+            // by their own worker because they are rows of the same table with the same lease
+            // discipline; what they do is directional-svc's, so that is where they are done.
+            case DispatchTimerKinds.DirectionalExpiry:
+            case DispatchTimerKinds.DirectionalReminder:
+                await directionalFilters.RunTimerAsync(timer, cancellationToken);
+                break;
+
             default:
                 // A kind this sweep claimed but cannot act on, or a row whose subject column is
                 // null. Retired rather than left due, so it cannot spin the sweep forever.
@@ -554,6 +580,12 @@ public sealed class DispatchService(
 
         await index.RemoveFromPoolAsync(driverId, PresenceStates.OnRide, cancellationToken);
 
+        // The `first_matched_trip` half of DT-04, and a no-op unless an admin has turned
+        // `clear_on_first_trip` on — it is false by default and D5' §12 never asks for it to be
+        // true. Deliberately on *accept* and not on offer: a filter that cleared because a ride was
+        // offered would be gone even if the driver declined it.
+        await directionalFilters.OnTripMatchedAsync(driverId, cancellationToken);
+
         logger.LogInformation("Driver {DriverId} accepted ride {RideId}; out of the candidate pool", driverId, rideId);
     }
 
@@ -653,6 +685,12 @@ public sealed class DispatchService(
         }
 
         await index.ForgetAsync(driverId, cancellationToken);
+
+        // DT-04 lists the EMQX last will beside going offline, and this is the instant that path
+        // actually takes a driver out of the pool — the `offline` message itself only started a
+        // clock. A driver whose phone is gone cannot be sent anything, directional or not, and
+        // leaving the filter live would have it still applying when they come back tomorrow.
+        await directionalFilters.ClearAsync(driverId, DirectionalClearReasons.Offline, cancellationToken);
     }
 
     /// <summary>
@@ -762,7 +800,13 @@ public sealed class DispatchService(
                     ride.PaymentMethod,
                     candidate.DistanceM,
                     ride.Kind,
-                    ride.PackageSize),
+                    ride.PackageSize,
+
+                    // DT-08's badge: true only when this driver had a filter and this ride is what
+                    // it was asking for. Read off the audit breakdown rather than recomputed, so
+                    // the badge on the driver's screen and the row an operator reads back cannot
+                    // disagree.
+                    candidate.Breakdown.Directional?.Matched is true),
                 cancellationToken);
 
             await unitOfWork.CommitAsync(cancellationToken);

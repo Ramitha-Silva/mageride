@@ -68,6 +68,7 @@ public static class DispatchApplication
         app.UseMageRideDefaults(serviceOptions);
 
         app.MapStandbyEndpoints();
+        app.MapDirectionalEndpoints();
         app.MapScheduledRideEndpoints();
         app.MapDriverLevelEndpoints();
 
@@ -160,6 +161,23 @@ public static class DispatchApplication
                 "scheduled ride stays on the Job Board past its pickup time and no passenger who booked ahead " +
                 "is ever dispatched (D5' §3.7).",
                 options.ScheduledLeadTime);
+        }
+
+        if (!options.DirectionalGateEnabled)
+        {
+            app.Logger.LogWarning(
+                "Dispatch:DirectionalGateEnabled is off. Drivers can still set a Destination Filter and it still " +
+                "costs them a daily use, but the DT-02 predicate never runs — every ride is offered to them " +
+                "whichever way it heads, and nothing on the driver's screen says the filter is inert.");
+        }
+
+        if (!options.DispatchTimerWorkerEnabled)
+        {
+            app.Logger.LogWarning(
+                "Dispatch:DispatchTimerWorkerEnabled is off, so no dispatch.timers row ever fires. Besides the " +
+                "US-6A.11 cascade deadline and the R-15 grace, a Directional Travel filter never expires on its " +
+                "own (DT-04) and no {Lead} pre-expiry reminder is sent (DT-08).",
+                options.DirectionalReminderLead);
         }
 
         if (!options.LevelWorkerEnabled)

@@ -131,12 +131,72 @@ public sealed record ScoreBreakdown(
 public sealed record ScoreTerms(double Distance, double Level, double Category);
 
 /// <summary>
-/// The DT-02 audit slot on the breakdown. <b>Always <see langword="null"/> here</b> — no
-/// Destination Filter can be set until C036 maps <c>POST /v1/standby/directional</c>, and a
-/// fabricated "matched: true" would be indistinguishable from a predicate that ran.
+/// The DT-02 audit: what the Directional Travel predicate computed for a candidate who had an
+/// active Destination Filter, and which of its three clauses decided the outcome.
 /// </summary>
+/// <remarks>
+/// <para>
+/// <b>Absent means "this driver had no filter"</b>, which is a different fact from "the predicate
+/// ran and passed" — <c>MageRideJson.StorageOptions</c> omits nulls, so a candidate with no filter
+/// simply has no <c>directional</c> member and the overwhelming majority of audit rows are
+/// unchanged by this component.
+/// </para>
+/// <para>
+/// The three thresholds travel with the decision for the same reason the scoring weights do
+/// (R-11): they are admin-tunable at runtime through
+/// <c>PUT /v1/admin/dispatch/directional-config</c>, so a row that carried only the measurements
+/// would stop being reproducible the moment an operator retuned them.
+/// </para>
+/// </remarks>
+/// <param name="Matched">Whether the ride survived the predicate. <see langword="false"/> means the
+/// candidate was dropped from this round — and from nothing else (DT-05, US-6A.23).</param>
+/// <param name="BearingDiffDeg">
+/// <c>angularDiff(bearing(driver→destination), bearing(pickup→dropoff))</c>, in <c>[0, 180]</c>.
+/// </param>
+/// <param name="DetourM">
+/// <c>dist(pickup, driver)</c> — the same <c>ST_Distance</c> metres the post-filter ranked by, not a
+/// second measurement of it.
+/// </param>
+/// <param name="ProgressM">
+/// <c>dist(pickup, destination) − dist(dropoff, destination)</c>: how much closer to the driver's
+/// destination the drop-off leaves them. Negative when the ride heads away.
+/// </param>
+/// <param name="FailedOn">
+/// Which clause of D5' §12.1 refused — <c>bearing</c>, <c>detour</c>, <c>progress</c> — or
+/// <c>unevaluable</c> when the ride carried no drop-off to measure against. Absent when the
+/// predicate passed.
+/// </param>
 public sealed record DirectionalBreakdown(
-    bool Matched, double BearingDiffDeg, double DetourM, double ProgressM);
+    bool Matched,
+    double BearingDiffDeg,
+    double DetourM,
+    double ProgressM,
+    double DriverBearingDeg,
+    double RideBearingDeg,
+    int ThetaMaxDeg,
+    int DetourMaxM,
+    int ProgressMinM,
+    string? FailedOn = null);
+
+/// <summary>The clause names <see cref="DirectionalBreakdown.FailedOn"/> carries.</summary>
+public static class DirectionalClauses
+{
+    /// <summary><c>angularDiff(…) ≤ θ_max</c> — the ride points somewhere else.</summary>
+    public const string Bearing = "bearing";
+
+    /// <summary><c>dist(pickup, driver) ≤ detour_max</c> — the pickup is too far off the way.</summary>
+    public const string Detour = "detour";
+
+    /// <summary><c>dist(dropoff, dest) &lt; dist(pickup, dest) − progress_min</c> — it makes no headway.</summary>
+    public const string Progress = "progress";
+
+    /// <summary>
+    /// The round's input carried no drop-off, so none of the three clauses could be computed. The
+    /// candidate is <b>kept</b>: DT-05 bounds what this predicate may do, and dropping a driver on a
+    /// measurement that was never taken is a decision made on no evidence.
+    /// </summary>
+    public const string Unevaluable = "unevaluable";
+}
 
 /// <summary>Why a candidate was excluded, as written to <c>candidate_scores.breakdown</c>.</summary>
 /// <remarks>
@@ -159,6 +219,19 @@ public static class EligibilityGates
 
     /// <summary>E-03 — the vehicle's documents lapsed and registry set <c>DISPATCH_SUSPENDED</c>.</summary>
     public const string DispatchSuspended = "dispatch_suspended";
+
+    /// <summary>
+    /// DT-02 — the driver has an active Destination Filter and this ride does not head their way.
+    /// </summary>
+    /// <remarks>
+    /// <b>Last in the gate order, and that ordering is DT-05.</b> A driver refused by the wallet or
+    /// by their block state reads as refused by that, because the directional predicate runs
+    /// <em>after</em> all hard gates and only ever narrows what they left. It is also the one
+    /// "rejection" here that is not a fault of any kind: the driver asked for it, and US-6A.23
+    /// forbids any reputation or acceptance-rate consequence — no offer row is written, so there is
+    /// nothing for the acceptance rate to count.
+    /// </remarks>
+    public const string Directional = "directional";
 }
 
 /// <summary>The three package sizes <c>rides.rides.package_size</c>'s CHECK allows (P-06).</summary>
@@ -183,8 +256,8 @@ public static class RideKinds
 /// <summary>The <c>dispatch.timers.kind</c> values this service arms (migrations 0708, 0711).</summary>
 /// <remarks>
 /// 0708 deliberately left <c>kind</c> without a CHECK — "both specs print it open, and dispatch-svc
-/// adds kinds without a migration". These two are C034's; <c>directional_expiry</c> is 0708's own
-/// and is C036's to arm.
+/// adds kinds without a migration". The first two are C034's; <c>directional_expiry</c> is 0708's
+/// own and <c>directional_reminder</c> is C036's, which is what that sentence was written for.
 /// </remarks>
 public static class DispatchTimerKinds
 {
@@ -196,6 +269,16 @@ public static class DispatchTimerKinds
 
     /// <summary>DT-04's Destination Filter expiry — 0708's original kind, armed by C036.</summary>
     public const string DirectionalExpiry = "directional_expiry";
+
+    /// <summary>
+    /// DT-08 / US-10.14's 10-minute pre-expiry reminder. Its own kind rather than a flag on the
+    /// expiry row because <c>ux_dispatch_timers_driver_live</c> is one live timer per
+    /// <em>(driver, kind)</em> — one row cannot carry two fire times, and a filter needs both.
+    /// </summary>
+    public const string DirectionalReminder = "directional_reminder";
+
+    /// <summary>The two a Destination Filter arms, retired together when it clears.</summary>
+    public static readonly IReadOnlyList<string> Directional = [DirectionalExpiry, DirectionalReminder];
 }
 
 /// <summary>A due row of <c>dispatch.timers</c> (migrations 0708, 0711).</summary>

@@ -10,11 +10,13 @@ namespace MageRide.Dispatch.Persistence;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Two kinds live here. <see cref="DispatchTimerKinds.RideTimeout"/> is US-6A.11's 120-second
+/// Four kinds live here. <see cref="DispatchTimerKinds.RideTimeout"/> is US-6A.11's 120-second
 /// global cascade deadline, and it has to fire in exactly the case where nothing else would — no
 /// candidate was ever found, so no offer exists and no <c>rides.timers</c> backstop was ever armed.
 /// <see cref="DispatchTimerKinds.OfferReleaseGrace"/> is R-15's last-will grace.
-/// <c>directional_expiry</c> is 0708's own kind and is C036's to arm.
+/// <see cref="DispatchTimerKinds.DirectionalExpiry"/> is 0708's own kind — DT-04's durable
+/// expiry, of which the Redis TTL is only a hint — and
+/// <see cref="DispatchTimerKinds.DirectionalReminder"/> is US-10.14's 10-minute warning ahead of it.
 /// </para>
 /// <para>
 /// <b>Arming is idempotent by index, not by a prior read.</b> <c>ux_dispatch_timers_ride_live</c>
@@ -244,10 +246,18 @@ public sealed class DispatchTimerRepository : IDispatchTimerRepository
                 BatchSize = batchSize,
                 LeaseSeconds = lease.TotalSeconds,
 
-                // Scoped by kind so this sweep never claims a `directional_expiry` row C036 owns.
-                // Two components sharing one table with no coordination protocol is only safe while
-                // every query says which kinds it is for.
-                Kinds = new[] { DispatchTimerKinds.RideTimeout, DispatchTimerKinds.OfferReleaseGrace },
+                // Still scoped by kind, now that C036 has added the two directional ones: two
+                // components sharing one table with no coordination protocol is only safe while
+                // every query says which kinds it is for, and a kind nobody handles must never be
+                // claimed — a claimed row's fire_at is pushed out by the lease, so an unhandled
+                // kind would be quietly deferred for ever rather than left visibly due.
+                Kinds = new[]
+                {
+                    DispatchTimerKinds.RideTimeout,
+                    DispatchTimerKinds.OfferReleaseGrace,
+                    DispatchTimerKinds.DirectionalExpiry,
+                    DispatchTimerKinds.DirectionalReminder,
+                },
             },
             transaction,
             cancellationToken: cancellationToken));

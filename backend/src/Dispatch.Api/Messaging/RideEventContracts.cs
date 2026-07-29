@@ -146,6 +146,14 @@ public sealed record RideEventEnvelope(
             Currency: Payload.Currency ?? "LKR",
             PassengerId: Payload.PassengerId,
             Kind: Payload.Kind ?? Domain.RideKinds.Passenger,
-            PackageSize: Payload.PackageSize);
+            PackageSize: Payload.PackageSize,
+
+            // The DT-02 predicate's second point (Δ C036). A malformed drop-off is dropped rather
+            // than rejected: it is not an input to *whether* the ride can be dispatched, only to
+            // whether a driver with a Destination Filter is kept in the round, and refusing to
+            // dispatch a ride at all over it would be the tail wagging the dog.
+            Dropoff: Payload.Dropoff is { } dropoff && Math.Abs(dropoff.Lat) <= 90 && Math.Abs(dropoff.Lng) <= 180
+                ? new GeoPoint(dropoff.Lat, dropoff.Lng)
+                : null);
     }
 }

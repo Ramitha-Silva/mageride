@@ -19,6 +19,7 @@ public interface ICandidateScorer
         IReadOnlyList<Candidate> candidates,
         IReadOnlyDictionary<Guid, ReputationVerdict> reputation,
         IReadOnlyDictionary<Guid, WalletVerdict> wallet,
+        IReadOnlyDictionary<Guid, DirectionalVerdict>? directional = null,
         CandidateOrdering ordering = CandidateOrdering.WeightedScore);
 }
 
@@ -58,8 +59,9 @@ public enum CandidateOrdering
 /// are all predicates on rows Postgres already has in hand, so
 /// <see cref="Persistence.CandidateRepository"/> applies them inside the same <c>ST_DWithin</c>
 /// query rather than fetching a driver in order to reject them in C#. The two that need another
-/// service — reputation-svc's block state and the wallet balance — arrive here as the two
-/// dictionaries.
+/// service — reputation-svc's block state and the wallet balance — arrive here as dictionaries, and
+/// so does the DT-02 Directional Travel verdict, which needs a per-driver row and a per-round
+/// geometry that no <c>ST_DWithin</c> predicate could express.
 /// </para>
 /// <para>
 /// <b>Pure and synchronous.</b> Everything it needs has been fetched by the caller, which is what
@@ -81,6 +83,7 @@ public sealed class CandidateScorer(IOptions<DispatchOptions> options) : ICandid
         IReadOnlyList<Candidate> candidates,
         IReadOnlyDictionary<Guid, ReputationVerdict> reputation,
         IReadOnlyDictionary<Guid, WalletVerdict> wallet,
+        IReadOnlyDictionary<Guid, DirectionalVerdict>? directional = null,
         CandidateOrdering ordering = CandidateOrdering.WeightedScore)
     {
         ArgumentNullException.ThrowIfNull(ride);
@@ -91,7 +94,7 @@ public sealed class CandidateScorer(IOptions<DispatchOptions> options) : ICandid
         var weights = new ScoreTerms(_options.Weights.Distance, _options.Weights.Level, _options.Weights.Category);
 
         var evaluated = candidates
-            .Select(candidate => Evaluate(ride, candidate, reputation, wallet, weights, ordering))
+            .Select(candidate => Evaluate(ride, candidate, reputation, wallet, directional, weights, ordering))
             .ToList();
 
         // Eligible first. After that the two rules diverge, and both end on the driver id: two
@@ -134,6 +137,7 @@ public sealed class CandidateScorer(IOptions<DispatchOptions> options) : ICandid
         Candidate candidate,
         IReadOnlyDictionary<Guid, ReputationVerdict> reputation,
         IReadOnlyDictionary<Guid, WalletVerdict> wallet,
+        IReadOnlyDictionary<Guid, DirectionalVerdict>? directional,
         ScoreTerms weights,
         CandidateOrdering ordering)
     {
@@ -141,13 +145,24 @@ public sealed class CandidateScorer(IOptions<DispatchOptions> options) : ICandid
         var money = wallet.TryGetValue(candidate.DriverId, out var purse) ? purse : WalletVerdict.NotChecked;
         var packageCompatible = PackageCompatibility.Evaluate(candidate.VehicleType, ride.PackageSize);
 
+        var heading = directional?.TryGetValue(candidate.DriverId, out var filtered) is true
+            ? filtered
+            : DirectionalVerdict.NoFilter;
+
         // Gate order follows D5' §3.2's own sentence order. It only matters for which reason ends
         // up on the audit row when a candidate fails more than one — and a driver who is delisted
         // *and* broke should read as delisted, because that is the one they can do least about.
+        //
+        // **Directional is last, and DT-05 is why.** "The predicate runs after all hard gates and
+        // never relaxes them — it can only remove otherwise-eligible candidates." Putting it at the
+        // end of this chain is that sentence: a driver the wallet gate already refused reads as
+        // refused by the wallet, and a driver nothing else refused is the only kind this clause can
+        // reach. It cannot re-admit anybody, because it only ever writes a rejection.
         var rejectedBy =
             !block.DispatchEligible ? EligibilityGates.BlockState
             : !money.Allowed ? EligibilityGates.Wallet
             : packageCompatible is false ? EligibilityGates.PackageSize
+            : !heading.Allowed ? EligibilityGates.Directional
             : null;
 
         // 1 / (1 + d/halfLife): monotonically decreasing, in (0,1], and finite for a driver
@@ -186,9 +201,10 @@ public sealed class CandidateScorer(IOptions<DispatchOptions> options) : ICandid
             Terms: terms,
             Weights: weights,
 
-            // DT-02's slot. C036 fills it; a fabricated value here would be indistinguishable from
-            // a predicate that had actually run.
-            Directional: null,
+            // DT-02's audit (Δ C036). Present only for a driver who had an active Destination
+            // Filter, because "no member" and "the predicate ran and passed" are different facts
+            // and the overwhelming majority of rows are the former.
+            Directional: heading.Breakdown,
 
             // Omitted on the ordinary path, where Rank follows the score and saying so would be
             // noise on every row of every round.

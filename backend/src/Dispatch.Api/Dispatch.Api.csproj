@@ -1,7 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
   <!--
-    Dispatch.Api (C023 ws-dispatch-stub, C034 core) — the Mode C dispatcher.
+    Dispatch.Api (C023 ws-dispatch-stub, C034 core, C035 scheduling + levels, C036 directional)
+    — the Mode C dispatcher.
 
     dispatch-svc offers; it never writes rides.state (R-01, ADD §11.12 "ride-svc is the sole
     writer"). The four state moves it drives are commands on ride-svc's /v1/internal/rides/**.
@@ -18,8 +19,13 @@
     offer key with PEXPIRE; the R-04 durable rides.timers backstop; US-6A.11's 120 s global
     timeout; R-15's EMQX last-will release; and the R-13 dispatch.outbox `offer.created`.
 
-    NOT here: Directional Travel (C036), scheduled rides / the Job Board / the Driver Level engine
-    / no-show reporting (C035). The FCM/SignalR push that turns `offer.created` into a phone
+    C035 added scheduled rides, the Job Board and the Driver Level engine. C036 added Directional
+    Travel (DT-01..DT-08): POST/GET/DELETE /v1/standby/directional, the D5' §12.1 candidate
+    predicate applied AFTER every hard gate and audited into candidate_scores.breakdown.directional,
+    the Asia/Colombo daily-use limit, the durable dispatch.timers expiry and 10-minute reminder, and
+    PUT /v1/admin/dispatch/directional-config.
+
+    NOT here: the FCM/SignalR push that turns `offer.created` or `directional.expiring` into a phone
     buzzing is C024/C051 — this service's job ends at the committed outbox row.
 
     Verify: dotnet test backend/src/Dispatch.Api.Tests -c Release

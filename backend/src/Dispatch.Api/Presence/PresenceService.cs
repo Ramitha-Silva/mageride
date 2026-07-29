@@ -1,4 +1,5 @@
 using MageRide.Dispatch.Configuration;
+using MageRide.Dispatch.Directional;
 using MageRide.Dispatch.Domain;
 using MageRide.Dispatch.Persistence;
 using MageRide.Dispatch.Redis;
@@ -41,6 +42,7 @@ public sealed class PresenceService(
     IUnitOfWorkFactory unitOfWorkFactory,
     IPresenceRepository presence,
     IDriverIndex index,
+    IDirectionalService directional,
     IOptions<DispatchOptions> options,
     ILogger<PresenceService> logger) : IPresenceService
 {
@@ -154,9 +156,16 @@ public sealed class PresenceService(
                 driverId, Guid.Empty, string.Empty, PresenceStates.Offline, null, null, null, DateTimeOffset.UtcNow);
         }
 
-        // DT-04 says going offline also clears any Directional Travel filter and emits
-        // `directional.cleared`. Nothing here can set one — POST /v1/standby/directional is C036 —
-        // so there is deliberately no clear-and-emit that would always be a no-op.
+        // DT-04: going offline clears any active Directional Travel filter and emits
+        // `directional.cleared`. Not part of the presence transaction, deliberately — the two are
+        // different facts with different owners, and a clear that is lost to a crash costs a driver
+        // one stale filter that their own expiry timer will retire, while a presence write rolled
+        // back by a filter's failure would leave a driver who asked to go offline still taking
+        // offers. Idempotent, so the next offline (or the expiry) finishes the job.
+        //
+        // Ordered after presence for the same reason: OFFLINE is what the driver actually asked for.
+        await directional.ClearAsync(driverId, DirectionalClearReasons.Offline, cancellationToken);
+
         logger.LogInformation("Driver {DriverId} left standby", driverId);
 
         return row;
