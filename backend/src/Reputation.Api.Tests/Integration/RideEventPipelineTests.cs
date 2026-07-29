@@ -205,6 +205,7 @@ public sealed class RideEventPipelineTests(PostgresFixture postgres, RedisFixtur
             ClientRequestId: Guid.NewGuid(),
             BookerId: passengerId,
             RiderId: null,
+            RiderPhoneHash: null,
             RiderName: null,
             IsProxy: false,
             Kind: 0,
@@ -219,6 +220,14 @@ public sealed class RideEventPipelineTests(PostgresFixture postgres, RedisFixtur
             CurrentOfferId: null,
             OfferExpiresAt: null,
             PaymentMethod: "cash",
+
+            // The Δ C037 package columns: a passenger ride carries none of them.
+            PackageSize: null,
+            PackageDescription: null,
+            RecipientName: null,
+            RecipientPhone: null,
+            PickupOtpAttempts: 0,
+            DeliveryOtpAttempts: 0,
             FareEstimateMinor: 74_000,
             FareSurchargeMinor: 0,
             Currency: "LKR",

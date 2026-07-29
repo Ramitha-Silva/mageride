@@ -94,8 +94,12 @@ public sealed class RideService(
     IRideRepository rides,
     IRideTransitionRepository transitions,
     IDriverSummaryRepository drivers,
+    ICounterpartyRepository counterparties,
     RideStateWriter stateWriter,
     IBookingEligibility eligibility,
+    IRiderDirectory riderDirectory,
+    RiderPhoneHasher phones,
+    PackageOtpCodec otps,
     FareEstimateTokenCodec fareTokens,
     IOptions<RideOptions> options,
     TimeProvider timeProvider,
@@ -115,13 +119,19 @@ public sealed class RideService(
 
         var clientRequestId = RequireClientRequestId(command.ClientRequestId);
         var kind = RequireBookableKind(command);
-        var vehicleType = RequireVehicleType(command.VehicleType);
+        var vehicleType = RequireVehicleType(command.VehicleType, kind);
         var pickup = RequirePlace(command.Pickup, "pickup");
         var dropoff = RequirePlace(command.Dropoff, "dropoff");
         var paymentMethod = RequirePaymentMethod(command.PaymentMethod, kind);
         RequireImmediate(command.ScheduledAt);
 
         var quote = RequireFareEstimate(command.FareEstimateToken, vehicleType, kind);
+
+        // Both resolved before the transaction opens. The proxy rider's registration is an iam-svc
+        // round trip (P-03) and holding a Postgres transaction across another service's HTTP call
+        // is how one service's latency becomes another's lock contention.
+        var rider = await ResolveRiderAsync(command, kind, cancellationToken);
+        var package = ResolvePackage(command, clientRequestId, kind);
 
         await using var unitOfWork = await unitOfWorkFactory.BeginAsync(cancellationToken: cancellationToken);
 
@@ -154,7 +164,17 @@ public sealed class RideService(
                 Dropoff: dropoff,
                 PaymentMethod: paymentMethod,
                 FareEstimateMinor: quote.AmountMinor,
-                FareSurchargeMinor: quote.SurchargeMinor),
+                FareSurchargeMinor: quote.SurchargeMinor,
+                Kind: kind,
+                RiderId: rider.RiderId,
+                RiderPhoneHash: rider.PhoneHash,
+                RiderName: rider.Name,
+                PackageSize: package?.Size,
+                PackageDescription: package?.Description,
+                RecipientName: package?.RecipientName,
+                RecipientPhone: package?.RecipientPhone,
+                PickupOtpHash: package?.PickupOtpHash,
+                DeliveryOtpHash: package?.DeliveryOtpHash),
             cancellationToken);
 
         switch (result.Outcome)
@@ -198,10 +218,12 @@ public sealed class RideService(
         await unitOfWork.CommitAsync(cancellationToken);
 
         logger.LogInformation(
-            "Ride {RideId} requested by passenger {PassengerId} ({VehicleType}, {AmountMinor} minor)",
-            ride.Id, command.PassengerId, vehicleType, quote.AmountMinor);
+            "Ride {RideId} requested by passenger {PassengerId} ({Kind}, {VehicleType}, {AmountMinor} minor)",
+            ride.Id, command.PassengerId, kind, vehicleType, quote.AmountMinor);
 
-        return new RideBooking(ride, Replayed: false);
+        // The one and only time the pickup code exists outside a digest. The endpoint puts it on
+        // the 202 and nothing keeps it.
+        return new RideBooking(ride, Replayed: false, package?.PickupOtp);
     }
 
     public async Task<RideBooking> MaterialiseScheduledAsync(
@@ -209,7 +231,9 @@ public sealed class RideService(
     {
         ArgumentNullException.ThrowIfNull(command);
 
-        var vehicleType = RequireVehicleType(command.VehicleType);
+        // A scheduled booking is a passenger ride (dispatch.scheduled_rides has no kind), so the
+        // delivery-only tiers are refused here exactly as they are on POST /v1/rides/request.
+        var vehicleType = RequireVehicleType(command.VehicleType, RideKinds.Passenger);
         var pickup = RequirePlace(command.Pickup, "pickup");
         var dropoff = RequirePlace(command.Dropoff, "dropoff");
 
@@ -320,7 +344,7 @@ public sealed class RideService(
                 MageRideErrors.NotRideParticipant, "This ride belongs to another passenger and driver.");
         }
 
-        return await ProjectAsync(connection, null, ride, cancellationToken);
+        return await ProjectAsync(connection, null, ride, callerId, cancellationToken);
     }
 
     public async Task<RideView?> GetActiveForPassengerAsync(
@@ -334,7 +358,7 @@ public sealed class RideService(
 
         var ride = await rides.FindActiveByPassengerAsync(connection, null, passengerId, cancellationToken);
 
-        return ride is null ? null : await ProjectAsync(connection, null, ride, cancellationToken);
+        return ride is null ? null : await ProjectAsync(connection, null, ride, callerId, cancellationToken);
     }
 
     public async Task<RideView?> GetActiveForDriverAsync(Guid callerId, Guid driverId, CancellationToken cancellationToken)
@@ -345,7 +369,7 @@ public sealed class RideService(
 
         var ride = await rides.FindActiveByDriverAsync(connection, null, driverId, cancellationToken);
 
-        return ride is null ? null : await ProjectAsync(connection, null, ride, cancellationToken);
+        return ride is null ? null : await ProjectAsync(connection, null, ride, callerId, cancellationToken);
     }
 
     public async Task<RideView> AcceptOfferAsync(
@@ -367,7 +391,8 @@ public sealed class RideService(
                 // This driver already holds the ride — a repeat accept under a fresh
                 // Idempotency-Key, not a loss. The contract marks the operation idempotent, so it
                 // answers 200 with where the ride actually is.
-                var held = await ProjectAsync(unitOfWork.Connection, unitOfWork.Transaction, current, cancellationToken);
+                var held = await ProjectAsync(
+                    unitOfWork.Connection, unitOfWork.Transaction, current, driverId, cancellationToken);
                 await unitOfWork.RollbackAsync(cancellationToken);
                 return held;
             }
@@ -398,11 +423,16 @@ public sealed class RideService(
             accepted.AcceptedVehicleId ?? Guid.Empty,
             cancellationToken);
 
+        // AL-48: this response is the first one that carries a number, because this is the moment
+        // acceptance happens. Read inside the transaction, before the connection goes back.
+        var contacts = await ResolveContactsAsync(
+            unitOfWork.Connection, unitOfWork.Transaction, accepted, driverId, cancellationToken);
+
         await unitOfWork.CommitAsync(cancellationToken);
 
         logger.LogInformation("Driver {DriverId} won offer {OfferId} on ride {RideId}", driverId, offerId, rideId);
 
-        return new RideView(accepted, driver);
+        return new RideView(accepted, driver, contacts);
     }
 
     public async Task<RideRow> DeclineOfferAsync(
@@ -744,15 +774,99 @@ public sealed class RideService(
         NpgsqlConnection connection,
         NpgsqlTransaction? transaction,
         RideRow ride,
+        Guid callerId,
         CancellationToken cancellationToken)
     {
+        var contacts = await ResolveContactsAsync(connection, transaction, ride, callerId, cancellationToken);
+
         if (ride.AcceptedDriverId is not { } driverId || ride.AcceptedVehicleId is not { } vehicleId)
         {
-            return new RideView(ride, null);
+            return new RideView(ride, null, contacts);
         }
 
         return new RideView(
-            ride, await drivers.FindByVehicleAsync(connection, transaction, driverId, vehicleId, cancellationToken));
+            ride,
+            await drivers.FindByVehicleAsync(connection, transaction, driverId, vehicleId, cancellationToken),
+            contacts);
+    }
+
+    /// <summary>
+    /// AL-48's numbers, resolved for the caller who is asking.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Nothing is exposed before <c>accepted_driver_id</c> is set — which is what "only after driver
+    /// acceptance … withheld for rides cancelled before assignment" reduces to, since a ride
+    /// cancelled before assignment never had one. A driver merely <em>holding</em> an offer gets
+    /// nothing either: they may read the ride (that is what <c>offered_driver_id</c> is for) and
+    /// they have no one to call yet.
+    /// </para>
+    /// <para>
+    /// <b>An unregistered proxy rider has no number here, and cannot have one.</b> P-03 stores that
+    /// rider as a digest, deliberately — and AL-48 asks the API to hand the driver the rider's real
+    /// MSISDN. Both cannot hold. P-03 is the narrower, privacy-bearing rule and it wins: the field
+    /// is absent, the driver's app falls back to the in-app channel, and the booker relays. The two
+    /// rules are in genuine conflict and it is raised in the C037 handoff.
+    /// </para>
+    /// </remarks>
+    private async Task<RideContacts> ResolveContactsAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction? transaction,
+        RideRow ride,
+        Guid callerId,
+        CancellationToken cancellationToken)
+    {
+        if (ride.AcceptedDriverId is not { } driverId)
+        {
+            return RideContacts.None;
+        }
+
+        var isDriver = callerId == driverId;
+
+        // The rider's side is named explicitly rather than taken from IsParticipant, which is
+        // wider: it also admits the driver an offer was *reserved* for. That driver may read the
+        // ride during their countdown (which is what the column is for) and has nobody to call —
+        // handing them the winning driver's number would leak one driver's MSISDN to another.
+        var isRiderSide = callerId == ride.PassengerId || callerId == ride.BookerId || callerId == ride.RiderId;
+
+        if (!isDriver && !isRiderSide)
+        {
+            return RideContacts.None;
+        }
+
+        string? counterparty;
+
+        if (isDriver)
+        {
+            // P-05: the rider, never the booker. For a passenger ride they are the same account;
+            // for a proxy ride only a registered rider has a number to give; for a package the far
+            // end of the delivery is the recipient.
+            counterparty = ride.KindName switch
+            {
+                RideKinds.Package => ride.RecipientPhone,
+                RideKinds.Proxy => ride.RiderId is { } riderId
+                    ? await counterparties.FindPhoneAsync(connection, transaction, riderId, cancellationToken)
+                    : null,
+                _ => await counterparties.FindPhoneAsync(
+                    connection, transaction, ride.PassengerId, cancellationToken),
+            };
+        }
+        else
+        {
+            counterparty = await counterparties.FindPhoneAsync(connection, transaction, driverId, cancellationToken);
+        }
+
+        if (!ride.IsPackage)
+        {
+            return new RideContacts(counterparty, null, null);
+        }
+
+        // AL-33's three sheets show the sender and the recipient side by side, each with a call
+        // button. The sender is the booking account, which is registered by construction.
+        return new RideContacts(
+            counterparty,
+            await counterparties.FindPhoneAsync(connection, transaction, ride.PassengerId, cancellationToken),
+            ride.RecipientPhone);
     }
 
     /// <summary>
@@ -925,14 +1039,21 @@ public sealed class RideService(
     }
 
     /// <summary>
-    /// Only <c>passenger</c> is bookable in this slice. Proxy needs the P-02 location-request
-    /// round-trip and a rider identity (<c>ck_rides_proxy_identity</c>); package needs a size and
-    /// both OTP hashes (<c>ck_rides_package_complete</c>). Both are C032/C037, and a booking that
-    /// skipped them would be rejected by the database anyway — as a 500, not as an answer.
+    /// Which of the three kinds this is, from the two members D3' gives a client to say it with.
     /// </summary>
+    /// <remarks>
+    /// <c>RideRequest</c> carries both <c>kind</c> and <c>isProxy</c>, and <c>rides.rides</c> carries
+    /// both <c>kind</c> and <c>is_proxy</c>, so the two can be made to disagree. They are reconciled
+    /// here once — <c>isProxy: true</c> with no <c>kind</c> means a proxy booking, and any actual
+    /// contradiction is refused rather than silently resolved in favour of one of them. The column
+    /// pair is written from this single answer (<c>RideRepository.CreateAsync</c>), so a row where
+    /// <c>is_proxy</c> and <c>kind</c> disagree cannot exist.
+    /// </remarks>
     private static string RequireBookableKind(RequestRideCommand command)
     {
-        var kind = string.IsNullOrWhiteSpace(command.Kind) ? RideKinds.Passenger : command.Kind;
+        var kind = string.IsNullOrWhiteSpace(command.Kind)
+            ? command.IsProxy == true ? RideKinds.Proxy : RideKinds.Passenger
+            : command.Kind;
 
         if (!RideKinds.All.Contains(kind))
         {
@@ -942,22 +1063,28 @@ public sealed class RideService(
             });
         }
 
-        if (kind != RideKinds.Passenger || command.IsProxy == true || command.PackageSize is not null)
+        if (command.IsProxy is { } isProxy && isProxy != (kind == RideKinds.Proxy))
         {
             throw new MageRideValidationException(new Dictionary<string, string[]>
             {
-                ["kind"] =
-                [
-                    "Only 'passenger' rides are bookable in this build. Proxy booking (P-01..P-05) and package " +
-                    "delivery (P-06..P-11) are C032/C037.",
-                ],
+                ["isProxy"] = [$"isProxy is {isProxy}, which contradicts kind '{kind}'. Send one or agreeing values."],
             });
         }
 
         return kind;
     }
 
-    private static string RequireVehicleType(string? vehicleType)
+    /// <summary>
+    /// AL-09's tier set, narrowed by kind: <c>truck</c> and <c>mini_truck</c> are
+    /// <b>delivery-only</b> ("Mode-C passenger ride set; +truck|mini_truck for package delivery").
+    /// </summary>
+    /// <remarks>
+    /// The other direction is deliberately open — a motorbike carries an S parcel, which is P-11's
+    /// whole compatibility table. Only the two delivery tiers are refused to a human passenger, and
+    /// they are refused here rather than left to dispatch-svc, which would find no candidate and
+    /// leave the ride to expire with no reason a passenger could act on.
+    /// </remarks>
+    private static string RequireVehicleType(string? vehicleType, string kind)
     {
         if (!RideVehicleTypes.IsBookable(vehicleType))
         {
@@ -971,7 +1098,135 @@ public sealed class RideService(
             });
         }
 
+        if (kind != RideKinds.Package && RideVehicleTypes.Delivery.Contains(vehicleType!))
+        {
+            throw new MageRideValidationException(new Dictionary<string, string[]>
+            {
+                ["vehicleType"] =
+                [
+                    $"'{vehicleType}' carries packages, not passengers (AL-09). Book it with kind 'package'.",
+                ],
+            });
+        }
+
         return vehicleType!;
+    }
+
+    /// <summary>The rider a ride is for: the passenger themselves, or P-01's third party.</summary>
+    /// <param name="RiderId">
+    /// The rider's account when the number belongs to one. A proxy ride for an unregistered rider
+    /// carries only <paramref name="PhoneHash"/>, which is what <c>ck_rides_proxy_identity</c>
+    /// accepts as the alternative.
+    /// </param>
+    private sealed record ResolvedRider(Guid? RiderId, byte[]? PhoneHash, string? Name)
+    {
+        /// <summary>A passenger booking: the rider is the passenger and no column names them twice.</summary>
+        public static readonly ResolvedRider Self = new(null, null, null);
+    }
+
+    private async Task<ResolvedRider> ResolveRiderAsync(
+        RequestRideCommand command, string kind, CancellationToken cancellationToken)
+    {
+        if (kind != RideKinds.Proxy)
+        {
+            // A passenger or package booking that names a rider is refused rather than ignored: a
+            // client that filled the field believes somebody else is being carried, and a ride that
+            // silently dropped that belief would send a driver to the wrong person's phone.
+            if (command.RiderPhone is not null || command.RiderName is not null)
+            {
+                throw new MageRideValidationException(new Dictionary<string, string[]>
+                {
+                    ["riderName"] = [$"riderName and riderPhone belong to a proxy booking, not to a '{kind}' one."],
+                });
+            }
+
+            return ResolvedRider.Self;
+        }
+
+        // ck_rides_proxy_identity: a proxy ride must name its rider and be able to reach them.
+        if (string.IsNullOrWhiteSpace(command.RiderName))
+        {
+            throw new MageRideValidationException(new Dictionary<string, string[]>
+            {
+                ["riderName"] = ["riderName is required on a proxy booking (P-01)."],
+            });
+        }
+
+        if (!RiderPhone.TryNormalise(command.RiderPhone, out var phone))
+        {
+            throw new MageRideException(
+                MageRideErrors.InvalidPhone,
+                "riderPhone is required on a proxy booking and must be a Sri Lankan mobile in E.164 (P-03).");
+        }
+
+        // P-03. An unregistered rider is not an error — US-8.19 has the booker set the pickup pin
+        // themselves and AL-45 gives the rider a web path — so the answer decides which columns are
+        // written, not whether the booking proceeds.
+        var lookup = await riderDirectory.LookupAsync(phone, cancellationToken);
+
+        // The digest is written for a registered rider too. It is what the P-12 audit and any later
+        // "who was this ride for" question join on, and it costs one HMAC.
+        return new ResolvedRider(lookup.UserId, phones.Hash(phone), command.RiderName.Trim());
+    }
+
+    /// <summary>Everything a package booking adds, including the code the sender is about to be shown.</summary>
+    private sealed record ResolvedPackage(
+        string Size,
+        string? Description,
+        string? RecipientName,
+        string RecipientPhone,
+        string PickupOtp,
+        byte[] PickupOtpHash,
+        byte[] DeliveryOtpHash);
+
+    private ResolvedPackage? ResolvePackage(RequestRideCommand command, Guid clientRequestId, string kind)
+    {
+        if (kind != RideKinds.Package)
+        {
+            if (command.PackageSize is not null || command.PackageDescription is not null ||
+                command.RecipientPhone is not null || command.RecipientName is not null)
+            {
+                throw new MageRideValidationException(new Dictionary<string, string[]>
+                {
+                    ["packageSize"] = [$"The package members belong to kind 'package', not to a '{kind}' booking."],
+                });
+            }
+
+            return null;
+        }
+
+        if (command.PackageSize is not { } size || !PackageSizes.All.Contains(size))
+        {
+            throw new MageRideValidationException(new Dictionary<string, string[]>
+            {
+                ["packageSize"] = ["packageSize is required on a package booking and must be S, M or L (P-06)."],
+            });
+        }
+
+        // AL-21 notifies the recipient at pickup and AL-33 puts a call button in front of the
+        // driver; neither is possible without the number, and ck_rides_package_recipient
+        // (migration 0609) refuses the row anyway.
+        if (!RiderPhone.TryNormalise(command.RecipientPhone, out var recipientPhone))
+        {
+            throw new MageRideException(
+                MageRideErrors.InvalidPhone,
+                "recipientPhone is required on a package booking and must be a Sri Lankan mobile in E.164 (AL-21).");
+        }
+
+        // Both codes are minted here, at ride creation (D5' §11). Only the pickup one is ever shown
+        // from this response; the delivery code the recipient is given is minted again at the
+        // moment it is sent — see PackageService.VerifyPickupOtpAsync for why a plaintext nobody
+        // kept cannot be delivered an hour later.
+        var pickupOtp = otps.Generate();
+
+        return new ResolvedPackage(
+            Size: size,
+            Description: string.IsNullOrWhiteSpace(command.PackageDescription) ? null : command.PackageDescription,
+            RecipientName: string.IsNullOrWhiteSpace(command.RecipientName) ? null : command.RecipientName.Trim(),
+            RecipientPhone: recipientPhone,
+            PickupOtp: pickupOtp,
+            PickupOtpHash: otps.Hash(command.PassengerId, clientRequestId, PackageOtpPurpose.Pickup, pickupOtp),
+            DeliveryOtpHash: otps.Hash(command.PassengerId, clientRequestId, PackageOtpPurpose.Delivery, otps.Generate()));
     }
 
     private static GeoPoint RequirePlace(RidePlace? place, string field)

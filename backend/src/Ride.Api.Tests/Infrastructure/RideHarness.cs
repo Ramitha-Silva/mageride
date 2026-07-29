@@ -38,13 +38,28 @@ internal sealed class RideHarness : IAsyncDisposable
 
     private static int _plateCounter = Random.Shared.Next(1_000, 9_000) * 1_000;
 
+    /// <summary>The P-03 pepper and hash key. Long enough that nothing rejects them for length.</summary>
+    public const string OtpPepper = "mageride-c037-test-package-otp-pepper";
+
+    public const string PhoneHashKey = "mageride-c037-test-rider-phone-hash-key";
+
     private readonly WebApplication _app;
     private readonly PostgresFixture _postgres;
+    private readonly IamLookupStub _iam;
+    private readonly string _proofPhotoRoot;
 
-    private RideHarness(WebApplication app, HttpClient client, TestTokenIssuer tokens, PostgresFixture postgres)
+    private RideHarness(
+        WebApplication app,
+        HttpClient client,
+        TestTokenIssuer tokens,
+        PostgresFixture postgres,
+        IamLookupStub iam,
+        string proofPhotoRoot)
     {
         _app = app;
         _postgres = postgres;
+        _iam = iam;
+        _proofPhotoRoot = proofPhotoRoot;
         Client = client;
         Tokens = tokens;
     }
@@ -52,6 +67,12 @@ internal sealed class RideHarness : IAsyncDisposable
     public HttpClient Client { get; }
 
     public TestTokenIssuer Tokens { get; }
+
+    /// <summary>iam-svc's registration oracle (P-03), on its own socket.</summary>
+    public IamLookupStub Iam => _iam;
+
+    /// <summary>Where P-10 delivery photos land for this harness.</summary>
+    public string ProofPhotoRoot => _proofPhotoRoot;
 
     public IServiceProvider Services => _app.Services;
 
@@ -71,9 +92,19 @@ internal sealed class RideHarness : IAsyncDisposable
         await postgres.EnsureMigratedAsync();
 
         var tokens = new TestTokenIssuer();
+        var iam = await IamLookupStub.StartAsync(postgres);
+
+        // One directory per harness, so two concurrently running tests cannot read each other's
+        // delivery photos and a failed run leaves its evidence behind to look at.
+        var proofPhotoRoot = Path.Combine(
+            Path.GetTempPath(), "mageride-c037", Guid.NewGuid().ToString("N"));
 
         var overrides = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
         {
+            ["Ride:IamBaseUrl"] = iam.BaseAddress,
+            ["Ride:OtpPepper"] = OtpPepper,
+            ["Ride:PhoneHashKey"] = PhoneHashKey,
+            ["Ride:ProofPhotoRoot"] = proofPhotoRoot,
             ["ConnectionStrings:Postgres"] = postgres.ConnectionString,
             // The container is plain Postgres, not PgBouncer — so the pooled DSN also serves the
             // LISTEN the outbox dispatcher registers (E-09).
@@ -143,7 +174,7 @@ internal sealed class RideHarness : IAsyncDisposable
 
         var client = new HttpClient { BaseAddress = new Uri(baseAddress), Timeout = TimeSpan.FromSeconds(60) };
 
-        return new RideHarness(app, client, tokens, postgres);
+        return new RideHarness(app, client, tokens, postgres, iam, proofPhotoRoot);
     }
 
     // -------------------------------------------------------------------------------------------
@@ -151,16 +182,23 @@ internal sealed class RideHarness : IAsyncDisposable
     // -------------------------------------------------------------------------------------------
 
     /// <summary>Creates the <c>iam.users</c> row the ride's foreign keys need.</summary>
-    public async Task<Guid> CreatePassengerAsync()
+    public async Task<Guid> CreatePassengerAsync() => (await CreateUserAsync()).Id;
+
+    /// <summary>
+    /// The same account, with the number it is reachable on — which is what the P-03 lookup and
+    /// AL-48's <c>counterpartyPhone</c> both turn on.
+    /// </summary>
+    public async Task<SeededUser> CreateUserAsync(string role = "passenger")
     {
-        var passengerId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var phone = NextPhone();
 
         await using var connection = await _postgres.OpenAsync();
         await connection.ExecuteAsync(
-            "INSERT INTO iam.users (id, phone, role) VALUES (@Id, @Phone, 'passenger');",
-            new { Id = passengerId, Phone = NextPhone() });
+            "INSERT INTO iam.users (id, phone, role) VALUES (@Id, @Phone, @Role);",
+            new { Id = userId, Phone = phone, Role = role });
 
-        return passengerId;
+        return new SeededUser(userId, phone, Tokens.Passenger(userId));
     }
 
     /// <summary>
@@ -173,6 +211,7 @@ internal sealed class RideHarness : IAsyncDisposable
         var vehicleId = Guid.NewGuid();
         var name = driverName ?? "Test Driver";
         var plate = NextPlate();
+        var phone = NextPhone();
 
         await using var connection = await _postgres.OpenAsync();
         await connection.ExecuteAsync(
@@ -185,13 +224,13 @@ internal sealed class RideHarness : IAsyncDisposable
             {
                 DriverId = driverId,
                 VehicleId = vehicleId,
-                Phone = NextPhone(),
+                Phone = phone,
                 Plate = plate,
                 VehicleType = vehicleType,
                 DriverName = name,
             });
 
-        return new SeededDriver(driverId, vehicleId, plate, name, Tokens.Driver(driverId));
+        return new SeededDriver(driverId, vehicleId, plate, name, phone, Tokens.Driver(driverId));
     }
 
     // -------------------------------------------------------------------------------------------
@@ -301,6 +340,208 @@ internal sealed class RideHarness : IAsyncDisposable
 
         Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
         return await ReadJsonAsync(response);
+    }
+
+    /// <summary>Books a proxy ride for a third party (P-01) and returns the 202 body.</summary>
+    public async Task<HttpResponseMessage> RequestProxyRideAsync(
+        string bookerBearer,
+        string riderPhone,
+        string riderName = "Nimal",
+        string vehicleType = "three_wheeler",
+        string? clientRequestId = null) =>
+        await PostAsync(
+            "/v1/rides/request",
+            new
+            {
+                clientRequestId = clientRequestId ?? Guid.NewGuid().ToString(),
+                kind = "proxy",
+                pickup = new { lat = Pickup.Latitude, lng = Pickup.Longitude },
+                dropoff = new { lat = Dropoff.Latitude, lng = Dropoff.Longitude },
+                vehicleType,
+                fareEstimateToken = IssueFareToken(vehicleType),
+                paymentMethod = "cash",
+                riderName,
+                riderPhone,
+            },
+            bookerBearer);
+
+    /// <summary>Books a package delivery (P-06) and returns the 202 body, pickup code included.</summary>
+    public async Task<HttpResponseMessage> RequestPackageRideAsync(
+        string senderBearer,
+        string recipientPhone,
+        string packageSize = "S",
+        string vehicleType = "motorbike",
+        string paymentMethod = "cash",
+        string? clientRequestId = null) =>
+        await PostAsync(
+            "/v1/rides/request",
+            new
+            {
+                clientRequestId = clientRequestId ?? Guid.NewGuid().ToString(),
+                kind = "package",
+                pickup = new { lat = Pickup.Latitude, lng = Pickup.Longitude },
+                dropoff = new { lat = Dropoff.Latitude, lng = Dropoff.Longitude },
+                vehicleType,
+                fareEstimateToken = IssueFareToken(vehicleType, kind: "package"),
+                paymentMethod,
+                packageSize,
+                packageDescription = "One box of mangoes",
+                recipientName = "Kamala",
+                recipientPhone,
+            },
+            senderBearer);
+
+    /// <summary>
+    /// Books a package and walks it to <paramref name="state"/> through the real HTTP surface, the
+    /// way <see cref="DriveToAsync"/> does for a passenger ride.
+    /// </summary>
+    /// <remarks>
+    /// The only difference is the gate: a package leaves <c>Accepted</c> through
+    /// <c>package/pickup-otp</c> and not through <c>start</c>, which is exactly the substitution
+    /// ADD §11.16 makes.
+    /// </remarks>
+    public async Task<LivePackage> DrivePackageToAsync(
+        string state, string paymentMethod = "cash", string vehicleType = "motorbike")
+    {
+        var sender = await CreateUserAsync();
+        var recipient = IamLookupStub.UnregisteredPhone();
+        var driver = await CreateDriverAsync(vehicleType);
+
+        var response = await RequestPackageRideAsync(
+            sender.Bearer, recipient, vehicleType: vehicleType, paymentMethod: paymentMethod);
+
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+
+        var booked = await ReadJsonAsync(response);
+        var rideId = booked.GetProperty("rideId").GetGuid();
+        var pickupOtp = booked.GetProperty("pickupOtp").GetString()!;
+
+        var package = new LivePackage(
+            rideId, sender, recipient, driver, booked.GetProperty("version").GetInt64(), pickupOtp);
+
+        if (state == "Requested")
+        {
+            return package;
+        }
+
+        var offer = await OfferAsync(rideId, driver);
+        package = package with { Version = offer.Version };
+
+        if (state == "Offered")
+        {
+            return package;
+        }
+
+        var accepted = await PostAsync(
+            $"/v1/rides/{rideId}/offer/{driver.DriverId}/accept",
+            new { offerId = offer.OfferId.ToString(), version = offer.Version },
+            driver.Bearer);
+
+        Assert.Equal(HttpStatusCode.OK, accepted.StatusCode);
+        package = package with { Version = (await ReadJsonAsync(accepted)).GetProperty("version").GetInt64() };
+
+        if (state == "Accepted")
+        {
+            return package;
+        }
+
+        var picked = await PostAsync(
+            $"/v1/rides/{rideId}/package/pickup-otp", new { otp = pickupOtp }, driver.Bearer);
+
+        Assert.Equal(HttpStatusCode.OK, picked.StatusCode);
+        package = package with { Version = (await ReadJsonAsync(picked)).GetProperty("version").GetInt64() };
+
+        if (state == "InProgress")
+        {
+            return package;
+        }
+
+        // The delivery code is minted at pickup and leaves on `package.picked_up`, which is the
+        // only place a test can read it — exactly where notification-svc reads it in production.
+        var handover = await ReadEventPayloadAsync(rideId, "package.picked_up");
+        var deliveryOtp = handover.GetProperty("payload").GetProperty("deliveryOtp").GetString()!;
+
+        if (state == "PickedUp")
+        {
+            return package with { DeliveryOtp = deliveryOtp };
+        }
+
+        var delivered = await PostAsync(
+            $"/v1/rides/{rideId}/package/delivery-otp", new { otp = deliveryOtp }, driver.Bearer);
+
+        Assert.Equal(HttpStatusCode.OK, delivered.StatusCode);
+
+        return package with
+        {
+            Version = (await ReadJsonAsync(delivered)).GetProperty("version").GetInt64(),
+            DeliveryOtp = deliveryOtp,
+        };
+    }
+
+    /// <summary>Issues a location request as the booker and returns the raw response.</summary>
+    public Task<HttpResponseMessage> IssueLocationRequestAsync(string bookerBearer, string riderPhone) =>
+        PostAsync("/v1/location-requests", new { riderPhone }, bookerBearer);
+
+    /// <summary>One <c>rides.location_requests</c> row, straight from the table.</summary>
+    public async Task<(string State, double? Lat, double? Lng)> ReadLocationRequestAsync(Guid requestId)
+    {
+        await using var connection = await OpenAsync();
+
+        return await connection.QuerySingleAsync<(string, double?, double?)>(
+            """
+            SELECT state,
+                   ST_Y(resolved_geo::geometry) AS lat,
+                   ST_X(resolved_geo::geometry) AS lng
+              FROM rides.location_requests
+             WHERE request_id = @RequestId;
+            """,
+            new { RequestId = requestId });
+    }
+
+    /// <summary>The P-12 audit trail for a booker, newest first.</summary>
+    public async Task<IReadOnlyList<string>> ReadLocationAuditAsync(Guid bookerId)
+    {
+        await using var connection = await OpenAsync();
+
+        return [.. await connection.QueryAsync<string>(
+            "SELECT decision FROM safety.location_request_audit WHERE booker_id = @BookerId ORDER BY ts, id;",
+            new { BookerId = bookerId })];
+    }
+
+    /// <summary>The proof artifacts a ride has collected (P-10).</summary>
+    public async Task<IReadOnlyList<(Guid Id, string Kind, string StorageUrl, byte[] Sha256)>> ReadProofArtifactsAsync(
+        Guid rideId)
+    {
+        await using var connection = await OpenAsync();
+
+        return [.. await connection.QueryAsync<(Guid, string, string, byte[])>(
+            "SELECT id, kind, storage_url, sha256 FROM rides.proof_artifacts WHERE ride_id = @RideId ORDER BY captured_at;",
+            new { RideId = rideId })];
+    }
+
+    /// <summary>The unfired timers of a kind on a ride (R-04).</summary>
+    public async Task<int> CountLiveTimersAsync(Guid rideId, string kind)
+    {
+        await using var connection = await OpenAsync();
+
+        return await connection.ExecuteScalarAsync<int>(
+            "SELECT count(*)::int FROM rides.timers WHERE ride_id = @RideId AND kind = @Kind AND fired_at IS NULL;",
+            new { RideId = rideId, Kind = kind });
+    }
+
+    /// <summary>Pulls a ride's timer forward so a test can fire it without waiting out its window.</summary>
+    public async Task DueTimerAsync(Guid rideId, string kind)
+    {
+        await using var connection = await OpenAsync();
+
+        var updated = await connection.ExecuteAsync(
+            """
+            UPDATE rides.timers SET fire_at = now() - interval '1 second'
+             WHERE ride_id = @RideId AND kind = @Kind AND fired_at IS NULL;
+            """,
+            new { RideId = rideId, Kind = kind });
+
+        Assert.True(updated > 0, $"No live '{kind}' timer on ride {rideId} to bring forward.");
     }
 
     /// <summary>
@@ -441,6 +682,20 @@ internal sealed class RideHarness : IAsyncDisposable
             "SELECT state, version FROM rides.rides WHERE id = @RideId;", new { RideId = rideId });
     }
 
+    /// <summary>The ride's <c>rides.transitions</c> audit, oldest first (ADD Appendix B.2 invariant 4).</summary>
+    public async Task<IReadOnlyList<(string? FromState, string ToState, string? ReasonCode, string ActorType)>>
+        ReadTransitionsAsync(Guid rideId)
+    {
+        await using var connection = await OpenAsync();
+
+        return [.. await connection.QueryAsync<(string?, string, string?, string)>(
+            """
+            SELECT from_state, to_state, reason_code, actor_type
+              FROM rides.transitions WHERE ride_id = @RideId ORDER BY ts, id;
+            """,
+            new { RideId = rideId })];
+    }
+
     /// <summary>The outbox rows this ride has produced, oldest first.</summary>
     public async Task<IReadOnlyList<string>> ReadEventsAsync(Guid rideId)
     {
@@ -498,6 +753,20 @@ internal sealed class RideHarness : IAsyncDisposable
         Client.Dispose();
         await _app.StopAsync();
         await _app.DisposeAsync();
+        await _iam.DisposeAsync();
+
+        // Delivery photos are evidence in production and litter in a test run.
+        try
+        {
+            if (Directory.Exists(_proofPhotoRoot))
+            {
+                Directory.Delete(_proofPhotoRoot, recursive: true);
+            }
+        }
+        catch (IOException)
+        {
+            // A file still open somewhere is not worth failing a passing test over.
+        }
     }
 
     private static string NextPhone() =>
@@ -513,7 +782,26 @@ internal sealed class RideHarness : IAsyncDisposable
 }
 
 /// <summary>A driver plus the one APPROVED vehicle they are live on (US-9.6).</summary>
-internal sealed record SeededDriver(Guid DriverId, Guid VehicleId, string Plate, string Name, string Bearer);
+internal sealed record SeededDriver(
+    Guid DriverId, Guid VehicleId, string Plate, string Name, string Phone, string Bearer);
+
+/// <summary>An <c>iam.users</c> row, with the number the P-03 lookup resolves it by.</summary>
+internal sealed record SeededUser(Guid Id, string Phone, string Bearer);
+
+/// <summary>A package delivery sitting in a known state, with every credential it needs to hand.</summary>
+/// <param name="PickupOtp">What the 202 showed the sender, once (P-07).</param>
+/// <param name="DeliveryOtp">
+/// What the recipient was sent, read off <c>package.picked_up</c> — <see langword="null"/> until the
+/// parcel has been picked up, because it does not exist before then.
+/// </param>
+internal sealed record LivePackage(
+    Guid RideId,
+    SeededUser Sender,
+    string RecipientPhone,
+    SeededDriver Driver,
+    long Version,
+    string PickupOtp,
+    string? DeliveryOtp = null);
 
 /// <summary>An offer that has been placed and not yet answered.</summary>
 /// <param name="Version">The ride version the driver must echo on the accept.</param>

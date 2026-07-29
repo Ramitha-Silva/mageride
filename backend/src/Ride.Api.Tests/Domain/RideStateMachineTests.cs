@@ -176,18 +176,26 @@ public sealed class RideStateMachineTests
     }
 
     /// <summary>
-    /// ride-svc claims four of <c>ck_timers_kind</c>'s eight. <c>offer_expiry</c> is dispatch-svc's
-    /// (ADD §6, C023) and the other three are C037's — a claim that widened silently would take
-    /// another service's backstop.
+    /// ride-svc claims five of <c>ck_timers_kind</c>'s eight (Δ C037 added <c>cod_uncollected</c>).
+    /// <c>offer_expiry</c> is dispatch-svc's (ADD §6, C023) and the remaining two are armed by
+    /// nobody — a claim that widened silently would take another service's backstop, and a claim
+    /// that covered a kind nothing arms would leave rows sitting due for ever.
     /// </summary>
     [Fact]
-    public void The_timer_kinds_this_service_owns_are_the_four_it_arms()
+    public void The_timer_kinds_this_service_owns_are_the_five_it_arms()
     {
         Assert.Equal(
-            new[] { "arrival_grace", "no_show", "offline_grace", "payment_pending" }.Order(StringComparer.Ordinal),
+            new[] { "arrival_grace", "cod_uncollected", "no_show", "offline_grace", "payment_pending" }
+                .Order(StringComparer.Ordinal),
             RideTimerKinds.Owned.Order(StringComparer.Ordinal));
 
         Assert.DoesNotContain(RideTimerKinds.OfferExpiry, (IReadOnlySet<string>)RideTimerKinds.Owned);
+
+        // `location_request_expiry` cannot be a row at all (rides.timers.ride_id is NOT NULL and the
+        // request predates the ride) and `otp_attempt_window` has no duration in any spec — see
+        // RideTimerKinds.
+        Assert.DoesNotContain("location_request_expiry", (IReadOnlySet<string>)RideTimerKinds.Owned);
+        Assert.DoesNotContain("otp_attempt_window", (IReadOnlySet<string>)RideTimerKinds.Owned);
     }
 
     [Fact]

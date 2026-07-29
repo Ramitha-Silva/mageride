@@ -7,12 +7,11 @@ namespace MageRide.Ride.Domain;
 /// <c>rides.rides.kind</c> (C004 migration 0601): 0=passenger, 1=proxy, 2=package.
 /// </summary>
 /// <remarks>
-/// The state machine is kind-agnostic (ADD Appendix B.2 invariant 6), but proxy and package each
-/// bring a sub-flow C022 is fenced out of — the P-02 location request and the two OTP gates. Only
-/// <see cref="Passenger"/> is bookable here; the other two are <c>400 validation-failed</c> until
-/// C032/C037 land the sub-flows, because a package booked with no OTP would fail the
-/// <c>ck_rides_package_complete</c> CHECK and a proxy with no rider identity the
-/// <c>ck_rides_proxy_identity</c> one.
+/// The state machine is kind-agnostic (ADD Appendix B.2 invariant 6): all three traverse the same
+/// eighteen states. What differs is the sub-flow each brings — <see cref="Proxy"/> the P-02
+/// location-request round-trip and the <c>booker_id ≠ rider</c> invariant, <see cref="Package"/> the
+/// two OTP gates (P-07) and the COD terminal (P-08). Both landed in C037; C022's fence, which made
+/// them <c>400 validation-failed</c>, is gone.
 /// </remarks>
 public static class RideKinds
 {
@@ -82,16 +81,34 @@ public static class RideVehicleTypes
 /// A row of <c>rides.rides</c> — the whole Mode C aggregate as this slice reads it.
 /// </summary>
 /// <remarks>
-/// The package columns (<c>package_size</c>, the two OTP hashes and their attempt counters), the
-/// proxy phone hash and <c>dispatch_algorithm_version</c> are omitted: nothing in C022 writes or
-/// reads them, and a field this service cannot keep correct is worse than an absent one.
+/// <para>
+/// <c>dispatch_algorithm_version</c> (R-11) is omitted: it is dispatch-svc's audit of which scoring
+/// formula produced the offer and nothing here writes or reads it. The <b>OTP hashes</b> are
+/// omitted too, deliberately — see <see cref="PickupOtpAttempts"/>.
+/// </para>
+/// <para>
+/// Δ C037 added the proxy and package columns. <c>rider_phone_hash</c> is present because P-03 makes
+/// it the only handle an unregistered rider has, and both attempt counters because they are what the
+/// driver's app renders as "3 tries left".
+/// </para>
 /// </remarks>
+/// <param name="PickupOtpAttempts">
+/// How many wrong pickup codes this delivery has absorbed (P-07's budget of five). The
+/// <b>hashes themselves are not on this record</b> and no query in this service selects them: a
+/// digest that never leaves Postgres cannot be logged, serialised into an event or returned by a
+/// read — the comparison happens inside the conditional <c>UPDATE</c> that consumes the attempt.
+/// </param>
+/// <param name="RecipientPhone">
+/// The package recipient's E.164 number, in the clear (migration 0609). AL-21 SMSes it and AL-33
+/// dials it, so unlike <paramref name="RiderPhoneHash"/> it cannot be a digest.
+/// </param>
 public sealed record RideRow(
     Guid Id,
     Guid PassengerId,
     Guid ClientRequestId,
     Guid BookerId,
     Guid? RiderId,
+    byte[]? RiderPhoneHash,
     string? RiderName,
     bool IsProxy,
     short Kind,
@@ -106,6 +123,12 @@ public sealed record RideRow(
     Guid? CurrentOfferId,
     DateTimeOffset? OfferExpiresAt,
     string PaymentMethod,
+    string? PackageSize,
+    string? PackageDescription,
+    string? RecipientName,
+    string? RecipientPhone,
+    short PickupOtpAttempts,
+    short DeliveryOtpAttempts,
     long? FareEstimateMinor,
     long FareSurchargeMinor,
     string Currency,
@@ -116,11 +139,23 @@ public sealed record RideRow(
 {
     public string KindName => RideKinds.FromDatabase(Kind);
 
+    public bool IsPackage => Kind == RideKinds.ToDatabase(RideKinds.Package);
+
+    /// <summary>Whether the fare is collected as cash on delivery (P-08).</summary>
+    public bool IsCashOnDelivery =>
+        IsPackage && string.Equals(PaymentMethod, RidePaymentMethods.CashOnDelivery, StringComparison.Ordinal);
+
     /// <summary>
     /// Whether <paramref name="userId"/> may read this ride. The passenger, the booker (who is the
     /// passenger unless the ride is proxy, P-01), the rider, the driver who won it and the driver
     /// currently holding its offer — nobody else (<c>403 not-ride-participant</c>).
     /// </summary>
+    /// <remarks>
+    /// A package's <b>recipient is not a participant</b>, even when the number belongs to an
+    /// account. AL-21 gives them the AL-44 <c>package_recipient</c> share token instead, which is
+    /// scope-shaped and TTL-bounded — a recipient who could read the ride aggregate would also see
+    /// the sender's payment method and the whole transition log.
+    /// </remarks>
     public bool IsParticipant(Guid userId) =>
         PassengerId == userId
         || BookerId == userId

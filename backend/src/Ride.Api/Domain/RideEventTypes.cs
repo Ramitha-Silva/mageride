@@ -68,4 +68,59 @@ public static class RideEventTypes
     /// remarks. The driver's earning posts from here and never before.
     /// </summary>
     public const string Settled = "ride.settled";
+
+    // --- Δ C037: proxy booking (P-02, P-13) ---------------------------------------------------
+
+    /// <summary>
+    /// A booker asked a rider where they are (ADD §11.15). notification-svc branches on the
+    /// payload's <c>state</c>: <c>Pending</c> is the FCM data message to a registered rider,
+    /// <c>RiderNotRegistered</c> is AL-45's <c>pickup_confirm</c> token minted and SMSed instead.
+    /// </summary>
+    public const string LocationRequestIssued = "location.request.issued";
+
+    /// <summary>
+    /// The rider shared their position. fanout-svc publishes it to the booker's WebSocket group
+    /// <c>booker:{bookerId}:loc-req:{requestId}</c> (P-13) and the booker's pickup pin follows.
+    /// </summary>
+    public const string LocationRequestConfirmed = "location.request.confirmed";
+
+    /// <summary>
+    /// The rider refused. <b>Carries no coordinates and never can</b> (P-02) — the payload type has
+    /// no place to put one.
+    /// </summary>
+    public const string LocationRequestDeclined = "location.request.declined";
+
+    /// <summary>The 300 s window closed unanswered; the booker falls back to a map pin (US-8.19).</summary>
+    public const string LocationRequestExpired = "location.request.expired";
+
+    // --- Δ C037: package delivery (P-07, P-08, AL-21) -----------------------------------------
+
+    /// <summary>
+    /// The sender's OTP was read out and the parcel changed hands (ADD §11.16). AL-21's branch
+    /// hangs off this one: notification-svc pushes to a registered recipient and SMSes an
+    /// unregistered one a <c>safety.trip_share_tokens</c> tracking link, and the delivery OTP
+    /// travels with it.
+    /// </summary>
+    public const string PackagePickedUp = "package.picked_up";
+
+    /// <summary>
+    /// Handed over — by the recipient's OTP, or by photo proof when nobody was there (P-10).
+    /// Co-fires with <see cref="Completed"/>, which is the state change consumers already read.
+    /// </summary>
+    public const string PackageDelivered = "package.delivered";
+
+    /// <summary>
+    /// Five wrong codes on one gate: the handoff now needs a human (P-07's "expired/exhausted →
+    /// admin queue"). <b>No spec prints a name</b> — coined here and raised in the C037 handoff,
+    /// because "admin queue" is a support-svc ticket and D6' §2.4 makes the outbox the only way one
+    /// bounded context asks another for something.
+    /// </summary>
+    public const string PackageOtpLocked = "package.otp_locked";
+
+    /// <summary>
+    /// The driver confirmed the cash-on-delivery amount was collected (P-08: "settlement event
+    /// <c>payment.cod_collected</c> posts driver earning identically to <c>CashSettled</c>").
+    /// Carries the same payload as <see cref="Settled"/>, so a consumer reads one shape.
+    /// </summary>
+    public const string CashOnDeliveryCollected = "payment.cod_collected";
 }

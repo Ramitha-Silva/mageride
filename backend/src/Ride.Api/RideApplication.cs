@@ -67,8 +67,23 @@ public static class RideApplication
         app.UseMageRideDefaults(serviceOptions);
 
         app.MapRideEndpoints();
+        app.MapLocationRequestEndpoints();
 
         var settings = app.Services.GetRequiredService<IOptions<RideOptions>>().Value;
+
+        // Both hold a key that is required outside Development, so a deployment that forgot one
+        // fails here rather than on a booking. Same discipline as iam-svc's PhoneHasher (C027).
+        _ = app.Services.GetRequiredService<Rides.RiderPhoneHasher>();
+        _ = app.Services.GetRequiredService<Rides.PackageOtpCodec>();
+
+        if (string.IsNullOrWhiteSpace(settings.IamBaseUrl))
+        {
+            // The passenger surface is unaffected; proxy booking and the whole P-02 round-trip are
+            // not, and both answer 503 rather than guessing at a rider's registration.
+            app.Logger.LogWarning(
+                "Ride:IamBaseUrl is not configured. POST /v1/rides/request with kind 'proxy' and the whole " +
+                "/v1/location-requests family will answer 503 dependency-unavailable (P-03).");
+        }
 
         if (settings.StuckStateMetricsEnabled)
         {

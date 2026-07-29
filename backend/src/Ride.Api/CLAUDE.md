@@ -1,4 +1,4 @@
-# ride-svc (C022 happy path, C023 Δ, C032 core) — Mode C ride aggregate
+# ride-svc (C022 happy path, C023 Δ, C032 core, C037 proxy + package) — Mode C ride aggregate
 
 Stack: .NET 10 Minimal API + Dapper over Npgsql + MQTTnet. References `MageRide.Shared` (C002).
 
@@ -23,10 +23,14 @@ payment terminals and the R-20 stuck-state SLOs. Everything here matches
 | `POST /v1/internal/rides/{id}/matching` · `/offer` | **Δ C022** — see below |
 | `POST /v1/internal/rides/{id}/offer/expire` | **Δ C023**, `reason` **Δ C034** — see below |
 | `POST /v1/internal/rides/scheduled` | **Δ C035** — see below |
+| `POST /v1/rides/{id}/package/pickup-otp` · `/delivery-otp` | **Δ C037** — P-07, ADD §11.16 |
+| `POST /v1/rides/{id}/package/proof-photo` | **Δ C037** — P-10 |
+| `POST /v1/rides/{id}/cod-collected` | **Δ C037** — P-08 |
+| `POST /v1/location-requests` · `GET /{id}` · `/confirm` · `/decline` | **Δ C037** — P-02, P-13, §11.15 |
+| `POST /v1/internal/location-requests/{id}/confirm` · `/decline` | **Δ C037** — AL-45's web path |
 
-**Not here, on purpose.** Proxy booking and the P-02 location-request family, package delivery and
-its two OTP gates are **C037**. `/dispute` is **C049/C050** (it opens a support ticket, which is
-support-svc's). `GET /v1/rides/history` is **C048**. All are left unmapped rather than stubbed.
+**Not here, on purpose.** `/dispute` is **C049/C050** (it opens a support ticket, which is
+support-svc's). `GET /v1/rides/history` is **C048**. Both are left unmapped rather than stubbed.
 
 ## Rules that are load-bearing
 
@@ -74,11 +78,13 @@ support-svc's). `GET /v1/rides/history` is **C048**. All are left unmapped rathe
   because that is the only amount this service holds; `basis: full_fare` is what tells fare-svc to
   bill the metered distance instead. Same for the no-show's `base_fare_half` — the base fare is per
   tier (D5' §1.1) and lives in `fares.tariffs`.
-- **ride-svc owns four of the eight `rides.timers` kinds.** `arrival_grace`, `no_show`,
-  `payment_pending`, `offline_grace`. `offer_expiry` is dispatch-svc's (ADD §6 gives it "Quartz.NET
-  (scheduled rides **+ offer backstop**)", and C023 built it); the other three are C037's. Every
-  query in `RideTimerRepository` is scoped by kind, which is what lets two services share one table
-  with no coordination protocol.
+- **ride-svc owns five of the eight `rides.timers` kinds.** `arrival_grace`, `no_show`,
+  `payment_pending`, `offline_grace` and — Δ C037 — `cod_uncollected`. `offer_expiry` is
+  dispatch-svc's (ADD §6 gives it "Quartz.NET (scheduled rides **+ offer backstop**)", and C023
+  built it). The remaining two are armed by **nobody**, each for its own reason:
+  `location_request_expiry` cannot be a row at all and `otp_attempt_window` has no duration in any
+  spec — both argued at `RideTimerKinds`. Every query in `RideTimerRepository` is scoped by kind,
+  which is what lets two services share one table with no coordination protocol.
 - **A lease-poll, not Quartz.** ADD §6 names "Quartz.NET clustered scheduler". What R-04 requires
   is that the durable row decides and that a fire lands within about a second on any replica;
   Quartz's contribution would be a job store holding one recurring trigger whose job is to scan
@@ -121,6 +127,72 @@ support-svc's). `GET /v1/rides/history` is **C048**. All are left unmapped rathe
   regenerated its header key.
 - **`clientRequestId` may be a ULID.** ADD §11.13 has the apps generate them; the column is `UUID`.
 
+## Proxy booking and package delivery (Δ C037)
+
+- **One machine, three kinds.** ADD Appendix B.2 invariant 6 is honoured literally: proxy and
+  package add **no states**. The pickup OTP takes the same `Accepted|DriverArrived → InProgress`
+  edge `start` does and the delivery OTP the same `InProgress → Completed → PaymentPending` pair
+  `complete` does. A gate decides *whether* the ride may move, never *where* to.
+- **Both events at every gate.** `package.picked_up` co-fires with `ride.started` and
+  `package.delivered` with `ride.completed`. Spelling a package's completion only the new way would
+  leave dispatch-svc — which releases the driver on `ride.completed` — holding a ghost-busy driver.
+- **`passenger_id` is the booking account on all three kinds.** D4' annotates `booker_id`
+  "= passenger unless proxy", but the column is `NOT NULL REFERENCES iam.users(id)` and P-03's whole
+  point is that a proxy rider may have no account — so that reading is unsatisfiable for the case it
+  was written for. R-18's idempotency key, AL-16, `ux_rides_open_passenger` and the money all belong
+  to the account that booked; `rider_id` names the rider when there is one to name.
+- **A correct OTP never spends an attempt, and neither does a malformed one.** The gate is two
+  guarded `UPDATE`s — one that matches the digest and moves the ride, one that charges the budget
+  and applies only when the digest does *not* match — so no attempt can be counted twice and none
+  can be counted for a code that was never a guess. The attempt that **exhausts** the budget raises
+  `package.otp_locked`; the next one is `423`. A wrong code is committed, deliberately: rolling it
+  back would make the budget unenforceable.
+- **The delivery code is minted at pickup, not read back.** D5' §11 has both codes generated at
+  booking and ADD §11.16 sends the delivery one to the recipient at *pickup* — and a plaintext the
+  server did not keep cannot be sent an hour later. A code exists from booking (so
+  `ck_rides_package_complete` holds at `INSERT`) and the code actually sent is minted at the moment
+  of sending, replacing its digest in the same statement that takes the pickup gate. It lives in the
+  clear for one hop instead of for the whole booking.
+- **Photo proof completes the delivery.** ADD §11.16 draws the photograph and the delivery OTP as
+  alternatives into `Completed`; a route that only filed the picture would leave the parcel
+  delivered and the ride running. The file is written **before** the transaction, so a ride that
+  moved leaves an orphan file rather than a completion with no proof behind it.
+- **`cod-collected` is the settlement, and that is not an R-05 exception.** The three gateway
+  terminals are states fare-svc *observes*; cash in a driver's hand is observable by nobody, and
+  D5' §6 draws `PaymentPending --> CashOnDeliveryCollected` as an edge of the ride machine. It emits
+  P-08's `payment.cod_collected` **and** the ordinary `ride.settled`, so every terminal reaches a
+  consumer in one payload shape.
+- **P-14 is a matrix row, not a code path.** `cod_uncollected` is armed at the *pickup* of a COD
+  parcel (the clock is about money in transit, and the delivery may itself be what never happens),
+  survives every lifecycle move like `offline_grace`, and is retired by the terminal the driver's
+  tap produces. The tap and the clock race; whichever lands first leaves the other nothing to do.
+- **A decline transmits nothing, and the code has no way to.** The route takes no body, the
+  statement has no `resolved_geo` in its `SET` list, and the event payload's `geo` is filled from a
+  column that is NULL by construction. P-02's fence is three properties of the code rather than one
+  reviewer's care.
+- **`RiderNotRegistered` is live, not terminal.** ADD §11.15 ends the round-trip there; AL-45 is
+  later and wins — the rider is SMSed a `pickup_confirm` link, answers through public-bff, and the
+  request runs down the same 300 s clock. US-8.19's booker fallback is what happens if nobody
+  answers, not the only path.
+- **The 300 s deadline is the request row, because it cannot be a timer.** ADD §11.15 asks for
+  `rides.timers kind='location_request_expiry'`, but that table's `ride_id` is `NOT NULL` with a
+  foreign key onto `rides.rides` and the request is issued *before* the ride — which is why
+  `rides.location_requests.ride_id` is nullable in the first place. `issued_at + ttl_seconds` is the
+  durable deadline, swept over `ix_location_requests_due` in the same worker pass.
+- **The P-12 limit is Postgres, not Redis.** ride-svc holds no Redis connection (`UseRedis = false`,
+  which is what makes R-04's "independently of any Redis TTL" structural). `ix_location_requests_booker`
+  exists in migration 0606 for exactly this count, and counting inside the transaction that inserts
+  the next row means a request that rolled back never spent a token. It is checked **before** the
+  iam-svc lookup, so a booker out of requests cannot keep using the registration oracle for free.
+- **The lookup is a call, not a join.** ride-svc reads `iam.users` directly for
+  `counterpartyPhone` — the same read-only cross-context read `DriverSummaryRepository` makes — but
+  "is this number registered" is a *registration oracle*, and iam-svc answers it behind
+  `iam.phone_lookups`, which records who asked. An outage is `503`: guessing "unregistered" SMSes a
+  stranger and guessing "registered" pushes into the void.
+- **AL-48 and P-03 conflict in exactly one cell, and P-03 wins.** A proxy ride whose rider is
+  unregistered has no number to hand the driver. The field is absent — never the booker's, which
+  P-05 forbids outright.
+
 ## Configuration
 
 `Ride:InternalApiKey` **unset means `/v1/internal/rides/**` is not mapped at all** — dispatch-svc
@@ -142,6 +214,27 @@ shared secret is the interim until C042.
 | `VehicleStatusEnabled` / `MqttServiceName` | off / `ride` | R-15; off because it is the only part needing a broker |
 | `StuckStateMetricsEnabled` | on | R-20 / ADD §13.3.1 |
 
+`Ride:PhoneHashKey` and `Ride:OtpPepper` are **required outside Development** and resolved during
+`RideApplication.Build`, so a deployment that forgets one is a failed start rather than a 500 on
+somebody's booking. Neither is rotatable in place: a new phone key partitions the existing digests
+rather than re-keying them, and a new OTP pepper makes every package booked before the change
+undeliverable by code (photo proof is what an in-flight delivery falls back to).
+
+`Ride:IamBaseUrl` **unset means proxy booking and the whole `/v1/location-requests` family answer
+`503 dependency-unavailable`** — the routes stay mapped, because a null object that answered
+"unregistered" would SMS a stranger every time. `Ride:IamInternalApiKey` must equal iam-svc's
+`Auth:InternalApiKey` or every lookup is a 404.
+
+| Setting | Default | Where it comes from |
+|---|---|---|
+| `MaxOtpAttempts` | 5 | P-07 — "max 5 attempts each → admin queue" |
+| `LocationRequestTtl` | 5 min | P-02 / ADD §11.15; the contract pins `ttl` at `const: 300` |
+| `LocationRequestsPerHour` / `PerDay` | 5 / 30 | P-12 |
+| `CodUncollectedGrace` | 24 h | P-14 / D5' §8.3 |
+| `ProofPhotoRoot` | *(temp dir)* | **not object storage** — D-36's bucket, when a client exists |
+| `ProofPhotoMaxBytes` | 8 MiB | **no spec pins it** — argued at its declaration |
+| `IamTimeout` | 3 s | it sits in front of a booker tapping a button |
+
 `Fare:EstimateTokenKey` must be the same value fare-svc signs with, or every booking is a 400.
 `Jwt:Issuer` must match what iam-svc signs with; ride-svc holds no signing key.
 
@@ -157,6 +250,15 @@ rather than merely tested: there is no cache in this process to flush.
 `ride.expired_no_driver` · `ride.no_show_rider` · `ride.no_show_driver` · `ride.disputed` ·
 `cancellation.penalty.accrued` · `reputation.driver_cancelled` · `ride.settled`.
 
+**Δ C037 adds eight.** `package.picked_up` · `package.delivered` · `package.otp_locked` ·
+`payment.cod_collected` · `location.request.issued` · `.confirmed` · `.declined` · `.expired`.
+ADD §11.16 names the two package moves and P-08 names the COD one; `package.otp_locked` is coined
+here for the admin queue and raised in the handoff. The four `location.request.*` events are keyed
+by **`requestId`, not by a ride** — the round-trip happens before a ride exists, which is the point
+of it — and ride under `ride.events` because this service has one outbox and D6' §2.1 gives it one
+topic. A consumer keyed on rides ignores them by `eventType`, which dispatch-svc's handler already
+does for everything it does not recognise.
+
 D6' §2.2's `eventType` comment is a partial list; §11.12's Events column names six more and they are
 used verbatim. **`ride.settled` is the one name no spec prints** and is this service's — raised in
 the C032 handoff. Every one of them is keyed by `rideId` on the same topic, so a penalty can never
@@ -169,3 +271,11 @@ overtake the cancellation that caused it.
 `rides.transitions` (0602) and `rides.rides.terminal_at` (0601) were already exactly what the
 §11.12 matrix and the R-04 backstop need. `terminal_at` had no writer before this component; it
 does now.
+
+`db/migrations/0609` (C037) — `recipient_name` / `recipient_phone` on `rides.rides` plus
+`ck_rides_package_recipient`, and `ix_location_requests_due` on `rides.location_requests`. Both are
+micro-change-sets and the file header argues each. The recipient's number is stored **in the clear**,
+unlike `rider_phone_hash`: P-03 hashes the unregistered proxy rider because nothing ever has to dial
+them, and AL-21 must SMS the recipient while AL-33 must let the driver ring them. Everything else
+C037 needed — the two OTP hashes, the attempt counters, `rides.location_requests`,
+`rides.proof_artifacts`, `safety.location_request_audit` — was already landed by C004/C005.

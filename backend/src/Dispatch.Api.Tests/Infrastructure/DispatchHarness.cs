@@ -699,22 +699,37 @@ internal sealed class DispatchHarness : IAsyncDisposable
     // -----------------------------------------------------------------------------------------
 
     /// <summary>Books a ride through the real ride-svc and returns its id.</summary>
+    /// <param name="packageSize">
+    /// <c>S</c> | <c>M</c> | <c>L</c> books a <b>package</b> delivery rather than a passenger ride
+    /// (P-06). Needed for the two delivery-only tiers: Δ C037 enforces AL-09's "+truck|mini_truck
+    /// for package delivery", so a passenger booking on one of them is now a 400 rather than a ride
+    /// nobody could have been carried on. Nothing else about a dispatch round changes — a delivery
+    /// and a passenger ride are interchangeable for the daily fee (P-06) and share every gate.
+    /// </param>
     public async Task<Guid> RequestRideAsync(
-        Guid passengerId, string vehicleType = "three_wheeler", GeoPoint? pickup = null)
+        Guid passengerId,
+        string vehicleType = "three_wheeler",
+        GeoPoint? pickup = null,
+        string? packageSize = null)
     {
         var from = pickup ?? Pickup;
+        var kind = packageSize is null ? "passenger" : "package";
 
         using var request = new HttpRequestMessage(HttpMethod.Post, "/v1/rides/request")
         {
             Content = JsonContent.Create(new
             {
                 clientRequestId = Guid.NewGuid().ToString(),
+                kind,
                 pickup = new { lat = from.Latitude, lng = from.Longitude, address = "Colombo Fort" },
                 dropoff = new { lat = Dropoff.Latitude, lng = Dropoff.Longitude, address = "Dehiwala" },
                 vehicleType,
                 fareEstimateToken = FareTokens.Issue(
-                    vehicleType, "passenger", 74_000, 0, 9.2, from, Dropoff),
+                    vehicleType, kind, 74_000, 0, 9.2, from, Dropoff),
                 paymentMethod = "cash",
+                packageSize,
+                recipientName = packageSize is null ? null : "Kamala",
+                recipientPhone = packageSize is null ? null : NextPhone(),
             }),
         };
 

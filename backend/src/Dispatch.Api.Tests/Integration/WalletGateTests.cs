@@ -241,15 +241,18 @@ public sealed class WalletGateTests(PostgresFixture postgres, RedisFixture redis
         var driver = await harness.CreateOnlineDriverAsync(Nearest, vehicleType: "mini_truck");
         await harness.SetWalletBalanceAsync(driver.DriverId, 10_000_000);
 
+        // Booked as deliveries: `mini_truck` carries parcels, not people (AL-09), and ride-svc
+        // enforces that since Δ C037. The daily fee does not care which it was — P-06 counts
+        // deliveries and passenger rides together — so the gate under test is unchanged.
         var firstRideId = await harness.RequestRideAsync(
-            await harness.CreatePassengerAsync(), vehicleType: "mini_truck");
+            await harness.CreatePassengerAsync(), vehicleType: "mini_truck", packageSize: "M");
 
         Assert.Equal(DispatchResult.Offered, (await OfferLoopTests.DispatchAsync(harness, firstRideId)).Result);
 
         await CompleteTripAsync(harness, firstRideId, driver.DriverId);
 
         var secondRideId = await harness.RequestRideAsync(
-            await harness.CreatePassengerAsync(), vehicleType: "mini_truck");
+            await harness.CreatePassengerAsync(), vehicleType: "mini_truck", packageSize: "M");
 
         Assert.Equal(DispatchResult.NoCandidate, (await OfferLoopTests.DispatchAsync(harness, secondRideId)).Result);
 

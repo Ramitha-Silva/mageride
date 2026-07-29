@@ -681,3 +681,18 @@ components:
         application/problem+json:
           schema:
             $ref: '#/components/schemas/Problem'
+
+    ServiceUnavailable:
+      description: |
+        A dependency this operation cannot proceed without is unreachable or its circuit is open
+        (D6' §8.3). Distinct from a 500: the request was well formed and is worth retrying.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+      headers:
+        Retry-After:
+          description: Seconds to wait before retrying, when the service can estimate one.
+          schema:
+            type: integer
+            format: int32

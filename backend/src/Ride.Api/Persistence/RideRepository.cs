@@ -140,6 +140,52 @@ public interface IRideRepository
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Δ C037 — the P-07 OTP gate, taken. One conditional <c>UPDATE</c> that matches only when the
+    /// stored digest equals <paramref name="hash"/>, the caller is the accepted driver, the ride is
+    /// a package sitting in one of <paramref name="fromStates"/> and the attempt budget still has
+    /// room. A correct code therefore <b>never</b> spends an attempt.
+    /// </summary>
+    /// <param name="rotatedDeliveryOtpHash">
+    /// The pickup gate only, and the reason it exists is that a plaintext the server did not keep
+    /// cannot be sent later: ADD §11.16 hands the delivery code to the recipient <em>at pickup</em>,
+    /// so the code that is sent is minted at that moment and its digest replaces the one booking
+    /// wrote. <see langword="null"/> leaves the column alone.
+    /// </param>
+    /// <returns>The moved row, or <see langword="null"/> for every other outcome.</returns>
+    Task<RideRow?> ConsumePackageOtpAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction? transaction,
+        Guid rideId,
+        Guid driverId,
+        PackageOtpPurpose purpose,
+        byte[] hash,
+        IReadOnlyCollection<string> fromStates,
+        string toState,
+        int maxAttempts,
+        byte[]? rotatedDeliveryOtpHash,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The other half of the gate: charge a wrong code to the budget. Guarded on the digest
+    /// <em>not</em> matching, so the two statements cannot both apply to one attempt.
+    /// </summary>
+    /// <returns>
+    /// The attempt count after the increment, or <see langword="null"/> when nothing was charged —
+    /// which, once <see cref="ConsumePackageOtpAsync"/> has also declined, means the ride is locked,
+    /// somewhere else, somebody else's, or not a package.
+    /// </returns>
+    Task<short?> ChargePackageOtpAttemptAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction? transaction,
+        Guid rideId,
+        Guid driverId,
+        PackageOtpPurpose purpose,
+        byte[] hash,
+        IReadOnlyCollection<string> fromStates,
+        int maxAttempts,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// A move to a terminal state (§11.12): stamps <c>terminal_at</c> and drops the live offer, so
     /// a finished ride carries neither a countdown nor something to accept.
     /// </summary>
@@ -187,6 +233,22 @@ public interface IRideRepository
 /// the price quoted when it was booked (D5' §1.4), and <c>0</c> would read as "free" rather than
 /// as "not quoted". <c>ck_rides_fare_estimate_minor</c> admits NULL for the same reason.
 /// </param>
+/// <param name="Kind">
+/// <c>passenger</c> | <c>proxy</c> | <c>package</c>. The three sub-flows differ; the state machine
+/// does not (ADD Appendix B.2 invariant 6).
+/// </param>
+/// <param name="RiderId">
+/// The proxy rider's account, when the number belongs to one. <see langword="null"/> for a
+/// passenger booking (where the rider *is* the passenger) and for an unregistered proxy rider, whom
+/// <paramref name="RiderPhoneHash"/> is the only handle on (P-03).
+/// </param>
+/// <param name="RecipientPhone">
+/// The package recipient, in the clear — AL-21 SMSes it and AL-33 dials it (migration 0609).
+/// </param>
+/// <param name="PickupOtpHash">
+/// The HMAC of the code the sender was shown, from <c>PackageOtpCodec</c>. Written once and never
+/// read back out of the database.
+/// </param>
 public sealed record NewRide(
     Guid PassengerId,
     Guid ClientRequestId,
@@ -195,7 +257,17 @@ public sealed record NewRide(
     GeoPoint Dropoff,
     string PaymentMethod,
     long? FareEstimateMinor,
-    long FareSurchargeMinor);
+    long FareSurchargeMinor,
+    string Kind = RideKinds.Passenger,
+    Guid? RiderId = null,
+    byte[]? RiderPhoneHash = null,
+    string? RiderName = null,
+    string? PackageSize = null,
+    string? PackageDescription = null,
+    string? RecipientName = null,
+    string? RecipientPhone = null,
+    byte[]? PickupOtpHash = null,
+    byte[]? DeliveryOtpHash = null);
 
 /// <inheritdoc cref="IRideRepository"/>
 public sealed class RideRepository : IRideRepository
@@ -206,11 +278,21 @@ public sealed class RideRepository : IRideRepository
     /// <summary>The partial unique index behind invariant 1 (ADD Appendix B.2).</summary>
     private const string OpenPassengerIndex = "ux_rides_open_passenger";
 
+    /// <summary>
+    /// Every column <see cref="RideRow"/> carries — and, as deliberately, neither OTP hash. A digest
+    /// that is never selected cannot be logged, serialised into an event or returned by a read; the
+    /// comparison happens inside the <c>UPDATE</c> that consumes the attempt (P-07).
+    /// </summary>
     private const string Columns =
-        "id, passenger_id, client_request_id, booker_id, rider_id, rider_name, is_proxy, kind, " +
-        "vehicle_type, pickup_geo, dropoff_geo, state, accepted_driver_id, accepted_vehicle_id, " +
-        "offered_driver_id, offered_vehicle_id, current_offer_id, offer_expires_at, payment_method, " +
+        "id, passenger_id, client_request_id, booker_id, rider_id, rider_phone_hash, rider_name, " +
+        "is_proxy, kind, vehicle_type, pickup_geo, dropoff_geo, state, accepted_driver_id, " +
+        "accepted_vehicle_id, offered_driver_id, offered_vehicle_id, current_offer_id, offer_expires_at, " +
+        "payment_method, package_size, package_description, recipient_name, recipient_phone, " +
+        "pickup_otp_attempts, delivery_otp_attempts, " +
         "fare_estimate_minor, fare_surcharge_minor, currency, version, created_at, updated_at, terminal_at";
+
+    /// <summary><c>rides.rides.kind</c> for a package (migration 0601's <c>ck_rides_kind</c>).</summary>
+    private static readonly short PackageKind = RideKinds.ToDatabase(RideKinds.Package);
 
     /// <summary>The ten states a ride never leaves (D5' §6); anything else is live.</summary>
     private static readonly string[] TerminalStates = [.. RideStates.Terminal];
@@ -249,18 +331,30 @@ public sealed class RideRepository : IRideRepository
             // an untargeted DO NOTHING would turn "you already have a ride running" into a silent
             // success that returns nothing.
             //
-            // booker_id = passenger_id and kind = 0: proxy and package are C032/C037 (see RideKinds).
+            // `booker_id` and `passenger_id` are both the authenticated account, on all three kinds.
+            // D4' annotates booker_id "= passenger unless proxy", which reads as though a proxy
+            // ride's passenger_id should be the rider — but the column is NOT NULL with a foreign
+            // key onto iam.users and P-03's whole point is that a proxy rider may have no account,
+            // so that reading is unsatisfiable for exactly the case it was written for. Everything
+            // hung off passenger_id is the booking account's anyway: R-18's idempotency key, AL-16's
+            // eligibility, ux_rides_open_passenger and the money. `rider_id` names the rider when
+            // there is one to name. Δ C037; raised in the handoff.
+            //
             // version starts at 1 because the contract types it `minimum: 1` and the 202 example
             // says 1; the column defaults to 0.
             var created = await connection.QuerySingleOrDefaultAsync<RideRow>(new CommandDefinition(
                 $"""
                  INSERT INTO rides.rides
-                   (passenger_id, client_request_id, booker_id, rider_id, kind, vehicle_type,
-                    pickup_geo, dropoff_geo, state, payment_method,
+                   (passenger_id, client_request_id, booker_id, rider_id, rider_phone_hash, rider_name,
+                    is_proxy, kind, vehicle_type, pickup_geo, dropoff_geo, state, payment_method,
+                    package_size, package_description, recipient_name, recipient_phone,
+                    pickup_otp_hash, delivery_otp_hash,
                     fare_estimate_minor, fare_surcharge_minor, currency, version)
                  VALUES
-                   (@PassengerId, @ClientRequestId, @PassengerId, @PassengerId, 0, @VehicleType,
-                    @Pickup, @Dropoff, '{RideStates.Requested}', @PaymentMethod,
+                   (@PassengerId, @ClientRequestId, @PassengerId, @RiderId, @RiderPhoneHash, @RiderName,
+                    @IsProxy, @Kind, @VehicleType, @Pickup, @Dropoff, '{RideStates.Requested}', @PaymentMethod,
+                    @PackageSize, @PackageDescription, @RecipientName, @RecipientPhone,
+                    @PickupOtpHash, @DeliveryOtpHash,
                     @FareEstimateMinor, @FareSurchargeMinor, 'LKR', 1)
                  ON CONFLICT (passenger_id, client_request_id) DO NOTHING
                  RETURNING {Columns};
@@ -269,10 +363,21 @@ public sealed class RideRepository : IRideRepository
                 {
                     ride.PassengerId,
                     ride.ClientRequestId,
+                    ride.RiderId,
+                    ride.RiderPhoneHash,
+                    ride.RiderName,
+                    IsProxy = ride.Kind == RideKinds.Proxy,
+                    Kind = RideKinds.ToDatabase(ride.Kind),
                     ride.VehicleType,
                     ride.Pickup,
                     ride.Dropoff,
                     ride.PaymentMethod,
+                    ride.PackageSize,
+                    ride.PackageDescription,
+                    ride.RecipientName,
+                    ride.RecipientPhone,
+                    ride.PickupOtpHash,
+                    ride.DeliveryOtpHash,
                     ride.FareEstimateMinor,
                     ride.FareSurchargeMinor,
                 },
@@ -581,6 +686,112 @@ public sealed class RideRepository : IRideRepository
             transaction,
             cancellationToken: cancellationToken));
     }
+
+    public Task<RideRow?> ConsumePackageOtpAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction? transaction,
+        Guid rideId,
+        Guid driverId,
+        PackageOtpPurpose purpose,
+        byte[] hash,
+        IReadOnlyCollection<string> fromStates,
+        string toState,
+        int maxAttempts,
+        byte[]? rotatedDeliveryOtpHash,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+        ArgumentNullException.ThrowIfNull(hash);
+        ArgumentNullException.ThrowIfNull(fromStates);
+
+        // The column names come from a two-valued enum, never from the request — the only two
+        // interpolations in this file that are not compile-time constants, and both are closed sets.
+        //
+        // The comparison is Postgres's `=` on bytea and is not constant-time. That is deliberate and
+        // it is not the control: what bounds guessing at a 10^4 code is the five-attempt budget in
+        // the predicate below, and a timing oracle over a network on a digest the attacker cannot
+        // choose the input to buys nothing against it.
+        return connection.QuerySingleOrDefaultAsync<RideRow>(new CommandDefinition(
+            $"""
+             UPDATE rides.rides
+                SET state = @ToState,
+                    delivery_otp_hash = COALESCE(@RotatedDeliveryOtpHash::bytea, delivery_otp_hash),
+                    version = version + 1,
+                    updated_at = now()
+              WHERE id = @RideId
+                AND kind = @PackageKind
+                AND accepted_driver_id = @DriverId
+                AND state = ANY(@FromStates)
+                AND {AttemptsColumn(purpose)} < @MaxAttempts
+                AND {HashColumn(purpose)} = @Hash
+             RETURNING {Columns};
+             """,
+            new
+            {
+                RideId = rideId,
+                PackageKind,
+                DriverId = driverId,
+                FromStates = fromStates.ToArray(),
+                ToState = toState,
+                MaxAttempts = maxAttempts,
+                Hash = hash,
+                RotatedDeliveryOtpHash = rotatedDeliveryOtpHash,
+            },
+            transaction,
+            cancellationToken: cancellationToken));
+    }
+
+    public async Task<short?> ChargePackageOtpAttemptAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction? transaction,
+        Guid rideId,
+        Guid driverId,
+        PackageOtpPurpose purpose,
+        byte[] hash,
+        IReadOnlyCollection<string> fromStates,
+        int maxAttempts,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+        ArgumentNullException.ThrowIfNull(hash);
+        ArgumentNullException.ThrowIfNull(fromStates);
+
+        // `IS DISTINCT FROM` rather than `<>`: a package always has both digests
+        // (ck_rides_package_complete), but a NULL would otherwise make this predicate unknown and
+        // silently stop charging attempts — a lockout that never locks.
+        //
+        // No `version` bump. Getting a code wrong is not a state change, and moving the version
+        // would invalidate the optimistic token every other route makes the client echo.
+        return await connection.ExecuteScalarAsync<short?>(new CommandDefinition(
+            $"""
+             UPDATE rides.rides
+                SET {AttemptsColumn(purpose)} = {AttemptsColumn(purpose)} + 1
+              WHERE id = @RideId
+                AND kind = @PackageKind
+                AND accepted_driver_id = @DriverId
+                AND state = ANY(@FromStates)
+                AND {AttemptsColumn(purpose)} < @MaxAttempts
+                AND {HashColumn(purpose)} IS DISTINCT FROM @Hash
+             RETURNING {AttemptsColumn(purpose)};
+             """,
+            new
+            {
+                RideId = rideId,
+                PackageKind,
+                DriverId = driverId,
+                FromStates = fromStates.ToArray(),
+                MaxAttempts = maxAttempts,
+                Hash = hash,
+            },
+            transaction,
+            cancellationToken: cancellationToken));
+    }
+
+    private static string AttemptsColumn(PackageOtpPurpose purpose) =>
+        purpose is PackageOtpPurpose.Pickup ? "pickup_otp_attempts" : "delivery_otp_attempts";
+
+    private static string HashColumn(PackageOtpPurpose purpose) =>
+        purpose is PackageOtpPurpose.Pickup ? "pickup_otp_hash" : "delivery_otp_hash";
 
     public Task<RideRow?> TerminateAsync(
         NpgsqlConnection connection,

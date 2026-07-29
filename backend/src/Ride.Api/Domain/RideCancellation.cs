@@ -35,6 +35,13 @@ public enum RideCancellationTrigger
 
     /// <summary>An operator ended the ride through admin-bff.</summary>
     AdminIntervention,
+
+    /// <summary>
+    /// Δ C037 — P-14: a package was delivered cash-on-delivery and the driver never confirmed the
+    /// money 24 hours later. D5' §8.3 lands it in <c>Disputed</c> and the existing refund/dispute
+    /// workflow (§11.14) takes it from there; no new pipeline.
+    /// </summary>
+    CodUncollected,
 }
 
 /// <summary>Which of the §11.12 "Penalty" column's three amounts applies.</summary>
@@ -295,6 +302,28 @@ public static class RideCancellationMatrix
             }
         }
 
+        // ---- Uncollected cash on delivery (P-14, Δ C037) ------------------------------------
+        // "If COD not collected within 24 h and rider/recipient cannot be reached, ride moves to
+        // `Disputed` and falls into the existing refund/dispute workflow (§11.14); no new pipeline."
+        //
+        // `PaymentPending` alone. The 24-hour clock starts at the *pickup* (ADD §11.16 arms the
+        // timer there), so it can fire against a ride that is still `InProgress` — a delivery that
+        // has taken a day. That is a stuck delivery, not an uncollected debt: no money is owed until
+        // the parcel is handed over, and the R-16 offline grace and the R-20 stuck-state watch are
+        // what have something to say about it. The timer finds no row and retires, which is exactly
+        // what TryApplyAsync is for.
+        cells[(RideStates.PaymentPending, RideCancellationTrigger.CodUncollected)] = new RideCancellationOutcome(
+            RideStates.Disputed,
+            RideReasonCodes.CodUncollected,
+            RideTransitions.Actors.System,
+
+            // No penalty. The money is the *fare*, which fare-svc is still owed and which the
+            // dispute resolves; accruing something on top of it here would bill the passenger for
+            // the driver not having pressed a button.
+            RidePenaltyBasis.None,
+            ReputationHit: false,
+            CountsTowardBookingDisable: false);
+
         return cells.ToFrozenDictionary();
     }
 }
@@ -353,6 +382,20 @@ public static class RideReasonCodes
     public const string NoDriverFound = "NO_DRIVER_FOUND";
     public const string FraudLock = "FRAUD_LOCK";
     public const string AdminIntervention = "ADMIN_INTERVENTION";
+
+    /// <summary>Δ C037 — P-14: 24 hours after a COD delivery, with no "cash received" tap.</summary>
+    public const string CodUncollected = "COD_UNCOLLECTED";
+
+    // --- Δ C037: the package gates and the proxy round-trip ---------------------------------
+
+    /// <summary>The sender's OTP was accepted; the parcel changed hands (P-07).</summary>
+    public const string PackagePickedUp = "PACKAGE_PICKED_UP";
+
+    /// <summary>The recipient's OTP was accepted (P-07).</summary>
+    public const string PackageDeliveredByOtp = "PACKAGE_DELIVERED_OTP";
+
+    /// <summary>Nobody was there; a photo is the proof instead (P-10).</summary>
+    public const string PackageDeliveredByPhoto = "PACKAGE_DELIVERED_PHOTO";
 
     public const string PaymentSucceeded = "PAYMENT_SUCCEEDED";
     public const string PaymentCashSettled = "PAYMENT_CASH_SETTLED";

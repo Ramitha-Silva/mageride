@@ -14,7 +14,11 @@ using Microsoft.Extensions.Options;
 namespace MageRide.Ride.Timers;
 
 /// <summary>What one sweep pass did.</summary>
-public sealed record RideTimerSweep(int Claimed, int Applied)
+/// <param name="ExpiredLocationRequests">
+/// P-02 requests whose 300 s window closed in this pass (Δ C037). Counted separately because they
+/// are not <c>rides.timers</c> rows and cannot be — see <see cref="RideTimerKinds"/>.
+/// </param>
+public sealed record RideTimerSweep(int Claimed, int Applied, int ExpiredLocationRequests = 0)
 {
     /// <summary>Timers that fired and found nothing to do — the normal race, not a fault.</summary>
     public int NoOp => Claimed - Applied;
@@ -143,7 +147,14 @@ public sealed class RideTimerWorker(
             }
         }
 
-        var sweep = new RideTimerSweep(claimed.Count, applied);
+        // The P-02 expiries ride the same pass rather than a worker of their own: the deadline they
+        // enforce lives on `rides.location_requests` instead of in `rides.timers` (the row cannot
+        // exist — see RideTimerKinds), and R-04's "≤1 s after expiry" is this ticker either way.
+        // Kept out of the loop above and out of its transaction, so a location-request failure
+        // cannot take a no-show timer with it.
+        var expiredRequests = await ExpireLocationRequestsAsync(scope.ServiceProvider, cancellationToken);
+
+        var sweep = new RideTimerSweep(claimed.Count, applied, expiredRequests);
 
         if (sweep.Claimed > 0)
         {
@@ -152,6 +163,24 @@ public sealed class RideTimerWorker(
         }
 
         return sweep;
+    }
+
+    private async Task<int> ExpireLocationRequestsAsync(
+        IServiceProvider scope, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await scope.GetRequiredService<ILocationRequestService>().ExpireDueAsync(cancellationToken);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            // Still Pending, so still due: the next tick picks them up unchanged. Logged rather
+            // than rethrown for the same reason each timer's fire is — one failing subject must not
+            // cost the rest of the pass.
+            logger.LogError(exception, "The location-request expiry sweep failed; retrying on the next tick");
+
+            return 0;
+        }
     }
 
     /// <summary>
@@ -181,6 +210,15 @@ public sealed class RideTimerWorker(
             RideTimerKinds.OfflineGrace => await FireOfflineGraceAsync(scope, cancellations, timers, timer, cancellationToken),
 
             RideTimerKinds.PaymentPending => await ReportStuckPaymentAsync(scope, timer, cancellationToken),
+
+            // P-14, Δ C037. Twenty-four hours after a COD parcel was picked up and the driver has
+            // still not banked the cash: the ride becomes a dispute and §11.14's existing refund
+            // workflow takes it. If the driver did tap "Cash received" the ride is already terminal,
+            // the timer was retired with it, and this line is never reached — the matrix has a row
+            // for PaymentPending alone.
+            RideTimerKinds.CodUncollected =>
+                await cancellations.TryApplyAsync(timer.RideId, RideCancellationTrigger.CodUncollected, cancellationToken)
+                    is not null,
 
             _ => throw new InvalidOperationException(
                 $"rides.timers row {timer.Id} has kind '{timer.Kind}', which ride-svc does not own."),

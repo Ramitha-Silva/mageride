@@ -1,6 +1,7 @@
 using MageRide.Ride.Domain;
 using MageRide.Ride.Persistence;
 using MageRide.Ride.Rides;
+using MageRide.Shared.Primitives;
 
 namespace MageRide.Ride.Endpoints;
 
@@ -9,9 +10,10 @@ public sealed record PlaceBody(double? Lat, double? Lng, string? Address);
 
 /// <summary>The body of <c>POST /v1/rides/request</c> (D3' <c>RideRequest</c>).</summary>
 /// <remarks>
-/// The proxy and package members are declared so a client written against the contract compiles
-/// and so a booking that sets them is refused with a reason rather than silently downgraded to a
-/// plain passenger ride. C032/C037 implement them.
+/// All three kinds are bookable since Δ C037. Members that do not belong to the kind being booked
+/// are refused rather than ignored — a client that filled <c>riderPhone</c> on a passenger ride
+/// believes somebody else is being carried, and a booking that quietly dropped that belief would
+/// send a driver to the wrong person.
 /// </remarks>
 public sealed record RideRequestBody(
     string? ClientRequestId,
@@ -58,13 +60,72 @@ public sealed record FareEstimateResponse(long AmountMinor, string Currency, lon
 
 /// <summary>The 202 of <c>POST /v1/rides/request</c>.</summary>
 /// <param name="PickupOtp">
-/// Package bookings only (P-07), and never issued in this build — always absent.
+/// Package bookings only (P-07). The sender shows it to the driver at the door, and this response
+/// is the only place it is ever rendered — a second booking read answers without it, because the
+/// server kept a digest and not the code.
 /// </param>
 public sealed record RideRequestedResponse(
     Guid RideId, string State, long Version, FareEstimateResponse? EstimatedFare, string? PickupOtp = null)
 {
-    public static RideRequestedResponse From(RideRow ride) =>
-        new(ride.Id, ride.State, ride.Version, FareEstimateResponse.From(ride));
+    public static RideRequestedResponse From(RideBooking booking)
+    {
+        ArgumentNullException.ThrowIfNull(booking);
+
+        var ride = booking.Ride;
+
+        return new RideRequestedResponse(
+            ride.Id, ride.State, ride.Version, FareEstimateResponse.From(ride), booking.PickupOtp);
+    }
+}
+
+/// <summary>The body of both package OTP routes (<c>ride.yaml</c>'s <c>OtpAttempt</c>).</summary>
+public sealed record OtpAttemptBody(string? Otp);
+
+/// <summary>The body of <c>POST /v1/rides/{rideId}/cod-collected</c> (P-08).</summary>
+/// <param name="CollectedMinor">
+/// What the driver took, in LKR minor units (§0 Money). Stated rather than checked against the
+/// fare: ride-svc holds the *quote*, the metered amount is fare-svc's (D5' §1.4), and a mismatch is
+/// a reconciliation question rather than grounds to refuse a driver who is holding the cash.
+/// </param>
+public sealed record CashCollectedBody(long? CollectedMinor);
+
+/// <summary>The 201 of <c>POST /v1/rides/{rideId}/package/proof-photo</c> (P-10).</summary>
+public sealed record ProofArtifactResponse(Guid ArtifactId, string State, long Version);
+
+/// <summary>The body of <c>POST /v1/location-requests</c> (P-02).</summary>
+public sealed record LocationRequestBody(string? RiderPhone, string? RideDraftId);
+
+/// <summary>
+/// The body of <c>POST /v1/location-requests/{requestId}/confirm</c>
+/// (<c>_shared.yaml#GeoPointWithAccuracy</c>).
+/// </summary>
+/// <remarks>
+/// There is no matching body on <c>/decline</c>, and there deliberately never will be: P-02 says a
+/// decline transmits no coordinates, so the route takes no body at all.
+/// </remarks>
+public sealed record ConfirmLocationBody(double? Lat, double? Lng, double? Accuracy);
+
+/// <summary>D3' <c>LocationRequest</c> — the 202 of the issue and the 200 of every resolution.</summary>
+/// <param name="Geo">
+/// Present only when <c>state</c> is <c>Confirmed</c>. On a decline or an expiry the underlying
+/// column is NULL because nothing could have written it (P-02).
+/// </param>
+public sealed record LocationRequestResponse(
+    Guid RequestId, string State, DateTimeOffset ExpiresAt, int Ttl, ConfirmLocationBody? Geo)
+{
+    public static LocationRequestResponse From(LocationRequestRow request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        return new LocationRequestResponse(
+            request.RequestId,
+            request.State,
+            request.ExpiresAt,
+            request.TtlSeconds,
+            request.ResolvedGeo is { } geo
+                ? new ConfirmLocationBody(geo.Latitude, geo.Longitude, (double?)request.ResolvedAccuracyM)
+                : null);
+    }
 }
 
 /// <summary>D3' <c>RideStateChange</c>.</summary>
@@ -101,10 +162,17 @@ public sealed record RideDriverResponse(
 /// D3' <c>RideDetail</c>.
 /// </summary>
 /// <remarks>
-/// Three optional members of the contract's schema are deliberately never populated here and are
-/// listed as contract gaps in the C022 handoff: <c>counterpartyPhone</c> (AL-48) needs an
-/// <c>iam.users</c> read this service does not make, and the two package members belong to C037.
-/// <c>rating</c> and <c>etaSeconds</c> on the driver are reputation-svc's and dispatch-svc's.
+/// <para>
+/// Δ C037 fills the three members C022 left as contract gaps: <c>counterpartyPhone</c> (AL-48),
+/// <c>packageSize</c> and <c>packageDescription</c>, plus the derived <c>packageStatus</c>.
+/// <c>rating</c> and <c>etaSeconds</c> on the driver remain reputation-svc's and dispatch-svc's.
+/// </para>
+/// <para>
+/// <c>senderPhone</c> and <c>recipientPhone</c> are Δ C037 on the contract itself: AL-33's delivery
+/// sheets put a call button beside <b>both</b> parties and <c>RideDetail</c> carried one number.
+/// They are package-only and appear on the same terms as <c>counterpartyPhone</c> — from
+/// <c>Accepted</c> onward, to a participant, never to anybody else.
+/// </para>
 /// </remarks>
 public sealed record RideDetailResponse(
     Guid RideId,
@@ -120,7 +188,14 @@ public sealed record RideDetailResponse(
     string PaymentMethod,
     DateTimeOffset? OfferExpiresAt,
     RideDriverResponse? Driver,
+    string? CounterpartyPhone,
     FareEstimateResponse? Fare,
+    string? PackageSize,
+    string? PackageDescription,
+    string? PackageStatus,
+    string? RecipientName,
+    string? SenderPhone,
+    string? RecipientPhone,
     DateTimeOffset CreatedAt)
 {
     public static RideDetailResponse From(RideView view)
@@ -145,7 +220,17 @@ public sealed record RideDetailResponse(
             PaymentMethod: ride.PaymentMethod,
             OfferExpiresAt: ride.OfferExpiresAt,
             Driver: RideDriverResponse.From(view.Driver),
+            CounterpartyPhone: view.Contacts.CounterpartyPhone,
             Fare: FareEstimateResponse.From(ride),
+            PackageSize: ride.PackageSize,
+            PackageDescription: ride.PackageDescription,
+
+            // Derived, never stored — the machine is kind-agnostic and a second status column would
+            // be a copy that can disagree with `state` (ADD Appendix B.2 invariant 6).
+            PackageStatus: ride.IsPackage ? PackageStatuses.For(ride.State) : null,
+            RecipientName: ride.RecipientName,
+            SenderPhone: view.Contacts.SenderPhone,
+            RecipientPhone: view.Contacts.RecipientPhone,
             CreatedAt: ride.CreatedAt);
     }
 }

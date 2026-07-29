@@ -71,7 +71,60 @@ public static class InternalRideEndpoints
         internalRides.MapPost("/{rideId}/payment-settled", PaymentSettledAsync).WithName("notifyPaymentSettled");
         internalRides.MapGet("/{rideId}/saga-state", SagaStateAsync).WithName("getRideSagaState");
 
+        // Δ C037 — AL-45's web path into the P-02 state machine. A rider with no MageRide account
+        // answers at `passenger.mageride.lk/track?token=…` (SCR-WT-003); public-bff validates and
+        // burns the `pickup_confirm` token safety-svc minted, and then has to move a row in
+        // `rides.location_requests`, which is this service's. So it is a command on the internal
+        // plane, exactly like the four dispatch-svc drives — and for the same reason: ride-svc is
+        // the sole writer of its own aggregates, and AL-45 explicitly routes the web flow through
+        // "the same `rides.location_requests` state machine".
+        //
+        // No rider identity is asserted, because there is none — an unregistered rider has no
+        // `rider_id` to match. The burned token is the credential, and public-bff is trusted to
+        // have checked it, which is what the internal plane's mTLS (C042) is for.
+        var internalRequests = endpoints.MapGroup("/v1/internal/location-requests")
+            .WithTags("location-requests")
+            .AllowAnonymous()
+            .AddEndpointFilter(new InternalApiKeyFilter(apiKey));
+
+        internalRequests.MapPost("/{requestId}/confirm", ConfirmLocationAsync)
+            .WithName("confirmLocationRequestForToken");
+
+        internalRequests.MapPost("/{requestId}/decline", DeclineLocationAsync)
+            .WithName("declineLocationRequestForToken");
+
         return endpoints;
+    }
+
+    private static async Task<Ok<LocationRequestResponse>> ConfirmLocationAsync(
+        string requestId,
+        ConfirmLocationBody? body,
+        ILocationRequestService service,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(service);
+
+        var request = await service.ConfirmAsync(
+            riderId: null,
+            LocationRequestEndpoints.RequireRequestId(requestId),
+            LocationRequestEndpoints.RequireGeo(body),
+            body?.Accuracy,
+            cancellationToken);
+
+        return TypedResults.Ok(LocationRequestResponse.From(request));
+    }
+
+    private static async Task<Ok<LocationRequestResponse>> DeclineLocationAsync(
+        string requestId, ILocationRequestService service, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(service);
+
+        // No body here either. The web page and the app decline through statements that have no
+        // column for a coordinate, which is what makes P-02's fence a property of the code.
+        var request = await service.DeclineAsync(
+            riderId: null, LocationRequestEndpoints.RequireRequestId(requestId), cancellationToken);
+
+        return TypedResults.Ok(LocationRequestResponse.From(request));
     }
 
     private static async Task<Ok<RideStateChangeResponse>> MarkMatchingAsync(

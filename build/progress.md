@@ -62,7 +62,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C034 | dispatch-svc-core | 2 | DONE | 2026-07-29 | 108 tests green (30 new); 2 dispatch migrations (0711–0712) + a `reason` on ride-svc's `/offer/expire`; **0712 fixes a live bug — an ACCEPTED offer stayed live for ever, so a driver could take exactly one ride**; 9 micro-change-sets |
 | C035 | dispatch-svc-scheduling-levels | 2 | DONE | 2026-07-29 | 143 tests green (35 new); 1 dispatch migration (0713, +`dispatch.level_config`) + a fifth internal command on ride-svc (`/v1/internal/rides/scheduled`); the C033/C034 "sole writer of `dispatch.driver_levels`" fence narrowed to counter-driven rules; 11 micro-change-sets |
 | C036 | dispatch-svc-directional | 2 | DONE | 2026-07-29 | 180 tests green (37 new); **no migration** — 0707/0708 already carried every table and the open `kind` column; the DT-02 predicate reads the durable row rather than ADD §7.4's Redis hint, argued below; `GeoMath` promoted to the kernel; 8 micro-change-sets |
-| C037 | ride-svc-proxy-package | 2 | PENDING | | |
+| C037 | ride-svc-proxy-package | 2 | DONE | 2026-07-29 | 314 tests green (62 new); 1 rides migration (0609 — the package recipient + the location-request sweep index) and a `ServiceUnavailable` response in `_shared.yaml`; **no new ride state** — ADD Appendix B.2 invariant 6 held literally, the OTP gates take the edges `start`/`complete` already take; 11 micro-change-sets and one genuine P-03-versus-AL-48 conflict |
 | C038 | mqtt-bridge-svc | 2 | PENDING | | |
 | C039 | position-processor-svc | 2 | PENDING | | |
 | C040 | persistence-writer-svc | 2 | PENDING | | |
@@ -4786,3 +4786,204 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   dispatch-svc owns only the clock. `directional.cleared` is the other one, carrying its `reason`.
   **Build host —** Docker for Testcontainers (Postgres, Redis, Redpanda, EMQX); the replica stayed
   down throughout. The suite takes ~4 min, most of it EMQX start-up.
+
+- **Component:** C037 ride-svc-proxy-package — 2026-07-29
+- **Status:** DONE — `dotnet test backend/src/Ride.Api.Tests -c Release` is **314/314 green** (was
+  252; 62 new). All four DoD items are covered by named tests. (1) *Both channels, and the driver
+  sees the rider* — `ProxyBookingTests` walks a proxy ride to `PaymentPending` and asserts
+  `bookerId` **and** `riderId` on every one of its six events, then asserts the driver's
+  `counterpartyPhone` is the rider's number and the booker's appears nowhere in the payload.
+  (2) *A decline stores the decision and no coordinates* —
+  `A_declined_request_stores_the_decision_and_transmits_no_coordinates` checks the row, the event
+  and the response, and that a later confirm is 410. (3) *A sixth wrong pickup OTP* —
+  `A_sixth_wrong_pickup_code_is_locked_and_the_admin_queue_has_been_raised`: five `invalid-otp`,
+  one `package.otp_locked`, the sixth `423`, and the *correct* code refused after it. (4) *Photo
+  proof* — the ride reaches `PaymentPending`, the artifact row exists, and its `sha256` matches the
+  bytes actually on disk. `bash infra/scripts/migrate-verify.sh` is **213/213** (two new checks);
+  Spectral is clean; `Reputation.Api.Tests` (84), `Dispatch.Api.Tests` (180) and the solution build
+  were re-run green.
+- **Notes:**
+  **Spec gaps and conflicts — micro-change-sets (11).**
+  (a) *A package has a recipient and `rides.rides` has nowhere to put one.* D3' `RideRequest`
+  carries `recipientName`/`recipientPhone`, AL-21 makes the recipient the subject of a notification
+  at pickup-confirm, AL-33 puts a call button in front of the driver for them — and neither DDL
+  source has a column. `rider_*` was not overloaded: `ride.yaml` says a package has "no rider at
+  all", so filling `riderId` would make `RideDetail` claim somebody is the rider who is not.
+  **Migration 0609 adds `recipient_name` + `recipient_phone` + `ck_rides_package_recipient`; D4' §5
+  and server_db_schema.md §5 need all three.**
+  (b) *The recipient's number is stored in the clear and the proxy rider's is not.* P-03 hashes the
+  unregistered rider because nothing ever has to dial them; AL-21 must SMS the recipient and AL-33
+  must let the driver ring them, so a digest would leave both unimplementable. No spec asks for the
+  recipient to be hashed — it has no column at all — so the number is kept as `iam.users.phone`
+  keeps one.
+  (c) *ADD §11.15 asks for a `rides.timers` row that cannot exist.* `kind='location_request_expiry'
+  fire_at=now()+5min`, but `rides.timers.ride_id` is `NOT NULL REFERENCES rides.rides(id)` (0605)
+  and the request is issued **before** the ride — which is exactly why
+  `rides.location_requests.ride_id` is nullable (0606). The durable deadline is the request row
+  itself (`issued_at + ttl_seconds`), swept in the same worker pass over the new
+  `ix_location_requests_due`. R-04's property is unaffected: the durable row decides, not a process.
+  **ADD §11.15 should stop naming a timer row, or 0605 should make `ride_id` nullable.**
+  (d) *`otp_attempt_window` has a CHECK value and no duration anywhere.* P-07 says "max 5 attempts
+  each → admin queue" and names no window. Left unarmed and unclaimed: a timer that reset the
+  counter would hand an attacker unlimited tries at a 10⁴ code by waiting, and a locked handoff is
+  unlocked by support, not by the clock. **P-07 should either give the window a number or the kind
+  should leave `ck_timers_kind`.**
+  (e) *The delivery OTP cannot be both "generated at ride creation" and sent at pickup.* D5' §11
+  has both codes minted at booking and their plaintext leaving "exactly once"; ADD §11.16 hands the
+  delivery code to the recipient at **pickup**, an hour later, by which time the server holds only a
+  digest. Resolved by minting a code at booking (so `ck_rides_package_complete` holds at `INSERT`)
+  and re-minting the one actually sent inside the same statement that takes the pickup gate. The
+  code exists in the clear for one hop instead of for the whole booking, which is the better half of
+  the trade. **D5' §11 and ADD §11.16 should agree on which moment issues it.**
+  (f) *`RiderNotRegistered` is terminal in ADD §11.15 and answerable in AL-45.* AL-45 is later and
+  wins — notification-svc SMSes a `pickup_confirm` link and SCR-WT-003 feeds the same machine — so
+  the state is **live**, runs down the same 300 s clock, and US-8.19's booker fallback is what
+  happens if nobody answers rather than the only path. **ADD §11.15's not-registered branch needs
+  rewriting to match AL-45.**
+  (g) *AL-45 gives public-bff no route to call.* SCR-WT-003 must move a row in
+  `rides.location_requests`, which ride-svc owns. Added
+  `POST /v1/internal/location-requests/{id}/confirm|decline` — the same shape and the same argument
+  as the five internal commands dispatch-svc drives. **D3' should carry the pair.**
+  (h) *AL-33 needs two numbers and `RideDetail` carries one.* The delivery sheets put a call button
+  beside the sender *and* the recipient. Added `senderPhone` / `recipientPhone` to `RideDetail`,
+  package-only and on exactly AL-48's terms (from `Accepted`, to a participant, never otherwise).
+  (i) *`RideDetail.packageStatus` has four values and the aggregate has three positions.* The
+  machine is kind-agnostic, so `PickedUp` and `InTransit` are the same state; `InProgress` renders
+  as `InTransit` and the instant of pickup is the `package.picked_up` event. **`ride.yaml`'s enum
+  should drop one or D4' should give the aggregate a column.**
+  (j) *No spec names an event for the P-07 admin queue, and D6' §2.4 makes the outbox the only way
+  one context asks another for something.* `package.otp_locked` is coined here, carrying the gate
+  and the attempt count. **D6' §2.2 should register it**, alongside `location.request.*`, which the
+  ADD describes as outbox rows and never names.
+  (k) *The proof-photo route's contract cannot express what P-10 stores.* Its multipart schema is
+  `file` + `note`; `rides.proof_artifacts.captured_geo` exists and D5' §11 names it as part of the
+  proof. Added optional `lat`/`lng`; `note` stays accepted-and-dropped because no column holds it.
+  **A genuine conflict, and it is not resolved — it is decided.** *AL-48 asks the API to hand the
+  driver the rider's real MSISDN; P-03 stores an unregistered proxy rider as a keyed digest.* Both
+  cannot hold, and nothing downstream can invert an HMAC. P-03 is the narrower, privacy-bearing rule
+  and it wins: `counterpartyPhone` is **absent** on that one combination, never filled with the
+  booker's number (P-05 forbids it outright), and the driver falls back to the in-app channel while
+  the booker relays. The same gap makes AL-33's call button unreachable for an unregistered
+  *recipient* — except that C037 stores the recipient's number in the clear (note (b)), so that half
+  works. **The specs need to say which of P-03 and AL-48 governs an unregistered proxy rider.**
+  **Decisions —**
+  (1) **No new states, and the gates prove it.** ADD Appendix B.2 invariant 6 says the machine is
+  kind-agnostic; `RideTransitions` and `RideCancellationMatrix` gained exactly one row between them
+  (P-14's `PaymentPending × CodUncollected → Disputed`). The pickup OTP takes the same
+  `Accepted|DriverArrived → InProgress` edge `start` takes and the delivery OTP the same
+  `InProgress → Completed → PaymentPending` pair `complete` takes. A gate decides *whether*, never
+  *where to*.
+  (2) **Both events at every gate.** `package.picked_up` co-fires with `ride.started` and
+  `package.delivered` with `ride.completed`. Spelling a package's completion only the new way would
+  leave dispatch-svc — which releases the driver on `ride.completed` — holding a ghost-busy driver,
+  which is precisely the R-20 alert C034 built.
+  (3) **A correct OTP never spends an attempt, and neither does a malformed one.** The gate is two
+  conditional `UPDATE`s: one guarded on the digest matching (and on the budget, the driver, the kind
+  and the state), one guarded on it *not* matching. No attempt can be counted twice, none can be
+  counted for four characters that are not four digits, and a wrong code is **committed** —
+  rolling it back would make the budget unenforceable and hand an attacker all ten thousand codes.
+  The attempt that exhausts the budget raises the queue item, because the delivery is stuck the
+  moment the last try is used and waiting for a sixth would leave a driver standing at a door with
+  nobody notified.
+  (4) **`passenger_id` is the booking account on all three kinds.** D4' annotates `booker_id`
+  "= passenger unless proxy", which reads as though a proxy ride's `passenger_id` should be the
+  rider — but that column is `NOT NULL REFERENCES iam.users(id)` and P-03's whole point is that a
+  proxy rider may have no account, so the reading is unsatisfiable for the case it was written for.
+  R-18's key, AL-16, `ux_rides_open_passenger` and the money all belong to the account that booked.
+  **Consequence worth knowing:** a booker can hold one open ride, so they cannot book proxy rides
+  for two people at once. No spec grants that; if the product wants it, `ux_rides_open_passenger`
+  is what has to change.
+  (5) **`cod-collected` settles the ride, and that is not an R-05 exception.** The three gateway
+  terminals are states fare-svc *observes*; cash in a driver's hand is observable by nobody, and
+  D5' §6 draws `PaymentPending --> CashOnDeliveryCollected: COD confirmed (package, P-08)` as an
+  edge of the **ride** machine. It emits P-08's named `payment.cod_collected` *and* the ordinary
+  `ride.settled`, so fare-svc and billing read one authorisation shape for all four terminals.
+  (6) **P-14 is a matrix row, not a code path** — as the C032 handoff predicted.
+  `cod_uncollected` is armed at the **pickup** (ADD §11.16: the clock is about money in transit, and
+  the delivery may itself be what never happens), survives every lifecycle move exactly as
+  `offline_grace` does, and is retired by the terminal the driver's tap produces. The tap and the
+  clock race; whichever lands first leaves the other nothing to do.
+  (7) **The P-12 rate limit is Postgres, not Redis.** D5' §10 names a token bucket; ride-svc holds
+  no Redis connection at all, which is what makes R-04's "independently of any Redis TTL"
+  structural. `ix_location_requests_booker` exists in 0606 for exactly this count, and counting
+  inside the transaction that inserts the next row means a request that rolled back never spent a
+  token — which a bucket decremented before the write would have. It is checked **before** the
+  iam-svc lookup, so a booker who has run out cannot keep using the registration oracle for free.
+  (8) **The registration check is a call; the phone read is a join.** "Is this number registered" is
+  an oracle, and iam-svc answers it behind `iam.phone_lookups`, which records who asked (C027) —
+  bypassing that would remove the control. `counterpartyPhone` is the opposite: iam-svc publishes no
+  "number for this user id" route, so it is a read-only join into `iam.users` on exactly the footing
+  `DriverSummaryRepository`'s join into `registry.vehicles` already has, and C048 replaces both.
+  **iam-svc could use a `GET /v1/internal/users/{id}/phone` — raised for C027's owner.**
+  (9) **An iam-svc outage is a 503, not an assumption.** Guessing "unregistered" SMSes a stranger
+  because a service was restarting; guessing "registered" pushes an FCM message into the void and
+  leaves the booker watching a request that can only expire. `Ride:IamBaseUrl` unset gets the same
+  answer from a null object rather than unmapping the routes — a missing setting should be visible
+  on the route that needs it, not look like a deployment that never had the feature.
+  (10) **A decline cannot leak a position, in three independent ways.** The route takes no body; the
+  `UPDATE` has no `resolved_geo` in its `SET` list; the event's `geo` is filled from a column that is
+  NULL by construction. P-02's fence is a property of the code rather than of a reviewer's care.
+  (11) **The proof photo is written before the transaction.** A ride that moved in between leaves an
+  orphan file rather than a completion with no proof behind it — the file is recoverable evidence
+  and a missing artifact row would not be. The `sha256` is computed over the bytes as written, in
+  one pass, so it describes the file that actually exists.
+  (12) **A leak the review caught, not the tests.** `counterpartyPhone` was first resolved for
+  anyone `RideRow.IsParticipant` admits — which includes the driver an offer was merely *reserved*
+  for. Because ADD §11.11's accept is deliberately not bound to `offered_driver_id`, a driver who
+  held the offer and lost the race would have been handed the winner's MSISDN. The rider side is now
+  named explicitly (passenger, booker, rider) and
+  `A_driver_who_only_held_an_offer_gets_no_number` pins it.
+  **One test in another component had to change —** `WalletGateTests.A_tier_with_no_billing_plan_is_
+  refused_from_the_second_trip` booked `mini_truck` as a *passenger* ride to reach a tier migration
+  1901 leaves unseeded. Δ C037 enforces AL-09's "+truck|mini_truck for **package delivery**" on
+  `POST /v1/rides/request`, so that booking is now a 400. `DispatchHarness.RequestRideAsync` gained
+  an optional `packageSize` and the test books two deliveries instead — which changes nothing it
+  asserts, because P-06 counts deliveries and passenger rides together for the daily fee. The fence
+  was previously unenforced anywhere: a passenger could book a truck and dispatch would look for a
+  driver to carry them in it.
+  **Two findings worth acting on elsewhere —**
+  (a) **The kernel's R-14 command log stores response bodies, so the pickup OTP plaintext is at rest
+  in `rides.command_log.response_body`.** D3' requires `pickupOtp` on the 202 and R-14 replays the
+  stored body verbatim (which is what makes a retry under the same header key work at all), so the
+  two requirements meet in a JSONB column. P-07's "hashed at rest" is about the aggregate and holds
+  there. **A redaction hook on `IdempotencyMiddleware` belongs in C002's kernel**, not in a service.
+  (b) **`FileSystemProofPhotoStore` is not object storage.** D-36 puts every upload on SSE-KMS
+  buckets, the dev compose runs MinIO, and no service in this build has an S3 client. `IProofPhotoStore`
+  is one method wide and the digest, the artifact row and the state change — everything the AL-44
+  receipt and a §11.14 dispute are built from — are in Postgres either way. **Whoever lands the
+  object-store client should implement it here first.**
+  **For C051 (notification-svc) —** four hand-offs, all on `ride.events`. `location.request.issued`
+  carries `state` (`Pending` ⇒ FCM data message to `riderId`; `RiderNotRegistered` ⇒ mint AL-45's
+  `pickup_confirm` token and SMS `riderPhone`, which is on the payload and is the one place an
+  unhashed number appears) plus `expiresAt` for the 300 s countdown. `package.picked_up` carries
+  `deliveryOtp`, `recipientPhone` and `recipientName` — AL-21's branch is yours: registered
+  recipient ⇒ FCM deep link, unregistered ⇒ SMS a `safety.trip_share_tokens` link. Every proxy
+  event names `bookerId` **and** `riderId`, and both are told about every state change (P-05
+  constrains who the *driver* reaches, not who is notified). `package.otp_locked` is the admin-queue
+  item; it carries `gate` and `attempts`.
+  **For C053 (fanout-svc) —** `location.request.confirmed|declined|expired` are keyed by
+  **`requestId`**, not by a ride, and the envelope carries `requestId` at its top level beside
+  `eventId`/`eventType`. The group is `booker:{bookerId}:loc-req:{requestId}` and both halves are on
+  the payload. `geo` is present on `confirmed` alone.
+  **For public-bff (AL-44/AL-45) —** `POST /v1/internal/location-requests/{id}/confirm|decline`
+  behind `X-MageRide-Internal-Key`, with the same 410 `token-expired-or-revoked` the Bearer pair
+  answers. Burn the `pickup_confirm` token on your side; ride-svc asserts no rider identity on that
+  path because an unregistered rider has none. The delivered-page outcome D4' calls derived reads
+  off `rides.proof_artifacts` (⇒ `photo_proof`), the `CashOnDeliveryCollected` terminal
+  (⇒ `cod_collected`) and `Disputed` (⇒ `disputed`); everything else is `otp_verified`.
+  **For C034/C036 (dispatch-svc) —** `RideEventPayload.PackageSize` is **now produced**, which
+  closes the gap C034 recorded and C036 repeated: the P-11 compatibility gate has its input and
+  `dispatch.candidate_scores.package_size_compatible` stops being permanently NULL for real
+  bookings. `packageDescription` rides with it, for the driver's own rejection decision.
+  **For C049/C050 (fare-svc) —** `payment.cod_collected` is the COD sibling of `ride.settled` and
+  carries the identical `RideSettlementPayload` with `earningPayable: true`; its `paymentId` is the
+  **ride id**, because `fares.ride_payments` does not exist yet and the ride is the only aggregate
+  with an identifier for that settlement. Replace it when you own the payment row. A package's fare
+  is the ordinary tariff and its delivery counts toward the daily fee exactly as a passenger ride
+  does (P-06 — "deliveries and passenger rides are interchangeable for fee purposes").
+  **For C065 / PDPA —** an erasure has three new places to reach in `rides`: `recipient_phone`
+  (clear text), the two `rider_phone_hash` columns (digests, not reversible but still linkable) and
+  `rides.proof_artifacts.storage_url`, whose bytes live outside Postgres.
+  **Build host —** Docker for Testcontainers (Postgres, Redpanda) and one throwaway
+  `timescaledb-ha:pg16` for `migrate-verify.sh`; the replica stayed down throughout. The ride suite
+  takes ~2 min 55 s, the migration verify ~4 min.

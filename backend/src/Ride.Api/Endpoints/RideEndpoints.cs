@@ -1,3 +1,4 @@
+using System.Globalization;
 using MageRide.Ride.Domain;
 using MageRide.Ride.Rides;
 using MageRide.Shared.Auth;
@@ -20,9 +21,14 @@ namespace MageRide.Ride.Endpoints;
 /// <c>PaymentPending</c>.
 /// </para>
 /// <para>
+/// Δ C037 adds the four package routes — the two OTP gates, the photo-proof fallback and the
+/// cash-on-delivery confirmation. The location-request family is its own group
+/// (<see cref="LocationRequestEndpoints"/>): it is not about a ride, and at the moment it runs
+/// there is no ride for it to be about.
+/// </para>
+/// <para>
 /// Left unmapped rather than stubbed, each with the component that owns it: <c>/dispute</c>
-/// (E-05, C049/C050), <c>GET /history</c> (AL-36, C048), the five package routes (P-06..P-08,
-/// C037) and the four location-request routes (P-02/P-13, C037). A stubbed route is worse than an
+/// (E-05, C049/C050) and <c>GET /history</c> (AL-36, C048). A stubbed route is worse than an
 /// absent one — it answers 200 to a passenger and changes nothing.
 /// </para>
 /// </remarks>
@@ -68,6 +74,20 @@ public static class RideEndpoints
         driver.MapPost("/{rideId}/start", StartAsync).WithName("startRide");
         driver.MapPost("/{rideId}/complete", CompleteAsync).WithName("completeRide");
 
+        // Δ C037 — the package delivery gates (P-07, P-08, P-10). All four are the driver's: the
+        // sender and the recipient hold the codes, and the driver is who types them in.
+        driver.MapPost("/{rideId}/package/pickup-otp", VerifyPickupOtpAsync).WithName("verifyPackagePickupOtp");
+        driver.MapPost("/{rideId}/package/delivery-otp", VerifyDeliveryOtpAsync).WithName("verifyPackageDeliveryOtp");
+
+        // DisableAntiforgery for the same reason provisioning-svc's bulk upload does: the request is
+        // a Bearer-authenticated multipart POST from a mobile app, not a browser form, so there is
+        // no cookie for a forgery to ride on and no token for a native client to fetch.
+        driver.MapPost("/{rideId}/package/proof-photo", UploadProofPhotoAsync)
+            .WithName("uploadPackageProofPhoto")
+            .DisableAntiforgery();
+
+        driver.MapPost("/{rideId}/cod-collected", ConfirmCashOnDeliveryAsync).WithName("confirmCashOnDelivery");
+
         return endpoints;
     }
 
@@ -89,14 +109,128 @@ public static class RideEndpoints
                 PaymentMethod: body?.PaymentMethod,
                 ScheduledAt: body?.ScheduledAt,
                 IsProxy: body?.IsProxy,
-                PackageSize: body?.PackageSize),
+                RiderName: body?.RiderName,
+                RiderPhone: body?.RiderPhone,
+                PackageSize: body?.PackageSize,
+                PackageDescription: body?.PackageDescription,
+                RecipientName: body?.RecipientName,
+                RecipientPhone: body?.RecipientPhone),
             cancellationToken);
 
         // 202 either way. R-18 says a retry "returns the existing ride"; answering 200 the second
         // time would make the status itself carry state, and a client cannot tell a replay from a
         // fresh booking without one — which is exactly the property that makes the retry safe.
-        return TypedResults.Accepted(
-            $"/v1/rides/{booking.Ride.Id}", RideRequestedResponse.From(booking.Ride));
+        return TypedResults.Accepted($"/v1/rides/{booking.Ride.Id}", RideRequestedResponse.From(booking));
+    }
+
+    // -----------------------------------------------------------------------------------------
+    // Δ C037 — package delivery
+    // -----------------------------------------------------------------------------------------
+
+    private static async Task<Ok<RideStateChangeResponse>> VerifyPickupOtpAsync(
+        string rideId,
+        OtpAttemptBody? body,
+        HttpContext context,
+        IPackageService service,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(service);
+
+        var ride = await service.VerifyPickupOtpAsync(
+            context.User.RequireSubjectId(), RequireRideId(rideId), body?.Otp, cancellationToken);
+
+        return TypedResults.Ok(RideStateChangeResponse.From(ride));
+    }
+
+    private static async Task<Ok<RideStateChangeResponse>> VerifyDeliveryOtpAsync(
+        string rideId,
+        OtpAttemptBody? body,
+        HttpContext context,
+        IPackageService service,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(service);
+
+        var ride = await service.VerifyDeliveryOtpAsync(
+            context.User.RequireSubjectId(), RequireRideId(rideId), body?.Otp, cancellationToken);
+
+        return TypedResults.Ok(RideStateChangeResponse.From(ride));
+    }
+
+    /// <summary>
+    /// P-10 — multipart, one <c>file</c> part, read as a stream rather than buffered: a delivery
+    /// photo is megabytes and every one of them would otherwise sit in this process's heap.
+    /// </summary>
+    private static async Task<IResult> UploadProofPhotoAsync(
+        string rideId, HttpContext context, IPackageService service, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(service);
+
+        if (!context.Request.HasFormContentType)
+        {
+            throw new MageRideValidationException(new Dictionary<string, string[]>
+            {
+                ["file"] = ["Expected multipart/form-data with a `file` part."],
+            });
+        }
+
+        var form = await context.Request.ReadFormAsync(cancellationToken);
+        var file = form.Files["file"]
+                   ?? throw new MageRideValidationException(new Dictionary<string, string[]>
+                   {
+                       ["file"] = ["No `file` part in the upload."],
+                   });
+
+        await using var content = file.OpenReadStream();
+
+        var proof = await service.UploadProofPhotoAsync(
+            new ProofPhotoCommand(
+                DriverId: context.User.RequireSubjectId(),
+                RideId: RequireRideId(rideId),
+                FileName: file.FileName,
+                Length: file.Length,
+                Content: content,
+                CapturedGeo: ReadCapturedGeo(form),
+                Note: form["note"].FirstOrDefault()),
+            cancellationToken);
+
+        // 201 with the artifact id, as the contract's `uploadPackageProofPhoto` declares. The state
+        // and version ride along because the same call completed the delivery, and a client that
+        // had to re-read the ride to discover that would be one round trip behind its own action.
+        return TypedResults.Created(
+            $"/v1/rides/{proof.Ride.Id}",
+            new ProofArtifactResponse(proof.ArtifactId, proof.Ride.State, proof.Ride.Version));
+    }
+
+    /// <summary>
+    /// The optional <c>lat</c>/<c>lng</c> parts behind <c>rides.proof_artifacts.captured_geo</c>
+    /// (Δ C037). Absent or unparseable means no fix — a lift well or a warehouse basement — which is
+    /// a photo without a position rather than a refused delivery.
+    /// </summary>
+    private static GeoPoint? ReadCapturedGeo(IFormCollection form) =>
+        double.TryParse(form["lat"].FirstOrDefault(), NumberStyles.Float, CultureInfo.InvariantCulture, out var lat) &&
+        double.TryParse(form["lng"].FirstOrDefault(), NumberStyles.Float, CultureInfo.InvariantCulture, out var lng) &&
+        lat is >= -90 and <= 90 && lng is >= -180 and <= 180
+            ? new GeoPoint(lat, lng)
+            : null;
+
+    private static async Task<Ok<RideStateChangeResponse>> ConfirmCashOnDeliveryAsync(
+        string rideId,
+        CashCollectedBody? body,
+        HttpContext context,
+        IPackageService service,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(service);
+
+        var ride = await service.ConfirmCashOnDeliveryAsync(
+            context.User.RequireSubjectId(), RequireRideId(rideId), body?.CollectedMinor, cancellationToken);
+
+        return TypedResults.Ok(RideStateChangeResponse.From(ride));
     }
 
     private static async Task<Ok<RideDetailResponse>> GetAsync(

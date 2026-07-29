@@ -267,7 +267,8 @@ public sealed class RideTimerRepository : IRideTimerRepository
             throw new ArgumentOutOfRangeException(
                 nameof(kind), kind,
                 $"ride-svc owns only {string.Join(", ", RideTimerKinds.Owned.Order(StringComparer.Ordinal))} " +
-                "in rides.timers; offer_expiry is dispatch-svc's (C023) and the C037 kinds do not exist yet.");
+                "in rides.timers; offer_expiry is dispatch-svc's (C023), and location_request_expiry and " +
+                "otp_attempt_window are armed by nobody — see RideTimerKinds for why neither can be.");
         }
     }
 }

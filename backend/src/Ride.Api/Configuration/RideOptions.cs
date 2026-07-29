@@ -154,6 +154,108 @@ public sealed class RideOptions
     /// <summary>MQTT service-account name; <c>svc-</c> is prefixed by the token issuer.</summary>
     public string MqttServiceName { get; set; } = "ride";
 
+    // -----------------------------------------------------------------------------------------
+    // Δ C037 — proxy booking (P-02, P-03, P-12) and package delivery (P-07, P-08, P-14)
+    // -----------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// HMAC key for <c>rides.rides.rider_phone_hash</c> and
+    /// <c>rides.location_requests.rider_phone_hash</c> (P-03).
+    /// </summary>
+    /// <remarks>
+    /// Required outside Development — see <see cref="Rides.RiderPhoneHasher"/> for why an unkeyed
+    /// digest of a <c>+947XXXXXXXX</c> number is not a hash. <b>Not rotatable in place</b>: a new
+    /// key partitions the existing rows rather than re-keying them, so the P-12 audit stops being
+    /// able to group a booker's requests by subject across the change.
+    /// </remarks>
+    public string? PhoneHashKey { get; set; }
+
+    /// <summary>
+    /// HMAC pepper for the two package OTP digests (P-07: "hashed (HMAC-SHA256 with a
+    /// per-environment pepper) before persistence").
+    /// </summary>
+    /// <remarks>
+    /// Required outside Development. Rotating it makes every package booked before the change
+    /// undeliverable by OTP — the digests no longer match any code — so a rotation is a drain, not
+    /// a restart. The photo-proof path (P-10) is what an in-flight delivery falls back to.
+    /// </remarks>
+    public string? OtpPepper { get; set; }
+
+    /// <summary>
+    /// How many wrong codes one OTP gate absorbs before <c>423 otp-locked</c> (P-07: "max 5
+    /// attempts each → admin queue").
+    /// </summary>
+    [Range(1, 20)]
+    public int MaxOtpAttempts { get; set; } = 5;
+
+    /// <summary>
+    /// How long a rider has to answer a location request (P-02, ADD §11.15: 5 min; the contract
+    /// types <c>ttl</c> as <c>const: 300</c>).
+    /// </summary>
+    /// <remarks>
+    /// The contract pins the number a client is told, so this is not a knob a deployment may turn
+    /// freely: changing it makes the 202 disagree with <c>ride.yaml</c>. It is configuration so a
+    /// test can close the window without waiting five minutes.
+    /// </remarks>
+    [Range(typeof(TimeSpan), "00:00:01", "00:30:00")]
+    public TimeSpan LocationRequestTtl { get; set; } = TimeSpan.FromMinutes(5);
+
+    /// <summary>P-12: 5 location requests per booker per hour.</summary>
+    [Range(1, 1_000)]
+    public int LocationRequestsPerHour { get; set; } = 5;
+
+    /// <summary>P-12: 30 location requests per booker per day.</summary>
+    [Range(1, 10_000)]
+    public int LocationRequestsPerDay { get; set; } = 30;
+
+    /// <summary>How many expired location requests one sweep pass resolves.</summary>
+    [Range(1, 10_000)]
+    public int LocationRequestBatchSize { get; set; } = 100;
+
+    /// <summary>
+    /// How long a delivered COD package may go unreconciled before it becomes a dispute (P-14,
+    /// D5' §8.3: 24 h).
+    /// </summary>
+    [Range(typeof(TimeSpan), "00:01:00", "7.00:00:00")]
+    public TimeSpan CodUncollectedGrace { get; set; } = TimeSpan.FromHours(24);
+
+    /// <summary>
+    /// iam-svc's base address, for the P-03 registration lookup (<c>GET /v1/users/lookup</c>).
+    /// </summary>
+    /// <remarks>
+    /// <b>Unset means the location-request family is not mapped at all</b> — the same discipline
+    /// <see cref="InternalApiKey"/> applies to the internal plane. A proxy booking whose rider is
+    /// named by phone needs the same lookup and is refused with
+    /// <c>503 dependency-unavailable</c> rather than guessed at.
+    /// </remarks>
+    public string? IamBaseUrl { get; set; }
+
+    /// <summary>Must equal iam-svc's <c>Auth:InternalApiKey</c>, or every lookup is a 404 (C027).</summary>
+    public string? IamInternalApiKey { get; set; }
+
+    /// <summary>Budget for one iam-svc lookup. It sits in front of a booker tapping a button.</summary>
+    [Range(typeof(TimeSpan), "00:00:00.100", "00:00:30")]
+    public TimeSpan IamTimeout { get; set; } = TimeSpan.FromSeconds(3);
+
+    /// <summary>
+    /// Where P-10 delivery photos are written. Empty means a directory under the system temp path.
+    /// </summary>
+    /// <remarks>
+    /// <b>Not object storage.</b> D-36 puts uploads on SSE-KMS buckets and no service in this build
+    /// has a client for one — see <see cref="Rides.IProofPhotoStore"/>.
+    /// </remarks>
+    public string? ProofPhotoRoot { get; set; }
+
+    /// <summary>Ceiling on one delivery photo, past which the upload is <c>413</c>.</summary>
+    /// <remarks>
+    /// <b>No spec pins it.</b> Eight megabytes is a generous phone photo and small enough that a
+    /// driver on a Sri Lankan mobile network finishes the upload while standing at the door; the
+    /// point of the number is that there is one, because the route reads a stream from an
+    /// unauthenticated-by-content client.
+    /// </remarks>
+    [Range(64 * 1024, 64 * 1024 * 1024)]
+    public long ProofPhotoMaxBytes { get; set; } = 8 * 1024 * 1024;
+
     /// <summary>Whether the ADD §13.3.1 stuck-state gauges are published (R-20).</summary>
     /// <remarks>
     /// On by default and cheap: one indexed count per state per scrape, only while something is

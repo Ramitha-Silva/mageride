@@ -611,6 +611,14 @@ check_eq "ux_rides_driver_busy covers exactly the four busy states (O2/R-10)" \
      FROM pg_indexes i, LATERAL regexp_matches(i.indexdef, '''([A-Za-z]+)''', 'g') AS m
     WHERE i.schemaname='rides' AND i.indexname='ux_rides_driver_busy';"
 
+# C037 / migration 0609. The P-02 sweep scans the requests still open, and AL-45 makes
+# RiderNotRegistered one of them — a request answered by SMS runs down the same 300 s clock.
+check_eq "ix_location_requests_due covers both live request states (P-02/AL-45)" \
+  "Pending,RiderNotRegistered" \
+  "SELECT string_agg(m[1], ',' ORDER BY m[1] COLLATE \"C\")
+     FROM pg_indexes i, LATERAL regexp_matches(i.indexdef, '''([A-Za-z]+)''', 'g') AS m
+    WHERE i.schemaname='rides' AND i.indexname='ix_location_requests_due';"
+
 step "R-10 — one live offer per driver"
 check_eq "ux_offers_driver_live is unique partial on driver_id WHERE OFFERED/ACCEPTED" \
   "ACCEPTED,OFFERED" \
@@ -765,12 +773,21 @@ check_rejects "a proxy ride with no way to identify the rider is rejected (P-01/
                            kind, is_proxy)
      VALUES ('$PAX_2','c0000005-0000-0000-0000-000000000006','$PAX_2','three_wheeler', $COLOMBO, $KANDY, 1, true);"
 
+# C037 / migration 0609: AL-21 notifies the recipient and AL-33 dials them, so a parcel with
+# nobody to deliver it to is a delivery that cannot be completed.
+check_rejects "a package ride with no recipient is rejected (AL-21/AL-33)" \
+  "INSERT INTO rides.rides(passenger_id, client_request_id, booker_id, vehicle_type, pickup_geo, dropoff_geo,
+                           kind, package_size, pickup_otp_hash, delivery_otp_hash)
+     VALUES ('$PAX_2','c0000005-0000-0000-0000-000000000008','$PAX_2','mini_truck', $COLOMBO, $KANDY,
+             2, 'M', decode('00','hex'), decode('01','hex'));"
+
 CHECKS=$((CHECKS + 1))
 if psql_run "INSERT INTO rides.rides(passenger_id, client_request_id, booker_id, vehicle_type, pickup_geo,
                                      dropoff_geo, kind, package_size, pickup_otp_hash, delivery_otp_hash,
-                                     payment_method)
+                                     recipient_name, recipient_phone, payment_method)
                VALUES ('$PAX_2','c0000005-0000-0000-0000-000000000007','$PAX_2','mini_truck', $COLOMBO,
-                       $KANDY, 2, 'M', decode('00','hex'), decode('01','hex'), 'cod');" >/dev/null 2>&1; then
+                       $KANDY, 2, 'M', decode('00','hex'), decode('01','hex'),
+                       'Kamala', '+94771234567', 'cod');" >/dev/null 2>&1; then
   printf '  %s✓%s a complete package ride with COD is accepted (P-06/P-08)\n' "$GREEN" "$RESET"
 else
   printf '  %s✗%s a complete package ride with COD was rejected\n' "$RED" "$RESET"

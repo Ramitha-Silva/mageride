@@ -30,6 +30,20 @@ namespace MageRide.Ride.Domain;
 /// <c>offer_expiry</c> and recorded it; this component matches it rather than running two different
 /// timer mechanisms over one table. Recorded again in the C032 handoff.
 /// </para>
+/// <para>
+/// <b>Δ C037: five of the eight, and the other three have owners.</b> <c>cod_uncollected</c> joined
+/// the claim — it is P-14's 24-hour window, armed at the pickup of a COD package. The remaining two
+/// are deliberately armed by nobody. <c>location_request_expiry</c> <b>cannot exist as a row</b>:
+/// ADD §11.15 asks for one at <c>now()+5min</c>, but <c>rides.timers.ride_id</c> is <c>NOT NULL</c>
+/// with a foreign key onto <c>rides.rides</c> (0605) and a location request is issued *before* any
+/// ride does — <c>rides.location_requests.ride_id</c> is nullable for precisely that reason (0606).
+/// The durable deadline is the request row itself, <c>issued_at + ttl_seconds</c>, swept over
+/// <c>ix_location_requests_due</c> (0609) in the same worker pass; R-04's property — the durable row
+/// decides, never a process — holds either way. <c>otp_attempt_window</c> has <b>no duration in any
+/// spec</b>, and forgiveness is the wrong default: P-07 says "max 5 attempts each → admin queue" and
+/// a timer that reset the counter would hand an attacker unlimited tries at a 10⁴ code by waiting.
+/// A locked handoff is unlocked by support, not by the clock. Both raised in the C037 handoff.
+/// </para>
 /// </remarks>
 public static class RideTimerKinds
 {
@@ -59,10 +73,19 @@ public static class RideTimerKinds
     /// </summary>
     public const string OfflineGrace = "offline_grace";
 
+    /// <summary>
+    /// Armed when a COD package is picked up (Δ C037): P-14's "uncollected COD &gt; 24 h →
+    /// <c>Disputed</c>", D5' §8.3's <c>cod_uncollected</c> verbatim. Retired by the driver
+    /// confirming the cash, and — like <see cref="OfflineGrace"/> — <b>not</b> by the lifecycle
+    /// moves in between, because the parcel is delivered long before the money is reconciled and
+    /// AL-33 decouples the two on purpose.
+    /// </summary>
+    public const string CodUncollected = "cod_uncollected";
+
     /// <summary>The kinds this service claims. Anything else in the table belongs to someone else.</summary>
     public static readonly FrozenSet<string> Owned = new[]
     {
-        ArrivalGrace, NoShow, PaymentPending, OfflineGrace,
+        ArrivalGrace, NoShow, PaymentPending, OfflineGrace, CodUncollected,
     }.ToFrozenSet(StringComparer.Ordinal);
 }
 

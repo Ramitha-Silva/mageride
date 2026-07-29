@@ -83,8 +83,15 @@ public sealed class RideStateWriter(
     /// the air.
     /// </para>
     /// <para>
-    /// A terminal state retires everything, <c>offline_grace</c> included: there is nothing left to
-    /// take away.
+    /// <b><c>cod_uncollected</c> survives them for the same reason</b> (Δ C037). It is armed at the
+    /// pickup of a COD parcel and its whole purpose is to outlive the delivery: the ride moves
+    /// <c>InProgress → Completed → PaymentPending</c> within the hour and the money is not
+    /// reconciled for a day, which is exactly the decoupling AL-33 asks for ("COD/cash collection is
+    /// decoupled from completion"). Retiring it on the way past would leave P-14 with no clock.
+    /// </para>
+    /// <para>
+    /// A terminal state retires everything, <c>offline_grace</c> and <c>cod_uncollected</c>
+    /// included: there is nothing left to take away.
     /// </para>
     /// </remarks>
     private async Task ApplyTimerPlanAsync(IUnitOfWork unitOfWork, RideRow ride, CancellationToken cancellationToken)
@@ -101,6 +108,13 @@ public sealed class RideStateWriter(
 
             // The rider has five minutes from here (D5' §7).
             RideStates.DriverArrived => (RideTimerKinds.NoShow, _options.RiderNoShowGrace),
+
+            // P-14, Δ C037: a COD parcel has just been picked up, so from here the driver is
+            // carrying somebody's cash. ADD §11.16 arms the 24-hour window at exactly this moment
+            // — not at the delivery — because the clock is about the *money in transit*, and the
+            // delivery may itself be what never happens.
+            RideStates.InProgress when ride.IsCashOnDelivery =>
+                (RideTimerKinds.CodUncollected, _options.CodUncollectedGrace),
 
             // The R-20 stuck-payment watch, per ride (ADD §13.3.1).
             RideStates.PaymentPending => (RideTimerKinds.PaymentPending, _options.PaymentPendingGrace),
@@ -123,7 +137,10 @@ public sealed class RideStateWriter(
             cancellationToken);
     }
 
-    /// <summary>The kinds a lifecycle move replaces. <c>offline_grace</c> is deliberately absent.</summary>
+    /// <summary>
+    /// The kinds a lifecycle move replaces. <c>offline_grace</c> and <c>cod_uncollected</c> are
+    /// deliberately absent — see the remarks above.
+    /// </summary>
     private static readonly string[] LifecycleKinds =
     [
         RideTimerKinds.ArrivalGrace, RideTimerKinds.NoShow, RideTimerKinds.PaymentPending,

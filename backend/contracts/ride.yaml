@@ -6,6 +6,7 @@ openapi: 3.1.0
 #         + ADD Appendix C ride-svc (v2.1/v2.2)
 #         + Δ 2026-06-28 AL-36 (`GET /v1/rides/history`)
 #         + Δ 2026-07-05 #2 AL-48 (`counterpartyPhone` on RideDetail)
+#         + Δ C037 proxy booking & package delivery (P-01..P-14, AL-21, AL-33, AL-45)
 #
 # Scope fence (CLAUDE.md, R-01): ride-svc owns Mode C. Mode A/B tracking sessions belong to
 # trip-state-svc and that boundary is never crossed. dispatch-svc *consumes* ride events and
@@ -78,7 +79,15 @@ paths:
         exactly once**, to be shown to the sender (P-07).
 
         `paymentMethod: cod` is package-only. `truck` and `mini_truck` are delivery-only vehicle
-        types (AL-09).
+        types (AL-09) and are refused on a passenger or proxy booking.
+
+        **Δ C037.** `kind` and `isProxy` must agree; sending `isProxy: true` alone is enough. A
+        proxy booking requires `riderName` and `riderPhone`, a package booking `packageSize` and
+        `recipientPhone`. Members belonging to another kind are refused rather than ignored — a
+        client that filled `riderPhone` believes a third party is being carried. The proxy path
+        resolves the number through iam-svc (P-03) and answers `503 dependency-unavailable` when
+        that lookup cannot be made, because guessing would either SMS a stranger or push an FCM
+        message into the void.
       tags: [rides]
       security:
         - bearerAuth: []
@@ -120,7 +129,8 @@ paths:
         '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
         '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
-      x-error-codes: [invalid-fare-token, attestation-failed, payment-method-invalid, booking-disabled, active-ride-exists]
+        '503': { $ref: './_shared.yaml#/components/responses/ServiceUnavailable' }
+      x-error-codes: [validation-failed, invalid-phone, invalid-fare-token, attestation-failed, payment-method-invalid, booking-disabled, active-ride-exists, dependency-unavailable]
 
   /v1/rides/history:
     get:
@@ -621,7 +631,16 @@ paths:
       description: |
         P-07. Compared against the stored hash; **at most five attempts**, after which the
         endpoint answers `423 otp-locked` and the handoff needs support intervention. Success
-        moves the package to `PickedUp`.
+        moves the package to `PickedUp` (`Accepted | DriverArrived → InProgress`) and emits
+        `package.picked_up`.
+
+        **Δ C037.** A *correct* code never spends an attempt and neither does a malformed one — the
+        budget bounds guessing, and four characters that are not four digits are not a guess. The
+        attempt that exhausts the budget is what raises the admin-queue item (`package.otp_locked`),
+        so the driver standing at the door is not left waiting for a sixth try to notify anybody.
+        The **delivery code is minted at this moment** and leaves on `package.picked_up`: D5' §11
+        has both codes generated at booking, and a plaintext the server did not keep cannot be sent
+        to the recipient an hour later.
       tags: [package]
       security:
         - bearerAuth: []
@@ -647,13 +666,17 @@ paths:
         '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
         '423': { $ref: './_shared.yaml#/components/responses/Locked' }
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
-      x-error-codes: [invalid-otp, unauthorized, not-ride-participant, not-found, otp-locked]
+      x-error-codes: [validation-failed, invalid-otp, illegal-transition, unauthorized, not-ride-participant, not-found, otp-locked]
 
   /v1/rides/{rideId}/package/delivery-otp:
     post:
       operationId: verifyPackageDeliveryOtp
       summary: Driver enters the recipient's delivery OTP.
-      description: P-07. Same five-attempt budget as pickup. Success moves the package to `Delivered`.
+      description: |
+        P-07. Same five-attempt budget as pickup, against the code the recipient was sent at
+        pickup. Success moves the package to `Delivered` — `InProgress → Completed →
+        PaymentPending` in one transaction — and emits `package.delivered` alongside
+        `ride.completed`.
       tags: [package]
       security:
         - bearerAuth: []
@@ -679,7 +702,7 @@ paths:
         '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
         '423': { $ref: './_shared.yaml#/components/responses/Locked' }
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
-      x-error-codes: [invalid-otp, unauthorized, not-ride-participant, not-found, otp-locked]
+      x-error-codes: [validation-failed, invalid-otp, illegal-transition, unauthorized, not-ride-participant, not-found, otp-locked]
 
   /v1/rides/{rideId}/package/proof-photo:
     post:
@@ -689,6 +712,12 @@ paths:
         P-10. The fallback when no one is there to read out the delivery OTP. Persists
         `rides.proof_artifacts(kind='delivery_photo')`; the receipt surfaced at
         `GET /public/track/{token}/receipt` then reports `photo_proof` instead of `otp_verified`.
+
+        **Δ C037.** It **completes the delivery**, exactly as the delivery OTP does — ADD §11.16
+        draws the two as alternatives into `Completed`, so a route that only filed the photograph
+        would leave the parcel delivered and the ride running. It is therefore legal only from
+        `InProgress`; anywhere else is `400 illegal-transition`. The `sha256` recorded is over the
+        bytes as stored, which is what makes it evidence in a §11.14 dispute.
       tags: [package]
       security:
         - bearerAuth: []
@@ -709,9 +738,25 @@ paths:
                 note:
                   type: string
                   maxLength: 500
+                  description: '**Δ C037:** accepted and dropped — `rides.proof_artifacts` has no note column.'
+                lat:
+                  type: number
+                  format: double
+                  minimum: -90
+                  maximum: 90
+                  description: |
+                    **Δ C037.** Where the phone says the photo was taken, behind
+                    `rides.proof_artifacts.captured_geo` (D5' §11 names it as part of the proof).
+                    Absent means no fix — a lift well, a basement — which is a photo without a
+                    position rather than a refused delivery.
+                lng:
+                  type: number
+                  format: double
+                  minimum: -180
+                  maximum: 180
       responses:
         '201':
-          description: Proof stored.
+          description: Proof stored and the delivery completed.
           content:
             application/json:
               schema:
@@ -720,21 +765,38 @@ paths:
                 properties:
                   artifactId:
                     $ref: './_shared.yaml#/components/schemas/Ulid'
+                  state:
+                    description: '**Δ C037** — where the ride landed, so the app need not re-read it.'
+                    allOf:
+                      - $ref: './_shared.yaml#/components/schemas/RideState'
+                  version:
+                    $ref: '#/components/schemas/Version'
         '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
         '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
         '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
         '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
         '413': { $ref: './_shared.yaml#/components/responses/PayloadTooLarge' }
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
-      x-error-codes: [validation-failed, unauthorized, not-ride-participant, not-found, payload-too-large]
+      x-error-codes: [validation-failed, illegal-transition, unauthorized, not-ride-participant, not-found, conflict, payload-too-large]
 
   /v1/rides/{rideId}/cod-collected:
     post:
       operationId: confirmCashOnDelivery
       summary: Driver confirms the cash-on-delivery amount was collected.
       description: |
-        P-08. Moves the payment to `CashOnDeliveryCollected`, which is terminal — the driver's
-        earning posts from there (R-05). Only valid on a package ride booked `paymentMethod: cod`.
+        P-08. Moves the ride to `CashOnDeliveryCollected`, which is terminal — the driver's
+        earning posts from there (R-05). Only valid on a package ride booked `paymentMethod: cod`,
+        and only from `PaymentPending`: the cash is banked once the parcel has been handed over.
+
+        **Δ C037 — why this is not R-05's exception.** The three gateway terminals are states
+        fare-svc *observes*; cash in a driver's hand is observable by nobody, and D5' §6 draws
+        `PaymentPending --> CashOnDeliveryCollected: COD confirmed (package, P-08)` as an edge of
+        the **ride** machine. The driver's confirmation is the settlement. It emits
+        `payment.cod_collected` (P-08's name) and the ordinary `ride.settled` authorisation
+        alongside it, so a consumer reads one payload shape for all four terminals. P-14's 24-hour
+        `cod_uncollected` timer is what happens when the confirmation never comes: the ride becomes
+        `Disputed` and §11.14's existing refund workflow takes it.
       tags: [package]
       security:
         - bearerAuth: []
@@ -763,11 +825,12 @@ paths:
                 $ref: '#/components/schemas/RideStateChange'
         '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
         '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '402': { $ref: './_shared.yaml#/components/responses/PaymentRequired' }
         '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
         '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
         '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
-      x-error-codes: [invalid-amount, attestation-failed, not-ride-participant, not-found, payment-already-settled]
+      x-error-codes: [invalid-amount, illegal-transition, payment-method-invalid, attestation-failed, not-ride-participant, not-found, payment-already-settled, conflict]
 
   # -------------------------------------------------------------------------------------------
   # Location requests (P-02, P-12, P-13, §11.15)
@@ -783,7 +846,15 @@ paths:
         5-minute expiry timer is armed and the booker subscribes the SignalR group
         `booker:{bookerId}:loc-req:{requestId}`.
 
-        Rate limited per booker: 5 per hour, 30 per day (P-12).
+        Rate limited per booker: 5 per hour, 30 per day (P-12) — checked **before** the lookup, so
+        a booker who has run out of requests cannot keep asking iam-svc whether a stranger's number
+        is on the platform.
+
+        **Δ C037.** `RiderNotRegistered` is a live state, not a failure: AL-45 resolved the
+        wireframe-versus-D1 contradiction in favour of the web flow, so that request runs down the
+        same 300 s clock and is answered through `POST /public/track/{token}/pickup/confirm|decline`.
+        `503 dependency-unavailable` means iam-svc could not be asked at all — the request is not
+        created, because both available guesses send a real message to a real person.
       tags: [location-requests]
       security:
         - bearerAuth: []
@@ -824,7 +895,8 @@ paths:
         '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
         '429': { $ref: './_shared.yaml#/components/responses/TooManyRequests' }
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
-      x-error-codes: [invalid-phone, attestation-failed, loc-request-rate-limited]
+        '503': { $ref: './_shared.yaml#/components/responses/ServiceUnavailable' }
+      x-error-codes: [invalid-phone, attestation-failed, loc-request-rate-limited, dependency-unavailable]
 
   /v1/location-requests/{requestId}:
     get:
@@ -916,6 +988,72 @@ paths:
   # -------------------------------------------------------------------------------------------
   # Internal (mTLS)
   # -------------------------------------------------------------------------------------------
+  /v1/internal/location-requests/{requestId}/confirm:
+    post:
+      operationId: confirmLocationRequestForToken
+      summary: public-bff answers a location request on behalf of a rider with no app.
+      description: |
+        **Δ C037 (micro-change-set into D3' ride-svc), AL-45.** An unregistered rider is SMSed a
+        `pickup_confirm` link and answers at `passenger.mageride.lk/track?token=…` (SCR-WT-003).
+        public-bff validates and burns that token, and then has to move a row in
+        `rides.location_requests` — which ride-svc owns. So it is a command on the internal plane,
+        the same shape and for the same reason as the four dispatch-svc drives.
+
+        **No rider identity is asserted**, because an unregistered rider has none: the burned token
+        is the credential and public-bff is trusted to have checked it, which is what the internal
+        plane's mTLS is for. The Bearer twin at `POST /v1/location-requests/{requestId}/confirm` is
+        the in-app path into the same state machine, and the two stay in lockstep.
+      tags: [location-requests]
+      security:
+        - internalKey: []
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: './_shared.yaml#/components/schemas/GeoPointWithAccuracy'
+      responses:
+        '200':
+          description: Location shared with the booker.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocationRequest'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '410': { $ref: './_shared.yaml#/components/responses/Gone' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, not-found, token-expired-or-revoked]
+
+  /v1/internal/location-requests/{requestId}/decline:
+    post:
+      operationId: declineLocationRequestForToken
+      summary: public-bff records a refusal on behalf of a rider with no app.
+      description: |
+        **Δ C037, AL-45.** The web twin of `POST /v1/location-requests/{requestId}/decline`.
+        **No body, on either route** — P-02 says a decline transmits no coordinates, so neither path
+        has a parameter one could arrive in.
+      tags: [location-requests]
+      security:
+        - internalKey: []
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Declined; the booker is notified.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocationRequest'
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '410': { $ref: './_shared.yaml#/components/responses/Gone' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [not-found, token-expired-or-revoked]
+
   /v1/internal/rides/scheduled:
     post:
       operationId: materialiseScheduledRide
@@ -1493,6 +1631,12 @@ components:
             **AL-48.** Present only from `Accepted` onward. The passenger sees the driver's
             number; the driver sees the **rider's** number, never the booker's (P-05). This is the
             number the client `tel:` dials when VoIP fails — there is no masking bridge.
+
+            **Δ C037 — one case has no number, and cannot.** A proxy ride whose rider is
+            unregistered stores that rider as a keyed digest (P-03) and nothing can reverse it, so
+            the driver's side is absent rather than filled with the booker's number. P-03 and AL-48
+            are in genuine conflict there and the privacy-bearing rule wins. On a package ride the
+            driver's counterparty is the **recipient**, the far end of the delivery.
           oneOf:
             - $ref: './_shared.yaml#/components/schemas/PhoneE164'
             - type: 'null'
@@ -1503,8 +1647,30 @@ components:
         packageDescription:
           type: string
         packageStatus:
+          description: |
+            Derived from `state`, never stored — the machine is kind-agnostic (ADD Appendix B.2
+            invariant 6) and a second status column would be a copy that can disagree with the
+            first. `InProgress` renders as `InTransit`; `PickedUp` is the instant of
+            `package.picked_up` and is not separately observable on the aggregate (Δ C037).
           type: string
           enum: [PickupPending, PickedUp, InTransit, Delivered]
+        recipientName:
+          description: '**Δ C037** — who the parcel is for (P-06). Package rides only.'
+          type: string
+        senderPhone:
+          description: |
+            **Δ C037.** AL-33's delivery sheets put a call button beside **both** parties and
+            `counterpartyPhone` carries one number, so a package ride states the pair. The sender is
+            the account that booked it. Package rides only, and on the same terms as
+            `counterpartyPhone`: from `Accepted` onward, to a participant, never to anybody else.
+          oneOf:
+            - $ref: './_shared.yaml#/components/schemas/PhoneE164'
+            - type: 'null'
+        recipientPhone:
+          description: '**Δ C037** — the other half of AL-33''s sheet. Same terms as `senderPhone`.'
+          oneOf:
+            - $ref: './_shared.yaml#/components/schemas/PhoneE164'
+            - type: 'null'
         createdAt:
           $ref: './_shared.yaml#/components/schemas/Timestamp'
 
@@ -1572,6 +1738,10 @@ components:
       description: |
         `RiderNotRegistered` means the SMS `pickup_confirm` web path was taken instead of the
         in-app one (AL-45).
+
+        **Δ C037 — two of the five are live.** `Pending` and `RiderNotRegistered` can both still be
+        answered and both run down the same 300 s clock; the other three are terminal, and an
+        attempt to answer one is `410 token-expired-or-revoked`.
       enum: [Pending, RiderNotRegistered, Confirmed, Declined, Expired]
 
     LocationRequest:
@@ -1583,9 +1753,15 @@ components:
         state:
           $ref: '#/components/schemas/LocationRequestState'
         geo:
-          description: Present only when `state` is `Confirmed`.
+          description: |
+            Present only when `state` is `Confirmed`. A decline and an expiry carry no position and
+            there is no server path that could attach one (P-02).
           oneOf:
             - $ref: './_shared.yaml#/components/schemas/GeoPointWithAccuracy'
             - type: 'null'
+        ttl:
+          type: integer
+          format: int32
+          description: '**Δ C037** — the window in seconds, so one shape serves the 202 and every resolution.'
         expiresAt:
           $ref: './_shared.yaml#/components/schemas/Timestamp'

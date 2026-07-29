@@ -79,10 +79,17 @@ public sealed class RideLifecycleRuleTests(PostgresFixture postgres)
         await ProblemDocument.AssertAsync(response, HttpStatusCode.PaymentRequired, "payment-method-invalid");
     }
 
-    /// <summary>The fences: proxy is C032, package is C037, scheduling is C035.</summary>
+    /// <summary>
+    /// The one fence left on this route: a future pickup is dispatch-svc's
+    /// <c>POST /v1/rides/schedule</c> (AL-36, C035), and accepting <c>scheduledAt</c> here would
+    /// dispatch a driver to a passenger who asked for tomorrow.
+    /// </summary>
+    /// <remarks>
+    /// <c>kind: proxy</c> and <c>kind: package</c> were refused by the same theory until Δ C037
+    /// landed both sub-flows; they are now covered by <c>ProxyBookingTests</c> and
+    /// <c>PackageDeliveryTests</c>.
+    /// </remarks>
     [Theory]
-    [InlineData("kind", "proxy")]
-    [InlineData("kind", "package")]
     [InlineData("scheduledAt", "2026-08-01T09:00:00Z")]
     public async Task Out_of_scope_bookings_are_refused_rather_than_downgraded(string field, string value)
     {
