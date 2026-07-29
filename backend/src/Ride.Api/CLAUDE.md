@@ -22,6 +22,7 @@ payment terminals and the R-20 stuck-state SLOs. Everything here matches
 | `POST /v1/internal/rides/{id}/system-cancel` · `/payment-settled` · `GET /saga-state` | **Δ C032** — D3' internal family |
 | `POST /v1/internal/rides/{id}/matching` · `/offer` | **Δ C022** — see below |
 | `POST /v1/internal/rides/{id}/offer/expire` | **Δ C023**, `reason` **Δ C034** — see below |
+| `POST /v1/internal/rides/scheduled` | **Δ C035** — see below |
 
 **Not here, on purpose.** Proxy booking and the P-02 location-request family, package delivery and
 its two OTP gates are **C037**. `/dispute` is **C049/C050** (it opens a support ticket, which is
@@ -41,6 +42,18 @@ support-svc's). `GET /v1/rides/history` is **C048**. All are left unmapped rathe
   set rather than a boolean, so `rides.transitions.reason_code` records which of the two happened
   (`OFFER_EXPIRED` / `DRIVER_UNREACHABLE`). Both emit `offer.expired` — the consumer's reaction is
   identical.
+- **A scheduled ride is booked elsewhere and materialised here** (Δ C035). `scheduledAt` on
+  `POST /v1/rides/request` is still refused: advance bookings live in `dispatch.scheduled_rides`
+  and `POST /v1/rides/schedule` on dispatch-svc is what creates one (AL-36). At T-30 min dispatch
+  calls `POST /v1/internal/rides/scheduled`, which is the fourth command of the same family and
+  exists for the same reason as the other three — `dispatch.offers.ride_id` has a foreign key onto
+  `rides.rides`, so the offer cannot exist before the ride, and R-01 says dispatch may not create
+  it. It is **idempotent because the scheduled-ride id is the `clientRequestId`**: `ux_rides_idem`
+  turns a retried sweep into a replay rather than a second booking. It takes no `fareEstimateToken`
+  — a quote from when the passenger booked is not the price of a ride 30 minutes from now (D5'
+  §1.4) — so the ride carries no `fare_estimate_minor` and fare-svc meters it. The booked pickup
+  time is not echoed onto the ride either: `rides.rides` has no `scheduled_at` column and
+  `dispatch.scheduled_rides.pickup_time` is where it lives. Both are C035 handoff notes.
 - **The matrix decides, not the caller.** `POST /cancel` takes a `reason`, and the reason decides
   nothing: `RideCancellationMatrix` resolves (state × trigger) → (target, penalty, reputation hit),
   the trigger comes from which party is authenticated, and the guarded `UPDATE` is bound to the

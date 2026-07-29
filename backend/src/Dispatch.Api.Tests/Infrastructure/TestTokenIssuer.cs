@@ -40,6 +40,9 @@ internal sealed class TestTokenIssuer
 
     public string Driver(Guid userId) => Issue(userId, [MageRideRoles.Driver], MageRideApps.Driver);
 
+    /// <summary>A back-office admin, for <c>PUT /v1/admin/drivers/level-config</c> (US-14.12).</summary>
+    public string Admin(Guid userId) => Issue(userId, [MageRideRoles.Admin], MageRideApps.Admin);
+
     /// <summary>
     /// A passenger who opened the Driver App: <c>app=driver</c> but no driver role. C020 decision 4
     /// makes this a real, reachable principal rather than a contrived one.

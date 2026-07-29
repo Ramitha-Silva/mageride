@@ -1,11 +1,14 @@
 using MageRide.Dispatch.Configuration;
 using MageRide.Dispatch.Dispatching;
 using MageRide.Dispatch.Eligibility;
+using MageRide.Dispatch.Levels;
 using MageRide.Dispatch.Messaging;
 using MageRide.Dispatch.Mqtt;
+using MageRide.Dispatch.Penalties;
 using MageRide.Dispatch.Persistence;
 using MageRide.Dispatch.Presence;
 using MageRide.Dispatch.Redis;
+using MageRide.Dispatch.Scheduling;
 using MageRide.Dispatch.Timers;
 using MageRide.Shared.Mqtt;
 using Microsoft.Extensions.Configuration;
@@ -42,6 +45,9 @@ public static class DispatchServiceCollectionExtensions
         services.AddSingleton<IOfferTimerRepository, OfferTimerRepository>();
         services.AddSingleton<IDispatchTimerRepository, DispatchTimerRepository>();
         services.AddSingleton<IDailyFeeRepository, DailyFeeRepository>();
+        services.AddSingleton<IScheduledRideRepository, ScheduledRideRepository>();
+        services.AddSingleton<IDriverLevelRepository, DriverLevelRepository>();
+        services.AddSingleton<IPenaltyRepository, PenaltyRepository>();
         services.AddSingleton<IDriverIndex, DriverIndex>();
 
         // Pure: everything it scores has already been fetched by the caller.
@@ -54,6 +60,9 @@ public static class DispatchServiceCollectionExtensions
         services.AddScoped<IDispatchService, DispatchService>();
         services.AddScoped<IRideEventHandler, RideEventHandler>();
         services.AddScoped<IWalletGate, WalletGate>();
+        services.AddScoped<IScheduledRideService, ScheduledRideService>();
+        services.AddScoped<IDriverLevelService, DriverLevelService>();
+        services.AddScoped<IPenaltyService, PenaltyService>();
 
         services.AddHttpClient<IRideServiceClient, RideServiceClient>(RideServiceClient.HttpClientName, (sp, client) =>
         {
@@ -79,6 +88,18 @@ public static class DispatchServiceCollectionExtensions
         if (dispatch.KeyspaceNotificationsEnabled)
         {
             services.AddHostedService<OfferKeyspaceListener>();
+        }
+
+        if (dispatch.ScheduledWorkerEnabled)
+        {
+            services.AddSingleton<ScheduledRideWorker>();
+            services.AddHostedService(sp => sp.GetRequiredService<ScheduledRideWorker>());
+        }
+
+        if (dispatch.LevelWorkerEnabled)
+        {
+            services.AddSingleton<DriverLevelWorker>();
+            services.AddHostedService(sp => sp.GetRequiredService<DriverLevelWorker>());
         }
 
         if (dispatch.ConsumerEnabled)

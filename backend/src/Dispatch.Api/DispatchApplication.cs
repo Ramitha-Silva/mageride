@@ -68,6 +68,18 @@ public static class DispatchApplication
         app.UseMageRideDefaults(serviceOptions);
 
         app.MapStandbyEndpoints();
+        app.MapScheduledRideEndpoints();
+        app.MapDriverLevelEndpoints();
+
+        // Not mapped at all without a key, exactly as ride-svc and reputation-svc treat their own
+        // internal families: an unauthenticated route into the level engine and the penalty ledger
+        // is worse than a missing feature, and the start-up warning below says which it is.
+        var dispatchOptions = app.Services.GetRequiredService<IOptions<DispatchOptions>>().Value;
+
+        if (!string.IsNullOrWhiteSpace(dispatchOptions.InternalApiKey))
+        {
+            app.MapInternalDispatchEndpoints(dispatchOptions.InternalApiKey);
+        }
 
         WarnAboutGatesThatCannotClose(app);
 
@@ -131,6 +143,31 @@ public static class DispatchApplication
                 "telemetry.normalized (R-08). Every driver falls out of the candidate pool {Freshness} after " +
                 "going online and no position ever moves them.",
                 options.PositionFreshness);
+        }
+
+        if (string.IsNullOrWhiteSpace(options.InternalApiKey))
+        {
+            app.Logger.LogWarning(
+                "Dispatch:InternalApiKey is not configured, so /v1/internal/** is not mapped. No driver no-show " +
+                "can be reported (US-6A.7) and fare-svc cannot read or settle the D-05 cancellation penalties " +
+                "this service accrues — a passenger's Rs 50 debt is recorded and never collected.");
+        }
+
+        if (!options.ScheduledWorkerEnabled)
+        {
+            app.Logger.LogWarning(
+                "Dispatch:ScheduledWorkerEnabled is off. Nothing materialises a booking at T-{Lead}, so every " +
+                "scheduled ride stays on the Job Board past its pickup time and no passenger who booked ahead " +
+                "is ever dispatched (D5' §3.7).",
+                options.ScheduledLeadTime);
+        }
+
+        if (!options.LevelWorkerEnabled)
+        {
+            app.Logger.LogInformation(
+                "Dispatch:LevelWorkerEnabled is off. Levels still move when GET /v1/drivers/{{id}}/level or the " +
+                "Job Board gate refreshes a driver, but a level earned by ratings alone will not reach the " +
+                "scoring hot path — which reads it through reputation-svc, not through those routes.");
         }
     }
 }

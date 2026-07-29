@@ -79,11 +79,18 @@ settlement is fare-svc's (D5' §7.1). Nothing here cancels a ride or suspends a 
   materialises an `OK` row before locking, because a `SELECT … FOR UPDATE` that matches nothing
   takes no lock — without it two concurrent first facts for one user deadlock against each other.
   The expiry sweep can only discover users through `block_states`, which is what fixes the order.
-- **reputation-svc is the sole writer of `dispatch.driver_levels`.** The table is in another
-  schema because that is where D4' §6 prints it; every rule that *changes* a level is D5' §4.2's
-  and therefore this service's, and D3' puts both `GetDriverLevel` and the appeal restore here. A
-  second `reputation.driver_levels` would be two tables for one fact. Raised as a
-  micro-change-set in the C033 handoff.
+- **reputation-svc owns the counter-driven half of `dispatch.driver_levels`.** The table is in
+  another schema because that is where D4' §6 prints it; the rules that take a level from *this
+  service's counters* — three confirmed reports and the temporary delisting — are D5' §4.2's and
+  therefore this service's, and D3' puts both `GetDriverLevel` and the appeal restore here. A
+  second `reputation.driver_levels` would be two tables for one fact.
+  **Δ C035:** the other half — the level-*up* from `trips.ratings` that the "Not here" note above
+  hands over, and the US-6A.7 no-show decrement D3' files under
+  `POST /v1/internal/drivers/{id}/no-show` — is now written by **dispatch-svc**. The C033 handoff's
+  "sole writer" claim is narrowed to this service's own rules. Two writers are safe because both
+  take `SELECT … FOR UPDATE` on the row before changing it and dispatch-svc takes *only* that row,
+  which is a suffix of this service's block state → counters → level order, so no cycle exists.
+  Raised as a micro-change-set in the C033 and C035 handoffs.
 - **`iam.devices` is read and only ever read.** Two accounts on one `device_key` is E-07's
   device-binding cross-check and is not visible anywhere else; the key itself is never published
   on a flag.

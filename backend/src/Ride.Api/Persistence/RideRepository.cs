@@ -181,6 +181,12 @@ public interface IRideRepository
 }
 
 /// <summary>The fields <c>POST /v1/rides/request</c> writes.</summary>
+/// <param name="FareEstimateMinor">
+/// The quote bound by the <c>fareEstimateToken</c>. <see langword="null"/> only for a ride
+/// materialised from a scheduled booking (Δ C035): the price of a ride 30 minutes from now is not
+/// the price quoted when it was booked (D5' §1.4), and <c>0</c> would read as "free" rather than
+/// as "not quoted". <c>ck_rides_fare_estimate_minor</c> admits NULL for the same reason.
+/// </param>
 public sealed record NewRide(
     Guid PassengerId,
     Guid ClientRequestId,
@@ -188,7 +194,7 @@ public sealed record NewRide(
     GeoPoint Pickup,
     GeoPoint Dropoff,
     string PaymentMethod,
-    long FareEstimateMinor,
+    long? FareEstimateMinor,
     long FareSurchargeMinor);
 
 /// <inheritdoc cref="IRideRepository"/>

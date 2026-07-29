@@ -1,5 +1,7 @@
 using MageRide.Dispatch.Dispatching;
 using MageRide.Dispatch.Domain;
+using MageRide.Dispatch.Levels;
+using MageRide.Dispatch.Penalties;
 using Microsoft.Extensions.Logging;
 
 namespace MageRide.Dispatch.Messaging;
@@ -29,7 +31,11 @@ public interface IRideEventHandler
 }
 
 /// <inheritdoc cref="IRideEventHandler"/>
-public sealed class RideEventHandler(IDispatchService dispatch, ILogger<RideEventHandler> logger) : IRideEventHandler
+public sealed class RideEventHandler(
+    IDispatchService dispatch,
+    IDriverLevelService levels,
+    IPenaltyService penalties,
+    ILogger<RideEventHandler> logger) : IRideEventHandler
 {
     public async Task HandleAsync(RideEventEnvelope envelope, CancellationToken cancellationToken)
     {
@@ -78,6 +84,25 @@ public sealed class RideEventHandler(IDispatchService dispatch, ILogger<RideEven
                 await dispatch.RetireRideAsync(envelope.RideId, cancellationToken);
                 break;
 
+            // D5' §7.1's accrual. Idempotent by ux_penalty_accrual(original_ride_id, basis)
+            // (migration 0713), which is what absorbs the redelivery D6' §2.3 guarantees.
+            case RideEventTypes.PenaltyAccrued:
+                await AccrueAsync(envelope, cancellationToken);
+                break;
+
+            // US-6A.7. The same path POST /v1/internal/drivers/{id}/no-show takes, and idempotent
+            // on (driver, ride) — so a redelivery, or the internal route being called for the same
+            // ride as well, takes one level and not two.
+            //
+            // `reputation.driver_cancelled` is deliberately NOT consumed alongside it. §11.12 gives
+            // a driver cancellation a reputation hit and a brief delist, both of which are
+            // reputation-svc's and both of which it already applies; no spec gives it a level or a
+            // point cost. `level_config.cancellation_penalty_points` exists because the contract's
+            // LevelConfig names it, and nothing here reads it — see Dispatch.Api/CLAUDE.md.
+            case RideEventTypes.NoShowDriver when envelope.Payload?.DriverId is { } absentDriver:
+                await levels.RecordNoShowAsync(absentDriver, envelope.RideId, cancellationToken);
+                break;
+
             default:
                 logger.LogDebug("Ignoring {EventType} on ride {RideId}", envelope.EventType, envelope.RideId);
                 break;
@@ -100,6 +125,28 @@ public sealed class RideEventHandler(IDispatchService dispatch, ILogger<RideEven
         var outcome = await dispatch.BeginAsync(request, cancellationToken);
 
         logger.LogInformation("ride.requested for {RideId} → {Result}", envelope.RideId, outcome.Result);
+    }
+
+    private async Task AccrueAsync(RideEventEnvelope envelope, CancellationToken cancellationToken)
+    {
+        // A penalty with nobody to pay it to is not this table's row: D5' §7.1 credits the driver
+        // whose accepted ride was cancelled, and `affected_driver_id` is NOT NULL for that reason.
+        // ride-svc omits it on the rows of §11.12 that have no driver, which are also the rows with
+        // no penalty — so this is a defensive read, not a case that fires.
+        if (envelope.Payload is not { AffectedDriverId: { } driverId, PassengerId: { } passengerId } payload ||
+            payload.AmountMinor is not { } amountMinor ||
+            payload.Basis is not { Length: > 0 } basis)
+        {
+            logger.LogWarning(
+                "cancellation.penalty.accrued for ride {RideId} is missing the passenger, the driver, the amount " +
+                "or the basis; not recording it",
+                envelope.RideId);
+
+            return;
+        }
+
+        await penalties.AccrueAsync(
+            new PenaltyAccrual(passengerId, envelope.RideId, driverId, amountMinor, basis), cancellationToken);
     }
 
     private async Task ReleaseAndRetryAsync(

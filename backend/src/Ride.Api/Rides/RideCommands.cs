@@ -24,6 +24,29 @@ public sealed record RequestRideCommand(
     bool? IsProxy,
     string? PackageSize);
 
+/// <summary>
+/// The body of <c>POST /v1/internal/rides/scheduled</c> (Δ C035) — dispatch-svc's T-30 min
+/// materialisation of a <c>dispatch.scheduled_rides</c> row.
+/// </summary>
+/// <param name="ScheduledRideId">
+/// The scheduled booking's id, used verbatim as the ride's <c>clientRequestId</c>. That is what
+/// makes the call idempotent under R-18 without a second key: a scheduler that retried after a
+/// timeout gets the ride its first attempt created.
+/// </param>
+/// <remarks>
+/// No <c>fareEstimateToken</c>: a quote taken when the passenger booked yesterday is not the price
+/// of the ride that is about to run (D5' §1.4), and the caller is a trusted service rather than a
+/// client that could be quoting itself a discount. The ride therefore carries no
+/// <c>fare_estimate_minor</c> and fare-svc meters it.
+/// </remarks>
+public sealed record MaterialiseScheduledRideCommand(
+    Guid ScheduledRideId,
+    Guid PassengerId,
+    RidePlace? Pickup,
+    RidePlace? Dropoff,
+    string? VehicleType,
+    string? PaymentMethod);
+
 /// <param name="Replayed">
 /// <see langword="true"/> when <c>(passengerId, clientRequestId)</c> already existed and this is
 /// R-18's retry rather than a new booking.

@@ -322,6 +322,14 @@ paths:
                   $ref: './_shared.yaml#/components/schemas/Timestamp'
                 vehicleType:
                   $ref: './_shared.yaml#/components/schemas/RideVehicleType'
+                paymentMethod:
+                  description: |
+                    **Δ C035 (micro-change-set into D3' Δ 2026-06-28).** Defaults to `cash`. At
+                    T-30 min this row becomes a `rides.rides`, whose `payment_method` is NOT NULL
+                    over a closed set — the printed body carried no way to say which, and choosing
+                    for the passenger in the service would take the choice away silently.
+                  allOf:
+                    - $ref: '#/components/schemas/ScheduledPaymentMethod'
       responses:
         '201':
           description: Scheduled.
@@ -343,7 +351,12 @@ paths:
         Sets `dispatch.scheduled_rides.status = 'CANCELLED'` and withdraws it from the Job Board.
         Once dispatch has materialised the ride (`status = 'DISPATCHED'`), cancellation belongs to
         ride-svc's `POST /v1/rides/{rideId}/cancel`, which owns the penalty matrix — this endpoint
-        answers `409 illegal-transition` from that point on.
+        answers `409 conflict` from that point on.
+
+        **Δ C035:** this line read `409 illegal-transition`. That code is registered as a **400** in
+        `_shared.yaml`'s `ErrorCode` and in `MageRideErrors`, and ride-svc answers 400 with it, so
+        one kebab code would have carried two statuses across the platform. The status printed here
+        (409) wins and the code becomes `conflict`.
 
         Path note: ADD Appendix C spells this `DELETE /rides/scheduled/{rideId}`, which cannot
         coexist with D3' Part 2's `GET /rides/scheduled/{driverId}` — two different identifiers in
@@ -366,7 +379,7 @@ paths:
         '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
         '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
-      x-error-codes: [unauthorized, forbidden, not-found, illegal-transition]
+      x-error-codes: [unauthorized, forbidden, not-found, conflict]
 
   /v1/rides/scheduled/{driverId}:
     get:
@@ -500,7 +513,7 @@ paths:
         '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
         '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
-      x-error-codes: [unauthorized, forbidden, not-found, illegal-transition]
+      x-error-codes: [unauthorized, forbidden, not-found, conflict]
 
   # -------------------------------------------------------------------------------------------
   # Driver Level
@@ -626,6 +639,107 @@ paths:
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
       x-error-codes: [validation-failed, unauthorized, not-found]
 
+  /v1/internal/passengers/{passengerId}/penalties:
+    get:
+      operationId: listOutstandingPenalties
+      summary: A passenger's accrued, unsettled cross-trip debt.
+      description: |
+        **Δ C035 (micro-change-set into D3').** Internal, mTLS only. D5' §7.1 has fare-svc add the
+        outstanding Rs 50 to the passenger's **next** completed trip, which means fare-svc has to
+        be able to read it before it prices that trip. The ledger is `dispatch.cancellation_penalties`
+        and dispatch-svc owns it (ADD §9.1, D4' §6); D3' names no route to reach it. Also what
+        US-6A.10b / AL-16's "clear outstanding balance to be re-enabled" is evaluated against.
+      tags: [dispatch-admin]
+      security:
+        - mtls: []
+      parameters:
+        - name: passengerId
+          in: path
+          required: true
+          schema:
+            $ref: './_shared.yaml#/components/schemas/Ulid'
+      responses:
+        '200':
+          description: Outstanding penalties, oldest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, totalMinor, currency]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CancellationPenalty'
+                  totalMinor:
+                    type: integer
+                    format: int64
+                    minimum: 0
+                  currency:
+                    $ref: './_shared.yaml#/components/schemas/Currency'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized]
+
+  /v1/internal/passengers/{passengerId}/penalties/settle:
+    post:
+      operationId: settleOutstandingPenalties
+      summary: Mark this passenger's outstanding penalties settled against one completed ride.
+      description: |
+        **Δ C035 (micro-change-set into D3').** The write half of D5' §7.1, called by fare-svc
+        **after** it has posted the ledger entries — the money is fare-svc's (D-09) and this row is
+        only the debt's record.
+
+        `UNIQUE(penalty_id, applied_ride_id)` is D5' §7.1's stated guard; what actually prevents a
+        double-apply is that the update is conditional on `status = 'OUTSTANDING'` and claims rows
+        `FOR UPDATE SKIP LOCKED`. A second call with the same `rideId` settles nothing and returns
+        an empty list, which is the same answer a replay of the first call gives.
+      tags: [dispatch-admin]
+      security:
+        - mtls: []
+      parameters:
+        - name: passengerId
+          in: path
+          required: true
+          schema:
+            $ref: './_shared.yaml#/components/schemas/Ulid'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rideId]
+              properties:
+                rideId:
+                  description: The completed ride the debt is collected on.
+                  allOf:
+                    - $ref: './_shared.yaml#/components/schemas/Ulid'
+      responses:
+        '200':
+          description: What this call settled. Empty when there was nothing outstanding.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, settledMinor, currency]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CancellationPenalty'
+                  settledMinor:
+                    type: integer
+                    format: int64
+                    minimum: 0
+                  currency:
+                    $ref: './_shared.yaml#/components/schemas/Currency'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized]
+
   # -------------------------------------------------------------------------------------------
   # Admin configuration
   # -------------------------------------------------------------------------------------------
@@ -711,6 +825,56 @@ components:
       type: string
       description: Matches the `dispatch.scheduled_rides.status` CHECK (C004).
       enum: [SCHEDULED, DISPATCHED, CANCELLED]
+
+    ScheduledPaymentMethod:
+      type: string
+      description: |
+        **Δ C035.** How the materialised ride will be paid for. The `rides.rides.payment_method`
+        set minus `cod`, which D3' makes package-only and a scheduled ride is a passenger booking.
+      enum: [cash, lankaqr, onepay]
+      default: cash
+
+    CancellationPenalty:
+      description: |
+        **Δ C035.** One row of `dispatch.cancellation_penalties` — a debt accrued by a §11.12
+        cancellation and collected on the passenger's next completed trip (D5' §7.1, D-05, AL-16).
+      type: object
+      required: [penaltyId, passengerId, originalRideId, affectedDriverId, amountMinor, currency, basis, status]
+      properties:
+        penaltyId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        passengerId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        originalRideId:
+          description: The ride whose cancellation accrued it.
+          allOf:
+            - $ref: './_shared.yaml#/components/schemas/Ulid'
+        affectedDriverId:
+          description: Who the money is owed to. The next trip's driver is a pass-through (AL-16).
+          allOf:
+            - $ref: './_shared.yaml#/components/schemas/Ulid'
+        amountMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        currency:
+          $ref: './_shared.yaml#/components/schemas/Currency'
+        basis:
+          description: |
+            Which §11.12 rule accrued it. `full_fare` means `amountMinor` is the **quoted** fare
+            and fare-svc settles the metered one instead.
+          type: string
+          enum: [cancellation_fee, no_show_fee, full_fare]
+        status:
+          type: string
+          enum: [OUTSTANDING, SETTLED]
+        appliedRideId:
+          description: '`null` until settled; the completed ride the debt was collected on.'
+          oneOf:
+            - $ref: './_shared.yaml#/components/schemas/Ulid'
+            - type: 'null'
+        createdAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
 
     ScheduledRide:
       type: object

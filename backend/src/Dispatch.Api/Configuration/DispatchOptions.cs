@@ -193,6 +193,17 @@ public sealed class DispatchOptions
     [Range(typeof(TimeSpan), "00:00:01", "00:01:00")]
     public TimeSpan RideServiceTimeout { get; set; } = TimeSpan.FromSeconds(10);
 
+    /// <summary>
+    /// Guards this service's own <c>/v1/internal/**</c> routes — the US-6A.7 no-show report and the
+    /// D5' §7.1 penalty ledger fare-svc settles against.
+    /// </summary>
+    /// <remarks>
+    /// <b>Unset means those routes are not mapped at all</b>, exactly as <c>Ride:InternalApiKey</c>
+    /// and <c>Reputation:InternalApiKey</c> behave. D3' §0 puts the whole family on mTLS and the
+    /// gateway refuses the prefix at the edge (C008); the shared secret is the interim until C042.
+    /// </remarks>
+    public string? InternalApiKey { get; set; }
+
     // -------------------------------------------------------------------------------------------
     // Scoring (D5' §3.3, R-11)
     // -------------------------------------------------------------------------------------------
@@ -231,6 +242,95 @@ public sealed class DispatchOptions
     /// matcher is wired behind it.
     /// </summary>
     public bool BatchMatchingEnabled { get; set; }
+
+    // -------------------------------------------------------------------------------------------
+    // Scheduled rides, the Job Board and the Driver Level engine (D5' §3.7, §4 — C035)
+    // -------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// D-06's Job Board radius. 30 km is the one number the spec does pin —
+    /// <c>GET /v1/rides/job-board?radius=30km</c> — and it is also the ceiling
+    /// <c>dispatch.yaml</c> allows on the query parameter.
+    /// </summary>
+    [Range(1_000, 30_000)]
+    public int JobBoardRadiusM { get; set; } = 30_000;
+
+    /// <summary>
+    /// How far ahead of the booked pickup a scheduled ride is dispatched. D5' §3.7: "scheduled ride
+    /// goes live <b>30 min prior</b>".
+    /// </summary>
+    [Range(typeof(TimeSpan), "00:01:00", "1.00:00:00")]
+    public TimeSpan ScheduledLeadTime { get; set; } = TimeSpan.FromMinutes(30);
+
+    /// <summary>
+    /// How far in the future a booking must be to be accepted. Below the lead time the ride would
+    /// be materialised by the very next sweep, which is an immediate ride booked through the wrong
+    /// endpoint — <c>POST /v1/rides/request</c> is what that is for.
+    /// </summary>
+    /// <remarks>
+    /// <b>No spec pins it.</b> Set to <see cref="ScheduledLeadTime"/> so the rule is "a scheduled
+    /// ride is one that is still scheduled by the time the scheduler looks at it", which needs no
+    /// second number to justify.
+    /// </remarks>
+    [Range(typeof(TimeSpan), "00:00:00", "1.00:00:00")]
+    public TimeSpan ScheduledMinimumLead { get; set; } = TimeSpan.FromMinutes(30);
+
+    /// <summary>
+    /// How far ahead of now a booking may be made. <b>No spec pins it</b>; 30 days is chosen
+    /// because <c>fares.tariffs</c> are versioned and a quote taken a year out would be for a
+    /// price list that no longer exists.
+    /// </summary>
+    [Range(typeof(TimeSpan), "01:00:00", "365.00:00:00")]
+    public TimeSpan ScheduledMaximumLead { get; set; } = TimeSpan.FromDays(30);
+
+    /// <summary>
+    /// How long past the booked pickup time the sweep keeps trying to materialise a ride it could
+    /// not place — the passenger was mid-ride, or ride-svc was down. Past it the booking is
+    /// abandoned as <c>CANCELLED</c> rather than retried for ever.
+    /// </summary>
+    /// <remarks>
+    /// <b>No spec pins it.</b> 30 minutes matches the lead time: a booking that could not be
+    /// materialised for as long as it was advertised on the Job Board is not going to be.
+    /// </remarks>
+    [Range(typeof(TimeSpan), "00:01:00", "1.00:00:00")]
+    public TimeSpan ScheduledDispatchGrace { get; set; } = TimeSpan.FromMinutes(30);
+
+    /// <summary>Runs the T-30 materialisation sweep in this process.</summary>
+    public bool ScheduledWorkerEnabled { get; set; } = true;
+
+    /// <summary>
+    /// How often the sweep looks for due bookings. Coarser than the offer backstop by three orders
+    /// of magnitude on purpose: R-04 promises a fire within a second of a 15-second window, and a
+    /// scheduled ride is being placed half an hour early.
+    /// </summary>
+    [Range(typeof(TimeSpan), "00:00:01", "00:15:00")]
+    public TimeSpan ScheduledPollInterval { get; set; } = TimeSpan.FromSeconds(30);
+
+    /// <summary>Bookings materialised per sweep.</summary>
+    [Range(1, 1_000)]
+    public int ScheduledBatchSize { get; set; } = 50;
+
+    /// <summary>
+    /// Runs the Driver Level sweep — the half of D5' §4.2 that turns ratings into levels.
+    /// </summary>
+    /// <remarks>
+    /// <b>Off means levels only move when somebody reads them.</b> <c>GET /v1/drivers/{id}/level</c>
+    /// and the Job Board gate both refresh the driver they are about, so nothing is ever *wrong*;
+    /// what stops is a level rising on its own, which matters because the dispatch hot path reads
+    /// the level through reputation-svc's gRPC and never through those routes.
+    /// </remarks>
+    public bool LevelWorkerEnabled { get; set; } = true;
+
+    /// <summary>
+    /// How often the level sweep runs. A level is a slow fact — 500 points is a hundred five-star
+    /// rides — so this is a minute, not a second.
+    /// </summary>
+    [Range(typeof(TimeSpan), "00:00:01", "01:00:00")]
+    public TimeSpan LevelSweepInterval { get; set; } = TimeSpan.FromMinutes(1);
+
+    /// <summary>Drivers re-counted per level sweep.</summary>
+    [Range(1, 10_000)]
+    public int LevelSweepBatchSize { get; set; } = 200;
 
     // -------------------------------------------------------------------------------------------
     // Hard eligibility gates (D5' §3.2)

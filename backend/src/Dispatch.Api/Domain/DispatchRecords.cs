@@ -104,6 +104,14 @@ public sealed record ScoredCandidate(
 /// </remarks>
 /// <param name="Terms">Each term's normalised input in [0,1], before its weight.</param>
 /// <param name="Weights">The weights that multiplied them.</param>
+/// <param name="Ordering">
+/// Which rule put the cascade in the order it ran, when it was not the score. Absent — and
+/// therefore omitted from the JSON — for an ordinary Mode C round, where <see cref="Rank"/> follows
+/// the score. Present on a Job Board dispatch, whose order is D5' §3.7's "closest intent-submitting
+/// driver by Level" and not §3.3's: the score is still computed and stored, so the row stays
+/// reproducible, but a <see cref="Rank"/> that disagreed with the score would otherwise read as a
+/// bug rather than as a different rule.
+/// </param>
 public sealed record ScoreBreakdown(
     string Algorithm,
     int Rank,
@@ -116,7 +124,8 @@ public sealed record ScoreBreakdown(
     string? RejectedBy,
     ScoreTerms Terms,
     ScoreTerms Weights,
-    DirectionalBreakdown? Directional = null);
+    DirectionalBreakdown? Directional = null,
+    string? Ordering = null);
 
 /// <summary>The three D5' §3.3 terms, used both for the inputs and for the weights.</summary>
 public sealed record ScoreTerms(double Distance, double Level, double Category);

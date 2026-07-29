@@ -55,6 +55,9 @@ internal sealed class DispatchHarness : IAsyncDisposable
     /// <summary>Guards reputation-svc's gRPC service and its own internal routes (C033).</summary>
     public const string ReputationInternalKey = "mageride-c034-test-reputation-key";
 
+    /// <summary>Guards dispatch-svc's own <c>/v1/internal/**</c> — the no-show report and the D-05 ledger (C035).</summary>
+    public const string DispatchInternalKey = "mageride-c035-test-dispatch-key";
+
     /// <summary>Colombo Fort — every test's pickup unless it says otherwise.</summary>
     public static readonly GeoPoint Pickup = new(6.9344, 79.8428);
 
@@ -354,6 +357,183 @@ internal sealed class DispatchHarness : IAsyncDisposable
 
         return Client.SendAsync(request);
     }
+
+    /// <summary>GETs from dispatch-svc as <paramref name="bearer"/>.</summary>
+    public Task<HttpResponseMessage> GetAsync(string path, string? bearer)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Get, path);
+
+        if (bearer is not null)
+        {
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", bearer);
+        }
+
+        return Client.SendAsync(request);
+    }
+
+    /// <summary>Calls one of dispatch-svc's own <c>/v1/internal/**</c> routes with the shared secret.</summary>
+    public Task<HttpResponseMessage> InternalAsync(
+        HttpMethod method, string path, object? body = null, string? apiKey = DispatchInternalKey)
+    {
+        ArgumentNullException.ThrowIfNull(method);
+
+        var request = new HttpRequestMessage(method, path);
+
+        if (method == HttpMethod.Post)
+        {
+            request.Content = JsonContent.Create(body ?? new { });
+            request.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString());
+        }
+
+        if (apiKey is not null)
+        {
+            request.Headers.Add("X-MageRide-Internal-Key", apiKey);
+        }
+
+        return Client.SendAsync(request);
+    }
+
+    // -----------------------------------------------------------------------------------------
+    // Scheduled rides, the Job Board and the Driver Level (C035)
+    // -----------------------------------------------------------------------------------------
+
+    /// <summary>Books a future ride through <c>POST /v1/rides/schedule</c>.</summary>
+    public Task<HttpResponseMessage> ScheduleRideAsync(
+        Guid passengerId,
+        DateTimeOffset pickupTime,
+        GeoPoint? pickup = null,
+        GeoPoint? destination = null,
+        string vehicleType = "three_wheeler",
+        bool includeDestination = true)
+    {
+        var from = pickup ?? Pickup;
+        var to = destination ?? Dropoff;
+
+        return PostAsync(
+            "/v1/rides/schedule",
+            new
+            {
+                pickupLat = from.Latitude,
+                pickupLng = from.Longitude,
+
+                // AL-36's negative case is "no destination at all", so the two members go missing
+                // together rather than arriving as nulls.
+                destLat = includeDestination ? to.Latitude : (double?)null,
+                destLng = includeDestination ? to.Longitude : (double?)null,
+                pickupTime,
+                vehicleType,
+            },
+            Tokens.Passenger(passengerId));
+    }
+
+    /// <summary>Books a ride and returns its <c>dispatch.scheduled_rides</c> id.</summary>
+    public async Task<Guid> ScheduleRideForAsync(
+        Guid passengerId, DateTimeOffset pickupTime, GeoPoint? pickup = null, string vehicleType = "three_wheeler")
+    {
+        using var response = await ScheduleRideAsync(passengerId, pickupTime, pickup, vehicleType: vehicleType);
+        Assert.Equal(System.Net.HttpStatusCode.Created, response.StatusCode);
+
+        var body = await ReadJsonAsync(response);
+        return Guid.Parse(body.GetProperty("scheduledRideId").GetString()!);
+    }
+
+    /// <summary>Reads the D-06 Job Board as a driver standing at <paramref name="origin"/>.</summary>
+    public Task<HttpResponseMessage> JobBoardAsync(SeededDriver driver, GeoPoint origin, int? radiusM = null)
+    {
+        ArgumentNullException.ThrowIfNull(driver);
+
+        var path = string.Create(
+            CultureInfo.InvariantCulture,
+            $"/v1/rides/job-board?lat={origin.Latitude}&lng={origin.Longitude}")
+            + (radiusM is { } radius ? $"&radius={radius.ToString(CultureInfo.InvariantCulture)}" : string.Empty);
+
+        return GetAsync(path, driver.Bearer);
+    }
+
+    /// <summary>Posts intent on a Job Board card (US-6A.5 — not an acceptance).</summary>
+    public Task<HttpResponseMessage> PostIntentAsync(SeededDriver driver, Guid scheduledRideId)
+    {
+        ArgumentNullException.ThrowIfNull(driver);
+        return PostAsync($"/v1/rides/job-board/{scheduledRideId}/intent", new { }, driver.Bearer);
+    }
+
+    /// <summary>Fires one T-30 sweep without waiting on the worker's ticker.</summary>
+    public async Task<int> MaterialiseDueScheduledRidesAsync()
+    {
+        // Awaited inside the scope: returning the task would dispose the scope — and with it the
+        // unit of work the sweep is holding its FOR UPDATE claim on — before the sweep finished.
+        await using var scope = Services.CreateAsyncScope();
+
+        return await scope.ServiceProvider
+            .GetRequiredService<MageRide.Dispatch.Scheduling.IScheduledRideService>()
+            .MaterialiseDueAsync(CancellationToken.None);
+    }
+
+    /// <summary>The scheduled booking as it now stands, straight from the table.</summary>
+    public async Task<ScheduledRideSnapshot> ReadScheduledRideAsync(Guid scheduledRideId)
+    {
+        await using var connection = await _postgres.OpenAsync();
+
+        return await connection.QuerySingleAsync<ScheduledRideSnapshot>(
+            "SELECT ride_id AS RideId, status AS Status FROM dispatch.scheduled_rides WHERE id = @Id;",
+            new { Id = scheduledRideId });
+    }
+
+    /// <summary>
+    /// Writes a passenger→driver star rating on a completed ride, as whoever collects ratings would
+    /// (US-18.1, <c>trips.ratings</c>). The subject id is not read by the level engine — only the
+    /// ratee, the direction and the stars are — so it need not be a real ride.
+    /// </summary>
+    public async Task RateDriverAsync(Guid driverId, Guid passengerId, int stars, int times = 1)
+    {
+        await using var connection = await _postgres.OpenAsync();
+
+        for (var i = 0; i < times; i++)
+        {
+            await connection.ExecuteAsync(
+                """
+                INSERT INTO trips.ratings (subject_kind, subject_id, rater_id, ratee_id, stars, direction)
+                VALUES ('ride', @SubjectId, @RaterId, @RateeId, @Stars, 'passenger_to_driver');
+                """,
+                new
+                {
+                    SubjectId = Guid.NewGuid(),
+                    RaterId = passengerId,
+                    RateeId = driverId,
+                    Stars = (short)stars,
+                });
+        }
+    }
+
+    /// <summary>The driver's level row, straight from the table.</summary>
+    public async Task<DriverLevelSnapshot?> ReadDriverLevelAsync(Guid driverId)
+    {
+        await using var connection = await _postgres.OpenAsync();
+
+        return await connection.QuerySingleOrDefaultAsync<DriverLevelSnapshot>(
+            """
+            SELECT level::int AS Level, rating_points AS RatingPoints,
+                   points_awarded_total AS PointsAwardedTotal
+              FROM dispatch.driver_levels WHERE driver_id = @DriverId;
+            """,
+            new { DriverId = driverId });
+    }
+
+    /// <summary>Every penalty row for a passenger, oldest first.</summary>
+    public async Task<IReadOnlyList<PenaltySnapshot>> ReadPenaltiesAsync(Guid passengerId)
+    {
+        await using var connection = await _postgres.OpenAsync();
+
+        return [.. await connection.QueryAsync<PenaltySnapshot>(
+            """
+            SELECT id AS Id, amount_minor::bigint AS AmountMinor, basis AS Basis, status AS Status,
+                   applied_ride_id AS AppliedRideId
+              FROM dispatch.cancellation_penalties WHERE passenger_id = @PassengerId
+             ORDER BY created_at, id;
+            """,
+            new { PassengerId = passengerId })];
+    }
+
     // -----------------------------------------------------------------------------------------
     // ride-svc, driven directly — the passenger half of the skeleton
     // -----------------------------------------------------------------------------------------
@@ -411,6 +591,86 @@ internal sealed class DispatchHarness : IAsyncDisposable
 
         using var response = await RideClient.SendAsync(request);
         Assert.Equal(System.Net.HttpStatusCode.OK, response.StatusCode);
+    }
+
+    /// <summary>The driver taps Accept, through ride-svc's real route (ADD §11.11).</summary>
+    public async Task AcceptOfferAsync(SeededDriver driver, Guid rideId, Guid offerId, long version)
+    {
+        ArgumentNullException.ThrowIfNull(driver);
+
+        using var request = new HttpRequestMessage(
+            HttpMethod.Post, $"/v1/rides/{rideId}/offer/{driver.DriverId}/accept")
+        {
+            Content = JsonContent.Create(new { offerId = offerId.ToString(), version }),
+        };
+
+        request.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString());
+        request.Headers.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", driver.Bearer);
+
+        using var response = await RideClient.SendAsync(request);
+        Assert.Equal(System.Net.HttpStatusCode.OK, response.StatusCode);
+    }
+
+    /// <summary>
+    /// The passenger cancels, through ride-svc's real route. It is the §11.12 matrix there — not
+    /// this test — that decides whether a penalty accrues and how much (R-03).
+    /// </summary>
+    public async Task<HttpResponseMessage> CancelRideAsync(Guid passengerId, Guid rideId, string reason = "OTHER")
+    {
+        // `version` is not optional on this route: R-02's optimistic concurrency is what stops a
+        // cancel racing an accept, so the caller has to say which ride it thinks it is cancelling.
+        var current = await ReadRideAsync(rideId);
+
+        var request = new HttpRequestMessage(HttpMethod.Post, $"/v1/rides/{rideId}/cancel")
+        {
+            Content = JsonContent.Create(new { reason, version = current.Version }),
+        };
+
+        request.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString());
+        request.Headers.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", Tokens.Passenger(passengerId));
+
+        return await RideClient.SendAsync(request);
+    }
+
+    /// <summary>
+    /// One <c>rides.outbox</c> row, parsed as the envelope dispatch-svc's consumer would receive.
+    /// </summary>
+    /// <remarks>
+    /// The wire shape is read from ride-svc's own outbox rather than hand-built, so a test that
+    /// drives the handler directly still fails if the two services stop agreeing about the payload
+    /// — which is the only thing a fabricated envelope could not catch.
+    /// </remarks>
+    public async Task<MageRide.Dispatch.Messaging.RideEventEnvelope> ReadRideEventAsync(
+        Guid rideId, string eventType)
+    {
+        await using var connection = await _postgres.OpenAsync();
+
+        var payload = await connection.QuerySingleOrDefaultAsync<string>(
+            """
+            SELECT payload::text FROM rides.outbox
+             WHERE aggregate_id = @RideId AND event_type = @EventType
+             ORDER BY id DESC LIMIT 1;
+            """,
+            new { RideId = rideId, EventType = eventType });
+
+        Assert.NotNull(payload);
+
+        var envelope = MageRide.Dispatch.Messaging.RideEventEnvelope.TryParse(payload);
+        Assert.NotNull(envelope);
+
+        return envelope;
+    }
+
+    /// <summary>Hands one <c>ride.events</c> envelope to the consumer's reaction table.</summary>
+    public async Task HandleRideEventAsync(MageRide.Dispatch.Messaging.RideEventEnvelope envelope)
+    {
+        await using var scope = Services.CreateAsyncScope();
+
+        await scope.ServiceProvider
+            .GetRequiredService<MageRide.Dispatch.Messaging.IRideEventHandler>()
+            .HandleAsync(envelope, CancellationToken.None);
     }
 
     /// <summary>
@@ -580,6 +840,12 @@ internal sealed class DispatchHarness : IAsyncDisposable
             ["Dispatch:RideServiceInternalKey"] = InternalApiKey,
             ["Dispatch:ReputationGrpcAddress"] = reputationGrpcUrl,
             ["Dispatch:ReputationInternalKey"] = ReputationInternalKey,
+            ["Dispatch:InternalApiKey"] = DispatchInternalKey,
+
+            // A test books a ride and fires the T-30 sweep in the same breath, so the floor that
+            // stops "scheduled" meaning "now" is lifted here and asserted on its own in
+            // SchedulingTests. The 30-minute lead itself is left at the D5' §3.7 value.
+            ["Dispatch:ScheduledMinimumLead"] = "00:00:00",
 
             // The gate's local memo is off so a block state a test has just written is seen by the
             // very next round. reputation-svc's own cache is zeroed for the same reason; what stays
@@ -593,6 +859,8 @@ internal sealed class DispatchHarness : IAsyncDisposable
             ["Dispatch:ConsumerEnabled"] = "false",
             ["Dispatch:PositionConsumerEnabled"] = "false",
             ["Dispatch:KeyspaceNotificationsEnabled"] = "false",
+            ["Dispatch:ScheduledWorkerEnabled"] = "false",
+            ["Dispatch:LevelWorkerEnabled"] = "false",
         };
 
         Merge(overrides, settings);
@@ -650,6 +918,13 @@ internal sealed class DispatchHarness : IAsyncDisposable
     /// harness is the sort of shortcut that later hides a real foreign-key bug.
     /// </summary>
     /// <remarks>
+    /// <c>trips.ratings</c> is another bounded context's table and only the <c>subject_kind =
+    /// 'ride'</c> rows are removed — those are the ones this suite writes, and the Driver Level
+    /// sweep scans the whole table by design (it is the engine's input). A rated driver left behind
+    /// by an earlier test is a driver the next test's sweep dutifully recounts, which turns "the
+    /// sweep found nothing to do" into an assertion about every test that ran before it.
+    /// </remarks>
+    /// <remarks>
     /// <c>rides.outbox</c> is drained rather than emptied, and that one is not cosmetic. Most tests
     /// run with ride-svc's dispatcher off, so their <c>ride.requested</c> rows sit undispatched;
     /// the moment a later test turns the dispatcher on, every one of them is published and the
@@ -661,11 +936,24 @@ internal sealed class DispatchHarness : IAsyncDisposable
     {
         await using (var connection = await postgres.OpenAsync())
         {
+            // `dispatch.job_board_intents` is listed explicitly rather than relying on CASCADE: a
+            // TRUNCATE that reaches a table nobody named is how a later test starts failing for a
+            // reason nobody wrote down. `dispatch.level_config` is a singleton and is reset rather
+            // than emptied — migration 0713 seeds it, and an empty one would silently fall back to
+            // the compiled defaults instead of exercising the read.
             await connection.ExecuteAsync(
                 """
                 TRUNCATE dispatch.candidate_scores, dispatch.offers, dispatch.driver_presence,
-                         dispatch.timers, dispatch.outbox, dispatch.command_log;
+                         dispatch.timers, dispatch.outbox, dispatch.command_log,
+                         dispatch.job_board_intents, dispatch.scheduled_rides,
+                         dispatch.driver_levels, dispatch.no_show_events,
+                         dispatch.cancellation_penalties;
+                UPDATE dispatch.level_config
+                   SET level_up_threshold = 500, no_show_penalty_points = 0,
+                       cancellation_penalty_points = 0, job_board_min_level = 2
+                 WHERE id = 1;
                 DELETE FROM rides.timers WHERE kind = 'offer_expiry';
+                DELETE FROM trips.ratings WHERE subject_kind = 'ride';
                 UPDATE rides.outbox SET dispatched_at = now() WHERE dispatched_at IS NULL;
                 """);
         }
@@ -717,3 +1005,13 @@ internal sealed record ScoreRow(
 /// <summary>The slice of <c>rides.rides</c> a dispatch assertion cares about.</summary>
 internal sealed record RideSnapshot(
     string State, Guid? CurrentOfferId, Guid? OfferedDriverId, DateTimeOffset? OfferExpiresAt, long Version);
+
+/// <summary>The slice of <c>dispatch.scheduled_rides</c> the T-30 assertions read (C035).</summary>
+internal sealed record ScheduledRideSnapshot(Guid? RideId, string Status);
+
+/// <summary>The slice of <c>dispatch.driver_levels</c> the level-engine assertions read (C035).</summary>
+internal sealed record DriverLevelSnapshot(int Level, int RatingPoints, int PointsAwardedTotal);
+
+/// <summary>The slice of <c>dispatch.cancellation_penalties</c> the D-05 assertions read (C035).</summary>
+internal sealed record PenaltySnapshot(
+    Guid Id, long AmountMinor, string Basis, string Status, Guid? AppliedRideId);

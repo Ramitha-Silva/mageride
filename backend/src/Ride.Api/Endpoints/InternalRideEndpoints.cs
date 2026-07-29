@@ -54,6 +54,12 @@ public static class InternalRideEndpoints
             .AllowAnonymous()
             .AddEndpointFilter(new InternalApiKeyFilter(apiKey));
 
+        // Δ C035: mapped before the templated routes so `/scheduled` is never mistaken for a ride
+        // id. It is the fourth command of the same family — dispatch-svc owns the schedule and
+        // ride-svc owns the aggregate, so the T-30 materialisation is a command, not a foreign
+        // INSERT into rides.rides.
+        internalRides.MapPost("/scheduled", MaterialiseScheduledAsync).WithName("materialiseScheduledRide");
+
         internalRides.MapPost("/{rideId}/matching", MarkMatchingAsync).WithName("markRideMatching");
         internalRides.MapPost("/{rideId}/offer", PlaceOfferAsync).WithName("placeRideOffer");
         internalRides.MapPost("/{rideId}/offer/expire", ExpireOfferAsync).WithName("expireRideOffer");
@@ -76,6 +82,26 @@ public static class InternalRideEndpoints
         var ride = await service.MarkMatchingAsync(RequireRideId(rideId), body?.Version, cancellationToken);
 
         return TypedResults.Ok(RideStateChangeResponse.From(ride));
+    }
+
+    private static async Task<Ok<RideStateChangeResponse>> MaterialiseScheduledAsync(
+        MaterialiseScheduledBody? body, IRideService service, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(service);
+
+        var booking = await service.MaterialiseScheduledAsync(
+            new MaterialiseScheduledRideCommand(
+                ScheduledRideId: RequireId(body?.ScheduledRideId, "scheduledRideId"),
+                PassengerId: RequireId(body?.PassengerId, "passengerId"),
+                Pickup: body?.Pickup,
+                Dropoff: body?.Dropoff,
+                VehicleType: body?.VehicleType,
+                PaymentMethod: body?.PaymentMethod),
+            cancellationToken);
+
+        // 200 on a replay as well as on a first call: the contract's only success is 200, and a
+        // scheduler that retried after a timeout needs the ride id, not a different status code.
+        return TypedResults.Ok(RideStateChangeResponse.From(booking.Ride));
     }
 
     private static async Task<Ok<OfferPlacedResponse>> PlaceOfferAsync(

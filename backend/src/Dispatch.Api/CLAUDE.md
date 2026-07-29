@@ -1,4 +1,4 @@
-# dispatch-svc (C023 ws-dispatch-stub, C034 core) — Mode C presence and the offer loop
+# dispatch-svc (C023 ws-dispatch-stub, C034 core, C035 scheduling + levels) — Mode C presence, the offer loop, the Job Board
 
 Stack: .NET 10 Minimal API + Dapper over Npgsql + StackExchange.Redis + Confluent.Kafka +
 MQTTnet + a `reputation.v1` gRPC client + `pocketken.H3`. References `MageRide.Shared` (C002).
@@ -17,16 +17,24 @@ which wins over this file and over the code.
 |---|---|
 | `POST /v1/standby/online` | D3' dispatch-svc route table, US-6A.1 |
 | `POST /v1/standby/offline` | D3' dispatch-svc route table |
+| `POST /v1/rides/schedule` · `DELETE /v1/rides/schedule/{id}` | D3' Δ 2026-06-28 AL-36, US-6A.4 |
+| `GET /v1/rides/job-board` · `POST /v1/rides/job-board/{id}/intent` | D-06, US-6A.5 |
+| `GET /v1/rides/scheduled/{driverId}` | US-6A.15 |
+| `GET /v1/drivers/{id}/level` · `/stats` | US-6A.6, US-6A.14 |
+| `POST /v1/internal/drivers/{id}/no-show` | US-6A.7 |
+| `PUT /v1/admin/drivers/level-config` | US-14.12 |
+| `GET`/`POST /v1/internal/passengers/{id}/penalties[/settle]` | **Δ C035** — D5' §7.1's read and write halves |
 
-There is still no third route. The offer loop is driven by `ride.events`, `telemetry.normalized`
-and `veh/+/status`, not by HTTP.
+The offer loop itself is still driven by `ride.events`, `telemetry.normalized` and `veh/+/status`,
+not by HTTP. None of the routes above places an offer.
 
-**Not here, on purpose.** Directional Travel (DT-01..DT-08) is **C036**; scheduled rides, the Job
-Board and its intents, the Driver Level *engine*, `dispatch.no_show_events` and the Rs 50
-cancellation-penalty records are **C035**; the FCM/SignalR push that turns `offer.created` into a
-phone buzzing is **C024/C051**. The Driver Level is *read* here (it is a scoring term) and written
-by reputation-svc, which C033's fence makes its sole writer. All are left out rather than stubbed —
-a gate that always passes reads like a gate that works.
+**Not here, on purpose.** Directional Travel (DT-01..DT-08) and
+`PUT /v1/admin/dispatch/directional-config` are **C036**; the FCM/SignalR push that turns
+`offer.created` into a phone buzzing is **C024/C051**; the money that settles a penalty is
+**fare-svc's** — this service records the debt and exposes it, and writes no ledger entry. The
+Driver Level's *level-down-on-reports* rule and the admin appeal restore are **reputation-svc's**
+(C033). All are left out rather than stubbed — a gate that always passes reads like a gate that
+works.
 
 ## Rules that are load-bearing
 
@@ -109,6 +117,71 @@ a gate that always passes reads like a gate that works.
   construction instead — deterministic `Idempotency-Key`s, conditional `UPDATE`s guarded on the
   status they expect, and partial unique indexes for the arming.
 
+## Scheduling, the Job Board and the Driver Level (C035)
+
+- **The booking table is its own timer.** No `dispatch.timers` row is armed for T-30 and none
+  could be: that table's `ride_id` has a foreign key onto `rides.rides`, and at T-30 the ride does
+  not exist — creating it is the job. `ix_sched_due` (0704) is a partial index on
+  `pickup_time WHERE status = 'SCHEDULED'`, which *is* "the next thing to fire", and the status
+  column is the claim (`FOR UPDATE SKIP LOCKED`).
+- **The sweep materialises and stops; the event dispatches.** `POST /v1/internal/rides/scheduled`
+  (Δ C035 on ride-svc) turns the booking into a ride and emits `ride.requested` in its own
+  transaction; the ordinary consumer runs the ordinary round. Dispatching from the sweep as well
+  would give one ride two racing first rounds. It is idempotent because the **scheduled-ride id is
+  the `clientRequestId`** — R-18's `ux_rides_idem` is what makes a retried sweep find the ride its
+  first attempt created.
+- **A scheduled round is intent-only, and every round of it.** `DispatchService.DispatchAsync`
+  looks the booking up by ride id and, when it finds one, the raw candidate set is
+  `dispatch.job_board_intents` instead of the H3 ring, at the 30 km board radius instead of the
+  5 km on-demand one. A decline re-runs the same branch, so the cascade walks the intent list.
+  **A scheduled ride nobody posted intent on is never offered to the open pool** — D5' §3.7 names
+  intent-posters and nobody else, and it ends in `ExpiredNoDriver` at the ordinary 120 s deadline.
+  See the C035 handoff: that is the spec read literally, and it is a product question.
+- **§3.7 is a different rule from §3.3, not a re-weighting of it.** The Job Board dispatch orders
+  by distance and breaks ties on the higher level; the weighted score is still computed and stored,
+  and `breakdown.ordering = "job-board-proximity"` says which rule produced the `rank`. Folding it
+  into the weights would put a distant Level-3 driver ahead of a near Level-2 one, which is exactly
+  what "closest … by Level" does not say.
+- **Two services write `dispatch.driver_levels`, and one lock keeps it safe.** reputation-svc owns
+  every rule driven by its counters (three reports → −1 and the delisting, the appeal restore);
+  this service owns the level-*up* from `trips.ratings` — which C033's own CLAUDE.md hands over —
+  and the US-6A.7 no-show decrement D3' files here. Both sides take `SELECT … FOR UPDATE` on the
+  row first, and this side takes only that row, so it holds a suffix of C033's documented
+  block-state → counters → level order and no cycle is possible.
+- **The level engine is a recompute, not a queue.** Points are summed from `trips.ratings` and
+  compared against `points_awarded_total` (migration 0713); only the delta is applied. Running it
+  twice, on two replicas, or after a crash awards nothing twice — which a rating-event consumer
+  could only manage if delivery were exactly-once, and D6' §2.3 says it is not. Only 4★ and 5★
+  count, at their own star value (D5' §4.2), and only `subject_kind = 'ride'` ratings: this level
+  gates Mode C, and a Mode A/B session rating is trip-state-svc's plane.
+- **A level once earned is not un-earned by the evidence disappearing.** A rating total that goes
+  *down* (a PDPA erasure) moves the watermark and leaves the level alone; §4.2's level-down list is
+  three reports and a no-show.
+- **The no-show insert is the claim.** `ux_no_show_driver_ride` (0713) is what makes US-6A.7 one
+  decrement per missed ride however many times the report arrives — the level row is locked
+  *before* the audit insert, so the two are one atomic act. A report with no `rideId` cannot be
+  deduplicated and is counted as given; the index is partial for that reason.
+- **`level_config.cancellation_penalty_points` is stored and never read.** `dispatch.yaml`'s
+  `LevelConfig` names the knob so the admin surface has to round-trip it, but §11.12 gives a driver
+  cancellation a reputation hit and a brief delist — both reputation-svc's, both already applied
+  there — and no spec gives it a level or a point cost. Applying one off
+  `reputation.driver_cancelled` would also be the one write in this service a redelivery could
+  double. Raised in the C035 handoff.
+- **The penalty ledger is recorded here and settled by fare-svc.** `cancellation.penalty.accrued`
+  becomes a `dispatch.cancellation_penalties` row; `GET`/`POST /v1/internal/passengers/{id}/
+  penalties[/settle]` are how fare-svc reads the debt before pricing the next trip and marks it
+  paid after posting the ledger entries. **No ledger entry is written here** (D-09). All three
+  §11.12 bases are recorded, not only the Rs 50 — the table is the passenger's whole outstanding
+  balance, which is what US-6A.10b's "clear outstanding balance" is evaluated against — and `basis`
+  tells fare-svc that a `full_fare` amount is the *quoted* fare to be re-metered.
+- **`ux_penalty_apply` guards nothing; the conditional `UPDATE` does.** D5' §7.1 names
+  `UNIQUE(penalty_id, applied_ride_id)`, and because `id` is the primary key that pair is unique by
+  construction (0706's own header says so). What actually prevents a double-apply is that the
+  settle statement claims `FOR UPDATE SKIP LOCKED` and updates only rows still `OUTSTANDING`, so a
+  retry and a later trip both settle nothing and report zero — the same answer as "nothing owed",
+  deliberately, because an amount reported twice is an amount charged twice. The accrual side is
+  guarded by `ux_penalty_accrual(original_ride_id, basis)` (0713).
+
 ## Configuration
 
 `Dispatch:RideServiceInternalKey` must equal ride-svc's `Ride:InternalApiKey`. Unset means every
@@ -136,11 +209,19 @@ that is switched off; `DispatchApplication.WarnAboutGatesThatCannotClose` is the
 | `OfferReleaseGrace` | 5 s | R-15. **No spec pins it** — argued against the 15 s offer window |
 | `TimerPollInterval` / `TimerBatchSize` / `TimerLease` | 500 ms / 100 / 30 s | R-04's "≤1 s after expiry" |
 | `MqttServiceName` | `dispatch` | mints `svc-dispatch`, which `acl.conf` grants `veh/#` |
+| `JobBoardRadiusM` | 30 000 | D-06 / `GET /v1/rides/job-board?radius=30km` — the one radius a spec pins |
+| `ScheduledLeadTime` | 30 min | D5' §3.7 "goes live 30 min prior" |
+| `ScheduledMinimumLead` / `ScheduledMaximumLead` | 30 min / 30 d | **no spec** — the floor is the lead time; the ceiling is how long a tariff version lasts |
+| `ScheduledDispatchGrace` | 30 min | **no spec** — how long a booking that will not materialise is retried before it is abandoned |
+| `ScheduledPollInterval` / `ScheduledBatchSize` | 30 s / 50 | a booking is placed half an hour early; this is not the R-04 backstop |
+| `LevelSweepInterval` / `LevelSweepBatchSize` | 1 min / 200 | 500 points is a hundred five-star rides — a level is a slow fact |
+| `InternalApiKey` | *(unset)* | D3' §0's mTLS family, interim shared secret. **Unset ⇒ `/v1/internal/**` is not mapped** |
 
 Each of `ExpiryWorkerEnabled`, `DispatchTimerWorkerEnabled`, `ConsumerEnabled`,
 `PositionConsumerEnabled`, `KeyspaceNotificationsEnabled`, `LastWillEnabled`,
-`ReputationGateEnabled` and `WalletGateEnabled` gates one thing. `LastWillEnabled` is **off** by
-default because it is the only part of this service that needs a broker; everything else is on.
+`ScheduledWorkerEnabled`, `LevelWorkerEnabled`, `ReputationGateEnabled` and `WalletGateEnabled`
+gates one thing. `LastWillEnabled` is **off** by default because it is the only part of this
+service that needs a broker; everything else is on.
 
 **Redis needs `notify-keyspace-events Ex`** for the D-07 accelerator;
 `infra/docker-compose.dev.slim.yml` and the TestKit fixture both set it on the server's command
@@ -156,9 +237,12 @@ itself, which needs an admin connection the kernel deliberately does not open.
 
 `db/migrations/0710` (C023) — `dispatch.command_log`. **`0711`** (C034) — `dispatch.timers` gains
 `ride_id`, a nullable `driver_id`, a `payload` and the two live-timer partial unique indexes.
-**`0712`** (C034) — `dispatch.offers.released_at` and the widened `ux_offers_driver_live`. Neither
-adds a table, so `migrate-verify.sh` still expects **13** dispatch tables. Both file headers argue
-the change; both are micro-change-sets in the C034 handoff.
+**`0712`** (C034) — `dispatch.offers.released_at` and the widened `ux_offers_driver_live`.
+**`0713`** (C035) — `scheduled_rides.payment_method` + `ux_sched_ride`,
+`driver_levels.points_awarded_total`, `ux_no_show_driver_ride`, `cancellation_penalties.basis` +
+`ux_penalty_accrual`, and the singleton `dispatch.level_config`. 0713 is the only one that adds a
+table, so `migrate-verify.sh` now expects **14** dispatch tables, not 13. Every file header argues
+its change and every one is a micro-change-set in the C034 or C035 handoff.
 
 ## The one thing that is not dispatch's table
 

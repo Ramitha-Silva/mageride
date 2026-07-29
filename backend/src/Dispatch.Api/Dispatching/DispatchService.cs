@@ -134,6 +134,7 @@ public sealed class DispatchService(
     IOfferRepository offers,
     IOfferTimerRepository timers,
     IDispatchTimerRepository dispatchTimers,
+    IScheduledRideRepository scheduledRides,
     IDriverIndex index,
     IRideServiceClient rideService,
     IReputationGate reputationGate,
@@ -227,15 +228,30 @@ public sealed class DispatchService(
             return await GiveUpAsync(ride.RideId, "global-timeout", cancellationToken);
         }
 
-        // --- H3 coarse pre-filter (R-06, D-06) -------------------------------------------------
-        var grid = new H3Grid(_options.H3Resolution, _options.H3RingK);
-        var cells = grid.DiskAt(ride.Pickup);
-        var raw = await index.PreFilterAsync(ride.VehicleType, cells, cancellationToken);
+        // --- who is even in the running -------------------------------------------------------
+        // A ride materialised from a Job Board booking has a candidate list decided half an hour
+        // ago: D5' §3.7 dispatches it "to closest intent-submitting driver by Level", so the raw
+        // set is the intent list rather than whoever the H3 ring happens to hold. The lookup is by
+        // ride id (ux_sched_ride, migration 0713) and lives here rather than on the callers, so
+        // every entry point — the first round, a decline, an expiry, a redelivered ride.requested —
+        // takes the same branch without having to know it exists.
+        var scheduled = await scheduledRides.FindByRideAsync(connection, ride.RideId, cancellationToken);
+
+        var (raw, searchRadiusM, ordering) = scheduled is null
+            ? (await PreFilterAsync(ride, cancellationToken), _options.SearchRadiusM, CandidateOrdering.WeightedScore)
+            : (await scheduledRides.IntentDriversAsync(connection, scheduled.Id, cancellationToken),
+
+               // The intent-posters saw this ride on a 30 km board, so the post-filter's radius is
+               // that board's. Keeping the 5 km on-demand radius here would silently drop the very
+               // drivers who chose the ride.
+               _options.JobBoardRadiusM,
+               CandidateOrdering.JobBoardProximity);
 
         // --- exact-distance post-filter, MANDATORY (D5' §3.1) ----------------------------------
-        // The cell set above spans tens of kilometres; it decided which KEYS to read and nothing
-        // else. ST_DWithin on dispatch.driver_presence is what decides who is actually near, and
-        // the same query applies the five §3.2 gates that are predicates on rows it already holds.
+        // Whatever produced the raw set, it decided which drivers to CONSIDER and nothing else.
+        // ST_DWithin on dispatch.driver_presence is what decides who is actually near, and the same
+        // query applies the five §3.2 gates that are predicates on rows it already holds — an
+        // intent posted last week does not survive going offline, a lapsed insurance or a block.
         var nearby = await candidates.NarrowAsync(
             connection,
             new CandidateQuery(
@@ -243,14 +259,15 @@ public sealed class DispatchService(
                 ride.PassengerId,
                 ride.Pickup,
                 ride.VehicleType,
-                _options.SearchRadiusM,
+                searchRadiusM,
                 _options.PositionFreshness),
             raw,
             cancellationToken);
 
         logger.LogInformation(
-            "Ride {RideId}: {Cells} H3 res-{Resolution} cells → {Raw} indexed drivers → {Nearby} within {RadiusM} m",
-            ride.RideId, cells.Count, _options.H3Resolution, raw.Count, nearby.Count, _options.SearchRadiusM);
+            "Ride {RideId}: {Raw} candidate drivers ({Source}) → {Nearby} within {RadiusM} m",
+            ride.RideId, raw.Count, scheduled is null ? "standby pool" : "job-board intents", nearby.Count,
+            searchRadiusM);
 
         if (nearby.Count == 0)
         {
@@ -265,7 +282,7 @@ public sealed class DispatchService(
 
         var wallet = await walletGate.EvaluateAsync(connection, identities, cancellationToken);
 
-        var scored = scorer.Score(ride, nearby, reputation, wallet);
+        var scored = scorer.Score(ride, nearby, reputation, wallet, ordering);
         var eligible = scored.Where(static c => c.Eligible).ToList();
 
         // R-11: the audit records everyone considered — including everyone excluded, and by which
@@ -309,6 +326,28 @@ public sealed class DispatchService(
 
         return new DispatchOutcome(
             DispatchResult.NoCandidate, null, null, null, null, raw.Count, nearby.Count, eligible.Count);
+    }
+
+    /// <summary>
+    /// The H3 coarse pre-filter (R-06, D-06) — the ordinary Mode C round's raw candidate set.
+    /// </summary>
+    /// <remarks>
+    /// The cell set spans tens of kilometres; it is a set of Redis keys to read and never a
+    /// distance bound. <see cref="Persistence.CandidateRepository"/> is what decides who is near.
+    /// </remarks>
+    private async Task<IReadOnlyList<Guid>> PreFilterAsync(
+        RideDispatchRequest ride, CancellationToken cancellationToken)
+    {
+        var grid = new H3Grid(_options.H3Resolution, _options.H3RingK);
+        var cells = grid.DiskAt(ride.Pickup);
+
+        var raw = await index.PreFilterAsync(ride.VehicleType, cells, cancellationToken);
+
+        logger.LogDebug(
+            "Ride {RideId}: {Cells} H3 res-{Resolution} cells held {Raw} indexed drivers",
+            ride.RideId, cells.Count, _options.H3Resolution, raw.Count);
+
+        return raw;
     }
 
     /// <summary>

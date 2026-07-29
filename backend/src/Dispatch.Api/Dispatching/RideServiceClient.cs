@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using MageRide.Dispatch.Configuration;
 using MageRide.Shared.Http;
+using MageRide.Shared.Primitives;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -66,7 +67,35 @@ public interface IRideServiceClient
     /// and the reason the caller waits for the offer to settle first.
     /// </remarks>
     Task<RideCommandResult> SystemCancelAsync(Guid rideId, string reason, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Δ C035: turns a due <c>dispatch.scheduled_rides</c> row into a <c>rides.rides</c> row at
+    /// T-30 min, and returns the ride it became.
+    /// </summary>
+    /// <remarks>
+    /// The fifth command, and the reason there is one: <c>dispatch.offers.ride_id</c> has a foreign
+    /// key onto <c>rides.rides</c>, so the T-30 offer cannot exist before the ride does — and R-01
+    /// says dispatch-svc may not create it. ride-svc's own <c>ux_rides_idem</c> makes the call
+    /// idempotent on <c>(passengerId, scheduledRideId)</c>, so a sweep that retried after a timeout
+    /// gets the ride its first attempt created rather than a second booking.
+    /// </remarks>
+    Task<MaterialisedRideResult> MaterialiseScheduledAsync(
+        MaterialiseScheduledRide command, CancellationToken cancellationToken);
 }
+
+/// <summary>What dispatch-svc sends to <c>POST /v1/internal/rides/scheduled</c>.</summary>
+public sealed record MaterialiseScheduledRide(
+    Guid ScheduledRideId,
+    Guid PassengerId,
+    GeoPoint Pickup,
+    GeoPoint Dropoff,
+    string VehicleType,
+    string PaymentMethod);
+
+/// <param name="RideId">The ride ride-svc created, or the one it had already created.</param>
+public sealed record MaterialisedRideResult(
+    bool Succeeded, HttpStatusCode Status, string? ErrorCode, long? Version, Guid? RideId)
+    : RideCommandResult(Succeeded, Status, ErrorCode, Version);
 
 /// <param name="Succeeded"><see langword="true"/> only on a 2xx.</param>
 /// <param name="Status">The HTTP status, so a caller can tell a race (409/410) from a fault.</param>
@@ -123,7 +152,7 @@ public sealed class RideServiceClient(
             },
             IdempotencyKey("offer", offerId),
             cancellationToken,
-            readOfferExpiry: true);
+            ResponseShape.OfferPlaced);
 
         return (OfferPlacedResult)result;
     }
@@ -162,6 +191,32 @@ public sealed class RideServiceClient(
             cancellationToken);
     }
 
+    public async Task<MaterialisedRideResult> MaterialiseScheduledAsync(
+        MaterialiseScheduledRide command, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+
+        // Keyed by the booking, so the header key and ride-svc's own ux_rides_idem agree about what
+        // "the same command" means. A random key per attempt would make the kernel's replay log
+        // treat a retry as a new materialisation, and only the database index would stop it.
+        var result = await SendAsync(
+            "/v1/internal/rides/scheduled",
+            new
+            {
+                scheduledRideId = command.ScheduledRideId.ToString(),
+                passengerId = command.PassengerId.ToString(),
+                pickup = new { lat = command.Pickup.Latitude, lng = command.Pickup.Longitude },
+                dropoff = new { lat = command.Dropoff.Latitude, lng = command.Dropoff.Longitude },
+                vehicleType = command.VehicleType,
+                paymentMethod = command.PaymentMethod,
+            },
+            IdempotencyKey("schedule", command.ScheduledRideId),
+            cancellationToken,
+            ResponseShape.Materialised);
+
+        return (MaterialisedRideResult)result;
+    }
+
     /// <summary>
     /// A stable key per (operation, subject). Long enough for the kernel's 16-character minimum and
     /// well under its 128-character ceiling.
@@ -169,12 +224,25 @@ public sealed class RideServiceClient(
     internal static string IdempotencyKey(string operation, Guid subject) =>
         string.Create(CultureInfo.InvariantCulture, $"dispatch-{operation}-{subject}");
 
+    /// <summary>Which of the three 200 bodies <c>ride.yaml</c> returns to this service.</summary>
+    private enum ResponseShape
+    {
+        /// <summary><c>RideStateChange</c> — matching, offer/expire, system-cancel.</summary>
+        StateChange,
+
+        /// <summary><c>OfferPlaced</c> — a state change plus ride-svc's authoritative deadline.</summary>
+        OfferPlaced,
+
+        /// <summary>A <c>RideStateChange</c> read for its <c>rideId</c> (Δ C035).</summary>
+        Materialised,
+    }
+
     private async Task<RideCommandResult> SendAsync(
         string path,
         object body,
         string idempotencyKey,
         CancellationToken cancellationToken,
-        bool readOfferExpiry = false)
+        ResponseShape shape = ResponseShape.StateChange)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, path)
         {
@@ -200,19 +268,27 @@ public sealed class RideServiceClient(
             logger.LogInformation(
                 "ride-svc answered {Status} ({ErrorCode}) to POST {Path}", (int)response.StatusCode, code, path);
 
-            return readOfferExpiry
-                ? new OfferPlacedResult(false, response.StatusCode, code, null, null)
-                : new RideCommandResult(false, response.StatusCode, code, null);
+            return shape switch
+            {
+                ResponseShape.OfferPlaced => new OfferPlacedResult(false, response.StatusCode, code, null, null),
+                ResponseShape.Materialised => new MaterialisedRideResult(false, response.StatusCode, code, null, null),
+                _ => new RideCommandResult(false, response.StatusCode, code, null),
+            };
         }
 
-        var (version, expiresAt) = ReadSuccess(payload);
+        var success = ReadSuccess(payload);
 
-        return readOfferExpiry
-            ? new OfferPlacedResult(true, response.StatusCode, null, version, expiresAt)
-            : new RideCommandResult(true, response.StatusCode, null, version);
+        return shape switch
+        {
+            ResponseShape.OfferPlaced =>
+                new OfferPlacedResult(true, response.StatusCode, null, success.Version, success.OfferExpiresAt),
+            ResponseShape.Materialised =>
+                new MaterialisedRideResult(true, response.StatusCode, null, success.Version, success.RideId),
+            _ => new RideCommandResult(true, response.StatusCode, null, success.Version),
+        };
     }
 
-    private static (long? Version, DateTimeOffset? OfferExpiresAt) ReadSuccess(string payload)
+    private static SuccessBody ReadSuccess(string payload)
     {
         try
         {
@@ -227,13 +303,22 @@ public sealed class RideServiceClient(
                     ? deadline
                     : null;
 
-            return (version, expiresAt);
+            Guid? rideId =
+                root.TryGetProperty("rideId", out var r) && r.ValueKind is JsonValueKind.String &&
+                Guid.TryParse(r.GetString(), out var parsedRide)
+                    ? parsedRide
+                    : null;
+
+            return new SuccessBody(version, expiresAt, rideId);
         }
         catch (JsonException)
         {
-            return (null, null);
+            return new SuccessBody(null, null, null);
         }
     }
+
+    /// <summary>The three members any of ride-svc's 200 bodies may carry.</summary>
+    private sealed record SuccessBody(long? Version, DateTimeOffset? OfferExpiresAt, Guid? RideId);
 
     /// <summary>
     /// The kebab code out of an RFC 7807 body. D3' §0 carries it in the <c>type</c> URI

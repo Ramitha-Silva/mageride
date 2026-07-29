@@ -916,6 +916,72 @@ paths:
   # -------------------------------------------------------------------------------------------
   # Internal (mTLS)
   # -------------------------------------------------------------------------------------------
+  /v1/internal/rides/scheduled:
+    post:
+      operationId: materialiseScheduledRide
+      summary: Turn a due scheduled ride into a real ride aggregate.
+      description: |
+        **Δ C035 (micro-change-set into D3' ride-svc).** At T-30 min dispatch-svc turns a
+        `dispatch.scheduled_rides` row into a `rides.rides` row — `dispatch.yaml`'s
+        `ScheduledRide.rideId` is documented as "`null` until dispatch materialises the ride at
+        T-30 min" and `dispatch.offers.ride_id` has a foreign key onto `rides.rides`, so the
+        offer cannot exist before the ride does. `POST /v1/rides/request` cannot serve: it is
+        Bearer-authenticated as the passenger and demands a `fareEstimateToken` signed by
+        fare-svc, neither of which a scheduler has 30 minutes later.
+
+        **ride-svc stays the sole writer of `rides.state`** (R-01) — this is the same shape as
+        `matching` and `offer`, a command rather than a foreign write.
+
+        Idempotent by `(passengerId, scheduledRideId)` through `ux_rides_idem` (R-18): the
+        scheduled-ride id **is** the `clientRequestId`, so a retried materialisation returns the
+        ride the first call created and books nothing twice. Emits `ride.requested`, which is what
+        drives the ordinary dispatch cascade.
+
+        No `fareEstimateToken` and therefore no quote: the price of a ride 30 minutes from now is
+        not the price quoted when it was booked (D5' §1.4), so `fareEstimateMinor` is absent and
+        fare-svc meters it. The booked pickup time is not echoed onto the ride either —
+        `rides.rides` has no `scheduled_at` column and `dispatch.scheduled_rides.pickup_time` is
+        where it lives. Both are recorded in the C035 handoff.
+      tags: [rides]
+      security:
+        - internalKey: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [scheduledRideId, passengerId, pickup, dropoff, vehicleType]
+              properties:
+                scheduledRideId:
+                  description: The `dispatch.scheduled_rides` id; becomes the ride's `clientRequestId`.
+                  allOf:
+                    - $ref: './_shared.yaml#/components/schemas/Ulid'
+                passengerId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+                pickup:
+                  $ref: './_shared.yaml#/components/schemas/Place'
+                dropoff:
+                  $ref: './_shared.yaml#/components/schemas/Place'
+                vehicleType:
+                  $ref: './_shared.yaml#/components/schemas/RideVehicleType'
+                paymentMethod:
+                  $ref: '#/components/schemas/RidePaymentMethod'
+      responses:
+        '200':
+          description: The ride exists and is `Requested`. Returned on a first call and on a replay alike.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RideStateChange'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, not-found, active-ride-exists, booking-disabled]
+
   /v1/internal/rides/{rideId}/matching:
     post:
       operationId: markRideMatching

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using MageRide.Dispatch.Dispatching;
+using MageRide.Dispatch.Domain;
 using MageRide.Shared.Http;
 using MageRide.Shared.Primitives;
 
@@ -21,6 +22,19 @@ public static class RideEventTypes
     /// caused it rather than leaving a live timer against a terminal ride.
     /// </summary>
     public const string ExpiredNoDriver = "ride.expired_no_driver";
+
+    /// <summary>
+    /// §11.12's debt statement, riding alongside a cancellation terminal. Consumed into
+    /// <c>dispatch.cancellation_penalties</c>, which is where D5' §7.1 has the Rs 50 wait for the
+    /// passenger's next completed trip (C035).
+    /// </summary>
+    public const string PenaltyAccrued = "cancellation.penalty.accrued";
+
+    /// <summary>
+    /// A driver did not reach the pickup and the rider gave up (§11.12). US-6A.7's level decrement;
+    /// the same idempotent path <c>POST /v1/internal/drivers/{id}/no-show</c> uses (C035).
+    /// </summary>
+    public const string NoShowDriver = "ride.no_show_driver";
 }
 
 /// <summary>The <c>payload</c> member of a <c>ride.events</c> envelope.</summary>
@@ -61,7 +75,20 @@ public sealed record RideEventPayload(
     /// <c>candidate_scores.package_size_compatible</c> stays NULL and says so. Raised as a
     /// micro-change-set in the C034 handoff.
     /// </remarks>
-    string? PackageSize = null);
+    string? PackageSize = null,
+
+    /// <summary>
+    /// <c>cancellation.penalty.accrued</c> only — LKR minor units, and for
+    /// <see cref="PenaltyBases.FullFare"/> the <em>quoted</em> fare rather than the metered one
+    /// (C035, D5' §7.1).
+    /// </summary>
+    long? AmountMinor = null,
+
+    /// <summary>Which §11.12 rule accrued the debt: <c>cancellation_fee</c> | <c>no_show_fee</c> | <c>full_fare</c>.</summary>
+    string? Basis = null,
+
+    /// <summary>Who the money is owed to — the driver whose accepted ride was cancelled (AL-16).</summary>
+    Guid? AffectedDriverId = null);
 
 /// <summary>A coordinate as D6' §2.2 renders one.</summary>
 public sealed record RideEventPoint(double Lat, double Lng);

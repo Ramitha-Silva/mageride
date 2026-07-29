@@ -163,6 +163,19 @@ public sealed record AcceptOfferResponse(Guid RideId, string State, long Version
 /// <summary>The body of <c>POST /v1/internal/rides/{rideId}/matching</c>.</summary>
 public sealed record MarkMatchingBody(long? Version);
 
+/// <summary>The body of <c>POST /v1/internal/rides/scheduled</c> (Δ C035).</summary>
+/// <param name="ScheduledRideId">
+/// The <c>dispatch.scheduled_rides</c> id. Becomes the ride's <c>clientRequestId</c>, which is
+/// what makes the call idempotent under R-18.
+/// </param>
+public sealed record MaterialiseScheduledBody(
+    string? ScheduledRideId,
+    string? PassengerId,
+    RidePlace? Pickup,
+    RidePlace? Dropoff,
+    string? VehicleType,
+    string? PaymentMethod);
+
 /// <summary>The body of <c>POST /v1/internal/rides/{rideId}/offer</c>.</summary>
 /// <param name="TtlSeconds">
 /// Offer window; omitted means <c>Ride:OfferTtl</c> (15 s, D5' §3.5). The deadline itself is

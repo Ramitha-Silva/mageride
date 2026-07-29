@@ -18,7 +18,28 @@ public interface ICandidateScorer
         RideDispatchRequest ride,
         IReadOnlyList<Candidate> candidates,
         IReadOnlyDictionary<Guid, ReputationVerdict> reputation,
-        IReadOnlyDictionary<Guid, WalletVerdict> wallet);
+        IReadOnlyDictionary<Guid, WalletVerdict> wallet,
+        CandidateOrdering ordering = CandidateOrdering.WeightedScore);
+}
+
+/// <summary>Which rule decides who the cascade tries first.</summary>
+public enum CandidateOrdering
+{
+    /// <summary>D5' §3.3's weighted score — every ordinary Mode C round.</summary>
+    WeightedScore,
+
+    /// <summary>
+    /// D5' §3.7's Job Board rule: "dispatched to closest intent-submitting driver by Level (ties →
+    /// higher level rung first)". Distance decides; the level breaks the tie.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately <em>not</em> a re-weighting of the §3.3 score. §3.7 is a different rule for a
+    /// different situation — every candidate here chose this ride half an hour ago, so proximity is
+    /// the only thing left that serves the passenger — and expressing it as weights would make the
+    /// two indistinguishable in the audit and would put a distant Level-3 driver ahead of a nearby
+    /// Level-2 one, which is exactly what "closest … by Level" does not say.
+    /// </remarks>
+    JobBoardProximity,
 }
 
 /// <inheritdoc cref="ICandidateScorer"/>
@@ -59,7 +80,8 @@ public sealed class CandidateScorer(IOptions<DispatchOptions> options) : ICandid
         RideDispatchRequest ride,
         IReadOnlyList<Candidate> candidates,
         IReadOnlyDictionary<Guid, ReputationVerdict> reputation,
-        IReadOnlyDictionary<Guid, WalletVerdict> wallet)
+        IReadOnlyDictionary<Guid, WalletVerdict> wallet,
+        CandidateOrdering ordering = CandidateOrdering.WeightedScore)
     {
         ArgumentNullException.ThrowIfNull(ride);
         ArgumentNullException.ThrowIfNull(candidates);
@@ -69,18 +91,24 @@ public sealed class CandidateScorer(IOptions<DispatchOptions> options) : ICandid
         var weights = new ScoreTerms(_options.Weights.Distance, _options.Weights.Level, _options.Weights.Category);
 
         var evaluated = candidates
-            .Select(candidate => Evaluate(ride, candidate, reputation, wallet, weights))
+            .Select(candidate => Evaluate(ride, candidate, reputation, wallet, weights, ordering))
             .ToList();
 
-        // Eligible first, then by score. The secondary key is the exact distance and the tertiary
-        // the driver id: two candidates can tie on a weighted score to the last bit — the level
-        // term takes three values and the category term one — and a cascade whose order depended on
-        // the order Redis happened to return a set in would not be reproducible from the audit.
-        var ordered = evaluated
-            .OrderByDescending(static c => c.Eligible)
-            .ThenByDescending(static c => c.Score)
-            .ThenBy(static c => c.DistanceM)
-            .ThenBy(static c => c.DriverId)
+        // Eligible first. After that the two rules diverge, and both end on the driver id: two
+        // candidates can tie on a weighted score to the last bit — the level term takes three
+        // values and the category term one — and a cascade whose order depended on the order Redis
+        // happened to return a set in would not be reproducible from the audit.
+        var ordered = (ordering is CandidateOrdering.JobBoardProximity
+                ? evaluated
+                    .OrderByDescending(static c => c.Eligible)
+                    .ThenBy(static c => c.DistanceM)
+                    .ThenByDescending(static c => c.Breakdown.DriverLevel)
+                    .ThenBy(static c => c.DriverId)
+                : evaluated
+                    .OrderByDescending(static c => c.Eligible)
+                    .ThenByDescending(static c => c.Score)
+                    .ThenBy(static c => c.DistanceM)
+                    .ThenBy(static c => c.DriverId))
             .ToList();
 
         // Rank is the cascade position, so only an eligible candidate has one. -1 says "never in
@@ -98,12 +126,16 @@ public sealed class CandidateScorer(IOptions<DispatchOptions> options) : ICandid
         return ordered;
     }
 
+    /// <summary>The <c>breakdown.ordering</c> value on a D5' §3.7 Job Board dispatch.</summary>
+    public const string JobBoardOrderingName = "job-board-proximity";
+
     private ScoredCandidate Evaluate(
         RideDispatchRequest ride,
         Candidate candidate,
         IReadOnlyDictionary<Guid, ReputationVerdict> reputation,
         IReadOnlyDictionary<Guid, WalletVerdict> wallet,
-        ScoreTerms weights)
+        ScoreTerms weights,
+        CandidateOrdering ordering)
     {
         var block = reputation.TryGetValue(candidate.DriverId, out var verdict) ? verdict : ReputationVerdict.Unknown;
         var money = wallet.TryGetValue(candidate.DriverId, out var purse) ? purse : WalletVerdict.NotChecked;
@@ -156,7 +188,11 @@ public sealed class CandidateScorer(IOptions<DispatchOptions> options) : ICandid
 
             // DT-02's slot. C036 fills it; a fabricated value here would be indistinguishable from
             // a predicate that had actually run.
-            Directional: null);
+            Directional: null,
+
+            // Omitted on the ordinary path, where Rank follows the score and saying so would be
+            // noise on every row of every round.
+            Ordering: ordering is CandidateOrdering.JobBoardProximity ? JobBoardOrderingName : null);
 
         return new ScoredCandidate(candidate, rejectedBy is null, rejectedBy, score, breakdown);
     }

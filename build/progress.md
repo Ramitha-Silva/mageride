@@ -60,7 +60,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C032 | ride-svc-core | 2 | DONE | 2026-07-28 | 252 tests green; the §11.12 matrix is data, not a switch; no new migration — 0605's timer kinds and `terminal_at` were already right; 4 micro-change-sets |
 | C033 | reputation-svc | 2 | DONE | 2026-07-28 | 84 tests green; 3 reputation migrations (0803–0805) + an 8th Redpanda topic; the platform's first gRPC service, which needs a port of its own (cleartext has no ALPN); 8 micro-change-sets |
 | C034 | dispatch-svc-core | 2 | DONE | 2026-07-29 | 108 tests green (30 new); 2 dispatch migrations (0711–0712) + a `reason` on ride-svc's `/offer/expire`; **0712 fixes a live bug — an ACCEPTED offer stayed live for ever, so a driver could take exactly one ride**; 9 micro-change-sets |
-| C035 | dispatch-svc-scheduling-levels | 2 | PENDING | | |
+| C035 | dispatch-svc-scheduling-levels | 2 | DONE | 2026-07-29 | 143 tests green (35 new); 1 dispatch migration (0713, +`dispatch.level_config`) + a fifth internal command on ride-svc (`/v1/internal/rides/scheduled`); the C033/C034 "sole writer of `dispatch.driver_levels`" fence narrowed to counter-driven rules; 11 micro-change-sets |
 | C036 | dispatch-svc-directional | 2 | PENDING | | |
 | C037 | ride-svc-proxy-package | 2 | PENDING | | |
 | C038 | mqtt-bridge-svc | 2 | PENDING | | |
@@ -4549,3 +4549,144 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   what makes trips 3..N of a day free.
   **Build host —** Docker for Testcontainers (Postgres, Redis, Redpanda, EMQX); the replica stayed
   down throughout. The 108 tests take ~3 min, most of it EMQX start-up.
+
+- **Component:** C035 dispatch-svc-scheduling-levels — 2026-07-29
+- **Status:** DONE — `dotnet test backend/src/Dispatch.Api.Tests -c Release` exits 0 (143 tests,
+  35 new); `Ride.Api.Tests` (252) and `Reputation.Api.Tests` (84) still green after the Δ on each.
+  All four DoD items pass: a Level-1 driver is answered 403 on both the Job Board and
+  the intent route with a reason that says it is not a ban; a scheduled ride with no destination is
+  400 at the service boundary and nothing is written; the T-30 job goes to the closest
+  intent-poster with the higher level winning an exact distance tie; and a penalty settles against
+  exactly one ride, with a retry and a later trip both collecting nothing.
+- **Notes:**
+  **Scope split with C033, and the fence it narrows —** the C034 handoff told this component that
+  `dispatch.driver_levels` was read-only for it. That could not be squared with the deliverables:
+  D5' §4.2 has four rules, D3' files two of the surfaces that change a level under **dispatch-svc**
+  (`POST /v1/internal/drivers/{id}/no-show`, `PUT /v1/admin/drivers/level-config`), and C033's own
+  CLAUDE.md hands the level-*up* half over in as many words ("rating collection and the level-*up*
+  points … belong to whoever writes ratings"). **Resolution taken:** reputation-svc keeps every rule
+  driven by its counters — three confirmed reports → −1 plus the temporary delisting, and the
+  US-6A.8 appeal restore, all already built and untouched here — and dispatch-svc owns the level-up
+  from `trips.ratings` and the US-6A.7 no-show decrement. Two writers on one row are safe because
+  both take `SELECT … FOR UPDATE` first and this side takes *only* that row, which is a suffix of
+  C033's documented block state → counters → level order, so no cycle exists.
+  **Micro-change-set:** D3' should say which service owns which level rule; today it is derivable
+  from the route table and nowhere stated. `Reputation.Api/CLAUDE.md`'s "sole writer" bullet has
+  been narrowed in place.
+
+  **Spec gaps — micro-change-sets.**
+  (a) **A scheduled ride has no payment method.** `POST /v1/rides/schedule` (Δ 2026-06-28, AL-36)
+  takes destination, pickup, time and tier; at T-30 the row becomes a `rides.rides`, whose
+  `payment_method` is NOT NULL over a closed set. Landed as an optional `paymentMethod` on the
+  contract defaulting to `cash` — **D3' should print it**. Hard-coding cash in the service would
+  have taken the passenger's choice away silently.
+  (b) **`rides.rides` has no `scheduled_at`, but `RideDetail.scheduledAt` is in the contract.**
+  The materialised ride therefore does not carry its own booked pickup time;
+  `dispatch.scheduled_rides.pickup_time` is where it lives and `GET /v1/rides/scheduled/{driverId}`
+  is what shows it to the driver. **Either D4' §5 should add the column or D3' should drop the
+  member.**
+  (c) **A materialised ride has no quote.** `POST /v1/internal/rides/scheduled` takes no
+  `fareEstimateToken` — a quote taken when the passenger booked is not the price of a ride 30
+  minutes from now (D5' §1.4) — so `fare_estimate_minor` is NULL and `offer.created` carries no
+  `fareEstimateMinor`. **fare-svc meters it; D5' §1.4 should say so for scheduled rides.**
+  (d) **D5' §7.1's `UNIQUE(penalty_id, applied_ride_id)` guards nothing**, which 0706's own header
+  already said: `id` is the primary key, so the pair is unique by construction. The real guard is
+  the conditional `UPDATE … WHERE status = 'OUTSTANDING'` over a `FOR UPDATE SKIP LOCKED` claim.
+  **§7.1 should name that instead of the index.**
+  (e) **The Rs 50 is not the only debt settled on the next trip.** §11.12 marks all three penalty
+  bases `settledOn: next_trip` — the Rs 50 `cancellation_fee`, the Rs 100 `no_show_fee` and the
+  mid-trip `full_fare` — but §7.1 writes the ledger row only for the Rs 50. All three are recorded,
+  with a `basis` column, because US-6A.10b's "clear outstanding balance" cannot be evaluated against
+  a table holding one of the three. **§7.1's pseudocode should generalise.**
+  (f) **`LevelConfig.cancellationPenaltyPoints` has no rule.** The contract names the knob; §11.12
+  gives a driver cancellation a reputation hit and a brief delist, both reputation-svc's, and no
+  spec gives it a level or a point cost. It is stored and round-tripped by the admin route and
+  **nothing reads it** — said plainly in `Dispatch.Api/CLAUDE.md` rather than wired to a
+  non-idempotent deduction off `reputation.driver_cancelled`, which a redelivery would double.
+  (g) **No spec says what happens to a scheduled ride nobody posted intent on.** D5' §3.7 names
+  intent-submitting drivers and nobody else, so that is what was built: the cascade stays inside the
+  intent list on every round and the ride ends `ExpiredNoDriver` at the ordinary 120 s deadline
+  rather than falling back to the open pool. **This is a product decision, not a technical one** —
+  falling back would offer an advance booking to a driver who never opted in.
+  (h) **No spec pins** the booking floor and ceiling (30 min / 30 d), the T-30 materialisation
+  retry grace (30 min) or the two sweep intervals. Each is argued at its declaration in
+  `DispatchOptions`.
+
+  **Δ on other services.**
+  (1) **ride-svc gained `POST /v1/internal/rides/scheduled`** (contract + service). It is the fourth
+  command of the family C022/C023/C034 built, and for the same reason: `dispatch.offers.ride_id` has
+  a foreign key onto `rides.rides`, so the T-30 offer cannot exist before the ride, and R-01 forbids
+  dispatch creating it. `POST /v1/rides/request` cannot serve — it is Bearer-authenticated as the
+  passenger and demands a fare token. **Idempotent because the scheduled-ride id is the
+  `clientRequestId`**, so R-18's `ux_rides_idem` turns a retried sweep into a replay.
+  `NewRide.FareEstimateMinor` became `long?` for the same call; `RequireImmediate`'s message now
+  points at the right endpoint instead of saying the feature does not exist.
+  (2) **dispatch.yaml gained** the optional `paymentMethod` and the two internal penalty routes
+  `GET`/`POST /v1/internal/passengers/{id}/penalties[/settle]` — D5' §7.1 has fare-svc read the debt
+  before pricing the next trip and mark it settled after posting the ledger entries, and D3' names
+  no route to reach a ledger this service owns.
+  (3) **`migrate-verify.sh`** moved to 14 dispatch tables and gained six checks over 0713.
+
+  **Migration 0713** — one file, five changes, each argued in the header:
+  `scheduled_rides.payment_method` + `ux_sched_ride` + `ix_sched_passenger`;
+  `driver_levels.points_awarded_total` (the level engine's idempotency watermark);
+  `ux_no_show_driver_ride` (one decrement per missed ride, whatever the delivery count);
+  `cancellation_penalties.basis` + `ux_penalty_accrual` (the at-least-once guard §7.1's index is
+  not); and the singleton `dispatch.level_config`, the only new table.
+
+  **Decisions —**
+  (1) **The booking table is its own timer, and no `dispatch.timers` row is armed.** The C034
+  handoff suggested a new timer kind, but `dispatch.timers.ride_id` has a foreign key onto
+  `rides.rides` and at T-30 the ride is precisely what does not exist yet. `ix_sched_due` (0704) is
+  already a partial index on `pickup_time WHERE status='SCHEDULED'` — "the next thing to fire" — and
+  the status column is the claim.
+  (2) **The sweep materialises and stops; `ride.requested` dispatches.** One dispatch path, driven
+  by one event, rather than a second entry point racing the sweep for the same ride. It also means
+  a scheduled ride goes through exactly the cascade every other ride does.
+  (3) **A scheduled round is intent-only, on every round, at the 30 km board radius.**
+  `DispatchService` looks the booking up by ride id (`ux_sched_ride`) so no caller has to carry the
+  fact — a decline, an expiry and a redelivered `ride.requested` all take the same branch. Keeping
+  the 5 km on-demand radius would have dropped the very drivers who chose the ride.
+  (4) **§3.7 is a different rule from §3.3, not a re-weighting of it.** The Job Board dispatch
+  orders by distance and breaks ties on level; the weighted score is still computed and stored and
+  `breakdown.ordering` says which rule produced the `rank`, so an audit row whose rank disagrees
+  with its score reads as a different rule rather than as a bug. Folding it into the weights would
+  put a distant Level-3 driver ahead of a near Level-2 one, which is what "closest … by Level" does
+  not say.
+  (5) **The level engine is a recompute against a watermark, not a consumed-events queue.** Points
+  are summed from `trips.ratings` and only the delta is applied, so a read, the sweep, two replicas
+  and a crash mid-update all award the same points once. A rating is not on any topic D6' §2.1
+  declares, so there was nothing to consume in any case.
+  (6) **A level once earned is not un-earned by the evidence disappearing.** A rating total that
+  falls (a PDPA erasure) moves the watermark and leaves the level alone — §4.2's level-down list is
+  three reports and a no-show.
+  (7) **Ratings are counted only for `subject_kind='ride'`.** This level gates Mode C dispatch and a
+  Mode A/B session rating is trip-state-svc's plane; CLAUDE.md's boundary rule is explicit.
+  (8) **The no-show insert is the claim, and the level row is locked before it.** The two are one
+  atomic act, so two deliveries cannot both find the row unclaimed. A report with no `rideId` cannot
+  be deduplicated and is counted as given — which is why the index is partial.
+  (9) **An empty settlement and "nothing owed" are the same answer.** fare-svc adds what the settle
+  call returns to the fare, so a retry that re-reported the debt would charge it twice.
+  (10) **`acceptanceRate` is 1.0 for a driver who has never been offered anything.** The number is
+  shown to the driver and read by support; 0 would describe a refusal that never happened.
+
+  **Two bugs caught by the tests, both the same shape —** a bare column list reused in a joined
+  query. `dispatch.offers` also has `id`, `ride_id` and `status`, so
+  `ScheduledRideRepository.AssignedToDriverAsync` answered an ambiguous-column 500; the penalty
+  settlement's `RETURNING` had the same problem against its claim CTE. Both now use an explicitly
+  qualified list.
+
+  **For C036 (dispatch-svc-directional) —** `PUT /v1/admin/dispatch/directional-config` is the last
+  unmapped route in `dispatch.yaml` and `dispatch.directional_config` (0707) is already seeded and
+  verified. `InternalDispatchEndpoints` is where an internal route goes and
+  `Dispatch:InternalApiKey` already gates the group. `CandidateOrdering` is the enum to extend if
+  DT-02 ever needs its own ordering; `ScoreBreakdown.Directional` is still the null audit slot.
+  **For fare-svc (C045) —** `GET /v1/internal/passengers/{id}/penalties` before you price a
+  completed trip and `POST …/settle` after you post the ledger entries; the `basis` member tells you
+  when `amountMinor` is the quoted fare to be re-metered rather than the amount. Nothing here writes
+  `billing.journal_entries` (D-09).
+  **For whoever collects Mode C ride ratings —** write `trips.ratings` with
+  `subject_kind='ride'`, `direction='passenger_to_driver'`; the level engine needs no event and no
+  call, it recomputes.
+  **Build host —** Docker for Testcontainers (Postgres, Redis, Redpanda, EMQX); the replica stayed
+  down throughout. The suite takes ~4 min, most of it EMQX start-up.

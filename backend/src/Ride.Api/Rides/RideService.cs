@@ -31,6 +31,17 @@ public interface IRideService
 {
     Task<RideBooking> RequestAsync(RequestRideCommand command, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Δ C035: turns a due <c>dispatch.scheduled_rides</c> row into a ride aggregate at T-30 min.
+    /// </summary>
+    /// <remarks>
+    /// Idempotent on <c>(passengerId, scheduledRideId)</c> — the scheduled-ride id <b>is</b> the
+    /// <c>clientRequestId</c>, so R-18's <c>ux_rides_idem</c> makes a retried materialisation
+    /// return the ride the first call created. See <c>POST /v1/internal/rides/scheduled</c>.
+    /// </remarks>
+    Task<RideBooking> MaterialiseScheduledAsync(
+        MaterialiseScheduledRideCommand command, CancellationToken cancellationToken);
+
     /// <summary>The full aggregate, for a caller who is a party to it (<c>403 not-ride-participant</c>).</summary>
     Task<RideView> GetAsync(Guid callerId, Guid rideId, CancellationToken cancellationToken);
 
@@ -90,6 +101,12 @@ public sealed class RideService(
     TimeProvider timeProvider,
     ILogger<RideService> logger) : IRideService
 {
+    /// <summary>
+    /// <c>rides.transitions.reason_code</c> for the Δ C035 T-30 materialisation, so a ride that
+    /// nobody clicked "Book" on today is distinguishable in the audit from one that was requested.
+    /// </summary>
+    private const string ScheduledMaterialisedReason = "SCHEDULED_MATERIALISED";
+
     private readonly RideOptions _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
 
     public async Task<RideBooking> RequestAsync(RequestRideCommand command, CancellationToken cancellationToken)
@@ -183,6 +200,110 @@ public sealed class RideService(
         logger.LogInformation(
             "Ride {RideId} requested by passenger {PassengerId} ({VehicleType}, {AmountMinor} minor)",
             ride.Id, command.PassengerId, vehicleType, quote.AmountMinor);
+
+        return new RideBooking(ride, Replayed: false);
+    }
+
+    public async Task<RideBooking> MaterialiseScheduledAsync(
+        MaterialiseScheduledRideCommand command, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+
+        var vehicleType = RequireVehicleType(command.VehicleType);
+        var pickup = RequirePlace(command.Pickup, "pickup");
+        var dropoff = RequirePlace(command.Dropoff, "dropoff");
+
+        // A scheduled booking is a passenger ride, so `cod` is refused here exactly as it is on
+        // POST /v1/rides/request — the kind is what makes it package-only, not the caller.
+        var paymentMethod = RequirePaymentMethod(command.PaymentMethod ?? RidePaymentMethods.Cash, RideKinds.Passenger);
+
+        if (command.ScheduledRideId == Guid.Empty)
+        {
+            throw new MageRideValidationException(new Dictionary<string, string[]>
+            {
+                ["scheduledRideId"] = ["scheduledRideId is required and must be a ULID or a UUID."],
+            });
+        }
+
+        await using var unitOfWork = await unitOfWorkFactory.BeginAsync(cancellationToken: cancellationToken);
+
+        // AL-16 is evaluated at materialisation, not at scheduling. The passenger may have earned
+        // three consecutive post-acceptance cancellations in the days between booking and pickup,
+        // and the rule is about who may hold a live ride — which is what this call creates.
+        var standing = await eligibility.EvaluateAsync(
+            unitOfWork.Connection, unitOfWork.Transaction, command.PassengerId, cancellationToken);
+
+        if (standing.IsDisabled)
+        {
+            await unitOfWork.RollbackAsync(cancellationToken);
+
+            throw new MageRideException(
+                MageRideErrors.BookingDisabled,
+                $"Booking is disabled after {standing.ConsecutiveCancellations} consecutive cancellations made " +
+                "after a driver had accepted (US-6A.10b). The scheduled ride cannot be dispatched.");
+        }
+
+        var result = await rides.CreateAsync(
+            unitOfWork.Connection,
+            unitOfWork.Transaction,
+            new NewRide(
+                PassengerId: command.PassengerId,
+                ClientRequestId: command.ScheduledRideId,
+                VehicleType: vehicleType,
+                Pickup: pickup,
+                Dropoff: dropoff,
+                PaymentMethod: paymentMethod,
+                FareEstimateMinor: null,
+                FareSurchargeMinor: 0),
+            cancellationToken);
+
+        switch (result.Outcome)
+        {
+            case RideCreateOutcome.ActiveRideExists:
+                // The passenger is mid-ride. Not a fault and not permanent: the scheduler backs off
+                // and comes back, because invariant 1 is about *now* and the ride they are on will
+                // end. Answering 409 rather than booking a second live ride is the whole point.
+                await unitOfWork.RollbackAsync(cancellationToken);
+
+                throw new MageRideException(
+                    MageRideErrors.ActiveRideExists,
+                    "This passenger already has a ride that has not finished, so the scheduled one cannot be " +
+                    "materialised yet (ADD Appendix B.2 invariant 1).");
+
+            case RideCreateOutcome.AlreadyRequested:
+                await unitOfWork.CommitAsync(cancellationToken);
+
+                logger.LogInformation(
+                    "Scheduled ride {ScheduledRideId} was already materialised as ride {RideId}; replaying",
+                    command.ScheduledRideId, result.Ride!.Id);
+
+                return new RideBooking(result.Ride, Replayed: true);
+
+            case RideCreateOutcome.Created:
+            default:
+                break;
+        }
+
+        var ride = result.Ride!;
+
+        // `ride.requested` is what drives the cascade. The scheduler does not dispatch the ride
+        // itself: one event, one dispatch path, and the round that runs is the same one every
+        // other ride gets — which is what keeps the T-30 offer inside dispatch-svc's own loop.
+        await stateWriter.RecordAsync(
+            unitOfWork,
+            ride,
+            fromState: null,
+            actorType: RideTransitions.Actors.System,
+            actorId: null,
+            reasonCode: ScheduledMaterialisedReason,
+            [RideEvents.Build(RideEventTypes.Requested, ride, Guid.NewGuid(), timeProvider.GetUtcNow())],
+            cancellationToken);
+
+        await unitOfWork.CommitAsync(cancellationToken);
+
+        logger.LogInformation(
+            "Scheduled ride {ScheduledRideId} materialised as ride {RideId} for passenger {PassengerId} ({VehicleType})",
+            command.ScheduledRideId, ride.Id, command.PassengerId, vehicleType);
 
         return new RideBooking(ride, Replayed: false);
     }
@@ -897,9 +1018,11 @@ public sealed class RideService(
 
     /// <summary>
     /// A scheduled ride is a Job Board posting, not a dispatch (D-06, US-6A.5), and the whole
-    /// scheduling path — <c>dispatch.scheduled_rides</c>, the intent flow, the Quartz trigger — is
-    /// C035. Refusing is the honest answer; accepting and dispatching immediately would send a
-    /// driver to a passenger who asked for tomorrow.
+    /// scheduling path — <c>dispatch.scheduled_rides</c>, the intent flow, the T-30 trigger — is
+    /// dispatch-svc's (C035). Refusing is still the honest answer on <em>this</em> route: accepting
+    /// and dispatching immediately would send a driver to a passenger who asked for tomorrow, and
+    /// silently forwarding to another service's booking table would hide which aggregate the
+    /// passenger's ride actually lives in until T-30 min.
     /// </summary>
     private static void RequireImmediate(DateTimeOffset? scheduledAt)
     {
@@ -907,7 +1030,11 @@ public sealed class RideService(
         {
             throw new MageRideValidationException(new Dictionary<string, string[]>
             {
-                ["scheduledAt"] = ["Scheduled rides are not available in this build (C035). Omit scheduledAt for immediate dispatch."],
+                ["scheduledAt"] =
+                [
+                    "Omit scheduledAt for immediate dispatch. A future pickup is booked with " +
+                    "POST /v1/rides/schedule on dispatch-svc, which owns dispatch.scheduled_rides (AL-36).",
+                ],
             });
         }
     }

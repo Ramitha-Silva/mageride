@@ -223,9 +223,10 @@ check_eq "6 trips tables" "6" \
 check_eq "7 rides tables" "7" \
   "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
     WHERE n.nspname='rides' AND c.relkind IN ('r','p') AND NOT c.relispartition;"
-# 13, not C004's 12: 0710 added dispatch.command_log — the third per-service command log
-# (iam 0104, registry 0307), for the reason recorded in db/CLAUDE.md.
-check_eq "13 dispatch tables" "13" \
+# 14, not C004's 12: 0710 added dispatch.command_log — the third per-service command log
+# (iam 0104, registry 0307), for the reason recorded in db/CLAUDE.md — and 0713 added
+# dispatch.level_config, the singleton PUT /v1/admin/drivers/level-config writes (US-14.12).
+check_eq "14 dispatch tables" "14" \
   "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
     WHERE n.nspname='dispatch' AND c.relkind IN ('r','p') AND NOT c.relispartition;"
 # 7, not C004's 3: 0803 added reputation.intake_log / outbox / command_log and 0805 added
@@ -646,6 +647,30 @@ check_eq "the default penalty is Rs 50 in minor units" "5000" \
   "SELECT column_default FROM information_schema.columns
     WHERE table_schema='dispatch' AND table_name='cancellation_penalties'
       AND column_name='amount_minor';"
+# 0713: ux_penalty_apply cannot reject a redelivered accrual — `id` is the primary key, so the
+# pair is unique by construction. This one is the guard that actually holds (C035 handoff).
+check_eq "ux_penalty_accrual is unique on (original_ride_id, basis)" "1" \
+  "SELECT count(*) FROM pg_indexes
+    WHERE schemaname='dispatch' AND indexname='ux_penalty_accrual'
+      AND indexdef LIKE 'CREATE UNIQUE INDEX%(original_ride_id, basis)%';"
+
+step "US-6A.6/6A.7/US-14.12 — Driver Level System (0713)"
+check_eq "driver_levels start at 3 with a 500-point threshold" "3|500" \
+  "SELECT (SELECT column_default FROM information_schema.columns
+             WHERE table_schema='dispatch' AND table_name='driver_levels' AND column_name='level')
+         ||'|'||
+         (SELECT column_default FROM information_schema.columns
+             WHERE table_schema='dispatch' AND table_name='driver_levels' AND column_name='level_up_threshold');"
+check_eq "the level-up engine has its idempotency watermark" "1" \
+  "SELECT count(*) FROM information_schema.columns
+    WHERE table_schema='dispatch' AND table_name='driver_levels' AND column_name='points_awarded_total';"
+check_eq "ux_no_show_driver_ride is unique partial on (driver_id, ride_id)" "1" \
+  "SELECT count(*) FROM pg_indexes
+    WHERE schemaname='dispatch' AND indexname='ux_no_show_driver_ride'
+      AND indexdef LIKE 'CREATE UNIQUE INDEX%(driver_id, ride_id)%WHERE (ride_id IS NOT NULL)%';"
+check_eq "level_config seeded with one row" "1" "SELECT count(*) FROM dispatch.level_config;"
+check_eq "level_config defaults are the D5 §4.2 values" "500|2" \
+  "SELECT level_up_threshold||'|'||job_board_min_level FROM dispatch.level_config WHERE id = 1;"
 
 step "DT-03 — directional filters"
 check_eq "ux_directional_active is unique partial on driver_id WHERE cleared_at IS NULL" "1" \
