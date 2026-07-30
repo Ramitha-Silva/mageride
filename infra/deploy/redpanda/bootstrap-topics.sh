@@ -107,6 +107,12 @@ ensure_pair reputation.events    "$EVENT_RETENTION_MS"       # key userId    —
 # (US-3.16's email/SMS device-down alert) and no topic; C044 added it, and the handoff raises
 # the micro-change-set against §2.1.
 ensure_pair fleet.events         "$EVENT_RETENTION_MS"       # key fleetId   — fleet-health-svc (outbox)
+# Not one of D6' §2.1's six either, and the best-attested of the five that are not: ADD §6's
+# wallet-svc row says it "publishes wallet.debited / wallet.credited events that invalidate
+# dispatch-svc's Redis balance cache", D5' §9.2 makes that cache "debit-invalidated (wallet.debited
+# event clears)", and ride-svc's ADD row lists wallet.debited among what it consumes — a producer and
+# two consumers, and no topic. C046 added it; the handoff raises the micro-change-set against §2.1.
+ensure_pair wallet.events        "$EVENT_RETENTION_MS"       # key ownerId   — wallet-svc (outbox)
 ensure_pair audit.events         "$EVENT_RETENTION_MS"       # key entityId  — all (admin-bff)
 
 echo

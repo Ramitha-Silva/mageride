@@ -906,7 +906,8 @@ check_eq "5 safety tables" "5" \
   "SELECT count(*) FROM information_schema.tables WHERE table_schema='safety' AND table_type='BASE TABLE';"
 check_eq "5 fares tables" "5" \
   "SELECT count(*) FROM information_schema.tables WHERE table_schema='fares' AND table_type='BASE TABLE';"
-check_eq "12 billing tables" "12" \
+# 15, not C005's 12: billing.topups, billing.outbox and billing.command_log are C046's (1107).
+check_eq "12 billing tables from C005 + 3 from C046" "15" \
   "SELECT count(*) FROM information_schema.tables WHERE table_schema='billing' AND table_type='BASE TABLE';"
 check_eq "4 subscription tables" "4" \
   "SELECT count(*) FROM information_schema.tables WHERE table_schema='subscription' AND table_type='BASE TABLE';"
@@ -1654,6 +1655,58 @@ check_rejects "a broadcast whose window ends before it starts is rejected" \
   "INSERT INTO content.broadcasts(message_by_lang, scheduled_at, ends_at)
      VALUES ('{\"si\":\"a\",\"ta\":\"b\",\"en\":\"c\"}'::jsonb,
              '2026-08-01T00:00:00Z','2026-07-01T00:00:00Z');"
+
+# ---------------------------------------------------------------------------------------
+# C046 — billing: top-up sessions, this plane's outbox, the replay log (1107)
+# ---------------------------------------------------------------------------------------
+step "Objects owned by C046 (D-09, D-12, R-19, AL-05)"
+for t in topups outbox command_log; do
+  check_eq "billing.$t exists" "1" \
+    "SELECT count(*) FROM information_schema.tables
+      WHERE table_schema='billing' AND table_name='$t';"
+done
+check_eq "billing.command_log has no aggregate-id column" "0" \
+  "SELECT count(*) FROM information_schema.columns
+    WHERE table_schema='billing' AND table_name='command_log'
+      AND column_name IN ('ride_id','topup_id');"
+check_eq "R-19: provider_transaction_id is unique where present" "1" \
+  "SELECT count(*) FROM pg_indexes
+    WHERE schemaname='billing' AND indexname='ux_topups_provider_txn';"
+
+step "AL-05 — bank transfer is not a top-up method, anywhere"
+check_eq "no billing table mentions bank transfer" "0" \
+  "SELECT count(*) FROM information_schema.tables
+    WHERE table_schema='billing' AND table_name LIKE '%bank%';"
+check_eq "no billing column mentions bank transfer" "0" \
+  "SELECT count(*) FROM information_schema.columns
+    WHERE table_schema='billing' AND column_name LIKE '%bank%';"
+check_rejects "a bank-transfer top-up method is rejected by the database (AL-05)" \
+  "INSERT INTO billing.topups(driver_id, account_id, method, amount_minor)
+     SELECT '$DRV_B', a.id, 'bank_transfer', 100000
+       FROM billing.accounts a WHERE a.owner_type='platform' LIMIT 1;"
+
+step "C046 constraints actually bite"
+psql_run "INSERT INTO billing.accounts(owner_type, owner_id, currency) VALUES ('driver','$DRV_B','LKR')
+            ON CONFLICT DO NOTHING;" >/dev/null || die "could not seed the C046 wallet fixture."
+TOPUP_ACCOUNT="$(psql_q "SELECT id FROM billing.accounts WHERE owner_type='driver' AND owner_id='$DRV_B';")"
+check_rejects "a Pending top-up cannot carry a ledger entry" \
+  "INSERT INTO billing.topups(driver_id, account_id, method, amount_minor, journal_entry_id)
+     SELECT '$DRV_B','$TOPUP_ACCOUNT','onepay',100000, e.id
+       FROM billing.journal_entries e LIMIT 1;"
+check_rejects "a settled top-up must carry a settlement instant" \
+  "INSERT INTO billing.topups(driver_id, account_id, method, amount_minor, state)
+     VALUES ('$DRV_B','$TOPUP_ACCOUNT','onepay',100000,'Succeeded');"
+check_rejects "a zero-amount top-up is rejected" \
+  "INSERT INTO billing.topups(driver_id, account_id, method, amount_minor)
+     VALUES ('$DRV_B','$TOPUP_ACCOUNT','onepay',0);"
+psql_run "INSERT INTO billing.topups(id, driver_id, account_id, method, amount_minor, provider_transaction_id)
+            VALUES ('c0000046-0000-0000-0000-000000000001','$DRV_B','$TOPUP_ACCOUNT','onepay',100000,'onepay-verify-1');" \
+  >/dev/null || die "could not seed the R-19 top-up fixture."
+check_rejects "a second top-up cannot claim the same provider_transaction_id (R-19)" \
+  "INSERT INTO billing.topups(driver_id, account_id, method, amount_minor, provider_transaction_id)
+     VALUES ('$DRV_B','$TOPUP_ACCOUNT','lankaqr',100000,'onepay-verify-1');"
+psql_run "DELETE FROM billing.topups WHERE provider_transaction_id='onepay-verify-1';" >/dev/null \
+  || die "could not clean up the R-19 top-up fixture."
 
 # ---------------------------------------------------------------------------------------
 printf '\n'

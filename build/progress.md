@@ -71,7 +71,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C043 | tcp-adapter | 2 | DONE | 2026-07-30 | 89 tests green in a **new suite** (`TcpAdapter.Tests`); **no migration** — this service writes nothing anywhere, and reads `registry.vehicles` read-only; four golden frames, one per protocol family, byte-exact with real checksums; the platform's first `Microsoft.NET.Sdk.Worker` service (no HTTP surface at all, so no `AddMageRideDefaults`); a read-only Postgres dependency D7' §2.1's Container 9 row does not list, argued below; `POST /v1/internal/sessions/ignition` finally has a caller; 9 micro-change-sets |
 | C044 | fleet-health-svc | 2 | DONE | 2026-07-30 | 57 tests green in a **new suite** (`FleetHealth.Tests`); **1 telemetry migration (1805)** — `telemetry.device_health`, `fleet_health_alerts`, this plane's outbox and the four-state classifier, none of which any DDL source prints; US-3.13's ladder landed as **one SQL function both the dashboard read and the sweep call**, so an operator cannot be shown one state while an alert fires on another; **`GET /v1/fleets/{fleetId}/health` moved out of `fleet.yaml` into a new `fleet-health.yaml`**, the same split D3' Part 2 makes for the tracker-bulk route; a 10th Redpanda topic (`fleet.events`); `migrate-verify.sh` expects 4 telemetry tables and 8 views, not 1 and 6; **the p95 for a 1000-vehicle fleet measured at 99.7 ms against the DoD's 200**; 12 micro-change-sets |
 | C045 | content-svc | 3 | DONE | 2026-07-30 | 105 tests green in a **new suite** (`Content.Api.Tests`); **2 migrations (1307, 1903)** — the template approval workflow, the broadcast window, `content.onboarding_slides` + its Si/Ta/En seed, `content.command_log`, and the trilingual rule as a **deferred constraint trigger** that checks the old pair as well as the new; the fence is enforced three times over (a type that cannot hold two languages, a field-level `validation-failed`, a COMMIT-time trigger); **6 new contract operations** — FAQ, the AL-28 carousel, template approve + history, broadcast publish, cache purge; `Cache__Ttl` honoured as D7' spells it; `migrate-verify.sh` 275/275 with a C045 section (5 content tables, not 3); 17 spec gaps / micro-change-sets |
-| C046 | wallet-svc | 3 | PENDING | | |
+| C046 | wallet-svc | 3 | DONE | 2026-07-30 | 76 tests green in a **new suite** (`Wallet.Api.Tests`) + 15 in `MageRide.Shared.Tests`; **1 billing migration (1107)** — `billing.topups` (a top-up session had an id, a state and a gateway reference and nowhere to live), this plane's outbox and the replay log; **one writer for `billing.journal_postings`**, and every money movement is one method; the AL-01 fee row is impossible rather than absent (no journal kind could carry it); AL-05 held by `ck_topups_method`; **7 new contract operations** incl. the voucher purchase and the whole request/approve/reject flow moved here from subscription-svc (ADD §11.6) and the internal ledger seam C047–C050 and C065 all need; `WebhookSignature` promoted into the kernel for the platform's six payment callbacks; an 11th Redpanda topic (`wallet.events`); 16 spec gaps / micro-change-sets |
 | C047 | subscription-svc-daily-fee | 3 | PENDING | | |
 | C048 | subscription-svc-mode-b | 3 | PENDING | | |
 | C049 | fare-svc-core | 3 | PENDING | | |
@@ -6457,3 +6457,216 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   **Build host —** Docker for two Testcontainers fixtures (Postgres, Redis); the replica stack stayed
   down throughout. `Content.Api.Tests` takes ~55 s. **No new NuGet reference** — everything is already
   pinned centrally or arrives through `MageRide.Shared`.
+
+- **Component:** C046 wallet-svc — 2026-07-30
+- **Status:** DONE — `dotnet test backend/src/Wallet.Api.Tests -c Release` is **76/76 green** in a new
+  suite; `dotnet test backend/src/MageRide.Shared.Tests -c Release` is **254/254** (15 new, for the
+  webhook-signature verifier this component promoted into the kernel);
+  `bash infra/scripts/migrate-verify.sh` is **287/287** (was 275, +12 for 1107);
+  `dotnet build backend/MageRide.sln -c Release` is clean (0 warnings) and
+  `dotnet test backend/src/ApiGateway.Tests -c Release` is 538/538. Spectral lints
+  `backend/contracts/*.yaml` with zero errors.
+  All five DoD items pass, each with a test that names it: every entry and the **whole ledger** sum to
+  zero after a voucher, a transfer and a fee, and the deferred trigger rejects a single-leg entry **at
+  COMMIT** (`LedgerTests`); the Rs 1,000 voucher at 10 % charges 90,000 and credits 100,000, and every
+  seeded rung is checked, idempotent on the gateway reference (`VoucherTests`); a transfer of X moves
+  exactly X with a **two-leg** entry that the platform account is not a party to (`CreditTransferTests`);
+  a callback replayed three times credits once and answers `200` each time (`TopupTests`); and there is
+  no bank-transfer route, no `method` value the database will accept and no `%bank%` table or column
+  (`TopupTests` + `migrate-verify.sh`).
+  ⚠ **One real gap found by another suite, and fixed here:** `ApiGateway.Tests`'
+  `The_enforced_operation_set_is_exactly_the_contract_set` failed on the three new money-moving
+  operations that declare `X-Attestation` — `POST /v1/wallet/voucher/purchase`,
+  `/credit-transfer/request` and `/credit-transfer/{transferId}/approve` — because the gateway's
+  `Gateway:Attestation:SensitiveOperations` list is what actually enforces D-30. All three are now
+  listed; `/reject` deliberately is **not**, because rejecting moves no money.
+  ⚠ **Pre-existing failures elsewhere are unchanged** from what the C044 and C045 handoffs report
+  (`HotPath.Tests` ×2, `slim-verify.sh`'s compose-go `include` panic) and were not re-investigated.
+  This component's own additions to `slim-verify.sh` — `wallet.events`, its DLQ, and the topic total
+  moving 20 → 22 — are consistent with the C044 change and could not be run for the same reason.
+- **Notes:**
+  **Spec gaps —** (a) ***A top-up session has an id, a state and a gateway reference, and §10 gives it
+  nowhere to live.*** D3' returns `{topupId, state:"Pending", redirectUrl}` from the initiate call and
+  D6' §7.1 has the webhook arrive later carrying `{orderId, providerTransactionId, status}` — so the id
+  has to survive between two requests and the callback has to find what it is confirming.
+  `fares.ride_payments` (1002) cannot be borrowed: its `ride_id` is `NOT NULL`. Without
+  `billing.topups` (1107) there is no R-19 dedupe key, no way to answer a redelivery, no record of a
+  failed top-up and nothing for §7.1's reconcile-open-orders to walk. **§10 and D4' §10 should carry
+  it.**
+  (b) ***`wallet.debited` / `wallet.credited` have a producer, two consumers and no topic.*** ADD §6's
+  wallet-svc row and the replica's both say this service "publishes wallet.debited / wallet.credited
+  events that invalidate dispatch-svc's Redis balance cache"; D5' §9.2 makes the D-08 cache
+  "debit-invalidated (`wallet.debited` event clears)"; ride-svc's ADD row lists `wallet.debited` among
+  what it consumes. D6' §2.1's registry has none of it and §10 has no `billing.outbox` — the fifth time
+  this exact shape has come up (C028's `registry.events`, C030's, C033's, C044's). **D6' §2.1 should
+  carry `wallet.events`** (partition key the wallet owner, producer wallet-svc, consumers dispatch ·
+  ride · notification · audit) **and §10 the table**. Keyed by the *owner* rather than by the entry: a
+  debit and the credit after it must reach the cache in the order they happened.
+  (c) ***`billing.command_log` is the fifth per-service replay log*** and D4' §5 still prints only
+  `rides.command_log`. Every POST here moves money or opens a payment session, so R-14 is not optional
+  on this surface. **D4' §5 should print one per bounded context with idempotent POSTs.**
+  (d) ***D3' splits one bounded context's money across two services, and `billing.*` can only have one
+  writer.*** D3' Part 2 files `POST /v1/vouchers/purchase`, `/v1/transfers/driver` and the four
+  `/v1/subscriptions/credit-transfer/*` operations under **subscription-svc**, and the balance, the
+  ledger and the history under **wallet-svc** — but the discount arithmetic, the balance check and the
+  two-leg posting are the same ledger operation whichever path is called, and a second implementation
+  of a *balanced entry* is the one duplication D-09 cannot survive. **ADD §11.6 resolves it**: the
+  sequence diagram has subscription-svc hold the request/approve *workflow* and call **wallet-svc** to
+  check the holder's balance and move the money. So all six operations are implemented here, under
+  `/v1/wallet/**` (which the gateway already routes to this service), and C007's decision to leave them
+  out of `wallet.yaml` is reversed with the reasoning in that file's header. **D3' should name one
+  owner per operation.** What C047/C048 have to do is under "what the next components need".
+  (e) ***Nothing in any spec describes how another service moves a driver's money.*** C047's own
+  deliverable is `POST /internal/fees/{driverId}/charge-before-trip` — subscription-svc's route, which
+  has to result in a wallet debit — and D5' §7.1 has fare-svc settle a penalty the same way. There is
+  no interface for it anywhere. `POST /v1/internal/wallet/{driverId}/debit` and `/credit` are that
+  seam, with a **`kind` whitelist** as its boundary: a caller may post the entry kinds a spec names for
+  it and nothing else. **D3' should print the pair.**
+  (f) ***`ComBankIpg__WebhookSecret` now has a consumer, which supersedes the C007 note in
+  `.env.app.example`*** ("no service reads this key; §4.2 should drop it"). AL-05 withdrew bank
+  transfer as a *top-up method*; D6' §7.2 keeps the Commercial Bank IPG webhook for the LankaQR rail,
+  whose acquirer the bank is (D-12) — so it is the secret `POST /v1/wallet/topup/lankaqr/confirm` is
+  verified against. The note is rewritten rather than deleted, so nobody re-raises it.
+  (g) ***No spec gives the LankaQR deep link a scheme or the QR a payload format.*** D6' §7.2 says
+  "'Pay' deep link to bank app (QR fallback only, AL-15)" and stops; both belong to the acquiring bank.
+  `LankaQr:DeepLinkTemplate` is a template (unset ⇒ that rail answers `503` rather than returning a
+  link that resolves to nothing) and **the EMVCo payload is deliberately not generated** — a composed
+  TLV string with a computed CRC would be a plausible, unscannable code in front of a driver. Unset,
+  `qrPayload` is omitted and the deep link is the only route, which AL-15 makes the primary path anyway.
+  (h) ***D6' §7.1's OnePay contract is two fields.*** "OnePay create-session → `{redirectUrl |
+  sessionToken}`" and a webhook payload of four fields. The request body this service sends, the
+  timeout, and the `Authorization` scheme are all this component's; nothing else is read from the
+  response, because a session that returned successfully has moved no money.
+  (i) ***§7.1's "reconcile open orders by status poll" is not implemented.*** It needs a live OnePay
+  query API, which does not exist to code against. `Wallet:TopupPendingWindow` (90 s) is *read* — a
+  Pending session's age is reportable — and **nothing sweeps**: a callback that arrives late is still a
+  payment the driver made, and failing sessions on a timer would strand real money. Today a paid
+  top-up whose callback was lost is resolved by the provider's own retry. Named rather than stubbed.
+  (j) ***The PDF statement is declared and not produced.*** `wallet.yaml` lists `application/pdf` on
+  `GET /v1/wallet/{userId}/transactions` (US-9A.19's "PDF/CSV"); CSV is implemented and PDF answers
+  `415` with the reason, because a PDF needs a renderer and a document template no spec provides and a
+  PDF-shaped CSV would be worse than saying so. It is **returned rather than thrown**, which matters:
+  the kernel's exception handler writes through `IProblemDetailsService`, which honours `Accept` — so a
+  client asking for `application/pdf` and nothing else would otherwise get a `415` with an empty body.
+  (k) ***A driver has no debt anywhere in the schema, and `availableMinor` is required.*** The contract
+  makes it "balance net of outstanding accrued debt (a cross-trip cancellation penalty, D-05)", and
+  §11.12 answers a *driver* cancellation with a reputation hit and a brief delist rather than money —
+  while `billing.daily_fee_charges.status` has no unpaid state. So it is read from
+  `dispatch.cancellation_penalties` (a read-only cross-context read, for the reason iam-svc's bootstrap
+  makes several) and is nearly always zero for a driver. Kept rather than hardcoded to zero, because
+  the day a debt exists a gross figure would overstate what the fee gate can take.
+  (l) ***§10 and D5' §9.4 disagree about whether a driver's balance may be negative.*** §10 says
+  "driver non-negativity in app" — so this service refuses a debit that would overdraw
+  (`402 insufficient-wallet`) — while §9.4's second clause describes a `< Rs 0` balance showing "Top Up
+  Required". Both are honoured: the refusal is the rule, and `wallet.low_balance` still carries a
+  `severity` of `top_up_required` for a balance below zero, which is reachable only for a row written
+  around this service. **§10 and §9.4 should agree.**
+  (m) ***`wallet.low_balance` is this component's event.*** US-9.9 names the push ("< Rs 200 → low
+  balance push"), D5' §9.4 names both thresholds, and no spec gives the event a name, a topic or an
+  envelope. **D6' §2.2 should print it.**
+  (n) ***D7' §4.2's wallet-svc row is four variables for a service with fourteen settings.*** All four
+  are honoured **exactly as §4.2 spells them** (`Onepay__ApiKey`, `LankaQr__MerchantId`,
+  `ComBankIpg__WebhookSecret`, `LowBalance__ThresholdMinor`), with a `Wallet:*` value winning where both
+  are set. **The row needs rewriting** against `WalletOptions`.
+  (o) ***`Onepay__WebhookSecret` is not in §4.2 at all***, and it is the single most important value in
+  this service: without it every OnePay callback is refused, so a driver pays at the gateway and is
+  never credited. §4.2 lists `Onepay__ApiKey` and `Onepay__WebhookSecret` for **fare-svc** and gives
+  wallet-svc only the API key. **Both belong on both rows.** Logged at *error* level on start-up.
+  (p) ***`sum(bigint)` is `numeric` in Postgres***, and Dapper cannot bind it to a `long` record
+  property — the error is an unrelated-looking "no constructor matching signature". Cast to `::bigint`
+  in the query. Recorded because C047–C050 will write the same aggregates over the same money columns.
+
+  **Decisions —** (1) **One method writes every entry, and that is the component.**
+  `LedgerService.PostAsync` claims the idempotency key, locks the accounts in id order, checks the
+  arithmetic, writes the postings, updates all three read models, queues the outbox row, commits, and
+  *then* writes the D-08 cache. Top-up settlement, voucher purchase, transfer and both internal routes
+  differ only in which legs they build and what row they write beside them (a callback passes a
+  `beforeCommit` that runs in the same transaction). Five things that have to happen together; five
+  call sites would eventually be four.
+  (2) **Σ legs = 0 is checked in code *as well as* by `trg_balanced`.** The trigger is the guarantee —
+  it binds a psql session and every future service, and it fires at COMMIT — but a violation there is a
+  500 on somebody's wallet. Checking first makes a caller's arithmetic bug diagnosable.
+  (3) **Accounts are locked in id order.** A transfer touches two wallets; two simultaneous transfers
+  between the same pair in opposite directions would deadlock if each locked its own sender first.
+  `ORDER BY id … FOR UPDATE` makes that impossible rather than rare.
+  (4) **Two idempotency guards on a callback, answering different questions.**
+  `ux_topups_provider_txn` catches a redelivery of the same gateway transaction (R-19, checked first);
+  the ledger's `topup:{topupId}` key catches two *different* callbacks for one session, which a
+  provider retrying under a new transaction id produces. A redelivery answers `200` with the same body
+  — which is what stops a provider retrying for ever.
+  (5) **A callback whose amount disagrees with its session credits nothing.** Crediting the callback's
+  figure lets a spoofed or misconfigured provider set the balance; crediting the session's credits
+  money the driver may not have paid. Both are wrong, so the session stays `Pending` and the mismatch
+  is logged as the settlement exception D6' §7.2 routes to Finance.
+  (6) **The face value moves both ways in a voucher purchase**, and the discount lives only in
+  `paid_minor`. `ck_voucher_purchases_credited` (C005) already required it; the discount is truncated
+  so the *price* rounds up, which leaves the fraction of a minor unit with the platform rather than the
+  buyer. A denomination that is not an active tier is refused rather than interpolated: the rate is per
+  voucher value (AL-01), and an interpolated one is a number somebody is paid.
+  (7) **A transfer's balance is checked at approval, never at request.** What the holder can afford
+  when they answer is the only figure that matters; a request for more than they hold is allowed to
+  *exist* and stays `PENDING` after a refusal, so they can top up and approve it later.
+  (8) **The write-through is a write, not a delete, and it happens after COMMIT.** D5' §9.2's
+  "debit-invalidated" is satisfied more strongly by replacing the value than by dropping it, and C034's
+  own test expects wallet-svc to write it. Inside the transaction it would publish a balance a rollback
+  un-did; on a Redis failure the key is deleted instead (sending the gate to `billing.wallets`, updated
+  in the same transaction), and if that fails too the 5 s TTL bounds it.
+  (9) **The low-balance event is edge-triggered.** The balance *before* the posting is known inside the
+  transaction, so a driver already below the threshold who spends again is not warned twice — the same
+  choice C036 and C044 made, for the same reason: level-triggered, the warning is the noise a driver
+  mutes inside a day.
+  (10) **`WebhookSignature` went into the kernel, not into this service.** Six payment callbacks across
+  four services share the scheme `_shared.yaml` declares once (this component's two, C048's, C049/C050's),
+  and four copies of a signature check is four chances for one of them to compare with `==` — which
+  leaks the key a byte at a time to a caller who can time it. Both hex and base64 are accepted because
+  OnePay's documentation and the ComBank IPG differ, and a deployment that guessed wrong would reject
+  every genuine callback while looking like a provider outage.
+  (11) **The internal seam is idempotency-exempt because the *body* carries the ledger key.** A
+  header-based guard over the same money would be weaker and would need its own table. The two
+  provider callbacks are exempt for R-19's reason. Everything else on this surface goes through
+  `billing.command_log`.
+  (12) **A transfer that is not the caller's is a 404**; the `409` that follows is only reachable once
+  the caller has proved the row is theirs. Telling "not yours" from "does not exist" would make the
+  endpoint an oracle over other drivers' credit requests.
+
+  **What the next components need —**
+  **For C047 (subscription-svc-daily-fee) —** the daily fee is a debit through
+  `POST /v1/internal/wallet/{driverId}/debit` with `X-MageRide-Internal-Key: $Wallet__InternalApiKey`,
+  `kind: "daily_fee"` and — this is the part that matters — `idempotencyKey` spelled exactly
+  `daily_fee:{driverId}:{vehicleId}:{feeDate}` (1101's own comment fixes it). That key is UNIQUE on
+  `billing.journal_entries`, so **your DoD's "charging twice on the same (driver, vehicle, Asia/Colombo
+  date) debits once" is already true** — the response's `replayed: true` is how you tell. A driver who
+  cannot cover it answers `402 insufficient-wallet`; do not retry that as a failure, it is the D-08
+  gate's own answer arriving late. **Write no ledger entry yourself.** Your `PUT
+  /v1/admin/voucher-discount-tiers` and this service's `PUT /v1/wallet/admin/voucher-discount-tiers`
+  are the same table and both spellings are in D3' Part 2 — one should be retired (C007 said so first).
+  For your D3'-spelled `/v1/vouchers/purchase`, `/v1/transfers/driver` and
+  `/v1/subscriptions/credit-transfer/*`: **forward the caller's bearer to the `/v1/wallet/**`
+  equivalents** rather than reimplementing them (gap (d), ADD §11.6). They are
+  `POST /v1/wallet/voucher/purchase`, `/credit-transfer/initiate`, `/request`,
+  `/{transferId}/approve`, `/{transferId}/reject` and `GET /credit-transfer/pending`.
+  **For C048 (subscription-svc-mode-b) —** Mode B subscription money is a **pass-through to the fleet
+  owner that MageRide never holds**, so it writes no entry here and needs nothing from this service.
+  Your OnePay/LankaQR callbacks should verify with `MageRide.Shared.Payments.WebhookSignature` — it is
+  in the kernel for you.
+  **For C049/C050 (fare-svc) —** tips, refunds and overpayment reversals are
+  `POST /v1/internal/wallet/{driverId}/credit` (`tip_payout`, `payment_refund`, `overpaid_reversal`);
+  the D-05 penalty settle and a wallet-paid fare are the debit route (`penalty_settle`,
+  `trip_payment`). D5' §7.1's key spelling is `penalty_id || ':' || rideId`, fixed by 1101 — use it
+  verbatim. Same webhook verifier. **`fares.driver_earnings` is still nobody's writer** (C042's note
+  stands); this service does not touch it.
+  **For C051 (notification-svc) —** `wallet.low_balance` on `wallet.events`, keyed by the wallet owner,
+  carrying `{ownerId, balanceMinor, thresholdMinor, severity, notificationType: "LOW_BALANCE"}` and **no
+  rendered text** (D-26 — the template is content-svc's, C045). `severity` is `low` or
+  `top_up_required`, which is D5' §9.4's two clauses; only a client draws the banner. The two movement
+  events are on the same topic if you want a "topped up" confirmation.
+  **For C065 (admin-bff) —** `POST /v1/admin/drivers/wallet/{id}/reverse-fee` is
+  `POST /v1/internal/wallet/{driverId}/credit` with `kind: "adjustment"` and a key composed from the
+  charge being reversed. **The `audit.events` row is yours** — this service writes none, by the same
+  split C045 uses; `billing.voucher_discount_tiers.updated_by` keeps the after-image's actor. The
+  finance transactions report (US-24.x) is `GET /v1/wallet/{userId}/transactions`, which a back-office
+  role may read for any driver.
+  **For C118 (contract tests) —** `wallet.yaml` gained seven operations and four schemas; three
+  operations gained `X-Attestation` and are now in the gateway's enforced set.
+  **Build host —** Docker for three Testcontainers fixtures (Postgres, Redis, Redpanda); the replica
+  stack stayed down throughout. `Wallet.Api.Tests` takes ~70 s. **No new NuGet reference.**

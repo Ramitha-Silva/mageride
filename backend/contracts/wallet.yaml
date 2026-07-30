@@ -14,9 +14,30 @@ openapi: 3.1.0
 #     ADD Appendix C lists both; D3' Part 2 lists only the OnePay route, and card payment *is*
 #     the OnePay rail. One endpoint, not two.
 #
-# The voucher *purchase* endpoint is subscription-svc's `POST /v1/vouchers/purchase` (D3' Part 2).
-# ADD Appendix C also spells it `POST /wallet/voucher/purchase`; D3' is the API source of truth,
-# so it is not duplicated here. See the C007 handoff.
+# Δ C046 — seven operations, and one reversal of a C007 decision:
+#   POST /v1/wallet/voucher/purchase            the money side of the bulk voucher (US-9.19)
+#   POST /v1/wallet/credit-transfer/request     US-9.10 — ask a holder for credit, by Driver ID
+#   GET  /v1/wallet/credit-transfer/pending     US-9A.10 — the holder's approval inbox
+#   POST /v1/wallet/credit-transfer/{id}/approve  US-9.13 — exact value, no commission
+#   POST /v1/wallet/credit-transfer/{id}/reject   US-9.12
+#   GET  /v1/wallet/topup/{topupId}             the state a client polls when it lost the webhook race
+#   POST /v1/internal/wallet/{driverId}/debit | /credit   the ledger seam for the services that
+#                                               move a driver's money and do not own the ledger
+#
+# **The voucher purchase and the request/approve/reject flow are here, not in subscription-svc.**
+# C007 left them out of this file because D3' Part 2 prints them under `/v1/vouchers` and
+# `/v1/subscriptions/credit-transfer`. Two things overrule that placement:
+#   * `billing.*` is one bounded context with one writer. The discount arithmetic, the balance
+#     check and the two-leg posting are the same ledger operation whichever path is called, and a
+#     second implementation of a *balanced entry* is the one duplication this platform cannot
+#     afford (D-09).
+#   * ADD §11.6 draws the flow that way: subscription-svc holds the request/approve *workflow* and
+#     calls **wallet-svc** to check the holder's balance and to move the money.
+# So subscription-svc keeps its D3' route table and forwards the caller's bearer to these routes
+# (C047/C048). Recorded in the C046 handoff; D3' should name one owner per operation.
+#
+# REMOVED, do not re-add (second list): POST /v1/wallet/topup/card — consolidated into
+# /v1/wallet/topup/onepay, which *is* the card rail (D6' §7.1). ADD Appendix C lists both.
 # =============================================================================================
 
 info:
@@ -248,6 +269,204 @@ paths:
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
       x-error-codes: [unauthorized]
 
+  /v1/wallet/voucher/purchase:
+    post:
+      operationId: purchaseVoucherFromWallet
+      summary: Buy bulk credit at the configured per-denomination discount.
+      description: |
+        **Δ C046.** US-9.19, Driver App. The discount lives entirely in what is **paid**: a Rs 1,000
+        voucher on a 10 % tier costs Rs 900 and credits Rs 1,000 to the buyer's own wallet. There is
+        no redeem code and no second party — `credited_minor = denomination_minor` is a database
+        constraint (C005).
+
+        `denominationMinor` must match an **active** tier exactly; an amount between tiers is
+        `validation-failed` rather than rounded, because the discount is per denomination (AL-01)
+        and interpolating one would invent a rate no admin set.
+
+        The purchase is one balanced journal entry: the platform account is debited the face value
+        and the buyer credited the face value, with the discount recorded on the purchase row. That
+        difference **is** the informal reseller's whole margin — there is no per-transfer commission
+        anywhere on this platform.
+
+        Payment for the voucher itself rides the same OnePay/LankaQR rail as a top-up; a purchase
+        whose `gatewayRef` has already been seen credits nothing twice
+        (`ux_voucher_purchases_gateway_ref`, C005).
+      tags: [wallet]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+        - $ref: './_shared.yaml#/components/parameters/XAttestation'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [denominationMinor]
+              properties:
+                denominationMinor:
+                  type: integer
+                  format: int64
+                  minimum: 1
+                gatewayRef:
+                  type: string
+                  maxLength: 128
+                  description: The settled gateway reference this purchase was paid with, when there is one.
+      responses:
+        '201':
+          description: Purchased and credited.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoucherPurchase'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, invalid-amount, attestation-failed, forbidden, conflict]
+
+  /v1/wallet/credit-transfer/request:
+    post:
+      operationId: requestWalletCreditTransfer
+      summary: Ask another driver for credit, by Driver ID.
+      description: |
+        **Δ C046.** US-9.10, Driver App. Creates a `PENDING` request against the **holding**
+        driver, who approves or rejects it in their own app. **No money moves here** — the balance
+        is checked at approval, because the holder's balance at request time says nothing about
+        what it will be when they answer.
+
+        **Driver ID only.** SCR-DA/DI-023's QR-scan path was removed by AL-34 and there is no
+        field for a scanned payload on this request.
+      tags: [wallet]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+        - $ref: './_shared.yaml#/components/parameters/XAttestation'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [holderDriverId, amountMinor]
+              properties:
+                holderDriverId:
+                  description: The driver holding the credit — the one who will approve.
+                  allOf:
+                    - $ref: './_shared.yaml#/components/schemas/Ulid'
+                amountMinor:
+                  type: integer
+                  format: int64
+                  minimum: 1
+      responses:
+        '201':
+          description: Request created and awaiting the holder.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransferRow'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, invalid-amount, attestation-failed, forbidden, not-found]
+
+  /v1/wallet/credit-transfer/pending:
+    get:
+      operationId: listPendingWalletCreditTransfers
+      summary: Credit requests waiting on this driver.
+      description: |
+        **Δ C046.** US-9A.10, Driver App — the holder's approval inbox, newest first. Only requests
+        addressed to the caller are visible; a driver cannot read what they were not asked.
+      tags: [wallet]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/Cursor'
+        - $ref: './_shared.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Pending requests.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './_shared.yaml#/components/schemas/CursorPage'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/TransferRow'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden]
+
+  /v1/wallet/credit-transfer/{transferId}/approve:
+    post:
+      operationId: approveWalletCreditTransfer
+      summary: Approve a credit request — debit the exact amount, credit the exact amount.
+      description: |
+        **Δ C046.** US-9.13. Only the **holding** driver may approve, and only a `PENDING` request.
+        Posts one balanced `driver_transfer` entry: the holder is debited `amountMinor` and the
+        requester credited `amountMinor`. **No fee leg is ever written** — there is no journal kind
+        that could carry one (AL-01, C005).
+
+        `402 insufficient-wallet` when the holder cannot cover it at approval time. Approving twice
+        is a `409`; the second call moves nothing.
+      tags: [wallet]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TransferId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+        - $ref: './_shared.yaml#/components/parameters/XAttestation'
+      responses:
+        '200':
+          description: Approved and posted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransferRow'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '402': { $ref: './_shared.yaml#/components/responses/PaymentRequired' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [attestation-failed, insufficient-wallet, forbidden, not-found, conflict]
+
+  /v1/wallet/credit-transfer/{transferId}/reject:
+    post:
+      operationId: rejectWalletCreditTransfer
+      summary: Reject a credit request.
+      description: '**Δ C046.** US-9.12. Only the holding driver, only a `PENDING` request. Nothing is posted.'
+      tags: [wallet]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TransferId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Rejected.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransferRow'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, not-found, conflict]
+
   # -------------------------------------------------------------------------------------------
   # Top-up
   # -------------------------------------------------------------------------------------------
@@ -406,6 +625,134 @@ paths:
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
       x-error-codes: [validation-failed, unauthorized, not-found]
 
+  /v1/wallet/topup/{topupId}:
+    get:
+      operationId: getTopup
+      summary: The state of one top-up session.
+      description: |
+        **Δ C046.** What a client polls after returning from the OnePay page: the wallet is credited
+        on the **callback**, so the app that comes back from the gateway may arrive before the
+        webhook does. D6' §7.1 gives the session a 90-second pending window; this is how the driver's
+        screen resolves it without guessing. Only the session's own driver may read it.
+      tags: [topup]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: topupId
+          in: path
+          required: true
+          schema:
+            $ref: './_shared.yaml#/components/schemas/Ulid'
+      responses:
+        '200':
+          description: The session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Topup'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, not-found]
+
+  # -------------------------------------------------------------------------------------------
+  # The internal ledger seam (mTLS, D3' §0)
+  #
+  # Every service that moves a driver's money without owning the ledger comes through here, so
+  # `billing.journal_postings` has exactly one writer. The `kind` whitelist is the boundary: a
+  # caller may post the kinds a spec names for it and nothing else, which is what stops this
+  # becoming a general "write me an entry" API.
+  # -------------------------------------------------------------------------------------------
+  /v1/internal/wallet/{driverId}/debit:
+    post:
+      operationId: internalWalletDebit
+      summary: Debit a driver's wallet on behalf of another service.
+      description: |
+        **Δ C046.** Callers and their kinds, each named by a spec:
+
+        | Caller | `kind` | Spec |
+        |---|---|---|
+        | subscription-svc (C047) | `daily_fee` | D-13, D5' §2.2 — charged before the second trip |
+        | fare-svc (C049/C050) | `penalty_settle` | D5' §7.1 — the D-05 cross-trip penalty |
+        | fare-svc | `trip_payment` | a wallet-paid fare |
+
+        `idempotencyKey` becomes `billing.journal_entries.idempotency_key`, so it must be composed
+        from the business fact and not randomly — a retry has to collide. The daily-fee spelling is
+        `daily_fee:{driverId}:{vehicleId}:{feeDate}` (1101).
+
+        `402 insufficient-wallet` when the balance will not cover it: this service refuses rather
+        than letting a driver's wallet go negative, because §10 leaves driver non-negativity to the
+        application and nothing else enforces it.
+      tags: [wallet]
+      security:
+        - mtls: []
+      parameters:
+        - $ref: '#/components/parameters/DriverId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LedgerPostingRequest'
+      responses:
+        '200':
+          description: Posted, or replayed from the ledger when the key was already used.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LedgerPostingResult'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '402': { $ref: './_shared.yaml#/components/responses/PaymentRequired' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-idempotency-exempt: >-
+        The request body carries its own ledger idempotency key, which is UNIQUE on
+        billing.journal_entries and is what makes a retry a no-op; a second header key would be a
+        second, weaker guard over the same money.
+      x-error-codes: [validation-failed, invalid-amount, insufficient-wallet, not-found]
+
+  /v1/internal/wallet/{driverId}/credit:
+    post:
+      operationId: internalWalletCredit
+      summary: Credit a driver's wallet on behalf of another service.
+      description: |
+        **Δ C046.** Callers and their kinds:
+
+        | Caller | `kind` | Spec |
+        |---|---|---|
+        | fare-svc (C050) | `tip_payout` | US-8.13 — a passenger tip reaching the driver |
+        | fare-svc | `payment_refund` · `overpaid_reversal` | E-05, D-10 |
+        | admin-bff (C065) | `adjustment` | `POST /v1/admin/drivers/wallet/{id}/reverse-fee` |
+
+        Same idempotency rule as the debit: the key is the business fact.
+      tags: [wallet]
+      security:
+        - mtls: []
+      parameters:
+        - $ref: '#/components/parameters/DriverId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LedgerPostingRequest'
+      responses:
+        '200':
+          description: Posted, or replayed from the ledger when the key was already used.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LedgerPostingResult'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-idempotency-exempt: >-
+        The request body carries its own ledger idempotency key, which is UNIQUE on
+        billing.journal_entries and is what makes a retry a no-op; a second header key would be a
+        second, weaker guard over the same money.
+      x-error-codes: [validation-failed, invalid-amount, not-found]
+
   # -------------------------------------------------------------------------------------------
   # Admin
   # -------------------------------------------------------------------------------------------
@@ -496,10 +843,26 @@ components:
       $ref: './_shared.yaml#/components/securitySchemes/bearerAuth'
     hmacSignature:
       $ref: './_shared.yaml#/components/securitySchemes/hmacSignature'
+    mtls:
+      $ref: './_shared.yaml#/components/securitySchemes/mtls'
 
   parameters:
     UserId:
       name: userId
+      in: path
+      required: true
+      schema:
+        $ref: './_shared.yaml#/components/schemas/Ulid'
+
+    DriverId:
+      name: driverId
+      in: path
+      required: true
+      schema:
+        $ref: './_shared.yaml#/components/schemas/Ulid'
+
+    TransferId:
+      name: transferId
       in: path
       required: true
       schema:
@@ -634,6 +997,89 @@ components:
         raw:
           type: object
           additionalProperties: true
+
+    VoucherPurchase:
+      type: object
+      description: |
+        What a bulk-credit purchase did. `paidMinor` is the discounted price and `creditedMinor` is
+        the face value — the gap is the buyer's margin when they pass the credit on at par (AL-01).
+      required: [purchaseId, denominationMinor, discountBps, paidMinor, creditedMinor, currency, balanceAfterMinor, createdAt]
+      properties:
+        purchaseId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        denominationMinor:
+          type: integer
+          format: int64
+          minimum: 1
+        discountBps:
+          type: integer
+          format: int32
+          minimum: 0
+          maximum: 10000
+        paidMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        creditedMinor:
+          type: integer
+          format: int64
+          minimum: 1
+        currency:
+          $ref: './_shared.yaml#/components/schemas/Currency'
+        balanceAfterMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        entryId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        createdAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    LedgerPostingRequest:
+      type: object
+      description: |
+        One balanced entry, requested by the service that owns the *reason* for it. The amount is
+        unsigned — the route says which direction it moves.
+      required: [amountMinor, kind, idempotencyKey]
+      properties:
+        amountMinor:
+          type: integer
+          format: int64
+          minimum: 1
+        kind:
+          type: string
+          description: A `billing.journal_entries.kind` this caller is allowed to post (see the operation).
+          enum: [daily_fee, penalty_settle, trip_payment, tip_payout, payment_refund, overpaid_reversal, adjustment]
+        idempotencyKey:
+          type: string
+          maxLength: 200
+          description: Composed from the business fact, never random. Becomes the ledger's own unique key.
+        description:
+          type: string
+          maxLength: 500
+        reference:
+          type: string
+          maxLength: 128
+          description: Ride, penalty or fee id this posting settles, for the driver's history line.
+
+    LedgerPostingResult:
+      type: object
+      required: [entryId, accountId, amountMinor, balanceAfterMinor, replayed]
+      properties:
+        entryId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        accountId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        amountMinor:
+          description: Signed as it was posted to this account — a debit is negative.
+          type: integer
+          format: int64
+        balanceAfterMinor:
+          type: integer
+          format: int64
+        replayed:
+          type: boolean
+          description: True when the idempotency key had already been used and nothing new was posted.
 
     VoucherDiscountTier:
       type: object

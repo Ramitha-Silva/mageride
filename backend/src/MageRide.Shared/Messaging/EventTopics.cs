@@ -90,6 +90,26 @@ public static class EventTopics
     /// </remarks>
     public const string FleetEvents = "fleet.events";
 
+    /// <summary>
+    /// wallet-svc's outbox — <c>wallet.debited</c>, <c>wallet.credited</c>,
+    /// <c>wallet.low_balance</c>. Key: the wallet owner (driverId or fleetId).
+    /// </summary>
+    /// <remarks>
+    /// <b>Not in D6' §2.1's six-topic registry</b> — a micro-change-set raised in the C046 handoff,
+    /// the same shape as the four above, and the best-named of them: ADD §6's wallet-svc row and the
+    /// replica's both say "publishes <c>wallet.debited</c> / <c>wallet.credited</c> events that
+    /// invalidate dispatch-svc's Redis balance cache", D5' §9.2 makes the cache "debit-invalidated
+    /// (<c>wallet.debited</c> event clears)", and ride-svc's ADD row lists <c>wallet.debited</c>
+    /// among what it consumes. Two named producers' worth of consumers, and no topic.
+    /// <para>
+    /// Keyed by the wallet <i>owner</i> rather than by the journal entry: a debit and the credit that
+    /// follows it must reach the D-08 cache in the order they happened, and only the owner key
+    /// guarantees that. <c>wallet.low_balance</c> rides the same topic because it is a fact about the
+    /// same wallet and its consumer (notification-svc, US-9.9) is reading it anyway.
+    /// </para>
+    /// </remarks>
+    public const string WalletEvents = "wallet.events";
+
     /// <summary>Audit trail (D-35). Key: entityId.</summary>
     public const string AuditEvents = "audit.events";
 
@@ -97,7 +117,7 @@ public static class EventTopics
     public static readonly IReadOnlyList<string> All =
     [
         TelemetryRaw, TelemetryNormalized, TripEvents, RideEvents, DispatchEvents, RegistryEvents,
-        ProvisioningEvents, ReputationEvents, FleetEvents, AuditEvents,
+        ProvisioningEvents, ReputationEvents, FleetEvents, WalletEvents, AuditEvents,
     ];
 
     /// <summary>

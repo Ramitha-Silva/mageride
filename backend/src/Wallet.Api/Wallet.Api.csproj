@@ -1,0 +1,59 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    Wallet.Api (C046 wallet-svc) — the driver wallet on a balanced double-entry ledger.
+
+    ONE WRITER, ONE INVARIANT. Every movement of money on this platform that touches a driver's
+    wallet goes through `LedgerService.PostAsync`: it writes a `billing.journal_entries` row and its
+    balanced `billing.journal_postings` legs, updates `billing.accounts` / `billing.wallets` /
+    `billing.wallet_transactions` in the same transaction, queues the `wallet.debited` /
+    `wallet.credited` outbox row beside them (R-13), and writes through the D-08 dispatch balance
+    cache after COMMIT. Σ legs = 0 is checked here *and* by `trg_balanced` at COMMIT (1101).
+
+    In: `POST /v1/wallet/topup/onepay` · `/lankaqr` + their two HMAC callbacks (D6' §7.1/§7.2),
+    `POST /v1/wallet/voucher/purchase` (US-9.19), the four credit-transfer operations (US-9.10-9.13,
+    US-9A.12), and `POST /v1/internal/wallet/{driverId}/debit` · `/credit` — the seam every service
+    that moves a driver's money without owning the ledger comes through (subscription-svc's daily
+    fee, fare-svc's tips and penalty settles, admin-bff's fee reversal).
+
+    Out: `GET /v1/wallet/{userId}` · `/transactions` (JSON or CSV) · `/transfers`, the voucher tier
+    ladder, and `wallet.events` on Redpanda.
+
+    FENCES:
+      AL-05 — bank transfer is not a top-up method. There is no endpoint, no `method` value, no
+              receipt column and no reconciliation queue for it; `ck_topups_method` (1107) admits
+              `onepay` and `lankaqr` only.
+      AL-01 — "reseller" is not a role, an account or a capability. One wallet per driver, and a
+              transfer moves the exact value: there is no journal kind that could carry a fee leg,
+              so the platform *cannot* record a per-transfer commission.
+      AL-34 — a credit request names a Driver ID. There is no field for a scanned QR payload.
+
+    Verify: dotnet test backend/src/Wallet.Api.Tests -c Release
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.Wallet</RootNamespace>
+    <AssemblyName>MageRide.Wallet.Api</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <UserSecretsId>mageride-wallet-api</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MageRide.Shared\MageRide.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Dapper" />
+    <PackageReference Include="Npgsql" />
+    <!-- The D-08 balance cache dispatch-svc gates every second trip on. -->
+    <PackageReference Include="StackExchange.Redis" />
+    <!-- `wallet.events` — the outbox dispatcher's producer arrives through MageRide.Shared, and
+         the OnePay session call is an ordinary IHttpClientFactory client. -->
+    <PackageReference Include="Confluent.Kafka" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Wallet.Api.Tests" />
+  </ItemGroup>
+
+</Project>
