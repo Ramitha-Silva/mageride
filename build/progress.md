@@ -66,7 +66,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C038 | mqtt-bridge-svc | 2 | DONE | 2026-07-29 | 43 HotPath tests green (13 tagged `Category=MqttBridge`, 8 new); **one broker-config change** — `mqtt.shared_subscription_strategy = sticky`, because EMQX 5.8's `round_robin` default makes two replicas race one vehicle's samples and the end-to-end ordering DoD unreachable; live and replay now hold **separate broker sessions**, not just separate share groups; the bridge became the D-17 *detector* (EMQX stays the enforcer); `IEventPublisher` now returns a `PublishReceipt`; 4 micro-change-sets |
 | C039 | position-processor-svc | 2 | DONE | 2026-07-29 | 88 HotPath tests green (53 tagged `Category=PositionProcessor`, 45 new); **no migration** — this service has no database; D-18/T-07 landed as a pure filter with ADD §12.6's table in configuration; the R-08 ownership conflict between ADD §9.4 and C034 resolved by splitting on *what decides the fact* (phase = dispatch-svc, position = here) with a new `veh:driver:{vehicleId}` binding; one fixture bug fixed — `Samples.Dehiwala` was documented as a different res-5 cell and is not; 7 micro-change-sets |
 | C040 | persistence-writer-svc | 2 | DONE | 2026-07-30 | 111 HotPath tests green (23 tagged `Category=PersistenceWriter`, all new); **1 trips migration (0506)** — `ux_possample_session_minute` and `trips.session_summaries`, the ADD §9.2 trip summary that no DDL source printed; `COPY` measured at **14,811 rows/s** against the DoD's 3,000; Postgres joins `HotPathCollection` (4 containers now) and `migrate-verify.sh` expects 7 trips tables, not 6; 6 micro-change-sets |
-| C041 | fanout-svc | 2 | PENDING | | |
+| C041 | fanout-svc | 2 | DONE | 2026-07-30 | 48 tests green in a **new suite** (`Fanout.Api.Tests`; the 9 hub tests moved out of HotPath.Tests, which is 102); **no migration** — this service owns no table; the D6' §5.1/§5.2 contradiction resolved with a `vehicle:{vehicleId}` group, argued below; a **custom Redis control channel** rather than SignalR's backplane, because the latter would multiply every cell batch by the replica count; 9 micro-change-sets |
 | C042 | query-svc | 2 | PENDING | | |
 | C043 | tcp-adapter | 2 | PENDING | | |
 | C044 | fleet-health-svc | 2 | PENDING | | |
@@ -5409,3 +5409,117 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   `migrate-verify.sh` ~2 min. **No new NuGet dependencies** — `Npgsql` and `Dapper` were already
   pinned centrally; `NpgsqlBinaryImporter` is why Npgsql is referenced directly rather than only
   through the kernel.
+
+- **Component:** C041 fanout-svc — 2026-07-30
+- **Status:** DONE — `dotnet test backend/src/Fanout.Api.Tests -c Release` is 48/48 green, and all four
+  DoD lines are asserted through a real SignalR client over a real WebSocket against a real Redis,
+  Redpanda and EMQX. `HotPath.Tests` stays green at 102 (the nine hub tests moved into the new suite);
+  `MageRide.Shared.Tests` at 235. **No migration** — this service owns no table and holds no database.
+- **Notes:**
+  **The one design decision everything else follows from —** D6' §5.1 and §5.2 cannot both be true of
+  a geocell group. §5.2 says a public `cell:{h3index}` group fans out "Mode A + entitled Mode B", and
+  a group has one membership and one message: a Mode B frame put on it reaches every passenger in the
+  cell, entitled or not. ADD §11.10's remedy — "for each geocell … `RemoveFromGroupAsync(connectionId,
+  "geocell:" + cell)`" — would also stop the revoked passenger seeing the buses, which is visibility
+  §5.2 grants unconditionally. **Resolved with a fourth group, `vehicle:{vehicleId}`**, carrying one
+  vehicle to the passengers entitled to it (D-23) and, for a Mode C vehicle, to its own driver
+  (AL-31). Both spec lines then hold literally: entitlement is still "checked on group join" and never
+  per frame, and D-22's revocation is still one directed `RemoveFromGroupAsync` — one that now removes
+  exactly what was granted. Micro-change-set (a) against D6' §5.1's group table and `signalr-hub.md`
+  §2.1, both updated.
+  **There is deliberately no `SubscribeVehicle` method.** Every membership of that group is derived
+  from server-side state (`share:{userId}`, or registry-svc's `lock:driver:{driverId}`), so there is
+  no request a client could make that the server would not have to overrule — a method taking a
+  vehicle id would be a method whose whole body is "ignore the argument". It is also what makes the
+  AL-31 fence structural rather than a promise: a driver is joined to exactly one vehicle group, their
+  own, whatever the app asks for.
+  **The backplane is a channel of our own, not `AddStackExchangeRedis()`.** D6' §5 asks for "Redis
+  (MVP) → Redpanda (scale)" and the C024 handoff left a fence saying C041 must add one for the
+  directed sends and keep the per-cell batches off it. SignalR's backplane cannot do that — it is a
+  property of the `HubLifetimeManager` and applies to every group send the process makes — and every
+  replica already produces every cell batch independently, so turning it on would deliver one copy per
+  replica per frame. So the directed sends (`ShareRevoked`, `RideStateChanged`,
+  `LocationRequestResolved`, `PackageStatus`) travel a Redis pub/sub channel, `fanout:control`, and
+  each replica applies a signal to **its own connections only** — disjoint sets, so exactly-once
+  delivery — while the batches stay local. `EntitlementTests` measures the cross-replica hop against
+  D-22's 200 ms with the passenger deliberately on the replica that did *not* consume the event.
+  **Spec gaps and micro-change-sets —**
+  (a) **`vehicle:{vehicleId}` is not in D6' §5.1's group table.** Argued above; `signalr-hub.md` §2.1
+  and §4 updated, D6' §5.1 needs the row.
+  (b) **`signalr-hub.md` §2.1 omits the proxy *rider* from `ride:{rideId}`.** It names "the ride's
+  passenger, its driver, and — for a proxy booking — the booker". P-01 makes booker and rider two
+  people and the rider is the one in the car; they are admitted, and the contract file now says so.
+  (c) **D3' §3.1 and D6' §5.1 write `SubscribeRide`/`SubscribeLocRequest` arguments as ULIDs.**
+  `rides.rides.id` and `rides.location_requests.request_id` are `UUID` columns and every REST response
+  renders them as such. The hub takes UUID strings; contract file corrected.
+  (d) **No spec pins the US-7.17 freshness window.** D5' §5.4, ADD §6 and US-7.17 all say "older than
+  the freshness window"; the only related figure is ADD §7.5.1's dispatch rule (`2 × expectedInterval`),
+  whose interval is per phase and runs 1–60 s. `Fanout:FreshnessWindow` is **60 s**, chosen to equal
+  `Dispatch:PresenceTtl` and `PositionProcessor:DriverAvailabilityTtl` — two different answers to "is
+  this vehicle live" would show up to a passenger as a marker they can see and cannot book.
+  (e) **Three Redis keys are not in ADD §9.4's key space** — `veh:engaged:{vehicleId}` (US-7.16's
+  active hire), `veh:offline:{vehicleId}` (the last-will instant) and `fanout:ride:{rideId}` (the
+  participant projection `SubscribeRide` is checked against). Each is argued at its declaration in
+  `RedisKeys`. `share:{userId}` *is* spec'd (D-23) and is the only one that is.
+  (f) **ADD §11.10's `SREM` + geocell removal is superseded** by (a). The `SREM` is kept — this
+  service is the SET's only writer — and the group removal is against `vehicle:{vehicleId}`.
+  (g) **D6' §2.2 prints no envelope for `registry.events`.** The outbox dispatcher publishes the
+  payload column verbatim with the type in an `eventType` **Kafka header**; ride-svc's rows only look
+  like envelopes because `RideEvents.Build` serialises one into that column. A consumer that looked
+  for `eventType` in a registry payload would silently discard every share event — the consumer reads
+  the header, and `Events.Share` in the test suite produces the flat shape on purpose.
+  (h) **`etaSeconds` on `RideStateChanged` is never sent.** D3' marks it optional; the estimate is
+  query-svc's (C042), computed from the route, and inventing one here would put two different numbers
+  in front of one passenger.
+  (i) **`Fanout:JoinSeedFrames` survives C041.** The C024 note said "C041/C042 should remove it";
+  `signalr-hub.md` §1.1 makes `GET /v1/nearby` the real snapshot path and that is C042, so removing it
+  now would leave a passenger opening the map with nothing at all. It is kept, and now runs through
+  the same visibility filter as a live batch — a replay that showed an engaged taxi would be the D-22
+  leak with a two-second delay on it. **C042 removes it.**
+  **Two races found and closed, both of which fail silently —**
+  (1) **`ride.events` is partitioned by `rideId`, so two rides are two partitions and nothing orders
+  them against each other.** An offer that expired *before* an accept can be consumed after it, and an
+  unconditional `DEL veh:engaged:{vehicleId}` there would put an occupied taxi back on the public map
+  for the rest of the trip. The release is a Lua compare-and-delete on the ride id.
+  (2) **A vehicle driving from one of a passenger's nineteen cells into another stops appearing in the
+  first cell's stream**, which is indistinguishable from having stopped reporting. A naive stale sweep
+  would tell the client to erase a marker the next batch puts straight back — once per window, for
+  every moving vehicle on the map. The sweep now checks the candidate's own current position first and
+  only announces a vehicle that is stale *everywhere*. A vehicle that leaves the whole view is neither
+  stale nor offline nor engaged, so no reason in the contract fits and the client ages it out — which
+  it must anyway, since a passenger panning the map changes their cell set with no server event.
+  **Known gap — `share:{userId}` has no rebuild path.** This service is the SET's only writer and
+  builds it from `registry.events` with a stable consumer group reading from Earliest, so a fresh
+  deployment replays the topic and rebuilds every passenger's entitlements. A Redis flush *after* that
+  leaves entitled passengers with no Mode B visibility until their next grant event. Failing closed is
+  the right direction — a passenger who cannot see their school van complains, where the opposite
+  default is a disclosure nobody can see — but the durable fix is a read-through against registry-svc,
+  and Mode B subscriptions are **C048's** surface. Not stubbed here: a rebuild path that quietly
+  returned an empty set would read exactly like a working one.
+  **Where the visibility model is read from —** `ride.events` (engagement, participants,
+  `RideStateChanged`, `PackageStatus`, `LocationRequestResolved`), `registry.events` (the entitlement
+  SET, D-22), the EMQX last will on `veh/+/status` (US-7.17's `offline` half, as `svc-fanout`, which
+  `acl.conf`'s `^svc-` rule already grants), and `lock:driver:{driverId}` (AL-31). Each has an
+  `Enabled` switch and **each one off is a filter that cannot close**, so
+  `WarnAboutFiltersThatCannotClose` names them at start-up — position-processor-svc's rule, for the
+  same reason: an open filter looks exactly like a working one from the outside.
+  **For C042 (query-svc) —** `GET /v1/nearby` must apply the *same* four rules this service applies
+  (D3' §524 already says so): Mode A always, Mode B only if `share:{userId}` contains the vehicle,
+  Mode C only if `veh:engaged:{vehicleId}` is absent, and nothing whose `veh:meta.sampleTs` is older
+  than `Fanout:FreshnessWindow` or older than `veh:offline:{vehicleId}`. All four keys are readable
+  from Redis and the rule itself is `MageRide.Fanout.Visibility.VehicleVisibilityRules.Classify` —
+  worth promoting to the kernel when the second caller exists rather than reimplementing it. Landing
+  `/v1/nearby` also retires `Fanout:JoinSeedFrames`.
+  **For C048 (subscription-svc-mode-b) —** the unsubscribe path must emit `share.revoked` on
+  `registry.events` with `passengerId`, exactly as registry-svc does, or a passenger who unsubscribes
+  keeps seeing the vehicle. That is also the natural home for the `share:{userId}` rebuild.
+  **For C051 (notification-svc) —** nothing on this hub is a push. `signalr-hub.md` §6 lists what goes
+  to FCM/APNs instead; a backgrounded app has no socket.
+  **For C067–C102 (the apps) —** three client-side obligations the server cannot enforce: age a marker
+  out when it stops arriving (a vehicle leaving the view produces no event, by design); treat
+  `VehiclePositions` as a merge by `vehicleId` and not a replacement, because the private and public
+  streams arrive as separate batches; and after a reconnect, re-join geocells **and** resync from
+  `/v1/nearby` (§1.1) rather than waiting for the next tick.
+  **Build host —** Docker for three Testcontainers fixtures (Redis, Redpanda, EMQX); the replica stack
+  stayed down throughout. `Fanout.Api.Tests` takes ~1 min 40 s, `HotPath.Tests` ~5 min. **One new
+  NuGet reference** — `MQTTnet`, already pinned centrally, for the `veh/+/status` subscription.

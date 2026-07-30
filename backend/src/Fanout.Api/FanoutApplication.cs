@@ -1,8 +1,13 @@
 using MageRide.Fanout.Configuration;
+using MageRide.Fanout.Messaging;
 using MageRide.Fanout.Realtime;
+using MageRide.Fanout.Rides;
+using MageRide.Fanout.Visibility;
 using MageRide.Shared;
 using MageRide.Shared.Http;
+using MageRide.Shared.Mqtt;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.SignalR;
 using Contract = MageRide.Shared.Realtime.LiveHub;
 
 namespace MageRide.Fanout;
@@ -25,18 +30,23 @@ public static class FanoutApplication
 
         configure?.Invoke(builder);
 
+        var fanout = builder.Configuration.GetSection(FanoutOptions.SectionName).Get<FanoutOptions>()
+                     ?? new FanoutOptions();
+
         var serviceOptions = new MageRideServiceOptions
         {
             ServiceName = ServiceName,
 
-            // Redis is the whole of this service's state: it reads the cell streams
-            // position-processor-svc writes and holds nothing durable of its own. No Postgres, no
-            // outbox, and no Kafka — D6' §5 offers a Redpanda backplane "at scale, > 5 pods", and
-            // this slice does not have a backplane at all (see ICellSubscriptions).
+            // Redis is the whole of this service's durable state: the cell streams
+            // position-processor-svc writes, the entitlement SET, the engagement marks, the ride
+            // projection and the directed-send channel. No Postgres and no outbox — everything this
+            // service knows it learned from somebody else's.
             UsePostgres = false,
             UseCommandLog = false,
             UseRedis = true,
-            UseKafka = false,
+
+            // `ride.events` (US-7.16, US-6A.12, P-13, US-20.7) and `registry.events` (D-22/D-23).
+            UseKafka = fanout.EventsEnabled,
             UseAuthentication = true,
         };
 
@@ -76,6 +86,19 @@ public static class FanoutApplication
 
         builder.Services.AddSingleton<ICellSubscriptions, CellSubscriptions>();
         builder.Services.AddSingleton<ICellStreamReader, CellStreamReader>();
+        builder.Services.AddSingleton<IVehicleSnapshotReader, VehicleSnapshotReader>();
+        builder.Services.AddSingleton<IHubConnections, HubConnections>();
+        builder.Services.AddSingleton<IVisibilityIndex, VisibilityIndex>();
+        builder.Services.AddSingleton<IEntitlementCache, EntitlementCache>();
+        builder.Services.AddSingleton<IDriverVehicles, DriverVehicles>();
+        builder.Services.AddSingleton<IRideProjection, RideProjection>();
+        builder.Services.AddSingleton<FanoutSignalApplier>();
+        builder.Services.AddSingleton<IFanoutControlPlane, RedisFanoutControlPlane>();
+        builder.Services.AddScoped<IRideEventHandler, RideEventHandler>();
+
+        // Without this, `Clients.User(...)` addresses nobody: SignalR's default provider reads a
+        // claim type the kernel deliberately does not map (see SubjectUserIdProvider).
+        builder.Services.AddSingleton<IUserIdProvider, SubjectUserIdProvider>();
 
         builder.Services
             .AddSignalR(signalr =>
@@ -90,12 +113,38 @@ public static class FanoutApplication
                 json.PayloadSerializerOptions = MageRideJson.Options;
             });
 
-        var fanout = builder.Configuration.GetSection(FanoutOptions.SectionName).Get<FanoutOptions>()
-                     ?? new FanoutOptions();
+        // Deliberately NOT .AddStackExchangeRedis(). D6' §5 offers a Redis backplane and it would be
+        // wrong for the per-cell batches: every replica reads the cell streams it has members in and
+        // pushes to its own local group, so coverage is already complete and a backplane would
+        // deliver one copy of every batch per replica. The directed sends that genuinely have to
+        // cross replicas go over `fanout:control` instead — see RedisFanoutControlPlane.
+        if (fanout.ControlPlaneEnabled)
+        {
+            builder.Services.AddHostedService<FanoutControlSubscriber>();
+        }
+
+        // Registered whether or not they are hosted, so a test can step a tick deterministically
+        // instead of racing a background loop that is also running.
+        builder.Services.AddSingleton<CellStreamPump>();
+        builder.Services.AddSingleton<VehicleStreamPump>();
 
         if (fanout.PumpEnabled)
         {
-            builder.Services.AddHostedService<CellStreamPump>();
+            builder.Services.AddHostedService(services => services.GetRequiredService<CellStreamPump>());
+            builder.Services.AddHostedService(services => services.GetRequiredService<VehicleStreamPump>());
+        }
+
+        if (fanout.EventsEnabled)
+        {
+            builder.Services.AddHostedService<RideEventConsumer>();
+            builder.Services.AddHostedService<RegistryEventConsumer>();
+        }
+
+        if (fanout.PresenceEnabled)
+        {
+            builder.Services.AddMageRideMqtt(builder.Configuration);
+            builder.Services.AddSingleton<PresenceWorker>();
+            builder.Services.AddHostedService(services => services.GetRequiredService<PresenceWorker>());
         }
 
         var app = builder.Build();
@@ -104,6 +153,50 @@ public static class FanoutApplication
 
         app.MapHub<LiveHub>(Contract.Path);
 
+        WarnAboutFiltersThatCannotClose(app, fanout);
+
         return app;
+    }
+
+    /// <summary>
+    /// Says, once and loudly, which parts of the visibility model are switched off.
+    /// </summary>
+    /// <remarks>
+    /// An open filter looks exactly like a working one from the outside: positions flow, the map is
+    /// populated, nothing errors — and the difference only surfaces when somebody sees a vehicle
+    /// they should not. position-processor-svc warns about its disabled gates for the same reason,
+    /// and this plane's failures are the ones a passenger cannot report.
+    /// </remarks>
+    private static void WarnAboutFiltersThatCannotClose(WebApplication app, FanoutOptions fanout)
+    {
+        var logger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(FanoutApplication));
+
+        if (!fanout.EventsEnabled)
+        {
+            logger.LogWarning(
+                "Fanout:EventsEnabled is off: no ride.events and no registry.events. Engaged Mode C "
+                + "vehicles stay on the public map (US-7.16), Mode B entitlements are never granted "
+                + "or revoked (D-22/D-23), and no ride may be subscribed to.");
+        }
+
+        if (!fanout.ControlPlaneEnabled)
+        {
+            logger.LogWarning(
+                "Fanout:ControlPlaneEnabled is off: a directed send reaches only the replica that "
+                + "consumed the event. Correct on one replica and a silent half-delivery on any more.");
+        }
+
+        if (!fanout.PresenceEnabled)
+        {
+            logger.LogWarning(
+                "Fanout:PresenceEnabled is off: an EMQX last will no longer removes a vehicle from "
+                + "the map. The {Window} freshness window is the only remaining half of US-7.17.",
+                fanout.FreshnessWindow);
+        }
+
+        if (!fanout.PumpEnabled)
+        {
+            logger.LogWarning("Fanout:PumpEnabled is off: this replica pushes no positions at all.");
+        }
     }
 }

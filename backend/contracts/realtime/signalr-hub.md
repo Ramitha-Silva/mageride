@@ -56,16 +56,39 @@ would let a large fleet re-synchronise into a second thundering herd.
 |---|---|---|
 | `JoinGeocells(cells: string[])` | H3 **resolution-7** cell ids | Subscribe to live vehicle frames for those cells. A 3 km passenger view is res-7 self + `ring(2)` = **19 cells** (R-06). **Mode B entitlement is checked at join** (D-23) — a cell join never grants visibility of a vehicle the caller is not entitled to see. |
 | `LeaveGeocells(cells: string[])` | — | Unsubscribe. **30 s hysteresis on boundary churn** — a client oscillating across a cell edge does not thrash group membership. |
-| `SubscribeRide(rideId: string)` | ULID | Live driver position for the caller's own ride (US-6A.12). Rejected unless the caller is a participant. |
-| `SubscribeLocRequest(requestId: string)` | ULID | Booker awaits the rider's confirmation (P-13). |
+| `SubscribeRide(rideId: string)` | UUID | Live driver position and state for the caller's own ride (US-6A.12). **Rejected unless the caller is a participant** — checked against fanout-svc's projection of `ride.events`, and refused for a ride it has never seen. |
+| `SubscribeLocRequest(requestId: string)` | UUID | Booker awaits the rider's confirmation (P-13). The group is named from the caller's own token, so a caller who is not the booker joins a group nothing publishes to. |
+
+D3' §3.1 and D6' §5.1 both write these two arguments as ULIDs; `rides.rides.id` and
+`rides.location_requests.request_id` are `UUID` columns and every REST response renders them as such,
+so the wire form is a UUID string. Recorded as a micro-change-set in the C041 handoff.
 
 ### 2.1 Groups
 
 | Group | Membership |
 |---|---|
-| `cell:{h3Res7}` | Any authenticated client that joined the cell, filtered by entitlement |
-| `ride:{rideId}` | The ride's passenger, its driver, and — for a proxy booking — the booker |
+| `cell:{h3Res7}` | Any authenticated client that joined the cell. Carries **public** vehicles only — see §4 |
+| `vehicle:{vehicleId}` | The passengers entitled to a Mode B vehicle (D-23), and that vehicle's own driver (AL-31). **Joined by the server, never asked for** |
+| `ride:{rideId}` | The ride's passenger, its driver, its proxy **rider**, and — for a proxy booking — the booker |
 | `booker:{bookerId}:loc-req:{requestId}` | The booker who issued the location request (P-13) |
+
+**`vehicle:{vehicleId}` is a C041 addition to D6' §5.1's table**, and it is the only shape in which
+§5.1 and §5.2 are both satisfiable. §5.2 says a public geocell group fans out "Mode A + entitled
+Mode B", which cannot be true of a *group*: a cell group has one membership and one message, so a
+Mode B frame put on it reaches every passenger in the cell, entitled or not. ADD §11.10's remedy —
+remove the revoked passenger from the geocell group — would also stop them seeing the buses, which
+is visibility §5.2 grants unconditionally. Splitting the private vehicles onto a group of their own
+makes both lines hold literally: entitlement is still checked at join and never per frame, and D-22's
+revocation is still one directed `RemoveFromGroupAsync` that now removes exactly what was granted.
+
+**There is no `SubscribeVehicle` method.** Every membership of that group is derived from server-side
+state — the `share:{userId}` SET for a Mode B watcher, registry-svc's `lock:driver:{driverId}`
+go-live selection for the driver home map — so there is no request a client could make that the
+server would not have to overrule. AL-31 is enforced by what the server joins: a driver is put in
+exactly one vehicle group, their own, whatever the app asks for.
+
+The **proxy rider** is likewise a C041 addition. P-01 makes booker and rider two different people and
+the rider is the one actually in the car; the original line names the booker and omits them.
 
 ---
 
@@ -89,24 +112,59 @@ one set of models between the socket and the API (C012).
 
 ## 4. Visibility and entitlement (D-22, D-23)
 
-Public geocell groups fan out:
+Where one vehicle's position may go:
 
-- **Mode A** — bus and train, always;
-- **Mode B** — only to entitled passengers;
-- **Mode C** — only while *not* on active hire. Once a ride is accepted the vehicle is removed
-  from the public groups with `VehicleRemoved{reason:"engaged"}` and appears only in
-  `ride:{rideId}`.
+| Mode | State | Audience |
+|---|---|---|
+| **A** — bus, train | any | `cell:{h3Res7}` — public, always |
+| **B** — private shared | any | `vehicle:{vehicleId}` only, i.e. its entitled passengers |
+| **C** — on demand | idle | `cell:{h3Res7}` — public |
+| **C** | on active hire | `ride:{rideId}` only, as `DriverPosition`. Also `vehicle:{vehicleId}`, which for a Mode C vehicle is its own driver (AL-31) |
+| any | stale or offline | nobody (US-7.17) |
 
-Stale and offline vehicles are dropped (US-7.17).
+The filter splits in two, and only one half is per passenger. **Stale, offline and on-hire are facts
+about the vehicle**, identical for every subscriber, so they are decided once per frame and the batch
+stays a batch — ADD §7.4's O(updates × subscribers-per-cell) cost model is untouched. **Entitlement is
+a fact about the pair**, and it is settled at group join: an entitled passenger is a member of
+`vehicle:{vehicleId}` and everybody else is not, so no frame is ever tested against a passenger.
 
-**Entitlement cache.** Mode B entitlement is a Redis `share:{userId}` SET, invalidated by pub/sub
-(D-23), and it is checked **on group join**, not per frame.
+A vehicle that leaves the public map is announced with `VehicleRemoved` and a reason, not by going
+quiet: batches carry only what moved, so a client that inferred removal from absence would erase
+every stationary vehicle on every tick.
+
+**Freshness.** No specification pins the window. D5' §5.4, ADD §6 and US-7.17 all say "older than the
+freshness window"; `Fanout:FreshnessWindow` defaults to **60 s**, matching the R-08 presence TTL, so
+a vehicle leaves the passenger's map at the same moment its driver leaves the dispatch pool. The same
+rule drops a frame that *arrives* older than the window, which is what keeps a reconnecting device's
+`veh/{id}/pos/replay` backlog off the live map — those samples reach the same cell stream as live
+ones.
+
+**Entitlement cache.** Mode B entitlement is a Redis `share:{userId}` SET, invalidated by
+`share.granted`/`share.revoked` on `registry.events` (D-23), and it is checked **on group join**, not
+per frame. A miss means "not entitled" — a cold cache costs an entitled passenger their Mode B
+vehicles until their next grant event, which is a degradation they can see and report, where the
+opposite default would be a disclosure nobody can.
 
 **Revocation is directed and immediate.** A `share.revoked` event triggers a targeted
 `RemoveFromGroupAsync` for the affected passenger in **under 200 ms** (D-22) — the platform does
 not wait for the passenger's next cell crossing to stop showing them a vehicle they no longer have
 access to. `ShareRevoked` is delivered to that passenger so the client can drop the marker rather
 than let it go stale.
+
+### 4.1 Backplane
+
+D6' §5's "Redis (MVP) → Redpanda (scale)" applies to the **directed** sends only — `ShareRevoked`,
+`RideStateChanged`, `LocationRequestResolved`, `PackageStatus` — whose target connection may be on
+any replica. They travel a Redis pub/sub channel (`fanout:control`) that each replica applies to its
+own connections, so every client is served exactly once.
+
+**The per-cell batches must never go through a backplane.** Every replica reads the `cell:{h3index}`
+streams it has members in and pushes to its own local group, so coverage is already complete;
+SignalR's `AddStackExchangeRedis()` would re-broadcast each replica's send to every other replica and
+a passenger would receive one copy of every frame per replica in the deployment.
+
+Sticky sessions are still required at the edge — a WebSocket is a single long-lived connection, and
+SignalR's SSE and long-polling fallbacks route several requests to one connection id.
 
 ---
 

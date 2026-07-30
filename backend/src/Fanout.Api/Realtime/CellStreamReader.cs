@@ -5,6 +5,17 @@ using StackExchange.Redis;
 
 namespace MageRide.Fanout.Realtime;
 
+/// <summary>
+/// One vehicle's newest frame in a batch, with the two fields the wire payload does not carry.
+/// </summary>
+/// <param name="Frame">Exactly what goes on the socket (<c>signalr-hub.md</c> §3).</param>
+/// <param name="SampleTs">
+/// The sample's GNSS instant. Read but never sent: it is what US-7.17's freshness rule is measured
+/// against, and it is what keeps a replayed backlog (<c>veh/{id}/pos/replay</c>, R-17) off the live
+/// map — those samples travel the same cell stream as live ones and are indistinguishable without it.
+/// </param>
+public sealed record CellFrame(VehicleFrame Frame, DateTimeOffset? SampleTs);
+
 /// <summary>A batch drained from one cell's stream, and where the read stopped.</summary>
 /// <param name="Cell">The res-7 cell.</param>
 /// <param name="Frames">Newest frame per vehicle, oldest vehicle first.</param>
@@ -12,7 +23,7 @@ namespace MageRide.Fanout.Realtime;
 /// <param name="OldestEntryAt">When the oldest entry in the batch was written, for the SLO
 /// histogram. Null when the stream ids carried no usable timestamp.</param>
 public sealed record CellBatch(
-    string Cell, IReadOnlyList<VehicleFrame> Frames, RedisValue Position, DateTimeOffset? OldestEntryAt);
+    string Cell, IReadOnlyList<CellFrame> Frames, RedisValue Position, DateTimeOffset? OldestEntryAt);
 
 /// <summary>
 /// Turns <c>cell:{h3index}</c> stream entries into <c>VehiclePositions</c> batches.
@@ -100,7 +111,7 @@ public sealed class CellStreamReader(IConnectionMultiplexer redis) : ICellStream
         // Newest frame per vehicle. A vehicle that reported four times inside one batch window is
         // in exactly one place now, and sending its whole history would make the marker jitter
         // backwards on the map.
-        var newest = new Dictionary<Guid, VehicleFrame>();
+        var newest = new Dictionary<Guid, CellFrame>();
         var order = new List<Guid>();
         DateTimeOffset? oldest = null;
 
@@ -113,13 +124,13 @@ public sealed class CellStreamReader(IConnectionMultiplexer redis) : ICellStream
                 continue;
             }
 
-            if (newest.TryAdd(frame.VehicleId, frame))
+            if (newest.TryAdd(frame.Frame.VehicleId, frame))
             {
-                order.Add(frame.VehicleId);
+                order.Add(frame.Frame.VehicleId);
             }
             else
             {
-                newest[frame.VehicleId] = frame;
+                newest[frame.Frame.VehicleId] = frame;
             }
 
             if (TimestampOf(entry.Id) is { } written && (oldest is null || written < oldest))
@@ -135,7 +146,7 @@ public sealed class CellStreamReader(IConnectionMultiplexer redis) : ICellStream
             oldest);
     }
 
-    private static VehicleFrame? ToFrame(StreamEntry entry)
+    private static CellFrame? ToFrame(StreamEntry entry)
     {
         Guid? vehicleId = null;
         double? lat = null;
@@ -144,11 +155,21 @@ public sealed class CellStreamReader(IConnectionMultiplexer redis) : ICellStream
         double? speed = null;
         string? type = null;
         string? mode = null;
+        DateTimeOffset? sampleTs = null;
 
         foreach (var field in entry.Values)
         {
             switch (field.Name.ToString())
             {
+                case "sampleTs":
+                    sampleTs = DateTimeOffset.TryParse(
+                        field.Value.ToString(),
+                        CultureInfo.InvariantCulture,
+                        DateTimeStyles.RoundtripKind,
+                        out var stamped)
+                        ? stamped
+                        : null;
+                    break;
                 case "vehicleId":
                     vehicleId = Guid.TryParse(field.Value.ToString(), out var parsed) ? parsed : null;
                     break;
@@ -171,7 +192,7 @@ public sealed class CellStreamReader(IConnectionMultiplexer redis) : ICellStream
                     mode = field.Value.ToString();
                     break;
                 default:
-                    // seq and sampleTs are carried for consumers that need them; a frame does not.
+                    // seq is carried for consumers that need it; a frame does not.
                     break;
             }
         }
@@ -179,7 +200,7 @@ public sealed class CellStreamReader(IConnectionMultiplexer redis) : ICellStream
         // A partial entry is one nobody can draw. Skipping it costs one vehicle one tick; failing
         // the batch would cost every vehicle in the cell.
         return vehicleId is { } id && lat is { } latitude && lng is { } longitude
-            ? new VehicleFrame(id, latitude, longitude, heading, speed, type, mode)
+            ? new CellFrame(new VehicleFrame(id, latitude, longitude, heading, speed, type, mode), sampleTs)
             : null;
     }
 

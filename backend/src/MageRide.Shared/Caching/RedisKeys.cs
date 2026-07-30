@@ -237,6 +237,96 @@ public static class RedisKeys
     /// </remarks>
     public static string WalletBalance(Guid driverId) => $"wallet:bal:{driverId}";
 
+    /// <summary>
+    /// The Mode B entitlement cache for one passenger — a SET of the vehicle ids they may watch
+    /// (D-23), checked by fanout-svc on group join.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The one key on this page D-23 spells out by name. It has <b>no TTL</b>: the invalidation is
+    /// the <c>share.granted</c>/<c>share.revoked</c> pair on <c>registry.events</c>, and a TTL would
+    /// make an entitled passenger's map go quietly dark on a schedule nothing published.
+    /// </para>
+    /// <para>
+    /// Written and deleted by <b>fanout-svc alone</b> (C041), from those events. The durable truth
+    /// is <c>registry.shares</c>; this is a projection of it shaped for one question asked on a
+    /// socket connect — "which vehicles may this passenger see" — which no SQL index on that table
+    /// answers in the time a WebSocket handshake has.
+    /// </para>
+    /// </remarks>
+    public static string Share(Guid userId) => $"share:{userId}";
+
+    /// <summary>
+    /// The ride a Mode C vehicle is currently engaged on, or absent when it is idle (US-7.16).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Not in ADD §9.4's key space</b> — a micro-change-set raised in the C041 handoff. §6's
+    /// fanout-svc row requires "Mode C vehicles engaged on an active hire are excluded from public
+    /// groups (their live position is sent only to the assigned ride's passenger group)", and the
+    /// fan-out plane meets a vehicle, not a ride: the cell stream is keyed by <c>vehicleId</c> and
+    /// carries no ride at all. Without this key the exclusion is a per-frame join against
+    /// <see cref="VehicleDriver"/> and then <see cref="DriverAvailability"/>, two round trips deep,
+    /// on the hottest path the platform has.
+    /// </para>
+    /// <para>
+    /// Written and deleted by fanout-svc alone, from <c>ride.events</c>: set on the accept, cleared
+    /// on every terminal. The value is the ride id, because "hide it from the public map" and "send
+    /// it to <c>ride:{rideId}</c>" are the same decision and the second one needs the id.
+    /// </para>
+    /// </remarks>
+    public static string VehicleEngagement(Guid vehicleId) => $"veh:engaged:{vehicleId}";
+
+    /// <summary>
+    /// When a vehicle's EMQX last will last fired — the <c>offline</c> half of US-7.17.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Not in ADD §9.4's key space</b> either (C041 handoff). Deliberately <em>not</em> a field on
+    /// <see cref="VehicleMeta"/>: that hash is position-processor-svc's and is rewritten on every
+    /// accepted sample, so a second writer there would race the hot path for a fact the hot path
+    /// never learns.
+    /// </para>
+    /// <para>
+    /// It holds an <b>instant</b>, not a flag, and the visibility rule compares it against the
+    /// sample's own timestamp. A vehicle whose broker session died and then came back publishing is
+    /// live again the moment a fresher sample lands, with no <c>online</c> message needed — which
+    /// matters because a device that crashed and restarted may never send one.
+    /// </para>
+    /// </remarks>
+    public static string VehicleOfflineAt(Guid vehicleId) => $"veh:offline:{vehicleId}";
+
+    /// <summary>
+    /// Who is allowed into <c>ride:{rideId}</c> — fanout-svc's participant projection of a ride.
+    /// </summary>
+    /// <remarks>
+    /// <b>Not in ADD §9.4's key space</b> (C041 handoff). <c>signalr-hub.md</c> §2 makes
+    /// <c>SubscribeRide</c> "rejected unless the caller is a participant" and fanout-svc holds no
+    /// database — asking ride-svc over HTTP on every subscribe would put a synchronous dependency on
+    /// the socket path that R-01's outbox exists to avoid. Built from <c>ride.events</c>, which
+    /// carries every party on every transition.
+    /// </remarks>
+    public static string RideParticipants(Guid rideId) => $"fanout:ride:{rideId}";
+
+    /// <summary>
+    /// fanout-svc's directed-send channel — D6' §5's "Redis backplane (MVP)".
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Carries only the sends whose target connection could be on any replica: the D-22 revocation,
+    /// <c>RideStateChanged</c>, <c>LocationRequestResolved</c>, <c>PackageStatus</c> and the
+    /// <c>VehicleRemoved</c> notices. <b>The per-cell position batches never travel on it</b> —
+    /// every replica reads the cell streams it has members in and pushes to its own local group, so
+    /// re-broadcasting a batch would deliver one copy per replica in the deployment.
+    /// </para>
+    /// <para>
+    /// Redpanda replaces this channel beyond five pods (D6' §5) — a topic with a consumer group per
+    /// replica rather than per service, which is the same fan-out with durability nobody needs for a
+    /// message whose whole value expires in 200 ms.
+    /// </para>
+    /// </remarks>
+    public const string FanoutControlChannel = "fanout:control";
+
     /// <summary>Opaque refresh token mirror for O(1) revocation (D-29).</summary>
     public static string RefreshToken(string jti) => $"refresh:{jti}";
 

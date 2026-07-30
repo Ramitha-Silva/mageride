@@ -275,4 +275,31 @@ public static class MageRideDiagnostics
     public static readonly Histogram<double> FanoutLatencyMs =
         Meter.CreateHistogram<double>("mageride.fanout.latency", "ms",
             "Time from a cell stream entry being written to it being pushed to a group.");
+
+    /// <summary>
+    /// Frames the D-22/D-23 visibility filter kept off the public geocell groups, by reason
+    /// (<c>engaged</c> | <c>stale</c> | <c>offline</c> | <c>private</c>).
+    /// </summary>
+    /// <remarks>
+    /// The one number that says the filter is doing anything. A working filter and an absent filter
+    /// look identical from a passenger's map — vehicles appear, positions move — and the difference
+    /// only shows when somebody who should not see a vehicle does. A reading of zero <c>engaged</c>
+    /// on a platform with rides in progress is the alarm (C041).
+    /// </remarks>
+    public static readonly Counter<long> FanoutFramesFiltered =
+        Meter.CreateCounter<long>("mageride.fanout.filtered", "{frame}",
+            "Vehicle frames withheld from public geocell groups, by reason.");
+
+    /// <summary>
+    /// <c>share.revoked</c> arriving at fanout-svc to the affected passenger being out of the
+    /// vehicle's group, in milliseconds. D-22's budget is 200 ms.
+    /// </summary>
+    public static readonly Histogram<double> FanoutRevocationMs =
+        Meter.CreateHistogram<double>("mageride.fanout.revocation", "ms",
+            "Mode B revocation to directed group removal (D-22, budget 200 ms).");
+
+    /// <summary>Directed sends applied from the Redis control channel, by kind.</summary>
+    public static readonly Counter<long> FanoutSignalsApplied =
+        Meter.CreateCounter<long>("mageride.fanout.signals", "{signal}",
+            "Directed fan-out signals applied to this replica's local connections.");
 }

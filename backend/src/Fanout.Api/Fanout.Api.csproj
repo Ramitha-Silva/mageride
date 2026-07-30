@@ -1,22 +1,20 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
   <!--
-    Fanout.Api (C024, ws-realtime-pipeline) — the SignalR hub `/hubs/live`.
+    Fanout.Api (C024 ws-realtime-pipeline, C041 fanout-svc) — the SignalR hub `/hubs/live`.
 
     Passengers join `cell:{h3index}` groups (res-7 self + ring(2) = 19 cells for the 3 km view,
     R-06); this service reads the matching Redis streams position-processor-svc writes and pushes
-    `VehiclePositions` batches into those groups. Method and event names come from
-    MageRide.Shared.Realtime.LiveHub, which is the .NET half of
-    `backend/contracts/realtime/signalr-hub.md` — SignalR resolves both by string, so a typo is a
-    silent no-op rather than a compile error.
+    `VehiclePositions` batches into those groups.
 
-    NOT here, and named rather than stubbed: the D-22/D-23 visibility filters (Mode A always,
-    Mode B on entitlement, Mode C hidden on active hire), `VehicleRemoved`, `SubscribeRide`,
-    `SubscribeLocRequest`, `RideStateChanged`, `ShareRevoked` and the `share:{userId}` entitlement
-    cache — all C041. Implementing a group join with no entitlement check and calling it done would
-    read like a filter that works.
+    C041 added the visibility plane on top of that: Mode C hidden on active hire (US-7.16), stale
+    and last-will suppression (US-7.17), the Mode B entitlement cache and its directed revocation
+    (D-22/D-23), the ride and booker groups (P-13/US-6A.12) and the driver's own-vehicle stream
+    (AL-31). Method and event names come from MageRide.Shared.Realtime.LiveHub, which is the .NET
+    half of `backend/contracts/realtime/signalr-hub.md` — SignalR resolves both by string, so a
+    typo is a silent no-op rather than a compile error.
 
-    Verify: dotnet test backend/src/HotPath.Tests -c Release
+    Verify: dotnet test backend/src/Fanout.Api.Tests -c Release
   -->
 
   <PropertyGroup>
@@ -34,10 +32,13 @@
     <!-- SignalR itself comes from the ASP.NET Core shared framework. -->
     <PackageReference Include="StackExchange.Redis" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+    <!-- The EMQX last-will subscription (US-7.17); ADD §6 names it as this service's input. -->
+    <PackageReference Include="MQTTnet" />
   </ItemGroup>
 
   <ItemGroup>
     <InternalsVisibleTo Include="HotPath.Tests" />
+    <InternalsVisibleTo Include="Fanout.Api.Tests" />
   </ItemGroup>
 
 </Project>

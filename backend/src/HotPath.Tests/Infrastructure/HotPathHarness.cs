@@ -425,6 +425,17 @@ internal sealed class HotPathHarness : IAsyncDisposable
             ["Jwt:RequireHttpsMetadata"] = "false",
             ["Fanout:PumpEnabled"] = options.FanoutPump ? "true" : "false",
             ["Fanout:JoinSeedFrames"] = options.JoinSeedFrames.ToString(),
+
+            // Δ C041: the visibility plane is off in this suite, and deliberately. What is under
+            // test here is the *pipeline* — EMQX to a passenger's geocell group under five seconds —
+            // and every claim it makes is about an idle Mode C vehicle, which C041's filter passes
+            // through unchanged. The entitlement cache, the engagement marks and the last-will
+            // subscription are asserted in Fanout.Api.Tests, where the events that drive them are.
+            // Leaving them on would add a Kafka consumer and a broker session to a suite whose
+            // failures should only ever be about ingest.
+            ["Fanout:EventsEnabled"] = "false",
+            ["Fanout:PresenceEnabled"] = "false",
+            ["Fanout:ControlPlaneEnabled"] = "false",
             ["Otel:PrometheusEnabled"] = "false",
         };
 

@@ -342,7 +342,14 @@ services:
     restart: unless-stopped
 
   # -----------------------------------------------------------------------------------
-  # fanout-svc (C024) — SignalR /hubs/live. Listens on 5001 (D7' §2.1).
+  # fanout-svc (C024, C041) — SignalR /hubs/live. Listens on 5001 (D7' §2.1).
+  #
+  # Δ C041: two dependencies more than the skeleton needed. `ride.events` and
+  # `registry.events` are what drive the whole visibility model — US-7.16's engagement
+  # mark, D-22/D-23's entitlement cache, the ride participant projection — and the EMQX
+  # last will is the `offline` half of US-7.17. Without them the service still runs and
+  # still fans out positions, which is precisely why it says so at start-up: an open
+  # filter looks exactly like a working one from the outside.
   # -----------------------------------------------------------------------------------
   fanout-svc:
     build:
@@ -356,6 +363,8 @@ services:
       ASPNETCORE_URLS: http://+:5001
     depends_on:
       redis: { condition: service_healthy }
+      redpanda: { condition: service_healthy }
+      emqx: { condition: service_healthy }
       iam-svc: { condition: service_healthy }
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:5001/health/ready > /dev/null"]

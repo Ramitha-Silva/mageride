@@ -1,5 +1,7 @@
 using MageRide.Fanout.Configuration;
-using MageRide.Shared.Errors;
+using MageRide.Fanout.Rides;
+using MageRide.Fanout.Visibility;
+using MageRide.Shared.Auth;
 using MageRide.Shared.Geo;
 using MageRide.Shared.Realtime;
 using Microsoft.AspNetCore.Authorization;
@@ -15,19 +17,17 @@ namespace MageRide.Fanout.Realtime;
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>Two methods, and the other two are absent rather than stubbed.</b> The contract lists four:
-/// <c>JoinGeocells</c> and <c>LeaveGeocells</c> are here; <c>SubscribeRide</c> and
-/// <c>SubscribeLocRequest</c> are C041. Both of those are "rejected unless the caller is a
-/// participant", and a version that joined the group without checking would be a working
-/// subscription to somebody else's ride — a hole that reads, from the client, exactly like the
-/// finished feature.
+/// <b>Four methods, and three kinds of group.</b> <c>JoinGeocells</c>/<c>LeaveGeocells</c> put a
+/// client in the public <c>cell:{h3index}</c> groups; <c>SubscribeRide</c> in <c>ride:{rideId}</c>,
+/// which is refused unless the caller is on the ride; <c>SubscribeLocRequest</c> in the booker's own
+/// P-13 group. The fourth membership, <c>vehicle:{vehicleId}</c>, has no method at all — see
+/// <see cref="OnConnectedAsync"/>.
 /// </para>
 /// <para>
-/// <b>No entitlement filter yet, and that is why the fence matters.</b> D-22/D-23 say public geocell
-/// groups carry Mode A always, Mode B only to entitled passengers, and Mode C only while not on
-/// active hire. None of that is here (C041), so this slice fans out every vehicle
-/// position-processor-svc indexed. That is the documented state of the walking skeleton, not an
-/// oversight — and it is why nothing in this component claims to implement D-22.
+/// <b>Entitlement is resolved once, at connect, and never per frame</b> (D-23). The server reads
+/// <c>share:{userId}</c> and joins the caller to one group per vehicle they may watch. That is what
+/// "checked on group join" means here, and it is what lets D-22's revocation be a single directed
+/// <c>RemoveFromGroupAsync</c> rather than a filter that has to run against every batch.
 /// </para>
 /// <para>
 /// <b>Cells are validated as res-7 ids.</b> <c>JoinGeocells</c> takes an array off the wire and the
@@ -39,11 +39,46 @@ namespace MageRide.Fanout.Realtime;
 [Authorize]
 public sealed class LiveHub(
     ICellSubscriptions subscriptions,
+    IHubConnections connections,
     ICellStreamReader streams,
+    IEntitlementCache entitlements,
+    IDriverVehicles driverVehicles,
+    IVisibilityIndex visibility,
+    IRideProjection rides,
     IOptions<FanoutOptions> options,
+    TimeProvider clock,
     ILogger<LiveHub> logger) : Hub
 {
     private readonly FanoutOptions _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
+
+    /// <summary>
+    /// Registers the connection and puts it in the vehicle streams its owner is entitled to.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>There is no <c>SubscribeVehicle</c>, deliberately.</b> Every membership of a
+    /// <c>vehicle:{vehicleId}</c> group is derived from server-side state — the D-23 entitlement SET
+    /// for a Mode B watcher, <c>lock:driver:{driverId}</c> for AL-31's own-vehicle home map — so
+    /// there is no request a client could make that the server would not have to overrule. A method
+    /// taking a vehicle id would be a method whose entire body is "ignore the argument".
+    /// </para>
+    /// <para>
+    /// <b>AL-31 is enforced by what the server joins, not by what the client asks.</b> A driver is
+    /// put in exactly one vehicle group — their own — so the driver home map cannot receive another
+    /// driver's position, whatever the app does. The complementary rule, engaged Mode C vehicles
+    /// staying off the public map, is US-7.16 and lives in the pump.
+    /// </para>
+    /// </remarks>
+    public override async Task OnConnectedAsync()
+    {
+        var userId = RequireCaller();
+
+        connections.Connected(Context.ConnectionId, userId);
+
+        await SubscribeEntitledVehiclesAsync(userId);
+
+        await base.OnConnectedAsync();
+    }
 
     /// <summary>
     /// Subscribes to live vehicle frames for <paramref name="cells"/> — H3 <b>resolution 7</b> ids.
@@ -77,6 +112,11 @@ public sealed class LiveHub(
 
         logger.LogDebug("Connection {ConnectionId} joined {Count} geocells", Context.ConnectionId, wanted.Count);
 
+        // D-23's "checked on group join", taken literally: a grant accepted since the socket opened
+        // takes effect at the next map interaction as well as on the control channel, so the two
+        // paths cover each other.
+        await SubscribeEntitledVehiclesAsync(RequireCaller());
+
         foreach (var seed in seeds)
         {
             await Clients.Caller.SendAsync(Contract.Events.VehiclePositions, seed, Context.ConnectionAborted);
@@ -95,17 +135,78 @@ public sealed class LiveHub(
     {
         ArgumentNullException.ThrowIfNull(cells);
 
-        subscriptions.ScheduleLeave(Context.ConnectionId, cells, DateTimeOffset.UtcNow);
+        subscriptions.ScheduleLeave(Context.ConnectionId, cells, clock.GetUtcNow());
 
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Joins <c>ride:{rideId}</c> — the assigned ride's live driver position and state (US-6A.12).
+    /// </summary>
+    /// <remarks>
+    /// <b>Rejected unless the caller is a participant</b> (<c>signalr-hub.md</c> §2). The check is
+    /// the whole method: a version that joined the group without it would be a working subscription
+    /// to a stranger's journey, showing their driver's live position, and from the client it would
+    /// look exactly like the finished feature.
+    /// <para>
+    /// A ride this service has never seen is refused rather than allowed. The projection is built
+    /// from <c>ride.events</c> and a gap in it means fanout-svc does not know who the parties are —
+    /// which is not the same as knowing the caller is one of them.
+    /// </para>
+    /// </remarks>
+    public async Task SubscribeRide(string rideId)
+    {
+        var id = ParseId(rideId, nameof(rideId));
+        var userId = RequireCaller();
+
+        var ride = await rides.ReadAsync(id, Context.ConnectionAborted)
+            ?? throw new HubException($"Ride '{id}' is not one this connection may subscribe to.");
+
+        if (!ride.Includes(userId))
+        {
+            // Deliberately the same message as the unknown-ride case. Telling a caller that a ride
+            // exists but is not theirs is a membership oracle over other people's journeys.
+            throw new HubException($"Ride '{id}' is not one this connection may subscribe to.");
+        }
+
+        await Groups.AddToGroupAsync(Context.ConnectionId, Contract.RideGroup(id), Context.ConnectionAborted);
+        connections.JoinRide(Context.ConnectionId, id);
+
+        logger.LogDebug("Connection {ConnectionId} subscribed to ride {RideId}", Context.ConnectionId, id);
+    }
+
+    /// <summary>
+    /// Joins <c>booker:{bookerId}:loc-req:{requestId}</c> — the P-13 proxy round-trip.
+    /// </summary>
+    /// <remarks>
+    /// <b>The caller is the booker, by construction.</b> The group name is built from the token's
+    /// subject rather than from anything on the wire, and ride-svc publishes to the name built from
+    /// the request's own <c>bookerId</c>; a caller who is not that booker joins a group nothing will
+    /// ever publish to. That is a stronger guarantee than a lookup would be, and it needs no read at
+    /// all — which matters because the round-trip is issued before any ride exists and there is
+    /// nothing yet for this service to have projected.
+    /// </remarks>
+    public async Task SubscribeLocRequest(string requestId)
+    {
+        var id = ParseId(requestId, nameof(requestId));
+        var bookerId = RequireCaller();
+
+        await Groups.AddToGroupAsync(
+            Context.ConnectionId,
+            Contract.BookerLocationRequestGroup(bookerId, id),
+            Context.ConnectionAborted);
+
+        logger.LogDebug(
+            "Booker {BookerId} awaiting location request {RequestId} (P-13)", bookerId, id);
     }
 
     public override Task OnDisconnectedAsync(Exception? exception)
     {
         // No hysteresis on a disconnect: the socket is gone, so there is no membership to preserve
         // and holding one would keep this replica polling streams for nobody. SignalR removes the
-        // connection from its groups itself; the registry has to be told so the pump stops.
+        // connection from its groups itself; the registries have to be told so the pumps stop.
         var dropped = subscriptions.Disconnect(Context.ConnectionId);
+        connections.Disconnected(Context.ConnectionId);
 
         if (dropped.Count > 0)
         {
@@ -114,6 +215,51 @@ public sealed class LiveHub(
         }
 
         return base.OnDisconnectedAsync(exception);
+    }
+
+    /// <summary>
+    /// Puts the connection in one <c>vehicle:{vehicleId}</c> group per vehicle its owner may watch.
+    /// </summary>
+    /// <remarks>
+    /// Idempotent, because it runs on connect and again on every <c>JoinGeocells</c>: SignalR's
+    /// <c>AddToGroupAsync</c> is a set insert and <see cref="IHubConnections.JoinVehicle"/> counts
+    /// each connection once.
+    /// </remarks>
+    private async Task SubscribeEntitledVehiclesAsync(Guid userId)
+    {
+        var wanted = new List<Guid>();
+
+        // D-23. The SET is registry-svc's grants, projected; a miss is "no Mode B visibility", which
+        // is the safe direction to fail — see IEntitlementCache.
+        wanted.AddRange(await entitlements.EntitlementsOfAsync(userId, Context.ConnectionAborted));
+
+        // AL-31. Only for a caller who actually holds the driver role: a passenger's user id can
+        // never name a live vehicle, and asking Redis about it on every connect would put a wasted
+        // round trip on the handshake of every passenger on the platform.
+        if (Context.User?.IsInRole(MageRideRoles.Driver) == true
+            && await driverVehicles.ActiveVehicleOfAsync(userId, Context.ConnectionAborted) is { } own
+            && !wanted.Contains(own))
+        {
+            wanted.Add(own);
+        }
+
+        foreach (var vehicleId in wanted)
+        {
+            if (connections.VehicleCountOf(Context.ConnectionId) >= _options.MaxVehicleSubscriptions)
+            {
+                logger.LogWarning(
+                    "Connection {ConnectionId} reached the {Ceiling}-vehicle ceiling; the rest are not subscribed",
+                    Context.ConnectionId,
+                    _options.MaxVehicleSubscriptions);
+
+                return;
+            }
+
+            await Groups.AddToGroupAsync(
+                Context.ConnectionId, Contract.VehicleGroup(vehicleId), Context.ConnectionAborted);
+
+            connections.JoinVehicle(Context.ConnectionId, vehicleId);
+        }
     }
 
     /// <summary>
@@ -127,9 +273,8 @@ public sealed class LiveHub(
     /// has not been sent.
     /// </para>
     /// <para>
-    /// The seed batches go to <see cref="IHubCallerClients.Caller"/> only — the group has already
-    /// seen them. See <see cref="FanoutOptions.JoinSeedFrames"/> for why seeding exists at all and
-    /// when it should go.
+    /// The seed goes through the same visibility filter as a live batch. A replay that showed an
+    /// engaged taxi or a private vehicle would be the D-22 leak with a two-second delay on it.
     /// </para>
     /// </remarks>
     private async Task<IReadOnlyList<IReadOnlyList<VehicleFrame>>> ResolveAsync(IReadOnlyCollection<string> cells)
@@ -157,13 +302,43 @@ public sealed class LiveHub(
                 subscriptions.Advance(cell, batch.Position);
             }
 
-            if (batch.Frames.Count > 0)
+            if (batch.Frames.Count == 0)
             {
-                seeds.Add(batch.Frames);
+                continue;
+            }
+
+            var visible = await PublicOnlyAsync(batch.Frames);
+
+            if (visible.Count > 0)
+            {
+                seeds.Add(visible);
             }
         }
 
         return seeds;
+    }
+
+    private async Task<IReadOnlyList<VehicleFrame>> PublicOnlyAsync(IReadOnlyList<CellFrame> frames)
+    {
+        var now = clock.GetUtcNow();
+        var states = await visibility.ReadAsync(
+            [.. frames.Select(frame => frame.Frame.VehicleId)], Context.ConnectionAborted);
+
+        var visible = new List<VehicleFrame>(frames.Count);
+
+        foreach (var frame in frames)
+        {
+            var state = states.TryGetValue(frame.Frame.VehicleId, out var known) ? known : VehicleState.Unknown;
+
+            if (VehicleVisibilityRules.Classify(
+                    frame.Frame.Mode, frame.SampleTs, state, now, _options.FreshnessWindow).Audience
+                == VehicleAudience.Public)
+            {
+                visible.Add(frame.Frame);
+            }
+        }
+
+        return visible;
     }
 
     private IReadOnlyCollection<string> Validate(string[] cells)
@@ -203,4 +378,22 @@ public sealed class LiveHub(
 
         return wanted;
     }
+
+    /// <summary>
+    /// The caller's <c>iam.users.id</c>.
+    /// </summary>
+    /// <remarks>
+    /// A connection that reached a hub method has already passed <c>[Authorize]</c> and the kernel's
+    /// deny-by-default fallback, so a missing subject is a token this service should never have
+    /// accepted rather than an unauthenticated caller — hence a throw and not a null.
+    /// </remarks>
+    private Guid RequireCaller() =>
+        Guid.TryParse(Context.UserIdentifier, out var userId)
+            ? userId
+            : throw new HubException("This access token carries no usable subject.");
+
+    private static Guid ParseId(string? value, string name) =>
+        Guid.TryParse(value, out var parsed)
+            ? parsed
+            : throw new HubException($"'{name}' is not a valid identifier.");
 }

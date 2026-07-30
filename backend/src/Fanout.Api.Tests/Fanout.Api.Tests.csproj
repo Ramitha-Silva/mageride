@@ -1,0 +1,61 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    C041 verify target: dotnet test backend/src/Fanout.Api.Tests -c Release
+
+    fanout-svc's own suite. C024 proved the *pipeline* — EMQX to a passenger's group in under five
+    seconds — and that claim still lives in HotPath.Tests, where the bridge and the processor are.
+    What is proved here is the *visibility model*: who may see which vehicle, and how fast a
+    passenger stops seeing one.
+
+    NO IN-MEMORY SHORTCUTS, for the same reason as C024's fence. Every connection is a real SignalR
+    client over a real WebSocket against a real Kestrel, so the `access_token` query authentication,
+    the JSON hub protocol and the group bookkeeping are the ones the apps meet; the entitlement SET,
+    the engagement marks and the control channel are a real Redis; `share.revoked` and
+    `ride.accepted` arrive on a real Redpanda. A visibility filter asserted against a fake would
+    agree with itself by construction.
+
+    Microsoft.NET.Sdk.Web, not Microsoft.NET.Sdk: the harness builds WebApplications.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.Fanout.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <OutputType>Exe</OutputType>
+    <!--
+      xUnit1041: collection-fixture ctor args are consumed through the primary constructor.
+      xUnit1051: every test is bounded by its own harness lifetime, so threading
+                 TestContext.Current.CancellationToken through each call would add noise without
+                 changing behaviour. Matches HotPath/Iam/Registry/Ride/Dispatch.Api.Tests.
+    -->
+    <NoWarn>$(NoWarn);xUnit1041;xUnit1051</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+    <!-- The passenger and the driver are real SignalR clients over real WebSockets. -->
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" />
+    <!-- `ride.events` and `registry.events` are produced onto a real broker, so the consumers under
+         test do the same decode, offset commit and partition assignment they do in production. -->
+    <PackageReference Include="Confluent.Kafka" />
+    <PackageReference Include="StackExchange.Redis" />
+    <!-- The US-7.17 last will is published by a real client to a real EMQX. -->
+    <PackageReference Include="MQTTnet" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Fanout.Api\Fanout.Api.csproj" />
+    <!-- C010: the Redis, Redpanda and EMQX fixtures, so this suite runs the same server builds —
+         and, for EMQX, the same broker policy — the dev stack does. -->
+    <ProjectReference Include="..\MageRide.TestKit\MageRide.TestKit.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>
