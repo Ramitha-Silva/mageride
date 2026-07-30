@@ -34,8 +34,6 @@ internal sealed record FanoutHarnessOptions
     public TimeSpan? BatchInterval { get; init; }
 
     /// <summary>Frames replayed to a joining connection. 0 keeps a test's assertions to deltas.</summary>
-    public int JoinSeedFrames { get; init; }
-
     /// <summary>Group-membership hysteresis. Tests that assert on it shorten it.</summary>
     public TimeSpan? LeaveHysteresis { get; init; }
 
@@ -334,7 +332,6 @@ internal sealed class FanoutHarness : IAsyncDisposable
             ["Jwt:Issuer"] = Tokens.IssuerName,
             ["Jwt:RequireHttpsMetadata"] = "false",
             ["Fanout:PumpEnabled"] = _options.Pump ? "true" : "false",
-            ["Fanout:JoinSeedFrames"] = _options.JoinSeedFrames.ToString(),
             ["Fanout:EventsEnabled"] = _options.Events ? "true" : "false",
             ["Fanout:PresenceEnabled"] = _options.Presence ? "true" : "false",
             ["Fanout:ControlPlaneEnabled"] = _options.ControlPlane ? "true" : "false",

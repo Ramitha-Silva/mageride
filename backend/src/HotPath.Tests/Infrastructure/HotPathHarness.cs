@@ -40,8 +40,6 @@ internal sealed record HotPathHarnessOptions
     public TimeSpan? BatchInterval { get; init; }
 
     /// <summary>Frames replayed to a joining connection. 0 keeps a test's assertions to deltas.</summary>
-    public int JoinSeedFrames { get; init; }
-
     /// <summary>Group-membership hysteresis. Tests that assert on it shorten it.</summary>
     public TimeSpan? LeaveHysteresis { get; init; }
 
@@ -424,7 +422,6 @@ internal sealed class HotPathHarness : IAsyncDisposable
             ["Jwt:Issuer"] = Tokens.IssuerName,
             ["Jwt:RequireHttpsMetadata"] = "false",
             ["Fanout:PumpEnabled"] = options.FanoutPump ? "true" : "false",
-            ["Fanout:JoinSeedFrames"] = options.JoinSeedFrames.ToString(),
 
             // Δ C041: the visibility plane is off in this suite, and deliberately. What is under
             // test here is the *pipeline* — EMQX to a passenger's geocell group under five seconds —

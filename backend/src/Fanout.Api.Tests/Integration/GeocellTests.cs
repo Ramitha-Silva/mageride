@@ -301,7 +301,6 @@ public sealed class GeocellTests(RedisFixture redis, RedpandaFixture redpanda, E
             // background push arriving mid-assertion would make a membership question look like a
             // delivery one.
             Pump = false,
-            JoinSeedFrames = 0,
             LeaveHysteresis = hysteresis,
 
             // No broker: nothing here is about an event. Keeping Kafka out means these tests fail

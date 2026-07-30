@@ -107,6 +107,13 @@ makes AL-31 structural: a driver is joined to exactly one vehicle group, their o
   a place: a long ride leaves the nineteen cells the app joined within minutes, and a Mode B watcher
   follows a school van across a city. Driving them from cell membership would stop the position for a
   reason the user cannot see.
+- **The join no longer replays anything (C042).** `Fanout:JoinSeedFrames` is gone: `signalr-hub.md`
+  §1.1 makes `GET /v1/nearby` the snapshot and resync path, and that endpoint exists now. The seed
+  was the weaker of the two paths anyway — it read only the cells the client had joined and only the
+  *public* audience, so it could never show a passenger their own engaged vehicle (US-7.16) or their
+  entitled Mode B van (D-23). `LiveHub.AnchorAsync` keeps the part that was load-bearing: fixing each
+  new cell's stream position at join time, so nothing written between the join and the first tick is
+  skipped.
 - **A cell's read position is fixed at join, not on the pump's first tick.** Resolving it on the first
   tick loses every position written between the join and that tick: the tick advances past those
   entries and sends nothing, because a batch with no frames is not a batch. A cell another connection
@@ -144,10 +151,9 @@ makes AL-31 structural: a driver is joined to exactly one vehicle group, their o
   event. Failing closed is the right direction, and the durable fix is a read-through against
   registry-svc — C048's surface. Raised in the C041 handoff.
 - **`etaSeconds` is never sent on `RideStateChanged`.** D3' marks it optional and the estimate is
-  query-svc's (C042), computed from the route; inventing one here would put two different numbers in
-  front of one passenger.
-- **`Fanout:JoinSeedFrames` is still a stand-in.** `signalr-hub.md` §1.1 makes `GET /v1/nearby`
-  (query-svc, C042) the real snapshot path. **C042 should remove it** once that lands.
+  query-svc's (C042), which now populates it on `GET /v1/nearby` for the caller's own accepted vehicle
+  and for Mode A. Sending a second one from here would put two different numbers in front of one
+  passenger.
 
 ## Configuration
 
@@ -162,7 +168,6 @@ The ones that are not obvious:
 | `MaxVehicleSubscriptions` | 64 | a bound on what the *server* reads, not on what a client asks |
 | `RideProjectionTtl` | 24 h | must outlive a live ride by a reconnect; R-20's SLOs are minutes |
 | `EngagementTtl` | 12 h | a backstop for a terminal event never seen; errs long on purpose |
-| `JoinSeedFrames` | 32 | the C042 stand-in |
 | `LeaveHysteresis` | 30 s | ADD §7.4 step 6 |
 | `EventsEnabled` · `ControlPlaneEnabled` · `PresenceEnabled` · `PumpEnabled` | on | each gates one filter; all four warn when off |
 | `ConsumerGroup` | `fanout-svc` | D6' §2, "consumer group per service" |

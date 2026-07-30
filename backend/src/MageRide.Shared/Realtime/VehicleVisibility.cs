@@ -1,6 +1,6 @@
-using MageRide.Shared.Realtime;
 
-namespace MageRide.Fanout.Visibility;
+
+namespace MageRide.Shared.Realtime;
 
 /// <summary>The operating modes a frame can carry (D5' §2, <c>OperatingMode</c>).</summary>
 public static class OperatingModes
@@ -21,7 +21,15 @@ public enum VehicleAudience
     /// <summary>The public geocell group — Mode A always, idle Mode C.</summary>
     Public,
 
-    /// <summary>Only <c>vehicle:{vehicleId}</c>: the entitled Mode B watchers, and the own driver.</summary>
+    /// <summary>
+    /// Only <c>vehicle:{vehicleId}</c>: the entitled Mode B watchers, and the own driver.
+    /// </summary>
+    /// <remarks>
+    /// On the socket the entitlement was settled at group join, so this verdict is "not the public
+    /// map" and nothing more. A request-shaped caller (query-svc's <c>GET /v1/nearby</c>) has no
+    /// group to have joined and must test <c>share:{userId}</c> itself before including the vehicle —
+    /// the verdict says the vehicle is private, not that this particular caller may see it.
+    /// </remarks>
     Entitled,
 
     /// <summary>Only <c>ride:{rideId}</c>: a Mode C vehicle on active hire (US-7.16).</summary>
@@ -86,6 +94,15 @@ public sealed record VehicleState(Guid? EngagedOn, DateTimeOffset? OfflineAt)
 /// The D-22/D-23/US-7.16/US-7.17 visibility rules, as one pure function.
 /// </summary>
 /// <remarks>
+/// <para>
+/// <b>In the kernel because two planes answer the same question and must answer it identically.</b>
+/// fanout-svc (C041) applies this to every frame it pushes; query-svc (C042) applies it to every
+/// vehicle <c>GET /v1/nearby</c> would return, which <c>signalr-hub.md</c> §1.1 makes the snapshot
+/// and resync path for that same map. A second implementation would let the live stream and the
+/// snapshot disagree about who may be seen — and the disagreement would surface as a passenger
+/// watching an engaged taxi for one poll interval, which is D-22's disclosure with a delay on it.
+/// C041's handoff asked for the promotion by name.
+/// </para>
 /// <para>
 /// <b>The filter splits in two, and only one half is per passenger.</b> Whether a vehicle is stale,
 /// offline or on hire is a fact about the <em>vehicle</em> and is identical for every subscriber, so

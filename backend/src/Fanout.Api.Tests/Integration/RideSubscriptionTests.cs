@@ -284,7 +284,6 @@ public sealed class RideSubscriptionTests(RedisFixture redis, RedpandaFixture re
         FanoutHarness.StartAsync(redis, redpanda, emqx, new FanoutHarnessOptions
         {
             Pump = false,
-            JoinSeedFrames = 0,
             Events = events,
         });
 }

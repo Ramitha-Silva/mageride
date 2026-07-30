@@ -1,0 +1,63 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    Query.Api (C042 query-svc) — the read side of both planes.
+
+    The live plane: `GET /v1/nearby` reads Redis `geo:live` + `veh:meta:{vehicleId}` and applies the
+    SAME D-22/D-23/US-7.16/US-7.17 visibility rules fanout-svc applies to a socket frame. The rule
+    itself is MageRide.Shared.Realtime.VehicleVisibilityRules, promoted into the kernel by this
+    component at C041's request — `signalr-hub.md` §1.1 makes this endpoint the snapshot and resync
+    path for the very map fanout-svc streams, so two implementations would mean the poll and the
+    stream disagreeing about who may be seen.
+
+    The historical plane: trip history and detail across `rides.rides` (Mode C) and `trips.sessions`
+    + `trips.session_summaries` (Mode A/B), and driver earnings over `fares.ride_payments` +
+    `billing.daily_fee_charges` + `dispatch.cancellation_penalties`.
+
+    Plus the two proxied surfaces D3' files under this service: forward and reverse geocoding
+    against a self-hosted Nominatim (D-14/D-15) — no Google Places, ever — and the
+    destination-options aggregation, which delegates to transit-svc and fare-svc rather than
+    computing GTFS routes or fares of its own.
+
+    NOT here: tiles (Cloudflare R2 + Worker, not an app API), GTFS routing (transit-svc, C061), the
+    fare tariff (fare-svc), and any write at all — this service owns no table.
+
+    Verify: dotnet test backend/src/Query.Api.Tests -c Release
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.Query</RootNamespace>
+    <AssemblyName>MageRide.Query.Api</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <UserSecretsId>mageride-query-api</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MageRide.Shared\MageRide.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Dapper" />
+    <PackageReference Include="Npgsql" />
+    <PackageReference Include="StackExchange.Redis" />
+    <PackageReference Include="Grpc.AspNetCore" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      Compiled straight out of backend/contracts/, like reputation-svc's. GrpcServices="Both" so the
+      test project can call the running service through the generated stub without compiling the
+      proto a second time (which would define every message twice and be ambiguous at the call
+      site). ProtoRoot resolves google/protobuf/timestamp.proto out of the Grpc.Tools well-known set.
+    -->
+    <Protobuf Include="..\..\contracts\proto\query.v1.proto"
+              ProtoRoot="..\..\contracts\proto"
+              GrpcServices="Both"
+              Link="Protos\query.v1.proto" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Query.Api.Tests" />
+  </ItemGroup>
+
+</Project>

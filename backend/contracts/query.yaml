@@ -23,7 +23,11 @@ info:
     the SignalR hub `/hubs/live` (see `realtime/signalr-hub.md`), and this endpoint is what a
     client calls on cold start or after a reconnect.
 
-    **Visibility rules are enforced here as well as in fan-out** (D-22/D-23):
+    **The visibility rules are the same function fan-out applies, not a second implementation.**
+    `MageRide.Shared.Realtime.VehicleVisibilityRules` lives in the kernel precisely because this
+    endpoint is the snapshot path for the map `/hubs/live` streams — two implementations would let the
+    poll and the stream disagree about who may be seen, and the disagreement surfaces as a passenger
+    watching an engaged taxi for one poll interval (D-22 with a delay on it). The rules (D-22/D-23):
 
     - Mode C vehicles on active hire are excluded from public results (US-7.16) — they are sent
       only to their assigned passenger's ride group.
@@ -53,6 +57,28 @@ tags:
     description: Driver earnings dashboards.
   - name: geo
     description: Forward and reverse geocoding (nominatim-svc).
+
+# ADD §6 gives query-svc ".NET 10 LTS minimal API **+ gRPC**" and D3' §0 names "`query-svc` internal" as
+# a gRPC surface, but neither prints a service block — so the three RPCs and every message are a C042
+# micro-change-set. The IDL is `proto/query.v1.proto`, which the server and every caller compile; a
+# copied proto is how two services start disagreeing.
+#
+# Each RPC exists because a named later component would otherwise reimplement a rule that must not be
+# reimplemented — the D-22/D-23/US-7.16/US-7.17 visibility filter, the polyline's provenance, or the
+# R-05 gate and the Asia/Colombo period arithmetic. See the proto's header.
+x-grpc-service:
+  package: query.v1
+  transport: gRPC over mTLS (Linkerd/SPIFFE); never exposed through the gateway.
+  proto: |
+    service Query {
+      rpc GetNearbyVehicles(NearbyRequest) returns (NearbyVehicles);  // the visibility-filtered snapshot
+      rpc GetTripDetail(TripRequest) returns (TripDetail);            // one trip + its stored polyline
+      rpc GetDriverEarnings(EarningsRequest) returns (EarningsSummary);
+    }
+  callers:
+    - fleet-svc — GetNearbyVehicles for the fleet live map (SCR-FP-009), so the D-22/D-23 rules are applied once
+    - admin-bff — GetNearbyVehicles for the admin live map (SCR-AP-013)
+    - admin-bff — GetTripDetail / GetDriverEarnings for the read-only trips and earnings tabs (US-24.9/24.10)
 
 paths:
 
@@ -118,7 +144,7 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [vehicles, asOf]
+                required: [vehicles, asOf, limitedLive]
                 properties:
                   vehicles:
                     type: array
@@ -126,6 +152,16 @@ paths:
                       $ref: '#/components/schemas/NearbyVehicle'
                   asOf:
                     $ref: './_shared.yaml#/components/schemas/Timestamp'
+                  limitedLive:
+                    type: boolean
+                    default: false
+                    description: |
+                      **Not in D3' — C042 micro-change-set.** ADD §12's resilience table specifies it by
+                      name: "Redis failure … query-svc returns `limited_live` flag". The live index was
+                      unreachable, so this is not a full answer and a client must say so rather than
+                      render an empty city. Always present, including when false: a client that could
+                      not tell "no vehicles nearby" from "we do not know" would show an outage as a
+                      quiet afternoon.
         '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
         '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
@@ -161,8 +197,13 @@ paths:
             maximum: 180
         - name: fromLat
           in: query
-          required: false
-          description: Defaults to the caller's last known position.
+          required: true
+          description: |
+            The origin. **Required — a C042 micro-change-set.** D3' documents it as defaulting to "the
+            caller's last known position", and the platform holds no such thing for a *passenger*:
+            `geo:live` is keyed by vehicle because EMQX authenticates a vehicle, and a passenger's
+            handset publishes no position at all. Inventing an origin would price a journey from
+            somewhere the passenger is not; a client with a map open knows where its map is centred.
           schema:
             type: number
             format: double
@@ -170,7 +211,7 @@ paths:
             maximum: 90
         - name: fromLng
           in: query
-          required: false
+          required: true
           schema:
             type: number
             format: double
@@ -192,8 +233,19 @@ paths:
         '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
         '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
         '422': { $ref: './_shared.yaml#/components/responses/UnprocessableEntity' }
+        '503':
+          description: |
+            Neither transit-svc nor fare-svc is reachable, so there is no answer to give. One of the
+            two missing degrades instead: without transit-svc the private tiers are still a complete
+            answer to "how do I get there", which is also C061's own documented no-feed behaviour.
+            An empty list is deliberately not used for this — it reads as "there is no way to get
+            there".
+          content:
+            application/problem+json:
+              schema:
+                $ref: './_shared.yaml#/components/schemas/Problem'
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
-      x-error-codes: [validation-failed, unauthorized, route-unavailable]
+      x-error-codes: [validation-failed, unauthorized, route-unavailable, dependency-unavailable]
 
   /v1/routes/{routeNumber}/buses:
     get:
@@ -218,7 +270,7 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [vehicles, asOf]
+                required: [vehicles, asOf, limitedLive]
                 properties:
                   vehicles:
                     type: array
@@ -226,8 +278,20 @@ paths:
                       $ref: '#/components/schemas/NearbyVehicle'
                   asOf:
                     $ref: './_shared.yaml#/components/schemas/Timestamp'
+                  limitedLive:
+                    type: boolean
+                    default: false
+                    description: As `GET /v1/nearby` — the live index was unreachable (ADD §12).
         '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
-        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '404':
+          description: |
+            No route carries that number. A route that exists with nothing running on it is a `200`
+            with an empty list — the difference is what a client needs to show US-7.14's "no vehicles
+            of your type are active" message rather than "no such route".
+          content:
+            application/problem+json:
+              schema:
+                $ref: './_shared.yaml#/components/schemas/Problem'
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
       x-error-codes: [unauthorized, not-found]
 
@@ -423,6 +487,10 @@ paths:
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
       x-error-codes: [validation-failed, unauthorized]
 
+  # With no geocoder configured or reachable this still answers 200 from the caller's saved and recent
+  # places, which is a real part of BR-23.1's prediction set rather than a stand-in. Only the reverse
+  # lookup below has no local answer and therefore a 503.
+
   /v1/geo/reverse:
     get:
       operationId: reverseGeocode
@@ -457,9 +525,27 @@ paths:
                 $ref: '#/components/schemas/GeocodedPlace'
         '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
         '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
-        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '404':
+          description: |
+            Nominatim placed nothing at that coordinate — the middle of the sea, most often. A real
+            answer to a real question, and deliberately distinct from the 503 below.
+          content:
+            application/problem+json:
+              schema:
+                $ref: './_shared.yaml#/components/schemas/Problem'
+        '503':
+          description: |
+            **Not in D3' — C042 micro-change-set.** The self-hosted Nominatim (D-14/D-15) is
+            unconfigured or unreachable. A reverse lookup has no local equivalent — there is nothing to
+            reverse a coordinate against — and **there is no third-party geocoder fallback anywhere in
+            this path by design** (D3' map hard rule). Reporting 404 instead would claim no such place
+            exists, which is a different and false statement.
+          content:
+            application/problem+json:
+              schema:
+                $ref: './_shared.yaml#/components/schemas/Problem'
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
-      x-error-codes: [validation-failed, unauthorized, not-found]
+      x-error-codes: [validation-failed, unauthorized, not-found, dependency-unavailable]
 
 components:
   securitySchemes:
@@ -581,10 +667,33 @@ components:
       allOf:
         - $ref: '#/components/schemas/TripSummary'
         - type: object
+          required: [geometrySource]
           properties:
             polyline:
               type: string
-              description: Encoded polyline of the Kalman-filtered track (E-04).
+              description: |
+                The stored track as an **encoded polyline** (Google's Encoded Polyline Algorithm,
+                precision 5 — the format MapLibre's `LineLayer` consumes for MAP-08; a published,
+                patent-free encoding with no Google service involved). Absent when the journey
+                produced fewer than two distinct points.
+            geometrySource:
+              type: string
+              enum: [telemetry, operational, aggregate_1m, none]
+              description: |
+                **Not in D3' — C042 micro-change-set.** Which relation the line came from and at what
+                grain, because the planes differ by an order of magnitude and a client drawing both
+                must not present one as the other:
+
+                * `telemetry` — full-resolution `telemetry.positions`, via the stored
+                  `trips.session_summaries` row (Mode A/B, ADD §9.2).
+                * `operational` — the 1/min `trips.position_samples`; `distanceKm` is a lower bound.
+                * `aggregate_1m` — the `telemetry.positions_1m` continuous aggregate, one point per
+                  minute. **Mode C only**, because no service stores a Mode C track: ADD §9.2's stored
+                  summary is per *session* and E-04's Kalman-filtered track is computed by fare-svc for
+                  the fare's distance and never persisted. `distanceKm` is omitted for this source
+                  rather than derived from it — a minute-grain chord chain understates a city journey by
+                  a third or more, and that number is the one on the receipt.
+                * `none` — the journey produced no usable line.
             distanceKm:
               type: number
               format: double
@@ -699,5 +808,16 @@ components:
           type: string
         source:
           type: string
-          description: '`nominatim` for a geocode; `saved`/`recent` for the caller''s own places.'
+          description: |
+            BR-23.1's three prediction sources, and never a fourth: a destination is a geo-location
+            only and a route row can never appear here (AL-17). `nominatim` for a geocode;
+            `saved`/`recent` for the caller's own places.
           enum: [nominatim, saved, recent]
+        label:
+          type: string
+          description: |
+            **Not in D3' — C042 micro-change-set.** The free-text name the passenger gave a saved
+            address ("Home", "Amma's"), captured in the add-address sheet (AL-26, US-22.2). Present
+            only when `source` is `saved`; a geocoded hit has no label and a recent destination has no
+            stored address at all. Without it a client cannot render the Home and Work shortcuts
+            US-7.13 promises at the top of the list.

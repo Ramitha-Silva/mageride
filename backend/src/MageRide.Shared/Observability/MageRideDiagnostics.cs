@@ -302,4 +302,59 @@ public static class MageRideDiagnostics
     public static readonly Counter<long> FanoutSignalsApplied =
         Meter.CreateCounter<long>("mageride.fanout.signals", "{signal}",
             "Directed fan-out signals applied to this replica's local connections.");
+
+    // --- query-svc (C042): the read side of the same two planes -----------------------------------
+
+    /// <summary>Vehicles <c>GET /v1/nearby</c> returned.</summary>
+    public static readonly Counter<long> NearbyVehiclesReturned =
+        Meter.CreateCounter<long>("mageride.query.nearby.vehicles", "{vehicle}",
+            "Vehicles included in a nearby snapshot after filtering.");
+
+    /// <summary>
+    /// Vehicles the visibility filter withheld from a nearby snapshot, by the same reasons
+    /// <see cref="FanoutFramesFiltered"/> uses, plus <c>unknown</c> (no <c>veh:meta</c> at all) and
+    /// <c>out_of_radius</c> (the exact post-filter).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Comparable with <see cref="FanoutFramesFiltered"/> on purpose: the socket and the snapshot
+    /// apply one rule (<see cref="Realtime.VehicleVisibilityRules"/>) and their <c>engaged</c>,
+    /// <c>stale</c>, <c>offline</c> and <c>private</c> rates should move together. They diverging is
+    /// the signal that one plane is reading state the other is not.
+    /// </para>
+    /// <para>
+    /// <c>unknown</c> and <c>out_of_radius</c> are this endpoint's alone and both count the cost of
+    /// <c>geo:live</c> having no expiry: nothing removes a member, so the index is a superset of the
+    /// live fleet and every candidate has to be re-checked against its own current position.
+    /// </para>
+    /// </remarks>
+    public static readonly Counter<long> NearbyVehiclesFiltered =
+        Meter.CreateCounter<long>("mageride.query.nearby.filtered", "{vehicle}",
+            "Vehicles withheld from a nearby snapshot, by reason.");
+
+    /// <summary>
+    /// Nearby snapshots served without the live index — ADD §12's <c>limited_live</c> degradation.
+    /// </summary>
+    /// <remarks>
+    /// A reading above zero means passengers are being shown an empty or partial map with a flag
+    /// rather than an error. That is the prescribed behaviour and it is still an outage.
+    /// </remarks>
+    public static readonly Counter<long> NearbyLimitedLive =
+        Meter.CreateCounter<long>("mageride.query.nearby.limited_live", "{snapshot}",
+            "Nearby snapshots served in the degraded limited-live mode (Redis unreachable).");
+
+    /// <summary>Forward and reverse geocodes, tagged <c>op</c> and <c>outcome</c>.</summary>
+    /// <remarks>
+    /// The <c>outcome=cache_hit</c> share is the number that matters: a self-hosted Nominatim on its
+    /// own VPS (ADD §6) is the slowest dependency on the passenger's search path, and the cache is
+    /// the whole of D-15's mitigation for it.
+    /// </remarks>
+    public static readonly Counter<long> GeocodeRequests =
+        Meter.CreateCounter<long>("mageride.query.geocode.requests", "{request}",
+            "Forward and reverse geocode lookups, by operation and outcome.");
+
+    /// <summary>Read queries served by a replica rather than the primary (ADD §9.3).</summary>
+    public static readonly Counter<long> QueryReplicaReads =
+        Meter.CreateCounter<long>("mageride.query.replica_reads", "{query}",
+            "Read queries routed to a Postgres read replica, by whether read-after-write forced the primary.");
 }

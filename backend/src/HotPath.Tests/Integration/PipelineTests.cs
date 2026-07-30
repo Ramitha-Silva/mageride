@@ -236,54 +236,7 @@ public sealed class PipelineTests(EmqxFixture emqx, RedpandaFixture redpanda, Re
         await passenger.StopAsync();
     }
 
-    [Fact]
-    public async Task A_passenger_joining_a_populated_cell_is_seeded_with_what_is_already_there()
-    {
-        RequireContainers();
-
-        await using var harness = await StartAsync(seedFrames: 32);
-        await harness.WaitForBridgesAsync();
-
-        var vehicleId = Guid.NewGuid();
-
-        await using var device = await DeviceClient.ConnectAsync(emqx, vehicleId);
-        await device.PublishPositionAsync(Samples.At(vehicleId, Samples.ColomboFort, seq: 1));
-
-        // Wait for the position to reach the cell stream before anyone is watching it.
-        await using var connection = await harness.ConnectRedisAsync();
-        var cell = GeoCells.ViewCell(Samples.ColomboFort);
-
-        await WaitUntilAsync(
-            async () =>
-            {
-                var entries = await connection.GetDatabase().StreamRangeAsync(
-                    Shared.Caching.RedisKeys.Cell(cell), minId: "-", maxId: "+", count: 200);
-
-                return entries.Any(entry => entry.Values.Any(
-                    value => value.Value.ToString() == vehicleId.ToString()));
-            },
-            "the sample should reach the cell stream");
-
-        var frames = new FrameCollector();
-        await using var passenger = harness.PassengerConnection();
-        frames.Attach(passenger);
-        await passenger.StartAsync();
-
-        await passenger.InvokeAsync(
-            Contract.Methods.JoinGeocells, GeoCells.ViewCells(Samples.ColomboFort).ToArray());
-
-        // Without the seed the passenger would stare at an empty map until each nearby vehicle's
-        // next sample. `signalr-hub.md` §1.1 assigns that snapshot to query-svc's GET /v1/nearby
-        // (C042); Fanout:JoinSeedFrames is the bounded stand-in until it exists, and C041/C042
-        // should remove it then.
-        var frame = await frames.WaitForAsync(vehicleId, Timeout);
-
-        Assert.Equal(Samples.ColomboFort.Latitude, frame.Lat, precision: 4);
-
-        await passenger.StopAsync();
-    }
-
-    private Task<HotPathHarness> StartAsync(int seedFrames = 0) =>
+    private Task<HotPathHarness> StartAsync() =>
         HotPathHarness.StartAsync(emqx, redpanda, redis, new HotPathHarnessOptions
         {
             BridgeReplicas = 1,
@@ -293,7 +246,6 @@ public sealed class PipelineTests(EmqxFixture emqx, RedpandaFixture redpanda, Re
 
             // Deliberately the shipped default (2 s). See the class remarks.
             BatchInterval = null,
-            JoinSeedFrames = seedFrames,
         });
 
     private void RequireContainers()

@@ -40,28 +40,6 @@ public sealed class FanoutOptions
     public int MaxEntriesPerCellPerTick { get; set; } = 512;
 
     /// <summary>
-    /// How many recent frames a joining client is sent immediately.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>A stand-in, and a deliberate one.</b> <c>signalr-hub.md</c> §1.1 says a client resyncs
-    /// from <c>GET /v1/nearby</c> (query-svc) because "the socket carries deltas, the REST read
-    /// carries the snapshot" — and query-svc is C042. Until it exists, a passenger who opens the map
-    /// sees nothing at all until each nearby vehicle's next sample, which looks exactly like a
-    /// broken map. This replays the tail of each joined cell's buffer to <b>the joining connection
-    /// only</b>, which is bounded and costs the group nothing.
-    /// </para>
-    /// <para>
-    /// The seed goes through the same visibility filter as a live batch — an engaged Mode C vehicle
-    /// or a Mode B one is no more visible in a replay than it is live. Set to 0 to turn it off.
-    /// <b>C042 should remove it</b> once <c>/v1/nearby</c> lands — two snapshot paths is one more
-    /// than the contract has.
-    /// </para>
-    /// </remarks>
-    [Range(0, 1_000)]
-    public int JoinSeedFrames { get; set; } = 32;
-
-    /// <summary>
     /// How long a group membership survives a <c>LeaveGeocells</c> (ADD §7.4 step 6).
     /// </summary>
     /// <remarks>

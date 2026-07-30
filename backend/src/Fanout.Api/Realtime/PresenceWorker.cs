@@ -1,5 +1,6 @@
 using System.Text;
 using MageRide.Fanout.Visibility;
+using MageRide.Shared.Realtime;
 using MageRide.Shared.Mqtt;
 using Microsoft.Extensions.Options;
 using MQTTnet;

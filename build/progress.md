@@ -67,7 +67,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C039 | position-processor-svc | 2 | DONE | 2026-07-29 | 88 HotPath tests green (53 tagged `Category=PositionProcessor`, 45 new); **no migration** — this service has no database; D-18/T-07 landed as a pure filter with ADD §12.6's table in configuration; the R-08 ownership conflict between ADD §9.4 and C034 resolved by splitting on *what decides the fact* (phase = dispatch-svc, position = here) with a new `veh:driver:{vehicleId}` binding; one fixture bug fixed — `Samples.Dehiwala` was documented as a different res-5 cell and is not; 7 micro-change-sets |
 | C040 | persistence-writer-svc | 2 | DONE | 2026-07-30 | 111 HotPath tests green (23 tagged `Category=PersistenceWriter`, all new); **1 trips migration (0506)** — `ux_possample_session_minute` and `trips.session_summaries`, the ADD §9.2 trip summary that no DDL source printed; `COPY` measured at **14,811 rows/s** against the DoD's 3,000; Postgres joins `HotPathCollection` (4 containers now) and `migrate-verify.sh` expects 7 trips tables, not 6; 6 micro-change-sets |
 | C041 | fanout-svc | 2 | DONE | 2026-07-30 | 48 tests green in a **new suite** (`Fanout.Api.Tests`; the 9 hub tests moved out of HotPath.Tests, which is 102); **no migration** — this service owns no table; the D6' §5.1/§5.2 contradiction resolved with a `vehicle:{vehicleId}` group, argued below; a **custom Redis control channel** rather than SignalR's backplane, because the latter would multiply every cell batch by the replica count; 9 micro-change-sets |
-| C042 | query-svc | 2 | PENDING | | |
+| C042 | query-svc | 2 | DONE | 2026-07-30 | 65 tests green in a **new suite** (`Query.Api.Tests`); **no migration** — this service writes nothing anywhere; the D-22/D-23/US-7.16/US-7.17 filter **promoted into the kernel** (`MageRide.Shared.Realtime.VehicleVisibilityRules`) so the socket and the snapshot cannot disagree, which is what C041's handoff asked for; `Fanout:JoinSeedFrames` retired with it (Fanout.Api.Tests 48 → 47, HotPath.Tests 102 → 101); the platform's second gRPC service; **no Mode C track exists anywhere to serve as a polyline** and it is not invented; 9 micro-change-sets |
 | C043 | tcp-adapter | 2 | PENDING | | |
 | C044 | fleet-health-svc | 2 | PENDING | | |
 | C045 | content-svc | 3 | PENDING | | |
@@ -5523,3 +5523,206 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   **Build host —** Docker for three Testcontainers fixtures (Redis, Redpanda, EMQX); the replica stack
   stayed down throughout. `Fanout.Api.Tests` takes ~1 min 40 s, `HotPath.Tests` ~5 min. **One new
   NuGet reference** — `MQTTnet`, already pinned centrally, for the `veh/+/status` subscription.
+
+- **Component:** C042 query-svc — 2026-07-30
+- **Status:** DONE — `dotnet test backend/src/Query.Api.Tests -c Release` is 65/65 green in a new suite,
+  and all four DoD lines are asserted against a real Redis holding `geo:live`/`veh:meta` hashes written
+  by the **real** position-processor-svc writer and a real Postgres holding a real
+  `geography(LINESTRING,4326)` polyline. `Fanout.Api.Tests` is 47 (was 48 — the join-seed test went with
+  the option it tested), `HotPath.Tests` 101 (was 102, same reason), `MageRide.Shared.Tests` 235.
+  **No migration** — this service owns no table and writes nothing but a geocode cache.
+- **Notes:**
+  **The decision everything else follows from —** `signalr-hub.md` §1.1 makes `GET /v1/nearby` the
+  snapshot and resync path for the *same map* `/hubs/live` streams, so the two paths must agree exactly
+  about who may be seen. C041's handoff asked for its `VehicleVisibilityRules.Classify` to be promoted
+  to the kernel "when the second caller exists rather than reimplementing it", and that is done: the
+  file moved to `MageRide.Shared/Realtime/VehicleVisibility.cs` and both services now call one function.
+  A second implementation would surface as a passenger watching an engaged taxi for one poll
+  interval — D-22's disclosure with a delay on it — and no test on either side would catch it, because
+  each suite would agree with its own copy.
+  **`Fanout:JoinSeedFrames` is retired, as C041 said C042 would.** The join used to replay each cell's
+  tail to the joining connection; `LiveHub.AnchorAsync` keeps the load-bearing half (fixing a new
+  cell's stream position at join time, so nothing written before the first tick is skipped) and sends
+  nothing. The seed was the weaker of the two snapshot paths anyway: it read only the cells the client
+  had joined and only the **public** audience, so it could never show a passenger their own engaged
+  vehicle (US-7.16's second half) or their entitled Mode B van (D-23), both of which `/v1/nearby` does.
+  **Spec gaps and conflicts —**
+  (a) ***No Mode C track is stored anywhere, so the DoD's "stored polyline" is only literally
+  satisfiable for Mode A/B.*** ADD §9.2's stored trip summary is per **session**:
+  `trips.session_summaries` (0506) covers Mode A and B and `ck_summaries_mode` admits only those two.
+  The Mode C equivalent has no table, no column and no writer — E-04's Kalman-filtered track is
+  computed by fare-svc for the distance the fare is charged on and never persisted. A ride's line is
+  therefore read from the **`telemetry.positions_1m` continuous aggregate**, which is the read path
+  ADD §9.5 item 2 prescribes for a trip summary ("hits aggregates, not raw rows") and which migration
+  1802 landed *naming this component* ("so query-svc (C042) can pick a granularity by table name
+  alone"). It is one point per minute and labels itself `aggregate_1m`. **No table was added for a
+  writer that does not exist**; **C049 must persist the E-04 track and its distance**, and this
+  service reads whatever column it lands in.
+  (b) ***A Mode C `distanceKm` is omitted rather than derived.*** Chaining sixty-second chords across a
+  route with turns loses a third of the distance or more — C040's own note on the same trade-off — and
+  that number is the one on the receipt. A figure a third short of the fare is worse than no figure.
+  (c) ***"My trips spans both planes" is only half-joinable.*** D3' says the history covers Mode A/B
+  sessions and Mode C rides, and the only link from a **user** to a `trips.sessions` row is
+  `driver_id`: the platform records no ridership for a bus or a school van, because nobody is
+  ticketed. So a passenger's history is their Mode C rides (as passenger, booker or registered rider)
+  and a driver's is theirs plus their sessions. **Not a narrowing of the contract — the only join the
+  schema has.** A passenger-side Mode A/B history would need a boarding record nothing produces.
+  (d) ***`fares.driver_earnings` (1004) has no writer, and is deliberately not read.*** It is
+  documented as "the read model behind the driver Earnings screen", and its writer is fare-svc's R-05
+  earning post (C049/C050). Reading an unwritten rollup would answer every dashboard with zeros while
+  the payment rows behind it hold real money — the failure that looks exactly like a working screen.
+  It also has no tip and no penalty column, so it could not answer D3' in full even once written.
+  **C050 should either populate it or drop it.**
+  (e) ***D3' does not state the direction of `EarningsSummary.penaltyMinor`.*** Its prose says "the fee
+  and any penalty netted out", which reads like a deduction — and **nothing in D5' ever debits a
+  driver a penalty**. The only Rs 50 on the platform is charged to a *passenger* for cancelling after
+  an accept and paid to `dispatch.cancellation_penalties.affected_driver_id`, whose own column comment
+  is explicit that the driver who later collects it is "a pass-through, not the beneficiary". Read as
+  a deduction the field would be permanently zero and would hide money the driver is owed, so it is
+  reported as the compensation **credited** and it **adds** to net. **D3' should state the direction.**
+  (f) ***`dispatch.cancellation_penalties` has no settled-at column***, so a penalty accrued in March
+  and collected in April currently lands in March's earnings (`created_at` is the only date the row
+  carries). Micro-change-set: the table needs `settled_at`.
+  (g) ***`GET /v1/transport-options`'s `fromLat`/`fromLng` cannot default.*** D3' documents them as
+  defaulting to "the caller's last known position", and the platform holds no such thing for a
+  **passenger**: `geo:live` is keyed by vehicle because EMQX authenticates a vehicle, and a
+  passenger's handset publishes nothing. Made **required** in `query.yaml` rather than inventing an
+  origin — a client with a map open knows where its map is centred.
+  (h) ***The endpoint overlaps C061.*** AL-17 assigns the reachable-options computation to "query-svc /
+  a new transit-svc" and C061 owns `GET /v1/transit/options` with the same inputs and a superset of
+  the outputs. `/v1/transport-options` is **kept** only because `shared/kmp`'s generated client
+  already calls it (C012) — it aggregates and computes nothing, delegating GTFS matching to
+  transit-svc and pricing to fare-svc. **C061 may reasonably absorb it**; if it does, the KMP client
+  and the gateway route go with it.
+  (i) ***"C042 lands a mesh" is recorded in the C031 and C037 handoffs and is wrong.*** Both note that
+  the interim `X-MageRide-Internal-Key` shared secret stands "until C042 lands a mesh"; C042 is
+  query-svc. **No component in the 132 owns the Linkerd/SPIFFE mesh** (C119's security review
+  *verifies* mTLS on internal routes without installing it), so the interim scheme stays and this
+  service uses it too — `Query:InternalApiKey` unset leaves `query.v1.Query` **unmapped**, not open.
+  A mesh component is missing from the manifest.
+  **Decisions —**
+  (1) **The exact post-filter is not an optimisation, it is the correctness of the endpoint.**
+  `geo:live` has no per-member TTL and *nothing ever removes a member*: C039 `GEOADD`s and never
+  `GEOREM`s, and C041's stale sweep works on the cell streams instead. A `GEOSEARCH` therefore returns
+  every vehicle that has ever driven through the radius, at the place it stopped. Every candidate is
+  re-read from `veh:meta` (which *does* expire) and re-measured with a haversine; a candidate with no
+  hash is dropped, not drawn approximately. The search radius is inflated 1 % first — twice Redis's
+  own documented geohash error — so the exact pass can also *include* a vehicle the index excluded
+  from just inside the line. `A_geo_index_member_with_no_position_hash_is_not_drawn` is the test.
+  **US-7.17's `geo:live` cleanup is still nobody's** (C039's CLAUDE.md assigned it to C041, which did
+  the sweep on the streams); the post-filter makes it a cost rather than a bug, and the two counters
+  `unknown` and `out_of_radius` are what would show it.
+  (2) **US-7.16's second half is implemented, and without a copy of ride-svc's state machine.** An
+  engaged Mode C vehicle is off the public answer and *on* the answer for the passenger whose ride
+  engaged it. `veh:engaged:{vehicleId}` already names the ride, so the only question left is "is that
+  hire yours", which `rides.rides` answers over passenger/booker/rider (P-01/P-03 make those three
+  different accounts). Nothing here re-derives which states count as engaged. This is also the only
+  path on which `driverName` and `registrationNumber` are populated at all (US-7.12) — without it two
+  contract fields would be permanently dead.
+  (3) **The registry is read only for vehicles whose identity may be disclosed.** US-7.4 gives the
+  popup to Mode A and B alone ("standby on-demand vehicles do not show info when tapped") and US-7.12
+  gives the plate to the accepted ride, so an idle Mode C taxi's registration is **never fetched**.
+  The privacy rule is the shape of the data access rather than a field-stripping step that could be
+  forgotten later.
+  (4) **A vehicle whose publisher denormalised no `mode` or `type` is dropped, though the registry
+  could supply it.** fanout-svc holds no database and drops that frame; being more generous here would
+  put a marker on the map the socket then never moves — a frozen vehicle a passenger walks towards.
+  The two planes fail the same way on purpose, counted under fanout's own `unclassified` reason so
+  the rates stay comparable. (`type` is separately required: MAP-03 draws a marker *by* type.)
+  (5) **`etaSeconds` is a straight line with a detour factor, and every assumption is a setting.**
+  ADD §7.6 puts routing (OSRM/Valhalla) in **Phase 3**, so no road network exists to measure against;
+  C041 had already deferred this field to C042 once and deferring again would mean nothing ever
+  populates it. The per-type speeds are urban averages **including stops** — deliberately *not*
+  ADD §12.6's anti-spoof ceilings, which are three to five times higher and are the speeds above
+  which a fix is a lie. US-7.11's two halves point at different targets: the accepted vehicle's ETA is
+  to whichever end of the journey is ahead, a Mode A vehicle's is to the caller's own map centre.
+  Deleted when the router lands.
+  (6) **AL-17 is held by an absence of capability.** The search path has no query that can reach
+  `spatial.routes`, `transit.gtfs_routes` or anything else holding a route — `IPlaceRepository` reaches
+  two tables and `IGeocoder` reaches an OSM *place* index. A filter would be a line somebody could
+  delete. `Search_never_returns_a_route_row_for_a_typed_route_number` seeds a real route numbered 138
+  **with an active bus on it**, proves `GET /v1/routes/138/buses` returns that bus, and proves search
+  for "138" still cannot produce the route.
+  (7) **Read-after-write is exactly one read, decided by the read's shape.** ADD §9.3 asks for replicas
+  "with read-after-write consistency only where required". Required once: `GET
+  /v1/trips/{userId}/{tripId}`, opened from the receipt screen seconds after ride-svc marked the ride
+  terminal, where lag does not *stale* the answer but **inverts** it into a 404 on a trip the
+  passenger has just finished. Everything else is a list or an aggregate, where a row missing from the
+  top of a page appears on the next pull — sending those to the primary too would give up §9.3
+  entirely to protect against something no user can see.
+  (8) **The R-05 gate is read off the *ride*, not the payment.** D5' §8.1's terminal set is three
+  `rides.rides.state` values (AL-47's driver-QR settles into the same place). Gating on payment rows
+  would count a `Succeeded` attempt on a ride later disputed and would have to reason about the D-10
+  retry chain to avoid counting one fare three times; a ride has one state.
+  `A_retry_chain_contributes_one_fare_and_not_three` pins it. Gross excludes the OnePay surcharge
+  (US-8.11 — the passenger's gateway cost), and a cash ride with **no payment row at all** still
+  counts as a trip, because a driver whose day was all cash must not read "0 trips".
+  (9) **The daily fee and the penalty are on the summary and not on a per-ride row.** A daily fee is a
+  fact about a *day* (D-13 charges it once, before the second trip) and the penalty about somebody
+  else's cancellation; splitting either across a day's rides makes every row's net wrong in a
+  different way. D3' marks both optional on `SessionEarning` and required on `EarningsSummary`.
+  (10) **Two bugs the tests found, both of the silent kind.** *Modes and types have opposite case
+  conventions* — canonical types are lower-case with underscores (AL-09), modes are upper-case A/B/C
+  (D5' §2) — and one shared `ToLowerInvariant` turned `modes=C` into a filter matching nothing: an
+  empty map, no error anywhere. `NormaliseType`/`NormaliseMode` are the fix and a test pins both.
+  *`@Before IS NULL` with no cast* makes Postgres refuse the statement with `42P08` rather than infer
+  a type, which took both keyset cursors down; the casts are load-bearing and say so.
+  (11) **`limitedLive` rather than a 500 on a Redis outage**, because ADD §12's resilience table
+  specifies it by name ("query-svc returns `limited_live` flag"). Always serialised, including when
+  false: a client that could not tell "no vehicles nearby" from "we do not know" would render an
+  outage as a quiet afternoon.
+  (12) **The polyline is encoded here, not by `ST_AsEncodedPolyline`.** Putting the wire encoding in a
+  query means a second endpoint reading the same column either repeats the SQL or disagrees about
+  precision. `EncodedPolyline` is asserted against the published algorithm's own worked example as
+  well as a round trip — a round trip alone passes for an encoder that is self-consistent and wrong,
+  and MapLibre is what would then draw a line off the road.
+  (13) **The test project references `HotPath.PositionProcessor` and writes the live index through the
+  real `LivePositionIndex`.** `veh:meta`'s field names are the contract between C039 and this service
+  and neither may reference the other in production; a hand-written copy of the names would stay green
+  through a rename there while every passenger's map went quietly empty. Referencing it from the
+  *test* project makes such a rename break this build instead.
+  **Contract changes (all in `query.yaml`, lint clean) —** `limitedLive` on both snapshot responses
+  (ADD §12 names the flag; D3' prints no field); `TripDetail.geometrySource` (a full-resolution Mode
+  A/B track and a 1/min Mode C line are not the same artefact, and a client drawing both must not
+  present one as the other); `GeocodedPlace.label` (without it a client cannot render US-7.13's
+  Home/Work shortcuts); `503` on `/v1/geo/reverse` and `/v1/transport-options`; `fromLat`/`fromLng`
+  required (gap (g)); and **`x-grpc-service` + `proto/query.v1.proto`** — ADD §6 gives query-svc
+  ".NET 10 minimal API **+ gRPC**" and D3' §0 names "`query-svc` internal", and neither prints a
+  service block. Three RPCs, each with a named caller that would otherwise reimplement a rule:
+  `GetNearbyVehicles` (fleet-svc C059 and admin-bff C057 both render live maps and must not be a third
+  opinion about D-22/D-23), `GetTripDetail` and `GetDriverEarnings` (admin-bff's US-24.9/24.10 tabs).
+  `viewer_user_id` is **required** — two of the four rules are per viewer, and answering a call that
+  names nobody with the public map is how a back-office screen shows an engaged taxi.
+  **For C013 (kmp-api-client) —** the generated client is now behind `query.yaml` in four places, all
+  of them mine: `NearbyVehiclesResponse` needs `limitedLive`, `TripDetail` needs `geometrySource`,
+  `GeocodedPlace` needs `label`, and `getTransportOptions`'s `fromLat`/`fromLng` must stop being
+  nullable. Nothing is broken today — no app screen exists yet (C067+) — but a client that can
+  construct a request the contract forbids is a bug waiting for the first booking screen.
+  **For C049/C050 (fare-svc) —** persist the E-04 Kalman track and its distance (gap (a)) and either
+  populate or drop `fares.driver_earnings` (gap (d)). Both are read here the moment they exist.
+  **For C059 (fleet-svc) / C057 (admin-bff) —** call `query.v1.Query/GetNearbyVehicles` rather than
+  reading `geo:live`; ADD §9.5 item 8's `fleet_id` RLS (migration 1804) is fleet-svc's to set a role
+  for, because no endpoint here is fleet-scoped.
+  **For C061 (transit-svc) —** `Query:TransitBaseUrl` expects `GET
+  /v1/transit/options?fromLat&fromLng&toLat&toLng` answering `{options:[{shortName, headsign,
+  vehicleType, transfers, fareMinor}]}`; `vehicleType` is passed through and not guessed at, because
+  MAP-03's rail icon depends on it. See gap (h) on whether this endpoint should move.
+  **For C067–C102 (the apps) —** `/v1/nearby` is the cold-start and post-reconnect snapshot and the
+  socket carries deltas only; **read `limitedLive` and say so on the screen** rather than rendering an
+  empty map; and US-7.14's "no vehicles of your type are active" message is the client's, from an
+  empty `vehicles` array on a snapshot whose `limitedLive` is false.
+  (j) ***D7' §4.2 has no row for query-svc, and this service needs two ports.*** Cleartext HTTP has no
+  ALPN, so Kestrel cannot negotiate HTTP/1.1 and HTTP/2 on one socket — a gRPC client's preface to the
+  REST port is answered `GOAWAY HTTP_1_1_REQUIRED`, which is the failure C033 hit and why §4.2 gives
+  reputation-svc a `Grpc__ListenPort`=5005. query-svc therefore binds its own listeners the same way:
+  `Query:HttpListenPort` (5000, the address `gateway-routes.json` points the cluster at, or
+  `ASPNETCORE_URLS`) and **`Query:GrpcListenPort`=5006**. Not 5005 — both services run in the combined
+  `app-services` container in the dev compose and would fight over it. **§4.2 needs the row.** The
+  HTTP/2 listener is bound whenever `Query:GrpcEnabled` is on even without a key, so a keyless
+  deployment fails at "a port that answers Unauthenticated" rather than "connection refused" — a
+  diagnosable misconfiguration instead of an apparent network fault. The harness sets both to 0 and
+  drives the production wiring, so this is under test rather than deployment-only.
+  **Build host —** Docker for two Testcontainers fixtures (Postgres, Redis); the replica stack stayed
+  down throughout. `Query.Api.Tests` takes ~1 min, `Fanout.Api.Tests` ~1 min 25 s, `HotPath.Tests`
+  ~4 min 40 s. **No new NuGet reference** — `Grpc.AspNetCore`, `Grpc.Net.Client`, `Dapper`, `Npgsql`
+  and `StackExchange.Redis` are all already pinned centrally.

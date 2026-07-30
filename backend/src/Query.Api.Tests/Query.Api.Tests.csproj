@@ -1,0 +1,68 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    C042 verify target: dotnet test backend/src/Query.Api.Tests -c Release
+
+    query-svc reads two planes and owns neither, so almost nothing here can be proved against a fake.
+    The four Definition-of-Done claims are all claims about *state somebody else wrote*:
+
+      * nearby excludes engaged Mode C and anything stale     -> a real Redis holding a real
+                                                                 `geo:live` / `veh:meta` / `veh:engaged`
+      * a type filter returns exactly the requested types      -> the same
+      * trip detail returns the STORED polyline                -> a real `trips.session_summaries`
+                                                                 geography column
+      * search never returns a route row                       -> a real `spatial.routes` row that
+                                                                 exists and is still not returned
+
+    A suite that asserted any of those against an in-memory double would agree with itself and say
+    nothing about the platform.
+
+    The position writer is the *real* MageRide.HotPath.PositionProcessor.Redis.LivePositionIndex, not a
+    copy of it. `veh:meta`'s field names are the contract between C039 and this service and neither may
+    reference the other in production — so the test project references it instead, and a rename on that
+    side breaks this build rather than silently emptying a passenger's map.
+
+    Microsoft.NET.Sdk.Web, not Microsoft.NET.Sdk: the harness builds WebApplications (query-svc itself,
+    and a stand-in Nominatim).
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.Query.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <OutputType>Exe</OutputType>
+    <!--
+      xUnit1041: collection-fixture ctor args are consumed through the primary constructor.
+      xUnit1051: every test is bounded by its own harness lifetime, so threading
+                 TestContext.Current.CancellationToken through each HTTP call would add noise without
+                 changing behaviour. Matches Registry/TripState/Fanout.Api.Tests.
+    -->
+    <NoWarn>$(NoWarn);xUnit1041;xUnit1051</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+    <PackageReference Include="StackExchange.Redis" />
+    <PackageReference Include="Dapper" />
+    <!-- The internal surface is exercised through a real gRPC channel, so the interceptor, the
+         metadata header and the generated stubs are the ones a caller meets. -->
+    <PackageReference Include="Grpc.Net.Client" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Query.Api\Query.Api.csproj" />
+    <!-- C010: the Postgres and Redis fixtures, so this suite runs the same server builds the dev
+         stack does — including PostGIS and TimescaleDB, both of which this service reads through. -->
+    <ProjectReference Include="..\MageRide.TestKit\MageRide.TestKit.csproj" />
+    <!-- The real live-index writer. See the header. -->
+    <ProjectReference Include="..\HotPath.PositionProcessor\HotPath.PositionProcessor.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

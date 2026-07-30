@@ -1,5 +1,6 @@
 using System.Globalization;
 using MageRide.Fanout.Configuration;
+using MageRide.Shared.Realtime;
 using MageRide.Shared.Caching;
 using Microsoft.Extensions.Options;
 using StackExchange.Redis;

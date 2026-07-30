@@ -1,3 +1,4 @@
+using MageRide.Shared.Realtime;
 using MageRide.Shared.Caching;
 using StackExchange.Redis;
 

@@ -43,7 +43,6 @@ public sealed class LiveHub(
     ICellStreamReader streams,
     IEntitlementCache entitlements,
     IDriverVehicles driverVehicles,
-    IVisibilityIndex visibility,
     IRideProjection rides,
     IOptions<FanoutOptions> options,
     TimeProvider clock,
@@ -101,7 +100,7 @@ public sealed class LiveHub(
         // a two-second hole at exactly the moment a passenger opens the map. Resolving the tail
         // first and joining second closes it — anything written after this read has an id greater
         // than the recorded position, so the pump picks it up.
-        var seeds = await ResolveAsync(wanted);
+        await AnchorAsync(wanted);
 
         subscriptions.Join(Context.ConnectionId, wanted);
 
@@ -116,11 +115,6 @@ public sealed class LiveHub(
         // takes effect at the next map interaction as well as on the control channel, so the two
         // paths cover each other.
         await SubscribeEntitledVehiclesAsync(RequireCaller());
-
-        foreach (var seed in seeds)
-        {
-            await Clients.Caller.SendAsync(Contract.Events.VehiclePositions, seed, Context.ConnectionAborted);
-        }
     }
 
     /// <summary>
@@ -263,8 +257,7 @@ public sealed class LiveHub(
     }
 
     /// <summary>
-    /// Fixes the pump's resume point for any cell this replica is not already reading, and collects
-    /// the seed batches for the joining connection.
+    /// Fixes the pump's resume point for any cell this replica is not already reading.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -273,72 +266,34 @@ public sealed class LiveHub(
     /// has not been sent.
     /// </para>
     /// <para>
-    /// The seed goes through the same visibility filter as a live batch. A replay that showed an
-    /// engaged taxi or a private vehicle would be the D-22 leak with a two-second delay on it.
+    /// <b>Nothing is replayed to the joining connection any more.</b> C024 seeded the tail of each
+    /// joined cell (<c>Fanout:JoinSeedFrames</c>) because <c>signalr-hub.md</c> §1.1 makes the
+    /// snapshot <c>GET /v1/nearby</c>'s job and query-svc did not exist — a passenger opening the map
+    /// saw nothing until each vehicle's next sample, which looks exactly like a broken map. C042
+    /// landed that endpoint and this replay is retired with it: two snapshot paths is one more than
+    /// the contract has, and the socket one was the weaker of them. It read only the cells the client
+    /// happened to join and only the public audience, so it could never show a passenger their own
+    /// engaged vehicle or their entitled Mode B van; <c>/v1/nearby</c> answers for the viewer and
+    /// applies all four rules. <c>count: 0</c> below is the anchor and nothing else — the reader
+    /// returns the resume id even when no frames are wanted.
     /// </para>
     /// </remarks>
-    private async Task<IReadOnlyList<IReadOnlyList<VehicleFrame>>> ResolveAsync(IReadOnlyCollection<string> cells)
+    private async Task AnchorAsync(IReadOnlyCollection<string> cells)
     {
-        var seeds = new List<IReadOnlyList<VehicleFrame>>();
-
         foreach (var cell in cells)
         {
-            var untracked = subscriptions.PositionOf(cell) is null;
-
-            if (!untracked && _options.JoinSeedFrames <= 0)
+            if (subscriptions.PositionOf(cell) is not null)
             {
                 continue;
             }
 
-            var batch = await streams.ReadTailAsync(cell, _options.JoinSeedFrames, Context.ConnectionAborted);
+            var batch = await streams.ReadTailAsync(cell, count: 0, Context.ConnectionAborted);
 
-            if (batch is null)
-            {
-                continue;
-            }
-
-            if (untracked)
+            if (batch is not null)
             {
                 subscriptions.Advance(cell, batch.Position);
             }
-
-            if (batch.Frames.Count == 0)
-            {
-                continue;
-            }
-
-            var visible = await PublicOnlyAsync(batch.Frames);
-
-            if (visible.Count > 0)
-            {
-                seeds.Add(visible);
-            }
         }
-
-        return seeds;
-    }
-
-    private async Task<IReadOnlyList<VehicleFrame>> PublicOnlyAsync(IReadOnlyList<CellFrame> frames)
-    {
-        var now = clock.GetUtcNow();
-        var states = await visibility.ReadAsync(
-            [.. frames.Select(frame => frame.Frame.VehicleId)], Context.ConnectionAborted);
-
-        var visible = new List<VehicleFrame>(frames.Count);
-
-        foreach (var frame in frames)
-        {
-            var state = states.TryGetValue(frame.Frame.VehicleId, out var known) ? known : VehicleState.Unknown;
-
-            if (VehicleVisibilityRules.Classify(
-                    frame.Frame.Mode, frame.SampleTs, state, now, _options.FreshnessWindow).Audience
-                == VehicleAudience.Public)
-            {
-                visible.Add(frame.Frame);
-            }
-        }
-
-        return visible;
     }
 
     private IReadOnlyCollection<string> Validate(string[] cells)

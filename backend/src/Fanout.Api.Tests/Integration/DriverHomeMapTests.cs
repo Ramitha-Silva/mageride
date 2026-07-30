@@ -164,7 +164,6 @@ public sealed class DriverHomeMapTests(RedisFixture redis, RedpandaFixture redpa
         FanoutHarness.StartAsync(redis, redpanda, emqx, new FanoutHarnessOptions
         {
             Pump = false,
-            JoinSeedFrames = 0,
 
             // No broker: AL-31 is decided from `lock:driver:{driverId}` and nothing else.
             Events = false,

@@ -1,0 +1,207 @@
+// =============================================================================================
+// query.v1 — the internal read surface of query-svc.
+//
+// Source: ADD §6 gives query-svc ".NET 10 LTS minimal API **+ gRPC**" and D3' §0 names
+// "`query-svc` internal" as a gRPC surface — but neither prints a service block, so the three
+// RPCs and every message here are C042's and are recorded as a micro-change-set in the C042
+// handoff. Compare `reputation.v1.proto`, where D3' prints the service and the messages are the
+// contract's.
+//
+// Why these three and no others. Each one exists because a named later component would otherwise
+// have to *reimplement a rule that must not be reimplemented*:
+//
+//   GetNearbyVehicles  fleet-svc (C059) SCR-FP-009 fleet live map, admin-bff (C057) SCR-AP-013.
+//                      The D-22/D-23/US-7.16/US-7.17 visibility rules are one function in the
+//                      kernel (MageRide.Shared.Realtime.VehicleVisibilityRules) precisely so the
+//                      socket and the snapshot cannot disagree; a portal BFF reading `geo:live`
+//                      directly would be a third opinion, and the failure mode is a back-office
+//                      screen showing an engaged taxi as available.
+//   GetTripDetail      admin-bff (C057) US-24.9/24.10's trips tab. The polyline's provenance —
+//                      which relation it came from and at what grain — is not something a second
+//                      reader should have to know (see TripDetail.geometry_source).
+//   GetDriverEarnings  admin-bff (C057) US-24.10's earnings tab and fleet-svc's payout view. The
+//                      R-05 terminal-state gate and the Asia/Colombo period arithmetic (D-13,
+//                      D-38) are the two things a re-implementation would get subtly wrong, and
+//                      the symptom is a number in front of a driver that disagrees with their app.
+//
+// Nothing here is a mutation and nothing here is reachable from the internet:
+// `backend/src/ApiGateway/gateway-routes.json` routes only the HTTP paths at query-svc.
+//
+// Transport: gRPC over mTLS (Linkerd/SPIFFE). Until the mesh lands the in-cluster hop presents the
+// same interim shared secret the `/v1/internal/**` HTTP family uses, as the
+// `x-mageride-internal-key` metadata header — `Query:InternalApiKey` unset leaves the whole gRPC
+// endpoint unmapped rather than open.
+//
+// **`viewer_user_id` is required on GetNearbyVehicles and is not decoration.** Two of the four
+// visibility rules are per-viewer: whether a Mode B vehicle is shared with this passenger (D-23)
+// and whether an engaged Mode C vehicle is the one they themselves booked (US-7.16). A caller that
+// omitted it would get the public map, which for a passenger is the wrong answer twice over.
+//
+// Identifiers travel as strings: protobuf has no UUID and D3' types every id as "ULID or UUID,
+// rendered canonically". Money is integer minor units (D3' §0) and travels as int64. Instants are
+// google.protobuf.Timestamp; business dates are ISO `YYYY-MM-DD` strings in Asia/Colombo (D-38),
+// because a Timestamp for a date would invite a reader to apply their own zone to it.
+// =============================================================================================
+
+syntax = "proto3";
+
+package query.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option csharp_namespace = "MageRide.Query.Grpc";
+
+service Query {
+  // The visibility-filtered live snapshot behind GET /v1/nearby (US-7.1, US-7.7, US-7.16, US-7.17).
+  rpc GetNearbyVehicles(NearbyRequest) returns (NearbyVehicles);
+
+  // One trip with its stored polyline, across both planes (US-8.7).
+  rpc GetTripDetail(TripRequest) returns (TripDetail);
+
+  // A driver's earnings for a period, in Asia/Colombo (US-9.22).
+  rpc GetDriverEarnings(EarningsRequest) returns (EarningsSummary);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Nearby
+// ---------------------------------------------------------------------------------------------
+
+message NearbyRequest {
+  double lat = 1;
+  double lng = 2;
+
+  // Metres. 0 means the service default (Query:DefaultRadiusM, 3000).
+  int32 radius_m = 3;
+
+  // Canonical vehicle types (AL-09). Empty means every type, trains included.
+  //
+  // Named `vehicle_types` rather than `types` to match the REST `?types=` parameter: protobuf's C#
+  // generator puts a nested `Types` holder class on every message, so a field called `types` is
+  // renamed by the codegen and the generated property would not be the one anybody expects.
+  repeated string vehicle_types = 4;
+
+  // 'A' | 'B' | 'C'. Empty means every mode.
+  repeated string modes = 5;
+
+  // Whose map this is. See the header: two of the four rules cannot be applied without it.
+  string viewer_user_id = 6;
+}
+
+message NearbyVehicles {
+  repeated NearbyVehicle vehicles = 1;
+
+  // When the snapshot was taken, so a caller holding a socket frame can tell which is newer.
+  google.protobuf.Timestamp as_of = 2;
+
+  // ADD §12's `limited_live`: the live index was unreachable, so this is not a full answer. A
+  // caller must say so on the screen rather than render an empty map as "no vehicles nearby".
+  bool limited_live = 3;
+}
+
+message NearbyVehicle {
+  string vehicle_id = 1;
+  string type = 2;
+  string mode = 3;
+  double lat = 4;
+  double lng = 5;
+
+  // Absent as 'not reported', which is different from zero — a stationary vehicle has a heading.
+  optional int32 heading = 6;
+  optional double speed_mps = 7;
+
+  // US-7.12: Mode C only, and only for the passenger whose ride this vehicle accepted.
+  optional string driver_name = 8;
+  optional string registration_number = 9;
+
+  // A straight-line estimate with a detour factor, not a routed one — see EtaEstimator. Absent
+  // when no estimate applies rather than 0, because 0 seconds means "arriving now".
+  optional int32 eta_seconds = 10;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Trips
+// ---------------------------------------------------------------------------------------------
+
+message TripRequest {
+  // The user whose trip it is. Scoping is the server's: a caller may not read a trip that is not
+  // this user's, and this RPC does not widen that.
+  string user_id = 1;
+  string trip_id = 2;
+}
+
+message TripDetail {
+  string trip_id = 1;
+
+  // 'ride' = Mode C (rides.rides); 'session' = Mode A/B (trips.sessions).
+  string plane = 2;
+  optional string mode = 3;
+
+  optional Place pickup = 4;
+  optional Place dropoff = 5;
+
+  optional int64 fare_minor = 6;
+  string currency = 7;
+
+  google.protobuf.Timestamp started_at = 8;
+  optional google.protobuf.Timestamp ended_at = 9;
+
+  // Encoded polyline (Google's algorithm, precision 5) of the stored track. Absent when the
+  // journey produced no line — and, for a Mode C ride, absent whenever the aggregate the line is
+  // read from holds fewer than two buckets. Never rebuilt from raw rows.
+  optional string polyline = 10;
+
+  // Where the geometry came from and at what grain: 'telemetry' (full resolution),
+  // 'operational' (the 1/min sample; distance is a lower bound), 'aggregate_1m' (the continuous
+  // aggregate — Mode C, one point per minute) or 'none'.
+  string geometry_source = 11;
+
+  optional double distance_km = 12;
+  optional int32 duration_sec = 13;
+
+  optional Driver driver = 14;
+  optional int32 rating = 15;
+}
+
+message Place {
+  double lat = 1;
+  double lng = 2;
+  optional string display_name = 3;
+}
+
+message Driver {
+  string driver_id = 1;
+  optional string name = 2;
+  optional string registration_number = 3;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Earnings
+// ---------------------------------------------------------------------------------------------
+
+message EarningsRequest {
+  string driver_id = 1;
+
+  // 'today' | 'week' | 'month'. Empty means 'today'.
+  string period = 2;
+}
+
+message EarningsSummary {
+  string period = 1;
+
+  // Asia/Colombo business dates, inclusive (D-13, D-38).
+  string range_from = 2;
+  string range_to = 3;
+
+  int64 gross_minor = 4;
+  int64 daily_fee_minor = 5;
+
+  // D-05 cancellation compensation *received*. See the C042 handoff: the only Rs 50 penalty on
+  // the platform is charged to a passenger and paid to the affected driver, so on a driver's
+  // dashboard this line adds.
+  int64 penalty_minor = 6;
+
+  int64 tip_minor = 7;
+  int64 net_minor = 8;
+  string currency = 9;
+  int32 trips = 10;
+}

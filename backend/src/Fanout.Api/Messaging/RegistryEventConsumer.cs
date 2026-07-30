@@ -4,6 +4,7 @@ using Confluent.Kafka;
 using MageRide.Fanout.Configuration;
 using MageRide.Fanout.Realtime;
 using MageRide.Fanout.Visibility;
+using MageRide.Shared.Realtime;
 using MageRide.Shared.Http;
 using MageRide.Shared.Messaging;
 using Microsoft.Extensions.Options;

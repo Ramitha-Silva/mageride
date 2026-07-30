@@ -252,8 +252,7 @@ public sealed class EntitlementTests(RedisFixture redis, RedpandaFixture redpand
             new FanoutHarnessOptions
             {
                 Pump = false,
-                JoinSeedFrames = 0,
-                Events = events,
+                    Events = events,
 
                 // A shared group across replicas, so exactly one of them consumes each event —
                 // which is the deployment this component's backplane exists for.

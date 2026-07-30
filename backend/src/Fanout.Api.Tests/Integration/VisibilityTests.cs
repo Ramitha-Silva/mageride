@@ -426,45 +426,13 @@ public sealed class VisibilityTests(RedisFixture redis, RedpandaFixture redpanda
         await passenger.StopAsync();
     }
 
-    [Fact]
-    public async Task The_join_seed_is_filtered_exactly_like_a_live_batch()
-    {
-        Assert.SkipWhen(!redis.IsAvailable, redis.SkipReason ?? string.Empty);
-
-        await using var harness = await StartAsync(seedFrames: 32);
-
-        var shared = Guid.NewGuid();
-        var bus = Guid.NewGuid();
-
-        // Both are already in the cell before anybody is watching, which is what the seed replays.
-        await harness.Positions.PublishAsync(shared, Samples.Moratuwa, mode: "B", vehicleType: "van");
-        await harness.Positions.PublishAsync(bus, Samples.Moratuwa, mode: "A", vehicleType: "bus");
-
-        var events = new LiveEvents();
-        await using var passenger = harness.Passenger(Guid.NewGuid());
-        events.Attach(passenger);
-        await passenger.StartAsync();
-        await passenger.InvokeAsync(
-            Contract.Methods.JoinGeocells, GeoCells.ViewCells(Samples.Moratuwa).ToArray());
-
-        await FanoutHarness.WaitAsync(() => events.Saw(bus), "the seed should carry the public vehicle");
-
-        // A replay that showed a private vehicle would be the D-22 leak with a two-second delay on
-        // it — which is exactly the kind of hole a stand-in path is where they hide.
-        Assert.False(events.Saw(shared), "the seed must not replay a Mode B vehicle to a stranger");
-
-        await passenger.StopAsync();
-    }
-
     private Task<FanoutHarness> StartAsync(
         bool events = false,
         bool presence = false,
-        int seedFrames = 0,
         TimeSpan? freshness = null) =>
         FanoutHarness.StartAsync(redis, redpanda, emqx, new FanoutHarnessOptions
         {
             Pump = false,
-            JoinSeedFrames = seedFrames,
             Events = events,
             Presence = presence,
             FreshnessWindow = freshness,
