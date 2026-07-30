@@ -30,8 +30,8 @@ public sealed class RedpandaFixture : ContainerFixture
     /// </summary>
     /// <remarks>
     /// Six of these are D6' §2.1's. <c>registry.events</c> (C028), <c>provisioning.events</c>
-    /// (C030) and <c>reputation.events</c> (C033) are not — each is a micro-change-set raised in
-    /// its own handoff, and all three are in the bootstrap script and in
+    /// (C030), <c>reputation.events</c> (C033) and <c>fleet.events</c> (C044) are not — each is a
+    /// micro-change-set raised in its own handoff, and all four are in the bootstrap script and in
     /// <c>MageRide.Shared.Messaging.EventTopics</c>. Kept as a literal rather than read from
     /// <c>EventTopics.All</c> so the assertion is against what the script creates and not against
     /// the same constant the producer uses.
@@ -46,6 +46,7 @@ public sealed class RedpandaFixture : ContainerFixture
         "registry.events",
         "provisioning.events",
         "reputation.events",
+        "fleet.events",
         "audit.events",
     ];
 

@@ -1272,10 +1272,13 @@ check_eq "a PDPA request defaults to the 30-day statutory deadline (E-06)" "30" 
 # C006 — telemetry (TimescaleDB hypertable, rollups, policies, fleet scoping)
 # ---------------------------------------------------------------------------------------
 step "Objects owned by C006"
-check_eq "1 telemetry table" "1" \
+# 1 from C006 (telemetry.positions) + 3 added by C044 (1805): device_health, fleet_health_alerts
+# and the outbox. US-3.13's four states are a per-device question a bucketed continuous aggregate
+# cannot answer; see 1805's header.
+check_eq "4 telemetry tables — 1 hypertable + 3 from C044" "4" \
   "SELECT count(*) FROM information_schema.tables
     WHERE table_schema='telemetry' AND table_type='BASE TABLE';"
-check_eq "6 telemetry views — 4 rollups + 2 fleet-scoped" "6" \
+check_eq "8 telemetry views — 4 rollups + 4 fleet-scoped" "8" \
   "SELECT count(*) FROM information_schema.views WHERE table_schema='telemetry';"
 
 step "T-06 / ADD §9.5 — the hypertable"
@@ -1442,6 +1445,93 @@ check_fleet_eq "a vehicle owned by no fleet is invisible to every fleet" "0" "$F
   "SELECT count(*) FROM telemetry.positions_fleet WHERE vehicle_id='$VEH_T4';"
 check_fleet_eq "the fleet health rollup is scoped the same way" "$FLEET_1" "$FLEET_1" \
   "SELECT string_agg(DISTINCT fleet_id::text, ',') FROM telemetry.fleet_health_5m_fleet;"
+
+# ---------------------------------------------------------------------------------------
+# C044 — telemetry: per-device health, the fleet threshold alert, this plane's outbox (1805)
+# ---------------------------------------------------------------------------------------
+step "Objects owned by C044 (US-3.13, US-3.16)"
+for t in device_health fleet_health_alerts outbox; do
+  check_eq "telemetry.$t exists" "1" \
+    "SELECT count(*) FROM information_schema.tables
+      WHERE table_schema='telemetry' AND table_name='$t';"
+done
+check_eq "the four-state classifier is one IMMUTABLE SQL function" "sql|i" \
+  "SELECT l.lanname||'|'||p.provolatile::text FROM pg_proc p
+     JOIN pg_language l ON l.oid = p.prolang
+     JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname='telemetry' AND p.proname='device_health_state';"
+
+step "US-3.13 — the state ladder is decided in the database"
+# The thresholds are parameters, not literals: Health:StaleAfter / Health:OfflineAfter. `at` is a
+# parameter too, which is what makes the function immutable and the same expression usable by both
+# the dashboard read and fleet-health-svc's transition sweep.
+ladder() { # ladder <last_ping_at> <last_status> <last_status_at> [binding_state]
+  printf "SELECT telemetry.device_health_state('%s', NULL, %s, %s, %s, interval '5 minutes', interval '30 minutes', '2026-07-30T09:00:00Z'::timestamptz);" \
+    "${4:-ACTIVE}" "$1" "$2" "$3"
+}
+
+check_eq "a ping 1 min ago is ONLINE" "ONLINE" \
+  "$(ladder "'2026-07-30T08:59:00Z'::timestamptz" NULL NULL)"
+check_eq "no ping > 5 min is STALE" "STALE" \
+  "$(ladder "'2026-07-30T08:54:00Z'::timestamptz" NULL NULL)"
+check_eq "no ping > 30 min is OFFLINE" "OFFLINE" \
+  "$(ladder "'2026-07-30T08:29:00Z'::timestamptz" NULL NULL)"
+check_eq "a tracker that never reported is OFFLINE, not ONLINE" "OFFLINE" \
+  "$(ladder NULL NULL NULL)"
+# R-15/T-04: the broker has said the session is gone, so it cannot be ONLINE — but US-3.13 defines
+# OFFLINE as thirty minutes of silence and a bus in a tunnel is not a device failure.
+check_eq "a last will after the last ping is STALE, not OFFLINE" "STALE" \
+  "$(ladder "'2026-07-30T08:59:00Z'::timestamptz" "'offline'" "'2026-07-30T08:59:30Z'::timestamptz")"
+check_eq "a ping after the last will clears it with no 'online' message" "ONLINE" \
+  "$(ladder "'2026-07-30T08:59:30Z'::timestamptz" "'offline'" "'2026-07-30T08:59:00Z'::timestamptz")"
+# US-3.8 against T-08: a revoked credential is retired, a quarantine is held pending US-3.4's admin
+# decision and may return, so only the first is DECOMMISSIONED.
+check_eq "a REVOKED binding is DECOMMISSIONED even while it is publishing" "DECOMMISSIONED" \
+  "$(ladder "'2026-07-30T09:00:00Z'::timestamptz" NULL NULL REVOKED)"
+check_eq "a QUARANTINED binding is not decommissioned" "ONLINE" \
+  "$(ladder "'2026-07-30T09:00:00Z'::timestamptz" NULL NULL QUARANTINED)"
+
+step "US-3.16 — one alert per fleet per window"
+psql_run "INSERT INTO telemetry.device_health(vehicle_id, fleet_id, imei, last_ping_at)
+            VALUES ('$VEH_T1','$FLEET_1','864000000000001', now());
+          INSERT INTO telemetry.fleet_health_alerts
+            (fleet_id, bucket, window_minutes, expected_vehicles, reporting_vehicles,
+             offline_vehicles, offline_pct, threshold_pct)
+            VALUES ('44444444-4444-4444-4444-444444444444','2026-07-30T09:00:00Z',5,100,90,10,10.00,10.00);" \
+  >/dev/null || die "could not seed the C044 fixtures."
+
+check_rejects "a second alert for the same (fleet, window) is rejected" \
+  "INSERT INTO telemetry.fleet_health_alerts
+     (fleet_id, bucket, window_minutes, expected_vehicles, reporting_vehicles,
+      offline_vehicles, offline_pct, threshold_pct)
+     VALUES ('44444444-4444-4444-4444-444444444444','2026-07-30T09:00:00Z',5,100,90,10,10.00,10.00);"
+check_rejects "an alert claiming more offline than the fleet holds is rejected" \
+  "INSERT INTO telemetry.fleet_health_alerts
+     (fleet_id, bucket, window_minutes, expected_vehicles, reporting_vehicles,
+      offline_vehicles, offline_pct, threshold_pct)
+     VALUES ('44444444-4444-4444-4444-444444444444','2026-07-30T09:05:00Z',5,10,0,11,110.00,10.00);"
+check_rejects "a battery percentage outside 0-100 is rejected" \
+  "UPDATE telemetry.device_health SET battery_pct = 255 WHERE vehicle_id='$VEH_T1';"
+check_rejects "an unknown health state is rejected" \
+  "UPDATE telemetry.device_health SET observed_state = 'DEGRADED' WHERE vehicle_id='$VEH_T1';"
+check_rejects "an unknown presence payload is rejected" \
+  "UPDATE telemetry.device_health SET last_status = 'maybe' WHERE vehicle_id='$VEH_T1';"
+
+step "ADD §7.7.7 — a fleet operator sees only its own devices and alerts"
+check_fleet_denied "the fleet role cannot read telemetry.device_health directly" \
+  "SELECT count(*) FROM telemetry.device_health;"
+check_fleet_denied "the fleet role cannot read telemetry.fleet_health_alerts directly" \
+  "SELECT count(*) FROM telemetry.fleet_health_alerts;"
+check_fleet_eq "an unscoped session sees no device health at all (fail closed)" "0" "" \
+  "SELECT count(*) FROM telemetry.device_health_fleet;"
+check_fleet_eq "fleet 1 sees its own device" "1" "$FLEET_1" \
+  "SELECT count(*) FROM telemetry.device_health_fleet;"
+check_fleet_eq "fleet 2 sees none of fleet 1's devices" "0" "$FLEET_2" \
+  "SELECT count(*) FROM telemetry.device_health_fleet;"
+check_fleet_eq "the alerted fleet sees its own alert" "1" "44444444-4444-4444-4444-444444444444" \
+  "SELECT count(*) FROM telemetry.fleet_health_alerts_fleet;"
+check_fleet_eq "another fleet sees none of it" "0" "$FLEET_1" \
+  "SELECT count(*) FROM telemetry.fleet_health_alerts_fleet;"
 
 # ---------------------------------------------------------------------------------------
 printf '\n'

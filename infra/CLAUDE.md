@@ -34,7 +34,7 @@ infra/
   docker/Dockerfile.portal      C010 — node:24-alpine, --build-arg PORTAL=<admin|fleet|web-passenger>
   scripts/dev-up.sh             [slim|full]  ·  dev-down.sh [slim|full|all] [--volumes]
   scripts/wait-healthy.sh       [compose-file] [timeout] — every container up, one-shots 0
-  scripts/slim-verify.sh        the C009 definition of done, 66 checks
+  scripts/slim-verify.sh        the C009 definition of done, 78 checks
   scripts/migrate-verify.sh     the C003–C006 definition of done (no compose involved)
 ```
 

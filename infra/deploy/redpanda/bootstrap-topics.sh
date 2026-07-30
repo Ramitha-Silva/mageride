@@ -102,6 +102,11 @@ ensure_pair provisioning.events  "$EVENT_RETENTION_MS"       # key vehicleId —
 # "emits fraud.suspected for admin review") and a consumer (ADD §12.6's admin fraud queue)
 # and no topic; C033 added it, and the handoff raises the micro-change-set against §2.1.
 ensure_pair reputation.events    "$EVENT_RETENTION_MS"       # key userId    — reputation-svc (outbox)
+# Not one of D6' §2.1's six either. fleet.health_alert has a producer (C044's deliverable —
+# "threshold alerts … emitted for the Fleet Portal and notification-svc") and a consumer
+# (US-3.16's email/SMS device-down alert) and no topic; C044 added it, and the handoff raises
+# the micro-change-set against §2.1.
+ensure_pair fleet.events         "$EVENT_RETENTION_MS"       # key fleetId   — fleet-health-svc (outbox)
 ensure_pair audit.events         "$EVENT_RETENTION_MS"       # key entityId  — all (admin-bff)
 
 echo

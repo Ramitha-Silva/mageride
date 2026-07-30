@@ -49,8 +49,14 @@ services:
 
   # -----------------------------------------------------------------------------------
   # Container 6 — hot-path: mqtt-bridge + position-processor + persistence-writer +
-  # fleet-health, four IHostedServices in one process (T-01, T-05, T-06, D-18).
-  # Lands with C038 / C039 / C040 / C044. No ports: it is a consumer only.
+  # fleet-health in one process (T-01, T-05, T-06, D-18).
+  # Lands with C038 / C039 / C040 / C044.
+  #
+  # No *published* port — nothing here is reached from the host. It does listen, though:
+  # fleet-health-svc (C044) serves `GET /v1/fleets/{fleetId}/health` (US-3.13) and the
+  # gateway's `fleet-health-svc` cluster points at `http://hot-path:5000/` over this
+  # network, so the combined host has to expose Kestrel on 5000. The other three are
+  # consumers only.
   # -----------------------------------------------------------------------------------
   hot-path:
     build:

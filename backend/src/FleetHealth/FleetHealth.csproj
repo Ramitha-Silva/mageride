@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    FleetHealth (C044, fleet-health-svc) — per-fleet tracker health rollups and device-down alerts.
+
+    Four inputs, one rollup, two outputs. In: `telemetry.normalized` (the ping clock),
+    `veh/{vehicleId}/status` (the EMQX last will, T-04), `sys/diag/{vehicleId}` (US-3.12's
+    diagnostics) and `provisioning.events` (bind / revoke / quarantine). Rollup:
+    `telemetry.device_health`, one row per vehicle, classified into US-3.13's
+    Online | Stale | Offline | Decommissioned. Out: `GET /v1/fleets/{fleetId}/health` for the Fleet
+    Portal, and `fleet.health_alert` on `fleet.events` for notification-svc when more than
+    `Health:OfflinePct` of a fleet stops reporting inside one `Health:WindowMin` window (US-3.16).
+
+    FENCE: this service reads the stream and writes rollups. It never writes `registry.vehicles`,
+    `trips.sessions` or `rides.rides`, and the only column it writes outside `telemetry` is the four
+    diagnostics fields on `prov.tracker_bindings` that C030's own CLAUDE.md hands to it
+    ("the columns are read here and written there").
+
+    Microsoft.NET.Sdk.Web, unlike the three services it shares the `hot-path` container with: this
+    one has an HTTP surface (D3' fleet-svc route table, US-3.13).
+
+    Verify: dotnet test backend/src/FleetHealth.Tests -c Release
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.FleetHealth</RootNamespace>
+    <AssemblyName>MageRide.FleetHealth</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <UserSecretsId>mageride-fleet-health</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MageRide.Shared\MageRide.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The retained `veh/+/status` last will (R-15, T-04) and `sys/diag/+` are subscriptions on
+         the device plane, not Redpanda topics — EMQX never bridges either to Kafka (only
+         `pos/live` and `pos/replay` are bridged, D6' §3.3), so a broker client is the only way to
+         hear them. Dapper, Npgsql and Confluent.Kafka arrive through MageRide.Shared. -->
+    <PackageReference Include="MQTTnet" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="FleetHealth.Tests" />
+  </ItemGroup>
+
+</Project>

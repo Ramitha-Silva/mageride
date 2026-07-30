@@ -1,0 +1,389 @@
+openapi: 3.1.0
+
+# =============================================================================================
+# fleet-health-svc — per-fleet tracker health rollups and device-down alerting
+# Source: specs/D3_mageride_api_contracts.md fleet-svc route table
+#           ("GET /v1/fleets/{id}/health | any sub-role | tracker health rollup (US-3.13,
+#            fleet-health-svc)")
+#         + specs/user-requirements-document.md US-3.13, US-3.16
+#         + specs/architecture-design-document.md §6 (fleet-health-svc), §7.7.7 (fleet scoping)
+#         + specs/D6_mageride_integration.md §3.4 (LWT consumers), §4.5 (mode routing)
+#         + specs/D7_mageride_devops.md §4.2 (`Health__OfflinePct`, `Health__WindowMin`)
+#
+# WHY THIS OPERATION IS NOT IN `fleet.yaml` (C044 micro-change-set)
+#   D3' lists the route in the **fleet-svc** table and attributes it to **fleet-health-svc** in
+#   the same line, which is the same split D3' Part 2 makes for
+#   `POST /v1/fleets/{fleetId}/trackers/bulk` — a path under `/v1/fleets` that provisioning-svc
+#   owns and `fleet.yaml`'s header says "must not duplicate". The gateway resolves a cluster from
+#   the contract that declares the operation (C008 `RouteTableTests`), so an operation served by
+#   fleet-health-svc has to be declared here or it is routed to fleet-svc, which does not
+#   implement it. `fleet.yaml` therefore drops the path and the `TrackerHealth` schema; a note in
+#   its header says where they went.
+#
+# THE RESPONSE IS WIDER THAN THE PRE-C044 CONTRACT (C044 micro-change-set)
+#   `fleet.yaml` shipped `{vehiclesOnline, vehiclesOffline, items, asOf}` — a two-state answer.
+#   US-3.13 asks for the "count and percentage of trackers in states Online / Stale (no ping
+#   > 5 min) / Offline (no ping > 30 min) / Decommissioned", which two counts and a boolean
+#   cannot express. `counts` / `percentages` / `TrackerHealth.state` are the story's four states;
+#   `vehiclesOnline` / `vehiclesOffline` are kept, still required, so the change is additive.
+#   `window` and `alert` are US-3.16's 5-minute device-down early warning, which had no read
+#   surface at all — `GET /v1/fleets/{id}/alerts` in `fleet.yaml` is the Phase 3 route-deviation
+#   and geofence family and its `kind` enum has no value for a device outage.
+# =============================================================================================
+
+info:
+  title: MageRide fleet-health-svc
+  version: 1.0.0
+  summary: Per-fleet hardware-tracker health rollups and device-down threshold alerts.
+  description: |
+    The read side of the hardware-tracker health plane (T-04, T-10). fleet-health-svc consumes
+    `telemetry.normalized`, the retained `veh/{vehicleId}/status` last will, `sys/diag/{vehicleId}`
+    diagnostics and `provisioning.events`, and keeps one health row per vehicle. It writes
+    rollups and alerts; it never mutates a vehicle, a binding or a session.
+
+    **The four states are US-3.13's, and they are thresholds on silence.** `online` — a ping
+    inside `Health:StaleAfter` (5 min). `stale` — silent longer than that, or the broker's last
+    will has fired since the last ping. `offline` — silent longer than `Health:OfflineAfter`
+    (30 min). `decommissioned` — the tracker's credentials were revoked (US-3.8); a
+    `QUARANTINED` binding is **not** decommissioned, because T-08 holds it pending an admin
+    decision and it may return.
+
+    **Scoped in the database, not in the application.** The read goes through the
+    `telemetry.device_health_fleet` security-barrier view filtered on the `app.fleet_id` session
+    GUC, which is fail-closed: an unscoped connection sees zero rows rather than another
+    organisation's devices (ADD §9.5 item 8, ADD §7.7.7, migration 1804/1805). The caller's
+    `fleet_id` claim is checked against the path as well — a mismatch is `403`, not a filtered
+    answer that would look like an empty fleet.
+
+    **`window` is a different measurement from `counts`, on purpose.** `counts` is a per-device
+    test against the silence thresholds above. `window` is the closed 5-minute
+    `telemetry.fleet_health_5m` continuous-aggregate bucket — `reportingVehicles` is that
+    bucket's distinct-vehicle count and `expectedVehicles` is the fleet's `ACTIVE` tracker
+    bindings, which the aggregate cannot know. A vehicle that reported once at the start of the
+    bucket and then stopped is *reporting* in `window` and may already be *stale* in `counts`.
+  contact:
+    name: MageRide Platform Engineering
+    url: https://mageride.lk
+  license:
+    name: UNLICENSED
+    url: https://mageride.lk/legal/terms
+
+servers:
+  - url: https://api.mageride.lk
+    description: Production gateway (DOKS Singapore)
+  - url: http://localhost:8080
+    description: Docker Compose dev gateway
+
+tags:
+  - name: fleet-health
+    description: Tracker health rollups and device-down alerts for one fleet organisation.
+
+paths:
+
+  /v1/fleets/{fleetId}/health:
+    get:
+      operationId: getFleetHealth
+      summary: Tracker health rollup.
+      description: |
+        US-3.13, any fleet sub-role (`owner` | `manager` | `viewer`). Served from
+        `telemetry.device_health` and the `telemetry.fleet_health_5m` continuous aggregate — an
+        online/stale/offline/decommissioned rollup rather than a scan of raw telemetry chunks.
+
+        `items` is capped at `Health:MaxItems`; `itemsTruncated` says when the cap was reached,
+        so a fleet larger than the cap reads as a truncated list rather than as a smaller fleet.
+        The counts and percentages are always over the whole fleet, never over `items`.
+      tags: [fleet-health]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+      responses:
+        '200':
+          description: Health rollup.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FleetHealthRollup'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, not-found]
+
+components:
+
+  securitySchemes:
+    bearerAuth:
+      $ref: './_shared.yaml#/components/securitySchemes/bearerAuth'
+
+  parameters:
+    FleetId:
+      name: fleetId
+      in: path
+      required: true
+      schema:
+        $ref: './_shared.yaml#/components/schemas/Ulid'
+
+  schemas:
+
+    FleetHealthRollup:
+      type: object
+      required:
+        [fleetId, vehiclesOnline, vehiclesOffline, counts, percentages, thresholds, window,
+         items, itemsTruncated, asOf]
+      properties:
+        fleetId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        vehiclesOnline:
+          description: '`counts.online`. Kept from the pre-C044 two-state contract.'
+          type: integer
+          format: int32
+          minimum: 0
+        vehiclesOffline:
+          description: |
+            `counts.stale + counts.offline`. **Decommissioned trackers are excluded** — a retired
+            device is not a device that went down, and counting it here would inflate every
+            operator's alarm permanently after their first decommission.
+          type: integer
+          format: int32
+          minimum: 0
+        counts:
+          $ref: '#/components/schemas/TrackerStateCounts'
+        percentages:
+          $ref: '#/components/schemas/TrackerStatePercentages'
+        thresholds:
+          $ref: '#/components/schemas/HealthThresholds'
+        window:
+          $ref: '#/components/schemas/FleetHealthWindow'
+        alert:
+          description: The most recent device-down alert for this fleet, absent if there is none.
+          allOf:
+            - $ref: '#/components/schemas/FleetHealthAlert'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrackerHealth'
+        itemsTruncated:
+          description: '`items` hit the `Health:MaxItems` cap; the counts still cover the whole fleet.'
+          type: boolean
+        asOf:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    TrackerStateCounts:
+      description: US-3.13's four states, counted over every tracker bound to this fleet.
+      type: object
+      required: [online, stale, offline, decommissioned, total]
+      properties:
+        online:
+          type: integer
+          format: int32
+          minimum: 0
+        stale:
+          type: integer
+          format: int32
+          minimum: 0
+        offline:
+          type: integer
+          format: int32
+          minimum: 0
+        decommissioned:
+          type: integer
+          format: int32
+          minimum: 0
+        total:
+          type: integer
+          format: int32
+          minimum: 0
+
+    TrackerStatePercentages:
+      description: |
+        The same four states as a share of `counts.total`, to one decimal place. Zero across the
+        board when the fleet has no trackers — a percentage of nothing is reported as 0, never as
+        a division error.
+      type: object
+      required: [online, stale, offline, decommissioned]
+      properties:
+        online:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 100
+        stale:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 100
+        offline:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 100
+        decommissioned:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 100
+
+    HealthThresholds:
+      description: |
+        The silence windows this answer was classified against (`Health:StaleAfter`,
+        `Health:OfflineAfter`). Returned so a dashboard can label its own legend instead of
+        hardcoding US-3.13's 5 and 30 minutes, and so a retuned deployment does not need a
+        portal release.
+      type: object
+      required: [staleAfterSeconds, offlineAfterSeconds]
+      properties:
+        staleAfterSeconds:
+          type: integer
+          format: int32
+          minimum: 1
+        offlineAfterSeconds:
+          type: integer
+          format: int32
+          minimum: 1
+
+    FleetHealthWindow:
+      description: |
+        The most recent closed `telemetry.fleet_health_5m` bucket for this fleet (US-3.16).
+        `reportingVehicles` is the aggregate's distinct-vehicle count for the bucket;
+        `expectedVehicles` is the fleet's `ACTIVE` tracker bindings.
+      type: object
+      required:
+        [start, end, windowMinutes, expectedVehicles, reportingVehicles, offlineVehicles,
+         offlinePct, thresholdPct, alerting]
+      properties:
+        start:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+        end:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+        windowMinutes:
+          type: integer
+          format: int32
+          minimum: 1
+        expectedVehicles:
+          type: integer
+          format: int32
+          minimum: 0
+        reportingVehicles:
+          type: integer
+          format: int32
+          minimum: 0
+        offlineVehicles:
+          type: integer
+          format: int32
+          minimum: 0
+        offlinePct:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 100
+        thresholdPct:
+          description: '`Health:OfflinePct` — the share at or above which an alert is raised.'
+          type: number
+          format: double
+          minimum: 0
+          maximum: 100
+        alerting:
+          description: '`offlinePct >= thresholdPct` for this window.'
+          type: boolean
+
+    FleetHealthAlert:
+      description: One device-down threshold breach (US-3.16).
+      type: object
+      required:
+        [alertId, bucket, windowMinutes, expectedVehicles, reportingVehicles, offlineVehicles,
+         offlinePct, thresholdPct, raisedAt]
+      properties:
+        alertId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        bucket:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+        windowMinutes:
+          type: integer
+          format: int32
+          minimum: 1
+        expectedVehicles:
+          type: integer
+          format: int32
+          minimum: 1
+        reportingVehicles:
+          type: integer
+          format: int32
+          minimum: 0
+        offlineVehicles:
+          type: integer
+          format: int32
+          minimum: 0
+        offlinePct:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 100
+        thresholdPct:
+          description: The threshold in force when the alert fired, not the current one.
+          type: number
+          format: double
+          minimum: 0
+          maximum: 100
+        raisedAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    TrackerHealth:
+      description: |
+        One vehicle's tracker health. Moved here from `fleet.yaml` by C044, plus `state`,
+        `since`, `signalStrength` and `batteryMv`.
+      type: object
+      required: [vehicleId, state, online]
+      properties:
+        vehicleId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        imei:
+          type: string
+        state:
+          $ref: '#/components/schemas/TrackerState'
+        online:
+          description: '`state == online`. Kept from the pre-C044 contract.'
+          type: boolean
+        lastSeen:
+          description: |
+            Platform receive instant of the newest accepted sample — **not** the GNSS capture
+            instant. The silence thresholds are measured from here, so a tracker with a wrong
+            clock cannot pin itself Online.
+          allOf:
+            - $ref: './_shared.yaml#/components/schemas/Timestamp'
+        since:
+          description: When this device last changed state.
+          allOf:
+            - $ref: './_shared.yaml#/components/schemas/Timestamp'
+        battery:
+          description: |
+            Battery charge as a percentage, only when the device reports one. Most of the
+            population does not: a GT06 status byte carries a coarse voltage level and JT/T 808
+            additional items carry millivolts, and neither converts to a percentage without
+            knowing the pack. See `batteryMv`.
+          type: integer
+          format: int32
+          minimum: 0
+          maximum: 100
+        batteryMv:
+          description: Battery voltage in millivolts, as reported (`prov.tracker_bindings.battery_mv`).
+          type: integer
+          format: int32
+          minimum: 0
+        signalStrength:
+          description: GSM signal strength as the protocol reports it (US-3.12).
+          type: integer
+          format: int32
+          minimum: 0
+        sats:
+          type: integer
+          format: int32
+          minimum: 0
+
+    TrackerState:
+      description: |
+        US-3.13's four states. `stale` is "no ping > `Health:StaleAfter`" **or** the broker's last
+        will has fired since the last ping; `offline` is "no ping > `Health:OfflineAfter`";
+        `decommissioned` is a revoked credential (US-3.8), not a T-08 quarantine.
+      type: string
+      enum: [online, stale, offline, decommissioned]

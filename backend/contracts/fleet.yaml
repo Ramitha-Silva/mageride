@@ -11,6 +11,12 @@ openapi: 3.1.0
 # Bulk **tracker** onboarding (`POST /v1/fleets/{fleetId}/trackers/bulk` and its job poll) belongs
 # to provisioning-svc — D3' Part 2 places it there, and this file must not duplicate it. What
 # lives here is the single owner-facing `POST /v1/fleets/{fleetId}/trackers/bind` (US-13.12).
+#
+# `GET /v1/fleets/{fleetId}/health` and the `TrackerHealth` schema **moved to
+# `fleet-health.yaml`** (C044). Same reason as the bulk route: D3' attributes the operation to
+# fleet-health-svc in the very line that lists it under fleet-svc, and the gateway resolves a
+# cluster from the contract that declares an operation — so declaring it here routes it to a
+# service that does not implement it. Do not re-add it from an earlier-dated spec line.
 # =============================================================================================
 
 info:
@@ -777,47 +783,6 @@ paths:
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
       x-error-codes: [unauthorized, forbidden, not-found]
 
-  /v1/fleets/{fleetId}/health:
-    get:
-      operationId: getFleetHealth
-      summary: Tracker health rollup.
-      description: |
-        US-3.13, served by fleet-health-svc from the `fleet_health_5m` continuous aggregate — an
-        online/offline and last-seen rollup rather than a scan of raw telemetry chunks.
-      tags: [fleet-ops]
-      security:
-        - bearerAuth: []
-      parameters:
-        - $ref: '#/components/parameters/FleetId'
-      responses:
-        '200':
-          description: Health rollup.
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [vehiclesOnline, vehiclesOffline, items, asOf]
-                properties:
-                  vehiclesOnline:
-                    type: integer
-                    format: int32
-                    minimum: 0
-                  vehiclesOffline:
-                    type: integer
-                    format: int32
-                    minimum: 0
-                  items:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/TrackerHealth'
-                  asOf:
-                    $ref: './_shared.yaml#/components/schemas/Timestamp'
-        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
-        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
-        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
-        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
-      x-error-codes: [unauthorized, forbidden, not-found]
-
   /v1/fleets/{fleetId}/analytics:
     get:
       operationId: getFleetAnalytics
@@ -1576,28 +1541,6 @@ components:
           minimum: 0
         sampleTs:
           $ref: './_shared.yaml#/components/schemas/Timestamp'
-
-    TrackerHealth:
-      type: object
-      required: [vehicleId, online]
-      properties:
-        vehicleId:
-          $ref: './_shared.yaml#/components/schemas/Ulid'
-        imei:
-          type: string
-        online:
-          type: boolean
-        lastSeen:
-          $ref: './_shared.yaml#/components/schemas/Timestamp'
-        battery:
-          type: integer
-          format: int32
-          minimum: 0
-          maximum: 100
-        sats:
-          type: integer
-          format: int32
-          minimum: 0
 
     VehicleAnalytics:
       type: object

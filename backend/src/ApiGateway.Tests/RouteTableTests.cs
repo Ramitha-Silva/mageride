@@ -165,6 +165,10 @@ public sealed class RouteTableTests : IAsyncLifetime
     [InlineData("POST", "/v1/fleets/01JZ/trackers/bulk", "provisioning-svc")]
     [InlineData("GET", "/v1/fleets/01JZ/trackers/bulk/01JY", "provisioning-svc")]
     [InlineData("POST", "/v1/fleets/01JZ/trackers/bind", "fleet-svc")]
+    // Health: the same split again (C044). D3' lists the route in the fleet-svc table and attributes it
+    // to fleet-health-svc in the same line, so the contract lives in fleet-health.yaml.
+    [InlineData("GET", "/v1/fleets/01JZ/health", "fleet-health-svc")]
+    [InlineData("GET", "/v1/fleets/01JZ/map", "fleet-svc")]
     // /v1/geo is split between the geocoder proxy and the GTFS link parser.
     [InlineData("GET", "/v1/geo/search", "query-svc")]
     [InlineData("GET", "/v1/geo/reverse", "query-svc")]

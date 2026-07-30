@@ -75,6 +75,21 @@ public static class EventTopics
     /// </remarks>
     public const string ReputationEvents = "reputation.events";
 
+    /// <summary>
+    /// fleet-health-svc's outbox — <c>fleet.health_alert</c> (US-3.16). Key: fleetId.
+    /// </summary>
+    /// <remarks>
+    /// <b>Not in D6' §2.1's six-topic registry</b> — a micro-change-set raised in the C044
+    /// handoff, the same shape as <see cref="RegistryEvents"/>, <see cref="ProvisioningEvents"/>
+    /// and <see cref="ReputationEvents"/>. C044's deliverable is "threshold alerts … emitted for
+    /// the Fleet Portal and notification-svc", and US-3.16 gives the alert a consumer
+    /// (notification-svc, by email/SMS) — so it has a named producer and a named consumer and no
+    /// topic. Keyed by fleetId rather than by alert id: an alert is a fact about an organisation,
+    /// and two windows' verdicts for one fleet have to arrive in the order they were reached or a
+    /// recovery notice can precede the outage it clears.
+    /// </remarks>
+    public const string FleetEvents = "fleet.events";
+
     /// <summary>Audit trail (D-35). Key: entityId.</summary>
     public const string AuditEvents = "audit.events";
 
@@ -82,7 +97,7 @@ public static class EventTopics
     public static readonly IReadOnlyList<string> All =
     [
         TelemetryRaw, TelemetryNormalized, TripEvents, RideEvents, DispatchEvents, RegistryEvents,
-        ProvisioningEvents, ReputationEvents, AuditEvents,
+        ProvisioningEvents, ReputationEvents, FleetEvents, AuditEvents,
     ];
 
     /// <summary>

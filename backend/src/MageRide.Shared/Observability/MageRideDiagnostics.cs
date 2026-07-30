@@ -303,6 +303,58 @@ public static class MageRideDiagnostics
         Meter.CreateCounter<long>("mageride.fanout.signals", "{signal}",
             "Directed fan-out signals applied to this replica's local connections.");
 
+    // --- fleet-health-svc (C044): the device-health plane (T-04, T-10, US-3.13/3.16) --------------
+    // These four are cross-cutting in the same sense the rest of this file is: the tracker plane's
+    // health is what an operator's page rule is written against, and D7' §12 scrapes this meter by
+    // name. The per-state gauge is the one a dashboard draws; the two counters either side of it are
+    // what say whether the *alerting* half is alive, which a gauge sitting at zero cannot.
+
+    /// <summary>
+    /// Devices in each US-3.13 state, tagged <c>state</c> and <c>fleet_id</c>, as an observable
+    /// gauge.
+    /// </summary>
+    /// <remarks>
+    /// Published by fleet-health-svc's transition sweep, so it moves at the sweep's cadence and not
+    /// per sample. A whole fleet arriving in <c>offline</c> at once is the SIM-provider outage
+    /// US-3.16 exists to catch, and it is visible here a window before the alert fires.
+    /// </remarks>
+    public const string DeviceHealthGauge = "mageride.fleet.device_health";
+
+    /// <summary>
+    /// Devices whose health state changed, tagged <c>from</c> and <c>to</c>.
+    /// </summary>
+    /// <remarks>
+    /// The transition and not the level, because "40 devices are stale" is a fact about last week
+    /// and "40 devices went stale in the last minute" is an incident. A sustained
+    /// <c>online→stale</c> rate with no matching <c>stale→online</c> is a fleet going dark.
+    /// </remarks>
+    public static readonly Counter<long> DeviceHealthTransitions =
+        Meter.CreateCounter<long>("mageride.fleet.device_transitions", "{device}",
+            "Tracker health-state changes fleet-health-svc recorded, by from-state and to-state.");
+
+    /// <summary>Device-health rows written, tagged <c>input</c> — <c>ping</c>, <c>status</c>, <c>diag</c> or <c>binding</c>.</summary>
+    /// <remarks>
+    /// A reading of zero on <c>ping</c> while <see cref="PositionsProcessed"/> is non-zero means the
+    /// health plane has stopped consuming <c>telemetry.normalized</c> — which looks exactly like a
+    /// fleet that has parked for the night.
+    /// </remarks>
+    public static readonly Counter<long> DeviceHealthUpdates =
+        Meter.CreateCounter<long>("mageride.fleet.device_updates", "{update}",
+            "Device-health rows written by fleet-health-svc, by which input produced them.");
+
+    /// <summary>
+    /// Device-down threshold alerts raised, tagged <c>fleet_id</c> — one per fleet per window
+    /// (US-3.16).
+    /// </summary>
+    /// <remarks>
+    /// Counted only when the <c>ux_fleet_health_alert_window</c> insert actually claimed the window,
+    /// so the number is alerts *raised* and not windows evaluated: every replica evaluates every
+    /// window and exactly one of them wins.
+    /// </remarks>
+    public static readonly Counter<long> FleetHealthAlerts =
+        Meter.CreateCounter<long>("mageride.fleet.health_alerts", "{alert}",
+            "Fleet device-down threshold alerts raised (US-3.16).");
+
     // --- query-svc (C042): the read side of the same two planes -----------------------------------
 
     /// <summary>Vehicles <c>GET /v1/nearby</c> returned.</summary>

@@ -69,7 +69,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C041 | fanout-svc | 2 | DONE | 2026-07-30 | 48 tests green in a **new suite** (`Fanout.Api.Tests`; the 9 hub tests moved out of HotPath.Tests, which is 102); **no migration** — this service owns no table; the D6' §5.1/§5.2 contradiction resolved with a `vehicle:{vehicleId}` group, argued below; a **custom Redis control channel** rather than SignalR's backplane, because the latter would multiply every cell batch by the replica count; 9 micro-change-sets |
 | C042 | query-svc | 2 | DONE | 2026-07-30 | 65 tests green in a **new suite** (`Query.Api.Tests`); **no migration** — this service writes nothing anywhere; the D-22/D-23/US-7.16/US-7.17 filter **promoted into the kernel** (`MageRide.Shared.Realtime.VehicleVisibilityRules`) so the socket and the snapshot cannot disagree, which is what C041's handoff asked for; `Fanout:JoinSeedFrames` retired with it (Fanout.Api.Tests 48 → 47, HotPath.Tests 102 → 101); the platform's second gRPC service; **no Mode C track exists anywhere to serve as a polyline** and it is not invented; 9 micro-change-sets |
 | C043 | tcp-adapter | 2 | DONE | 2026-07-30 | 89 tests green in a **new suite** (`TcpAdapter.Tests`); **no migration** — this service writes nothing anywhere, and reads `registry.vehicles` read-only; four golden frames, one per protocol family, byte-exact with real checksums; the platform's first `Microsoft.NET.Sdk.Worker` service (no HTTP surface at all, so no `AddMageRideDefaults`); a read-only Postgres dependency D7' §2.1's Container 9 row does not list, argued below; `POST /v1/internal/sessions/ignition` finally has a caller; 9 micro-change-sets |
-| C044 | fleet-health-svc | 2 | PENDING | | |
+| C044 | fleet-health-svc | 2 | DONE | 2026-07-30 | 57 tests green in a **new suite** (`FleetHealth.Tests`); **1 telemetry migration (1805)** — `telemetry.device_health`, `fleet_health_alerts`, this plane's outbox and the four-state classifier, none of which any DDL source prints; US-3.13's ladder landed as **one SQL function both the dashboard read and the sweep call**, so an operator cannot be shown one state while an alert fires on another; **`GET /v1/fleets/{fleetId}/health` moved out of `fleet.yaml` into a new `fleet-health.yaml`**, the same split D3' Part 2 makes for the tracker-bulk route; a 10th Redpanda topic (`fleet.events`); `migrate-verify.sh` expects 4 telemetry tables and 8 views, not 1 and 6; **the p95 for a 1000-vehicle fleet measured at 99.7 ms against the DoD's 200**; 12 micro-change-sets |
 | C045 | content-svc | 3 | PENDING | | |
 | C046 | wallet-svc | 3 | PENDING | | |
 | C047 | subscription-svc-daily-fee | 3 | PENDING | | |
@@ -5940,3 +5940,271 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   stayed down throughout. `TcpAdapter.Tests` takes ~1 min 30 s (the codec half is ~0.5 s of it).
   **No new NuGet reference** — `MQTTnet`, `StackExchange.Redis`, `Dapper`, `Npgsql` and
   `Microsoft.Extensions.TimeProvider.Testing` are all already pinned centrally.
+
+- **Component:** C044 fleet-health-svc — 2026-07-30
+- **Status:** DONE — `dotnet test backend/src/FleetHealth.Tests -c Release` is **57/57 green** in a
+  new suite; `bash infra/scripts/migrate-verify.sh` is **246/246**;
+  `dotnet build backend/MageRide.sln -c Release` is clean (0 warnings) and
+  `dotnet test backend/src/ApiGateway.Tests -c Release` is 538/538 with the new contract file routed.
+  Spectral lints `backend/contracts/*.yaml` with zero errors. All three DoD items pass: a device
+  silent past the stale window flips to Stale and then Offline at the configured thresholds
+  (`DeviceStateTests`); a simulated 10 % fleet outage raises exactly one alert per window, re-checked
+  twice (`AlertThresholdTests`); the rollup answers a 1000-vehicle fleet at **p95 99.7 ms** against the
+  200 ms budget (samples 29.6 → 118.6 ms, median ~47 ms, over the full HTTP round trip on this build
+  host with four containers running).
+  ⚠ **Pre-existing failures elsewhere, all confirmed against `main` with this component's changes
+  stashed** — flagged for whoever owns the Wave 2 gate, none of them C044's:
+  · `HotPath.Tests` — `PersistenceWriterTests.A_minute_of_Mode_A_fixes_becomes_one_operational_sample_and_many_hypertable_rows`
+  and `The_operational_sample_is_idempotent_across_a_redelivery`, both `Expected: 1, Actual: 0`. C040's
+  own handoff reported 111 green, so something has regressed in that suite since (99/101 now).
+  · `slim-verify.sh` — 10/78 fail. `docker compose config` **panics** on `infra/docker-compose.dev.yml`
+  inside compose-go v2.13's `include` loader (Docker Compose v5.3.1 on this host); that one failure
+  cascades into five more, including every EMQX check. Separately the "67 scripts from C003–C006"
+  literal is stale (96 now) and seven D7' §4.2 variables that C038/C041 deliberately retired are
+  reported missing from `.env.app.example`. **C044's own additions to that script verify green** —
+  `fleet.events`, its DLQ, and the topic total moving 18 → 20.
+- **Notes:**
+  **Spec gaps —** (a) ***US-3.13 cannot be served by `telemetry.fleet_health_5m`, and the deliverable
+  list implies it can.*** The story wants "the count and percentage of trackers in states Online /
+  Stale (no ping > 5 min) / Offline (no ping > 30 min) / Decommissioned". A continuous aggregate is
+  bucketed by time and blind to *which* device contributed: it can say 90 of 100 vehicles reported in
+  the last five minutes, and it can never say which ten did not, nor tell a six-minute silence from a
+  six-hour one, nor know that a fleet has forty trackers of which four have never reported — a vehicle
+  that publishes nothing writes no row for it to count. So `telemetry.device_health` (1805) is the
+  rollup US-3.13 is actually answered from, and the aggregate is used for the *window* question it can
+  answer (US-3.16's numerator). **D4' §17 / server_db_schema.md §18 should carry the per-device table**,
+  and the two questions should be described as two questions.
+  (b) ***The `TrackerHealth` schema `fleet.yaml` shipped cannot express the story it is for.*** It
+  carried `{vehicleId, imei, online: boolean, lastSeen, battery, sats}` and the response carried
+  `{vehiclesOnline, vehiclesOffline, items, asOf}` — a two-state answer for a four-state story with
+  percentages. `counts`, `percentages`, `thresholds` and `TrackerHealth.state` are added; the two
+  original counts stay required, so nothing breaks. **D3' should print the four states.**
+  (c) ***US-3.16 has no read surface anywhere.*** `GET /v1/fleets/{id}/alerts` exists but is the Phase 3
+  route-deviation and geofence family, and its `kind` enum has no value for a device outage — so an
+  operator could be emailed about a fleet going dark and have nowhere in the portal to see it. `window`
+  and `alert` on the health response are that surface. **D3' should either widen `FleetAlert.kind` or
+  print these.**
+  (d) ***`fleet.events` is not in D6' §2.1's registry*** — the fourth topic in that position, after
+  C028's `registry.events`, C030's `provisioning.events` and C033's `reputation.events`. This
+  component's deliverable is "threshold alerts … emitted for the Fleet Portal and **notification-svc**"
+  and US-3.16 gives the alert a delivery channel, so it has a named producer and a named consumer and
+  no topic. Added to `EventTopics`, `bootstrap-topics.sh` and `slim-verify.sh` (10 topics + 10 DLQs = 20,
+  was 18). **D6' §2.1 should carry it** (partition key fleetId, producer fleet-health-svc, consumers
+  notification-svc · audit).
+  (e) ***D6' §2.2 prints no envelope for it either***, so `fleet.health_alert`'s shape in
+  `Rollups/FleetHealthEvents.cs` is this service's.
+  (f) ***`sys/diag/{vehicleId}` has a name and no payload.*** D6' §3.1 and `mqtt-topics.md` §1 both
+  print the row as "diagnostics" and stop. The shape is added as `mqtt-topics.md` §2.4 and is C044's;
+  **D6' §3.1 should carry it.** This answers the question C043's handoff left open — *"C044 either
+  consumes a diagnostics topic this component would have to start publishing, or the fields stay null —
+  decide which"*: **consume it.** See "What the next components need", below.
+  (g) ***`prov.tracker_bindings.last_seen_at`, `signal_strength`, `battery_mv` and `sat_count` had a
+  reader and no writer.*** C030's own CLAUDE.md hands them to this service — "the columns are read here
+  and written there" — so US-3.12's Admin Portal panel has been permanently blank since C030 landed.
+  This service is now their writer, on its own five-minute interval. **Neither D4' §3 nor D3'
+  `GET /v1/trackers/{imei}` says who writes them; one of them should.**
+  (h) ***D7' §4.2's fleet-health row is two variables for a service with twenty-two settings.***
+  `Health__OfflinePct`=10 and `Health__WindowMin`=5 are honoured exactly as spelled and everything else
+  is documented at its declaration and in `.env.app.example`. **The row needs rewriting** against
+  `FleetHealthOptions`.
+  (i) ***No spec gives the alert a tie-break, a debounce or a floor.*** `>=` versus `>`, edge-triggering,
+  and `MinFleetSize` are all decisions (2), (3) and (4) below.
+  (j) ***`telemetry.fleet_health_5m` has no `time_bucket` width anywhere machine-readable.*** No
+  `timescaledb_information` view exposes a continuous aggregate's bucket width, so the 5 minutes the
+  relation's name and 1802's DDL both state is a constant here (`AggregateMaintainer.AggregateBucketMinutes`)
+  and a mismatch with `Health:WindowMin` is a start-up error rather than silently wrong percentages.
+  (k) ***US-3.7 (primary + redundant trackers, promote after 60 s) is not implementable against this
+  schema.*** `prov.tracker_bindings` has no column saying which of a vehicle's bindings is primary, and
+  the health rollup is keyed by *vehicle*, so two trackers on one vehicle share one row. Left out and
+  named; a per-binding health row needs the roster to say which is primary first.
+  **Decisions —**
+  (1) **US-3.13's ladder is one SQL function, and there is deliberately no C# classifier.**
+  `telemetry.device_health_state(binding_state, decommissioned_at, last_ping_at, last_status,
+  last_status_at, stale_after, offline_after, at)` is called by the fleet dashboard read *and* by the
+  transition sweep. A second implementation in C# would be a second opinion about the same row, and the
+  symptom is the worst kind: an operator sees a fleet as healthy while an alert fires on it, or the
+  reverse. The thresholds and the clock are **parameters**, which is what makes it `IMMUTABLE`,
+  set-based over a whole fleet, and directly assertable (`migrate-verify.sh` now drives all eight
+  branches).
+  (2) **The state is derived at read time; `observed_state` is only the sweep's record of a change.**
+  The alternative — a materialised state the sweep maintains — is stale for a sweep interval after
+  every restart, which is exactly when somebody is looking at the dashboard. So the counts are correct
+  to the second *with the sweep switched off*, and the sweep exists only for what a read cannot do:
+  detect a *transition* (there is no event when a device goes quiet), stamp `since`, and push the
+  US-3.12 diagnostics into `prov.tracker_bindings`.
+  (3) **The threshold comparison is `>=`, not `>`.** The deliverable writes "> 10 % of a fleet offline"
+  and the definition of done writes "a **simulated 10 %** fleet outage raises exactly one alert per
+  window". With a strict comparison a fleet configured at 10 that loses exactly 10 % is silent — the
+  case the DoD names. `RollupArithmeticTests` pins both sides of the boundary.
+  (4) **The alert is edge-triggered by default (`Health:AlertOnCrossingOnly`).** US-3.16 is "N % of my
+  fleet **goes** offline within a 5-minute window" — a transition, not a level. Level-triggered, a fleet
+  with a fifth of its vehicles parked for the season alerts every five minutes for ever and is muted
+  inside a day, which is the same outcome as not alerting but harder to notice. The knob makes the
+  choice visible and reversible; either way it is one alert per window.
+  (5) **"Exactly one alert per window" is `ux_fleet_health_alert_window`, not a lock.** Every replica
+  evaluates every window and the `INSERT … ON CONFLICT DO NOTHING … RETURNING` is the claim: the replica
+  whose insert returns no row writes no outbox event. That makes the guarantee hold for any deployment
+  size *and* makes a restart's re-evaluation free, which is what lets the worker re-check the most
+  recent closed window every minute instead of trying to fire exactly on the boundary (1802's refresh
+  policy has a five-minute `end_offset`, so a just-closed bucket may not be materialised yet).
+  (6) **The alert's numerator is the continuous aggregate's and its denominator is the tracker roster's,
+  and neither source has both halves.** `reporting` is the closed `fleet_health_5m` bucket's
+  `active_vehicles`; `expected` is the fleet's `ACTIVE` bindings. `reporting` is **capped at**
+  `expected`, because the aggregate counts every vehicle carrying the fleet's id in
+  `telemetry.positions` — including one publishing from a phone (US-3.6's other source) and one whose
+  binding was revoked mid-window — and without the cap an outage reads as a surplus. The response
+  labels `window` and `counts` as the two different measurements they are.
+  (7) **A last will takes a device out of `Online` and no further.** The broker has said the session is
+  gone, so the device cannot be Online however recent its last ping was; but US-3.13 defines Offline as
+  thirty minutes of silence and a bus in a tunnel is not a device failure. It is compared as an
+  *instant* against the last ping, not held as a flag — C041's rule on the same fact — so a fresher
+  ping clears it with **no `online` message needed**, which matters because a device that crashed and
+  restarted may never send one. Across the platform this makes four consumers of one will
+  (trip-state, dispatch, fanout, here), each acting differently and none able to undo another.
+  (8) **`REVOKED` is `Decommissioned`; `QUARANTINED` is not.** US-3.8 revokes credentials and no
+  further ingest is possible, so the state wins over a recent ping — a decommission performed while a
+  device was still publishing would otherwise take half an hour to appear. T-08 holds a binding pending
+  the US-3.4 admin decision and it may return to service, so it reads as a device that is not
+  reporting rather than one that has been retired. `tracker.credential_rotated` and
+  `tracker.source_switched` are consumed and mapped to **nothing**: a rotation deliberately leaves the
+  outgoing credential valid (C030), so mapping it would make a routine 90-day renewal look like an
+  outage.
+  (9) **The silence clock is the platform's receive instant, not the device's GNSS clock.**
+  `last_ping_at` is the sample's `receivedTs`. A tracker whose clock is a year fast would otherwise be
+  permanently Online and one a year slow permanently Offline — and C039 carries a `MaxClockSkewAhead`
+  gate because wrong clocks are common in this population. For a T-05 backlog it is the instant the
+  backlog *arrived*, which is when the device was demonstrably reachable; `last_sample_ts` keeps the
+  GNSS instant for the record and is never used as a clock. **`OfflineAfter` is thirty minutes, not
+  D6' §4.5's thirty seconds** — that number is dispatch-svc's per-ride fallback, on the hot path.
+  (10) **The ping path collapses to one row per vehicle before it touches the database, and it is not
+  the kernel's `KafkaTopicConsumer`.** T-10 sizes ingest at 20k msg/s and this service sees all of it,
+  while the fact has a five-minute grain — a hundred samples from one bus in five seconds carry exactly
+  one fact. The kernel's consumer commits per message, which is a broker round trip per position. So
+  the ping loop is local (the same call C040 made on the same topic) and `provisioning.events` uses the
+  kernel's consumer, where per-message commit and `Earliest` are both right.
+  (11) **Every conflicting column takes `GREATEST` or `COALESCE`, never the incoming value.** Delivery
+  is at-least-once and per-vehicle ordering lapses for seconds during a rebalance, so an overtaken or
+  redelivered flush must not move a clock backwards, and a report carrying no battery must not erase
+  the battery the last one gave. That is what makes committing the offsets *after* the flush and
+  nothing else sufficient.
+  (12) **`UseRedis = false`, and it is a fence rather than a preference.** The service cannot reach
+  `geo:live`, `veh:meta` or the R-08 pool because it does not register a client — so "a slow health
+  write must not affect the live map" is held by construction. There is no `CommandLog` either: every
+  route is a `GET`, so a `telemetry.command_log` would be a table for a route family that does not
+  exist.
+  (13) **`GET /v1/fleets/{fleetId}/health` moved out of `fleet.yaml` into a new `fleet-health.yaml`.**
+  C008's `RouteTableTests` resolves the expected cluster from the contract file that declares an
+  operation, so an operation served by fleet-health-svc and declared in `fleet.yaml` is routed to
+  fleet-svc — which does not implement it. This is the split D3' Part 2 already makes for
+  `POST /v1/fleets/{fleetId}/trackers/bulk`, and `fleet.yaml`'s header says in as many words that the
+  file "must not duplicate it"; the same note now covers `/health`. The gateway gains an `Order`-10
+  route and a `fleet-health-svc` cluster pointing at `http://hot-path:5000/` (D7' §2.1's container for
+  this service).
+  (14) **The endpoint's row filter is a session GUC and a security-barrier view, not a `WHERE` clause.**
+  ADD §9.5 item 8 asks for the filter to be in the database "without application-side filtering risk"
+  and ADD §7.7.7 names *this service* as one of the two that apply it. `set_config('app.fleet_id', …,
+  true)` — `is_local`, because ADD §9.3 puts this behind PgBouncer in transaction mode and a
+  session-scoped `SET` would leak one caller's fleet onto the next caller's connection — plus
+  `telemetry.device_health_fleet`, whose predicate is `telemetry.current_fleet_id()`. Unset, that
+  returns NULL and the view matches no row, so a dropped scope produces an empty dashboard and never
+  another organisation's devices. `migrate-verify.sh` asserts both directions and that the fleet role
+  cannot read the base tables at all.
+  (15) **A fleet that is not the caller's is 403; one that does not exist is 404.** Unusual here — the
+  house rule elsewhere is that "not yours" and "does not exist" must be indistinguishable so a scoped
+  read cannot enumerate other people's resources. It does not apply: a fleet operator's own
+  organisation id is in their token, so the only path they can construct is their own, and reaching the
+  404 at all takes one of AL-06's two platform roles. D3' declares both codes on the operation.
+  (16) **`vehiclesOffline` excludes decommissioned trackers.** The pre-C044 field is a two-valued
+  reading of a four-state world, and counting retired devices in it would leave every operator's alarm
+  permanently raised after their first decommission. `counts` carries all four.
+  (17) **`items` is capped and says so.** D3' gives the operation a flat array with no pagination, so
+  the cap is `Health:MaxItems` (5 000 — US-3.2's bulk-onboarding ceiling, so the largest fleet the
+  platform lets an operator create fits in one answer) and the response carries `itemsTruncated`. The
+  counts are a `GROUP BY` over the whole fleet and are never affected by it. Ordering is **worst state
+  first** and fixed rather than a parameter, because a truncated list whose ordering a client chose
+  could hide exactly the rows it was opened to see.
+  (18) **The "continuous-aggregate maintenance" deliverable is verification plus an on-demand refresh,
+  not a recomputation.** 1802 owns the aggregate and its policy and TimescaleDB's scheduler runs it —
+  duplicating any of it would be the second opinion C040's handoff warns against. What a service can
+  usefully add is two things the scheduler cannot: say so when the aggregate is missing,
+  `materialized_only`, or without a policy (each with the specific symptom it causes), and materialise
+  a named closed window on demand by calling the aggregate's own `refresh_continuous_aggregate` before
+  reading it. The refresh is **swallowed on failure and logged**: `materialized_only = false` means the
+  read that follows is still correct, it just pays for a raw-chunk scan.
+  (19) **The bucket boundary is computed in .NET as well as in SQL, and a test pins the agreement.**
+  The worker names the window it evaluates in a `WHERE bucket = …` predicate; if the two ever disagreed
+  the predicate would match no row and *every* fleet would read as a total outage. `TimeBuckets` floors
+  on Unix seconds, which is only safe for widths that divide a day (the gaps between TimescaleDB's
+  various `time_bucket` origins are whole days), and it refuses any other width rather than being
+  subtly wrong. `BucketArithmeticMatchesPostgres` checks seven instants against the real server.
+  (20) **The `sys/diag` payload is JSON, not CBOR.** `pos/live` is CBOR because a metered mobile link
+  carries it five times a second; a diagnostics frame is one message every several minutes at QoS 0, so
+  there is no bandwidth argument for a second encoder, and every publisher follows a schema this
+  repository defines. Both battery fields exist (`batteryPct` **and** `batteryMv`) because a GT06 status
+  byte carries a coarse voltage *level*, JT/T 808 carries millivolts and only a firmware that computes
+  it can give a percentage — deriving one from the other would put a number on an operator's screen that
+  no device said. An out-of-domain field is **dropped, not clamped**: `ck_device_health_battery_pct`
+  would otherwise reject a whole flush batch over one device reporting 255 %.
+  (21) **One broker session for both device-plane subscriptions**, unlike C038's deliberate split of
+  `pos/live` and `pos/replay`. That split exists because a throttled backlog shares an inflight window
+  with live delivery; nothing here is throttled or on the hot path, so a second session would double the
+  connection count for no isolation. Whole-topic subscriptions rather than shared ones, for the reason
+  ride-svc, dispatch-svc and fanout-svc all use them on `veh/+/status`: presence is rare and every write
+  is idempotent, so a replica taking a copy costs one upsert and missing one costs a stale reading.
+  **C044 added no ACL rule** — `acl.conf` already grants `^svc-` the whole `veh/#` and `sys/#` tree.
+  (22) **`Health:DevicePlaneEnabled` is off by default**, the call trip-state-svc makes for its own
+  last-will worker: it is the only part of the service that needs a broker, and the four states work
+  without it because they are thresholds on silence. Off, a dropped session is noticed at `StaleAfter`
+  rather than immediately and no diagnostics are recorded — both announced at start-up.
+  **The suite is 57 tests and every claim is made against the real thing.** The ladder against a real
+  `device_health_state()`; "one alert per window" against a real unique index, re-evaluated twice, which
+  is the same test as running two replicas; the fleet scoping against a real GUC and a real
+  security-barrier view; the window rollup against a real TimescaleDB continuous aggregate the service
+  refreshes itself; the last will and the diagnostics frame against a real EMQX running the
+  repository's own `acl.conf`, published *as the vehicle* so the rule that authorises it is the one
+  under test. `BindingEventNamesTests` references `Provisioning.Api` for four constants only — the
+  production path must not, and a rename there would otherwise show up as fleet dashboards that
+  silently stop learning about new trackers.
+  **Two test-harness traps worth writing down.** (i) The Redpanda and EMQX containers are shared across
+  the collection and each harness joins with a fresh consumer group reading from the earliest offset, so
+  a consumer's *counter* reaching one says "something arrived", not "this test's message arrived" — every
+  wait in `IngestTests` is on an observable effect for a named vehicle instead. (ii) The fake clock is
+  frozen, so a will published in the same instant as a ping is a tie the strict `last_status_at >
+  last_ping_at` comparison resolves in the ping's favour; the test advances the clock a second, as
+  production does.
+  **What the next components need from this one —**
+  **For C043 (tcp-adapter) —** a small, named change: publish `sys/diag/{vehicleId}` in the
+  `mqtt-topics.md` §2.4 shape from the GT06 status byte's voltage level and GSM signal strength and from
+  JT/T 808's additional items. Until it does, `battery`, `batteryMv` and `signalStrength` are populated
+  only for MQTT-native trackers and `prov.tracker_bindings`' three diagnostics columns stay null for the
+  legacy population. `sats` already arrives on the `PositionSample`.
+  **For C051 (notification-svc) —** consume `fleet.events`, event type `fleet.health_alert`, keyed by
+  fleetId. The payload carries `notificationType: FLEET_DEVICES_OFFLINE` and the numbers behind the
+  decision and **no rendered text** — the trilingual template, the channel and the recipient's
+  preferences are yours (D-26), as they are for C036's `directional.expiring`. US-3.16 asks for
+  email/SMS to whoever *subscribed*, and there is no subscription table anywhere: **somebody has to own
+  `POST /v1/fleets/{id}/alert-subscriptions`.**
+  **For C059 (fleet-svc-fleet-ops) —** `/v1/fleets/{fleetId}/health` is **not** yours; the gateway routes
+  it past you at `Order` 10. `GET /v1/fleets/{id}/map` still is. If you want the health rollup on the
+  same screen as the map, read this service's HTTP surface rather than `telemetry.device_health`.
+  **For C062 (admin-bff) —** `GET /v1/trackers/{imei}` now answers with real `lastSeen`, `signalStrength`,
+  `battery_mv` and `sat_count` (US-3.12), up to `Health:BindingSyncInterval` stale by design. The US-3.4
+  quarantine queue is still yours and this service does not adjudicate: it mirrors `binding_state` and
+  reports a quarantined tracker as offline-or-online, never as decommissioned.
+  **For whoever owns US-3.14 —** "a push when my tracker has been offline for more than 15 minutes
+  during a session that was supposed to be active". The traceability matrix groups it here; it is not in
+  this component's deliverables or DoD and it is **not implemented**. The reason is worth reading: the
+  trigger is a *session*, sessions are trip-state-svc's, and that service already auto-ends a session
+  two minutes after a last will and at a thirty-minute idle timeout — so a fifteen-minute alert sits
+  inside both of its clocks and the three have to be reconciled by whoever owns them. This service can
+  supply the tracker half through `telemetry.device_health` or through a device-level event on
+  `fleet.events`.
+  **For C125 (the replica) —** the `hot-path` container is where D7' §2.1 puts this service and the
+  gateway's `fleet-health-svc` cluster points at it, so **that container needs Kestrel on 5000** — it is
+  the first thing in it with an HTTP surface, and `docker-compose.dev.yml`'s comment still says "No
+  ports: it is a consumer only". No host port is needed; the gateway reaches it over the compose
+  network. `backend/src/HotPath/Dockerfile` is still nobody's.
+  **Build host —** Docker for three Testcontainers fixtures (Postgres, Redpanda, EMQX); the replica
+  stack stayed down throughout. `FleetHealth.Tests` takes ~2 min. **No new NuGet reference** — `MQTTnet`
+  and `Microsoft.Extensions.TimeProvider.Testing` are already pinned centrally and everything else
+  arrives through `MageRide.Shared`.

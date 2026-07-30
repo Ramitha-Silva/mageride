@@ -89,6 +89,20 @@
         "Match": { "Path": "/v1/fleets/{fleetId}/trackers/bulk/{**remainder}" },
         "Metadata": { "RateLimit": "write" }
       },
+      "fleet-health": {
+        "ClusterId": "fleet-health-svc",
+        "Order": 10,
+        "AuthorizationPolicy": "anonymous",
+        "//": [
+          "US-3.13. A second path under /v1/fleets that fleet-svc does not own — D3' lists the",
+          "route in the fleet-svc table and attributes it to fleet-health-svc in the same line,",
+          "the same split as the provisioning bulk route above. The contract lives in",
+          "backend/contracts/fleet-health.yaml, which is what RouteTableTests resolves the",
+          "expected cluster from."
+        ],
+        "Match": { "Path": "/v1/fleets/{fleetId}/health" },
+        "Metadata": { "RateLimit": "default" }
+      },
       "transit-geo-parse-maps-link": {
         "ClusterId": "transit-svc",
         "Order": 10,
@@ -478,6 +492,16 @@
       "transit-svc": { "Destinations": { "primary": { "Address": "http://transit-svc:5000/" } } },
       "query-svc": { "Destinations": { "primary": { "Address": "http://query-svc:5000/" } } },
       "fleet-svc": { "Destinations": { "primary": { "Address": "http://fleet-svc:5000/" } } },
+      "fleet-health-svc": {
+        "//": [
+          "C044. fleet-health-svc runs inside the `hot-path` container (D7' §2.1) beside",
+          "mqtt-bridge, position-processor and persistence-writer, so in the dev compose the",
+          "destination is that container's name; on DOKS it is the service's own pod. The host",
+          "publishes no port for it — the gateway reaches it over the compose network, which is",
+          "why `hot-path` still declares no `ports:`."
+        ],
+        "Destinations": { "primary": { "Address": "http://hot-path:5000/" } }
+      },
       "admin-bff": { "Destinations": { "primary": { "Address": "http://admin-bff:5000/" } } },
       "public-bff": { "Destinations": { "primary": { "Address": "http://public-bff:5000/" } } },
 

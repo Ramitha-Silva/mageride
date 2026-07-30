@@ -78,6 +78,43 @@ over the open socket (T-05, US-3.17).
 
 Payload is the literal string `online` or `offline`.
 
+### 2.4 `sys/diag` — device diagnostics `[NEW C044]`
+
+D6' §3.1 and §1 above give this branch a name and no payload. The shape is **fleet-health-svc's**
+(C044), and it is the shape US-3.12's "last-seen, signal strength, satellite count and battery
+voltage (when reported by the protocol)" panel is filled from — a micro-change-set into D6' §3.1 is
+raised in the C044 handoff.
+
+```jsonc
+{ "ts": "2026-07-30T09:14:30Z",   // optional; the platform receive instant is the fallback
+  "signalStrength": 24,           // GSM signal, as the protocol reports it
+  "batteryPct": 82,               // ONLY when the firmware computes a percentage
+  "batteryMv": 4020,              // battery voltage in millivolts
+  "satCount": 11 }
+```
+
+**JSON, not CBOR.** `pos/live` is CBOR because a metered mobile link carries it five times a second;
+a diagnostics frame is one message every several minutes at QoS 0, so there is no bandwidth argument
+for a second encoder, and every publisher follows a schema this repository defines.
+
+**Every field is optional and an out-of-domain one is dropped rather than clamped.** The population
+reports different subsets — a GT06 status byte carries a coarse voltage *level* and a signal
+strength, JT/T 808 additional items carry millivolts and a satellite count, generic NMEA carries
+neither — so `batteryPct` and `batteryMv` are separate fields and a percentage is never derived from
+a voltage. A field nobody reported leaves the stored value alone: "stopped reporting its battery" and
+"battery unknown" are different facts and only the second is true.
+
+**The vehicle comes from the topic, never from the payload** — EMQX bound `sys/diag/${username}` to
+the device's credential, and the payload is self-asserted. Same rule C039 applies to a position
+sample.
+
+> **Nothing publishes here for a legacy TCP device yet.** The GT06 status byte's voltage level and
+> GSM signal strength, and JT/T 808's additional items, are decoded by `tcp-adapter` (C043) and
+> discarded — that component's handoff asks C044 to decide whether to consume a diagnostics topic or
+> leave the fields null, and this is the answer: **consume it, and C043 gains a publish.** Until then
+> `battery`, `batteryMv`, `signalStrength` and `sats` are populated only for MQTT-native trackers
+> publishing this shape, and `sats` alone also arrives on the `PositionSample` (§2.1).
+
 ---
 
 ## 3. Authentication
@@ -195,7 +232,7 @@ Three services consume it:
 |---|---|
 | `trip-state-svc` | Auto-end the Mode A/B session (`POST /v1/internal/sessions/{sessionId}/auto-end`, reason `mqtt_offline`) |
 | `dispatch-svc` | Release the active offer and start the grace window (R-15); **clear the active Directional filter** (DT-04) |
-| `fleet-health-svc` | Update the health rollup |
+| `fleet-health-svc` | Record it against the device (C044). A will that fired **after** the last ping takes the tracker out of `Online` and no further: US-3.13 defines `Offline` as thirty minutes of silence, and a bus in a tunnel is not a device failure. A fresher ping clears it with no `online` message needed — a device that crashed and restarted may never send one |
 
 **The TCP adapter emulates LWT on socket half-close** by publishing the same retained
 `status=offline` (T-04) — a legacy device that simply loses its socket is indistinguishable, to
