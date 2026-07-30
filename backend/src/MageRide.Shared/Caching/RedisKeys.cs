@@ -327,6 +327,29 @@ public static class RedisKeys
     /// </remarks>
     public const string FanoutControlChannel = "fanout:control";
 
+    /// <summary>
+    /// content-svc's cache-purge channel — the invalidation half of D7' §4.2's <c>Cache__Ttl</c>
+    /// (C045).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Not in ADD §9.4's key space</b> — a micro-change-set raised in the C045 handoff. The
+    /// C045 deliverable is "aggressive caching with an invalidation path on publish", and content-svc
+    /// caches in process: the datasets are a few hundred rows, read on every notification render, and
+    /// a Redis round trip per render would be a cache in front of a cache. So the *cache* is local
+    /// and only the *purge* is shared, which is what this channel carries — a comma-separated
+    /// dataset list, or empty for all of them.
+    /// </para>
+    /// <para>
+    /// Published by content-svc on every admin publish and by its
+    /// <c>POST /v1/internal/content/cache/purge</c> route, which exists for the one dataset it serves
+    /// and does not own: the launch cities, whose CRUD D3' assigns to admin-bff. Best effort by
+    /// design — a subscriber that was down misses the message and falls back to the TTL, which is
+    /// the same worst case a deployment with no Redis has.
+    /// </para>
+    /// </remarks>
+    public const string ContentInvalidationChannel = "content:invalidate";
+
     /// <summary>Opaque refresh token mirror for O(1) revocation (D-29).</summary>
     public static string RefreshToken(string jti) => $"refresh:{jti}";
 

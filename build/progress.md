@@ -70,7 +70,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C042 | query-svc | 2 | DONE | 2026-07-30 | 65 tests green in a **new suite** (`Query.Api.Tests`); **no migration** — this service writes nothing anywhere; the D-22/D-23/US-7.16/US-7.17 filter **promoted into the kernel** (`MageRide.Shared.Realtime.VehicleVisibilityRules`) so the socket and the snapshot cannot disagree, which is what C041's handoff asked for; `Fanout:JoinSeedFrames` retired with it (Fanout.Api.Tests 48 → 47, HotPath.Tests 102 → 101); the platform's second gRPC service; **no Mode C track exists anywhere to serve as a polyline** and it is not invented; 9 micro-change-sets |
 | C043 | tcp-adapter | 2 | DONE | 2026-07-30 | 89 tests green in a **new suite** (`TcpAdapter.Tests`); **no migration** — this service writes nothing anywhere, and reads `registry.vehicles` read-only; four golden frames, one per protocol family, byte-exact with real checksums; the platform's first `Microsoft.NET.Sdk.Worker` service (no HTTP surface at all, so no `AddMageRideDefaults`); a read-only Postgres dependency D7' §2.1's Container 9 row does not list, argued below; `POST /v1/internal/sessions/ignition` finally has a caller; 9 micro-change-sets |
 | C044 | fleet-health-svc | 2 | DONE | 2026-07-30 | 57 tests green in a **new suite** (`FleetHealth.Tests`); **1 telemetry migration (1805)** — `telemetry.device_health`, `fleet_health_alerts`, this plane's outbox and the four-state classifier, none of which any DDL source prints; US-3.13's ladder landed as **one SQL function both the dashboard read and the sweep call**, so an operator cannot be shown one state while an alert fires on another; **`GET /v1/fleets/{fleetId}/health` moved out of `fleet.yaml` into a new `fleet-health.yaml`**, the same split D3' Part 2 makes for the tracker-bulk route; a 10th Redpanda topic (`fleet.events`); `migrate-verify.sh` expects 4 telemetry tables and 8 views, not 1 and 6; **the p95 for a 1000-vehicle fleet measured at 99.7 ms against the DoD's 200**; 12 micro-change-sets |
-| C045 | content-svc | 3 | PENDING | | |
+| C045 | content-svc | 3 | DONE | 2026-07-30 | 105 tests green in a **new suite** (`Content.Api.Tests`); **2 migrations (1307, 1903)** — the template approval workflow, the broadcast window, `content.onboarding_slides` + its Si/Ta/En seed, `content.command_log`, and the trilingual rule as a **deferred constraint trigger** that checks the old pair as well as the new; the fence is enforced three times over (a type that cannot hold two languages, a field-level `validation-failed`, a COMMIT-time trigger); **6 new contract operations** — FAQ, the AL-28 carousel, template approve + history, broadcast publish, cache purge; `Cache__Ttl` honoured as D7' spells it; `migrate-verify.sh` 275/275 with a C045 section (5 content tables, not 3); 17 spec gaps / micro-change-sets |
 | C046 | wallet-svc | 3 | PENDING | | |
 | C047 | subscription-svc-daily-fee | 3 | PENDING | | |
 | C048 | subscription-svc-mode-b | 3 | PENDING | | |
@@ -6208,3 +6208,252 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   stack stayed down throughout. `FleetHealth.Tests` takes ~2 min. **No new NuGet reference** — `MQTTnet`
   and `Microsoft.Extensions.TimeProvider.Testing` are already pinned centrally and everything else
   arrives through `MageRide.Shared`.
+
+- **Component:** C045 content-svc — 2026-07-30
+- **Status:** DONE — `dotnet test backend/src/Content.Api.Tests -c Release` is **105/105 green** in a
+  new suite; `bash infra/scripts/migrate-verify.sh` is **275/275** (was 246, +29 for the two new
+  scripts); `dotnet build backend/MageRide.sln -c Release` is clean (0 warnings) and
+  `dotnet test backend/src/ApiGateway.Tests -c Release` is 538/538 with the six new contract
+  operations routed. Spectral lints `backend/contracts/*.yaml` with zero errors. All three DoD items
+  pass: publishing a template missing a language is rejected `validation-failed` with the language
+  named in a field key, one language at a time (`TemplatePublishTests`); `GET /v1/config/cities`
+  returns active rows only, ordered by `sortOrder`, with all three names, proved against a *dark city
+  that sorts ahead of a live one* (`OperatingCityTests`); and a template change reaches a **second,
+  independently built replica** immediately with the purge on and at the 300 s TTL with it off —
+  asserted at 299 s and 301 s (`CacheInvalidationTests`).
+  ⚠ **Pre-existing failures elsewhere are unchanged from what C044's handoff reported** and were not
+  re-investigated here: `HotPath.Tests` (2 failures) and `slim-verify.sh` (the compose-go `include`
+  panic). Neither touches this component; `Cache__Ttl` is still uncommented in
+  `.env.app.example`, so this component's own additions to that file do not change slim-verify's count.
+- **Notes:**
+  **Spec gaps —** (a) ***`server_db_schema.md` §14 cannot express the approval workflow D3' names in
+  the same breath.*** The route table calls `PUT /v1/admin/content/{key}` a "versioned template edit
+  (approval workflow)" and the table it writes has `version` and `approved_by` — a *who* with no
+  *whether* and no *when*, so there is nowhere to put an edit that has been written and not yet
+  approved, and the only implementable reading of "approval workflow" is "the edit goes live and an
+  admin's id is filed beside it". Migration 1307 adds `status` (draft|published|archived),
+  `approved_at` and `created_by`; `created_by` is separate because `approved_by` cannot also mean the
+  author and D-35 wants both sides of a four-eyes edit. **§14 and D4' §11-16 should carry all three.**
+  (b) ***A broadcast has a start and no end.*** `GET /v1/content/broadcasts` serves the announcements
+  "currently in force" (US-14.8) and §14 gives `scheduled_at` alone — so either every banner is
+  permanent or the rule is unimplementable as printed. `ends_at` + `ck_broadcasts_window` added
+  (1307). **§14 should carry it.**
+  (c) ***AL-28's carousel has no table anywhere.*** "3 client-paged slides (strings/illustrations
+  served by `content-svc`, localised Si/Ta/En)" and BR-25.1 repeat it; no DDL source prints a row for
+  it. `content.notification_templates` is keyed by one string per key per language with no
+  illustration and no ordering, so putting six slides there would mean twelve invented template keys
+  and no way to say which slide is second. `content.onboarding_slides` (1307) is the table and 1903
+  is its seed. **D4' §11-16 should carry it.**
+  (d) ***The trilingual rule had a schema-level expression for broadcasts and none for templates.***
+  C005 landed `ck_broadcasts_trilingual` and called it "the platform's trilingual rule made a schema
+  constraint"; the equivalent for a template is over the *set* of rows sharing a `(template_key,
+  version)`, which a CHECK cannot see. 1307 adds `trg_notification_templates_trilingual`, a
+  `DEFERRABLE INITIALLY DEFERRED` constraint trigger that counts languages at COMMIT — which is also
+  what makes 1902's twelve-row seed and this service's three-INSERT publish both valid, and what makes
+  deleting one language of a live version impossible while withdrawing the whole version stays
+  possible. **§14 should print it beside C005's.**
+  (e) ***`GET /v1/content/faq` is in the C045 deliverables and D3' files FAQ under support-svc.***
+  Both are right and they are two surfaces: C053's own fence says "FAQ content is owned by
+  content-svc; support-svc serves and filters it, it does not author it". Added to `content.yaml` as
+  the authored source, Bearer-gated; `GET /v1/support/faq` stays C053's app-facing read over the same
+  rows. **D3' should say which is which.**
+  (f) ***`content.faq_articles` has no key linking the three translations of one article***, so FAQ
+  *authoring* is not implementable and is **not implemented**. The three languages are sibling rows
+  with a generated UUID each, and a trilingual editor has nothing to address; there is also no admin
+  FAQ screen in D2' and no route in D3'. Migration 1902's twelve rows are the day-0 set. **An
+  `article_key TEXT` (or a parent table) is needed before anybody builds the editor** — see "what the
+  next components need".
+  (g) ***No spec defines the placeholder syntax.*** §20 seeds `{{pickup}} → {{dropoff}}` and D6'
+  I-29.2 seeds `{{link}}`, and that is the whole corpus. `TemplatePlaceholders` is where it is written
+  down, and the **cross-language consistency rule is this component's invention**, argued at its
+  declaration: three of the four seeded templates interpolate a tracking link, and a Sinhala body that
+  lost `{{link}}` in translation is an SMS with no link sent to the one recipient who has no app to
+  find another way in. Both directions are refused (a dropped placeholder loses a value, an invented
+  one is delivered literally). **D6' §7 or D3' should pin the syntax.**
+  (h) ***`GET /v1/content/templates/{key}` is marked "mTLS internal" and is the one internal route on
+  this platform the gateway forwards.*** Every other such family lives under `/v1/internal/**`, which
+  `gateway-routes.json` refuses at the edge; D3' prints this one under `/v1/content`, and the
+  `content` route forwards that whole prefix. So the guard is in the service (`Content:InternalApiKey`,
+  fixed-time compare, `404` like the gateway's). **D3' should move the path to
+  `/v1/internal/content/templates/{key}`**; until then the route is only as private as that key.
+  (i) ***`content.broadcasts.audience`'s own column comment names a predicate no token can answer.***
+  C005's example is `{"role":"driver","city":"colombo"}`. This service serves the in-app banner, where
+  the only facts about the caller are in the bearer — `role` and `app` — because
+  `iam.users.operating_city_code` is a column in another bounded context. Publishing a `city` selector
+  would leave it evaluable by nobody, so the **publish path refuses any key but those two** rather
+  than the read path ignoring one: a banner an admin believes is targeted and the whole island
+  receives is the failure being avoided. **City targeting needs the city on the token or a
+  cross-context read; neither exists.** notification-svc's push path *does* have the user row and can
+  widen the vocabulary — at which point this service's validator must widen with it.
+  (j) ***The approval step and the version history had no routes*** (`POST /v1/admin/content/{key}/approve`,
+  `GET /v1/admin/content/{key}`). A draft nobody can read is a draft nobody can approve. **D3' should
+  print both.**
+  (k) ***D7' §4.2 gives this service one variable for a service with nine settings.*** `Cache__Ttl`=300
+  is honoured **exactly as spelled** — unprefixed, in seconds — because that is what
+  `.env.app.example` ships and an operator who set it must not be setting a key nothing reads;
+  `Content:CacheTtl` wins when both are present, and a test pins both directions. **The row needs
+  rewriting** against `ContentOptions`.
+  (l) ***`content:invalidate` is not in ADD §9.4's Redis key space*** — another key family added
+  outside it, after C033's, C039's and C041's. Added to `RedisKeys` with the argument for why the
+  *cache* is local and only the *purge* is shared.
+  (m) ***"Fare-tariff display strings" is in the scope line and there is nothing to serve.***
+  `fares.tariffs` (1001) holds numbers and a canonical `vehicle_type`; the display string for a tier is
+  that type's label, which lives in the apps' own resource files (AL-09's vocabulary, D2' §A) and in no
+  `content.*` table, and no spec prints one. **Nothing was invented for it.** If the intent is that
+  vehicle-type labels become server-served content, that is a table, a seed and a contract change —
+  and it would duplicate strings the apps must already ship for offline use (`mobile_db_schema.md`
+  §1.7).
+  (n) ***`_shared.yaml`'s `Lang` parameter documents a fallback step this service cannot take.*** "the
+  requested language → the caller's profile language → `en`": the middle step is
+  `iam.users.language`, iam-svc's column, and reading it per banner would put an availability
+  dependency on iam-svc on a cached read. The apps store the profile language at onboarding (AL-26)
+  and send it as `?lang=`, so the step is the client's. **The parameter's description should say so.**
+  (o) ***`content.command_log` is the fifth per-service replay log, and D4' §5 still prints only
+  `rides.command_log`.*** The same micro-change-set C020 (0104), C021 (0307), C034 (0710) and C033
+  (0803) raised. D3' §0 requires an `Idempotency-Key` on every POST mutation and `content.yaml`
+  declares it required on both POSTs here, so the alternative was a header the service accepted and
+  ignored. **`POST /v1/admin/content/broadcasts` is why the table exists rather than being argued
+  away**: an approve is self-limiting (a second one is a `409` by the version's own status) and a
+  purge is idempotent by nature — it opts out with `AllowMissingIdempotencyKey`, matching its
+  `x-idempotency-exempt` — but a retried publish puts a **second identical banner** in front of every
+  user on the platform and no natural key would collide. **D4' §5 should print one command-log table
+  per bounded context with idempotent POSTs.**
+  (q) ***`?&` is a key-presence test, and three constraints leaned on it for a value rule.***
+  C005's `ck_broadcasts_trilingual` (and this component's first draft of the slide constraints) are
+  `x ?& array['si','ta','en']`, which `{"si":null,"ta":"","en":"ok"}` satisfies — and a blank message
+  in one language is exactly what the constraint was written to prevent. Worse, content-svc's reader
+  *refuses* such a row (it throws rather than pretend two languages are three), so one would 500 a
+  whole list endpoint — including the **public, pre-sign-in** carousel. 1307 adds
+  `content.is_trilingual_text(JSONB)` (an IMMUTABLE SQL function: non-blank *string* per language) and
+  uses it for both slide columns and for `ck_broadcasts_trilingual_strict`, the latter `NOT VALID`
+  because that column predates this script. **§14's constraint should be the strict form.**
+  (p) ***`404` on `PUT /v1/admin/content/{key}` had no meaning until now.*** `content.yaml` declared it
+  and an upsert would never produce it. **An unknown key is a 404, not a new template**: a key is only
+  content if some service renders it — C005's own note on the four seeded keys says "inventing further
+  keys would put strings in the database that no service resolves" — so a new key ships in a migration
+  beside the code that sends it, and this route edits the wording of one that exists.
+
+  **Decisions —** (1) **The cache is in process; only the purge crosses replicas.** Every dataset is
+  tiny (three cities, six slides, twelve FAQ rows, four template keys) and the template read is on the
+  hottest cold path the platform has — E-01 renders one template per candidate driver per ride offer.
+  Redis per render would swap a 1 ms query for a 1 ms network hop; a dictionary lookup swaps it for a
+  pointer dereference. What must cross replicas is the *invalidation*, and that is one pub/sub message
+  carrying a dataset list. `CacheInvalidationTests` stands up two services against one Postgres and
+  one Redis, which is the deployment shape the DoD sentence is about — the replica that published the
+  change is not the one notification-svc happens to call.
+  (2) **Expiry is measured on `TimeProvider` and nothing sweeps.** An entry is checked when it is
+  read, so a five-minute TTL is testable in a millisecond with a `FakeTimeProvider` — and the test
+  asserts 299 s stale, 301 s fresh, which is the *documented* TTL and not an approximation of it.
+  (3) **The ETag is a digest of the serialised payload, computed once per cache load.** Not per
+  request (it would hash the same bytes on every call) and not `max(updated_at)` + a row count (which
+  would miss a change that reused a timestamp). This is what forced `ORDER BY sort_order, code` on the
+  cities read: `sort_order` defaults to 0, ties are therefore normal, and an unstable row order would
+  change the validator on every read and defeat the caching AL-27 depends on.
+  (4) **The carousel returns all three languages at once and has no `lang` parameter.** The language
+  picker is on the same screen (SCR-DA/DI-002), so the client re-renders from the response it already
+  holds when the reader switches language. A `lang` parameter would mean a round trip per toggle on
+  the slowest connection any user of this platform has — and the endpoint is public for the same reason
+  the city list is: the screen precedes sign-in entirely.
+  (5) **The seeded carousel copy is content, not spec.** US-1.2a names four driver themes for three
+  slides, so dispatch and Directional Travel share the middle slide — they are the same promise (how
+  work reaches you) and splitting them would push the wallet off a screen the story puts it on. The
+  passenger deck has no per-slide list anywhere; the three chosen are what SCR-PA-004/008/010 do. The
+  Sinhala and Tamil reuse 1902's vetted vocabulary (`පසුම්බිය`/`பணப்பை`, `දෛනික ගාස්තුව`/`தினசரி
+  கட்டணம்`) so two screens do not name the same thing differently. **1903 says in its header that this
+  is copy for the Admin Portal to edit** — which is the whole point of serving it from a table.
+  (6) **Draft → approve is the default and `Content:PublishOnEdit` is the escape hatch.** The response's
+  `status` always says which happened, so a portal never assumes; the switch is announced at start-up
+  because it silently removes D-35's second pair of eyes. One approver per version: a second approval
+  is `409`, not an overwrite of who signed it off, and a version that does not exist is `404` — told
+  apart by reading the version's own status.
+  (7) **A broadcast's window is applied per request, not at load time.** The cache holds every row
+  that has not ended; the start and end are compared with the clock on each read. Caching the filtered
+  answer would hold a scheduled banner back for up to a TTL after its start time *and* would need a
+  cache entry per role/app combination. Start inclusive, end exclusive, so two back-to-back
+  broadcasts are never both up.
+  (8) **Presentation order is Sinhala-first (AL-26); fallback order is English-first.** Two different
+  questions — what to draw, and what to serve when the asked-for language is genuinely absent — and one
+  shared order would answer one of them wrongly. A `?lang=` value is normalised rather than matched:
+  `si-LK`, `ta_IN` and `SI` all resolve, which is the difference between a working picker and one that
+  quietly does nothing for a client that sent its device locale.
+  (9) **`Content:InternalApiKey` unset leaves the template read *open*, not unmapped** — the opposite
+  of registry-svc, trip-state-svc and provisioning-svc. A template body with placeholders is not a
+  secret, and unmapping the route would stop every notification on the platform rendering with the
+  failure surfacing inside notification-svc. Logged at warning level with the disclosure named. The
+  purge route *is* unmapped without the key, because that one is a write and an unauthenticated
+  cache-drop is a cheap way to make a service query its database on every request.
+  (10) **Authoring is Admin and Super Admin only.** D3' says "admin" and URD §2.3's content row gives
+  the other four back-office roles no editorial cell; a Support CSR rewriting every push notification
+  on the platform is not a permission any spec grants. The narrower gate widens later without a
+  migration.
+  (11) **The audit row is admin-bff's, not this service's.** D-35's log is `audit.events` and every
+  admin call arrives through that BFF (C065), which records the actor and both images for the whole
+  portal; a second row written here would double-count every edit and leave the two copies to
+  disagree. What this service contributes is the version history — a permanent, queryable after-image —
+  plus an information-level line naming the actor and version.
+  (12) **DDL and seed are two files.** 1307 is DDL only, 1903 is the carousel seed, per `db/CLAUDE.md`'s
+  `19xx` range for reference data every environment needs. 1307 sorts before 1902/1903, so the
+  trilingual trigger exists when the seeds run — which is what proves it accepts a three-language
+  insert in one statement.
+
+  (13) **No caller-supplied string reaches a cache key, and the one that does is bounded.** The FAQ is
+  cached per *language* and the category filter is applied to the cached rows. Keyed by
+  `(language, category)` — the obvious shape, and what the first pass did — `?category=*` and "no
+  category" collide on any sentinel a category could also contain, so one request with that value
+  serves **every** reader an empty FAQ for a whole TTL; and a loop over random categories grows the
+  cache without bound, because expiry is lazy and nothing sweeps. Three entries hold every FAQ article
+  on the platform, so there was nothing to gain by splitting them. The template key on the internal
+  render route is the one caller-supplied key that remains (negative results are cached too), and
+  `Content:MaxCacheEntries` (1 000, three orders of magnitude of headroom) is its backstop: at the
+  ceiling, expired entries are dropped and reads are served uncached.
+  (14) **The broadcast load is bounded in time as well as in rows.** It reaches exactly one
+  `CacheTtl` into the future — far enough that a banner starting inside the life of the cache entry is
+  already loaded when it does, and no further, because rows come back newest-scheduled first and a
+  batch scheduled for next month would otherwise fill `MaxBroadcasts` and push today's live banner out
+  of the answer. Both list reads now log when the cap bites; the first pass truncated the broadcast
+  list silently, which contradicted this file's own "no silent caps".
+  (15) **`If-None-Match` is compared weakly, as RFC 9110 §13.1.2 requires.** An intermediary that
+  re-encodes the body (gzip) weakens the validator it passes on, so a strict compare would leave every
+  client behind such a proxy refetching the whole city list for ever — AL-27's caching, quietly off.
+
+  **What the next components need —**
+  **For C051 (notification-svc) —** `GET /v1/content/templates/{key}?lang=` with
+  `X-MageRide-Internal-Key: $Content__InternalApiKey`. **You render, this service does not**: the
+  response is `{key, language, version, title?, body, placeholders}` with `{{name}}` markers intact,
+  and `placeholders` is there so you can check you hold every variable before you substitute. `language`
+  is **what was actually served**, which is the requested one unless a row was written around this
+  service — compare it if the difference matters to you. The four keys that exist are `ride_offer`,
+  `package_on_the_way`, `proxy_ride_link`, `pickup_confirm_link`; **a new key is a migration, not an
+  admin action** (gap (p)), so add yours in the same change set as the code that sends it, in all
+  three languages, or 1307's trigger rejects it. Broadcast delivery is yours too: `content.broadcasts`
+  holds the audience selector, and if you widen it beyond `role`/`app` this service's publish
+  validator has to widen with it (gap (i)).
+  **For C053 (support-svc) —** `GET /v1/content/faq?lang=&category=` is the authored source; filter and
+  shape it for US-16.1. `GET /v1/support/faq/{articleId}` maps to `content.faq_articles.id`, which is
+  **one language of one article** — there is no key grouping the three translations (gap (f)), so
+  "the same article in Tamil" is not expressible today. If you need it, add `article_key TEXT` in your
+  own migration and backfill it from `(category, sort_order)`; the twelve seeded rows are one article
+  per category.
+  **For C065 (admin-bff) —** two things. (1) After **any** write to `config.operating_cities`, call
+  `POST /v1/internal/content/cache/purge` with `{"datasets":["cities"]}` and the internal key —
+  **nothing calls it today**, and without it a newly launched city waits out `Cache__Ttl` on every
+  replica, which is a thin version of AL-27's "no app release required". (2) The Admin Portal content
+  screen is `GET /v1/admin/content/{key}` (version history, `current`), `PUT` (draft), `POST
+  …/approve`, and `POST /v1/admin/content/broadcasts`. **The `audit.events` row for each is yours**;
+  this service writes none.
+  **For C067+/C085+ (the apps) —** `GET /v1/content/onboarding/{audience}` is **public** and returns
+  **all three languages per slide**, so the AL-28/US-1.2 pager needs no refetch when the language
+  toggle on the same screen changes. `illustrationRef` is an app-bundled asset key
+  (`onboarding/driver-vehicle`), not a URL, unless a deployment sets `Content__AssetBaseUrl` — so ship
+  six assets under those names and treat an absolute `https` value as a remote override. Both public
+  reads carry an ETag and `max-age=300`; honour them.
+  **For C118 (contract tests) —** `content.yaml` gained six operations and six schemas, and one
+  existing response gained a required field (`NotificationTemplate.placeholders`). Three status codes
+  were corrected against what the service actually answers, because the contract is what you assert:
+  `GET /v1/content/templates/{key}` and `POST /v1/internal/content/cache/purge` answer **404, never
+  401** (the internal plane is unmappable rather than unauthorized — what the gateway does for
+  `/v1/internal/**`), and `PUT /v1/admin/content/{key}` can answer **409** when two edits race for the
+  same version number, which the primary key rather than a lock arbitrates.
+  **Build host —** Docker for two Testcontainers fixtures (Postgres, Redis); the replica stack stayed
+  down throughout. `Content.Api.Tests` takes ~55 s. **No new NuGet reference** — everything is already
+  pinned centrally or arrives through `MageRide.Shared`.

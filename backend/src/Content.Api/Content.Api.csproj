@@ -1,0 +1,52 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    Content.Api (C045 content-svc) — server-side i18n and public reference data.
+
+    Four datasets, one rule. `content.notification_templates` (the Si/Ta/En bodies notification-svc
+    renders, D-26), `content.faq_articles` (US-16.1's source, which support-svc serves and does not
+    author), `content.broadcasts` (US-14.8's in-app banner) and the two public reference sets that
+    feed the first-run screen — `config.operating_cities` (AL-27) and `content.onboarding_slides`
+    (AL-28's carousel). The rule is CLAUDE.md's: every user-facing string exists in Sinhala, Tamil
+    and English, or it is not publishable.
+
+    FENCE 1: a template or a broadcast missing a language is invalid, and that is enforced twice —
+    here, with a field-level `validation-failed` naming the missing languages, and in the database
+    (migration 1307's deferred constraint trigger, C005's `ck_broadcasts_trilingual`), so a psql
+    session and a later component are bound by it too.
+    FENCE 2: only `is_active` operating cities are served publicly. The filter is inside the SQL,
+    not applied to its result.
+
+    Read-heavy and write-rare, so everything is cached in process for `Cache:Ttl` (D7' §4.2, 300 s)
+    and every publish purges every replica over Redis pub/sub. Postgres is the only source of truth;
+    the cache holds no fact that is not in a row.
+
+    No Kafka, no outbox, no command log on the two idempotent-by-nature POSTs — see
+    ContentApplication for why each is off.
+
+    Verify: dotnet test backend/src/Content.Api.Tests -c Release
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.Content</RootNamespace>
+    <AssemblyName>MageRide.Content.Api</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <UserSecretsId>mageride-content-api</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MageRide.Shared\MageRide.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Dapper" />
+    <PackageReference Include="Npgsql" />
+    <!-- The cross-replica purge is a Redis pub/sub channel; the cache itself is in process. -->
+    <PackageReference Include="StackExchange.Redis" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Content.Api.Tests" />
+  </ItemGroup>
+
+</Project>

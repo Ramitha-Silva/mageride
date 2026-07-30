@@ -1,0 +1,59 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    C045 verify target: dotnet test backend/src/Content.Api.Tests -c Release
+
+    Real Postgres and real Redis. Every claim this component makes is a claim about something
+    outside the process:
+
+      * the trilingual fence is enforced twice — a field-level rejection here and migration 1307's
+        DEFERRABLE INITIALLY DEFERRED constraint trigger at COMMIT, which only a real server has;
+      * "only active operating cities are served" is `WHERE is_active` in SQL;
+      * "a template change is visible within the documented cache TTL" is a statement about a TTL
+        and a Redis pub/sub purge across two independently built instances, which is what
+        CacheInvalidationTests stands up;
+      * the seeded Si/Ta/En content (1902, 1903) is what the endpoints serve, so the tests assert
+        the real Sinhala and Tamil strings rather than fixtures of their own.
+
+    Microsoft.NET.Sdk.Web, not Microsoft.NET.Sdk: the harness builds a WebApplication.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.Content.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <OutputType>Exe</OutputType>
+    <!--
+      xUnit1041: collection-fixture ctor args are consumed through the primary constructor.
+      xUnit1051: every test is bounded by its own harness lifetime, so threading
+                 TestContext.Current.CancellationToken through each call would add noise without
+                 changing behaviour. Matches Dispatch/TripState/FleetHealth.Tests.
+    -->
+    <NoWarn>$(NoWarn);xUnit1041;xUnit1051</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+    <PackageReference Include="Dapper" />
+    <PackageReference Include="Npgsql" />
+    <PackageReference Include="StackExchange.Redis" />
+    <!-- FakeTimeProvider: the definition of done is written in terms of a 300-second TTL and no
+         suite can wait for it. The cache measures expiry on TimeProvider precisely so this works. -->
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Content.Api\Content.Api.csproj" />
+    <!-- C010: the Postgres and Redis fixtures, so this suite runs the same server builds the dev
+         stack does and applies the same migration set. -->
+    <ProjectReference Include="..\MageRide.TestKit\MageRide.TestKit.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

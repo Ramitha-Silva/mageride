@@ -910,7 +910,10 @@ check_eq "12 billing tables" "12" \
   "SELECT count(*) FROM information_schema.tables WHERE table_schema='billing' AND table_type='BASE TABLE';"
 check_eq "4 subscription tables" "4" \
   "SELECT count(*) FROM information_schema.tables WHERE table_schema='subscription' AND table_type='BASE TABLE';"
-check_eq "3 comms, 2 docs, 1 support, 3 content, 1 audit, 2 pdpa, 3 spatial tables" "15" \
+# 5 content, not C005's 3: `content.onboarding_slides` (AL-28's carousel copy, which is
+# content-svc's content) and `content.command_log` (R-14, one per bounded context) are C045's, both
+# added by 1307 in the same schema.
+check_eq "3 comms, 2 docs, 1 support, 5 content, 1 audit, 2 pdpa, 3 spatial tables" "17" \
   "SELECT count(*) FROM information_schema.tables
     WHERE table_schema IN ('comms','docs','support','content','audit','pdpa','spatial')
       AND table_type='BASE TABLE';"
@@ -1532,6 +1535,125 @@ check_fleet_eq "the alerted fleet sees its own alert" "1" "44444444-4444-4444-44
   "SELECT count(*) FROM telemetry.fleet_health_alerts_fleet;"
 check_fleet_eq "another fleet sees none of it" "0" "$FLEET_1" \
   "SELECT count(*) FROM telemetry.fleet_health_alerts_fleet;"
+
+# ---------------------------------------------------------------------------------------
+# C045 — content: the publishing workflow, the broadcast window, the carousel (1307, 1903)
+# ---------------------------------------------------------------------------------------
+step "Objects owned by C045 (D-26, AL-28)"
+check_eq "content.onboarding_slides exists" "1" \
+  "SELECT count(*) FROM information_schema.tables
+    WHERE table_schema='content' AND table_name='onboarding_slides';"
+check_eq "the trilingual template rule is a DEFERRED constraint trigger" "1" \
+  "SELECT count(*) FROM pg_trigger
+    WHERE tgname='trg_notification_templates_trilingual' AND tgdeferrable AND tginitdeferred;"
+for c in status approved_at created_by; do
+  check_eq "content.notification_templates.$c exists" "1" \
+    "SELECT count(*) FROM information_schema.columns
+      WHERE table_schema='content' AND table_name='notification_templates' AND column_name='$c';"
+done
+check_eq "content.broadcasts carries the other end of the window" "2" \
+  "SELECT count(*) FROM information_schema.columns
+    WHERE table_schema='content' AND table_name='broadcasts'
+      AND column_name IN ('ends_at','created_by');"
+check_eq "content.command_log exists (R-14, one per bounded context)" "1" \
+  "SELECT count(*) FROM information_schema.tables
+    WHERE table_schema='content' AND table_name='command_log';"
+check_eq "content.command_log has no aggregate-id column" "0" \
+  "SELECT count(*) FROM information_schema.columns
+    WHERE table_schema='content' AND table_name='command_log'
+      AND column_name IN ('ride_id','broadcast_id');"
+check_eq "the JSONB trilingual test is one IMMUTABLE SQL function" "sql|i" \
+  "SELECT l.lanname||'|'||p.provolatile::text FROM pg_proc p
+     JOIN pg_language l ON l.oid = p.prolang
+     JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname='content' AND p.proname='is_trilingual_text';"
+
+step "AL-28 — the first-run carousel is seeded, three slides per audience"
+check_eq "3 driver + 3 passenger slides" "driver=3,passenger=3" \
+  "SELECT string_agg(audience||'='||n, ',' ORDER BY audience) FROM (
+     SELECT audience, count(*)::text AS n FROM content.onboarding_slides
+      WHERE is_active GROUP BY audience) s;"
+check_eq "every slide carries a headline and a body in all three languages (D-26)" "0" \
+  "SELECT count(*) FROM content.onboarding_slides
+    WHERE NOT (title_by_lang ?& array['si','ta','en'])
+       OR NOT (body_by_lang ?& array['si','ta','en']);"
+check_eq "the Sinhala driver wallet slide survived three migration passes intact" "1" \
+  "SELECT count(*) FROM content.onboarding_slides
+    WHERE audience='driver' AND slot=3 AND title_by_lang->>'si' LIKE 'එක් පසුම්බියක්%';"
+check_rejects "a fourth slide cannot take an occupied slot" \
+  "INSERT INTO content.onboarding_slides(audience, slot, illustration_ref, title_by_lang, body_by_lang)
+     VALUES ('driver', 1, 'x', '{\"si\":\"a\",\"ta\":\"b\",\"en\":\"c\"}'::jsonb,
+                             '{\"si\":\"a\",\"ta\":\"b\",\"en\":\"c\"}'::jsonb);"
+check_rejects "a slide missing Tamil is rejected (D-26)" \
+  "INSERT INTO content.onboarding_slides(audience, slot, illustration_ref, title_by_lang, body_by_lang)
+     VALUES ('passenger', 9, 'x', '{\"si\":\"a\",\"en\":\"c\"}'::jsonb,
+                                  '{\"si\":\"a\",\"ta\":\"b\",\"en\":\"c\"}'::jsonb);"
+# `?&` (C005's form) admits these three: the keys are present and the *values* are not strings a
+# reader can show anybody. content.is_trilingual_text is what closes it.
+check_rejects "a slide with a blank language is rejected, not just a missing key" \
+  "INSERT INTO content.onboarding_slides(audience, slot, illustration_ref, title_by_lang, body_by_lang)
+     VALUES ('passenger', 9, 'x', '{\"si\":\"  \",\"ta\":\"b\",\"en\":\"c\"}'::jsonb,
+                                  '{\"si\":\"a\",\"ta\":\"b\",\"en\":\"c\"}'::jsonb);"
+check_rejects "a slide with a null language is rejected" \
+  "INSERT INTO content.onboarding_slides(audience, slot, illustration_ref, title_by_lang, body_by_lang)
+     VALUES ('passenger', 9, 'x', '{\"si\":null,\"ta\":\"b\",\"en\":\"c\"}'::jsonb,
+                                  '{\"si\":\"a\",\"ta\":\"b\",\"en\":\"c\"}'::jsonb);"
+check_rejects "a slide whose language is a number is rejected" \
+  "INSERT INTO content.onboarding_slides(audience, slot, illustration_ref, title_by_lang, body_by_lang)
+     VALUES ('passenger', 9, 'x', '{\"si\":1,\"ta\":\"b\",\"en\":\"c\"}'::jsonb,
+                                  '{\"si\":\"a\",\"ta\":\"b\",\"en\":\"c\"}'::jsonb);"
+check_rejects "a broadcast with a blank language is rejected (ck_broadcasts_trilingual_strict)" \
+  "INSERT INTO content.broadcasts(message_by_lang)
+     VALUES ('{\"si\":\"\",\"ta\":\"b\",\"en\":\"c\"}'::jsonb);"
+
+step "C045 constraints actually bite"
+check_eq "every seeded template version is published with an approval timestamp" "0" \
+  "SELECT count(*) FROM content.notification_templates
+    WHERE status <> 'published' OR approved_at IS NULL;"
+# The fence, at COMMIT: two of three languages is not a template. psql -c runs one implicit
+# transaction, so the deferred trigger fires before it returns.
+check_rejects "a template published in two languages is rejected at COMMIT (D-26)" \
+  "INSERT INTO content.notification_templates(template_key, language, body)
+     VALUES ('verify_partial','en','Two of three'), ('verify_partial','si','තුනෙන් දෙක');"
+check_eq "and it left nothing behind" "0" \
+  "SELECT count(*) FROM content.notification_templates WHERE template_key='verify_partial';"
+psql_run "INSERT INTO content.notification_templates(template_key, language, body) VALUES
+            ('verify_full','en','All three'), ('verify_full','si','තුනම'), ('verify_full','ta','மூன்றும்');" \
+  >/dev/null || die "a trilingual template insert was rejected; the deferred trigger is too strict."
+check_eq "all three languages together are accepted" "3" \
+  "SELECT count(*) FROM content.notification_templates WHERE template_key='verify_full';"
+check_rejects "dropping one language of a published version is rejected (D-26)" \
+  "DELETE FROM content.notification_templates WHERE template_key='verify_full' AND language='ta';"
+psql_run "DELETE FROM content.notification_templates WHERE template_key='verify_full';" >/dev/null \
+  || die "withdrawing a whole template version was rejected; the trigger must allow 0 languages."
+check_eq "withdrawing the whole version is allowed" "0" \
+  "SELECT count(*) FROM content.notification_templates WHERE template_key='verify_full';"
+# The hole a NEW-only trigger would leave: move one language's row to a fresh version and fill that
+# version up, and the version it came *from* is left with two languages. Both pairs are checked.
+psql_run "INSERT INTO content.notification_templates(template_key, language, body) VALUES
+            ('verify_move','en','a'), ('verify_move','si','b'), ('verify_move','ta','c');" >/dev/null \
+  || die "could not seed the version-move fixture."
+check_rejects "moving one language to another version cannot leave the old version partial (D-26)" \
+  "UPDATE content.notification_templates SET version = 2
+     WHERE template_key='verify_move' AND language='ta';
+   INSERT INTO content.notification_templates(template_key, language, body, version) VALUES
+     ('verify_move','si','b2',2), ('verify_move','en','a2',2);"
+check_eq "and the original version still has all three languages" "3" \
+  "SELECT count(*) FROM content.notification_templates
+    WHERE template_key='verify_move' AND version = 1;"
+psql_run "DELETE FROM content.notification_templates WHERE template_key='verify_move';" >/dev/null \
+  || die "could not clean up the version-move fixture."
+
+check_rejects "a published version with no approval timestamp is rejected" \
+  "INSERT INTO content.notification_templates(template_key, language, body, status, approved_at)
+     VALUES ('verify_unapproved','en','x','published',NULL);"
+check_rejects "an unknown template status is rejected" \
+  "INSERT INTO content.notification_templates(template_key, language, body, status)
+     VALUES ('verify_status','en','x','live');"
+check_rejects "a broadcast whose window ends before it starts is rejected" \
+  "INSERT INTO content.broadcasts(message_by_lang, scheduled_at, ends_at)
+     VALUES ('{\"si\":\"a\",\"ta\":\"b\",\"en\":\"c\"}'::jsonb,
+             '2026-08-01T00:00:00Z','2026-07-01T00:00:00Z');"
 
 # ---------------------------------------------------------------------------------------
 printf '\n'

@@ -1,28 +1,47 @@
 openapi: 3.1.0
 
 # =============================================================================================
-# content-svc — public reference data + localised templates & broadcasts
+# content-svc — public reference data + localised templates, FAQ, broadcasts and the carousel
 # Source: specs/D3_mageride_api_contracts.md
 #           "content-svc — public reference data (/v1/config)"  (Change 6/22)
 #           "content-svc — localised templates (/v1/content)"   (D-26)
+#         specs/architecture-design-document.md §1.10 AL-28 (onboarding carousel)
 #
 # The admin-side city CRUD named in the D3 `GET /v1/config/cities` note
 # (`POST/PATCH /v1/admin/config/cities`) is an **admin-bff** surface and lives in
 # admin-bff.yaml, per that note's own wording.
+#
+# Δ C045 — six operations D3' does not print, each argued at its declaration and recorded as a
+# micro-change-set in the C045 handoff:
+#   GET  /v1/content/faq                    the deliverable's own wording; support-svc serves and
+#                                           filters it (C053) and does not author it
+#   GET  /v1/content/onboarding/{audience}  AL-28's "strings/illustrations served by content-svc"
+#   GET  /v1/admin/content/{key}            a draft nobody can read is a draft nobody can approve
+#   POST /v1/admin/content/{key}/approve    D3' calls the edit route an approval *workflow*
+#   POST /v1/admin/content/broadcasts       US-14.8's banner had a reader and no writer
+#   POST /v1/internal/content/cache/purge   the invalidation path for a writer in another service
 # =============================================================================================
 
 info:
   title: MageRide content-svc
-  version: 1.0.0
-  summary: Operating cities, notification templates and in-app broadcasts, all trilingual.
+  version: 1.1.0
+  summary: Operating cities, notification templates, FAQ, in-app broadcasts and the first-run carousel — all trilingual.
   description: |
     Everything this service returns exists in **Sinhala, Tamil and English** (D-26,
     CLAUDE.md "Trilingual resources"). `content.broadcasts.message_by_lang` carries a schema
-    constraint requiring all three (C005 decision 7) — a broadcast cannot be published in one
-    language.
+    constraint requiring all three (C005 decision 7) and `content.notification_templates` carries
+    a deferred constraint trigger to the same effect (C045, migration 1307) — a template or a
+    broadcast **cannot be published in fewer than three languages**.
 
-    `GET /v1/config/cities` is deliberately public and cacheable (ETag / `Cache-Control`,
-    D6' §7): launching a new city is a database row, not an app release.
+    `GET /v1/config/cities` and `GET /v1/content/onboarding/{audience}` are deliberately public
+    and cacheable (ETag / `Cache-Control`, D6' §7): they feed the same first-run screen
+    (SCR-DA/DI-002, SCR-PA/PI-002), before any sign-in exists, and launching a new city is a
+    database row rather than an app release.
+
+    **Caching.** Every read here is served from an in-process cache with a `Cache:Ttl` (D7' §4.2,
+    300 s) lifetime, invalidated across replicas the moment an admin publishes. So a template
+    edit reaches notification-svc immediately in a healthy deployment and within the TTL in the
+    worst case — never later.
   contact:
     name: MageRide Platform Engineering
     url: https://mageride.lk
@@ -40,7 +59,7 @@ tags:
   - name: config
     description: Public launch-configuration reference data.
   - name: content
-    description: Localised notification templates and in-app announcements.
+    description: Localised notification templates, FAQ, in-app announcements and onboarding copy.
 
 paths:
 
@@ -80,14 +99,77 @@ paths:
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
       x-error-codes: [internal-error]
 
+  /v1/content/onboarding/{audience}:
+    get:
+      operationId: listOnboardingSlides
+      summary: The three feature-carousel slides for one app's first-run screen.
+      description: |
+        **Δ C045.** AL-28 / BR-25.1 put a 3-slide feature carousel above the language and city
+        selectors on SCR-DA/DI-002 (mirroring SCR-PA/PI-002, US-1.2) with "strings/illustrations
+        served by `content-svc`, localised Si/Ta/En" — and D3' prints no route for it.
+
+        Public and cacheable for the same reason as `/v1/config/cities`: it is drawn on the same
+        pre-sign-in screen.
+
+        **All three languages are returned in one answer, not the requested one.** The language
+        picker is on this very screen, so the client re-renders the slides from the response when
+        the reader switches language instead of re-fetching. There is deliberately no `lang`
+        parameter.
+
+        `illustrationRef` is an app-bundled asset key (`onboarding/driver-wallet`) unless the
+        deployment sets an asset base URL, in which case it is an absolute `https` URL. This
+        service serves the reference and never image bytes.
+      tags: [content]
+      security: []
+      parameters:
+        - name: audience
+          in: path
+          required: true
+          description: Which app's first-run screen.
+          schema:
+            type: string
+            enum: [driver, passenger]
+      responses:
+        '200':
+          description: Active slides for the audience, in pager order.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [slides]
+                properties:
+                  slides:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OnboardingSlide'
+          headers:
+            ETag:
+              description: Strong validator; clients revalidate rather than refetch.
+              schema:
+                type: string
+            Cache-Control:
+              schema:
+                type: string
+              example: public, max-age=300
+        '304':
+          description: Not modified.
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, internal-error]
+
   /v1/content/templates/{key}:
     get:
       operationId: renderNotificationTemplate
       summary: Resolve a notification template in one language.
       description: |
         Internal, mTLS only — notification-svc calls it while composing an FCM/APNs payload
-        (D-26, D6' I-29.2). Returns the current version of the template; every key exists in all
-        three languages, so an unsupported `lang` falls back rather than 404s.
+        (D-26, D6' I-29.2). Returns the current **published** version of the template; every key
+        exists in all three languages, so an unsupported `lang` falls back rather than 404s.
+
+        `language` is the language actually served, which is the requested one unless the stored
+        set is incomplete (only possible for rows written outside this service — the publish path
+        cannot create one). `placeholders` is the `{{name}}` set found in the body and subject, so
+        a caller can check it holds every variable before it renders.
       tags: [content]
       security:
         - mtls: []
@@ -107,10 +189,61 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/NotificationTemplate'
-        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
-        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '404':
+          description: |
+            No published version of the key — **or** the caller is not entitled to the internal
+            plane. The two are deliberately the same answer: it is what the gateway returns for
+            `/v1/internal/**`, and a caller who may not read this surface should not be able to map
+            it. There is no `401` on this operation.
+          content:
+            application/problem+json:
+              schema:
+                $ref: './_shared.yaml#/components/schemas/Problem'
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
-      x-error-codes: [unauthorized, not-found]
+      x-error-codes: [not-found]
+
+  /v1/content/faq:
+    get:
+      operationId: listFaqArticles
+      summary: List FAQ articles in one language.
+      description: |
+        **Δ C045.** The C045 deliverable names `GET /v1/content/faq` and the C053 fence says "FAQ
+        content is owned by content-svc; support-svc serves and filters it, it does not author
+        it" — so this is the authored source and `GET /v1/support/faq` (US-16.1) is the app-facing
+        surface over it.
+
+        Articles are stored one row per language (`content.faq_articles`), so this returns the
+        rows for the resolved language, ordered by `sortOrder` then `category`.
+      tags: [content]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/Lang'
+        - name: category
+          in: query
+          required: false
+          description: Restrict to one category, e.g. `wallet`, `daily_fee`, `booking`.
+          schema:
+            type: string
+            maxLength: 60
+      responses:
+        '200':
+          description: FAQ articles in the resolved language.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, language]
+                properties:
+                  language:
+                    $ref: './_shared.yaml#/components/schemas/LanguageCode'
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FaqArticle'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized]
 
   /v1/content/broadcasts:
     get:
@@ -118,7 +251,11 @@ paths:
       summary: List in-app announcements currently in force.
       description: |
         Backs the in-app announcement banner (US-14.8). Only broadcasts whose window covers
-        `now()` are returned, resolved into the requested language.
+        `now()` are returned, resolved into the requested language, newest first.
+
+        A broadcast may carry an `audience` selector; this surface applies the parts of it that
+        are decidable from the bearer — the caller's `role` and `app` — and the publish path
+        refuses a selector containing anything else, so no predicate is silently unevaluated.
       tags: [content]
       security:
         - bearerAuth: []
@@ -142,13 +279,68 @@ paths:
       x-error-codes: [unauthorized]
 
   /v1/admin/content/{key}:
+    get:
+      operationId: listNotificationTemplateVersions
+      summary: Every version of one notification template, drafts included.
+      description: |
+        **Δ C045.** Admin only. The approval workflow needs a read: a draft nobody can see is a
+        draft nobody can approve, and D3' prints only the write half.
+
+        Versions are returned newest first. `current` names the version the render path serves —
+        the highest `published` one.
+      tags: [content]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[a-z0-9]+(_[a-z0-9]+)*$'
+      responses:
+        '200':
+          description: The template's version history.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [key, versions]
+                properties:
+                  key:
+                    type: string
+                  current:
+                    type: integer
+                    format: int32
+                    minimum: 1
+                    description: The published version the render path serves. Absent if none is published.
+                  versions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TemplateVersion'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, not-found]
+
     put:
       operationId: updateNotificationTemplate
-      summary: Publish a new version of a notification template.
+      summary: Draft a new version of a notification template.
       description: |
         Admin only, audited (D-35). Templates are **versioned, not overwritten**: this creates
-        version `n+1` and makes it current. All three languages are required — a template that
-        would leave a language blank is rejected `validation-failed` (D-26).
+        version `n+1`. All three languages are required — a template that would leave a language
+        blank is rejected `validation-failed` (D-26), as is one whose three bodies do not carry
+        the same `{{placeholder}}` set, because the language that is missing a placeholder is the
+        language whose message loses the tracking link.
+
+        **An unknown `key` is `404`, not a new template.** A template key is only content if some
+        service renders it, so a new key ships in a migration beside the code that sends it; this
+        route edits the wording of one that exists.
+
+        Whether the new version goes live immediately is the deployment's policy
+        (`Content:PublishOnEdit`, default off = a draft that `POST …/approve` publishes). The
+        response says which happened.
       tags: [content]
       security:
         - bearerAuth: []
@@ -173,25 +365,180 @@ paths:
                   $ref: '#/components/schemas/TrilingualText'
       responses:
         '200':
-          description: New version published.
+          description: New version created.
           content:
             application/json:
               schema:
-                type: object
-                required: [key, version]
-                properties:
-                  key:
-                    type: string
-                  version:
-                    type: integer
-                    format: int32
-                    minimum: 1
+                $ref: '#/components/schemas/TemplateVersionRef'
         '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
         '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
         '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
         '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409':
+          description: |
+            Another edit created the same version number first. Versions are allocated by the
+            primary key rather than by a lock, so the loser of a race is told rather than silently
+            dropped — re-read the history and submit again.
+          content:
+            application/problem+json:
+              schema:
+                $ref: './_shared.yaml#/components/schemas/Problem'
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
-      x-error-codes: [validation-failed, unauthorized, forbidden, not-found]
+      x-error-codes: [validation-failed, unauthorized, forbidden, not-found, conflict]
+
+  /v1/admin/content/{key}/approve:
+    post:
+      operationId: approveNotificationTemplate
+      summary: Publish a drafted template version.
+      description: |
+        **Δ C045.** D3' calls `PUT /v1/admin/content/{key}` a "versioned template edit (approval
+        workflow)" and `content.notification_templates` carries an `approved_by` column with no
+        state to approve — so the approval step had no route. This is it.
+
+        Publishing records `approvedBy` and `approvedAt`, makes the version current for the render
+        path, and purges the cache across every replica. A version already published is a `409`
+        rather than a second approval, so the audit trail carries one approver per version.
+      tags: [content]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[a-z0-9]+(_[a-z0-9]+)*$'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version]
+              properties:
+                version:
+                  type: integer
+                  format: int32
+                  minimum: 1
+      responses:
+        '200':
+          description: The version is now current.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateVersionRef'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden, not-found, conflict]
+
+  /v1/admin/content/broadcasts:
+    post:
+      operationId: publishBroadcast
+      summary: Publish an in-app announcement.
+      description: |
+        **Δ C045.** `GET /v1/content/broadcasts` (US-14.8) had a reader and no writer in any
+        contract, and `content.broadcasts` is one of this component's three tables.
+
+        All three languages are required (`ck_broadcasts_trilingual`, C005). `startsAt` in the
+        future schedules the banner; omitted, it is live immediately. `audience` accepts only
+        `role` and `app` — the two facts this platform can decide about a bearer — so nothing is
+        published that the read surface would have to ignore.
+      tags: [content]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [messageByLang]
+              properties:
+                messageByLang:
+                  $ref: '#/components/schemas/TrilingualText'
+                audience:
+                  $ref: '#/components/schemas/BroadcastAudience'
+                startsAt:
+                  $ref: './_shared.yaml#/components/schemas/Timestamp'
+                endsAt:
+                  $ref: './_shared.yaml#/components/schemas/Timestamp'
+      responses:
+        '201':
+          description: Published.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Broadcast'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden]
+
+  /v1/internal/content/cache/purge:
+    post:
+      operationId: purgeContentCache
+      summary: Drop cached content after a write made elsewhere.
+      description: |
+        **Δ C045.** Internal, mTLS only. Every write *this* service makes purges its own cache
+        already; this exists for the one dataset it serves and does not own — the launch cities,
+        whose CRUD D3' assigns to **admin-bff** (`POST/PATCH /v1/admin/config/cities`). Without
+        it a newly launched city waits out `Cache:Ttl` on every replica, which is the difference
+        between "no app release needed" and "no app release needed, in five minutes".
+
+        Purging is idempotent and carries no body beyond the dataset name, so it needs no
+        `Idempotency-Key` — replaying it drops an already-dropped cache.
+      tags: [content]
+      security:
+        - mtls: []
+      x-idempotency-exempt: >-
+        Purging a cache is idempotent by nature; a replay drops an already-empty cache. There is
+        no state to replay a response from.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                datasets:
+                  type: array
+                  description: Which caches to drop. Absent or empty = all of them.
+                  items:
+                    type: string
+                    enum: [cities, templates, faq, broadcasts, onboarding]
+      responses:
+        '202':
+          description: Accepted; the purge is broadcast to every replica.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [purged]
+                properties:
+                  purged:
+                    type: array
+                    items:
+                      type: string
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '404':
+          description: |
+            The caller is not entitled to the internal plane, or the deployment has no
+            `Content:InternalApiKey` and the route is unmapped. `404` for the same reason the
+            gateway answers it for `/v1/internal/**`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: './_shared.yaml#/components/schemas/Problem'
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, not-found]
 
 components:
   securitySchemes:
@@ -236,7 +583,7 @@ components:
 
     NotificationTemplate:
       type: object
-      required: [key, language, version, body]
+      required: [key, language, version, body, placeholders]
       properties:
         key:
           type: string
@@ -250,6 +597,112 @@ components:
           type: string
         body:
           type: string
+        placeholders:
+          type: array
+          description: The `{{name}}` variables this rendering expects, in first-seen order.
+          items:
+            type: string
+
+    TemplateVersionRef:
+      type: object
+      description: What an admin write did.
+      required: [key, version, status]
+      properties:
+        key:
+          type: string
+        version:
+          type: integer
+          format: int32
+          minimum: 1
+        status:
+          $ref: '#/components/schemas/TemplateStatus'
+        approvedAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    TemplateStatus:
+      type: string
+      description: |
+        `draft` — written and not servable · `published` — servable, and current if it is the
+        highest published version · `archived`.
+      enum: [draft, published, archived]
+
+    TemplateVersion:
+      type: object
+      required: [version, status, bodyByLang, placeholders]
+      properties:
+        version:
+          type: integer
+          format: int32
+          minimum: 1
+        status:
+          $ref: '#/components/schemas/TemplateStatus'
+        titleByLang:
+          $ref: '#/components/schemas/TrilingualText'
+        bodyByLang:
+          $ref: '#/components/schemas/TrilingualText'
+        placeholders:
+          type: array
+          items:
+            type: string
+        approvedAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+        approvedBy:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        createdAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    FaqArticle:
+      type: object
+      required: [articleId, category, title, body, sortOrder]
+      properties:
+        articleId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        category:
+          type: string
+          example: wallet
+        title:
+          type: string
+        body:
+          type: string
+        sortOrder:
+          type: integer
+          format: int32
+
+    OnboardingSlide:
+      type: object
+      description: One carousel slide, in all three languages at once (AL-28).
+      required: [slot, illustrationRef, title, body]
+      properties:
+        slot:
+          type: integer
+          format: int32
+          minimum: 1
+          description: 1-based position in the pager.
+        illustrationRef:
+          type: string
+          description: App-bundled asset key, or an absolute https URL if the deployment sets an asset base.
+          example: onboarding/driver-wallet
+        title:
+          $ref: '#/components/schemas/TrilingualText'
+        body:
+          $ref: '#/components/schemas/TrilingualText'
+
+    BroadcastAudience:
+      type: object
+      description: |
+        Who the announcement is for. Both members are optional and are ANDed; an empty selector
+        is everybody. Deliberately limited to the two facts a bearer carries — a `city` predicate
+        is refused at publish time rather than ignored at read time, because
+        `iam.users.operating_city_code` is not on the token (C045 handoff).
+      additionalProperties: false
+      properties:
+        role:
+          type: string
+          description: One of the nine canonical roles (AL-06).
+          example: driver
+        app:
+          type: string
+          enum: [passenger, driver, admin, fleet]
 
     Broadcast:
       type: object
@@ -264,3 +717,5 @@ components:
           $ref: './_shared.yaml#/components/schemas/Timestamp'
         endsAt:
           $ref: './_shared.yaml#/components/schemas/Timestamp'
+        audience:
+          $ref: '#/components/schemas/BroadcastAudience'
