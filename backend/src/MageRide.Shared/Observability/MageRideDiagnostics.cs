@@ -185,6 +185,86 @@ public static class MageRideDiagnostics
         Meter.CreateHistogram<double>("mageride.positions.ingest.latency", "ms",
             "Time from a sample's GNSS instant to it landing on its cell stream.");
 
+    // --- persistence-writer-svc (C040): the durable write path (T-06, T-10) ----------------------
+    // ADD §9.5's write path is a batch pipeline, so the signals that matter are throughput, the
+    // ratio that says how much of it is replay, and the two things that mean it has fallen behind.
+
+    /// <summary>Rows the <c>telemetry.positions</c> hypertable accepted.</summary>
+    public static readonly Counter<long> TelemetryRowsWritten =
+        Meter.CreateCounter<long>("mageride.telemetry.rows_written", "{row}",
+            "Position rows COPYed into the telemetry.positions hypertable.");
+
+    /// <summary>
+    /// Rows the replay-idempotency index refused (T-05/R-17).
+    /// </summary>
+    /// <remarks>
+    /// Healthy at a low rate — it is <c>ux_positions_vehicle_seq</c> doing its job on a redelivered
+    /// batch. A sustained high ratio to <see cref="TelemetryRowsWritten"/> means a device is
+    /// re-sending a backlog the platform already has, which is a tracker firmware problem.
+    /// </remarks>
+    public static readonly Counter<long> TelemetryRowsDeduped =
+        Meter.CreateCounter<long>("mageride.telemetry.rows_deduped", "{row}",
+            "Position rows the (vehicle_id, seq, sample_ts) unique index rejected as replays.");
+
+    /// <summary>Rows Postgres refused on their own merits, sent to the DLQ.</summary>
+    /// <remarks>
+    /// Should be zero: C039 refuses everything implausible upstream, so a row this table still
+    /// rejects is a producer that has changed shape. Any non-zero reading is worth a page.
+    /// </remarks>
+    public static readonly Counter<long> TelemetryRowsDeadLettered =
+        Meter.CreateCounter<long>("mageride.telemetry.rows_dead_lettered", "{row}",
+            "Position rows the system of record refused, published to telemetry.normalized.dlq.");
+
+    /// <summary>Rows written to <c>trips.position_samples</c> — ADD §9.2's 1/min downsample.</summary>
+    public static readonly Counter<long> OperationalSamplesWritten =
+        Meter.CreateCounter<long>("mageride.telemetry.operational_samples", "{row}",
+            "1/min operational position samples written for Mode A/B sessions.");
+
+    /// <summary>Trip summaries written, tagged <c>geometry_source</c> (ADD §9.2).</summary>
+    /// <remarks>
+    /// The tag is the useful part: a rising <c>operational</c> or <c>none</c> share means summaries
+    /// are being computed after the raw chunks were dropped, or for sessions that produced no fixes
+    /// at all — both of which make the distance figure something different from what it usually is.
+    /// </remarks>
+    public static readonly Counter<long> TripSummariesWritten =
+        Meter.CreateCounter<long>("mageride.trips.summaries", "{summary}",
+            "Per-session trip summaries computed and stored.");
+
+    /// <summary>
+    /// Batch write time, in milliseconds — the <c>COPY</c>, the insert and the downsample together.
+    /// </summary>
+    public static readonly Histogram<double> TelemetryFlushLatencyMs =
+        Meter.CreateHistogram<double>("mageride.telemetry.flush.latency", "ms",
+            "Time to COPY one batch into the hypertable and apply it.");
+
+    /// <summary>
+    /// Flushes that threw and were retried with the offsets left uncommitted.
+    /// </summary>
+    /// <remarks>
+    /// Nothing is lost when this rises — the backlog sits on <c>telemetry.normalized</c>, which is
+    /// retained seven days — but it is the signal that the system of record has stopped keeping up,
+    /// and the fence C040 is written against ("a slow or failed write must not affect the live map")
+    /// is only honoured for as long as that retention lasts.
+    /// </remarks>
+    public static readonly Counter<long> TelemetryFlushFailures =
+        Meter.CreateCounter<long>("mageride.telemetry.flush.failures", "{failure}",
+            "Batch writes that failed and were retried.");
+
+    /// <summary>
+    /// Polls the writer declined because its in-process buffer was full.
+    /// </summary>
+    /// <remarks>
+    /// The deliberate back-pressure of the "degrade by buffering" fence: the writer stops consuming
+    /// rather than growing without bound, so the buffer of record is Redpanda. A non-zero reading
+    /// means the database is not keeping up with ingest.
+    /// </remarks>
+    public static readonly Counter<long> TelemetryWriterStalls =
+        Meter.CreateCounter<long>("mageride.telemetry.writer.stalls", "{stall}",
+            "Consume polls skipped because the writer's buffer was at its ceiling.");
+
+    /// <summary>Rows buffered in the writer awaiting a flush, as an observable gauge.</summary>
+    public const string TelemetryWriterBacklogGauge = "mageride.telemetry.writer.backlog";
+
     /// <summary>Vehicle frames pushed to SignalR geocell groups.</summary>
     public static readonly Counter<long> FanoutFramesSent =
         Meter.CreateCounter<long>("mageride.fanout.frames", "{frame}", "Vehicle frames pushed to geocell groups.");

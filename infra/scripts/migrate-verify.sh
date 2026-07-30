@@ -217,7 +217,10 @@ step "Tables owned by C004"
 # idempotency log and D4' prints one for rides only — the fourth service to need it) and
 # trips.outbox (D6' §2.1 names trip.events and trip-state-svc as its producer, and neither D4' §4
 # nor server_db_schema.md §4 gives that producer a transactional table to write into).
-check_eq "6 trips tables" "6" \
+# + 1 added by C040 (0506): trips.session_summaries. ADD §9.2 promises a durable "trip summary
+# (start, end, distance, polyline)" and no DDL source prints a table for it; §9.5 item 2's
+# continuous aggregates cannot answer it, being bucketed by time and blind to sessions.
+check_eq "7 trips tables" "7" \
   "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
     WHERE n.nspname='trips' AND c.relkind IN ('r','p') AND NOT c.relispartition;"
 check_eq "7 rides tables" "7" \
@@ -586,6 +589,38 @@ check_eq "there is no DEFAULT partition" "0" \
   "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
     WHERE n.nspname='trips' AND c.relkind='r' AND c.relispartition
       AND pg_get_expr(c.relpartbound, c.oid) = 'DEFAULT';"
+
+# C040 (0506). The 1/min sample had no key, so an at-least-once consumer appended a duplicate
+# row on every rebalance; the writer stores each row at its minute boundary and this index is
+# what makes that idempotent without per-vehicle state.
+check_eq "one operational sample per session per minute (0506)" "1" \
+  "SELECT count(*) FROM pg_indexes
+    WHERE schemaname='trips' AND indexname='ux_possample_session_minute'
+      AND indexdef LIKE 'CREATE UNIQUE INDEX%(session_id, sample_ts)%';"
+
+step "ADD §9.2 — the trip summary (C040, 0506)"
+check_eq "trips.session_summaries exists" "1" \
+  "SELECT count(*) FROM information_schema.tables
+    WHERE table_schema='trips' AND table_name='session_summaries';"
+# ADD §9.2 names exactly these four. A summary with a distance and no line, or a line and no
+# ends, is not the artefact the sentence promises.
+for col in start_geo end_geo distance_m polyline; do
+  check_eq "session_summaries.$col" "1" \
+    "SELECT count(*) FROM information_schema.columns
+      WHERE table_schema='trips' AND table_name='session_summaries' AND column_name='$col';"
+done
+check_eq "geometry_source records which relation the distance came from" "1" \
+  "SELECT count(*) FROM pg_constraint
+    WHERE conrelid='trips.session_summaries'::regclass
+      AND conname='ck_summaries_geometry_source';"
+# R-01 again: a summary is a Mode A/B journey. A Mode C ride is rides.rides and is priced,
+# not summarised from a tracking session.
+check_rejects "a Mode C trip summary is rejected (R-01)" \
+  "INSERT INTO trips.session_summaries(session_id, vehicle_id, driver_id, mode, started_at, ended_at)
+     VALUES (gen_random_uuid(), gen_random_uuid(), gen_random_uuid(), 'C', now(), now());"
+check_rejects "a negative summary distance is rejected" \
+  "INSERT INTO trips.session_summaries(session_id, vehicle_id, driver_id, mode, started_at, ended_at, distance_m)
+     VALUES (gen_random_uuid(), gen_random_uuid(), gen_random_uuid(), 'B', now(), now(), -1);"
 
 step "R-01 / Appendix B.2 — the 18 ride states, exactly"
 check_eq "rides.rides state CHECK matches D5 §6 / ADD Appendix B.2" \

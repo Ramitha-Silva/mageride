@@ -65,7 +65,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C037 | ride-svc-proxy-package | 2 | DONE | 2026-07-29 | 314 tests green (62 new); 1 rides migration (0609 — the package recipient + the location-request sweep index) and a `ServiceUnavailable` response in `_shared.yaml`; **no new ride state** — ADD Appendix B.2 invariant 6 held literally, the OTP gates take the edges `start`/`complete` already take; 11 micro-change-sets and one genuine P-03-versus-AL-48 conflict |
 | C038 | mqtt-bridge-svc | 2 | DONE | 2026-07-29 | 43 HotPath tests green (13 tagged `Category=MqttBridge`, 8 new); **one broker-config change** — `mqtt.shared_subscription_strategy = sticky`, because EMQX 5.8's `round_robin` default makes two replicas race one vehicle's samples and the end-to-end ordering DoD unreachable; live and replay now hold **separate broker sessions**, not just separate share groups; the bridge became the D-17 *detector* (EMQX stays the enforcer); `IEventPublisher` now returns a `PublishReceipt`; 4 micro-change-sets |
 | C039 | position-processor-svc | 2 | DONE | 2026-07-29 | 88 HotPath tests green (53 tagged `Category=PositionProcessor`, 45 new); **no migration** — this service has no database; D-18/T-07 landed as a pure filter with ADD §12.6's table in configuration; the R-08 ownership conflict between ADD §9.4 and C034 resolved by splitting on *what decides the fact* (phase = dispatch-svc, position = here) with a new `veh:driver:{vehicleId}` binding; one fixture bug fixed — `Samples.Dehiwala` was documented as a different res-5 cell and is not; 7 micro-change-sets |
-| C040 | persistence-writer-svc | 2 | PENDING | | |
+| C040 | persistence-writer-svc | 2 | DONE | 2026-07-30 | 111 HotPath tests green (23 tagged `Category=PersistenceWriter`, all new); **1 trips migration (0506)** — `ux_possample_session_minute` and `trips.session_summaries`, the ADD §9.2 trip summary that no DDL source printed; `COPY` measured at **14,811 rows/s** against the DoD's 3,000; Postgres joins `HotPathCollection` (4 containers now) and `migrate-verify.sh` expects 7 trips tables, not 6; 6 micro-change-sets |
 | C041 | fanout-svc | 2 | PENDING | | |
 | C042 | query-svc | 2 | PENDING | | |
 | C043 | tcp-adapter | 2 | PENDING | | |
@@ -5276,3 +5276,136 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   `Category=PositionProcessor` filter takes ~31 s, the whole HotPath suite ~4 min 52 s and
   `Dispatch.Api.Tests` ~4 min 17 s. **No new NuGet dependencies** — the H3 arithmetic came with
   `MageRide.Shared` and the anti-spoof filter is arithmetic.
+
+- **Component:** C040 persistence-writer-svc — 2026-07-30
+- **Status:** DONE — `dotnet test backend/src/HotPath.Tests -c Release --filter Category=PersistenceWriter`
+  is **23 passed, 0 failed**; the whole HotPath suite is **111 passed**; `bash
+  infra/scripts/migrate-verify.sh` is **222/222**. All four DoD items assert:
+  `COPY` sustains **14,811 rows/s** on this box against the 3,000 msg/s target
+  (`Sustained_ingest_of_three_thousand_rows_a_second_is_written_without_backlog`), a duplicate
+  `(vehicle_id, seq)` batch inserts nothing the second time, a writer killed mid-backlog and restarted
+  on the same consumer group delivers every row exactly once
+  (`Killing_the_writer_mid_batch_loses_no_rows_and_duplicates_none`), and the live map keeps advancing
+  while the writer is dead with the backlog still there afterwards.
+- **Notes:**
+  (1) **ADD §9.2 promises a trip summary and no DDL source prints a table for it.** The sentence is
+  "only 1/min sampled + trip summary (start, end, distance, polyline) are persisted operationally",
+  and §9.5 item 2 adds that the *query* path for a trip summary "hits aggregates, not raw rows" —
+  which cannot be the whole story, because `telemetry.positions_1m` is bucketed by time and knows
+  nothing about sessions. It can say how fast a vehicle was going at 14:03; it cannot say where one
+  journey started, ended, or how far it went. So 0506 adds `trips.session_summaries`, **not columns on
+  `trips.sessions`**: that table is trip-state-svc's aggregate with its own state machine and
+  `updated_at` trigger, and US-5.10 lets an auto-ended session restart *in place keeping its id*, so a
+  summary is not a final fact about a row — it has to be replaceable when the journey resumes and ends
+  again.
+  (2) **The 1/min sample had no idempotency key, and an at-least-once consumer needs one.** 0503 gives
+  `trips.position_samples` only `PRIMARY KEY (id, sample_ts)` over a generated identity, so every
+  write is unconditionally a new row and each rebalance appended a duplicate minute. The writer now
+  stores each row **at its minute boundary** — `sample_ts` is the minute the row represents, which is
+  what a 1/min series means — and `ux_possample_session_minute` makes the insert idempotent by
+  construction. The alternative, an in-process "last written minute per vehicle", resets exactly when
+  the platform is least stable.
+  (3) **`COPY` cannot do `ON CONFLICT`, and the spec asks for both.** ADD §9.5 item 5 says `COPY`;
+  §9.5 item 1 and T-05/R-17 require replay idempotency on the vehicle's sequence. `COPY` has no
+  conflict handling at all — one duplicate raises and takes the batch with it. Resolved as binary
+  `COPY` into a temp staging table, then one `INSERT … SELECT DISTINCT ON … ON CONFLICT
+  (vehicle_id, seq, sample_ts) DO NOTHING`. **The staging table is created inside the transaction,
+  `ON COMMIT DROP`**: a session-scoped one is faster and breaks behind PgBouncer in transaction mode
+  (ADD §9.3), where consecutive transactions are not promised the same backend.
+  (4) **The batch path is not the kernel's `KafkaTopicConsumer`, and that is the component.** That
+  consumer commits per message — right for a ride command, a broker round trip per position here. The
+  batching loop accumulates per Kafka partition and commits the high-water mark *after* the database
+  transaction, which is the whole durability story: a kill has committed nothing, the batch is
+  redelivered, and the two unique indexes absorb it. **Promote it into the kernel when a second
+  service needs batching**; there is no second one yet.
+  (5) **"per partition" (ADD §9.5 item 5) is read as the Kafka partition, not the Timescale space
+  partition.** The Timescale reading is not implementable from the application — the vehicle-hash
+  partition is computed inside the database — and the Kafka one is what makes "which offsets are safe
+  to commit" answerable. Since `telemetry.normalized` is keyed by `vehicleId`, a Kafka partition is a
+  stable subset of vehicles, so batching per Kafka partition also gives each `COPY` the per-vehicle
+  locality the Timescale reading was after.
+  (6) **A poison batch is isolated row by row; everything else is retried.** SQLSTATE class 22 (data)
+  and 23 (integrity) will fail identically on every retry, so those rows go to
+  `telemetry.normalized.dlq` with the reason and the decoded sample attached and their neighbours are
+  written. A dropped connection, a deadlock, a full disk or a chunk being compressed is transient by
+  definition and must never be committed past — the hypertable is the system of record.
+  `A_transient_failure_is_never_dead_lettered` asserts the classifier directly, because the branch it
+  guards is what decides between "retry" and "drop".
+  (7) **The summary is computed from full-resolution rows, not from the 1/min samples.** A minute of
+  city driving is not a straight line: chaining sixty-second chords across a route with turns loses a
+  third of the distance or more. The raw rows are indexed for exactly this read
+  (`ix_positions_vehicle_ts`; ADD §9.5 item 6 names "trip linestring for trip Y" as a raw-chunk
+  query) and are always present when `session.ended` arrives. It is bounded by
+  `(vehicle_id, sample_ts BETWEEN started_at AND ended_at)` and **not by `trip_id`**, because
+  `telemetry.positions.trip_id` is set only if the publishing device chose to (`mqtt-topics.md` §2.1)
+  and nothing makes a tracker do it — a summary keyed on it would be empty for most fleets. The
+  `geometry_source` column records which relation answered, so a reader comparing two journeys can see
+  when a distance is a lower bound.
+  (8) **The distance is measured before the polyline is simplified.** Simplifying first would quietly
+  shorten every journey by the tolerance's worth of detail, and the distance is the one number in a
+  summary somebody might be paid against. `The_distance_is_measured_before_the_line_is_simplified`
+  runs a 500 m tolerance over a 3.3 km route and asserts both halves.
+  (9) **`session.ended` has three outcomes, not two.** Written; `SessionActive` — a US-5.10 restart,
+  **committed**, because the journey may run for another hour and stalling the partition would hold up
+  every summary behind it; and `SessionNotFound` — the event outran its own transaction, **retried**,
+  because a summary lost to that race is a journey with no record of how far it went. A single "null
+  means no" conflated the two, which was a real bug in the first draft.
+  (10) **Postgres joined `HotPathCollection`.** The first three hot-path services own no table, which
+  is why C024's csproj said "no Postgres anywhere in this suite". Every claim this component makes is
+  a claim about what a real hypertable did, so the collection now starts four containers, and
+  `HotPath.Tests` references `TripState.Api` for one constant — the `session.ended` event name, spelled
+  on both sides and asserted equal, so a rename fails here rather than in production as summaries that
+  silently stop being written.
+  **Micro-change-sets raised —**
+  (a) **`trips.session_summaries` is not in D4' §4 or `server_db_schema.md` §4.** ADD §9.2 names the
+  artefact and nothing prints it. **D4' §4 should carry the table**; note (1) above argues why it is
+  not columns on `trips.sessions`.
+  (b) **`trips.position_samples` has no uniqueness in 0503** and cannot be written idempotently
+  without some. D4' §4 should carry `UNIQUE (session_id, sample_ts)` and should say that the 1/min
+  row's `sample_ts` is the bucket boundary rather than the fix's instant.
+  (c) **D7' §4.2 gives this service its settings under a `Timescale` prefix** (`Timescale__BatchRows`,
+  `Timescale__FlushMs`) and gives it no others. Everything C040 needs is bound under
+  `PersistenceWriter`, with the two D7' names honoured as aliases so no deployed environment file has
+  to change. D7' §4.2 should list the section this service actually reads.
+  (d) **ADD §9.2 and §9.5 item 2 disagree about where a trip summary comes from** — "persisted
+  operationally" versus "the query path hits aggregates". Resolved toward §9.2: the artefact is
+  stored, because the aggregates cannot produce it. §9.5 item 2's sentence should say it is *fleet
+  daily distance* that hits aggregates.
+  (e) **Nothing in any spec bounds the polyline's size or precision.** `PolylineToleranceM` (25 m) is
+  invented and argued from D5' §5.2's own `Δpos < 25 m` coalescing threshold — the distance the
+  platform has already decided is not worth transmitting.
+  (f) **`telemetry.raw.dlq` (D6' §2.3) is still unowned**, as the C039 handoff also recorded. This
+  service owns `telemetry.normalized.dlq` — its own input topic — and deliberately nothing else: the
+  raw one is a claim against the kernel's shared `KafkaTopicConsumer`, which every consumer on the
+  platform uses, so adding it from inside one service would either be that service's alone or a kernel
+  change made from under five others.
+  **Known gap —** the DoD's fourth line says "stopped for **60 s**" and the test's window is seconds.
+  The property is not time-dependent: the writer is a separate consumer group, the live map is Redis
+  written by C039, and this service sets `UseRedis = false` so it registers no Redis client at all —
+  there is nothing on the path with a minute-scale timeout for a longer sleep to exercise. What the
+  test asserts instead is the whole of the fence: the live map advances while the writer is dead, the
+  durable table demonstrably does not, and the backlog is still on the topic to be written when it
+  returns.
+  **For C041 (fanout-svc) —** `telemetry.positions` is now populated, so US-7.17's stale-vehicle
+  removal has a durable history to reason against rather than only Redis. `veh:meta`'s field names are
+  unchanged.
+  **For C042 (query-svc) —** the read path over all of this is yours, and three things are ready for
+  it: `trips.session_summaries` answers "trip detail + polyline" (ADD §2719's
+  `GET /trips/{userId}/{tripId}`) in one row with no aggregation, `ix_summaries_driver` and
+  `ix_summaries_vehicle` are the two history reads, and `geometry_source` is what a response should
+  surface when a distance is a lower bound. `GET /v1/nearby` still reads Redis, not this.
+  **For C043 (tcp-adapter) —** set `PositionSource` correctly and set `tripId` when the tracker is on a
+  Mode A/B journey if you want a full-resolution `trip_id`-keyed read to work later; the summary does
+  not need it (see note 7) but nothing else populates it.
+  **For C044 (fleet-health-svc) —** `telemetry.fleet_health_5m` (C006's aggregate) now has rows,
+  because `fleet_id` is denormalised on every write. A vehicle in no fleet stays invisible to it, by
+  design.
+  **For C125 (infra hardening) —** this service must **not** be given `ConnectionStrings__Redis`. The
+  fence is held structurally by `UseRedis = false`; handing it a Redis DSN would not break anything
+  today and would remove the guarantee.
+  **Build host —** Docker for four Testcontainers fixtures (Postgres/timescaledb-ha:pg16, EMQX,
+  Redpanda, Redis) plus one more for `migrate-verify.sh`; the replica stack stayed down throughout.
+  The `Category=PersistenceWriter` filter takes ~23 s, the whole HotPath suite ~5 min 15 s and
+  `migrate-verify.sh` ~2 min. **No new NuGet dependencies** — `Npgsql` and `Dapper` were already
+  pinned centrally; `NpgsqlBinaryImporter` is why Npgsql is referenced directly rather than only
+  through the kernel.

@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    HotPath.PersistenceWriter (C040) — telemetry.normalized to the system of record.
+
+    The durable write path, off the hot path. Batches accepted position samples into the
+    telemetry.positions hypertable through binary COPY (ADD §9.5 item 5: 1k rows / 500 ms /
+    partition), downsamples Mode A/B journeys to the 1/min trips.position_samples the operational
+    schema keeps (ADD §9.2), and writes the per-session trip summary — start, end, distance,
+    polyline — that §9.2 promises and no DDL source printed until 0506.
+
+    Nothing here is on the live path. It is a separate consumer group on telemetry.normalized, so
+    a slow or dead Postgres costs a growing Redpanda backlog and nothing else: the live map is
+    Redis, written by position-processor-svc (C039), and this service cannot reach it.
+
+    NOT here, and named rather than stubbed: the continuous aggregates and the compression and
+    retention policies (all declarative, C006's migrations 1802-1803 — Timescale runs them, not a
+    service), fleet-health rollups (C044), the read path over any of this (C042 query-svc), and
+    telemetry.raw.dlq (D6' §2.3, still unowned — this service owns telemetry.normalized.dlq only).
+
+    Verify: dotnet test backend/src/HotPath.Tests -c Release, filtered to
+    Category=PersistenceWriter. (Written out rather than pasted: XML comments cannot carry the
+    filter flag's double hyphen. The runnable form is in this project's CLAUDE.md.)
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.HotPath.PersistenceWriter</RootNamespace>
+    <AssemblyName>MageRide.HotPath.PersistenceWriter</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <UserSecretsId>mageride-hotpath-persistence-writer</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MageRide.Shared\MageRide.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Confluent.Kafka" />
+    <!-- Npgsql directly, for NpgsqlBinaryImporter: COPY is the whole point of this service and
+         Dapper has no surface for it. Every read and every non-COPY write still goes through
+         Dapper over the kernel's connection factory (AL-53). -->
+    <PackageReference Include="Dapper" />
+    <PackageReference Include="Npgsql" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="HotPath.Tests" />
+  </ItemGroup>
+
+</Project>

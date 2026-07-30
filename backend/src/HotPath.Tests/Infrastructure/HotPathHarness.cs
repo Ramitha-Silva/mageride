@@ -1,6 +1,9 @@
 using MageRide.Fanout;
 using MageRide.HotPath.MqttBridge;
 using MageRide.HotPath.MqttBridge.Bridging;
+using MageRide.HotPath.PersistenceWriter;
+using MageRide.HotPath.PersistenceWriter.Ingest;
+using MageRide.HotPath.PersistenceWriter.Summaries;
 using MageRide.HotPath.PositionProcessor;
 using MageRide.Shared.Realtime;
 using MageRide.TestKit;
@@ -59,6 +62,24 @@ internal sealed record HotPathHarnessOptions
     /// the deployed 500 ms only where a test is waiting on the fold itself.
     /// </summary>
     public TimeSpan? RateFlushInterval { get; init; }
+
+    /// <summary>Run persistence-writer-svc's <c>telemetry.normalized</c> batch writer (C040).</summary>
+    public bool Writer { get; init; }
+
+    /// <summary>Run its <c>trip.events</c> consumer, which writes the trip summaries.</summary>
+    public bool Summaries { get; init; }
+
+    /// <summary>Rows per <c>COPY</c> batch. Shortened where a test is waiting on a flush.</summary>
+    public int? BatchRows { get; init; }
+
+    /// <summary>How long a partially-filled batch waits. ADD §9.5 ships 500 ms.</summary>
+    public TimeSpan? FlushInterval { get; init; }
+
+    /// <summary>
+    /// The writer's consumer group. Shared deliberately by the two halves of the restart test, which
+    /// is the only way to prove an offset survived a process death.
+    /// </summary>
+    public string? WriterConsumerGroup { get; init; }
 }
 
 /// <summary>
@@ -85,14 +106,22 @@ internal sealed class HotPathHarness : IAsyncDisposable
     private readonly List<WebApplication> _apps = [];
     private readonly List<MqttBridgeWorker> _bridges = [];
     private readonly RedisFixture _redis;
+    private readonly PostgresFixture? _postgres;
 
     private WebApplication? _fanoutApp;
+    private WebApplication? _writerApp;
 
-    private HotPathHarness(EmqxFixture emqx, RedpandaFixture redpanda, RedisFixture redis, TestTokenIssuer tokens)
+    private HotPathHarness(
+        EmqxFixture emqx,
+        RedpandaFixture redpanda,
+        RedisFixture redis,
+        PostgresFixture? postgres,
+        TestTokenIssuer tokens)
     {
         Emqx = emqx;
         Redpanda = redpanda;
         _redis = redis;
+        _postgres = postgres;
         Tokens = tokens;
     }
 
@@ -113,8 +142,20 @@ internal sealed class HotPathHarness : IAsyncDisposable
     public IServiceProvider FanoutServices => _fanoutApp?.Services
         ?? throw new InvalidOperationException("This harness did not start fanout-svc.");
 
+    /// <summary>persistence-writer-svc's batch writer, when this harness started one.</summary>
+    public TelemetryWriterWorker Writer => _writerApp?.Services.GetRequiredService<TelemetryWriterWorker>()
+        ?? throw new InvalidOperationException("This harness did not start persistence-writer-svc.");
+
+    /// <summary>Its trip-summary consumer, when this harness started one.</summary>
+    public TripEventConsumer Summaries => _writerApp?.Services.GetRequiredService<TripEventConsumer>()
+        ?? throw new InvalidOperationException("This harness did not start the summary consumer.");
+
     public static async Task<HotPathHarness> StartAsync(
-        EmqxFixture emqx, RedpandaFixture redpanda, RedisFixture redis, HotPathHarnessOptions options)
+        EmqxFixture emqx,
+        RedpandaFixture redpanda,
+        RedisFixture redis,
+        HotPathHarnessOptions options,
+        PostgresFixture? postgres = null)
     {
         ArgumentNullException.ThrowIfNull(emqx);
         ArgumentNullException.ThrowIfNull(redpanda);
@@ -125,6 +166,13 @@ internal sealed class HotPathHarness : IAsyncDisposable
         redpanda.RequireAvailable();
         redis.RequireAvailable();
 
+        if (options.Writer || options.Summaries)
+        {
+            ArgumentNullException.ThrowIfNull(postgres);
+            postgres.RequireAvailable();
+            await postgres.EnsureMigratedAsync();
+        }
+
         // Created explicitly rather than left to auto-create: a topic nobody declared would come up
         // with one partition, which silently changes the ordering guarantee under test.
         await redpanda.CreateTopicAsync(Shared.Messaging.EventTopics.TelemetryRaw);
@@ -134,7 +182,7 @@ internal sealed class HotPathHarness : IAsyncDisposable
         // two: an auto-created topic comes up with one partition.
         await redpanda.CreateTopicAsync(Shared.Messaging.EventTopics.AuditEvents);
 
-        var harness = new HotPathHarness(emqx, redpanda, redis, new TestTokenIssuer());
+        var harness = new HotPathHarness(emqx, redpanda, redis, postgres, new TestTokenIssuer());
         var group = $"hotpath-{Guid.NewGuid():N}";
 
         for (var replica = 0; replica < options.BridgeReplicas; replica++)
@@ -150,6 +198,11 @@ internal sealed class HotPathHarness : IAsyncDisposable
         if (options.Fanout)
         {
             await harness.StartFanoutAsync(options);
+        }
+
+        if (options.Writer || options.Summaries)
+        {
+            await harness.StartWriterAsync(options);
         }
 
         return harness;
@@ -298,6 +351,68 @@ internal sealed class HotPathHarness : IAsyncDisposable
 
         await app.StartAsync();
         _apps.Add(app);
+    }
+
+    /// <summary>
+    /// Starts persistence-writer-svc, built through its own <c>Build</c> so the pipeline under test
+    /// is the one the process runs — including the batching consumer, which is this component's
+    /// whole difference from the kernel's per-message one.
+    /// </summary>
+    private async Task StartWriterAsync(HotPathHarnessOptions options)
+    {
+        await Redpanda.CreateTopicAsync(Shared.Messaging.EventTopics.TripEvents);
+
+        var settings = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Kafka:BootstrapServers"] = Redpanda.BootstrapServers,
+            ["ConnectionStrings:Postgres"] = _postgres!.ConnectionString,
+            ["PersistenceWriter:Enabled"] = options.Writer ? "true" : "false",
+            ["PersistenceWriter:SummariesEnabled"] = options.Summaries ? "true" : "false",
+            ["PersistenceWriter:ConsumerGroup"] =
+                options.WriterConsumerGroup ?? $"writer-{Guid.NewGuid():N}",
+            ["PersistenceWriter:TripConsumerGroup"] = $"writer-trips-{Guid.NewGuid():N}",
+            ["Otel:PrometheusEnabled"] = "false",
+        };
+
+        if (options.BatchRows is { } rows)
+        {
+            settings["PersistenceWriter:BatchRows"] = rows.ToString();
+        }
+
+        if (options.FlushInterval is { } flush)
+        {
+            settings["PersistenceWriter:FlushInterval"] = flush.ToString();
+        }
+
+        var app = PersistenceWriterApplication.Build(NewOptions(), builder => Configure(builder, settings));
+
+        await app.StartAsync();
+
+        _apps.Add(app);
+        _writerApp = app;
+    }
+
+    /// <summary>
+    /// Stops persistence-writer-svc the way a pod kill does, leaving the rest of the pipeline running.
+    /// </summary>
+    /// <remarks>
+    /// The DoD's third and fourth lines are both about this: a writer killed mid-batch has committed
+    /// no offsets, and the live map keeps working while it is gone because the live map is Redis and
+    /// this service cannot reach it.
+    /// </remarks>
+    public async Task StopWriterAsync()
+    {
+        if (_writerApp is null)
+        {
+            return;
+        }
+
+        _apps.Remove(_writerApp);
+
+        await _writerApp.StopAsync(TimeSpan.FromSeconds(10));
+        await _writerApp.DisposeAsync();
+
+        _writerApp = null;
     }
 
     private async Task StartFanoutAsync(HotPathHarnessOptions options)

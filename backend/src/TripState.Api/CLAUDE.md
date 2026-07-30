@@ -31,9 +31,12 @@ belongs, and a Mode C **vehicle** is refused even when the body claims B — the
 fact, not the client's.
 
 **Not here, on purpose.** Position ingest is the hot path's (C038/C039): this service *consumes*
-`telemetry.normalized` and writes no telemetry of its own. `trips.position_samples` (0503) has no
-writer — the 1/min Mode A/B history sample it is for belongs with persistence-writer-svc (C040),
-which owns the same decision for `telemetry.positions`. The US-5.9 push itself is
+`telemetry.normalized` and writes no telemetry of its own. `trips.position_samples` (0503) is
+**persistence-writer-svc's (C040)** — it writes the 1/min Mode A/B history sample there off the same
+topic, and computes the ADD §9.2 trip summary into `trips.session_summaries` (0506) when this
+service's `session.ended` says a journey is over. Two consequences for this service: nothing here
+may write either table, and `session.ended` is now load-bearing beyond the US-5.9 push — a journey
+whose end is never published gets no distance and no polyline. The US-5.9 push itself is
 notification-svc's (C051); this service emits `session.ended` carrying the reason and the deadline,
 which is what that push is built from. Route geometry and stops are spatial's (C005) — `route_id`
 is stored and never resolved here, and its FK is still deferred (0501's header).

@@ -14,7 +14,12 @@
     shared subscriptions by construction, and E-08 — "two replicas share the subscription with no
     duplicate ingest" — is a claim about EMQX, not about our code.
 
-    No Postgres anywhere in this suite: none of the three services owns a table.
+    Δ C040: there is Postgres in this suite now. persistence-writer-svc is the fourth service here
+    and the only one that owns a write path into the system of record, and the claims it has to make
+    are all about what Postgres actually did with a batch — that a COPY of a thousand rows clears
+    3000 rows/s, that a duplicate (vehicle_id, seq) produces no second row, that a kill mid-batch
+    loses nothing. None of those is assertable against anything but a real hypertable, so
+    HotPathCollection now starts four containers rather than three.
 
     Microsoft.NET.Sdk.Web, not Microsoft.NET.Sdk: the harness builds three WebApplications.
   -->
@@ -52,7 +57,14 @@
   <ItemGroup>
     <ProjectReference Include="..\HotPath.MqttBridge\HotPath.MqttBridge.csproj" />
     <ProjectReference Include="..\HotPath.PositionProcessor\HotPath.PositionProcessor.csproj" />
+    <ProjectReference Include="..\HotPath.PersistenceWriter\HotPath.PersistenceWriter.csproj" />
     <ProjectReference Include="..\Fanout.Api\Fanout.Api.csproj" />
+    <!-- Δ C040, and for one constant. persistence-writer-svc consumes trip-state-svc's
+         `session.ended` off `trip.events` and must not reference that service's code; the event name
+         is therefore spelled on both sides, and TripSummaryTests asserts the two agree. Without the
+         reference a rename in trip-state-svc would show up as summaries that silently stop being
+         written. Dispatch.Api.Tests references Ride.Api for the same kind of seam. -->
+    <ProjectReference Include="..\TripState.Api\TripState.Api.csproj" />
     <!-- C010: the EMQX, Redis and Redpanda fixtures, so this suite runs the same server builds and
          — for EMQX — the same broker policy the dev stack does. -->
     <ProjectReference Include="..\MageRide.TestKit\MageRide.TestKit.csproj" />
