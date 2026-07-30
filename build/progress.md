@@ -64,7 +64,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C036 | dispatch-svc-directional | 2 | DONE | 2026-07-29 | 180 tests green (37 new); **no migration** — 0707/0708 already carried every table and the open `kind` column; the DT-02 predicate reads the durable row rather than ADD §7.4's Redis hint, argued below; `GeoMath` promoted to the kernel; 8 micro-change-sets |
 | C037 | ride-svc-proxy-package | 2 | DONE | 2026-07-29 | 314 tests green (62 new); 1 rides migration (0609 — the package recipient + the location-request sweep index) and a `ServiceUnavailable` response in `_shared.yaml`; **no new ride state** — ADD Appendix B.2 invariant 6 held literally, the OTP gates take the edges `start`/`complete` already take; 11 micro-change-sets and one genuine P-03-versus-AL-48 conflict |
 | C038 | mqtt-bridge-svc | 2 | DONE | 2026-07-29 | 43 HotPath tests green (13 tagged `Category=MqttBridge`, 8 new); **one broker-config change** — `mqtt.shared_subscription_strategy = sticky`, because EMQX 5.8's `round_robin` default makes two replicas race one vehicle's samples and the end-to-end ordering DoD unreachable; live and replay now hold **separate broker sessions**, not just separate share groups; the bridge became the D-17 *detector* (EMQX stays the enforcer); `IEventPublisher` now returns a `PublishReceipt`; 4 micro-change-sets |
-| C039 | position-processor-svc | 2 | PENDING | | |
+| C039 | position-processor-svc | 2 | DONE | 2026-07-29 | 88 HotPath tests green (53 tagged `Category=PositionProcessor`, 45 new); **no migration** — this service has no database; D-18/T-07 landed as a pure filter with ADD §12.6's table in configuration; the R-08 ownership conflict between ADD §9.4 and C034 resolved by splitting on *what decides the fact* (phase = dispatch-svc, position = here) with a new `veh:driver:{vehicleId}` binding; one fixture bug fixed — `Samples.Dehiwala` was documented as a different res-5 cell and is not; 7 micro-change-sets |
 | C040 | persistence-writer-svc | 2 | PENDING | | |
 | C041 | fanout-svc | 2 | PENDING | | |
 | C042 | query-svc | 2 | PENDING | | |
@@ -5155,3 +5155,124 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   HotPath suite ~3 min 53 s. Note that the suite's wall-clock is dominated by the broker's own
   5 msg/s publish ceiling rather than by anything under test: the load test spends most of its time
   waiting for 30 devices to be allowed to publish 8 samples each.
+
+- **Component:** C039 position-processor-svc — 2026-07-29
+- **Status:** DONE — `dotnet test backend/src/HotPath.Tests -c Release --filter Category=PositionProcessor`
+  is **53 passed, 0 failed**; the whole HotPath suite is **88 passed**, `MageRide.Shared.Tests` 235 and
+  `Dispatch.Api.Tests` 181 (one added here). All four DoD items assert: a teleport is refused and
+  counted (`PositionGateTests.A_teleporting_sample_is_rejected_and_leaves_the_live_state_untouched`),
+  the availability index adds and removes on a phase transition and on offline within one sample
+  (`DriverAvailabilityTests`, five cases), a replayed `seq` is dropped
+  (`PositionProcessorTests.A_replayed_seq_is_discarded_on_the_watermark`), and `geo:live` reflects the
+  last accepted position inside the 5 s end-to-end SLO the pipeline test already measures.
+- **Notes:**
+  (1) **R-08 had two owners and the spec's attribution was not implementable — this is the
+  resolution.** ADD §9.4 makes position-processor-svc the writer of `driver:availability:{driverId}`
+  and `geo:drivers:available:{type}:{res5cell}`; **a position sample carries no driver.** The whole
+  telemetry contract is keyed by `vehicleId` because EMQX authenticates a *vehicle*
+  (`mqtt-topics.md` §1), and the dispatch plane is keyed by `driverId` because a ride is offered to a
+  person. That is why C024 left the heartbeat unwritten and C034 landed a working version in
+  dispatch-svc, and why C034's handoff asked C039 to decide who owns the transition. **Split on what
+  decides the fact, not on which key it lives in:** dispatch-svc owns the *phase* (creating the hash
+  with the tier on go-online, moving `state` on offer/accept, deleting on offline) and the recovery
+  path when the 60 s TTL lapsed but `dispatch.driver_presence` survived — it is the only party that
+  can read the durable row. position-processor-svc owns everything a *position* decides: the res-5
+  cell, `lastSeen`, and the TTL. It **never creates the hash and never adds a driver the hash does
+  not already say is `AVAILABLE`**, so the two writers cannot contradict each other — one says who is
+  in the pool, the other says where. The whole reconciliation is one Lua script, because an `HSET` on
+  a key whose TTL lapsed a millisecond ago resurrects it with one field and no expiry, which then
+  reads to dispatch as "online, position unknown" for ever.
+  (2) **`dispatch-svc`'s `PresenceService.RecordPositionAsync` still refreshes the same two keys off
+  `telemetry.normalized`, and that redundancy was left deliberately.** The writes are identical and
+  idempotent (same driver, same res-5 cell, same TTL) and they converge, so running both is safe; the
+  alternative was deleting the Redis half of that method, which would have meant rewriting three
+  passing C034 tests in a component this session does not own. **Whoever removes it must keep the
+  recovery branch** — "the hash is gone but the durable row says AVAILABLE, so re-index" is the one
+  thing this service structurally cannot do.
+  (3) **The refused sample must not advance the watermark, and that ordering is the subtle part.**
+  The plausibility gate runs *before* `LivePositionIndex.RecordAsync`. If a rejected sample moved
+  `veh:seq`, every genuine sample behind it would look like a replay and one spoofed frame would take
+  a vehicle off the map until its `seq` caught up; if it became the `veh:meta` position the next
+  sample is measured against, a spoofer could walk a vehicle across the island one refused jump at a
+  time. Both are asserted.
+  (4) **`MinStepInterval` is not in any spec and the teleport gate is unusable without it.** An
+  implied speed is a distance over a time, and over a short time the numerator is the fix's own error
+  circle: 10 m of ordinary GNSS jitter across 100 ms implies 360 km/h. Worse, most trackers stamp
+  `sampleTs` to the whole second, so two fixes 200 ms apart arrive bearing the *same* instant and
+  there is nothing to divide by. It is a **clamp, not a skip** (1 s, D5' §5.2/AL-12's fastest
+  cadence): a teleport published as two same-instant samples is still judged at that interval and
+  still fails. Skipping would hand a spoofer the gate, which is what the first draft of this filter
+  did.
+  (5) **A backlog skips the step gates and nothing else.** `stream=replay` samples carry a stale
+  capture time by definition, so implied speed, the monotonic clock and the R-08 heartbeat are
+  meaningless for them — judging a reconnecting fleet's history as teleports would drop all of it.
+  Accuracy and satellite count still apply: a 500 m fix was useless when it was captured. A record
+  with **no** `stream` header is treated as **live**, because reading it as a backlog would silently
+  switch the gates off for any producer that forgot to stamp it.
+  (6) **Both D-17 lines write the same `audit.events` action.** `mqtt.rate_violation` is the only one
+  any spec spells for the MQTT plane, so the bridge's per-vehicle 5 msg/s observation and this
+  service's 10 msg/s-over-10 s drop are told apart by `detectedBy` and a new `line` field rather than
+  by a second action — as the C038 handoff asked. The **debounce keys differ**
+  (`rate:mqtt-violation:` vs `rate:pos-violation:`) so the first line firing cannot silence the
+  second, which is the failure mode that would matter most.
+  (7) **One fixture bug found and fixed.** `Samples.Dehiwala` was documented since C024 as being in a
+  different res-5 cell from Colombo Fort. It is not — both are `85611cb3fffffff`; a res-5 hexagon
+  averages 252 km². `Samples.Moratuwa` (18.5 km, and reachable at 55 km/h) was added for the tests
+  that need to cross a res-5 boundary. Also, `PipelineTests`' six-sample burst was moving 22 m
+  between fixes stamped milliseconds apart — 79 km/h against a three-wheeler's 80 km/h ceiling once
+  the gate landed, i.e. a coin toss. The step is now ~11 m; what that test asserts is batching.
+  **Micro-change-sets raised —**
+  (a) **`veh:driver:{vehicleId}` is not in ADD §9.4's key space** and R-08 is not implementable
+  without it or something like it. Either §9.4 should carry the binding, or the §9.4 rows for
+  `driver:availability` / `geo:drivers:available` should name dispatch-svc as a co-writer.
+  (b) **`veh:meta`'s `poolCell` field is not in ADD §9.4's shape either.** It exists because a GEO set
+  has no TTL and the availability hash does: when the hash expires nothing anywhere names the cell key
+  that still holds the driver, so the membership leaks for ever. Some memory of it has to live
+  somewhere with a longer TTL than 60 s.
+  (c) **ADD §12.6's anti-spoof table prices seven of registry's ten vehicle types.** `truck`,
+  `mini_truck` and `train` (`0303__registry_vehicles.sql`) have no ceiling. They fall to
+  `DefaultMaxSpeedKph`, set to 200 — the most permissive value *in* the spec's own table — so a tier
+  nobody priced is never refused by an invented number. The three need real values.
+  (d) **D5' §13.1's "minimum satellite count" gives no number.** Four is used (what a 3-D fix needs).
+  (e) **D5' §13.1 counts failed samples "toward a per-device fraud score" and no component owns that
+  score.** Not provisioning-svc (C030 implements T-08 anti-cloning and nothing else), not
+  reputation-svc (D-04 is about users, not devices). Today the trail is
+  `mageride.positions.implausible{check,vehicle_type}` and a warning-level log line. **C044
+  (fleet-health-svc) is the natural home** — it already owns the per-device rollup.
+  (f) **Nothing in D5' or the ADD bounds a sample's clock skew *ahead* of the platform's.**
+  `MaxClockSkewAhead` (5 min) is invented, and T-07's monotonic rule needs it: one frame dated 2099
+  becomes the watermark and takes that tracker off the map until `veh:meta` expires.
+  (g) **`telemetry.raw.dlq` (D6' §2.3) is still unowned.** C038's CLAUDE.md said "that is C039"; it is
+  not in this component's deliverable list and it does not belong here — the retry/poison policy lives
+  in the kernel's `KafkaTopicConsumer`, which every consumer on the platform shares, so a DLQ added
+  from inside one service would either be that service's alone or a kernel change made from under
+  five others. **It should be a kernel change with its own component.** Corrected in the bridge's
+  CLAUDE.md rather than left pointing here.
+  **For C040 (persistence-writer-svc) —** `telemetry.normalized` now carries only samples that passed
+  D-18/T-07, so the `ck_positions_*` CHECK constraints should never fire from this path and a
+  violation there is a real regression rather than a cheap tracker. `ReceivedTs` is stamped, `FleetId`
+  is still **not** populated (`mqtt-topics.md` §6 says C040 must), and the `ON CONFLICT
+  (vehicle_id, seq, sample_ts) DO NOTHING` three-column target from C006 note (a) still stands. The
+  `veh:meta` hash gained a `poolCell` field — ignore it, it is this service's bookkeeping.
+  **For C041 (fanout-svc) —** the `cell:{h3index}` stream and `veh:meta` field names are unchanged;
+  `MetaFields` now spells them in one place if you want to read the hash. US-7.17's stale-vehicle
+  removal from `geo:live` is still yours and still unimplemented — note that `geo:live` has no TTL of
+  its own, exactly like the GEO sets this component now cleans up.
+  **For C043 (tcp-adapter) —** every sample you publish goes through the D-18 gates. Two consequences:
+  a GT06 frame carries no `satCount`, which is why `RequireSatelliteCount` defaults **off** (turning it
+  on blinds the whole GT06 fleet); and `PositionSource` must be set correctly, because
+  `Source != Mobile` is what turns on T-07's monotonic-GNSS-clock and satellite checks. An adapter
+  that left `source` at its default would have its trackers judged as handsets.
+  **For C044 (fleet-health-svc) —** micro-change-set (e) above: the per-device fraud score D5' §13.1
+  asks for has no owner and your rollup is the natural place. The signal is already emitted as a
+  metric and a log line; it needs a store and a threshold.
+  **For C125 (infra hardening) —** `PositionProcessor__DriverAvailabilityTtl` **must equal**
+  `Dispatch__PresenceTtl` in every environment file. They are 60 s in both defaults and in
+  `.env.app.example`, and nothing enforces the equality at start-up — a mismatch would make a driver
+  fall out of the hot index while dispatch still believed them fresh, which reads as an empty
+  candidate set.
+  **Build host —** Docker for the Testcontainers fixtures only (EMQX, Redpanda, Redis for HotPath;
+  Postgres, Redis, Redpanda for the dispatch re-run); the replica stack stayed down throughout. The
+  `Category=PositionProcessor` filter takes ~31 s, the whole HotPath suite ~4 min 52 s and
+  `Dispatch.Api.Tests` ~4 min 17 s. **No new NuGet dependencies** — the H3 arithmetic came with
+  `MageRide.Shared` and the anti-spoof filter is arithmetic.

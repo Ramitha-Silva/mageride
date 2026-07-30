@@ -82,11 +82,50 @@ public sealed class PresenceTests(PostgresFixture postgres, RedisFixture redis)
         Assert.Equal(ColomboFortRes5, byName["cell"]);
         Assert.Contains("lastSeen", byName);
 
-        // R-08's TTL. Nothing refreshes it in this slice — position-processor-svc (C039) owns the
-        // heartbeat — which is exactly why the exact post-filter reads the durable presence row.
+        // R-08's TTL. Refreshed by this service's own telemetry.normalized consumer and, as of
+        // C039, by position-processor-svc one hop earlier. The exact post-filter still reads the
+        // durable presence row: that is what survives a flush.
         var ttl = await db.KeyTimeToLiveAsync(key);
         Assert.NotNull(ttl);
         Assert.InRange(ttl.Value, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(60));
+    }
+
+    /// <summary>
+    /// Δ C039 — the reverse binding position-processor-svc resolves a position's driver through.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// ADD §9.4 makes position-processor-svc the writer of <c>driver:availability:{driverId}</c> and
+    /// <c>geo:drivers:available:*</c>, and a position sample carries no driver — the telemetry plane
+    /// is keyed by <c>vehicleId</c> end to end because EMQX authenticates a vehicle. This key is
+    /// what makes that attribution implementable, and it is written here because this is where the
+    /// (driver, vehicle) pair is established.
+    /// </para>
+    /// <para>
+    /// Asserted against the literal pattern rather than the helper that builds it: the reader is in
+    /// another codebase and another test suite, and a rename on one side has to fail on both.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task Going_online_publishes_the_vehicle_to_driver_binding_and_offline_withdraws_it()
+    {
+        await using var harness = await StartAsync();
+
+        var driver = await harness.CreateOnlineDriverAsync(ColomboFort);
+        var db = harness.Redis.GetDatabase();
+        var binding = (RedisKey)$"veh:driver:{driver.VehicleId}";
+
+        Assert.Equal(driver.DriverId.ToString(), await db.StringGetAsync(binding));
+        Assert.Equal(binding.ToString(), RedisKeys.VehicleDriver(driver.VehicleId));
+
+        // No TTL: it has to outlive the 60 s availability hash, or a driver whose hash lapsed would
+        // become unresolvable and their GEO membership would leak for ever.
+        Assert.Null(await db.KeyTimeToLiveAsync(binding));
+
+        // Withdrawing it is what stops position-processor-svc refreshing presence from a vehicle
+        // whose driver has gone home — the vehicle keeps publishing either way.
+        Assert.Equal(HttpStatusCode.OK, (await harness.GoOfflineAsync(driver)).StatusCode);
+        Assert.False(await db.KeyExistsAsync(binding));
     }
 
     [Fact]

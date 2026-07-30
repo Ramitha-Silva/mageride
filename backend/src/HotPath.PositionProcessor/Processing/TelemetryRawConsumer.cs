@@ -2,6 +2,7 @@ using System.Text;
 using Confluent.Kafka;
 using MageRide.HotPath.PositionProcessor.Configuration;
 using MageRide.Shared.Messaging;
+using MageRide.Shared.Telemetry;
 using Microsoft.Extensions.Options;
 
 namespace MageRide.HotPath.PositionProcessor.Processing;
@@ -59,26 +60,34 @@ public sealed class TelemetryRawConsumer(
                 $"('{message.Message.Key}'). mqtt-bridge-svc keys every record by the topic's vehicleId.");
         }
 
+        var stream = ReadStream(message);
+
         await using var scope = services.CreateAsyncScope();
         var processor = scope.ServiceProvider.GetRequiredService<IPositionProcessor>();
 
-        var result = await processor.ProcessAsync(message.Message.Value, vehicleId, cancellationToken);
+        var result = await processor.ProcessAsync(message.Message.Value, vehicleId, stream, cancellationToken);
 
         if (result.Outcome is not PositionOutcome.Indexed)
         {
             Logger.LogDebug(
                 "Vehicle {VehicleId} sample at offset {Offset} was {Outcome} (stream {Stream})",
-                vehicleId, message.Offset.Value, result.Outcome, ReadStream(message));
+                vehicleId, message.Offset.Value, result.Outcome, stream);
         }
     }
 
     /// <summary>The <c>stream</c> header the bridge stamps: <c>live</c> or <c>replay</c>.</summary>
+    /// <remarks>
+    /// An unstamped record is treated as <b>live</b> (<see cref="TelemetryHeaders.DefaultStream"/>).
+    /// Every producer on the plane stamps it, so a record without one is a hand-published payload or
+    /// a producer predating C038 — and reading those as a backlog would silently switch off the
+    /// plausibility gates and the R-08 heartbeat for them.
+    /// </remarks>
     private static string ReadStream(ConsumeResult<string, byte[]> message)
     {
         if (message.Message.Headers is null
-            || !message.Message.Headers.TryGetLastBytes("stream", out var value))
+            || !message.Message.Headers.TryGetLastBytes(TelemetryHeaders.Stream, out var value))
         {
-            return "unknown";
+            return TelemetryHeaders.DefaultStream;
         }
 
         return Encoding.UTF8.GetString(value);

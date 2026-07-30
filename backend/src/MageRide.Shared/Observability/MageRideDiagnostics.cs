@@ -131,6 +131,48 @@ public static class MageRideDiagnostics
     public static readonly Counter<long> PositionsDropped =
         Meter.CreateCounter<long>("mageride.positions.dropped", "{sample}", "Position samples dropped before indexing.");
 
+    // --- position-processor-svc, production form (C039): D-18/T-07 anti-spoof, D-17 second line ---
+
+    /// <summary>
+    /// Samples the D-18/T-07 plausibility filter refused, tagged <c>check</c> — <c>accuracy</c>,
+    /// <c>speed</c>, <c>jump</c>, <c>clock</c> or <c>satellites</c> — and <c>vehicle_type</c>.
+    /// </summary>
+    /// <remarks>
+    /// The tag is the point. "Positions are being dropped" is not actionable; "every drop on this
+    /// fleet is <c>accuracy</c>" is a coverage problem and "every drop is <c>speed</c>" is a spoofer
+    /// or a wrongly-typed vehicle. D5' §13.1 also counts these toward a per-device fraud score,
+    /// which nothing owns yet — see the C039 handoff.
+    /// </remarks>
+    public static readonly Counter<long> PositionsImplausible =
+        Meter.CreateCounter<long>("mageride.positions.implausible", "{sample}",
+            "Position samples refused by the D-18/T-07 plausibility filter.");
+
+    /// <summary>
+    /// Vehicles reported over D-17's second-line 10 msg/s ceiling. One per vehicle per cooldown,
+    /// however many replicas saw it, and one <c>mqtt.rate_violation</c> on <c>audit.events</c> each.
+    /// </summary>
+    /// <remarks>
+    /// The counterpart to <see cref="MqttRateViolations"/>, which is the bridge's observation of the
+    /// broker's 5 msg/s ceiling and drops nothing. This one drops
+    /// (<c>mqtt-topics.md</c> §4: "Drop + flag").
+    /// </remarks>
+    public static readonly Counter<long> PositionRateViolations =
+        Meter.CreateCounter<long>("mageride.positions.rate_violations", "{violation}",
+            "Vehicles observed publishing above D-17's second-line ceiling.");
+
+    /// <summary>
+    /// Changes position-processor-svc made to the R-08 candidate pool, tagged <c>change</c> —
+    /// <c>added</c>, <c>moved</c> or <c>removed</c>.
+    /// </summary>
+    /// <remarks>
+    /// A sustained <c>removed</c> rate with no matching <c>added</c> is drivers ageing out of the
+    /// hot index faster than they are being put back, which shows up to a passenger as "no drivers
+    /// available" with a full car park outside.
+    /// </remarks>
+    public static readonly Counter<long> DriverPoolChanges =
+        Meter.CreateCounter<long>("mageride.dispatch.pool_changes", "{change}",
+            "Drivers added to, moved within or removed from the R-08 candidate index.");
+
     /// <summary>
     /// GNSS capture instant to Redis cell stream, in milliseconds — the ingest half of the SLO.
     /// </summary>

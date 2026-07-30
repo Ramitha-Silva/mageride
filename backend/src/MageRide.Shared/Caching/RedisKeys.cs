@@ -89,6 +89,54 @@ public static class RedisKeys
     /// </summary>
     public static string VehicleRateViolation(Guid vehicleId) => $"rate:mqtt-violation:{vehicleId}";
 
+    /// <summary>
+    /// Count of a vehicle's samples inside one D-17 <b>second-line</b> window —
+    /// <c>backend/contracts/realtime/mqtt-topics.md</c> §4's "10 msg/s per 10 s", counted across
+    /// every position-processor replica (C039).
+    /// </summary>
+    /// <remarks>
+    /// A separate key family from <see cref="VehiclePublishWindow"/> on purpose. That one is the
+    /// bridge's per-second observation of the broker's 5 msg/s ceiling and it only <i>reports</i>;
+    /// this one is the ten-second window the processor <i>drops</i> on, and the two would report
+    /// different rates over the same key if they shared it.
+    /// </remarks>
+    public static string VehicleIngestWindow(Guid vehicleId, long windowStartUnixSeconds) =>
+        $"rate:pos-ingest:{vehicleId}:{windowStartUnixSeconds.ToString(CultureInfo.InvariantCulture)}";
+
+    /// <summary>
+    /// Debounce for the second-line <c>mqtt.rate_violation</c> — one report per vehicle per
+    /// cooldown, across every position-processor replica (C039).
+    /// </summary>
+    /// <remarks>
+    /// Deliberately not <see cref="VehicleRateViolation"/>: sharing that key would let the bridge's
+    /// report of the 5 msg/s ceiling suppress the processor's report of the 10 msg/s one, and the
+    /// second line exists precisely to be heard when the first has already fired.
+    /// </remarks>
+    public static string PositionRateViolation(Guid vehicleId) => $"rate:pos-violation:{vehicleId}";
+
+    /// <summary>
+    /// The driver a vehicle is currently on standby with — the reverse of
+    /// <see cref="DriverAvailability"/>'s <c>vehicleId</c> field (R-08).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Not in ADD §9.4's key space</b> — a micro-change-set raised in the C039 handoff. §9.4 makes
+    /// position-processor-svc the writer of <c>driver:availability:{driverId}</c> and
+    /// <c>geo:drivers:available:*</c>, and a position sample carries no driver: the whole telemetry
+    /// contract (<c>mqtt-topics.md</c> §2.1) is keyed by <c>vehicleId</c> because EMQX authenticates
+    /// a <i>vehicle</i>. Without a reverse binding the attribution in §9.4 is not implementable at
+    /// all, which is why C024 left the heartbeat unwritten and C034 landed it in dispatch-svc.
+    /// </para>
+    /// <para>
+    /// Written and deleted by dispatch-svc alone, at the two moments the (driver, vehicle) pair is
+    /// established and dissolved — <c>POST /v1/standby/online</c> and going offline. Read by
+    /// position-processor-svc on the hot path. A miss means "no Mode C driver is on standby with
+    /// this vehicle", which is the ordinary case: <c>telemetry.raw</c> carries every Mode A bus and
+    /// every Mode B shared vehicle on the platform.
+    /// </para>
+    /// </remarks>
+    public static string VehicleDriver(Guid vehicleId) => $"veh:driver:{vehicleId}";
+
     /// <summary>GEO index of dispatch candidates for a vehicle type in an H3 res-5 cell (R-08).</summary>
     public static string AvailableDrivers(string vehicleType, string h3Res5Cell) =>
         $"geo:drivers:available:{vehicleType}:{h3Res5Cell}";

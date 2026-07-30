@@ -204,10 +204,16 @@ public sealed class PipelineTests(EmqxFixture emqx, RedpandaFixture redpanda, Re
         await using var device = await DeviceClient.ConnectAsync(emqx, vehicleId);
 
         // Six samples inside one batch window, each a little further east.
+        //
+        // Δ C039: the step is ~11 m rather than the ~22 m it was. These six fixes are published as
+        // fast as the socket allows and therefore carry capture instants milliseconds apart, and
+        // the D-18 teleport gate judges a step at no less than `MinStepInterval` (1 s) — so 22 m
+        // reads as 79 km/h against a three-wheeler's 80 km/h ceiling, which is a coin toss rather
+        // than a test. 11 m reads as 40 km/h. What is under test here is batching, not plausibility.
         for (var seq = 1; seq <= 6; seq++)
         {
             var point = new Shared.Primitives.GeoPoint(
-                Samples.Dehiwala.Latitude, Samples.Dehiwala.Longitude + (seq * 0.0002));
+                Samples.Dehiwala.Latitude, Samples.Dehiwala.Longitude + (seq * 0.0001));
 
             await device.PublishPositionAsync(Samples.At(vehicleId, point, seq));
         }
@@ -217,7 +223,7 @@ public sealed class PipelineTests(EmqxFixture emqx, RedpandaFixture redpanda, Re
         // The batch carries the newest frame per vehicle, not the history: a vehicle is in exactly
         // one place now, and replaying its last six fixes would make the marker jitter backwards.
         await WaitUntilAsync(
-            () => frames.Latest(vehicleId)?.Lng >= Samples.Dehiwala.Longitude + 0.0011,
+            () => frames.Latest(vehicleId)?.Lng >= Samples.Dehiwala.Longitude + 0.00055,
             "the passenger should end up with the vehicle's newest position");
 
         Assert.True(frame.Lng >= Samples.Dehiwala.Longitude);

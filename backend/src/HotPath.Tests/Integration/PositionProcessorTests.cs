@@ -8,8 +8,6 @@ using MageRide.Shared.Geo;
 using MageRide.Shared.Messaging;
 using MageRide.Shared.Telemetry;
 using MageRide.TestKit;
-using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
 using StackExchange.Redis;
 // `PositionProcessor` is both a namespace (MageRide.HotPath.PositionProcessor) and the class inside
 // it. From a MageRide.HotPath.* namespace the namespace wins, so the class is named explicitly.
@@ -28,8 +26,12 @@ namespace MageRide.HotPath.Tests.Integration;
 /// answer that.
 /// </remarks>
 [Collection<HotPathCollection>]
+[Trait("Category", "PositionProcessor")]
 public sealed class PositionProcessorTests(EmqxFixture emqx, RedpandaFixture redpanda, RedisFixture redis)
 {
+    /// <summary>The bridge's <c>stream</c> header for <c>pos/live</c>, which is what these drive.</summary>
+    private const string Live = TelemetryHeaders.Live;
+
     [Fact]
     public async Task A_sample_lands_in_geo_live_its_meta_hash_and_its_res_7_cell_stream()
     {
@@ -40,7 +42,7 @@ public sealed class PositionProcessorTests(EmqxFixture emqx, RedpandaFixture red
         var index = NewIndex(connection);
 
         var sample = Samples.At(vehicleId, Samples.ColomboFort, seq: 5);
-        var cell = await index.RecordAsync(sample, CancellationToken.None);
+        var cell = await index.RecordAsync(sample, null, CancellationToken.None);
 
         // ADD §7.4 step 1: the fan-out grid is res 7. A cell at any other resolution is a group
         // nothing publishes to.
@@ -90,19 +92,19 @@ public sealed class PositionProcessorTests(EmqxFixture emqx, RedpandaFixture red
         await using var connection = await ConnectAsync();
         var index = NewIndex(connection);
 
-        Assert.NotNull(await index.RecordAsync(Samples.At(vehicleId, Samples.ColomboFort, seq: 10), default));
+        Assert.NotNull(await index.RecordAsync(Samples.At(vehicleId, Samples.ColomboFort, seq: 10), null, default));
 
         // R-17/T-05, layer 1: a tracker that reconnects after buffering bursts its backlog, and
         // `seq <= last_seen` is what stops that backlog being written over the live position.
-        Assert.Null(await index.RecordAsync(Samples.At(vehicleId, Samples.Kandy, seq: 9), default));
-        Assert.Null(await index.RecordAsync(Samples.At(vehicleId, Samples.Kandy, seq: 10), default));
+        Assert.Null(await index.RecordAsync(Samples.At(vehicleId, Samples.Kandy, seq: 9), null, default));
+        Assert.Null(await index.RecordAsync(Samples.At(vehicleId, Samples.Kandy, seq: 10), null, default));
 
         // And the discarded sample changed nothing: the vehicle is still where seq 10 put it, not
         // 95 km inland.
         var position = await connection.GetDatabase().GeoPositionAsync(RedisKeys.GeoLive, vehicleId.ToString());
         Assert.Equal(Samples.ColomboFort.Latitude, position!.Value.Latitude, precision: 3);
 
-        Assert.NotNull(await index.RecordAsync(Samples.At(vehicleId, Samples.Dehiwala, seq: 11), default));
+        Assert.NotNull(await index.RecordAsync(Samples.At(vehicleId, Samples.Dehiwala, seq: 11), null, default));
     }
 
     [Fact]
@@ -113,7 +115,7 @@ public sealed class PositionProcessorTests(EmqxFixture emqx, RedpandaFixture red
         var vehicleId = Guid.NewGuid();
         await using var connection = await ConnectAsync();
 
-        await NewIndex(connection).RecordAsync(Samples.At(vehicleId, Samples.ColomboFort, seq: 84_213), default);
+        await NewIndex(connection).RecordAsync(Samples.At(vehicleId, Samples.ColomboFort, seq: 84_213), null, default);
 
         // Asserted against the literal pattern rather than the helper: C039 and C040 both read it.
         Assert.Equal(
@@ -131,8 +133,8 @@ public sealed class PositionProcessorTests(EmqxFixture emqx, RedpandaFixture red
         await using var connection = await ConnectAsync();
         var index = NewIndex(connection);
 
-        var fort = await index.RecordAsync(Samples.At(vehicleId, Samples.ColomboFort, seq: 1), default);
-        var dehiwala = await index.RecordAsync(Samples.At(vehicleId, Samples.Dehiwala, seq: 2), default);
+        var fort = await index.RecordAsync(Samples.At(vehicleId, Samples.ColomboFort, seq: 1), null, default);
+        var dehiwala = await index.RecordAsync(Samples.At(vehicleId, Samples.Dehiwala, seq: 2), null, default);
 
         Assert.NotEqual(fort, dehiwala);
 
@@ -151,7 +153,7 @@ public sealed class PositionProcessorTests(EmqxFixture emqx, RedpandaFixture red
         await using var connection = await ConnectAsync();
         var processor = NewProcessor(connection, publishNormalized: false);
 
-        var result = await processor.ProcessAsync("not a position"u8.ToArray(), Guid.NewGuid(), default);
+        var result = await processor.ProcessAsync("not a position"u8.ToArray(), Guid.NewGuid(), Live, default);
 
         // One misbehaving handset must not stall the partition every other vehicle in its shard
         // shares. Counted by reason, dropped, moved on.
@@ -173,7 +175,7 @@ public sealed class PositionProcessorTests(EmqxFixture emqx, RedpandaFixture red
         var wild = new PositionSample(vehicleId, DateTimeOffset.UtcNow, 1, 0, 999, PositionSource.Gt06);
         var encoded = PositionSampleCodec.Encode(wild);
 
-        var result = await processor.ProcessAsync(encoded, vehicleId, default);
+        var result = await processor.ProcessAsync(encoded, vehicleId, Live, default);
 
         Assert.Equal(PositionOutcome.Malformed, result.Outcome);
         Assert.Null(await connection.GetDatabase().GeoPositionAsync(RedisKeys.GeoLive, vehicleId.ToString()));
@@ -194,7 +196,7 @@ public sealed class PositionProcessorTests(EmqxFixture emqx, RedpandaFixture red
         // device chose to write. Trusting the payload would undo the ACL — a handset could report
         // its neighbour's position from its own authenticated topic.
         var spoofed = PositionSampleCodec.Encode(Samples.At(claimed, Samples.ColomboFort, seq: 3));
-        var result = await processor.ProcessAsync(spoofed, authenticated, default);
+        var result = await processor.ProcessAsync(spoofed, authenticated, Live, default);
 
         Assert.Equal(PositionOutcome.Indexed, result.Outcome);
         Assert.Equal(authenticated, result.Sample!.VehicleId);
@@ -248,27 +250,10 @@ public sealed class PositionProcessorTests(EmqxFixture emqx, RedpandaFixture red
         ConnectionMultiplexer.ConnectAsync(redis.ConnectionString);
 
     private static LivePositionIndex NewIndex(IConnectionMultiplexer connection) =>
-        new(connection, Options.Create(new PositionProcessorOptions()), NullLogger<LivePositionIndex>.Instance);
+        ProcessorParts.Index(connection);
 
     private static Processor NewProcessor(IConnectionMultiplexer connection, bool publishNormalized) =>
-        new(
-            NewIndex(connection),
-            new UnusedPublisher(),
-            Options.Create(new PositionProcessorOptions { PublishNormalized = publishNormalized }),
-            TimeProvider.System,
-            NullLogger<Processor>.Instance);
-
-    /// <summary>
-    /// Fails loudly if a test that turned <c>PublishNormalized</c> off ever reaches the producer.
-    /// A no-op stub would let a regression in that flag pass unnoticed.
-    /// </summary>
-    private sealed class UnusedPublisher : IEventPublisher
-    {
-        public Task<PublishReceipt> PublishAsync(EventMessage message, CancellationToken cancellationToken = default) =>
-            throw new InvalidOperationException("This test disabled telemetry.normalized; nothing should publish.");
-
-        public Task<IReadOnlyList<PublishReceipt>> PublishAsync(
-            IReadOnlyCollection<EventMessage> messages, CancellationToken cancellationToken = default) =>
-            throw new InvalidOperationException("This test disabled telemetry.normalized; nothing should publish.");
-    }
+        ProcessorParts.Build(
+            connection,
+            options: new PositionProcessorOptions { PublishNormalized = publishNormalized });
 }

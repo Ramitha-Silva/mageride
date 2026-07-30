@@ -107,6 +107,17 @@ gate that always passes reads like a gate that works.
 - **`driver:availability:{driverId}`'s `level` and `walletOk` are written and never read.** They
   are ADD §9.4's documented shape and would be hours stale by the time a candidate build saw them;
   the live values come from reputation-svc and from `wallet:bal:{driverId}`.
+- **Two services write that hash, split on what decides the fact (Δ C039).** This one owns the
+  *phase* — creating it on go-online with the tier, moving `state` on offer/accept, deleting it on
+  offline — and the recovery path when the 60 s TTL lapsed but `dispatch.driver_presence` survived.
+  position-processor-svc owns everything a *position* decides: which res-5 cell the driver is
+  discoverable from, `lastSeen`, and the TTL. It never creates the hash and never adds a driver this
+  service has not already marked `AVAILABLE`, so the two cannot disagree — one says *who* is in the
+  pool, the other says *where*. ADD §9.4 gives both keys to position-processor-svc and a position
+  sample carries no driver, which is what `veh:driver:{vehicleId}` (Δ C039, written by
+  `DriverIndex`, read there) exists to bridge. `PresenceService.RecordPositionAsync` still refreshes
+  from `telemetry.normalized` as well; the writes are identical and idempotent, and the day that
+  redundancy is removed the recovery branch is the half that has to stay.
 - **The reputation gate fails open, and says so on the row.** A reputation outage that excluded
   every driver would take the platform down for a signal that removes a handful of them. An
   unanswered candidate carries `blockState: UNKNOWN` into the audit, which is a different fact from

@@ -2,6 +2,7 @@ using MageRide.HotPath.MqttBridge.Configuration;
 using MageRide.HotPath.MqttBridge.Throttling;
 using MageRide.Shared.Messaging;
 using MageRide.Shared.Mqtt;
+using MageRide.Shared.Telemetry;
 using Microsoft.Extensions.Options;
 
 namespace MageRide.HotPath.MqttBridge.Bridging;
@@ -25,23 +26,27 @@ namespace MageRide.HotPath.MqttBridge.Bridging;
 /// </remarks>
 internal sealed class MqttBridgeWorker : BackgroundService, IAsyncDisposable
 {
+    // The names and the two stream values live in the kernel as of C039, because
+    // position-processor-svc reads what this writes and its project does not reference this one.
+    // Kept as aliases here so the bridge's own call sites and tests still read as the bridge's.
+
     /// <summary>Header naming the concrete MQTT topic a record came off.</summary>
-    public const string TopicHeader = "mqttTopic";
+    public const string TopicHeader = TelemetryHeaders.Topic;
 
     /// <summary>Header distinguishing the live stream from the backlog: <c>live</c> | <c>replay</c>.</summary>
-    public const string StreamHeader = "stream";
+    public const string StreamHeader = TelemetryHeaders.Stream;
 
     /// <summary>Header stamping when the bridge saw the payload — the platform's receive clock.</summary>
-    public const string ReceivedAtHeader = "receivedTs";
+    public const string ReceivedAtHeader = TelemetryHeaders.ReceivedAt;
 
     /// <summary>Header naming the replica that forwarded it, for E-08 attribution.</summary>
-    public const string BridgeHeader = "bridge";
+    public const string BridgeHeader = TelemetryHeaders.Bridge;
 
     /// <summary><see cref="StreamHeader"/> value for <c>veh/+/pos/live</c>.</summary>
-    public const string LiveStream = "live";
+    public const string LiveStream = TelemetryHeaders.Live;
 
     /// <summary><see cref="StreamHeader"/> value for <c>veh/+/pos/replay</c>.</summary>
-    public const string ReplayStream = "replay";
+    public const string ReplayStream = TelemetryHeaders.Replay;
 
     private readonly MqttBridgeOptions _bridge;
     private readonly TelemetryForwarder _forwarder;

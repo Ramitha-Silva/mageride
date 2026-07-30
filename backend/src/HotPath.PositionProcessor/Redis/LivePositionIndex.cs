@@ -1,11 +1,44 @@
 using System.Globalization;
 using MageRide.HotPath.PositionProcessor.Configuration;
 using MageRide.Shared.Caching;
+using MageRide.Shared.Primitives;
 using MageRide.Shared.Telemetry;
 using Microsoft.Extensions.Options;
 using StackExchange.Redis;
 
 namespace MageRide.HotPath.PositionProcessor.Redis;
+
+/// <summary>The fields <c>veh:meta:{vehicleId}</c> carries (ADD §9.4).</summary>
+/// <remarks>
+/// Read back by this service on the next sample — the D-18 filter measures a step against
+/// <see cref="Lat"/>/<see cref="Lng"/>/<see cref="SampleTs"/> — and by fanout-svc's join seed, so
+/// the names are a contract in both directions rather than an implementation detail.
+/// </remarks>
+public static class MetaFields
+{
+    public const string Cell = "cell";
+    public const string Lat = "lat";
+    public const string Lng = "lng";
+    public const string Seq = "seq";
+    public const string SampleTs = "sampleTs";
+    public const string Type = "type";
+    public const string Mode = "mode";
+    public const string Heading = "heading";
+    public const string Speed = "speed";
+
+    /// <summary>
+    /// The <c>geo:drivers:available:{type}:{res5cell}</c> key this vehicle's driver was last put in
+    /// (R-08), or absent.
+    /// </summary>
+    /// <remarks>
+    /// <b>Not in ADD §9.4's shape</b> — a micro-change-set in the C039 handoff. It exists because a
+    /// GEO set has no TTL and <c>driver:availability:{driverId}</c> does: when the availability hash
+    /// expires there is nothing left anywhere that says which cell key still holds the driver, so
+    /// the membership would leak for ever. This is that memory, and it lives on the vehicle's hash
+    /// because the vehicle is what the next sample arrives for.
+    /// </remarks>
+    public const string PoolCell = "poolCell";
+}
 
 /// <summary>The fields one entry on a <c>cell:{h3index}</c> stream carries.</summary>
 /// <remarks>
@@ -31,18 +64,61 @@ public static class CellStreamFields
 }
 
 /// <summary>
+/// The vehicle's last accepted fix, as <c>veh:meta:{vehicleId}</c> remembers it.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The D-18 plausibility filter measures a step against this, which is why it is read from the
+/// meta hash rather than kept in the process: a vehicle's samples are keyed to one Redpanda
+/// partition and therefore to one consumer, but that assignment moves on every rebalance, and an
+/// in-process "last position" would reset to nothing every time a replica restarted — switching the
+/// teleport gate off for one sample per vehicle, exactly when the platform is least stable.
+/// </para>
+/// <para>
+/// <see cref="PositionProcessorOptions.VehicleMetaTtl"/> is therefore also the filter's horizon: a
+/// vehicle silent for longer than that gets its next sample accepted with no step measured. That is
+/// the right way round — the alternative is judging a step over an unknown gap.
+/// </para>
+/// </remarks>
+/// <param name="Point">Where the last accepted sample put the vehicle.</param>
+/// <param name="SampleTs">That sample's GNSS instant — T-07's monotonic watermark.</param>
+/// <param name="Seq">Its R-17 sequence.</param>
+/// <param name="Cell">The res-7 fan-out cell it was written to.</param>
+/// <param name="Pool">
+/// Where this service last put the vehicle's driver in the R-08 candidate index, or
+/// <see langword="null"/>. Remembered here because the availability hash that would otherwise name
+/// it has a 60 s TTL and the GEO membership it created does not — see
+/// <see cref="IDriverAvailabilityIndex"/>.
+/// </param>
+public sealed record LastAcceptedPosition(
+    GeoPoint Point, DateTimeOffset SampleTs, long Seq, string? Cell, PoolMembership? Pool);
+
+/// <summary>
 /// The live geospatial state a position sample produces (ADD §8, §9.4).
 /// </summary>
 public interface ILivePositionIndex
 {
     /// <summary>
+    /// Reads what the vehicle's last accepted sample left behind, or <see langword="null"/> when
+    /// there is nothing — a vehicle's first sample, or one after the meta hash's TTL lapsed.
+    /// </summary>
+    Task<LastAcceptedPosition?> ReadLastAcceptedAsync(Guid vehicleId, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Records <paramref name="sample"/> if it is newer than the vehicle's watermark.
     /// </summary>
+    /// <param name="sample">The accepted sample.</param>
+    /// <param name="pool">
+    /// The candidate-pool membership to remember for this vehicle's driver, or
+    /// <see langword="null"/> to forget it. Written in the same hash write as everything else so the
+    /// hot path costs one round trip rather than two.
+    /// </param>
+    /// <param name="cancellationToken">Cancellation.</param>
     /// <returns>
     /// The cell it was written to, or <see langword="null"/> when the sample was a replay of
     /// something already seen (R-17, T-05).
     /// </returns>
-    Task<string?> RecordAsync(PositionSample sample, CancellationToken cancellationToken);
+    Task<string?> RecordAsync(PositionSample sample, PoolMembership? pool, CancellationToken cancellationToken);
 }
 
 /// <inheritdoc cref="ILivePositionIndex"/>
@@ -60,12 +136,10 @@ public interface ILivePositionIndex
 /// history nothing.
 /// </para>
 /// <para>
-/// <b>What this deliberately does not write.</b> R-08 gives position-processor-svc the
-/// <c>driver:availability:{driverId}</c> heartbeat that keeps a driver in the dispatch candidate
-/// pool. It is C039's, and this slice leaves it alone rather than half-refreshing it: dispatch-svc
-/// already reads the durable <c>dispatch.driver_presence</c> row for its freshness gate precisely
-/// because nothing refreshes that hash yet (C023 decision 10). A sample also carries no driverId,
-/// so writing it would mean a registry lookup this component has no business doing.
+/// <b>The R-08 candidate index is not written here</b> — it is <see cref="DriverAvailabilityIndex"/>
+/// (C039). Kept separate because the two have different subjects: everything in this type is keyed
+/// by the <i>vehicle</i> EMQX authenticated, and R-08's keys are about the <i>driver</i> on standby
+/// with it, which is a fact this service has to look up and may not find.
 /// </para>
 /// </remarks>
 public sealed class LivePositionIndex(
@@ -97,7 +171,37 @@ public sealed class LivePositionIndex(
     private readonly PositionProcessorOptions _options =
         options?.Value ?? throw new ArgumentNullException(nameof(options));
 
-    public async Task<string?> RecordAsync(PositionSample sample, CancellationToken cancellationToken)
+    public async Task<LastAcceptedPosition?> ReadLastAcceptedAsync(
+        Guid vehicleId, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var values = await redis.GetDatabase().HashGetAsync(
+            RedisKeys.VehicleMeta(vehicleId),
+            [MetaFields.Lat, MetaFields.Lng, MetaFields.SampleTs, MetaFields.Seq, MetaFields.Cell,
+             MetaFields.PoolCell]);
+
+        // Any of the four load-bearing fields missing means the hash is not one this service wrote —
+        // an expired key reads as all-null, and a partial one is not something to guess at.
+        if (!values[0].TryParse(out double lat)
+            || !values[1].TryParse(out double lng)
+            || !DateTimeOffset.TryParse(
+                values[2].ToString(), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var sampleTs)
+            || !values[3].TryParse(out long seq))
+        {
+            return null;
+        }
+
+        return new LastAcceptedPosition(
+            new GeoPoint(lat, lng),
+            sampleTs,
+            seq,
+            values[4].IsNullOrEmpty ? null : values[4].ToString(),
+            PoolMembership.TryParse(values[5].IsNullOrEmpty ? null : values[5].ToString()));
+    }
+
+    public async Task<string?> RecordAsync(
+        PositionSample sample, PoolMembership? pool, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(sample);
         cancellationToken.ThrowIfCancellationRequested();
@@ -120,7 +224,7 @@ public sealed class LivePositionIndex(
             RedisKeys.GeoLive,
             new GeoEntry(sample.Lng, sample.Lat, sample.VehicleId.ToString()));
 
-        await WriteMetaAsync(db, sample, cell);
+        await WriteMetaAsync(db, sample, cell, pool);
         await AppendToCellAsync(db, cell, sample);
 
         return cell;
@@ -136,7 +240,7 @@ public sealed class LivePositionIndex(
         return (long)result == 1;
     }
 
-    private async Task WriteMetaAsync(IDatabase db, PositionSample sample, string cell)
+    private async Task WriteMetaAsync(IDatabase db, PositionSample sample, string cell, PoolMembership? pool)
     {
         var key = RedisKeys.VehicleMeta(sample.VehicleId);
 
@@ -146,34 +250,48 @@ public sealed class LivePositionIndex(
         // without recomputing a cell from a position that has since changed.
         var fields = new List<HashEntry>
         {
-            new("cell", cell),
-            new("lat", sample.Lat),
-            new("lng", sample.Lng),
-            new("seq", sample.Seq),
-            new("sampleTs", sample.SampleTs.ToString("O", CultureInfo.InvariantCulture)),
+            new(MetaFields.Cell, cell),
+            new(MetaFields.Lat, sample.Lat),
+            new(MetaFields.Lng, sample.Lng),
+            new(MetaFields.Seq, sample.Seq),
+            new(MetaFields.SampleTs, sample.SampleTs.ToString("O", CultureInfo.InvariantCulture)),
         };
 
         if (sample.VehicleType is { Length: > 0 } type)
         {
-            fields.Add(new HashEntry("type", type));
+            fields.Add(new HashEntry(MetaFields.Type, type));
         }
 
         if (sample.Mode is { Length: > 0 } mode)
         {
-            fields.Add(new HashEntry("mode", mode));
+            fields.Add(new HashEntry(MetaFields.Mode, mode));
         }
 
         if (sample.HeadingDeg is { } heading)
         {
-            fields.Add(new HashEntry("heading", heading));
+            fields.Add(new HashEntry(MetaFields.Heading, heading));
         }
 
         if (sample.SpeedMps is { } speed)
         {
-            fields.Add(new HashEntry("speed", speed));
+            fields.Add(new HashEntry(MetaFields.Speed, speed));
+        }
+
+        if (pool is not null)
+        {
+            fields.Add(new HashEntry(MetaFields.PoolCell, pool.ToString()));
         }
 
         await db.HashSetAsync(key, [.. fields]);
+
+        if (pool is null)
+        {
+            // Deleted rather than left stale: the field's only purpose is to say which GEO key still
+            // holds this vehicle's driver, and a value that outlives the membership would make the
+            // next removal a GEOREM against the wrong cell — leaving the driver in the pool.
+            await db.HashDeleteAsync(key, MetaFields.PoolCell);
+        }
+
         await db.KeyExpireAsync(key, _options.VehicleMetaTtl);
     }
 

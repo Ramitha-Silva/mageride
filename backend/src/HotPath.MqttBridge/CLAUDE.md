@@ -37,7 +37,8 @@ ADD §7.3/§7.5.2/§7.5.3.
   MQTTnet acks on handler return, which would make EMQX → Redpanda at-most-once. The PUBACK goes
   out only after a delivery report names a partition and an offset. A payload that cannot be
   produced is left unacknowledged and EMQX redispatches it to another group member when this
-  session ends. No in-process retry and no `telemetry.raw.dlq` (D6' §2.3) — that is C039.
+  session ends. No in-process retry and no `telemetry.raw.dlq` (D6' §2.3) — **still nobody's**;
+  C039 did not land it either (see its handoff).
 - **The forward is started synchronously and completed asynchronously.** `TelemetryForwarder.Forward`
   hands the record to librdkafka before it returns and waits for the delivery report on a
   continuation, so several produces are in flight at once. Awaiting each in turn caps a replica at
@@ -114,7 +115,10 @@ backlog session, `ThrottleReplay` the T-05 bucket, `MonitorPublishRate` the D-17
 - **"Live preempts replay 4:1" (R-09/D6' §3.5) is not implemented as a ratio.** Connection
   isolation plus the 20/s cap is what keeps the backlog off the live path, and it is enough for the
   DoD; a literal 4:1 needs broker-side priority the C009 configuration does not set.
-- **`telemetry.raw.dlq`** (D6' §2.3) — C039.
+- **`telemetry.raw.dlq`** (D6' §2.3) — **still unowned.** C039 was expected to land it and did
+  not: it is not in that component's deliverable list, and `KafkaTopicConsumer` — the kernel type
+  a DLQ would belong in — is shared by every consumer on the platform. Recorded in the C039
+  handoff.
 
 ## Not here
 

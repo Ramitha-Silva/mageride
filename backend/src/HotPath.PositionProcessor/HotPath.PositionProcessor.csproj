@@ -1,21 +1,25 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
   <!--
-    HotPath.PositionProcessor (C024, ws-realtime-pipeline) — telemetry.raw -> live indexes.
+    HotPath.PositionProcessor (C024 skeleton, C039 production form) — telemetry.raw -> live state.
 
-    Consume `telemetry.raw`, decode the device payload, discard replayed samples on the R-17/T-05
-    `seq` watermark, and write the three things the live map is made of: the `geo:live` GEO set,
-    the `veh:meta:{vehicleId}` hash, and the `cell:{h3index}` stream fanout-svc reads (ADD §7.4,
-    §9.4). The normalised sample is republished onto `telemetry.normalized` for the consumers that
-    do not want the raw device encoding.
+    Consume `telemetry.raw`, decode the device payload, refuse what cannot be true (D-18/T-07's
+    per-vehicle-type speed table, the 200 m accuracy ceiling, monotonic GNSS UTC and the satellite
+    minimum on hardware) and what is publishing too fast (D-17's second line, 10 msg/s over 10 s —
+    dropped and flagged), discard replays on the R-17/T-05 `seq` watermark, and write the live state
+    the map and the dispatcher are made of: `geo:live`, `veh:meta:{vehicleId}`, the res-7
+    `cell:{h3index}` stream fanout-svc reads, and R-08's `geo:drivers:available:{type}:{res5cell}` +
+    `driver:availability:{driverId}` (ADD §7.4, §9.4, §12.6). The normalised sample is republished
+    onto `telemetry.normalized` for the consumers that do not want the raw device encoding.
 
-    NOT here, and named rather than stubbed: the anti-spoof gates and the Kalman pass (C039), the
-    second-line 10 msg/s ceiling (D-17), the Timescale write path (C040), the
-    `driver:availability:{driverId}` heartbeat that R-08 gives this service (C039 — dispatch-svc's
-    freshness gate reads the durable row for exactly that reason, C023 decision 10), the LWT
-    consumers (R-15/T-04) and `telemetry.raw.dlq` (D6' §2.3).
+    NOT here, and named rather than stubbed: D5' §13.1's per-device fraud score (nobody's),
+    `telemetry.raw.dlq` (D6' §2.3), T-08 anti-cloning (provisioning-svc), T-11 mode eligibility
+    (dispatch-svc), the Timescale write path (C040), US-7.17's stale-vehicle removal from geo:live
+    (C041) and the LWT consumers (R-15/T-04).
 
-    Verify: dotnet test backend/src/HotPath.Tests -c Release
+    Verify: dotnet test backend/src/HotPath.Tests -c Release, filtered to
+    Category=PositionProcessor. (Written out rather than pasted: XML comments cannot carry the
+    filter flag's double hyphen. The runnable form is in this project's CLAUDE.md.)
   -->
 
   <PropertyGroup>

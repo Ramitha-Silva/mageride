@@ -95,6 +95,9 @@ public sealed class DriverIndex(
     /// <summary>Field of <c>driver:availability:{driverId}</c> holding the cell the driver is indexed in.</summary>
     internal const string CellField = "cell";
 
+    /// <summary>Field holding the vehicle the driver went on standby with — the reverse binding's key.</summary>
+    internal const string VehicleIdField = "vehicleId";
+
     /// <summary>
     /// The reservation, as one script. <c>SET NX</c> alone would leave a window in which the lock
     /// is held but <c>offer:{rideId}</c> does not exist yet, which is precisely the phantom the
@@ -177,7 +180,7 @@ public sealed class DriverIndex(
             new HashEntry("state", PresenceStates.Available),
             new HashEntry("lastSeen", DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture)),
             new HashEntry("vehicleType", vehicleType),
-            new HashEntry("vehicleId", vehicleId.ToString()),
+            new HashEntry(VehicleIdField, vehicleId.ToString()),
             new HashEntry(CellField, cell),
 
             // `level` and `walletOk` are part of ADD §9.4's shape and are written so the hash is
@@ -192,10 +195,22 @@ public sealed class DriverIndex(
         ]);
 
         // TTL 60 s, refreshed on every live GPS sample (R-08) — by this service's own
-        // telemetry.normalized consumer, which is what C034 added. The exact post-filter still
-        // reads dispatch.driver_presence rather than this hash: the durable row is what survives a
-        // flush, and D5' §3.2's freshness rule is a bound on its `last_seen_at`.
+        // telemetry.normalized consumer, and as of C039 by position-processor-svc one hop earlier.
+        // The exact post-filter still reads dispatch.driver_presence rather than this hash: the
+        // durable row is what survives a flush, and D5' §3.2's freshness rule is a bound on its
+        // `last_seen_at`.
         await db.KeyExpireAsync(availability, _options.PresenceTtl);
+
+        // Δ C039. The reverse binding, so position-processor-svc can find the driver a position
+        // belongs to: ADD §9.4 makes it the writer of these two keys and the telemetry plane is
+        // keyed by vehicleId end to end, because EMQX authenticates a vehicle and not a person.
+        // Written here because this is where the (driver, vehicle) pair is established — the driver
+        // told this service which vehicle they went on standby with — and deleted in ForgetAsync.
+        //
+        // No TTL: it has to outlive the 60 s availability hash, or a driver whose hash lapsed would
+        // become unresolvable and their GEO membership would leak. ForgetAsync is what removes it,
+        // and going offline is idempotent.
+        await db.StringSetAsync(RedisKeys.VehicleDriver(vehicleId), driverId.ToString());
     }
 
     public async Task RemoveFromPoolAsync(Guid driverId, string newState, CancellationToken cancellationToken)
@@ -236,8 +251,22 @@ public sealed class DriverIndex(
         cancellationToken.ThrowIfCancellationRequested();
 
         var db = Db;
+
+        // Read before the hash is deleted: the binding is keyed by vehicle and only this hash knows
+        // which vehicle that was.
+        var vehicleId = await db.HashGetAsync(RedisKeys.DriverAvailability(driverId), VehicleIdField);
+
         await RemoveFromGeoSetAsync(db, driverId);
         await db.KeyDeleteAsync(RedisKeys.DriverAvailability(driverId));
+
+        // Δ C039. Dropping the binding is what tells position-processor-svc to stop refreshing this
+        // driver's presence from the vehicle's positions — the vehicle keeps publishing after the
+        // driver goes off duty (a Mode A tracker never stops), and without this the heartbeat would
+        // keep a driver who is at home in the candidate pool.
+        if (Guid.TryParse(vehicleId.ToString(), out var vehicle))
+        {
+            await db.KeyDeleteAsync(RedisKeys.VehicleDriver(vehicle));
+        }
     }
 
     public async Task<IReadOnlyList<Guid>> PreFilterAsync(

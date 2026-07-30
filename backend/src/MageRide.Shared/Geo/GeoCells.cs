@@ -68,6 +68,16 @@ public static class GeoCells
     /// <summary>The res-7 view grid, at the 3 km passenger ring.</summary>
     public static H3Grid PassengerView { get; } = new(ViewResolution, PassengerViewRing);
 
+    /// <summary>The res-5 dispatch grid, at D5' §3.1's <c>ring(1..2)</c> pre-filter reach.</summary>
+    /// <remarks>
+    /// dispatch-svc builds its own from <c>Dispatch:H3Resolution</c> / <c>:H3RingK</c> because an
+    /// operator may want to retune the pre-filter's reach; position-processor-svc, which only ever
+    /// needs the single cell a driver is <i>in</i>, takes it from here. The two must agree on the
+    /// resolution or a driver would be indexed under a key no candidate build reads — which fails
+    /// silently, as an empty candidate set. Asserted in <c>H3GridTests</c>.
+    /// </remarks>
+    public static H3Grid Dispatch { get; } = new(DispatchResolution, DispatchPreFilterRing);
+
     /// <summary>
     /// How many cells a hexagon-centred disk of radius <paramref name="k"/> holds:
     /// <c>1 + 3k(k + 1)</c>.
@@ -85,6 +95,9 @@ public static class GeoCells
 
     /// <summary>The res-7 cell a position falls in — the fan-out group and stream key.</summary>
     public static string ViewCell(GeoPoint point) => PassengerView.CellAt(point);
+
+    /// <summary>The res-5 cell a position falls in — the <c>geo:drivers:available:*</c> key (R-08).</summary>
+    public static string DispatchCell(GeoPoint point) => Dispatch.CellAt(point);
 
     /// <summary>
     /// The cells a client at <paramref name="centre"/> subscribes to. 19 for the default 3 km view.
