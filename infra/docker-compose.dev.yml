@@ -245,12 +245,32 @@ services:
       - path: env/.env.app
         required: false
     environment:
-      Mqtt__ServiceUsername: svc-tcp-adapter
+      # Bare name; the `svc-` prefix acl.conf grants `veh/#` to is added by the service
+      # (MqttSessionTokenIssuer.IssueForService), so this must stay `tcp-adapter` unless
+      # infra/scripts/slim-verify.sh changes with it.
+      Adapter__ServiceName: tcp-adapter
+      # provisioning-svc and trip-state-svc both live in app-services in this stack.
+      Adapter__ProvisioningBaseUrl: http://app-services:5000
+      Adapter__TripStateBaseUrl: http://app-services:5000
+      # The PSK signing key provisioning-svc's embedded CA writes (D6' §4.2) —
+      # secrets/psk_signing_key under the same directory that service gets as
+      # StepCa:RootKeyPath.
+      Adapter__PskKeyDirectory: /var/step
+    volumes:
+      # The same bind mount app-services and emqx use (C030): generated on the host by
+      # dev-up.sh, so it exists before any container starts. Read-only here — the adapter
+      # verifies a presented PSK token and never mints one.
+      - ./deploy/device-ca:/var/step:ro
     ports:
       - "127.0.0.1:${ADAPTER_NMEA_UDP_PORT:-5026}:5026/udp"
     depends_on:
       emqx:  { condition: service_healthy }
       redis: { condition: service_healthy }
+      # Δ C043: T-11 reads registry.vehicles.mode and the canonical sample carries the
+      # vehicle's type, so this container has a read-only Postgres dependency D7' §2.1's
+      # Container 9 row does not list. Recorded as a micro-change-set in the C043 handoff.
+      postgres: { condition: service_healthy }
+      migrate:  { condition: service_completed_successfully }
     healthcheck:
       # D7' §5.1: "TCP socket on 5023", 10 s interval, threshold 5. The alpine runtime
       # image has busybox nc; -z is a connect-and-close probe.

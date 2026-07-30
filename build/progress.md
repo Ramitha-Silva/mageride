@@ -68,7 +68,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C040 | persistence-writer-svc | 2 | DONE | 2026-07-30 | 111 HotPath tests green (23 tagged `Category=PersistenceWriter`, all new); **1 trips migration (0506)** — `ux_possample_session_minute` and `trips.session_summaries`, the ADD §9.2 trip summary that no DDL source printed; `COPY` measured at **14,811 rows/s** against the DoD's 3,000; Postgres joins `HotPathCollection` (4 containers now) and `migrate-verify.sh` expects 7 trips tables, not 6; 6 micro-change-sets |
 | C041 | fanout-svc | 2 | DONE | 2026-07-30 | 48 tests green in a **new suite** (`Fanout.Api.Tests`; the 9 hub tests moved out of HotPath.Tests, which is 102); **no migration** — this service owns no table; the D6' §5.1/§5.2 contradiction resolved with a `vehicle:{vehicleId}` group, argued below; a **custom Redis control channel** rather than SignalR's backplane, because the latter would multiply every cell batch by the replica count; 9 micro-change-sets |
 | C042 | query-svc | 2 | DONE | 2026-07-30 | 65 tests green in a **new suite** (`Query.Api.Tests`); **no migration** — this service writes nothing anywhere; the D-22/D-23/US-7.16/US-7.17 filter **promoted into the kernel** (`MageRide.Shared.Realtime.VehicleVisibilityRules`) so the socket and the snapshot cannot disagree, which is what C041's handoff asked for; `Fanout:JoinSeedFrames` retired with it (Fanout.Api.Tests 48 → 47, HotPath.Tests 102 → 101); the platform's second gRPC service; **no Mode C track exists anywhere to serve as a polyline** and it is not invented; 9 micro-change-sets |
-| C043 | tcp-adapter | 2 | PENDING | | |
+| C043 | tcp-adapter | 2 | DONE | 2026-07-30 | 89 tests green in a **new suite** (`TcpAdapter.Tests`); **no migration** — this service writes nothing anywhere, and reads `registry.vehicles` read-only; four golden frames, one per protocol family, byte-exact with real checksums; the platform's first `Microsoft.NET.Sdk.Worker` service (no HTTP surface at all, so no `AddMageRideDefaults`); a read-only Postgres dependency D7' §2.1's Container 9 row does not list, argued below; `POST /v1/internal/sessions/ignition` finally has a caller; 9 micro-change-sets |
 | C044 | fleet-health-svc | 2 | PENDING | | |
 | C045 | content-svc | 3 | PENDING | | |
 | C046 | wallet-svc | 3 | PENDING | | |
@@ -5726,3 +5726,217 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   down throughout. `Query.Api.Tests` takes ~1 min, `Fanout.Api.Tests` ~1 min 25 s, `HotPath.Tests`
   ~4 min 40 s. **No new NuGet reference** — `Grpc.AspNetCore`, `Grpc.Net.Client`, `Dapper`, `Npgsql`
   and `StackExchange.Redis` are all already pinned centrally.
+
+- **Component:** C043 tcp-adapter — 2026-07-30
+- **Status:** DONE — `dotnet test backend/src/TcpAdapter.Tests -c Release` is 89/89 green in a new suite,
+  and every line of the DoD is asserted against the thing it is a claim about: four golden frames decode
+  to the expected `PositionSample` through the production mapping; an unbound, revoked and quarantined
+  IMEI each close a real socket; a half-closed socket's retained `status=offline` is read back off a real
+  EMQX inside the configured window; and T-11 is asserted against `registry.vehicles.mode` in a real
+  Postgres and `veh:driver:{vehicleId}` in a real Redis. `dotnet build backend/MageRide.sln -c Release`
+  is clean with 0 warnings. **No migration** — this service owns no table and writes to no database.
+- **Notes:**
+  **The decision everything else follows from —** a tracker cannot present a JWT, so the enforcement that
+  confines an MQTT-native device (EMQX's `verify_claims` binding `${username}` to the token's
+  `vehicleId`, plus `acl.conf`'s `veh/${username}/*`) is **structurally unavailable** on 5023-5026. The
+  adapter connects as one `svc-tcp-adapter` principal with `veh/#`, so the vehicle binding is this
+  service's to get right and nothing else's. The guarantee is therefore made structural rather than
+  careful: the only thing in the project that produces a topic is a `TrackerAuthorisation.VehicleId`,
+  which came from `prov.tracker_bindings`, and `EmqxLink` takes no topic from a caller that did not build
+  one from an authorisation. A per-device broker session was considered and rejected — it multiplies
+  EMQX's connection count by the tracker population and buys no authorisation the `svc-` grant does not
+  already give.
+  **`seq` is the capture instant in milliseconds, and this is the load-bearing design choice.** A tracker
+  frame has no sequence number worth using: GT06's and JT/T 808's information serials are sixteen bits,
+  wrap in hours, and survive neither a device reboot nor a pod move — all of which `veh:seq:{vehicleId}`
+  outlives, because R-17/T-05's watermark is per vehicle and permanent. The GNSS instant does survive all
+  three, is monotonic per vehicle (which T-07's monotonic-clock check independently requires of hardware
+  anyway), and is *identical* for a sample sent live and the same sample re-sent from the device's flash
+  ring — so the backlog dedupe falls out of the comparison position-processor already makes rather than
+  needing anything new. The cost is that two fixes stamped to the same millisecond collide, and for four
+  protocol families that all stamp to the whole second, two fixes in one second are the same position
+  twice. `TrackerSamples.From` is the one place it is computed, shared by the TCP sessions and the UDP
+  listener, because two producers filling the canonical payload differently would surface as a vehicle
+  whose type depends on which port its tracker speaks.
+  **Spec gaps and conflicts —**
+  (a) ***D7' §2.1 gives Container 9 no database and this service needs one.*** T-11's gate needs the
+  vehicle's **mode** and `registry.vehicles.mode` is the only place it exists: `prov.tracker_bindings`
+  does not carry it, `imei:{imei}` holds a vehicle id and nothing else, and `veh:meta:{vehicleId}` is
+  written by position-processor-svc *from accepted samples* — so reading the mode from there to decide
+  whether to accept a sample is circular and empty for exactly the tracker-only vehicles that need it.
+  The canonical sample's denormalised `mode`/`vehicleType` (`mqtt-topics.md` §2.1, "so a consumer needs no
+  registry lookup") need the same row. One read-only primary-key lookup per device *connect*, cached for
+  `Adapter:VehicleProfileTtl` — the same read-only cross-context window provisioning-svc opens for a
+  bind, and never a write. Widening C030's `validate` response with a mode was considered and rejected:
+  that endpoint's fence is "this service only mints, binds and revokes", and it does not own the column
+  either. **§2.1's Container 9 row needs `postgres` added, and the dev compose now declares it.**
+  (b) ***D7' §2.2's `runtime:10.0-alpine` cannot be used for this container, and neither can
+  `infra/docker/Dockerfile.worker`.*** §2.2 says "`tcp-adapter` uses
+  mcr.microsoft.com/dotnet/runtime:10.0-alpine (no ASP.NET)" and C010 built a worker image on that base
+  for it. `MageRide.Shared` carries `FrameworkReference Microsoft.AspNetCore.App` — for the middleware,
+  health checks and minimal-API results the other twenty services use — and backend/CLAUDE.md requires
+  every service to reference it, so a process built against it does not start on the runtime-only image
+  whatever it does at run time. `backend/src/TcpAdapter/Dockerfile` (the path the dev compose already
+  named) uses `aspnet:10.0-alpine` and says why in its header. The cost is ~10 MB of layer; the
+  alternative is a second copy of the kernel. **§2.2, `infra/CLAUDE.md`'s base-image line and
+  `infra/docker/Dockerfile.worker`'s header all need the correction** — the worker image is still right
+  for `hot-path` only if that project ever stops referencing the kernel, which it does not.
+  (c) ***JT/T 808-2013's terminal phone number cannot express an IMEI.*** Six BCD bytes are twelve
+  digits; `provisioning.yaml` constrains a binding's IMEI to `^\d{15}$`. So a 2013-header device presents
+  an identity **no binding could ever have carried**, and it is refused at connect with that reason named
+  (`AuthOutcome.MalformedIdentity`, distinct from `NotBound`, because the two need different fixes). The
+  2019 header's ten-byte field carries a zero-padded IMEI comfortably and is what the golden frame uses.
+  Both header shapes decode; only the 2019 one can authenticate. Resolving it needs either 2019-capable
+  firmware or an **alias index in provisioning-svc** (`imei:alias:{12-digit}` → IMEI, written at bind);
+  inventing a mapping here would authenticate a device against a guess, which is the one thing this path
+  must not do. **A decision is needed before any 2013-only fleet is onboarded.**
+  (d) ***D6' §4.1 and ADD §7.7.1 call H02 "ASCII pipe-delimited"; every device in the family uses
+  commas.*** Both separators are accepted — it costs one entry in a `char[]` — rather than picking one
+  and refusing the other, because a bus that stops reporting is a worse outcome than a redundant
+  separator. **§4.1's table needs the word changed.**
+  (e) ***Generic UDP-NMEA shares `source = 4` with NMEA-over-MQTT.*** `ck_positions_source` admits 0…4
+  and D6' §4.1 lists five families for five codes, so the two NMEA transports share the code that says
+  "this is NMEA". Coining a sixth needs a migration to widen the CHECK for a distinction no consumer
+  reads: what a reader wants from `source` is which decoder produced the numbers, and for these two it is
+  the same sentence grammar. **Recorded rather than fixed;** if the distinction is ever wanted, it is a
+  C006 migration and a `PositionSource` member.
+  (f) ***ADD §7.7.3's "per-device pre-shared bearer + IMEI signature" is not expressible on three of the
+  four protocols.*** The GT06 login packet is eight BCD bytes of terminal id and an optional two-byte
+  model code — there is nowhere to put a credential. H02 and generic-NMEA are the same. **JT/T 808's
+  `0x0102` terminal-authentication body is the only field in the four families a credential fits in.**
+  `Adapter:RequireCredential` therefore defaults **off**; a credential that *is* presented is always
+  verified against `secrets/psk_signing_key`, whatever the setting. The C030 handoff's expectation that
+  "an adapter holding the signing key rejects a forged token without a network call" is honoured for the
+  one family that can carry one — and `Identity/CredentialTests.cs` mints a real token with C030's own
+  `EmbeddedStepCa` and verifies it here, so the two implementations of the format cannot drift silently.
+  **§7.7.3's table needs a note naming which families can carry the bearer.**
+  (g) ***No spec gives the generic-NMEA framing.*** A `$GPRMC` sentence says where something is and never
+  says what, so the three accepted identity prefixes (`IMEI:…;`, `#…#`, a bare digit string) are stated in
+  `NmeaCodec`'s remarks and nowhere else. **D6' §4.1 needs the framing written down** before a device
+  population is bought.
+  (h) ***H02's ACC bit is bit 10 of the status word, inverted, and that is in no document here.*** It is
+  what the field-tested decoders for the family do and the reading that makes `FFFFFBFF` — the value a
+  unit with the engine running sends — mean ignition-on. Asserted in `CodecTests`; **flagged because a
+  wrong reading here auto-starts a Mode A journey every time a bus is parked.**
+  (i) ***Three thresholds this component chose because no spec pins them.*** `Adapter:OfflineWindow`
+  (5 s — the deadline the T-04 publish must land inside, not a wait), `Adapter:ReplayAge` (60 s — above
+  any live cadence D5' §5.2 allows, below the shortest coverage gap worth calling one; JT/T 808's
+  `0x0704` needs no heuristic because it *is* the backlog), and `Adapter:IdleTimeout` (15 min — five
+  missed GT06 heartbeats, against HAProxy's `timeout client 4h`). Each is argued at its declaration.
+  (j) ***D7' §4.2's `Provisioning__ImeiCacheKey` names nothing and should be dropped from the row.***
+  The `imei:` prefix is `MageRide.Shared.Caching.RedisKeys.Imei`, spelled once for every service on the
+  tracker plane — provisioning-svc writes the key, this service reads it and fleet-health will too — so a
+  configurable prefix is a way for three services to disagree about where the cache lives and no way to
+  fix anything. It is **kept in `.env.app.example` regardless**, because `slim-verify.sh` asserts the
+  templates cover §4.2 line for line and removing it would fail C009's verify; the line now says it reads
+  nothing. `Mqtt__ServiceUsername`, which C009 also put in that block, *is* removed — it is not in §4.2,
+  named nothing the service reads, and an `env_file` is one flat map, so a `Mqtt__*` key set there for the
+  adapter reached every container loading the file (the compose `hot-path` service sets it again in
+  `environment:` purely to undo that). `Adapter__ServiceName` replaces it in both places. **§4.2's
+  tcp-adapter row needs rewriting** against the settings in `AdapterOptions`.
+  **Decisions —**
+  (1) **`Microsoft.NET.Sdk.Worker`, and no `AddMageRideDefaults`.** `mqtt-topics.md` §7 says
+  "tcp-adapter … has **no HTTP surface**" and D7' §5.1 gives the container a TCP-socket probe for exactly
+  that reason. The kernel call configures the HTTP half — RFC 7807, the `Idempotency-Key` middleware, the
+  health endpoints, JWT bearer — and none of it has anything to configure in a process no request can
+  reach. Postgres, Redis, telemetry and the MQTT session-token issuer are registered individually, each
+  through the same kernel extension every other service uses. This is the platform's first service with
+  no Kestrel; **"ready" is therefore not a thing this container can answer**, and that is deliberate: a
+  device that connects while EMQX is away authenticates normally and its samples are dropped and counted
+  (`mageride.tracker.samples_gated{reason=broker_unavailable}`), because refusing devices over a broker
+  restart would turn it into the fleet-wide reconnect storm R-09 exists to prevent.
+  (2) **T-11 is gated at ingest, and the "online" fact is `veh:driver:{vehicleId}`.** §7.7.7's "pings
+  sent while offline are rejected and never reach the live map or dispatch" is a statement about where
+  the sample stops — publishing and filtering later would put it on `telemetry.raw`, through
+  position-processor's Redis writes and onto the cell streams fanout reads. C039's handoff agrees from
+  the other side ("T-11 mode eligibility — dispatch's gate", i.e. not its own). The binding dispatch-svc
+  writes at `POST /v1/standby/online` and deletes when the driver goes off duty *is* §7.7.7's sentence,
+  and it is already the key position-processor resolves a driver through, so the two planes read one
+  fact. The availability hash's `state` is deliberately **not** consulted: a driver mid-offer or mid-ride
+  is not `AVAILABLE` and is emphatically online, and gating on the phase would take a Mode C vehicle off
+  the map the moment it was hired.
+  (3) **`Adapter:PublishWhenModeUnknown` defaults open, and the asymmetry is the argument.** Closed means
+  a Postgres blip takes every Mode A bus on the platform off the live map — and §7.7.7 makes the tracker
+  "the authoritative and only source" for those, with no app to fall back to. Open means a Mode C
+  vehicle whose driver is offline may appear until the lookup recovers, which position-processor's
+  freshness gate and dispatch's own availability check both still see. A **stale cache entry is preferred
+  to either** (`VehicleProfileCache` keeps expired entries and serves them while the database is
+  unreachable), so this only decides a vehicle the pod has never resolved.
+  (4) **T-08 is reported, never adjudicated, and both sockets stay open.** Two live sockets holding one
+  identity is a fact only this service can see (C030's fence: at `bind` a clone arrives with two
+  identities and is decidable there; at the adapter it presents a *copy* of the genuine credential).
+  Closing one would destroy the evidence and might well leave the clone publishing, so the adapter POSTs
+  `/quarantine` and provisioning-svc's answer arrives back as a revocation on `prov:tracker`.
+  (5) **`tracker.bound` closes a socket and `tracker.credential_rotated` does not.** A bind while a socket
+  is open means the IMEI moved to another vehicle and that socket is publishing under the old one. A
+  rotation must not close anything — "rotation is not revocation, and conflating them bricks devices"
+  (C030): the replacement is minted fourteen days early precisely so a tracker parked out of GSM coverage
+  can come back and collect it. `DownlinkTests` asserts both directions.
+  (6) **The retained presence pair is guarded by `SessionRegistry.IsCurrent`.** An `offline` from a
+  session already displaced by a reconnect would overwrite the replacement's `online`, and the value is
+  **retained** — the vehicle would read dark to all three LWT consumers until its next reconnect. Across
+  pods this cannot be checked at all, which is the fourth reason stickiness is a deployment property and
+  not an optimisation (the others: the downlink's socket, the T-08 detection, the JT/T 808 session state).
+  (7) **The five downlink commands are a closed set, and an inexpressible one answers null.** GT06's
+  command payload is an opaque ASCII string, so a pass-through would turn any publisher on `veh/+/cmd`
+  into a device-configuration channel. Not every command exists on every protocol — H02's vocabulary is
+  published per device family and only `S71`'s reporting interval has a consistent meaning across the
+  population; generic NMEA has no command grammar and no session to write one back on. Those are counted
+  as `unsupported` rather than faked, because a device silently discards a command it does not recognise
+  and that is indistinguishable from one that arrived and did nothing. `revokeCredential` is honoured by
+  closing the socket: no device frame carries it, and stopping service is the only thing the adapter can
+  do about a device holding a revoked credential.
+  (8) **`AddHostedService<T>` cannot register the three TCP listeners.** It goes through
+  `TryAddEnumerable`, which de-duplicates by *implementation type* — so three `TrackerListener`
+  registrations silently keep the first and two protocol ports never open, with nothing to see but a
+  quiet log. `AdapterListeners` builds them and `ListenerHost` puts them under the host's lifetime.
+  Recorded because the failure mode is invisible.
+  (9) **`POST /v1/internal/sessions/ignition` now has a caller,** which is **not in this component's
+  deliverable list**. C031 landed the route saying in as many words that "the tracker plane decodes ACC
+  out of a GT06/JT808 frame (`tcp-adapter`, C043) and had nowhere to say so"; a landed endpoint with no
+  caller means a tracker-equipped fleet never auto-starts a journey (AL-32, US-3.22/3.23). The ACC line
+  is a bit in a status byte only this service parses, so the decode was happening here regardless. The
+  first frame of a session reporting ACC-off is **not** reported — it is the state the device was already
+  in, and reporting it would auto-end a session the dashboard started, which AL-32 forbids the device
+  from doing. Gated by `Adapter:TripStateBaseUrl`; unset is a start-up warning.
+  (10) **The adapter's counters are declared in the service, not in `MageRideDiagnostics`.** Every other
+  component put its instruments in the kernel; none of these is cross-cutting, and a protocol adapter's
+  vocabulary (`sockets_refused`, `frames_rejected`, `revocation.latency`) does not belong in the assembly
+  all twenty-odd services compile against. They are created on `MageRideDiagnostics.Meter`, so the
+  exporter D7' §12 configures picks them up by meter name exactly as if they had been.
+  **The four golden frames are constructed, not captured.** There is no tracker on this build host, and a
+  "capture" pasted from a vendor forum is a frame nobody can check. Every field in `Captures` is derived
+  from the published frame layout and every checksum is computed by the algorithm the format names — and
+  the one independently attestable fixed point, the GT06 documentation's login acknowledgement
+  `78 78 05 01 00 01 D9 DC 0D 0A`, verifies against the same CRC (`WireTests`), which pins both the
+  algorithm (CRC-16/X-25, not CRC-CCITT) and the range it covers. All four frames describe the same
+  vehicle at the same instant in the same place, so a hemisphere bit read backwards, a knot read as a
+  km/h or a Beijing timestamp left in local time shows up as a disagreement with the other three.
+  **provisioning-svc is a stub in this suite, and the two formats where that would hide something are
+  not.** What the adapter needs from `validate` is four fields; running the real service to produce them
+  would drag in step-ca, its migrations and an authenticated bind flow. What a stub cannot check is
+  *format agreement*, and there are exactly two formats written down on both sides of the fence — the
+  signed PSK token and the `prov:tracker` signal. Both are asserted against `Provisioning.Api`'s own
+  `EmbeddedStepCa` and `TrackerCredentialSignal` in `Identity/CredentialTests.cs`, because a divergence
+  in either is silent: a renamed JSON field turns every value null and the socket never closes; a changed
+  HMAC payload makes every credential look forged.
+  **What the next components need from this one —**
+  **For C044 (fleet-health-svc) —** the GT06 status byte's voltage level and GSM signal strength, and
+  JT/T 808's additional items, are **decoded by nothing today**. `prov.tracker_bindings.signal_strength`,
+  `battery_mv` and `sat_count` have a reader (C030's `GET /v1/trackers/{imei}`) and no writer;
+  `sys/diag/{vehicleId}` (D6' §3.1, QoS 0) is the topic they belong on and this service publishes nothing
+  there. C044 either consumes a diagnostics topic this component would have to start publishing, or the
+  fields stay null — **decide which, and if it is the former, say so and it is a small change here.**
+  **For C044 / C062 —** `mageride.tracker.samples_gated{reason=mode_c_offline}` rising for a vehicle is
+  the operational signal that a Mode C tracker is reporting while its driver is off duty, which is
+  US-3.6's "one publisher at a time" question in a different form. Nothing alerts on it.
+  **For C125 (the replica) —** `Adapter:ShardCount`/`Shard` are off in the dev compose because there is
+  one pod. A multi-pod deployment must **also** make the L4 balancer sticky by device (HAProxy
+  `stick-table` on the source address in front of 5023-5025, `sessionAffinity: ClientIP` on DOKS) or the
+  four per-pod facts split silently — the adapter logs the disagreement once per device and serves it
+  anyway. The hash is FNV-1a over the IMEI's ASCII digits and is pinned by a test.
+  **For provisioning-svc (a future Δ) —** gap (c)'s alias index, if a JT/T 808-2013 fleet is onboarded.
+  **Build host —** Docker for three Testcontainers fixtures (EMQX, Redis, Postgres); the replica stack
+  stayed down throughout. `TcpAdapter.Tests` takes ~1 min 30 s (the codec half is ~0.5 s of it).
+  **No new NuGet reference** — `MQTTnet`, `StackExchange.Redis`, `Dapper`, `Npgsql` and
+  `Microsoft.Extensions.TimeProvider.Testing` are all already pinned centrally.

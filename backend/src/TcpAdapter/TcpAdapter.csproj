@@ -1,0 +1,60 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+
+  <!--
+    TcpAdapter (C043) — hardware GPS tracker ingest: GT06 / JT/T 808 / H02 / generic-NMEA.
+
+    Terminate the device socket on 5023-5026, authenticate its IMEI against provisioning-svc
+    (T-01/T-03/T-12), decode the binary or ASCII frame into the canonical PositionSample, and
+    publish it into EMQX on `veh/{vehicleId}/pos/live` (or `/pos/replay`) as the `svc-` bridge user.
+    Downlink commands travel the other way: `veh/{vehicleId}/cmd` -> a protocol-native command frame
+    on the open socket (§7.7.5). A half-closed socket publishes the retained `status=offline` that
+    emulates an MQTT last will (T-04).
+
+    Microsoft.NET.Sdk.Worker, NOT Sdk.Web: `mqtt-topics.md` §7 says "tcp-adapter is one StatefulSet
+    per protocol family and has no HTTP surface", and D7' §5.1 gives it a TCP-socket liveness probe
+    (`nc -z 127.0.0.1 5023`) instead of /health/live for exactly that reason. So there is no Kestrel
+    here and no `AddMageRideDefaults` — the kernel's HTTP half has nothing to configure. The pieces
+    that are not HTTP (Postgres, Redis, telemetry, the MQTT session-token issuer) are registered
+    directly in TcpAdapterApplication.
+
+    The image is nevertheless `aspnet:*-alpine` rather than D7' §2.2's `runtime:*-alpine`:
+    MageRide.Shared carries `FrameworkReference Microsoft.AspNetCore.App`, and backend/CLAUDE.md
+    requires every service to reference it. See the Dockerfile.
+
+    NOT here: the protocol *decision* of which vehicle a device belongs to (provisioning-svc, C030),
+    the seq dedupe and anti-spoof filter (position-processor-svc, C039), the Timescale write (C040),
+    and the LWT *consumers* (trip-state, dispatch, fleet-health).
+
+    Verify: dotnet test backend/src/TcpAdapter.Tests -c Release
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.TcpAdapter</RootNamespace>
+    <AssemblyName>MageRide.TcpAdapter</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <UserSecretsId>mageride-tcp-adapter</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MageRide.Shared\MageRide.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The adapter is an MQTT *client* of EMQX, publishing on behalf of devices that cannot speak
+         MQTT themselves, and a subscriber of `veh/+/cmd` for the downlink. Same client the bridge
+         uses (C038) so both halves of the plane agree about protocol version and QoS. -->
+    <PackageReference Include="MQTTnet" />
+    <!-- `imei:{imei}` (T-03), the `prov:tracker` revocation channel (T-12) and the
+         `veh:driver:{vehicleId}` standby binding the T-11 gate reads. -->
+    <PackageReference Include="StackExchange.Redis" />
+    <!-- registry.vehicles.mode / vehicle_type — read-only, one indexed lookup per device connect.
+         See Modes/VehicleProfiles.cs for why the adapter needs a database at all. -->
+    <PackageReference Include="Dapper" />
+    <PackageReference Include="Npgsql" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="TcpAdapter.Tests" />
+  </ItemGroup>
+
+</Project>

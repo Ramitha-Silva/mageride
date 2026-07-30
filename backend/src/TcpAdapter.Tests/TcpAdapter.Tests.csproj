@@ -1,0 +1,77 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    C043 verify target: dotnet test backend/src/TcpAdapter.Tests -c Release
+
+    Two halves, split on what the claim is about.
+
+    The codec half needs nothing running. A captured frame either decodes to the expected
+    PositionSample or it does not, and that is the DoD's first line — four golden frames, one per
+    protocol family, byte-exact with real checksums. Those tests also carry the checksum, escaping
+    and framing edge cases, because a CRC table that is subtly wrong rejects every genuine frame and
+    a decoder split across two reads is how a real device actually arrives.
+
+    The rest run the real listeners on real sockets against a real EMQX, a real Redis and a real
+    Postgres. Every remaining line of the DoD is a claim about a seam: "an unbound or revoked IMEI is
+    refused at connect" is about provisioning-svc's answer reaching the accept path, "a half-closed
+    socket publishes a retained status=offline" is about what is actually on the broker afterwards,
+    and T-11 is about a Redis key dispatch-svc writes and a Postgres column registry-svc owns. None
+    of them is assertable against a fake.
+
+    provisioning-svc itself is a stub here — a WebApplication answering the two internal routes the
+    adapter calls. Running the real service would drag in step-ca, its own migrations and a bind flow
+    with authentication, to answer a question the contract prints in four fields. What is asserted
+    against the real thing is the part where agreement actually matters and a divergence would be
+    silent: the PSK token format and the shape of the prov:tracker signal, both checked against
+    Provisioning.Api's own types in Identity/CredentialTests.cs.
+
+    Microsoft.NET.Sdk.Web, not Microsoft.NET.Sdk: the provisioning stub is a WebApplication.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.TcpAdapter.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <OutputType>Exe</OutputType>
+    <!--
+      xUnit1041: collection-fixture ctor args are consumed through the primary constructor.
+      xUnit1051: every test is bounded by its own harness lifetime, so threading
+                 TestContext.Current.CancellationToken through each call would add noise without
+                 changing behaviour. Matches HotPath.Tests and Provisioning.Api.Tests.
+    -->
+    <NoWarn>$(NoWarn);xUnit1041;xUnit1051</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <!-- The published sample and the retained presence are asserted by subscribing to the broker,
+         not by reading the adapter's own counters. -->
+    <PackageReference Include="MQTTnet" />
+    <PackageReference Include="StackExchange.Redis" />
+    <PackageReference Include="Dapper" />
+    <PackageReference Include="Npgsql" />
+    <!-- Three decoders read a clock: GT06's time-sync reply, H02's command stamp and the date NMEA's
+         GGA-only datagram has to infer. All three are assertions about a specific instant. -->
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TcpAdapter\TcpAdapter.csproj" />
+    <!-- For two constants' worth of seam. The PSK token format and the prov:tracker signal shape are
+         implemented on both sides of a wire (this project must not reference C030's decoding, and
+         C030 must not reference this project's protocols), so the agreement is asserted against
+         Provisioning.Api's own EmbeddedStepCa and TrackerCredentialSignal. Same reason
+         HotPath.Tests references TripState.Api. -->
+    <ProjectReference Include="..\Provisioning.Api\Provisioning.Api.csproj" />
+    <!-- C010: the EMQX, Redis and Postgres fixtures, so this suite runs the same server builds and
+         — for EMQX — the same deployed broker policy the dev stack does. -->
+    <ProjectReference Include="..\MageRide.TestKit\MageRide.TestKit.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>
