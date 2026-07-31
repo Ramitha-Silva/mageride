@@ -14,6 +14,36 @@ openapi: 3.1.0
 #
 # AL-34: the credit-request QR-scan path is REMOVED — `credit-transfer/request` is Driver-ID-only
 # and SCR-DA/DI-023 drops the scan tile.
+#
+# Δ C047 — five operations, one field, and two clarifications the code had to make:
+#   POST /v1/internal/fees/mode-b/run           AL-03 — raise the Mode B per-vehicle platform
+#                                               charge for a Colombo month. D5' §2.1 states the
+#                                               ~Rs 300 monthly fee and the free first month and
+#                                               D3' gives it no route, so nothing raised it.
+#   GET  /v1/admin/fees/mode-b/charges          the AL-03 hand-off: the month's lines plus their
+#                                               per-fleet totals, which fleet-billing-svc (C060)
+#                                               turns into a billing.fleet_invoices row
+#   POST /v1/fees/{driverId}/refund-requests    US-9.23 — the driver's fee-refund intake. The
+#   GET  /v1/fees/{driverId}/refund-requests    reversal itself is admin-bff's (US-14.11, C065)
+#   GET  /v1/admin/voucher-discount-tiers       the read side of the PUT beside it, so a Config
+#                                               screen can read-modify-write on one prefix
+#   `vehicleId` on GET /v1/fees/{driverId}/today   US-9.7 puts the live vehicle's registration
+#                                               beside the fee, and the client cannot resolve it
+#                                               without knowing which vehicle the rate is for
+#   `x-idempotency-exempt` on the two internal routes   their key is the Asia/Colombo day (D-13)
+#                                               and the (vehicleId, periodMonth) pair — both
+#                                               stronger than a header, which dedupes identical
+#                                               *requests* rather than identical *days*
+#   `503` on charge-before-trip                 wallet-svc unreachable. The fee is refused rather
+#                                               than skipped: a 200 with nothing charged would
+#                                               cost the platform its only revenue and look healthy
+#
+# **The credit-transfer and voucher operations below forward to wallet-svc.** `billing.*` has one
+# writer (D-09) and ADD §11.6 draws subscription-svc calling wallet-svc for the balance check and
+# the movement, so C046 landed the working half at `/v1/wallet/**` and these D3'-spelled paths
+# proxy the caller's own bearer to it. Both spellings are in D3' Part 2 and both are landed; one
+# should be retired — C007 said so first, and the C047 handoff says it again. The same is true of
+# the two `voucher-discount-tiers` admin surfaces, which are the same table.
 # =============================================================================================
 
 info:
@@ -115,10 +145,17 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [vehicleType, dailyRateMinor, status, tripsToday, firstTripFree, feeDate]
+                required: [vehicleType, vehicleId, dailyRateMinor, status, tripsToday, firstTripFree, feeDate]
                 properties:
                   vehicleType:
                     $ref: './_shared.yaml#/components/schemas/VehicleType'
+                  vehicleId:
+                    # Δ C047. US-9.7 puts "the registration number of the vehicle currently
+                    # live/online" on the dashboard beside the fee, and the client cannot resolve
+                    # that without knowing which vehicle the rate it is being shown belongs to.
+                    # It is the driver's selected vehicle (US-9.6), or — if they have gone
+                    # offline — the one today's charge was taken for.
+                    $ref: './_shared.yaml#/components/schemas/Ulid'
                   dailyRateMinor:
                     type: integer
                     format: int64
@@ -201,12 +238,38 @@ paths:
 
         An insufficient balance is `402 insufficient-wallet`, which is what surfaces to the driver
         as a failed accept (US-9.1).
+
+        **Δ C047 — `rideId` is load-bearing, not decorative.** D3' has ride-svc call this during
+        offer acceptance, *after* the conditional `UPDATE … AND version = :v` has already settled
+        the offer, so the trip being paid for is itself in the count by the time this service is
+        asked. The ride named here is excluded from it; without that, the first trip of every
+        Colombo day arrives as `tripsToday = 1` and is charged, which is the one thing D-13 forbids.
+        Omit it only if the call is made *before* the accept lands.
+
+        `tripsToday` is counted from `dispatch.offers` (`status = 'ACCEPTED'`, responded to on the
+        Colombo day) — the same rows dispatch-svc's D-08 pre-dispatch gate counts. The gate exists
+        to predict this charge, so the two must count the same thing or it withholds an offer over
+        a fee that would have been waived, or offers a trip whose accept then fails with a `402`.
+
+        **Δ C047 — `404 not-found` also means "no rate is configured for this vehicle type".**
+        §20 seeds none for `truck` or `mini_truck`, so a delivery vehicle cannot go online until
+        Finance sets one; refusing is the point, and inventing a rate would bill a driver a number
+        nobody chose. `503 dependency-unavailable` means wallet-svc could not be reached — the fee
+        is refused rather than silently skipped, because a 200 with nothing charged would cost the
+        platform its only revenue while every dashboard stayed green.
       tags: [fees]
       security:
         - mtls: []
       parameters:
         - $ref: '#/components/parameters/DriverId'
         - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      # Δ C047. The header is accepted and ignored: the idempotency key of this operation is the
+      # Colombo day itself. `billing.daily_fee_charges`'s (driver_id, vehicle_id, fee_date) primary
+      # key stops a second row and the UNIQUE on `billing.journal_entries.idempotency_key` — keyed
+      # `daily_fee:{driverId}:{vehicleId}:{feeDate}` — stops a second deduction. A header-based
+      # guard would be weaker: it dedupes identical *requests*, so two differently-keyed calls for
+      # one Colombo day would both pass it.
+      x-idempotency-exempt: the natural key is (driverId, vehicleId, feeDate) in Asia/Colombo (D-13)
       requestBody:
         required: true
         content:
@@ -231,7 +294,140 @@ paths:
         '402': { $ref: './_shared.yaml#/components/responses/PaymentRequired' }
         '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
-      x-error-codes: [validation-failed, unauthorized, insufficient-wallet, not-found]
+        '503': { $ref: './_shared.yaml#/components/responses/ServiceUnavailable' }
+      x-error-codes:
+        [validation-failed, unauthorized, insufficient-wallet, not-found, vehicle-not-found,
+         dependency-unavailable]
+
+  /v1/internal/fees/mode-b/run:
+    post:
+      operationId: runModeBMonthlyCharge
+      summary: Raise the Mode B per-vehicle platform charge for a Colombo month.
+      description: |
+        **Δ C047.** AL-03 / D5' §2.1 — every approved Mode B vehicle owes the platform ~Rs 300 a
+        month, and its first calendar month of registration is free. This raises the missing rows
+        in `billing.monthly_subscriptions` for one month and returns what it raised.
+
+        Idempotent on `(vehicle_id, period_month)`: re-running raises nothing and restates nothing,
+        so a past month is never re-priced by a later rate change. A background runner in this
+        service does the same thing hourly; the route exists so fleet-billing-svc (C060) can force
+        the month it is about to invoice rather than racing a timer, and so an operator can catch a
+        month up after an outage.
+
+        **This raises the charge and posts nothing.** §10 gives
+        `billing.monthly_subscriptions` no `journal_entry_id` and the journal `kind` vocabulary has
+        no value a monthly platform fee could carry, so the consolidated invoice
+        (`billing.fleet_invoices`), the fleet wallet it settles against and the per-vehicle
+        breakdown are all **fleet-billing-svc's** (C060). Not to be confused with C048's
+        subscriber payments, which are a pass-through to the fleet owner and are never ledgered.
+      tags: [fees]
+      security:
+        - mtls: []
+      parameters:
+        - name: month
+          in: query
+          required: false
+          description: Any date in the Colombo month; the current month if omitted.
+          schema:
+            $ref: './_shared.yaml#/components/schemas/BusinessDate'
+      x-idempotency-exempt: the natural key is (vehicleId, periodMonth) — re-running raises nothing
+      responses:
+        '200':
+          description: What the run raised.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModeBRun'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized]
+
+  /v1/fees/{driverId}/refund-requests:
+    post:
+      operationId: requestDailyFeeRefund
+      summary: Raise a refund request for a daily fee charged in error.
+      description: |
+        **Δ C047.** US-9.23 — the driver raises it from the Driver App; US-14.11's reversal is
+        admin-bff's (`POST /v1/admin/drivers/wallet/{id}/reverse-fee`, a wallet credit of kind
+        `adjustment`). **Nothing here moves money.**
+
+        Validated against this service's own charge row, which is why the route lives here: a
+        `404` means no daily platform fee was deducted from this driver on that Colombo day, and
+        the free first trip is not a deduction. A ticket raised against a day with no charge is a
+        queue item Finance has to close by hand.
+
+        The request becomes one `support.tickets` row with category `daily_fee_refund` — the row
+        migration 1303's own comment anticipates. support-svc (C053) owns the queue and its
+        lifecycle; this service never sets a status and never writes a response.
+      tags: [fees]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/DriverId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [feeDate, reason]
+              properties:
+                feeDate:
+                  $ref: './_shared.yaml#/components/schemas/BusinessDate'
+                reason:
+                  type: string
+                  minLength: 1
+                  maxLength: 2000
+                  description: What the driver says happened. Triaged by Support.
+                rideId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+      responses:
+        '201':
+          description: Request raised.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeeRefundRequest'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden, not-found]
+
+    get:
+      operationId: listDailyFeeRefundRequests
+      summary: The driver's own fee-refund requests.
+      description: |
+        **Δ C047.** `feeDate`, `amountMinor` and `currency` are absent from these rows and that is
+        not an oversight: `support.tickets` has no column for any of them, and re-deriving them
+        from a description a CSR may have edited would report numbers the platform does not hold.
+        They are present on the create, where the charge has just been read.
+      tags: [fees]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/DriverId'
+        - $ref: './_shared.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: The driver's requests, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FeeRefundRequest'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden]
 
   # -------------------------------------------------------------------------------------------
   # Driver credit transfer & vouchers (AL-01, AL-34)
@@ -1142,6 +1338,80 @@ paths:
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
       x-error-codes: [validation-failed, unauthorized, forbidden]
 
+    get:
+      operationId: listSubscriptionVoucherDiscountTiers
+      summary: The bulk-voucher discount ladder.
+      description: |
+        **Δ C047.** The read side of the PUT above, so a Config screen can read-modify-write
+        against one prefix instead of two services. wallet-svc serves the same rows — and a usage
+        count beside them — at `GET /v1/wallet/admin/voucher-discount-tiers`; both are the same
+        table, and whichever of the two spellings survives the retirement C007 asked for takes this
+        with it.
+      tags: [subscription-admin]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: The ladder.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tiers]
+                properties:
+                  tiers:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/VoucherDiscountTier'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden]
+
+  /v1/admin/fees/mode-b/charges:
+    get:
+      operationId: listModeBPlatformCharges
+      summary: A month's Mode B per-vehicle platform charges, consolidated per fleet.
+      description: |
+        **Δ C047 — the AL-03 hand-off.** One line per approved Mode B vehicle for the month, plus
+        the per-fleet totals fleet-billing-svc (C060) turns into a `billing.fleet_invoices` row
+        with a per-vehicle breakdown. The totals are computed on read rather than stored: that
+        invoice table is C060's, and a second writer would give one fleet two invoices for one
+        month.
+
+        Mode A vehicles never appear — they are free, and the run writes them no row at all rather
+        than a zero line. Mode C never appears either: those drivers pay the daily fee from their
+        own wallet. Vehicles belonging to no fleet group under a null `fleetId`; they are
+        individually-owned Mode B vehicles and belong to no consolidated invoice.
+      tags: [subscription-admin]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: month
+          in: query
+          required: false
+          description: Any date in the Colombo month; the current month if omitted.
+          schema:
+            $ref: './_shared.yaml#/components/schemas/BusinessDate'
+        - name: fleetId
+          in: query
+          required: false
+          description: Narrow to one fleet — what C060 asks for when it invoices that fleet.
+          schema:
+            $ref: './_shared.yaml#/components/schemas/Ulid'
+      responses:
+        '200':
+          description: The month's charges.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModeBCharges'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden]
+
 components:
   securitySchemes:
     bearerAuth:
@@ -1239,6 +1509,128 @@ components:
           type: string
           enum: [PAID, WAIVED_FIRST_TRIP]
         chargedAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    ModeBRun:
+      type: object
+      description: What one pass of the Mode B monthly charge raised (Δ C047).
+      required: [periodMonth, raised, freeMonths, totalMinor, currency]
+      properties:
+        periodMonth:
+          $ref: './_shared.yaml#/components/schemas/BusinessDate'
+        raised:
+          type: integer
+          format: int32
+          minimum: 0
+          description: Rows created. Zero on a re-run, which is what makes the run idempotent.
+        freeMonths:
+          type: integer
+          format: int32
+          minimum: 0
+          description: Of those, the vehicles in their first calendar month — charged nothing.
+        totalMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        currency:
+          $ref: './_shared.yaml#/components/schemas/Currency'
+
+    ModeBCharge:
+      type: object
+      description: One vehicle's Mode B platform charge for one Colombo month (Δ C047, AL-03).
+      required: [vehicleId, registrationNumber, vehicleType, ownerId, periodMonth, amountMinor, currency, status]
+      properties:
+        vehicleId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        registrationNumber:
+          type: string
+        vehicleType:
+          $ref: './_shared.yaml#/components/schemas/VehicleType'
+        ownerId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        fleetId:
+          description: Absent for an individually-owned vehicle, which belongs to no invoice.
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        periodMonth:
+          $ref: './_shared.yaml#/components/schemas/BusinessDate'
+        amountMinor:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Zero when `status` is `FREE` (`ck_monthly_subscriptions_free`).
+        currency:
+          $ref: './_shared.yaml#/components/schemas/Currency'
+        status:
+          type: string
+          enum: [FREE, DUE, PAID]
+
+    ModeBFleetTotal:
+      type: object
+      description: One fleet's consolidated total — the line C060 invoices (Δ C047).
+      required: [vehicleCount, totalMinor, currency]
+      properties:
+        fleetId:
+          description: Absent for the group of vehicles belonging to no fleet.
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        vehicleCount:
+          type: integer
+          format: int32
+          minimum: 0
+        totalMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        currency:
+          $ref: './_shared.yaml#/components/schemas/Currency'
+
+    ModeBCharges:
+      type: object
+      description: A month's charges with their per-fleet consolidation (Δ C047).
+      required: [periodMonth, totalMinor, currency, fleets, items]
+      properties:
+        periodMonth:
+          $ref: './_shared.yaml#/components/schemas/BusinessDate'
+        totalMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        currency:
+          $ref: './_shared.yaml#/components/schemas/Currency'
+        fleets:
+          type: array
+          items:
+            $ref: '#/components/schemas/ModeBFleetTotal'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ModeBCharge'
+
+    FeeRefundRequest:
+      type: object
+      description: |
+        A raised daily-fee refund request — one `support.tickets` row (Δ C047, US-9.23). `feeDate`,
+        `amountMinor` and `currency` are present only on the create; the list omits them because
+        `support.tickets` holds no column for any of them.
+      required: [requestId, driverId, status, createdAt]
+      properties:
+        requestId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        driverId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        status:
+          type: string
+          description: The ticket's own status, owned by support-svc (C053).
+          enum: [OPEN, IN_PROGRESS, RESOLVED]
+        feeDate:
+          $ref: './_shared.yaml#/components/schemas/BusinessDate'
+        amountMinor:
+          type: integer
+          format: int64
+          minimum: 0
+          description: The charge being disputed, as this service recorded it.
+        currency:
+          $ref: './_shared.yaml#/components/schemas/Currency'
+        createdAt:
           $ref: './_shared.yaml#/components/schemas/Timestamp'
 
     CreditTransfer:

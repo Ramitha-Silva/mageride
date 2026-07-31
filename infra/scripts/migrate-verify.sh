@@ -909,7 +909,11 @@ check_eq "5 fares tables" "5" \
 # 15, not C005's 12: billing.topups, billing.outbox and billing.command_log are C046's (1107).
 check_eq "12 billing tables from C005 + 3 from C046" "15" \
   "SELECT count(*) FROM information_schema.tables WHERE table_schema='billing' AND table_type='BASE TABLE';"
-check_eq "4 subscription tables" "4" \
+# 6, not C005's 4: `subscription.command_log` is C047's (1203) — R-14 needs a replay log per
+# bounded context and D4' §5 prints DDL for `rides.command_log` only — and `subscription.outbox`
+# is C048's (1204), because BR-23.11's unsubscribe has to publish `share.revoked` inside the
+# transaction that mutes the grant and D6' §2.1 gives this service no topic and D4' §18b no table.
+check_eq "4 subscription tables from C005 + 1 from C047 + 1 from C048" "6" \
   "SELECT count(*) FROM information_schema.tables WHERE table_schema='subscription' AND table_type='BASE TABLE';"
 # 5 content, not C005's 3: `content.onboarding_slides` (AL-28's carousel copy, which is
 # content-svc's content) and `content.command_log` (R-14, one per bounded context) are C045's, both
@@ -1707,6 +1711,51 @@ check_rejects "a second top-up cannot claim the same provider_transaction_id (R-
      VALUES ('$DRV_B','$TOPUP_ACCOUNT','lankaqr',100000,'onepay-verify-1');"
 psql_run "DELETE FROM billing.topups WHERE provider_transaction_id='onepay-verify-1';" >/dev/null \
   || die "could not clean up the R-19 top-up fixture."
+
+# ---------------------------------------------------------------------------------------
+# C047 — subscription: the R-14 replay log (1203), plus the two fences the database holds for
+#        this component that no earlier section asserts
+# ---------------------------------------------------------------------------------------
+step "Objects owned by C047 (D-13, AL-03, AL-09)"
+check_eq "subscription.command_log exists" "1" \
+  "SELECT count(*) FROM information_schema.tables
+    WHERE table_schema='subscription' AND table_name='command_log';"
+check_eq "subscription.command_log has no aggregate-id column" "0" \
+  "SELECT count(*) FROM information_schema.columns
+    WHERE table_schema='subscription' AND table_name='command_log'
+      AND column_name IN ('ride_id','ticket_id');"
+# The replay log is per bounded context precisely so two services' keys cannot collide: a client's
+# key against subscription-svc must not replay wallet-svc's stored response.
+check_eq "subscription.command_log is keyed on the idempotency key alone" "1" \
+  "SELECT count(*) FROM information_schema.key_column_usage k
+     JOIN information_schema.table_constraints c USING (constraint_schema, constraint_name)
+    WHERE c.table_schema='subscription' AND c.table_name='command_log'
+      AND c.constraint_type='PRIMARY KEY' AND k.column_name='idempotency_key';"
+
+# §20 seeds no rate for the package-delivery types on purpose: a delivery vehicle cannot go online
+# until Finance decides what it costs, and subscription-svc answers 404 rather than inventing one.
+check_eq "no daily-fee rate is seeded for truck or mini_truck (§20, AL-09)" "0" \
+  "SELECT count(*) FROM billing.plans WHERE vehicle_type IN ('truck','mini_truck');"
+
+step "AL-03 — the Mode B monthly platform charge, and its first free month"
+check_rejects "a FREE month cannot carry an amount" \
+  "INSERT INTO billing.monthly_subscriptions(vehicle_id, period_month, amount_minor, status)
+     VALUES ('$VEH_A','2026-07-01', 30000, 'FREE');"
+# The platform's Mode B fee is ledgered through the consolidated invoice; the per-vehicle row is
+# deliberately unledgered, which is what keeps subscription-svc's charge (C047) distinct from both
+# fleet-billing-svc's posting (C060) and C048's pass-through, which is never ledgered at all (§18b).
+check_eq "billing.monthly_subscriptions has no journal_entry_id" "0" \
+  "SELECT count(*) FROM information_schema.columns
+    WHERE table_schema='billing' AND table_name='monthly_subscriptions'
+      AND column_name='journal_entry_id';"
+check_eq "billing.fleet_invoices does have one" "1" \
+  "SELECT count(*) FROM information_schema.columns
+    WHERE table_schema='billing' AND table_name='fleet_invoices'
+      AND column_name='journal_entry_id';"
+check_eq "'daily_fee' is a journal kind wallet-svc will accept" "1" \
+  "SELECT count(*) FROM pg_constraint
+    WHERE conrelid='billing.journal_entries'::regclass AND contype='c'
+      AND pg_get_constraintdef(oid) LIKE '%daily_fee%';"
 
 # ---------------------------------------------------------------------------------------
 printf '\n'

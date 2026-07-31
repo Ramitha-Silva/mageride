@@ -72,7 +72,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C044 | fleet-health-svc | 2 | DONE | 2026-07-30 | 57 tests green in a **new suite** (`FleetHealth.Tests`); **1 telemetry migration (1805)** — `telemetry.device_health`, `fleet_health_alerts`, this plane's outbox and the four-state classifier, none of which any DDL source prints; US-3.13's ladder landed as **one SQL function both the dashboard read and the sweep call**, so an operator cannot be shown one state while an alert fires on another; **`GET /v1/fleets/{fleetId}/health` moved out of `fleet.yaml` into a new `fleet-health.yaml`**, the same split D3' Part 2 makes for the tracker-bulk route; a 10th Redpanda topic (`fleet.events`); `migrate-verify.sh` expects 4 telemetry tables and 8 views, not 1 and 6; **the p95 for a 1000-vehicle fleet measured at 99.7 ms against the DoD's 200**; 12 micro-change-sets |
 | C045 | content-svc | 3 | DONE | 2026-07-30 | 105 tests green in a **new suite** (`Content.Api.Tests`); **2 migrations (1307, 1903)** — the template approval workflow, the broadcast window, `content.onboarding_slides` + its Si/Ta/En seed, `content.command_log`, and the trilingual rule as a **deferred constraint trigger** that checks the old pair as well as the new; the fence is enforced three times over (a type that cannot hold two languages, a field-level `validation-failed`, a COMMIT-time trigger); **6 new contract operations** — FAQ, the AL-28 carousel, template approve + history, broadcast publish, cache purge; `Cache__Ttl` honoured as D7' spells it; `migrate-verify.sh` 275/275 with a C045 section (5 content tables, not 3); 17 spec gaps / micro-change-sets |
 | C046 | wallet-svc | 3 | DONE | 2026-07-30 | 76 tests green in a **new suite** (`Wallet.Api.Tests`) + 15 in `MageRide.Shared.Tests`; **1 billing migration (1107)** — `billing.topups` (a top-up session had an id, a state and a gateway reference and nowhere to live), this plane's outbox and the replay log; **one writer for `billing.journal_postings`**, and every money movement is one method; the AL-01 fee row is impossible rather than absent (no journal kind could carry it); AL-05 held by `ck_topups_method`; **7 new contract operations** incl. the voucher purchase and the whole request/approve/reject flow moved here from subscription-svc (ADD §11.6) and the internal ledger seam C047–C050 and C065 all need; `WebhookSignature` promoted into the kernel for the platform's six payment callbacks; an 11th Redpanda topic (`wallet.events`); 16 spec gaps / micro-change-sets |
-| C047 | subscription-svc-daily-fee | 3 | PENDING | | |
+| C047 | subscription-svc-daily-fee | 3 | DONE | 2026-07-30 | 79 tests green in a **new suite** (`Subscription.Api.Tests`), which boots a **real wallet-svc** because half the "debits once" guarantee is an index in C046's schema; **2 migrations (1203, 0713)** — `subscription.command_log` and the missing `dispatch.offers` index both callers of `tripsToday` were sequential-scanning; **this service writes no ledger row** — the fee is a `daily_fee` debit through wallet-svc's internal seam, keyed `daily_fee:{driverId}:{vehicleId}:{feeDate}`; **debit first, record second**, because only that order is recoverable; `tripsToday` **switched to `dispatch.offers`** so the D-08 gate and the charge cannot disagree; the Mode A fence held twice (the admin PUT refuses a non-zero Mode A rate, the charge path zeroes one anyway); Mode B monthly charge + the AL-03 per-fleet consolidation **handed to C060 unledgered**, because §10 gives the per-vehicle row no `journal_entry_id` and no journal kind could carry it; **5 new contract operations**; `migrate-verify.sh` 295/295 with a C047 section; 11 spec gaps / micro-change-sets |
 | C048 | subscription-svc-mode-b | 3 | PENDING | | |
 | C049 | fare-svc-core | 3 | PENDING | | |
 | C050 | fare-svc-payments | 3 | PENDING | | |
@@ -6670,3 +6670,185 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   operations gained `X-Attestation` and are now in the gateway's enforced set.
   **Build host —** Docker for three Testcontainers fixtures (Postgres, Redis, Redpanda); the replica
   stack stayed down throughout. `Wallet.Api.Tests` takes ~70 s. **No new NuGet reference.**
+
+- **Component:** C047 subscription-svc-daily-fee — 2026-07-30
+- **Status:** DONE — `dotnet test backend/src/Subscription.Api.Tests -c Release` is **79/79 green**
+  in a new suite; `bash infra/scripts/migrate-verify.sh` is **295/295**; `dotnet build
+  backend/MageRide.sln -c Release` and the Spectral lint over `backend/contracts/*.yaml` are clean;
+  `Dispatch.Api.Tests` still 181/181 against the new index. All four DoD items are asserted against
+  the two databases that actually enforce them — charging twice on one Colombo day debits once
+  (including six concurrent attempts), the first trip never charges and the second charges the
+  vehicle-type rate, a Mode A vehicle is never charged on any trip, and a rate change reaches the
+  next charge without touching a row already written.
+- **Notes:**
+  **Spec gaps / micro-change-sets —**
+  (a) **`subscription.command_log` does not exist in any DDL source — migration 1203.** R-14 wants a
+  replay log per bounded context and D4' §5 prints DDL for `rides.command_log` only. The eighth time
+  this has been raised (C020, C021, C030, C033, C034, C045, C046). **`billing.command_log` is
+  deliberately not reused:** it is wallet-svc's, its primary key is the bare idempotency key, and two
+  services sharing it would let one client's key collide across a service boundary and be served the
+  other service's response body. **D4' §5 should carry a command log per bounded context.**
+  (b) **`dispatch.offers` has no index for `tripsToday` — migration 0713.** D5' §2.2's count is "this
+  driver's ACCEPTED offers within a Colombo day" and 0702 indexes the table only by `ride_id` and by
+  the partial-unique live-offer predicate. Two callers ask it on the hot path — dispatch-svc's D-08
+  gate, per candidate per round, and this service's charge, once per accept — and both were
+  sequential scans over the platform's whole offer history. Partial on `status = 'ACCEPTED'`, because
+  a fifteen-second cascade leaves one accept and many DECLINED/EXPIRED rows behind. **D4' §6 /
+  `server_db_schema.md` §6 should carry the index, or say which table answers `tripsToday`.**
+  (c) **The Mode B monthly platform charge had no route anywhere.** D5' §2.1 and ADD §19 state the
+  ~Rs 300 per-vehicle monthly fee and the free first month; D3' subscription-svc prints no endpoint
+  and nothing raised the rows. Added `POST /v1/internal/fees/mode-b/run` plus an hourly background
+  runner. **D3' should carry the route** (or name whose job the run is).
+  (d) **US-9.23's fee-refund intake had no route either.** Added `POST`/`GET
+  /v1/fees/{driverId}/refund-requests`. **D3' should carry them.**
+  (e) **`billing.monthly_subscriptions` has no `journal_entry_id` and no journal `kind` could carry a
+  monthly platform fee** (`ck_journal_entries_kind` has ten values and none of them fits). §10 gives
+  `billing.fleet_invoices` a `journal_entry_id` and the per-vehicle row none, so the split is
+  deliberate and this service raises the charge and posts nothing — see (h) for what that leaves open.
+  (f) **1104's "seeded per vehicle at registration with status FREE" has no writer.** registry-svc
+  (C029) creates no billing row and knows nothing about money. The free month is therefore *derived*
+  from `registry.vehicles.created_at` in Colombo, which gets the same answer and — the part that
+  matters — gets it right whenever billing is first switched on. Anchoring it to "the first row this
+  run creates" would have handed a free month to every vehicle already on the platform the day the
+  runner deployed. **D4' §10 should say which service seeds it, or that it is derived.**
+  (g) **`GET /v1/fees/{driverId}/today` had no `vehicleId`.** US-9.7 puts the live vehicle's
+  registration number on the dashboard beside the fee, and a client cannot resolve it without knowing
+  which vehicle the rate it is being shown belongs to. Added to the contract.
+  (h) **An individually-owned Mode B vehicle's `DUE` row has no settlement path.** `billing
+  .fleet_invoices` requires a `fleet_id`, so a Mode B vehicle in no fleet is charged and nothing in
+  any spec collects it. The row is raised and reported; **a spec decision is needed** — either a
+  fleet-less invoice, or a wallet debit under a journal kind that does not exist yet.
+  (i) **`PUT /v1/admin/voucher-discount-tiers` exists twice**, here and on wallet-svc, over one
+  table. C007 raised it, C046 raised it again, and this component landed the second half because D3'
+  subscription-svc prints it. A `GET` was added beside this one so a Config screen can
+  read-modify-write on a single prefix — which makes **three** spellings of one ladder across two
+  services. **One service should own it.**
+  (j) **The same is true of `/v1/vouchers/purchase`, `/v1/transfers/driver` and
+  `/v1/subscriptions/credit-transfer/**`.** C046 landed the working half at `/v1/wallet/**` per ADD
+  §11.6 and told C047 to forward; these routes forward the caller's bearer and nothing else. **D3'
+  should name one owner per operation.**
+  (k) **`billing.plans.vehicle_type` is a bare `TEXT` primary key with no CHECK**, unlike
+  `registry.vehicles.vehicle_type`, so an admin could configure a rate for `car` — a row that looks
+  configured on SCR-AP-007, matches no vehicle ever, and leaves the type it was meant for unable to
+  go online. Validated in the endpoint against AL-09's ten canonical types; **a CHECK would be
+  better and belongs in §10.**
+
+  **Decisions —**
+  (1) **This service writes no ledger row, and that is the whole architecture.** The daily fee is
+  `POST /v1/internal/wallet/{driverId}/debit` with `kind: "daily_fee"` and `idempotencyKey` spelled
+  exactly `daily_fee:{driverId}:{vehicleId}:{feeDate}` — C005 decision 4, and asserted as a literal
+  string in a unit test, because it is a cross-service contract and a well-meaning reformat of it
+  would silently start taking a second fee. `billing.journal_postings` keeps one writer (D-09).
+  (2) **Debit first, record second.** The two systems are not in one transaction, so the order *is*
+  the crash-safety argument. Debit-then-record leaves, at worst, money taken and no row — and the
+  retry re-sends the same ledger key, gets `replayed: true` for the same entry, and writes the row it
+  owed. Record-then-debit leaves a driver marked `PAID` who paid nothing, which no retry ever repairs
+  because the row now says the day is settled. One order is recoverable; the other loses revenue
+  silently.
+  (3) **`tripsToday` is counted from `dispatch.offers`, not from `rides.rides`** — changed during the
+  build after reading C034's own repository. dispatch-svc's D-08 pre-dispatch gate exists to predict
+  *this* charge (it withholds an offer from a driver who could not pay for it) and counts
+  `status = 'ACCEPTED'` offers responded to on the Colombo day. Counting anything else here would
+  make the gate mispredict its own subject: it would withhold an offer over a fee that would have
+  been waived, or offer a trip whose accept then fails with a `402`. One number, read the same way in
+  both services.
+  (4) **`rideId` in the charge body is load-bearing.** D3' §325 has ride-svc charge *after* the
+  conditional accept has settled the offer, so the trip being paid for is already in the count when
+  the call arrives — without the exclusion the first trip of every Colombo day arrives as
+  `tripsToday = 1` and is charged, which is the one thing the fence forbids. Excluding the caller's
+  own ride makes the answer identical whichever side of the accept the call is made from, and both
+  orderings have a test.
+  (5) **`already_charged` is `status = 'PAID'`, never "a row exists".** A `WAIVED_FIRST_TRIP` row
+  means the driver had their free trip on this vehicle today and still owes the day's fee; the row is
+  upgraded in place on the second trip. Reading it as "a row exists" would make every driver's whole
+  day free. The upsert carries `WHERE status <> 'PAID'` so a late redelivery of the waiver cannot
+  overwrite a paid row with a zero.
+  (6) **The free trip is per driver per day, not per vehicle.** D5' §2.2 counts trips for the
+  *driver* and keys the charge row per (driver, vehicle, day), so US-9.6's "the driver pays the daily
+  payment per vehicle" holds without the waiver being re-earnable by switching vehicles — tested.
+  (7) **Mode A is fenced twice, independently.** `PUT /v1/admin/fees/rates` refuses a non-zero rate
+  for a Mode A type so the number cannot be written, and `RateForAsync` returns zero for `mode = 'A'`
+  whatever `billing.plans` says so it cannot be read. A zero rate writes no journal entry and burns
+  no idempotency key: nothing is charged, rather than zero being charged.
+  (8) **A vehicle type with no configured rate is `404`, not a guess.** §20 seeds none for `truck` /
+  `mini_truck` deliberately, and inventing one would bill a driver a number nobody chose. An admin
+  configuring the rate unlocks the type in the same session — tested.
+  (9) **wallet-svc unreachable is a `503` and the trip is refused, not allowed free.** A `200` with
+  nothing charged would cost the platform its only revenue while every dashboard stayed green. The
+  loud failure is the right one, and it is announced at start-up as well.
+  (10) **A `402` from wallet-svc is carried through unchanged.** It is D-08's own answer arriving
+  late; reshaping it into a `503` would look like an outage a driver could wait out instead of a
+  balance they have to top up.
+  (11) **The suite boots a real wallet-svc** (the precedent Dispatch.Api.Tests set with Ride.Api).
+  The DoD's first line is "charging twice … debits once" and half of that is a UNIQUE index in C046's
+  schema; a stub would have asserted this suite's own arithmetic. Redis is there for wallet-svc's
+  D-08 write-through only — subscription-svc touches no cache.
+  (12) **No Redis, no Kafka, no outbox in this service, and there must not be.** The daily fee's
+  event is `wallet.debited`, emitted by wallet-svc inside the transaction that posts the money
+  (R-13); an event published from here would describe a movement this service did not make and could
+  not roll back. The Mode B hand-off to C060 is a table it reads, not a message it waits for.
+  (13) **The one cross-context write is `support.tickets`, and it is named rather than hidden.**
+  Migration 1303's own comment says the table "also carries the driver daily-fee refund request
+  (US-9.23) as an ordinary category". What makes it this service's to write is the validation — only
+  subscription-svc can say whether the driver was in fact charged on the day they are disputing, and
+  a ticket against a day with no charge is a queue item Finance closes by hand. One `OPEN` row, no
+  status, no response, no resolution. **When C053 lands this becomes a forward to its ticket route.**
+  (14) **Only the driver may raise their own refund request** (`RequireSelf`), while the reads admit
+  the six back-office roles. A back-office role that could raise a claim in a driver's name would put
+  words in their mouth on a queue that ends in a wallet credit — and an admin who wants to reverse a
+  fee has C065's `reverse-fee` and needs no ticket to do it.
+  (15) **The forwarder keys on stream seekability, not on `Content-Length`** — found by a failing
+  test. A chunked request carries no `Content-Length`, which is exactly what .NET's own `JsonContent`
+  sends, so the header check silently dropped the body of every call made by a .NET client.
+  (16) **Money columns are cast to `bigint` in the SQL.** `daily_fee_minor` and `amount_minor` are
+  `INTEGER` in §10 while every contract types money as int64, and Dapper's constructor binding matches
+  parameter types *exactly* — an `Int32` column against an `Int64` parameter does not mis-convert, it
+  fails to materialise the record at all. Worth knowing for C048–C050, which read the same columns.
+  (17) **The Mode B runner is an hourly interval, not a monthly alarm.** The run is an idempotent
+  upsert, so re-running costs one statement and catches a vehicle approved on the 9th, a deployment
+  rolling at midnight on the 1st, and a clock that moved. A monthly alarm gets one attempt per month
+  to be running. Every replica runs it; `ON CONFLICT DO NOTHING` is the arbiter.
+  (18) **The history cursor is the `(feeDate, vehicleId)` pair.** A driver who used two vehicles in
+  one Colombo day has two rows sharing a date, and a date-only cursor would drop whichever straddled
+  a page boundary — silently, and only for the drivers US-9.6 exists for.
+
+  **What the next components need —**
+  **For ride-svc (C036/C037) — this is the one wiring this component depends on and it does not
+  exist yet.** Nothing in `Ride.Api` calls `charge-before-trip` today. On a winning accept, POST
+  `/v1/internal/fees/{driverId}/charge-before-trip` with `X-MageRide-Internal-Key:
+  $Subscription__InternalApiKey`, body `{vehicleId, rideId}` — **send `rideId`**, see decision (4).
+  A `402 insufficient-wallet` means fail the accept and surface US-9.1's "request missed"; a `404`
+  means the vehicle has no configured rate and the accept cannot proceed; a `503` means the fee could
+  not be charged and the accept must not proceed either. `200` is safe to repeat.
+  **For C048 (subscription-svc-mode-b) —** the project, its composition root, `SubscriptionOptions`,
+  the internal-key filter and `subscription.command_log` are all here; add `/v1/mode-b/**` to
+  `SubscriptionApplication`. **Your money is not this component's money**: `subscription.payments` is
+  a pass-through to the fleet owner that MageRide never holds and never ledgers (§18b), while
+  `billing.monthly_subscriptions` is the platform's own charge. The schema gives you no column
+  tempting you to net them; keep it that way. `Currencies.Lkr`, `OperatingModes`, `BusinessDates`
+  and `RequestIds` are already there.
+  **For C049/C050 (fare-svc) —** the same wallet seam, the same `WalletLedgerClient` shape; note
+  decisions (2) and (16). `fares.driver_earnings.daily_fee_minor` (which iam-svc's bootstrap reads)
+  **is still nobody's writer** — C042's and C046's note stands, and this component did not take it
+  on: it would mean subscription-svc writing a `fares.*` row on every charge, and the natural writer
+  is whoever owns the daily earnings rollup.
+  **For C060 (fleet-billing-svc) —** your input is `GET /v1/admin/fees/mode-b/charges?month=&fleetId=`:
+  the month's per-vehicle lines and their per-fleet totals, which is exactly the per-vehicle breakdown
+  your invoice needs. Force the month first with `POST /v1/internal/fees/mode-b/run?month=` rather
+  than racing the runner. **`billing.fleet_invoices` is yours and this service writes none** — a
+  second writer would give one fleet two invoices for one month. Mode A vehicles get no row at all
+  rather than a zero line, so "Mode A never appears as a charged line" is already true of the input.
+  **For C065 (admin-bff) —** `PUT /v1/admin/fees/rates` and `PUT /v1/admin/voucher-discount-tiers`
+  are here (Finance Officer, Admin, Super Admin); **the `audit.events` row is yours**, by the same
+  split C045 and C046 use. The fee reversal US-14.11 asks for is yours too and is a wallet credit of
+  kind `adjustment` — this service raises the *request* (`GET /v1/fees/{driverId}/refund-requests`,
+  category `daily_fee_refund` on `support.tickets`) and never the credit.
+  **For C053 (support-svc) —** `support.tickets` rows with `category = 'daily_fee_refund'` are raised
+  by this service and are otherwise ordinary tickets. When your ticket route lands, this service
+  should forward to it and delete its own INSERT — see decision (13).
+  **For C118 (contract tests) —** `subscription.yaml` gained five operations, five schemas, one
+  required field, two `x-idempotency-exempt` markers and a `503` on the charge route.
+  **Build host —** Docker for two Testcontainers fixtures (Postgres, Redis); the replica stack stayed
+  down throughout. `Subscription.Api.Tests` takes ~2 min because it boots two services per test.
+  **No new NuGet reference.**
+

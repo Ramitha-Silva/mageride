@@ -1,0 +1,51 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    Subscription.Api (C047 subscription-svc-daily-fee) — the Namma-Yatri zero-commission fee model.
+
+    THIS SERVICE OWNS THE RULE, NOT THE MONEY. It decides *whether* a driver owes the daily platform
+    fee and *how much*; the movement itself is a call to wallet-svc's ledger seam
+    (`POST /v1/internal/wallet/{driverId}/debit`, kind `daily_fee`). `billing.journal_postings` keeps
+    exactly one writer (D-09), which is C046.
+
+    In:  `POST /v1/internal/fees/{driverId}/charge-before-trip` — ride-svc's D-08/D-13 gate,
+         `PUT /v1/admin/fees/rates` and `PUT /v1/admin/voucher-discount-tiers` (Admin Portal config),
+         `POST /v1/fees/{driverId}/refund-requests` (US-9.23 intake),
+         and the D3'-spelled credit/voucher routes, which forward the caller's bearer to wallet-svc.
+    Out: `GET /v1/fees/rates` · `/{driverId}/today` · `/{driverId}/history`, and the Mode B
+         per-vehicle monthly platform charge (`billing.monthly_subscriptions`) that C060 consolidates.
+
+    FENCES:
+      D-13  — there is no per-trip fee and no commission, ever. One flat charge per
+              (driver, vehicle, Asia/Colombo day), and the first trip of each Colombo day is free.
+      AL-09 — Mode A (bus/train) pays nothing. `billing.plans` rates them zero and a zero rate
+              moves no money and writes no journal entry.
+      AL-01 — "reseller" is not a role, account or capability. The voucher discount is the entire
+              margin; nothing here can record a per-transfer commission.
+      AL-03 — the Mode B monthly charge is the PLATFORM's charge to the vehicle's owner. It is not
+              C048's passenger subscription, which is a pass-through MageRide never holds.
+
+    Verify: dotnet test backend/src/Subscription.Api.Tests -c Release
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.Subscriptions</RootNamespace>
+    <AssemblyName>MageRide.Subscription.Api</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <UserSecretsId>mageride-subscription-api</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MageRide.Shared\MageRide.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Dapper" />
+    <PackageReference Include="Npgsql" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Subscription.Api.Tests" />
+  </ItemGroup>
+
+</Project>

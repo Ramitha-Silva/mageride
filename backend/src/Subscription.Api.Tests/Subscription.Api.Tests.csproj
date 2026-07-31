@@ -1,0 +1,68 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    C047 verify target: dotnet test backend/src/Subscription.Api.Tests -c Release
+
+    Real Postgres, real Redis, and a REAL wallet-svc. Every claim this component makes is a claim
+    about something outside the process:
+
+      * "charging twice on the same (driver, vehicle, Asia/Colombo date) debits once" is two
+        indexes — `billing.daily_fee_charges`'s composite primary key and the UNIQUE on
+        `billing.journal_entries.idempotency_key` — and the second one lives in another service.
+        A stubbed wallet would test the stub;
+      * "the first trip of a day never charges; the second charges the vehicle-type rate" is a
+        COUNT over `rides.rides` and a balance in `billing.accounts`;
+      * "a Mode A vehicle is never charged" is the absence of a journal entry, which is a
+        COUNT over real postings;
+      * "a rate change applies from the next charge without retro-billing" is two rows written
+        either side of an admin PUT, compared.
+
+    wallet-svc is booted from Wallet.Api (C046) against the same database — the precedent
+    Dispatch.Api.Tests set with Ride.Api and Reputation.Api. Redis is wallet-svc's D-08
+    write-through; Redpanda is not needed, because this suite asserts on the ledger rather than on
+    `wallet.events`, and the outbox dispatcher is switched off exactly as WalletHarness does when
+    the broker is absent.
+
+    Microsoft.NET.Sdk.Web, not Microsoft.NET.Sdk: the harness builds two WebApplications.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.Subscriptions.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <OutputType>Exe</OutputType>
+    <!--
+      xUnit1041: collection-fixture ctor args are consumed through the primary constructor.
+      xUnit1051: every test is bounded by its own harness lifetime, so threading
+                 TestContext.Current.CancellationToken through each call would add noise without
+                 changing behaviour. Matches Dispatch/TripState/FleetHealth/Content/Wallet.Tests.
+    -->
+    <NoWarn>$(NoWarn);xUnit1041;xUnit1051</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+    <PackageReference Include="Dapper" />
+    <PackageReference Include="Npgsql" />
+    <PackageReference Include="StackExchange.Redis" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Subscription.Api\Subscription.Api.csproj" />
+    <!-- The other end of the ledger seam. The DoD's "debits once" is enforced by an index this
+         service does not own, so the suite runs the service that owns it. -->
+    <ProjectReference Include="..\Wallet.Api\Wallet.Api.csproj" />
+    <!-- C010: the Postgres and Redis fixtures, so this suite runs the same server builds the dev
+         stack does and applies the same migration set. -->
+    <ProjectReference Include="..\MageRide.TestKit\MageRide.TestKit.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>
