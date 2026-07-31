@@ -42,9 +42,33 @@ public static class RegistryServiceCollectionExtensions
         services.AddSingleton<IDocumentRepository, DocumentRepository>();
         services.AddSingleton<IOnboardingStepRepository, OnboardingStepRepository>();
 
-        // TryAdd, so ocr-svc's real client (C054) registering ahead of this wins. Without one
-        // every document comes back unread and every document step lands pending_review — the
-        // honest outcome, and the one D5' §14.1a prescribes for a document that did not extract.
+        // C054. `Registry:OcrBaseUrl` is what decides which of the two lands: with it, the real
+        // hop to ocr-svc; without it, the honest no-op below. TryAdd is still what registers the
+        // fallback, so a test (or a future composition) can put its own client in ahead of both.
+        var ocrBaseUrl = configuration[$"{RegistryOptions.SectionName}:{nameof(RegistryOptions.OcrBaseUrl)}"];
+
+        if (!string.IsNullOrWhiteSpace(ocrBaseUrl))
+        {
+            services.AddHttpClient(OcrDocumentExtractionClient.HttpClientName)
+                .ConfigureHttpClient((provider, client) =>
+                {
+                    var options = provider.GetRequiredService<
+                        Microsoft.Extensions.Options.IOptions<RegistryOptions>>().Value;
+
+                    client.BaseAddress = new Uri(options.OcrBaseUrl!, UriKind.Absolute);
+                    client.Timeout = options.OcrTimeout;
+                });
+
+            // No resilience pipeline on this hop, deliberately. ocr-svc already retries the leg
+            // that actually fails (Gemini, D6' §8.3) and falls back to its own on-prem engine
+            // behind it, so a retry here would re-run a whole extraction pass — a second Tesseract
+            // read and a second `docs.extractions` row — while a driver waits on a step save.
+            services.TryAddSingleton<IDocumentExtractionClient, OcrDocumentExtractionClient>();
+        }
+
+        // Without one every document comes back unread and every document step lands
+        // pending_review — the honest outcome, and the one D5' §14.1a prescribes for a document
+        // that did not extract.
         services.TryAddSingleton<IDocumentExtractionClient, UnconfiguredDocumentExtractionClient>();
 
         // Scoped: each opens a unit of work per command, so its lifetime is the request's.

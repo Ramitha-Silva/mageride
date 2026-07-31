@@ -1,0 +1,70 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    C054 verify target: dotnet test backend/src/Ocr.Api.Tests -c Release
+
+    Real Postgres, real OpenCV, real Tesseract, and a recording HTTP server standing in for Gemini.
+    Every one of this component's definition-of-done items is a claim about something outside the
+    process, and three of them are claims about pixels:
+
+      * "no unredacted image is sent to the external model in an integration test with a network
+        recorder" is asserted on the BYTES the recorder captured — their sha256 is the redacted
+        artefact's, it is not the raw file's, and the raw file's hash appears nowhere in the request.
+      * "with Gemini unavailable the Tesseract path still produces fields" runs the real `tesseract`
+        binary over a real rendered document, with the stub answering 503.
+      * "a low-confidence field is written pending and never auto-verified" and "a plate mismatch
+        marks the photos step pending_review" are driven through the stub's own answers, because
+        reproducing them against the real model would mean carrying deliberately blurry photographs
+        in the repository and hoping it stays as unsure of them as it is today.
+
+    The document fixtures are RENDERED with OpenCV rather than checked in: a binary fixture is
+    opaque in review, and one whose text nobody can read from the diff is a poor thing to hang a
+    redaction assertion on. `DocumentFixtures` is the whole vocabulary.
+
+    NATIVE DEPENDENCIES. This suite needs `tesseract` on PATH, OpenCV's native library
+    (libgtk-3-0t64 + libatomic1 on Debian/Ubuntu) and a Haar cascade (`opencv-data`). CI installs
+    all three on the backend leg; see backend/src/Ocr.Api/CLAUDE.md. Where one is missing the
+    service degrades fail-closed rather than crashing, and the tests that assert THAT are the ones
+    that still run.
+
+    No Redis, no Kafka, no bearer: the service holds none of them, deliberately (see OcrApplication).
+
+    Microsoft.NET.Sdk.Web, not Microsoft.NET.Sdk: the harness builds two WebApplications — the
+    service and the Gemini recorder.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.Ocr.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <OutputType>Exe</OutputType>
+    <!--
+      xUnit1041: collection-fixture ctor args are consumed through the primary constructor.
+      xUnit1051: every test is bounded by its own harness lifetime.
+    -->
+    <NoWarn>$(NoWarn);xUnit1041;xUnit1051</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Dapper" />
+    <PackageReference Include="Npgsql" />
+    <!-- The document fixtures are drawn, not checked in. -->
+    <PackageReference Include="OpenCvSharp4" />
+    <PackageReference Include="OpenCvSharp4.official.runtime.linux-x64" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Ocr.Api\Ocr.Api.csproj" />
+    <!-- C010: the Postgres fixture, so this suite runs the same server build the dev stack does
+         and applies the same migration set — including 1310's processing-log columns. -->
+    <ProjectReference Include="..\MageRide.TestKit\MageRide.TestKit.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

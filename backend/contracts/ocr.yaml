@@ -1,0 +1,182 @@
+openapi: 3.1.0
+
+# =============================================================================================
+# ocr-svc — document extraction, and the D-36 redaction pass in front of it
+# Source: specs/D6_mageride_integration.md §7.5 (Gemini Flash 3.0 + Tesseract)
+#         specs/architecture-design-document.md §12.5 (PII & OCR pipeline, D-36)
+#         specs/D5_mageride_business_logic.md §14.1a (Mode-C auto-verification)
+#
+# **Δ C054 — the whole file.** No specification gives ocr-svc an API. D6' §7.5 draws the hop as
+# `registry-svc → ocr-svc` and D3' has no ocr-svc section at all, so the one operation below is a
+# micro-change-set, on the internal plane the gateway refuses at the edge (C008). There is no
+# public surface on this service and there must not be: what is behind this route reads any
+# `docs.uploads` row by id and returns what is printed on somebody's licence.
+#
+# Two things this contract deliberately does NOT carry:
+#   * an upload route. The bytes are fetched by this service from object storage; registry-svc
+#     resolves an id and never touches the file, which is what keeps an unredacted image on this
+#     side of the D-36 perimeter. Filling `docs.uploads` for onboarding is still unowned (C125).
+#   * a step, vehicle or approval verdict. This service decides FIELD-level verified/pending;
+#     `registry.onboarding_steps` and `registry.vehicles` are registry-svc's (AL-30), and
+#     `registry.document_fields` has exactly one writer — registry-svc's (C029).
+# =============================================================================================
+
+info:
+  title: MageRide ocr-svc
+  version: 1.0.0
+  summary: Per-field document extraction with a mandatory PII redaction pre-pass.
+  description: |
+    Gemini Flash 3.0 primary, on-prem Tesseract fallback (D6' §7.5). **Every document goes through
+    the D-36 pre-pass — OpenCV face blur plus Tesseract bounding-box ID masking — before anything
+    reaches the external model**, and a deployment that cannot run that pass sends nothing to it at
+    all: extraction falls back to the on-prem engine and every field is flagged for review.
+
+    Nothing about a document is an error here. Unreadable, unavailable, both engines down — all
+    answer `200` with `succeeded: false`, because the caller has an onboarding step to save either
+    way (D5' §14.1a) and a `5xx` would put a retry between a driver and their next screen.
+  contact:
+    name: MageRide Platform Engineering
+    url: https://mageride.lk
+  license:
+    name: UNLICENSED
+    url: https://mageride.lk/legal/terms
+
+servers:
+  - url: https://api.mageride.lk
+    description: Production gateway (DOKS Singapore)
+  - url: http://localhost:8080
+    description: Docker Compose dev gateway
+
+tags:
+  - name: ocr-internal
+    description: Document extraction. Internal only — no public surface exists.
+
+paths:
+
+  /v1/internal/ocr/extractions:
+    post:
+      operationId: extractDocument
+      summary: Extract the fields of one uploaded document.
+      description: |
+        Queue-driven (ADD §6: "stateless, queue-driven") and answered synchronously inside D6'
+        §8.3's 30-second OCR budget, which is the shape D6' §2.1's table calls "Sync+fallback".
+
+        The pass, in order: read the bytes from object storage · read them on-prem with Tesseract ·
+        **redact** (face blur + ID-number masking, D-36) · send *only the redacted copy* to Gemini
+        Flash 3.0 · fall back to the on-prem read if the model is unavailable · write one
+        `docs.extractions` row with ADD §12.5's processing log.
+
+        `reg_no_match` is computed here and never taken from the model: D5' §14.1a's photos verdict
+        is a comparison against `registrationNumber`, which the caller supplies, and splitting it
+        across two services would let them disagree about whether `wp qa 1234` is `WP-QA-1234`.
+
+        A required field that could not be read is still returned, with a null `value` and
+        `verifyStatus: pending`, so the Verification-Officer queue (SCR-AP-003) shows a row to fill
+        rather than an absence to notice.
+      tags: [ocr-internal]
+      security:
+        - mtls: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [uploadId, storageUrl, kind]
+              properties:
+                uploadId:
+                  description: The `docs.uploads` row (D-36). The bytes are fetched, never posted.
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+                storageUrl:
+                  type: string
+                  maxLength: 2048
+                  description: |
+                    Resolved by the caller from `docs.uploads.storage_url`. Treated as a path under
+                    the service's own storage root; one that resolves outside it is refused, because
+                    a service that follows any URL written into a table it does not own is one row
+                    away from reading the cluster's metadata endpoint.
+                kind:
+                  type: string
+                  description: |
+                    `driving_license` · `insurance` · `revenue_license` · `registration` (Mode-C
+                    step 4/4's photos and AL-50's CR-book slot) · `permit` (AL-50, Mode A). A kind
+                    with no extractor behind it is `validation-failed` rather than an empty read.
+                  enum: [driving_license, insurance, revenue_license, registration, permit]
+                side:
+                  type: string
+                  description: |
+                    Which face of a two-sided capture this is (AL-43's scanner posts one per side).
+                    A Sri Lankan licence carries its classes on the reverse, so the side is what
+                    decides whether `allowed_vehicle_types` is expected (AL-29).
+                  enum: [front, back]
+                registrationNumber:
+                  type: string
+                  maxLength: 32
+                  description: |
+                    The plate the driver entered, for `kind: registration`. Without it
+                    `reg_no_match` can only be `pending` — there is nothing to compare against.
+      responses:
+        '200':
+          description: |
+            The verdict on this document. `succeeded: false` is a normal answer, not an error — see
+            the operation description.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentExtraction'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, not-found]
+
+components:
+
+  securitySchemes:
+    mtls:
+      $ref: './_shared.yaml#/components/securitySchemes/mtls'
+
+  schemas:
+
+    DocumentExtraction:
+      type: object
+      required: [succeeded, fields, jobId, engine, redactionApplied]
+      properties:
+        succeeded:
+          type: boolean
+          description: |
+            Whether an extraction actually ran. `false` covers Gemini down, Tesseract down and no
+            engine configured at all. The caller saves its onboarding step either way and lands it
+            `pending_review` — a failed extraction must not stop onboarding, only auto-approval.
+        fields:
+          type: array
+          description: |
+            The shared `ExtractedField` (AL-29), narrowed by what this service can produce: `source`
+            is always `ai` — `manual` is a driver typing a value registry-svc collected, and an
+            extractor able to emit it could launder a guess into a trusted field — and
+            `verifyStatus` is `auto_verified` or `pending`, never `confirmed`, which is a
+            Verification Officer's decision (C062).
+          items:
+            $ref: './_shared.yaml#/components/schemas/ExtractedField'
+        jobId:
+          description: |
+            The `docs.extractions` row, surfaced to the driver app as `ocrJobId`. Null when nothing
+            could be written, so a client is never handed an identifier no service will recognise.
+          oneOf:
+            - $ref: './_shared.yaml#/components/schemas/Ulid'
+            - type: 'null'
+        engine:
+          type: string
+          description: |
+            Which path produced this. `tesseract` means the primary was unavailable and every field
+            is capped below the auto-verify threshold (D6' §7.5, §8.3); `none` means neither engine
+            could read it.
+          enum: [gemini, tesseract, none]
+        redactionApplied:
+          type: boolean
+          description: |
+            Whether the D-36 pre-pass ran on these bytes. **Never `false` together with
+            `engine: gemini`** — the type system forbids it in the service and
+            `ck_extractions_gemini_is_redacted` (migration 1310) forbids the row.

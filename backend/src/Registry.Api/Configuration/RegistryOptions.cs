@@ -74,4 +74,34 @@ public sealed class RegistryOptions
     /// <c>402 merchant-not-onboarded</c> at <c>POST /v1/fare/pay</c> (D-11).
     /// </remarks>
     public string? InternalApiKey { get; set; }
+
+    // -----------------------------------------------------------------------------------------
+    // C054 — the ocr-svc hop (D6' §7.5)
+    // -----------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Where ocr-svc is.
+    /// </summary>
+    /// <remarks>
+    /// <b>Unset leaves <see cref="Onboarding.UnconfiguredDocumentExtractionClient"/> in place</b>,
+    /// so every document comes back unread and every document step lands <c>pending_review</c>.
+    /// That is a working deployment — a Verification Officer confirms each field — it just has no
+    /// AL-27 auto-approval in it, and the service says so at start-up.
+    /// </remarks>
+    public string? OcrBaseUrl { get; set; }
+
+    /// <summary>Must equal ocr-svc's <c>Ocr:InternalApiKey</c>, or every extraction is a 404.</summary>
+    public string? OcrInternalApiKey { get; set; }
+
+    /// <summary>
+    /// How long to wait for one document.
+    /// </summary>
+    /// <remarks>
+    /// D6' §8.3 budgets 30 s for OCR and ocr-svc bounds its own pass at that; this is a little
+    /// longer so the timeout that fires first is the one that can say <em>which</em> stage was slow.
+    /// A step save waits on this, so it is also the worst case for the driver's screen — and the
+    /// answer when it expires is a saved step, not an error.
+    /// </remarks>
+    [Range(typeof(TimeSpan), "00:00:05", "00:05:00")]
+    public TimeSpan OcrTimeout { get; set; } = TimeSpan.FromSeconds(35);
 }

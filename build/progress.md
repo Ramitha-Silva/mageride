@@ -79,7 +79,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C051 | notification-svc | 3 | DONE | 2026-07-31 | 86 tests green in a **new suite** (`Notification.Api.Tests`); **2 migrations (1308, 1904)** — `comms.notifications`, the outbound queue **no spec declares**, plus `comms.command_log`, the AL-08 install column on `notification_tokens` and the eighteen §14.4 template keys 1902 deliberately left unseeded; **E-01's "exactly once" is two database facts** — the `Sent → FellBackToSms` claim in the statement that selects the row, and `fallback:{pushId}` on `ux_notifications_dedupe` — so three sweeps of one unacked offer produce one SMS; **D-33 measured** against two gateways on real sockets with a deliberately slow primary (p99 well inside the 5 s, and both gateways written to); P-12's buckets spent **after** the dedupe claim so a redelivered `location.request.issued` costs nothing; AL-44/AL-45's fence held by the type system — `MintedLink` has no token member and no response shape in the assembly can carry one; **a real defect caught**: the kernel's camelCase dictionary-key policy answered a `LOW_BALANCE` mute with `loW_BALANCE`, fixed with iam-svc's `LiteralKeyDictionaryConverter` on both directions of the wire; **4 contract changes** (`POST /v1/notify/ack`, `notificationType`, `phones`, `audience`); `migrate-verify.sh` 330/330 with a C051 section; 14 spec gaps / micro-change-sets |
 | C052 | safety-svc | 3 | DONE | 2026-07-31 | 30 tests green in a **new suite** (`Safety.Api.Tests`), which boots a **real notification-svc** because D-33 is a property of the two services together and runs **dispatch-svc's own candidate query** because US-12.10's gate lives there; **1 migration (0905)** — `safety.outbox` (the admin live feed D3' asks for and `signalr-hub.md` has no group for), `safety.command_log`, `sos_events.dispatched_at` (without it every SOS looks instantaneous and the D-33 SLO is unmeasurable), the `driver_id` a report counts against and its resolution evidence; **the SOS bypasses the notification queue** — C051 gained an inline dispatch for the one type with a latency SLO, so the five seconds do not depend on how many ride offers are queued in front of it, and the per-gateway outcome exists to record at all; **no replay is structural** — the public view reads `veh:meta`, a Redis hash that holds one position and no history, so the store cannot answer the question D-34 forbids; the 410 is produced before the ride row is read, and the test asserts the *body*; **two real defects caught** — an SOS with no ride rendered an empty `{{link}}` and was silently never sent (now a `geo:` URI), and the P-12 tally's keys were camelCased on the wire, which promoted iam-svc's `LiteralKeyDictionaryConverter` into the kernel on its third instance; **5 contract changes** (`smsStatus`, the moderation pair, the trip-end hook, the P-12 read, and C051's `deliveries`); `migrate-verify.sh` 341/341 with a C052 section; 12 spec gaps / micro-change-sets |
 | C053 | support-svc | 3 | DONE | 2026-07-31 | 32 tests green in a **new suite** (`Support.Api.Tests`), all integration against a real Postgres and asserting migration 1902's **actual Sinhala and Tamil strings** rather than fixtures of its own; **1 migration (1309)** — `support.ticket_events` (the thread; §13 holds one `admin_response`, so a second reply overwrites the first and a status change leaves no trace at all), `support.command_log` (R-14, the twelfth), the five columns an agent's handling needs, and `screenshot_upload_id` as a **FK onto `docs.uploads`** because the DoD says "links it by id, not by public URL" and §13's `screenshot_url` **is** that URL; **this service is the platform's first writer of `docs.uploads`** — US-16.2's "attach a screenshot" had no upload surface anywhere, and registry-svc says outright that filling that table is not its job; **the Finance queue is derived from the category, never stored**, because `support.tickets` has three writers and a stored column would default C047's and C050's own rows onto the wrong pile; **one real defect caught** — thread entries stamped from the service clock beside a `resolved_at` stamped by Postgres sorted the thread out of order, so every timestamp on these tables is now `now()`; **10 contract changes** (the upload pair, the internal queue family, the thread, the queue, `TicketRow`); `migrate-verify.sh` 351/351 with a C053 section; 11 spec gaps / micro-change-sets |
-| C054 | ocr-svc | 3 | PENDING | | |
+| C054 | ocr-svc | 3 | DONE | 2026-07-31 | **113 tests green** in a new suite (`Ocr.Api.Tests`), against a real Postgres, real OpenCV, the real `tesseract` binary and a **recording HTTP server** standing in for Gemini — the D-36 claim is asserted on the bytes that came off the socket; **1 migration (1310)** — ADD §12.5's document-processing log (`raw_sha256`, `redacted_sha256`, policy + pass version, the mask counts, `engine`) on `docs.extractions`, which 1301 gives one BOOLEAN, plus **`ck_extractions_gemini_is_redacted`**, the D-36 invariant in the last place able to refuse to record its violation; **the pre-pass is held twice** — `GeminiFieldExtractor` takes a `RedactedDocument` only the redactor can construct, and `PerimeterGuardHandler` re-checks the wire; **fails closed everywhere**: no Tesseract ⇒ no ID boxes ⇒ no redaction ⇒ **no Gemini call at all**, and the on-prem path still returns fields, capped below the auto-verify threshold so a model outage can never auto-approve a vehicle; **three real defects caught by the tests** — the guard's regex matched nothing at all because `System.Text.Json` escapes `+` and `/` to `\uXXXX` (it was passing every payload); Tesseract's PSM 11 returns **nothing** for a framed number plate, the one document step 4/4 cannot be blind on; and a label match on a heading returned `revenue_no = "LICENCE NO RL8891234"`; **`_shared.yaml`'s `FieldSource`/`VerifyStatus` enums named values no row can hold** and omitted `auto_verified`, so a generated client would have failed on every field registry-svc has ever returned — corrected; **1 new contract** (`ocr.yaml`, Δ in full: D3' has no ocr-svc section); `migrate-verify.sh` 355/355 with a C054 section; 8 spec gaps / micro-change-sets |
 | C055 | voip-svc | 3 | PENDING | | |
 | C056 | transit-svc-routing | 3 | PENDING | | |
 | C057 | transit-svc-gtfs-lifecycle | 3 | PENDING | | |
@@ -7693,3 +7693,196 @@ _Append 3 lines per completed component (Component / Status / Notes)._
 
   **Build host —** Docker for one Testcontainers fixture (Postgres); the replica stack stayed down
   throughout. `Support.Api.Tests` takes ~50 s. No new NuGet reference.
+
+- **Component:** C054 ocr-svc — 2026-07-31
+- **Status:** DONE — `dotnet test backend/src/Ocr.Api.Tests -c Release` → **113 passed, 0 failed,
+  0 skipped** in a new suite. All four DoD items pass, each with a named test: a low-confidence
+  field is written `pending` and never auto-verified (`A_low_confidence_field_is_pending_and_never_auto_verified`,
+  plus the unscored-field and unread-field variants); a plate mismatch comes back `reg_no_match=false`
+  → `pending`, which is what registry-svc turns into the photos step's `pending_review`
+  (`A_plate_that_does_not_match_the_registration_is_pending`); with Gemini answering 503 the real
+  `tesseract` binary still produces `revenue_no` and `revenue_expiry` off a real rendered document,
+  every one of them flagged for review (`FallbackTests`); and **no unredacted image reaches the
+  external model**, asserted on the bytes a real HTTP recorder captured — their sha256 is the
+  redacted artefact's, it is not the raw file's, and the raw file's base64 appears nowhere in the
+  request body (`No_unredacted_image_reaches_the_external_model`). Gates re-run green after one
+  migration and one contract correction: `bash infra/scripts/migrate-verify.sh` → **355/355** (was
+  351), `Registry.Api.Tests` → 175, Spectral on `backend/contracts/*.yaml` → 0 errors,
+  `dotnet build backend/MageRide.sln -c Release` → 0 warnings.
+- **Notes:**
+  **The deliverable that moved — `registry.document_fields` keeps one writer.**
+  The manifest lists "writes to `registry.document_fields` with confidence + source and the derived
+  `verify_status`" as C054's. It is met **through the seam, not by a second writer**, because the
+  C029 handoff's fence says the opposite in as many words — *"Return fields with confidences and
+  nothing else: whether a field is pending … is decided here [registry-svc], because AL-30 makes
+  those properties of tables ocr-svc does not own"* — and because two writers of that table would
+  double-insert every field on every extraction, with no natural key to collide on. So ocr-svc
+  produces the value, the confidence, the source and **its own derived verdict**, and registry-svc
+  persists them. `verifyStatus` is on the wire and registry-svc deliberately ignores it, re-deriving
+  the same answer from the same confidence — which is why `Ocr:ConfidenceThreshold` and
+  `Registry:OcrConfidenceThreshold` share a default and an argument at both declarations.
+
+  **Spec gaps — one micro-change-set landed as `db/migrations/1310`, one contract correction, and
+  six smaller ones.**
+  (a) ***ADD §12.5 asks for a processing log and the schema has one BOOLEAN.*** §12.5 says
+  "document processing log: hash + policy version + redaction-pass version stored per extraction"
+  and 1301's `docs.extractions` carries `redaction_applied BOOLEAN`, which can say *that* a document
+  was redacted and nothing about *how*. The question a privacy impact assessment asks — §12.5 makes
+  one a precondition of production rollout — is "this driver's licence was processed on the 3rd:
+  which file was it, what did the pass mask that day, and which build did the masking?" 1310 adds
+  `raw_sha256` (identifies the file after NFR-28 deletes it), `redacted_sha256` (what actually left),
+  `redaction_policy_version`, `redaction_pass_version`, `faces_blurred`, `identifiers_masked` and
+  `engine`. **D4' §11-16 / server_db_schema §12 should carry them.**
+  (b) ***D-36 had no expression in the database.*** 1310 adds `ck_extractions_gemini_is_redacted`
+  (`engine IS DISTINCT FROM 'gemini' OR redaction_applied`) — a row claiming the external model ran
+  on an unredacted image describes the one thing that must never have happened, and the schema is
+  the last place able to refuse to record it. `NOT VALID`: pre-C054 rows carry no engine.
+  (c) ***`_shared.yaml`'s `FieldSource` and `VerifyStatus` named values no row can hold.*** They read
+  `[ocr, manual]` and `[pending, confirmed, rejected]`; migration 0305's CHECKs — D4' §2, which
+  `backend/CLAUDE.md` makes the source of truth — are `[ai, manual]` and
+  `[auto_verified, pending, confirmed]`. **`auto_verified` was not in the enum at all**, so a client
+  generated from these contracts (C012/C013) would have failed to deserialise every field
+  registry-svc has ever returned, and `ocr`/`rejected` name states nothing can write. Corrected in
+  place, with the `ExtractedField.key` example (`licenceNo` → `licence_no`). Consumers are
+  `registry.yaml`, `admin-bff.yaml`, `fleet.yaml` and now `ocr.yaml`; none referenced `rejected`.
+  (d) ***ocr-svc has no API anywhere in D3'.*** D6' §7.5 draws the hop as `registry-svc → ocr-svc`
+  and names no shape. `backend/contracts/ocr.yaml` is new and Δ C054 in full — one internal
+  operation, on the plane the gateway refuses at the edge (C008). **D3' should carry an ocr-svc
+  section**, or say explicitly that the service has no contract surface.
+  (e) ***No spec names the AL-50 permit fields.*** D6' I-27.3 says "route permit = permit no +
+  route/validity" and gives no keys. `permit_no`, `permit_route`, `permit_expiry` are this
+  service's; registry-svc's `DocumentFieldKeys.RequiredFor` has no `permit` case, so the Fleet
+  Portal's approval gate (C059) will need one.
+  (f) ***No spec pins the confidence threshold, and none pins a fallback ceiling at all.***
+  `Ocr:ConfidenceThreshold` is 0.80, matching C029's identical finding.
+  `Ocr:TesseractConfidenceCeiling` (0.60) is new and is D6' §7.5's own "below threshold → manual
+  admin review" made structural rather than hoped-for; the options validator refuses a configuration
+  where it is not below the threshold.
+  (g) ***A licence class is not a vehicle type, and nothing maps them.*** AL-29 stores
+  `allowed_vehicle_types` and a Sri Lankan licence prints `A1`, `B`, `C1`; `registry.vehicles`
+  speaks `three_wheeler`/`sedan`. The classes are stored verbatim — inventing the mapping here would
+  put an unstated rule between a driver's licence and what they may drive.
+  (h) ***`docs.uploads` still has no writer for onboarding.*** registry-svc resolves ids it did not
+  create; this service reads bytes it did not put there and stamps NFR-28's deadline when the row
+  arrived without one, because it is the first thing on the platform that touches those bytes. The
+  upload surface and the S3 client behind `IRawDocumentStore` are C125's. **A vehicle cannot be
+  onboarded in a deployment where nothing fills that table.**
+
+  **Three real defects, all found by the suite —**
+  (1) ***The perimeter guard was matching nothing at all.*** It scanned the outbound body with a
+  regex for a base64 run, and `System.Text.Json`'s default encoder escapes `+` and `/` to their
+  `\uXXXX` forms — so a serialised image never survives as a contiguous base64 string and the guard
+  passed **every** payload while looking like it worked. It now parses the body and walks every
+  string in it (the regex stays for a body the parser cannot read). Caught by
+  `An_image_the_pre_pass_never_produced_is_refused_before_it_leaves`, which is the only reason the
+  second D-36 fence exists at all rather than existing on paper.
+  (2) ***Tesseract's PSM 11 returns nothing for a number plate.*** "Sparse text" is the intuitive
+  mode for a form and reads a licence and an insurance certificate identically to PSM 3 — and
+  returns **zero words** for a plate framed by its border, which is the one document step 4/4 cannot
+  be blind on. The default is now PSM 3, and a page that comes back empty is retried under the other
+  mode before it is called unreadable.
+  (3) ***A label match on a heading returned the whole next line.*** A revenue licence prints
+  "REVENUE LICENCE" as a heading and "LICENCE NO RL8891234" under it; the heading matched first,
+  left nothing after itself, and the fall-through returned `revenue_no = "LICENCE NO RL8891234"` —
+  a field a Verification Officer then has to retype. The continuation line now has its own label
+  stripped, longest-label-first.
+
+  **Decisions —**
+  (1) **The on-prem read runs on every document, before the redaction, whether or not Gemini will be
+  called.** ADD §12.5 takes its mask boxes from Tesseract, so the chain is *no Tesseract ⇒ no boxes ⇒
+  no redaction ⇒ no Gemini*, with no branch that skips a link — and the same page is then the
+  fallback extractor's input, so the slowest step runs once.
+  (2) **Every redaction failure is a refusal, never a partial pass.** There is no path returning an
+  image with *some* of the pass applied. "Blur what we found and go" is a pipeline whose D-36
+  compliance depends on whether a library loaded, which is not a property anybody can audit.
+  (3) **An empty face list is not a failure; an unavailable detector is.** An insurance certificate
+  has no portrait. The two are indistinguishable from the result, which is why
+  `IFaceDetector.IsAvailable` is checked before the document rather than inferred from it.
+  (4) **Faces are blurred and ID numbers are filled.** A blur leaves a document that still reads as
+  one — the model can see a portrait belongs there, which is what stops it hallucinating a field
+  into the space — while removing the biometric. A number cannot be blurred: a strong enough blur is
+  still invertible for a nine-character string over a known alphabet at a known position.
+  (5) **The redacted copy is re-encoded as PNG even from a JPEG.** A second JPEG generation over a
+  freshly blacked-out rectangle leaves ringing along its edges — faint, and a partial reconstruction
+  of the glyphs underneath.
+  (6) **The prompt tells the model the image was redacted, and to answer null for anything behind a
+  rectangle.** Without it a black box reads as a printing artefact and the model invents a plausible
+  NIC for the space — exactly what I-25.1's "the value is captured from the structured response" has
+  to be protected from. Asserted (`The_prompt_tells_the_model_the_image_was_redacted`).
+  (7) **Confidence is asked for per field, with a rubric.** AL-29, BR-25.2 and D6' §7.5 hang the
+  whole verdict on "below threshold", and a model asked for a number with no rubric returns 0.95 for
+  everything. The rubric is the legibility of *that field's own characters*.
+  (8) **`reg_no_match` fails in both directions.** A confident mismatch is pending — the plate is the
+  verdict, not the confidence — and so is a *match* read off an illegible plate, because agreeing
+  with the registration on something nobody could make out is not evidence that the photograph is of
+  this vehicle. AL-30's auto-approve depends on the second half as much as the first.
+  (9) **Plates compare on their alphanumerics and nothing else is forgiven.** `WP QA-1234`,
+  `WP-QA-1234` and `WPQA1234` are one registration; no `O`↔`0` folding, because over-strictness
+  costs an officer a glance and under-strictness puts an unverified vehicle on the road. Reading one
+  is done on *tokens*, not a regex over the page — Tesseract renders the fixture's separators as
+  `WP—-QA-—1234` — and the token boundaries are what stop `EXPIRY 2029` (six letters, four digits,
+  the exact canonical plate shape) being read as a registration.
+  (10) **Every field the fallback produces is capped below the auto-verify threshold.** Not because
+  Tesseract is untrustworthy — its per-word confidences are honest — but because that path has no
+  layout model: it finds a date near a label, and AL-27 approves a vehicle with no human involvement
+  on the result.
+  (11) **The document-level confidence is the lowest field, not the mean.** A certificate whose
+  insurer read at 0.99 and whose expiry read at 0.30 is one nobody should act on, and 0.65 describes
+  neither number.
+  (12) **Nothing about a document is an HTTP error.** Unreadable, unavailable, both engines down —
+  all `200` with `succeeded:false`, because the caller has a step to save either way (D5' §14.1a) and
+  a `5xx` would put registry-svc's retry between a driver and their next screen.
+  (13) **The queue is in process, bounded, and full is a refusal.** The pass is idempotent and its
+  caller is a synchronous hop with D6' §8.3's 30-second budget, so a document that outlived the
+  process outlived the request that wanted it; a durable queue would deliver a result to a caller
+  that stopped waiting.
+  (14) **The kernel's deny-by-default fallback policy is removed in this service, and replaced by a
+  test.** With no authentication scheme registered — this plane carries no token —
+  `RequireAuthenticatedUser` can never be satisfied, and it applies to requests matching **no**
+  endpoint, so every unknown path answered `500` instead of `404`.
+  `Every_route_on_this_service_is_health_or_key_gated` holds the posture instead. **Any service
+  that sets `UseAuthentication = false` has this problem** — ApiGateway and the three HotPath
+  processes should be checked.
+  (15) **No retry on registry-svc's side of the hop.** ocr-svc already retries the leg that fails
+  (Gemini, D6' §8.3) and has the on-prem engine behind it; a retry from registry-svc would re-run a
+  whole pass — a second Tesseract read and a second `docs.extractions` row — while a driver waits on
+  a step save.
+
+  **Native dependencies, and why they are a posture rather than a crash —**
+  `tesseract` (D6' §7.5's fallback **and** ADD §12.5's box source), OpenCV's native library
+  (`libgtk-3-0t64` + `libatomic1`) and a Haar cascade (`opencv-data`). Missing any of them, the
+  service starts, logs `ERROR`, reports `/health/ready` **degraded**, extracts every document
+  on-prem and **sends nothing to Gemini**. That is D-36 failing closed and it is why the CI backend
+  leg now installs all three: without them the suite would still pass, having proved the degraded
+  path twice and the pre-pass never. `infra/docker/Dockerfile.ocr` is this service's own image —
+  the shared template publishes onto Alpine and OpenCvSharp's native half is a glibc build, and
+  ocr-svc's image needs an `apt-get` layer for Tesseract regardless.
+
+  **For C062 (admin-bff) —** the Verification-Officer queue is unchanged: it still reads
+  `registry.document_fields.verify_status='pending'` and is still pushed `document.review_required`,
+  both registry-svc's. What is new for you is `docs.extractions`: `engine` says whether a pending
+  field came from Gemini or from the capped on-prem path, and a queue full of `tesseract` rows means
+  the model is down rather than the documents being poor. `raw_sha256` identifies the file after
+  NFR-28 has deleted it, which is the only handle a complaint about a 90-day-old decision has.
+  **For C059 (fleet-svc) —** the four SCR-FP-004 slots work today: `registration`, `insurance`,
+  `revenue_license` and `permit` all route to this pipeline (AL-50). `permit` returns `permit_no`,
+  `permit_route` and `permit_expiry` — keys no spec names (see gap (e)) — and registry-svc's
+  `RequiredFor` has no `permit` case, so the approval gate that extends AL-10 for Mode A is yours to
+  add.
+  **For C125 (object storage) —** `IRawDocumentStore` is one method and the filesystem
+  implementation behind it is the whole seam; `Ocr:Storage:Root` becomes the bucket. Two things are
+  this service's regardless of where the bytes sit and should stay so: the deadline stamped on
+  `docs.uploads.auto_delete_at` when a row arrives without one, and the refusal of any
+  `storage_url` that resolves outside the root (`http(s)` sources are off unless asked for by name —
+  a service that follows any URL written into a table it does not own is one row from the cluster
+  metadata endpoint).
+  **For C009 / C124 (compose and CD) —** ocr-svc **cannot join the combined `app-services`
+  container**: that image is Alpine and this service's native half is glibc. It needs its own
+  container from `infra/docker/Dockerfile.ocr`, reachable at `Registry:OcrBaseUrl`. It needs **no
+  gateway cluster** — there is no public route to forward.
+  **For C118 (contract tests) —** `ocr.yaml` is new (one operation, two schemas) and `_shared.yaml`'s
+  `FieldSource`/`VerifyStatus` enums changed to match the database; anything asserting the old values
+  was asserting values no row can hold.
+  **Build host —** Docker for one Testcontainers fixture (Postgres); the replica stack stayed down
+  throughout. `apt-get install tesseract-ocr libgtk-3-0t64 libatomic1 opencv-data` was run on this
+  box — the suite needs them, and so does the service. `Ocr.Api.Tests` takes ~35 s.

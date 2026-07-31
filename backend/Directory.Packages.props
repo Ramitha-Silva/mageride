@@ -79,6 +79,19 @@
     <PackageVersion Include="System.Formats.Cbor" Version="10.0.10" />
   </ItemGroup>
 
+  <ItemGroup Label="Computer vision — the D-36 redaction pre-pass (C054)">
+    <!-- ocr-svc blurs faces and blacks out ID numbers BEFORE anything reaches Gemini (D-36,
+         ADD §12.5). OpenCV is what both specs name, and OpenCvSharp4 is its only maintained .NET
+         binding; `official.runtime.linux-x64` is the matching native build, published by the same
+         author as the managed half — the community `OpenCvSharp4.runtime.linux-x64` stopped at
+         4.10 and links Ubuntu 20.04-era libav/libtiff sonames that no current image carries.
+         The native half needs `libgtk-3-0t64` and `libatomic1` at run time and the cascade file
+         from `opencv-data`; all three are deployment concerns, and ocr-svc FAILS CLOSED without
+         them — no redactor means no Gemini call, never an unredacted one. -->
+    <PackageVersion Include="OpenCvSharp4" Version="4.13.0.20260627" />
+    <PackageVersion Include="OpenCvSharp4.official.runtime.linux-x64" Version="4.13.0.20260627" />
+  </ItemGroup>
+
   <ItemGroup Label="Resilience (D6' §8.3)">
     <PackageVersion Include="Polly.Core" Version="8.7.0" />
     <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="10.8.0" />

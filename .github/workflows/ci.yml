@@ -89,6 +89,20 @@ jobs:
         with:
           global-json-file: global.json
 
+      # C054: ocr-svc's redaction pass is native. `tesseract` is D6' §7.5's fallback AND the
+      # source of ADD §12.5's ID-number bounding boxes; libgtk-3/libatomic1 are what OpenCV's
+      # native library links; opencv-data ships the Haar face cascade. Without them the service
+      # fails CLOSED — it starts, extracts on-prem and sends nothing to Gemini — so the suite
+      # would still pass, having proved the degraded path twice and the D-36 pre-pass never.
+      # See backend/src/Ocr.Api/CLAUDE.md.
+      - name: backend — native OCR dependencies
+        if: matrix.target == 'backend'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            tesseract-ocr libgtk-3-0t64 libatomic1 opencv-data
+          tesseract --version
+
       - name: backend — restore and build
         if: matrix.target == 'backend'
         run: dotnet build backend/MageRide.sln -c Release

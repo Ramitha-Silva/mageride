@@ -1,0 +1,99 @@
+# =====================================================================================
+# MageRide — ocr-svc image (C054).
+#
+#   docker build -f infra/docker/Dockerfile.ocr -t mageride/ocr-svc:dev .
+#
+# Build context is the REPOSITORY ROOT, as with Dockerfile.service.
+#
+# WHY THIS SERVICE HAS ITS OWN DOCKERFILE, when the other twenty share one:
+#
+#   1. `Dockerfile.service` publishes onto `aspnet:10.0-alpine`. OpenCvSharp's native half
+#      (`libOpenCvSharpExtern.so`) is a glibc build and does not load under musl, so the
+#      D-36 face blur would be permanently unavailable on that base — the service would run,
+#      fail closed, and quietly never call Gemini again.
+#   2. This service needs three OS packages at RUN TIME whatever the base is: the `tesseract`
+#      binary (D6' §7.5's fallback AND ADD §12.5's source of ID-number bounding boxes), the
+#      libraries OpenCV links, and the Haar cascade from `opencv-data`. A shared template with
+#      a per-service package list would put ocr-svc's dependencies in every other image.
+#
+# So the deviation is one image with an apt layer, not a parameterised template. Everything
+# else — non-root `app`, port 5000, the /health/ready healthcheck, the resolved entry point —
+# matches `Dockerfile.service` deliberately, so the two behave identically to an orchestrator.
+#
+# The service FAILS CLOSED without any of the three packages: it starts, reports
+# /health/ready degraded, extracts every document on-prem and sends nothing to the external
+# model. That is correct behaviour and it is also why they are installed here rather than
+# left to a runtime check — a silently degraded OCR service is indistinguishable from a
+# working one from the outside.
+# =====================================================================================
+
+ARG DOTNET_SDK_IMAGE=mcr.microsoft.com/dotnet/sdk:10.0
+# Debian, not Alpine — see (1) above.
+ARG DOTNET_RUNTIME_IMAGE=mcr.microsoft.com/dotnet/aspnet:10.0
+
+# ---- build --------------------------------------------------------------------------
+FROM ${DOTNET_SDK_IMAGE} AS build
+ARG BUILD_CONFIGURATION=Release
+WORKDIR /src
+
+COPY ["global.json", "./"]
+COPY ["backend/Directory.Build.props", "backend/Directory.Packages.props", "backend/"]
+COPY ["backend/src/", "backend/src/"]
+# MageRide.Migrations globs db/migrations/*.sql as embedded resources; anything that
+# references it — directly or through MageRide.TestKit — needs them present to restore.
+COPY ["db/migrations/", "db/migrations/"]
+
+RUN dotnet restore "backend/src/Ocr.Api/Ocr.Api.csproj"
+
+RUN dotnet publish "backend/src/Ocr.Api/Ocr.Api.csproj" \
+      -c ${BUILD_CONFIGURATION} \
+      -o /app \
+      --no-restore \
+      /p:UseAppHost=false
+
+# ---- runtime ------------------------------------------------------------------------
+FROM ${DOTNET_RUNTIME_IMAGE} AS runtime
+
+# tesseract-ocr        D6' §7.5 fallback + ADD §12.5 bounding boxes
+# libgtk-3-0 libatomic1  what libOpenCvSharpExtern.so links
+# opencv-data          haarcascade_frontalface_default.xml, probed by OpenCvFaceDetector
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      tesseract-ocr \
+      tesseract-ocr-eng \
+      libgtk-3-0 \
+      libatomic1 \
+      opencv-data \
+      wget \
+ && rm -rf /var/lib/apt/lists/*
+
+# The Debian base ships no `app` user, unlike the Alpine one Dockerfile.service guards for.
+RUN getent group app >/dev/null 2>&1 || groupadd -r app; \
+    getent passwd app >/dev/null 2>&1 || useradd -r -g app app
+
+WORKDIR /app
+COPY --from=build /app .
+
+# Where a raw document is staged for the Tesseract child process, and where D-36's bucket is
+# mounted until C125 lands an object-storage client. Both are written by the service, so they
+# are the only paths it owns; the image itself stays read-only to `app`.
+RUN mkdir -p /var/lib/mageride/ocr-work /var/lib/mageride/documents \
+ && chown -R app:app /var/lib/mageride
+
+USER app
+
+ENV ASPNETCORE_URLS=http://+:5000 \
+    DOTNET_gcServer=1 \
+    TZ=Asia/Colombo \
+    Ocr__Tesseract__WorkRoot=/var/lib/mageride/ocr-work
+EXPOSE 5000
+
+# /health/ready reports DEGRADED — not unhealthy — when the redaction pass is disarmed: a
+# service that can still extract on-prem should stay in rotation, because taking it out turns
+# "no auto-approval today" into "no onboarding today". So this probe passes on a degraded pod
+# by design, and the ERROR at start-up plus the `engine` column on docs.extractions are what
+# make the difference visible.
+HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=3 \
+  CMD wget -qO- http://localhost:5000/health/ready || exit 1
+
+ENTRYPOINT ["dotnet", "MageRide.Ocr.Api.dll"]

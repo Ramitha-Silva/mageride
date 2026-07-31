@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    Ocr.Api (C054 ocr-svc) — document extraction, and the PII redaction pass that has to happen
+    before any of it leaves the perimeter.
+
+    FENCE 1 (D-36, the whole reason this service exists): face blur + ID-number masking run BEFORE
+    Gemini. Held structurally, not by care — `GeminiFieldExtractor` takes a `RedactedDocument`, a
+    type only `RedactionPipeline` can construct, and the outbound HttpClient carries
+    `PerimeterGuardHandler`, which refuses any request whose inline image is not a hash the
+    redactor registered. No redactor available ⇒ NO Gemini call at all, ever.
+    FENCE 2: Tesseract is a required fallback, not an extra. Gemini down, Gemini refusing, Gemini
+    unconfigured and OpenCV missing all land on the on-prem path, which still returns fields —
+    capped below the auto-verify threshold, so they are flagged for review rather than trusted.
+    FENCE 3: this service decides FIELD-level verified/pending. The onboarding step and the vehicle
+    status are registry-svc's (AL-30), and `registry.document_fields` has exactly one writer —
+    C029's. See CLAUDE.md, "The deliverable that moved".
+
+    Verify: dotnet test backend/src/Ocr.Api.Tests -c Release
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.Ocr</RootNamespace>
+    <AssemblyName>MageRide.Ocr.Api</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <UserSecretsId>mageride-ocr-api</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MageRide.Shared\MageRide.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Dapper" />
+    <PackageReference Include="Npgsql" />
+    <!-- D-36's face blur. The native half is a deployment concern; see Directory.Packages.props. -->
+    <PackageReference Include="OpenCvSharp4" />
+    <PackageReference Include="OpenCvSharp4.official.runtime.linux-x64" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Ocr.Api.Tests" />
+  </ItemGroup>
+
+</Project>

@@ -528,17 +528,28 @@ components:
       description: Org-scoped sub-role carried in the `fleet_role` claim (AL-03).
       enum: [owner, manager, viewer]
 
+    # Δ C054 — both enums corrected against D4' §2 / migration 0305, which is the source of truth
+    # for them (backend/CLAUDE.md). As written they described values no row can hold and omitted
+    # the one almost every row does: `ck_document_fields` admits source ∈ {ai, manual} and
+    # verify_status ∈ {auto_verified, pending, confirmed}. A generated client (C012/C013) would
+    # have failed to deserialise every field registry-svc has ever returned — `auto_verified` was
+    # not in the enum at all — and `ocr` and `rejected` name states that cannot be written.
+    # Raised as a micro-change-set in the C054 handoff.
     VerifyStatus:
       type: string
       description: |
         Per-field verification state (AL-29/AL-30). `pending` fields hold the vehicle in the
-        Verification Officer queue and block approval (US-2.10a).
-      enum: [pending, confirmed, rejected]
+        Verification Officer queue and block approval (US-2.10a); `confirmed` is an officer's
+        answer (SCR-AP-003) and counts as verified. A rejection is recorded on the document
+        (`registry.documents.status`), not on the field.
+      enum: [auto_verified, pending, confirmed]
 
     FieldSource:
       type: string
-      description: Where a field's value came from — OCR extraction or driver keystrokes (AL-29).
-      enum: [ocr, manual]
+      description: |
+        Where a field's value came from — extraction by ocr-svc (`ai`) or driver keystrokes
+        (`manual`, always `pending` per BR-25.2).
+      enum: [ai, manual]
 
     ExtractedField:
       type: object
@@ -547,7 +558,12 @@ components:
       properties:
         key:
           type: string
-          example: licenceNo
+          description: |
+            A `registry.document_fields.field_key`. Snake case, because it is the stored key rather
+            than a wire name — `licence_no`, `licence_expiry`, `nic_no`, `allowed_vehicle_types`,
+            `insurance_expiry`, `revenue_no`, `revenue_expiry`, `reg_no_match`, … (Δ C054: the
+            example said `licenceNo`, which no row holds.)
+          example: licence_no
         value:
           type: [string, 'null']
         source:

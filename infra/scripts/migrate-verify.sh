@@ -2093,6 +2093,57 @@ psql_run "DELETE FROM support.ticket_events
           DELETE FROM iam.users WHERE id='c0000053-0000-0000-0000-000000000001';" >/dev/null \
   || die "could not clean up the C053 ticket fixture."
 
+# ---------------------------------------------------------------------------------------
+# C054 — docs: the ADD §12.5 document-processing log on docs.extractions (1310)
+#
+# §12.5 asks for "hash + policy version + redaction-pass version stored per extraction" and 1301
+# gives it one BOOLEAN. The checks below are about the two things those columns exist to make
+# answerable: WHICH file was processed under WHICH redaction policy (after NFR-28 has deleted the
+# file itself), and the D-36 invariant that an image only ever left the perimeter redacted.
+# ---------------------------------------------------------------------------------------
+step "Objects owned by C054 (D-36, ADD §12.5, D6' §7.5)"
+
+check_eq "docs.extractions carries the ADD §12.5 processing log (7 columns)" "7" \
+  "SELECT count(*) FROM information_schema.columns
+    WHERE table_schema='docs' AND table_name='extractions'
+      AND column_name IN ('raw_sha256','redacted_sha256','redaction_policy_version',
+                          'redaction_pass_version','faces_blurred','identifiers_masked','engine');"
+
+check_eq "the D6' §7.5 fallback is countable (ix_extractions_fallback)" "1" \
+  "SELECT count(*) FROM pg_indexes
+    WHERE schemaname='docs' AND indexname='ix_extractions_fallback';"
+
+psql_run "INSERT INTO iam.users (id, phone, role)
+            VALUES ('c0000054-0000-0000-0000-000000000001','+94770000541','driver');
+          INSERT INTO docs.uploads (id, owner_id, storage_url, kind)
+            VALUES ('c0000054-0000-0000-0000-000000000002',
+                    'c0000054-0000-0000-0000-000000000001','licence.png','driving_license');" >/dev/null \
+  || die "could not seed the C054 extraction fixture."
+
+# The D-36 invariant, in the last place able to refuse to record its violation: a row saying the
+# external model ran on an image the pre-pass never touched describes the one thing that must never
+# have happened. NOT VALID, so this proves it bites on a NEW write — the half that closes the hole.
+check_rejects "an unredacted Gemini extraction is refused (ck_extractions_gemini_is_redacted)" \
+  "INSERT INTO docs.extractions (upload_id, doc_type, status, redaction_applied, engine)
+     VALUES ('c0000054-0000-0000-0000-000000000002','driving_license','EXTRACTED',false,'gemini');"
+
+check_rejects "an unknown extraction engine is refused (ck_extractions_engine)" \
+  "INSERT INTO docs.extractions (upload_id, doc_type, status, engine)
+     VALUES ('c0000054-0000-0000-0000-000000000002','driving_license','EXTRACTED','azure');"
+
+# The on-prem path is the one that legitimately sends nothing, so it must be recordable.
+psql_run "INSERT INTO docs.extractions (upload_id, doc_type, status, redaction_applied, engine,
+                                        raw_sha256, redaction_policy_version, redaction_pass_version,
+                                        faces_blurred, identifiers_masked)
+            VALUES ('c0000054-0000-0000-0000-000000000002','driving_license','MANUAL_REVIEW',false,
+                    'tesseract', repeat('a',64), 'd36.1', 'c054.1', 1, 2);" >/dev/null \
+  || die "a Tesseract-only extraction (redaction_applied=false, engine=tesseract) was refused."
+
+psql_run "DELETE FROM docs.extractions WHERE upload_id='c0000054-0000-0000-0000-000000000002';
+          DELETE FROM docs.uploads WHERE id='c0000054-0000-0000-0000-000000000002';
+          DELETE FROM iam.users WHERE id='c0000054-0000-0000-0000-000000000001';" >/dev/null \
+  || die "could not clean up the C054 extraction fixture."
+
 # AL-49 BR-31.1: the pay sheet's payTo reads the single verified row, and the table is versioned so
 # an owner's later edit lands beside it rather than on top of it.
 check_eq "an org has at most one verified payout profile" "1" \
