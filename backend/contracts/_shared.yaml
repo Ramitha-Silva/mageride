@@ -283,6 +283,19 @@ components:
         - feed-duplicate
         - feed-not-validated
         - feed-already-active
+        # fleet-svc org, sub-roles and payout profile (AL-03, AL-49) — coined by C058, which is the
+        # first component with code that can raise them. `fleet.yaml` declared 403/404/409 on the
+        # organisation routes with only the kernel codes to carry them, and the Fleet Portal renders
+        # a different screen for each: "we are reviewing your application" (fleet-not-approved) is
+        # not "you may not do this" (fleet-role-insufficient), and neither is "that organisation is
+        # not yours" (not-fleet-member). See the C058 handoff.
+        - fleet-not-approved
+        - not-fleet-member
+        - fleet-role-insufficient
+        - fleet-not-found
+        - payout-profile-not-found
+        - business-registration-exists
+        - fleet-member-exists
 
     Problem:
       type: object

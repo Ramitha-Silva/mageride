@@ -162,6 +162,47 @@ public static partial class MageRideErrors
     public static readonly ErrorCode RouteUnavailable = new("route-unavailable", 422, "No route could be computed");
 
     // ---------------------------------------------------------------------------------------
+    // fleet-svc — the organisation, its sub-roles and its payout profile (AL-03, AL-49).
+    // Coined by C058, which is the first component with code that can raise them; `fleet.yaml`
+    // and `_shared.yaml`'s ErrorCode enum carry the same seven.
+    // ---------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// The organisation has not been approved by a Verification Officer (US-13.A7).
+    /// </summary>
+    /// <remarks>
+    /// A code of its own rather than a bare <see cref="Forbidden"/>, because the Fleet Portal
+    /// renders a different screen for it: "we are reviewing your application" is not "you may not
+    /// do this", and SCR-FP-002's pending state is the one an operator sees for days.
+    /// </remarks>
+    public static readonly ErrorCode FleetNotApproved = new("fleet-not-approved", 403, "Fleet organisation is not approved");
+
+    /// <summary>
+    /// The caller holds no membership of the organisation named in the path (AL-03).
+    /// </summary>
+    /// <remarks>
+    /// The token's <c>fleet_id</c> claim carries <b>one</b> membership — iam-svc picks the most
+    /// privileged when a person belongs to several (C027) — so the claim can never be the
+    /// authority on a path-addressed org. This is what a caller gets when the two disagree and
+    /// there is no membership row to back the path.
+    /// </remarks>
+    public static readonly ErrorCode NotFleetMember = new("not-fleet-member", 403, "Caller is not a member of this fleet organisation");
+
+    /// <summary>The caller's sub-role is below what the route requires (US-13.A5).</summary>
+    public static readonly ErrorCode FleetRoleInsufficient = new("fleet-role-insufficient", 403, "Fleet sub-role does not permit this");
+
+    public static readonly ErrorCode FleetNotFound = new("fleet-not-found", 404, "Fleet organisation not found");
+
+    /// <summary>The organisation has never submitted a bank and payout profile (AL-49).</summary>
+    public static readonly ErrorCode PayoutProfileNotFound = new("payout-profile-not-found", 404, "Fleet payout profile not found");
+
+    /// <summary>Another live organisation already claims this business registration.</summary>
+    public static readonly ErrorCode BusinessRegistrationExists = new("business-registration-exists", 409, "A live organisation already uses this business registration");
+
+    /// <summary>The invited person already holds a sub-role in this organisation (US-13.A5).</summary>
+    public static readonly ErrorCode FleetMemberExists = new("fleet-member-exists", 409, "This person is already a member of the organisation");
+
+    // ---------------------------------------------------------------------------------------
     // safety-svc / public-bff (D3')
     // ---------------------------------------------------------------------------------------
 

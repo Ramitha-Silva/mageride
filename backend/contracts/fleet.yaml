@@ -17,6 +17,22 @@ openapi: 3.1.0
 # fleet-health-svc in the very line that lists it under fleet-svc, and the gateway resolves a
 # cluster from the contract that declares an operation — so declaring it here routes it to a
 # service that does not implement it. Do not re-add it from an earlier-dated spec line.
+#
+# Δ C058 (fleet-svc-org), each raised in the build/progress.md handoff:
+#   + GET  /v1/fleets/{fleetId}/members          — members could be provisioned and never read back,
+#                                                  so SCR-FP-002's team list had no source.
+#   + /v1/internal/fleets/**                     — AL-39 states the Verification Officer's routes on
+#                                                  admin-bff, which is a BFF and holds no fleet
+#                                                  tables; its own description has approving an org
+#                                                  set `payout_profiles.status='verified'`, which is
+#                                                  a write on registry.fleet_payout_profiles. These
+#                                                  four are what it forwards to.
+#   ~ FleetStatus lost `SUSPENDED`               — `registry.fleets.status CHECK` (migration 0301,
+#                                                  server_db_schema.md §2) admits PENDING, APPROVED
+#                                                  and REJECTED only; nothing in D3'/D5'/URD Epic 13
+#                                                  suspends an organisation. A status the API could
+#                                                  return and the row could not hold is a 500.
+#   ~ seven org error codes                      — see `_shared.yaml`'s ErrorCode enum.
 # =============================================================================================
 
 info:
@@ -117,7 +133,7 @@ paths:
         '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
         '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
-      x-error-codes: [validation-failed, unauthorized, forbidden, conflict]
+      x-error-codes: [validation-failed, unauthorized, forbidden, business-registration-exists]
 
   /v1/fleets/{fleetId}:
     get:
@@ -140,9 +156,42 @@ paths:
         '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
         '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
-      x-error-codes: [unauthorized, forbidden, not-found]
+      x-error-codes: [unauthorized, not-fleet-member, fleet-not-found]
 
   /v1/fleets/{fleetId}/members:
+    get:
+      operationId: listFleetMembers
+      summary: The organisation's team.
+      description: |
+        **Δ C058.** US-13.A5 provisions Manager and Viewer sub-users and SCR-FP-002 lists them;
+        without this route a member could be created and never read back. Any sub-role may read.
+        Ordered Owner, Manager, Viewer — the list renders as an org chart, not as an audit trail.
+
+        No phone number: `iam.fleet_members_fleet` (migration 1806) does not project one. A
+        sub-user's mobile is their own, and an org's team list is not a reason to hand it over.
+      tags: [fleets]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+      responses:
+        '200':
+          description: The organisation's members.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FleetMember'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, not-fleet-member, fleet-not-found]
     post:
       operationId: addFleetMember
       summary: Provision a Manager or Viewer sub-user.
@@ -177,22 +226,13 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required: [memberId, email, fleetRole]
-                properties:
-                  memberId:
-                    $ref: './_shared.yaml#/components/schemas/Ulid'
-                  email:
-                    type: string
-                    format: email
-                  fleetRole:
-                    $ref: './_shared.yaml#/components/schemas/FleetRole'
+                $ref: '#/components/schemas/FleetMember'
         '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
         '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
         '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
         '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
-      x-error-codes: [validation-failed, unauthorized, forbidden, conflict]
+      x-error-codes: [validation-failed, unauthorized, fleet-role-insufficient, fleet-member-exists]
 
   /v1/fleets/{fleetId}/payout-profile:
     get:
@@ -217,7 +257,7 @@ paths:
         '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
         '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
-      x-error-codes: [unauthorized, not-owner, not-found]
+      x-error-codes: [unauthorized, fleet-role-insufficient, payout-profile-not-found]
     put:
       operationId: upsertPayoutProfile
       summary: Create or edit the org bank and payout profile.
@@ -263,7 +303,7 @@ paths:
         '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
         '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
-      x-error-codes: [validation-failed, unauthorized, not-owner, not-found]
+      x-error-codes: [validation-failed, unauthorized, fleet-role-insufficient, fleet-not-found]
 
   /v1/fleets/{fleetId}/payout-profile/documents:
     post:
@@ -313,7 +353,7 @@ paths:
         '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
         '413': { $ref: './_shared.yaml#/components/responses/PayloadTooLarge' }
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
-      x-error-codes: [validation-failed, unauthorized, not-owner, not-found, payload-too-large]
+      x-error-codes: [validation-failed, unauthorized, fleet-role-insufficient, payout-profile-not-found, payload-too-large]
 
   # -------------------------------------------------------------------------------------------
   # Vehicles
@@ -492,7 +532,7 @@ paths:
         '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
         '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
-      x-error-codes: [validation-failed, unauthorized, forbidden, vehicle-not-found, payout-profile-not-verified]
+      x-error-codes: [validation-failed, unauthorized, fleet-not-approved, fleet-role-insufficient, vehicle-not-found, payout-profile-not-verified]
 
   /v1/fleets/{fleetId}/vehicles/{vehicleId}/documents:
     get:
@@ -1330,10 +1370,192 @@ paths:
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
       x-error-codes: [unauthorized, not-owner, not-found, conflict]
 
+  # -------------------------------------------------------------------------------------------
+  # Internal plane — the Verification Officer's decisions, as admin-bff drives them (Δ C058)
+  #
+  # AL-39 states the officer's routes on admin-bff:
+  #   GET  /v1/admin/verification/queues/fleet-org
+  #   GET  /v1/admin/verification/org/{orgId}
+  #   POST /v1/admin/verification/{subjectId}/approve | /reject
+  # admin-bff is a BFF — it holds no fleet tables, and its own description has approving an org
+  # "set the payout profile to `verified` (AL-49)", which is a write on
+  # `registry.fleet_payout_profiles`. These four are what it forwards to, and they are what make
+  # AL-39's fleet-org subject implementable at all.
+  #
+  # D3' §0 puts the whole `/v1/internal/**` family on service-to-service mTLS and the gateway
+  # refuses the prefix at the edge (C008); until the mesh lands (C042) the hop carries a shared
+  # secret in `X-MageRide-Internal-Key`, and without it fleet-svc does not map the family at all.
+  # No route here checks a `verification_officer` role: it never sees the officer's bearer.
+  # admin-bff does, RBAC-gated deny-by-default, and passes the resolved `officerId` on the body —
+  # which is also what `audit.events` records (D-35). Same split as registry-svc's
+  # `/v1/internal/vehicles/**` and support-svc's `/v1/internal/support/**`.
+  # -------------------------------------------------------------------------------------------
+  /v1/internal/fleets/queue:
+    get:
+      operationId: listInternalFleetOrgQueue
+      summary: Fleet organisations awaiting verification.
+      description: |
+        Backs `GET /v1/admin/verification/queues/fleet-org`. Oldest application first — a queue is
+        worked in the order people applied. `payoutProfileStatus` is the **latest** version's, not
+        "is there a verified one", so an org whose verified profile has just been edited appears
+        here as pending, which is the whole of AL-49's "any edit re-triggers verification".
+      tags: [fleets]
+      security:
+        - mtls: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          description: Defaults to `PENDING`.
+          schema:
+            $ref: '#/components/schemas/FleetStatus'
+        - $ref: './_shared.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Queue page.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FleetOrgQueueRow'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized]
+
+  /v1/internal/fleets/{fleetId}:
+    get:
+      operationId: getInternalFleetVerification
+      summary: Fleet-org verification detail — KYC, payout profile and evidence.
+      description: |
+        Backs `GET /v1/admin/verification/org/{orgId}`. `documents[]` carries the AL-49 payout
+        uploads (`bank_statement`, `passbook_first_page`, `lankaqr_code`); the **signed** thumbnail
+        and full URLs US-24.8 asks for are added by admin-bff, which holds the signing key.
+      tags: [fleets]
+      security:
+        - mtls: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+      responses:
+        '200':
+          description: Verification detail.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [kyc, documents]
+                properties:
+                  kyc:
+                    $ref: '#/components/schemas/Fleet'
+                  payoutProfileStatus:
+                    $ref: '#/components/schemas/PayoutProfileStatus'
+                  payoutProfile:
+                    $ref: '#/components/schemas/PayoutProfile'
+                  documents:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PayoutDocumentRef'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, fleet-not-found]
+
+  /v1/internal/fleets/{fleetId}/approve:
+    post:
+      operationId: approveInternalFleetOrg
+      summary: Approve the organisation and verify its payout profile.
+      description: |
+        Backs `POST /v1/admin/verification/{subjectId}/approve` for the fleet-org subject. One
+        decision, one transaction, both rows: the org goes `APPROVED` and any
+        `pending_verification` payout version becomes `verified`, superseding the incumbent —
+        `ux_payout_profile_verified` admits exactly one verified row per org.
+
+        **Not once-only.** An APPROVED organisation whose owner edited a verified payout profile is
+        back on the queue with a pending version; approving again leaves the org APPROVED and
+        decides the new version. An approve with nothing pending re-stamps nothing.
+      tags: [fleets]
+      security:
+        - mtls: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [officerId]
+              properties:
+                officerId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+      responses:
+        '200':
+          description: Approved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FleetVerificationDecision'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, fleet-not-found]
+
+  /v1/internal/fleets/{fleetId}/reject:
+    post:
+      operationId: rejectInternalFleetOrg
+      summary: Reject the organisation, with a reason.
+      description: |
+        Backs `POST /v1/admin/verification/{subjectId}/reject`. The reason is mandatory and is
+        surfaced verbatim to the applicant (US-2.15's rule, applied to the org subject).
+
+        A rejection **never disturbs an incumbent verified payout profile**: BR-31.1's mismatched
+        account-holder name is a reason to refuse the *edit*, not a reason to stop an organisation
+        collecting against details an officer already approved.
+      tags: [fleets]
+      security:
+        - mtls: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [officerId, reason]
+              properties:
+                officerId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+                reason:
+                  type: string
+                  maxLength: 1000
+      responses:
+        '200':
+          description: Rejected.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FleetVerificationDecision'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, fleet-not-found]
+
 components:
   securitySchemes:
     bearerAuth:
       $ref: './_shared.yaml#/components/securitySchemes/bearerAuth'
+    mtls:
+      $ref: './_shared.yaml#/components/securitySchemes/mtls'
 
   parameters:
     FleetId:
@@ -1364,7 +1586,31 @@ components:
   schemas:
     FleetStatus:
       type: string
-      enum: [PENDING, APPROVED, REJECTED, SUSPENDED]
+      description: |
+        `registry.fleets.status` (migration 0301, server_db_schema.md §2). **Δ C058:** `SUSPENDED`
+        was removed — the CHECK admits these three only, and nothing in D3', D5' or URD Epic 13
+        suspends an *organisation* (the platform suspends vehicles and drivers, US-14.3). A status
+        the API could return and the row could not hold is a 500 waiting for the first operator who
+        tries it.
+      enum: [PENDING, APPROVED, REJECTED]
+
+    FleetMember:
+      type: object
+      description: |
+        A seat in the organisation (`iam.fleet_members`, AL-03). `memberId` is the person's
+        `iam.users.id`: the membership has a composite primary key and no surrogate id, and the
+        user id is what the token's `sub`, an assignment and an audit row already name them by.
+      required: [memberId, fleetRole]
+      properties:
+        memberId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        fleetRole:
+          $ref: './_shared.yaml#/components/schemas/FleetRole'
 
     Fleet:
       type: object
@@ -1392,7 +1638,60 @@ components:
 
     PayoutProfileStatus:
       type: string
-      enum: [pending_verification, verified, rejected]
+      description: |
+        `registry.fleet_payout_profiles.status`. **Δ C058:** `superseded` was added — §26 makes the
+        table versioned *and* admits one verified row per org
+        (`ux_payout_profile_verified`), so when an officer approves an edit the incumbent has to
+        leave `verified` and no printed status could carry it: `rejected` is a decision nobody took
+        and `pending_verification` would put a superseded row back on the queue. See migration 0313.
+      enum: [pending_verification, verified, rejected, superseded]
+
+    PayoutDocumentRef:
+      type: object
+      description: One AL-49 evidence upload (`docs.uploads`), as the officer's queue detail lists it.
+      required: [docId, kind]
+      properties:
+        docId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        kind:
+          type: string
+          enum: [bank_statement, passbook_first_page, lankaqr_code]
+        createdAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    FleetOrgQueueRow:
+      type: object
+      description: One organisation waiting on the Verification Officer (AL-39, SCR-AP-003).
+      required: [fleetId, name, status]
+      properties:
+        fleetId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        name:
+          type: string
+        registrationNo:
+          type: string
+        contactPhone:
+          $ref: './_shared.yaml#/components/schemas/PhoneE164'
+        status:
+          $ref: '#/components/schemas/FleetStatus'
+        payoutProfileStatus:
+          $ref: '#/components/schemas/PayoutProfileStatus'
+        documentCount:
+          type: integer
+          format: int32
+          minimum: 0
+        createdAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    FleetVerificationDecision:
+      type: object
+      description: What an officer's approve or reject produced — the org, and the payout version it decided.
+      required: [fleet]
+      properties:
+        fleet:
+          $ref: '#/components/schemas/Fleet'
+        payoutProfile:
+          $ref: '#/components/schemas/PayoutProfile'
 
     PayoutProfile:
       type: object

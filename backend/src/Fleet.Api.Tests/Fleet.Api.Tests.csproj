@@ -1,0 +1,61 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    C058 verify target: dotnet test backend/src/Fleet.Api.Tests -c Release
+
+    Real Postgres, because every one of this component's definition-of-done items is a claim about
+    the database rather than about the process:
+
+      * "a cross-org read attempt is refused by RLS, not by application filtering alone" is asserted
+        by connecting as a real login role that is a member of `mageride_fleet_reader`, setting
+        `app.fleet_id`, and asking for another organisation's rows **by primary key** with no
+        application SQL anywhere in the path. A fake or an in-memory store cannot make that claim.
+      * "editing a verified payout profile re-enters pending while Paid subscriptions keep
+        collecting against the last verified snapshot" is asserted on the ROWS — two versions, the
+        old one still `verified`, `ux_payout_profile_verified` still satisfied — and then against
+        the exact query subscription-svc's pay sheet runs (C050
+        `ReadVerifiedPayoutProfileAsync`), because "keeps collecting" means that query still
+        returns the old account.
+      * "an unapproved org receives 403 on every vehicle and assignment endpoint" is asserted twice:
+        once over HTTP, and once by walking the endpoint data source, so a route C059 adds to either
+        group without the gate fails this suite rather than shipping.
+
+    No Redis and no Redpanda: the service opens neither, deliberately (see FleetApplication).
+
+    Microsoft.NET.Sdk.Web, not Microsoft.NET.Sdk: the harness builds a WebApplication.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.Fleet.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <OutputType>Exe</OutputType>
+    <!--
+      xUnit1041: collection-fixture ctor args are consumed through the primary constructor.
+      xUnit1051: every test is bounded by its own harness lifetime.
+    -->
+    <NoWarn>$(NoWarn);xUnit1041;xUnit1051</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+    <PackageReference Include="Dapper" />
+    <PackageReference Include="Npgsql" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Fleet.Api\Fleet.Api.csproj" />
+    <!-- C010: the Postgres fixture, so this suite runs the same server build the dev stack does
+         and applies the same migration set — including 1804's fleet reader role and 1806's
+         policies, which are the fence this component is measured against. -->
+    <ProjectReference Include="..\MageRide.TestKit\MageRide.TestKit.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

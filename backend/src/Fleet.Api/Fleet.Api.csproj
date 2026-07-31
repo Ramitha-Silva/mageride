@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    Fleet.Api (C058 fleet-svc-org) — the Fleet Portal's organisation identity: the
+    Verification-Officer-gated org, its Owner/Manager/Viewer sub-roles, and the bank & payout
+    profile every rupee of Mode B money depends on.
+
+    FENCE 1: a fleet operates Mode A and/or Mode B. **Never Mode C** (AL-03). Held in the
+    database — `registry.fleet_vehicles.mode CHECK (mode IN ('A','B'))` (migration 0306) — and
+    re-stated in `FleetModes`, so no code path here can put a fleet on the on-demand plane.
+    FENCE 2: **an unapproved org onboards nothing.** Held structurally: every vehicle and
+    assignment route hangs off the two groups `FleetEndpoints` builds with
+    `.RequireApprovedFleet()`, so C059's routes are gated the moment they are mapped rather than
+    each remembering. `Every_vehicle_and_assignment_route_is_gated` asserts it by walking the
+    endpoint data source.
+    FENCE 3: **a cross-org read is a security bug.** Held in Postgres — migration 1806's
+    RESTRICTIVE policies over the five org-owned tables, entered through `SET LOCAL ROLE
+    mageride_fleet_reader`. The application's own `WHERE fleet_id = @FleetId` is the second lock,
+    not the only one.
+
+    Not this component's: vehicle onboarding, documents, assignment, tracker binding, scheduling,
+    the map and the subscription proxies are C059's; the Verification Officer's *screen* is the
+    Admin Portal's (C107) behind admin-bff (C062), which drives the internal plane here.
+
+    No Redis, no Kafka, no outbox — see FleetApplication for why each is off.
+
+    Verify: dotnet test backend/src/Fleet.Api.Tests -c Release
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.Fleet</RootNamespace>
+    <AssemblyName>MageRide.Fleet.Api</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <UserSecretsId>mageride-fleet-api</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MageRide.Shared\MageRide.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Dapper" />
+    <PackageReference Include="Npgsql" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Fleet.Api.Tests" />
+  </ItemGroup>
+
+</Project>

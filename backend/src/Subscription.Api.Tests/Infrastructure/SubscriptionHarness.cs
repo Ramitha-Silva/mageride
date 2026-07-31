@@ -572,10 +572,16 @@ internal sealed class SubscriptionHarness : IAsyncDisposable
             TRUNCATE subscription.payments, subscription.subscriptions, subscription.grants,
                      subscription.access_requests, subscription.outbox, docs.uploads CASCADE;
 
+            -- support.ticket_events is named for the same reason, and it is not optional: C053's
+            -- migration 1309 gave it a foreign key onto support.tickets, and Postgres refuses to
+            -- truncate a referenced table unless the referencing one goes with it. Naming it
+            -- rather than adding CASCADE keeps this list's own property — if that FK is ever
+            -- dropped, the thread is still emptied instead of silently surviving the reset.
             TRUNCATE billing.daily_fee_charges, billing.monthly_subscriptions, billing.fleet_invoices,
                      billing.journal_postings, billing.wallet_transactions, billing.outbox,
                      billing.command_log, billing.topups, billing.voucher_purchases,
-                     billing.credit_transfers, subscription.command_log, support.tickets;
+                     billing.credit_transfers, subscription.command_log,
+                     support.ticket_events, support.tickets;
             DELETE FROM billing.journal_entries;
             DELETE FROM billing.wallets;
             DELETE FROM billing.accounts WHERE owner_type IN ('driver','fleet');

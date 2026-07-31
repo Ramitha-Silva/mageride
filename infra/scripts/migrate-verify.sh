@@ -195,7 +195,10 @@ check_eq "13 iam tables" "13" \
 # (C028 handoff micro-change-set); + registry.document_notices, added by C029 because E-03 names
 # four distinct notices per document and registry.documents.status can only remember one
 # (C029 handoff micro-change-set).
-check_eq "15 registry tables" "15" \
+# + registry.fleet_command_log, added by C058 because fleet-svc is a bounded context of its own
+# and shares this schema but not registry-svc's idempotency key space (C058 handoff
+# micro-change-set, the twelfth instance of the per-context command log).
+check_eq "16 registry tables" "16" \
   "SELECT count(*) FROM information_schema.tables WHERE table_schema='registry' AND table_type='BASE TABLE';"
 # 2 from server_db_schema.md §3 (tracker_bindings, device_certs) + 5 added by C030, each a
 # micro-change-set raised in its handoff: prov.command_log (D3' §0 mandates a per-service
@@ -385,8 +388,13 @@ check_eq "every DATE column has a tz_at companion" "0" \
                          AND t.column_name LIKE '%tz\_at');"
 
 step "§0.2 — set_updated_at attached to every mutable table"
+# BASE TABLE only (C058). A trigger cannot be attached to a view, and a fleet-scoped `_fleet`
+# view (migrations 1804/1806) projects its base table's updated_at by design — the rule is about
+# the table that owns the column, which is already covered.
 check_eq "no updated_at column is left without its trigger" "0" \
   "SELECT count(*) FROM information_schema.columns c
+    JOIN information_schema.tables t
+      ON t.table_schema = c.table_schema AND t.table_name = c.table_name AND t.table_type = 'BASE TABLE'
     WHERE c.table_schema IN ($OWNED_SCHEMAS)
       AND c.column_name = 'updated_at'
       AND NOT EXISTS (
@@ -960,8 +968,13 @@ check_eq "every *_minor column is an integer type" "0" \
 # §0 exempts exactly the ledger balances and postings: those are signed BIGINT because the
 # suspense account and the debit leg of every entry are negative by construction. Every
 # other *_minor column in the platform must carry a >= 0 (or > 0) CHECK.
+# BASE TABLE only (C058), for the reason the updated_at rule is: a CHECK cannot be declared on a
+# view, and registry.fleet_vehicles_fleet (1806) projects default_monthly_fare_minor from
+# registry.vehicles, where the constraint is and is asserted.
 check_eq "every non-ledger *_minor column has a non-negative CHECK" "0" \
   "SELECT count(*) FROM information_schema.columns c
+    JOIN information_schema.tables t
+      ON t.table_schema = c.table_schema AND t.table_name = c.table_name AND t.table_type = 'BASE TABLE'
     WHERE c.table_schema IN ($OWNED_SCHEMAS)
       AND c.column_name LIKE '%\_minor'
       AND (c.table_schema||'.'||c.table_name||'.'||c.column_name) NOT IN (
@@ -2280,6 +2293,164 @@ check_rejects "an 'active' feed version may not keep archived_at (a rollback mus
 psql_run "DELETE FROM transit.gtfs_feed_versions WHERE sha256='c057-sha';
           DELETE FROM iam.users WHERE id='c0000057-0000-0000-0000-000000000001';" >/dev/null \
   || die "could not clean up the C057 rollback fixture."
+
+# ---------------------------------------------------------------------------------------
+# C058 — the fleet organisation: its KYC contact and the uniqueness of a business registration
+# (0313), the payout status a supersede needs (0313), fleet-svc's own command log (0313), and
+# the row-level security that makes a cross-org read impossible rather than merely unwritten
+# (1806).
+#
+# The RLS half is the component's fence — "a cross-org read is a security bug" — and it is the
+# one thing here that cannot be asserted from a service test alone: the checks below run as
+# `verify_fleet`, a real login role with real grants, so what they prove is the database's
+# refusal and not an application's WHERE clause.
+# ---------------------------------------------------------------------------------------
+step "Objects owned by C058 (AL-03, AL-49, US-13.A7, BR-31.1)"
+
+check_eq "registry.fleets carries the US-13.A7 KYC contact (3 columns)" "3" \
+  "SELECT count(*) FROM information_schema.columns
+    WHERE table_schema='registry' AND table_name='fleets'
+      AND column_name IN ('contact_phone','contact_email','address');"
+
+check_eq "one live organisation per business registration (ux_fleets_business_reg_active)" "1" \
+  "SELECT count(*) FROM pg_indexes
+    WHERE schemaname='registry' AND indexname='ux_fleets_business_reg_active';"
+
+check_eq "registry.fleet_command_log exists with the 0603 shape minus the aggregate id" "8" \
+  "SELECT count(*) FROM information_schema.columns
+    WHERE table_schema='registry' AND table_name='fleet_command_log'
+      AND column_name IN ('idempotency_key','actor_type','actor_id','command','request_hash',
+                          'response_status','response_body','response_content_type');"
+
+check_eq "fleet-svc's replay log is separate from registry-svc's (two command logs, one schema)" "2" \
+  "SELECT count(*) FROM information_schema.tables
+    WHERE table_schema='registry' AND table_name IN ('command_log','fleet_command_log');"
+
+# Five tables, five RESTRICTIVE policies. Permissive-only would scope the fleet reader and deny
+# the twenty services that read these tables platform-wide; role-targeted RESTRICTIVE is what
+# keeps the blast radius to the role created for it.
+check_eq "row-level security is enabled on the five org-owned tables" "5" \
+  "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE c.relrowsecurity
+      AND (n.nspname, c.relname) IN
+        (('registry','fleets'),('registry','fleet_vehicles'),('registry','fleet_assignments'),
+         ('registry','fleet_payout_profiles'),('iam','fleet_members'));"
+
+check_eq "each of them carries a RESTRICTIVE policy targeted at mageride_fleet_reader" "5" \
+  "SELECT count(*) FROM pg_policies
+    WHERE permissive='RESTRICTIVE'
+      AND 'mageride_fleet_reader' = ANY(roles)
+      AND (schemaname, tablename) IN
+        (('registry','fleets'),('registry','fleet_vehicles'),('registry','fleet_assignments'),
+         ('registry','fleet_payout_profiles'),('iam','fleet_members'));"
+
+check_eq "the fleet-scoped join views exist (1806)" "3" \
+  "SELECT count(*) FROM information_schema.views
+    WHERE (table_schema, table_name) IN
+      (('registry','fleet_vehicles_fleet'),('iam','fleet_members_fleet'),('trips','sessions_fleet'));"
+
+C058_OWNER='c0000058-0000-0000-0000-00000000000a'
+C058_FLEET_A='c0000058-0000-0000-0000-000000000001'
+C058_FLEET_B='c0000058-0000-0000-0000-000000000002'
+C058_VEH_A='c0000058-0000-0000-0000-00000000000b'
+C058_VEH_B='c0000058-0000-0000-0000-00000000000c'
+C058_DRIVER='c0000058-0000-0000-0000-00000000000d'
+# Two drivers, because ux_sessions_active_driver (0501) gives one driver one live session — D-03.
+C058_DRIVER_B='c0000058-0000-0000-0000-00000000000e'
+
+psql_run "INSERT INTO iam.users (id, phone, role) VALUES
+            ('$C058_OWNER','+94770000581','fleet_owner'),
+            ('$C058_DRIVER','+94770000582','driver'),
+            ('$C058_DRIVER_B','+94770000584','driver');
+          INSERT INTO registry.fleets (id, owner_id, name, business_reg, contact_phone, status) VALUES
+            ('$C058_FLEET_A','$C058_OWNER','C058 Alpha Transit','PV-C058-A','+94770000581','APPROVED'),
+            ('$C058_FLEET_B','$C058_OWNER','C058 Beta Transit','PV-C058-B','+94770000583','APPROVED');
+          INSERT INTO iam.fleet_members (fleet_id, user_id, fleet_role) VALUES
+            ('$C058_FLEET_A','$C058_OWNER','owner');
+          INSERT INTO registry.vehicles (id, owner_id, registration_number, vehicle_type, mode, driver_name) VALUES
+            ('$C058_VEH_A','$C058_OWNER','C058-AAA-1111','bus','A','Alpha Driver'),
+            ('$C058_VEH_B','$C058_OWNER','C058-BBB-2222','van','B','Beta Driver');
+          INSERT INTO registry.fleet_vehicles (fleet_id, vehicle_id, mode) VALUES
+            ('$C058_FLEET_A','$C058_VEH_A','A'),
+            ('$C058_FLEET_B','$C058_VEH_B','B');
+          INSERT INTO trips.sessions (vehicle_id, driver_id, mode) VALUES
+            ('$C058_VEH_A','$C058_DRIVER','A'),
+            ('$C058_VEH_B','$C058_DRIVER_B','B');
+          INSERT INTO registry.fleet_payout_profiles
+            (fleet_id, bank, branch, account_no, account_holder_name, status) VALUES
+            ('$C058_FLEET_A','Alpha Bank','Colombo','1111','C058 Alpha Transit','verified'),
+            ('$C058_FLEET_B','Beta Bank','Kandy','2222','C058 Beta Transit','verified');" >/dev/null \
+  || die "could not seed the C058 fleet fixture."
+
+check_rejects "a second live organisation cannot claim a business registration (case-insensitively)" \
+  "INSERT INTO registry.fleets (owner_id, name, business_reg)
+     VALUES ('$C058_OWNER','C058 Impostor','pv-c058-a');"
+
+# The whole point of `superseded` (0313 gap (b)): the incumbent leaves 'verified' in the same
+# transaction the replacement enters it, and ux_payout_profile_verified is what forces the order.
+# Inserted rather than merely allowed, so the next two checks run against an org that already has
+# a version history — which is the state every edited profile is in.
+psql_run "INSERT INTO registry.fleet_payout_profiles
+            (fleet_id, bank, branch, account_no, account_holder_name, status)
+          VALUES ('$C058_FLEET_A','Alpha Bank','Colombo','1111-old','C058 Alpha Transit','superseded');" >/dev/null \
+  || die "the payout-profile CHECK does not admit 'superseded' (migration 0313)."
+
+check_eq "a superseded version sits beside the verified one (0313)" "1|1" \
+  "SELECT count(*) FILTER (WHERE status='superseded')||'|'||count(*) FILTER (WHERE status='verified')
+     FROM registry.fleet_payout_profiles WHERE fleet_id='$C058_FLEET_A';"
+
+check_rejects "an unknown payout-profile status is refused (ck_payout_profile_status)" \
+  "INSERT INTO registry.fleet_payout_profiles
+     (fleet_id, bank, branch, account_no, account_holder_name, status)
+   VALUES ('$C058_FLEET_A','Alpha Bank','Colombo','9999','C058 Alpha Transit','approved');"
+
+check_rejects "a second verified profile for one org is refused (ux_payout_profile_verified)" \
+  "INSERT INTO registry.fleet_payout_profiles
+     (fleet_id, bank, branch, account_no, account_holder_name, status)
+   VALUES ('$C058_FLEET_A','Alpha Bank','Colombo','3333','C058 Alpha Transit','verified');"
+
+step "C058 fence — a cross-org read is refused by the database, not by application SQL"
+
+check_fleet_eq "an unscoped session sees no organisation at all (fail closed)" "0" "" \
+  "SELECT count(*) FROM registry.fleets WHERE id IN ('$C058_FLEET_A','$C058_FLEET_B');"
+check_fleet_eq "fleet A sees its own organisation" "C058AlphaTransit" "$C058_FLEET_A" \
+  "SELECT name FROM registry.fleets WHERE id='$C058_FLEET_A';"
+# Asked for by primary key, which is the strongest form of the question: the row is named
+# explicitly and the policy still refuses it.
+check_fleet_eq "fleet A cannot read fleet B's organisation even by id" "0" "$C058_FLEET_A" \
+  "SELECT count(*) FROM registry.fleets WHERE id='$C058_FLEET_B';"
+check_fleet_eq "fleet A cannot read fleet B's bank account" "0" "$C058_FLEET_A" \
+  "SELECT count(*) FROM registry.fleet_payout_profiles WHERE fleet_id='$C058_FLEET_B';"
+check_fleet_eq "fleet A cannot read fleet B's roster" "0" "$C058_FLEET_A" \
+  "SELECT count(*) FROM registry.fleet_vehicles WHERE fleet_id='$C058_FLEET_B';"
+check_fleet_eq "fleet A cannot read fleet B's team" "0" "$C058_FLEET_A" \
+  "SELECT count(*) FROM iam.fleet_members WHERE fleet_id='$C058_FLEET_B';"
+
+check_fleet_eq "the roster view is scoped and joins registry.vehicles for it" "C058-AAA-1111" "$C058_FLEET_A" \
+  "SELECT registration_number FROM registry.fleet_vehicles_fleet;"
+check_fleet_eq "the team view is scoped and joins iam.users for it" "1" "$C058_FLEET_A" \
+  "SELECT count(*) FROM iam.fleet_members_fleet;"
+check_fleet_eq "the journey view is scoped (trips.sessions, not rides.rides — R-01)" "1" "$C058_FLEET_A" \
+  "SELECT count(*) FROM trips.sessions_fleet;"
+check_fleet_eq "fleet B's journey is invisible to fleet A" "0" "$C058_FLEET_A" \
+  "SELECT count(*) FROM trips.sessions_fleet WHERE vehicle_id='$C058_VEH_B';"
+
+# The views exist so these three never have to be granted. If any of them ever is, the scoping
+# above becomes decorative — a fleet could simply read the base table instead.
+check_fleet_denied "the fleet role cannot read registry.vehicles directly" \
+  "SELECT count(*) FROM registry.vehicles;"
+check_fleet_denied "the fleet role cannot read iam.users directly" \
+  "SELECT count(*) FROM iam.users;"
+check_fleet_denied "the fleet role cannot read trips.sessions directly" \
+  "SELECT count(*) FROM trips.sessions;"
+check_fleet_denied "the fleet role cannot write its own organisation's status" \
+  "UPDATE registry.fleets SET status='APPROVED' WHERE id='$C058_FLEET_A';"
+
+psql_run "DELETE FROM trips.sessions WHERE vehicle_id IN ('$C058_VEH_A','$C058_VEH_B');
+          DELETE FROM registry.fleets WHERE id IN ('$C058_FLEET_A','$C058_FLEET_B');
+          DELETE FROM registry.vehicles WHERE id IN ('$C058_VEH_A','$C058_VEH_B');
+          DELETE FROM iam.users WHERE id IN ('$C058_OWNER','$C058_DRIVER','$C058_DRIVER_B');" >/dev/null \
+  || die "could not clean up the C058 fleet fixture."
 
 # ---------------------------------------------------------------------------------------
 printf '\n'

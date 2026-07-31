@@ -83,7 +83,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C055 | voip-svc | 3 | DONE | 2026-07-31 | **68 tests green** in a new suite (`Voip.Api.Tests`), against a real Postgres and a real Redpanda — the trip-end teardown is proved with a terminal `ride.events` message on a real broker, because that half cannot be shown any other way; **1 migration (1311)** — `ux_voip_sessions_open_room` (D3' gives a ride ONE room and **both** parties start a call into it, so without it each tap opened a rival session) plus the `comms.call_log.outcome` vocabulary 1302 left as free text with no writer, which is what makes ADD §16's call-setup SLO and ADD §14's fallback measurable at all; **"expiring at trip end" needs TWO mechanisms** — a LiveKit token is a *join* credential whose `exp` is checked at connect and never again, so minting is refused for a terminal ride **and** the room is closed when `ride.events` says the ride is over; **P-05 held by the projection, not a branch** — `RiderIdentity` is `rider_id` with **no fallback to `booker_id`**, and a proxy booker is 403 on both routes; **AL-48 enforced by reflection** — the suite fails if any member of the assembly is named after the withdrawn masking stack or can name a phone number, because three still-current spec sections still describe masking; **the LiveKit token is minted by hand** (its authority is a nested `video` claim the claims-dictionary APIs stringify — a token that fails at the SFU, not at the mint); **media plane config landed** (`livekit.yaml` + `turnserver.conf`, both containers `network_mode: host` per D6' §6 — HAProxy cannot relay UDP and the failure mode is one-way audio, not a startup error); **1 contract addition** (`POST /v1/calls/{callId}/outcome`); `migrate-verify.sh` 361/361 with a C055 section; 7 spec gaps / micro-change-sets |
 | C056 | transit-svc-routing | 3 | DONE | 2026-07-31 | **58 tests green** in a new suite (`Transit.Api.Tests`) over a real Postgres and a real URL shortener on a socket; the Colombo Fort → Kottawa corridor is seeded at its **actual coordinates** with route 138 on it, and the shape is asserted by **decoding** the polyline rather than comparing a string; **1 migration (1406)** — `trip_headsign` on `transit.gtfs_trips` **and its staging mirror**, which both specs put on every option and §18c had nowhere to hold (it is what tells "138 to Kottawa" from "138 to Pettah", which share a short name AND a long name); **the feed is patterns, not trips** — distinct stop sequences indexed by halt, so BR-23.2's "all direct routes" is an in-memory lookup instead of a self-join over 512k `stop_times` on a screen the passenger is watching; **"expires within 60 s" is LISTEN plus a poll**, and the poll is why it is a guarantee — a notification only reaches sessions connected when it fires, and the suite proves the missed-NOTIFY path separately; **AL-55 became a wire field** (`coverage: active | no_feed`, Δ C056) because an empty list meant both "no bus goes there" and "we cannot tell"; **the paste-link allowlist is re-checked at every redirect hop** — the first URL is the one an attacker cannot aim, and a mid-chain hop to `169.254.169.254` is asserted refused; **one real defect caught**: the resolver kept a second hardcoded shortener-host list that could disagree with the configured allowlist; **`EncodedPolyline` promoted into the kernel** (two services must agree on a wire format); **BR-23.2's "soonest departure" is unimplementable** — §18c mirrors five GTFS tables and none is the service calendar; `migrate-verify.sh` 363/363 with a C056 section; 6 spec gaps / micro-change-sets |
 | C057 | transit-svc-gtfs-lifecycle | 3 | DONE | 2026-07-31 | **26 GTFS tests green** (`--filter Category=Gtfs`) and **84/84** across the whole transit suite, over a real Postgres with real zips built in memory; **1 migration (1407)** — `transit.command_log`, the eleventh instance of the R-14 gap, because BR-32.2 makes activation idempotent on `Idempotency-Key`; **the swap is a three-way schema rename**, so the live dataset is replaced in the time it takes to take the locks whatever the feed's size — and **the index names are renamed back onto their own side in the same transaction** (the C005 decision), asserted after *two* activations because a one-way rename passes after one; **"a failed activation leaves the previous feed live" is held by which tables each phase touches**, not by unwinding — the staging load never touches `transit.*` — and is asserted by losing the stored zip out from under a validated version; **the upload dedupes on content, not on a header** (sha256, BR-32.1), which is why it is the one POST outside the kernel's replay: the body is 200 MB and the header would be weaker; **3 guards for one 413** because a declared length, a chunked body and the file's own bytes are three different clients; **`trip_headsign` is now mapped**, closing C056's ask — without it "138 to Kottawa" and "138 to Pettah" are the same card twice; **C056's gap (b) is escalated, not closed** — the calendar is validated but §18c has nowhere to store it; **3 error codes landed in the kernel** that C007 coined in the contract enum and nothing could raise; `migrate-verify.sh` 366/366 (was 363), Spectral 0 errors, solution build 0 warnings; 2 contract additions, 5 spec gaps |
-| C058 | fleet-svc-org | 3 | PENDING | | |
+| C058 | fleet-svc-org | 3 | DONE | 2026-07-31 | **42 tests green** in a new suite (`Fleet.Api.Tests`), every one integration against a real Postgres because every DoD item is a claim about the database; **2 migrations (0313, 1806)** — the org's KYC contact (`POST /v1/fleets` **requires** `contactPhone` and §2 has nowhere to put it), `ux_fleets_business_reg_active`, `registry.fleet_command_log` (R-14, the twelfth), and a `superseded` payout status because §26 makes the table versioned **and** admits one verified row per org — when an officer approves an edit the incumbent has to leave `verified` and no printed status could carry it; **the cross-org fence is RLS, asserted as RLS** — five RESTRICTIVE role-targeted policies plus three security-barrier join views, and `RowLevelSecurityTests` connects as a **real non-superuser login** and asks for another org's rows **by primary key** with no fleet-svc code in the path; **RESTRICTIVE, not permissive-only, because twenty services read these tables** and a plain policy would have denied every one of them silently as zero rows; **the approval gate is on the route group, not in the handlers** — C059's vehicle and assignment routes are gated the moment they are mapped, and a test walks the endpoint data source so it fails for the *next* component's mistake; **BR-31.1's second half is the expensive one** — an edit to a verified payout profile *inserts* and leaves the incumbent collecting, asserted against subscription-svc's own pay-sheet query verbatim; **the token's `fleet_role` claim is never the authority** (it carries one membership of possibly several, C027), so every request resolves the seat from `iam.fleet_members` for the org in the **path**; **two verify-script queries narrowed to `BASE TABLE`** — a trigger cannot be attached to a view and a CHECK cannot be declared on one; `migrate-verify.sh` **391/391** (was 366) with a C058 section, Spectral 0 errors, solution build 0 warnings; 7 new error codes, 6 contract changes, 8 spec gaps / micro-change-sets |
 | C059 | fleet-svc-fleet-ops | 3 | PENDING | | |
 | C060 | fleet-billing-svc | 3 | PENDING | | |
 | C061 | analytics-read-model | 3 | PENDING | | |
@@ -8357,3 +8357,276 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   `Transit.Api.Tests` takes ~60 s for the full suite, ~30 s for `Category=Gtfs`. **No new NuGet
   reference** — the zip reader, the CSV reader and the multipart reader are all BCL or ASP.NET
   Core.
+
+- **Component:** C058 fleet-svc-org — 2026-07-31
+- **Status:** DONE — `dotnet test backend/src/Fleet.Api.Tests -c Release` → **42 passed, 0 failed,
+  0 skipped** in a new suite. All four DoD items pass, each with a named test:
+  an unapproved org receives 403 on every vehicle and assignment endpoint
+  (`An_unapproved_organisation_is_refused_on_a_vehicle_route_and_told_why` and
+  `A_rejected_organisation_is_refused_on_the_same_routes` over HTTP, plus
+  `Every_vehicle_and_assignment_route_is_gated`, which walks the endpoint data source so the claim
+  holds for routes this component did not write); a Viewer cannot mutate anything and a Manager
+  cannot change the payout profile (`A_viewer_cannot_mutate_anything` — four mutations, one
+  assertion loop — and `A_manager_runs_the_fleet_but_cannot_touch_the_payout_profile`, which first
+  proves the Manager *can* classify a vehicle, so the refusal is about billing rather than about
+  the seat); editing a verified payout profile re-enters pending while Paid subscriptions keep
+  collecting against the last verified snapshot
+  (`Editing_a_verified_profile_forks_a_pending_version_and_the_pay_sheet_keeps_the_old_account`,
+  asserted three ways — what the owner is shown, what the rows say, and what
+  **subscription-svc's own `payTo` query returns**, reproduced verbatim from C050); and a cross-org
+  read is refused by RLS rather than by application filtering
+  (`A_fleet_reader_cannot_reach_another_organisation_even_by_primary_key`, plus
+  `An_unscoped_fleet_reader_sees_nothing` and the four-case theory
+  `A_fleet_reader_holds_no_privilege_on_the_platform_wide_tables`). Gates re-run green:
+  `bash infra/scripts/migrate-verify.sh` → **391/391** (was 366), Spectral on
+  `backend/contracts/*.yaml` → 0 errors, `dotnet build backend/MageRide.sln -c Release` → 0
+  warnings. Neighbours re-run to prove the new RLS is transparent to them:
+  `Registry.Api.Tests` 175/175, `Iam.Api.Tests` 330/330, `Provisioning.Api.Tests` 99/99,
+  `MageRide.Shared.Tests` 257/257.
+- **Notes:**
+
+  **How the fence is actually held —** the C058 fence is "every read is row-level-security scoped
+  to the caller's org; a cross-org read is a security bug", and the load-bearing detail is that
+  **RLS is not applied to a superuser, nor to a table's owner without `FORCE`** — and the service's
+  login role is one or both in every environment this repo runs in. So a scoped read opens a
+  transaction and does `SET LOCAL ROLE mageride_fleet_reader` (1804's role) plus
+  `set_config('app.fleet_id', …, true)`, and `IFleetScopedReader` is the **only** way a repository
+  can obtain a connection — a read that forgot to scope itself is not a bug that can be written
+  here, because there is nothing to write it with. Both statements are transaction-local, which is
+  what makes it correct under PgBouncer transaction pooling;
+  `The_scope_does_not_leak_to_the_next_transaction` asserts that on a pooled connection taken
+  straight afterwards. The predicate is fail-closed by construction: 1806 uses the **two-argument**
+  `current_setting`, which returns NULL when the GUC is unset, so an unscoped read sees nothing
+  rather than everything — the one-argument form raises `42704`, and a caller that catches the
+  error is one retry away from an unscoped read.
+
+  **Why the policies are RESTRICTIVE and role-targeted —** the five org tables are read by services
+  that are not fleet-svc: subscription-svc reads `registry.fleet_payout_profiles` and
+  `registry.fleet_vehicles` for the Mode B pay sheet (C050), provisioning-svc reads
+  `registry.fleets` for tracker scope (C030), iam-svc reads `iam.fleet_members` to mint the
+  `fleet_role` claim (C027), fleet-health-svc and the hot path read the roster. A plain
+  `ENABLE ROW LEVEL SECURITY` plus one permissive policy would have denied every one of them the
+  moment their login role stopped being the table owner — **silently, as zero rows**. Each table
+  therefore gets a pair: a PERMISSIVE `TO PUBLIC USING (true)` (the platform, unchanged) and a
+  RESTRICTIVE one `TO mageride_fleet_reader` carrying the org predicate. Permissive policies are
+  OR-ed and restrictive ones AND-ed, and a policy only applies to the roles it names, so the blast
+  radius is exactly the role created for the purpose. The three neighbour suites above are the
+  evidence.
+
+  **Why there are views as well as policies —** RLS scopes rows in a table the reader may read. It
+  cannot help where the fleet needs *columns* from a table it must never read at all:
+  `registry.vehicles` (every vehicle on the platform), `iam.users` (every person), `trips.sessions`
+  (every Mode A/B journey). Granting those and adding a policy would work and would be one
+  forgotten `WHERE` away from a platform-wide read. Instead the reader holds a security-barrier
+  view per join (`registry.fleet_vehicles_fleet`, `iam.fleet_members_fleet`, `trips.sessions_fleet`
+  — 1804's `<relation>_fleet` convention applied outside telemetry) and **no privilege on the base
+  table**, which `A_fleet_reader_holds_no_privilege_on_the_platform_wide_tables` asserts as a
+  `42501`. `iam.fleet_members_fleet` deliberately does not project `phone`: a sub-user's mobile is
+  their own, and an org's team list is not a reason to hand it to whoever holds the Owner seat.
+
+  **`trips.sessions`, not `rides.rides`.** The deliverable says "a fleet-scoped read path into
+  telemetry and rides". Telemetry already had one (1804). "Rides" resolves to `trips.sessions`:
+  R-01 and `ck_sessions_mode` make `trips.*` the Mode A/B tracking plane and `rides.rides` the
+  Mode C commercial aggregate, and AL-03 plus `registry.fleet_vehicles.mode CHECK (mode IN
+  ('A','B'))` mean a fleet vehicle can never appear in `rides.rides`. A `rides.rides_fleet` view
+  would be **empty by construction** and would tell a future reader that fleets have Mode C rides,
+  so it is deliberately absent and 1806 says so at the point it would have been.
+
+  **The token's `fleet_role` claim is not the authority.** A person may belong to several
+  organisations and iam-svc puts **one** pair in the token — the most privileged
+  (C027 `UserRepository.FleetMembershipAsync`). Trusting it would mean an Owner of one fleet
+  arriving at another fleet's path as an owner. `FleetAccessFilter` therefore reads
+  `iam.fleet_members` for the org in the **path** on every request, and the claim does nothing but
+  get past deny-by-default authorization. Two tests exist for exactly this:
+  `An_owner_of_one_organisation_is_a_stranger_at_another` (403 `not-fleet-member`) and
+  `A_token_claiming_a_sub_role_the_person_does_not_hold_is_refused` (403
+  `fleet-role-insufficient`). Ordering is 404 on the organisation and 403 on everything inside it:
+  a fleet id is a UUID nobody guesses, so "no such organisation" leaks nothing, but inside one a
+  non-member must not be able to tell an id that exists from one that does not.
+
+  **A sub-user holds the canonical `fleet_owner` role, and that is not a mistake.** URD §2.1 makes
+  Owner/Manager/Viewer "an org-scoped sub-model of the Fleet Owner role", and C027's
+  `PolicyEvaluator` narrows the `fleet_owner` column *and only that one* — a Viewer holding no
+  canonical role would be narrowed from an empty cell and end up with no permissions at all. So
+  provisioning adds an `iam.user_roles` grant (the AL-06 union), and only sets `iam.users.role`
+  when it creates the account: an existing driver or passenger keeps their primary role, because
+  overwriting it would demote somebody's account because they were handed a Viewer seat.
+
+  **Spec gaps and micro-change-sets —**
+  (a) **`registry.fleets` has nowhere to put its KYC contact.** `POST /v1/fleets` **requires**
+  `{name, registrationNo, contactPhone}` and returns `contactEmail` and `address`, and US-13.A7
+  makes the submission "organisation KYC (business name/registration, contact, authorised-person
+  ID)" — the thing a Verification Officer reads before approving. §2 carries `name` and
+  `business_reg` and nothing else, so two required contract fields and the whole of the officer's
+  contact evidence had no column. Recording them on `iam.users` would be wrong twice over: the
+  contact is the organisation's, not the signing-in person's, and an owner who changed their own
+  phone number would silently rewrite a KYC record an officer already approved.
+  **`server_db_schema.md` §2 / D4' §2 should carry `contact_phone`, `contact_email`, `address`.**
+  (b) **A verified payout profile cannot be replaced.** §26 states two rules that cannot both hold
+  under the printed CHECK: "edits INSERT a new row + re-verify (versioned)" with BR-31.1's "Paid
+  subscriptions keep collecting against the last verified snapshot" — so the old row must **stay**
+  `verified` while the edit sits at `pending_verification` — and `ux_payout_profile_verified`, "at
+  most one live verified profile per org". Both hold right up to the moment the officer approves
+  the edit, and then there is **no legal status left** to move the incumbent to: `rejected` is a
+  decision nobody took, `pending_verification` would put a superseded row back on the queue.
+  Migration 0313 adds `superseded`; nothing else changes, and C050's pay-sheet read
+  (`WHERE status = 'verified'`) still finds exactly one row.
+  **§26 / D4' Δ 2026-07-18 should carry the fourth value.**
+  (c) **No command log for fleet-svc** — the **twelfth** instance of the same gap (iam 0104,
+  registry 0307, prov 0402, trips 0505, rides 0603, dispatch 0710, reputation 0803, fares 1005,
+  subscription 1203, content 1307, comms 1308, transit 1407). `registry.fleet_command_log` is
+  separate from `registry.command_log` on purpose: the two services share a schema but not a key
+  space, and one table would let a key spent against registry-svc replay a fleet-svc command.
+  **D4' §5 should carry a command log per bounded context.**
+  (d) **`fleet.yaml`'s `FleetStatus` lists `SUSPENDED` and `registry.fleets.status` does not.** No
+  row can hold it, nothing in D3', D5' or URD Epic 13 suspends an *organisation* — the platform
+  suspends vehicles and drivers (US-14.3). Removed from the contract rather than accepted-and-
+  never-written, because a status the API could return and the row could not store is a 500 waiting
+  for the first operator who tries it. **D3' should drop it, or §2 should gain it with a
+  transition.**
+  (e) **AL-39's fleet-org subject has no service behind it.** admin-bff owns
+  `GET /v1/admin/verification/queues/fleet-org`, `…/org/{orgId}` and `…/{subjectId}/approve|reject`
+  — and admin-bff is a BFF: it holds no fleet tables, and its own description has approving an org
+  "set the payout profile to `verified` (AL-49)", which is a write on
+  `registry.fleet_payout_profiles`. `/v1/internal/fleets/**` (queue, detail, approve, reject) is
+  what it forwards to; without it AL-39's fleet-org subject is unimplementable.
+  **D3' should carry the internal plane, as it does not for registry-svc or support-svc either.**
+  (f) **Members can be provisioned and never read back.** `fleet.yaml` has
+  `POST /v1/fleets/{id}/members` and no `GET`, so SCR-FP-002's team list has no source. Added as
+  Δ C058. **D3' should carry it.**
+  (g) **Seven org error codes had no key.** `fleet.yaml` declared 403/404/409 on the organisation
+  routes with only kernel codes to carry them, and the Fleet Portal renders a different screen for
+  each: "we are reviewing your application" (`fleet-not-approved`) is not "you may not do this"
+  (`fleet-role-insufficient`), and neither is "that organisation is not yours"
+  (`not-fleet-member`). All seven landed in `MageRideErrors` **and** `_shared.yaml`'s enum, per the
+  contracts convention.
+  (h) **`defaultMonthlyFareMinor` is `int64` on the wire and `INTEGER` in the row.**
+  `registry.vehicles.default_monthly_fare_minor` is the narrower of the two and therefore the real
+  bound (about Rs 21 million a month), so the endpoint refuses anything wider with a `400` rather
+  than letting Postgres do it with a `22003` about integer range. **§2 should widen the column or
+  D3' should narrow the field.**
+
+  **Decisions worth knowing —**
+  (1) **The approval gate is metadata on two route groups, not an `if` in each handler.** The DoD
+  says "**every** vehicle and assignment endpoint" and this component maps one of them, so the
+  guarantee had to survive C059. `FleetEndpoints` exposes `FleetVehiclesGroup` and
+  `FleetAssignmentsGroup`, both built with `.RequireApprovedFleet()`; the assignments group is
+  mapped with **no routes on it yet**, deliberately, so C059's land inside the gate rather than
+  beside it. `Every_vehicle_and_assignment_route_is_gated` walks the endpoint data source and also
+  asserts `Assert.NotEmpty` first — a vacuously green guarantee would be worse than a red one.
+  (2) **An edit to a *pending* profile updates in place; an edit to a *verified* one forks.**
+  Nothing is collecting against a pending version and nobody has decided on it, so a correction is
+  a correction — inserting instead would put a second application for one organisation on the
+  officer's queue for every digit fixed. A version marks a **verification decision**, not a
+  keystroke.
+  (3) **A document upload is an edit.** BR-31.1 says "any edit re-enters `pending_verification`"
+  and does not carve out the evidence: replacing the bank statement behind a verified profile is
+  exactly the change an officer would want to see again, so an upload against a verified profile
+  forks a pending version carrying the other slot forward
+  (`Replacing_evidence_behind_a_verified_profile_forks_a_pending_version`).
+  (4) **Approve is not once-only, and a rejection never disturbs the incumbent.** An APPROVED org
+  whose owner edited a verified profile is back on the queue; approving again decides the new
+  version and leaves the org APPROVED, and with nothing pending it re-stamps nothing. Rejecting an
+  edit leaves the verified snapshot collecting — BR-31.1's mismatched account-holder name is a
+  reason to refuse the *change*, not a reason to stop an organisation being paid
+  (`Rejecting_an_edit_does_not_disturb_the_verified_snapshot`).
+  (5) **The payout gate and the classification write are one transaction**, or an officer rejecting
+  between them leaves a vehicle Paid against an account nobody approved. That read is not entered
+  through `IFleetScopedReader` — a read-only role cannot carry the `UPDATE` — but the transaction
+  still calls `FleetScope.ApplyFleetIdAsync`, because without the GUC
+  `registry.fleet_vehicles_fleet` matches nothing and an owner is told their own vehicle does not
+  exist. That was a real defect the suite caught.
+  (6) **Free is never gated.** An office shuttle collects nothing, and demanding a verified bank
+  account to say so would be a gate on the wrong thing. Only `paid` reaches BR-31.1's 409.
+  (7) **No Kafka and no outbox, and the reason is not "we skipped it".** Every consequence of what
+  this service writes is a **read** somebody else already does against the same tables —
+  subscription-svc's `payTo`, iam-svc's claim, the roster reads. And there is nobody to tell: D6'
+  §2.1 names no fleet-svc topic (`fleet.events` is fleet-health-svc's, C044), and the one event
+  that would earn one — "your organisation has been approved / rejected" — has **no notification
+  template anywhere in the seed** (migration 1904) and no consumer. Producing to a topic nobody
+  reads is the failure D6' §2.1's registry exists to prevent. See (12) below.
+  (8) **Business-registration uniqueness** is a rule with no home rather than a gap: two orgs
+  claiming one registration is the KYC failure the officer queue exists to catch, and catching it
+  at submit is cheaper than catching it twice in the queue. `ux_fleets_business_reg_active` is
+  shaped exactly like D-37's `ux_vehicles_regno_active` — the live set only, so a REJECTED org's
+  number is free again — and the service catches its `23505` so a lost race answers the same 409
+  the pre-check does rather than a 500.
+  (9) **A second Owner cannot be provisioned through `POST /members`.** US-13.A5 gives the Fleet
+  Owner "Manager and Viewer"; a second Owner is a change of who the organisation belongs to, and
+  `registry.fleets.owner_id` — which nothing on that route rewrites — says it is not that route's
+  to make. Provisioning the same person twice is `409`, not a silent promotion: changing a seat is
+  a decision with its own audit story.
+  (10) **`bank_statement` and `passbook_first_page` share `proof_upload_id`** because BR-31.1 asks
+  for one *or* the other; uploading a passbook after a statement replaces it, which is what
+  somebody correcting a blurred photograph expects.
+  (11) **`captured_via` is left NULL on a payout document.** AL-43's provenance is about onboarding
+  *photographs*, where a gallery pick is the fraud signal the queue sorts on; a bank statement is
+  exported from a banking app on a desktop, and recording `gallery` for all of them would put a
+  fraud signal on every payout profile on the platform.
+  (12) **Two `migrate-verify.sh` platform-rule queries were narrowed to `BASE TABLE`.** "No
+  `updated_at` column without its trigger" and "every non-ledger `*_minor` column has a
+  non-negative CHECK" both scanned `information_schema.columns` unfiltered, and a trigger cannot be
+  attached to a view nor a CHECK declared on one — the `_fleet` views project their base tables'
+  `updated_at` and `default_monthly_fare_minor` by design. The rules are unchanged; they now ask
+  the question of the relation that can answer it.
+
+  **Pre-existing failures found while re-running neighbours — NOT caused by C058.** Both reproduce
+  identically on a clean `git worktree` at `HEAD` (893d023, C057):
+  * **`Subscription.Api.Tests` was red: 95 failed / 17 passed — now 112/112, fixed here.**
+    `SubscriptionHarness.ResetAsync` ended its third statement
+    `…, subscription.command_log, support.tickets;` **without `CASCADE`**, and C053's migration 1309
+    added `support.ticket_events.ticket_id REFERENCES support.tickets(id)`. Postgres answered
+    `0A000 cannot truncate a table referenced in a foreign key constraint` for every test, in
+    `StartAsync`, so the suite had been failing since C053 landed. The fix **names
+    `support.ticket_events` in the list** rather than adding `CASCADE`, which is the style that
+    statement's own comment argues for — "named rather than left to the CASCADE above, so a schema
+    change that drops one of these foreign keys shows up here as contamination rather than as a
+    mystery". `support.ticket_events` is the only inbound foreign key on any table in that list
+    (checked against the whole migration set, not guessed). Fixed from this component because wave
+    3 cannot close with it red; C047 and C053 own the surrounding harness and nothing else in it
+    was touched.
+  * **`FleetHealth.Tests` is red: 1 failed / 56 passed** —
+    `A_last_will_and_a_diagnostics_frame_arrive_over_the_real_broker`, a timeout waiting on the
+    real EMQX broker. **Not fixed** — it is a broker-timing failure with no schema this component
+    touched anywhere in its path, and diagnosing it belongs with C044. Recorded so the next person
+    does not attribute it to C058.
+
+  **For C059 (fleet-svc-fleet-ops) —** map every vehicle route on `FleetEndpoints.FleetVehiclesGroup`
+  and every assignment route on `FleetEndpoints.FleetAssignmentsGroup`; both already carry
+  `AddEndpointFilter<FleetAccessFilter>()` and `.RequireApprovedFleet()`, and
+  `Every_vehicle_and_assignment_route_is_gated` will fail your build if you create your own group
+  instead. Declare a minimum seat with `.RequireFleetSubRole(FleetRoles.Manager)` — the same test
+  requires one, because without it a Viewer can call the route. Read the caller's org from
+  `context.RequireFleet()`, never from the token. `PUT …/classification` is **already implemented**
+  here (it is where AL-49's gate lives) — extend it rather than re-adding it. For the roster and
+  the map, read through `registry.fleet_vehicles_fleet` and `telemetry.positions_fleet` inside
+  `IFleetScopedReader.ReadAsync`; for a write that must also read a `_fleet` view, call
+  `FleetScope.ApplyFleetIdAsync` on your unit of work first or the view will match nothing.
+  `registry.documents` already carries `fleet_id` and `ck_documents_owner` is an **XOR** — a
+  fleet-uploaded vehicle document sets `fleet_id` and must **not** also set `driver_id` (C003
+  note (b), restated here because AL-50's slots are yours).
+  **For C060 (fleet-billing-svc) —** `billing.fleet_invoices.fleet_id` references
+  `registry.fleets`, which now has RLS. Nothing changes for you: your login role gets the
+  PERMISSIVE policy and sees everything. If you ever want an org-scoped read, join
+  `mageride_fleet_reader` and use the same two statements — do not add a policy of your own.
+  **For C062 (admin-bff-core) —** the fleet-org verification family is
+  `/v1/internal/fleets/**` on fleet-svc, guarded by `Fleet:InternalApiKey` in
+  `X-MageRide-Internal-Key` until the mesh lands (C042). Four routes: `GET /queue?status=&limit=`,
+  `GET /{fleetId}` (KYC + payout version + `documents[]`), `POST /{fleetId}/approve` and
+  `POST /{fleetId}/reject`, both taking `{officerId}` on the body because this service never sees
+  the officer's bearer — you resolve it, and it is what `audit.events` records (D-35). **Approving
+  an org verifies its payout profile in the same transaction**, which is what AL-49 asks for; a
+  second approve with nothing pending is a no-op rather than a re-stamp. The signed thumbnail and
+  full document URLs US-24.8 wants are yours to mint — this service returns `docId` and `kind` and
+  holds no signing key.
+  **For notification-svc / whoever owns Epic 13's messaging —** two notifications do not exist and
+  are felt: "your organisation has been approved / rejected" (the applicant is told nothing, and
+  `registry.fleets.rejection_reason` is written for a screen nobody has yet), and the sub-user
+  invitation (`POST /members` creates an account with no credential and **nobody is told**; the
+  Fleet Owner has to pass the address on out of band). Both need a `content.notification_templates`
+  row in three languages first; the second would also be the first real consumer of a fleet-svc
+  event, which is the point at which the outbox stops being correctly absent.
+  **Build host —** Docker for one Testcontainers fixture (Postgres with PostGIS and TimescaleDB)
+  plus the throwaway container `migrate-verify.sh` starts; the replica stayed down throughout.
+  `Fleet.Api.Tests` takes ~2 m 40 s (42 harness starts, each a fresh service on a real socket).
+  **No new NuGet reference.**
