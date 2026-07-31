@@ -1,0 +1,51 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    Notification.Api (C051 notification-svc) — every push and every SMS the platform sends.
+
+    One job, two transports and a rule. The transports are FCM HTTP v1 and APNs HTTP/2 (D6' §7.4)
+    and Notify.lk with a Dialog/Mobitel secondary (D6' §7.3); the rule is D-26's — no user-facing
+    string is composed here, every one is rendered from `content.notification_templates` in the
+    recipient's own language.
+
+    FENCE 1: a share token is minted here and put in an SMS. It is never returned to a client, on
+    any route, in any shape (AL-44/AL-45) — there is no response type in this assembly that can
+    carry one.
+    FENCE 2: P-12's 5/hour and 30/day per booker are hard limits on the location-request push.
+    FENCE 3: no masked-number relay. AL-48 removed D-25 and nothing here dials or bridges a call.
+
+    The latency-critical path is E-01: an offer push is high-priority and silent, and one that is
+    not acked within three seconds falls back to SMS *exactly once* — which is a guarded UPDATE on
+    comms.notifications, not a property of the worker that runs it (migration 1308).
+
+    Verify: dotnet test backend/src/Notification.Api.Tests -c Release
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.Notification</RootNamespace>
+    <AssemblyName>MageRide.Notification.Api</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <UserSecretsId>mageride-notification-api</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MageRide.Shared\MageRide.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Dapper" />
+    <PackageReference Include="Npgsql" />
+    <!-- P-12's token buckets are Redis, and they have to be: the limit is per booker across every
+         replica, and an in-process counter would let N replicas pass N × 5 requests an hour. -->
+    <PackageReference Include="StackExchange.Redis" />
+    <!-- The four topics this service consumes: dispatch.events (E-01 offers, DT-04/DT-08),
+         ride.events (the lifecycle, the P-02 round-trip and the AL-21 package branch),
+         wallet.events (US-9.9) and registry.events (E-03, US-2.14). -->
+    <PackageReference Include="Confluent.Kafka" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Notification.Api.Tests" />
+  </ItemGroup>
+
+</Project>

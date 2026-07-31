@@ -1,0 +1,62 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    C051 verify target: dotnet test backend/src/Notification.Api.Tests -c Release
+
+    Two kinds of test, and the split is the usual one.
+
+    The RENDERER and the CATALOGUE are pure: D5' §14.4's per-type table is transcribed and compared
+    cell for cell, the {{placeholder}} substitution is exercised against the failure it exists to
+    prevent (an SMS whose only link is missing), and the preference document is round-tripped
+    through the camelCase trap that would silently rewrite SCHEDULED_REMINDER. None of that needs a
+    container.
+
+    Everything else is a claim about the SERVER and about real sockets, and the definition of done
+    says so in four places: "an offer push that is not acked within 3 s triggers the SMS fallback
+    exactly once" is a guarded UPDATE, "SOS dispatch measures p99 <= 5 s against both gateways" is
+    two HTTP gateways answering in parallel, "a 6th location request in an hour is rejected" is a
+    Redis token bucket, and "every notification body is rendered in the recipient's language" is a
+    round trip through a content-svc that serves three languages. Those run against a real Postgres
+    and a real Redis through MageRide.TestKit, with stub sockets for content-svc and the two SMS
+    gateways.
+
+    Microsoft.NET.Sdk.Web, not Microsoft.NET.Sdk: the harness builds a WebApplication, and so do
+    the three stubs.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.Notification.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <OutputType>Exe</OutputType>
+    <!--
+      xUnit1041: collection-fixture ctor args are consumed through the primary constructor.
+      xUnit1051: every test is bounded by its own harness lifetime, so threading
+                 TestContext.Current.CancellationToken through each call would add noise without
+                 changing behaviour. Matches Dispatch/TripState/Subscription/Wallet/Fare.Tests.
+    -->
+    <NoWarn>$(NoWarn);xUnit1041;xUnit1051</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+    <PackageReference Include="Dapper" />
+    <PackageReference Include="Npgsql" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Notification.Api\Notification.Api.csproj" />
+    <!-- C010: the Postgres and Redis fixtures, so this suite runs the same server builds the dev
+         stack does and applies the same migration set. -->
+    <ProjectReference Include="..\MageRide.TestKit\MageRide.TestKit.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

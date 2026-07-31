@@ -76,7 +76,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C048 | subscription-svc-mode-b | 3 | DONE | 2026-07-30 | 112 tests green in `Subscription.Api.Tests` (79 from C047 + 33); **1 migration (1204)** — `subscription.outbox`, because BR-23.11's unsubscribe must publish `share.revoked` *inside* the transaction that mutes the grant and D6' §2.1 gives this service no topic; **the event goes on `registry.events` in registry-svc's exact envelope**, so fanout-svc (C041) consumes a second producer with no change; **AL-25 is one index** — `ux_grant_active` partial on `deleted_at` makes the muted roster row, the owner-only delete and the rejoin-reuses-the-grant rule the same fact; **the pass-through fence is an absence** — no ledger call, no journal entry, and `migrate-verify.sh` now asserts `subscription.payments` has no posting or commission column; `payTo` served only from the single `verified` payout profile and from the last verified snapshot after an edit; "joined 5 Jun ⇒ due 6 Jul" implemented from the worked example, with the anniversary re-derived from `join_day` so a 31st survives February; **1 new contract operation** (the AL-49 signed-URL route D3' asks for and gives no path); `migrate-verify.sh` 307/307 with a C048 section; 11 spec gaps / micro-change-sets |
 | C049 | fare-svc-core | 3 | DONE | 2026-07-31 | 78 tests green in a **new suite** (`Fare.Api.Tests`); **2 migrations (1005, 1006)** — `fares.command_log` and `ux_ride_payments_first_attempt`, the missing "a ride is priced once" index that a `FOR UPDATE` cannot supply because a row that does not exist cannot be locked (six concurrent completions produced four fares); **money never touches a float** — the distance is quantised to whole metres at the boundary and every step after it is `long`, with `(a*b+half)/divisor` as §1.3's single round; D5' §1.1's tariff table reproduced to the minor unit for every tier and every surcharge combination, peak+night stacked additively and never compounded; **E-04 landed** — reject, Kalman, and an accuracy-weighted movement gate that reads the *measurement* uncertainty rather than the filter's posterior, taking a stationary three minutes from 292 m to under 50 m while four right-angle turns keep their length; the estimate now prices the **routed** distance (straight line × 1.3, the same interim and the same constant as query-svc's ETA) instead of the C022 stub's bare haversine; tariffs resolved by `effective_from` at the ride's *request* instant so a mid-journey rate change cannot re-price it; `migrate-verify.sh` 316/316 with a C049 section; 6 spec gaps / micro-change-sets |
 | C050 | fare-svc-payments | 3 | PARTIAL | 2026-07-31 | 113 tests green (35 added); **D5' §8.1's machine is a table and the test compares it with a hand transcription of the diagram**, so an invented transition fails as loudly as a missing one; every move is a guarded `UPDATE … WHERE state = @From`, which is the whole concurrency argument and all R-19 needs beside the `provider_transaction_id` UNIQUE; a late gateway success after cash becomes `Overpaid` with an `overpaid_reversal` on the Finance queue and **does not touch the ride** (§11.14); AL-47's driver-QR trio settles with **zero** requests to the ledger seam, asserted against a wallet stub that is running and unused; **ride-svc had no `DriverConfirmedQR` terminal** so no driver-QR fare could ever settle a ride — added, mapped to `CashSettled` exactly as 1002's column comment always said; retry implemented as a new attempt because `provider_transaction_id` must stay one-to-one with a gateway call; no migration and no outbox; **PARTIAL: the AL-47 nudge push and the COD state sync are not built** (no notification-svc, and ride-svc's `cod-collected` never reaches fare-svc); 6 spec gaps |
-| C051 | notification-svc | 3 | PENDING | | |
+| C051 | notification-svc | 3 | DONE | 2026-07-31 | 86 tests green in a **new suite** (`Notification.Api.Tests`); **2 migrations (1308, 1904)** — `comms.notifications`, the outbound queue **no spec declares**, plus `comms.command_log`, the AL-08 install column on `notification_tokens` and the eighteen §14.4 template keys 1902 deliberately left unseeded; **E-01's "exactly once" is two database facts** — the `Sent → FellBackToSms` claim in the statement that selects the row, and `fallback:{pushId}` on `ux_notifications_dedupe` — so three sweeps of one unacked offer produce one SMS; **D-33 measured** against two gateways on real sockets with a deliberately slow primary (p99 well inside the 5 s, and both gateways written to); P-12's buckets spent **after** the dedupe claim so a redelivered `location.request.issued` costs nothing; AL-44/AL-45's fence held by the type system — `MintedLink` has no token member and no response shape in the assembly can carry one; **a real defect caught**: the kernel's camelCase dictionary-key policy answered a `LOW_BALANCE` mute with `loW_BALANCE`, fixed with iam-svc's `LiteralKeyDictionaryConverter` on both directions of the wire; **4 contract changes** (`POST /v1/notify/ack`, `notificationType`, `phones`, `audience`); `migrate-verify.sh` 330/330 with a C051 section; 14 spec gaps / micro-change-sets |
 | C052 | safety-svc | 3 | PENDING | | |
 | C053 | support-svc | 3 | PENDING | | |
 | C054 | ocr-svc | 3 | PENDING | | |
@@ -7241,3 +7241,144 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   throughout. `Fare.Api.Tests` takes ~55 s. **No new NuGet reference and no new migration** — C049's
   1005/1006 were the last, and everything C050 needed was already in C005's `fares.ride_payments`
   and `fares.refunds`.
+
+- **Component:** C051 notification-svc — 2026-07-31
+- **Status:** DONE — `dotnet test backend/src/Notification.Api.Tests -c Release` → **86/86 green**
+  (42 unit, 44 integration against a real Postgres and a real Redis). All four DoD items pass, each
+  with a test named after the claim. `bash infra/scripts/migrate-verify.sh` → **330/330**.
+  `npx @stoplight/spectral-cli lint 'backend/contracts/*.yaml'` → 0 errors.
+- **Notes:**
+  **The four definition-of-done claims, and where each is proved.**
+  (1) *"An offer push that is not acked within 3 s triggers the SMS fallback exactly once."*
+  `An_unacked_offer_falls_back_to_sms_exactly_once` sweeps at 2 s (nothing), then at 3.5 s, then
+  twice more, and finds one SMS. It is exactly-once because of **two independent database facts**,
+  not one worker's care: `ClaimUnackedOffersAsync` moves the push `Sent → FellBackToSms` *inside the
+  statement that selects it*, so two replicas sweeping one instant claim one row between them; and
+  the SMS is enqueued under `fallback:{pushId}`, which `ux_notifications_dedupe` makes unique, so a
+  worker that died between the claim and the insert still sends one. A late ack answers `404` and
+  does not recall the SMS — an ack cannot un-send a message, and the driver getting both once is the
+  honest outcome of a slow handset.
+  (2) *"SOS SMS dispatch measures p99 ≤ 5 s against both gateways."* Two gateway stubs on real
+  sockets, the primary given a deliberate 2 s delay: D6' §7.3's sequential rule would cost that on
+  every message, and the parallel send resolves on the secondary. The test asserts the percentile
+  **and** the shape — every one of the twenty reached *both* gateways — because a fast primary would
+  satisfy the percentile alone. Also covered: the primary refusing (200-with-an-error, Notify.lk's
+  real failure shape), both refusing (retried on D-27's backoff, never reported sent), and a
+  deployment with one gateway (degraded, announced at start-up).
+  (3) *"A 6th location request in an hour from the same booker is rejected."* Real Redis, the
+  kernel's `RateLimitPolicies.LocationRequestHourly`/`Daily` — declared by C002 for this component
+  and until now unused. Two companion tests pin the two things that make the limit correct rather
+  than merely present: the bucket is spent **after** the dedupe claim (so six deliveries of one
+  event cost one token, and at-least-once delivery does not quietly turn five requests into four),
+  and the subject is the **booker** (six different bookers pinging one rider all get through).
+  (4) *"Every body rendered in the recipient's language with no hardcoded strings."* Three users in
+  three scripts, one event, three bodies; the language is resolved at enqueue and stored on the row
+  so a preference change mid-retry cannot produce two attempts in two languages. The "no hardcoded
+  strings" half is proved by *editing* the template on the content-svc stub and watching the next
+  message change — a body composed in C# would be unaffected.
+  **A real defect, found by a test and worth naming.** `MageRideJson` sets
+  `DictionaryKeyPolicy = CamelCase`, so `PUT /v1/notify/preferences` answered a request that muted
+  `LOW_BALANCE` with **`loW_BALANCE`**: a client that sent back what it was given would then hold a
+  key matching no notification type, and the mute would silently stop working. iam-svc's C027
+  handoff predicted this exact failure for this exact route ("notification-svc's
+  `PUT /v1/notify/preferences` writes the same column and will need the same treatment"). Fixed with
+  a `LiteralKeyDictionaryConverter` on **both directions** of the wire shape, plus a hand-written
+  document for the column. `A_preference_key_survives_the_round_trip_verbatim` is the regression.
+  **Spec gaps and micro-change-sets (14).**
+  (a) **No spec declares an outbound notification table.** §11's `comms` is VoIP sessions, push
+  tokens and a call log; D5' §14.4 is a matrix of trigger × channel × type × throttle in prose.
+  D-27's "exponential-backoff worker" cannot survive a restart without a row, and E-01's fallback
+  cannot be exactly once without one — `comms.notifications` (1308) is both. Every producer on the
+  platform was already waiting on it (C050's handoff says so outright).
+  (b) `comms.command_log` — the **tenth** instance of the R-14 micro-change-set (iam 0104, registry
+  0307, dispatch 0710, reputation 0803, content 1307, fares 1005 …). D4' §5 still prints DDL for
+  `rides.command_log` only.
+  (c) `comms.notification_tokens.device_id` + `ux_notif_tokens_device`. `notification.yaml` has
+  carried `deviceId` on register-token since C013 and 1302 had nowhere to put it; without it a
+  reinstall (new token, same install) leaves the old handle alive to receive every future offer.
+  `last_seen_at` beside it, because FCM and APNs retire a token at ~270 days and `updated_at` moves
+  on any column change.
+  (d) **`POST /v1/notify/ack` did not exist, and E-01 is unimplementable without it.** D6' §7.4 says
+  "3 s no-ack → SMS fallback", which requires the handset to be able to say it woke up; neither D3'
+  nor `notification.yaml` declared a route. With none, *every* offer push on the platform falls back
+  to SMS three seconds later — the wrong behaviour and a bill. Added, idempotency-exempt (it races
+  the deadline and is idempotent by construction).
+  (e) **The send route took `templateKey` and user ids only.** Three additions, each unimplementable
+  otherwise: `notificationType` (D5' §14.4's Type decides the channel, the priority, mutability and
+  whether D-33's dual dispatch applies — a key is wording, a type is behaviour), `phones` (D-33's
+  SOS addresses an *emergency contact*, which is nobody's account, and AL-21's package link an
+  unregistered recipient) and `audience` (US-14.8's announcement had a reader and no way to reach a
+  handset). `priority` and `silent` were **removed**: letting any caller mark a message
+  high-priority puts E-01's Doze-bypassing budget in every service's hands.
+  (f) **§20's `ride_offer` template cannot be filled by any producer that exists.** Its
+  `{{pickup}}`/`{{dropoff}}` are display strings, and no event on the platform carries one —
+  `ride.requested` has coordinates, `offer.created` has neither. The offer push is therefore a
+  silent data message with no template (which is also what §14.4's "FCM-hi / APNs silent" asks for),
+  and the E-01 fallback renders a new `ride_offer_sms` keyed on the two values `offer.created`
+  actually carries. **Filling §20's template needs a producer to carry an address.**
+  (g) **AL-21's "📦 Package on the way — {driver} · ETA {n} min" is likewise unfillable.**
+  `package.picked_up` carries no driver name and no ETA, and `ride.accepted` no driver name, so
+  `driver_assigned` says "a driver has accepted your ride" and the app fetches the detail behind the
+  deep link. Same for `document_expiring`, which says "one of your documents" rather than
+  "your {{document}}": the value available is `registry.documents.kind` — an English identifier that
+  would be pasted verbatim into the Sinhala and Tamil bodies and quietly break D-26 for the one
+  sentence that matters.
+  (h) **§14.4's REGISTRATION_RESULT is one row and US-2.14 is two outcomes.** Split into
+  `REGISTRATION_APPROVED` and `REGISTRATION_REVIEW_REQUIRED`, because registry-svc emits them as two
+  events and they are different facts to a driver who is waiting.
+  (i) **Five types with no §14.4 row**, each with a producer that already emits the fact:
+  `DIRECTIONAL_CLEARED` (DT-04/US-6A.21), `TOP_UP_REQUIRED` (D5' §9.4's second clause, which
+  wallet-svc already flags as `severity`), `DAILY_FEE` (D-13), `DOCUMENT_EXPIRING`/`_EXPIRED` (E-03),
+  plus `BROADCAST` (US-14.8).
+  (j) **`iam.users.notif_prefs` now has two writers.** D3' puts the preferences route here, iam-svc's
+  own CLAUDE.md anticipates it, and a `comms.notification_preferences` of this service's own would
+  make `GET /v1/users/me` report switches that gate nothing. Both services apply the same
+  safety-critical list; the test that keeps them in step is named after it.
+  (k) **`location.request.issued` carries only the public `requestId`.** `safety.trip_share_tokens
+  .location_request_id` has its FK onto `rides.location_requests.id`, the surrogate, so minting
+  AL-45's token needs a one-column read of ride-svc's table. **Carrying both ids on the event would
+  delete `LocationRequestLookup`.**
+  (l) **The unregistered proxy rider cannot be reached.** `ride.accepted` carries `riderId` and no
+  number, and P-03 stores an unregistered rider's MSISDN as a digest and nowhere else — so AL-44's
+  `proxy_rider` SMS is addressable only to a *registered* rider today. `location.request.issued`
+  solves the same problem by carrying `riderPhone`; `ride.accepted` would have to do the same.
+  (m) **The secondary SMS gateway's request shape is still a guess** — the second copy of it, after
+  C026's. No spec prints one and D6' names two providers that do not share a shape. It matters more
+  here than in iam-svc: D-33 sends through it *in parallel* rather than as a fallback, so the guess
+  is load-bearing rather than a safety net.
+  (n) `mageride://ride/{id}` and `mageride://wallet`/`documents` follow D6' I-23.3's
+  `mageride://package/{rideId}`, which is the only deep link any spec prints.
+  **Fences, and how each is held.** The AL-44 token fence is the type system: `MintedLink` has no
+  token member, no response shape in the assembly can carry one, and a test checks every response
+  this service can produce against the value just minted. P-12 is Redis buckets keyed on the booker,
+  spent after the dedupe claim. AL-48's masked relay is absent — nothing here touches
+  `comms.call_log`.
+  **Δ on other services — none.** No file outside `Notification.Api`, its tests, the two migrations,
+  `notification.yaml`, `migrate-verify.sh` and `.env.app.example` changed. `UseKafka` is tied to
+  `ConsumersEnabled` because this service never publishes, so a deployment with consumers off needs
+  no broker address.
+  **For C052 (safety-svc) —** the SOS path is built and waiting for you: `POST
+  /v1/internal/notify/send` with `notificationType: SOS_TRIGGERED` and `phones: [<emergency
+  contact>]` goes through both gateways in parallel, renders `sos_alert` ({{name}}, {{link}}), and is
+  unmutable. `safety.location_request_audit` is **ride-svc's** (C037 writes all four decisions inside
+  the transaction that changes the state) — a second row here or there would double-count the abuse
+  signal; what this service holds is the outbound limit. Token **revocation and access metering are
+  yours**: this service writes the row and its expiry only.
+  **For C060/C065 —** `POST /v1/internal/notify/send` with `audience: {role}` is US-14.8's push half,
+  bounded by `Notification:MaxBroadcastRecipients` with truncation logged. The `audit.events` row for
+  an admin broadcast is admin-bff's, by the same split C045–C050 use.
+  **For fare-svc —** the queue `QrNudgeSweeper` said it had nothing to write to now exists. The
+  AL-47 prompt, its +5 min nudge, US-8.15's `PAYMENT_CONFIRMED` (already wired from `ride.settled`)
+  and §11.14's refund notice need a `notificationType`, a seeded template key and a call; no type or
+  key was invented for the three that have no caller.
+  **For C012/C013 (KMP) —** three client-visible additions: `POST /v1/notify/ack` (call it from the
+  silent data message's handler with `data.notificationId`, inside three seconds), the `data.kind`
+  switch (`ride_offer`, `location_request`, and the type name for everything else), and
+  `data.deeplink`. Preference keys are **transmitted verbatim** — do not apply a camelCase policy to
+  that dictionary.
+  **For C118 (contract tests) —** `notification.yaml` gained one operation (`acknowledgeNotification`)
+  and reshaped `sendNotification`; all four operations are implemented.
+  **Build host —** Docker for two Testcontainers fixtures (Postgres, Redis); the replica stack stayed
+  down throughout. `Notification.Api.Tests` takes ~1 m 15 s, `migrate-verify.sh` ~3 min. **No new
+  NuGet reference** — the FCM service-account assertion and the APNs ES256 provider token are ~40
+  lines of `System.Security.Cryptography` rather than a token library and its dependency tree.

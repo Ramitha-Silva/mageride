@@ -8,6 +8,22 @@ openapi: 3.1.0
 # notification-svc also mints the AL-44 web share tokens (package_recipient, proxy_rider,
 # pickup_confirm) and SMSes them. That is deliberately **not** an endpoint: D3' Δ 2026-07-05
 # says "mint-and-SMS, never returned to a client". See public-bff.yaml.
+#
+# Δ C051 — four changes, each argued at its operation and recorded in the C051 handoff:
+#   * POST /v1/notify/ack           — E-01 is unimplementable without it. "3 s no-ack → SMS
+#                                     fallback" needs the handset to be able to say it woke up,
+#                                     and no document declared a route for it; with none, every
+#                                     offer push on the platform falls back to SMS.
+#   * send: `notificationType`      — D5' §14.4's Type decides the channel, the priority and
+#                                     whether the recipient may mute it. `templateKey` alone
+#                                     cannot answer any of the three: a key is wording, a type is
+#                                     behaviour.
+#   * send: `phones`                — D-33's SOS goes to an emergency contact
+#                                     (`iam.users.emergency_contact_phone`, nobody's account) and
+#                                     AL-21's package link to an unregistered recipient. A
+#                                     recipients-are-user-ids body cannot address either.
+#   * send: `audience`              — US-14.8's announcement had a reader (content.broadcasts)
+#                                     and no way to reach a handset.
 # =============================================================================================
 
 info:
@@ -79,6 +95,46 @@ paths:
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
       x-error-codes: [validation-failed, unauthorized]
 
+  /v1/notify/ack:
+    post:
+      operationId: acknowledgeNotification
+      summary: Confirm that a device woke up on a high-priority push.
+      description: |
+        **Δ C051.** E-01's other half: an offer push that is not acknowledged within three seconds
+        falls back to SMS (D6' §7.4). The driver app calls this from the silent data message's
+        handler, with the `notificationId` the push carried in `data`.
+
+        Idempotent by construction — the acknowledgement is a guarded `UPDATE` bound to `Sent`, so a
+        repeat matches nothing — and it races a three-second deadline, which is why it is
+        idempotency-exempt: answering `400 idempotency-key-required` to a handset that woke up in
+        time would fire the fallback for a driver who was there.
+
+        `404` means there was nothing left to acknowledge: the window had already closed and the SMS
+        has gone, or the notification belongs to another account.
+      tags: [notify]
+      security:
+        - bearerAuth: []
+      x-idempotency-exempt: >-
+        Races E-01's 3 s deadline and is idempotent by construction (guarded UPDATE bound to Sent).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [notificationId]
+              properties:
+                notificationId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+      responses:
+        '204':
+          description: Acknowledged; no SMS fallback will be sent for this push.
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, not-found]
+
   /v1/notify/preferences:
     put:
       operationId: updateNotificationPreferences
@@ -99,6 +155,10 @@ paths:
               properties:
                 preferences:
                   type: object
+                  description: |
+                    Merged into what is already set, so a client sending one switch does not clear
+                    the rest. **The keys are data, not property names** — `SCHEDULED_REMINDER`, not
+                    `scheduledReminder` — and are transmitted verbatim in both directions.
                   additionalProperties:
                     type: boolean
                   example:
@@ -130,6 +190,15 @@ paths:
         Internal, mTLS only. Resolves the template per recipient language (D-26), batches to FCM
         HTTP v1 / APNs HTTP/2, and marks dispatch offers high-priority so they wake a backgrounded
         driver app (E-01). Accepted asynchronously — delivery receipts are not part of this call.
+
+        **Δ C051.** `notificationType` is required and `templateKey` is now an override, because
+        D5' §14.4's Type is what decides the channel, the priority, whether the recipient may mute
+        it (US-10.7) and whether it goes through both SMS gateways in parallel (D-33). `priority`
+        and `silent` are gone for the same reason: a caller cannot make a message high-priority, and
+        letting one would put E-01's Doze-bypassing budget in the hands of every service on the
+        platform.
+
+        At least one of `recipients`, `phones` and `audience` is required.
       tags: [notify]
       security:
         - mtls: []
@@ -141,10 +210,19 @@ paths:
           application/json:
             schema:
               type: object
-              required: [templateKey, recipients]
+              required: [notificationType]
               properties:
+                notificationType:
+                  type: string
+                  description: |
+                    D5' §14.4's Type — `RIDE_OFFER`, `DRIVER_ASSIGNED`, `SOS_TRIGGERED`,
+                    `location_request`, … The full set is `NotificationCatalogue`.
+                  pattern: '^[A-Za-z0-9_]+$'
                 templateKey:
                   type: string
+                  description: |
+                    Overrides the type's own template. Only for a caller that has already resolved
+                    the wording — a US-14.8 broadcast carries its own trilingual message.
                   pattern: '^[a-z0-9]+(_[a-z0-9]+)*$'
                 recipients:
                   type: array
@@ -152,18 +230,31 @@ paths:
                   maxItems: 1000
                   items:
                     $ref: './_shared.yaml#/components/schemas/Ulid'
+                phones:
+                  type: array
+                  description: |
+                    E.164 numbers, for recipients with no account: D-33's emergency contact and
+                    AL-21's unregistered package recipient. A number that belongs to an account is
+                    resolved to it, so the owner's language and preferences apply.
+                  minItems: 1
+                  maxItems: 1000
+                  items:
+                    type: string
+                    pattern: '^\+94[0-9]{9}$'
+                audience:
+                  type: object
+                  description: |
+                    US-14.8's broadcast. Bounded by `Notification:MaxBroadcastRecipients`, and
+                    truncation is logged rather than silent.
+                  properties:
+                    role:
+                      type: string
+                      description: Matched against the union of `iam.user_roles` (AL-06).
                 data:
                   type: object
                   description: Template substitution values plus the client's data payload.
-                  additionalProperties: true
-                priority:
-                  type: string
-                  enum: [normal, high]
-                  default: normal
-                  description: '`high` is reserved for E-01 offer pushes.'
-                silent:
-                  type: boolean
-                  default: false
+                  additionalProperties:
+                    type: string
       responses:
         '202':
           description: Accepted for delivery.
@@ -171,14 +262,22 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [dispatchId, accepted]
+                required: [dispatchId, accepted, suppressed, undeliverable]
                 properties:
                   dispatchId:
                     $ref: './_shared.yaml#/components/schemas/Ulid'
                   accepted:
                     type: integer
                     format: int32
-                    description: Recipients with at least one live device token.
+                    description: Recipients queued for delivery.
+                  suppressed:
+                    type: integer
+                    format: int32
+                    description: Refused by a preference (US-10.7) or a limit (P-12).
+                  undeliverable:
+                    type: integer
+                    format: int32
+                    description: Recipients with no account, no number and no device.
         '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
         '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
         '404': { $ref: './_shared.yaml#/components/responses/NotFound' }

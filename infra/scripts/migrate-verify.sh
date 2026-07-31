@@ -920,7 +920,9 @@ check_eq "4 subscription tables from C005 + 1 from C047 + 1 from C048" "6" \
 # 5 content, not C005's 3: `content.onboarding_slides` (AL-28's carousel copy, which is
 # content-svc's content) and `content.command_log` (R-14, one per bounded context) are C045's, both
 # added by 1307 in the same schema.
-check_eq "3 comms, 2 docs, 1 support, 5 content, 1 audit, 2 pdpa, 3 spatial tables" "17" \
+# 5 comms, not C005's 3: `comms.notifications` (D5' §14.4's outbound queue, which no spec declares)
+# and `comms.command_log` (R-14, the tenth of them) are C051's, both added by 1308.
+check_eq "5 comms, 2 docs, 1 support, 5 content, 1 audit, 2 pdpa, 3 spatial tables" "19" \
   "SELECT count(*) FROM information_schema.tables
     WHERE table_schema IN ('comms','docs','support','content','audit','pdpa','spatial')
       AND table_type='BASE TABLE';"
@@ -1058,8 +1060,21 @@ check_eq "every seeded notification template exists in all three languages (D-26
   "SELECT count(*) FROM (
      SELECT template_key FROM content.notification_templates
       GROUP BY template_key HAVING count(DISTINCT language) <> 3) t;"
-check_eq "four notification template keys seeded" "4" \
+# 1902's four (the keys the specs name by string) plus 1904's eighteen: the rest of D5' §14.4's
+# table, seeded beside the service that resolves them (C051).
+check_eq "twenty-two notification template keys seeded" "22" \
   "SELECT count(DISTINCT template_key) FROM content.notification_templates;"
+check_eq "the E-01 fallback SMS interpolates the two values offer.created carries" "1" \
+  "SELECT count(*) FROM content.notification_templates
+    WHERE template_key='ride_offer_sms' AND language='en'
+      AND body LIKE '%{{fare}}%' AND body LIKE '%{{distance}}%';"
+check_eq "every language of a key interpolates the same placeholders (D-26)" "0" \
+  "SELECT count(*) FROM (
+     SELECT template_key
+       FROM (SELECT template_key, language,
+                    (SELECT count(*) FROM regexp_matches(body, '\\{\\{[a-z]+\\}\\}', 'g')) AS n
+                FROM content.notification_templates) c
+      GROUP BY template_key HAVING count(DISTINCT n) <> 1) t;"
 check_eq "every FAQ category exists in all three languages (US-16.1, D-26)" "0" \
   "SELECT count(*) FROM (
      SELECT category FROM content.faq_articles
@@ -1891,6 +1906,62 @@ psql_run "DELETE FROM subscription.payments
            WHERE subscription_id='c0000048-0000-0000-0000-000000000002';
           DELETE FROM subscription.grants WHERE id='c0000048-0000-0000-0000-000000000001';" >/dev/null \
   || die "could not clean up the Epic 23 fixtures."
+
+# ---------------------------------------------------------------------------------------
+# C051 — comms: the outbound notification queue (1308)
+#
+# The queue is what makes D-27's backoff survive a restart and E-01's "3 s no-ack → SMS fallback"
+# exactly once, so the checks below are about the two guards rather than about the columns: the
+# dedupe claim that turns at-least-once event delivery into one message, and the CHECK that refuses
+# a row nothing could be delivered to.
+# ---------------------------------------------------------------------------------------
+step "Objects owned by C051 (D5' §14.4, E-01, D-27)"
+
+check_eq "comms.notifications exists" "1" \
+  "SELECT count(*) FROM information_schema.tables
+    WHERE table_schema='comms' AND table_name='notifications';"
+check_eq "comms.command_log exists (R-14, the tenth bounded context)" "1" \
+  "SELECT count(*) FROM information_schema.tables
+    WHERE table_schema='comms' AND table_name='command_log';"
+check_eq "ux_notifications_dedupe is the producer's claim" "1" \
+  "SELECT count(*) FROM pg_indexes
+    WHERE schemaname='comms' AND indexname='ux_notifications_dedupe';"
+check_eq "the E-01 ack sweep has its partial index" "1" \
+  "SELECT count(*) FROM pg_indexes
+    WHERE schemaname='comms' AND indexname='ix_notifications_ack_due'
+      AND indexdef LIKE '%acked_at IS NULL%';"
+check_eq "the delivery queue is indexed on due rows only" "1" \
+  "SELECT count(*) FROM pg_indexes
+    WHERE schemaname='comms' AND indexname='ix_notifications_due'
+      AND indexdef LIKE '%Pending%';"
+check_eq "comms.notification_tokens carries the AL-08 install (1308)" "1" \
+  "SELECT count(*) FROM information_schema.columns
+    WHERE table_schema='comms' AND table_name='notification_tokens' AND column_name='device_id';"
+check_eq "one live handle per install (ux_notif_tokens_device)" "1" \
+  "SELECT count(*) FROM pg_indexes
+    WHERE schemaname='comms' AND indexname='ux_notif_tokens_device';"
+
+psql_run "INSERT INTO comms.notifications(dedupe_key, notification_type, channel, recipient_phone, language)
+          VALUES ('verify:c051:one','SOS_TRIGGERED','sms','+94770000001','en');" >/dev/null \
+  || die "could not seed the C051 notification fixture."
+check_rejects "a producer's claim is unique (ux_notifications_dedupe)" \
+  "INSERT INTO comms.notifications(dedupe_key, notification_type, channel, recipient_phone, language)
+     VALUES ('verify:c051:one','SOS_TRIGGERED','sms','+94770000002','en');"
+check_rejects "an SMS with no destination is refused (ck_notifications_sms_destination)" \
+  "INSERT INTO comms.notifications(dedupe_key, notification_type, channel, recipient_user_id, language)
+     VALUES ('verify:c051:two','SOS_TRIGGERED','sms',NULL,'en');"
+check_rejects "a row nothing can be addressed to is refused (ck_notifications_addressable)" \
+  "INSERT INTO comms.notifications(dedupe_key, notification_type, channel, language)
+     VALUES ('verify:c051:three','DRIVER_ASSIGNED','push','en');"
+check_rejects "an unknown status is refused (ck_notifications_status)" \
+  "INSERT INTO comms.notifications(dedupe_key, notification_type, channel, recipient_phone, status, language)
+     VALUES ('verify:c051:four','SOS_TRIGGERED','sms','+94770000003','Delivered','en');"
+check_rejects "a body in a fourth language is refused (ck_notifications_language)" \
+  "INSERT INTO comms.notifications(dedupe_key, notification_type, channel, recipient_phone, language)
+     VALUES ('verify:c051:five','SOS_TRIGGERED','sms','+94770000004','hi');"
+
+psql_run "DELETE FROM comms.notifications WHERE dedupe_key LIKE 'verify:c051:%';" >/dev/null \
+  || die "could not clean up the C051 notification fixture."
 
 # AL-49 BR-31.1: the pay sheet's payTo reads the single verified row, and the table is versioned so
 # an owner's later edit lands beside it rather than on top of it.
