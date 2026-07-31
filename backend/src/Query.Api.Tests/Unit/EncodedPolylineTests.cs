@@ -1,4 +1,5 @@
 using MageRide.Query.Geo;
+using MageRide.Shared.Geo;
 using MageRide.Shared.Primitives;
 
 namespace MageRide.Query.Tests.Unit;

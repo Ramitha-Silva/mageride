@@ -2210,6 +2210,28 @@ psql_run "DELETE FROM comms.call_log WHERE ride_id='c0000055-0000-0000-0000-0000
           DELETE FROM iam.users WHERE id='c0000055-0000-0000-0000-000000000001';" >/dev/null \
   || die "could not clean up the C055 call fixture."
 
+# ---------------------------------------------------------------------------------------
+# C056 — transit: the destination a bus is signed for (1406)
+#
+# Both D3' and D5' BR-23.2 put the headsign on every option and §18c gives transit.gtfs_trips five
+# columns, none of which can hold it. It is what tells the two directions of one route apart on a
+# card: "138 to Kottawa" and "138 to Pettah" share a route_short_name AND a route_long_name.
+#
+# The staging mirror matters as much as the live column here: 1404 builds
+# transit_staging.gtfs_trips with CREATE TABLE IF NOT EXISTS ... LIKE, so a column added later is
+# only picked up on a database where staging does not exist yet. On every other one the two sides
+# diverge — and activation is ALTER TABLE ... SET SCHEMA, which needs them shape-identical.
+# ---------------------------------------------------------------------------------------
+step "Objects owned by C056 (AL-18, BR-23.2)"
+
+check_eq "transit.gtfs_trips carries trip_headsign" "1" \
+  "SELECT count(*) FROM information_schema.columns
+    WHERE table_schema='transit' AND table_name='gtfs_trips' AND column_name='trip_headsign';"
+
+check_eq "transit_staging.gtfs_trips carries it too (the swap needs both sides identical)" "1" \
+  "SELECT count(*) FROM information_schema.columns
+    WHERE table_schema='transit_staging' AND table_name='gtfs_trips' AND column_name='trip_headsign';"
+
 # AL-49 BR-31.1: the pay sheet's payTo reads the single verified row, and the table is versioned so
 # an owner's later edit lands beside it rather than on top of it.
 check_eq "an org has at most one verified payout profile" "1" \

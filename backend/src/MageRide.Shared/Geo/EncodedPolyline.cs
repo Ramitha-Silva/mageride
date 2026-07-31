@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Text;
 using MageRide.Shared.Primitives;
 
-namespace MageRide.Query.Geo;
+namespace MageRide.Shared.Geo;
 
 /// <summary>
 /// Google's Encoded Polyline Algorithm, precision 5 — the wire form of a trip's track (MAP-08).

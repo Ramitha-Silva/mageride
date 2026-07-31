@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    Transit.Api (C056 transit-svc-routing) — GTFS-backed Mode A route discovery, and the
+    Google-Maps paste-link resolver.
+
+    FENCE 1: **no Google APIs.** `/v1/geo/parse-maps-link` follows a short link's redirect and
+    parses the coordinates out of the resolved URL. There is no Maps SDK, no Places call and no
+    API key — D6' I-23.1's map hard rule. `NoGoogleApiIsCalled` asserts the host allowlist is
+    redirect-only.
+    FENCE 2 (AL-17): a destination is a **geo-location**. No route number is accepted as input
+    anywhere on this surface; `/v1/transit/options` takes four coordinates and nothing else.
+    FENCE 3 (AL-55): the no-coverage answer is a safety net for a genuine feed gap, not the
+    expected launch state — so "no feed" and "no bus goes there" are DIFFERENT answers on the
+    wire, and the degraded one says so.
+
+    The GTFS Dataset Manager (upload / validate / activate, AL-54) is **C057**; this service
+    only listens for its `transit_feed_activated` NOTIFY.
+
+    Verify: dotnet test backend/src/Transit.Api.Tests -c Release
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.Transit</RootNamespace>
+    <AssemblyName>MageRide.Transit.Api</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <UserSecretsId>mageride-transit-api</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MageRide.Shared\MageRide.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Dapper" />
+    <PackageReference Include="Npgsql" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Transit.Api.Tests" />
+  </ItemGroup>
+
+</Project>

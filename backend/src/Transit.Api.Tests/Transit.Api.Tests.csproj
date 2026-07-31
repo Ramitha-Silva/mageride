@@ -1,0 +1,62 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    C056 verify target: dotnet test backend/src/Transit.Api.Tests -c Release
+
+    Real Postgres, and a real HTTP server standing in for a URL shortener. Every one of this
+    component's definition-of-done items is a claim about something outside the process:
+
+      * "a corridor with a known direct route returns it with the correct shape polyline" is
+        asserted against a seeded feed and the polyline is DECODED back to coordinates, not
+        compared with a string somebody wrote down — an encoder checked against its own author's
+        expectation is checked against nothing.
+      * "all four Google Maps URL shapes resolve or fail cleanly within 3 s" runs the short-link
+        case through a real redirect chain on a real socket, including a chain that redirects
+        somewhere it should not be followed.
+      * "activating a new feed version refreshes the cache within 60 s without a restart" flips
+        `transit.gtfs_feed_versions` and issues the real `NOTIFY transit_feed_activated`, then
+        waits for the running service to serve the new feed. The safety-net poll is asserted
+        separately, with the notification deliberately not sent.
+      * "with no active feed the endpoint degrades rather than erroring" is asserted on the
+        `coverage` discriminator, because an empty list alone cannot tell "no bus goes there" from
+        "we cannot say" — which is the whole of AL-55.
+
+    No Redis and no Kafka: the service holds neither, deliberately (see TransitApplication).
+
+    Microsoft.NET.Sdk.Web, not Microsoft.NET.Sdk: the harness builds two WebApplications — the
+    service and the shortener.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.Transit.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <OutputType>Exe</OutputType>
+    <!--
+      xUnit1041: collection-fixture ctor args are consumed through the primary constructor.
+      xUnit1051: every test is bounded by its own harness lifetime.
+    -->
+    <NoWarn>$(NoWarn);xUnit1041;xUnit1051</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+    <PackageReference Include="Dapper" />
+    <PackageReference Include="Npgsql" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Transit.Api\Transit.Api.csproj" />
+    <!-- C010: the Postgres fixture, so this suite runs the same server build the dev stack does —
+         PostGIS included, which the GTFS geography columns need. -->
+    <ProjectReference Include="..\MageRide.TestKit\MageRide.TestKit.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

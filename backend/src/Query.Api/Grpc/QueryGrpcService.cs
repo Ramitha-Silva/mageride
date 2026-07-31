@@ -6,6 +6,7 @@ using MageRide.Query.Endpoints;
 using MageRide.Query.Geo;
 using MageRide.Query.Live;
 using MageRide.Query.Persistence;
+using MageRide.Shared.Geo;
 using MageRide.Shared.Primitives;
 using Microsoft.Extensions.Options;
 

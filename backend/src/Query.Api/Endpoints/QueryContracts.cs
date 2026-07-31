@@ -3,6 +3,7 @@ using MageRide.Query.Geo;
 using MageRide.Query.Live;
 using MageRide.Query.Destinations;
 using MageRide.Query.Persistence;
+using MageRide.Shared.Geo;
 using MageRide.Shared.Primitives;
 
 namespace MageRide.Query.Endpoints;

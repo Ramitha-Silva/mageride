@@ -1,6 +1,7 @@
 using System.Net;
 using MageRide.Query.Geo;
 using MageRide.Query.Tests.Infrastructure;
+using MageRide.Shared.Geo;
 using MageRide.Shared.Primitives;
 using MageRide.TestKit;
 

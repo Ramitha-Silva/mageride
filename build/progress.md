@@ -81,7 +81,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C053 | support-svc | 3 | DONE | 2026-07-31 | 32 tests green in a **new suite** (`Support.Api.Tests`), all integration against a real Postgres and asserting migration 1902's **actual Sinhala and Tamil strings** rather than fixtures of its own; **1 migration (1309)** — `support.ticket_events` (the thread; §13 holds one `admin_response`, so a second reply overwrites the first and a status change leaves no trace at all), `support.command_log` (R-14, the twelfth), the five columns an agent's handling needs, and `screenshot_upload_id` as a **FK onto `docs.uploads`** because the DoD says "links it by id, not by public URL" and §13's `screenshot_url` **is** that URL; **this service is the platform's first writer of `docs.uploads`** — US-16.2's "attach a screenshot" had no upload surface anywhere, and registry-svc says outright that filling that table is not its job; **the Finance queue is derived from the category, never stored**, because `support.tickets` has three writers and a stored column would default C047's and C050's own rows onto the wrong pile; **one real defect caught** — thread entries stamped from the service clock beside a `resolved_at` stamped by Postgres sorted the thread out of order, so every timestamp on these tables is now `now()`; **10 contract changes** (the upload pair, the internal queue family, the thread, the queue, `TicketRow`); `migrate-verify.sh` 351/351 with a C053 section; 11 spec gaps / micro-change-sets |
 | C054 | ocr-svc | 3 | DONE | 2026-07-31 | **113 tests green** in a new suite (`Ocr.Api.Tests`), against a real Postgres, real OpenCV, the real `tesseract` binary and a **recording HTTP server** standing in for Gemini — the D-36 claim is asserted on the bytes that came off the socket; **1 migration (1310)** — ADD §12.5's document-processing log (`raw_sha256`, `redacted_sha256`, policy + pass version, the mask counts, `engine`) on `docs.extractions`, which 1301 gives one BOOLEAN, plus **`ck_extractions_gemini_is_redacted`**, the D-36 invariant in the last place able to refuse to record its violation; **the pre-pass is held twice** — `GeminiFieldExtractor` takes a `RedactedDocument` only the redactor can construct, and `PerimeterGuardHandler` re-checks the wire; **fails closed everywhere**: no Tesseract ⇒ no ID boxes ⇒ no redaction ⇒ **no Gemini call at all**, and the on-prem path still returns fields, capped below the auto-verify threshold so a model outage can never auto-approve a vehicle; **three real defects caught by the tests** — the guard's regex matched nothing at all because `System.Text.Json` escapes `+` and `/` to `\uXXXX` (it was passing every payload); Tesseract's PSM 11 returns **nothing** for a framed number plate, the one document step 4/4 cannot be blind on; and a label match on a heading returned `revenue_no = "LICENCE NO RL8891234"`; **`_shared.yaml`'s `FieldSource`/`VerifyStatus` enums named values no row can hold** and omitted `auto_verified`, so a generated client would have failed on every field registry-svc has ever returned — corrected; **1 new contract** (`ocr.yaml`, Δ in full: D3' has no ocr-svc section); `migrate-verify.sh` 355/355 with a C054 section; 8 spec gaps / micro-change-sets |
 | C055 | voip-svc | 3 | DONE | 2026-07-31 | **68 tests green** in a new suite (`Voip.Api.Tests`), against a real Postgres and a real Redpanda — the trip-end teardown is proved with a terminal `ride.events` message on a real broker, because that half cannot be shown any other way; **1 migration (1311)** — `ux_voip_sessions_open_room` (D3' gives a ride ONE room and **both** parties start a call into it, so without it each tap opened a rival session) plus the `comms.call_log.outcome` vocabulary 1302 left as free text with no writer, which is what makes ADD §16's call-setup SLO and ADD §14's fallback measurable at all; **"expiring at trip end" needs TWO mechanisms** — a LiveKit token is a *join* credential whose `exp` is checked at connect and never again, so minting is refused for a terminal ride **and** the room is closed when `ride.events` says the ride is over; **P-05 held by the projection, not a branch** — `RiderIdentity` is `rider_id` with **no fallback to `booker_id`**, and a proxy booker is 403 on both routes; **AL-48 enforced by reflection** — the suite fails if any member of the assembly is named after the withdrawn masking stack or can name a phone number, because three still-current spec sections still describe masking; **the LiveKit token is minted by hand** (its authority is a nested `video` claim the claims-dictionary APIs stringify — a token that fails at the SFU, not at the mint); **media plane config landed** (`livekit.yaml` + `turnserver.conf`, both containers `network_mode: host` per D6' §6 — HAProxy cannot relay UDP and the failure mode is one-way audio, not a startup error); **1 contract addition** (`POST /v1/calls/{callId}/outcome`); `migrate-verify.sh` 361/361 with a C055 section; 7 spec gaps / micro-change-sets |
-| C056 | transit-svc-routing | 3 | PENDING | | |
+| C056 | transit-svc-routing | 3 | DONE | 2026-07-31 | **58 tests green** in a new suite (`Transit.Api.Tests`) over a real Postgres and a real URL shortener on a socket; the Colombo Fort → Kottawa corridor is seeded at its **actual coordinates** with route 138 on it, and the shape is asserted by **decoding** the polyline rather than comparing a string; **1 migration (1406)** — `trip_headsign` on `transit.gtfs_trips` **and its staging mirror**, which both specs put on every option and §18c had nowhere to hold (it is what tells "138 to Kottawa" from "138 to Pettah", which share a short name AND a long name); **the feed is patterns, not trips** — distinct stop sequences indexed by halt, so BR-23.2's "all direct routes" is an in-memory lookup instead of a self-join over 512k `stop_times` on a screen the passenger is watching; **"expires within 60 s" is LISTEN plus a poll**, and the poll is why it is a guarantee — a notification only reaches sessions connected when it fires, and the suite proves the missed-NOTIFY path separately; **AL-55 became a wire field** (`coverage: active | no_feed`, Δ C056) because an empty list meant both "no bus goes there" and "we cannot tell"; **the paste-link allowlist is re-checked at every redirect hop** — the first URL is the one an attacker cannot aim, and a mid-chain hop to `169.254.169.254` is asserted refused; **one real defect caught**: the resolver kept a second hardcoded shortener-host list that could disagree with the configured allowlist; **`EncodedPolyline` promoted into the kernel** (two services must agree on a wire format); **BR-23.2's "soonest departure" is unimplementable** — §18c mirrors five GTFS tables and none is the service calendar; `migrate-verify.sh` 363/363 with a C056 section; 6 spec gaps / micro-change-sets |
 | C057 | transit-svc-gtfs-lifecycle | 3 | PENDING | | |
 | C058 | fleet-svc-org | 3 | PENDING | | |
 | C059 | fleet-svc-fleet-ops | 3 | PENDING | | |
@@ -8030,3 +8030,140 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   **For C118 (contract tests) —** `voip.yaml` gained one operation; nothing else changed.
   **Build host —** Docker for two Testcontainers fixtures (Postgres, Redpanda); the replica stack
   stayed down throughout. `Voip.Api.Tests` takes ~40 s. No new NuGet reference.
+
+- **Component:** C056 transit-svc-routing — 2026-07-31
+- **Status:** DONE — `dotnet test backend/src/Transit.Api.Tests -c Release` → **58 passed, 0
+  failed, 0 skipped** in a new suite. All four DoD items pass, each with a named test: a corridor
+  with a known direct route returns it with the correct shape
+  (`A_corridor_with_a_known_direct_route_returns_it_with_its_shape` — Colombo Fort → Kottawa on
+  route 138, at real coordinates, with the polyline **decoded** back to five points rather than
+  compared with a string somebody wrote down); all four Google Maps URL shapes resolve or fail
+  inside 3 s (`MapsLinkTests`, the short link through a real redirect on a real socket); activating
+  a new feed refreshes the cache without a restart
+  (`Activating_a_feed_refreshes_the_cache_without_a_restart`, plus
+  `A_notification_that_never_arrives_is_covered_by_the_safety_net_poll`, which withholds the
+  `NOTIFY` entirely); and with no active feed the endpoint degrades rather than erroring
+  (`With_no_active_feed_the_endpoint_degrades_rather_than_erroring` and
+  `No_coverage_and_no_route_on_the_corridor_are_different_answers`). Gates re-run green:
+  `bash infra/scripts/migrate-verify.sh` → **363/363** (was 361), Spectral on
+  `backend/contracts/*.yaml` → 0 errors, `dotnet build backend/MageRide.sln -c Release` →
+  0 warnings, `Query.Api.Tests` re-run after the `EncodedPolyline` promotion.
+- **Notes:**
+  **Spec gaps — one micro-change-set landed as `db/migrations/1406`, one contract addition, and
+  four others.**
+  (a) ***The headsign is on every option and the schema cannot hold it.*** D3' transit-svc ("ALL
+  direct GTFS routes (route_no, **headsign**/desc, shape)"), D5' BR-23.2 and
+  `contracts/transit.yaml`'s `TransitLeg.headsign` all carry it; `server_db_schema` §18c gives
+  `transit.gtfs_trips` five columns and none is GTFS's `trip_headsign`. It is the field that tells
+  the two directions of one route apart on a card — **"138 to Kottawa" and "138 to Pettah" share a
+  `route_short_name` *and* a `route_long_name`**, so without it a passenger is shown the same option
+  twice with no way to tell which one goes their way. 1406 adds it, and **adds it to the staging
+  mirror in the same file**: 1404 builds `transit_staging.gtfs_trips` with
+  `CREATE TABLE IF NOT EXISTS … LIKE`, so a later column is only inherited on a database where
+  staging does not exist yet, and activation is `ALTER TABLE … SET SCHEMA`, which needs both sides
+  shape-identical. **§18c / D4' §11-16 should carry the column.**
+  (b) ***BR-23.2's "soonest departure" is unimplementable in this build.*** The rule orders direct
+  options by "fewest stops/soonest departure". §18c mirrors five GTFS tables — routes, trips, stops,
+  stop_times, shapes — and **none of them is `calendar` or `calendar_dates`**, although
+  `contracts/transit.yaml` lists those files as *required* in an upload and `gtfs_trips.service_id`
+  points at them. So a trip's departure time is readable and whether that trip runs *today* is not.
+  Ordering on a departure nothing can validate would put a Sunday-only working at the top of a
+  Tuesday morning list, so the order is **fewest stops, then shortest walk**, and the durations
+  reported come from the pattern's own arrival offsets, which are service-day independent. **Either
+  §18c gains the two calendar tables (and C057 imports them) or BR-23.2 should drop the departure
+  clause.**
+  (c) ***AL-55 needed a wire field.*** `coverage: active | no_feed` on the options response
+  (Δ C056). An empty `options` list meant two different things — "no bus goes there" on a live feed
+  and "we cannot tell" before the first import — and AL-55 makes the second a *safety net* that
+  SCR-PA-009 renders differently (live buses and private tiers stay, route matching is hidden).
+  `feedVersion` is now typed `[string, 'null']` for the same reason: it is absent exactly when
+  coverage is `no_feed`.
+  (d) ***No spec pins the halt count, the option cap, the redirect ceiling or the poll interval.***
+  All argued at their declarations.
+  (e) ***`transit_feed_activated` has a consumer and no producer yet.*** D6' I-32.1 names the
+  channel; C057's activation is what fires it. Nothing else in this build does, so today the safety
+  net poll is the only trigger that runs in anger.
+  (f) ***query-svc's `CLAUDE.md` calls transit-svc "C061".*** The manifest has this component as
+  C056 and the GTFS lifecycle as C057. Cosmetic, but worth fixing when C042 is next touched.
+
+  **One real defect, caught by the suite —**
+  ***The resolver kept a second host list.*** `/v1/geo/parse-maps-link` decided whether to follow a
+  redirect from a hardcoded "is this a shortener" list (`maps.app.goo.gl`, `goo.gl`) that was
+  entirely separate from the configured `AllowedHosts` — so a host an operator allowed was then
+  refused by a constant nobody could see, and the two could drift apart in either direction. The
+  rule is now one list and one decision: **an allow-listed URL that carries no coordinate is a link
+  whose coordinate is on the other side of a redirect**, which is what a short link is.
+
+  **Decisions —**
+  (1) **The feed is loaded once per activation and answered from memory, as *patterns*.** A pattern
+  is a distinct stop sequence; a route's thousands of trips collapse to a handful of them, and
+  BR-23.2's question is a question about the sequence. Computed per request instead, "all direct
+  routes" is a self-join over half a million `stop_times` rows on a screen the passenger is
+  watching.
+  (2) **Distinct sequences, not one representative per direction.** The smaller choice is wrong in
+  *both* directions: a longest-pattern-only cache claims a direct route for a corridor only the
+  full-length working covers, and still misses a short-turn that reaches somewhere the long one does
+  not. Both are asserted.
+  (3) **All direct *routes*, one option per route.** Three workings over the same corridor are one
+  answer to a passenger — the shortest ride on it.
+  (4) **"Before" is the whole rule.** A route that passes both halts in the other order is not a way
+  to get there, and a matcher built as a set intersection would say it was. Asserted directly.
+  (5) **One transfer, not two.** BR-23.2 says "≥ 1 transfer" and lists them below direct options;
+  two-transfer search over a national feed is RAPTOR or a transfer graph, and a different latency
+  budget. Named rather than half-built.
+  (6) **The cache is swapped, never mutated**, matching AL-54's own shape on the database side —
+  one transaction there, one reference assignment here — so a request that started under the old
+  feed finishes under it. A reload that *fails* leaves the previous feed published: yesterday's
+  routes beat no routes.
+  (7) **`LISTEN` is the trigger and the poll is why 60 s is a guarantee.** A notification reaches
+  sessions connected at the instant it fires; a reconnect window loses it, and a service that only
+  listened would serve the previous feed indefinitely with nothing to say it had. The connection is
+  `OpenDirectAsync`, because PgBouncer in transaction mode drops the registration — the same reason
+  the kernel's outbox dispatcher takes it.
+  (8) **The stop lookup is a linear scan.** ~7 600 halts and a haversine each is tens of
+  microseconds, with no index to maintain, no rebuild on reload and no second structure that can
+  disagree with the stop list.
+  (9) **The `data=` pin beats the `@` viewport on a `/place/` URL.** They differ, sometimes by
+  hundreds of metres, because the viewport is framed around the label rather than centred on it —
+  taking it drops the passenger's marker down the street from the place they shared.
+  (10) **The allowlist is re-checked at every redirect hop, and `AllowAutoRedirect` is off.** The
+  first URL is the one an attacker cannot choose the destination of; the redirect target is.
+  Automatic handling would follow the chain wherever it went and report only where it ended — by
+  which point the request to the private address has been made. Matching is exact-or-subdomain,
+  never a string suffix (`evilgoo.gl` ends with `goo.gl` and is somebody else's domain).
+  (11) **An unreadable link is `422` and a missing one is `400`.** Different failures: one the client
+  fixes by sending a url, the other by picking on the map (BR-23.4's Error state).
+  (12) **AL-17 is held by an absence of capability.** Every parameter on this surface is a
+  coordinate, and `There_is_no_way_to_ask_for_a_route_number_as_a_destination` asserts the whole
+  route table so a route added later fails the suite rather than quietly opening the door.
+
+  **Promoted into the kernel —**
+  `EncodedPolyline` moved from `Query.Api/Geo/` to `MageRide.Shared.Geo`, unchanged. It is a **wire
+  format two services must agree on** — query-svc encodes a trip's track, transit-svc encodes a GTFS
+  shape, one client decodes both — so a copy would let them drift on precision. The same move C042
+  made with `VehicleVisibilityRules` and C052 with `LiteralKeyDictionaryConverter`. `Query.Api.Tests`
+  re-run green after it.
+
+  **For C057 (transit-svc-gtfs-lifecycle) —** you own everything this component consumes. Four
+  things specifically: **fire `NOTIFY transit_feed_activated` inside the activation transaction**
+  (D6' I-32.1) — this service listens for it and its poll is only the safety net; **map
+  `trips.txt`'s `trip_headsign` into `transit.gtfs_trips.trip_headsign`** (1406), which is NULL on
+  every row until you do and falls back to `route_long_name`; **the swap needs staging and live
+  shape-identical**, which 1406 keeps true and a later column would not unless it does the same;
+  and **gap (b) is yours to close or to escalate** — the calendar tables have no home, so nothing
+  can say whether a trip runs today. `/v1/admin/transit/gtfs/**` is unmapped here and the contract
+  already carries it.
+  **For C042 (query-svc) —** `/v1/transport-options` composes private tiers with a call to this
+  service; the route it wants is `GET /v1/transit/options`, which now also answers `coverage`.
+  Passing that through is what lets the options screen distinguish "no bus" from "no feed". The
+  `C061` reference in your CLAUDE.md is this component.
+  **For the passenger app (C012/C013) —** parse the four full URL shapes client-side per BR-23.4 and
+  send **only** short links to `/v1/geo/parse-maps-link`; a full URL is answered without a network
+  hop but there is no reason to pay for the round trip. On `422` show "couldn't read that link —
+  pick on map". On `coverage: no_feed`, hide route matching and keep live buses and private tiers
+  (AL-55) — an empty list with `coverage: active` is the opposite instruction.
+  **For C118 (contract tests) —** `transit.yaml` gained `coverage` (required) and `feedVersion`
+  became nullable; nothing was removed.
+  **Build host —** Docker for one Testcontainers fixture (Postgres, with PostGIS — the GTFS halts
+  are geography columns); the replica stayed down throughout. `Transit.Api.Tests` takes ~40 s. No
+  new NuGet reference.

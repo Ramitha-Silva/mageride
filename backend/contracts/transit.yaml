@@ -9,6 +9,13 @@ openapi: 3.1.0
 # AL-18: **the GTFS feed is the source of truth for Mode A routing.** AL-17: a destination is a
 # geo-location only — a passenger never types a route number, and `/v1/geo/search` never returns
 # route rows.
+#
+# Δ C056 — one addition, argued at the field and recorded in the C056 handoff:
+#   `coverage` on the options response. An empty `options` list meant two different things — "no
+#   bus goes there" on a live feed, and "we cannot tell" before the first import — and AL-55 makes
+#   the second a SAFETY NET rather than the expected state, which SCR-PA-009 has to render
+#   differently: live buses and private tiers stay, route matching is hidden. With one field the
+#   screen can tell them apart; without it, a feed gap looks like a corridor no bus serves.
 # =============================================================================================
 
 info:
@@ -104,15 +111,26 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [options]
+                required: [options, coverage]
                 properties:
                   options:
                     type: array
                     items:
                       $ref: '#/components/schemas/TransitOption'
                   feedVersion:
+                    type: [string, 'null']
+                    description: |
+                      `feed_info` version of the active feed the answer came from. Null when
+                      `coverage` is `no_feed` — there is no feed to name.
+                  coverage:
+                    description: |
+                      **Δ C056.** Whether route matching could answer at all. `active` means the
+                      answer came from a live feed, so an empty list is the answer: no bus serves
+                      this corridor. `no_feed` is AL-55's safety net — a genuine feed gap, an
+                      expired service window or the pre-first-import state — and SCR-PA-009 keeps
+                      live buses and private tiers while hiding route matching.
                     type: string
-                    description: '`feed_info` version of the active feed the answer came from.'
+                    enum: [active, no_feed]
         '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
         '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
         '422': { $ref: './_shared.yaml#/components/responses/UnprocessableEntity' }
