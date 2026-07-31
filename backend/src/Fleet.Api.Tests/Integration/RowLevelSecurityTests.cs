@@ -110,15 +110,30 @@ public sealed class RowLevelSecurityTests(PostgresFixture postgres)
     /// The three tables the join views exist to keep out of reach are not reachable.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// If any of them is ever granted, the scoping above becomes decorative: a fleet reader could
     /// simply read the base table instead of the view. <c>registry.vehicles</c> is every vehicle on
-    /// the platform, <c>iam.users</c> every person, <c>trips.sessions</c> every Mode A/B journey.
+    /// the platform, <c>iam.users</c> every person, <c>trips.sessions</c> every Mode A/B journey,
+    /// and <c>registry.document_fields</c> the extraction of every document either of the two
+    /// onboarding surfaces has ever taken.
+    /// </para>
+    /// <para>
+    /// <b>Δ C059 — <c>registry.documents</c> moved out of this list</b>, into the scoped set below.
+    /// C058 put it here because a fleet had no documents; AL-50 gave it four named slots per
+    /// vehicle, and the table carries a <c>fleet_id</c> of its own, so it belongs to the same
+    /// category as <c>registry.fleets</c> and <c>registry.fleet_vehicles</c>: granted, with a
+    /// RESTRICTIVE policy carrying the org predicate (migration 1807). What makes that safe rather
+    /// than a widening is <c>ck_documents_owner</c> — an XOR, so a driver's own licence has
+    /// <c>fleet_id IS NULL</c> and the predicate evaluates NULL for it whatever the GUC says.
+    /// <c>A_fleet_reader_sees_only_its_own_documents</c> asserts both halves.
+    /// </para>
     /// </remarks>
     [Theory]
     [InlineData("registry.vehicles")]
     [InlineData("iam.users")]
     [InlineData("trips.sessions")]
-    [InlineData("registry.documents")]
+    [InlineData("registry.document_fields")]
+    [InlineData("registry.fleet_bulk_job_rows")]
     public async Task A_fleet_reader_holds_no_privilege_on_the_platform_wide_tables(string relation)
     {
         await using var harness = await FleetHarness.StartAsync(postgres);

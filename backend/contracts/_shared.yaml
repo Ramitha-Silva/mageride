@@ -296,6 +296,15 @@ components:
         - payout-profile-not-found
         - business-registration-exists
         - fleet-member-exists
+        # Δ C059 (fleet-svc-fleet-ops), both raised in its handoff.
+        # `driver-not-found` because US-13.2 assigns "by User ID / phone" and "no such person" sends
+        # the operator back to the number they typed, while a bare `not-found` beside
+        # `vehicle-not-found` leaves them unable to tell which half of the request was wrong.
+        # `documents-incomplete` because AL-50 blocks APPROVED on the four named slots and the only
+        # code that could carry it was `conflict`, which the Fleet Portal cannot turn into "your
+        # route permit is still pending".
+        - driver-not-found
+        - documents-incomplete
 
     Problem:
       type: object

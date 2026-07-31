@@ -202,6 +202,30 @@ public static partial class MageRideErrors
     /// <summary>The invited person already holds a sub-role in this organisation (US-13.A5).</summary>
     public static readonly ErrorCode FleetMemberExists = new("fleet-member-exists", 409, "This person is already a member of the organisation");
 
+    /// <summary>
+    /// The assignment names somebody who is not a driver on this platform (US-13.2).
+    /// </summary>
+    /// <remarks>
+    /// <b>Δ C059.</b> A code of its own rather than a bare <see cref="NotFound"/>, because US-13.2
+    /// has the operator assign "by User ID / phone" and the two failures need different words on
+    /// the screen: "no such person" sends them back to the number they typed, while "that person
+    /// has never opened the Driver App" is something the driver has to fix before the operator can
+    /// do anything. The vehicle's own 404 stays <c>vehicle-not-found</c>, so a portal can tell which
+    /// half of the request was wrong.
+    /// </remarks>
+    public static readonly ErrorCode DriverNotFound = new("driver-not-found", 404, "No such driver");
+
+    /// <summary>
+    /// A required AL-50 document slot is missing or unverified, so the vehicle cannot be approved.
+    /// </summary>
+    /// <remarks>
+    /// <b>Δ C059.</b> US-27.3: registration, insurance and revenue licence for every vehicle, plus
+    /// a route permit for Mode A. 409 rather than 403 — the officer is entitled to approve
+    /// vehicles, and this one becomes approvable the moment the paperwork settles, which is a
+    /// conflict with a state rather than a refusal of a right.
+    /// </remarks>
+    public static readonly ErrorCode DocumentsIncomplete = new("documents-incomplete", 409, "A required document is missing or unverified");
+
     // ---------------------------------------------------------------------------------------
     // safety-svc / public-bff (D3')
     // ---------------------------------------------------------------------------------------

@@ -1,9 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
   <!--
-    Fleet.Api (C058 fleet-svc-org) — the Fleet Portal's organisation identity: the
-    Verification-Officer-gated org, its Owner/Manager/Viewer sub-roles, and the bank & payout
-    profile every rupee of Mode B money depends on.
+    Fleet.Api (C058 fleet-svc-org + C059 fleet-svc-fleet-ops) — the whole Fleet Portal surface:
+    the Verification-Officer-gated organisation, its Owner/Manager/Viewer sub-roles, the bank &
+    payout profile every rupee of Mode B money depends on, and the operations on top of it —
+    Mode A/B vehicle onboarding with AL-50's named document slots, time-bounded driver assignment,
+    tracker binding, scheduling with the US-13.11 not-started alarm, the live map, analytics,
+    geofences and the Epic 23 subscription proxies.
 
     FENCE 1: a fleet operates Mode A and/or Mode B. **Never Mode C** (AL-03). Held in the
     database — `registry.fleet_vehicles.mode CHECK (mode IN ('A','B'))` (migration 0306) — and
@@ -18,9 +21,15 @@
     mageride_fleet_reader`. The application's own `WHERE fleet_id = @FleetId` is the second lock,
     not the only one.
 
-    Not this component's: vehicle onboarding, documents, assignment, tracker binding, scheduling,
-    the map and the subscription proxies are C059's; the Verification Officer's *screen* is the
-    Admin Portal's (C107) behind admin-bff (C062), which drives the internal plane here.
+    FENCE 4 (C059): a required AL-50 document slot holds a vehicle out of APPROVED — registration,
+    insurance and revenue licence for every mode, plus the route permit for Mode A. Held in
+    VehicleApprovalService, which re-derives every slot inside the transaction that writes the
+    status, so a permit that lapsed while the queue item sat there stops the approval.
+
+    Not this component's: monthly invoicing and the fleet wallet are C060's; the Verification
+    Officer's *screen* is the Admin Portal's (C107) behind admin-bff (C062), which drives the
+    internal plane here. Route-deviation and geofence *alerting* is Phase 3 — the CRUD is built and
+    nothing raises an alert.
 
     No Redis, no Kafka, no outbox — see FleetApplication for why each is off.
 

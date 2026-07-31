@@ -33,6 +33,34 @@ openapi: 3.1.0
 #                                                  suspends an organisation. A status the API could
 #                                                  return and the row could not hold is a 500.
 #   ~ seven org error codes                      — see `_shared.yaml`'s ErrorCode enum.
+#
+# Δ C059 (fleet-svc-fleet-ops), each raised in the build/progress.md handoff:
+#   + GET  /v1/fleets/{fleetId}/vehicles         — vehicles could be added, classified and removed
+#                                                  and never listed, so SCR-FP-004's status table
+#                                                  had no source.
+#   + GET  …/vehicles/bulk/{jobId}               — the 202 returns a `jobId` and nothing could read
+#                                                  it back; a job that survives only inside the
+#                                                  response that created it cannot be polled.
+#   + GET  …/vehicles/bulk/{jobId}/errors.csv    — the `errorReportUrl` the same 202 promises. There
+#                                                  is no object storage in front of this service
+#                                                  (C125), so the link is HMAC-signed and served
+#                                                  here — provisioning-svc's exact arrangement.
+#   + GET  /v1/fleets/{fleetId}/assignments      — SCR-FP-005 renders "assignment history" and the
+#                                                  contract had the two writes and no read.
+#   + GET  /v1/fleets/{fleetId}/schedules        — the same gap for SCR-FP-008, which also has to
+#                                                  show the departures whose alarm has fired.
+#   + GET  /v1/fleets/{fleetId}/geofences        — PUT replaced a set nothing could read back.
+#   + /v1/internal/fleets/{fleetId}/vehicles/**  — AL-50's approval gate. It states the rule on
+#                                                  registry-svc, whose approval path is AL-30's
+#                                                  Mode C wizard: that service refuses a Mode A/B
+#                                                  vehicle outright and derives its verdict from
+#                                                  `registry.onboarding_steps`, which a fleet
+#                                                  vehicle has no rows in. These three are where the
+#                                                  gate can actually live.
+#   ~ assignDriverToVehicle gained `driverPhone` — US-13.2 assigns "by User ID / phone" and the body
+#                                                  typed `driverId` alone.
+#   ~ Assignment / FleetSchedule / VehicleDocumentSlot gained the fields their screens render.
+#   ~ two error codes                            — `driver-not-found`, `documents-incomplete`.
 # =============================================================================================
 
 info:
@@ -359,6 +387,36 @@ paths:
   # Vehicles
   # -------------------------------------------------------------------------------------------
   /v1/fleets/{fleetId}/vehicles:
+    get:
+      operationId: listFleetVehicles
+      summary: The organisation's vehicle roster.
+      description: |
+        **Δ C059.** SCR-FP-004's status table — plate, type, mode, approval status, Service payment
+        and the AL-50 `docsStatus`. Any sub-role: a Viewer is defined as read-only monitoring
+        (US-13.A5), and a roster is what they monitor.
+      tags: [fleet-vehicles]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+      responses:
+        '200':
+          description: The roster.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FleetVehicle'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, fleet-not-found]
     post:
       operationId: addFleetVehicle
       summary: Add a Mode A or Mode B vehicle to the fleet.
@@ -433,28 +491,21 @@ paths:
                 file:
                   type: string
                   format: binary
-                  description: '`text/csv`, rows `registrationNumber,vehicleType,mode`.'
+                  description: |
+                    `text/csv`, rows `registrationNumber,vehicleType,mode` — plus, **Δ C059**, an
+                    optional `modeBBilling` and `defaultMonthlyFareMinor`, because US-13.1b captures
+                    the Service payment setting "at onboarding (single & bulk CSV)". A header row is
+                    optional and is recognised by content.
       responses:
         '202':
-          description: Job accepted.
+          description: |
+            Imported. Every row is either imported or reported: `COMPLETED` with `failedRows > 0` is
+            a partial import with a downloadable report, not a failure — `FAILED` is reserved for a
+            job that could not be processed at all.
           content:
             application/json:
               schema:
-                type: object
-                required: [jobId, totalRows, status]
-                properties:
-                  jobId:
-                    $ref: './_shared.yaml#/components/schemas/Ulid'
-                  totalRows:
-                    type: integer
-                    format: int32
-                    minimum: 0
-                  status:
-                    type: string
-                    enum: [PROCESSING, COMPLETED, FAILED]
-                  errorReportUrl:
-                    type: string
-                    format: uri
+                $ref: '#/components/schemas/BulkVehicleJob'
         '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
         '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
         '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
@@ -462,6 +513,73 @@ paths:
         '429': { $ref: './_shared.yaml#/components/responses/TooManyRequests' }
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
       x-error-codes: [csv-invalid, unauthorized, forbidden, too-many-rows, bulk-in-progress]
+
+  /v1/fleets/{fleetId}/vehicles/bulk/{jobId}:
+    get:
+      operationId: getBulkVehicleJob
+      summary: One bulk import, as it stands.
+      description: |
+        **Δ C059** — the poll the 202's `Location` points at. `errorReportUrl` is present only when
+        rows failed; a link that downloads an empty report is a button an operator learns nothing
+        from.
+      tags: [fleet-vehicles]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+        - $ref: '#/components/parameters/JobId'
+      responses:
+        '200':
+          description: The job.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkVehicleJob'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, not-found]
+
+  /v1/fleets/{fleetId}/vehicles/bulk/{jobId}/errors.csv:
+    get:
+      operationId: downloadBulkVehicleErrorReport
+      summary: The per-row error report of a bulk import.
+      description: |
+        **Δ C059** — the `errorReportUrl` the 202 promises, which had no route. `security: []`
+        because the HMAC in the query string **is** the credential: that is what lets the Fleet
+        Portal hand the link straight to a browser download, and it is the arrangement
+        provisioning-svc's tracker `errors.csv` and subscription-svc's signed document links both
+        take. A bad or expired signature is `404`, not `403` — the link has not proved the job
+        exists, and a 403 would confirm a guessed id.
+
+        Columns: `row,registrationNumber,vehicleType,mode,error,detail`. `error` is the same kebab
+        code the single-vehicle `POST` would have raised.
+      tags: [fleet-vehicles]
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+        - $ref: '#/components/parameters/JobId'
+        - name: expires
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: signature
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The report.
+          content:
+            text/csv:
+              schema:
+                type: string
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [not-found]
 
   /v1/fleets/{fleetId}/vehicles/{vehicleId}:
     delete:
@@ -634,10 +752,18 @@ paths:
           application/json:
             schema:
               type: object
-              required: [driverId, vehicleId, from]
+              required: [vehicleId, from]
+              description: |
+                Exactly one of `driverId` and `driverPhone` names the driver.
               properties:
                 driverId:
                   $ref: './_shared.yaml#/components/schemas/Ulid'
+                driverPhone:
+                  description: |
+                    **Δ C059.** US-13.2 assigns "by User ID / phone" and an operator standing in a
+                    depot has the number, not the ULID.
+                  allOf:
+                    - $ref: './_shared.yaml#/components/schemas/PhoneE164'
                 vehicleId:
                   $ref: './_shared.yaml#/components/schemas/Ulid'
                 from:
@@ -657,7 +783,42 @@ paths:
         '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
         '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
-      x-error-codes: [validation-failed, unauthorized, forbidden, vehicle-not-found, conflict]
+      x-error-codes: [validation-failed, unauthorized, forbidden, vehicle-not-found, driver-not-found, conflict]
+    get:
+      operationId: listFleetAssignments
+      summary: The organisation's driver assignments, active first.
+      description: |
+        **Δ C059.** SCR-FP-005 renders "assign/revoke drivers … assignment history" and the contract
+        had the two writes and no read. `active` is the validity window evaluated by the database at
+        read time — US-13.9's auto-expiry is that flag going false with nothing having been written.
+      tags: [fleet-vehicles]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+        - name: vehicleId
+          in: query
+          required: false
+          schema:
+            $ref: './_shared.yaml#/components/schemas/Ulid'
+      responses:
+        '200':
+          description: Assignments.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Assignment'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, fleet-not-found]
 
   /v1/fleets/{fleetId}/assignments/{assignmentId}:
     delete:
@@ -742,6 +903,41 @@ paths:
       x-error-codes: [validation-failed, unauthorized, forbidden, vehicle-not-found, imei-duplicate]
 
   /v1/fleets/{fleetId}/schedules:
+    get:
+      operationId: listFleetSchedules
+      summary: The organisation's departures, soonest first.
+      description: |
+        **Δ C059.** SCR-FP-008 lists per-vehicle scheduled rides and has to show the ones whose
+        not-started alarm has fired, which the contract gave it no way to read. Defaults to the last
+        day forward, so the departure an operator is asking about is on the screen they open.
+      tags: [fleet-ops]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+        - name: from
+          in: query
+          required: false
+          schema:
+            $ref: './_shared.yaml#/components/schemas/Timestamp'
+      responses:
+        '200':
+          description: Departures.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FleetSchedule'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, fleet-not-found]
     post:
       operationId: createFleetSchedule
       summary: Schedule a ride for a fleet vehicle.
@@ -898,6 +1094,33 @@ paths:
       x-error-codes: [unauthorized, forbidden, not-found]
 
   /v1/fleets/{fleetId}/geofences:
+    get:
+      operationId: listFleetGeofences
+      summary: The organisation's operational geofences.
+      description: '**Δ C059** — the PUT replaced a set nothing could read back.'
+      tags: [fleet-ops]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+      responses:
+        '200':
+          description: Geofences.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FleetGeofence'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, fleet-not-found]
     put:
       operationId: setFleetGeofences
       summary: Define the fleet's operational geofences.
@@ -1390,6 +1613,122 @@ paths:
   # which is also what `audit.events` records (D-35). Same split as registry-svc's
   # `/v1/internal/vehicles/**` and support-svc's `/v1/internal/support/**`.
   # -------------------------------------------------------------------------------------------
+  /v1/internal/fleets/{fleetId}/vehicles/{vehicleId}:
+    get:
+      operationId: getInternalFleetVehicleVerification
+      summary: One fleet vehicle and its AL-50 document slots, for the officer's queue detail.
+      description: |
+        **Δ C059.** AL-50 states the approval gate on registry-svc — "registry-svc blocks
+        `status='APPROVED'` until every required doc is verified" — and registry-svc's approval path
+        is AL-30's four-step Mode C wizard: it refuses a Mode A/B vehicle outright and derives its
+        verdict from `registry.onboarding_steps`, a table a fleet vehicle has no rows in. The
+        sentence therefore names a service that structurally cannot hold the gate for the vehicles
+        it is about. These three routes are where it lives — same column, same effect, and the same
+        split C058 made for the organisation itself.
+      tags: [fleets]
+      security:
+        - mtls: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+        - $ref: '#/components/parameters/VehicleId'
+      responses:
+        '200':
+          description: The vehicle and its slots.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FleetVehicleVerification'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, vehicle-not-found]
+
+  /v1/internal/fleets/{fleetId}/vehicles/{vehicleId}/approve:
+    post:
+      operationId: approveInternalFleetVehicle
+      summary: Approve a fleet vehicle.
+      description: |
+        **Δ C059.** Refused **`409 documents-incomplete`** while any slot the vehicle's mode requires
+        is `missing` or `pending`: registration, insurance and revenue licence for every vehicle,
+        plus the route permit for Mode A (US-27.3). The slots are re-derived inside the transaction
+        that writes the status, so a permit that lapsed while the queue item sat there stops the
+        approval.
+
+        `officerId` is on the body because this service never sees the officer's bearer — admin-bff
+        resolves it, and it is what `audit.events` records (D-35).
+      tags: [fleets]
+      security:
+        - mtls: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+        - $ref: '#/components/parameters/VehicleId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [officerId]
+              properties:
+                officerId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+      responses:
+        '200':
+          description: Approved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FleetVehicleVerification'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, vehicle-not-found, documents-incomplete]
+
+  /v1/internal/fleets/{fleetId}/vehicles/{vehicleId}/reject:
+    post:
+      operationId: rejectInternalFleetVehicle
+      summary: Reject a fleet vehicle, with a reason.
+      description: |
+        **Δ C059.** Ungated: an officer refusing a vehicle because its insurance is a photograph of
+        a different vehicle must not be told they cannot, on the grounds that the insurance is not
+        verified. The reason is required — US-2.15's column exists so the operator can be told what
+        to fix.
+      tags: [fleets]
+      security:
+        - mtls: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+        - $ref: '#/components/parameters/VehicleId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [officerId, reason]
+              properties:
+                officerId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+                reason:
+                  type: string
+                  maxLength: 500
+      responses:
+        '200':
+          description: Rejected.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FleetVehicleVerification'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, vehicle-not-found]
+
   /v1/internal/fleets/queue:
     get:
       operationId: listInternalFleetOrgQueue
@@ -1582,6 +1921,12 @@ components:
       required: true
       schema:
         $ref: './_shared.yaml#/components/schemas/Ulid'
+    JobId:
+      name: jobId
+      in: path
+      required: true
+      schema:
+        $ref: './_shared.yaml#/components/schemas/Ulid'
 
   schemas:
     FleetStatus:
@@ -1762,6 +2107,12 @@ components:
           type: string
           description: Stored kind — matches the `registry.documents.kind` CHECK (C003).
           enum: [registration, insurance, revenue_license, permit]
+        required:
+          type: boolean
+          description: |
+            **Δ C059.** Whether AL-50 makes this slot mandatory for *this* vehicle. The route permit
+            is required for Mode A and optional for Mode B, so the same slot answers differently on
+            two vehicles and a portal cannot derive it from `kind` alone.
         status:
           type: string
           enum: [verified, pending, missing]
@@ -1781,7 +2132,11 @@ components:
 
     Assignment:
       type: object
-      required: [assignmentId, driverId, vehicleId, from]
+      description: |
+        A time-bounded driver assignment (US-13.2, AL-23). **Δ C059:** the driver's name and phone,
+        the plate, `revokedAt` and `active` were added — SCR-FP-005 renders all five and a client
+        cannot derive `active` without knowing the server's clock.
+      required: [assignmentId, driverId, vehicleId, from, active]
       properties:
         assignmentId:
           $ref: './_shared.yaml#/components/schemas/Ulid'
@@ -1789,14 +2144,31 @@ components:
           $ref: './_shared.yaml#/components/schemas/Ulid'
         vehicleId:
           $ref: './_shared.yaml#/components/schemas/Ulid'
+        driverName:
+          type: string
+        driverPhone:
+          $ref: './_shared.yaml#/components/schemas/PhoneE164'
+        registrationNumber:
+          type: string
         from:
           $ref: './_shared.yaml#/components/schemas/Timestamp'
         to:
           $ref: './_shared.yaml#/components/schemas/Timestamp'
+        revokedAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+        active:
+          type: boolean
+          description: |
+            The validity window evaluated by the database at read time. US-13.9's "auto-expires" is
+            this going false with nothing having been written and nobody having pressed anything.
 
     FleetSchedule:
       type: object
-      required: [scheduleId, vehicleId, departAt]
+      description: |
+        A per-vehicle scheduled departure (US-13.11). **Δ C059:** `status` and `alarmRaisedAt` were
+        added — SCR-FP-008 has to show which departures were made, which were missed, and whether
+        anybody was told.
+      required: [scheduleId, vehicleId, departAt, status]
       properties:
         scheduleId:
           $ref: './_shared.yaml#/components/schemas/Ulid'
@@ -1810,6 +2182,71 @@ components:
           type: integer
           format: int32
           minimum: 1
+        status:
+          type: string
+          description: |
+            `MISSED` is terminal for the alarm and not for the journey: a bus that leaves forty
+            minutes late still leaves, and the operator has already been told.
+          enum: [SCHEDULED, STARTED, MISSED, CANCELLED]
+        alarmRaisedAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    BulkVehicleJob:
+      type: object
+      description: '**Δ C059** — one CSV import (US-13.1), and the report it can be read back from.'
+      required: [jobId, totalRows, importedRows, failedRows, status]
+      properties:
+        jobId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        totalRows:
+          type: integer
+          format: int32
+          minimum: 0
+        importedRows:
+          type: integer
+          format: int32
+          minimum: 0
+        failedRows:
+          type: integer
+          format: int32
+          minimum: 0
+        status:
+          type: string
+          enum: [PROCESSING, COMPLETED, FAILED]
+        errorReportUrl:
+          type: string
+          format: uri
+          description: Present only when `failedRows` is greater than zero. HMAC-signed and expiring.
+
+    FleetGeofence:
+      type: object
+      description: '**Δ C059** — one stored operational polygon (`spatial.geofences`, US-13.5).'
+      required: [geofenceId, polygon]
+      properties:
+        geofenceId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        name:
+          type: string
+        polygon:
+          type: array
+          minItems: 4
+          items:
+            $ref: './_shared.yaml#/components/schemas/GeoPoint'
+
+    FleetVehicleVerification:
+      type: object
+      description: '**Δ C059** — what the Verification Officer reads and decides on, per vehicle.'
+      required: [vehicle, docsStatus, documents]
+      properties:
+        vehicle:
+          $ref: '#/components/schemas/FleetVehicle'
+        docsStatus:
+          type: string
+          enum: [docs_pending, docs_complete]
+        documents:
+          type: array
+          items:
+            $ref: '#/components/schemas/VehicleDocumentSlot'
 
     FleetVehiclePosition:
       type: object

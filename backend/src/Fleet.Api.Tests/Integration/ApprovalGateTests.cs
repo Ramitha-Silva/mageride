@@ -3,6 +3,7 @@ using MageRide.Fleet.Authorization;
 using MageRide.Fleet.Endpoints;
 using MageRide.Fleet.Tests.Infrastructure;
 using MageRide.TestKit;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Routing;
 
 namespace MageRide.Fleet.Tests.Integration;
@@ -90,7 +91,21 @@ public sealed class ApprovalGateTests(PostgresFixture postgres)
     /// source and fails if any route under either prefix is missing either filter.
     /// </para>
     /// <para>
-    /// It therefore fails for the <em>next</em> component's mistake, which is the point.
+    /// It therefore fails for the <em>next</em> component's mistake, which is the point — and it
+    /// did: C059's onboarding, bulk CSV, documents, assignment and subscription proxies all arrived
+    /// under one of the two prefixes and are all gated because of it.
+    /// </para>
+    /// <para>
+    /// <b>Δ C059 — one exemption, and it is narrow.</b> A route that declares
+    /// <c>AllowAnonymous</c> is outside this rule, because the rule is about a route an
+    /// <em>authenticated fleet member</em> reaches: the gate reads the caller's seat and the
+    /// organisation's status, and a route with no bearer has neither. There is exactly one such
+    /// route — the bulk-import error report, whose HMAC in the query string <em>is</em> the
+    /// credential (the shape provisioning-svc's <c>errors.csv</c> and subscription-svc's signed
+    /// document links both take), and which is what lets the Fleet Portal hand a download link
+    /// straight to a browser. Its own scoping is the signature plus the RLS-scoped view behind it.
+    /// The exemption is by metadata rather than by path, so it cannot be widened by naming a route
+    /// something else.
     /// </para>
     /// </remarks>
     [Fact]
@@ -103,7 +118,8 @@ public sealed class ApprovalGateTests(PostgresFixture postgres)
             .Where(endpoint =>
                 endpoint.RoutePattern.RawText is { } pattern
                 && (pattern.StartsWith(FleetEndpoints.FleetVehiclesGroup, StringComparison.Ordinal)
-                    || pattern.StartsWith(FleetEndpoints.FleetAssignmentsGroup, StringComparison.Ordinal)))
+                    || pattern.StartsWith(FleetEndpoints.FleetAssignmentsGroup, StringComparison.Ordinal))
+                && endpoint.Metadata.GetMetadata<IAllowAnonymous>() is null)
             .ToArray();
 
         // If this ever reaches zero the assertions below pass vacuously, which would be worse than

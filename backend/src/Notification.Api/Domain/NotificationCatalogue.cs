@@ -166,6 +166,20 @@ public static class NotificationCatalogue
     /// <summary>US-14.8's announcement, pushed rather than only drawn as an in-app banner.</summary>
     public const string Broadcast = "BROADCAST";
 
+    /// <summary>
+    /// US-13.11: a fleet vehicle has not begun its booked departure. <b>Δ C059.</b>
+    /// </summary>
+    /// <remarks>
+    /// <b>Not <see cref="ScheduledReminder"/>.</b> That one is dispatch-svc's courtesy *before* a
+    /// booking — "your ride is in 30 minutes" (US-6A.15, US-10.9) — and this is an exception
+    /// *after* a departure that should already have happened. Sharing a type would share a
+    /// template, and a driver whose bus is ten minutes late would be told their ride is upcoming.
+    /// High priority and unmutable for the same reason <see cref="RideCancelled"/> is: US-13.11
+    /// calls it "a ringing alarm in the Android and iOS Driver Apps", and an alarm a driver can
+    /// switch off in Settings is a notification, not an alarm.
+    /// </remarks>
+    public const string ScheduleNotStarted = "SCHEDULE_NOT_STARTED";
+
     private static readonly FrozenDictionary<string, NotificationTypeSpec> Specs = Build();
 
     /// <summary>Every type, ordered by name.</summary>
@@ -256,6 +270,14 @@ public static class NotificationCatalogue
             // The body is the broadcast's own trilingual message (content.broadcasts), resolved by
             // the caller — so there is no template key and the payload carries the text.
             new(Broadcast, NotificationChannels.Push, TemplateKey: null),
+
+            // Δ C059. High priority so FCM bypasses Doze and APNs wakes a backgrounded app — a
+            // departure alarm that arrives when the driver next unlocks their phone is not an
+            // alarm. Not silent: unlike RIDE_OFFER there is no in-app screen waiting to draw it,
+            // so the body is rendered from the template (migration 1905) in the recipient's own
+            // language, which is also what the Fleet Portal's own members receive.
+            new(ScheduleNotStarted, NotificationChannels.Push, "schedule_not_started",
+                Priority: NotificationPriorities.High, Mutable: false),
         ];
 
         return specs.ToFrozenDictionary(static spec => spec.Type, StringComparer.Ordinal);

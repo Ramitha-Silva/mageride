@@ -50,6 +50,14 @@ public sealed class NotificationCatalogueTests
         // waiting, and registry-svc emits them as two events — so the row is split rather than
         // rendered from a branch inside one template.
         "REGISTRATION_REVIEW_REQUIRED",
+
+        // Δ C059. US-13.11's "ringing alarm in the Android and iOS Driver Apps" when a fleet
+        // vehicle has not begun its booked departure, produced by fleet-svc's ScheduleAlarmWorker.
+        // Deliberately not SCHEDULED_REMINDER, which is dispatch-svc's courtesy *before* a booking
+        // (US-6A.15/US-10.9) and would tell a late driver their ride is upcoming. Migration 1905
+        // seeds `schedule_not_started` in all three languages — a type without a template is a key
+        // nobody resolves, which is what 1902 refused to create.
+        "SCHEDULE_NOT_STARTED",
     ];
 
     [Fact]

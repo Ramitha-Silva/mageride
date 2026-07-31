@@ -84,6 +84,17 @@ check_rejects() { # check_rejects <label> <sql that must fail>
   fi
 }
 
+check_accepts() { # check_accepts <label> <sql that must succeed>
+  local label="$1" sql="$2"
+  CHECKS=$((CHECKS + 1))
+  if psql_run "$sql" >/dev/null 2>&1; then
+    printf '  %s✓%s %s\n' "$GREEN" "$RESET" "$label"
+  else
+    printf '  %s✗%s %s (the statement was rejected but should have been accepted)\n' "$RED" "$RESET" "$label"
+    FAILURES=$((FAILURES + 1))
+  fi
+}
+
 psql_fleet() { # psql_fleet <fleet_id | ""> <sql> -> last line, whitespace trimmed
   local fleet="$1" sql="$2" prelude=""
   [[ -n "$fleet" ]] && prelude="SET app.fleet_id = '$fleet'; "
@@ -198,7 +209,12 @@ check_eq "13 iam tables" "13" \
 # + registry.fleet_command_log, added by C058 because fleet-svc is a bounded context of its own
 # and shares this schema but not registry-svc's idempotency key space (C058 handoff
 # micro-change-set, the twelfth instance of the per-context command log).
-check_eq "16 registry tables" "16" \
+# + registry.fleet_schedules, registry.fleet_bulk_jobs and registry.fleet_bulk_job_rows, added by
+# C059: US-13.11's per-vehicle departures and their not-started alarm have no table in any spec
+# (dispatch.scheduled_rides is a passenger's Mode C advance booking and AL-03 forbids a fleet Mode
+# C vehicle), and US-13.1's bulk CSV job is specified completely by fleet.yaml with nowhere to
+# store it — the same gap 0405 raised for bulk trackers (C059 handoff micro-change-sets).
+check_eq "19 registry tables" "19" \
   "SELECT count(*) FROM information_schema.tables WHERE table_schema='registry' AND table_type='BASE TABLE';"
 # 2 from server_db_schema.md §3 (tracker_bindings, device_certs) + 5 added by C030, each a
 # micro-change-set raised in its handoff: prov.command_log (D3' §0 mandates a per-service
@@ -1084,7 +1100,9 @@ check_eq "every seeded notification template exists in all three languages (D-26
       GROUP BY template_key HAVING count(DISTINCT language) <> 3) t;"
 # 1902's four (the keys the specs name by string) plus 1904's eighteen: the rest of D5' §14.4's
 # table, seeded beside the service that resolves them (C051).
-check_eq "twenty-two notification template keys seeded" "22" \
+# + `schedule_not_started` (1905), C059: US-13.11's ringing alarm has no D5' §14.4 row and no
+# seeded key, and this build has its producer (fleet-svc's ScheduleAlarmWorker).
+check_eq "twenty-three notification template keys seeded" "23" \
   "SELECT count(DISTINCT template_key) FROM content.notification_templates;"
 check_eq "the E-01 fallback SMS interpolates the two values offer.created carries" "1" \
   "SELECT count(*) FROM content.notification_templates
@@ -2445,6 +2463,205 @@ check_fleet_denied "the fleet role cannot read trips.sessions directly" \
   "SELECT count(*) FROM trips.sessions;"
 check_fleet_denied "the fleet role cannot write its own organisation's status" \
   "UPDATE registry.fleets SET status='APPROVED' WHERE id='$C058_FLEET_A';"
+
+# =====================================================================================
+# C059 — fleet operations: the assignment window US-13.9's auto-expiry needs, the schedule
+# and bulk tables no spec declares, the fleet a geofence belongs to, and the second half of
+# the row-level-security fence over all four.
+# =====================================================================================
+step "Objects owned by C059 (US-13.1, US-13.2, US-13.9, US-13.11, US-13.5, AL-50)"
+
+# (a) The gap 0310's own header named as C059's to close. Before this, `revoked_at` was the only
+# way an assignment could end — which is precisely the "manual action" US-13.9 rules out.
+check_eq "registry.fleet_assignments carries its validity window" "2" \
+  "SELECT count(*) FROM information_schema.columns
+    WHERE table_schema='registry' AND table_name='fleet_assignments'
+      AND column_name IN ('valid_from','expires_at');"
+
+check_eq "an assignment that expires before it starts is refused (ck_fleet_assign_window)" "1" \
+  "SELECT count(*) FROM pg_constraint
+    WHERE conrelid='registry.fleet_assignments'::regclass AND conname='ck_fleet_assign_window';"
+
+# 0306's unique index said "one open assignment per (vehicle, driver)", which could not tell an
+# expired row from a live one and would have blocked re-hiring the same relief driver for ever.
+check_eq "0306's ux_fleet_assign_active is gone" "0" \
+  "SELECT count(*) FROM pg_indexes
+    WHERE schemaname='registry' AND indexname='ux_fleet_assign_active';"
+
+check_eq "overlapping open assignments are refused by an exclusion constraint" "1" \
+  "SELECT count(*) FROM pg_constraint
+    WHERE conrelid='registry.fleet_assignments'::regclass
+      AND conname='ex_fleet_assign_overlap' AND contype='x';"
+
+# The whole of C059's third definition-of-done item, asserted against the projection registry-svc,
+# dispatch-svc and trip-state-svc all read: a window that has closed returns no row, with the
+# assignment untouched.
+C059_OWNER='c0000059-0000-0000-0000-00000000000a'
+C059_DRIVER='c0000059-0000-0000-0000-00000000000b'
+C059_FLEET='c0000059-0000-0000-0000-000000000001'
+C059_FLEET_B='c0000059-0000-0000-0000-000000000002'
+C059_VEH='c0000059-0000-0000-0000-00000000000c'
+C059_VEH_B='c0000059-0000-0000-0000-00000000000d'
+
+psql_run "INSERT INTO iam.users (id, phone, role) VALUES
+            ('$C059_OWNER','+94770000591','fleet_owner'),
+            ('$C059_DRIVER','+94770000592','driver');
+          INSERT INTO registry.fleets (id, owner_id, name, business_reg, contact_phone, status) VALUES
+            ('$C059_FLEET','$C059_OWNER','C059 Alpha Transit','PV-C059-A','+94770000591','APPROVED'),
+            ('$C059_FLEET_B','$C059_OWNER','C059 Beta Transit','PV-C059-B','+94770000593','APPROVED');
+          INSERT INTO registry.vehicles (id, owner_id, registration_number, vehicle_type, mode, driver_name) VALUES
+            ('$C059_VEH','$C059_OWNER','C059-BUS-0001','bus','A','C059 Alpha Transit'),
+            ('$C059_VEH_B','$C059_OWNER','C059-VAN-0002','van','B','C059 Beta Transit');
+          INSERT INTO registry.fleet_vehicles (fleet_id, vehicle_id, mode) VALUES
+            ('$C059_FLEET','$C059_VEH','A'),
+            ('$C059_FLEET_B','$C059_VEH_B','B');
+          INSERT INTO registry.fleet_assignments (fleet_id, vehicle_id, driver_id, valid_from, expires_at) VALUES
+            ('$C059_FLEET','$C059_VEH','$C059_DRIVER', now() - interval '2 hours', now() - interval '1 hour');" \
+  >/dev/null || die "could not seed the C059 assignment fixture."
+
+check_eq "an expired assignment confers nothing, with the row untouched (US-13.9)" "0" \
+  "SELECT count(*) FROM registry.driver_eligible_vehicles
+    WHERE driver_id='$C059_DRIVER' AND vehicle_id='$C059_VEH';"
+check_eq "and it is still there, unrevoked — nothing swept it" "1" \
+  "SELECT count(*) FROM registry.fleet_assignments
+    WHERE driver_id='$C059_DRIVER' AND revoked_at IS NULL;"
+
+psql_run "UPDATE registry.fleet_assignments SET expires_at = now() + interval '8 hours'
+           WHERE driver_id='$C059_DRIVER';" >/dev/null
+
+check_eq "and the same row inside its window does confer the vehicle" "1" \
+  "SELECT count(*) FROM registry.driver_eligible_vehicles
+    WHERE driver_id='$C059_DRIVER' AND vehicle_id='$C059_VEH' AND source='assigned';"
+
+psql_run "UPDATE registry.fleet_assignments SET valid_from = now() + interval '3 days',
+                                                expires_at = now() + interval '4 days'
+           WHERE driver_id='$C059_DRIVER';" >/dev/null
+
+check_eq "a window that has not opened confers nothing either (a relief driver booked ahead)" "0" \
+  "SELECT count(*) FROM registry.driver_eligible_vehicles
+    WHERE driver_id='$C059_DRIVER' AND vehicle_id='$C059_VEH';"
+
+check_rejects "two open assignments of one driver to one vehicle cannot overlap" \
+  "INSERT INTO registry.fleet_assignments (fleet_id, vehicle_id, driver_id, valid_from, expires_at)
+   VALUES ('$C059_FLEET','$C059_VEH','$C059_DRIVER', now() + interval '3 days 6 hours',
+           now() + interval '5 days');"
+
+check_accepts "a consecutive, non-overlapping window is how a relief driver is re-hired" \
+  "INSERT INTO registry.fleet_assignments (fleet_id, vehicle_id, driver_id, valid_from, expires_at)
+   VALUES ('$C059_FLEET','$C059_VEH','$C059_DRIVER', now() + interval '30 days',
+           now() + interval '37 days');"
+
+# (b) US-13.11's departures. NOT dispatch.scheduled_rides — that one is a passenger's Mode C
+# advance booking and a bus leaving the depot has no passenger and no pickup point.
+check_eq "registry.fleet_schedules exists with its alarm bound" "1" \
+  "SELECT count(*) FROM pg_constraint
+    WHERE conrelid='registry.fleet_schedules'::regclass AND conname='ck_fleet_schedules_alarm';"
+
+check_rejects "an alarm offset outside 1..120 minutes is refused" \
+  "INSERT INTO registry.fleet_schedules (fleet_id, vehicle_id, depart_at, not_started_alarm_minutes)
+   VALUES ('$C059_FLEET','$C059_VEH', now() + interval '1 hour', 240);"
+
+psql_run "INSERT INTO registry.fleet_schedules (id, fleet_id, vehicle_id, depart_at)
+          VALUES ('c0000059-0000-0000-0000-0000000000f1','$C059_FLEET','$C059_VEH', now() + interval '6 hours');" \
+  >/dev/null
+
+check_rejects "one live departure per vehicle per instant (ux_fleet_schedules_slot)" \
+  "INSERT INTO registry.fleet_schedules (fleet_id, vehicle_id, depart_at)
+   SELECT fleet_id, vehicle_id, depart_at FROM registry.fleet_schedules
+    WHERE id='c0000059-0000-0000-0000-0000000000f1';"
+
+# (c) US-13.1's bulk job. The outcome CHECK is what keeps the roster and the report agreeing.
+check_eq "one PROCESSING bulk job per fleet (ux_fleet_bulk_jobs_in_flight)" "1" \
+  "SELECT count(*) FROM pg_indexes
+    WHERE schemaname='registry' AND indexname='ux_fleet_bulk_jobs_in_flight';"
+
+psql_run "INSERT INTO registry.fleet_bulk_jobs (id, fleet_id, requested_by, total_rows)
+          VALUES ('c0000059-0000-0000-0000-0000000000f2','$C059_FLEET','$C059_OWNER',2);" >/dev/null
+
+check_rejects "a second bulk job for one fleet is refused while the first is running" \
+  "INSERT INTO registry.fleet_bulk_jobs (fleet_id, requested_by, total_rows)
+   VALUES ('$C059_FLEET','$C059_OWNER',1);"
+
+check_rejects "an IMPORTED row that names no vehicle is refused" \
+  "INSERT INTO registry.fleet_bulk_job_rows (job_id, row_number, registration_number, status)
+   VALUES ('c0000059-0000-0000-0000-0000000000f2',1,'C059-X-0001','IMPORTED');"
+
+check_rejects "a FAILED row that gives no reason is refused" \
+  "INSERT INTO registry.fleet_bulk_job_rows (job_id, row_number, registration_number, status)
+   VALUES ('c0000059-0000-0000-0000-0000000000f2',2,'C059-X-0002','FAILED');"
+
+# (d) A geofence belongs to a fleet — without it one operator's PUT replaces everybody's fences.
+check_eq "spatial.geofences carries a fleet_id" "1" \
+  "SELECT count(*) FROM information_schema.columns
+    WHERE table_schema='spatial' AND table_name='geofences' AND column_name='fleet_id';"
+
+# ---------------------------------------------------------------------------------------
+# The C059 half of the fence: the four relations 1807 scopes, proved by rejection.
+# ---------------------------------------------------------------------------------------
+step "C059 fence — the fleet-ops relations are scoped too"
+
+check_eq "row-level security is enabled on the four relations 1807 adds" "4" \
+  "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE c.relrowsecurity
+      AND (n.nspname, c.relname) IN
+        (('registry','fleet_schedules'),('registry','fleet_bulk_jobs'),
+         ('registry','documents'),('spatial','geofences'));"
+
+check_eq "each carries a RESTRICTIVE policy targeted at mageride_fleet_reader" "4" \
+  "SELECT count(*) FROM pg_policies
+    WHERE permissive='RESTRICTIVE'
+      AND 'mageride_fleet_reader' = ANY(roles)
+      AND (schemaname, tablename) IN
+        (('registry','fleet_schedules'),('registry','fleet_bulk_jobs'),
+         ('registry','documents'),('spatial','geofences'));"
+
+check_eq "the fleet-scoped join views 1807 adds exist" "3" \
+  "SELECT count(*) FROM information_schema.views
+    WHERE (table_schema, table_name) IN
+      (('registry','fleet_assignments_fleet'),('registry','document_fields_fleet'),
+       ('registry','fleet_bulk_job_rows_fleet'));"
+
+psql_run "INSERT INTO registry.documents (fleet_id, vehicle_id, kind, file_url) VALUES
+            ('$C059_FLEET','$C059_VEH','permit','file:///c059/permit.png');
+          INSERT INTO registry.documents (driver_id, vehicle_id, kind, file_url) VALUES
+            ('$C059_DRIVER','$C059_VEH','driving_license','file:///c059/licence.png');
+          INSERT INTO spatial.geofences (fleet_id, name, kind, geom) VALUES
+            ('$C059_FLEET','C059 depot','fleet_operational',
+             ST_GeomFromText('POLYGON((79.85 6.90, 79.85 6.95, 79.90 6.95, 79.85 6.90))',4326));" \
+  >/dev/null || die "could not seed the C059 document and geofence fixture."
+
+check_fleet_eq "a fleet sees its own vehicle documents" "1" "$C059_FLEET" \
+  "SELECT count(*) FROM registry.documents;"
+# ck_documents_owner is an XOR, so a driver-owned row has fleet_id NULL and the predicate evaluates
+# NULL — no row, whatever the GUC says. AL-27's licence is nobody's fleet's business.
+check_fleet_eq "and never a driver's own identity document, whatever the scope says" "0" "$C059_FLEET" \
+  "SELECT count(*) FROM registry.documents WHERE kind='driving_license';"
+check_fleet_eq "another organisation's documents are invisible" "0" "$C059_FLEET_B" \
+  "SELECT count(*) FROM registry.documents;"
+check_fleet_eq "a fleet sees its own geofences" "1" "$C059_FLEET" \
+  "SELECT count(*) FROM spatial.geofences;"
+check_fleet_eq "and not another organisation's" "0" "$C059_FLEET_B" \
+  "SELECT count(*) FROM spatial.geofences;"
+# Two rows, not one: the re-hire above left this driver with consecutive, non-overlapping windows
+# on the same bus, which is the arrangement ex_fleet_assign_overlap exists to permit. What is being
+# asserted here is the join — `driver_phone` comes from iam.users, which the fleet role holds no
+# privilege on at all.
+check_fleet_eq "the assignment view joins iam.users and scopes the result" "2" "$C059_FLEET" \
+  "SELECT count(*) FROM registry.fleet_assignments_fleet WHERE driver_phone='+94770000592';"
+check_fleet_eq "and shows nothing to the organisation next door" "0" "$C059_FLEET_B" \
+  "SELECT count(*) FROM registry.fleet_assignments_fleet;"
+
+check_fleet_denied "the fleet role cannot read registry.document_fields directly" \
+  "SELECT count(*) FROM registry.document_fields;"
+check_fleet_denied "the fleet role cannot read registry.fleet_bulk_job_rows directly" \
+  "SELECT count(*) FROM registry.fleet_bulk_job_rows;"
+
+psql_run "DELETE FROM spatial.geofences WHERE fleet_id IN ('$C059_FLEET','$C059_FLEET_B');
+          DELETE FROM registry.documents WHERE vehicle_id IN ('$C059_VEH','$C059_VEH_B');
+          DELETE FROM registry.fleets WHERE id IN ('$C059_FLEET','$C059_FLEET_B');
+          DELETE FROM registry.vehicles WHERE id IN ('$C059_VEH','$C059_VEH_B');
+          DELETE FROM iam.users WHERE id IN ('$C059_OWNER','$C059_DRIVER');" >/dev/null \
+  || die "could not clean up the C059 fleet-ops fixture."
 
 psql_run "DELETE FROM trips.sessions WHERE vehicle_id IN ('$C058_VEH_A','$C058_VEH_B');
           DELETE FROM registry.fleets WHERE id IN ('$C058_FLEET_A','$C058_FLEET_B');

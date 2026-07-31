@@ -67,10 +67,17 @@ internal sealed class FleetHarness : IAsyncDisposable
 
     public IServiceProvider Services => _app.Services;
 
+    /// <param name="configure">
+    /// Runs before <c>AddFleetServices</c>, which is what lets a test register its own
+    /// <c>IVehicleDocumentExtractionClient</c>: the service registers both real implementations with
+    /// <c>TryAddSingleton</c>, so whatever is already there wins. That is the only way to drive
+    /// AL-50's slot rule end to end without an ocr-svc on a socket.
+    /// </param>
     public static async Task<FleetHarness> StartAsync(
         PostgresFixture postgres,
         IDictionary<string, string?>? settings = null,
-        bool withInternalPlane = true)
+        bool withInternalPlane = true,
+        Action<WebApplicationBuilder>? configure = null)
     {
         ArgumentNullException.ThrowIfNull(postgres);
 
@@ -120,6 +127,8 @@ internal sealed class FleetHarness : IAsyncDisposable
             },
             builder =>
             {
+                configure?.Invoke(builder);
+
                 // MAGERIDE_TEST_LOGS=1 keeps the console provider when a failure needs a trace.
                 if (Environment.GetEnvironmentVariable("MAGERIDE_TEST_LOGS") != "1")
                 {
@@ -163,6 +172,13 @@ internal sealed class FleetHarness : IAsyncDisposable
     /// <summary>POSTs with a fresh <c>Idempotency-Key</c> — what a well-behaved client does once.</summary>
     public Task<HttpResponseMessage> PostAsync(string path, object? body, string? bearer = null) =>
         PostWithKeyAsync(path, body, bearer, Guid.NewGuid().ToString());
+
+    /// <summary>POSTs and deserialises the success body, failing loudly on anything else.</summary>
+    public async Task<T> PostJsonAsync<T>(string path, object? body, string? bearer = null)
+    {
+        using var response = await PostAsync(path, body, bearer);
+        return await OkAsync<T>(response, $"POST {path}");
+    }
 
     /// <summary>POSTs with a caller-chosen key, so a retry can be replayed (R-14).</summary>
     public async Task<HttpResponseMessage> PostWithKeyAsync(
@@ -420,6 +436,138 @@ internal sealed class FleetHarness : IAsyncDisposable
         return vehicleId;
     }
 
+    /// <summary>A driver account with the canonical role an assignment demands (US-13.2).</summary>
+    public async Task<(Guid Id, string Phone)> CreateDriverAsync()
+    {
+        var id = Guid.CreateVersion7();
+        var phone = "+9477" + Random.Shared.NextInt64(1_000_000, 9_999_999).ToString(CultureInfo.InvariantCulture);
+
+        await using var connection = await _postgres.OpenAsync();
+
+        await connection.ExecuteAsync(
+            "INSERT INTO iam.users (id, phone, role) VALUES (@Id, @Phone, 'driver');",
+            new { Id = id, Phone = phone });
+
+        return (id, phone);
+    }
+
+    /// <summary>Uploads a document into one of SCR-FP-004's named slots.</summary>
+    public async Task<HttpResponseMessage> UploadVehicleDocumentAsync(
+        Guid fleetId, Guid vehicleId, string bearer, string kind, string? expiresAt = null)
+    {
+        using var request = new HttpRequestMessage(
+            HttpMethod.Post, $"/v1/fleets/{fleetId}/vehicles/{vehicleId}/documents");
+
+        Authorize(request, bearer);
+        request.Headers.TryAddWithoutValidation(MageRideHeaders.IdempotencyKey, Guid.NewGuid().ToString());
+
+        var content = new MultipartFormDataContent { { new StringContent(kind), "kind" } };
+
+        if (expiresAt is not null)
+        {
+            content.Add(new StringContent(expiresAt), "expiresAt");
+        }
+
+        var file = new ByteArrayContent([1, 2, 3, 4, 5, 6, 7, 8]);
+        file.Headers.ContentType = new MediaTypeHeaderValue("image/png");
+        content.Add(file, "file", $"{kind}.png");
+
+        request.Content = content;
+
+        return await Client.SendAsync(request);
+    }
+
+    /// <summary>Uploads a bulk-onboarding CSV the way SCR-FP-004's importer does.</summary>
+    public async Task<HttpResponseMessage> UploadVehicleCsvAsync(Guid fleetId, string bearer, string csv)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/v1/fleets/{fleetId}/vehicles/bulk");
+
+        Authorize(request, bearer);
+        request.Headers.TryAddWithoutValidation(MageRideHeaders.IdempotencyKey, Guid.NewGuid().ToString());
+
+        var content = new MultipartFormDataContent();
+        var file = new ByteArrayContent(System.Text.Encoding.UTF8.GetBytes(csv));
+        file.Headers.ContentType = new MediaTypeHeaderValue("text/csv");
+        content.Add(file, "file", "vehicles.csv");
+
+        request.Content = content;
+
+        return await Client.SendAsync(request);
+    }
+
+    public async Task<HttpResponseMessage> DeleteAsync(string path, string? bearer = null)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Delete, path);
+        Authorize(request, bearer);
+        return await Client.SendAsync(request);
+    }
+
+    /// <summary>A telemetry sample for a fleet vehicle, as the hot path would have written it.</summary>
+    public async Task AddPositionAsync(
+        Guid fleetId, Guid vehicleId, double lat, double lng, DateTimeOffset? sampleTs = null, long seq = 1)
+    {
+        await using var connection = await _postgres.OpenAsync();
+
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO telemetry.positions
+              (vehicle_id, sample_ts, seq, lat, lng, speed_mps, heading_deg, source, fleet_id)
+            VALUES (@VehicleId, @SampleTs, @Seq, @Lat, @Lng, 12.5, 90, 0, @FleetId);
+            """,
+            new
+            {
+                VehicleId = vehicleId,
+                SampleTs = sampleTs ?? DateTimeOffset.UtcNow,
+                Seq = seq,
+                Lat = lat,
+                Lng = lng,
+                FleetId = fleetId,
+            });
+    }
+
+    /// <summary>Opens a Mode A/B tracking session, which is what a departure being "started" means.</summary>
+    public async Task<Guid> StartSessionAsync(
+        Guid vehicleId, Guid driverId, DateTimeOffset startedAt, string mode = "B")
+    {
+        var id = Guid.CreateVersion7();
+
+        await using var connection = await _postgres.OpenAsync();
+
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO trips.sessions (id, vehicle_id, driver_id, mode, state, started_at)
+            VALUES (@Id, @VehicleId, @DriverId, @Mode, 'ACTIVE', @StartedAt);
+            """,
+            new { Id = id, VehicleId = vehicleId, DriverId = driverId, Mode = mode, StartedAt = startedAt });
+
+        return id;
+    }
+
+    /// <summary>What `registry.driver_eligible_vehicles` says this driver may go live on.</summary>
+    /// <remarks>
+    /// The projection registry-svc's select-live, dispatch-svc's standby gate and trip-state-svc's
+    /// session start all read (migration 0310/0314) — so asserting against it is asserting against
+    /// what the Driver App will actually offer, without booting three services.
+    /// </remarks>
+    public async Task<IReadOnlyList<Guid>> EligibleVehiclesAsync(Guid driverId)
+    {
+        await using var connection = await _postgres.OpenAsync();
+
+        var rows = await connection.QueryAsync<Guid>(
+            "SELECT vehicle_id FROM registry.driver_eligible_vehicles WHERE driver_id = @DriverId;",
+            new { DriverId = driverId });
+
+        return [.. rows];
+    }
+
+    public async Task<string?> VehicleStatusAsync(Guid vehicleId)
+    {
+        await using var connection = await _postgres.OpenAsync();
+
+        return await connection.ExecuteScalarAsync<string?>(
+            "SELECT status FROM registry.vehicles WHERE id = @Id;", new { Id = vehicleId });
+    }
+
     /// <summary>Every version of an org's payout profile, oldest first, as it is stored.</summary>
     public async Task<IReadOnlyList<(Guid Id, string Status, string AccountNo, DateTimeOffset? VerifiedAt)>>
         PayoutVersionsAsync(Guid fleetId)
@@ -529,10 +677,16 @@ internal sealed class FleetHarness : IAsyncDisposable
 
         // registry.fleets CASCADEs to fleet_vehicles, fleet_assignments, fleet_payout_profiles and
         // iam.fleet_members; iam.users is truncated last because everything references it.
+        // registry.fleets CASCADEs to fleet_vehicles, fleet_assignments, fleet_payout_profiles,
+        // fleet_schedules, fleet_bulk_jobs, spatial.geofences and iam.fleet_members; the two
+        // telemetry relations and registry.documents are named because nothing cascades to them —
+        // a position left behind by one test is a marker on the next one's map.
         await connection.ExecuteAsync(
             """
             TRUNCATE registry.fleet_command_log;
+            TRUNCATE telemetry.positions;
             TRUNCATE trips.sessions CASCADE;
+            TRUNCATE registry.documents CASCADE;
             TRUNCATE registry.fleets CASCADE;
             TRUNCATE registry.vehicles CASCADE;
             TRUNCATE docs.uploads CASCADE;

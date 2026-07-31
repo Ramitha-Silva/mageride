@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using MageRide.Fleet.Organisation;
+using MageRide.Fleet.Vehicles;
 using MageRide.Shared.Errors;
 using Microsoft.AspNetCore.Http.HttpResults;
 
@@ -55,6 +56,22 @@ public static class InternalFleetEndpoints
         internalFleets.MapGet("/{fleetId}", ReadVerificationAsync).WithName("getInternalFleetVerification");
         internalFleets.MapPost("/{fleetId}/approve", ApproveAsync).WithName("approveInternalFleetOrg");
         internalFleets.MapPost("/{fleetId}/reject", RejectAsync).WithName("rejectInternalFleetOrg");
+
+        // Δ C059 — the officer's decision on one of the org's *vehicles*, and the AL-50 gate.
+        //
+        // AL-50 states the gate on registry-svc ("registry-svc blocks status='APPROVED' until every
+        // required doc is verified"), and registry-svc's approval path is AL-30's four-step Mode C
+        // wizard: it refuses a Mode A/B vehicle outright and derives its verdict from
+        // registry.onboarding_steps, a table a fleet vehicle has no rows in. So the sentence names a
+        // service that structurally cannot hold the gate for the vehicles it is about. These three
+        // routes are where it actually lives — same column, same effect, and the same split C058
+        // made for the organisation itself. Raised in the C059 handoff.
+        internalFleets.MapGet("/{fleetId}/vehicles/{vehicleId}", ReadVehicleAsync)
+            .WithName("getInternalFleetVehicleVerification");
+        internalFleets.MapPost("/{fleetId}/vehicles/{vehicleId}/approve", ApproveVehicleAsync)
+            .WithName("approveInternalFleetVehicle");
+        internalFleets.MapPost("/{fleetId}/vehicles/{vehicleId}/reject", RejectVehicleAsync)
+            .WithName("rejectInternalFleetVehicle");
 
         return endpoints;
     }
@@ -121,6 +138,70 @@ public static class InternalFleetEndpoints
             cancellationToken);
 
         return TypedResults.Ok(VerificationDecisionResponse.From(decision));
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Δ C059 — one fleet vehicle, and AL-50's approval gate
+    // ---------------------------------------------------------------------------------------
+
+    private static async Task<Ok<VehicleDecisionResponse>> ReadVehicleAsync(
+        string fleetId,
+        string vehicleId,
+        IVehicleApprovalService approvals,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(approvals);
+
+        var decision = await approvals.ReadAsync(
+            RequestIds.Require(fleetId, "fleetId"),
+            RequestIds.Require(vehicleId, "vehicleId"),
+            cancellationToken);
+
+        return TypedResults.Ok(VehicleDecisionResponse.From(decision));
+    }
+
+    private static async Task<Ok<VehicleDecisionResponse>> ApproveVehicleAsync(
+        string fleetId,
+        string vehicleId,
+        VehicleDecisionBody? body,
+        IVehicleApprovalService approvals,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(approvals);
+
+        // `officerId` is required for the same reason it is on the organisation's approval: this
+        // service never sees the officer's bearer, admin-bff resolves it, and it is what
+        // `audit.events` records (D-35). It is validated and not stored — `registry.vehicles` has
+        // no column for who approved a vehicle, which is registry-svc's schema and not this
+        // component's to change. Named in the C059 handoff.
+        _ = RequestIds.Require(body?.OfficerId, "officerId");
+
+        var decision = await approvals.ApproveAsync(
+            RequestIds.Require(fleetId, "fleetId"),
+            RequestIds.Require(vehicleId, "vehicleId"),
+            cancellationToken);
+
+        return TypedResults.Ok(VehicleDecisionResponse.From(decision));
+    }
+
+    private static async Task<Ok<VehicleDecisionResponse>> RejectVehicleAsync(
+        string fleetId,
+        string vehicleId,
+        VehicleDecisionBody? body,
+        IVehicleApprovalService approvals,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(approvals);
+
+        _ = RequestIds.Require(body?.OfficerId, "officerId");
+
+        var decision = await approvals.RejectAsync(
+            RequestIds.Require(fleetId, "fleetId"),
+            RequestIds.Require(vehicleId, "vehicleId"),
+            body?.Reason ?? string.Empty,
+            cancellationToken);
+
+        return TypedResults.Ok(VehicleDecisionResponse.From(decision));
     }
 }
 

@@ -106,12 +106,20 @@ public sealed record PayoutDocumentResponse(string DocId, string Kind);
 public sealed record ClassificationBody(string? ModeBBilling, long? DefaultMonthlyFareMinor);
 
 /// <summary><c>fleet.yaml#/components/schemas/FleetVehicle</c>.</summary>
+/// <remarks>
+/// <c>docsStatus</c> is AL-50's verdict — <c>docs_pending</c> until every slot the vehicle's mode
+/// requires is verified. It is <b>derived, never stored</b> (see <c>VehicleDocumentSlots</c>), and
+/// it is absent on the one response that has no reason to have read the documents:
+/// <c>PUT …/classification</c> changes the Service payment setting and nothing about the paperwork,
+/// so answering it with a stale-by-a-transaction verdict would be worse than answering without one.
+/// </remarks>
 public sealed record FleetVehicleResponse(
     string VehicleId,
     string RegistrationNumber,
     string VehicleType,
     string Mode,
     string Status,
+    string? DocsStatus,
     string? ModeBBilling,
     long? DefaultMonthlyFareMinor,
     string? Currency)
@@ -119,7 +127,7 @@ public sealed record FleetVehicleResponse(
     /// <summary>D3' §0: every money field is LKR integer minor units.</summary>
     private const string Lkr = "LKR";
 
-    public static FleetVehicleResponse From(FleetVehicle vehicle)
+    public static FleetVehicleResponse From(FleetVehicle vehicle, string? docsStatus = null)
     {
         ArgumentNullException.ThrowIfNull(vehicle);
 
@@ -129,6 +137,7 @@ public sealed record FleetVehicleResponse(
             vehicle.VehicleType,
             vehicle.Mode,
             vehicle.Status,
+            docsStatus,
             vehicle.ModeBBilling,
             vehicle.DefaultMonthlyFareMinor,
             // Only when there is an amount to denominate. A currency beside a null fare is a fact

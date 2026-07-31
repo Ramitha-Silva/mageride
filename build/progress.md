@@ -84,7 +84,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C056 | transit-svc-routing | 3 | DONE | 2026-07-31 | **58 tests green** in a new suite (`Transit.Api.Tests`) over a real Postgres and a real URL shortener on a socket; the Colombo Fort → Kottawa corridor is seeded at its **actual coordinates** with route 138 on it, and the shape is asserted by **decoding** the polyline rather than comparing a string; **1 migration (1406)** — `trip_headsign` on `transit.gtfs_trips` **and its staging mirror**, which both specs put on every option and §18c had nowhere to hold (it is what tells "138 to Kottawa" from "138 to Pettah", which share a short name AND a long name); **the feed is patterns, not trips** — distinct stop sequences indexed by halt, so BR-23.2's "all direct routes" is an in-memory lookup instead of a self-join over 512k `stop_times` on a screen the passenger is watching; **"expires within 60 s" is LISTEN plus a poll**, and the poll is why it is a guarantee — a notification only reaches sessions connected when it fires, and the suite proves the missed-NOTIFY path separately; **AL-55 became a wire field** (`coverage: active | no_feed`, Δ C056) because an empty list meant both "no bus goes there" and "we cannot tell"; **the paste-link allowlist is re-checked at every redirect hop** — the first URL is the one an attacker cannot aim, and a mid-chain hop to `169.254.169.254` is asserted refused; **one real defect caught**: the resolver kept a second hardcoded shortener-host list that could disagree with the configured allowlist; **`EncodedPolyline` promoted into the kernel** (two services must agree on a wire format); **BR-23.2's "soonest departure" is unimplementable** — §18c mirrors five GTFS tables and none is the service calendar; `migrate-verify.sh` 363/363 with a C056 section; 6 spec gaps / micro-change-sets |
 | C057 | transit-svc-gtfs-lifecycle | 3 | DONE | 2026-07-31 | **26 GTFS tests green** (`--filter Category=Gtfs`) and **84/84** across the whole transit suite, over a real Postgres with real zips built in memory; **1 migration (1407)** — `transit.command_log`, the eleventh instance of the R-14 gap, because BR-32.2 makes activation idempotent on `Idempotency-Key`; **the swap is a three-way schema rename**, so the live dataset is replaced in the time it takes to take the locks whatever the feed's size — and **the index names are renamed back onto their own side in the same transaction** (the C005 decision), asserted after *two* activations because a one-way rename passes after one; **"a failed activation leaves the previous feed live" is held by which tables each phase touches**, not by unwinding — the staging load never touches `transit.*` — and is asserted by losing the stored zip out from under a validated version; **the upload dedupes on content, not on a header** (sha256, BR-32.1), which is why it is the one POST outside the kernel's replay: the body is 200 MB and the header would be weaker; **3 guards for one 413** because a declared length, a chunked body and the file's own bytes are three different clients; **`trip_headsign` is now mapped**, closing C056's ask — without it "138 to Kottawa" and "138 to Pettah" are the same card twice; **C056's gap (b) is escalated, not closed** — the calendar is validated but §18c has nowhere to store it; **3 error codes landed in the kernel** that C007 coined in the contract enum and nothing could raise; `migrate-verify.sh` 366/366 (was 363), Spectral 0 errors, solution build 0 warnings; 2 contract additions, 5 spec gaps |
 | C058 | fleet-svc-org | 3 | DONE | 2026-07-31 | **42 tests green** in a new suite (`Fleet.Api.Tests`), every one integration against a real Postgres because every DoD item is a claim about the database; **2 migrations (0313, 1806)** — the org's KYC contact (`POST /v1/fleets` **requires** `contactPhone` and §2 has nowhere to put it), `ux_fleets_business_reg_active`, `registry.fleet_command_log` (R-14, the twelfth), and a `superseded` payout status because §26 makes the table versioned **and** admits one verified row per org — when an officer approves an edit the incumbent has to leave `verified` and no printed status could carry it; **the cross-org fence is RLS, asserted as RLS** — five RESTRICTIVE role-targeted policies plus three security-barrier join views, and `RowLevelSecurityTests` connects as a **real non-superuser login** and asks for another org's rows **by primary key** with no fleet-svc code in the path; **RESTRICTIVE, not permissive-only, because twenty services read these tables** and a plain policy would have denied every one of them silently as zero rows; **the approval gate is on the route group, not in the handlers** — C059's vehicle and assignment routes are gated the moment they are mapped, and a test walks the endpoint data source so it fails for the *next* component's mistake; **BR-31.1's second half is the expensive one** — an edit to a verified payout profile *inserts* and leaves the incumbent collecting, asserted against subscription-svc's own pay-sheet query verbatim; **the token's `fleet_role` claim is never the authority** (it carries one membership of possibly several, C027), so every request resolves the seat from `iam.fleet_members` for the org in the **path**; **two verify-script queries narrowed to `BASE TABLE`** — a trigger cannot be attached to a view and a CHECK cannot be declared on one; `migrate-verify.sh` **391/391** (was 366) with a C058 section, Spectral 0 errors, solution build 0 warnings; 7 new error codes, 6 contract changes, 8 spec gaps / micro-change-sets |
-| C059 | fleet-svc-fleet-ops | 3 | PENDING | | |
+| C059 | fleet-svc-fleet-ops | 3 | DONE | 2026-07-31 | **93 tests green** in `Fleet.Api.Tests` (was 42), the four new suites integration against a real Postgres because every DoD item is a claim about the database; **4 migrations (0314, 1408, 1807, 1905)** — the assignment validity window 0310's own header named as C059's to close, `registry.fleet_schedules` (US-13.11 has no table anywhere and `dispatch.scheduled_rides` is a passenger's Mode C booking), the bulk-job pair, `spatial.geofences.fleet_id` (a PUT is a replace and §17's table had no owner) and a trilingual `schedule_not_started` template; **US-13.9's "auto-expires" is a predicate, not a sweep** — `driver_eligible_vehicles` evaluates the window at read time, so the row is untouched and simply stops being returned, which is what makes "without manual action" true rather than merely fast; **the overlap rule is an exclusion constraint** (`btree_gist`), because 0306's unique index could not tell an expired assignment from a live one and would have blocked re-hiring a relief driver for ever; **AL-50's approval gate lives here, not where the spec puts it** — registry-svc's approval path is AL-30's Mode C wizard, which refuses Mode A/B outright and derives its verdict from a table a fleet vehicle has no rows in; **`docsStatus` is derived, never stored**, and the gate re-derives every slot *inside* the transaction that writes the status, so a permit that lapsed while the queue item sat there stops the approval; **a bulk row that fails costs only itself** (`SAVEPOINT` per row) and `COMPLETED` with failures is a partial import with a downloadable report, not a failure; **the map and the analytics are scoped by the database** — `telemetry.positions_fleet` + `trips.sessions_fleet`, with the base tables never granted; `migrate-verify.sh` **421/421** (was 391) with a C059 section, Spectral 0 errors, solution build 0 warnings; 2 new error codes, 13 contract changes, 9 spec gaps / micro-change-sets |
 | C060 | fleet-billing-svc | 3 | PENDING | | |
 | C061 | analytics-read-model | 3 | PENDING | | |
 | C062 | admin-bff-core | 3 | PENDING | | |
@@ -8630,3 +8630,237 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   plus the throwaway container `migrate-verify.sh` starts; the replica stayed down throughout.
   `Fleet.Api.Tests` takes ~2 m 40 s (42 harness starts, each a fresh service on a real socket).
   **No new NuGet reference.**
+
+- **Component:** C059 fleet-svc-fleet-ops — 2026-07-31
+- **Status:** DONE — `dotnet test backend/src/Fleet.Api.Tests -c Release` is **93/93** (42 were
+  C058's; 51 are new). `bash infra/scripts/migrate-verify.sh` is **421/421** (was 391).
+  `dotnet build backend/MageRide.sln -c Release` is clean and Spectral lints the contracts with
+  0 errors. All four definition-of-done items pass, each with a test named after it:
+  `A_mode_A_vehicle_cannot_be_approved_without_a_verified_route_permit`,
+  `A_mixed_csv_imports_the_valid_rows_and_reports_the_rest`,
+  `An_expiring_assignment_takes_the_vehicle_away_with_nothing_written`,
+  `The_map_returns_only_the_callers_own_vehicles`.
+- **Notes:**
+  **Spec gaps / micro-change-sets —**
+  (a) *An assignment could not expire.* US-13.9 says an assignment "**auto-expires**" and AL-23
+  makes time-bounding the whole mechanism by which a Mode A/B driver is temporarily hired;
+  `registry.fleet_assignments` (0306) had `assigned_at` and `revoked_at` and nothing else, so the
+  only way one could end was a human ending it — precisely the "manual action" the DoD rules out.
+  Migration 0310's own header records the gap and names this component: *"C059 owns assignment
+  writes and should add `expires_at`, after which the WHERE clause below gains one predicate and
+  nothing else changes."* That is exactly what 0314 does. **`server_db_schema.md` §2 / D4' §2
+  should carry `valid_from` and `expires_at`.**
+  (b) *There is nowhere to put a fleet schedule.* US-13.11 gives per-vehicle scheduled rides with a
+  not-started alarm and `fleet.yaml` specifies `POST /v1/fleets/{id}/schedules` completely; no
+  table exists anywhere. `dispatch.scheduled_rides` (0704) is **not** it and must not be reused —
+  it is a passenger's Mode C advance booking (`passenger_id NOT NULL`, `pickup_geo`, `dropoff_geo`,
+  a `rides.rides` id) and AL-03 forbids a fleet Mode C vehicle; a bus leaving the depot at 06:10
+  has no passenger and no pickup point. **`server_db_schema.md` §6 / D4' §6 should carry
+  `registry.fleet_schedules`.**
+  (c) *No table for a bulk vehicle job.* `fleet.yaml` answers `POST …/vehicles/bulk` with
+  `202 {jobId, totalRows, status, errorReportUrl}` and US-13.1 asks for the Epic 3 downloadable
+  error report; a job held in memory cannot answer a poll after a restart and cannot render a
+  report at all. The same gap 0405 raised for bulk *trackers*. **D4' §2 should carry both tables.**
+  (d) *A geofence belongs to nobody.* `spatial.geofences` (§17) has `id`, `name`, `kind`, `geom`
+  and no owner, and `PUT /v1/fleets/{id}/geofences` is a **replace** — one operator's upload would
+  have deleted every other operator's fences. **`server_db_schema.md` §17 should carry `fleet_id`.**
+  (e) ***AL-50 states the approval gate on a service that structurally cannot hold it.*** AL-50 and
+  the D3' Δ 2026-07-18 both say "registry-svc blocks `status='APPROVED'` until every required doc is
+  verified". registry-svc's approval path is AL-30's four-step Mode C wizard: it **refuses a Mode
+  A/B vehicle outright** ("in-app vehicle onboarding is Mode C only") and derives its verdict from
+  `registry.onboarding_steps`, a table a fleet vehicle has no rows in. So the sentence names a
+  service that cannot gate the vehicles the sentence is about. The gate is implemented here, over
+  the same column, on a new internal family (`/v1/internal/fleets/{id}/vehicles/**`) — the same
+  split C058 made for the organisation itself. **AL-50 / D3' should say fleet-svc.**
+  (f) *US-13.11's alarm has no notification type and no template.* D5' §14.4's matrix has no row
+  and neither 1902 nor 1904 seeds a key. `SCHEDULED_REMINDER` is **not** it — that is dispatch-svc's
+  courtesy *before* a booking (US-6A.15/US-10.9), and sent to a driver whose bus is ten minutes late
+  it would say their ride is upcoming. `SCHEDULE_NOT_STARTED` was added to
+  `NotificationCatalogue` with a trilingual template in migration 1905, together, because this
+  component is its producer and 1904's own header states the rule: a key nobody resolves, or a type
+  nothing sends, is what 1902 refused to create. **D5' §14.4 should carry the row.**
+  (g) *`fleet.yaml` had six writes whose screens had no read.* `GET …/vehicles` (SCR-FP-004's status
+  table), `GET …/vehicles/bulk/{jobId}` and `…/errors.csv` (the poll and the `errorReportUrl` the
+  202 promises), `GET …/assignments` (SCR-FP-005's "assignment history"), `GET …/schedules`
+  (SCR-FP-008, which also has to show the departures whose alarm fired) and `GET …/geofences`.
+  All six added to the contract.
+  (h) *US-13.2 assigns "by User ID / phone" and the body typed `driverId` alone.* `driverPhone`
+  added as an alternative — an operator standing in a depot has the number, not the ULID.
+  (i) *`FleetRegistrationNumbers` is a copy of registry-svc's `RegistrationNumbers`, and the copy is
+  the problem.* D-37's uniqueness is a unique index over the **stored text**, so it holds only while
+  every writer stores the same text for the same plate — and there are two writers now. Unlike the
+  vocabulary duplications elsewhere in this build, the two sides are agreeing on an *algorithm*,
+  which a set-equality assertion cannot police; `FleetRegistrationNumberTests` pins the canonical
+  form against a table instead. **It belongs in `MageRide.Shared.Primitives`** — not moved here
+  because relocating registry-svc's type is a change to a component this one is not building.
+
+  **Decisions —**
+  (1) **US-13.9's auto-expiry is a predicate, not a sweep.** `registry.driver_eligible_vehicles`
+  evaluates the assignment's window at read time, so the driver's app stops offering the vehicle the
+  instant `expires_at` passes with the row untouched and nobody pressing anything. A sweep would be
+  a second mechanism that could lag, fail or be switched off, and the driver would keep the bus for
+  as long as it did. The DoD test asserts against that projection — the one registry-svc's
+  `select-live`, dispatch-svc's standby gate and trip-state-svc's session start all read — so it is
+  asserting what the Driver App will actually offer, without booting three services.
+  (2) **The overlap rule is an exclusion constraint (`btree_gist`), not a unique index.** 0306's
+  `ux_fleet_assign_active` said "one open assignment per (vehicle, driver)", which was right while
+  an assignment had no end and is wrong now in the direction that matters: an expired-but-unrevoked
+  row would permanently block re-hiring the same relief driver next month, and the only way out
+  would be revoking a row that had already lapsed. `EXCLUDE USING gist (… tstzrange(valid_from,
+  expires_at) WITH &&) WHERE (revoked_at IS NULL)` says what actually holds, and survives two
+  managers assigning at once where a `SELECT`-then-`INSERT` does not. **This is the first
+  `btree_gist` dependency in the build**; it is standard contrib and present in every image this
+  repo runs on.
+  (3) **`valid_from` is kept beside `assigned_at` rather than replacing it.** `assigned_at` is when
+  the row was written — the audit fact SCR-FP-005's history orders by; `valid_from` is when the
+  driver may start driving, which a temporary hire routinely puts in the future. A relief driver
+  booked on Monday for Thursday's shift must not be able to take the bus out on Monday, and the test
+  asserts that too.
+  (4) **`docsStatus` is derived and there is no column.** `fleet.yaml` describes `docs_pending` as
+  "the state a bulk-CSV row starts in", which reads like a column; a column would be a second
+  opinion about the same documents, and a slot an officer verified would leave the vehicle reading
+  `docs_pending` until something remembered to rewrite it. The slot rule lives in one place
+  (`VehicleDocumentSlots`) because three things read it — the document screen, every vehicle
+  response, and the approval gate — and the one that matters is the gate.
+  (5) **An expired document is `pending`, not `verified`.** US-27.3 keeps expiry and approval
+  separate (expiry auto-suspends *dispatch* under E-03), but a certificate that has already lapsed
+  cannot be the evidence a vehicle is approved on — the alternative admits last year's cover.
+  (6) **A slot with no fields at all is `pending`.** An unreachable ocr-svc writes the required keys
+  with null values and `pending`, so "the permit expiry could not be read" is a row the officer can
+  fill rather than an absence they have to notice; the zero-field clause is belt and braces for a
+  document inserted by some other path, which must not read as verified.
+  (7) **`registry.documents` moved from "the fleet reader holds no privilege" to "granted with a
+  RESTRICTIVE policy".** C058's test listed it among the platform-wide tables because a fleet had no
+  documents; AL-50 gave it four slots per vehicle and the table carries `fleet_id`, so it belongs in
+  the same category as `registry.fleets`. What makes that safe rather than a widening is
+  `ck_documents_owner` — an XOR, so a driver's own licence has `fleet_id IS NULL` and the predicate
+  evaluates NULL for it whatever the GUC says. Both halves are asserted, in the suite and in
+  `migrate-verify.sh`.
+  (8) **`Every_vehicle_and_assignment_route_is_gated` gained one exemption, by metadata.** A route
+  declaring `AllowAnonymous` is outside the rule, because the rule is about a route an
+  *authenticated fleet member* reaches — the gate reads a seat and an org status, and a route with
+  no bearer has neither. There is exactly one: the bulk error report, whose HMAC **is** the
+  credential (provisioning-svc's `errors.csv` and subscription-svc's signed links take the same
+  shape). Exempting by metadata rather than by path means it cannot be widened by renaming a route.
+  (9) **Reading is not approval-gated; writing is.** US-13.A7 disables "onboarding and assignment",
+  not monitoring, so the map, the analytics and the alerts sit outside the gate and the writes on
+  the same group carry `.RequireApprovedFleet()` individually. A PENDING organisation waits days for
+  an officer and must still be able to watch the vehicles it already runs.
+  (10) **A bulk row that fails costs only itself.** Postgres aborts a transaction on a constraint
+  violation, so each row runs inside its own `SAVEPOINT` — without one the first duplicate plate
+  would take 4,999 good rows with it and the operator would be told nothing imported. `COMPLETED`
+  with failures is a partial import with a report; `FAILED` is reserved for a job that could not be
+  processed at all, because a client branching on the status must not discard the good rows. Unlike
+  provisioning-svc's bulk there is **no worker**: a vehicle row is an `INSERT`, so validating and
+  importing in one transaction is both simpler and stronger.
+  (11) **`train` is refused on this surface with `403 mode-not-allowed`.** US-2.17/2.18 make trains
+  admin-only with their own route family; the value is real and the surface is wrong, which is the
+  distinction registry-svc draws in the opposite direction for `bus`. `car` stays a `400` — AL-09
+  maps it as a data migration, not an input alias.
+  (12) **The vehicle's `owner_id` is the organisation's owner, and `driver_name` is the
+  organisation's name.** `registry.vehicles.owner_id` is what subscription-svc reads as "the
+  vehicle's owner" for the Mode B money, so a manager leaving must not take a bus's ownership with
+  them; `driver_name` is NOT NULL and is "shown to passengers" (US-2.12), which on a bus is the
+  operator — also what is painted on the side of it.
+  (13) **The tracker bind and the Epic 23 proxies forward the caller's own bearer, never a service
+  credential.** provisioning-svc and subscription-svc each resolve what the caller may do *against
+  the vehicle*, so forwarding the operator's token keeps that check where it is and means these hops
+  grant nothing the operator did not already have — in particular subscription-svc's owner-only
+  rules (mark cash received, override a fare, delete a subscriber, confirm a slip) stay owner-only
+  without this service restating them. No retry on either: a retried `accept` is a second grant.
+  (14) **A hop with nowhere to go leaves its routes unmapped rather than answering from nowhere.**
+  A bind that silently did nothing would leave an operator believing an ST-901 was armed on a bus
+  nothing is tracking; a subscriber roster served from nowhere would be a screen full of zeroes.
+  Announced as errors at start-up, and asserted by a test that walks the endpoint data source.
+  (15) **`captured_via` is `'other'` on a vehicle document.** AL-43 separates the in-app drag-crop
+  scanner from a phone gallery because a gallery pick is a fraud signal on an onboarding
+  *photograph*; the Fleet Portal is a browser file picker on a desktop and is neither. `'gallery'`
+  would put that signal on every fleet document on the platform and `'camera_dragcrop'` would claim
+  a scanner ran.
+  (16) **Analytics distance is great-circle, not road distance, and `earningsMinor` is absent rather
+  than zero.** Nothing in this build map-matches a completed journey, so the number is the sum of
+  hops between consecutive telemetry samples — an under-estimate on a winding road, an over-estimate
+  on a jittery fix, and what US-13.4's "distance" can honestly mean today. A fleet's Mode A/B
+  vehicles take no fares on this platform (a bus fare is collected on the bus; a Mode B subscription
+  is a pass-through to the owner's own bank account, §18b), so zero would be a claim that the
+  operator earned nothing where absent is the truth.
+  (17) **Every derived number in the analytics query is cast `::double precision`.**
+  `EXTRACT(EPOCH …)` answers `numeric`, and Dapper's constructor binding matches parameter types
+  exactly — a NUMERIC column against a `double` parameter does not fail to convert, it fails to
+  materialise the record at all, with a message about the constructor. Found by the test.
+  (18) **The alarm sweep is two statements in one transaction, and the state change commits before
+  the push.** Departures that were made are recorded before anything decides to ring; PostgreSQL
+  gives two data-modifying CTEs one snapshot with no ordering between them, so a single statement
+  could mark the same row twice. The claim (`UPDATE … WHERE status='SCHEDULED' … RETURNING`) makes
+  the alarm exactly-once across replicas with no lease. A notification that failed to send must not
+  roll back the record that a departure was missed — the operator's screen reads that record — and
+  the push is not re-queued, because ringing a driver about a departure that is by then an hour old
+  is worse than not ringing.
+  (19) **The alarm goes to whoever was driving at the booked time**, not whoever is assigned now: an
+  alarm raised at 06:20 about the 06:10 belongs to the 06:10's driver.
+  (20) **`autoStartSession` is accepted and is not armed.** AL-32/T-11 make tracker-driven journey
+  auto-start a property of the ingest path (tcp-adapter, trip-state-svc); provisioning-svc's bind
+  body has no field for it and `prov.tracker_bindings` no column. Sending it would invent a
+  contract; dropping it silently would be worse. Logged when a caller asks for `false`.
+  (21) **`thumbUrl` and `fullUrl` are left absent on a document slot.** The contract offers both;
+  this service holds no signing key and no object-storage client (C125), and a `file://` path on the
+  wire would be a storage layout no browser can follow. admin-bff mints them, as it does for the
+  payout documents (US-24.8).
+  (22) **Geofence validation is all-or-nothing and the ring is checked, not closed for the caller.**
+  A `PUT` replaces a set, so refusing halfway would leave an operator with whichever fences sorted
+  first; silently appending the first point would turn a ring somebody meant to draw differently
+  into one that merely parses. The WKT is built with `CultureInfo.InvariantCulture` — under a
+  comma-decimal culture `POLYGON((79,86 6,93 …))` is a syntactically valid ring, in the sea.
+
+  **Pre-existing failure found while re-running a neighbour — NOT caused by C059.** Reproduces
+  identically on a clean `git worktree` at `HEAD` (c5f5f6a, C058):
+  * **`Notification.Api.Tests` is red: 1 failed / 85 passed** —
+    `NotifyApiTests.Retention_removes_settled_rows_and_leaves_pending_ones` expects the retention
+    sweep to delete one settled row and gets zero. **Not fixed** — nothing in C059 touches
+    `comms.notifications`, the retention worker or its sweep, and the one change this component made
+    to notification-svc is additive (a catalogue entry and its test's declared-additions list; the
+    other 85 tests including `The_catalogue_invents_nothing_beyond_the_declared_additions` are
+    green). Diagnosing it belongs with C051. Recorded so the next person does not attribute it here.
+  * `FleetHealth.Tests`'s EMQX-timing failure recorded in the C058 handoff was not re-checked and is
+    unrelated.
+
+  **For C060 (fleet-billing-svc) —** `GET /v1/fleets/{id}/billing` and `POST …/wallet/topup` are the
+  two routes in `fleet.yaml` this component deliberately did not map. Map them on
+  `FleetOpsEndpoints.FleetOpsGroup` (`/v1/fleets/{fleetId}`) with
+  `.RequireFleetSubRole(FleetRoles.Owner)` — US-13.A5 gives the Owner "full org control + billing"
+  and C027's `PolicyEvaluator` narrows a Manager out of `fleet-billing` for the same reason — and add
+  `.RequireApprovedFleet()` per route, because that group carries the reads as well and the gate is
+  therefore not on the builder. The per-Mode-B-vehicle charges you consolidate are already being
+  raised by subscription-svc into `billing.monthly_subscriptions` (C047's runner); the vehicles they
+  are raised for are the ones this component onboards, and `registry.fleet_vehicles_fleet` is the
+  scoped roster to count.
+  **For C062 (admin-bff-core) —** the fleet-vehicle verification family is **Δ C059** and is three
+  more routes on the same internal plane C058 gave you, behind the same
+  `Fleet:InternalApiKey`/`X-MageRide-Internal-Key`: `GET /v1/internal/fleets/{fleetId}/vehicles/
+  {vehicleId}` (the vehicle plus its four AL-50 slots, each with the extracted fields and a
+  `required` flag), and `POST …/approve` · `…/reject`, both taking `{officerId}` on the body for the
+  reason the org's do. **Approve answers `409 documents-incomplete` while any required slot is
+  `missing` or `pending`** — registration, insurance and revenue licence for every vehicle, plus the
+  route permit for Mode A — and the detail names the slots, so SCR-AP-003's Approve button can be
+  disabled with a reason rather than failing on press. Reject is ungated and requires a reason. The
+  signed thumbnail and full-document URLs US-24.8 wants are yours to mint for vehicle documents too:
+  this service returns `docId` and `kind` and holds no signing key.
+  **For C107 (Admin Portal) / whoever builds the Fleet Portal screens —** every screen SCR-FP-004
+  through SCR-FP-009 now has a read route; the six that were missing are listed under (g) above.
+  `docsStatus` on a vehicle and `status` on a slot are what SCR-FP-004's chips render; `active` on
+  an assignment is the validity window evaluated server-side, so do not derive it from `to` against
+  the client's clock.
+  **For notification-svc / C051 —** `SCHEDULE_NOT_STARTED` is now a real type with a real producer
+  and a trilingual template (1905). It is `Mutable: false` and high priority deliberately: US-13.11
+  calls it "a ringing alarm in the Android and iOS Driver Apps", and an alarm a driver can switch off
+  in Settings is a notification. The two notifications C058 named as missing — "your organisation has
+  been approved / rejected" and the sub-user invitation — are still missing.
+  **For the KMP client (C012/C013) and contract tests (C118) —** `fleet.yaml` gained 6 read
+  operations, 3 internal ones, `driverPhone`, four schemas (`BulkVehicleJob`, `FleetGeofence`,
+  `FleetVehicleVerification`, plus fields on `Assignment`/`FleetSchedule`/`VehicleDocumentSlot`) and
+  2 error codes. `_shared.yaml`'s `ErrorCode` enum gained `driver-not-found` and
+  `documents-incomplete`.
+  **Build host —** Docker for one Testcontainers fixture (Postgres with PostGIS and TimescaleDB) plus
+  the throwaway container `migrate-verify.sh` starts; the replica stayed down throughout.
+  `Fleet.Api.Tests` takes ~6 m 10 s (93 harness starts, each a fresh service on a real socket).
+  **No new NuGet reference.** One new **PostgreSQL extension**: `btree_gist`, for decision (2).

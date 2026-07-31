@@ -101,6 +101,7 @@ public static class FleetApplication
         app.UseMageRideDefaults(serviceOptions);
 
         app.MapFleetEndpoints();
+        app.MapFleetOpsEndpoints();
 
         var settings = app.Services.GetRequiredService<IOptions<FleetOptions>>().Value;
 
@@ -151,18 +152,62 @@ public static class FleetApplication
         if (string.IsNullOrWhiteSpace(settings.DocumentRoot))
         {
             logger.LogWarning(
-                "Fleet:DocumentRoot is not configured, so AL-49 payout documents are written under the system "
-                + "temporary directory. A pod restart can lose a bank statement while the payout profile that "
-                + "references it survives; mount a volume, or point this service at D-36's bucket when C125 lands.");
+                "Fleet:DocumentRoot is not configured, so AL-49 payout documents and AL-50 vehicle documents are "
+                + "written under the system temporary directory. A pod restart can lose a bank statement or a route "
+                + "permit while the row that references it survives; mount a volume, or point this service at D-36's "
+                + "bucket when C125 lands.");
+        }
+
+        // ------------------------------------------------------------------------------------
+        // C059's four hops. Each is off by omission rather than by a flag, and each failure is
+        // silent from the outside — an operator sees a screen that works and is wrong.
+        // ------------------------------------------------------------------------------------
+
+        if (string.IsNullOrWhiteSpace(settings.OcrBaseUrl))
+        {
+            logger.LogError(
+                "Fleet:OcrBaseUrl is not configured, so NO VEHICLE DOCUMENT IS EVER READ (AL-50). Uploads are stored "
+                + "and every SCR-FP-004 chip stays `pending`, which holds every vehicle in every fleet out of "
+                + "APPROVED until a Verification Officer confirms each field by hand.");
+        }
+
+        if (string.IsNullOrWhiteSpace(settings.ProvisioningBaseUrl))
+        {
+            logger.LogError(
+                "Fleet:ProvisioningBaseUrl is not configured, so POST /v1/fleets/{{id}}/trackers/bind is NOT MAPPED "
+                + "(US-13.12). An operator gets a 404 rather than a binding — which is the safe direction, because "
+                + "the alternative is believing an ST-901 is armed on a bus nothing is tracking.");
+        }
+
+        if (string.IsNullOrWhiteSpace(settings.SubscriptionBaseUrl))
+        {
+            logger.LogError(
+                "Fleet:SubscriptionBaseUrl is not configured, so the Mode B request, subscriber and payment proxies "
+                + "are NOT MAPPED (SCR-FP-011/012). An operator has no view of who is paying for their vehicles' "
+                + "seats and cannot accept a subscription request from the Fleet Portal at all.");
+        }
+
+        if (!settings.ScheduleAlarmsEnabled || string.IsNullOrWhiteSpace(settings.NotificationBaseUrl))
+        {
+            logger.LogError(
+                "The US-13.11 not-started alarm cannot reach a driver: ScheduleAlarmsEnabled is {Enabled} and "
+                + "Fleet:NotificationBaseUrl is {Notification}. A booked departure nobody makes is recorded MISSED "
+                + "(or, with the sweep off, is not even that) and NO DRIVER APP RINGS.",
+                settings.ScheduleAlarmsEnabled ? "on" : "OFF",
+                string.IsNullOrWhiteSpace(settings.NotificationBaseUrl) ? "not configured" : "configured");
         }
 
         logger.LogInformation(
-            "fleet-svc is up: row-level security {Rls}, verification gate {Gate}, payout documents up to {MaxBytes} "
-            + "bytes kept {Retention}, at most {MaxMembers} members per organisation.",
+            "fleet-svc is up: row-level security {Rls}, verification gate {Gate}, documents up to {MaxBytes} bytes "
+            + "kept {Retention}, at most {MaxMembers} members and {BulkMaxRows} bulk rows per organisation; the map "
+            + "shows positions newer than {MapStaleAfter} and analytics spans at most {MaxAnalyticsDays} days.",
             settings.RlsEnabled ? "on" : "OFF",
             settings.VerificationGate ? "on" : "OFF",
             settings.DocumentMaxBytes,
             settings.DocumentRetention,
-            settings.MaxMembersPerFleet);
+            settings.MaxMembersPerFleet,
+            settings.BulkMaxRows,
+            settings.MapStaleAfter,
+            settings.MaxAnalyticsDays);
     }
 }
