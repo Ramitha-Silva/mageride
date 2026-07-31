@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    Support.Api (C053 support-svc) — the in-app FAQ, user tickets and the agent queue behind them.
+
+    FENCE 1: FAQ content is content-svc's (C045). This service serves and filters it and does not
+    author it — held structurally, not by care: `IFaqRepository` exposes two methods and both are
+    SELECTs, so there is no code path here that can write `content.faq_articles`.
+    FENCE 2: ticket resolution *UI* is the Admin Portal's (C107) and the RBAC-gated, audited front
+    door is admin-bff's (C065). This service exposes the queue API and the decisions behind it, on
+    `/v1/internal/support/**` — the same split C052 uses for the vehicle-report queue.
+
+    An upload surface with no S3 client: D-36 puts every uploaded image on SSE-KMS object storage
+    and no service in this build talks to a bucket (C125), so `IScreenshotStore` is the one-method
+    seam and the filesystem implementation behind it is a deployment concern. `docs.uploads` is
+    written either way, and the ticket links the **id** — never a public URL.
+
+    No Kafka, no outbox — see SupportApplication for why each is off.
+
+    Verify: dotnet test backend/src/Support.Api.Tests -c Release
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.Support</RootNamespace>
+    <AssemblyName>MageRide.Support.Api</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <UserSecretsId>mageride-support-api</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MageRide.Shared\MageRide.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Dapper" />
+    <PackageReference Include="Npgsql" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Support.Api.Tests" />
+  </ItemGroup>
+
+</Project>

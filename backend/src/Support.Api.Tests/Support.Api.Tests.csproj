@@ -1,0 +1,60 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    C053 verify target: dotnet test backend/src/Support.Api.Tests -c Release
+
+    Real Postgres. Every one of this component's definition-of-done items is a claim about something
+    outside the process:
+
+      * "FAQ returns articles in the requested language with a documented fallback order" is asserted
+        against migrations 1902's real Sinhala and Tamil strings, not against fixtures of this
+        suite's own making — a fallback test over invented rows tests the test.
+      * "a ticket with a screenshot stores the artifact in object storage and links it by id, not by
+        public URL" is asserted on the `support.tickets` ROW: the column holding the link is a
+        foreign key onto `docs.uploads`, `screenshot_url` stays NULL, and the id never appears in the
+        response as a URL that would work without a signature.
+      * "ticket status transitions are recorded and visible to the user in the thread" runs the whole
+        agent sequence through the internal plane and then reads the user's own detail back — the two
+        surfaces are different code paths over one table, and the point is that they agree.
+
+    No Redis: the service holds no connection to one, deliberately (see SupportApplication).
+
+    Microsoft.NET.Sdk.Web, not Microsoft.NET.Sdk: the harness builds a WebApplication.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.Support.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <OutputType>Exe</OutputType>
+    <!--
+      xUnit1041: collection-fixture ctor args are consumed through the primary constructor.
+      xUnit1051: every test is bounded by its own harness lifetime.
+    -->
+    <NoWarn>$(NoWarn);xUnit1041;xUnit1051</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+    <PackageReference Include="Dapper" />
+    <PackageReference Include="Npgsql" />
+    <!-- FakeTimeProvider: the signed screenshot link expires, and no suite can wait a quarter of an
+         hour for it. ScreenshotLinks measures expiry on TimeProvider precisely so this works. -->
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Support.Api\Support.Api.csproj" />
+    <!-- C010: the Postgres fixture, so this suite runs the same server build the dev stack does and
+         applies the same migration set — including 1902's seeded trilingual FAQ. -->
+    <ProjectReference Include="..\MageRide.TestKit\MageRide.TestKit.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

@@ -6,7 +6,22 @@ openapi: 3.1.0
 #         + ADD Appendix C support-svc
 #
 # The agent-side queue (`GET /v1/admin/support/tickets`, `POST .../{id}/resolve`) is an
-# admin-bff surface and lives in admin-bff.yaml, exactly as D3 Part 2 places it.
+# admin-bff surface and lives in admin-bff.yaml, exactly as D3 Part 2 places it. The
+# **decision** is made here, behind `/v1/internal/support/**` — the same split C052 uses for
+# the vehicle-report queue: admin-bff is the RBAC-gated, audited front door and forwards.
+#
+# Δ C053 — seven operations D3' does not print, each argued at its declaration and recorded as a
+# micro-change-set in the C053 handoff:
+#   POST /v1/support/screenshots                   US-16.2's "attach a screenshot" had no upload
+#                                                  surface anywhere on the platform, and the
+#                                                  ticket body takes an already-uploaded id
+#   GET  /v1/support/screenshots/{uploadId}        TicketDetail.screenshotUrl had no route to be
+#                                                  a URL of
+#   GET  /v1/internal/support/tickets              the queue admin-bff forwards …
+#   GET  /v1/internal/support/tickets/{ticketId}   … its detail, with the user's thread …
+#   POST /v1/internal/support/tickets/{id}/assign  … and the three decisions. `assign` and
+#   POST /v1/internal/support/tickets/{id}/respond `respond` are C053 deliverables that
+#   POST /v1/internal/support/tickets/{id}/resolve admin-bff.yaml has no route for.
 # =============================================================================================
 
 info:
@@ -21,6 +36,18 @@ info:
     CHECK, and the driver daily-fee refund request (US-9.23) is deliberately modelled as an
     ordinary category rather than its own endpoint (C005). Clients pick from the category list
     the FAQ surface publishes.
+
+    **The queue a ticket lands on is derived from its category, never stored** (C053).
+    `daily_fee_refund` (US-9.23, subscription-svc) and `driver_qr_dispute` (AL-47, fare-svc) go to
+    `finance` — both end in money moving, and URD §2.3 gives that to the Finance Officer; everything
+    else goes to `support` (US-14.13, Support/CSR). It is derived because `support.tickets` has
+    **three writers** — those two services raise their own claims, each having checked something
+    only it can check — and a stored column would default exactly those rows onto the wrong queue.
+
+    **Language.** The FAQ is served in the requested language with a documented fallback:
+    requested → `en` → `si` → `ta`, and the response always says which language it actually
+    served. Tickets are not translated — a description and an agent's reply are the words the
+    two people wrote.
   contact:
     name: MageRide Platform Engineering
     url: https://mageride.lk
@@ -37,6 +64,8 @@ servers:
 tags:
   - name: support
     description: FAQ and support tickets.
+  - name: support-internal
+    description: The agent queue admin-bff forwards (Δ C053).
 
 paths:
 
@@ -106,7 +135,12 @@ paths:
       summary: Raise a support ticket.
       description: |
         US-16.2. `tripId` attaches a Mode C ride or a Mode A/B session; `screenshotFileId` is an
-        already-uploaded `docs.uploads` id. Tickets open in status `OPEN`.
+        already-uploaded `docs.uploads` id — see `POST /v1/support/screenshots`. Tickets open in
+        status `OPEN` and carry an `opened` event in their thread from the first moment.
+
+        A `screenshotFileId` that does not exist, or that belongs to another user, is
+        `validation-failed` — not silently dropped, which would leave the complainant believing
+        their evidence was attached.
       tags: [support]
       security:
         - bearerAuth: []
@@ -143,6 +177,103 @@ paths:
         '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
       x-error-codes: [validation-failed, unauthorized, not-found]
+
+  /v1/support/screenshots:
+    post:
+      operationId: uploadSupportScreenshot
+      summary: Upload a screenshot to attach to a ticket.
+      description: |
+        **Δ C053 — not in D3'.** US-16.2's raise-ticket sheet has "a button to attach a
+        screenshot" and `POST /v1/support/tickets` takes an already-uploaded id, so the upload
+        itself had no surface anywhere on the platform — registry-svc resolves `docs.uploads` ids
+        and says outright that filling that table is not its job.
+
+        One `file` part. The bytes go to object storage (D-36) and the response is the
+        `docs.uploads` id, which is what the ticket links; the row carries `kind`
+        `support_screenshot`, the SHA-256 of the bytes as written, and NFR-28's 90-day
+        `autoDeleteAt`. **No public URL is ever minted** — the user reads their own screenshot
+        back through a short-lived signed link on the ticket detail.
+
+        An id may be attached to at most one ticket, and only by the user who uploaded it.
+      tags: [support]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: Stored.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadedScreenshot'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '413': { $ref: './_shared.yaml#/components/responses/PayloadTooLarge' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, payload-too-large]
+
+  /v1/support/screenshots/{uploadId}:
+    get:
+      operationId: getSupportScreenshot
+      summary: Serves a signed screenshot link.
+      description: |
+        **Δ C053 — not in D3'.** `TicketDetail.screenshotUrl` is described as a short-lived signed
+        object-storage URL and had no route to be a URL of. With no S3 client in this build
+        (D-36's bucket is C125's) the link is minted on the ticket detail and served here,
+        HMAC-signed over `(uploadId, expires)`.
+
+        **`security: []` because the signature is the credential** — the same reasoning as
+        subscription-svc's `GET /v1/mode-b/files/{kind}/{id}`. The URL goes to an image loader,
+        which carries no bearer, and an access token in a query string is an access token in every
+        proxy log on the way. A bad signature, an expired one and an unknown id all answer `403`,
+        so a forged link tells its author nothing.
+      tags: [support]
+      security: []
+      parameters:
+        - name: uploadId
+          in: path
+          required: true
+          schema:
+            $ref: './_shared.yaml#/components/schemas/Ulid'
+        - name: expires
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: signature
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The image bytes.
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [forbidden, not-found]
 
   /v1/support/tickets/{userId}:
     get:
@@ -205,14 +336,250 @@ paths:
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
       x-error-codes: [unauthorized, forbidden, not-found]
 
+  # -------------------------------------------------------------------------------------------
+  # The agent queue (Δ C053). admin-bff.yaml declares `/v1/admin/support/**` and is the
+  # RBAC-gated, audited front door (D-35); these are the operations it forwards, guarded by
+  # `Support:InternalApiKey` and refused at the edge by the gateway like every `/v1/internal`
+  # prefix (C008). The deciding agent travels on the body, because the caller is a service.
+  # -------------------------------------------------------------------------------------------
+  /v1/internal/support/tickets:
+    get:
+      operationId: listSupportQueueInternal
+      summary: The ticket queue.
+      description: |
+        US-16.3 / US-14.13. Filterable by `queue` (`support` | `finance`), `status`, `category`
+        and `assignedTo`; oldest first, because a queue is worked from its head.
+
+        `queue` is derived from the category, never stored — see the service description.
+        `?queue=finance` is how the Finance Officer's daily-fee-refund pile (US-9.23) is worked.
+      tags: [support-internal]
+      security:
+        - mtls: []
+      parameters:
+        - name: queue
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/TicketQueue'
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/TicketStatus'
+        - name: category
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 60
+        - name: assignedTo
+          in: query
+          required: false
+          description: Only tickets assigned to this agent.
+          schema:
+            $ref: './_shared.yaml#/components/schemas/Ulid'
+        - $ref: './_shared.yaml#/components/parameters/Cursor'
+        - $ref: './_shared.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Queue page.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './_shared.yaml#/components/schemas/CursorPage'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/TicketRow'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, not-found]
+
+  /v1/internal/support/tickets/{ticketId}:
+    get:
+      operationId: getSupportTicketInternal
+      summary: One ticket with its whole thread.
+      description: |
+        The agent's view of what the user sees, plus the assignment. The screenshot is a
+        short-lived signed link, identical to the one on the user's own detail.
+      tags: [support-internal]
+      security:
+        - mtls: []
+      parameters:
+        - $ref: '#/components/parameters/TicketId'
+      responses:
+        '200':
+          description: Ticket detail.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketRow'
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [not-found]
+
+  /v1/internal/support/tickets/{ticketId}/assign:
+    post:
+      operationId: assignSupportTicketInternal
+      summary: Take a ticket, or hand it to another agent.
+      description: |
+        **Δ C053.** A C053 deliverable that `admin-bff.yaml` has no route for. Moves `OPEN` to
+        `IN_PROGRESS` and records an `assigned` event.
+
+        The assignment is **not** shown to the user: who inside MageRide is handling a complaint
+        is not the complainant's business, and the queue still needs the trail. Re-assigning an
+        already-assigned ticket is allowed and records a second event; a `RESOLVED` ticket is
+        `409` — reopening is a decision, not a side effect of picking something up.
+      tags: [support-internal]
+      security:
+        - mtls: []
+      parameters:
+        - $ref: '#/components/parameters/TicketId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [actorId]
+              properties:
+                actorId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+                actorRole:
+                  type: string
+                  maxLength: 40
+                assignTo:
+                  description: Whom to assign it to. Absent means the actor takes it themselves.
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+      responses:
+        '200':
+          description: Assigned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketRow'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, not-found, conflict]
+
+  /v1/internal/support/tickets/{ticketId}/respond:
+    post:
+      operationId: respondSupportTicketInternal
+      summary: Reply to a ticket without closing it.
+      description: |
+        **Δ C053.** US-16.3's "respond … and mark them as resolved" is two verbs, and
+        `admin-bff.yaml` has a route only for the second — so an agent asking a clarifying
+        question had to resolve the ticket to be heard.
+
+        Appends a `responded` event, moves `OPEN` to `IN_PROGRESS`, and replaces
+        `adminResponse` with the latest reply. The **thread keeps every one of them**; the column
+        is the current value, which is what `TicketRow.response` returns. A `RESOLVED` ticket is
+        `409`.
+      tags: [support-internal]
+      security:
+        - mtls: []
+      parameters:
+        - $ref: '#/components/parameters/TicketId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [actorId, response]
+              properties:
+                actorId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+                actorRole:
+                  type: string
+                  maxLength: 40
+                response:
+                  type: string
+                  maxLength: 4000
+      responses:
+        '200':
+          description: Replied.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketRow'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, not-found, conflict]
+
+  /v1/internal/support/tickets/{ticketId}/resolve:
+    post:
+      operationId: resolveSupportTicketInternal
+      summary: Resolve a ticket.
+      description: |
+        US-16.3. The decision behind `POST /v1/admin/support/tickets/{ticketId}/resolve`, which
+        admin-bff forwards after RBAC-gating the agent and writing the D-35 audit row.
+
+        The response text is shown verbatim to the user. Resolving twice is `409` rather than an
+        overwrite of who resolved it — the loser is told, exactly as a second moderator is on
+        safety-svc's report queue.
+      tags: [support-internal]
+      security:
+        - mtls: []
+      parameters:
+        - $ref: '#/components/parameters/TicketId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [actorId, response]
+              properties:
+                actorId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+                actorRole:
+                  type: string
+                  maxLength: 40
+                response:
+                  type: string
+                  maxLength: 4000
+      responses:
+        '200':
+          description: Resolved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketRow'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, not-found, conflict]
+
 components:
   securitySchemes:
     bearerAuth:
       $ref: './_shared.yaml#/components/securitySchemes/bearerAuth'
+    mtls:
+      $ref: './_shared.yaml#/components/securitySchemes/mtls'
 
   parameters:
     UserId:
       name: userId
+      in: path
+      required: true
+      schema:
+        $ref: './_shared.yaml#/components/schemas/Ulid'
+
+    TicketId:
+      name: ticketId
       in: path
       required: true
       schema:
@@ -230,6 +597,9 @@ components:
         category:
           type: string
         language:
+          description: |
+            The language actually served, which is not necessarily the one asked for — see the
+            fallback order in the service description.
           $ref: './_shared.yaml#/components/schemas/LanguageCode'
 
     FaqArticle:
@@ -247,9 +617,63 @@ components:
       description: Matches the `support.tickets.status` CHECK (C005).
       enum: [OPEN, IN_PROGRESS, RESOLVED]
 
+    TicketQueue:
+      type: string
+      description: |
+        **Δ C053.** Which back-office pile a ticket belongs to, derived from its category and
+        never stored: `daily_fee_refund` → `finance` (US-9.23, US-14.11), everything else →
+        `support` (US-14.13).
+      enum: [support, finance]
+
+    TicketEventKind:
+      type: string
+      description: |
+        **Δ C053.** `assigned` is recorded and never returned to the user — who inside MageRide
+        is handling a complaint is not the complainant's business.
+      enum: [opened, assigned, responded, resolved, reopened]
+
+    TicketEvent:
+      type: object
+      description: '**Δ C053.** One entry in a ticket''s thread.'
+      required: [kind, at]
+      properties:
+        kind:
+          $ref: '#/components/schemas/TicketEventKind'
+        at:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+        fromStatus:
+          $ref: '#/components/schemas/TicketStatus'
+        toStatus:
+          $ref: '#/components/schemas/TicketStatus'
+        body:
+          type: string
+          description: The agent's words on `responded` and `resolved`, verbatim.
+        actorRole:
+          type: string
+          description: |
+            The canonical role of whoever caused the event, as held at the time. The agent's
+            **identity** is never returned to the user.
+
+    UploadedScreenshot:
+      type: object
+      description: '**Δ C053.** The `docs.uploads` row `POST /v1/support/screenshots` created.'
+      required: [fileId, sizeBytes]
+      properties:
+        fileId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        sizeBytes:
+          type: integer
+          format: int64
+        sha256:
+          type: string
+          description: Lower-case hex digest of the bytes as written.
+        autoDeleteAt:
+          description: NFR-28's 90-day raw delete.
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+
     Ticket:
       type: object
-      required: [ticketId, category, status, createdAt]
+      required: [ticketId, category, status, queue, createdAt]
       properties:
         ticketId:
           $ref: './_shared.yaml#/components/schemas/Ulid'
@@ -257,9 +681,13 @@ components:
           type: string
         status:
           $ref: '#/components/schemas/TicketStatus'
+        queue:
+          $ref: '#/components/schemas/TicketQueue'
         tripId:
           $ref: './_shared.yaml#/components/schemas/Ulid'
         createdAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+        updatedAt:
           $ref: './_shared.yaml#/components/schemas/Timestamp'
         resolvedAt:
           $ref: './_shared.yaml#/components/schemas/Timestamp'
@@ -268,13 +696,50 @@ components:
       allOf:
         - $ref: '#/components/schemas/Ticket'
         - type: object
-          required: [description]
+          required: [description, thread]
           properties:
             description:
               type: string
             screenshotUrl:
               type: string
               format: uri
-              description: Short-lived signed object-storage URL.
+              description: |
+                Short-lived signed link to `GET /v1/support/screenshots/{uploadId}`. Relative,
+                and re-minted on every read — it expires, so it cannot be cached with the ticket.
             adminResponse:
               type: string
+              description: The latest agent reply. Every reply is in `thread`.
+            thread:
+              type: array
+              description: |
+                **Δ C053.** Oldest first. Carries every status transition and every agent reply,
+                which is what makes a resolution visible to the user rather than a status they
+                have to interpret.
+              items:
+                $ref: '#/components/schemas/TicketEvent'
+
+    TicketRow:
+      allOf:
+        - $ref: '#/components/schemas/TicketDetail'
+        - type: object
+          description: |
+            **Δ C053.** The agent's view: the user's detail plus who raised it and who is working
+            it. Shaped so `admin-bff.yaml`'s `TicketRow` is a subset — that surface forwards here.
+          required: [userId]
+          properties:
+            userId:
+              $ref: './_shared.yaml#/components/schemas/Ulid'
+            assignedTo:
+              $ref: './_shared.yaml#/components/schemas/Ulid'
+            assignedAt:
+              $ref: './_shared.yaml#/components/schemas/Timestamp'
+            resolvedBy:
+              $ref: './_shared.yaml#/components/schemas/Ulid'
+            legacyScreenshotUrl:
+              type: string
+              description: |
+                **Δ C053, agent-only.** `support.tickets.screenshot_url` — the original §13
+                public-URL column. Nothing in support-svc writes it; fare-svc (C050) does, for
+                AL-47's driver-QR dispute evidence, so dropping it would lose the attachment on a
+                Finance-queue ticket. Deliberately absent from `TicketDetail`: it is unsigned and
+                uncontrolled, which is what `screenshotUrl` exists to avoid.

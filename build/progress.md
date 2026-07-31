@@ -78,7 +78,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C050 | fare-svc-payments | 3 | PARTIAL | 2026-07-31 | 113 tests green (35 added); **D5' §8.1's machine is a table and the test compares it with a hand transcription of the diagram**, so an invented transition fails as loudly as a missing one; every move is a guarded `UPDATE … WHERE state = @From`, which is the whole concurrency argument and all R-19 needs beside the `provider_transaction_id` UNIQUE; a late gateway success after cash becomes `Overpaid` with an `overpaid_reversal` on the Finance queue and **does not touch the ride** (§11.14); AL-47's driver-QR trio settles with **zero** requests to the ledger seam, asserted against a wallet stub that is running and unused; **ride-svc had no `DriverConfirmedQR` terminal** so no driver-QR fare could ever settle a ride — added, mapped to `CashSettled` exactly as 1002's column comment always said; retry implemented as a new attempt because `provider_transaction_id` must stay one-to-one with a gateway call; no migration and no outbox; **PARTIAL: the AL-47 nudge push and the COD state sync are not built** (no notification-svc, and ride-svc's `cod-collected` never reaches fare-svc); 6 spec gaps |
 | C051 | notification-svc | 3 | DONE | 2026-07-31 | 86 tests green in a **new suite** (`Notification.Api.Tests`); **2 migrations (1308, 1904)** — `comms.notifications`, the outbound queue **no spec declares**, plus `comms.command_log`, the AL-08 install column on `notification_tokens` and the eighteen §14.4 template keys 1902 deliberately left unseeded; **E-01's "exactly once" is two database facts** — the `Sent → FellBackToSms` claim in the statement that selects the row, and `fallback:{pushId}` on `ux_notifications_dedupe` — so three sweeps of one unacked offer produce one SMS; **D-33 measured** against two gateways on real sockets with a deliberately slow primary (p99 well inside the 5 s, and both gateways written to); P-12's buckets spent **after** the dedupe claim so a redelivered `location.request.issued` costs nothing; AL-44/AL-45's fence held by the type system — `MintedLink` has no token member and no response shape in the assembly can carry one; **a real defect caught**: the kernel's camelCase dictionary-key policy answered a `LOW_BALANCE` mute with `loW_BALANCE`, fixed with iam-svc's `LiteralKeyDictionaryConverter` on both directions of the wire; **4 contract changes** (`POST /v1/notify/ack`, `notificationType`, `phones`, `audience`); `migrate-verify.sh` 330/330 with a C051 section; 14 spec gaps / micro-change-sets |
 | C052 | safety-svc | 3 | DONE | 2026-07-31 | 30 tests green in a **new suite** (`Safety.Api.Tests`), which boots a **real notification-svc** because D-33 is a property of the two services together and runs **dispatch-svc's own candidate query** because US-12.10's gate lives there; **1 migration (0905)** — `safety.outbox` (the admin live feed D3' asks for and `signalr-hub.md` has no group for), `safety.command_log`, `sos_events.dispatched_at` (without it every SOS looks instantaneous and the D-33 SLO is unmeasurable), the `driver_id` a report counts against and its resolution evidence; **the SOS bypasses the notification queue** — C051 gained an inline dispatch for the one type with a latency SLO, so the five seconds do not depend on how many ride offers are queued in front of it, and the per-gateway outcome exists to record at all; **no replay is structural** — the public view reads `veh:meta`, a Redis hash that holds one position and no history, so the store cannot answer the question D-34 forbids; the 410 is produced before the ride row is read, and the test asserts the *body*; **two real defects caught** — an SOS with no ride rendered an empty `{{link}}` and was silently never sent (now a `geo:` URI), and the P-12 tally's keys were camelCased on the wire, which promoted iam-svc's `LiteralKeyDictionaryConverter` into the kernel on its third instance; **5 contract changes** (`smsStatus`, the moderation pair, the trip-end hook, the P-12 read, and C051's `deliveries`); `migrate-verify.sh` 341/341 with a C052 section; 12 spec gaps / micro-change-sets |
-| C053 | support-svc | 3 | PENDING | | |
+| C053 | support-svc | 3 | DONE | 2026-07-31 | 32 tests green in a **new suite** (`Support.Api.Tests`), all integration against a real Postgres and asserting migration 1902's **actual Sinhala and Tamil strings** rather than fixtures of its own; **1 migration (1309)** — `support.ticket_events` (the thread; §13 holds one `admin_response`, so a second reply overwrites the first and a status change leaves no trace at all), `support.command_log` (R-14, the twelfth), the five columns an agent's handling needs, and `screenshot_upload_id` as a **FK onto `docs.uploads`** because the DoD says "links it by id, not by public URL" and §13's `screenshot_url` **is** that URL; **this service is the platform's first writer of `docs.uploads`** — US-16.2's "attach a screenshot" had no upload surface anywhere, and registry-svc says outright that filling that table is not its job; **the Finance queue is derived from the category, never stored**, because `support.tickets` has three writers and a stored column would default C047's and C050's own rows onto the wrong pile; **one real defect caught** — thread entries stamped from the service clock beside a `resolved_at` stamped by Postgres sorted the thread out of order, so every timestamp on these tables is now `now()`; **10 contract changes** (the upload pair, the internal queue family, the thread, the queue, `TicketRow`); `migrate-verify.sh` 351/351 with a C053 section; 11 spec gaps / micro-change-sets |
 | C054 | ocr-svc | 3 | PENDING | | |
 | C055 | voip-svc | 3 | PENDING | | |
 | C056 | transit-svc-routing | 3 | PENDING | | |
@@ -7523,3 +7523,173 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   of 128 is reached a few tests in. **No new NuGet reference and no new topic-consuming code** — the
   reputation proto is compiled straight out of `backend/contracts/`, the same Include C033 wrote and
   C034 reused.
+
+- **Component:** C053 support-svc — 2026-07-31
+- **Status:** DONE — `dotnet test backend/src/Support.Api.Tests -c Release` → **32/32 green**, all
+  integration, against a real Postgres. All three DoD items pass, each with a test named after the
+  claim. `bash infra/scripts/migrate-verify.sh` → **351/351**.
+  `dotnet test backend/src/ApiGateway.Tests -c Release` → **538/538** (the route table drives every
+  contract operation, so the seven new ones are routed).
+  `npx @stoplight/spectral-cli lint 'backend/contracts/*.yaml'` → 0 errors.
+- **Notes:**
+  **New:** `backend/src/Support.Api` + `Support.Api.Tests` (both in `MageRide.sln`),
+  `db/migrations/1309__support_ticket_thread.sql`, seven operations on `backend/contracts/support.yaml`,
+  a C053 section in `migrate-verify.sh`, the `Support__*` block in `.env.app.example`.
+  **Changed elsewhere:** nothing. subscription-svc and fare-svc still write `support.tickets`
+  directly — see decision (9).
+
+  (1) **The FAQ is read straight from `content.faq_articles`, not fetched over HTTP from
+  content-svc.** The platform's established shape for a cross-context *read* (safety-svc reads
+  `iam.users`, subscription-svc reads `registry.vehicles`), and the reason is availability: the FAQ is
+  the screen somebody opens when something has **already** gone wrong, and a hop through another
+  service means a content-svc outage takes out the help page. CLAUDE.md's outbox rule governs
+  cross-service *state changes* and nothing here changes state. **The fence is held by the type**:
+  `IFaqRepository` has three methods, all three are `SELECT`s, and
+  `Nothing_in_this_service_can_write_an_article` asserts that by reflection — a method added later
+  fails the suite rather than quietly crossing the line.
+
+  (2) ⚠ **`content.faq_articles` still has no key linking the three translations of one article** —
+  the gap C045 raised as its (f) and deliberately left open. `GET /v1/support/faq/{articleId}?lang=`
+  is unsatisfiable without one, so the sibling is **derived from `(category, sort_order)`**: the pair
+  1902's seed makes unique per language and the pair `ix_faq_articles_lookup` already leads with.
+  It is a derivation and it is labelled as one at `IFaqRepository.ListTranslationsAsync`, which is
+  the single place that changes when a real `article_key TEXT` lands. **Micro-change-set, re-raised:**
+  add the column to `content.faq_articles` in a content-svc migration, backfill from
+  `(category, sort_order)`, and D3'/D4' should say which of the two identifies an article.
+
+  (3) **The documented fallback order is requested → `en` → `si` → `ta`, the whole order is walked,
+  and the response says which language it served.** English first among the alternatives for C045's
+  reason (it is the one every operator and CSR reads) while presentation order stays Sinhala-first
+  (AL-26) — two different questions. Walking the *whole* order matters: "requested, else English"
+  leaves a Tamil reader with nothing when an article exists only in Sinhala. And the fallback is
+  applied to the **filtered** answer, not to the language as a whole, so `?lang=ta&category=wallet`
+  serves the English wallet article rather than an empty list. Reaching a fallback logs a warning —
+  it means the day-0 set is incomplete for a language D-26 promises.
+
+  (4) ⚠ **US-16.2's "button to attach a screenshot" had no upload surface anywhere on the platform.**
+  `support.yaml`'s `POST /v1/support/tickets` takes an *already-uploaded* `docs.uploads` id;
+  registry-svc resolves such ids and its CLAUDE.md says outright that filling that table is not its
+  job; ride-svc and subscription-svc keep their artefacts outside `docs.*`. So **support-svc is the
+  platform's first writer of `docs.uploads`**, for the one `kind` it owns (`support_screenshot`), via
+  **Δ C053 `POST /v1/support/screenshots`**. It writes the SHA-256 of the bytes as written and
+  NFR-28's 90-day `auto_delete_at`; **the sweeper for that deadline still does not exist anywhere** —
+  1301's `ix_uploads_auto_delete` is the index it will scan. Raised as a gap.
+
+  (5) **"Stores the artifact in object storage and links it by id, not by public URL" is held by the
+  schema.** `screenshot_upload_id` is a **foreign key onto `docs.uploads`**, and §13's
+  `screenshot_url` — the public URL that phrasing rules out — is written by nothing here. The user
+  gets a link minted per read, HMAC-signed over `(kind, uploadId, expires)` with a 15-minute TTL, the
+  same shape C048 gave AL-49's "signed URL". `IScreenshotStore` is the one-method seam to D-36's
+  SSE-KMS bucket; until C125 the bytes are a file under `Support:ScreenshotRoot`, announced at
+  start-up. The signed read checks the **`kind`** as well as the signature, because `docs.uploads`
+  also holds driving licences and bank statements — a leaked signing key must not be a key to
+  somebody's NIC.
+
+  (6) ⚠ **§13 gives `support.tickets` one `admin_response TEXT`**, which is a queue that can remember
+  one sentence and cannot say who wrote it, when, or what the status was before they did — while
+  `support.yaml`'s `Ticket` already returns a `resolvedAt` §13 has no column for. Migration 1309 adds
+  `support.ticket_events` (the thread the DoD's "visible to the user" needs), `assigned_to` /
+  `assigned_at` (the deliverable is "list, **assign**, respond, resolve"), `resolved_at` /
+  `resolved_by`, `ck_tickets_resolution` (`NOT VALID`, because C047's existing rows have no
+  `resolved_at`), `ix_tickets_status_created` and `support.command_log`. Each is a micro-change-set.
+  **`support.ticket_events` is deliberately not `audit.events`**: that table is admin-bff's (D-35) and
+  is invisible to users; this one is *for* the user and carries only what a user may read.
+
+  (7) **The Finance routing is derived from the category and never stored.** `daily_fee_refund`
+  (US-9.23 → US-14.11) and `driver_qr_dispute` (AL-47) both end in money moving, and URD §2.3 gives
+  that to the Finance Officer; everything else is Support/CSR's (US-14.13). Derived because
+  `support.tickets` has **three writers** — a stored column would default C047's and C050's own rows,
+  the exact rows this routing exists for, onto the Support pile. The predicate is inside the queue
+  SQL rather than a filter over its result.
+
+  (8) **The agent queue is `/v1/internal/support/**`, the split C052 uses.** `admin-bff.yaml`
+  declares `/v1/admin/support/tickets` and `.../{id}/resolve`, and the C053 fence says resolution UI
+  is the Admin Portal's and this service "exposes the queue API only" — both hold at once if
+  admin-bff is the RBAC-gated, audited front door and the decision is made here. **Δ C053 adds
+  `assign` and `respond`**, which no contract had a route for: US-16.3 says "respond … **and** mark
+  them as resolved", so an agent asking a clarifying question would otherwise have had to close the
+  ticket to be heard. The acting agent travels on the body (`actorId`, `actorRole`), because the
+  caller is a service. No route here checks a role — admin-bff does.
+
+  (9) ⚠ **The two forwards C047 and C050 each asked for are NOT done, deliberately.** Both handoffs
+  say their direct `INSERT INTO support.tickets` "becomes a forward to C053's ticket route and the
+  SQL is deleted". Neither was changed, because the validation that makes each write correct would
+  have to move or be duplicated — **only subscription-svc can say whether the driver was in fact
+  charged on the day they are disputing**, and only fare-svc holds the QR settlement being disputed.
+  Nothing is lost by waiting: the queue routing is a pure function of `category`, so those rows land
+  on Finance's pile either way, and `migrate-verify.sh` proves both shapes coexist. **The shape a
+  forward should take**, when somebody does it: `POST /v1/support/tickets` with the caller's own
+  bearer, after the validation, and the id it returns replaces the one the local `INSERT` returned.
+  Raised as follow-up work for C047/C050 rather than done here.
+
+  (10) **fare-svc's evidence would have been silently dropped, and is not.** C050 writes AL-47's
+  QR-dispute screenshot into §13's original `screenshot_url`, which this service never writes — so a
+  reader that ignored the column would show a Finance agent a dispute with its attachment missing.
+  It is projected onto `TicketRow` as `legacyScreenshotUrl` (**agent-only**) and never onto
+  `TicketDetail`: an unsigned, uncontrolled URL in front of the complainant is exactly what the DoD
+  rules out. **For C050:** switch that write to `POST /v1/support/screenshots` +
+  `screenshot_upload_id` and the column can be dropped.
+
+  (11) **One real defect, caught by the suite.** Thread entries were stamped from the service's
+  `TimeProvider` while `created_at` / `resolved_at` came from Postgres — so under a `FakeTimeProvider`
+  the `opened` entry sorted **after** the resolution, and in production two replicas with drifting
+  clocks would have done the same intermittently. Fixed by putting **every timestamp on these tables
+  on the database clock** (`now()`), leaving `TimeProvider` for the one thing that is an application
+  decision rather than a row: the signed link's TTL. Thread ids are UUIDv7 for the same reason —
+  `ORDER BY at, id` over `gen_random_uuid()` would let a reply render above the transition that
+  caused it.
+
+  (12) **`from_status` is read under `FOR UPDATE`.** Without the lock two agents could both read
+  `OPEN`, and the loser of the guarded `UPDATE` would have written a thread entry claiming a
+  transition that never happened. The loser blocks, wakes to the new status, and its own guard turns
+  it into the `409` it should be — told apart from a `404` by reading the row, as safety-svc's report
+  queue does.
+
+  (13) **The assignment is recorded and withheld from the user.** Who inside MageRide is handling a
+  complaint is not the complainant's business — a complaint about a named driver routed to a named
+  CSR is exactly the pairing the complainant should not be able to read. The row is written and
+  `TicketEventKinds.UserVisible` is what withholds it; no thread entry carries an actor **id** on the
+  wire at all, only a role. Likewise **somebody else's ticket is `404`, not `403`**: a `403` confirms
+  the id names a real complaint.
+
+  (14) **No back-office exception on `GET /v1/support/tickets/{userId}`**, unlike subscription-svc's
+  fee history. An agent has the queue, which admin-bff gates and audits; a route letting any internal
+  role page a named user's complaints from the app surface would be the same read with none of that.
+
+  (15) **No Redis, no Kafka, no outbox.** Nothing here is rate-limited by a shared bucket or cached
+  across replicas, and this service changes no state another service acts on — a resolved ticket is
+  read by the person who raised it, and US-14.11's wallet reversal is an admin decision taken in
+  admin-bff against wallet-svc. A `ticket.*` topic would be produced here and consumed by nobody, and
+  D6' §2.1 gives this service none. **Its first real consumer would be notification-svc's "your
+  ticket was answered" push (C051)** — named as absent rather than left missing.
+
+  (16) ⚠ **`reopened` is in `ck_ticket_events_kind` and nothing writes it.** US-16.3 ends at "mark
+  them as resolved" and no spec gives a user or an agent a way back, so there is no route; the value
+  exists so a screen for it is not a migration. Raised as a gap.
+
+  **For C065 (admin-bff) —** five forwards and the audit row. `GET /v1/internal/support/tickets`
+  (`?queue=support|finance&status=&category=&assignedTo=` + cursor) is the queue,
+  `GET .../{ticketId}` its detail, and `POST .../{id}/assign` · `/respond` · `/resolve` the three
+  decisions — pass `actorId` and `actorRole` from the token you have already RBAC-gated, and write
+  the D-35 `audit.events` row, by the same split C045–C052 use. `?queue=finance` is the Finance
+  Officer's pile and `?queue=support` the CSR's; URD §2.3 is the mapping. `Support:InternalApiKey`
+  must equal what you send.
+
+  **For C107 (Admin Portal support/disputes screen) —** SCR-AP-005 renders `TicketRow`: the queue is
+  oldest-first because a queue is worked from its head, `thread` is the whole conversation including
+  the assignments the user cannot see, `screenshotUrl` is a short-lived signed link you must not
+  cache, and `legacyScreenshotUrl` is fare-svc's older attachment (see (10)). `respond` keeps a
+  ticket open; `resolve` closes it and a second `resolve` is `409`, not an overwrite.
+
+  **For C045 (content-svc) —** the `article_key` gap in (2) is yours to close whenever the FAQ gets
+  an authoring screen. Nothing here writes your table.
+
+  **For C051 (notification-svc) —** "your ticket was answered" is yours (see (15)). This service
+  moves the state and writes no `comms.*` row; the trigger is a `resolved` or `responded` entry on
+  `support.ticket_events`.
+
+  **For C118 (contract tests) —** `support.yaml` gained seven operations, six schemas, a `thread` on
+  `TicketDetail`, a `queue` on `Ticket` and one agent-only field on `TicketRow`.
+
+  **Build host —** Docker for one Testcontainers fixture (Postgres); the replica stack stayed down
+  throughout. `Support.Api.Tests` takes ~50 s. No new NuGet reference.

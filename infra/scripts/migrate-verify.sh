@@ -924,7 +924,11 @@ check_eq "4 subscription tables from C005 + 1 from C047 + 1 from C048" "6" \
 # added by 1307 in the same schema.
 # 5 comms, not C005's 3: `comms.notifications` (D5' §14.4's outbound queue, which no spec declares)
 # and `comms.command_log` (R-14, the tenth of them) are C051's, both added by 1308.
-check_eq "5 comms, 2 docs, 1 support, 5 content, 1 audit, 2 pdpa, 3 spatial tables" "19" \
+# 3 support, not C005's 1: `support.ticket_events` (the thread the definition of done makes a
+# ticket's status transitions "visible to the user" through — §13 holds one `admin_response`, so a
+# second reply overwrites the first) and `support.command_log` (R-14, the twelfth) are C053's, both
+# added by 1309.
+check_eq "5 comms, 2 docs, 3 support, 5 content, 1 audit, 2 pdpa, 3 spatial tables" "21" \
   "SELECT count(*) FROM information_schema.tables
     WHERE table_schema IN ('comms','docs','support','content','audit','pdpa','spatial')
       AND table_type='BASE TABLE';"
@@ -2025,6 +2029,69 @@ check_rejects "a body in a fourth language is refused (ck_notifications_language
 
 psql_run "DELETE FROM comms.notifications WHERE dedupe_key LIKE 'verify:c051:%';" >/dev/null \
   || die "could not clean up the C051 notification fixture."
+
+# ---------------------------------------------------------------------------------------
+# C053 — support: the ticket thread, the agent's handling columns, the replay log (1309)
+#
+# §13 gives support.tickets one `admin_response TEXT` — a queue that can remember one sentence and
+# cannot say who wrote it, when, or what the status was before they did. The checks below are about
+# the three facts these objects exist to make recordable: the conversation the complainant reads,
+# who is working the ticket, and when it was answered.
+# ---------------------------------------------------------------------------------------
+step "Objects owned by C053 (Epic 16, US-9.23, US-14.13)"
+
+check_eq "support.ticket_events exists (the thread)" "1" \
+  "SELECT count(*) FROM information_schema.tables
+    WHERE table_schema='support' AND table_name='ticket_events';"
+check_eq "support.command_log exists (R-14, the twelfth bounded context)" "1" \
+  "SELECT count(*) FROM information_schema.tables
+    WHERE table_schema='support' AND table_name='command_log';"
+check_eq "a ticket can be assigned, resolved and evidenced (5 columns)" "5" \
+  "SELECT count(*) FROM information_schema.columns
+    WHERE table_schema='support' AND table_name='tickets'
+      AND column_name IN ('assigned_to','assigned_at','resolved_at','resolved_by','screenshot_upload_id');"
+# The definition of done: the screenshot is linked by id, not by public URL. A foreign key onto
+# docs.uploads is what makes that structural — the bytes are on SSE-KMS storage (D-36) and the
+# ticket cannot hold anything but a pointer to the row that knows where.
+check_eq "the screenshot link is a FK onto docs.uploads, not a URL" "1" \
+  "SELECT count(*) FROM pg_constraint
+    WHERE conrelid='support.tickets'::regclass AND contype='f'
+      AND confrelid='docs.uploads'::regclass;"
+check_eq "the agent queue can be paged by status (ix_tickets_status_created)" "1" \
+  "SELECT count(*) FROM pg_indexes
+    WHERE schemaname='support' AND indexname='ix_tickets_status_created';"
+check_eq "a thread is read in order (ix_ticket_events_ticket)" "1" \
+  "SELECT count(*) FROM pg_indexes
+    WHERE schemaname='support' AND indexname='ix_ticket_events_ticket';"
+
+psql_run "INSERT INTO iam.users (id, phone, role)
+          VALUES ('c0000053-0000-0000-0000-000000000001','+94770000531','passenger')
+          ON CONFLICT (id) DO NOTHING;
+          INSERT INTO support.tickets (id, user_id, category, description)
+          VALUES ('c0000053-0000-0000-0000-000000000002','c0000053-0000-0000-0000-000000000001',
+                  'daily_fee_refund','verify: charged in error');" >/dev/null \
+  || die "could not seed the C053 ticket fixture."
+
+check_rejects "an unknown thread event kind is refused (ck_ticket_events_kind)" \
+  "INSERT INTO support.ticket_events (ticket_id, kind)
+     VALUES ('c0000053-0000-0000-0000-000000000002','escalated');"
+# ck_tickets_resolution is NOT VALID (resolved_at is new and pre-existing rows have none), so this
+# proves the constraint bites on a NEW write — which is the half that closes the hole.
+check_rejects "a RESOLVED ticket with no resolved_at is refused (ck_tickets_resolution)" \
+  "UPDATE support.tickets SET status='RESOLVED'
+     WHERE id='c0000053-0000-0000-0000-000000000002';"
+check_rejects "a resolved_at on an OPEN ticket is refused (ck_tickets_resolution)" \
+  "UPDATE support.tickets SET resolved_at=now()
+     WHERE id='c0000053-0000-0000-0000-000000000002';"
+check_rejects "a ticket cannot point at an upload that does not exist" \
+  "UPDATE support.tickets SET screenshot_upload_id='c0000053-0000-0000-0000-0000000000ff'
+     WHERE id='c0000053-0000-0000-0000-000000000002';"
+
+psql_run "DELETE FROM support.ticket_events
+           WHERE ticket_id='c0000053-0000-0000-0000-000000000002';
+          DELETE FROM support.tickets WHERE id='c0000053-0000-0000-0000-000000000002';
+          DELETE FROM iam.users WHERE id='c0000053-0000-0000-0000-000000000001';" >/dev/null \
+  || die "could not clean up the C053 ticket fixture."
 
 # AL-49 BR-31.1: the pay sheet's payTo reads the single verified row, and the table is versioned so
 # an owner's later edit lands beside it rather than on top of it.
