@@ -325,6 +325,58 @@ services:
     networks: [mr]
     restart: unless-stopped
 
+  # -----------------------------------------------------------------------------------
+  # Container 11 — the VoIP media plane (C055, D-24, D6' §6). Two containers, and the
+  # split matters: `livekit` is the SFU that carries a call, `coturn` is the relay for the
+  # handsets that cannot reach it directly.
+  #
+  # BOTH ARE ON HOST NETWORKING, and D6' §6 is why: "TURN media relay (coturn) on host UDP
+  # range (3478 + 50000-50100), NOT via HAProxy/L7 (HAProxy cannot relay UDP)." An L7 proxy
+  # has nothing to proxy here — the media is UDP to ports it has never heard of — and the
+  # failure mode of getting this wrong is not a startup error. It is one-way audio, on the
+  # subset of calls whose ICE happened to need a relay.
+  #
+  # What DOES go through the proxy is the signalling websocket alone (7880), which is
+  # ordinary HTTP upgrade traffic. voip-svc itself is inside `app-services` and is reached
+  # through the gateway like every other service.
+  # -----------------------------------------------------------------------------------
+  livekit:
+    image: livekit/livekit-server:v1.8
+    command: ["--config", "/etc/livekit.yaml"]
+    volumes:
+      - ./deploy/livekit/livekit.yaml:/etc/livekit.yaml:ro
+    environment:
+      # The HS256 signing key for every token voip-svc mints. `key: secret`, and it must
+      # equal Voip__LiveKit__ApiKey / Voip__LiveKit__ApiSecret in env/.env.app.
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY:-devkey}: ${LIVEKIT_API_SECRET:-devsecret-change-me}"
+    # host, not the `mr` bridge: the RTC port range has to be reachable as itself. Publishing
+    # 100 UDP ports through docker-proxy also costs a userland hop per packet on a media path.
+    network_mode: host
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:7880/ > /dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    mem_limit: 1g
+    cpus: 1.0
+    restart: unless-stopped
+
+  coturn:
+    image: coturn/coturn:4.6
+    command: ["-c", "/etc/coturn/turnserver.conf"]
+    volumes:
+      - ./deploy/coturn/turnserver.conf:/etc/coturn/turnserver.conf:ro
+    environment:
+      # coturn cannot infer the address it tells peers to send to; a wrong one is silent
+      # one-way audio rather than a failure. Set per deployment.
+      DETECT_EXTERNAL_IP: "yes"
+    # Same reason as livekit above, and the one D6' §6 states outright.
+    network_mode: host
+    mem_limit: 512m
+    cpus: 0.5
+    restart: unless-stopped
+
 # -------------------------------------------------------------------------------------
 # Optional containers, deliberately NOT declared here.
 #
@@ -335,8 +387,6 @@ services:
 #   admin-portal   C104  Next.js, Node 24-alpine, 3001, admin.mageride.lk   (AL-02)
 #   fleet-portal   C111  Next.js, Node 24-alpine, 3002, fleet.mageride.lk   (AL-03)
 #   monitoring     C119  Prometheus + Grafana, 9090 / 3000
-#   voip           C055  LiveKit + coturn; TURN media 50000-50100/UDP must be published
-#                        on the docker HOST, never through HAProxy (replica Container 11)
 #   nominatim      C056  8 GB — hosted on a SEPARATE VPS, never co-located (D-14)
 #
 # infra/deploy/haproxy.cfg already carries the admin./fleet. vhost backends and starts

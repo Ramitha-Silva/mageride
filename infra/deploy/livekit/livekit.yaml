@@ -1,0 +1,65 @@
+# =====================================================================================
+# MageRide — LiveKit SFU configuration (C055, D-24, D6' §6)
+#
+# Mounted at /etc/livekit.yaml in the `livekit` container. Read by voip-svc only through
+# its API key/secret; every routing decision below is LiveKit's own.
+#
+# THE ONE RULE THIS FILE EXISTS TO HOLD (D6' §6):
+#   media is UDP and HAProxy is L7. "TURN media relay (coturn) on host UDP range
+#   (3478 + 50000-50100), NOT via HAProxy/L7 (HAProxy cannot relay UDP)." So the RTC
+#   ports below are published on the HOST, and only the signalling websocket (7880) is
+#   ever put behind the proxy. Putting 50000-50100 behind HAProxy does not fail loudly —
+#   it fails as one-way audio on the calls whose ICE happened to need a relay.
+# =====================================================================================
+
+port: 7880
+
+rtc:
+  # The media plane. Host-published, never proxied — see the rule above.
+  tcp_port: 7881
+  port_range_start: 50000
+  port_range_end: 50100
+  # The SFU has to advertise the address a handset on a mobile network can actually reach.
+  # In compose this is the host's LAN address; in DOKS it is the node's external IP, which
+  # is why `use_external_ip` is on rather than a literal being baked in here.
+  use_external_ip: true
+
+# D-24 targets 500 concurrent calls in Phase 1 (ADD §1 D-24). A voice-only two-party room
+# is ~64 kbps each way, so the ceiling that actually binds is file descriptors and the UDP
+# port range above (100 ports); this is a guard rail, not the capacity plan.
+limit:
+  num_tracks: 4
+  bytes_per_sec: 300000
+
+# **Recordings are OFF (PDPA).** ADD §6 `voip-svc`: "Recordings off by default; on-demand
+# only with admin authorisation." There is no egress configuration in this file and there
+# must not be one — a call between a passenger and a driver is a private conversation, and
+# an egress that exists is an egress somebody can trigger. Turning it on is a deliberate,
+# audited change with a lawful basis behind it, not a config flag somebody flips.
+
+room:
+  # A room is created by the first token holder to join and is deleted by voip-svc when the
+  # ride reaches a terminal state (D6' §6, "expiring at trip end"). This is the backstop for
+  # the case where that teardown never arrives — a broker outage, a voip-svc restart — so it
+  # is deliberately short: a room with nobody in it is over.
+  empty_timeout: 60
+  # A call is between exactly two people. LiveKit enforcing it is a second fence behind
+  # voip-svc's own P-05 identity check.
+  max_participants: 2
+  # Voice only, matching the `canPublishSources: [microphone]` grant voip-svc mints.
+  enabled_codecs:
+    - mime: audio/opus
+
+turn:
+  # coturn is a separate container (turnserver.conf beside this file), not LiveKit's embedded
+  # TURN: D6' §6 names coturn by product and gives it the host UDP range, and the embedded
+  # server would need the same ports with none of coturn's operational surface.
+  enabled: false
+
+logging:
+  level: info
+  json: true
+
+# keys are supplied by the environment (LIVEKIT_KEYS), never written into this file:
+# the secret is the HS256 signing key for every token minted on the platform, and a file in
+# the repository is a file in every image layer that ever contained it.

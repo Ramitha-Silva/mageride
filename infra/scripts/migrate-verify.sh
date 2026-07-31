@@ -2144,6 +2144,72 @@ psql_run "DELETE FROM docs.extractions WHERE upload_id='c0000054-0000-0000-0000-
           DELETE FROM iam.users WHERE id='c0000054-0000-0000-0000-000000000001';" >/dev/null \
   || die "could not clean up the C054 extraction fixture."
 
+# ---------------------------------------------------------------------------------------
+# C055 — comms: one open room per ride, and a vocabulary for how a call ended (1311)
+#
+# 1302 landed both tables in their final post-AL-48 shape and neither had a writer until voip-svc.
+# The checks below are about the two facts the service otherwise cannot state: that a ride's one
+# LiveKit room has one open session (D3' gives a ride one room and BOTH parties start a call into
+# it), and that a call which never connected can be told from one that did — which is what ADD §14's
+# direct-dial fallback and ADD §16's call-setup SLO are both measured on.
+# ---------------------------------------------------------------------------------------
+step "Objects owned by C055 (D-24, D6' §6, AL-48)"
+
+check_eq "one open LiveKit session per room (ux_voip_sessions_open_room)" "1" \
+  "SELECT count(*) FROM pg_indexes
+    WHERE schemaname='comms' AND indexname='ux_voip_sessions_open_room';"
+
+check_eq "the VoIP-failure rate is countable (ix_call_log_voip_failed)" "1" \
+  "SELECT count(*) FROM pg_indexes
+    WHERE schemaname='comms' AND indexname='ix_call_log_voip_failed';"
+
+psql_run "INSERT INTO iam.users (id, phone, role)
+            VALUES ('c0000055-0000-0000-0000-000000000001','+94770000551','passenger');
+          INSERT INTO rides.rides
+            (id, passenger_id, client_request_id, booker_id, vehicle_type, pickup_geo, dropoff_geo, state)
+            VALUES ('c0000055-0000-0000-0000-000000000002',
+                    'c0000055-0000-0000-0000-000000000001','c0000055-0000-0000-0000-000000000003',
+                    'c0000055-0000-0000-0000-000000000001','three_wheeler',
+                    ST_SetSRID(ST_MakePoint(79.861, 6.927), 4326)::geography,
+                    ST_SetSRID(ST_MakePoint(79.877, 6.901), 4326)::geography, 'InProgress');
+          INSERT INTO comms.voip_sessions (ride_id, livekit_room)
+            VALUES ('c0000055-0000-0000-0000-000000000002','ride_c0000055');" >/dev/null \
+  || die "could not seed the C055 call fixture."
+
+check_rejects "a second open session for one room is refused (ux_voip_sessions_open_room)" \
+  "INSERT INTO comms.voip_sessions (ride_id, livekit_room)
+     VALUES ('c0000055-0000-0000-0000-000000000002','ride_c0000055');"
+
+# AL-48 withdrew number masking. The two values it left are the only two the log admits, and the
+# CHECK is where a component implementing from a pre-AL-48 section finds that out.
+check_rejects "the withdrawn masked call type is refused (ck_call_log_call_type)" \
+  "INSERT INTO comms.call_log (ride_id, caller_id, callee_role, call_type)
+     VALUES ('c0000055-0000-0000-0000-000000000002','c0000055-0000-0000-0000-000000000001',
+             'driver','normal_masked');"
+
+check_rejects "an outcome no spec names is refused (ck_call_log_outcome)" \
+  "INSERT INTO comms.call_log (ride_id, caller_id, callee_role, call_type, outcome, ended_at)
+     VALUES ('c0000055-0000-0000-0000-000000000002','c0000055-0000-0000-0000-000000000001',
+             'driver','free_voip','went_to_voicemail', now());"
+
+# An outcome describes a call that finished. Without the pairing a row can claim voip_failed and
+# still be open — which is exactly the row the SLO query counts.
+check_rejects "an outcome without an end is refused (ck_call_log_ended)" \
+  "INSERT INTO comms.call_log (ride_id, caller_id, callee_role, call_type, outcome)
+     VALUES ('c0000055-0000-0000-0000-000000000002','c0000055-0000-0000-0000-000000000001',
+             'driver','free_voip','completed');"
+
+psql_run "INSERT INTO comms.call_log (ride_id, caller_id, callee_role, call_type, outcome, ended_at)
+            VALUES ('c0000055-0000-0000-0000-000000000002','c0000055-0000-0000-0000-000000000001',
+                    'driver','direct_dial','completed', now());" >/dev/null \
+  || die "a client-reported direct_dial tap (AL-48) was refused."
+
+psql_run "DELETE FROM comms.call_log WHERE ride_id='c0000055-0000-0000-0000-000000000002';
+          DELETE FROM comms.voip_sessions WHERE ride_id='c0000055-0000-0000-0000-000000000002';
+          DELETE FROM rides.rides WHERE id='c0000055-0000-0000-0000-000000000002';
+          DELETE FROM iam.users WHERE id='c0000055-0000-0000-0000-000000000001';" >/dev/null \
+  || die "could not clean up the C055 call fixture."
+
 # AL-49 BR-31.1: the pay sheet's payTo reads the single verified row, and the table is versioned so
 # an owner's later edit lands beside it rather than on top of it.
 check_eq "an org has at most one verified payout profile" "1" \

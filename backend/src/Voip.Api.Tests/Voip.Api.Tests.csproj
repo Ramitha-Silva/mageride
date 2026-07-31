@@ -1,0 +1,62 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    C055 verify target: dotnet test backend/src/Voip.Api.Tests -c Release
+
+    Real Postgres and a real Redpanda. Every one of this component's definition-of-done items is a
+    claim about something outside the process:
+
+      * "a signalling token is rejected after trip end" is TWO claims, and both are asserted: the
+        mint refuses once `rides.rides.state` is terminal, and — the half a token cannot express,
+        because LiveKit checks `exp` at join and never again — a terminal `ride.events` message
+        published to a real broker closes the room and ends the session row.
+      * "a proxy ride's driver token resolves to the rider identity, never the booker" is asserted
+        on the DECODED LiveKit JWT: `sub` is the rider's id, and the booker cannot obtain a token
+        at all.
+      * "no code path provisions a masked DID or sends a masked SMS relay" is asserted by
+        reflection over the whole assembly, so a route, a client or an option added later fails the
+        suite rather than quietly rebuilding what AL-48 withdrew.
+      * "call_log rows distinguish free_voip from client-reported direct_dial" is asserted on the
+        rows, including that a `direct_dial` start creates NO LiveKit session.
+
+    No Redis: the service holds no connection to one, deliberately (see VoipApplication).
+
+    Microsoft.NET.Sdk.Web, not Microsoft.NET.Sdk: the harness builds a WebApplication.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.Voip.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <OutputType>Exe</OutputType>
+    <!--
+      xUnit1041: collection-fixture ctor args are consumed through the primary constructor.
+      xUnit1051: every test is bounded by its own harness lifetime.
+    -->
+    <NoWarn>$(NoWarn);xUnit1041;xUnit1051</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+    <PackageReference Include="Dapper" />
+    <PackageReference Include="Npgsql" />
+    <PackageReference Include="Confluent.Kafka" />
+    <!-- FakeTimeProvider: a token's expiry is the point, and no suite can wait five minutes. -->
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Voip.Api\Voip.Api.csproj" />
+    <!-- C010: the Postgres and Redpanda fixtures, so this suite runs the same server and broker
+         builds the dev stack does and applies the same migration set — including 1311. -->
+    <ProjectReference Include="..\MageRide.TestKit\MageRide.TestKit.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

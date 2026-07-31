@@ -13,6 +13,14 @@ openapi: 3.1.0
 #     no CPaaS, no DID pool, no masked-SMS relay. D3' Δ 2026-06-28 and D6' I-28.3/I-29.3 still
 #     describe masking; AL-48 is later and wins (planner finding 4).
 #   POST /public/track/{token}/call  — REMOVED BY AL-48; see public-bff.yaml.
+#
+# Δ C055 — one addition, argued at its operation and recorded in the C055 handoff:
+#   POST /v1/calls/{callId}/outcome  — ADD §14 documents a "Call normally instead?" fallback and
+#     ADD §16 sets a p95 call-setup SLO, and NEITHER is measurable: a call that never connected
+#     was indistinguishable from one that did, and `comms.call_log.outcome` (1302) had no writer
+#     and no vocabulary at all. This is the route the client reports `voip_failed` on — the signal
+#     the direct-dial prompt hangs on — and a `direct_dial` row that follows it on the same ride is
+#     the fallback actually being taken.
 # =============================================================================================
 
 info:
@@ -174,6 +182,55 @@ paths:
         '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
       x-error-codes: [validation-failed, not-ride-participant, not-found, ride-terminal]
+
+  /v1/calls/{callId}/outcome:
+    post:
+      operationId: recordCallOutcome
+      summary: Record how a call ended.
+      description: |
+        **Δ C055.** Closes the `comms.call_log` row with an outcome. Reported by the handset that
+        placed the call, so it is best-effort in the same way the log itself is — but it is the only
+        way the platform can see a call that never connected.
+
+        `voip_failed` is the value AL-48's fallback hangs on: it is what the client sends when it
+        puts up "Call normally instead?", and a `direct_dial` row after one on the same ride is the
+        fallback being taken rather than a user who simply preferred to dial.
+
+        Only the caller may report, and only once: a resumed app reporting again is `404`, not an
+        overwrite. Somebody else's call is also `404` — a call id is guessable, and "that id exists"
+        is itself something a stranger should not learn about two other people's conversation.
+      tags: [voip]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: callId
+          in: path
+          required: true
+          schema:
+            $ref: './_shared.yaml#/components/schemas/Ulid'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [outcome]
+              properties:
+                outcome:
+                  type: string
+                  description: |
+                    Matches the `ck_call_log_outcome` CHECK (migration 1311). **No spec names these**
+                    — 1302 left the column free text with no writer; the set is C055's.
+                  enum: [completed, missed, declined, cancelled, voip_failed]
+      responses:
+        '204':
+          description: Recorded.
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, not-found]
 
 components:
   securitySchemes:

@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    Voip.Api (C055 voip-svc) — ride-scoped LiveKit signalling, and nothing else.
+
+    FENCE 1 (AL-48): number masking is WITHDRAWN. `callType` is `free_voip` | `direct_dial`, and
+    `direct_dial` is a tap the client reports after the fact — there is no PSTN leg here, no
+    proxy-DID lease, no CPaaS and no masked-SMS relay. `MaskedCallingIsGone` asserts by reflection
+    that nothing in this assembly can grow one back.
+    FENCE 2 (P-05): the room admits exactly two identities — the driver and the RIDER. A booker who
+    is not the rider is not a participant, so there is no code path that can put them on a call with
+    the driver.
+    FENCE 3: the counterparty's phone number is NOT served here. "Normal call" is a client-side
+    `tel:` dial of the number `GET /v1/rides/{id}` carries post-accept (ride-svc's, AL-48); this
+    service never reads `iam.users.phone` and holds no route that could return one.
+
+    Verify: dotnet test backend/src/Voip.Api.Tests -c Release
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.Voip</RootNamespace>
+    <AssemblyName>MageRide.Voip.Api</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <UserSecretsId>mageride-voip-api</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MageRide.Shared\MageRide.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Dapper" />
+    <PackageReference Include="Npgsql" />
+    <!-- The room teardown consumes ride.events; the LiveKit token is signed in-process. -->
+    <PackageReference Include="Confluent.Kafka" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Voip.Api.Tests" />
+  </ItemGroup>
+
+</Project>

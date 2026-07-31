@@ -80,7 +80,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C052 | safety-svc | 3 | DONE | 2026-07-31 | 30 tests green in a **new suite** (`Safety.Api.Tests`), which boots a **real notification-svc** because D-33 is a property of the two services together and runs **dispatch-svc's own candidate query** because US-12.10's gate lives there; **1 migration (0905)** — `safety.outbox` (the admin live feed D3' asks for and `signalr-hub.md` has no group for), `safety.command_log`, `sos_events.dispatched_at` (without it every SOS looks instantaneous and the D-33 SLO is unmeasurable), the `driver_id` a report counts against and its resolution evidence; **the SOS bypasses the notification queue** — C051 gained an inline dispatch for the one type with a latency SLO, so the five seconds do not depend on how many ride offers are queued in front of it, and the per-gateway outcome exists to record at all; **no replay is structural** — the public view reads `veh:meta`, a Redis hash that holds one position and no history, so the store cannot answer the question D-34 forbids; the 410 is produced before the ride row is read, and the test asserts the *body*; **two real defects caught** — an SOS with no ride rendered an empty `{{link}}` and was silently never sent (now a `geo:` URI), and the P-12 tally's keys were camelCased on the wire, which promoted iam-svc's `LiteralKeyDictionaryConverter` into the kernel on its third instance; **5 contract changes** (`smsStatus`, the moderation pair, the trip-end hook, the P-12 read, and C051's `deliveries`); `migrate-verify.sh` 341/341 with a C052 section; 12 spec gaps / micro-change-sets |
 | C053 | support-svc | 3 | DONE | 2026-07-31 | 32 tests green in a **new suite** (`Support.Api.Tests`), all integration against a real Postgres and asserting migration 1902's **actual Sinhala and Tamil strings** rather than fixtures of its own; **1 migration (1309)** — `support.ticket_events` (the thread; §13 holds one `admin_response`, so a second reply overwrites the first and a status change leaves no trace at all), `support.command_log` (R-14, the twelfth), the five columns an agent's handling needs, and `screenshot_upload_id` as a **FK onto `docs.uploads`** because the DoD says "links it by id, not by public URL" and §13's `screenshot_url` **is** that URL; **this service is the platform's first writer of `docs.uploads`** — US-16.2's "attach a screenshot" had no upload surface anywhere, and registry-svc says outright that filling that table is not its job; **the Finance queue is derived from the category, never stored**, because `support.tickets` has three writers and a stored column would default C047's and C050's own rows onto the wrong pile; **one real defect caught** — thread entries stamped from the service clock beside a `resolved_at` stamped by Postgres sorted the thread out of order, so every timestamp on these tables is now `now()`; **10 contract changes** (the upload pair, the internal queue family, the thread, the queue, `TicketRow`); `migrate-verify.sh` 351/351 with a C053 section; 11 spec gaps / micro-change-sets |
 | C054 | ocr-svc | 3 | DONE | 2026-07-31 | **113 tests green** in a new suite (`Ocr.Api.Tests`), against a real Postgres, real OpenCV, the real `tesseract` binary and a **recording HTTP server** standing in for Gemini — the D-36 claim is asserted on the bytes that came off the socket; **1 migration (1310)** — ADD §12.5's document-processing log (`raw_sha256`, `redacted_sha256`, policy + pass version, the mask counts, `engine`) on `docs.extractions`, which 1301 gives one BOOLEAN, plus **`ck_extractions_gemini_is_redacted`**, the D-36 invariant in the last place able to refuse to record its violation; **the pre-pass is held twice** — `GeminiFieldExtractor` takes a `RedactedDocument` only the redactor can construct, and `PerimeterGuardHandler` re-checks the wire; **fails closed everywhere**: no Tesseract ⇒ no ID boxes ⇒ no redaction ⇒ **no Gemini call at all**, and the on-prem path still returns fields, capped below the auto-verify threshold so a model outage can never auto-approve a vehicle; **three real defects caught by the tests** — the guard's regex matched nothing at all because `System.Text.Json` escapes `+` and `/` to `\uXXXX` (it was passing every payload); Tesseract's PSM 11 returns **nothing** for a framed number plate, the one document step 4/4 cannot be blind on; and a label match on a heading returned `revenue_no = "LICENCE NO RL8891234"`; **`_shared.yaml`'s `FieldSource`/`VerifyStatus` enums named values no row can hold** and omitted `auto_verified`, so a generated client would have failed on every field registry-svc has ever returned — corrected; **1 new contract** (`ocr.yaml`, Δ in full: D3' has no ocr-svc section); `migrate-verify.sh` 355/355 with a C054 section; 8 spec gaps / micro-change-sets |
-| C055 | voip-svc | 3 | PENDING | | |
+| C055 | voip-svc | 3 | DONE | 2026-07-31 | **68 tests green** in a new suite (`Voip.Api.Tests`), against a real Postgres and a real Redpanda — the trip-end teardown is proved with a terminal `ride.events` message on a real broker, because that half cannot be shown any other way; **1 migration (1311)** — `ux_voip_sessions_open_room` (D3' gives a ride ONE room and **both** parties start a call into it, so without it each tap opened a rival session) plus the `comms.call_log.outcome` vocabulary 1302 left as free text with no writer, which is what makes ADD §16's call-setup SLO and ADD §14's fallback measurable at all; **"expiring at trip end" needs TWO mechanisms** — a LiveKit token is a *join* credential whose `exp` is checked at connect and never again, so minting is refused for a terminal ride **and** the room is closed when `ride.events` says the ride is over; **P-05 held by the projection, not a branch** — `RiderIdentity` is `rider_id` with **no fallback to `booker_id`**, and a proxy booker is 403 on both routes; **AL-48 enforced by reflection** — the suite fails if any member of the assembly is named after the withdrawn masking stack or can name a phone number, because three still-current spec sections still describe masking; **the LiveKit token is minted by hand** (its authority is a nested `video` claim the claims-dictionary APIs stringify — a token that fails at the SFU, not at the mint); **media plane config landed** (`livekit.yaml` + `turnserver.conf`, both containers `network_mode: host` per D6' §6 — HAProxy cannot relay UDP and the failure mode is one-way audio, not a startup error); **1 contract addition** (`POST /v1/calls/{callId}/outcome`); `migrate-verify.sh` 361/361 with a C055 section; 7 spec gaps / micro-change-sets |
 | C056 | transit-svc-routing | 3 | PENDING | | |
 | C057 | transit-svc-gtfs-lifecycle | 3 | PENDING | | |
 | C058 | fleet-svc-org | 3 | PENDING | | |
@@ -7886,3 +7886,147 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   **Build host —** Docker for one Testcontainers fixture (Postgres); the replica stack stayed down
   throughout. `apt-get install tesseract-ocr libgtk-3-0t64 libatomic1 opencv-data` was run on this
   box — the suite needs them, and so does the service. `Ocr.Api.Tests` takes ~35 s.
+
+- **Component:** C055 voip-svc — 2026-07-31
+- **Status:** DONE — `dotnet test backend/src/Voip.Api.Tests -c Release` → **68 passed, 0 failed,
+  0 skipped** in a new suite. All four DoD items pass, each with a named test: a token is rejected
+  after trip end (`No_token_is_minted_once_the_ride_has_ended` across five terminals, **and**
+  `A_call_still_running_is_ended_when_the_ride_ends`, which publishes a real terminal `ride.events`
+  message to a real Redpanda and asserts the room was closed and the session row stamped); a proxy
+  ride's driver token resolves to the rider (`A_proxy_rides_driver_token_resolves_to_the_rider_identity_never_the_booker`
+  — the driver's `callee` is `rider`, the passenger-side token's decoded `sub` is the **rider's**
+  account and not the booker's, and the booker is `403`); no code path provisions a masked DID or a
+  masked SMS relay (`MaskingWithdrawnTests`, by reflection over the whole assembly); and
+  `comms.call_log` distinguishes the two call types
+  (`A_free_voip_call_starts_a_session_and_a_direct_dial_starts_nothing`). Gates re-run green after
+  one migration and one additive contract pass: `bash infra/scripts/migrate-verify.sh` →
+  **361/361** (was 355), Spectral on `backend/contracts/*.yaml` → 0 errors,
+  `dotnet build backend/MageRide.sln -c Release` → 0 warnings.
+- **Notes:**
+  **Spec gaps — one micro-change-set landed as `db/migrations/1311`, one contract addition, and
+  five smaller ones.**
+  (a) ***A ride has one room and two people who both press Call.*** D3' names the room `ride_{id}`
+  and `comms.voip_sessions` (1302) has no way to say "one open session per room", so the driver
+  ringing and the rider ringing back each opened a session row — and the teardown at trip end closed
+  whichever one it found. `ux_voip_sessions_open_room` makes the second start *join* the first.
+  1302's own `ix_voip_sessions_open` comment ("for the reaper and the room-in-use check") describes
+  a question that could not be answered without it. **server_db_schema §11 / D4' §11-16 should carry
+  it.**
+  (b) ***`comms.call_log.outcome` was free text with no writer and no vocabulary.*** ADD §16 sets a
+  p95 call-setup SLO and ADD §14 documents the "Call normally instead?" fallback, and **neither is
+  measurable**: a call that never connected looked exactly like one that did, and a `direct_dial`
+  row was indistinguishable from a user who simply preferred to dial. 1311 adds
+  `ck_call_log_outcome` (`completed | missed | declined | cancelled | voip_failed`),
+  `ck_call_log_ended` (an outcome describes a call that *finished*; without the pairing a row can
+  claim `voip_failed` and still be open, which is exactly the row the SLO query counts),
+  `ck_call_log_span` (1302 guards the span on the sibling table and not on this one) and
+  `ix_call_log_voip_failed`. **No spec names any of the five values** — they are this component's.
+  (c) ***ADD §14's fallback had no server-side artefact.*** `POST /v1/calls/{callId}/outcome` is
+  Δ C055 on `voip.yaml`: the route the client reports `voip_failed` on when it puts the direct-dial
+  prompt up. A `direct_dial` row after one on the same ride is the fallback actually being taken.
+  (d) ***"Expiring at trip end" is not a property a token can have.*** D6' §6 and D3' both say the
+  LiveKit token expires at trip end. A LiveKit access token is a **join** credential — its `exp` is
+  checked when a participant connects and never again — so a token minted for "the whole trip" is a
+  five-minute join window stretched into an hour-long one, and a call that connected a minute before
+  the ride ended runs for as long as the two parties keep talking either way. Resolved as **two
+  mechanisms**: a short `Voip:TokenTtl` (5 min, no spec pins it) plus refusing to mint once the ride
+  is terminal, and — the half that actually ends a call — **closing the room** when `ride.events`
+  reports a terminal state. D6' §6 should say "the room expires at trip end".
+  (e) ***AL-48 and P-03 conflict in exactly one cell, and P-03 wins.*** A proxy ride whose rider
+  never registered has no account to admit to a room **and** no number to fall back to — P-03 keeps
+  only a digest. The driver is refused (`400`), never quietly connected to the booker. ride-svc
+  records the same conflict from its own side; the two services now agree.
+  (f) ***No spec pins the join-token TTL, the room's empty timeout or the outcome set.*** All three
+  are argued at their declarations.
+  (g) ***`comms.voip_sessions.ended_at` had no writer at all before this component***, and neither
+  did `comms.call_log`. Both tables have existed since C005.
+
+  **Decisions —**
+  (1) **P-05 is a property of the projection, not of a branch.** `RideParticipants.RiderIdentity`
+  resolves to `rider_id` on a proxy booking with **no `?? BookerId` fallback**, and `PartyFor`
+  returns nothing for anybody else — so the room has exactly two admissible identities and a proxy
+  booker is `403` on both routes. A fallback would have been the exact bug P-05 exists to prevent,
+  and it would only ever have shown up on third-party bookings.
+  (2) **The teardown trigger is the ride's *state*, not the event name.** ride-svc publishes sixteen
+  event types and ten are terminals; a consumer keyed on names would need all ten and would silently
+  miss the eleventh. Every message on `ride.events` carries the ride id as its key, so the handler
+  re-reads `rides.rides.state` — the same question `CallService` asks when it refuses to mint. One
+  rule, two callers, and the four `location.request.*` events (keyed by request id, no ride) fall
+  out as "nothing to close" rather than needing a special case.
+  (3) **The database row is closed whether or not LiveKit answered.** `ended_at` records that the
+  *ride* ended; whether the SFU acknowledged the teardown is operational and is logged. The other
+  order leaves a session open for ever every time LiveKit restarts.
+  (4) **`Completed` is not terminal, and it matters more here than almost anywhere.** The ride still
+  owes a payment and the two people are standing next to each other — "my driver just left with my
+  bag" is exactly the call this service carries, and a token refused at `Completed` would be refused
+  in the ninety seconds it is most needed.
+  (5) **A missing LiveKit is `503`, not a `200` with an unusable token.** That is the VoIP-failure
+  signal at its earliest point (ADD §14): the client shows "Call normally instead?" and dials the
+  number ride-svc gave it. A `200` would make an absent feature look like a flaky one — which is
+  also why the start-up log distinguishes them loudly.
+  (6) **`direct_dial` is logged even where LiveKit is absent.** That is the deployment where the
+  fallback rate matters most, and refusing to record it there would lose exactly the measurement.
+  (7) **The LiveKit token is minted by hand rather than through `JsonWebTokenHandler`.** Its
+  authority is a **nested object** claim (`video`), and the claims-dictionary APIs stringify or
+  flatten nested values depending on the path taken through them — producing a token that is
+  accepted by nothing and fails at the SFU, minutes later, with a message about permissions.
+  ~60 lines of Base64Url + HMAC is the whole format and is exactly testable; the suite decodes and
+  re-verifies the signature.
+  (8) **The join grant is microphone-only, one room, no data channel**; the teardown grant is
+  `roomAdmin` for one room with **no `roomJoin`** — a key to closing a conversation, never to
+  hearing one, and never `roomList`/`roomCreate`, which would make it a key to all of them.
+  (9) **No retry on the teardown.** It runs on a Kafka consumer whose offset is not committed when
+  it fails, so the redelivery *is* the retry — and a better one, because it survives a restart where
+  an in-process backoff would not. `EndSessionsAsync` is bound to `ended_at IS NULL`, which is what
+  makes a redelivery a no-op (`A_redelivered_terminal_event_closes_nothing_twice`).
+  (10) **The ride is read directly from `rides.rides`.** The platform's shape for a cross-context
+  read, and the reason here is availability: an in-app call is what somebody reaches for when a
+  driver cannot find them, and a hop through ride-svc would turn a ride-svc outage into a calling
+  outage on top of it. Four columns, and deliberately not `rider_phone_hash` or `recipient_phone`.
+  (11) **An outcome is reported once, by the caller.** A resumed app reporting again is `404`, not
+  an overwrite; somebody else's call is `404` too, because a call id is guessable and "that id
+  exists" is itself something a stranger should not learn about two other people's conversation.
+  (12) **No command-log aggregate id.** A call targets a ride this service does not own.
+
+  **The media plane, and the one line that shapes it —**
+  `infra/deploy/livekit/livekit.yaml` and `infra/deploy/coturn/turnserver.conf`, with both
+  containers declared **`network_mode: host`** in `infra/docker-compose.dev.yml` (which had
+  reserved the slot for C055 in its "optional containers" note; the note is now one line shorter).
+  D6' §6: *"TURN media relay (coturn) on host UDP range (3478 + 50000–50100), NOT via HAProxy/L7."*
+  A TURN relay allocates a fresh UDP port per candidate and tells the peer to send to it; an L7
+  proxy in front of that has nothing to proxy. **The failure mode of getting it wrong is not a
+  startup error — it is one-way audio, on the subset of calls whose ICE needed a relay.** Only the
+  signalling websocket (7880) goes through the proxy. Two further properties are held in those
+  files: **recordings are off and there is no egress configuration at all** (ADD §6, PDPA — an
+  egress that exists is an egress somebody can trigger), and **coturn denies loopback, link-local
+  and every private range**, because a TURN server with no denied peers is an open proxy into
+  whatever network it sits in and an allocation pointed at `169.254.169.254` reads the cluster's
+  metadata endpoint from outside.
+  ⚠ `docker compose -f infra/docker-compose.dev.yml config` **panics on this box**, and did so
+  before this component: docker compose v5's loader crashes on the file's `include:` directive
+  (`compose-go/loader/include.go:195`, nil map). The new services were validated by parsing the
+  YAML directly. Worth a look from whoever owns C009/C124 — it means the compose file has no
+  working syntax check on this host.
+
+  **For C066 (public-bff) —** `driver.phone` on the `package_recipient`/`proxy_rider` snapshot is a
+  plain `tel:` link (US-26.3). `POST /public/track/{token}/call`, the proxy-DID lease and
+  `comms.call_log.share_token` are removed by AL-48 and must not be re-added; the web subview gets
+  no WebRTC and no mic permission.
+  **For C012/C013 (KMP client) —** the call-type chooser is **Free (VoIP) / Normal (direct dial)**
+  and nothing else. On a `503` from `/v1/voip/token` or `/v1/calls/start`, show "Call normally
+  instead?" and dial `counterpartyPhone` from `GET /v1/rides/{id}`; then report
+  `POST /v1/calls/{callId}/outcome` with `voip_failed` **and** log the tap as a `direct_dial` start —
+  the pair is what makes the fallback visible. The join token lives 5 minutes: mint at the moment of
+  calling, not when the ride screen opens.
+  **For C009 / C124 (compose and CD) —** `livekit` and `coturn` are host-networked by requirement,
+  not by convenience; a Kubernetes manifest must use `hostNetwork: true` or a UDP-capable
+  LoadBalancer for 3478 + 50000–50100. `LIVEKIT_KEYS` must equal `Voip__LiveKit__ApiKey` /
+  `ApiSecret`, and coturn's `external-ip` has to be set per environment — it cannot be inferred
+  behind NAT and a wrong value is silent one-way audio rather than a failure.
+  **For C119 (monitoring) —** the two numbers this component makes available are
+  `ix_call_log_voip_failed` (ADD §14's fallback rate) and the `started_at`/`ended_at` span on
+  `comms.call_log` (ADD §16's p95 call-setup SLO, "signalling → first audio frame", as close as a
+  server-side row can get to it).
+  **For C118 (contract tests) —** `voip.yaml` gained one operation; nothing else changed.
+  **Build host —** Docker for two Testcontainers fixtures (Postgres, Redpanda); the replica stack
+  stayed down throughout. `Voip.Api.Tests` takes ~40 s. No new NuGet reference.
