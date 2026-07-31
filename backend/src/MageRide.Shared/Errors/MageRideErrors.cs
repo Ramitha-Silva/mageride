@@ -170,6 +170,28 @@ public static partial class MageRideErrors
     public static readonly ErrorCode TokenExpiredOrRevoked = new("token-expired-or-revoked", 410, "Share token has expired or was revoked");
 
     // ---------------------------------------------------------------------------------------
+    // transit-svc — the GTFS Dataset Manager (AL-54, SCR-AP-016). Coined by C007 in
+    // `contracts/_shared.yaml`'s ErrorCode enum and declared here by C057, which is the first
+    // component with code that can raise them.
+    // ---------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// A byte-identical feed has already been uploaded (BR-32.1's sha256 refusal).
+    /// </summary>
+    /// <remarks>
+    /// Carries a <c>feedVersionId</c> extension naming the existing version, because SCR-AP-016's
+    /// inline error is "This exact file is already uploaded (version N)" — a bare 409 leaves the
+    /// operator with no way to go and look at the version they already have.
+    /// </remarks>
+    public static readonly ErrorCode FeedDuplicate = new("feed-duplicate", 409, "This GTFS file has already been uploaded");
+
+    /// <summary>Activation was asked for on a version that has not passed validation (BR-32.2).</summary>
+    public static readonly ErrorCode FeedNotValidated = new("feed-not-validated", 409, "Feed version has not been validated");
+
+    /// <summary>Activation was asked for on the feed that is already live (BR-32.2).</summary>
+    public static readonly ErrorCode FeedAlreadyActive = new("feed-already-active", 409, "Feed version is already active");
+
+    // ---------------------------------------------------------------------------------------
     // Registry plumbing
     // ---------------------------------------------------------------------------------------
 

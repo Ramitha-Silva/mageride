@@ -2,7 +2,7 @@ using MageRide.Shared;
 using MageRide.Transit.Configuration;
 using MageRide.Transit.Endpoints;
 using MageRide.Transit.Feed;
-using Microsoft.Extensions.Options;
+using MageRide.Transit.Gtfs;
 
 namespace MageRide.Transit;
 
@@ -46,11 +46,24 @@ public static class TransitApplication
             UseKafka = false,
             UseOutbox = false,
 
-            // **No command log.** Every route here is a GET. There is no mutation to replay.
-            UseCommandLog = false,
+            // **Δ C057: on.** The routing half is all GETs, but BR-32.2 names the guarantee out
+            // loud — activation is "idempotent on `Idempotency-Key`" — and a double-clicked
+            // Activate in SCR-AP-016 must swap the live dataset once, not import and swap twice.
+            // The table is `transit.command_log` (migration 1407).
+            UseCommandLog = true,
 
             UseAuthentication = true,
         };
+
+        // Ahead of AddMageRideDefaults so an operator's setting still wins. The kernel defaults to
+        // `rides.command_log`; there is no aggregate-id column here, because the middleware never
+        // populates one and the feed version the command targets is already in the request path,
+        // which the request hash covers.
+        builder.Services.Configure<Shared.Http.Idempotency.CommandLogOptions>(commandLog =>
+        {
+            commandLog.Schema = "transit";
+            commandLog.AggregateIdColumn = null;
+        });
 
         builder.AddMageRideDefaults(serviceOptions);
         builder.Services.AddTransitServices(builder.Configuration);
@@ -60,11 +73,17 @@ public static class TransitApplication
             builder.Services.AddHostedService<GtfsFeedListener>();
         }
 
+        if (settings.Gtfs.ValidationEnabled)
+        {
+            builder.Services.AddHostedService<GtfsValidationWorker>();
+        }
+
         var app = builder.Build();
 
         app.UseMageRideDefaults(serviceOptions);
 
         app.MapTransitEndpoints();
+        app.MapGtfsAdminEndpoints();
 
         Announce(app, settings);
 
@@ -91,6 +110,14 @@ public static class TransitApplication
                 + "coverage=no_feed and Mode A route matching is hidden on every booking screen (AL-55).");
         }
 
+        if (!settings.Gtfs.ValidationEnabled)
+        {
+            logger.LogError(
+                "Transit:Gtfs:ValidationEnabled is off, so no upload is ever validated: every feed sits at "
+                + "'uploaded' for ever and none can be activated, because BR-32.2 admits only a validated or "
+                + "archived version. SCR-AP-016 is upload-only on this deployment.");
+        }
+
         logger.LogInformation(
             "transit-svc routing is up: halt radius {Radius} m, up to {Halts} halts per end, transfers {Transfers}, "
             + "feed cache {Cache} on LISTEN {Channel} with a {Poll} safety net. No Google API is called on any "
@@ -101,5 +128,14 @@ public static class TransitApplication
             settings.FeedCacheEnabled ? "on" : "OFF",
             settings.FeedChannel,
             settings.FeedPollInterval);
+
+        logger.LogInformation(
+            "GTFS Dataset Manager (SCR-AP-016) is up: uploads up to {MaxBytes} bytes, validation {Validation}, "
+            + "activation NOTIFYs {Channel}. Stored zips are never deleted by this service — BR-32.3's 12-month "
+            + "retention is the bucket's lifecycle policy, and a collected zip is a version that can no longer be "
+            + "rolled back to.",
+            settings.Gtfs.MaxUploadBytes,
+            settings.Gtfs.ValidationEnabled ? "on" : "OFF",
+            settings.FeedChannel);
     }
 }

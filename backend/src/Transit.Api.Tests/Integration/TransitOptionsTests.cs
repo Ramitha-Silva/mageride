@@ -211,9 +211,27 @@ public sealed class TransitOptionsTests(PostgresFixture postgres)
 
         Assert.Equal(
             ["/v1/geo/parse-maps-link", "/v1/transit/options", "/v1/transit/routes/{routeId}"],
-            routes.Where(route => route.StartsWith("/v1/", StringComparison.Ordinal)).Order());
+            routes
+                .Where(route => route.StartsWith("/v1/", StringComparison.Ordinal))
+                .Where(route => !route.StartsWith("/v1/admin/", StringComparison.Ordinal))
+                .Order(StringComparer.Ordinal));
 
-        // The GTFS Dataset Manager is C057's; nothing admin-shaped is mapped here.
-        Assert.DoesNotContain(routes, route => route.Contains("admin", StringComparison.Ordinal));
+        // Δ C057 — the GTFS Dataset Manager is mapped here now, and it does not weaken AL-17: every
+        // parameter on it names a *feed version*, which is a dataset an operator uploaded, never a
+        // place a passenger is going. Named in full so a route added to either half fails this
+        // test rather than quietly widening the surface.
+        Assert.Equal(
+            [
+                "/v1/admin/transit/gtfs/objects/{feedVersionId:guid}",
+                "/v1/admin/transit/gtfs/uploads",
+                "/v1/admin/transit/gtfs/uploads/{feedVersionId:guid}",
+                "/v1/admin/transit/gtfs/uploads/{feedVersionId:guid}/activate",
+                "/v1/admin/transit/gtfs/uploads/{feedVersionId:guid}/report",
+                "/v1/admin/transit/gtfs/versions",
+                "/v1/admin/transit/gtfs/versions/{feedVersionId:guid}/download",
+            ],
+            routes
+                .Where(route => route.StartsWith("/v1/admin/", StringComparison.Ordinal))
+                .Order(StringComparer.Ordinal));
     }
 }

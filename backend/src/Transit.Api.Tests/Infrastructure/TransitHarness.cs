@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -38,6 +39,12 @@ internal sealed class TestTokenIssuer
 
     public string Passenger() => Issue(Guid.NewGuid(), MageRideRoles.Passenger, MageRideApps.Passenger);
 
+    /// <summary>An Admin Portal session (AL-07: the portals sign in by password/Google, not OTP).</summary>
+    public string Admin(Guid userId) => Issue(userId, MageRideRoles.Admin, MageRideApps.Admin);
+
+    /// <summary>Δ C057 — one of the four back-office roles SCR-AP-016 denies (AL-06).</summary>
+    public string Internal(Guid userId, string role) => Issue(userId, role, MageRideApps.Admin);
+
     public string Issue(Guid userId, string role, string app)
     {
         var now = DateTime.UtcNow;
@@ -74,12 +81,15 @@ internal sealed class TransitHarness : IAsyncDisposable
     private readonly WebApplication _app;
     private readonly Shortener _shortener;
     private readonly string _bearer;
+    private readonly string _storageRoot;
 
-    private TransitHarness(WebApplication app, Shortener shortener, GtfsSeed seed, TestTokenIssuer tokens)
+    private TransitHarness(
+        WebApplication app, Shortener shortener, GtfsSeed seed, TestTokenIssuer tokens, string storageRoot)
     {
         _app = app;
         _shortener = shortener;
         _bearer = tokens.Passenger();
+        _storageRoot = storageRoot;
 
         Seed = seed;
         Tokens = tokens;
@@ -88,9 +98,20 @@ internal sealed class TransitHarness : IAsyncDisposable
             .Features.Get<IServerAddressesFeature>()!.Addresses.First();
 
         Client = new HttpClient { BaseAddress = new Uri(address), Timeout = TimeSpan.FromSeconds(120) };
+
+        // Δ C057. `…/download` answers a 302 to a signed URL and that redirect is the contract, so
+        // a client that follows it silently would assert the wrong thing — this one reports it.
+        Unredirected = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false })
+        {
+            BaseAddress = new Uri(address),
+            Timeout = TimeSpan.FromSeconds(120),
+        };
     }
 
     public HttpClient Client { get; }
+
+    /// <inheritdoc cref="Client"/>
+    public HttpClient Unredirected { get; }
 
     public GtfsSeed Seed { get; }
 
@@ -100,6 +121,14 @@ internal sealed class TransitHarness : IAsyncDisposable
 
     /// <summary>The stub shortener's base URL, allow-listed for this run.</summary>
     public string ShortenerBaseUrl => _shortener.BaseUrl;
+
+    /// <summary>
+    /// Removes a stored zip behind the service's back, which is what an object store losing an
+    /// object looks like from here — and the cheapest way to make an activation fail *after* the
+    /// version row says it may go live.
+    /// </summary>
+    public void LoseStoredZip(Guid feedVersionId) =>
+        File.Delete(Path.Combine(_storageRoot, "gtfs", $"{feedVersionId:D}.zip"));
 
     /// <summary>Registers a short link and returns the URL a passenger would paste.</summary>
     public string ShortLink(string target) => _shortener.Register(target);
@@ -115,8 +144,20 @@ internal sealed class TransitHarness : IAsyncDisposable
         var shortener = await Shortener.StartAsync();
         var tokens = new TestTokenIssuer();
 
+        // Per-run, so two harnesses in one assembly cannot read each other's stored feeds and a
+        // leftover zip cannot make a later test pass.
+        var storageRoot = Path.Combine(Path.GetTempPath(), "mageride-gtfs-tests", Guid.NewGuid().ToString("N"));
+
         var overrides = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
         {
+            // Δ C057 — the GTFS Dataset Manager.
+            ["Transit:Gtfs:StorageRoot"] = storageRoot,
+            // A fixed key, so a signed download link is verifiable and the "expired link" case is
+            // a property of the expiry rather than of a key that changed.
+            ["Transit:Gtfs:DownloadSigningKey"] = Convert.ToBase64String(new byte[32]),
+            // The validation latch is what actually starts a validation; this only bounds the
+            // reclaim path, and one second keeps the suite honest about not depending on the poll.
+            ["Transit:Gtfs:ValidationPollInterval"] = "00:00:01",
             ["ConnectionStrings:Postgres"] = postgres.ConnectionString,
             // The container is plain Postgres, not PgBouncer — which matters more here than
             // usual: transaction pooling drops the LISTEN this service depends on.
@@ -175,8 +216,139 @@ internal sealed class TransitHarness : IAsyncDisposable
 
         await app.StartAsync();
 
-        return new TransitHarness(app, shortener, new GtfsSeed(postgres), tokens);
+        return new TransitHarness(app, shortener, new GtfsSeed(postgres), tokens, storageRoot);
     }
+
+    // -----------------------------------------------------------------------------------------
+    // Δ C057 — the admin surface
+    // -----------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// An Admin Portal operator with a real <c>iam.users</c> row.
+    /// </summary>
+    /// <remarks>
+    /// The row is not decoration: <c>transit.gtfs_feed_versions.uploaded_by</c> has a foreign key
+    /// onto it, so an upload by a subject that does not exist fails in the database rather than in
+    /// the assertion.
+    /// </remarks>
+    public async Task<(Guid UserId, string Bearer)> AdminAsync()
+    {
+        var userId = await Seed.CreateUserAsync(MageRideRoles.Admin);
+
+        return (userId, Tokens.Admin(userId));
+    }
+
+    public async Task<HttpResponseMessage> UploadAsync(
+        byte[] zip, string? bearer, string fileName = "gtfs.zip", string? idempotencyKey = null)
+    {
+        using var content = new MultipartFormDataContent();
+        using var file = new ByteArrayContent(zip);
+
+        file.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/zip");
+        content.Add(file, "file", fileName);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/v1/admin/transit/gtfs/uploads")
+        {
+            Content = content,
+        };
+
+        request.Headers.TryAddWithoutValidation(
+            MageRideHeaders.IdempotencyKey, idempotencyKey ?? Guid.NewGuid().ToString("N"));
+
+        if (bearer is not null)
+        {
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", bearer);
+        }
+
+        return await Client.SendAsync(request);
+    }
+
+    /// <summary>Uploads and waits for the validation worker to reach a verdict.</summary>
+    public async Task<Guid> UploadAndAwaitVerdictAsync(byte[] zip, string bearer, string fileName = "gtfs.zip")
+    {
+        using var response = await UploadAsync(zip, bearer, fileName);
+
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+
+        var accepted = JsonSerializer.Deserialize<AcceptedBody>(
+            await response.Content.ReadAsStringAsync(), MageRideJson.Options)!;
+
+        await WaitForStatusAsync(accepted.FeedVersionId, bearer, status => status is "validated" or "failed");
+
+        return accepted.FeedVersionId;
+    }
+
+    /// <summary>Polls the status endpoint the way SCR-AP-016's stepper does (2 s), but faster.</summary>
+    public async Task<JsonElement> WaitForStatusAsync(
+        Guid feedVersionId, string bearer, Func<string, bool> until, TimeSpan? within = null)
+    {
+        var deadline = DateTime.UtcNow + (within ?? TimeSpan.FromSeconds(60));
+        var last = default(JsonElement);
+
+        while (DateTime.UtcNow < deadline)
+        {
+            using var response = await SendAsync(
+                HttpMethod.Get, $"/v1/admin/transit/gtfs/uploads/{feedVersionId:D}", bearer);
+
+            var payload = await response.Content.ReadAsStringAsync();
+
+            Assert.True(response.IsSuccessStatusCode, $"status poll answered {(int)response.StatusCode}: {payload}");
+
+            last = JsonDocument.Parse(payload).RootElement.Clone();
+
+            if (until(last.GetProperty("status").GetString()!))
+            {
+                return last;
+            }
+
+            await Task.Delay(150);
+        }
+
+        Assert.Fail($"the feed never reached the expected status; last was {last}");
+
+        return last;
+    }
+
+    public async Task<HttpResponseMessage> SendAsync(
+        HttpMethod method, string path, string? bearer, string? idempotencyKey = null)
+    {
+        using var request = new HttpRequestMessage(method, path);
+
+        if (bearer is not null)
+        {
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", bearer);
+        }
+
+        if (method == HttpMethod.Post)
+        {
+            request.Headers.TryAddWithoutValidation(
+                MageRideHeaders.IdempotencyKey, idempotencyKey ?? Guid.NewGuid().ToString("N"));
+        }
+
+        return await Client.SendAsync(request);
+    }
+
+    /// <summary>Reads a successful JSON response, failing with the body when it is not one.</summary>
+    public static async Task<JsonElement> JsonAsync(HttpResponseMessage response)
+    {
+        ArgumentNullException.ThrowIfNull(response);
+
+        var payload = await response.Content.ReadAsStringAsync();
+
+        Assert.True(response.IsSuccessStatusCode, $"the request answered {(int)response.StatusCode}: {payload}");
+
+        return JsonDocument.Parse(payload).RootElement.Clone();
+    }
+
+    /// <summary>Reads an RFC 7807 body, whatever the status.</summary>
+    public static async Task<JsonElement> ProblemAsync(HttpResponseMessage response)
+    {
+        ArgumentNullException.ThrowIfNull(response);
+
+        return JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.Clone();
+    }
+
+    private sealed record AcceptedBody(Guid FeedVersionId);
 
     // -----------------------------------------------------------------------------------------
     // HTTP
@@ -232,10 +404,20 @@ internal sealed class TransitHarness : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         Client.Dispose();
+        Unredirected.Dispose();
 
         await _app.StopAsync();
         await _app.DisposeAsync();
         await _shortener.DisposeAsync();
+
+        try
+        {
+            Directory.Delete(_storageRoot, recursive: true);
+        }
+        catch (DirectoryNotFoundException)
+        {
+            // Nothing was uploaded in this run.
+        }
     }
 
     /// <summary>

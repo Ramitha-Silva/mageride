@@ -220,13 +220,31 @@ internal sealed class GtfsSeed(PostgresFixture postgres)
             """);
     }
 
-    private static async Task<Guid> AdminAsync(Npgsql.NpgsqlConnection connection)
+    /// <summary>
+    /// An <c>iam.users</c> row for a back-office operator (Δ C057).
+    /// </summary>
+    /// <remarks>
+    /// <c>transit.gtfs_feed_versions.uploaded_by</c> references it, so an upload by a subject with
+    /// no row fails in the database. Every SCR-AP-016 test therefore mints a real user rather than
+    /// a bare token.
+    /// </remarks>
+    public async Task<Guid> CreateUserAsync(string role)
+    {
+        await using var connection = await _postgres.OpenAsync();
+
+        return await CreateUserAsync(connection, role);
+    }
+
+    private static Task<Guid> AdminAsync(Npgsql.NpgsqlConnection connection) =>
+        CreateUserAsync(connection, "admin");
+
+    private static async Task<Guid> CreateUserAsync(Npgsql.NpgsqlConnection connection, string role)
     {
         var id = Guid.NewGuid();
 
         await connection.ExecuteAsync(
-            "INSERT INTO iam.users (id, phone, role) VALUES (@Id, @Phone, 'admin');",
-            new { Id = id, Phone = $"+9476{Random.Shared.Next(1_000_000, 9_999_999)}" });
+            "INSERT INTO iam.users (id, phone, role) VALUES (@Id, @Phone, @Role);",
+            new { Id = id, Phone = $"+9476{Random.Shared.Next(1_000_000, 9_999_999)}", Role = role });
 
         return id;
     }

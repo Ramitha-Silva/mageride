@@ -932,7 +932,10 @@ check_eq "5 comms, 2 docs, 3 support, 5 content, 1 audit, 2 pdpa, 3 spatial tabl
   "SELECT count(*) FROM information_schema.tables
     WHERE table_schema IN ('comms','docs','support','content','audit','pdpa','spatial')
       AND table_type='BASE TABLE';"
-check_eq "6 transit + 5 transit_staging + 1 analytics tables" "12" \
+# 7 transit, not C005's 6: `transit.command_log` (R-14, the eleventh of them) is C057's, added by
+# 1407 — BR-32.2 makes the SCR-AP-016 activation idempotent on `Idempotency-Key`, and a
+# double-clicked Activate must swap the live dataset once.
+check_eq "7 transit + 5 transit_staging + 1 analytics tables" "13" \
   "SELECT count(*) FROM information_schema.tables
     WHERE table_schema IN ('transit','transit_staging','analytics') AND table_type='BASE TABLE';"
 check_eq "billing.bank_transfer_topups does not exist (AL-05)" "0" \
@@ -2238,6 +2241,45 @@ check_eq "an org has at most one verified payout profile" "1" \
   "SELECT count(*) FROM pg_indexes
     WHERE schemaname='registry' AND indexname='ux_payout_profile_verified'
       AND indexdef LIKE '%verified%';"
+
+# ---------------------------------------------------------------------------------------
+# C057 — transit: the GTFS Dataset Manager's command log (1407), and the two constraints the
+# lifecycle actually leans on.
+#
+# BR-32.2 makes activation "idempotent on `Idempotency-Key`", so transit-svc needs its own
+# command log — the eleventh instance of the D4' §5 gap. The two CHECK constraints below are what
+# make a rollback expressible at all: re-activating an archived version has to clear `archived_at`
+# in the same statement that sets the status, or the row it writes is one the table refuses.
+# ---------------------------------------------------------------------------------------
+step "Objects owned by C057 (AL-54, BR-32.2/32.3)"
+
+check_eq "transit.command_log exists with the 0603 shape minus the aggregate id" "8" \
+  "SELECT count(*) FROM information_schema.columns
+    WHERE table_schema='transit' AND table_name='command_log'
+      AND column_name IN ('idempotency_key','actor_type','actor_id','command','request_hash',
+                          'response_status','response_body','response_content_type');"
+
+check_eq "transit.command_log has no aggregate-id column (a feed version is not one)" "0" \
+  "SELECT count(*) FROM information_schema.columns
+    WHERE table_schema='transit' AND table_name='command_log' AND column_name LIKE '%_id'
+      AND column_name <> 'actor_id';"
+
+psql_run "INSERT INTO iam.users (id, phone, role)
+          VALUES ('c0000057-0000-0000-0000-000000000001','+94770000057','admin');" >/dev/null \
+  || die "could not create the C057 rollback fixture."
+
+# An 'active' row that still carries archived_at is exactly the shape a naive rollback writes —
+# re-activating an archived version has to clear it in the same statement that sets the status.
+check_rejects "an 'active' feed version may not keep archived_at (a rollback must clear it)" \
+  "INSERT INTO transit.gtfs_feed_versions
+     (feed_version_id, file_name, file_size_bytes, sha256, storage_key, uploaded_by,
+      status, activated_at, archived_at)
+   VALUES ('c0000057-0000-0000-0000-000000000002','rollback.zip',1,'c057-sha',
+           'gtfs/c057.zip','c0000057-0000-0000-0000-000000000001','active', now(), now());"
+
+psql_run "DELETE FROM transit.gtfs_feed_versions WHERE sha256='c057-sha';
+          DELETE FROM iam.users WHERE id='c0000057-0000-0000-0000-000000000001';" >/dev/null \
+  || die "could not clean up the C057 rollback fixture."
 
 # ---------------------------------------------------------------------------------------
 printf '\n'

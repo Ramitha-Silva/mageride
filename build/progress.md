@@ -82,7 +82,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C054 | ocr-svc | 3 | DONE | 2026-07-31 | **113 tests green** in a new suite (`Ocr.Api.Tests`), against a real Postgres, real OpenCV, the real `tesseract` binary and a **recording HTTP server** standing in for Gemini — the D-36 claim is asserted on the bytes that came off the socket; **1 migration (1310)** — ADD §12.5's document-processing log (`raw_sha256`, `redacted_sha256`, policy + pass version, the mask counts, `engine`) on `docs.extractions`, which 1301 gives one BOOLEAN, plus **`ck_extractions_gemini_is_redacted`**, the D-36 invariant in the last place able to refuse to record its violation; **the pre-pass is held twice** — `GeminiFieldExtractor` takes a `RedactedDocument` only the redactor can construct, and `PerimeterGuardHandler` re-checks the wire; **fails closed everywhere**: no Tesseract ⇒ no ID boxes ⇒ no redaction ⇒ **no Gemini call at all**, and the on-prem path still returns fields, capped below the auto-verify threshold so a model outage can never auto-approve a vehicle; **three real defects caught by the tests** — the guard's regex matched nothing at all because `System.Text.Json` escapes `+` and `/` to `\uXXXX` (it was passing every payload); Tesseract's PSM 11 returns **nothing** for a framed number plate, the one document step 4/4 cannot be blind on; and a label match on a heading returned `revenue_no = "LICENCE NO RL8891234"`; **`_shared.yaml`'s `FieldSource`/`VerifyStatus` enums named values no row can hold** and omitted `auto_verified`, so a generated client would have failed on every field registry-svc has ever returned — corrected; **1 new contract** (`ocr.yaml`, Δ in full: D3' has no ocr-svc section); `migrate-verify.sh` 355/355 with a C054 section; 8 spec gaps / micro-change-sets |
 | C055 | voip-svc | 3 | DONE | 2026-07-31 | **68 tests green** in a new suite (`Voip.Api.Tests`), against a real Postgres and a real Redpanda — the trip-end teardown is proved with a terminal `ride.events` message on a real broker, because that half cannot be shown any other way; **1 migration (1311)** — `ux_voip_sessions_open_room` (D3' gives a ride ONE room and **both** parties start a call into it, so without it each tap opened a rival session) plus the `comms.call_log.outcome` vocabulary 1302 left as free text with no writer, which is what makes ADD §16's call-setup SLO and ADD §14's fallback measurable at all; **"expiring at trip end" needs TWO mechanisms** — a LiveKit token is a *join* credential whose `exp` is checked at connect and never again, so minting is refused for a terminal ride **and** the room is closed when `ride.events` says the ride is over; **P-05 held by the projection, not a branch** — `RiderIdentity` is `rider_id` with **no fallback to `booker_id`**, and a proxy booker is 403 on both routes; **AL-48 enforced by reflection** — the suite fails if any member of the assembly is named after the withdrawn masking stack or can name a phone number, because three still-current spec sections still describe masking; **the LiveKit token is minted by hand** (its authority is a nested `video` claim the claims-dictionary APIs stringify — a token that fails at the SFU, not at the mint); **media plane config landed** (`livekit.yaml` + `turnserver.conf`, both containers `network_mode: host` per D6' §6 — HAProxy cannot relay UDP and the failure mode is one-way audio, not a startup error); **1 contract addition** (`POST /v1/calls/{callId}/outcome`); `migrate-verify.sh` 361/361 with a C055 section; 7 spec gaps / micro-change-sets |
 | C056 | transit-svc-routing | 3 | DONE | 2026-07-31 | **58 tests green** in a new suite (`Transit.Api.Tests`) over a real Postgres and a real URL shortener on a socket; the Colombo Fort → Kottawa corridor is seeded at its **actual coordinates** with route 138 on it, and the shape is asserted by **decoding** the polyline rather than comparing a string; **1 migration (1406)** — `trip_headsign` on `transit.gtfs_trips` **and its staging mirror**, which both specs put on every option and §18c had nowhere to hold (it is what tells "138 to Kottawa" from "138 to Pettah", which share a short name AND a long name); **the feed is patterns, not trips** — distinct stop sequences indexed by halt, so BR-23.2's "all direct routes" is an in-memory lookup instead of a self-join over 512k `stop_times` on a screen the passenger is watching; **"expires within 60 s" is LISTEN plus a poll**, and the poll is why it is a guarantee — a notification only reaches sessions connected when it fires, and the suite proves the missed-NOTIFY path separately; **AL-55 became a wire field** (`coverage: active | no_feed`, Δ C056) because an empty list meant both "no bus goes there" and "we cannot tell"; **the paste-link allowlist is re-checked at every redirect hop** — the first URL is the one an attacker cannot aim, and a mid-chain hop to `169.254.169.254` is asserted refused; **one real defect caught**: the resolver kept a second hardcoded shortener-host list that could disagree with the configured allowlist; **`EncodedPolyline` promoted into the kernel** (two services must agree on a wire format); **BR-23.2's "soonest departure" is unimplementable** — §18c mirrors five GTFS tables and none is the service calendar; `migrate-verify.sh` 363/363 with a C056 section; 6 spec gaps / micro-change-sets |
-| C057 | transit-svc-gtfs-lifecycle | 3 | PENDING | | |
+| C057 | transit-svc-gtfs-lifecycle | 3 | DONE | 2026-07-31 | **26 GTFS tests green** (`--filter Category=Gtfs`) and **84/84** across the whole transit suite, over a real Postgres with real zips built in memory; **1 migration (1407)** — `transit.command_log`, the eleventh instance of the R-14 gap, because BR-32.2 makes activation idempotent on `Idempotency-Key`; **the swap is a three-way schema rename**, so the live dataset is replaced in the time it takes to take the locks whatever the feed's size — and **the index names are renamed back onto their own side in the same transaction** (the C005 decision), asserted after *two* activations because a one-way rename passes after one; **"a failed activation leaves the previous feed live" is held by which tables each phase touches**, not by unwinding — the staging load never touches `transit.*` — and is asserted by losing the stored zip out from under a validated version; **the upload dedupes on content, not on a header** (sha256, BR-32.1), which is why it is the one POST outside the kernel's replay: the body is 200 MB and the header would be weaker; **3 guards for one 413** because a declared length, a chunked body and the file's own bytes are three different clients; **`trip_headsign` is now mapped**, closing C056's ask — without it "138 to Kottawa" and "138 to Pettah" are the same card twice; **C056's gap (b) is escalated, not closed** — the calendar is validated but §18c has nowhere to store it; **3 error codes landed in the kernel** that C007 coined in the contract enum and nothing could raise; `migrate-verify.sh` 366/366 (was 363), Spectral 0 errors, solution build 0 warnings; 2 contract additions, 5 spec gaps |
 | C058 | fleet-svc-org | 3 | PENDING | | |
 | C059 | fleet-svc-fleet-ops | 3 | PENDING | | |
 | C060 | fleet-billing-svc | 3 | PENDING | | |
@@ -8167,3 +8167,193 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   **Build host —** Docker for one Testcontainers fixture (Postgres, with PostGIS — the GTFS halts
   are geography columns); the replica stayed down throughout. `Transit.Api.Tests` takes ~40 s. No
   new NuGet reference.
+
+---
+
+- **Component:** C057 transit-svc-gtfs-lifecycle — 2026-07-31
+- **Status:** DONE — `dotnet test backend/src/Transit.Api.Tests -c Release --filter Category=Gtfs`
+  → **26 passed, 0 failed, 0 skipped**; the whole suite is **84 passed** (C056's 58 plus these,
+  after one C056 assertion was extended — see below). All four DoD items pass, each with a named
+  test: a malformed feed fails validation and produces a downloadable row-level report while
+  nothing is activated
+  (`A_malformed_feed_fails_validation_and_produces_a_downloadable_row_level_report`, which then
+  tries to activate the `failed` version and is refused, plus
+  `The_report_downloads_as_csv_as_well_as_json`); activation swaps the live tables atomically and
+  transit-svc serves the new routes
+  (`Activation_swaps_the_live_tables_and_transit_svc_serves_the_new_routes` — asserted through the
+  running service's own `GET /v1/transit/options`, not by reading the tables, because what BR-32.2
+  promises is that *passengers* see the new dataset); re-uploading the identical file returns 409
+  with the existing version number
+  (`Re_uploading_the_identical_file_returns_409_with_the_existing_version`, with a different
+  filename and a different `Idempotency-Key`, because BR-32.1 dedupes on the bytes); and
+  re-activating an archived version restores it and archives the current one
+  (`Re_activating_an_archived_version_restores_it_and_archives_the_current_one`, which proves it
+  from the wire — the rolled-back-to feed does not carry route 255, so `GET /v1/transit/routes/R255`
+  goes from 200 to 404). Gates re-run green: `bash infra/scripts/migrate-verify.sh` → **366/366**
+  (was 363), Spectral on `backend/contracts/*.yaml` → 0 errors,
+  `dotnet build backend/MageRide.sln -c Release` → 0 warnings, `MageRide.Shared.Tests` → 254 passed
+  after the three error codes landed.
+- **Notes:**
+  **Spec gaps — one micro-change-set landed as `db/migrations/1407`, two contract additions, and
+  four others.**
+  (a) ***R-14 has no per-service command log in D4' §5, for the eleventh time.*** BR-32.2 says
+  activation is "idempotent on `Idempotency-Key`" and `contracts/transit.yaml` declares the header
+  on both POSTs, but D4' §5 prints command-log DDL for `rides` only — the same gap C020, C021,
+  C030, C033, C034, C045, C046, C047, C051 and C053 each raised for their own bounded context.
+  1407 adds `transit.command_log`, shaped like 1308 (0603 minus the aggregate id). **D4' §5 should
+  carry a command log per bounded context** — eleven services in, this is no longer a per-component
+  finding.
+  (b) ***C056's gap (b) is escalated, not closed.*** `calendar`/`calendar_dates` are **validated**
+  here — BR-32.1 requires referential integrity against them and the service window is read out of
+  them into `service_start`/`service_end` — but they are **not stored**, because
+  `server_db_schema` §18c mirrors five GTFS tables and says so explicitly ("`transit_staging`
+  mirrors **these five tables only**"). So nothing in the platform can still say whether a trip
+  runs *today*, and BR-23.2's "soonest departure" stays unimplementable. Closing it is **two**
+  changes, neither of them this component's to make alone: §18c gains two tables (plus their
+  staging mirrors, plus the swap), and C056's routing gains a service-day evaluation in
+  Asia/Colombo (D-38). **Either §18c gains the calendar tables or BR-23.2 drops the departure
+  clause** — raised now for the second time.
+  (c) ***`counts` has two spellings in the specs.*** `server_db_schema` §27's column comment says
+  `{agencies, routes, trips, stops, stop_times, shapes, frequencies}` and
+  `contracts/transit.yaml`'s `FeedCounts` example says `agency: 12`. The contract wins per
+  `backend/contracts/CLAUDE.md`, so the keys are the GTFS **file base names** — `agency`, `routes`,
+  `trips`, `stops`, `stop_times`, `shapes`, `frequencies`, `calendar`, `calendar_dates` — which is
+  also self-consistent with every finding's `file` field. `§27`'s comment should say `agency`.
+  (d) ***`transit.gtfs_routes.agency` does not say which GTFS field it holds.*** §18c gives one
+  `agency TEXT` column; GTFS `routes.txt` carries `agency_id` and `agency.txt` carries
+  `agency_name`. transit-svc (C056) answers the column as `agencyName` on the route-detail
+  response, so the importer maps the **name** (falling back to the id for an agency the map does
+  not have). **§18c should name the column `agency_name` or say which it is.**
+  (e) ***BR-32.3's "retained ≥ 12 months" has no enforcement point in an application.*** It is met
+  here by the **absence of a delete path**: nothing in this service removes a stored zip, because a
+  rollback re-imports from the archived version's `storage_key` and a collected zip is a version
+  that can no longer be rolled back to. Expiry past 12 months is a bucket lifecycle policy and
+  belongs in **D7'**, which does not currently name one.
+  (f) ***No spec pins the report cap, the signed-link TTL, the validation poll or the activation
+  lock wait.*** All argued at their declarations in `TransitOptions.GtfsOptions`.
+
+  **Contract changes —**
+  (1) **`GET /v1/admin/transit/gtfs/objects/{feedVersionId}`** (`security: []`), the target of the
+  `…/download` 302. `contracts/transit.yaml` already specified a 302 to a signed URL; there was no
+  URL to point at, because **no service in this build has an S3 client**. A browser following a
+  redirect does not send the bearer that authorised it — which is exactly why object storage
+  answers downloads with presigned URLs — so this route *is* the presigned URL, with an HMAC over
+  `{feedVersionId}\n{exp}` as the credential. It is removed when a bucket is configured. This is
+  the only unauthenticated operation in the document.
+  (2) **`conflict` added to `activateGtfsFeed`'s `x-error-codes`.** Activation holds a session
+  advisory lock across both phases and a caller that cannot take it inside
+  `Transit:Gtfs:ActivationLockWait` is answered rather than left waiting.
+
+  **Landed in the kernel —**
+  `feed-duplicate` (409), `feed-not-validated` (409) and `feed-already-active` (409) are now
+  declared in `MageRideErrors`. C007 coined all three in `contracts/_shared.yaml`'s `ErrorCode`
+  enum and no component could raise them until this one; the registry test's spec-named theory now
+  covers them, so the two halves cannot drift apart again.
+
+  **One C056 assertion extended, deliberately —**
+  `There_is_no_way_to_ask_for_a_route_number_as_a_destination` asserts AL-17 against the *running*
+  route table, "so a route added later fails the suite". It did, which is the fence working. It now
+  names the passenger-facing routes and the seven admin routes separately: AL-17 is untouched
+  because every parameter C057 adds names a **feed version** — a dataset an operator uploaded —
+  never a place a passenger is going.
+
+  **Decisions —**
+  (1) **The swap is a three-way schema rename through a scratch schema.** `ALTER TABLE … SET
+  SCHEMA` is a catalogue update that rewrites no row, so the live dataset is replaced in the time
+  it takes to take the locks, whatever the feed's size. Emptying and refilling `transit.*` would
+  leave it empty for the length of a 512 000-row load, which is the one state passengers must never
+  see. Foreign keys follow the tables rather than the names — they are OID references — so the
+  ex-staging tables keep referencing each other after they land, which is what 1404 means by
+  "pointing WITHIN `transit_staging`".
+  (2) **Index names are renamed back onto their own side inside the same transaction.** The C005
+  decision `transit.yaml` records, resolved the way the contract offered: `transit` always carries
+  `ix_gtfs_*` and `transit_staging` always `ix_staging_gtfs_*`. Without it, 1404's
+  `CREATE INDEX IF NOT EXISTS ix_staging_…` matches nothing after the first activation and builds a
+  second index on every migration re-run. Asserted after **two** activations, because a rename that
+  only worked in one direction would pass after one.
+  (3) **Two phases, and the fence is which tables each touches.** The staging load takes minutes on
+  a national feed and writes only to `transit_staging.*`; the swap is one transaction and is the
+  only thing that touches `transit.*`. BR-32.2's "on any import or swap failure the prior feed
+  stays live" is therefore a property of *where the rows go*, not of how carefully the code unwinds
+  — which is what `A_failed_activation_leaves_the_previous_feed_live_and_untouched` asserts by
+  deleting the stored zip behind the service's back.
+  (4) **One activation at a time, by session advisory lock spanning both phases.** Two operators
+  activating two feeds would otherwise both truncate and load one staging schema and the swap would
+  publish half of each. It is the second thing in this service needing `OpenDirectAsync`, for the
+  same reason the `LISTEN` is: PgBouncer in transaction mode hands the session back between
+  statements and the lock with it.
+  (5) **The upload dedupes on content, and is the one POST outside the kernel's replay.** The
+  middleware hashes and buffers the request body to detect key reuse, and this body is up to 200 MB.
+  BR-32.1's sha256 refusal is both cheaper and *stronger* than a header: it catches a retry that
+  regenerated its key, and the same file uploaded a month later by a different operator. The header
+  is still **required** — enforced by the handler with the kernel's own rules — so a client cannot
+  tell the two endpoints apart by what they accept. The 409 carries `feedVersionId` as an extension,
+  because SCR-AP-016's inline error is "This exact file is already uploaded (version N)" and a bare
+  409 leaves the operator nowhere to go.
+  (6) **Three guards for one 200 MB ceiling**, because they catch different clients: a declared
+  `Content-Length` is refused before a byte is read, Kestrel's own limit is raised to exactly the
+  ceiling plus the multipart envelope (which is what terminates a chunked upload), and the object
+  store counts the file's own bytes. `MultipartReader`, never `ReadFormAsync` — the form reader
+  buffers the whole body to a temp file before the handler sees anything, so a 200 MB feed would be
+  written to disk twice and the 413 would arrive after both.
+  (7) **The verdict is a count and the report is a list.** A feed whose `stop_times.txt` names a
+  stop that does not exist is wrong on every one of half a million rows; the stored report is capped
+  and says how many were dropped, while the uncapped error *count* is what decides `failed`. A
+  missing required file stops the pass outright for the same reason: without `stops.txt` every
+  `stop_times` row is also an `unknown_stop_id`, and the one finding that explains the feed would be
+  buried under its consequences.
+  (8) **Stable-id warnings compare against the *active* feed, and only when one is active.** BR-32.1
+  says "the currently active feed version"; reading the live tables when nothing is active would
+  warn that every id in a dataset nobody is serving had disappeared.
+  (9) **Anything the validator throws becomes a `failed` verdict, not a stuck row**, and a feed left
+  at `validating` by a dead replica is reclaimed by age. An operator watching SCR-AP-016's stepper
+  needs an answer; a spinner that never resolves has no way out but SQL.
+  (10) **The CSV report is RFC 4180 on the way out as well as the way in.** GTFS route long names
+  carry commas ("Colombo, Fort – Kandy") and so do the messages that name them, so a naive join
+  shifts every later column for exactly the feeds most likely to be uploaded here. The same reader
+  handles a UTF-8 BOM, padded values, short rows and a wrapping directory inside the zip — AL-56
+  makes the file somebody else's work, and the one thing this must not do is refuse a feed for how
+  it was packed.
+  (11) **The two geography tables load through a temp table.** A binary `COPY` stream cannot
+  construct a PostGIS value; the coordinates arrive as doubles and one `INSERT … SELECT` makes them
+  points, which is also where a NULL coordinate stays NULL instead of becoming (0, 0) in the Gulf of
+  Guinea.
+  (12) **`audit.events` is written inside the transaction that changes the state** (D-35) for all
+  three mutations. Validation's row is deliberately **actor-less** — a queued job decided it, and
+  `audit.events.actor_id` is nullable for exactly that; the person who caused it is on the upload
+  row.
+
+  **The second copy of the audit writer —**
+  `GtfsAuditRepository` is twelve lines that reputation-svc (C033) already has as `AuditRepository`.
+  Not promoted here because promoting it means editing another service and re-running its suite for
+  no behaviour change. **C062 (admin-bff-core) is the third caller and should promote it** into
+  `MageRide.Shared` next to `AuditEvent` — D-35 applies to every admin mutation on the platform, and
+  C062 owns the interceptor that writes one on every mutating route.
+
+  **For C062 (admin-bff-core) —** the GTFS Dataset Manager proxy is
+  `/v1/admin/transit/gtfs/**` on transit-svc; all seven routes are live and RBAC'd to Admin +
+  Super Admin, so the proxy needs no authorisation of its own beyond passing the bearer. Two
+  things to know: the **upload is `multipart/form-data` up to 200 MB**, so the proxy must stream it
+  rather than buffer it (and its own `Content-Length` limits must be raised to match); and the
+  **download answers a 302 to an absolute signed URL** built from the scheme and host the request
+  arrived on — set `Transit:Gtfs:PublicBaseUrl` if the proxy rewrites the origin, or the link the
+  browser follows points at the wrong host.
+  **For the Admin Portal (SCR-AP-016) —** the status stepper polls
+  `GET …/uploads/{id}` and the payload carries `warnings[]` and `errorSummary[]` as **plain
+  strings** already formatted "`file` row `N`: message"; the full report is the separate download,
+  JSON or `?format=csv`. `counts` is keyed by GTFS **file base name** (`stop_times`, not
+  `stopTimes`) — it is data, not property names, so it is serialised verbatim. A duplicate upload's
+  409 carries `feedVersionId`, `feedInfoVersion` and `status` as problem extensions, which is what
+  "already uploaded (version N)" needs to link to.
+  **For C056's half —** the importer now fills `trip_headsign`, so the `route_long_name` fallback
+  stops being the only value in the field. `NOTIFY transit_feed_activated` finally has a producer;
+  the safety-net poll is back to being a safety net.
+  **For C118 (contract tests) —** `transit.yaml` gained one path
+  (`/v1/admin/transit/gtfs/objects/{feedVersionId}`, `security: []`) and one `x-error-codes` entry
+  (`conflict` on `activateGtfsFeed`); nothing was removed. `_shared.yaml`'s `ErrorCode` enum is
+  unchanged — the three feed codes were already in it and only the kernel was missing them.
+  **Build host —** Docker for one Testcontainers fixture (Postgres with PostGIS) plus the
+  throwaway container `migrate-verify.sh` starts; the replica stayed down throughout.
+  `Transit.Api.Tests` takes ~60 s for the full suite, ~30 s for `Category=Gtfs`. **No new NuGet
+  reference** — the zip reader, the CSV reader and the multipart reader are all BCL or ASP.NET
+  Core.

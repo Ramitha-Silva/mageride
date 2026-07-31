@@ -2,6 +2,7 @@ using System.Net;
 using MageRide.Transit.Configuration;
 using MageRide.Transit.Feed;
 using MageRide.Transit.Geo;
+using MageRide.Transit.Gtfs;
 using MageRide.Transit.Routing;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
@@ -36,6 +37,27 @@ public static class TransitServiceCollectionExtensions
         services.TryAddSingleton<IMapsLinkResolver, MapsLinkResolver>();
 
         services.AddMapsLinkClient();
+        services.AddGtfsLifecycle();
+
+        return services;
+    }
+
+    /// <summary>
+    /// The SCR-AP-016 half (Δ C057). Singletons for the same reason as the routing half: every one
+    /// of these is stateless over the connection factory, and the two that are not — the object
+    /// store's root and the validation latch — are process-wide by nature.
+    /// </summary>
+    private static IServiceCollection AddGtfsLifecycle(this IServiceCollection services)
+    {
+        services.TryAddSingleton<IGtfsFeedVersionRepository, GtfsFeedVersionRepository>();
+        services.TryAddSingleton<IGtfsAuditRepository, GtfsAuditRepository>();
+        services.TryAddSingleton<IGtfsObjectStore, FileSystemGtfsObjectStore>();
+        services.TryAddSingleton<IGtfsValidator, GtfsValidator>();
+        services.TryAddSingleton<IGtfsImporter, GtfsImporter>();
+        services.TryAddSingleton<IGtfsUploadService, GtfsUploadService>();
+        services.TryAddSingleton<IGtfsActivationService, GtfsActivationService>();
+        services.TryAddSingleton<GtfsValidationSignal>();
+        services.TryAddSingleton<GtfsDownloadLinks>();
 
         return services;
     }

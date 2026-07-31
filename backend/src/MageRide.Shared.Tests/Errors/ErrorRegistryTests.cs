@@ -63,6 +63,9 @@ public sealed class ErrorRegistryTests
     [InlineData("upgrade-required", 426)]
     [InlineData("otp-rate-limited", 429)]
     [InlineData("loc-request-rate-limited", 429)]
+    [InlineData("feed-duplicate", 409)]
+    [InlineData("feed-not-validated", 409)]
+    [InlineData("feed-already-active", 409)]
     public void Spec_named_codes_are_registered_with_their_spec_status(string code, int status)
     {
         Assert.True(MageRideErrors.TryGet(code, out var error), $"'{code}' is named by a spec but is not in the registry.");

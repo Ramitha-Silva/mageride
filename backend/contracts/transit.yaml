@@ -16,6 +16,16 @@ openapi: 3.1.0
 #   the second a SAFETY NET rather than the expected state, which SCR-PA-009 has to render
 #   differently: live buses and private tiers stay, route matching is hidden. With one field the
 #   screen can tell them apart; without it, a feed gap looks like a corridor no bus serves.
+#
+# Δ C057 — two additions, both recorded in the C057 handoff:
+#   `GET /v1/admin/transit/gtfs/objects/{feedVersionId}` — the target of the `…/download` 302, and
+#   the only unauthenticated route on this document. A browser following a redirect does not carry
+#   the bearer token that authorised it, which is why object storage answers downloads with
+#   presigned URLs; this route is that presigned URL until an S3 client exists, and its HMAC is the
+#   credential. When a bucket is configured the 302 points at the bucket and this route goes away.
+#   `conflict` on `activateGtfsFeed` — two operators activating two feeds at once would both load
+#   one staging schema, so activation serialises on an advisory lock and the caller that cannot
+#   take it is told rather than left waiting.
 # =============================================================================================
 
 info:
@@ -364,8 +374,14 @@ paths:
         passed validation is `409 feed-not-validated`; the currently active feed is
         `409 feed-already-active`.
 
-        The staging indexes are named `ix_staging_*` and survive the rename — C057 must either
-        rename on activate or stop depending on index names (C005 decision 5).
+        The staging indexes are named `ix_staging_*` and survive the rename — C057 renames them
+        back onto their own side inside the swap transaction (C005 decision 5), so `transit` always
+        carries `ix_gtfs_*` and `transit_staging` always carries `ix_staging_gtfs_*`.
+
+        **Δ C057:** activation serialises on a session advisory lock across both phases — the
+        staging load and the swap — because two concurrent activations would load one staging
+        schema with halves of two feeds. A caller that cannot take the lock inside
+        `Transit:Gtfs:ActivationLockWait` is answered `409 conflict`.
       tags: [gtfs-admin]
       security:
         - bearerAuth: []
@@ -384,7 +400,7 @@ paths:
         '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
         '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
-      x-error-codes: [unauthorized, forbidden, not-found, feed-not-validated, feed-already-active]
+      x-error-codes: [unauthorized, forbidden, not-found, feed-not-validated, feed-already-active, conflict]
 
   /v1/admin/transit/gtfs/versions:
     get:
@@ -442,6 +458,51 @@ paths:
         '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
       x-error-codes: [unauthorized, forbidden, not-found]
+
+  /v1/admin/transit/gtfs/objects/{feedVersionId}:
+    get:
+      operationId: downloadSignedGtfsObject
+      summary: Serve a stored feed zip against a signed link.
+      description: |
+        **Δ C057.** The target of `…/versions/{feedVersionId}/download`'s 302, and the only
+        unauthenticated operation in this document. A browser following a redirect does not send
+        the bearer token that authorised the redirect, which is why object storage answers
+        downloads with presigned URLs — **the `sig` HMAC is the credential here**, scoped to one
+        feed version and one expiry, so a link pasted into a ticket stops working.
+
+        This route stands in for a presigned bucket URL while no service in this build has an S3
+        client (the same interim as ride-svc's proof-photo store, D-36). When a bucket is
+        configured the 302 points at it and this route is removed.
+      tags: [gtfs-admin]
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/FeedVersionId'
+        - name: exp
+          in: query
+          required: true
+          description: Link expiry, Unix seconds.
+          schema:
+            type: integer
+            format: int64
+        - name: sig
+          in: query
+          required: true
+          description: base64url HMAC-SHA256 over `{feedVersionId}\n{exp}`.
+          schema:
+            type: string
+            maxLength: 128
+      responses:
+        '200':
+          description: The original GTFS zip.
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, not-found]
 
   /v1/admin/transit/gtfs-import:
     post:
