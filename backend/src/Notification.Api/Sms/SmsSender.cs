@@ -133,6 +133,11 @@ public sealed class SmsSender(
             return await primary.SendAsync(phone, message, cancellationToken);
         }
 
+        // Both names are recorded before either answers, because that is the fact D-33 is about:
+        // the message was handed to two gateways at the same time. Which one came back first is a
+        // separate fact and is `SmsResult.Gateway`.
+        string[] attempted = [primary.Name, secondary.Name];
+
         var first = primary.SendAsync(phone, message, cancellationToken);
         var second = secondary.SendAsync(phone, message, cancellationToken);
 
@@ -142,7 +147,7 @@ public sealed class SmsSender(
         if (result.Delivered)
         {
             Observe(winner == first ? second : first);
-            return result;
+            return result with { Attempted = attempted };
         }
 
         // The first answer was a refusal, so wait for the other one — the point of sending twice is
@@ -151,12 +156,12 @@ public sealed class SmsSender(
 
         if (other.Delivered)
         {
-            return other;
+            return other with { Attempted = attempted };
         }
 
         return SmsResult.Failed(
             $"{primary.Name}+{secondary.Name}",
-            $"Both gateways refused in parallel: {result.Error} / {other.Error}");
+            $"Both gateways refused in parallel: {result.Error} / {other.Error}") with { Attempted = attempted };
     }
 
     private ISmsGateway? Find(string name) =>

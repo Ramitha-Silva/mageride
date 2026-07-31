@@ -7,7 +7,22 @@ openapi: 3.1.0
 #
 # The admin report queue and its resolution (`GET /v1/admin/reports/queue`,
 # `POST /v1/admin/reports/{reportId}/resolve`) are **admin-bff** surfaces and live in
-# admin-bff.yaml, exactly where D3' Part 2 puts the resolve route.
+# admin-bff.yaml, exactly where D3' Part 2 puts the resolve route — and `reputation.v1.proto` says
+# "safety-svc owns the confirmation decision and safety.vehicle_reports". Both hold at once only if
+# admin-bff is the RBAC-gated, audited front door and the decision is made here, so the internal
+# family below is the pair it forwards.
+#
+# Δ C052 — four changes, each argued at its operation:
+#   * POST /v1/sos response gains `smsStatus` — without it a client cannot tell "the alert went out"
+#     from "the alert is on the admin console and nowhere else", and `dispatchedAt` is now nullable
+#     for the same reason: answering with an instant that never happened would tell somebody in
+#     trouble that help was on the way.
+#   * /v1/internal/safety/reports/queue + /{reportId}/resolve — the moderation pair admin-bff
+#     forwards. Without them US-12.6's third confirmation has no way to happen.
+#   * /v1/internal/safety/trips/{tripId}/close — D-34's window ends at trip end and nothing here
+#     knows when a trip ends; ride-svc and trip-state-svc do.
+#   * /v1/internal/safety/location-requests/{bookerId} — P-12's rows are ride-svc's to write and the
+#     question they exist to answer had nowhere to be asked.
 # =============================================================================================
 
 info:
@@ -48,6 +63,8 @@ tags:
     description: Public read-only trip-share tokens (D-34).
   - name: reports
     description: Vehicle reports and driver blocking.
+  - name: safety-internal
+    description: The seams admin-bff and ride-svc call (Δ C052).
 
 paths:
 
@@ -95,12 +112,25 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [sosId, dispatchedAt]
+                required: [sosId, smsStatus]
                 properties:
                   sosId:
                     $ref: './_shared.yaml#/components/schemas/Ulid'
                   dispatchedAt:
+                    description: |
+                      When a gateway took the alert. **Absent when none did** — the event is still
+                      recorded and still on the admin live feed, and reporting a dispatch that did
+                      not happen would tell somebody in trouble that help was on the way.
                     $ref: './_shared.yaml#/components/schemas/Timestamp'
+                  smsStatus:
+                    description: |
+                      **Δ C052.** `Dispatched` — a gateway took it. `Failed` — every gateway refused;
+                      the admin console has the alert and nobody has been SMSed. `NoContact` —
+                      AL-13: there is nobody on file to send to (only reachable with
+                      `Safety:RequireEmergencyContact` off; the default answers
+                      `400 no-emergency-contact` instead).
+                    type: string
+                    enum: [Dispatched, Failed, NoContact]
         '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
         '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
         '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
@@ -321,10 +351,210 @@ paths:
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
       x-error-codes: [unauthorized, not-found]
 
+  /v1/internal/safety/reports/queue:
+    get:
+      operationId: listReportQueueInternal
+      summary: Pending vehicle reports, for admin-bff to render.
+      description: |
+        **Δ C052.** The seam behind `GET /v1/admin/reports/queue`. admin-bff is the RBAC-gated,
+        audited front door; the rows are this service's.
+      tags: [safety-internal]
+      security:
+        - mtls: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/Cursor'
+        - $ref: './_shared.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Report queue, oldest-visible first.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './_shared.yaml#/components/schemas/CursorPage'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/VehicleReport'
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [not-found]
+
+  /v1/internal/safety/reports/{reportId}/resolve:
+    post:
+      operationId: resolveReportInternal
+      summary: Confirm or dismiss a vehicle report.
+      description: |
+        **Δ C052.** The seam behind `POST /v1/admin/reports/{reportId}/resolve`, and the decision
+        `reputation.v1.proto` says this service owns. **The third confirmation is what delists**
+        (US-12.6) — a consequence of the decision rather than a separate admin action — and the
+        count that makes it the third is taken inside the same transaction as the status, so two
+        moderators confirming at the same instant cannot both read two.
+
+        `resolvedBy` travels on the body rather than on a bearer: the caller has already
+        authenticated the human and writes the D-35 audit row. Recording who decided is what makes a
+        delisting appealable.
+
+        A report another moderator has already decided answers `409`; one that does not exist
+        answers `404`, told apart by reading the row.
+      tags: [safety-internal]
+      security:
+        - mtls: []
+      parameters:
+        - name: reportId
+          in: path
+          required: true
+          schema:
+            $ref: './_shared.yaml#/components/schemas/Ulid'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              properties:
+                decision:
+                  type: string
+                  enum: [CONFIRMED, DISMISSED]
+                note:
+                  type: string
+                  maxLength: 1000
+                resolvedBy:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+      responses:
+        '200':
+          description: Resolved.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [reportId, status, confirmedTotal, delisted]
+                properties:
+                  reportId:
+                    $ref: './_shared.yaml#/components/schemas/Ulid'
+                  status:
+                    type: string
+                    enum: [CONFIRMED, DISMISSED]
+                  confirmedTotal:
+                    type: integer
+                    format: int32
+                    description: CONFIRMED reports against the vehicle after this decision.
+                  delisted:
+                    type: boolean
+                    description: This decision reached the threshold (US-12.6).
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, not-found, conflict]
+
+  /v1/internal/safety/trips/{tripId}/close:
+    post:
+      operationId: closeTripShares
+      summary: Close every share link on a trip that has ended.
+      description: |
+        **Δ C052.** D-34's window is "trip end + 1 h" and nothing in this service knows when a trip
+        ends — ride-svc and trip-state-svc do. Revokes every **trip-scoped** token whoever minted it:
+        `trip_view` is this service's, `package_recipient` and `proxy_rider` are notification-svc's
+        (AL-44), and the window is a fact about the trip rather than about who issued the link.
+        `pickup_confirm` is untouched: it names a location request rather than a trip, and its own
+        300 s TTL is what closes it.
+
+        Idempotent — the revocation is guarded on `revoked_at IS NULL`, so a second call changes no
+        timestamp.
+      tags: [safety-internal]
+      security:
+        - mtls: []
+      parameters:
+        - $ref: '#/components/parameters/TripId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Closed.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tripId, revoked]
+                properties:
+                  tripId:
+                    $ref: './_shared.yaml#/components/schemas/Ulid'
+                  revoked:
+                    type: integer
+                    format: int32
+                    description: How many links were still live.
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [not-found]
+
+  /v1/internal/safety/location-requests/{bookerId}:
+    get:
+      operationId: listLocationRequestAudit
+      summary: One booker's proxy location-request outcomes (P-12).
+      description: |
+        **Δ C052.** `safety.location_request_audit` is written by **ride-svc** inside the transaction
+        that resolves each request — the only place it can be correct — and until now nothing could
+        ask the question it exists for: "this booker keeps pinging somebody who keeps declining".
+
+        The subject of each request is a keyed digest, never a number (P-03): the rider is frequently
+        somebody with no account, and the question is how often a booker was declined rather than who
+        they asked.
+      tags: [safety-internal]
+      security:
+        - mtls: []
+      parameters:
+        - name: bookerId
+          in: path
+          required: true
+          schema:
+            $ref: './_shared.yaml#/components/schemas/Ulid'
+        - name: hours
+          in: query
+          description: Window to summarise, 1–2160. Defaults to 24.
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+            maximum: 2160
+        - $ref: './_shared.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Outcomes and their totals.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [bookerId, totals, items]
+                properties:
+                  bookerId:
+                    $ref: './_shared.yaml#/components/schemas/Ulid'
+                  totals:
+                    type: object
+                    description: |
+                      Count per outcome. **The keys are the values
+                      `safety.location_request_audit.decision` holds** — `Confirmed`, `Declined`,
+                      `Expired`, `NotRegistered` — transmitted verbatim, not camelCased.
+                    additionalProperties:
+                      type: integer
+                      format: int32
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LocationRequestOutcome'
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [not-found]
+
 components:
   securitySchemes:
     bearerAuth:
       $ref: './_shared.yaml#/components/securitySchemes/bearerAuth'
+    mtls:
+      $ref: './_shared.yaml#/components/securitySchemes/mtls'
 
   parameters:
     TripId:
@@ -403,6 +633,24 @@ components:
           $ref: './_shared.yaml#/components/schemas/Timestamp'
         expiresAt:
           $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    LocationRequestOutcome:
+      type: object
+      required: [requestId, decision, at, riderPhoneFingerprint]
+      properties:
+        requestId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        decision:
+          type: string
+          description: Matches the `safety.location_request_audit.decision` CHECK (C005).
+          enum: [Confirmed, Declined, Expired, NotRegistered]
+        at:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+        riderPhoneFingerprint:
+          type: string
+          description: |
+            A short, stable handle for the subject — enough to see the same number declining twice,
+            and not reversible to a number (P-03).
 
     VehicleReport:
       type: object

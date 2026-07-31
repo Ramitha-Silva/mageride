@@ -1,0 +1,64 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    C052 verify target: dotnet test backend/src/Safety.Api.Tests -c Release
+
+    Three of the four definition-of-done items are claims about things OTHER components own, so this
+    suite boots them rather than faking them:
+
+      * "SOS reaches both SMS gateways in parallel and records per-gateway status" boots a REAL
+        notification-svc (C051) against two SMS gateways on real sockets. A fake INotificationClient
+        would prove that safety-svc calls what it calls; it would not prove that two requests are in
+        flight at once, which is the whole of D-33. The same reasoning Subscription.Api.Tests uses
+        when it boots a real wallet-svc.
+      * "a blocked driver is never offered that passenger's ride" runs dispatch-svc's OWN candidate
+        query (C023's `CandidateRepository`, public and connection-taking) against the row this
+        service wrote. Reproducing the SQL here would test a copy of the rule rather than the rule.
+      * "an expired or revoked token returns 410 with no ride data" is asserted on the response
+        body, not on a status code alone — the fence is that nothing about the trip is in it.
+
+    The fourth, AL-13's emergency contact, is a read of iam-svc's denormalised columns and is seeded
+    the way iam-svc writes them.
+
+    Microsoft.NET.Sdk.Web, not Microsoft.NET.Sdk: the harness builds two WebApplications and three
+    stubs.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.Safety.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <OutputType>Exe</OutputType>
+    <!--
+      xUnit1041: collection-fixture ctor args are consumed through the primary constructor.
+      xUnit1051: every test is bounded by its own harness lifetime.
+    -->
+    <NoWarn>$(NoWarn);xUnit1041;xUnit1051</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+    <PackageReference Include="Dapper" />
+    <PackageReference Include="Npgsql" />
+    <PackageReference Include="NetTopologySuite" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Safety.Api\Safety.Api.csproj" />
+    <!-- The real D-33 counterpart: notification-svc owns every SMS on the platform, and the p99 is
+         a property of the two services together. -->
+    <ProjectReference Include="..\Notification.Api\Notification.Api.csproj" />
+    <!-- US-12.10's gate lives in dispatch-svc's candidate query; this suite runs that query. -->
+    <ProjectReference Include="..\Dispatch.Api\Dispatch.Api.csproj" />
+    <ProjectReference Include="..\MageRide.TestKit\MageRide.TestKit.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

@@ -8,10 +8,38 @@ using Microsoft.Extensions.Options;
 
 namespace MageRide.Notification.Sending;
 
+/// <summary>What an inline dispatch did, for a caller that cannot wait for the worker.</summary>
+/// <param name="Gateways">
+/// Every SMS gateway the message was handed to — two on a D-33 parallel send, whether or not both
+/// answered. safety-svc records one per column on <c>safety.sos_events</c>.
+/// </param>
+public sealed record InlineDelivery(
+    Guid Id, string Status, string? Provider, IReadOnlyList<string> Gateways, string? Error);
+
 /// <summary>Sends one queued notification and records what happened to it.</summary>
 public interface INotificationDeliverer
 {
     Task DeliverAsync(NotificationRow row, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Delivers one row **on the calling request** and reports the outcome.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For the types with a latency SLO, and only those.</b> D-33 budgets an SOS five seconds at
+    /// the 99th percentile from button tap to dispatch; the queue drains every
+    /// <c>Notification:DeliveryInterval</c> in batches, so under a backlog of ride offers an SOS
+    /// would wait behind them. Bypassing the queue makes the SLO independent of queue depth, which
+    /// is what "design for it" means for an emergency path.
+    /// </para>
+    /// <para>
+    /// The row is still written and still claimed by <c>ux_notifications_dedupe</c> first — this is
+    /// a different <em>moment</em> of delivery, not a different pipeline. A failure leaves the row
+    /// <c>Pending</c> with a backoff, so the worker still picks it up: an inline attempt that lost
+    /// both gateways is retried rather than dropped.
+    /// </para>
+    /// </remarks>
+    Task<InlineDelivery?> DeliverNowAsync(Guid id, CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -45,7 +73,48 @@ internal sealed class NotificationDeliverer(
     private readonly NotificationOptions _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
     private readonly IReadOnlyList<IPushChannel> _pushChannels = [.. pushChannels];
 
-    public async Task DeliverAsync(NotificationRow row, CancellationToken cancellationToken)
+    public async Task<InlineDelivery?> DeliverNowAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var row = await notifications.FindAsync(id, cancellationToken);
+
+        if (row is null)
+        {
+            return null;
+        }
+
+        // The gateway names are captured during the send rather than read back off the row: the row
+        // records the *winner*, and D-33's claim is about how many were tried.
+        var trace = new DeliveryTrace();
+
+        await DeliverCoreAsync(row, trace, cancellationToken);
+
+        var settled = await notifications.FindAsync(id, cancellationToken);
+
+        if (settled is null)
+        {
+            return null;
+        }
+
+        var outcome = await notifications.ReadOutcomeAsync(id, cancellationToken);
+
+        return new InlineDelivery(settled.Id, settled.Status, outcome.Provider, trace.Gateways, outcome.LastError);
+    }
+
+    public Task DeliverAsync(NotificationRow row, CancellationToken cancellationToken) =>
+        DeliverCoreAsync(row, trace: null, cancellationToken);
+
+    /// <summary>
+    /// One delivery, optionally recording what the transports were asked to do.
+    /// </summary>
+    /// <remarks>
+    /// <paramref name="trace"/> is threaded rather than stashed in an <c>AsyncLocal</c>: an
+    /// async-local set inside a nested call does not flow back to its caller, so the inline
+    /// dispatch would have read an empty list every time — which is the sort of bug that shows up as
+    /// a column that is quietly always null. The worker passes <see langword="null"/> and pays
+    /// nothing.
+    /// </remarks>
+    private async Task DeliverCoreAsync(
+        NotificationRow row, DeliveryTrace? trace, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(row);
 
@@ -78,7 +147,7 @@ internal sealed class NotificationDeliverer(
 
         if (string.Equals(row.Channel, NotificationChannels.Sms, StringComparison.Ordinal))
         {
-            await DeliverSmsAsync(row, spec, message, cancellationToken);
+            await DeliverSmsAsync(row, spec, message, trace, cancellationToken);
         }
         else
         {
@@ -200,7 +269,11 @@ internal sealed class NotificationDeliverer(
     }
 
     private async Task DeliverSmsAsync(
-        NotificationRow row, NotificationTypeSpec? spec, RenderedMessage? message, CancellationToken cancellationToken)
+        NotificationRow row,
+        NotificationTypeSpec? spec,
+        RenderedMessage? message,
+        DeliveryTrace? trace,
+        CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(row.RecipientPhone))
         {
@@ -221,6 +294,11 @@ internal sealed class NotificationDeliverer(
         var result = spec?.DualGateway == true
             ? await sms.SendUrgentAsync(row.RecipientPhone, message.Body, cancellationToken)
             : await sms.SendAsync(row.RecipientPhone, message.Body, cancellationToken);
+
+        if (trace is not null)
+        {
+            trace.Gateways = result.Attempted;
+        }
 
         if (result.Delivered)
         {
@@ -275,6 +353,12 @@ internal sealed class NotificationDeliverer(
                ?? _pushChannels.FirstOrDefault(channel =>
                    channel.IsConfigured
                    && string.Equals(channel.Platform, DevicePlatforms.Any, StringComparison.Ordinal));
+    }
+
+    /// <summary>What one delivery's transports were, for a caller that asked to be told.</summary>
+    private sealed class DeliveryTrace
+    {
+        public IReadOnlyList<string> Gateways { get; set; } = [];
     }
 
     /// <summary>Payload keys a caller uses when the text is not a template's (a broadcast).</summary>

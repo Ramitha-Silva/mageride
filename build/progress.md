@@ -77,7 +77,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C049 | fare-svc-core | 3 | DONE | 2026-07-31 | 78 tests green in a **new suite** (`Fare.Api.Tests`); **2 migrations (1005, 1006)** — `fares.command_log` and `ux_ride_payments_first_attempt`, the missing "a ride is priced once" index that a `FOR UPDATE` cannot supply because a row that does not exist cannot be locked (six concurrent completions produced four fares); **money never touches a float** — the distance is quantised to whole metres at the boundary and every step after it is `long`, with `(a*b+half)/divisor` as §1.3's single round; D5' §1.1's tariff table reproduced to the minor unit for every tier and every surcharge combination, peak+night stacked additively and never compounded; **E-04 landed** — reject, Kalman, and an accuracy-weighted movement gate that reads the *measurement* uncertainty rather than the filter's posterior, taking a stationary three minutes from 292 m to under 50 m while four right-angle turns keep their length; the estimate now prices the **routed** distance (straight line × 1.3, the same interim and the same constant as query-svc's ETA) instead of the C022 stub's bare haversine; tariffs resolved by `effective_from` at the ride's *request* instant so a mid-journey rate change cannot re-price it; `migrate-verify.sh` 316/316 with a C049 section; 6 spec gaps / micro-change-sets |
 | C050 | fare-svc-payments | 3 | PARTIAL | 2026-07-31 | 113 tests green (35 added); **D5' §8.1's machine is a table and the test compares it with a hand transcription of the diagram**, so an invented transition fails as loudly as a missing one; every move is a guarded `UPDATE … WHERE state = @From`, which is the whole concurrency argument and all R-19 needs beside the `provider_transaction_id` UNIQUE; a late gateway success after cash becomes `Overpaid` with an `overpaid_reversal` on the Finance queue and **does not touch the ride** (§11.14); AL-47's driver-QR trio settles with **zero** requests to the ledger seam, asserted against a wallet stub that is running and unused; **ride-svc had no `DriverConfirmedQR` terminal** so no driver-QR fare could ever settle a ride — added, mapped to `CashSettled` exactly as 1002's column comment always said; retry implemented as a new attempt because `provider_transaction_id` must stay one-to-one with a gateway call; no migration and no outbox; **PARTIAL: the AL-47 nudge push and the COD state sync are not built** (no notification-svc, and ride-svc's `cod-collected` never reaches fare-svc); 6 spec gaps |
 | C051 | notification-svc | 3 | DONE | 2026-07-31 | 86 tests green in a **new suite** (`Notification.Api.Tests`); **2 migrations (1308, 1904)** — `comms.notifications`, the outbound queue **no spec declares**, plus `comms.command_log`, the AL-08 install column on `notification_tokens` and the eighteen §14.4 template keys 1902 deliberately left unseeded; **E-01's "exactly once" is two database facts** — the `Sent → FellBackToSms` claim in the statement that selects the row, and `fallback:{pushId}` on `ux_notifications_dedupe` — so three sweeps of one unacked offer produce one SMS; **D-33 measured** against two gateways on real sockets with a deliberately slow primary (p99 well inside the 5 s, and both gateways written to); P-12's buckets spent **after** the dedupe claim so a redelivered `location.request.issued` costs nothing; AL-44/AL-45's fence held by the type system — `MintedLink` has no token member and no response shape in the assembly can carry one; **a real defect caught**: the kernel's camelCase dictionary-key policy answered a `LOW_BALANCE` mute with `loW_BALANCE`, fixed with iam-svc's `LiteralKeyDictionaryConverter` on both directions of the wire; **4 contract changes** (`POST /v1/notify/ack`, `notificationType`, `phones`, `audience`); `migrate-verify.sh` 330/330 with a C051 section; 14 spec gaps / micro-change-sets |
-| C052 | safety-svc | 3 | PENDING | | |
+| C052 | safety-svc | 3 | DONE | 2026-07-31 | 30 tests green in a **new suite** (`Safety.Api.Tests`), which boots a **real notification-svc** because D-33 is a property of the two services together and runs **dispatch-svc's own candidate query** because US-12.10's gate lives there; **1 migration (0905)** — `safety.outbox` (the admin live feed D3' asks for and `signalr-hub.md` has no group for), `safety.command_log`, `sos_events.dispatched_at` (without it every SOS looks instantaneous and the D-33 SLO is unmeasurable), the `driver_id` a report counts against and its resolution evidence; **the SOS bypasses the notification queue** — C051 gained an inline dispatch for the one type with a latency SLO, so the five seconds do not depend on how many ride offers are queued in front of it, and the per-gateway outcome exists to record at all; **no replay is structural** — the public view reads `veh:meta`, a Redis hash that holds one position and no history, so the store cannot answer the question D-34 forbids; the 410 is produced before the ride row is read, and the test asserts the *body*; **two real defects caught** — an SOS with no ride rendered an empty `{{link}}` and was silently never sent (now a `geo:` URI), and the P-12 tally's keys were camelCased on the wire, which promoted iam-svc's `LiteralKeyDictionaryConverter` into the kernel on its third instance; **5 contract changes** (`smsStatus`, the moderation pair, the trip-end hook, the P-12 read, and C051's `deliveries`); `migrate-verify.sh` 341/341 with a C052 section; 12 spec gaps / micro-change-sets |
 | C053 | support-svc | 3 | PENDING | | |
 | C054 | ocr-svc | 3 | PENDING | | |
 | C055 | voip-svc | 3 | PENDING | | |
@@ -7382,3 +7382,144 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   down throughout. `Notification.Api.Tests` takes ~1 m 15 s, `migrate-verify.sh` ~3 min. **No new
   NuGet reference** — the FCM service-account assertion and the APNs ES256 provider token are ~40
   lines of `System.Security.Cryptography` rather than a token library and its dependency tree.
+
+- **Component:** C052 safety-svc — 2026-07-31
+- **Status:** DONE — `dotnet test backend/src/Safety.Api.Tests -c Release` → **30/30 green**, all
+  integration, against a real Postgres, a real Redis, a **real notification-svc** and two SMS
+  gateways on real sockets. All four DoD items pass, each with a test named after the claim.
+  `bash infra/scripts/migrate-verify.sh` → **341/341**.
+  `dotnet test backend/src/Notification.Api.Tests -c Release` → **86/86** (unchanged by the Δ below).
+  `npx @stoplight/spectral-cli lint 'backend/contracts/*.yaml'` → 0 errors.
+- **Notes:**
+  **The four definition-of-done claims, and where each is proved.**
+  (1) *"SOS reaches both SMS gateways in parallel and records per-gateway status."*
+  `An_sos_reaches_both_gateways_in_parallel_and_the_row_records_each` gives the primary gateway a
+  deliberate 2 s delay — under D6' §7.3's sequential rule every alert would cost that — and the
+  parallel send resolves on the secondary well inside the five seconds. It then waits for the
+  straggler and asserts the primary *also* received it, because a fast dispatch alone would not show
+  that two requests were in flight. The row keeps one column per gateway (`notifylk:attempted`,
+  `secondary:delivered`), which is the distinction D-33 forces: it resolves on whichever *delivers*
+  first and deliberately does not wait for the loser, so "tried" and "delivered" are different facts.
+  (2) *"The driver SOS path uses the driver's emergency contact from iam (AL-13)."* A driver and a
+  passenger with different contacts on one ride; the alert is addressed by *raiser*. The read is the
+  two denormalised columns on `iam.users`, never a join — iam-svc's own CLAUDE.md names this budget
+  as the reason they exist.
+  (3) *"An expired or revoked token returns 410 with no ride data in the body."* Asserted on the
+  **body**, not the status code: no coordinate, no state, no driver name, no ride id. It holds
+  structurally rather than by care — the revoked/expired gate sits between the token lookup and the
+  trip lookup, so the ride row is never read at all. The hit is still metered, because somebody
+  still holding a dead link is exactly what AL-44's `access_count` exists to surface.
+  (4) *"A blocked driver is never offered that passenger's ride."* Run against **dispatch-svc's own
+  `CandidateRepository`** (C023, public and connection-taking) rather than a reproduction of its SQL:
+  two drivers metres apart, both candidates, one blocked, one left. A companion test shows the block
+  is one-directional — another passenger's ride still reaches the same driver.
+  **Two real defects, both caught by tests, both worth naming.**
+  (a) **An SOS with no ride was silently never sent.** `sos_alert` interpolates `{{link}}` and
+  notification-svc's renderer correctly refuses a template with a value missing (C051's own rule:
+  a body with a hole in it is worse than none) — so an alert raised while walking to the car, with
+  no trip to share, rendered nothing and reached nobody, behind a 200. Fixed by giving the message a
+  `geo:` URI built from the coordinates the contract already requires: RFC 5870 is what every phone
+  hands to its own map application, and it needs no platform surface and no network to be useful.
+  Found by `A_double_tapped_panic_button_under_one_key_sends_one_message`, which had no ride.
+  (b) **The P-12 tally's keys were camelCased on the wire.** `Declined` came back as `declined`, so
+  an admin screen filtering on the value `safety.location_request_audit.decision` actually holds
+  would find nothing. Same family as the C051 defect, and the **third** instance of the pattern
+  (iam-svc C027, notification-svc C051, here) — so `LiteralKeyDictionaryConverter<TValue>` was
+  **promoted into the kernel**, following exactly the rule C024 used for `KafkaTopicConsumer`.
+  notification-svc now uses the shared one; iam-svc keeps its non-generic copy because that one is
+  also applied to a `jsonb` column and is C027's to change.
+  **Δ on notification-svc (C051), and why the SOS could not use its queue.** D-33 budgets five
+  seconds from button tap to dispatch. Everything on that service is accepted asynchronously and
+  drained by the D-27 worker every `DeliveryInterval` in batches — so under a backlog of ride offers
+  an SOS waits behind them, and the SLO becomes a property of queue depth. `POST
+  /v1/internal/notify/send` now **delivers inline** for a type the catalogue marks `DualGateway`
+  (`SOS_TRIGGERED`, the platform's only one) and returns the per-gateway outcome; everything else is
+  unchanged. The row is still claimed by `ux_notifications_dedupe` first, so this is a different
+  *moment* of delivery rather than a different pipeline, and a failed inline attempt is left
+  `Pending` for the worker rather than dropped. `SmsResult.Attempted` was added for the same reason:
+  without it the only record of a two-gateway dispatch is whichever one happened to be quicker.
+  One implementation note worth keeping: the gateway list was first threaded through an
+  `AsyncLocal`, which reads empty every time — an async-local set inside a nested call does not flow
+  back to its caller. It is an explicit parameter now, and the comment says why.
+  **Spec gaps and micro-change-sets (12).**
+  (a) **The admin live feed has no transport.** D3' lists "admin live-feed WS" as a side effect of
+  `POST /v1/sos`; `realtime/signalr-hub.md` has no admin group and no SOS event, and its §6 — which
+  lists what is deliberately *not* on the hub — does not mention one, so this is an omission rather
+  than a decision. CLAUDE.md's universal rule settles the shape: `safety.outbox` publishes
+  `sos.raised` on `safety.events`, the **ninth** topic outside D6' §2.1's registry (after C028, C030,
+  C033, C044, C046, C051). **The consumer is still missing** — a hub group and event are a
+  fanout-svc (C041) change and an admin-bff (C065) one.
+  (b) `safety.command_log` — R-14 per bounded context, the **eleventh** instance. It matters most on
+  the SOS: a double-tapped panic button under one key must send one message, and the second tap is
+  *likely*.
+  (c) **`safety.sos_events` could not record when the alert went out.** §8 gives the row a `ts` (the
+  tap) and D3' answers `dispatchedAt` (the gateway). Those are two instants and **the gap between
+  them is the D-33 SLO** — with one column every SOS looks instantaneous and the promise is
+  unmeasurable after the fact. `dispatched_at` added; `ck_sos_events_sms_status` gives the three
+  outcomes this service's vocabulary has, while the gateway columns stay free text because D6' §7.3
+  names two gateway families and a deployment may swap either.
+  (d) **A vehicle report cannot name the driver it counts against.** §8 has a reporter, a vehicle and
+  an optional ride; `reputation.v1.proto`'s `VehicleReport` requires a `driver_id` and its own
+  comment says why ("the counter is the driver's"). A vehicle has an *owner*, not a driver. Resolved
+  from the reported ride at report time and stored, because re-deriving it at confirmation time would
+  answer differently once the vehicle changed hands.
+  (e) `vehicle_reports.resolved_at` / `_by` / `resolution_note`. US-12.6's third confirmation
+  delists, so *when* and *by whom* is the evidence behind an appeal; §8 has a status and no way to
+  say who moved it.
+  (f) `ux_vreports_reporter_ride` — one complaint per passenger per trip. Three taps must not be the
+  three confirmations that delist a vehicle. Partial, because a report with no ride has no natural
+  key and the command log is what dedupes those.
+  (g) `ix_vreports_confirmed` and `ix_trip_share_tokens_trip_scope`. The tally is over CONFIRMED
+  rows and 0903's index covers every report; issuing a link asks a narrower question than revoking
+  one, because a package delivery legitimately carries a `package_recipient` token and a `trip_view`
+  token at the same time.
+  (h) **`POST /v1/sos` could not say what happened.** `dispatchedAt` alone cannot distinguish "the
+  alert went out" from "the alert is on the admin console and nowhere else", and answering with an
+  instant that never happened would tell somebody in trouble that help was on the way. `smsStatus`
+  added and `dispatchedAt` made absent when no gateway took it.
+  (i) **The moderation pair had nowhere to live.** `admin-bff.yaml` declares
+  `GET /v1/admin/reports/queue` and `POST /v1/admin/reports/{reportId}/resolve`;
+  `reputation.v1.proto` says "safety-svc owns the confirmation decision and
+  `safety.vehicle_reports`". Both hold only if admin-bff is the RBAC-gated, audited front door and
+  the decision is made here — so `/v1/internal/safety/reports/**` is the pair it forwards. Without
+  it US-12.6's third confirmation has no way to happen at all.
+  (j) **D-34's window ends at trip end and nothing here knows when a trip ends.**
+  `POST /v1/internal/safety/trips/{tripId}/close` is ride-svc's and trip-state-svc's hook; it closes
+  every *trip-scoped* scope whoever minted it, because the window is a fact about the trip.
+  `pickup_confirm` is deliberately untouched — it names a location request, not a trip.
+  (k) **P-12's rows had no reader.** `safety.location_request_audit` is written by ride-svc (C037)
+  inside the transaction that resolves each request — the only place it can be correct — and "this
+  booker keeps pinging somebody who keeps declining" could not be asked. Added as an internal read;
+  **the write stays ride-svc's**, and a second writer here would double-count every outcome. This
+  narrows C052's own deliverable line, which reads as though this service should persist them.
+  (l) **The block `reason` is accepted and not stored.** `safety.blocked_drivers` (0903) has no
+  column, US-12.10 asks for none, and inventing one would put a passenger's free-text opinion of a
+  named driver in the database for ever.
+  **Fences, and how each is held.** The p99 is held by *not queuing* and measured on the row rather
+  than in a log line. "No historical replay" is held by reading `veh:meta` — a Redis hash with one
+  position and no history — so the store cannot answer the forbidden question, and the response type
+  has no field for a track. "A dead token returns zero ride data" is held by ordering: the 410 comes
+  before the trip is read.
+  **For C057 (public-bff) —** the web SOS is ready for you: `safety.sos_events.source='web'`, the
+  `share_token` identity column and `RaiseSosCommand.ShareToken` all admit it, and
+  `ck_sos_events_actor` enforces one identity or the other. `GET /v1/trip-share/public/{token}`
+  serves the `trip_view` scope **only** and answers 404 for the other three — the richer
+  package/proxy/pickup-confirm shapes and their per-scope redaction are yours (AL-44).
+  **For C065 (admin-bff) —** two forwards and one consumer. `GET /v1/internal/safety/reports/queue`
+  and `POST /v1/internal/safety/reports/{reportId}/resolve` are the queue and the decision (pass
+  `resolvedBy`, write the D-35 audit row); `sos.raised` on `safety.events` is the live feed, and
+  `safety.sos_events.admin_acked_at` is the column US-12.11's acknowledgement writes and nothing
+  here does.
+  **For C041 (fanout-svc) —** `realtime/signalr-hub.md` needs an admin group and a `SosRaised`
+  event, or the admin live feed has no transport. The producer is done.
+  **For ride-svc / trip-state-svc —** call `POST /v1/internal/safety/trips/{tripId}/close` on every
+  terminal transition. Until then a share link lives out `Safety:ShareMaxLifetime` (12 h) rather
+  than D-34's trip end + 1 h.
+  **Build host —** Docker for two Testcontainers fixtures (Postgres, Redis); the replica stack stayed
+  down throughout. `Safety.Api.Tests` takes ~2 min — it builds five hosts per test (safety-svc, a
+  real notification-svc, a content stub and two SMS gateways), which needed
+  `DOTNET_hostBuilder:reloadConfigOnChange=false` in a module initializer: each host watches
+  `appsettings*.json`, Linux gives one inotify instance per watcher, and the default per-user limit
+  of 128 is reached a few tests in. **No new NuGet reference and no new topic-consuming code** — the
+  reputation proto is compiled straight out of `backend/contracts/`, the same Include C033 wrote and
+  C034 reused.

@@ -902,7 +902,9 @@ check_rejects "an unknown block state is rejected (D-04)" \
 #        audit / pdpa / spatial / transit / analytics
 # ---------------------------------------------------------------------------------------
 step "Tables owned by C005"
-check_eq "5 safety tables" "5" \
+# 7 safety, not C005's 5: `safety.outbox` (the admin live feed D3' asks for and signalr-hub.md has
+# no group for) and `safety.command_log` (R-14, the eleventh) are C052's, both added by 0905.
+check_eq "7 safety tables" "7" \
   "SELECT count(*) FROM information_schema.tables WHERE table_schema='safety' AND table_type='BASE TABLE';"
 # 6, not C005's 5: `fares.command_log` is C049's (1005) — R-14 needs a replay log per bounded
 # context and D4' §5 prints DDL for `rides.command_log` only.
@@ -1906,6 +1908,67 @@ psql_run "DELETE FROM subscription.payments
            WHERE subscription_id='c0000048-0000-0000-0000-000000000002';
           DELETE FROM subscription.grants WHERE id='c0000048-0000-0000-0000-000000000001';" >/dev/null \
   || die "could not clean up the Epic 23 fixtures."
+
+# ---------------------------------------------------------------------------------------
+# C052 — safety: the outbox, the replay log, and the four columns C005 could not know about (0905)
+#
+# The checks below are about the two facts the columns exist to make recordable: the D-33 interval
+# (`ts` -> `dispatched_at`, which is the SLO) and who confirmed a report (the evidence behind a
+# delisting somebody will appeal).
+# ---------------------------------------------------------------------------------------
+step "Objects owned by C052 (D-33, D-34, US-12.5/12.6)"
+
+check_eq "safety.outbox exists" "1" \
+  "SELECT count(*) FROM information_schema.tables
+    WHERE table_schema='safety' AND table_name='outbox';"
+check_eq "safety.command_log exists (R-14, the eleventh bounded context)" "1" \
+  "SELECT count(*) FROM information_schema.tables
+    WHERE table_schema='safety' AND table_name='command_log';"
+check_eq "safety.sos_events records when the alert actually went out" "1" \
+  "SELECT count(*) FROM information_schema.columns
+    WHERE table_schema='safety' AND table_name='sos_events' AND column_name='dispatched_at';"
+check_eq "a vehicle report names the driver it counts against" "1" \
+  "SELECT count(*) FROM information_schema.columns
+    WHERE table_schema='safety' AND table_name='vehicle_reports' AND column_name='driver_id';"
+check_eq "the US-12.6 tally has a partial index on CONFIRMED" "1" \
+  "SELECT count(*) FROM pg_indexes
+    WHERE schemaname='safety' AND indexname='ix_vreports_confirmed'
+      AND indexdef LIKE '%CONFIRMED%';"
+check_eq "issuing a D-34 link can find a live token per (trip, scope)" "1" \
+  "SELECT count(*) FROM pg_indexes
+    WHERE schemaname='safety' AND indexname='ix_trip_share_tokens_trip_scope';"
+
+check_rejects "an unknown SMS outcome is refused (ck_sos_events_sms_status)" \
+  "INSERT INTO safety.sos_events(user_id, role, lat, lng, sms_status)
+     VALUES ('$PAX_1','passenger',6.9271,79.8612,'Delivered');"
+check_rejects "a resolved report must say when (ck_vehicle_reports_resolution)" \
+  "INSERT INTO safety.vehicle_reports(reporter_id, vehicle_id, reason, status)
+     VALUES ('$PAX_1','$VEH_A','reason','CONFIRMED');"
+check_eq "a pending report needs no resolution timestamp" "1" \
+  "WITH filed AS (
+     INSERT INTO safety.vehicle_reports(reporter_id, vehicle_id, reason)
+     VALUES ('$PAX_1','$VEH_A','verify c052 pending') RETURNING 1)
+   SELECT count(*) FROM filed;"
+
+# A passenger who taps Report twice on one trip has one complaint — and three taps must not be the
+# three confirmations that delist a vehicle.
+REPORT_RIDE='c0000052-0000-0000-0000-000000000001'
+psql_run "INSERT INTO safety.vehicle_reports(reporter_id, vehicle_id, ride_id, reason)
+            VALUES ('$PAX_1','$VEH_A','$REPORT_RIDE','verify c052 first');" >/dev/null \
+  || die "could not seed the C052 report fixture."
+check_rejects "one passenger files one report per ride (ux_vreports_reporter_ride)" \
+  "INSERT INTO safety.vehicle_reports(reporter_id, vehicle_id, ride_id, reason)
+     VALUES ('$PAX_1','$VEH_A','$REPORT_RIDE','verify c052 second');"
+# …and a report with no ride has no natural key, so a second one is admitted (the command log is
+# what dedupes those).
+check_eq "a report with no ride is not caught by the partial index" "1" \
+  "WITH again AS (
+     INSERT INTO safety.vehicle_reports(reporter_id, vehicle_id, reason)
+     VALUES ('$PAX_1','$VEH_A','verify c052 pending again') RETURNING 1)
+   SELECT count(*) FROM again;"
+
+psql_run "DELETE FROM safety.vehicle_reports WHERE reason LIKE 'verify c052%';" >/dev/null \
+  || die "could not clean up the C052 report fixture."
 
 # ---------------------------------------------------------------------------------------
 # C051 — comms: the outbound notification queue (1308)

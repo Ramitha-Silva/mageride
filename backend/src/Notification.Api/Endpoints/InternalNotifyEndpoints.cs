@@ -43,8 +43,25 @@ public sealed record AudienceBody(string? Role);
 /// <param name="Accepted">Recipients queued for delivery.</param>
 /// <param name="Suppressed">Refused by a preference (US-10.7) or a limit (P-12).</param>
 /// <param name="Undeliverable">Recipients with no account, no number and no device.</param>
+/// <param name="Deliveries">
+/// **Present only for a type with a latency SLO** — today that is D-33's SOS, which is dispatched on
+/// this request rather than left to the queue. Everything else is accepted asynchronously, exactly as
+/// D3' says, and this member is absent.
+/// </param>
 public sealed record SendNotificationResponse(
-    Guid DispatchId, int Accepted, int Suppressed, int Undeliverable);
+    Guid DispatchId,
+    int Accepted,
+    int Suppressed,
+    int Undeliverable,
+    IReadOnlyList<InlineDeliveryResponse>? Deliveries = null);
+
+/// <summary>One message this request delivered before answering.</summary>
+/// <param name="Gateways">
+/// Every SMS gateway the message was handed to — two on a D-33 parallel send, whether or not both
+/// answered. safety-svc records one per column on `safety.sos_events`.
+/// </param>
+public sealed record InlineDeliveryResponse(
+    Guid NotificationId, string Status, string? Provider, IReadOnlyList<string> Gateways, string? Error);
 
 /// <summary>
 /// <c>/v1/internal/notify/**</c> — the entry point every other service fans out through.
@@ -81,12 +98,14 @@ public static class InternalNotifyEndpoints
     private static async Task<Accepted<SendNotificationResponse>> SendAsync(
         SendNotificationBody? body,
         INotificationService notifications,
+        INotificationDeliverer deliverer,
         IRecipientRepository recipients,
         IOptions<NotificationOptions> options,
         ILoggerFactory loggerFactory,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(notifications);
+        ArgumentNullException.ThrowIfNull(deliverer);
         ArgumentNullException.ThrowIfNull(recipients);
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(loggerFactory);
@@ -166,6 +185,12 @@ public static class InternalNotifyEndpoints
         var suppressed = 0;
         var undeliverable = 0;
 
+        // D-33 budgets five seconds from button tap to dispatch, and the queue drains on its own
+        // schedule behind whatever else is in it — so the one type with a latency SLO is delivered on
+        // this request. The row is still claimed first, so the dedupe guarantee is unchanged; what
+        // differs is *when* it is sent, not how.
+        var inline = spec.DualGateway ? new List<InlineDeliveryResponse>() : null;
+
         foreach (var userId in userIds)
         {
             var receipt = await notifications.EnqueueAsync(
@@ -178,6 +203,7 @@ public static class InternalNotifyEndpoints
                 cancellationToken);
 
             Count(receipt, ref accepted, ref suppressed, ref undeliverable);
+            await DispatchNowAsync(inline, deliverer, receipt, cancellationToken);
         }
 
         foreach (var phone in phones)
@@ -199,10 +225,38 @@ public static class InternalNotifyEndpoints
                 cancellationToken);
 
             Count(receipt, ref accepted, ref suppressed, ref undeliverable);
+            await DispatchNowAsync(inline, deliverer, receipt, cancellationToken);
         }
 
         return TypedResults.Accepted(
-            (string?)null, new SendNotificationResponse(dispatchId, accepted, suppressed, undeliverable));
+            (string?)null,
+            new SendNotificationResponse(dispatchId, accepted, suppressed, undeliverable, inline));
+    }
+
+    /// <summary>
+    /// Delivers a just-claimed urgent notification before answering, when the type asks for it.
+    /// </summary>
+    /// <remarks>
+    /// A row that was suppressed, undeliverable or already claimed is skipped: there is nothing to
+    /// send, and re-delivering somebody else's claim would be the one thing the dedupe key exists to
+    /// prevent.
+    /// </remarks>
+    private static async Task DispatchNowAsync(
+        List<InlineDeliveryResponse>? inline,
+        INotificationDeliverer deliverer,
+        NotificationReceipt receipt,
+        CancellationToken cancellationToken)
+    {
+        if (inline is null || receipt.Outcome != NotificationOutcome.Queued || receipt.Id is not { } id)
+        {
+            return;
+        }
+
+        if (await deliverer.DeliverNowAsync(id, cancellationToken) is { } delivered)
+        {
+            inline.Add(new InlineDeliveryResponse(
+                delivered.Id, delivered.Status, delivered.Provider, delivered.Gateways, delivered.Error));
+        }
     }
 
     private static void Count(

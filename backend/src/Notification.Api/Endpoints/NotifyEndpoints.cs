@@ -3,6 +3,7 @@ using MageRide.Notification.Domain;
 using MageRide.Notification.Persistence;
 using MageRide.Notification.Push;
 using MageRide.Shared.Auth;
+using MageRide.Shared.Http;
 using MageRide.Shared.Errors;
 using MageRide.Shared.Http.Idempotency;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -26,16 +27,16 @@ public sealed record RegisterTokenBody(string? Token, string? Platform, string? 
 /// The converter is not decoration. Without it the kernel's camelCase dictionary-key policy answers
 /// a request that muted <c>LOW_BALANCE</c> with <c>loW_BALANCE</c>, and a client that sends back
 /// what it was given has a key that matches no notification type. See
-/// <see cref="LiteralKeyDictionaryConverter"/>.
+/// <see cref="LiteralKeyDictionaryConverter{TValue}"/>.
 /// </remarks>
 public sealed record PreferencesBody(
-    [property: JsonConverter(typeof(LiteralKeyDictionaryConverter))]
+    [property: JsonConverter(typeof(LiteralKeyDictionaryConverter<bool>))]
     IReadOnlyDictionary<string, bool>? Preferences);
 
 /// <summary>The effective switches after a write.</summary>
 /// <inheritdoc cref="PreferencesBody" path="/remarks"/>
 public sealed record PreferencesResponse(
-    [property: JsonConverter(typeof(LiteralKeyDictionaryConverter))]
+    [property: JsonConverter(typeof(LiteralKeyDictionaryConverter<bool>))]
     IReadOnlyDictionary<string, bool> Preferences);
 
 /// <summary>`POST /v1/notify/ack` — Δ C051, see the remarks on <see cref="NotifyEndpoints"/>.</summary>

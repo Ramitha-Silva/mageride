@@ -7,11 +7,25 @@ using Microsoft.Extensions.Options;
 namespace MageRide.Notification.Sms;
 
 /// <summary>What one gateway did with one message.</summary>
+/// <param name="Gateway">The gateway that produced this answer — the winner, on a D-33 parallel send.</param>
 public sealed record SmsResult(bool Delivered, string Gateway, string? MessageId, string? Error)
 {
-    public static SmsResult Ok(string gateway, string? messageId = null) => new(true, gateway, messageId, null);
+    /// <summary>
+    /// Every gateway the message was handed to, whether or not it answered first.
+    /// </summary>
+    /// <remarks>
+    /// D-33's parallel send resolves on the first delivery and deliberately does not wait for the
+    /// loser, so "which gateway delivered" and "which gateways were tried" are different facts and
+    /// safety-svc's <c>safety.sos_events</c> has a column for each. Without this, the only record of
+    /// a two-gateway dispatch would be the one that happened to be quicker.
+    /// </remarks>
+    public IReadOnlyList<string> Attempted { get; init; } = [];
 
-    public static SmsResult Failed(string gateway, string error) => new(false, gateway, null, error);
+    public static SmsResult Ok(string gateway, string? messageId = null) =>
+        new(true, gateway, messageId, null) { Attempted = [gateway] };
+
+    public static SmsResult Failed(string gateway, string error) =>
+        new(false, gateway, null, error) { Attempted = [gateway] };
 }
 
 /// <summary>One SMS transport (D6' §7.3).</summary>

@@ -103,6 +103,17 @@ public interface INotificationRepository
     /// <summary>Everything sent to one recipient — the §14.4 throttles and the tests.</summary>
     Task<IReadOnlyList<NotificationRow>> ListForRecipientAsync(
         Guid recipientUserId, string? notificationType, int limit, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The two diagnostic columns an inline dispatch reports back to its caller.
+    /// </summary>
+    /// <remarks>
+    /// Off <see cref="NotificationRow"/> deliberately: <c>provider</c> and <c>last_error</c> are
+    /// operator-facing diagnostics rather than state, and putting them on the row every worker pass
+    /// reads back would carry a 500-character error string through the queue for the one caller that
+    /// wants it.
+    /// </remarks>
+    Task<(string? Provider, string? LastError)> ReadOutcomeAsync(Guid id, CancellationToken cancellationToken);
 }
 
 /// <inheritdoc cref="INotificationRepository"/>
@@ -373,6 +384,22 @@ internal sealed class NotificationRepository(INpgsqlConnectionFactory connection
 
         return [.. rows];
     }
+
+    public async Task<(string? Provider, string? LastError)> ReadOutcomeAsync(
+        Guid id, CancellationToken cancellationToken)
+    {
+        await using var connection = await _connections.OpenAsync(cancellationToken);
+
+        var row = await connection.QuerySingleOrDefaultAsync<OutcomeRow>(
+            new CommandDefinition(
+                "SELECT provider, last_error FROM comms.notifications WHERE id = @Id;",
+                new { Id = id },
+                cancellationToken: cancellationToken));
+
+        return (row?.Provider, row?.LastError);
+    }
+
+    private sealed record OutcomeRow(string? Provider, string? LastError);
 
     /// <summary><see cref="Columns"/> qualified by an alias, for the RETURNING of an UPDATE … FROM.</summary>
     private static string Qualified(string alias) =>

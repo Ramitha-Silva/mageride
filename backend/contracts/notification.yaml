@@ -278,6 +278,36 @@ paths:
                     type: integer
                     format: int32
                     description: Recipients with no account, no number and no device.
+                  deliveries:
+                    description: |
+                      **Δ C052. Present only for a type with a latency SLO** — today `SOS_TRIGGERED`
+                      alone, which is dispatched on this request rather than queued (D-33 budgets
+                      five seconds from button tap). Absent for everything else.
+                    type: array
+                    items:
+                      type: object
+                      required: [notificationId, status, gateways]
+                      properties:
+                        notificationId:
+                          $ref: './_shared.yaml#/components/schemas/Ulid'
+                        status:
+                          type: string
+                          description: |
+                            `Sent` when a transport took it. Anything else — `Pending` on a retry
+                            schedule, `Failed`, `Suppressed` — is not a dispatch.
+                        provider:
+                          type: string
+                          description: The transport that answered first.
+                        gateways:
+                          description: |
+                            Every SMS gateway the message was handed to — two on a D-33 parallel
+                            send, whether or not both answered. "Tried" and "delivered" are
+                            different facts and safety-svc records one column for each.
+                          type: array
+                          items:
+                            type: string
+                        error:
+                          type: string
         '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
         '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
         '404': { $ref: './_shared.yaml#/components/responses/NotFound' }

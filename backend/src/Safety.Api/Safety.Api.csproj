@@ -1,0 +1,64 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    Safety.Api (C052 safety-svc) — SOS, trip sharing, vehicle reports and driver blocking.
+
+    FENCE 1: SOS is a p99 <= 5 s SLO from button tap to SMS dispatched. The alert is handed to
+    notification-svc's INLINE dispatch, not to its queue, so the budget does not depend on how many
+    ride offers happen to be in front of it; the measured interval is on the row (`ts` ->
+    `dispatched_at`) rather than in a log line, so the SLO is queryable after the fact.
+    FENCE 2: a share token is trip-scoped, TTL-bounded (trip end + 1 h), revocable and rate-limited
+    (60 req/min). The public view is LIVE ONLY — it is read from the `veh:meta` Redis hash, which
+    holds one position and no history, so replay is impossible by construction rather than by care.
+    FENCE 3: token access is metered and a dead token returns zero ride data. The 410 is produced
+    before the ride is read at all, so there is no code path on which a revoked token could carry a
+    position.
+
+    Verify: dotnet test backend/src/Safety.Api.Tests -c Release
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.Safety</RootNamespace>
+    <AssemblyName>MageRide.Safety.Api</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <UserSecretsId>mageride-safety-api</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MageRide.Shared\MageRide.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Dapper" />
+    <PackageReference Include="Npgsql" />
+    <!-- D-34's 60/min per token and per IP, and the live position the public view draws. Both have
+         to be shared across replicas: a per-process bucket is a limit on nothing, and the position
+         is written by position-processor-svc. -->
+    <PackageReference Include="StackExchange.Redis" />
+    <!-- US-12.5's report is counted by reputation-svc, whose surface is gRPC (D3'). Client half
+         only — safety-svc serves no gRPC of its own. -->
+    <PackageReference Include="Google.Protobuf" />
+    <PackageReference Include="Grpc.Net.ClientFactory" />
+    <PackageReference Include="Grpc.Tools">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      Compiled straight out of backend/contracts/, not copied in — the same Include C033 wrote and
+      C034 reused. A copied proto is how a caller and a server start disagreeing about a wire format
+      neither of them owns.
+    -->
+    <Protobuf Include="..\..\contracts\proto\reputation.v1.proto"
+              ProtoRoot="..\..\contracts\proto"
+              GrpcServices="Client"
+              Link="Protos\reputation.v1.proto" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Safety.Api.Tests" />
+  </ItemGroup>
+
+</Project>
