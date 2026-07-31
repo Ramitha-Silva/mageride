@@ -1,23 +1,20 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
   <!--
-    Fare.Api (C022, ws-ride-svc-happy-path) — **a stub, and only a stub.**
+    Fare.Api (C049 fare-svc-core; C050 adds the payment state machine)
 
-    The walking skeleton needs one thing from fare-svc: an upfront price and the
-    `fareEstimateToken` that binds it, so `POST /v1/rides/request` has something to accept and
-    the booked ride can carry a number through to PaymentPending. That is all this project does.
+    Mode C fare computation and driver earnings: the fares.tariffs / fares.peak_windows rate card,
+    the upfront estimate and the fareEstimateToken that binds it, the E-04 Kalman filter and
+    accuracy-weighted resample that the final distance is measured with, the D-05 cross-trip
+    cancellation settlement, and the Initiated fares.ride_payments row a completed ride produces.
 
-    NOT here, and fenced out of C022 on purpose: the `fares.tariffs` / `fares.peak_windows`
-    tables (C005 landed the DDL, nothing reads it yet), peak and night surcharge windows in
-    Asia/Colombo (D5' §1.1, D-38), OSRM/Valhalla route distance (D5' §1.2), the Kalman-filtered
-    final fare, `POST /v1/fare/calculate`, and the whole payment state machine with OnePay,
-    LankaQR, cash, COD and driver-QR (D-10, AL-22, AL-47).
+    NOT here, and fenced out of C049 on purpose: everything after Initiated. The payment state
+    machine, OnePay (+5%), LankaQR, cash, COD and driver-QR attestation (D-10, AL-22, AL-47), the
+    tip capture (E-10), the refund/dispute workflow (E-05) and the R-05 terminal that posts a
+    driver's earning are all C050. A stubbed payment endpoint is worse than an absent one: it
+    answers 200 to a client that then believes money moved.
 
-    **C049 and C050 replace this.** Every stubbed decision is marked `STUB (C049/C050)` in the
-    source next to the spec line it stands in for.
-
-    Verify: dotnet test backend/src/Ride.Api.Tests -c Release
-            (the C022 verify target; it drives this service end to end into POST /v1/rides/request)
+    Verify: dotnet test backend/src/Fare.Api.Tests -c Release
   -->
 
   <PropertyGroup>
@@ -28,11 +25,18 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Dapper" />
+    <PackageReference Include="Npgsql" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\MageRide.Shared\MageRide.Shared.csproj" />
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Ride.Api.Tests drives the estimate end to end into POST /v1/rides/request (C022). -->
     <InternalsVisibleTo Include="Ride.Api.Tests" />
+    <InternalsVisibleTo Include="Fare.Api.Tests" />
   </ItemGroup>
 
 </Project>

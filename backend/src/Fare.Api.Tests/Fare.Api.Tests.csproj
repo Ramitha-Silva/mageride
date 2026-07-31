@@ -1,0 +1,58 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    C049 verify target: dotnet test backend/src/Fare.Api.Tests -c Release
+
+    Two kinds of test, and the split is deliberate.
+
+    The FORMULA and the FILTER are pure functions over integers and coordinates, so they are unit
+    tests: D5' §1.1's tariff table is reproduced to the minor unit for every vehicle type and every
+    surcharge combination, §1.3's rounding is asserted at the half, and E-04's Kalman filter is run
+    over a deterministically-generated noisy track and a stationary one. None of that needs a
+    database and all of it is what the definition of done is about.
+
+    Everything else is a claim about the SERVER: that a tariff is resolved by effective_from and a
+    rate published today cannot re-price yesterday's ride; that the night window wraps midnight;
+    that a ride priced twice produces one payment row and not two. Those run against a real Postgres
+    through MageRide.TestKit, because they are properties of the schema and the transaction, not of
+    this process.
+
+    Microsoft.NET.Sdk.Web, not Microsoft.NET.Sdk: the harness builds a WebApplication.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.Fare.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <OutputType>Exe</OutputType>
+    <!--
+      xUnit1041: collection-fixture ctor args are consumed through the primary constructor.
+      xUnit1051: every test is bounded by its own harness lifetime, so threading
+                 TestContext.Current.CancellationToken through each call would add noise without
+                 changing behaviour. Matches Dispatch/TripState/Subscription/Wallet.Tests.
+    -->
+    <NoWarn>$(NoWarn);xUnit1041;xUnit1051</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+    <PackageReference Include="Dapper" />
+    <PackageReference Include="Npgsql" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Fare.Api\Fare.Api.csproj" />
+    <!-- C010: the Postgres fixture, so this suite runs the same server build the dev stack does
+         and applies the same migration set. -->
+    <ProjectReference Include="..\MageRide.TestKit\MageRide.TestKit.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

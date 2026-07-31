@@ -1,3 +1,6 @@
+using System.Collections.Frozen;
+using MageRide.Fare.Domain;
+using MageRide.Fare.Pricing;
 using MageRide.Shared.Errors;
 using MageRide.Shared.Fares;
 using MageRide.Shared.Primitives;
@@ -5,100 +8,105 @@ using MageRide.Shared.Primitives;
 namespace MageRide.Fare.Estimates;
 
 /// <param name="AmountMinor">Total payable — the only number US-8.4 lets the UI show.</param>
-/// <param name="Breakdown">Support/receipt detail (D3' <c>FareBreakdown</c>).</param>
-public sealed record FareQuote(
-    string FareEstimateToken,
-    long AmountMinor,
-    long SurchargeMinor,
-    FareTariff Tariff,
-    double DistanceKm);
+public sealed record FareQuote(string FareEstimateToken, FareBreakdown Breakdown)
+{
+    public long AmountMinor => Breakdown.TotalMinor;
+}
 
 /// <summary>
-/// Prices a trip and mints the token that binds the price.
+/// <c>GET /v1/fare/estimate</c> — prices a trip and mints the token that binds the price (US-8.9).
 /// </summary>
 /// <remarks>
-/// <b>STUB (C049/C050).</b> Implements the D5' §1.1 master formula with two deliberate holes,
-/// each marked at the line that owns it: distance is straight-line rather than routed, and no
-/// peak or night surcharge is ever applied. Both are what "a flat estimate so the flow can
-/// complete" (the C022 scope) means; neither is safe to ship to a passenger.
+/// <para>
+/// <b>AL-19's fence lives here.</b> A Mode C tier shows a <em>price</em> before a driver is matched
+/// and nothing else — no ETA, no distance. The quote returns the total plus a
+/// <c>FareBreakdown</c> the contract marks for support and receipts, and this service computes no
+/// arrival time at all: there is no field for one and no code that could fill it.
+/// </para>
+/// <para>
+/// <b>The token binds the trip, not just the price.</b> Its claims carry the tier, the kind, the
+/// amount and both endpoints, and ride-svc checks all of them — so a Rs 300 quote for a short hop
+/// cannot be presented for a cross-city booking. That check is the reason the coordinates are in the
+/// claims at all.
+/// </para>
 /// </remarks>
-public sealed class FareEstimator(FareEstimateTokenCodec tokens)
+internal sealed class FareEstimator(FarePricingService pricing, FareEstimateTokenCodec tokens)
 {
-    /// <summary>The kinds <c>GET /v1/fare/estimate</c> accepts (D3' fare-svc).</summary>
-    public const string PassengerKind = "passenger";
-    public const string PackageKind = "package";
-
     /// <summary>
     /// Sri Lanka's bounding box, with a coastal margin.
-    /// <para>
-    /// <b>STUB (C049).</b> The real answer is <c>config.operating_cities</c> (C005 migration
-    /// 0201) — a per-city service polygon an admin edits. A box cannot tell Colombo from a
-    /// jungle, so this only catches a caller who is on the wrong continent, which is exactly
-    /// what <c>422 unserviceable-area</c> is for and no more.
-    /// </para>
     /// </summary>
+    /// <remarks>
+    /// <b>Still a box, and still an interim.</b> The real answer is <c>config.operating_cities</c>
+    /// (migration 0201) — per-city service polygons an admin edits, which is also where a launch city
+    /// is added without an app release. A box cannot tell Colombo from a jungle; it catches a caller
+    /// who is on the wrong continent, which is what <c>unserviceable-area</c> is for and no more.
+    /// Carried forward from the C022 stub unchanged and re-raised in the C049 handoff.
+    /// </remarks>
     private const double MinLatitude = 5.5;
     private const double MaxLatitude = 10.2;
     private const double MinLongitude = 79.2;
     private const double MaxLongitude = 82.2;
 
-    private const double EarthRadiusKm = 6371.0088;
-
-    public FareQuote Quote(GeoPoint pickup, GeoPoint dropoff, string vehicleType, string kind)
+    /// <summary>
+    /// The Mode C bookable set (<c>_shared.yaml#RideVehicleType</c>, AL-09).
+    /// </summary>
+    /// <remarks>
+    /// Checked before the tariff is looked up so the two failures stay distinct: <c>bus</c> is not a
+    /// tier this endpoint prices <em>at all</em> (Mode A carries no fare, ever), whereas
+    /// <c>truck</c> is a real tier whose rate Finance has not published yet — a
+    /// <c>422 route-unavailable</c> an admin can fix, not a client bug.
+    /// </remarks>
+    private static readonly FrozenSet<string> BookableTypes = new[]
     {
-        if (!FareTariff.TryGet(vehicleType, out var tariff))
+        "motorbike", "three_wheeler", "flex", "sedan", "mini_van", "van", "truck", "mini_truck",
+    }.ToFrozenSet(StringComparer.Ordinal);
+
+    public async Task<FareQuote> QuoteAsync(
+        GeoPoint pickup,
+        GeoPoint dropoff,
+        string? vehicleType,
+        string? kind,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        if (vehicleType is null || !BookableTypes.Contains(vehicleType))
         {
-            throw new MageRideValidationException(new Dictionary<string, string[]>
+            throw new MageRideValidationException(new Dictionary<string, string[]>(StringComparer.Ordinal)
             {
                 ["vehicleType"] =
                 [
-                    "vehicleType must be one of " +
-                    string.Join(", ", FareTariff.BookableVehicleTypes.Order(StringComparer.Ordinal)) +
-                    " (AL-09). 'bus' and 'train' are Mode A and carry no fare.",
+                    "vehicleType must be one of " + string.Join(", ", BookableTypes.Order(StringComparer.Ordinal))
+                    + " (AL-09). 'bus' and 'train' are Mode A and carry no fare at all.",
                 ],
             });
         }
 
-        if (kind is not (PassengerKind or PackageKind))
+        var quoteKind = kind ?? RideKinds.PassengerQuote;
+
+        if (quoteKind is not (RideKinds.PassengerQuote or RideKinds.PackageQuote))
         {
-            throw new MageRideValidationException(new Dictionary<string, string[]>
+            throw new MageRideValidationException(new Dictionary<string, string[]>(StringComparer.Ordinal)
             {
-                ["kind"] = [$"kind must be '{PassengerKind}' or '{PackageKind}'."],
+                ["kind"] = [$"kind must be '{RideKinds.PassengerQuote}' or '{RideKinds.PackageQuote}'."],
             });
         }
 
         RequireServiceable(pickup, "pickup");
         RequireServiceable(dropoff, "dropoff");
 
-        // STUB (C049): D5' §1.2 prices the estimate on the OSRM/Valhalla *route* distance. This
-        // is the haversine straight line, so every quote is low by whatever the road detour is.
-        var distanceKm = HaversineKm(pickup, dropoff);
-
-        // D5' §1.1: the first kilometre is inside the first-km charge.
-        var extraKm = Math.Max(0, distanceKm - 1.0);
-
-        // D5' §1.3 computes in minor units with a single round where a product is taken. Away
-        // from zero rather than banker's: the amount is always positive and a passenger reading
-        // "Rs 480" should not need to know which way 0.5 fell.
-        var baseMinor = tariff.FirstKmMinor + (long)Math.Round(extraKm * tariff.PerKmMinor, MidpointRounding.AwayFromZero);
-
-        // STUB (C049): D5' §1.1 stacks peak (+20%) and night (+15%) on baseMinor, evaluated in
-        // Asia/Colombo against fares.peak_windows (D-38). The stub never surcharges, so a 07:30
-        // quote and a 14:00 quote are the same price.
-        const long SurchargeMinor = 0;
-
-        var amountMinor = baseMinor + SurchargeMinor;
+        var distanceKm = pricing.RouteDistanceKm(pickup, dropoff);
+        var breakdown = await pricing.PriceAsync(vehicleType, distanceKm, at, cancellationToken);
 
         var token = tokens.Issue(
-            vehicleType: tariff.VehicleType,
-            kind: kind,
-            amountMinor: amountMinor,
-            surchargeMinor: SurchargeMinor,
-            distanceKm: distanceKm,
+            vehicleType: vehicleType,
+            kind: quoteKind,
+            amountMinor: breakdown.TotalMinor,
+            surchargeMinor: breakdown.SurchargeMinor,
+            distanceKm: breakdown.DistanceKm,
             pickup: pickup,
             dropoff: dropoff);
 
-        return new FareQuote(token, amountMinor, SurchargeMinor, tariff, distanceKm);
+        return new FareQuote(token, breakdown);
     }
 
     private static void RequireServiceable(GeoPoint point, string field)
@@ -109,19 +117,5 @@ public sealed class FareEstimator(FareEstimateTokenCodec tokens)
                 MageRideErrors.UnserviceableArea,
                 $"The {field} coordinate is outside Sri Lanka; MageRide operates nowhere else.");
         }
-    }
-
-    /// <summary>Great-circle distance in kilometres (D5' §1.2, "straight-line proximity = haversine").</summary>
-    internal static double HaversineKm(GeoPoint from, GeoPoint to)
-    {
-        var dLat = double.DegreesToRadians(to.Latitude - from.Latitude);
-        var dLng = double.DegreesToRadians(to.Longitude - from.Longitude);
-
-        var a = (Math.Sin(dLat / 2) * Math.Sin(dLat / 2))
-                + (Math.Cos(double.DegreesToRadians(from.Latitude))
-                   * Math.Cos(double.DegreesToRadians(to.Latitude))
-                   * Math.Sin(dLng / 2) * Math.Sin(dLng / 2));
-
-        return 2 * EarthRadiusKm * Math.Asin(Math.Min(1.0, Math.Sqrt(a)));
     }
 }

@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Text.Json;
 using MageRide.Fare;
+using MageRide.TestKit;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -18,7 +19,13 @@ namespace MageRide.Ride.Tests.Infrastructure;
 /// <remarks>
 /// It shares <see cref="RideHarness.FareTokenKey"/> and <paramref name="tokens"/> with the ride
 /// harness, because the only thing worth testing across the two services is that the token one
-/// mints is the token the other accepts. fare-svc touches no database, so there is no fixture.
+/// mints is the token the other accepts.
+/// <para>
+/// <b>Δ C049: fare-svc now has a database.</b> The C022 stub priced from a hard-coded table and
+/// declared no Postgres; the real service resolves <c>fares.tariffs</c> by <c>effective_from</c> and
+/// evaluates <c>fares.peak_windows</c>, so it is pointed at the same migrated fixture ride-svc uses
+/// and prices from 1901's seeded rate card.
+/// </para>
 /// </remarks>
 internal sealed class FareHarness : IAsyncDisposable
 {
@@ -32,12 +39,15 @@ internal sealed class FareHarness : IAsyncDisposable
 
     public HttpClient Client { get; }
 
-    public static async Task<FareHarness> StartAsync(TestTokenIssuer tokens)
+    public static async Task<FareHarness> StartAsync(TestTokenIssuer tokens, PostgresFixture postgres)
     {
         ArgumentNullException.ThrowIfNull(tokens);
+        ArgumentNullException.ThrowIfNull(postgres);
 
         var overrides = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
         {
+            ["ConnectionStrings:Postgres"] = postgres.ConnectionString,
+            ["Postgres:PgBouncerTransactionMode"] = "false",
             ["Jwt:JwksUrl"] = "http://127.0.0.1:1/.well-known/jwks.json",
             ["Jwt:Issuer"] = tokens.IssuerName,
             ["Jwt:RequireHttpsMetadata"] = "false",

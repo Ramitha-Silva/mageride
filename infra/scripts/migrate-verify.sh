@@ -904,7 +904,9 @@ check_rejects "an unknown block state is rejected (D-04)" \
 step "Tables owned by C005"
 check_eq "5 safety tables" "5" \
   "SELECT count(*) FROM information_schema.tables WHERE table_schema='safety' AND table_type='BASE TABLE';"
-check_eq "5 fares tables" "5" \
+# 6, not C005's 5: `fares.command_log` is C049's (1005) — R-14 needs a replay log per bounded
+# context and D4' §5 prints DDL for `rides.command_log` only.
+check_eq "5 fares tables from C005 + 1 from C049" "6" \
   "SELECT count(*) FROM information_schema.tables WHERE table_schema='fares' AND table_type='BASE TABLE';"
 # 15, not C005's 12: billing.topups, billing.outbox and billing.command_log are C046's (1107).
 check_eq "12 billing tables from C005 + 3 from C046" "15" \
@@ -1115,9 +1117,12 @@ psql_run "INSERT INTO fares.ride_payments(ride_id, method, amount_minor, provide
             VALUES ('$RIDE_1','onepay',150000,'OP-VERIFY-0001');" >/dev/null \
   || die "could not insert the fixture ride payment."
 
+# attempt_no = 2 so this is still a test of the provider_transaction_id UNIQUE and not of
+# ux_ride_payments_first_attempt (C049's 1006), which would otherwise reject the row first and
+# leave this check passing for the wrong reason.
 check_rejects "a replayed gateway callback id is rejected (R-19)" \
-  "INSERT INTO fares.ride_payments(ride_id, method, amount_minor, provider_transaction_id)
-     VALUES ('$RIDE_1','onepay',150000,'OP-VERIFY-0001');"
+  "INSERT INTO fares.ride_payments(ride_id, method, amount_minor, attempt_no, provider_transaction_id)
+     VALUES ('$RIDE_1','onepay',150000,2,'OP-VERIFY-0001');"
 
 check_rejects "a daily fee waived as the first trip cannot carry an amount (D-13)" \
   "INSERT INTO billing.daily_fee_charges(driver_id, vehicle_id, amount_minor, status)
@@ -1756,6 +1761,53 @@ check_eq "'daily_fee' is a journal kind wallet-svc will accept" "1" \
   "SELECT count(*) FROM pg_constraint
     WHERE conrelid='billing.journal_entries'::regclass AND contype='c'
       AND pg_get_constraintdef(oid) LIKE '%daily_fee%';"
+
+# ---------------------------------------------------------------------------------------
+# C049 — fares: the replay log (1005) and the one-fare-per-ride invariant (1006)
+# ---------------------------------------------------------------------------------------
+step "Objects owned by C049 (E-04, D-05, D-10, AL-19)"
+check_eq "fares.command_log exists" "1" \
+  "SELECT count(*) FROM information_schema.tables
+    WHERE table_schema='fares' AND table_name='command_log';"
+check_eq "fares.command_log has no aggregate-id column" "0" \
+  "SELECT count(*) FROM information_schema.columns
+    WHERE table_schema='fares' AND table_name='command_log' AND column_name IN ('ride_id','payment_id');"
+
+# A ride is priced once. The index is partial on attempt_no = 1 because D-10's retry chain
+# deliberately puts several attempts on one ride — a plain UNIQUE on ride_id would forbid the retry
+# the payment machine depends on.
+check_eq "ux_ride_payments_first_attempt is partial on the first attempt" "1" \
+  "SELECT count(*) FROM pg_indexes
+    WHERE schemaname='fares' AND indexname='ux_ride_payments_first_attempt'
+      AND indexdef LIKE '%attempt_no = 1%';"
+
+# $RIDE_1 already carries the attempt-1 payment the C005 section inserted, so the invariant is
+# tested against a row that is already there rather than against one this section seeds.
+check_rejects "a ride cannot be priced twice (ux_ride_payments_first_attempt)" \
+  "INSERT INTO fares.ride_payments(ride_id, method, amount_minor)
+     VALUES ('$RIDE_1','cash',50000);"
+# …but the D-10 retry chain still works, because a retry is attempt 2 and outside the predicate.
+check_eq "a retry attempt is still allowed on the same ride" "1" \
+  "WITH retry AS (
+     INSERT INTO fares.ride_payments(ride_id, method, amount_minor, attempt_no)
+     VALUES ('$RIDE_1','cash',50000,2)
+     RETURNING 1)
+   SELECT count(*) FROM retry;"
+
+# AL-19 / D5' §1.1: the rate card is versioned, never mutated, so a completed ride stays
+# reconcilable against the rate that priced it.
+check_eq "fares.tariffs is versioned by effective_from" "1" \
+  "SELECT count(*) FROM pg_constraint
+    WHERE conrelid='fares.tariffs'::regclass AND conname='ux_tariffs_type_effective';"
+check_rejects "one vehicle type cannot have two tariffs at one instant" \
+  "INSERT INTO fares.tariffs(vehicle_type, first_km_minor, per_km_minor, effective_from)
+     VALUES ('sedan', 99999, 99999, 'epoch'::timestamptz);"
+# §20 seeds no delivery rate on purpose: Epic 20 configures them before such a vehicle is booked.
+check_eq "no Mode C tariff is seeded for truck or mini_truck (§20, Epic 20)" "0" \
+  "SELECT count(*) FROM fares.tariffs WHERE vehicle_type IN ('truck','mini_truck');"
+# The night window wraps midnight, which is why 1001 declines to CHECK the ordering.
+check_eq "the seeded night window wraps midnight" "1" \
+  "SELECT count(*) FROM fares.peak_windows WHERE kind='night' AND end_local < start_local;"
 
 # ---------------------------------------------------------------------------------------
 # C048 — subscription: the Epic 23 outbox (1204) and the §18b fences the database holds

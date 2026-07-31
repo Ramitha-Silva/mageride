@@ -74,7 +74,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C046 | wallet-svc | 3 | DONE | 2026-07-30 | 76 tests green in a **new suite** (`Wallet.Api.Tests`) + 15 in `MageRide.Shared.Tests`; **1 billing migration (1107)** — `billing.topups` (a top-up session had an id, a state and a gateway reference and nowhere to live), this plane's outbox and the replay log; **one writer for `billing.journal_postings`**, and every money movement is one method; the AL-01 fee row is impossible rather than absent (no journal kind could carry it); AL-05 held by `ck_topups_method`; **7 new contract operations** incl. the voucher purchase and the whole request/approve/reject flow moved here from subscription-svc (ADD §11.6) and the internal ledger seam C047–C050 and C065 all need; `WebhookSignature` promoted into the kernel for the platform's six payment callbacks; an 11th Redpanda topic (`wallet.events`); 16 spec gaps / micro-change-sets |
 | C047 | subscription-svc-daily-fee | 3 | DONE | 2026-07-30 | 79 tests green in a **new suite** (`Subscription.Api.Tests`), which boots a **real wallet-svc** because half the "debits once" guarantee is an index in C046's schema; **2 migrations (1203, 0713)** — `subscription.command_log` and the missing `dispatch.offers` index both callers of `tripsToday` were sequential-scanning; **this service writes no ledger row** — the fee is a `daily_fee` debit through wallet-svc's internal seam, keyed `daily_fee:{driverId}:{vehicleId}:{feeDate}`; **debit first, record second**, because only that order is recoverable; `tripsToday` **switched to `dispatch.offers`** so the D-08 gate and the charge cannot disagree; the Mode A fence held twice (the admin PUT refuses a non-zero Mode A rate, the charge path zeroes one anyway); Mode B monthly charge + the AL-03 per-fleet consolidation **handed to C060 unledgered**, because §10 gives the per-vehicle row no `journal_entry_id` and no journal kind could carry it; **5 new contract operations**; `migrate-verify.sh` 295/295 with a C047 section; 11 spec gaps / micro-change-sets |
 | C048 | subscription-svc-mode-b | 3 | DONE | 2026-07-30 | 112 tests green in `Subscription.Api.Tests` (79 from C047 + 33); **1 migration (1204)** — `subscription.outbox`, because BR-23.11's unsubscribe must publish `share.revoked` *inside* the transaction that mutes the grant and D6' §2.1 gives this service no topic; **the event goes on `registry.events` in registry-svc's exact envelope**, so fanout-svc (C041) consumes a second producer with no change; **AL-25 is one index** — `ux_grant_active` partial on `deleted_at` makes the muted roster row, the owner-only delete and the rejoin-reuses-the-grant rule the same fact; **the pass-through fence is an absence** — no ledger call, no journal entry, and `migrate-verify.sh` now asserts `subscription.payments` has no posting or commission column; `payTo` served only from the single `verified` payout profile and from the last verified snapshot after an edit; "joined 5 Jun ⇒ due 6 Jul" implemented from the worked example, with the anniversary re-derived from `join_day` so a 31st survives February; **1 new contract operation** (the AL-49 signed-URL route D3' asks for and gives no path); `migrate-verify.sh` 307/307 with a C048 section; 11 spec gaps / micro-change-sets |
-| C049 | fare-svc-core | 3 | PENDING | | |
+| C049 | fare-svc-core | 3 | DONE | 2026-07-31 | 78 tests green in a **new suite** (`Fare.Api.Tests`); **2 migrations (1005, 1006)** — `fares.command_log` and `ux_ride_payments_first_attempt`, the missing "a ride is priced once" index that a `FOR UPDATE` cannot supply because a row that does not exist cannot be locked (six concurrent completions produced four fares); **money never touches a float** — the distance is quantised to whole metres at the boundary and every step after it is `long`, with `(a*b+half)/divisor` as §1.3's single round; D5' §1.1's tariff table reproduced to the minor unit for every tier and every surcharge combination, peak+night stacked additively and never compounded; **E-04 landed** — reject, Kalman, and an accuracy-weighted movement gate that reads the *measurement* uncertainty rather than the filter's posterior, taking a stationary three minutes from 292 m to under 50 m while four right-angle turns keep their length; the estimate now prices the **routed** distance (straight line × 1.3, the same interim and the same constant as query-svc's ETA) instead of the C022 stub's bare haversine; tariffs resolved by `effective_from` at the ride's *request* instant so a mid-journey rate change cannot re-price it; `migrate-verify.sh` 316/316 with a C049 section; 6 spec gaps / micro-change-sets |
 | C050 | fare-svc-payments | 3 | PENDING | | |
 | C051 | notification-svc | 3 | PENDING | | |
 | C052 | safety-svc | 3 | PENDING | | |
@@ -7002,4 +7002,120 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   **Build host —** Docker for two Testcontainers fixtures (Postgres, Redis) plus the throwaway
   Postgres `migrate-verify.sh` starts; the replica stack stayed down throughout.
   `Subscription.Api.Tests` takes ~3 min because it boots two services per test.
+  **No new NuGet reference.**
+
+- **Component:** C049 fare-svc-core — 2026-07-31
+- **Status:** DONE — `dotnet test backend/src/Fare.Api.Tests -c Release` is **78/78 green** in a new
+  suite; `bash infra/scripts/migrate-verify.sh` is **316/316**; `dotnet build backend/MageRide.sln
+  -c Release` is clean; `Ride.Api.Tests` is **314/314** after the two changes the real fare-svc
+  forced on it (below). All four DoD items are asserted: the D5' §1.1 tariff table is reproduced to
+  the minor unit for every vehicle type and every surcharge combination; §1.3's rounding is asserted
+  at the half and money never leaves `long`; the Kalman filter measurably reduces inflation on a
+  replayed noisy track and takes a stationary three minutes from 292 m to under 50 m; and the
+  estimate token carries and signs the pickup/dropoff pair, so a quote cannot be presented for
+  another trip.
+- **Notes:**
+  **Spec gaps / micro-change-sets —**
+  (a) **`fares.command_log` does not exist in any DDL source — migration 1005.** R-14 wants a replay
+  log per bounded context and `fare.yaml` puts an `Idempotency-Key` on `POST /v1/fare/calculate`;
+  D4' §5 prints DDL for `rides.command_log` only. The **ninth** time this has been raised (C020,
+  C021, C030, C033, C034, C045, C046, C047). **D4' §5 should carry a command log per bounded
+  context.**
+  (b) **"A ride is priced once" had no index — migration 1006.** ride-svc's `complete` is
+  at-least-once and §9 declares nothing that stops two fares landing on one journey. It could not
+  declare a plain UNIQUE on `ride_id` either, because D-10's retry chain deliberately puts several
+  attempts on one ride (1002's own header says so). The invariant is **one first attempt per ride**
+  — `ux_ride_payments_first_attempt`, partial on `attempt_no = 1` — which is exactly expressible.
+  **Found by a test, not by reading:** the application-side `SELECT … FOR UPDATE` I wrote first does
+  nothing, because a lock on a row that does not exist yet locks nothing; six concurrent completions
+  produced four payments. **D4' §9 / server_db_schema.md §9 should carry the index.**
+  (c) **`fares.peak_windows.multiplier_pct` has no reader, and cannot have one without changing
+  D5' §1.1.** The formula is explicit — `peakPct = isPeak(rideTime) ? tariff.peak_surcharge_pct : 0`
+  — so the window decides *when* a surcharge applies and the **tariff** decides *how much*. §20
+  seeds the column to the same 20/15 the tariffs carry, so the two agree today and an admin who set
+  them apart would find only the tariff's mattered. **D5' §1.1 should either read the window's
+  percentage or D4' §9 should drop the column.**
+  (d) **`fares.driver_earnings` has no tip and no penalty column** (the C042 handoff's gap (d), now
+  seen from this side). It can hold `trips`, `gross_minor` and `daily_fee_minor` and nothing else,
+  so it cannot answer D3's `EarningsSummary` in full even once written. **C050 should either extend
+  it or D3' should narrow the summary.**
+  (e) **D5' §1.1 prints no worked example**, so "reproduces every worked example to the minor unit"
+  was read as the tariff *table* plus D3's own `GET /v1/fare/estimate` sample (Rs 480.00 on a 4.8 km
+  three-wheeler at peak — reproduced exactly, `The_contract_example_reproduces`). Worth a line in
+  D5' if the intent was a set of examples that were never written down.
+  (f) **`config.operating_cities` still has no reader.** The serviceable-area check is the C022
+  bounding box, carried forward: it catches a caller on the wrong continent and cannot tell Colombo
+  from a jungle. Re-raised — the polygons exist (migration 0201) and nothing reads them.
+  **Decisions worth knowing —**
+  (1) **Money never touches a floating-point type, and the boundary is named.** The distance is the
+  one genuine real number; `FareFormula.MetresOf` quantises it to whole metres and every step after
+  that is `long`. `(a * b + half) / divisor` is §1.3's "one round where a product is taken", exactly,
+  in integer arithmetic. The classic trap is a test: 1.0 + 0.1 + 0.2 km still costs Rs 124.00.
+  (2) **The estimate is now a straight line × 1.3, not a straight line.** D5' §1.2 wants the OSRM
+  route distance and ADD §7.6 puts routing in Phase 3, so the C022 stub's bare haversine
+  under-quoted every ride by the whole detour. `Fare:RouteDetourFactor` is deliberately the same
+  method and the same number as `Query:EtaDetourFactor` — two services must not approximate one road
+  network with two constants, or the ETA and the price of one journey disagree. **This changed the
+  quoted price**, which is why `Ride.Api.Tests`' distance band moved.
+  (3) **E-04 is three rules, and the movement gate reads the measurement accuracy rather than the
+  filter's posterior.** The posterior shrinks as the filter converges — under a metre after a minute
+  of standing still — so a gate built from it reopens for exactly the stationary vehicle it exists
+  to hold shut. Fixing that took a stationary three minutes from 292 m to 111 m; the process-noise
+  sweep took it to under 50 m.
+  (4) **`Fare:Kalman:ProcessNoise` = 0.05 was swept, not argued from physics.** It trades two
+  failures that pull opposite ways, and `A_route_with_right_angle_turns_keeps_its_length` exists so
+  nobody tunes it down until the stationary case passes and every real journey quietly
+  under-charges.
+  (5) **The tariff is resolved at the ride's *request* instant on settlement**, not at completion, so
+  a rate published mid-journey cannot re-price it. That is what 1001's `effective_from` versioning is
+  for, and it is also why there is no cache in front of the table.
+  (6) **D-05 settles first and adds what comes back** (C035 decision 9, verbatim). The ledger legs
+  are posted **after** the commit, because a wallet posting is another service's transaction; each is
+  keyed `penalty_id || ':' || ride_id`, so a retry replays. The residual window — settled, committed,
+  and the forward failed — is logged as needing reconciliation rather than silently swallowed.
+  (7) **A sick dependency degrades the fare rather than refusing it.** dispatch-svc answering 500
+  leaves the trip's own fare correct and the debt outstanding for the next trip. A driver must not be
+  unable to finish a ride because a different service is down.
+  **Known gap in this component's own coverage —**
+  **The D-05 path has no integration test.** The code is written and its two collaborators are
+  behind interfaces, but `Fare:PenaltySettlementEnabled` is off in the harness and no test stands a
+  dispatch-svc or wallet-svc stub up, so "the Rs 50 is added to the next fare and forwarded
+  idempotently" is asserted by construction and not by execution. It is the one deliverable here
+  that is implemented but unproven, and **C050 should cover it** when it boots wallet-svc for the
+  payment machine anyway — the same way `Subscription.Api.Tests` boots a real wallet-svc for C047.
+  **Δ on other services —**
+  **`Ride.Api.Tests` changed twice, both forced.** Its `FareHarness` had no database because the
+  C022 stub had none; the real service resolves `fares.tariffs`, so it is pointed at the same
+  migrated fixture ride-svc already uses. And `FareStubTests`' distance band asserted the straight
+  line, which was the stub under-quoting — it now asserts the routed band, and its surcharge
+  assertion was **removed**: that harness runs fare-svc on the real clock, so asserting a particular
+  peak percentage would be a test that fails twice a day. The windows are pinned against a fake clock
+  in `Fare.Api.Tests` instead.
+  **For C050 (fare-svc-payments) —** the payment row you take over is created `Initiated` by
+  `POST /v1/fare/calculate` with `method` and `payer_role` already resolved from the booking (P-04:
+  cash ⇒ rider, LankaQR/OnePay ⇒ booker). `ux_ride_payments_first_attempt` is partial on
+  `attempt_no = 1`, so **a retry must increment `attempt_no`** or it collides.
+  `IDriverEarningsRepository.PostAsync` is written and tested and called by nothing — wire it to your
+  R-05 terminal; `RidePaymentStates.Terminal` is the set (four states; `Disputed` is deliberately not
+  one). `IWalletLedgerClient` is here with `penalty_settle` already used, and the kinds you need
+  (`trip_payment`, `tip_payout`, `payment_refund`, `overpaid_reversal`) are the same seam.
+  **For C065 (admin-bff) —** `PUT /v1/admin/fares/tariffs` is **yours**, not fare-svc's —
+  `admin-bff.yaml` declares it and `fare.yaml` does not. `ITariffRepository.PublishAsync` is the
+  write behind it: one `effectiveFrom` for a whole rate card, windows replaced in the same
+  transaction. **Never UPDATE a tariff row** — a completed ride must stay reconcilable against the
+  rate that priced it. The `audit.events` row is yours by the same split C045/C046/C047 use.
+  **For C042 (query-svc) —** gap (a) of your handoff is half-closed: `KalmanTrack.Filter` returns
+  the filtered points and the distance, but **nothing persists them yet** — there is still no Mode C
+  track table, and the settlement recomputes from `telemetry.positions` each time. The shape is
+  ready; the table is not, and I did not invent one.
+  **For C032/C037 (ride-svc) —** `POST /v1/fare/calculate` needs `Fare:InternalApiKey` presented as
+  `X-MageRide-Internal-Key`; unset leaves the route unmapped and every completed ride stalls in
+  `PaymentPending`. It answers `409 conflict` for a ride that is not `Completed`/`PaymentPending`,
+  `409 payment-already-settled` once C050 terminates one, and is idempotent on the ride.
+  **For C118 (contract tests) —** `fare.yaml` is unchanged by this component: both operations were
+  already in it and are now implemented. `POST /v1/fare/calculate`'s declared `409` is used for a
+  non-priceable ride as well as for `payment-already-settled`, so `conflict` should join its
+  `x-error-codes` when C050 next touches the file.
+  **Build host —** Docker for one Testcontainers fixture (Postgres) plus the throwaway Postgres
+  `migrate-verify.sh` starts; the replica stack stayed down throughout. `Fare.Api.Tests` takes ~50 s.
   **No new NuGet reference.**

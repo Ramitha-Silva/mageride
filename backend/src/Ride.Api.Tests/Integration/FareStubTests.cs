@@ -22,7 +22,7 @@ public sealed class FareStubTests(PostgresFixture postgres)
         Assert.SkipWhen(!postgres.IsAvailable, postgres.SkipReason ?? string.Empty);
 
         await using var rides = await RideHarness.StartAsync(postgres);
-        await using var fares = await FareHarness.StartAsync(rides.Tokens);
+        await using var fares = await FareHarness.StartAsync(rides.Tokens, postgres);
 
         var passengerId = await rides.CreatePassengerAsync();
         var passenger = rides.Tokens.Passenger(passengerId);
@@ -35,15 +35,24 @@ public sealed class FareStubTests(PostgresFixture postgres)
         var amountMinor = estimate.GetProperty("amountMinor").GetInt64();
         var token = estimate.GetProperty("fareEstimateToken").GetString();
 
-        // D5' §1.1: first-km charge plus per-km over the remainder. Colombo Fort → Dehiwala is
-        // about 9.5 km, so a three-wheeler is comfortably above the Rs 100 first-km charge.
+        // D5' §1.1: first-km charge plus per-km over the remainder, now read from the seeded
+        // `fares.tariffs` rate card rather than a hard-coded table (Δ C049).
         Assert.Equal(10_000, estimate.GetProperty("breakdown").GetProperty("firstKmMinor").GetInt64());
         Assert.Equal(8_000, estimate.GetProperty("breakdown").GetProperty("perKmMinor").GetInt64());
-        Assert.InRange(estimate.GetProperty("breakdown").GetProperty("distanceKm").GetDouble(), 8.0, 11.0);
-        Assert.InRange(amountMinor, 60_000, 100_000);
+
+        // Colombo Fort → Dehiwala is about 9.5 km straight-line. **Δ C049: the quote is now priced
+        // on the road distance**, approximated as that line × `Fare:RouteDetourFactor` (1.3) until
+        // OSRM lands in Phase 3 — so ~12.4 km. The C022 range asserted the straight line, which was
+        // the stub under-quoting every ride by the detour.
+        Assert.InRange(estimate.GetProperty("breakdown").GetProperty("distanceKm").GetDouble(), 11.0, 14.0);
         Assert.Equal("LKR", estimate.GetProperty("currency").GetString());
-        // The stub never surcharges — reported as 0, not omitted (see FareEndpoints).
-        Assert.Equal(0, estimate.GetProperty("breakdown").GetProperty("peakSurchargePct").GetInt32());
+
+        // The band is wide because this harness runs fare-svc on the **real** clock, so whether the
+        // seeded peak (07:00–09:00, 17:00–19:00) or night (22:00–05:00) window applies depends on
+        // when the suite runs. Asserting a particular surcharge here would be a test that fails
+        // twice a day; the windows themselves are pinned against a fake clock in Fare.Api.Tests.
+        // ~11–14 km on the three-wheeler tariff is Rs 900–1 140 base, up to +35% surcharged.
+        Assert.InRange(amountMinor, 85_000, 160_000);
 
         // …and ride-svc accepts it, on the strength of the shared key alone.
         var booked = await rides.RequestRideAsync(passenger, fareEstimateToken: token);
@@ -76,7 +85,7 @@ public sealed class FareStubTests(PostgresFixture postgres)
         Assert.SkipWhen(!postgres.IsAvailable, postgres.SkipReason ?? string.Empty);
 
         await using var rides = await RideHarness.StartAsync(postgres);
-        await using var fares = await FareHarness.StartAsync(rides.Tokens);
+        await using var fares = await FareHarness.StartAsync(rides.Tokens, postgres);
 
         var passenger = rides.Tokens.Passenger(await rides.CreatePassengerAsync());
 
@@ -96,7 +105,7 @@ public sealed class FareStubTests(PostgresFixture postgres)
         Assert.SkipWhen(!postgres.IsAvailable, postgres.SkipReason ?? string.Empty);
 
         await using var rides = await RideHarness.StartAsync(postgres);
-        await using var fares = await FareHarness.StartAsync(rides.Tokens);
+        await using var fares = await FareHarness.StartAsync(rides.Tokens, postgres);
 
         var passenger = rides.Tokens.Passenger(await rides.CreatePassengerAsync());
 
@@ -112,7 +121,7 @@ public sealed class FareStubTests(PostgresFixture postgres)
         Assert.SkipWhen(!postgres.IsAvailable, postgres.SkipReason ?? string.Empty);
 
         await using var rides = await RideHarness.StartAsync(postgres);
-        await using var fares = await FareHarness.StartAsync(rides.Tokens);
+        await using var fares = await FareHarness.StartAsync(rides.Tokens, postgres);
 
         using var response = await fares.Client.GetAsync(
             "/v1/fare/estimate?fromLat=6.9&fromLng=79.8&toLat=6.8&toLng=79.9&vehicleType=sedan");
@@ -128,7 +137,7 @@ public sealed class FareStubTests(PostgresFixture postgres)
         Assert.SkipWhen(!postgres.IsAvailable, postgres.SkipReason ?? string.Empty);
 
         await using var rides = await RideHarness.StartAsync(postgres);
-        await using var fares = await FareHarness.StartAsync(rides.Tokens);
+        await using var fares = await FareHarness.StartAsync(rides.Tokens, postgres);
 
         var passenger = rides.Tokens.Passenger(await rides.CreatePassengerAsync());
 

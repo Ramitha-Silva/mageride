@@ -1,10 +1,10 @@
+using MageRide.Fare.Domain;
 using MageRide.Fare.Estimates;
+using MageRide.Fare.Settlement;
 using MageRide.Shared.Errors;
-using MageRide.Shared.Fares;
+using MageRide.Shared.Http.Idempotency;
 using MageRide.Shared.Primitives;
-using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http.HttpResults;
-using Microsoft.AspNetCore.Routing;
 
 namespace MageRide.Fare.Endpoints;
 
@@ -14,24 +14,41 @@ public sealed record FareBreakdownResponse(
     long PerKmMinor,
     double DistanceKm,
     int PeakSurchargePct,
-    int NightSurchargePct);
+    int NightSurchargePct)
+{
+    public static FareBreakdownResponse From(FareBreakdown breakdown)
+    {
+        ArgumentNullException.ThrowIfNull(breakdown);
+
+        return new FareBreakdownResponse(
+            breakdown.FirstKmMinor,
+            breakdown.PerKmMinor,
+            breakdown.DistanceKm,
+            breakdown.PeakSurchargePct,
+            breakdown.NightSurchargePct);
+    }
+}
 
 /// <summary>The 200 of <c>GET /v1/fare/estimate</c>.</summary>
 public sealed record FareEstimateResponse(
-    string FareEstimateToken,
-    long AmountMinor,
-    string Currency,
-    FareBreakdownResponse Breakdown);
+    string FareEstimateToken, long AmountMinor, string Currency, FareBreakdownResponse Breakdown);
+
+/// <summary>The body of <c>POST /v1/fare/calculate</c>.</summary>
+public sealed record CalculateFareBody(string? RideId, double? DistanceKm, int? DurationSec);
+
+/// <summary>The 200 of <c>POST /v1/fare/calculate</c>.</summary>
+public sealed record FinalFareResponse(
+    Guid PaymentId, long AmountMinor, string Currency, FareBreakdownResponse Breakdown);
 
 /// <summary>
-/// <c>/v1/fare</c> — the one operation the walking skeleton needs from fare-svc.
+/// <c>/v1/fare</c> — the estimate a passenger is quoted and the final fare a completion produces.
 /// </summary>
 /// <remarks>
-/// The other fourteen operations in <c>backend/contracts/fare.yaml</c> — final calculation, the
-/// payment state machine, the OnePay and LankaQR callbacks, driver-QR settlement (AL-47) and the
-/// Finance refund routes — are C049/C050 and are left unmapped rather than stubbed. A stubbed
-/// payment endpoint is worse than an absent one: it answers 200 to a client that then believes
-/// money moved.
+/// <b>AL-19's fence is structural here.</b> A Mode C tier exposes a price and nothing else before a
+/// driver is matched: neither response carries an ETA or a duration, and this service computes
+/// neither. The <c>durationSec</c> the contract lets a caller send is accepted and unused — the D5'
+/// §1.1 tariff has no time component at all, and a fare that quietly grew one would be a different
+/// pricing model.
 /// </remarks>
 public static class FareEndpoints
 {
@@ -47,68 +64,144 @@ public static class FareEndpoints
         return endpoints;
     }
 
-    private static Ok<FareEstimateResponse> EstimateAsync(
+    /// <summary>
+    /// <c>POST /v1/fare/calculate</c> — internal, and mapped only when a key is configured.
+    /// </summary>
+    /// <remarks>
+    /// D3' puts this route on mTLS internal. Until C042 lands a mesh identity the guard is the same
+    /// interim shared secret every other internal plane on the platform carries, and an unset key
+    /// leaves the route <b>unmapped</b> rather than open: every completed ride goes through here, so
+    /// a caller who could reach it unauthenticated could price somebody else's journey.
+    /// </remarks>
+    public static IEndpointRouteBuilder MapInternalFareEndpoints(
+        this IEndpointRouteBuilder endpoints, string internalApiKey)
+    {
+        ArgumentNullException.ThrowIfNull(endpoints);
+
+        endpoints.MapPost("/v1/fare/calculate", CalculateAsync)
+            .AddEndpointFilter(new InternalKeyFilter(internalApiKey))
+            .AllowAnonymous()
+            .WithTags("fare")
+            .WithName("calculateFinalFare");
+
+        return endpoints;
+    }
+
+    private static async Task<Ok<FareEstimateResponse>> EstimateAsync(
         double? fromLat,
         double? fromLng,
         double? toLat,
         double? toLng,
         string? vehicleType,
         string? kind,
-        FareEstimator estimator)
+        FareEstimator estimator,
+        TimeProvider clock,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(estimator);
+        ArgumentNullException.ThrowIfNull(clock);
 
-        var pickup = RequirePoint(fromLat, fromLng, "from");
-        var dropoff = RequirePoint(toLat, toLng, "to");
+        var pickup = RequirePoint(fromLat, fromLng, "fromLat", "fromLng");
+        var dropoff = RequirePoint(toLat, toLng, "toLat", "toLng");
 
-        if (string.IsNullOrWhiteSpace(vehicleType))
-        {
-            throw new MageRideValidationException(new Dictionary<string, string[]>
-            {
-                ["vehicleType"] = ["vehicleType is required."],
-            });
-        }
-
-        // D3' declares `kind` optional with a `passenger` default.
-        var quote = estimator.Quote(pickup, dropoff, vehicleType, kind ?? FareEstimator.PassengerKind);
+        var quote = await estimator.QuoteAsync(
+            pickup, dropoff, vehicleType, kind, clock.GetUtcNow(), cancellationToken);
 
         return TypedResults.Ok(new FareEstimateResponse(
             quote.FareEstimateToken,
             quote.AmountMinor,
-            FareEstimateClaims.Currency,
-            new FareBreakdownResponse(
-                quote.Tariff.FirstKmMinor,
-                quote.Tariff.PerKmMinor,
-                Math.Round(quote.DistanceKm, 3),
-
-                // STUB (C049): the windows are never evaluated, so both are always zero. They are
-                // reported rather than omitted because a receipt that omits the field and one that
-                // reports 0% say different things, and only the second is true here.
-                PeakSurchargePct: 0,
-                NightSurchargePct: 0)));
+            quote.Breakdown.Currency,
+            FareBreakdownResponse.From(quote.Breakdown)));
     }
 
-    /// <summary>
-    /// Parses a coordinate pair. A missing or out-of-range value is <c>400 validation-failed</c>;
-    /// a well-formed coordinate outside the service area is <c>422 unserviceable-area</c>, which
-    /// is the estimator's call, not this one's.
-    /// </summary>
-    private static GeoPoint RequirePoint(double? lat, double? lng, string prefix)
+    private static async Task<Ok<FinalFareResponse>> CalculateAsync(
+        CalculateFareBody? body,
+        FareSettlementService settlement,
+        CancellationToken cancellationToken)
     {
-        var errors = new Dictionary<string, string[]>(StringComparer.Ordinal);
+        ArgumentNullException.ThrowIfNull(settlement);
 
-        if (lat is null || double.IsNaN(lat.Value) || lat.Value is < -90 or > 90)
+        var rideId = RequestIds.Require(body?.RideId, "rideId");
+
+        var fare = await settlement.CalculateAsync(rideId, body?.DistanceKm, cancellationToken);
+
+        return TypedResults.Ok(new FinalFareResponse(
+            fare.Payment.Id,
+            fare.AmountMinor,
+            fare.Payment.Currency,
+            FareBreakdownResponse.From(fare.Breakdown)));
+    }
+
+    /// <remarks>
+    /// The four coordinates are <c>required</c> in the contract, so a missing one is the caller's
+    /// bug and named as such rather than defaulted to the equator.
+    /// </remarks>
+    private static GeoPoint RequirePoint(double? lat, double? lng, string latField, string lngField)
+    {
+        if (lat is not { } latitude || lng is not { } longitude)
         {
-            errors[$"{prefix}Lat"] = [$"{prefix}Lat is required and must be between -90 and 90."];
+            throw new MageRideValidationException(new Dictionary<string, string[]>(StringComparer.Ordinal)
+            {
+                [latField] = [$"{latField} and {lngField} are both required."],
+            });
         }
 
-        if (lng is null || double.IsNaN(lng.Value) || lng.Value is < -180 or > 180)
+        try
         {
-            errors[$"{prefix}Lng"] = [$"{prefix}Lng is required and must be between -180 and 180."];
+            return new GeoPoint(latitude, longitude);
         }
+        catch (ArgumentOutOfRangeException exception)
+        {
+            throw new MageRideValidationException(new Dictionary<string, string[]>(StringComparer.Ordinal)
+            {
+                [latField] = [exception.Message],
+            });
+        }
+    }
+}
 
-        return errors.Count == 0
-            ? new GeoPoint(lat!.Value, lng!.Value)
-            : throw new MageRideValidationException(errors);
+/// <summary>Parses the identifiers D3' types as <c>Ulid</c> ("ULID or UUID, rendered canonically").</summary>
+/// <remarks>
+/// The same twelve lines wallet-svc, subscription-svc and reputation-svc carry. Per service rather
+/// than in the kernel because each one names its own fields in the error, which is what makes a 400
+/// actionable.
+/// </remarks>
+internal static class RequestIds
+{
+    public static Guid Require(string? value, string field) =>
+        Ulids.TryParse(value, out var parsed) && parsed != Guid.Empty
+            ? parsed
+            : throw new MageRideValidationException(new Dictionary<string, string[]>(StringComparer.Ordinal)
+            {
+                [field] = [$"{field} is required and must be a ULID or a UUID."],
+            });
+}
+
+/// <summary>
+/// Rejects a call that does not carry <c>Fare:InternalApiKey</c>.
+/// </summary>
+/// <remarks>
+/// Answers <c>404 not-found</c>, matching what the gateway returns for the <c>/v1/internal</c>
+/// prefix (C008): a caller who is not entitled to the internal plane should not be able to map it.
+/// Fixed-time comparison — a length-varying compare leaks the key a character at a time.
+/// </remarks>
+internal sealed class InternalKeyFilter(string apiKey) : IEndpointFilter
+{
+    /// <summary>Carries the interim shared secret. Replaced by the mesh peer identity in C042.</summary>
+    public const string ApiKeyHeader = "X-MageRide-Internal-Key";
+
+    private readonly byte[] _expected = System.Text.Encoding.UTF8.GetBytes(apiKey);
+
+    public ValueTask<object?> InvokeAsync(EndpointFilterInvocationContext context, EndpointFilterDelegate next)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(next);
+
+        var presented = context.HttpContext.Request.Headers[ApiKeyHeader].ToString();
+
+        return System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
+            System.Text.Encoding.UTF8.GetBytes(presented), _expected)
+            ? next(context)
+            : throw new MageRideException(MageRideErrors.NotFound, "No such resource.");
     }
 }
