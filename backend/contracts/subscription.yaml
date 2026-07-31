@@ -900,7 +900,8 @@ paths:
         '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
         '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
-      x-error-codes: [validation-failed, unauthorized, forbidden, not-found, payout-profile-not-verified]
+      x-error-codes:
+        [validation-failed, unauthorized, forbidden, not-found, conflict, payout-profile-not-verified]
 
   /v1/mode-b/subscriptions/{subscriptionId}/payments:
     get:
@@ -1071,6 +1072,64 @@ paths:
         '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
       x-error-codes: [validation-failed, unauthorized, not-found]
+
+  /v1/mode-b/files/{kind}/{id}:
+    get:
+      operationId: getModeBFile
+      summary: Serves a signed Mode B document link.
+      description: |
+        **Δ C048 — not in D3'.** AL-49 asks the pay sheet for "a signed URL" of the owner's
+        bank-app LankaQR image and gives `SubscriptionPayment.slipUrl` the same description, and
+        neither has a route to point at. With no object store in front of this service (D-36's
+        bucket is C125's) the link is minted by `POST …/pay` and `POST …/transfer-slip` and served
+        here, HMAC-signed over `(kind, id, expires)`.
+
+        **`security: []` because the signature is the credential.** The URL goes to an image
+        loader, which carries no bearer — and an access token in a query string is an access token
+        in every proxy log on the way. A bad or expired signature is `403`, and both answer
+        identically so a forged link tells its author nothing.
+      tags: [mode-b]
+      security: []
+      parameters:
+        - name: kind
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [lankaqr, slips]
+        - name: id
+          in: path
+          required: true
+          description: The payout profile (`lankaqr`) or the payment (`slips`).
+          schema:
+            $ref: './_shared.yaml#/components/schemas/Ulid'
+        - name: expires
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: signature
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The document.
+          content:
+            image/*:
+              schema:
+                type: string
+                format: binary
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [forbidden, not-found]
 
   /v1/mode-b/{vehicleId}/subscribers:
     get:

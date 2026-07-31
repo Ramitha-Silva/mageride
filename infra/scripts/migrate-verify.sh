@@ -1758,6 +1758,96 @@ check_eq "'daily_fee' is a journal kind wallet-svc will accept" "1" \
       AND pg_get_constraintdef(oid) LIKE '%daily_fee%';"
 
 # ---------------------------------------------------------------------------------------
+# C048 — subscription: the Epic 23 outbox (1204) and the §18b fences the database holds
+# ---------------------------------------------------------------------------------------
+step "Objects owned by C048 (AL-23, AL-24, AL-25, AL-49, §18b)"
+check_eq "subscription.outbox exists" "1" \
+  "SELECT count(*) FROM information_schema.tables
+    WHERE table_schema='subscription' AND table_name='outbox';"
+# Same shape as registry.outbox (0309) because it publishes onto the same topic with the same
+# partition key: fanout-svc's consumer cannot tell the two producers apart, and must not have to.
+check_eq "subscription.outbox is shaped like registry.outbox" "5" \
+  "SELECT count(*) FROM information_schema.columns
+    WHERE table_schema='subscription' AND table_name='outbox'
+      AND column_name IN ('aggregate_id','event_type','payload','created_at','dispatched_at');"
+
+# THE FENCE. §18b: this money is a pass-through to the fleet owner. There is no column here that
+# could hold a posting id, so no amount of future code can net it against the platform's own fee.
+check_eq "subscription.payments has no journal_entry_id and no commission column" "0" \
+  "SELECT count(*) FROM information_schema.columns
+    WHERE table_schema='subscription' AND table_name='payments'
+      AND column_name IN ('journal_entry_id','commission_minor','platform_fee_minor');"
+
+# AL-25: an unsubscribed grant keeps the (vehicle, passenger) slot until the OWNER deletes it,
+# which is what makes the roster row survive as MUTED and what a rejoin reuses.
+check_eq "ux_grant_active is partial on deleted_at, not on status" "1" \
+  "SELECT count(*) FROM pg_indexes
+    WHERE schemaname='subscription' AND indexname='ux_grant_active'
+      AND indexdef LIKE '%deleted_at IS NULL%' AND indexdef NOT LIKE '%status%';"
+
+psql_run "INSERT INTO subscription.grants(id, vehicle_id, passenger_id)
+            VALUES ('c0000048-0000-0000-0000-000000000001','$VEH_A','$PAX_1');" >/dev/null \
+  || die "could not seed the Epic 23 grant fixture."
+check_rejects "a second live grant cannot be issued for the same (vehicle, passenger)" \
+  "INSERT INTO subscription.grants(vehicle_id, passenger_id) VALUES ('$VEH_A','$PAX_1');"
+
+# A Paid subscription with no fare would bill nothing for ever, so the accept refuses the vehicle
+# rather than writing one — and the database refuses it too.
+check_rejects "a paid subscription cannot exist without a monthly fare (ck_subscriptions_fare)" \
+  "INSERT INTO subscription.subscriptions(grant_id, vehicle_id, passenger_id, billing, join_day)
+     VALUES ('c0000048-0000-0000-0000-000000000001','$VEH_A','$PAX_1','paid', 5);"
+check_rejects "a join_anniversary cycle cannot exist without the day it anniversaries on" \
+  "INSERT INTO subscription.subscriptions(grant_id, vehicle_id, passenger_id, billing, cycle)
+     VALUES ('c0000048-0000-0000-0000-000000000001','$VEH_A','$PAX_1','free','join_anniversary');"
+
+psql_run "INSERT INTO subscription.subscriptions
+            (id, grant_id, vehicle_id, passenger_id, billing, monthly_fare_minor, cycle, join_day, next_due)
+          VALUES ('c0000048-0000-0000-0000-000000000002','c0000048-0000-0000-0000-000000000001',
+                  '$VEH_A','$PAX_1','paid',250000,'join_anniversary',5,'2026-07-06');" >/dev/null \
+  || die "could not seed the Epic 23 subscription fixture."
+
+check_rejects "a payment period must be the first of a month (D-38)" \
+  "INSERT INTO subscription.payments(subscription_id, vehicle_id, passenger_id, period_month,
+                                     amount_minor, method)
+     VALUES ('c0000048-0000-0000-0000-000000000002','$VEH_A','$PAX_1','2026-07-06',250000,'cash');"
+check_rejects "a paid payment must say when it was paid (ck_subscription_payments_paid_at)" \
+  "INSERT INTO subscription.payments(subscription_id, vehicle_id, passenger_id, period_month,
+                                     amount_minor, method, status)
+     VALUES ('c0000048-0000-0000-0000-000000000002','$VEH_A','$PAX_1','2026-07-01',250000,'cash','paid');"
+
+psql_run "INSERT INTO subscription.payments(subscription_id, vehicle_id, passenger_id, period_month,
+                                            amount_minor, method)
+            VALUES ('c0000048-0000-0000-0000-000000000002','$VEH_A','$PAX_1','2026-07-01',250000,'onepay');" \
+  >/dev/null || die "could not seed the Epic 23 payment fixture."
+check_rejects "a month cannot carry two live payments (ux_subpay_period)" \
+  "INSERT INTO subscription.payments(subscription_id, vehicle_id, passenger_id, period_month,
+                                     amount_minor, method)
+     VALUES ('c0000048-0000-0000-0000-000000000002','$VEH_A','$PAX_1','2026-07-01',250000,'cash');"
+# …but a failed attempt is outside the partial index, so the passenger can try again.
+psql_run "UPDATE subscription.payments SET status='failed'
+           WHERE subscription_id='c0000048-0000-0000-0000-000000000002';" >/dev/null \
+  || die "could not fail the Epic 23 payment fixture."
+check_eq "a failed attempt does not block a retry for the same month" "1" \
+  "WITH retry AS (
+     INSERT INTO subscription.payments(subscription_id, vehicle_id, passenger_id, period_month,
+                                       amount_minor, method)
+     VALUES ('c0000048-0000-0000-0000-000000000002','$VEH_A','$PAX_1','2026-07-01',250000,'cash')
+     RETURNING 1)
+   SELECT count(*) FROM retry;"
+
+psql_run "DELETE FROM subscription.payments
+           WHERE subscription_id='c0000048-0000-0000-0000-000000000002';
+          DELETE FROM subscription.grants WHERE id='c0000048-0000-0000-0000-000000000001';" >/dev/null \
+  || die "could not clean up the Epic 23 fixtures."
+
+# AL-49 BR-31.1: the pay sheet's payTo reads the single verified row, and the table is versioned so
+# an owner's later edit lands beside it rather than on top of it.
+check_eq "an org has at most one verified payout profile" "1" \
+  "SELECT count(*) FROM pg_indexes
+    WHERE schemaname='registry' AND indexname='ux_payout_profile_verified'
+      AND indexdef LIKE '%verified%';"
+
+# ---------------------------------------------------------------------------------------
 printf '\n'
 if (( FAILURES == 0 )); then
   printf '%s%d/%d checks passed — migrations apply cleanly, twice.%s\n' "$GREEN" "$CHECKS" "$CHECKS" "$RESET"

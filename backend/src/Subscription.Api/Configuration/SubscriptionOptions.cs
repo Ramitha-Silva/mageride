@@ -118,4 +118,74 @@ public sealed class SubscriptionOptions
     /// wallet is worse than a caller who gets a 404.
     /// </remarks>
     public string? InternalApiKey { get; set; }
+
+    // -------------------------------------------------------------------------------------------
+    // Mode B passenger subscriptions (Epic 23, C048)
+    // -------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Maps <c>/v1/mode-b/**</c>. On.
+    /// </summary>
+    /// <remarks>
+    /// Off means a Mode B passenger cannot request access, pay a fare or unsubscribe, and an owner
+    /// has no roster — the whole of Epic 23. Announced at start-up, because from the outside it looks
+    /// like a platform with no private vehicles on it rather than a switch somebody turned off.
+    /// </remarks>
+    public bool ModeBSubscriptionsEnabled { get; set; } = true;
+
+    /// <summary>
+    /// HMAC secret for <c>POST /v1/mode-b/pay/onepay/webhook</c> (D6' §7.1).
+    /// </summary>
+    /// <remarks>
+    /// <b>Unset ⇒ every OnePay subscription callback is refused.</b> There is no "accept unsigned"
+    /// mode: a callback that marks a month paid without a signature settles the fleet owner's money
+    /// for anyone who finds the URL.
+    /// </remarks>
+    public string? OnepayWebhookSecret { get; set; }
+
+    /// <summary>HMAC secret for <c>POST /v1/mode-b/pay/lankaqr/confirm</c>. Unset refuses every callback.</summary>
+    public string? LankaQrWebhookSecret { get; set; }
+
+    /// <summary>
+    /// Signs the expiring URLs on <c>payTo.lankaqrImageUrl</c> and <c>SubscriptionPayment.slipUrl</c>.
+    /// </summary>
+    /// <remarks>
+    /// <b>Unset means a key generated per process</b>: correct for one instance and wrong for
+    /// several, because a link minted by one replica does not verify on another. Said at start-up.
+    /// </remarks>
+    public string? FileLinkSigningKey { get; set; }
+
+    /// <summary>
+    /// How long a signed document link stays valid.
+    /// </summary>
+    /// <remarks>
+    /// <b>No spec pins it.</b> 15 minutes is long enough for a pay sheet to render and a passenger to
+    /// scan the QR, and short enough that a link copied out of a screenshot is dead by the time it is
+    /// shared.
+    /// </remarks>
+    [Range(typeof(TimeSpan), "00:01:00", "24:00:00")]
+    public TimeSpan FileLinkTtl { get; set; } = TimeSpan.FromMinutes(15);
+
+    /// <summary>
+    /// Where transfer-slip screenshots are written.
+    /// </summary>
+    /// <remarks>
+    /// <b>Not object storage.</b> D-36 puts uploaded images on SSE-KMS buckets with Postgres holding
+    /// a pointer; no service in this build has an S3 client, so this is a directory and a pod restart
+    /// can lose the image while the payment row survives. The same seam ride-svc's
+    /// <c>Ride:ProofPhotoRoot</c> opens.
+    /// </remarks>
+    public string? SlipRoot { get; set; }
+
+    /// <summary>
+    /// Largest transfer slip accepted, in bytes. 8 MiB.
+    /// </summary>
+    /// <remarks>
+    /// <b>No spec pins it</b> — the same bound and the same number as <c>Ride:ProofPhotoMaxBytes</c>,
+    /// because both are a phone photograph. The idempotency middleware's request buffer is raised to
+    /// match in <c>SubscriptionApplication</c>, so the <c>413</c> a passenger gets is this one, with
+    /// the size in it, rather than the middleware's generic refusal.
+    /// </remarks>
+    [Range(64 * 1024, 64 * 1024 * 1024)]
+    public long SlipMaxBytes { get; set; } = 8 * 1024 * 1024;
 }

@@ -1,6 +1,7 @@
 using MageRide.Shared.Resilience;
 using MageRide.Subscriptions.Configuration;
 using MageRide.Subscriptions.Fees;
+using MageRide.Subscriptions.ModeB;
 using MageRide.Subscriptions.Persistence;
 using MageRide.Subscriptions.Wallet;
 
@@ -28,9 +29,20 @@ public static class SubscriptionServiceCollectionExtensions
         services.AddSingleton<IVoucherTierRepository, VoucherTierRepository>();
         services.AddSingleton<IModeBBillingRepository, ModeBBillingRepository>();
         services.AddSingleton<IRefundRequestRepository, RefundRequestRepository>();
+        services.AddSingleton<IModeBRegistryRepository, ModeBRegistryRepository>();
+        services.AddSingleton<IModeBAccessRepository, ModeBAccessRepository>();
+        services.AddSingleton<ISubscriptionPaymentRepository, SubscriptionPaymentRepository>();
 
         services.AddSingleton<DailyFeeService>();
         services.AddSingleton<ModeBBillingService>();
+
+        // Epic 23. Scoped rather than singleton: both take IUnitOfWorkFactory, which the kernel
+        // registers scoped so one request holds at most one transaction at a time.
+        services.AddScoped<ModeBAccessService>();
+        services.AddScoped<ModeBPaymentService>();
+
+        services.AddSingleton<IModeBFileLinks, ModeBFileLinks>();
+        services.AddSingleton<ITransferSlipStore, FileSystemTransferSlipStore>();
 
         services.AddSingleton<IWalletLedgerClient, WalletLedgerClient>();
         services.AddSingleton<IWalletForwarder, WalletForwarder>();

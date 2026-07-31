@@ -42,6 +42,14 @@ internal sealed class SubscriptionHarness : IAsyncDisposable
     /// <summary>The one wallet-svc's internal ledger plane demands.</summary>
     public const string WalletInternalApiKey = "c047-wallet-internal-key-not-a-secret";
 
+    /// <summary>The HMAC secrets the two Mode B provider callbacks are signed with (Δ C048).</summary>
+    public const string OnepayWebhookSecret = "c048-onepay-webhook-secret-not-a-secret";
+
+    public const string LankaQrWebhookSecret = "c048-lankaqr-webhook-secret-not-a-secret";
+
+    /// <summary>Signs the expiring URLs on <c>payTo.lankaqrImageUrl</c> and <c>slipUrl</c>.</summary>
+    public const string FileLinkSigningKey = "c048-file-link-signing-key-not-a-secret";
+
     /// <summary>
     /// 09:00 UTC on 30 July 2026 — 14:30 in Colombo, comfortably mid-day so a test that adds a few
     /// hours does not cross a business-date boundary by accident.
@@ -99,6 +107,10 @@ internal sealed class SubscriptionHarness : IAsyncDisposable
         var tokens = new TestTokenIssuer();
         var clock = new FakeTimeProvider(now ?? DefaultNow);
 
+        // One slip directory per harness, so a transfer screenshot written by one test cannot be
+        // read back by another that happened to mint the same payment id.
+        var slipRoot = Path.Combine(Path.GetTempPath(), "mageride-c048", Guid.NewGuid().ToString("N"));
+
         var wallet = BuildWallet(postgres, redis, tokens, clock);
         await wallet.StartAsync();
 
@@ -118,6 +130,17 @@ internal sealed class SubscriptionHarness : IAsyncDisposable
             // "the endpoint raised them" indistinguishable from "the runner did". The test that
             // asserts the runner turns it on.
             ["Subscription:ModeBBillingEnabled"] = "false",
+            ["Subscription:OnepayWebhookSecret"] = OnepayWebhookSecret,
+            ["Subscription:LankaQrWebhookSecret"] = LankaQrWebhookSecret,
+            ["Subscription:FileLinkSigningKey"] = FileLinkSigningKey,
+            ["Subscription:SlipRoot"] = slipRoot,
+            // Δ C048: Epic 23 gives this service an outbox, so it needs a broker address to
+            // validate. Pointed at a dead port and the dispatcher switched off, the same fallback
+            // WalletHarness takes — the D-22 assertions are about the `subscription.outbox` row
+            // committing with the grant change, which is the half this component owns. What
+            // fanout-svc does with it afterwards is C041's suite.
+            ["Kafka:BootstrapServers"] = "127.0.0.1:1",
+            ["Outbox:DispatcherEnabled"] = "false",
             ["urls"] = "http://127.0.0.1:0",
             // One /metrics endpoint per harness would collide across concurrently running tests.
             ["Otel:PrometheusEnabled"] = "false",
@@ -220,6 +243,107 @@ internal sealed class SubscriptionHarness : IAsyncDisposable
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", bearer);
 
         return await Client.SendAsync(request);
+    }
+
+    public async Task<HttpResponseMessage> DeleteAsync(string path, string bearer)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Delete, path);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", bearer);
+
+        return await Client.SendAsync(request);
+    }
+
+    /// <summary>Asserts a 2xx and deserialises. Every Mode B assertion goes through this.</summary>
+    public async Task<T> OkAsync<T>(HttpResponseMessage response, string what)
+    {
+        ArgumentNullException.ThrowIfNull(response);
+
+        var text = await response.Content.ReadAsStringAsync();
+
+        Assert.True(
+            (int)response.StatusCode is >= 200 and < 300,
+            $"{what} returned {(int)response.StatusCode}: {text}");
+
+        response.Dispose();
+
+        return JsonSerializer.Deserialize<T>(text, MageRideJson.Options)!;
+    }
+
+    /// <summary>The multipart upload <c>POST .../transfer-slip</c> takes.</summary>
+    public async Task<HttpResponseMessage> PostFileAsync(
+        string path, string bearer, byte[] bytes, string fileName = "slip.png")
+    {
+        ArgumentNullException.ThrowIfNull(bytes);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, path);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", bearer);
+        request.Headers.TryAddWithoutValidation(MageRideHeaders.IdempotencyKey, Guid.NewGuid().ToString());
+
+        var form = new MultipartFormDataContent();
+        var file = new ByteArrayContent(bytes);
+        file.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("image/png");
+        form.Add(file, "file", fileName);
+        request.Content = form;
+
+        return await Client.SendAsync(request);
+    }
+
+    /// <summary>
+    /// A provider callback, signed the way the gateway would (HMAC-SHA256 over the raw body).
+    /// </summary>
+    public async Task<HttpResponseMessage> PostSignedAsync(string path, object body, string secret)
+    {
+        var raw = JsonSerializer.SerializeToUtf8Bytes(body, MageRideJson.Options);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, path)
+        {
+            Content = new ByteArrayContent(raw),
+        };
+
+        request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
+        request.Headers.TryAddWithoutValidation(
+            MageRide.Shared.Payments.WebhookSignature.HeaderName,
+            MageRide.Shared.Payments.WebhookSignature.Compute(raw, secret));
+
+        return await Client.SendAsync(request);
+    }
+
+    /// <summary>The events this service queued on <c>subscription.outbox</c> for one vehicle.</summary>
+    public async Task<IReadOnlyList<(string EventType, string Payload)>> OutboxAsync(Guid vehicleId)
+    {
+        await using var connection = await _postgres.OpenAsync();
+
+        var rows = await connection.QueryAsync<(string EventType, string Payload)>(
+            """
+            SELECT event_type, payload::text AS payload
+              FROM subscription.outbox
+             WHERE aggregate_id = @VehicleId
+             ORDER BY id;
+            """,
+            new { VehicleId = vehicleId });
+
+        return [.. rows];
+    }
+
+    /// <summary>A subscription's stored next-due date, straight from the row.</summary>
+    public async Task<DateOnly?> NextDueAsync(Guid subscriptionId)
+    {
+        await using var connection = await _postgres.OpenAsync();
+
+        return await connection.ExecuteScalarAsync<DateOnly?>(
+            "SELECT next_due FROM subscription.subscriptions WHERE id = @Id;", new { Id = subscriptionId });
+    }
+
+    /// <summary>A grant's lifecycle columns — the AL-25 "muted until deleted" assertions read these.</summary>
+    public async Task<(string Status, bool Deleted)?> GrantAsync(Guid grantId)
+    {
+        await using var connection = await _postgres.OpenAsync();
+
+        var rows = await connection.QueryAsync<(string Status, bool Deleted)>(
+            "SELECT status, (deleted_at IS NOT NULL) AS deleted FROM subscription.grants WHERE id = @Id;",
+            new { Id = grantId });
+
+        return rows.Cast<(string Status, bool Deleted)?>().FirstOrDefault();
     }
 
     /// <summary>Charges the daily fee the way ride-svc does, through the internal plane.</summary>
@@ -442,6 +566,11 @@ internal sealed class SubscriptionHarness : IAsyncDisposable
         await connection.ExecuteAsync(
             """
             TRUNCATE rides.rides, registry.vehicles, registry.fleets CASCADE;
+
+            -- Named rather than left to the CASCADE above, so a schema change that drops one of
+            -- these foreign keys shows up here as contamination rather than as a mystery.
+            TRUNCATE subscription.payments, subscription.subscriptions, subscription.grants,
+                     subscription.access_requests, subscription.outbox, docs.uploads CASCADE;
 
             TRUNCATE billing.daily_fee_charges, billing.monthly_subscriptions, billing.fleet_invoices,
                      billing.journal_postings, billing.wallet_transactions, billing.outbox,

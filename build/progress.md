@@ -73,7 +73,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C045 | content-svc | 3 | DONE | 2026-07-30 | 105 tests green in a **new suite** (`Content.Api.Tests`); **2 migrations (1307, 1903)** — the template approval workflow, the broadcast window, `content.onboarding_slides` + its Si/Ta/En seed, `content.command_log`, and the trilingual rule as a **deferred constraint trigger** that checks the old pair as well as the new; the fence is enforced three times over (a type that cannot hold two languages, a field-level `validation-failed`, a COMMIT-time trigger); **6 new contract operations** — FAQ, the AL-28 carousel, template approve + history, broadcast publish, cache purge; `Cache__Ttl` honoured as D7' spells it; `migrate-verify.sh` 275/275 with a C045 section (5 content tables, not 3); 17 spec gaps / micro-change-sets |
 | C046 | wallet-svc | 3 | DONE | 2026-07-30 | 76 tests green in a **new suite** (`Wallet.Api.Tests`) + 15 in `MageRide.Shared.Tests`; **1 billing migration (1107)** — `billing.topups` (a top-up session had an id, a state and a gateway reference and nowhere to live), this plane's outbox and the replay log; **one writer for `billing.journal_postings`**, and every money movement is one method; the AL-01 fee row is impossible rather than absent (no journal kind could carry it); AL-05 held by `ck_topups_method`; **7 new contract operations** incl. the voucher purchase and the whole request/approve/reject flow moved here from subscription-svc (ADD §11.6) and the internal ledger seam C047–C050 and C065 all need; `WebhookSignature` promoted into the kernel for the platform's six payment callbacks; an 11th Redpanda topic (`wallet.events`); 16 spec gaps / micro-change-sets |
 | C047 | subscription-svc-daily-fee | 3 | DONE | 2026-07-30 | 79 tests green in a **new suite** (`Subscription.Api.Tests`), which boots a **real wallet-svc** because half the "debits once" guarantee is an index in C046's schema; **2 migrations (1203, 0713)** — `subscription.command_log` and the missing `dispatch.offers` index both callers of `tripsToday` were sequential-scanning; **this service writes no ledger row** — the fee is a `daily_fee` debit through wallet-svc's internal seam, keyed `daily_fee:{driverId}:{vehicleId}:{feeDate}`; **debit first, record second**, because only that order is recoverable; `tripsToday` **switched to `dispatch.offers`** so the D-08 gate and the charge cannot disagree; the Mode A fence held twice (the admin PUT refuses a non-zero Mode A rate, the charge path zeroes one anyway); Mode B monthly charge + the AL-03 per-fleet consolidation **handed to C060 unledgered**, because §10 gives the per-vehicle row no `journal_entry_id` and no journal kind could carry it; **5 new contract operations**; `migrate-verify.sh` 295/295 with a C047 section; 11 spec gaps / micro-change-sets |
-| C048 | subscription-svc-mode-b | 3 | PENDING | | |
+| C048 | subscription-svc-mode-b | 3 | DONE | 2026-07-30 | 112 tests green in `Subscription.Api.Tests` (79 from C047 + 33); **1 migration (1204)** — `subscription.outbox`, because BR-23.11's unsubscribe must publish `share.revoked` *inside* the transaction that mutes the grant and D6' §2.1 gives this service no topic; **the event goes on `registry.events` in registry-svc's exact envelope**, so fanout-svc (C041) consumes a second producer with no change; **AL-25 is one index** — `ux_grant_active` partial on `deleted_at` makes the muted roster row, the owner-only delete and the rejoin-reuses-the-grant rule the same fact; **the pass-through fence is an absence** — no ledger call, no journal entry, and `migrate-verify.sh` now asserts `subscription.payments` has no posting or commission column; `payTo` served only from the single `verified` payout profile and from the last verified snapshot after an edit; "joined 5 Jun ⇒ due 6 Jul" implemented from the worked example, with the anniversary re-derived from `join_day` so a 31st survives February; **1 new contract operation** (the AL-49 signed-URL route D3' asks for and gives no path); `migrate-verify.sh` 307/307 with a C048 section; 11 spec gaps / micro-change-sets |
 | C049 | fare-svc-core | 3 | PENDING | | |
 | C050 | fare-svc-payments | 3 | PENDING | | |
 | C051 | notification-svc | 3 | PENDING | | |
@@ -6852,3 +6852,154 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   down throughout. `Subscription.Api.Tests` takes ~2 min because it boots two services per test.
   **No new NuGet reference.**
 
+- **Component:** C048 subscription-svc-mode-b — 2026-07-30
+- **Status:** DONE — `dotnet test backend/src/Subscription.Api.Tests -c Release` is **112/112 green**
+  (79 from C047, 33 added); `bash infra/scripts/migrate-verify.sh` is **307/307**; `dotnet build
+  backend/MageRide.sln -c Release` and the Spectral lint over `backend/contracts/*.yaml` are clean.
+  All four DoD items are asserted end to end: a passenger who unsubscribes loses the vehicle from
+  their own card list and a `share.revoked` naming them commits with the mute; re-joining takes a
+  fresh request the owner accepts, and the muted row is on the roster the whole time and deletable
+  only after the passenger has left; a join on 5 June with a `join_anniversary` cycle stores
+  `next_due = 2026-07-06`; and `pay` serves `payTo` only from a `verified` payout profile, answering
+  `409 payout-profile-not-verified` before it and collecting against the last verified snapshot after
+  an owner's edit re-enters `pending_verification`.
+- **Notes:**
+  **Spec gaps / micro-change-sets —**
+  (a) **`subscription.outbox` does not exist in any DDL source — migration 1204.** BR-23.11 and
+  `POST /v1/mode-b/subscriptions/{id}/unsubscribe` put the passenger's unsubscribe on this service and
+  D-22 / D6' §5.2 require the revocation to reach the passenger's socket in under 200 ms — and D6'
+  §2.1 gives subscription-svc no topic and D4' §18b no outbox table. Exactly the gap 0309 opened for
+  registry-svc, arriving from the other end of the same event. **D6' §2.1's `registry.events` should
+  list subscription-svc as a second producer and D4' §18b should carry the table.**
+  (b) **The event goes on `registry.events`, not on a topic of its own, and that is a decision.**
+  fanout-svc (C041) consumes that topic keyed by vehicle and reads the type off the Kafka `eventType`
+  header, so a second producer with registry-svc's exact envelope needs **no change to C041 at all**.
+  A separate topic could not order an accept's `share.granted` against the `share.revoked` of an
+  earlier unsubscribe — and because a rejoin *reuses* the grant row, keying by grant would not
+  separate them either. `ModeBShareEvents` is byte-for-byte `Registry.Api/Sharing/ShareEvents`; the
+  two string constants are a third copy for the same reason C041 keeps a second one.
+  (c) **BR-23.9's prose and its own worked example disagree by one day, and the example wins.** The
+  text says `next_due = join_date + 1 month`; the example in the same sentence, in D4' §18b and in
+  this component's DoD says **joined 5 Jun ⇒ due 6 Jul**. Implemented as the example, because it is
+  also the only reading the money supports: the fare paid on the 5th buys the month up to and
+  including the 5th of the next, so a due date on the 5th charges for a day already paid for.
+  **D5' BR-23.9 should drop the formula or write it as `+ 1 month + 1 day`.**
+  (d) **`SubscriberRow.thisMonthStatus` cannot mean the current calendar month.** A
+  `join_anniversary` subscriber's *first* billing period is next month by construction, so an
+  equality on `date_trunc('month', now())` shows the owner "unpaid" against somebody who owes nothing
+  yet. Implemented as **the earliest live payment from the current Colombo month forward** — the
+  nearest outstanding period — which reads "paid" while the month it covers is current and drops out
+  of view once it has passed. **D3' should say which month the field is about.**
+  (e) **AL-49's "signed URL" had no route to point at — `GET /v1/mode-b/files/{kind}/{id}` added to
+  `subscription.yaml`.** The pay sheet's `payTo.lankaqrImageUrl` and `SubscriptionPayment.slipUrl` are
+  both specified as signed URLs and D-36's object store does not exist yet (C125), so the link is an
+  HMAC over `(kind, id, expires)` and this service serves the bytes — the same shape
+  provisioning-svc's `errors.csv` took. `security: []` because the signature *is* the credential: the
+  URL goes to an image loader that carries no bearer, and a token in a query string is a token in
+  every proxy log on the way. The kind is inside the signature so a slip link cannot be re-pointed at
+  a payout profile by editing one path segment.
+  (f) **`payModeBSubscription` declared a `409` response and no 409 error code.** Added `conflict` to
+  its `x-error-codes` — a Free subscription, an already-paid month and a slip already awaiting the
+  owner are all 409s that were unnameable.
+  (g) **`subscription.access_requests` has no column for the `note` the contract's request body
+  carries.** Accepted and dropped rather than refused, so a client sending the field the contract
+  declares is not 400'd. **D4' §18b should add the column or D3' should drop the field.**
+  (h) **`registry.vehicles.mode_b_billing` is nullable and no spec says what a NULL means for a Mode B
+  vehicle.** Read as **Free**: US-13.1b captures the setting at onboarding, so a NULL is a vehicle
+  onboarded before it existed, and reading it as Paid would start charging subscribers of a vehicle
+  whose owner never named a price. A vehicle that *is* Paid with no `default_monthly_fare_minor` is
+  refused at accept (409) rather than given an invented fare — `ck_subscriptions_fare` refuses the row
+  anyway, and a 500 on a CHECK is a worse answer than a 409 naming the misconfiguration.
+  (i) **AL-49 gates collecting, not joining.** D5' §802 says a Paid subscription "cannot start
+  billing" without a verified profile. Implemented as `409` on **`pay`**, for every method, and not on
+  the accept: blocking the accept would deny a child a seat on a school van over the owner's bank
+  paperwork, and the gate that should have prevented the situation is fleet-svc's
+  `PUT …/classification` (BR-31.1). Same 409 for a vehicle belonging to no fleet — a payout profile is
+  an org's, so an individually-owned Mode B vehicle has nowhere for the money to go.
+  (j) **`subscription.*` already had a second writer.** registry-svc (C028) reads the roster from
+  `subscription.grants` and performs the passenger's unsubscribe there, because D3' puts
+  `GET /v1/vehicles/{id}/subscribers` and `DELETE .../subscribers/{userId}` on registry-svc and says
+  the roster "is held in `subscription.grants`". The two agree on the transition and on the event, so
+  either surface produces the same rows — **but registry-svc knows nothing about
+  `subscription.subscriptions`, so its unsubscribe mutes the grant without cancelling the
+  subscription.** That route should forward here or be retired; **D3' should say which surface owns
+  the unsubscribe.**
+  (k) **"Owner" is never a role claim on this surface.** `fleet_owner` says somebody runs *a* fleet,
+  not *this* vehicle, so every check is resolved against the vehicle in the same statement that
+  fetched it. Two levels, because the URD asks for two: **manage** (the vehicle's owner, the org's
+  Owner or Manager, or the assigned driver — US-23.1's queue and roster) and **own** (the vehicle's
+  owner or the org's Owner only — US-23.6's "only the fleet Owner can mark it received", the fare
+  override, the hard delete, the slip confirm). No spec enumerates either set; both are derived from
+  the user stories and are worth a line in D5'.
+  **Decisions worth knowing —**
+  (1) **A rejoin reuses the grant row and starts a new subscription, and neither half is a choice.**
+  `ux_grant_active` is partial on `deleted_at IS NULL`, so the unsubscribed grant still holds the
+  (vehicle, passenger) slot until the owner deletes it — inserting a second one fails for exactly the
+  passenger US-4.12 is about. `ux_subscriptions_grant_live` then admits one non-cancelled subscription
+  per grant, so the new one is free to be created. This is what makes AL-25's three requirements one
+  index.
+  (2) **The passenger's card list filters on the grant being live *and* the subscription not being
+  cancelled.** The grant alone is not enough: a rejoin reactivates the same grant, so the ended
+  subscription would come back beside the new one and the list would grow by one card every time
+  somebody left and returned. Found by a test, not by reading.
+  (3) **The due date advances only from a guarded `UPDATE` that actually returned a row.** All four
+  settlement paths share it, which is what makes a redelivered gateway callback answer `200` and move
+  nothing. A double advance is a free month — the one arithmetic error here that costs the fleet owner
+  money — so R-19's dedupe is a row lock and a predicate rather than a uniqueness constraint on
+  `gateway_ref` this schema does not have.
+  (4) **Cash is not a method a passenger may choose.** `POST …/pay` refuses it: US-23.6 hands cash to a
+  collector and only the owner may say it arrived, so a passenger who could record one would be
+  marking their own month paid. `mark-cash` completes an `initiated` row for the same month rather than
+  writing a second one, because `ux_subpay_period` admits one live payment per month and paying cash
+  after tapping Pay is the ordinary case.
+  (5) **Kafka and the outbox are on only while Epic 23 is.**
+  `Subscription:ModeBSubscriptionsEnabled=false` unmaps `/v1/mode-b/**` and takes both back off, so a
+  deployment that does not want Mode B needs no broker for this service and is exactly C047's.
+  (6) **The idempotency middleware's request buffer is raised to `SlipMaxBytes + 64 KiB`.** It hashes
+  the whole body to detect key reuse; left at the 1 MiB default a phone screenshot would be answered
+  `413` by the middleware, with a message about buffering rather than about the slip.
+  **What the next components need —**
+  **For C059 (fleet-svc) —** the Fleet Portal proxy (`/v1/fleets/{fleetId}/vehicles/{vehicleId}/
+  requests|subscribers|…`, `/v1/fleets/{fleetId}/payments/{paymentId}/confirm`) is yours and maps
+  one-to-one onto this surface; add the org scope and forward. **`PUT …/classification` is yours and
+  this service never writes `registry.vehicles`** — `mode_b_billing` and `default_monthly_fare_minor`
+  are read here and set there, and BR-31.1's `409 payout-profile-not-verified` on setting a vehicle
+  Paid is that route's gate, not this one's. `registry.fleet_payout_profiles` is likewise read-only
+  here: this service composes `payTo` from the single `verified` row and denormalises nothing.
+  **For C041 (fanout-svc) —** nothing to change. The unsubscribe publishes `share.revoked` on
+  `registry.events` with `passengerId`, in registry-svc's envelope, keyed by vehicle. The
+  `share:{userId}` **rebuild path** the C041 handoff asked for is still not built: the natural shape
+  is a read-through against a new internal route here answering "which vehicles may this passenger
+  track", and it is one query over `subscription.grants` — raised again rather than guessed at.
+  **For C051/C052 (notification-svc) —** three pushes this service moves the state for and does not
+  send: the subscription due reminder (`next_due`, per subscriber), "a transfer slip is waiting" to
+  the owner, and "your payment was confirmed" to the passenger. Nothing here writes a `comms.*` row.
+  D-22's revocation is **not** one of them — it is a socket event, and a backgrounded app simply
+  fails the entitlement check on its next join.
+  **For C049/C050 (fare-svc) —** the OnePay session gap is shared. Mode B needs a gateway session
+  opened against the **owner's** merchant account and no schema binds one to a fleet
+  (`registry.driver_payouts` is per driver, D-11); opening one against the platform merchant would
+  route a subscriber's fare into MageRide's account, which §18b forbids. `pay` with `method: onepay`
+  therefore records the payment, returns no redirect and logs why; the callback half is complete.
+  **Whoever adds a per-org merchant binding should expect this service to be its second consumer.**
+  **For C060 (fleet-billing-svc) —** unchanged by this component, and worth restating: the money here
+  is the passenger's fare to the owner and yours is the platform's charge to the fleet. They must never
+  net. `subscription.payments` has no `journal_entry_id` and `migrate-verify.sh` now asserts that no
+  posting or commission column exists on it.
+  **For C065 (admin-bff) —** there is no Admin Portal screen over Epic 23 in D2/D3, deliberately:
+  `GET /v1/mode-b/subscriptions/{passengerId}` admits **only the passenger themselves**, unlike
+  `GET /v1/fees/{driverId}/history`, which admits the six back-office roles. Those are the platform's
+  charges against a driver and Finance answers disputes about them; these are a passenger's private
+  arrangement with a fleet. If a Support screen is ever specified it needs a route and a `PII_READ`
+  audit, not a widened check here.
+  **For C118 (contract tests) —** `subscription.yaml` gained **one operation** (`getModeBFile`) and one
+  error code on `payModeBSubscription`; the other seventeen `/v1/mode-b/**` operations were already
+  in the contract and are now implemented. Two of them are `security: []` HMAC callbacks and one is
+  `security: []` with a signed query string.
+  **For C012/C013 (KMP client) —** `payTo.lankaqrImageUrl` and `slipUrl` are **relative** URLs, to be
+  resolved against the gateway base; they expire (default 15 min) and are re-minted by the call that
+  returns them, so a client must not cache one past a pay-sheet render.
+  **Build host —** Docker for two Testcontainers fixtures (Postgres, Redis) plus the throwaway
+  Postgres `migrate-verify.sh` starts; the replica stack stayed down throughout.
+  `Subscription.Api.Tests` takes ~3 min because it boots two services per test.
+  **No new NuGet reference.**

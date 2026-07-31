@@ -1,5 +1,6 @@
 using MageRide.Shared;
 using MageRide.Shared.Http.Idempotency;
+using MageRide.Shared.Messaging;
 using MageRide.Subscriptions.Configuration;
 using MageRide.Subscriptions.Endpoints;
 using MageRide.Subscriptions.Wallet;
@@ -25,6 +26,11 @@ public static class SubscriptionApplication
 
         configure?.Invoke(builder);
 
+        // Read before the container is built, because it decides whether this process needs a broker
+        // at all. Off ⇒ subscription-svc is exactly the C047 service: fees, no messaging.
+        var modeBEnabled = builder.Configuration.GetValue(
+            $"{SubscriptionOptions.SectionName}:{nameof(SubscriptionOptions.ModeBSubscriptionsEnabled)}", true);
+
         var serviceOptions = new MageRideServiceOptions
         {
             ServiceName = ServiceName,
@@ -37,13 +43,20 @@ public static class SubscriptionApplication
             // number.
             UseRedis = false,
 
-            // No Kafka and no outbox, and there must not be. The daily fee's event is
-            // `wallet.debited`, which wallet-svc emits inside the transaction that posts the money
-            // (R-13) — an event published from here would describe a movement this service did not
-            // make and could not roll back. The Mode B hand-off to C060 is a table it reads, not a
-            // message it waits for.
-            UseKafka = false,
-            UseOutbox = false,
+            // Kafka and an outbox exist for Epic 23 and for nothing else (Δ C048).
+            //
+            // The daily fee still publishes nothing and must not: its event is `wallet.debited`,
+            // which wallet-svc emits inside the transaction that posts the money (R-13), and an
+            // event published from here would describe a movement this service did not make and
+            // could not roll back. The Mode B *platform* charge is a table C060 reads, not a message.
+            //
+            // What does need one is D-22. `POST /v1/mode-b/subscriptions/{id}/unsubscribe` has to
+            // reach the passenger's socket in under 200 ms, and the only correct place to write that
+            // event is inside the transaction that mutes the grant — publishing after the commit is
+            // how a passenger keeps watching a vehicle they have left, and publishing before it
+            // revokes one whose unsubscribe then rolls back.
+            UseKafka = modeBEnabled,
+            UseOutbox = modeBEnabled,
 
             // R-14. The refund intake is the route that needs it: a proxy retry or a double tap would
             // put a second identical ticket on the Support queue, and no natural key would collide.
@@ -62,6 +75,31 @@ public static class SubscriptionApplication
             commandLog.AggregateIdColumn = null;
         });
 
+        // Likewise ahead of the defaults. The topic is registry-svc's, deliberately: fanout-svc
+        // consumes `registry.events` keyed by vehicle and reads the type off a Kafka header, so a
+        // second producer on the same partition key keeps every share event about one vehicle
+        // ordered — which a topic of our own could not. Migration 1204 argues it at length.
+        builder.Services.Configure<OutboxOptions>(outbox =>
+        {
+            outbox.Schema = "subscription";
+            outbox.Table = "outbox";
+            outbox.Channel = "subscription_outbox";
+            outbox.Topic = EventTopics.RegistryEvents;
+        });
+
+        // A transfer slip is a phone screenshot, and the idempotency middleware hashes the whole
+        // request body to detect key reuse. Left at the 1 MiB default it would answer 413 before the
+        // upload route could, with a message about buffering rather than about the slip.
+        builder.Services.Configure<IdempotencyOptions>(idempotency =>
+        {
+            var limit = builder.Configuration.GetValue(
+                $"{SubscriptionOptions.SectionName}:{nameof(SubscriptionOptions.SlipMaxBytes)}",
+                8L * 1024 * 1024);
+
+            idempotency.MaxBufferedRequestBytes = (int)Math.Clamp(
+                limit + (64 * 1024), idempotency.MaxBufferedRequestBytes, int.MaxValue);
+        });
+
         builder.AddMageRideDefaults(serviceOptions);
         builder.Services.AddSubscriptionServices(builder.Configuration);
 
@@ -73,6 +111,11 @@ public static class SubscriptionApplication
         app.MapAdminFeeEndpoints();
 
         var settings = app.Services.GetRequiredService<IOptions<SubscriptionOptions>>().Value;
+
+        if (settings.ModeBSubscriptionsEnabled)
+        {
+            app.MapModeBEndpoints();
+        }
 
         if (!string.IsNullOrWhiteSpace(settings.InternalApiKey))
         {
@@ -135,6 +178,25 @@ public static class SubscriptionApplication
                 "Subscription:ModeBBillingEnabled is off: nothing raises billing.monthly_subscriptions, "
                 + "so no Mode B vehicle is charged the ~Rs 300 monthly platform fee and "
                 + "fleet-billing-svc (C060) has no lines to consolidate. The month simply passes.");
+        }
+
+        if (!options.ModeBSubscriptionsEnabled)
+        {
+            logger.LogWarning(
+                "Subscription:ModeBSubscriptionsEnabled is off, so /v1/mode-b/** is not mapped: no passenger "
+                + "can request access to a private vehicle, pay a monthly fare or unsubscribe, and no fleet "
+                + "owner has a roster (Epic 23). Kafka and the outbox are off with it — the D-22 revocation "
+                + "event has nothing to publish.");
+        }
+        else if (string.IsNullOrWhiteSpace(options.OnepayWebhookSecret)
+                 || string.IsNullOrWhiteSpace(options.LankaQrWebhookSecret))
+        {
+            logger.LogWarning(
+                "Subscription:OnepayWebhookSecret / Subscription:LankaQrWebhookSecret is not configured, so the "
+                + "matching Mode B subscription callback refuses every delivery. A passenger who pays through "
+                + "that rail is never marked paid and their next-due date never moves — the owner has to mark it "
+                + "cash-received by hand. There is no accept-unsigned mode: the money being settled is the fleet "
+                + "owner's.");
         }
 
         if (options.FreeTripsPerDay != 1)

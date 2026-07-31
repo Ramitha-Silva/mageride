@@ -66,11 +66,17 @@ internal sealed class SubscriptionSeed(PostgresFixture postgres, SubscriptionHar
     }
 
     /// <summary>An APPROVED vehicle owned by <paramref name="ownerId"/>.</summary>
+    /// <param name="modeBBilling">
+    /// AL-24's "Service payment", <c>paid</c> | <c>free</c>. NULL for Mode A/C, and NULL for a Mode B
+    /// vehicle onboarded before the setting existed — which C048 reads as Free.
+    /// </param>
     public async Task<SeededVehicle> VehicleAsync(
         Guid ownerId,
         string vehicleType = "three_wheeler",
         string mode = "C",
-        DateTimeOffset? createdAt = null)
+        DateTimeOffset? createdAt = null,
+        string? modeBBilling = null,
+        long? defaultMonthlyFareMinor = null)
     {
         var id = Guid.NewGuid();
         var registration = $"TEST-{Random.Shared.NextInt64(100_000, 999_999).ToString(CultureInfo.InvariantCulture)}";
@@ -80,10 +86,10 @@ internal sealed class SubscriptionSeed(PostgresFixture postgres, SubscriptionHar
             """
             INSERT INTO registry.vehicles
               (id, owner_id, registration_number, vehicle_type, mode, status, driver_name,
-               onboarding_status, created_at)
+               onboarding_status, mode_b_billing, default_monthly_fare_minor, created_at)
             VALUES
               (@Id, @OwnerId, @Registration, @VehicleType, @Mode, 'APPROVED', @DriverName,
-               'approved', coalesce(@CreatedAt, now()));
+               'approved', @ModeBBilling, @DefaultFare::int, coalesce(@CreatedAt, now()));
             """,
             new
             {
@@ -93,10 +99,94 @@ internal sealed class SubscriptionSeed(PostgresFixture postgres, SubscriptionHar
                 VehicleType = vehicleType,
                 Mode = mode,
                 DriverName = $"Driver {ownerId.ToString()[..8]}",
+                ModeBBilling = modeBBilling,
+                DefaultFare = defaultMonthlyFareMinor,
                 CreatedAt = createdAt,
             });
 
         return new SeededVehicle(id, ownerId, vehicleType, mode, registration);
+    }
+
+    /// <summary>A passenger account and a bearer for the passenger app.</summary>
+    public async Task<SeededDriver> PassengerAsync()
+    {
+        var id = await UserAsync("passenger");
+        return new SeededDriver(id, harness.Tokens.Passenger(id));
+    }
+
+    /// <summary>Puts a user on a fleet's roster with a sub-role (AL-03).</summary>
+    public async Task FleetMemberAsync(Guid fleetId, Guid userId, string fleetRole)
+    {
+        await using var connection = await postgres.OpenAsync();
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO iam.fleet_members (fleet_id, user_id, fleet_role)
+            VALUES (@FleetId, @UserId, @FleetRole)
+            ON CONFLICT (fleet_id, user_id) DO UPDATE SET fleet_role = EXCLUDED.fleet_role;
+            """,
+            new { FleetId = fleetId, UserId = userId, FleetRole = fleetRole });
+    }
+
+    /// <summary>US-13.9's driver ↔ vehicle assignment, which is what puts a queue in a Driver App.</summary>
+    public async Task AssignDriverAsync(Guid fleetId, Guid vehicleId, Guid driverId)
+    {
+        await using var connection = await postgres.OpenAsync();
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO registry.fleet_assignments (fleet_id, vehicle_id, driver_id)
+            VALUES (@FleetId, @VehicleId, @DriverId);
+            """,
+            new { FleetId = fleetId, VehicleId = vehicleId, DriverId = driverId });
+    }
+
+    /// <summary>
+    /// The org bank and payout profile AL-49 gates Paid collection on (SCR-FP-002a, §26).
+    /// </summary>
+    /// <remarks>
+    /// Written with SQL because fleet-svc (C059) is what owns the screen and the Verification
+    /// Officer's approval; this suite only needs the row in the state the officer would leave it.
+    /// </remarks>
+    public async Task<Guid> PayoutProfileAsync(
+        Guid fleetId, string status = "verified", Guid? lankaqrUploadId = null)
+    {
+        var id = Guid.NewGuid();
+
+        await using var connection = await postgres.OpenAsync();
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO registry.fleet_payout_profiles
+              (id, fleet_id, bank, branch, account_no, account_holder_name, lankaqr_upload_id,
+               status, verified_at)
+            VALUES
+              (@Id, @FleetId, 'Commercial Bank', 'Nugegoda', '8001234567', 'Sunrise Transport (Pvt) Ltd',
+               @LankaqrUploadId, @Status,
+               CASE WHEN @Status = 'verified' THEN now() ELSE NULL END);
+            """,
+            new { Id = id, FleetId = fleetId, LankaqrUploadId = lankaqrUploadId, Status = status });
+
+        return id;
+    }
+
+    /// <summary>A <c>docs.uploads</c> pointer, as the upload surface would leave one.</summary>
+    public async Task<Guid> UploadAsync(Guid ownerId, string kind, string? storageUrl = null)
+    {
+        var id = Guid.NewGuid();
+
+        await using var connection = await postgres.OpenAsync();
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO docs.uploads (id, owner_id, storage_url, kind, captured_via)
+            VALUES (@Id, @OwnerId, @StorageUrl, @Kind, 'gallery');
+            """,
+            new
+            {
+                Id = id,
+                OwnerId = ownerId,
+                StorageUrl = storageUrl ?? $"s3://mageride-docs/{id}.png",
+                Kind = kind,
+            });
+
+        return id;
     }
 
     /// <summary>US-9.6's "the single active vehicle selected in vehicle management".</summary>
