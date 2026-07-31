@@ -58,6 +58,13 @@ public sealed class RideSettlementService(
         {
             ["Succeeded"] = (RideStates.Paid, RideReasonCodes.PaymentSucceeded, true),
             ["FellBackToCash"] = (RideStates.CashSettled, RideReasonCodes.PaymentCashSettled, true),
+            // Δ C050 — AL-47's driver-QR attestation terminal. It lands on CashSettled because that
+            // is what it is: the passenger transferred bank-to-bank into the driver's own account,
+            // MageRide held none of it and took no commission, and no gateway ever confirmed it.
+            // 1002's own column comment fixed the rule before either side implemented it — "the
+            // driver earning posts on DriverConfirmedQR exactly as it does on CashSettled (R-05)" —
+            // and fare-svc had no terminal to report until this row existed.
+            ["DriverConfirmedQR"] = (RideStates.CashSettled, RideReasonCodes.PaymentCashSettled, true),
             ["CashOnDeliveryCollected"] =
                 (RideStates.CashOnDeliveryCollected, RideReasonCodes.PaymentCodCollected, true),
             ["Disputed"] = (RideStates.Disputed, RideReasonCodes.PaymentDisputed, false),

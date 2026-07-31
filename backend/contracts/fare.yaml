@@ -252,7 +252,9 @@ paths:
         '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
         '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
-      x-error-codes: [payment-method-invalid, attestation-failed, merchant-not-onboarded, gateway-error, not-ride-participant, not-found, payment-already-settled]
+      x-error-codes:
+        [payment-method-invalid, invalid-amount, attestation-failed, merchant-not-onboarded, gateway-error,
+         not-ride-participant, not-found, conflict, payment-already-settled]
 
   /v1/fare/pay/{paymentId}/status:
     get:
@@ -305,7 +307,7 @@ paths:
         '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
         '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
-      x-error-codes: [unauthorized, not-ride-participant, not-found, payment-already-settled]
+      x-error-codes: [unauthorized, not-ride-participant, not-found, conflict, payment-already-settled]
 
   /v1/fare/pay/scan-driver-qr:
     post:
@@ -349,7 +351,9 @@ paths:
         '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
         '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
-      x-error-codes: [validation-failed, attestation-failed, not-ride-participant, not-found, payment-already-settled]
+      x-error-codes:
+        [validation-failed, attestation-failed, not-ride-participant, not-found, conflict,
+         payment-already-settled]
 
   /v1/fare/pay/driver-qr/claim:
     post:
@@ -391,7 +395,9 @@ paths:
         '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
         '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
-      x-error-codes: [validation-failed, attestation-failed, not-ride-participant, not-found, payment-already-settled]
+      x-error-codes:
+        [validation-failed, attestation-failed, not-ride-participant, not-found, conflict,
+         payment-already-settled]
 
   /v1/fare/pay/driver-qr/confirm:
     post:
@@ -430,7 +436,9 @@ paths:
         '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
         '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
-      x-error-codes: [validation-failed, attestation-failed, not-ride-participant, not-found, payment-already-settled]
+      x-error-codes:
+        [validation-failed, attestation-failed, not-ride-participant, not-found, conflict,
+         payment-already-settled]
 
   /v1/fare/pay/driver-qr/dispute:
     post:
@@ -614,7 +622,9 @@ paths:
         '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
         '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
-      x-error-codes: [invalid-amount, unauthorized, forbidden, not-found, payment-already-settled]
+      x-error-codes:
+        [validation-failed, invalid-amount, unauthorized, forbidden, not-found, conflict,
+         payment-already-settled]
 
 components:
   securitySchemes:

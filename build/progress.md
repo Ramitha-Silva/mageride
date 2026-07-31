@@ -75,7 +75,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C047 | subscription-svc-daily-fee | 3 | DONE | 2026-07-30 | 79 tests green in a **new suite** (`Subscription.Api.Tests`), which boots a **real wallet-svc** because half the "debits once" guarantee is an index in C046's schema; **2 migrations (1203, 0713)** — `subscription.command_log` and the missing `dispatch.offers` index both callers of `tripsToday` were sequential-scanning; **this service writes no ledger row** — the fee is a `daily_fee` debit through wallet-svc's internal seam, keyed `daily_fee:{driverId}:{vehicleId}:{feeDate}`; **debit first, record second**, because only that order is recoverable; `tripsToday` **switched to `dispatch.offers`** so the D-08 gate and the charge cannot disagree; the Mode A fence held twice (the admin PUT refuses a non-zero Mode A rate, the charge path zeroes one anyway); Mode B monthly charge + the AL-03 per-fleet consolidation **handed to C060 unledgered**, because §10 gives the per-vehicle row no `journal_entry_id` and no journal kind could carry it; **5 new contract operations**; `migrate-verify.sh` 295/295 with a C047 section; 11 spec gaps / micro-change-sets |
 | C048 | subscription-svc-mode-b | 3 | DONE | 2026-07-30 | 112 tests green in `Subscription.Api.Tests` (79 from C047 + 33); **1 migration (1204)** — `subscription.outbox`, because BR-23.11's unsubscribe must publish `share.revoked` *inside* the transaction that mutes the grant and D6' §2.1 gives this service no topic; **the event goes on `registry.events` in registry-svc's exact envelope**, so fanout-svc (C041) consumes a second producer with no change; **AL-25 is one index** — `ux_grant_active` partial on `deleted_at` makes the muted roster row, the owner-only delete and the rejoin-reuses-the-grant rule the same fact; **the pass-through fence is an absence** — no ledger call, no journal entry, and `migrate-verify.sh` now asserts `subscription.payments` has no posting or commission column; `payTo` served only from the single `verified` payout profile and from the last verified snapshot after an edit; "joined 5 Jun ⇒ due 6 Jul" implemented from the worked example, with the anniversary re-derived from `join_day` so a 31st survives February; **1 new contract operation** (the AL-49 signed-URL route D3' asks for and gives no path); `migrate-verify.sh` 307/307 with a C048 section; 11 spec gaps / micro-change-sets |
 | C049 | fare-svc-core | 3 | DONE | 2026-07-31 | 78 tests green in a **new suite** (`Fare.Api.Tests`); **2 migrations (1005, 1006)** — `fares.command_log` and `ux_ride_payments_first_attempt`, the missing "a ride is priced once" index that a `FOR UPDATE` cannot supply because a row that does not exist cannot be locked (six concurrent completions produced four fares); **money never touches a float** — the distance is quantised to whole metres at the boundary and every step after it is `long`, with `(a*b+half)/divisor` as §1.3's single round; D5' §1.1's tariff table reproduced to the minor unit for every tier and every surcharge combination, peak+night stacked additively and never compounded; **E-04 landed** — reject, Kalman, and an accuracy-weighted movement gate that reads the *measurement* uncertainty rather than the filter's posterior, taking a stationary three minutes from 292 m to under 50 m while four right-angle turns keep their length; the estimate now prices the **routed** distance (straight line × 1.3, the same interim and the same constant as query-svc's ETA) instead of the C022 stub's bare haversine; tariffs resolved by `effective_from` at the ride's *request* instant so a mid-journey rate change cannot re-price it; `migrate-verify.sh` 316/316 with a C049 section; 6 spec gaps / micro-change-sets |
-| C050 | fare-svc-payments | 3 | PENDING | | |
+| C050 | fare-svc-payments | 3 | PARTIAL | 2026-07-31 | 113 tests green (35 added); **D5' §8.1's machine is a table and the test compares it with a hand transcription of the diagram**, so an invented transition fails as loudly as a missing one; every move is a guarded `UPDATE … WHERE state = @From`, which is the whole concurrency argument and all R-19 needs beside the `provider_transaction_id` UNIQUE; a late gateway success after cash becomes `Overpaid` with an `overpaid_reversal` on the Finance queue and **does not touch the ride** (§11.14); AL-47's driver-QR trio settles with **zero** requests to the ledger seam, asserted against a wallet stub that is running and unused; **ride-svc had no `DriverConfirmedQR` terminal** so no driver-QR fare could ever settle a ride — added, mapped to `CashSettled` exactly as 1002's column comment always said; retry implemented as a new attempt because `provider_transaction_id` must stay one-to-one with a gateway call; no migration and no outbox; **PARTIAL: the AL-47 nudge push and the COD state sync are not built** (no notification-svc, and ride-svc's `cod-collected` never reaches fare-svc); 6 spec gaps |
 | C051 | notification-svc | 3 | PENDING | | |
 | C052 | safety-svc | 3 | PENDING | | |
 | C053 | support-svc | 3 | PENDING | | |
@@ -7119,3 +7119,125 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   **Build host —** Docker for one Testcontainers fixture (Postgres) plus the throwaway Postgres
   `migrate-verify.sh` starts; the replica stack stayed down throughout. `Fare.Api.Tests` takes ~50 s.
   **No new NuGet reference.**
+
+- **Component:** C050 fare-svc-payments — 2026-07-31
+- **Status:** PARTIAL — the payment machine and every settlement path a passenger can reach are
+  built and green, but **two named deliverables are not**: the AL-47 nudge *push* and the COD state
+  sync (both below, both blocked on things outside this component). Everything else is done.
+  `dotnet test backend/src/Fare.Api.Tests -c Release` is **113/113** (78 from C049, 35 added);
+  `dotnet build backend/MageRide.sln -c Release` and the Spectral lint are clean; `Ride.Api.Tests`
+  is **314/314** after the one change C050 forced on it. All four DoD items pass: every state and
+  transition in D5' §8.1 is exercised, including all terminal states; a driver-QR confirm posts the
+  earning and closes the ride with **zero** requests to the ledger seam; a duplicate OnePay callback
+  settles once; and a refund posts through the seam that enforces balance and lands on the Finance
+  queue.
+- **Notes:**
+  **Spec gaps / micro-change-sets —**
+  (a) **ride-svc had no terminal for `DriverConfirmedQR`, so AL-47 could not settle a ride.** Its
+  `Terminals` map (C032/C037) knew four payment states and not that one, and fare-svc's R-05 hop
+  would have been answered `400 illegal-transition` for every driver-QR fare. Added it, mapped to
+  `CashSettled` with `earningPayable: true` — which is not an invention: **migration 1002's own
+  column comment fixed the rule before either side implemented it** ("the driver earning posts on
+  `DriverConfirmedQR` exactly as it does on `CashSettled` (R-05)"). C037's
+  `A_payment_still_in_flight_settles_nothing` listed it as in-flight and now asserts the terminal.
+  **D5' §8.1's R-05 line should name it beside `Paid`/`CashSettled`/`CashOnDeliveryCollected`.**
+  (b) **`FellBackToCash` is the only cash terminal the payment CHECK offers, so an ordinary cash
+  ride settles at a state named for the fallback.** D5' §8.1 names cash as the *default* method and
+  gives it no terminal of its own; `CashSettled` is a **ride** state (0601) that ride-svc maps
+  `FellBackToCash` onto. A cash ride and a fallen-back card therefore reach the same payment state
+  and `method` is what tells them apart. It works and it reads wrong. **D4' §9 could add a
+  `CashSettled` payment state, or D5' §8.1 could say the name covers both.**
+  (c) **ADD §11.14 names a `fares.ride_payments_callbacks` table that does not exist.** C005 put
+  `provider_transaction_id UNIQUE` on `fares.ride_payments` instead, which is a strictly better
+  place for it — the dedupe and the payment are one row, so there is no window in which a callback
+  is recorded and the payment is not. Implemented against the column. **ADD §11.14 should be
+  redrawn against it.**
+  (d) **There is no `POST /v1/fare/pay` retry route, and D5' §8.1 needs one.** "Failed → Retried:
+  passenger retry (new row, `retry_of_payment_id`)" is a real edge with no endpoint. Implemented as
+  `POST /v1/fare/pay` again: a payment in `Failed` is closed as `Retried` and a new attempt carries
+  the next try, in one transaction. **D3' should say the retry is the same route.**
+  (e) **`GET /v1/fare/pay/{id}/status`'s `settledAt` is only populatable for driver-QR.**
+  `fares.ride_payments` has `qr_confirmed_at` and no general settlement instant; `updated_at` is not
+  the same fact and reporting it would put a wrong timestamp on a right receipt. The field is absent
+  on every other path. **D4' §9 could add `settled_at`.**
+  (f) **`POST /v1/fare/pay` cannot express P-08's COD**, and should not: `PaymentMethod` is
+  `[cash, lankaqr, onepay, scan_driver_qr]` and `cod` is a booking-time choice (C004 note (f)). The
+  machine carries the two COD edges for whoever drives them — see the gap below.
+  **Decisions worth knowing —**
+  (1) **The state machine is a table, and the test compares it with the spec.** `PaymentStateMachine`
+  is D5' §8.1 edge for edge; `The_machine_is_exactly_the_diagram` transcribes the diagram by hand and
+  asserts set equality, so an invented transition fails as loudly as a missing one. Every handler
+  names a *trigger* and applies what it is given — no handler writes a state name.
+  (2) **Every move is `UPDATE … WHERE state = @From`.** A retrying webhook and a passenger tapping
+  "pay cash" resolve the same transition; the database picks the winner and the loser is told, rather
+  than overwriting a settlement. R-19 needs nothing else on this side of the UNIQUE index: a
+  redelivered callback finds the payment past the state it resolved from and answers `200`.
+  (3) **A settled payment and a wrong-moment one are different refusals** — `409
+  payment-already-settled` versus a plain conflict. Collapsing them would tell a passenger their card
+  had been charged when it had not.
+  (4) **Cash settles on the tap.** There is no driver-side "cash received" route for an ordinary ride
+  anywhere in D3' (only COD's, which is ride-svc's), so the alternative was a cash ride that never
+  leaves `PaymentPending`. The driver has the money in hand and MageRide never sees it.
+  (5) **`fares.refunds` is the Finance queue**, not an event. `ix_refunds_open` (1003) is a partial
+  index over the unsettled statuses ordered by `requested_at` and its comment names SCR-AP-009 — so
+  "visible in the Finance queue" is a row landing there. **No outbox was added**: `payment.overpaid`
+  is spec-named (§11.14) but has no consumer in this build, and a topic producing rows nothing reads
+  is infrastructure pretending to be a feature.
+  (6) **The earning is inside the transaction; the two outward hops are after it.** ride-svc's settle
+  and wallet-svc's tip are other services' transactions. A failed hop is logged loudly and does not
+  fail the caller — the passenger has paid, and a 500 invites a retry that finds the payment terminal.
+  (7) **A refund never un-earns a driver.** The rollup is a read model of what was collected;
+  reversing through it would make yesterday's Earnings screen change overnight. The reversal lives in
+  the ledger, which is where Finance reconciles.
+  (8) **fare-svc has its own gateway client rather than wallet-svc's**, and the difference is D-11: a
+  ride fare routes to the *driver's* merchant sub-account and a driver without one is `402
+  merchant-not-onboarded`, while a top-up is money moving to the platform. The fallbacks differ too
+  (cash versus 503). Worth promoting to the kernel when a third caller appears.
+  **Not delivered, and why —**
+  (i) **The AL-47 +5-minute nudge push.** `QrNudgeSweeper` finds the claims — over
+  `ix_ridepay_qr_unconfirmed`, the index 1002 built for exactly this ("D5 escalates these on a timer,
+  so the scan is by age") — and logs each one with the driver, the ride, the amount and the claim
+  instant. **It cannot push**: notification-svc (C051/C052) does not exist and `comms` has no
+  outbound queue table, only registration tokens. Faking it would answer 202 to a passenger whose
+  driver was never told.
+  (ii) **The COD state sync.** `CashOnDelivery` and `CashOnDeliveryCollected` are in the machine and
+  nothing drives them: ride-svc's `POST /v1/rides/{id}/cod-collected` (C037) settles the **ride**
+  directly and never tells fare-svc, so a COD payment row stays `Initiated`. Closing it needs either
+  a `ride.events` consumer here or a call from there, and I did not invent either. **P-14's 24 h →
+  `Disputed` is already ride-svc's `cod_uncollected` timer and is unaffected.**
+  (iii) **The acquirer's reverse API.** The refund writes the workflow row and posts the ledger leg;
+  calling OnePay's reverse endpoint and recording `provider_refund_id` is the gateway half, and
+  `ux_refunds_provider_ref` is already waiting for it.
+  **Known limit of this suite —** the refund's "leaves the ledger balanced" is asserted as *posting
+  through the seam that enforces it* (`payment_refund`, keyed by the refund row), against a recording
+  stub — not against a real wallet-svc, whose DB trigger is what actually enforces Σ postings = 0.
+  Booting wallet-svc here (as `Subscription.Api.Tests` does) is the stronger form and is the first
+  thing to do next. The stub is not a shortcut everywhere, though: the AL-47 fence is a claim about a
+  request that must **not** happen, and a stub that is running, reachable and unused proves that
+  better than an absent one.
+  **Δ on other services —** ride-svc's `RideSettlementService` gained the `DriverConfirmedQR`
+  terminal (gap (a)) and its `PaymentSettlementTests` moved that state from the in-flight theory to
+  the terminal one. Nothing else outside fare-svc changed.
+  **For C051/C052 (notification-svc) —** four pushes this service moves the state for and cannot
+  send: the AL-47 "QR payment received?" prompt and its +5 min re-push (the sweep's log line has
+  every field you need), US-8.15's `PAYMENT_CONFIRMED`, and §11.14's "Refund processed: Rs XXX".
+  **The platform has no outbound notification queue table** — `comms` holds tokens, sessions and a
+  call log — so either that table or a topic is your first decision, and every producer is waiting
+  on it.
+  **For C065 (admin-bff) —** `POST /v1/admin/fare/refund` is here and Finance-gated; **the
+  `audit.events` row is yours** by the same split C045–C047 use. The refund queue read is
+  `fares.refunds WHERE status IN ('Requested','Submitted') ORDER BY requested_at` —
+  `ix_refunds_open` is that query. `PUT /v1/admin/fares/tariffs` is still yours and still unbuilt
+  (C049 gap).
+  **For C053 (support-svc) —** `support.tickets` rows with `category = 'driver_qr_dispute'` are
+  raised here and are otherwise ordinary tickets; D3' routes them Support → Finance. When your ticket
+  route lands this becomes a forward and the SQL is deleted — the same note C047 left for its
+  `daily_fee_refund` category.
+  **For C118 (contract tests) —** `fare.yaml` gained no operation; five had `x-error-codes`
+  completed (`conflict` on the four that can refuse a wrong-moment transition, `invalid-amount` and
+  `validation-failed` where the handlers validate). Ten operations are now implemented; the twelve
+  in the file are complete except the two COD-driven states, which no operation exposes.
+  **Build host —** Docker for one Testcontainers fixture (Postgres); the replica stack stayed down
+  throughout. `Fare.Api.Tests` takes ~55 s. **No new NuGet reference and no new migration** — C049's
+  1005/1006 were the last, and everything C050 needed was already in C005's `fares.ride_payments`
+  and `fares.refunds`.

@@ -26,6 +26,11 @@ public sealed class PaymentSettlementTests(PostgresFixture postgres)
     [InlineData("Succeeded", "Paid", true)]
     [InlineData("FellBackToCash", "CashSettled", true)]
     [InlineData("CashOnDeliveryCollected", "CashOnDeliveryCollected", true)]
+    // Δ C050 — AL-47's driver-QR terminal settles like cash, because that is what it is: the
+    // passenger transferred bank-to-bank into the driver's own account and no gateway confirmed it.
+    // 1002's column comment fixed the rule ("the driver earning posts on DriverConfirmedQR exactly
+    // as it does on CashSettled") before either side implemented it.
+    [InlineData("DriverConfirmedQR", "CashSettled", true)]
     // Disputed is a terminal of the *ride*, not of the money: §11.12 sends it to manual review, so
     // nothing is payable until somebody has looked.
     [InlineData("Disputed", "Disputed", false)]
@@ -76,8 +81,9 @@ public sealed class PaymentSettlementTests(PostgresFixture postgres)
     [InlineData("Failed")]
     [InlineData("Retried")]
     [InlineData("CashOnDelivery")]
+    // A claim is the passenger's assertion and settles nothing; the driver's confirm is terminal and
+    // is asserted above (Δ C050).
     [InlineData("QrClaimedByPassenger")]
-    [InlineData("DriverConfirmedQR")]
     public async Task A_payment_still_in_flight_settles_nothing(string paymentState)
     {
         Assert.SkipWhen(!postgres.IsAvailable, postgres.SkipReason ?? string.Empty);

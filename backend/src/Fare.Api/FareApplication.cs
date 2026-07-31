@@ -78,6 +78,7 @@ public static class FareApplication
         app.UseMageRideDefaults(serviceOptions);
 
         app.MapFareEndpoints();
+        app.MapPaymentEndpoints();
 
         var settings = app.Services.GetRequiredService<IOptions<FareOptions>>().Value;
 
@@ -128,6 +129,24 @@ public static class FareApplication
                 "Fare:DispatchBaseUrl is set but Fare:WalletBaseUrl is not: a cancellation penalty will be "
                 + "collected into the fare and then cannot be forwarded to the driver it is owed to. That is "
                 + "the one combination that takes money without paying it out — configure both or neither.");
+        }
+
+        if (string.IsNullOrWhiteSpace(options.RideBaseUrl) || string.IsNullOrWhiteSpace(options.RideInternalApiKey))
+        {
+            logger.LogError(
+                "Fare:RideBaseUrl / Fare:RideInternalApiKey is not configured, so a terminal payment cannot be "
+                + "reported to ride-svc. Fares settle here and every ride stays in PaymentPending; the driver's "
+                + "earning is recorded but the ride never closes (R-05).");
+        }
+
+        if (string.IsNullOrWhiteSpace(options.OnepayWebhookSecret)
+            || string.IsNullOrWhiteSpace(options.LankaQrWebhookSecret))
+        {
+            logger.LogWarning(
+                "Fare:OnepayWebhookSecret / Fare:LankaQrWebhookSecret is not configured, so the matching payment "
+                + "callback refuses every delivery. A passenger who pays through that rail is never marked paid, "
+                + "the ride stalls, and the driver has to be settled in cash by hand. There is no accept-unsigned "
+                + "mode: an unsigned callback that settles a fare is a free-ride endpoint.");
         }
 
         logger.LogWarning(

@@ -18,21 +18,91 @@ public sealed record RidePayment(
     string PayerRole,
     Guid? PayerUserId,
     short AttemptNo,
-    DateTimeOffset CreatedAt);
+    string? ProviderTransactionId,
+    DateTimeOffset? QrClaimedAt,
+    DateTimeOffset? QrConfirmedAt,
+    DateTimeOffset CreatedAt)
+{
+    /// <summary>What the passenger owes in total — the fare plus OnePay's surcharge plus any tip.</summary>
+    public long PayableMinor => AmountMinor + SurchargeMinor + TipAmountMinor;
+}
 
 /// <summary>
-/// <c>fares.ride_payments</c>, as far as C049 goes: the <c>Initiated</c> row a completed ride
-/// produces.
+/// Columns a transition may set on its way past. Everything left <see langword="null"/> is untouched.
 /// </summary>
 /// <remarks>
-/// <b>The state machine is C050's.</b> This component writes exactly one state — the first — and
-/// reads back what it wrote. Every transition out of <c>Initiated</c>, every gateway callback and
-/// every refund belongs to the next component, and nothing here should grow an <c>UPDATE state</c>.
+/// One patch record rather than nine optional parameters: every transition is a single guarded
+/// <c>UPDATE</c>, and the columns that move with a given state change are part of that change. A
+/// separate write afterwards would be a second statement another caller could interleave with.
 /// </remarks>
+public sealed record PaymentPatch(
+    string? Method = null,
+    long? AmountMinor = null,
+    long? SurchargeMinor = null,
+    long? TipAmountMinor = null,
+    string? ProviderTransactionId = null,
+    string? PayerRole = null,
+    Guid? PayerUserId = null,
+    DateTimeOffset? QrClaimedAt = null,
+    Guid? QrClaimArtifactId = null,
+    DateTimeOffset? QrConfirmedAt = null);
+
+/// <summary>
+/// <c>fares.ride_payments</c> — the row C049 creates and the machine C050 drives it through.
+/// </summary>
 internal interface IRidePaymentRepository
 {
     /// <summary>The live payment for a ride, or <see langword="null"/>.</summary>
     Task<RidePayment?> FindForRideAsync(Guid rideId, CancellationToken cancellationToken);
+
+    /// <summary>One payment by id.</summary>
+    Task<RidePayment?> FindAsync(Guid paymentId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The payment a gateway callback names, by the provider's own reference (R-19's dedupe key).
+    /// </summary>
+    Task<RidePayment?> FindByProviderRefAsync(string providerTransactionId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Moves a payment, <b>only</b> from the state the machine resolved it from.
+    /// </summary>
+    /// <remarks>
+    /// <b>The <c>WHERE state = @From</c> is the whole of the concurrency argument.</b> Two callers
+    /// racing one payment — a retrying webhook and a passenger tapping "pay cash", a driver
+    /// confirming while a claim lands — both read the same state and both compute the same
+    /// transition; the database picks which one applies it, and the loser gets no row back and is
+    /// answered a conflict rather than overwriting a settlement.
+    /// </remarks>
+    Task<RidePayment?> TransitionAsync(
+        IUnitOfWork unitOfWork,
+        Guid paymentId,
+        string fromState,
+        string toState,
+        PaymentPatch? patch,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Opens the next attempt on a ride — §11.8's retry, a new row pointing back at the one it
+    /// replaces.
+    /// </summary>
+    /// <remarks>
+    /// A new row rather than a mutation, because <c>provider_transaction_id</c> is UNIQUE and must
+    /// stay one-to-one with a gateway call: reusing the row would make the retry chain
+    /// unreconstructable and give two gateway attempts one reference (1002's header).
+    /// </remarks>
+    Task<RidePayment> CreateRetryAsync(
+        IUnitOfWork unitOfWork, RidePayment previous, string method, long amountMinor, long surchargeMinor,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// AL-47's escalation queue: claims the driver has not answered, oldest first.
+    /// </summary>
+    /// <remarks>
+    /// Reads <c>ix_ridepay_qr_unconfirmed</c> (migration 1002), which exists for exactly this — its
+    /// own comment says "D5 escalates these on a timer, so the scan is by age".
+    /// </remarks>
+    Task<IReadOnlyList<RidePayment>> ListUnconfirmedQrClaimsAsync(
+        DateTimeOffset claimedBefore, int limit, CancellationToken cancellationToken);
 
     /// <summary>
     /// Creates the <c>Initiated</c> payment for a completed ride, or returns the one already there.
@@ -74,7 +144,8 @@ internal sealed class RidePaymentRepository(INpgsqlConnectionFactory connections
         """
         id, ride_id, state, method, amount_minor::bigint AS amount_minor,
         surcharge_minor::bigint AS surcharge_minor, tip_amount_minor::bigint AS tip_amount_minor,
-        currency, payer_role, payer_user_id, attempt_no, created_at
+        currency, payer_role, payer_user_id, attempt_no, provider_transaction_id,
+        qr_claimed_at, qr_confirmed_at, created_at
         """;
 
     public async Task<RidePayment?> FindForRideAsync(Guid rideId, CancellationToken cancellationToken)
@@ -82,6 +153,136 @@ internal sealed class RidePaymentRepository(INpgsqlConnectionFactory connections
         await using var connection = await connections.OpenAsync(cancellationToken);
 
         return await FindAsync(connection, null, rideId, cancellationToken);
+    }
+
+    public async Task<RidePayment?> FindAsync(Guid paymentId, CancellationToken cancellationToken)
+    {
+        await using var connection = await connections.OpenAsync(cancellationToken);
+
+        return await connection.QuerySingleOrDefaultAsync<RidePayment>(new CommandDefinition(
+            $"SELECT {Columns} FROM fares.ride_payments WHERE id = @PaymentId;",
+            new { PaymentId = paymentId },
+            cancellationToken: cancellationToken));
+    }
+
+    public async Task<RidePayment?> FindByProviderRefAsync(
+        string providerTransactionId, CancellationToken cancellationToken)
+    {
+        await using var connection = await connections.OpenAsync(cancellationToken);
+
+        return await connection.QuerySingleOrDefaultAsync<RidePayment>(new CommandDefinition(
+            $"SELECT {Columns} FROM fares.ride_payments WHERE provider_transaction_id = @Ref;",
+            new { Ref = providerTransactionId },
+            cancellationToken: cancellationToken));
+    }
+
+    public Task<RidePayment?> TransitionAsync(
+        IUnitOfWork unitOfWork,
+        Guid paymentId,
+        string fromState,
+        string toState,
+        PaymentPatch? patch,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(unitOfWork);
+
+        var set = patch ?? new PaymentPatch();
+
+        // coalesce on every optional column, so one statement serves every transition and a column
+        // the caller did not name keeps whatever it already held.
+        return unitOfWork.Connection.QuerySingleOrDefaultAsync<RidePayment>(new CommandDefinition(
+            $"""
+             UPDATE fares.ride_payments
+                SET state = @ToState,
+                    method = coalesce(@Method, method),
+                    amount_minor = coalesce(@AmountMinor::int, amount_minor),
+                    surcharge_minor = coalesce(@SurchargeMinor::int, surcharge_minor),
+                    tip_amount_minor = coalesce(@TipAmountMinor::int, tip_amount_minor),
+                    provider_transaction_id = coalesce(@ProviderTransactionId, provider_transaction_id),
+                    payer_role = coalesce(@PayerRole, payer_role),
+                    payer_user_id = coalesce(@PayerUserId, payer_user_id),
+                    qr_claimed_at = coalesce(@QrClaimedAt, qr_claimed_at),
+                    qr_claim_artifact_id = coalesce(@QrClaimArtifactId, qr_claim_artifact_id),
+                    qr_confirmed_at = coalesce(@QrConfirmedAt, qr_confirmed_at)
+              WHERE id = @PaymentId AND state = @FromState
+             RETURNING {Columns};
+             """,
+            new
+            {
+                PaymentId = paymentId,
+                FromState = fromState,
+                ToState = toState,
+                set.Method,
+                set.AmountMinor,
+                set.SurchargeMinor,
+                set.TipAmountMinor,
+                set.ProviderTransactionId,
+                set.PayerRole,
+                set.PayerUserId,
+                set.QrClaimedAt,
+                set.QrClaimArtifactId,
+                set.QrConfirmedAt,
+            },
+            unitOfWork.Transaction,
+            cancellationToken: cancellationToken));
+    }
+
+    public Task<RidePayment> CreateRetryAsync(
+        IUnitOfWork unitOfWork,
+        RidePayment previous,
+        string method,
+        long amountMinor,
+        long surchargeMinor,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(unitOfWork);
+        ArgumentNullException.ThrowIfNull(previous);
+
+        return unitOfWork.Connection.QuerySingleAsync<RidePayment>(new CommandDefinition(
+            $"""
+             INSERT INTO fares.ride_payments
+               (ride_id, state, method, amount_minor, surcharge_minor, tip_amount_minor, currency,
+                payer_role, payer_user_id, retry_of_payment_id, attempt_no)
+             VALUES
+               (@RideId, '{RidePaymentStates.Initiated}', @Method, @AmountMinor::int,
+                @SurchargeMinor::int, @TipAmountMinor::int, @Currency, @PayerRole, @PayerUserId,
+                @RetryOf, @AttemptNo::smallint)
+             RETURNING {Columns};
+             """,
+            new
+            {
+                previous.RideId,
+                Method = method,
+                AmountMinor = amountMinor,
+                SurchargeMinor = surchargeMinor,
+                previous.TipAmountMinor,
+                previous.Currency,
+                previous.PayerRole,
+                previous.PayerUserId,
+                RetryOf = previous.Id,
+                AttemptNo = previous.AttemptNo + 1,
+            },
+            unitOfWork.Transaction,
+            cancellationToken: cancellationToken));
+    }
+
+    public async Task<IReadOnlyList<RidePayment>> ListUnconfirmedQrClaimsAsync(
+        DateTimeOffset claimedBefore, int limit, CancellationToken cancellationToken)
+    {
+        await using var connection = await connections.OpenAsync(cancellationToken);
+
+        var rows = await connection.QueryAsync<RidePayment>(new CommandDefinition(
+            $"""
+             SELECT {Columns} FROM fares.ride_payments
+              WHERE state = '{RidePaymentStates.QrClaimedByPassenger}'
+                AND qr_claimed_at < @ClaimedBefore
+              ORDER BY qr_claimed_at
+              LIMIT @Limit;
+             """,
+            new { ClaimedBefore = claimedBefore, Limit = limit },
+            cancellationToken: cancellationToken));
+
+        return [.. rows];
     }
 
     public async Task<RidePayment> CreateInitiatedAsync(

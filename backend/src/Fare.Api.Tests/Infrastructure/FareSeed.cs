@@ -128,6 +128,20 @@ internal sealed class FareSeed(PostgresFixture postgres)
         return new SeededRide(rideId, passenger, driverId, vehicleId);
     }
 
+    /// <summary>D-11's OnePay merchant binding, as registry-svc leaves it on vehicle approval.</summary>
+    public async Task MerchantAsync(Guid driverId, string merchantId)
+    {
+        await using var connection = await postgres.OpenAsync();
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO registry.driver_payouts (driver_id, onepay_merchant_id)
+            VALUES (@DriverId, @MerchantId)
+            ON CONFLICT (driver_id) DO UPDATE
+              SET onepay_merchant_id = EXCLUDED.onepay_merchant_id, status = 'ACTIVE';
+            """,
+            new { DriverId = driverId, MerchantId = merchantId });
+    }
+
     /// <summary>
     /// A straight-line track for a vehicle, one fix per second — the rows E-04 measures.
     /// </summary>
@@ -195,6 +209,9 @@ internal sealed class TestTokenIssuer
     public string Passenger(Guid userId) => Issue(userId, MageRideRoles.Passenger, MageRideApps.Passenger);
 
     public string Driver(Guid userId) => Issue(userId, MageRideRoles.Driver, MageRideApps.Driver);
+
+    /// <summary>A Finance Officer — E-05's refund is theirs.</summary>
+    public string Finance(Guid userId) => Issue(userId, MageRideRoles.FinanceOfficer, MageRideApps.Admin);
 
     private string Issue(Guid userId, string role, string app)
     {

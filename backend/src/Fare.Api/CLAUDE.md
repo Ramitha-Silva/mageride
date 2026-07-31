@@ -1,4 +1,4 @@
-# fare-svc (C049 fare-svc-core) — Mode C fare computation
+# fare-svc (C049 fare-svc-core + C050 fare-svc-payments)
 
 Stack: .NET 10 Minimal API + Dapper over Npgsql. References `MageRide.Shared` (C002).
 **No Redis, no Kafka, no outbox** — see "Rules that are load-bearing" for why each is absent.
@@ -10,34 +10,39 @@ code.
 
 ## What this service is
 
-**What a Mode C ride costs, and nothing about how it is paid.** The `fares.tariffs` rate card, the
-peak and night windows, the upfront estimate and the token that binds it, the E-04 Kalman filter the
-final distance is measured with, the D-05 cross-trip cancellation settlement, and the `Initiated`
-`fares.ride_payments` row a completed ride produces.
-
-**Everything after `Initiated` is C050.** The payment state machine, OnePay (+5%), LankaQR, cash,
-COD, driver-QR attestation (AL-47), the tip (E-10), refunds (E-05) and the R-05 terminal that posts
-a driver's earning. Those routes are **left unmapped rather than stubbed**: a stubbed payment
-endpoint is worse than an absent one, because it answers 200 to a client that then believes money
-moved.
+**What a Mode C ride costs, and how it is paid.** C049 is the price: the `fares.tariffs` rate card,
+the peak and night windows, the upfront estimate and the token that binds it, the E-04 Kalman filter
+the final distance is measured with, the D-05 cross-trip cancellation settlement, and the
+`Initiated` `fares.ride_payments` row a completed ride produces. C050 is everything after
+`Initiated`: D-10's persisted state machine and every settlement path.
 
 | Endpoint | Auth | Spec |
 |---|---|---|
 | `GET /v1/fare/estimate` | Bearer | US-8.9, D5' §1.1/§1.2, AL-19 |
 | `POST /v1/fare/calculate` | internal | E-04, D5' §1.2/§7.1 — ride-svc's completion hop |
+| `POST /v1/fare/pay` | Bearer | **Δ C050** — D-10, US-8.11, P-04, D-11 |
+| `GET /v1/fare/pay/{id}/status` | Bearer | **Δ C050** — US-8.15 |
+| `POST /v1/fare/pay/{id}/fallback-cash` | Bearer | **Δ C050** — US-8.15 |
+| `POST /v1/fare/pay/scan-driver-qr` | Bearer | **Δ C050** — AL-22 |
+| `POST /v1/fare/pay/driver-qr/claim` · `/confirm` · `/dispute` | Bearer | **Δ C050** — AL-47, US-26.1 |
+| `POST /v1/fare/pay/onepay/webhook` · `/lankaqr/confirm` | HMAC | **Δ C050** — R-19, D6' §7.1/§7.2 |
+| `POST /v1/admin/fare/refund` | finance · admin | **Δ C050** — E-05 |
 
 | Table | Read | Written |
 |---|---|---|
 | `fares.tariffs` · `peak_windows` | every estimate and every settlement | **admin-bff** (C065) — see below |
-| `fares.ride_payments` | the ride's existing fare | **this service** (`Initiated` only) and C050 |
-| `fares.driver_earnings` | — | **this service**, from C050's terminal — see below |
+| `fares.ride_payments` | the ride's existing fare | **this service** — C049 opens it, C050 drives it |
+| `fares.refunds` | how much has already gone back | **this service** — and it *is* the Finance queue |
+| `fares.driver_earnings` | — | **this service**, on every R-05 terminal |
+| `support.tickets` | — | **support-svc** (C053) — one AL-47 dispute row written here |
+| `registry.driver_payouts` | D-11's merchant binding | **registry-svc** — read-only here |
 | `fares.command_log` | the kernel's replay | this service |
 | `rides.rides` · `transitions` | what to price, and the window to measure | **ride-svc** (R-01) — read-only here |
 | `telemetry.positions` | the E-04 track | **the ingest plane** — read-only here |
 | `billing.journal_*` | — | **wallet-svc** (D-09) — never touched here |
 | `dispatch.cancellation_penalties` | — | **dispatch-svc** — reached over HTTP, never read directly |
 
-## The three fences, and how each is held structurally
+## The fences, and how each is held structurally
 
 - **Mode C tiers expose PRICE ONLY before a driver is matched — no ETA, no distance (AL-19).**
   Neither response carries an arrival time and this service computes none: there is no field for
@@ -48,13 +53,65 @@ moved.
   `FareEstimator` before a tariff is looked up, and `fares.tariffs` is seeded with the six Mode C
   passenger tiers and nothing else. Mode B's money is `subscription.*` (Epic 23, C048) and
   `billing.monthly_subscriptions` (C047); neither is reachable from this service.
-- **Driver earning posts only once the payment reaches a terminal state (R-05).** Nothing on this
-  component's surface reaches a terminal — `POST /v1/fare/calculate` writes `Initiated` and stops —
-  so there is no code path here that could post one early. `RidePaymentStates.Terminal` names the
-  four states that qualify and deliberately excludes `Disputed`, which is a terminal of the *ride*
-  and not of the money.
+- **Driver earning posts only once the payment reaches a terminal state (R-05).** Every path that
+  closes a payment goes through one method — `PaymentSettlementService` — and the earning is written
+  inside the same transaction as the terminal state, so a payment cannot be terminal without its
+  earning and no handler can post one early. `Disputed` closes a payment and earns nothing: it is a
+  terminal of the *ride* and not of the money.
+- **Driver-QR payments have NO gateway callback (AL-47).** They settle by attestation and behave
+  like cash. `DriverQrService` contains no ledger call at all, and the test asserts the *absence* of
+  a request against a wallet stub that is running and reachable — the fence is proved, not assumed.
+- **Gateway-verified `Succeeded` is OnePay-only (D-10).** Only the OnePay route is wired to a
+  gateway that can produce one; the fence lives in which secret verifies which route, and LankaQR's
+  confirm is the acquirer reporting a transfer that already landed.
+- **P-04: cash is always paid by the rider, LankaQR/OnePay always by the booker.** Resolved from the
+  method chosen *at payment*, not at booking — so a passenger who booked cash and pays by card moves
+  the charge to the booker, which is what the rule is for.
 
 ## Rules that are load-bearing
+
+### The payment machine (Δ C050)
+
+- **The machine is data, not control flow.** `PaymentStateMachine` is D5' §8.1's diagram as one
+  table; every handler names *what happened* and applies what it is given, and none of them writes a
+  state name. `The_machine_is_exactly_the_diagram` compares the table with a hand transcription of
+  the spec and fails **both ways**, so an invented transition is as loud as a missing one.
+- **Every move is a guarded `UPDATE … WHERE state = @From`.** That is the whole concurrency
+  argument: a retrying webhook and a passenger tapping "pay cash" both resolve the same transition,
+  the database picks the winner, and the loser gets no row and is answered a conflict rather than
+  overwriting a settlement.
+- **A settled payment and a wrong-moment one are different refusals.** `409
+  payment-already-settled` versus an ordinary conflict — collapsing them would tell a passenger
+  their card had been charged when it had not.
+- **R-19's idempotency is the UNIQUE index plus a quiet no-op.** A redelivered callback either
+  collides on `provider_transaction_id` or finds the payment past the state it was resolving from;
+  both answer `200`, because anything else makes the gateway retry for ever. Nothing counts
+  deliveries and there is no second dedupe table.
+- **A late `Succeeded` after cash is an overpayment, and the ride is not touched.** §11.14 says it
+  outright — "UPDATE rides SET state='Disputed' is NOT done". The cash settlement stands, the
+  payment becomes `Overpaid`, and a `overpaid_reversal` row lands on the Finance queue.
+- **`fares.refunds` *is* the Finance queue.** `ix_refunds_open` (1003) is a partial index over the
+  unsettled statuses ordered by `requested_at` and its own comment names it SCR-AP-009. So a refund
+  becoming visible to Finance is a row landing there — not an event, and not a screen this service
+  owns.
+- **A retry is a new row, never a mutation.** `provider_transaction_id` is UNIQUE and must stay
+  one-to-one with a gateway call; reusing the row would give two attempts one reference and make
+  D-10's chain unreconstructable. The close and the successor are one transaction, because a
+  `Retried` row with no successor is a payment nothing can settle.
+- **`FellBackToCash` is the cash terminal, not only the fallback.** D5' §8.1 names cash as the
+  default method and the payment CHECK has no separate "cash settled" value — `CashSettled` is a
+  *ride* state, and ride-svc maps `FellBackToCash` onto it. A ride paid in cash and one that fell
+  back reach the same payment state by design; `method` is what tells them apart. Raised as a naming
+  observation in the C050 handoff.
+- **A refund never un-earns a driver.** The rollup is a read model of what was collected; putting a
+  reversal through it would make yesterday's Earnings screen change overnight. Finance reconciles
+  against the ledger, which is where the reversal lives.
+- **The earning is inside the transaction; the two outward hops are after it.** ride-svc's settle and
+  wallet-svc's tip are other services' transactions and cannot be rolled back with ours, so they run
+  post-commit and are each idempotent by construction. A failed hop is loud and does **not** fail the
+  caller — the passenger has paid, and a 500 would invite a retry that finds the payment terminal.
+
+### The fare (C049)
 
 - **Money never touches a floating-point type.** The distance is the one genuine real number, and
   `FareFormula.MetresOf` converts it to whole metres at the boundary; every arithmetic step
@@ -160,13 +217,18 @@ UNIQUE rather than the new index.
 
 ## Not here, and named rather than stubbed
 
-- **The payment state machine and everything in it** — C050. `fare.yaml`'s other twelve operations
-  are unmapped.
-- **The driver's earning.** `fares.driver_earnings` and `IDriverEarningsRepository.PostAsync` are
-  here, tested, and **called by nothing yet**: R-05 posts on a payment terminal, and no terminal is
-  reachable from C049. It is in this component rather than the next because the rollup is part of
-  the fare model — the same code that decides what a trip is worth decides what a driver earned from
-  it. C050 wires the call. Named in the handoff.
+- **The COD state sync.** `CashOnDelivery` and `CashOnDeliveryCollected` are in the machine and no
+  endpoint drives them: ride-svc's `POST /v1/rides/{id}/cod-collected` (C037) settles the *ride*
+  directly and never tells fare-svc, so a COD payment row stays `Initiated`. Closing it needs either
+  a `ride.events` consumer here or a call from there, and neither is invented. Named in the C050
+  handoff.
+- **The pushes.** The AL-47 +5-minute nudge, US-8.15's `PAYMENT_CONFIRMED` and §11.14's "Refund
+  processed" are notification-svc's (C051/C052), which does not exist and has no outbound queue
+  table to write to. `QrNudgeSweeper` identifies who should be nudged and logs it; everything the
+  notification needs is on the row it finds.
+- **The acquirer's reverse API.** E-05's refund writes the workflow row and posts the ledger leg;
+  actually calling OnePay's reverse endpoint and recording `provider_refund_id` is the gateway half,
+  and `ux_refunds_provider_ref` is already waiting for it.
 - **`PUT /v1/admin/fares/tariffs`.** admin-bff's (C065) — `admin-bff.yaml` declares it there, not in
   `fare.yaml`. What this component owns is the model it writes through: `ITariffRepository.PublishAsync`
   inserts a whole rate card at one `effectiveFrom` and replaces the windows in the same transaction.
@@ -196,6 +258,12 @@ what this service signs. One section, two readers, one key; without it every boo
 | `PenaltySettlementEnabled` · `DispatchBaseUrl` · `DispatchInternalApiKey` | on · unset · unset | **unset ⇒ no D-05 penalty is ever collected** |
 | `WalletBaseUrl` · `WalletInternalApiKey` | unset | **unset with dispatch set ⇒ the penalty is collected and cannot be paid out.** Set both or neither |
 | `InternalTimeout` | 2 s | D6' §8.3's internal hop |
+| `RideBaseUrl` · `RideInternalApiKey` | unset | **Δ C050 — unset ⇒ no ride ever leaves `PaymentPending`.** R-05's only hop |
+| `OnepaySurchargeBps` | 500 | US-8.11's +5%, in basis points so it stays an integer. OnePay only |
+| `OnepayBaseUrl` · `OnepayApiKey` | unset | **unset ⇒ `onepay` answers 503** and the app offers another rail |
+| `OnepayWebhookSecret` · `LankaQrWebhookSecret` | unset | **unset ⇒ that callback refuses every delivery.** No accept-unsigned mode |
+| `LankaQrMerchantId` · `LankaQrDeepLinkTemplate` | unset | AL-15's "Pay" deep link; unset ⇒ `lankaqr` answers 503. **No spec prints the scheme** |
+| `QrNudgeEnabled` · `QrNudgeAfter` · `QrNudgeInterval` | on · 5 min · 1 min | AL-47 / US-26.1. **The sweep runs; the push is C052's** |
 
 `ConnectionStrings:Postgres` and `Jwt:*` are required. `CommandLog:*` defaults to `fares` /
 `command_log` with no aggregate-id column (set in `FareApplication`, overridable). There is no

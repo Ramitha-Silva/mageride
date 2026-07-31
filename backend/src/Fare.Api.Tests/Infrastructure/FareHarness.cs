@@ -39,6 +39,11 @@ internal sealed class FareHarness : IAsyncDisposable
     /// </summary>
     public const string EstimateTokenKey = "c049-fare-estimate-token-key-not-a-secret";
 
+    /// <summary>The HMAC secrets the two payment callbacks are signed with (Δ C050).</summary>
+    public const string OnepayWebhookSecret = "c050-onepay-webhook-secret-not-a-secret";
+
+    public const string LankaQrWebhookSecret = "c050-lankaqr-webhook-secret-not-a-secret";
+
     /// <summary>
     /// 09:00 UTC on 30 July 2026 — 14:30 in Colombo. Deliberately outside every seeded window, so a
     /// test that wants a surcharge has to ask for one.
@@ -68,7 +73,10 @@ internal sealed class FareHarness : IAsyncDisposable
     public FareSeed Seed { get; }
 
     public static async Task<FareHarness> StartAsync(
-        PostgresFixture postgres, IDictionary<string, string?>? settings = null, DateTimeOffset? now = null)
+        PostgresFixture postgres,
+        IDictionary<string, string?>? settings = null,
+        DateTimeOffset? now = null,
+        DownstreamStub? downstream = null)
     {
         ArgumentNullException.ThrowIfNull(postgres);
 
@@ -92,6 +100,18 @@ internal sealed class FareHarness : IAsyncDisposable
             // that is not there would make every calculation log an error, and the tests that are
             // about it stand their own stub up.
             ["Fare:PenaltySettlementEnabled"] = "false",
+            // Δ C050. The nudge sweep is off unless a test drives it directly: a background pass
+            // logging under an assertion makes "the sweep found it" indistinguishable from "a
+            // previous pass did".
+            ["Fare:QrNudgeEnabled"] = "false",
+            ["Fare:OnepayWebhookSecret"] = OnepayWebhookSecret,
+            ["Fare:LankaQrWebhookSecret"] = LankaQrWebhookSecret,
+            ["Fare:LankaQrMerchantId"] = "MAGERIDE-TEST-MERCHANT",
+            ["Fare:LankaQrDeepLinkTemplate"] = "lankaqrpay://pay?m={merchant}&amt={amount}&ref={reference}",
+            ["Fare:RideBaseUrl"] = downstream?.BaseAddress,
+            ["Fare:RideInternalApiKey"] = downstream is null ? null : DownstreamStub.InternalApiKey,
+            ["Fare:WalletBaseUrl"] = downstream?.BaseAddress,
+            ["Fare:WalletInternalApiKey"] = downstream is null ? null : DownstreamStub.InternalApiKey,
             ["urls"] = "http://127.0.0.1:0",
             ["Otel:PrometheusEnabled"] = "false",
         };
@@ -185,6 +205,83 @@ internal sealed class FareHarness : IAsyncDisposable
         return await Client.SendAsync(request);
     }
 
+    /// <summary>A bearer POST with an idempotency key, as the apps send.</summary>
+    public async Task<HttpResponseMessage> PostAsync(string path, object? body, string bearer)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, path);
+
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", bearer);
+        request.Headers.TryAddWithoutValidation(MageRideHeaders.IdempotencyKey, Guid.NewGuid().ToString());
+
+        if (body is not null)
+        {
+            request.Content = JsonContent.Create(body, options: MageRideJson.Options);
+        }
+
+        return await Client.SendAsync(request);
+    }
+
+    /// <summary>A provider callback, signed the way the gateway would (HMAC-SHA256 over the raw body).</summary>
+    public async Task<HttpResponseMessage> PostSignedAsync(string path, object body, string secret)
+    {
+        var raw = JsonSerializer.SerializeToUtf8Bytes(body, MageRideJson.Options);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, path)
+        {
+            Content = new ByteArrayContent(raw),
+        };
+
+        request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
+        request.Headers.TryAddWithoutValidation(
+            MageRide.Shared.Payments.WebhookSignature.HeaderName,
+            MageRide.Shared.Payments.WebhookSignature.Compute(raw, secret));
+
+        return await Client.SendAsync(request);
+    }
+
+    /// <summary>A driver's daily earnings rollup — R-05's record that a trip was earned.</summary>
+    public async Task<(int Trips, long GrossMinor)?> EarningsAsync(Guid driverId)
+    {
+        await using var connection = await _postgres.OpenAsync();
+
+        var rows = await connection.QueryAsync<(int Trips, long GrossMinor)>(
+            """
+            SELECT trips, gross_minor::bigint AS gross_minor
+              FROM fares.driver_earnings WHERE driver_id = @DriverId;
+            """,
+            new { DriverId = driverId });
+
+        return rows.Cast<(int Trips, long GrossMinor)?>().FirstOrDefault();
+    }
+
+    /// <summary>The Finance refund queue as `ix_refunds_open` defines it (SCR-AP-009).</summary>
+    public async Task<IReadOnlyList<(Guid Id, string Kind, long AmountMinor, string Status)>> RefundQueueAsync()
+    {
+        await using var connection = await _postgres.OpenAsync();
+
+        var rows = await connection.QueryAsync<(Guid Id, string Kind, long AmountMinor, string Status)>(
+            """
+            SELECT id, kind, amount_minor::bigint AS amount_minor, status
+              FROM fares.refunds
+             WHERE status IN ('Requested','Submitted')
+             ORDER BY requested_at;
+            """);
+
+        return [.. rows];
+    }
+
+    /// <summary>Support tickets by category — the AL-47 dispute lands here.</summary>
+    public async Task<IReadOnlyList<(Guid Id, string Category, string Description)>> TicketsAsync(string category)
+    {
+        await using var connection = await _postgres.OpenAsync();
+
+        var rows = await connection.QueryAsync<(Guid Id, string Category, string Description)>(
+            "SELECT id, category, description FROM support.tickets WHERE category = @Category;",
+            new { Category = category });
+
+        return [.. rows];
+    }
+
     public async Task<T> OkAsync<T>(HttpResponseMessage response, string what)
     {
         ArgumentNullException.ThrowIfNull(response);
@@ -273,6 +370,7 @@ internal sealed class FareHarness : IAsyncDisposable
         await connection.ExecuteAsync(
             """
             TRUNCATE fares.ride_payments, fares.refunds, fares.driver_earnings, fares.command_log CASCADE;
+            TRUNCATE support.tickets, registry.driver_payouts CASCADE;
             TRUNCATE rides.rides, registry.vehicles CASCADE;
             DELETE FROM telemetry.positions;
 

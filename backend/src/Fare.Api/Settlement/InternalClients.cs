@@ -98,6 +98,88 @@ internal sealed class PenaltyClient(
     }
 }
 
+/// <summary>
+/// R-05's hop: fare-svc tells ride-svc a payment reached a terminal, and the ride settles.
+/// </summary>
+/// <remarks>
+/// <b>The direction matters.</b> ride-svc is the sole writer of <c>rides.state</c> (R-01), so
+/// fare-svc cannot move a ride itself; and nothing but a terminal payment may move a ride into a
+/// settled state, so ride-svc cannot decide it either. One command, one direction, and the ride's
+/// terminal is derived from the payment state this call carries.
+/// </remarks>
+internal interface IRideSettlementClient
+{
+    bool IsConfigured { get; }
+
+    /// <summary>
+    /// Reports a terminal payment state. Returns <see langword="false"/> when the hop could not be
+    /// made, which the caller logs rather than fails on — see <c>PaymentSettlementService</c>.
+    /// </summary>
+    Task<bool> SettleAsync(
+        Guid rideId, Guid paymentId, string paymentState, long settledMinor, CancellationToken cancellationToken);
+}
+
+/// <inheritdoc cref="IRideSettlementClient"/>
+internal sealed class RideSettlementClient(
+    IHttpClientFactory clients, IOptions<FareOptions> options, ILogger<RideSettlementClient> logger)
+    : IRideSettlementClient
+{
+    public const string HttpClientName = "ride-settlement";
+
+    private readonly FareOptions _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
+
+    public bool IsConfigured =>
+        !string.IsNullOrWhiteSpace(_options.RideBaseUrl) && !string.IsNullOrWhiteSpace(_options.RideInternalApiKey);
+
+    public async Task<bool> SettleAsync(
+        Guid rideId, Guid paymentId, string paymentState, long settledMinor, CancellationToken cancellationToken)
+    {
+        if (!IsConfigured)
+        {
+            logger.LogError(
+                "Fare:RideBaseUrl / Fare:RideInternalApiKey is not configured, so ride {RideId} cannot be told "
+                + "its payment reached {PaymentState}. The ride stays in PaymentPending and the driver's "
+                + "earning does not post (R-05).",
+                rideId,
+                paymentState);
+
+            return false;
+        }
+
+        var client = clients.CreateClient(HttpClientName);
+
+        using var request = new HttpRequestMessage(
+            HttpMethod.Post, $"v1/internal/rides/{rideId}/payment-settled")
+        {
+            Content = JsonContent.Create(
+                new { paymentId = paymentId.ToString(), paymentState, settledMinor },
+                options: MageRideJson.Options),
+        };
+
+        request.Headers.TryAddWithoutValidation(InternalKeyFilter.ApiKeyHeader, _options.RideInternalApiKey);
+
+        // The ride is the idempotency key: ride-svc's own settle is guarded on the ride's state, and
+        // a redelivered terminal must replay rather than move it twice.
+        request.Headers.TryAddWithoutValidation(MageRideHeaders.IdempotencyKey, $"settle-{paymentId:N}");
+
+        using var response = await client.SendAsync(request, cancellationToken);
+
+        if (response.IsSuccessStatusCode)
+        {
+            return true;
+        }
+
+        logger.LogError(
+            "ride-svc answered {Status} settling ride {RideId} at {PaymentState}. The payment is terminal "
+            + "here and the ride is not; this needs reconciliation.",
+            (int)response.StatusCode,
+            rideId,
+            paymentState);
+
+        return false;
+    }
+}
+
 /// <summary>The result of one ledger posting.</summary>
 public sealed record LedgerPostingResult(Guid? EntryId, bool Replayed);
 

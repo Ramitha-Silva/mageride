@@ -175,6 +175,9 @@ internal static class RequestIds
             {
                 [field] = [$"{field} is required and must be a ULID or a UUID."],
             });
+
+    public static Guid? Optional(string? value) =>
+        Ulids.TryParse(value, out var parsed) && parsed != Guid.Empty ? parsed : null;
 }
 
 /// <summary>
