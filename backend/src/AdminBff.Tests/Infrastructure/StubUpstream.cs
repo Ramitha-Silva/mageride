@@ -182,6 +182,8 @@ internal sealed class StubUpstream : IAsyncDisposable
 
         app.MapInternalRegistry(postgres);
         app.MapInternalFleet(postgres);
+        app.MapInternalWallet(postgres);
+        app.MapAdminFare(postgres);
 
         await app.StartAsync();
 
@@ -593,6 +595,185 @@ internal static class StubInternalPlanes
         DateTimeOffset? VerifiedAt);
 
     internal sealed record FleetDecisionRequest(string? OfficerId, string? Reason);
+
+    // ---------------------------------------------------------------------------------------
+    // C065 — the two upstreams a finance decision reaches
+    // ---------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// wallet-svc's <c>POST /v1/internal/wallet/{driverId}/credit</c> (C046).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>This stub posts, because C065's definition of done is about the ledger.</b> "A reversal
+    /// posts a balanced journal entry and appears in the driver's ledger and the audit log" is a
+    /// claim about <c>billing.journal_postings</c> summing to zero and about a
+    /// <c>billing.wallet_transactions</c> line existing — asserting it against a canned
+    /// <c>{"entryId": …}</c> would assert nothing at all. So it does what
+    /// <c>LedgerService.PostAsync</c> does, against the same Postgres.
+    /// </para>
+    /// <para>
+    /// <b>Faithful, not complete.</b> The idempotency claim, the balanced pair, the two balance
+    /// mirrors and the history line are here because admin-bff's behaviour depends on them; the
+    /// account lock ordering, the non-negativity refusal and the D-08 Redis write-through are
+    /// wallet-svc's own suite's business and admin-bff never observes them.
+    /// </para>
+    /// </remarks>
+    public static void MapInternalWallet(this WebApplication app, PostgresFixture postgres)
+    {
+        app.MapPost("/v1/internal/wallet/{driverId:guid}/credit", async (
+            Guid driverId, LedgerPostingRequest body) =>
+        {
+            await using var connection = await postgres.OpenAsync();
+
+            var accountId = await connection.ExecuteScalarAsync<Guid>(
+                """
+                INSERT INTO billing.accounts (owner_type, owner_id, currency, balance_minor)
+                VALUES ('driver', @DriverId, 'LKR', 0)
+                ON CONFLICT (owner_type, owner_id, currency) WHERE owner_id IS NOT NULL DO NOTHING;
+
+                SELECT id FROM billing.accounts
+                 WHERE owner_type = 'driver' AND owner_id = @DriverId AND currency = 'LKR';
+                """,
+                new { DriverId = driverId });
+
+            // The whole idempotency mechanism, in wallet-svc's own spelling: the loser of a race
+            // reads what the winner wrote and reports `replayed`.
+            var entryId = await connection.ExecuteScalarAsync<Guid?>(
+                """
+                INSERT INTO billing.journal_entries (kind, idempotency_key, description)
+                VALUES (@Kind, @Key, @Description)
+                ON CONFLICT (idempotency_key) DO NOTHING
+                RETURNING id;
+                """,
+                new { body.Kind, Key = body.IdempotencyKey, body.Description });
+
+            if (entryId is null)
+            {
+                var existing = await connection.QuerySingleAsync<(Guid EntryId, long BalanceAfter)>(
+                    """
+                    SELECT e.id,
+                           (SELECT balance_minor FROM billing.accounts WHERE id = @AccountId)
+                      FROM billing.journal_entries e WHERE e.idempotency_key = @Key;
+                    """,
+                    new { Key = body.IdempotencyKey, AccountId = accountId });
+
+                return Results.Json(
+                    new
+                    {
+                        entryId = existing.EntryId,
+                        accountId,
+                        amountMinor = body.AmountMinor,
+                        balanceAfterMinor = existing.BalanceAfter,
+                        replayed = true,
+                    },
+                    MageRideJson.Options);
+            }
+
+            // Both legs and both mirrors in one statement, so trg_balanced (DEFERRABLE INITIALLY
+            // DEFERRED) sees a balanced entry at COMMIT rather than a half-written one.
+            var balance = await connection.ExecuteScalarAsync<long>(
+                """
+                INSERT INTO billing.journal_postings (entry_id, account_id, amount_minor)
+                VALUES (@EntryId, @AccountId, @AmountMinor);
+
+                INSERT INTO billing.journal_postings (entry_id, account_id, amount_minor)
+                SELECT @EntryId, a.id, -@AmountMinor
+                  FROM billing.accounts a
+                 WHERE a.owner_type = 'platform' AND a.owner_id IS NULL AND a.currency = 'LKR';
+
+                UPDATE billing.accounts SET balance_minor = balance_minor + @AmountMinor
+                 WHERE id = @AccountId;
+
+                UPDATE billing.accounts SET balance_minor = balance_minor - @AmountMinor
+                 WHERE owner_type = 'platform' AND owner_id IS NULL AND currency = 'LKR';
+
+                INSERT INTO billing.wallets (account_id, balance_minor)
+                SELECT @AccountId, a.balance_minor FROM billing.accounts a WHERE a.id = @AccountId
+                ON CONFLICT (account_id) DO UPDATE SET balance_minor = EXCLUDED.balance_minor;
+
+                INSERT INTO billing.wallet_transactions
+                    (account_id, entry_id, kind, amount_minor, balance_after_minor, description)
+                SELECT @AccountId, @EntryId, @Kind, @AmountMinor, a.balance_minor, @Description
+                  FROM billing.accounts a WHERE a.id = @AccountId
+                ON CONFLICT (account_id, entry_id) DO NOTHING;
+
+                SELECT balance_minor FROM billing.accounts WHERE id = @AccountId;
+                """,
+                new
+                {
+                    EntryId = entryId.Value,
+                    AccountId = accountId,
+                    body.AmountMinor,
+                    body.Kind,
+                    body.Description,
+                });
+
+            return Results.Json(
+                new
+                {
+                    entryId = entryId.Value,
+                    accountId,
+                    amountMinor = body.AmountMinor,
+                    balanceAfterMinor = balance,
+                    replayed = false,
+                },
+                MageRideJson.Options);
+        });
+    }
+
+    /// <summary>
+    /// fare-svc's <c>POST /v1/admin/fare/refund</c> (C050) — a role-gated route, so the caller's own
+    /// bearer arrives rather than the shared key, which is one of the things a test asserts.
+    /// </summary>
+    /// <remarks>
+    /// Writes the <c>fares.refunds</c> row because the refund queue then has to stop showing the
+    /// payment as an unraised <c>Overpaid</c> — the transition from one population of the union to
+    /// the other is a C065 behaviour and a canned reply could not exercise it. The gateway reverse
+    /// call and the balanced ledger entry are fare-svc's own suite's.
+    /// </remarks>
+    public static void MapAdminFare(this WebApplication app, PostgresFixture postgres)
+    {
+        app.MapPost("/v1/admin/fare/refund", async (FareRefundRequest body) =>
+        {
+            await using var connection = await postgres.OpenAsync();
+
+            var row = await connection.QuerySingleOrDefaultAsync<(Guid RefundId, string Status, long AmountMinor, string Currency)>(
+                """
+                INSERT INTO fares.refunds
+                    (ride_payment_id, kind, amount_minor, currency, status, reason_code)
+                SELECT rp.id, @Kind, @AmountMinor, @Currency, 'Submitted', @ReasonCode
+                  FROM fares.ride_payments rp WHERE rp.id = @PaymentId
+                RETURNING id, status, amount_minor, currency;
+                """,
+                new { body.PaymentId, body.Kind, body.AmountMinor, Currency = body.Currency ?? "LKR", body.ReasonCode });
+
+            return row.RefundId == Guid.Empty
+                ? Results.Json(
+                    new { type = "https://mageride.lk/errors/not-found", detail = "No such payment." },
+                    MageRideJson.Options,
+                    "application/problem+json",
+                    StatusCodes.Status404NotFound)
+                : Results.Json(
+                    new
+                    {
+                        refundId = row.RefundId,
+                        status = row.Status,
+                        amountMinor = row.AmountMinor,
+                        currency = row.Currency,
+                    },
+                    MageRideJson.Options,
+                    statusCode: StatusCodes.Status201Created);
+        });
+    }
+
+    /// <summary>wallet.yaml's <c>LedgerPostingRequest</c>, as the stub receives it.</summary>
+    internal sealed record LedgerPostingRequest(
+        long AmountMinor, string Kind, string IdempotencyKey, string? Description, string? Reference);
+
+    /// <summary>fare.yaml's refund body.</summary>
+    internal sealed record FareRefundRequest(
+        Guid PaymentId, string Kind, long AmountMinor, string? Currency, string ReasonCode);
 }
 
 /// <summary>

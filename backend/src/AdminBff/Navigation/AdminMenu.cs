@@ -93,6 +93,12 @@ public static class AdminMenu
             // order rather than on the matrix.
             new("verification", "nav.verification", "/verification",
                 FeatureAreas.Verification, PermissionGrant.Read, Self),
+
+            // C065's. E-03's expiry is what AL-10's approval gate turns on, so the queue is the
+            // Verification row's and sits beside the queues it feeds rather than under Finance,
+            // where the component that built it happens to live.
+            new("document-expiry", "nav.documentExpiry", "/verification/expiring",
+                FeatureAreas.Verification, PermissionGrant.Read, Self),
         ]),
 
         new("directories", "nav.group.directories",
@@ -115,6 +121,11 @@ public static class AdminMenu
                 FeatureAreas.Moderation, PermissionGrant.Read, Self),
             new("support-tickets", "nav.supportTickets", "/support/tickets",
                 FeatureAreas.Support, PermissionGrant.Read, Self),
+
+            // C065's. What a confirmed E-07 signal leads to is a suspension, so the review queue is
+            // the Moderation row's — and reputation-svc, not admin-bff, decides each flag.
+            new("fraud-review", "nav.fraudReview", "/moderation/fraud",
+                FeatureAreas.Moderation, PermissionGrant.Read, Self),
         ]),
 
         new("finance", "nav.group.finance",
@@ -122,6 +133,15 @@ public static class AdminMenu
             // C065's.
             new("reconciliation", "nav.reconciliation", "/finance/reconciliation",
                 FeatureAreas.Finance, PermissionGrant.Read, Self),
+            new("transactions", "nav.transactions", "/finance/transactions",
+                FeatureAreas.Finance, PermissionGrant.Read, Self),
+
+            // The Refunds row and not the Finance one: it is the only row whose CSR cell
+            // (◐ raise/recommend) opens the queue while withholding the button, which is the whole
+            // shape of E-05's workflow.
+            new("refunds", "nav.refunds", "/finance/refunds",
+                FeatureAreas.Refunds, PermissionGrant.Read, Self),
+
             new("wallet-adjustments", "nav.walletAdjustments", "/finance/adjustments",
                 FeatureAreas.DriverWalletAdjustments, PermissionGrant.Write, Self),
             new("pdpa", "nav.pdpa", "/pdpa",

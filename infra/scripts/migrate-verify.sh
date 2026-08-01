@@ -2925,6 +2925,62 @@ psql_run "DELETE FROM billing.payouts WHERE batch_id='$AL57_BATCH';
   || die "could not clean up the AL-58 payout fixture."
 
 # ---------------------------------------------------------------------------------------
+# C065 — admin-bff finance & PDPA: the column an erasure writes, the decision columns a
+#        fulfilment writes, and the two read-path indexes the queues need.
+# ---------------------------------------------------------------------------------------
+step "Objects owned by C065 (E-05, E-06, R-19, E-03, AL-05)"
+
+check_eq "iam.users.anonymised_at exists — the column a PDPA erasure writes (0110)" "1" \
+  "SELECT count(*)::int FROM information_schema.columns
+    WHERE table_schema='iam' AND table_name='users' AND column_name='anonymised_at';"
+
+check_eq "pdpa.requests carries decided_by and decision_reason (1314)" "2" \
+  "SELECT count(*)::int FROM information_schema.columns
+    WHERE table_schema='pdpa' AND table_name='requests'
+      AND column_name IN ('decided_by','decision_reason');"
+
+check_eq "the four C065 read-path indexes exist" "4" \
+  "SELECT count(*)::int FROM pg_indexes
+    WHERE indexname IN ('ix_users_anonymised','ix_ridepay_overpaid',
+                        'ix_topups_method_created','ix_pdpa_requests_decided');"
+
+step "C065 constraints actually bite"
+
+C065_USER="$(psql_q "INSERT INTO iam.users(phone, role, first_name)
+                     VALUES ('+94770650001','passenger','C065 fixture') RETURNING id;")"
+[[ -n "$C065_USER" ]] || die "could not seed the C065 PDPA fixture."
+
+# A refusal must say why, and nothing else may carry a reason it did not earn — the two halves
+# of ck_pdpa_requests_rejection (1314).
+check_rejects "a Rejected PDPA request with no reason is refused" \
+  "INSERT INTO pdpa.requests(user_id, kind, status, fulfilled_at, decided_by)
+   VALUES ('$C065_USER','erasure','Rejected', now(), '$C065_USER');"
+
+check_rejects "a Fulfilled PDPA request carrying a rejection reason is refused" \
+  "INSERT INTO pdpa.requests(user_id, kind, status, fulfilled_at, decided_by, decision_reason)
+   VALUES ('$C065_USER','export','Fulfilled', now(), '$C065_USER', 'why?');"
+
+check_rejects "a decided PDPA request with no decider is refused" \
+  "INSERT INTO pdpa.requests(user_id, kind, status, fulfilled_at)
+   VALUES ('$C065_USER','export','Fulfilled', now());"
+
+check_accepts "a FulfilledHold names what a statute kept" \
+  "INSERT INTO pdpa.requests(user_id, kind, status, fulfilled_at, decided_by, hold_reason)
+   VALUES ('$C065_USER','erasure','FulfilledHold', now(), '$C065_USER','financial-records,audit-trail');"
+
+# AL-05, restated from this component's side: the reconciliation index exists on a table whose
+# method CHECK still admits exactly the two gateway rails, so there is no bank-transfer queue.
+check_eq "gateway settlement reconciles two rails and only two (AL-05)" "1" \
+  "SELECT count(*)::int FROM pg_constraint
+    WHERE conname='ck_topups_method'
+      AND pg_get_constraintdef(oid) LIKE '%onepay%' AND pg_get_constraintdef(oid) LIKE '%lankaqr%'
+      AND pg_get_constraintdef(oid) NOT LIKE '%bank%';"
+
+psql_run "DELETE FROM pdpa.requests WHERE user_id='$C065_USER';
+          DELETE FROM iam.users WHERE id='$C065_USER';" >/dev/null \
+  || die "could not clean up the C065 PDPA fixture."
+
+# ---------------------------------------------------------------------------------------
 printf '\n'
 if (( FAILURES == 0 )); then
   printf '%s%d/%d checks passed — migrations apply cleanly, twice.%s\n' "$GREEN" "$CHECKS" "$CHECKS" "$RESET"

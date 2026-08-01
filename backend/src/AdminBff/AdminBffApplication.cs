@@ -91,6 +91,16 @@ public static class AdminBffApplication
     /// without failing the build.
     /// </para>
     /// <para>
+    /// <b>Δ C065: <c>/v1/pdpa</c> is the one other prefix, and it is named here rather than allowed
+    /// by a looser rule.</b> D3' heads that family "pdpa-svc (via admin-bff) — data rights
+    /// (`/v1/pdpa`)" and marks its three routes <c>Bearer</c>; C008's <c>gateway-routes.json</c>
+    /// sends the prefix to this cluster; iam-svc's <c>DELETE /v1/users/me</c> answers <c>202</c> with
+    /// a <c>Location</c> under it. AL-02 forbids a driver-facing or passenger-facing <em>console</em>
+    /// — three routes by which a person exercises a statutory right over their own record are not
+    /// one. Spelling the exception out is what keeps it an exception: a fourth prefix still fails to
+    /// start.
+    /// </para>
+    /// <para>
     /// Health probes and the metrics endpoint are the kernel's and are exempt by name: they are
     /// infrastructure, they mutate nothing, and D7' §5.1 requires them at the root.
     /// </para>
@@ -110,11 +120,13 @@ public static class AdminBffApplication
                 continue;
             }
 
-            if (!route.StartsWith(AdminEndpoints.Prefix, StringComparison.Ordinal))
+            if (!route.StartsWith(AdminEndpoints.Prefix, StringComparison.Ordinal) &&
+                !route.StartsWith(PdpaEndpoints.SubjectPrefix, StringComparison.Ordinal))
             {
                 problems.Add(
-                    $"{route} is not under {AdminEndpoints.Prefix}. admin-bff serves the Admin Portal and nothing "
-                    + "else (AL-02); a driver-facing or passenger-facing route does not belong here.");
+                    $"{route} is not under {AdminEndpoints.Prefix} or {PdpaEndpoints.SubjectPrefix}. admin-bff "
+                    + "serves the Admin Portal and E-06's data-rights routes and nothing else (AL-02); a "
+                    + "driver-facing or passenger-facing route does not belong here.");
 
                 continue;
             }
@@ -209,6 +221,8 @@ public static class AdminBffApplication
         AdminUpstreams.Content => "Content",
         AdminUpstreams.Registry => "Registry",
         AdminUpstreams.Fleet => "Fleet",
+        AdminUpstreams.Wallet => "Wallet",
+        AdminUpstreams.Fare => "Fare",
         _ => "Transit",
     };
 }

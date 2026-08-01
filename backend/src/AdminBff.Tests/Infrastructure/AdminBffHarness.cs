@@ -162,6 +162,14 @@ internal sealed class AdminBffHarness : IAsyncDisposable
             ["AdminBff:Upstreams:Fleet:BaseUrl"] = upstream.BaseUrl,
             ["AdminBff:Upstreams:Fleet:InternalApiKey"] = StubUpstream.InternalKey,
 
+            // C065's two, and they are the two kinds. wallet-svc's ledger seam is an
+            // /v1/internal plane and takes the shared key; fare-svc's refund is a role-gated
+            // /v1/admin route and gets the operator's own bearer forwarded instead — which is
+            // exactly the split the stub asserts on.
+            ["AdminBff:Upstreams:Wallet:BaseUrl"] = upstream.BaseUrl,
+            ["AdminBff:Upstreams:Wallet:InternalApiKey"] = StubUpstream.InternalKey,
+            ["AdminBff:Upstreams:Fare:BaseUrl"] = upstream.BaseUrl,
+
             // A fixed key so a signed object URL is reproducible inside one run, and a base URL so
             // the 302's Location is the absolute form a bucket would serve.
             ["AdminBff:Documents:SigningKey"] = "test-document-signing-key",

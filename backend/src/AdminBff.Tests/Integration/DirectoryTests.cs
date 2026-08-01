@@ -614,10 +614,20 @@ public sealed class DirectoryTests(PostgresFixture postgres)
                     .Select(method => $"{method} {route.RoutePattern.RawText}"))
             .ToArray();
 
-        // The two suspensions are C062's moderation writes on the same prefixes and are the whole
-        // permitted set — refunds and reversals are Finance-only and belong to C065.
+        // The two suspensions are C062's moderation writes on the same prefixes.
+        //
+        // Δ C065 adds a third, and it is the one the C064 handoff named in advance: D3' spells the
+        // fee reversal `POST /v1/admin/drivers/wallet/{id}/reverse-fee`, so the contracted path
+        // shares this prefix without being a directory route — SCR-AP-013's wallet tab renders the
+        // ledger and moves nothing, and the button posts here (BR-28.8). It is listed rather than
+        // filtered out of the predicate, because the value of this test is that ANY write under
+        // these three prefixes has to be argued for on this line.
         Assert.Equal(
-            ["POST /v1/admin/drivers/{driverId:guid}/suspend", "POST /v1/admin/vehicles/{vehicleId:guid}/suspend"],
+            [
+                "POST /v1/admin/drivers/wallet/{driverId:guid}/reverse-fee",
+                "POST /v1/admin/drivers/{driverId:guid}/suspend",
+                "POST /v1/admin/vehicles/{vehicleId:guid}/suspend",
+            ],
             mutating.Order(StringComparer.Ordinal).ToArray());
     }
 

@@ -1,4 +1,4 @@
-# admin-bff (C062 core + C063 verification + C064 directories) — the Admin Portal's back-office BFF
+# admin-bff (C062 core + C063 verification + C064 directories + C065 finance & PDPA) — the Admin Portal's back-office BFF
 
 Stack: .NET 10 Minimal API + Dapper over Npgsql. References `MageRide.Shared` (C002) and
 `Analytics` (C061, a library — not a service). **No Redis, no consumer, no outbox, no command
@@ -12,9 +12,13 @@ the code.
 ## What this service is
 
 The single back-office front door for all six internal roles (AL-02, `admin.mageride.lk`). C062 is
-its foundation, **C063 is the Verification Officer's whole surface** and **C064 is the three
-directories**; C065 (finance/PDPA) maps onto the same group in `AdminEndpoints` and inherits both
-fences without touching either.
+its foundation, **C063 is the Verification Officer's whole surface**, **C064 is the three
+directories** and **C065 is finance, the three queues and E-06's data rights**. Each maps onto the
+same group in `AdminEndpoints` and inherits both fences without touching either — except that C065
+adds **one** second prefix, `/v1/pdpa`, which the start-up guard names explicitly (see AL-02 below).
+
+It also serves the **pdpa-svc surface** D3' heads "pdpa-svc (via admin-bff)": three data-subject
+routes and three operator ones.
 
 | Endpoint | URD §2.3 gate | Spec |
 |---|---|---|
@@ -41,6 +45,15 @@ fences without touching either.
 | `GET · PUT /v1/admin/config/feature-flags[/{key}]` | platform-settings · configure | **Δ C062** — US-14.12 |
 | `POST /v1/admin/trains` · `PUT` · `DELETE .../{id}` | platform-settings · configure | US-2.17/2.18 |
 | `POST /v1/admin/announcements` | announcements · write | US-14.8, D-26 |
+| `GET /v1/admin/finance/reconciliation` · `/exceptions` | finance · read | **C065** — D6' §7.2, SCR-AP-006 |
+| `GET /v1/admin/finance/transactions[.csv\|.pdf]` | finance · read | **C065** — US-9A.15 |
+| `GET · POST /v1/admin/finance/refunds` | refunds · read / write | **C065** — E-05, ADD §11.14 |
+| `POST /v1/admin/drivers/wallet/{driverId}/reverse-fee` | driver-wallet-adjustments · write | **C065** — US-14.11 |
+| `GET /v1/admin/documents/expiring` | verification · read | **C065** — E-03, ADD §6 |
+| `GET /v1/admin/fraud/queue` | moderation · read | **C065** — E-07, ADD §6 |
+| `GET /v1/admin/pdpa/queue` | account-management · read **platform-wide** | **C065** — E-06 |
+| `POST /v1/admin/pdpa/{id}/fulfill` · `/reject` | account-management · write **platform-wide** | **C065** — E-06 |
+| `POST /v1/pdpa/export` · `/erasure` · `GET /v1/pdpa/{id}` | **authenticated data subject** | **C065** — E-06, US-1.8 |
 | `GET /v1/admin/audit-log` | audit-trail · read | US-19.3, D-35 |
 | `/v1/admin/transit/gtfs/{**path}` | platform-settings · configure | AL-54, SCR-AP-016 |
 
@@ -73,6 +86,13 @@ recorded as a micro-change-set in the C062 handoff in `build/progress.md`.
   still carry the pre-AL-37 wording and a portal built from those would wait for a challenge.
 - **AL-02 — nothing driver-facing or passenger-facing.** For an API that means every route is under
   `/v1/admin`, asserted by the same start-up guard rather than trusted.
+  **Δ C065: `/v1/pdpa` is the one other prefix, and it is named in the guard rather than admitted by
+  a looser rule.** D3' heads that family "pdpa-svc (via admin-bff) — data rights (`/v1/pdpa`)" and
+  marks its three routes Bearer; `gateway-routes.json` already sends the prefix to this cluster; and
+  iam-svc's `DELETE /v1/users/me` answers `202` with `Location: /v1/pdpa/{requestId}`, a URL a
+  passenger's app follows. AL-02 forbids a driver-facing or passenger-facing **console** — three
+  routes by which a person exercises a statutory right over their own record are not one. A *fourth*
+  prefix still fails to start.
 
 ## Rules that are load-bearing
 
@@ -311,6 +331,108 @@ recorded as a micro-change-set in the C062 handoff in `build/progress.md`.
   every route under the three prefixes and allows exactly the two C062 suspensions, so a later
   component cannot hang a write off a directory path without the suite failing.
 
+### Finance and data rights (C065)
+
+- **This surface moves money and writes none of it.** `FinanceRepository` has no `INSERT` and no
+  `UPDATE` — asserted as a class, and `Only_two_finance_routes_mutate_and_both_forward` asserts it
+  against the running route table. The reversal is posted by **wallet-svc**, the only writer of
+  `billing.journal_postings`, whose own file names admin-bff as the caller entitled to
+  `kind='adjustment'`; the refund is raised by **fare-svc**, which owns `fares.refunds`, the
+  balanced entry and the gateway reverse call; a fraud flag is resolved by **reputation-svc**. What
+  this component contributes is the RBAC gate, the queue the decision is made from, and the D-35 row
+  saying a human made it.
+- **Four URD §2.3 rows on one screen, and the obvious single row is wrong three times.**
+  Reconciliation and the transactions report are **Finance** (CSR and Verification Officer ➖ — a CSR
+  investigating a ticket has the passenger directory and no business reading the platform's
+  settlement position). The reversal is **Driver wallet adjustments / reversals**, the one row that
+  exists for this button and whose cells are ✅ for exactly Super Admin and Finance — so C065's fence
+  ("Finance/Super-Admin only") is not a role list written into a route, it is what the matrix already
+  says, and there is no ◐ in the row to fence. Refunds are **Refunds**, whose CSR cell
+  `◐ raise/recommend` opens the queue and withholds the button without any platform-wide fence,
+  because `PermissionCell.Parse` already trades Write for Raise. **Admin holds ✅ on refunds and 👁 on
+  reversals**, and the difference is deliberate: giving a passenger back their own fare is not the
+  same authority as putting credit into a driver's wallet.
+- **The two review queues are gated where they belong, not where they were built.** ADD §6 lists the
+  refund, document-expiry and fraud-review queues together on admin-bff's row, so all three are here
+  — but an expiring insurance certificate is a document review (**Verification**, and E-03's expiry
+  is what AL-10's gate turns on) and a confirmed E-07 signal leads to a suspension
+  (**Moderation**). Gating either on Finance would hand the screen to the one role that has no use
+  for it and take it from the two that do.
+- **The reversal's ledger key is the business fact, so one charge is reversed once, ever.**
+  `adjustment:fee_reversal:{driverId}:{vehicleId}:{feeDate}` collides on
+  `billing.journal_entries.idempotency_key`, so a double click answers `replayed: true` with the
+  original entry — which is why this route needs no command log. The bound is the right one: a
+  second correction on the same day is an adjustment somebody has to argue for rather than press
+  twice. **The audit row is written either way**, because what D-35 records is that an operator
+  performed the action, not that the ledger happened to be in a state where it had an effect.
+- **The refund queue is a union, and the second half is the point.** §11.14's late callback writes
+  `fares.ride_payments.state = 'Overpaid'` *and* a `fares.refunds` row — but a payment that reached
+  Overpaid with no refund row is exactly the R-19 failure the queue exists to catch, and a list of
+  raised refunds would hide it. The Overpaid half excludes payments a refund already covers, so a
+  normally-handled callback appears once.
+- **The exception queue's four classes are derived, never stored.** wallet-svc refuses a callback
+  whose amount disagrees with its session, logs the numbers and leaves the session `Pending` — there
+  is no exception column, and adding one would give this component a write on another service's
+  table. So `amount-mismatch` / `settled-not-posted` / `unsettled` / `gateway-failed` are a `CASE`
+  over the state, the ledger and the clock, and a session that resolves itself leaves the queue with
+  nobody having to close it. A lost callback and a refused mismatch are **both** `unsettled` because
+  the schema cannot tell them apart, and the operator is told that rather than shown a guess.
+- **`AdminBff:Finance:SettlementGracePeriod` is deliberately not D6' §7.1's 90 seconds.** That window
+  is how long a client polls before falling back; a session still open a minute later is somebody
+  typing a card number. An hour later it is a lost callback. Using the gateway's own number would
+  fill Finance's queue with people who are still paying.
+- **The transactions report reads the journal, not `billing.wallet_transactions`.** The projection is
+  one row per *account leg*, so a driver-to-driver transfer appears twice and a report that summed it
+  would double the platform's transfer volume. One entry, two parties named by the sign of their leg
+  — one projection for all four kinds rather than four `CASE` arms to revisit when a kind is added.
+- **The JSON, the CSV and the PDF are one query.** "The export matches the screen" is structural, not
+  a coincidence two queries share — C061's CSV is written under the same rule. Both files carry a
+  preamble naming the window, the timezone and the row count, because a figure with no stated window
+  is unfalsifiable once the request that produced it is gone.
+- **The PDF is written by hand and that is cheaper than it sounds.** A table in one of the base-14
+  fonts every conforming reader must have needs no embedded font and no library on
+  `Directory.Packages.props` — and the byte offsets are *measured* rather than computed, because a
+  file whose xref is one byte out opens in a forgiving reader and fails in a strict one, which is the
+  worst way for it to be wrong. **It must not be extended to anything trilingual**: WinAnsi has no
+  Sinhala or Tamil glyphs, and faking them is worse than the 415 wallet-svc answers (D-26).
+- **An erasure is a soft anonymisation, and the hold list has two kinds of entry.** A *blocking* hold
+  (an in-flight ride, an open dispute, an unsettled payment, money still in the wallet) is a live
+  operation that anonymising would break; it answers 409 and lifts on its own. A *retention* hold
+  (the ledger, the audit trail) is a record a statute requires be kept and is what turns `Fulfilled`
+  into `FulfilledHold`. Treating them alike would either refuse every erasure for ever — every
+  account has a ledger — or anonymise somebody who is in a car right now.
+- **`audit.events` is never touched and the fulfilment writes to it.** A right-to-erasure that
+  deleted the record of the erasure would leave the platform unable to prove it complied. The
+  retention is *declared* on the request rather than being silent, because a subject is entitled to
+  know what was kept and on what basis.
+- **`phone` becomes NULL and `email` becomes a per-account `.invalid` address, and neither is
+  cosmetic.** `ck_users_credential` requires one of the two, so both cannot be cleared; both are
+  UNIQUE, so a shared placeholder would let the first erasure block every one after it. RFC 2606
+  reserves `.invalid` for a value that must exist and must not resolve, and no credential row
+  survives, so it cannot be signed in with.
+- **`iam.users.anonymised_at` is what makes C064's `deleted` producible.** That handoff recorded a
+  `PassengerRow.status` value nothing could produce and left the enum for this component; migration
+  0110 is the column and the passenger directory now derives it. Deliberately not `is_blocked`:
+  blocking is a moderation decision an admin can undo, and an erasure is neither.
+- **The data subject's own POST writes an `audit.events` row**, which nothing else on this surface
+  does. A statutory clock that starts when somebody presses a button in the Passenger App needs the
+  press in the same immutable log the fulfilment lands in, or the platform can prove it acted and
+  cannot prove when it was asked. `actor_role` is `passenger` or `driver` on exactly these rows.
+- **A request that is not yours is a 404.** Telling a 403 from a 404 would make the status route an
+  oracle over whether a given id is somebody's live erasure request — wallet-svc's house rule for
+  credit transfers, and it matters more here.
+- **A decided request is a 409, not an idempotent no-op.** Fulfilling an already-rejected erasure
+  would anonymise an account whose owner was told their request was refused; rejecting an
+  already-fulfilled one would record a refusal of something that has already happened.
+- **The archive is written before the transaction opens.** Assembling fourteen datasets and pushing a
+  ZIP to a bucket inside a transaction would hold a Postgres write transaction across a network round
+  trip. The failure mode of this order is an orphaned object the bucket's lifecycle rule sweeps; the
+  other order's is a lock on `pdpa.requests` for as long as the bucket is slow.
+- **An export archive is `ephemeral`, and that is a decision.** Any non-null `Retention` puts the
+  object under the prefix D-36's one lifecycle rule matches. It is emphatically not `Retained`, which
+  is for objects the platform keeps *serving* — a copy of everything held about one person must not
+  become a permanent second copy.
+
 ### Configuration surfaces
 
 - **A tariff version is inserted, never updated, and never backdated.** D-10 makes a published rate
@@ -361,6 +483,9 @@ Admin beside them (⚙) may use, which URD §2.4 rules out in as many words.
 | `1312` | `audit.events.event_id` · `.actor_role` · `.ip` · `.detail` | §15 prints eight columns and the D-35 interceptor records four more. Each is named by a document — D6' §2.2's envelope id, `admin-bff.yaml#AuditEvent`'s `actorRole`/`ip`, the deliverable's "before/after, ip" — and 1305 has nowhere to put any of them. `ip` is `TEXT` and not `INET`: an audit trail that refuses a value it cannot parse records less than one that writes down what it was handed |
 | `0315` | `registry.driver_profiles.rejection_reason` | **C063.** AL-39's family is subject-agnostic and US-2.15 makes a rejection reason mandatory and shown to the applicant. Two of the three subjects already have a column — `registry.vehicles` (0303) and `registry.fleets` (0301) — and the driver did not, so an officer's refusal of a licence could be recorded in `audit.events` and never shown to the driver it was about. No companion timestamp and no `status`: the state is derived (`verified_at` ⇒ APPROVED, else this ⇒ REJECTED, else PENDING), exactly as `onboarding_status` is |
 | `0109`, `0317`, `0507`, `0610`, `1110` | five directory read-path indexes | **C064.** No new table and no new column: three directories over other services' tables need ordering keys and two reverse lookups nobody had needed before. `iam.users(role, created_at DESC, id DESC)` is both people-directories' keyset; `registry.vehicles(created_at DESC, id DESC)` is the vehicle directory's — 0303's three indexes all *find* a vehicle and none orders by registration date. `trips.sessions(driver_id, started_at DESC)` because `ux_sessions_active_driver` is partial on ACTIVE and holds at most one row, which is the opposite set; `rides.rides(accepted_vehicle_id, …)` because 0601 indexes a ride by *person* and SCR-AP-014/015 asks by vehicle; `billing.daily_fee_charges(vehicle_id, fee_date DESC)` because the `(driver_id, vehicle_id, fee_date)` PK cannot serve a vehicle-first read as a prefix |
+| `0110` | `iam.users.anonymised_at` | **C065.** E-06's erasure is a *soft* anonymisation — the row survives so every ride, posting and audit event referencing it still resolves — and nothing in §1 recorded that it happened. Two consequences: `admin-bff.yaml`'s `PassengerRow.status` carried a `deleted` value nothing could produce (the C064 handoff records exactly that and leaves the enum for this component), and a second erasure request would re-anonymise an account and report it as fresh work. Not a `status` column and not `is_blocked`: blocking is a moderation decision an admin can undo |
+| `1008`, `1111` | two finance read-path indexes | **C065.** No new table and no new column. `fares.ride_payments(created_at) WHERE state='Overpaid'` because 1002's three indexes start from a ride, a QR claim or the retry chain and none can answer "everything currently Overpaid, oldest first", which is the refund queue's second half; `billing.topups(method, created_at DESC)` because 1107's three all start from one session and SCR-AP-006 starts from a **rail and a day** |
+| `1314` | `pdpa.requests.decided_by` · `.decision_reason` + `ix_pdpa_requests_decided` | **C065.** §16 gives the table a `Rejected` status and D3' a `/reject` route whose body the contract types as a **required** reason — with no column to put it in. `hold_reason` is not it: `ck_pdpa_requests_hold` ties that column to `FulfilledHold`, the opposite outcome, and one field could not carry both without the SLA queue losing the difference between a partial fulfilment and a denial. `decided_by` is the same gap on the other axis — `audit.events` records who called the route, and neither the subject's status read nor the queue can join it |
 | `1409` | `registry.vehicles.default_route_id` | `TrainInput.routeId` had nowhere to live. **Not** the same question as `trips.sessions.route_id`: that is the line a *journey* ran, this is the line the vehicle is *registered for* (US-2.17), and nothing derives one from the other. In the 14xx range because the FK points at `spatial.routes`, which 1401 creates |
 
 ## Not here, and named rather than stubbed
@@ -373,10 +498,30 @@ Admin beside them (⚙) may use, which URD §2.4 rules out in as many words.
 - **Daily-fee rates, bulk-voucher tiers, Driver-Level parameters.** subscription-svc's
   `/v1/admin/fees/rates` and `/v1/admin/voucher-discount-tiers`, dispatch-svc's
   `/v1/admin/drivers/level-config`. Same shape, same reason.
-- **Finance and PDPA (C065).** A separate component on this project. `AdminMenu` already carries its
-  nav entries, because the portal's shell must not depend on build order. The reversal button on
-  SCR-AP-013's wallet tab is C065's `POST /v1/admin/drivers/wallet/{driverId}/reverse-fee` — the
-  directory renders the ledger and moves nothing (BR-28.8).
+- **Every movement of money C065's screens decide (C065).** wallet-svc posts the reversal, fare-svc
+  raises the refund and its balanced entry and calls the gateway, reputation-svc resolves a fraud
+  flag, payout-svc runs the weekly sweep. This surface reads, gates and audits.
+- **The images behind an export archive (C065).** `documents.json` lists what is on file — kind,
+  dates, status — and the scans themselves are not enclosed: an archive assembled in one request
+  cannot carry a folder of photographs, and a PDPA download that timed out would be a fulfilment that
+  did not happen. The ZIP's own `README` says they are available through support. Named in the C065
+  handoff as the one thing the export names rather than includes.
+- **A sweeper for expired export archives (C065).** The bucket's own lifecycle rule is the deadline
+  (the object is written under `ephemeral/`), which is D-36's whole design — a second deleter in this
+  service would be a process that has to be right about somebody else's retention policy.
+- **Anything that erases a *driver's* operational record (C065).** An erasure anonymises the identity
+  on `iam.users` and `registry.driver_profiles` and leaves vehicles, documents, rides and the ledger
+  where they are: they are a fleet's, a passenger's and a statute's records as much as the driver's.
+  What stops the account being used is the session revocation, not a cascade.
+- **Two of the three `rides` columns the C032 handoff named for this component (C065).**
+  `rides.rides.rider_phone_hash` **is** cleared, where the subject is the rider rather than the
+  booker who typed somebody else's number. The other two are deliberately not:
+  `rides.rides.recipient_phone` is a **third party's** number on a delivery the subject booked — it
+  is the recipient's data, not the subject's, and `ck_rides_package_recipient` makes it `NOT NULL`
+  for a package ride, so clearing it would break the record of a delivery that happened.
+  `rides.proof_artifacts.storage_url` points at bytes in the D-36 bucket under NFR-28's own
+  `ephemeral/` lifecycle rule, which already deletes them on a deadline this service does not own.
+  Both are recorded in the C065 handoff rather than done quietly.
 - **Δ D-36 is wired (C063).** With `Storage:S3:*` configured, `GET /v1/admin/documents/{docId}`
   records its `DOC_VIEW` row and 302s to **the bucket's own presigned GET** — a SigV4 signature the
   storage provider verifies, with the TTL enforced by the provider and no MageRide process carrying
@@ -418,6 +563,12 @@ Every knob is documented at its declaration in `AdminBffOptions` and in `infra/e
 | `Documents:PublicBaseUrl` | — | **C063, no spec.** Where the D-36 store is reachable from a browser. Unset ⇒ the stored pointer is redirected to unchanged; the DOC_VIEW row is unaffected. ERROR at start-up |
 | `Documents:SigningKey` | *(per process)* | **C063, no spec.** Unset ⇒ a URL minted by one replica does not verify on another. Warned |
 | `Documents:UrlTtl` | 5 min | **C063, no spec** beyond AL-39's "short-lived" |
+| `Upstreams:Wallet:BaseUrl` + `:InternalApiKey` | — | **C065.** The ledger seam US-14.11 posts through. Unset ⇒ no driver can be given back a fee they were wrongly charged |
+| `Upstreams:Fare:BaseUrl` | — | **C065.** E-05's refund execution — role-gated, so the caller's bearer is forwarded and there is no key. Unset ⇒ the queue still reads and only the decision 503s |
+| `Pdpa:DueDays` | 30 | **C065.** D7' §4.2's `Pdpa__DueDays`, finally landing. The deadline itself is `pdpa.requests.due_by`'s column default (1306); this is what the 202 reports before the row is read back |
+| `Pdpa:ArtifactUrlTtl` | 15 min | **C065, no spec.** An export archive is a copy of everything held about one person; the link is minted fresh on every status read |
+| `Pdpa:MaxRowsPerDataset` | 10 000 | **C065, no spec.** The archive is assembled in memory. Truncation is recorded in the ZIP's manifest, never silent |
+| `Finance:SettlementGracePeriod` | 1 h | **C065, no spec.** Deliberately not D6' §7.1's 90 s — that window is how long a client polls, and a session open a minute later is somebody typing a card number |
 
 `ConnectionStrings:Postgres`, `Jwt:*` and `Kafka:BootstrapServers` are required through the kernel.
 There is no `ConnectionStrings:Redis` and no `Outbox:*`, and there must not be. The `Analytics:*`
@@ -426,4 +577,6 @@ section (C061) is read by this process, because this is the process that hosts t
 **Three of D7' §4.2's six admin-bff variables are not this service's.** `Login__MaxFailedAttempts`,
 `Login__LockoutMinutes` and `Login__IpAllowList` belong to iam-svc, which owns every credential
 path; `Rbac__DenyByDefault` is not a switch at all — deny-by-default is the kernel's fallback policy
-plus a per-route gate, and nothing reads a flag. `Pdpa__DueDays` is C065's. Micro-change-set raised.
+plus a per-route gate, and nothing reads a flag. Micro-change-set raised. **Δ C065: the sixth,
+`Pdpa__DueDays`, now lands here** — on `AdminBff:Pdpa:DueDays`, and it reports rather than decides
+the deadline, which migration 1306's column default owns.

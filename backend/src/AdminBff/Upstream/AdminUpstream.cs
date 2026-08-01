@@ -22,7 +22,34 @@ public static class AdminUpstreams
     /// <summary>The fleet-org queue and the AL-49/AL-50 decisions (C063).</summary>
     public const string Fleet = "fleet-svc";
 
-    public static readonly IReadOnlyList<string> All = [Safety, Support, Content, Transit, Registry, Fleet];
+    /// <summary>
+    /// The ledger seam US-14.11's fee reversal posts through (C046, C065).
+    /// </summary>
+    /// <remarks>
+    /// wallet-svc is the <b>only writer of <c>billing.journal_postings</c></b> and its own file lists
+    /// admin-bff by name as the caller entitled to post <c>kind='adjustment'</c> on
+    /// <c>POST /v1/internal/wallet/{driverId}/credit</c>. Posting the compensating entry here
+    /// instead would give the ledger a second writer for the one movement that is hardest to get
+    /// right — the balanced pair, the <c>billing.wallets</c> mirror, the history line, the D-08
+    /// cache write-through and the outbox row all happen inside <c>LedgerService.PostAsync</c>.
+    /// </remarks>
+    public const string Wallet = "wallet-svc";
+
+    /// <summary>
+    /// E-05's refund execution — <c>POST /v1/admin/fare/refund</c> (C050, C065).
+    /// </summary>
+    /// <remarks>
+    /// fare-svc owns <c>fares.refunds</c> and the gateway round-trip behind it, and its route is
+    /// role-gated on the caller's own bearer rather than sitting on an <c>/v1/internal/**</c> plane
+    /// — so this is one of the two upstreams that gets the operator's token forwarded, like
+    /// content-svc and transit-svc. In the deployed topology the gateway sends
+    /// <c>/v1/admin/fare/**</c> straight to fare-svc at Order 20; what admin-bff adds is the Finance
+    /// queue the decision is made from and the D-35 row recording that a human made it.
+    /// </remarks>
+    public const string Fare = "fare-svc";
+
+    public static readonly IReadOnlyList<string> All =
+        [Safety, Support, Content, Transit, Registry, Fleet, Wallet, Fare];
 }
 
 /// <summary>
@@ -231,6 +258,8 @@ internal sealed class AdminUpstream(
         AdminUpstreams.Transit => _upstreams.Transit,
         AdminUpstreams.Registry => _upstreams.Registry,
         AdminUpstreams.Fleet => _upstreams.Fleet,
+        AdminUpstreams.Wallet => _upstreams.Wallet,
+        AdminUpstreams.Fare => _upstreams.Fare,
         _ => throw new ArgumentOutOfRangeException(
             nameof(upstream), upstream, $"Not an admin-bff upstream. Known: {string.Join(", ", AdminUpstreams.All)}."),
     };

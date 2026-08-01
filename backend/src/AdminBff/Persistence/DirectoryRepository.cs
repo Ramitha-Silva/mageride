@@ -127,7 +127,8 @@ internal sealed class DirectoryRepository(INpgsqlConnectionFactory connections) 
     private const string SearchPassengersSql =
         """
         WITH page AS (
-          SELECT u.id, COALESCE(u.first_name, '') AS name, u.phone, u.created_at, u.is_blocked
+          SELECT u.id, COALESCE(u.first_name, '') AS name, u.phone, u.created_at, u.is_blocked,
+                 u.anonymised_at
             FROM iam.users u
            WHERE u.role = @Role
              AND (@Id::uuid          IS NULL OR u.id = @Id)
@@ -143,7 +144,9 @@ internal sealed class DirectoryRepository(INpgsqlConnectionFactory connections) 
                p.phone                    AS "Mobile",
                p.created_at               AS "JoinedAt",
                COALESCE(t.trips, 0)::int  AS "Trips",
-               CASE WHEN p.is_blocked THEN 'blocked' ELSE 'active' END AS "Status"
+               CASE WHEN p.anonymised_at IS NOT NULL THEN 'deleted'
+                    WHEN p.is_blocked                THEN 'blocked'
+                    ELSE 'active' END AS "Status"
           FROM page p
           LEFT JOIN LATERAL (
                 SELECT count(*) AS trips
@@ -193,7 +196,9 @@ internal sealed class DirectoryRepository(INpgsqlConnectionFactory connections) 
                u.created_at                AS "JoinedAt",
                r.rating                    AS "Rating",
                u.default_payment_method    AS "DefaultPay",
-               CASE WHEN u.is_blocked THEN 'blocked' ELSE 'active' END AS "Status"
+               CASE WHEN u.anonymised_at IS NOT NULL THEN 'deleted'
+                    WHEN u.is_blocked                THEN 'blocked'
+                    ELSE 'active' END AS "Status"
           FROM iam.users u
           LEFT JOIN LATERAL (
                 SELECT round(avg(ra.stars)::numeric, 2)::float8 AS rating

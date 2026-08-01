@@ -69,11 +69,14 @@ tags:
   - name: admin-config
     description: Tariffs, cities, trains and announcements.
   - name: admin-finance
-    description: Fee reversal — Finance only.
+    description: |
+      **Δ C065.** Gateway settlement reconciliation and its exception queue, the refund queue and
+      its decision, the transactions report with CSV/PDF export, and the daily-fee reversal.
+      Four URD §2.3 rows, not one — see each operation.
   - name: admin-audit
     description: The audit log.
   - name: pdpa
-    description: Data-subject export and erasure (E-06).
+    description: Data-subject export and erasure (E-06), and the operator queue that fulfils them.
 
 paths:
 
@@ -1669,14 +1672,437 @@ paths:
   # -------------------------------------------------------------------------------------------
   # Finance & audit
   # -------------------------------------------------------------------------------------------
+  /v1/admin/finance/reconciliation:
+    get:
+      operationId: getSettlementReconciliation
+      summary: OnePay/LankaQR settlement against the ledger, per rail per day.
+      description: |
+        **Δ C065.** D6' §7.1/§7.2 gives wallet-svc "OnePay/LankaQR gateway settlement reconciliation
+        … (exceptions → Finance queue in Admin Portal)" and SCR-AP-006 draws the screen; no route in
+        D3' serves it. `settledMinor` is what the gateway confirmed, `postedMinor` what reached the
+        ledger's own credit leg, and `varianceMinor` is the difference — zero is the whole point of
+        the screen.
+
+        **`billing.topups` is the whole of "gateway settlement" on this platform**, and that follows
+        from AL-57 rather than being a simplification: `onepay` and platform-merchant `lankaqr` were
+        removed as *ride* payment methods, so what the two rails settle is wallet top-ups.
+        `?method=` therefore admits exactly `onepay` and `lankaqr` — **there is no bank-transfer
+        rail to reconcile (AL-05)** and asking for one is a 400, not an empty page.
+
+        Gated on **Finance · Read** (ADM 👁, S.ADM ✅, FIN ✅, AUD 👁; CSR and Verification Officer
+        ➖). Default window is the last 30 Asia/Colombo business days (D-38); the maximum is 366.
+      tags: [admin-finance]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: from
+          in: query
+          required: false
+          schema:
+            $ref: './_shared.yaml#/components/schemas/BusinessDate'
+        - name: to
+          in: query
+          required: false
+          schema:
+            $ref: './_shared.yaml#/components/schemas/BusinessDate'
+        - name: method
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [onepay, lankaqr]
+      responses:
+        '200':
+          description: The window, its rails and the totals under them.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SettlementSummary'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden]
+
+  /v1/admin/finance/reconciliation/exceptions:
+    get:
+      operationId: listSettlementExceptions
+      summary: Gateway sessions that need a human.
+      description: |
+        **Δ C065.** D6' §7.2's "exceptions → Finance queue". Four kinds, **derived from the row
+        rather than stored on it** — wallet-svc records no exception column, so a session that
+        resolves itself leaves the queue with nobody having to close it:
+
+        | `kind` | What happened |
+        |---|---|
+        | `amount-mismatch` | Settled and posted, and the ledger's credit leg is not the amount the gateway confirmed. The one no retry will fix |
+        | `settled-not-posted` | Settled with no journal entry — money the payer parted with and no wallet moved |
+        | `unsettled` | Still open past `AdminBff:Finance:SettlementGracePeriod`: a lost callback, or an amount mismatch wallet-svc refused to credit and left `Pending` |
+        | `gateway-failed` | The gateway reported FAILED after issuing a transaction id of its own |
+
+        Oldest first, because the queue is worked oldest first and an operator touching a row must
+        not move it to the back.
+      tags: [admin-finance]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: kind
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [amount-mismatch, settled-not-posted, unsettled, gateway-failed]
+        - $ref: './_shared.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Open settlement exceptions.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SettlementException'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden]
+
+  /v1/admin/finance/refunds:
+    get:
+      operationId: listRefundQueue
+      summary: The refund queue, including R-19's Overpaid payments.
+      description: |
+        **Δ C065.** E-05 and ADD §11.14. **Two populations on one screen**, which is the point:
+        `source=refund` is a `fares.refunds` row already raised and awaiting settlement;
+        `source=overpaid` is a payment §11.14 moved to `Overpaid` that **nobody has raised a refund
+        for** — the R-19 failure this queue exists to catch. Showing only the first would hide
+        exactly the case that needs an operator.
+
+        Gated on **Refunds · Read**. The Support CSR's cell is `◐ raise/recommend`, so they see the
+        queue and cannot execute — which is what the row's other half (`FIN ✅ approve/execute`) is
+        written against.
+      tags: [admin-finance]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: source
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [refund, overpaid]
+        - name: status
+          in: query
+          required: false
+          description: A `fares.refunds.status`. Absent means the open ones, plus every unraised Overpaid.
+          schema:
+            type: string
+            enum: [Requested, Submitted, Succeeded, Failed]
+        - $ref: './_shared.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: The queue, oldest first.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RefundQueueRow'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden]
+
+    post:
+      operationId: issueRefund
+      summary: Raise a full, partial or overpaid reversal.
+      description: |
+        **Δ C065.** E-05. **Forwarded to fare-svc's `POST /v1/admin/fare/refund`**, which owns
+        `fares.refunds`, the balanced `payment_refund` / `overpaid_reversal` journal entry and the
+        gateway reverse call. The operator's own bearer is forwarded — that route is role-gated, not
+        an `/v1/internal/**` plane — and in the deployed topology the gateway sends
+        `/v1/admin/fare/**` straight to fare-svc at Order 20. What admin-bff adds is the queue the
+        decision is made from and the D-35 row saying a human made it: **two rows for one refund is
+        the right failure**, since only fare-svc's survives this route being renamed and only this
+        one survives the refund row being purged.
+
+        `amountMinor` may be omitted on a `full` or `overpaid_reversal` refund and means the whole
+        payment; a `partial` must say how much. Gated on **Refunds · Write**.
+      tags: [admin-finance]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [paymentId, kind, reasonCode]
+              properties:
+                paymentId:
+                  $ref: './_shared.yaml#/components/schemas/Ulid'
+                kind:
+                  type: string
+                  enum: [full, partial, overpaid_reversal]
+                amountMinor:
+                  type: integer
+                  format: int64
+                  minimum: 1
+                reasonCode:
+                  type: string
+                  maxLength: 60
+      responses:
+        '200':
+          description: Refund raised.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Refund'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes:
+        [validation-failed, invalid-amount, unauthorized, forbidden, not-found, conflict,
+         payment-already-settled, dependency-unavailable]
+
+  /v1/admin/finance/transactions:
+    get:
+      operationId: listWalletTransactions
+      summary: Top-ups, daily fees, voucher purchases and credit transfers.
+      description: |
+        **Δ C065.** US-9A.15's "view all wallet transactions" and SCR-AP-006's first tab. Exactly
+        four `billing.journal_entries.kind` values — the ledger admits twelve, and a report that
+        showed all of them would put a trip payment, a penalty settlement and a weekly payout under
+        column headings that describe none of the three.
+
+        **Read from the journal, not from `billing.wallet_transactions`.** The projection is one row
+        per *account leg*, so a driver-to-driver transfer appears twice and a report that summed it
+        would double the platform's transfer volume. One entry, two parties, named by the sign of
+        their leg: a top-up is platform → driver, a daily fee is driver → platform, a voucher
+        purchase is platform → buyer, a transfer is sender → recipient.
+      tags: [admin-finance]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TransactionsFrom'
+        - $ref: '#/components/parameters/TransactionsTo'
+        - $ref: '#/components/parameters/TransactionsKind'
+        - $ref: '#/components/parameters/TransactionsParty'
+        - $ref: './_shared.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: The window that was applied, and the rows under it.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionsReport'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden]
+
+  /v1/admin/finance/transactions.csv:
+    get:
+      operationId: exportWalletTransactionsCsv
+      summary: The same rows as a CSV download.
+      description: |
+        **Δ C065.** Byte-for-byte the rows `listWalletTransactions` returns for the same query —
+        one query, three renderings, so "the export matches the screen" is structural. The file
+        carries a `#` preamble naming the window, the timezone, the kinds, the row count and the
+        money unit, because a figure with no stated window is unfalsifiable once the request that
+        produced it is gone. Money stays in integer minor units.
+      tags: [admin-finance]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TransactionsFrom'
+        - $ref: '#/components/parameters/TransactionsTo'
+        - $ref: '#/components/parameters/TransactionsKind'
+        - $ref: '#/components/parameters/TransactionsParty'
+        - $ref: './_shared.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: CSV, UTF-8 with a BOM.
+          content:
+            text/csv:
+              schema:
+                type: string
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden]
+
+  /v1/admin/finance/transactions.pdf:
+    get:
+      operationId: exportWalletTransactionsPdf
+      summary: The same rows as a paginated PDF table.
+      description: |
+        **Δ C065.** The same rows again, laid out as an A4 table in one of the base-14 fonts every
+        conforming reader is required to have — so nothing is embedded and no rendering library is
+        on the platform's dependency list. The `entryId` column is dropped (a page of UUIDs is a
+        page nobody reads); the CSV is the machine-readable rendering and keeps it.
+
+        **Not for anything trilingual.** WinAnsi cannot draw Sinhala or Tamil, so this renderer is
+        for a finance table of ids, integers and contract identifiers and must not be extended to
+        fake a script it has no glyphs for (D-26).
+      tags: [admin-finance]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TransactionsFrom'
+        - $ref: '#/components/parameters/TransactionsTo'
+        - $ref: '#/components/parameters/TransactionsKind'
+        - $ref: '#/components/parameters/TransactionsParty'
+        - $ref: './_shared.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: PDF 1.4.
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden]
+
+  /v1/admin/documents/expiring:
+    get:
+      operationId: listDocumentExpiryQueue
+      summary: Documents inside E-03's notice horizon, or already expired.
+      description: |
+        **Δ C065.** ADD §6 lists a **document-expiry queue** among admin-bff's functions and no spec
+        gives it a route. Gated on **Onboarding/Verification · Read**, not Finance: an expiring
+        insurance certificate is a document review, and E-03's expiry is what AL-10's approval gate
+        turns on.
+
+        **Only the current document of each (subject, kind).** A renewal supersedes rather than
+        replaces, so the superseded row stays behind with a date in the past; a queue that listed
+        every expired row would show a backlog that has already been dealt with. `REJECTED`
+        documents are C063's queue and are excluded — one upload must not appear on two officers'
+        screens under two different verbs.
+
+        `lastNoticeDays` is the tightest E-03 reminder already sent (30 / 7 / 1 / 0), which is the
+        difference between chasing the holder and apologising to them. `thumbUrl`/`fullUrl` are
+        C063's audited viewer and never a bucket URL (AL-39).
+      tags: [admin-verification]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: withinDays
+          in: query
+          required: false
+          description: Horizon, 0–365. Defaults to 30 — E-03's own outermost reminder. 0 lists only what has expired.
+          schema:
+            type: integer
+            format: int32
+            minimum: 0
+            maximum: 365
+        - name: kind
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [driving_license, registration, permit, insurance, revenue_license]
+        - $ref: './_shared.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Documents by expiry, soonest first.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DocumentExpiryRow'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden]
+
+  /v1/admin/fraud/queue:
+    get:
+      operationId: listFraudReviewQueue
+      summary: E-07 anti-collusion signals awaiting review.
+      description: |
+        **Δ C065.** ADD §6 lists a **fraud-review queue** among admin-bff's functions.
+        reputation-svc owns `reputation.fraud_flags` and both `GET /v1/admin/reputation/flags` and
+        the `/resolve` that moves a flag off `open`; the gateway routes those there at Order 20.
+        What that surface cannot do is put a **name** beside a subject id — reputation-svc holds no
+        identity — and a queue of bare UUIDs is a queue nobody can work. So the list is joined here,
+        exactly as the three directories join five other services' tables, and `resolveUrl` points
+        the decision back at reputation-svc. **One reader, one writer.**
+
+        Gated on **Moderation · Read**, because what a confirmed signal leads to is a suspension.
+        `detail` is re-emitted as the JSON the detector stored: E-07's heuristics are expected to
+        grow (migration 0802) and a typed shape here would drop every field a new detector adds.
+      tags: [admin-moderation]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          description: Defaults to `open` — a review queue's job is what has not been reviewed.
+          schema:
+            type: string
+            enum: [open, dismissed, actioned]
+        - name: kind
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 60
+        - $ref: './_shared.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Flags, newest first.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FraudFlagRow'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden]
+
   /v1/admin/drivers/wallet/{driverId}/reverse-fee:
     post:
       operationId: reverseDriverFee
       summary: Reverse a daily-fee deduction.
       description: |
-        US-14.11, **Finance only** (AL-41 keeps reversals off every other role). Posts a balanced
-        compensating journal entry rather than editing the original — the ledger is append-only.
-        Audited (D-35).
+        US-14.11. Posts a balanced compensating journal entry rather than editing the original — the
+        ledger is append-only. Audited (D-35).
+
+        **Δ C065: gated on `Driver wallet adjustments / reversals` · Write**, which is the one URD
+        §2.3 row that exists for this button and whose cells are ✅ for exactly **Super Admin and
+        Finance** (Admin 👁, Auditor 👁, everybody else ➖). So the fence "reversals are
+        Finance/Super-Admin only" is not a role list written into this route — it is what the matrix
+        already says, and there is no ◐ in the row to fence.
+
+        **The entry is posted by wallet-svc**, the only writer of `billing.journal_postings`, whose
+        own file names admin-bff as the caller entitled to `kind='adjustment'`. The ledger key is
+        `adjustment:fee_reversal:{driverId}:{vehicleId}:{feeDate}` — composed from the business fact,
+        so a double click collides in the ledger and answers `replayed: true` with the original
+        entry rather than crediting twice. That means **one reversal per charge, ever**; a second
+        correction on the same day is an adjustment somebody has to argue for.
+
+        `amountMinor` defaults to the full charged amount and may not exceed it. A day whose fee was
+        waived under D-13's first-trip rule moved no money and is a `409`.
       tags: [admin-finance]
       security:
         - bearerAuth: []
@@ -1705,12 +2131,12 @@ paths:
                   maxLength: 1000
       responses:
         '200':
-          description: Reversal posted.
+          description: Reversal posted, or replayed from the ledger when the key was already used.
           content:
             application/json:
               schema:
                 type: object
-                required: [entryId, amountMinor, currency]
+                required: [entryId, amountMinor, currency, balanceAfterMinor, replayed]
                 properties:
                   entryId:
                     $ref: './_shared.yaml#/components/schemas/Ulid'
@@ -1720,13 +2146,26 @@ paths:
                     minimum: 0
                   currency:
                     $ref: './_shared.yaml#/components/schemas/Currency'
+                  balanceAfterMinor:
+                    description: The driver's wallet after the credit. Signed — a wallet may be negative (US-9A.7).
+                    type: integer
+                    format: int64
+                  replayed:
+                    description: |
+                      **Δ C065.** True when the ledger key had already been used — a double click,
+                      answered with the original entry rather than a second credit. On the wire
+                      because an operator who pressed twice deserves to be told the second press
+                      did nothing.
+                    type: boolean
         '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
         '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
         '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
         '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
         '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
-      x-error-codes: [invalid-amount, unauthorized, forbidden, not-found, conflict]
+      x-error-codes:
+        [validation-failed, invalid-amount, unauthorized, forbidden, not-found, conflict,
+         dependency-unavailable]
 
   /v1/admin/audit-log:
     get:
@@ -1789,14 +2228,41 @@ paths:
 
   # -------------------------------------------------------------------------------------------
   # PDPA (E-06) — pdpa-svc, surfaced through admin-bff
+  #
+  # Δ C065 — `/v1/pdpa` is the ONE prefix on this service that is not `/v1/admin`, and it is a named
+  # exception rather than a widening of AL-02. D3' heads the family "pdpa-svc (via admin-bff) — data
+  # rights (`/v1/pdpa`)" and marks all three routes Bearer; C008's gateway-routes.json already sends
+  # the prefix to this cluster; iam-svc's `DELETE /v1/users/me` answers 202 with
+  # `Location: /v1/pdpa/{requestId}`, a URL a passenger's app follows. AL-02 forbids a driver- or
+  # passenger-facing CONSOLE; three routes by which a person exercises a statutory right over their
+  # own record are not one. `AdminBffApplication.GuardTheSurface` names the prefix, so a fourth
+  # family still fails to start.
+  #
+  # The three subject routes are authenticated and NOT feature-gated: URD §2.3's End-user account
+  # management row gives PAX and DRV ➖ — correctly, since it is about operating on OTHER people's
+  # accounts — and gating an own-account right on it would refuse every data subject their own data.
+  # They are scoped in the handler by the `sub` claim, and a request that is not yours is a 404 (not
+  # a 403), because telling the two apart would make the route an oracle over other people's live
+  # erasure requests.
   # -------------------------------------------------------------------------------------------
   /v1/pdpa/export:
     post:
       operationId: requestDataExport
       summary: Request a copy of your data.
       description: |
-        E-06, US-1.8. Accepted asynchronously; `dueBy` is the 30-day statutory deadline. The
-        fulfilled export is a signed download on `GET /v1/pdpa/{requestId}`.
+        E-06, US-1.8. Accepted asynchronously; `dueBy` is the 30-day statutory deadline, which is
+        `pdpa.requests.due_by`'s own column default (migration 1306) rather than something computed
+        per request. The fulfilled export is a signed download on `GET /v1/pdpa/{requestId}`.
+
+        A second request while one is open is a **409**: two 30-day clocks against one obligation
+        leave whichever is not fulfilled permanently overdue in the SLA queue. iam-svc's
+        `DELETE /v1/users/me` makes the same call for the same reason.
+
+        **Δ C065: audited.** The request writes a `PDPA_REQUESTED` row into `audit.events` with the
+        data subject as the actor — the one action on this surface an end user's own request
+        records. A statutory clock that starts when somebody presses a button in the Passenger App
+        needs the press in the same immutable log the fulfilment lands in, or the platform can prove
+        it acted and cannot prove when it was asked.
       tags: [pdpa]
       security:
         - bearerAuth: []
@@ -1825,9 +2291,29 @@ paths:
       operationId: requestDataErasure
       summary: Request erasure of your data.
       description: |
-        E-06. `holdReasons` names any statutory hold that prevents full erasure — an unsettled
-        payment, an open dispute, a retention obligation. A request under hold is fulfilled as
-        `FulfilledHold` and **must carry a reason** (`ck_pdpa_hold_reason`, C005).
+        E-06. Erasure is a **soft anonymisation**: the account row survives so that every ride,
+        payment, ledger posting and audit event referencing it keeps resolving, and what is removed
+        is the identity on it.
+
+        `holdReasons` is a **preview and not a promise** — what would be held if the request were
+        fulfilled now. **Δ C065: two kinds of hold, and conflating them is the mistake the field
+        exists to prevent.**
+
+        | Code | Blocking | What it means |
+        |---|:-:|---|
+        | `active-ride` | yes | A ride or tracking session that has not reached a terminal state |
+        | `open-dispute` | yes | A `support.tickets` row nobody has answered |
+        | `unsettled-payment` | yes | A payment attempt or refund in flight (E-05) |
+        | `wallet-balance` | yes | Money still in the wallet — the driver has to be paid before they can vanish |
+        | `financial-records` | no | Ledger postings. Retained: financial records outlive the account (D-09) |
+        | `audit-trail` | no | `audit.events`. Retained and never rewritten (D-35) |
+
+        A **blocking** hold is a live operation that anonymising the account would break and answers
+        `409` at fulfilment — it lifts on its own. A **retention** hold is a record a statute
+        requires be kept, and is what turns `Fulfilled` into `FulfilledHold` (which **must** carry a
+        reason — `ck_pdpa_requests_hold`, C005). Treating them alike would either refuse every
+        erasure for ever — every account has a ledger — or anonymise somebody who is in a car right
+        now.
       tags: [pdpa]
       security:
         - bearerAuth: []
@@ -1849,7 +2335,7 @@ paths:
                   holdReasons:
                     type: array
                     items:
-                      type: string
+                      $ref: '#/components/schemas/PdpaHoldCode'
         '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
         '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
@@ -1859,7 +2345,13 @@ paths:
     get:
       operationId: getPdpaRequest
       summary: Status of a PDPA request.
-      description: Includes the signed download URL once the request is fulfilled.
+      description: |
+        Includes the signed download URL once an export is fulfilled. The URL is minted fresh on
+        every read and expires (`AdminBff:Pdpa:ArtifactUrlTtl`, 15 min) — an export archive is a
+        copy of everything the platform holds about one person, so a subject who is too slow simply
+        asks again.
+
+        **A request that is not the caller's own is a 404**, never a 403.
       tags: [pdpa]
       security:
         - bearerAuth: []
@@ -1873,18 +2365,87 @@ paths:
               schema:
                 $ref: '#/components/schemas/PdpaRequest'
         '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
-        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
         '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
-      x-error-codes: [unauthorized, forbidden, not-found]
+      x-error-codes: [unauthorized, not-found]
+
+  /v1/admin/pdpa/queue:
+    get:
+      operationId: listPdpaQueue
+      summary: Open data-rights requests by statutory deadline, or the decided history.
+      description: |
+        **Δ C065.** D3' gives fulfilment two routes and no queue to work them from. Open requests
+        come back **by deadline** (`ix_pdpa_requests_due`), because the 30-day SLA is the whole point
+        of that list; a `?status=` filter returns the decided history newest first
+        (`ix_pdpa_requests_decided`, migration 1314).
+
+        An **open erasure carries its live hold list**, because that is what the operator has to
+        decide about — pressing Fulfil on a request whose subject is mid-ride is refused, and being
+        shown that before pressing is the difference between a queue and a lottery.
+
+        Gated on **End-user account management · Read, held platform-wide**. The row's two ◐ cells
+        name who is bounded — `◐ verification` for the Verification Officer, `◐ on tickets` for the
+        Support CSR — and neither qualifier is "read every data-rights request on the platform".
+      tags: [pdpa]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          description: Absent means the two open statuses.
+          schema:
+            type: string
+            enum: [Received, InProgress, FulfilledHold, Fulfilled, Rejected]
+        - $ref: './_shared.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: The queue.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PdpaRequest'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden]
 
   /v1/admin/pdpa/{requestId}/fulfill:
     post:
       operationId: fulfillPdpaRequest
       summary: Mark a PDPA request fulfilled.
       description: |
-        Admin fulfilment. `FulfilledHold` records that some data was retained under a statutory
-        hold and **requires `holdReason`**. Audited (D-35).
+        Admin fulfilment. `FulfilledHold` records that some data was retained under a statutory hold
+        and **requires `holdReason`**. Audited (D-35), and gated on **End-user account management ·
+        Write, held platform-wide**.
+
+        **Δ C065 — what this route actually does.**
+
+        For an **export**, it assembles the archive (fourteen datasets as JSON plus a manifest and a
+        README), stores it under `ephemeral/` in the D-36 bucket so the bucket's own lifecycle rule
+        deletes it — an export must not become a permanent second copy of somebody's life — and
+        records a `pdpa.fulfillment_artifacts` row with the SHA-256 of what was delivered. Supplying
+        `artifactUrl` records a pointer produced out of band instead; there is no hash then, because
+        this process never saw the bytes.
+
+        For an **erasure**, it recomputes the statutory hold list **under the request's row lock**
+        and then: any *blocking* hold answers `409` naming it (a live operation is not something a
+        statute forces — it lifts on its own, and recording the obligation as met while a passenger
+        is in a car would be a false compliance claim); otherwise the identifying columns are
+        overwritten, `iam.emergency_contacts`, `iam.saved_addresses` and `iam.phone_lookups` are
+        deleted, live sessions are revoked, and `iam.users.anonymised_at` (migration 0110) records
+        that it happened. **`audit.events` is never touched** — a right-to-erasure that deleted the
+        record of the erasure would leave the platform unable to prove it complied — and the
+        financial ledger is retained under D-09. Both appear in `holdReason`.
+
+        **`outcome` is optional and is derived when omitted**, and the derivation wins over
+        `Fulfilled`: anything retained under a statute *is* a `FulfilledHold` whatever the button
+        said. A request that has already been decided is a `409` rather than an idempotent no-op —
+        fulfilling an already-rejected erasure would anonymise an account whose owner was told their
+        request was refused.
       tags: [pdpa]
       security:
         - bearerAuth: []
@@ -1892,20 +2453,22 @@ paths:
         - $ref: '#/components/parameters/PdpaRequestId'
         - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
       requestBody:
-        required: true
+        required: false
         content:
           application/json:
             schema:
               type: object
-              required: [outcome]
               properties:
                 outcome:
+                  description: Omit to let the retained-hold list decide. Δ C065.
                   type: string
                   enum: [Fulfilled, FulfilledHold]
                 holdReason:
                   type: string
                   maxLength: 1000
-                  description: Required when `outcome` is `FulfilledHold`.
+                  description: |
+                    Required when the outcome is `FulfilledHold`. Omitted, the derived list of
+                    retained hold codes is stored — which is the falsifiable version.
                 artifactUrl:
                   type: string
                   format: uri
@@ -2012,6 +2575,38 @@ components:
       name: requestId
       in: path
       required: true
+      schema:
+        $ref: './_shared.yaml#/components/schemas/Ulid'
+
+    # Δ C065. Shared by the JSON route and both exports, so the three cannot drift into answering
+    # for different windows — which is the one way "the export matches the screen" stops being true.
+    TransactionsFrom:
+      name: from
+      in: query
+      required: false
+      description: Inclusive Asia/Colombo business date. Defaults to 29 days before `to`; the window may not exceed 366 days.
+      schema:
+        $ref: './_shared.yaml#/components/schemas/BusinessDate'
+    TransactionsTo:
+      name: to
+      in: query
+      required: false
+      description: Inclusive. Defaults to today in Asia/Colombo (D-38).
+      schema:
+        $ref: './_shared.yaml#/components/schemas/BusinessDate'
+    TransactionsKind:
+      name: kind
+      in: query
+      required: false
+      description: One of the four kinds. Absent includes all four.
+      schema:
+        type: string
+        enum: [topup, daily_fee, voucher_purchase, driver_transfer]
+    TransactionsParty:
+      name: partyId
+      in: query
+      required: false
+      description: A driver, passenger or fleet id on either leg of the entry.
       schema:
         $ref: './_shared.yaml#/components/schemas/Ulid'
     StatsPeriod:
@@ -3258,7 +3853,7 @@ components:
 
     PdpaRequest:
       type: object
-      required: [requestId, kind, status, dueBy]
+      required: [requestId, kind, status, subjectId, requestedAt, dueBy, holds]
       properties:
         requestId:
           $ref: './_shared.yaml#/components/schemas/Ulid'
@@ -3269,12 +3864,396 @@ components:
           type: string
           description: Matches the `pdpa.requests.status` CHECK (C005).
           enum: [Received, InProgress, FulfilledHold, Fulfilled, Rejected]
-        holdReason:
-          type: string
-          description: Always present when `status` is `FulfilledHold`.
+        subjectId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        requestedAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
         dueBy:
           $ref: './_shared.yaml#/components/schemas/Timestamp'
+        fulfilledAt:
+          description: When the request stopped being open — a fulfilment or a refusal. Δ C065.
+          allOf:
+            - $ref: './_shared.yaml#/components/schemas/Timestamp'
+        holdReason:
+          type: string
+          description: Always present when `status` is `FulfilledHold`. What a statute forced to be retained.
+        rejectionReason:
+          type: string
+          description: |
+            **Δ C065.** Why a request was refused, shown to the data subject (E-06). Its own column
+            (`pdpa.requests.decision_reason`, migration 1314) and **not** `holdReason`, which names
+            what an erasure that otherwise succeeded had to keep — one field could not carry both,
+            and the SLA queue could not then tell a partial fulfilment from a denial.
+        holds:
+          description: |
+            **Δ C065.** The live statutory hold list, present on an **open erasure** — the queue's
+            reason for existing. Empty on an export, on a decided request, and on a subject's own
+            read of a request that is not an open erasure.
+          type: array
+          items:
+            $ref: '#/components/schemas/PdpaHold'
         downloadUrl:
           type: string
           format: uri
-          description: Short-lived signed URL of the export archive.
+          description: Short-lived signed URL of the export archive. Minted fresh on every read.
+        downloadExpiresAt:
+          description: When `downloadUrl` stops working. Δ C065.
+          allOf:
+            - $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    PdpaHoldCode:
+      type: string
+      description: |
+        **Δ C065.** A stable machine code, never a sentence: every string this platform shows a user
+        is trilingual (D-26) and the apps own the Si/Ta/En bundles. The code is what a client looks
+        a message up by, and what `pdpa.requests.hold_reason` stores.
+      enum:
+        [active-ride, open-dispute, unsettled-payment, wallet-balance, financial-records, audit-trail]
+
+    PdpaHold:
+      type: object
+      required: [code, blocking, count]
+      properties:
+        code:
+          $ref: '#/components/schemas/PdpaHoldCode'
+        blocking:
+          description: |
+            True when the hold stops the erasure happening at all — a live operation that lifts on
+            its own. False when it merely bounds it: the erasure proceeds and a statutorily-retained
+            subset survives, which is what `FulfilledHold` means.
+          type: boolean
+        count:
+          description: How many records the hold is about, so an operator can see whether it is one or a thousand.
+          type: integer
+          format: int32
+          minimum: 1
+
+    # -----------------------------------------------------------------------------------------
+    # Finance (Δ C065)
+    # -----------------------------------------------------------------------------------------
+
+    SettlementSummary:
+      type: object
+      required: [from, to, settledMinor, postedMinor, varianceMinor, exceptionCount, days]
+      properties:
+        from:
+          $ref: './_shared.yaml#/components/schemas/BusinessDate'
+        to:
+          $ref: './_shared.yaml#/components/schemas/BusinessDate'
+        settledMinor:
+          description: What the gateway confirmed across the window.
+          type: integer
+          format: int64
+        postedMinor:
+          description: What reached the ledger. Read off the credit leg, never off the session twice.
+          type: integer
+          format: int64
+        varianceMinor:
+          description: '`settledMinor − postedMinor`. Zero is what "reconciled" means.'
+          type: integer
+          format: int64
+        exceptionCount:
+          description: How many sessions are in the exception queue right now — SCR-AP-006's tab badge.
+          type: integer
+          format: int32
+          minimum: 0
+        days:
+          type: array
+          items:
+            $ref: '#/components/schemas/SettlementDay'
+
+    SettlementDay:
+      type: object
+      required:
+        [businessDate, method, openedCount, settledCount, failedCount, pendingCount,
+         settledMinor, postedMinor, varianceMinor, currency]
+      properties:
+        businessDate:
+          description: Asia/Colombo (D-38), computed in the database from the session's own instant.
+          allOf:
+            - $ref: './_shared.yaml#/components/schemas/BusinessDate'
+        method:
+          type: string
+          enum: [onepay, lankaqr]
+        openedCount:
+          type: integer
+          format: int32
+        settledCount:
+          type: integer
+          format: int32
+        failedCount:
+          type: integer
+          format: int32
+        pendingCount:
+          type: integer
+          format: int32
+        settledMinor:
+          type: integer
+          format: int64
+        postedMinor:
+          type: integer
+          format: int64
+        varianceMinor:
+          type: integer
+          format: int64
+        currency:
+          $ref: './_shared.yaml#/components/schemas/Currency'
+
+    SettlementException:
+      type: object
+      required: [topupId, kind, method, state, driverId, amountMinor, currency, createdAt]
+      properties:
+        topupId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        kind:
+          type: string
+          enum: [amount-mismatch, settled-not-posted, unsettled, gateway-failed]
+        method:
+          type: string
+          enum: [onepay, lankaqr]
+        state:
+          description: The `billing.topups.state` the session is actually in.
+          type: string
+          enum: [Pending, Succeeded, Failed]
+        driverId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        driverName:
+          type: string
+        amountMinor:
+          description: What the session was opened for.
+          type: integer
+          format: int64
+        postedMinor:
+          description: What the ledger holds, where anything was posted. Absent is itself the exception on a settled session.
+          type: integer
+          format: int64
+        currency:
+          $ref: './_shared.yaml#/components/schemas/Currency'
+        providerTransactionId:
+          type: string
+        providerOrderId:
+          type: string
+        failureReason:
+          type: string
+        createdAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+        settledAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    RefundQueueRow:
+      type: object
+      required:
+        [source, paymentId, rideId, paymentState, method, amountMinor, paymentAmountMinor,
+         currency, requestedAt]
+      properties:
+        refundId:
+          description: Absent on an `overpaid` row — that is the point of it.
+          allOf:
+            - $ref: './_shared.yaml#/components/schemas/Ulid'
+        source:
+          type: string
+          enum: [refund, overpaid]
+        paymentId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        rideId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        paymentState:
+          description: The `fares.ride_payments.state` the attempt is in.
+          type: string
+        method:
+          type: string
+        kind:
+          type: string
+          enum: [full, partial, overpaid_reversal]
+        status:
+          type: string
+          enum: [Requested, Submitted, Succeeded, Failed]
+        amountMinor:
+          description: The refund's amount where one was raised; the payment's otherwise.
+          type: integer
+          format: int64
+        paymentAmountMinor:
+          description: What the payment attempt collected — the ceiling a refund cannot exceed.
+          type: integer
+          format: int64
+        currency:
+          $ref: './_shared.yaml#/components/schemas/Currency'
+        reasonCode:
+          type: string
+        providerRefundId:
+          type: string
+        passengerId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        passengerName:
+          type: string
+        requestedAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+        settledAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    Refund:
+      type: object
+      required: [refundId, status, amountMinor, currency]
+      properties:
+        refundId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        status:
+          type: string
+          enum: [Requested, Submitted, Succeeded, Failed]
+        amountMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        currency:
+          $ref: './_shared.yaml#/components/schemas/Currency'
+
+    TransactionsReport:
+      type: object
+      required: [from, to, totalMinor, items]
+      properties:
+        from:
+          $ref: './_shared.yaml#/components/schemas/BusinessDate'
+        to:
+          $ref: './_shared.yaml#/components/schemas/BusinessDate'
+        kind:
+          description: The single kind that was filtered on, absent when all four are included.
+          type: string
+          enum: [topup, daily_fee, voucher_purchase, driver_transfer]
+        totalMinor:
+          type: integer
+          format: int64
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TransactionRow'
+
+    TransactionRow:
+      type: object
+      required: [entryId, kind, amountMinor, currency, fromAccountType, toAccountType, ts]
+      description: |
+        One money **event**, not one account leg. `fromParty` owns the negative leg and `toParty` the
+        positive one: a top-up is platform → driver, a daily fee is driver → platform, a voucher
+        purchase is platform → buyer, a transfer is sender → recipient.
+      properties:
+        entryId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        kind:
+          type: string
+          enum: [topup, daily_fee, voucher_purchase, driver_transfer]
+        amountMinor:
+          description: Unsigned — the magnitude that moved. The two party fields say which way.
+          type: integer
+          format: int64
+          minimum: 0
+        currency:
+          $ref: './_shared.yaml#/components/schemas/Currency'
+        fromPartyId:
+          description: Absent for the platform's two singleton accounts, which have no owner by CHECK.
+          allOf:
+            - $ref: './_shared.yaml#/components/schemas/Ulid'
+        fromName:
+          type: string
+        fromAccountType:
+          type: string
+          enum: [passenger, driver, fleet, platform, suspense]
+        toPartyId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        toName:
+          type: string
+        toAccountType:
+          type: string
+          enum: [passenger, driver, fleet, platform, suspense]
+        description:
+          type: string
+        ts:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    DocumentExpiryRow:
+      type: object
+      required: [docId, kind, status, expiresAt, daysRemaining, thumbUrl, fullUrl]
+      properties:
+        docId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        kind:
+          type: string
+          enum: [driving_license, registration, permit, insurance, revenue_license]
+        status:
+          type: string
+          enum: [VALID, EXPIRING, EXPIRED]
+        expiresAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+        daysRemaining:
+          description: Negative once expired, which is what sorts the queue.
+          type: integer
+          format: int32
+        lastNoticeDays:
+          description: |
+            The tightest E-03 reminder already emitted (30 / 7 / 1 / 0), absent where none has been.
+            The difference between chasing the holder and apologising to them.
+          type: integer
+          format: int32
+          enum: [30, 7, 1, 0]
+        driverId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        driverName:
+          type: string
+        fleetId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        fleetName:
+          type: string
+        vehicleId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        regNo:
+          type: string
+        dispatchState:
+          description: E-03 suspends dispatch on expiry, so this is what the queue is trying to prevent.
+          type: string
+        thumbUrl:
+          description: C063's audited viewer, never a bucket URL — one look is one `DOC_VIEW` row (AL-39).
+          type: string
+        fullUrl:
+          type: string
+
+    FraudFlagRow:
+      type: object
+      required: [flagId, kind, status, ts, resolveUrl]
+      properties:
+        flagId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        kind:
+          description: Open by design — E-07's heuristics are expected to grow (migration 0802).
+          type: string
+        status:
+          type: string
+          enum: [open, dismissed, actioned]
+        subjectId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        subjectType:
+          type: string
+          enum: [driver, passenger, vehicle]
+        subjectName:
+          description: What reputation-svc cannot supply — it holds no identity. The reason this queue is joined here.
+          type: string
+        relatedId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        relatedName:
+          type: string
+        windowKey:
+          description: The detection window. With `ux_fraud_flags_window` it is what bounds the queue.
+          type: string
+        detail:
+          description: Re-emitted as the detector stored it, so a new heuristic's fields survive.
+          type: object
+          additionalProperties: true
+        resolvedBy:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        resolvedAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+        ts:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+        resolveUrl:
+          description: |
+            reputation-svc's own decision route. Named here rather than left to the portal because
+            the decision belongs to the service that owns the flag, and a queue pointing anywhere
+            else would be inviting a second writer.
+          type: string

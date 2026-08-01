@@ -3,7 +3,9 @@ using MageRide.AdminBff.Authorization;
 using MageRide.AdminBff.Directories;
 using MageRide.Shared.Storage;
 using MageRide.AdminBff.Configuration;
+using MageRide.AdminBff.Finance;
 using MageRide.AdminBff.Moderation;
+using MageRide.AdminBff.Pdpa;
 using MageRide.AdminBff.Persistence;
 using MageRide.AdminBff.Platform;
 using MageRide.AdminBff.Upstream;
@@ -41,6 +43,8 @@ public static class AdminBffServiceCollectionExtensions
         services.TryAddSingleton<IAuditLogRepository, AuditLogRepository>();
         services.TryAddSingleton<IVerificationRepository, VerificationRepository>();
         services.TryAddSingleton<IDirectoryRepository, DirectoryRepository>();
+        services.TryAddSingleton<IFinanceRepository, FinanceRepository>();
+        services.TryAddSingleton<IPdpaRepository, PdpaRepository>();
 
         // Singleton: the PII gate is a pure function of the caller's claims over the compiled
         // URD §2.3 matrix — no state, no I/O, and the evaluator it wraps is itself stateless.
@@ -49,6 +53,11 @@ public static class AdminBffServiceCollectionExtensions
         // Singleton: it holds the signing key and a clock, and minting a link is a pure function of
         // both. A per-request instance would re-read the key on every thumbnail in a grid.
         services.TryAddSingleton<IDocumentLinks, DocumentLinks>();
+
+        // Singleton for the same reason, and a separate one from the document links on purpose: the
+        // two sign different payloads for different audiences, and sharing an implementation would
+        // let a URL minted for one verify against the other (C065).
+        services.TryAddSingleton<IPdpaArtifactLinks, PdpaArtifactLinks>();
 
         // Δ D-36. admin-bff writes no bytes; it needs the store only to presign a read. Unset
         // `Storage:*` leaves `TryPresign` answering false and `DocumentLinks` on its HMAC fallback.
@@ -68,6 +77,15 @@ public static class AdminBffServiceCollectionExtensions
         // own audit context, and a singleton would be recording a PII_READ into somebody else's
         // request.
         services.TryAddScoped<IDirectoryService, DirectoryService>();
+
+        // C065. The two that can change something record into the request's own audit context, so
+        // both are scoped; the read service is scoped with them rather than being the one singleton
+        // in a family, which is the kind of asymmetry somebody later "tidies up" in the wrong
+        // direction.
+        services.TryAddScoped<IFinanceService, FinanceService>();
+        services.TryAddScoped<IRefundService, RefundService>();
+        services.TryAddScoped<IWalletAdjustmentService, WalletAdjustmentService>();
+        services.TryAddScoped<IPdpaService, PdpaService>();
 
         // The filter is resolved per request through the endpoint-filter factory, and holds only
         // options and a logger.
@@ -109,6 +127,8 @@ public static class AdminBffServiceCollectionExtensions
                     AdminUpstreams.Content => options.Content,
                     AdminUpstreams.Registry => options.Registry,
                     AdminUpstreams.Fleet => options.Fleet,
+                    AdminUpstreams.Wallet => options.Wallet,
+                    AdminUpstreams.Fare => options.Fare,
                     _ => options.Transit,
                 }).Timeout;
             });

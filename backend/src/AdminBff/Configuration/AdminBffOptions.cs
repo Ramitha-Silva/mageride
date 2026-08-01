@@ -12,8 +12,9 @@ namespace MageRide.AdminBff.Configuration;
 /// (plus the optional <c>Login__IpAllowList</c>). Three of those are not settings of this service:
 /// <b>the two <c>Login__*</c> and the allow-list are iam-svc's</b>, which owns every credential path
 /// (AL-07, C026's <c>Auth:InternalRoleIpAllowList</c>), and <b><c>Rbac__DenyByDefault</c> is not a
-/// switch</b> — see <see cref="Audit"/>'s remark for the same argument. <c>Pdpa__DueDays</c> is
-/// C065's. So what is here is the audit topic plus the knobs this component's own decisions needed.
+/// switch</b> — see <see cref="Audit"/>'s remark for the same argument. <b>Δ C065:
+/// <c>Pdpa__DueDays</c> now lands here</b>, on <see cref="PdpaOptions.DueDays"/>. So what is here is
+/// the audit topic, the statutory deadline, and the knobs this service's own decisions needed.
 /// </remarks>
 public sealed class AdminBffOptions
 {
@@ -39,6 +40,80 @@ public sealed class AdminBffOptions
     /// <summary>The AL-39 document viewer's links (C063).</summary>
     [Required]
     public DocumentOptions Documents { get; init; } = new();
+
+    /// <summary>The E-06 data-rights workflow (C065).</summary>
+    [Required]
+    public PdpaOptions Pdpa { get; init; } = new();
+
+    /// <summary>The SCR-AP-006 finance surface (C065).</summary>
+    [Required]
+    public FinanceOptions Finance { get; init; } = new();
+
+    /// <summary>
+    /// E-06's export and erasure workflow — the one place D7' §4.2's <c>Pdpa__DueDays</c> lands.
+    /// </summary>
+    public sealed class PdpaOptions
+    {
+        /// <summary>
+        /// The statutory deadline, in days, a request must be fulfilled within (US-1.8).
+        /// </summary>
+        /// <remarks>
+        /// <b>D7' §4.2 names this variable and the database already answers it</b>:
+        /// <c>pdpa.requests.due_by</c> defaults to <c>now() + INTERVAL '30 days'</c> (migration
+        /// 1306), and iam-svc's <c>DELETE /v1/users/me</c> lets that default stand. So this is
+        /// <em>not</em> a second source of truth for the deadline — it is what this service uses to
+        /// compute the deadline it *reports* on the 202 before the row is read back, and it is
+        /// validated against the row on the way out. Changing it without changing 1306 makes the two
+        /// disagree, which is why the value is checked at start-up rather than trusted.
+        /// </remarks>
+        [Range(1, 365)]
+        public int DueDays { get; init; } = 30;
+
+        /// <summary>
+        /// How long the signed download URL of a fulfilled export lives.
+        /// </summary>
+        /// <remarks>
+        /// <b>No spec.</b> Fifteen minutes: an export archive is a copy of everything the platform
+        /// holds about one person, so the link is worth less than the document viewer's five-minute
+        /// one is worth more of — long enough for a large ZIP to download over a slow connection,
+        /// short enough that a URL left in a browser's history is dead. <c>GET /v1/pdpa/{requestId}</c>
+        /// mints a fresh one on every read, so a subject who is too slow simply asks again.
+        /// </remarks>
+        [Range(typeof(TimeSpan), "00:00:30", "24:00:00")]
+        public TimeSpan ArtifactUrlTtl { get; init; } = TimeSpan.FromMinutes(15);
+
+        /// <summary>
+        /// The most rows of any one dataset an export archive carries.
+        /// </summary>
+        /// <remarks>
+        /// <b>No spec.</b> A cap rather than an unbounded read, because an export is assembled in
+        /// memory into a ZIP and a three-year-old driver's wallet history is tens of thousands of
+        /// rows. Ten thousand per dataset is more than any real account and small enough that the
+        /// archive stays a request rather than a job. The manifest inside the ZIP records when a
+        /// dataset was truncated, so the subject is told rather than quietly given less.
+        /// </remarks>
+        [Range(100, 1_000_000)]
+        public int MaxRowsPerDataset { get; init; } = 10_000;
+    }
+
+    /// <summary>The reconciliation exception queue's one judgement call.</summary>
+    public sealed class FinanceOptions
+    {
+        /// <summary>
+        /// How long a gateway session may stay <c>Pending</c> before it is an exception.
+        /// </summary>
+        /// <remarks>
+        /// D6' §7.1 gives the rail a <b>90-second</b> pending window and wallet-svc's
+        /// <c>Wallet:TopupPendingWindow</c> is that number. This is deliberately much larger: the
+        /// gateway's window is how long a client polls before falling back, and a session that is
+        /// still open a minute later is normal (the payer is typing a card number). A session still
+        /// open <em>an hour</em> later is a lost callback or the amount mismatch wallet-svc refuses
+        /// to credit — both of which are D6' §7.2's "exceptions → Finance queue". Putting the
+        /// gateway's own 90 seconds here would fill the queue with people who are still paying.
+        /// </remarks>
+        [Range(typeof(TimeSpan), "00:01:00", "7.00:00:00")]
+        public TimeSpan SettlementGracePeriod { get; init; } = TimeSpan.FromHours(1);
+    }
 
     /// <summary>
     /// How the AL-39 viewer turns a stored object pointer into something an officer's browser can
@@ -181,6 +256,29 @@ public sealed class AdminBffOptions
         /// </remarks>
         [Required]
         public UpstreamService Fleet { get; init; } = new();
+
+        /// <summary>
+        /// wallet-svc — the ledger seam US-14.11's fee reversal posts through (C046, C065).
+        /// </summary>
+        /// <remarks>
+        /// Unset ⇒ <c>POST /v1/admin/drivers/wallet/{driverId}/reverse-fee</c> answers 503 and
+        /// <b>no driver can be given back a fee they were wrongly charged</b>. The route stays
+        /// mapped and stays gated, like every other unconfigured upstream.
+        /// </remarks>
+        [Required]
+        public UpstreamService Wallet { get; init; } = new();
+
+        /// <summary>
+        /// fare-svc — E-05's refund execution (C050, C065).
+        /// </summary>
+        /// <remarks>
+        /// Role-gated rather than internal, so this one carries the operator's own bearer and no
+        /// shared key — the same split content-svc and transit-svc are on. Unset ⇒ the refund
+        /// <em>queue</em> still reads (it is this service's own query over <c>fares.refunds</c>) and
+        /// only the decision answers 503.
+        /// </remarks>
+        [Required]
+        public UpstreamService Fare { get; init; } = new();
     }
 
     /// <summary>One upstream this BFF forwards to.</summary>

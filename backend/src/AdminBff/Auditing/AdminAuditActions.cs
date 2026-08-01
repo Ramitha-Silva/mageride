@@ -113,6 +113,61 @@ public static class AdminAuditActions
     public const string PiiRead = "PII_READ";
 
     // -------------------------------------------------------------------------------------------
+    // Finance (E-05, R-19, US-14.11, C065)
+    // -------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// A daily-fee deduction was reversed onto a driver's wallet (US-14.11).
+    /// </summary>
+    /// <remarks>
+    /// <b>Its own action, and not <see cref="RefundIssued"/>.</b> A refund gives a passenger back
+    /// money they paid a gateway; a reversal puts credit onto a driver's prepaid balance because
+    /// MageRide charged them a fee it should not have. Different payer, different rail, different
+    /// URD §2.3 row — and an auditor asking "how much did we hand back to drivers last month" must
+    /// not have to subtract one from the other.
+    /// </remarks>
+    public const string FeeReversed = "WALLET_FEE_REVERSED";
+
+    /// <summary>A full, partial or overpaid-reversal refund was raised through fare-svc (E-05).</summary>
+    /// <remarks>
+    /// The route-level fact. fare-svc writes the <c>fares.refunds</c> row and the balanced
+    /// <c>payment_refund</c> / <c>overpaid_reversal</c> journal entry inside its own transaction —
+    /// two rows for one action, which is the right failure: this one survives the refund row being
+    /// purged, that one survives this route being renamed.
+    /// </remarks>
+    public const string RefundIssued = "REFUND_ISSUED";
+
+    // -------------------------------------------------------------------------------------------
+    // PDPA (E-06, C065)
+    // -------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// A data subject asked for an export or an erasure (E-06, US-1.8).
+    /// </summary>
+    /// <remarks>
+    /// <b>The one action on this surface an end user's own request writes.</b> Every other row in
+    /// <c>audit.events</c> is an operator's decision, and D-35 is about operator decisions — but a
+    /// statutory 30-day clock that starts when somebody presses a button in the Passenger App needs
+    /// the button press to be in the same immutable log the fulfilment lands in, or the platform can
+    /// prove it acted and cannot prove when it was asked. <c>actor_role</c> is therefore
+    /// <c>passenger</c> or <c>driver</c> on these rows and nothing else on the surface.
+    /// </remarks>
+    public const string PdpaRequested = "PDPA_REQUESTED";
+
+    /// <summary>An export was delivered, or an erasure carried out (E-06).</summary>
+    /// <remarks>
+    /// One action for both outcomes — <c>Fulfilled</c> and <c>FulfilledHold</c> — because they are
+    /// the same decision and the <c>after</c> image carries which one it was together with the
+    /// statutory holds that were honoured. That is the opposite of the report queue's
+    /// confirm/dismiss split, and for the opposite reason: there the two verdicts are what an
+    /// auditor counts, here the question is "was the obligation met", and a hold is a fulfilment.
+    /// </remarks>
+    public const string PdpaFulfilled = "PDPA_FULFILLED";
+
+    /// <summary>A request was refused outright, with the reason the subject is shown (E-06).</summary>
+    public const string PdpaRejected = "PDPA_REJECTED";
+
+    // -------------------------------------------------------------------------------------------
     // Configuration
     // -------------------------------------------------------------------------------------------
 
@@ -178,6 +233,24 @@ public static class AdminAuditActions
     /// decisions on one id indistinguishable when read back.
     /// </summary>
     public const string PayoutProfileEntity = "driver_payout_profile";
+
+    /// <summary>
+    /// A driver's wallet — <c>billing.accounts</c> with <c>owner_type='driver'</c>.
+    /// </summary>
+    /// <remarks>
+    /// Not <see cref="DriverEntity"/>: a fee reversal is a fact about the balance, and an audit
+    /// trail that called it "driver" would make it indistinguishable from a suspension of the same
+    /// person. The id recorded is still the driver's, because that is the only id the operator, the
+    /// route and the ledger all agree on — <c>billing.accounts.id</c> is wallet-svc's and appears on
+    /// no screen.
+    /// </remarks>
+    public const string WalletEntity = "driver_wallet";
+
+    /// <summary>One <c>fares.ride_payments</c> attempt — what a refund is raised against (E-05).</summary>
+    public const string PaymentEntity = "ride_payment";
+
+    /// <summary><c>pdpa.requests</c> — one data-subject request (E-06).</summary>
+    public const string PdpaRequestEntity = "pdpa_request";
 
     public const string ReportEntity = "vehicle_report";
     public const string TicketEntity = "support_ticket";

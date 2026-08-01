@@ -29,10 +29,19 @@ public sealed record AdminSurfaceMarker;
 /// <c>Map…Endpoints(this IEndpointRouteBuilder admin)</c> here and gets the interceptor, the marker
 /// and the RBAC test's coverage without touching either fence.
 /// </para>
+/// <para>
+/// <b>Δ C065: a second group, and exactly one.</b> E-06's three data-subject routes live under
+/// <c>/v1/pdpa</c> because D3' heads the family "pdpa-svc (via admin-bff) — data rights
+/// (`/v1/pdpa`)", the gateway already routes that prefix to this cluster, and iam-svc's
+/// <c>DELETE /v1/users/me</c> answers with a <c>Location</c> pointing at it. They are mapped as a
+/// <em>second group carrying the same two conventions</em> rather than as loose routes, so the D-35
+/// interceptor and the surface marker reach them exactly as they reach everything else — the only
+/// thing that differs is the prefix, which <c>AdminBffApplication.GuardTheSurface</c> names.
+/// </para>
 /// </remarks>
 public static class AdminEndpoints
 {
-    /// <summary>Every route on this surface lives under this prefix (AL-02).</summary>
+    /// <summary>Every operator route on this surface lives under this prefix (AL-02).</summary>
     public const string Prefix = "/v1/admin";
 
     public static IEndpointRouteBuilder MapAdminBffEndpoints(this IEndpointRouteBuilder endpoints)
@@ -49,10 +58,19 @@ public static class AdminEndpoints
         admin.MapVerificationEndpoints();
         admin.MapDirectoryEndpoints();
         admin.MapModerationEndpoints();
+        admin.MapFinanceEndpoints();
+        admin.MapPdpaAdminEndpoints();
         admin.MapConfigurationEndpoints();
         admin.MapAnnouncementEndpoints();
         admin.MapAuditLogEndpoints();
         admin.MapGtfsProxyEndpoints();
+
+        var pdpa = endpoints.MapGroup(PdpaEndpoints.SubjectPrefix)
+            .WithTags("pdpa")
+            .WithMetadata(new AdminSurfaceMarker())
+            .AddEndpointFilter<AuditInterceptor>();
+
+        pdpa.MapPdpaSubjectEndpoints();
 
         return endpoints;
     }

@@ -109,6 +109,33 @@ public sealed class RbacMatrixTests(PostgresFixture postgres)
         ("POST", "/v1/admin/announcements",
             """{"messageByLang":{"si":"අ","ta":"அ","en":"a"},"startsAt":"2026-08-01T00:00:00Z"}"""),
 
+        // C065's finance surface. Four URD §2.3 rows, not one — Finance for reconciliation and the
+        // report, Refunds for the queue and its decision, Driver-wallet-adjustments for the
+        // reversal, and Verification / Moderation for the two review queues, which are on this
+        // component because the ADD lists the three queues together and are gated where they belong
+        // rather than where they were built. The theory reads each route's own pair off the
+        // endpoint, so this file states no expectation of its own.
+        ("GET", "/v1/admin/finance/reconciliation", null),
+        ("GET", "/v1/admin/finance/reconciliation/exceptions", null),
+        ("GET", "/v1/admin/finance/refunds", null),
+        ("POST", "/v1/admin/finance/refunds",
+            """{"paymentId":"01930000-0000-7000-8000-0000000000d1","kind":"full","reasonCode":"probe"}"""),
+        ("POST", "/v1/admin/drivers/wallet/01930000-0000-7000-8000-0000000000d2/reverse-fee",
+            """{"feeDate":"2026-08-01","vehicleId":"01930000-0000-7000-8000-0000000000d3","reason":"probe"}"""),
+        ("GET", "/v1/admin/finance/transactions", null),
+        ("GET", "/v1/admin/finance/transactions.csv", null),
+        ("GET", "/v1/admin/finance/transactions.pdf", null),
+        ("GET", "/v1/admin/documents/expiring", null),
+        ("GET", "/v1/admin/fraud/queue", null),
+
+        // E-06's operator half. The three data-subject routes under /v1/pdpa are deliberately
+        // absent: they are authenticated-and-own-scope rather than matrix-gated, for the reason
+        // PdpaEndpoints gives, and `Every_admin_route_is_gated_on_a_urd_row` skips them because it
+        // enumerates only the /v1/admin prefix. `PdpaTests` covers them instead.
+        ("GET", "/v1/admin/pdpa/queue", null),
+        ("POST", "/v1/admin/pdpa/01930000-0000-7000-8000-0000000000d4/fulfill", """{}"""),
+        ("POST", "/v1/admin/pdpa/01930000-0000-7000-8000-0000000000d4/reject", """{"reason":"probe"}"""),
+
         ("GET", "/v1/admin/audit-log", null),
 
         ("GET", "/v1/admin/transit/gtfs/versions", null),

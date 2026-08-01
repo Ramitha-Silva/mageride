@@ -831,7 +831,544 @@ internal sealed class AdminSeed(PostgresFixture postgres)
         return await connection.ExecuteScalarAsync<int>(
             "SELECT count(*)::int FROM iam.users WHERE role = 'passenger';");
     }
+
+    // -------------------------------------------------------------------------------------------
+    // Finance (C065)
+    // -------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// One driver's gateway sessions, one per exception class the reconciliation queue derives.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The mismatch is seeded as the ledger disagreeing with the session, which is the only
+    /// mismatch the schema can hold.</b> wallet-svc refuses a callback whose amount disagrees and
+    /// leaves the session <c>Pending</c> — there is no exception column — so a session that was
+    /// settled and posted for a <em>different</em> figure is what "the gateway and the ledger do not
+    /// agree" looks like in the database, and it is what the DoD's fourth item is about.
+    /// </para>
+    /// <para>
+    /// The postings are written as a balanced pair against the platform account, because
+    /// <c>trg_balanced</c> is a constraint trigger and a lone leg would be refused at COMMIT.
+    /// </para>
+    /// </remarks>
+    public async Task<SettlementFixture> SettlementFixtureAsync()
+    {
+        var fixture = new SettlementFixture(
+            DriverId: Guid.CreateVersion7(),
+            AccountId: Guid.CreateVersion7(),
+            MatchedTopupId: Guid.CreateVersion7(),
+            MismatchedTopupId: Guid.CreateVersion7(),
+            UnpostedTopupId: Guid.CreateVersion7(),
+            StaleTopupId: Guid.CreateVersion7(),
+            FailedTopupId: Guid.CreateVersion7(),
+            MatchedMinor: 500_00,
+            MismatchedMinor: 300_00,
+            PostedForMismatchMinor: 250_00);
+
+        await using var connection = await postgres.OpenAsync();
+
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO iam.users (id, phone, role, first_name)
+            VALUES (@DriverId, @Phone, 'driver', 'Settlement Driver');
+            INSERT INTO iam.user_roles (user_id, role) VALUES (@DriverId, 'driver') ON CONFLICT DO NOTHING;
+
+            INSERT INTO billing.accounts (id, owner_type, owner_id, currency, balance_minor)
+            VALUES (@AccountId, 'driver', @DriverId, 'LKR', 0);
+            INSERT INTO billing.wallets (account_id, balance_minor) VALUES (@AccountId, 0);
+
+            -- (1) settled and posted for exactly what the gateway confirmed: NOT an exception.
+            INSERT INTO billing.journal_entries (id, kind, idempotency_key, description)
+            VALUES (@MatchedEntryId, 'topup', 'topup:' || @MatchedTopupId::text, 'Top-up');
+            INSERT INTO billing.journal_postings (entry_id, account_id, amount_minor) VALUES
+                (@MatchedEntryId, @AccountId, @MatchedMinor),
+                (@MatchedEntryId, (SELECT id FROM billing.accounts
+                                    WHERE owner_type = 'platform' AND owner_id IS NULL AND currency = 'LKR'),
+                 -@MatchedMinor);
+            INSERT INTO billing.topups
+                (id, driver_id, account_id, method, amount_minor, state,
+                 provider_order_id, provider_transaction_id, journal_entry_id, created_at, settled_at)
+            VALUES (@MatchedTopupId, @DriverId, @AccountId, 'onepay', @MatchedMinor, 'Succeeded',
+                    'ord-' || @MatchedTopupId::text, 'txn-' || @MatchedTopupId::text, @MatchedEntryId,
+                    now() - interval '3 hours', now() - interval '3 hours');
+
+            -- (2) settled and posted for LESS than the gateway confirmed: amount-mismatch.
+            INSERT INTO billing.journal_entries (id, kind, idempotency_key, description)
+            VALUES (@MismatchEntryId, 'topup', 'topup:' || @MismatchedTopupId::text, 'Top-up');
+            INSERT INTO billing.journal_postings (entry_id, account_id, amount_minor) VALUES
+                (@MismatchEntryId, @AccountId, @PostedForMismatchMinor),
+                (@MismatchEntryId, (SELECT id FROM billing.accounts
+                                     WHERE owner_type = 'platform' AND owner_id IS NULL AND currency = 'LKR'),
+                 -@PostedForMismatchMinor);
+            INSERT INTO billing.topups
+                (id, driver_id, account_id, method, amount_minor, state,
+                 provider_order_id, provider_transaction_id, journal_entry_id, created_at, settled_at)
+            VALUES (@MismatchedTopupId, @DriverId, @AccountId, 'onepay', @MismatchedMinor, 'Succeeded',
+                    'ord-' || @MismatchedTopupId::text, 'txn-' || @MismatchedTopupId::text, @MismatchEntryId,
+                    now() - interval '2 hours', now() - interval '2 hours');
+
+            -- (3) settled with no ledger entry at all: settled-not-posted. ck_topups_posting admits
+            --     it — only a Pending session is forbidden a journal entry, not the reverse.
+            INSERT INTO billing.topups
+                (id, driver_id, account_id, method, amount_minor, state,
+                 provider_order_id, provider_transaction_id, created_at, settled_at)
+            VALUES (@UnpostedTopupId, @DriverId, @AccountId, 'lankaqr', 100000, 'Succeeded',
+                    'ord-' || @UnpostedTopupId::text, 'txn-' || @UnpostedTopupId::text,
+                    now() - interval '90 minutes', now() - interval '90 minutes');
+
+            -- (4) open well past the grace period: unsettled. This is also where a refused amount
+            --     mismatch lands, which is why the queue names the class rather than guessing.
+            INSERT INTO billing.topups
+                (id, driver_id, account_id, method, amount_minor, state, provider_order_id, created_at)
+            VALUES (@StaleTopupId, @DriverId, @AccountId, 'onepay', 75000, 'Pending',
+                    'ord-' || @StaleTopupId::text, now() - interval '2 days');
+
+            -- (5) the gateway reported FAILED after issuing its own reference: gateway-failed.
+            INSERT INTO billing.topups
+                (id, driver_id, account_id, method, amount_minor, state,
+                 provider_order_id, provider_transaction_id, failure_reason, created_at, settled_at)
+            VALUES (@FailedTopupId, @DriverId, @AccountId, 'onepay', 50000, 'Failed',
+                    'ord-' || @FailedTopupId::text, 'txn-' || @FailedTopupId::text,
+                    'gateway reported FAILED', now() - interval '4 hours', now() - interval '4 hours');
+            """,
+            new
+            {
+                fixture.DriverId,
+                fixture.AccountId,
+                fixture.MatchedTopupId,
+                fixture.MismatchedTopupId,
+                fixture.UnpostedTopupId,
+                fixture.StaleTopupId,
+                fixture.FailedTopupId,
+                fixture.MatchedMinor,
+                fixture.MismatchedMinor,
+                fixture.PostedForMismatchMinor,
+                MatchedEntryId = Guid.CreateVersion7(),
+                MismatchEntryId = Guid.CreateVersion7(),
+                Phone = $"+9475{Random.Shared.Next(1000000, 9999999)}",
+            });
+
+        return fixture;
+    }
+
+    /// <summary>D-13's charge for one Colombo business day — what a reversal compensates.</summary>
+    public async Task<DateOnly> DailyFeeChargeAsync(
+        Guid driverId, Guid vehicleId, long amountMinor, string status = "PAID")
+    {
+        await using var connection = await postgres.OpenAsync();
+
+        return await connection.ExecuteScalarAsync<DateOnly>(
+            """
+            INSERT INTO billing.daily_fee_charges
+                (driver_id, vehicle_id, amount_minor, trips_that_day, status)
+            VALUES (@DriverId, @VehicleId, @AmountMinor, 3, @Status)
+            ON CONFLICT (driver_id, vehicle_id, fee_date)
+            DO UPDATE SET amount_minor = EXCLUDED.amount_minor, status = EXCLUDED.status
+            RETURNING fee_date;
+            """,
+            new { DriverId = driverId, VehicleId = vehicleId, AmountMinor = amountMinor, Status = status });
+    }
+
+    /// <summary>The driver's wallet ledger, newest first — the DoD's "appears in the driver's ledger".</summary>
+    public async Task<IReadOnlyList<(string Kind, long AmountMinor, long BalanceAfterMinor)>>
+        WalletLedgerAsync(Guid driverId)
+    {
+        await using var connection = await postgres.OpenAsync();
+
+        var rows = await connection.QueryAsync<(string Kind, long AmountMinor, long BalanceAfterMinor)>(
+            """
+            SELECT wt.kind, wt.amount_minor, wt.balance_after_minor
+              FROM billing.wallet_transactions wt
+              JOIN billing.accounts a ON a.id = wt.account_id
+             WHERE a.owner_type = 'driver' AND a.owner_id = @DriverId
+             ORDER BY wt.ts DESC, wt.id DESC;
+            """,
+            new { DriverId = driverId });
+
+        return [.. rows];
+    }
+
+    /// <summary>Σ of a journal entry's legs. Zero, or the ledger is not a ledger (D-09).</summary>
+    public async Task<long> EntryBalanceAsync(Guid entryId)
+    {
+        await using var connection = await postgres.OpenAsync();
+
+        return await connection.ExecuteScalarAsync<long>(
+            "SELECT COALESCE(sum(amount_minor), 0)::bigint FROM billing.journal_postings WHERE entry_id = @Id;",
+            new { Id = entryId });
+    }
+
+    /// <summary>
+    /// A ride whose payment reached R-19's <c>Overpaid</c> and for which no refund has been raised.
+    /// </summary>
+    /// <remarks>
+    /// ADD §11.14's shape exactly: the rider paid the driver in cash, the ride closed, and a late
+    /// gateway callback then arrived. The absence of the <c>fares.refunds</c> row is the point —
+    /// that is the half of the queue a list of raised refunds cannot show.
+    /// </remarks>
+    public async Task<(Guid PassengerId, Guid PaymentId, Guid RideId, long AmountMinor)> OverpaidPaymentAsync()
+    {
+        var passengerId = Guid.CreateVersion7();
+        var rideId = Guid.CreateVersion7();
+        var paymentId = Guid.CreateVersion7();
+        const long amountMinor = 82_50;
+
+        await using var connection = await postgres.OpenAsync();
+
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO iam.users (id, phone, role, first_name)
+            VALUES (@PassengerId, @Phone, 'passenger', 'Overpaid Rider');
+
+            INSERT INTO rides.rides
+                (id, passenger_id, booker_id, client_request_id, vehicle_type,
+                 pickup_geo, dropoff_geo, state, created_at, terminal_at)
+            VALUES (@RideId, @PassengerId, @PassengerId, gen_random_uuid(), 'three_wheeler',
+                    ST_SetSRID(ST_MakePoint(79.861, 6.927), 4326)::geography,
+                    ST_SetSRID(ST_MakePoint(79.884, 6.901), 4326)::geography,
+                    'CashSettled', now() - interval '1 day', now() - interval '1 day');
+
+            INSERT INTO fares.ride_payments
+                (id, ride_id, attempt_no, method, amount_minor, currency, state, provider_transaction_id,
+                 created_at)
+            VALUES (@PaymentId, @RideId, 1::smallint, 'cash', @AmountMinor, 'LKR', 'Overpaid',
+                    'late-' || @PaymentId::text, now() - interval '1 day');
+            """,
+            new
+            {
+                PassengerId = passengerId,
+                RideId = rideId,
+                PaymentId = paymentId,
+                AmountMinor = amountMinor,
+                Phone = $"+9479{Random.Shared.Next(1000000, 9999999)}",
+            });
+
+        return (passengerId, paymentId, rideId, amountMinor);
+    }
+
+    /// <summary>One journal entry of each of the four kinds the transactions report covers.</summary>
+    public async Task<TransactionsFixture> TransactionsFixtureAsync()
+    {
+        var fixture = new TransactionsFixture(
+            DriverId: Guid.CreateVersion7(),
+            RecipientId: Guid.CreateVersion7(),
+            TopupMinor: 200_00,
+            DailyFeeMinor: 150_00,
+            VoucherMinor: 1000_00,
+            TransferMinor: 500_00);
+
+        await using var connection = await postgres.OpenAsync();
+
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO iam.users (id, phone, role, first_name) VALUES
+                (@DriverId,    @DriverPhone,    'driver', 'Report Driver'),
+                (@RecipientId, @RecipientPhone, 'driver', 'Report Recipient');
+
+            INSERT INTO billing.accounts (id, owner_type, owner_id, currency, balance_minor) VALUES
+                (@DriverAccountId,    'driver', @DriverId,    'LKR', 0),
+                (@RecipientAccountId, 'driver', @RecipientId, 'LKR', 0);
+
+            INSERT INTO billing.journal_entries (id, kind, idempotency_key, description) VALUES
+                (@TopupEntryId,    'topup',            'c065-topup:'    || @TopupEntryId::text,    'Top-up'),
+                (@FeeEntryId,      'daily_fee',        'c065-fee:'      || @FeeEntryId::text,      'Daily fee'),
+                (@VoucherEntryId,  'voucher_purchase', 'c065-voucher:'  || @VoucherEntryId::text,  'Bulk voucher'),
+                (@TransferEntryId, 'driver_transfer',  'c065-transfer:' || @TransferEntryId::text, 'Credit transfer');
+
+            -- Every entry balanced against the platform account, except the transfer, whose two legs
+            -- are two drivers' wallets (AL-01: exact value, no commission leg).
+            INSERT INTO billing.journal_postings (entry_id, account_id, amount_minor)
+            SELECT @TopupEntryId, @DriverAccountId, @TopupMinor
+            UNION ALL SELECT @TopupEntryId, p.id, -@TopupMinor FROM billing.accounts p
+                       WHERE p.owner_type = 'platform' AND p.owner_id IS NULL AND p.currency = 'LKR'
+            UNION ALL SELECT @FeeEntryId, @DriverAccountId, -@DailyFeeMinor
+            UNION ALL SELECT @FeeEntryId, p.id, @DailyFeeMinor FROM billing.accounts p
+                       WHERE p.owner_type = 'platform' AND p.owner_id IS NULL AND p.currency = 'LKR'
+            UNION ALL SELECT @VoucherEntryId, @DriverAccountId, @VoucherMinor
+            UNION ALL SELECT @VoucherEntryId, p.id, -@VoucherMinor FROM billing.accounts p
+                       WHERE p.owner_type = 'platform' AND p.owner_id IS NULL AND p.currency = 'LKR'
+            UNION ALL SELECT @TransferEntryId, @DriverAccountId, -@TransferMinor
+            UNION ALL SELECT @TransferEntryId, @RecipientAccountId, @TransferMinor;
+            """,
+            new
+            {
+                fixture.DriverId,
+                fixture.RecipientId,
+                fixture.TopupMinor,
+                fixture.DailyFeeMinor,
+                fixture.VoucherMinor,
+                fixture.TransferMinor,
+                DriverAccountId = Guid.CreateVersion7(),
+                RecipientAccountId = Guid.CreateVersion7(),
+                TopupEntryId = Guid.CreateVersion7(),
+                FeeEntryId = Guid.CreateVersion7(),
+                VoucherEntryId = Guid.CreateVersion7(),
+                TransferEntryId = Guid.CreateVersion7(),
+                DriverPhone = $"+9474{Random.Shared.Next(1000000, 9999999)}",
+                RecipientPhone = $"+9474{Random.Shared.Next(1000000, 9999999)}",
+            });
+
+        return fixture;
+    }
+
+    /// <summary>
+    /// A vehicle whose insurance expires in <paramref name="inDays"/>, with the E-03 notice already
+    /// sent — plus a superseded older copy the queue must <em>not</em> show.
+    /// </summary>
+    public async Task<(Guid DriverId, Guid VehicleId, Guid CurrentDocId, Guid SupersededDocId)>
+        ExpiringDocumentAsync(int inDays, short noticeDays = 30)
+    {
+        var (driverId, vehicleId) = await DriverWithVehicleAsync();
+        var currentDocId = Guid.CreateVersion7();
+        var supersededDocId = Guid.CreateVersion7();
+
+        await using var connection = await postgres.OpenAsync();
+
+        await connection.ExecuteAsync(
+            """
+            -- The superseded copy is written first and with an older created_at, so "newest per
+            -- (vehicle, kind)" has something to actually choose between.
+            INSERT INTO registry.documents (id, driver_id, vehicle_id, kind, file_url, expires_at, status, created_at)
+            VALUES (@SupersededDocId, @DriverId, @VehicleId, 'insurance', @SupersededUrl,
+                    now() - interval '40 days', 'EXPIRED', now() - interval '400 days');
+
+            INSERT INTO registry.documents (id, driver_id, vehicle_id, kind, file_url, expires_at, status, created_at)
+            VALUES (@CurrentDocId, @DriverId, @VehicleId, 'insurance', @CurrentUrl,
+                    now() + make_interval(days => @InDays), 'EXPIRING', now() - interval '30 days');
+
+            INSERT INTO registry.document_notices (document_id, threshold_days)
+            VALUES (@CurrentDocId, @NoticeDays) ON CONFLICT DO NOTHING;
+            """,
+            new
+            {
+                DriverId = driverId,
+                VehicleId = vehicleId,
+                CurrentDocId = currentDocId,
+                SupersededDocId = supersededDocId,
+                InDays = inDays,
+                NoticeDays = noticeDays,
+                CurrentUrl = $"s3://mageride-docs/insurance/{currentDocId:N}.jpg",
+                SupersededUrl = $"s3://mageride-docs/insurance/{supersededDocId:N}.jpg",
+            });
+
+        return (driverId, vehicleId, currentDocId, supersededDocId);
+    }
+
+    /// <summary>One E-07 flag awaiting review, with two named subjects for the queue to join.</summary>
+    public async Task<(Guid FlagId, Guid SubjectId, Guid RelatedId, string SubjectName)> FraudFlagAsync(
+        string status = "open")
+    {
+        var flagId = Guid.CreateVersion7();
+        var subjectId = Guid.CreateVersion7();
+        var relatedId = Guid.CreateVersion7();
+        var subjectName = $"Flagged {Guid.NewGuid():N}"[..20];
+
+        await using var connection = await postgres.OpenAsync();
+
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO iam.users (id, phone, role, first_name) VALUES
+                (@SubjectId, @SubjectPhone, 'driver',    @SubjectName),
+                (@RelatedId, @RelatedPhone, 'passenger', 'Repeat Rider');
+
+            INSERT INTO reputation.fraud_flags
+                (id, kind, subject_id, subject_type, related_id, window_key, status, detail, ts)
+            VALUES (@FlagId, 'repeat_pair', @SubjectId, 'driver', @RelatedId, '2026-W31', @Status,
+                    '{"rides": 11, "threshold": 8}'::jsonb, now() - interval '2 hours');
+            """,
+            new
+            {
+                FlagId = flagId,
+                SubjectId = subjectId,
+                RelatedId = relatedId,
+                SubjectName = subjectName,
+                Status = status,
+                SubjectPhone = $"+9478{Random.Shared.Next(1000000, 9999999)}",
+                RelatedPhone = $"+9478{Random.Shared.Next(1000000, 9999999)}",
+            });
+
+        return (flagId, subjectId, relatedId, subjectName);
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // PDPA (C065)
+    // -------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// A data subject with one of everything an export gathers and an erasure removes.
+    /// </summary>
+    /// <param name="withBlockingHold">
+    /// Adds a non-terminal ride, so the erasure hits <see cref="StatutoryHolds.ActiveRide"/> — the
+    /// case the fulfilment must refuse rather than fulfil.
+    /// </param>
+    public async Task<PdpaSubjectFixture> PdpaSubjectAsync(bool withBlockingHold = false)
+    {
+        var fixture = new PdpaSubjectFixture(
+            UserId: Guid.CreateVersion7(),
+            Name: $"Erasable {Guid.NewGuid():N}"[..22],
+            Phone: $"+9477{Random.Shared.Next(1000000, 9999999)}",
+            Email: $"erasable{Guid.NewGuid():N}@rider.test",
+            SosPhone: $"+9477{Random.Shared.Next(1000000, 9999999)}",
+            AccountId: Guid.CreateVersion7(),
+            RideId: Guid.CreateVersion7());
+
+        await using var connection = await postgres.OpenAsync();
+
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO iam.users (id, phone, email, role, first_name, photo_url,
+                                   emergency_contact_name, emergency_contact_phone)
+            VALUES (@UserId, @Phone, @Email, 'passenger', @Name, 'https://cdn.test/me.jpg',
+                    'Amma', @SosPhone);
+            INSERT INTO iam.user_roles (user_id, role) VALUES (@UserId, 'passenger') ON CONFLICT DO NOTHING;
+
+            INSERT INTO iam.emergency_contacts (user_id, name, phone) VALUES (@UserId, 'Amma', @SosPhone);
+
+            INSERT INTO iam.saved_addresses (user_id, label, line1, geo, is_home)
+            VALUES (@UserId, 'home', '12 Galle Road', ST_SetSRID(ST_MakePoint(79.86, 6.92), 4326)::geography, true);
+
+            INSERT INTO iam.phone_lookups (phone_hash, registered, user_id, caller)
+            VALUES (sha256(convert_to(@Phone, 'UTF8')), true, @UserId, 'test');
+
+            INSERT INTO iam.devices (id, user_id, platform, device_key)
+            VALUES (@DeviceId, @UserId, 'android', @DeviceKey);
+            INSERT INTO iam.sessions (jti, user_id, device_id, app)
+            VALUES (gen_random_uuid(), @UserId, @DeviceId, 'passenger');
+
+            -- A closed ride and a settled payment: financial history, which a statute retains.
+            INSERT INTO rides.rides
+                (id, passenger_id, booker_id, client_request_id, vehicle_type,
+                 pickup_geo, dropoff_geo, state, created_at, terminal_at)
+            VALUES (@RideId, @UserId, @UserId, gen_random_uuid(), 'sedan',
+                    ST_SetSRID(ST_MakePoint(79.861, 6.927), 4326)::geography,
+                    ST_SetSRID(ST_MakePoint(79.884, 6.901), 4326)::geography,
+                    'Paid', now() - interval '9 days', now() - interval '9 days');
+            INSERT INTO fares.ride_payments
+                (ride_id, attempt_no, method, amount_minor, currency, state, created_at)
+            VALUES (@RideId, 1::smallint, 'cash', 45000, 'LKR', 'FellBackToCash', now() - interval '9 days');
+
+            -- A ledger account with postings and a zero balance: a retention hold, never a blocking
+            -- one. A non-zero balance would be `wallet-balance`, which IS blocking.
+            INSERT INTO billing.accounts (id, owner_type, owner_id, currency, balance_minor)
+            VALUES (@AccountId, 'passenger', @UserId, 'LKR', 0);
+            INSERT INTO billing.journal_entries (id, kind, idempotency_key, description)
+            VALUES (@EntryId, 'topup', 'c065-pdpa:' || @EntryId::text, 'Top-up');
+            INSERT INTO billing.journal_postings (entry_id, account_id, amount_minor) VALUES
+                (@EntryId, @AccountId, 0),
+                (@EntryId, (SELECT id FROM billing.accounts
+                             WHERE owner_type = 'platform' AND owner_id IS NULL AND currency = 'LKR'), 0);
+
+            -- A resolved ticket, so `open-dispute` does NOT fire: the hold list has to distinguish
+            -- an open dispute from one that was answered.
+            INSERT INTO support.tickets (user_id, category, description, status, resolved_at)
+            VALUES (@UserId, 'fare_dispute', 'Resolved long ago', 'RESOLVED', now() - interval '5 days');
+
+            -- Optional: the in-flight ride that makes the erasure refusable.
+            INSERT INTO rides.rides
+                (id, passenger_id, booker_id, client_request_id, vehicle_type,
+                 pickup_geo, dropoff_geo, state, created_at)
+            SELECT gen_random_uuid(), @UserId, @UserId, gen_random_uuid(), 'sedan',
+                   ST_SetSRID(ST_MakePoint(79.861, 6.927), 4326)::geography,
+                   ST_SetSRID(ST_MakePoint(79.884, 6.901), 4326)::geography,
+                   'InProgress', now()
+             WHERE @Blocking;
+            """,
+            new
+            {
+                fixture.UserId,
+                fixture.Name,
+                fixture.Phone,
+                fixture.Email,
+                fixture.SosPhone,
+                fixture.AccountId,
+                fixture.RideId,
+                DeviceId = Guid.CreateVersion7(),
+                DeviceKey = $"dev-{Guid.NewGuid():N}",
+                EntryId = Guid.CreateVersion7(),
+                Blocking = withBlockingHold,
+            });
+
+        return fixture;
+    }
+
+    /// <summary>The identifying columns after an erasure — the DoD's "soft anonymisation".</summary>
+    public async Task<AnonymisedUser> UserAfterErasureAsync(Guid userId)
+    {
+        await using var connection = await postgres.OpenAsync();
+
+        return await connection.QuerySingleAsync<AnonymisedUser>(
+            """
+            SELECT u.phone AS Phone, u.email AS Email, u.first_name AS FirstName, u.photo_url AS PhotoUrl,
+                   u.emergency_contact_phone AS EmergencyContactPhone, u.anonymised_at AS AnonymisedAt,
+                   (SELECT count(*)::int FROM iam.emergency_contacts c WHERE c.user_id = u.id) AS EmergencyContacts,
+                   (SELECT count(*)::int FROM iam.saved_addresses a  WHERE a.user_id = u.id) AS SavedAddresses,
+                   (SELECT count(*)::int FROM iam.phone_lookups p    WHERE p.user_id = u.id) AS PhoneLookups,
+                   (SELECT count(*)::int FROM iam.sessions s
+                     WHERE s.user_id = u.id AND s.revoked_at IS NULL) AS LiveSessions,
+                   (SELECT count(*)::int FROM rides.rides r          WHERE r.passenger_id = u.id) AS Rides,
+                   (SELECT count(*)::int FROM billing.journal_postings jp
+                      JOIN billing.accounts a2 ON a2.id = jp.account_id
+                     WHERE a2.owner_id = u.id) AS LedgerPostings,
+                   (SELECT count(*)::int FROM audit.events e
+                     WHERE e.actor_id = u.id OR e.entity_id = u.id) AS AuditEvents
+              FROM iam.users u WHERE u.id = @Id;
+            """,
+            new { Id = userId });
+    }
+
+    /// <summary>The <c>pdpa.fulfillment_artifacts</c> row a fulfilment left behind.</summary>
+    public async Task<(string Kind, string StorageUrl, byte[]? Sha256)?> PdpaArtifactAsync(Guid requestId)
+    {
+        await using var connection = await postgres.OpenAsync();
+
+        var row = await connection.QuerySingleOrDefaultAsync<(string Kind, string StorageUrl, byte[]? Sha256)>(
+            """
+            SELECT kind, storage_url, sha256 FROM pdpa.fulfillment_artifacts
+             WHERE request_id = @Id ORDER BY signed_at DESC NULLS LAST LIMIT 1;
+            """,
+            new { Id = requestId });
+
+        return row.Kind is null ? null : row;
+    }
 }
+
+/// <summary>Everything <see cref="AdminSeed.SettlementFixtureAsync"/> minted.</summary>
+internal sealed record SettlementFixture(
+    Guid DriverId,
+    Guid AccountId,
+    Guid MatchedTopupId,
+    Guid MismatchedTopupId,
+    Guid UnpostedTopupId,
+    Guid StaleTopupId,
+    Guid FailedTopupId,
+    long MatchedMinor,
+    long MismatchedMinor,
+    long PostedForMismatchMinor);
+
+/// <summary>Everything <see cref="AdminSeed.TransactionsFixtureAsync"/> minted.</summary>
+internal sealed record TransactionsFixture(
+    Guid DriverId, Guid RecipientId, long TopupMinor, long DailyFeeMinor, long VoucherMinor, long TransferMinor);
+
+/// <summary>Everything <see cref="AdminSeed.PdpaSubjectAsync"/> minted.</summary>
+internal sealed record PdpaSubjectFixture(
+    Guid UserId, string Name, string Phone, string Email, string SosPhone, Guid AccountId, Guid RideId);
+
+/// <summary>What survived an erasure and what did not.</summary>
+internal sealed record AnonymisedUser(
+    string? Phone,
+    string? Email,
+    string? FirstName,
+    string? PhotoUrl,
+    string? EmergencyContactPhone,
+    DateTimeOffset? AnonymisedAt,
+    int EmergencyContacts,
+    int SavedAddresses,
+    int PhoneLookups,
+    int LiveSessions,
+    int Rides,
+    int LedgerPostings,
+    int AuditEvents);
 
 /// <summary>Every id the directory fixture minted, so an assertion can name what it is about.</summary>
 internal sealed record DirectoryFixture(
