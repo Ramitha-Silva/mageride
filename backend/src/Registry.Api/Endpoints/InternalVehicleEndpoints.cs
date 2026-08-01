@@ -39,7 +39,12 @@ public static class InternalVehicleEndpoints
             .AllowAnonymous()
             .AddEndpointFilter(new RegistryInternalApiKeyFilter(apiKey));
 
-        internalVehicles.MapPost("/{vehicleId}/merchant", BindMerchantAsync).WithName("bindOnepayMerchant");
+        // Δ AL-57 — REMOVED, do not re-add:
+        //   POST /v1/internal/vehicles/{vehicleId}/merchant
+        //     D-11 RETIRED. OnePay supports one merchant account per merchant, so the per-driver
+        //     sub-account this bound never existed — every row it could write would be MageRide's
+        //     own id repeated once per driver. Where a driver's money goes is now
+        //     `GET · PUT /v1/drivers/payout-profile` (AL-58) and payout-svc's weekly sweep.
         internalVehicles.MapPost("/{vehicleId}/onboarding/recompute", RecomputeOnboardingAsync)
             .WithName("recomputeVehicleOnboarding");
 
@@ -69,18 +74,6 @@ public static class InternalVehicleEndpoints
         return TypedResults.Ok(OnboardingStatusResponse.From(state));
     }
 
-    private static async Task<Ok<BindMerchantResponse>> BindMerchantAsync(
-        string vehicleId, BindMerchantBody? body, IMerchantService merchants, CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(merchants);
-
-        var id = VehicleEndpoints.RequireVehicleId(vehicleId);
-
-        var payout = await merchants.BindMerchantAsync(
-            new BindMerchantCommand(id, body?.MerchantId, body?.MerchantRef), cancellationToken);
-
-        return TypedResults.Ok(new BindMerchantResponse(id.ToString(), payout.OnepayMerchantId));
-    }
 }
 
 /// <summary>Refuses a request that does not carry the internal shared secret.</summary>

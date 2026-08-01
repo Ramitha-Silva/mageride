@@ -68,12 +68,34 @@ public sealed class RegistryOptions
     /// <remarks>
     /// D3' §0 puts the internal family on service-to-service mTLS and the gateway refuses the
     /// prefix at the edge (C008); this is the interim until C042 lands a mesh, and it must equal
-    /// whatever fare-svc (C046) sends. <b>Unset means the routes are not mapped at all</b> — a
-    /// deployment that forgets it gets 404s rather than an unauthenticated write to
-    /// <c>registry.driver_payouts</c>, and the missing merchant binding then surfaces as
-    /// <c>402 merchant-not-onboarded</c> at <c>POST /v1/fare/pay</c> (D-11).
+    /// whatever admin-bff (C063) sends. <b>Unset means the routes are not mapped at all</b> — a
+    /// deployment that forgets it gets 404s rather than an unauthenticated write.
+    /// <b>Δ AL-57:</b> the family is now one route, AL-30's onboarding recompute. The D-11 merchant
+    /// bind is retired — OnePay has one merchant account per merchant, so the per-driver binding it
+    /// wrote never existed.
     /// </remarks>
     public string? InternalApiKey { get; set; }
+
+    // -----------------------------------------------------------------------------------------
+    // The driver's bank & payout profile (Δ AL-58/AL-59)
+    // -----------------------------------------------------------------------------------------
+
+    /// <summary>Where payout documents are written until D-36's bucket exists (C125).</summary>
+    /// <remarks>
+    /// <b>Unset ⇒ a temporary directory</b>, which a restart can take an officer's evidence with.
+    /// Warned at construction. Not object storage: this service holds no signing key and no bucket
+    /// client, exactly as fleet-svc holds none for the same slots — admin-bff mints the signed URL
+    /// an officer opens them by (C063).
+    /// </remarks>
+    public string? PayoutDocumentRoot { get; set; }
+
+    /// <summary>Ceiling on one payout document.</summary>
+    /// <remarks><b>No spec</b> — the same 8 MiB bound fleet-svc uses for the identical slots.</remarks>
+    public long PayoutDocumentMaxBytes { get; set; } = 8 * 1024 * 1024;
+
+    /// <summary>How long a raw payout document is kept (NFR-28).</summary>
+    /// <remarks>Written to <c>docs.uploads.auto_delete_at</c>; the sweeper is not this service's.</remarks>
+    public TimeSpan PayoutDocumentRetention { get; set; } = TimeSpan.FromDays(90);
 
     // -----------------------------------------------------------------------------------------
     // C054 — the ocr-svc hop (D6' §7.5)

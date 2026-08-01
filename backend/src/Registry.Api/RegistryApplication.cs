@@ -91,11 +91,13 @@ public static class RegistryApplication
         }
         else
         {
-            // fare-svc cannot bind a driver's OnePay merchant without this, and the symptom is a
-            // 402 merchant-not-onboarded on somebody's fare rather than anything that points here.
+            // Δ AL-57: what is lost is AL-30's recompute, not the retired D-11 bind. Without it a
+            // Verification Officer's Confirm never reaches this service, so a Mode C vehicle sits at
+            // pending_review for a field nobody is still questioning and can never be approved.
             app.Logger.LogWarning(
                 "Registry:InternalApiKey is not configured, so /v1/internal/vehicles/** is unmapped. " +
-                "No OnePay merchant binding can be recorded against this instance (D-11).");
+                "A confirmed onboarding field never reaches this service (AL-30), so no Mode C vehicle " +
+                "can be approved.");
         }
 
         if (DevApprovalEnabled(app))

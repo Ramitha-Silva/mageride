@@ -160,65 +160,7 @@ public sealed class SubscriptionRepository : ISubscriptionRepository
     }
 }
 
-/// <summary><c>registry.driver_payouts</c> — the D-11 OnePay merchant binding (0304).</summary>
-public interface IDriverPayoutRepository
-{
-    /// <summary>
-    /// Binds or rebinds a driver's merchant account. Idempotent on the driver: the table is keyed
-    /// by <c>driver_id</c>, and a vehicle reaching APPROVED for the second time must not fail.
-    /// </summary>
-    Task<DriverPayout> BindAsync(
-        NpgsqlConnection connection,
-        NpgsqlTransaction? transaction,
-        Guid driverId,
-        string merchantId,
-        CancellationToken cancellationToken);
-
-    Task<DriverPayout?> FindAsync(
-        NpgsqlConnection connection, NpgsqlTransaction? transaction, Guid driverId, CancellationToken cancellationToken);
-}
-
-/// <inheritdoc cref="IDriverPayoutRepository"/>
-public sealed class DriverPayoutRepository : IDriverPayoutRepository
-{
-    private const string Columns = "driver_id, onepay_merchant_id, bound_at, status";
-
-    public Task<DriverPayout> BindAsync(
-        NpgsqlConnection connection,
-        NpgsqlTransaction? transaction,
-        Guid driverId,
-        string merchantId,
-        CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(connection);
-
-        // DO UPDATE, not DO NOTHING: a driver whose OnePay account was replaced must end up with
-        // the new one, and `bound_at` moving is the record of when that happened. Rebinding to the
-        // same id also clears a SUSPENDED status, which is the only way back from one today.
-        return connection.QuerySingleAsync<DriverPayout>(new CommandDefinition(
-            $"""
-             INSERT INTO registry.driver_payouts (driver_id, onepay_merchant_id)
-             VALUES (@DriverId, @MerchantId)
-             ON CONFLICT (driver_id) DO UPDATE
-               SET onepay_merchant_id = EXCLUDED.onepay_merchant_id,
-                   bound_at = now(),
-                   status = 'ACTIVE'
-             RETURNING {Columns};
-             """,
-            new { DriverId = driverId, MerchantId = merchantId },
-            transaction,
-            cancellationToken: cancellationToken));
-    }
-
-    public Task<DriverPayout?> FindAsync(
-        NpgsqlConnection connection, NpgsqlTransaction? transaction, Guid driverId, CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(connection);
-
-        return connection.QuerySingleOrDefaultAsync<DriverPayout>(new CommandDefinition(
-            $"SELECT {Columns} FROM registry.driver_payouts WHERE driver_id = @DriverId;",
-            new { DriverId = driverId },
-            transaction,
-            cancellationToken: cancellationToken));
-    }
-}
+// Δ AL-57 — `IDriverPayoutRepository` / `DriverPayoutRepository` REMOVED with D-11. OnePay has one
+// merchant account per merchant, so the per-driver binding they wrote never existed. Where a
+// driver's money goes is `registry.driver_payout_profiles` (AL-58) and payout-svc's weekly sweep;
+// migration 1010 drops the table this read.

@@ -361,15 +361,8 @@ internal sealed class RegistryHarness : IAsyncDisposable
         return value.IsNullOrEmpty ? null : value.ToString();
     }
 
-    /// <summary>The driver's bound OnePay merchant, or null — <c>registry.driver_payouts</c> (D-11).</summary>
-    public async Task<string?> MerchantIdAsync(Guid driverId)
-    {
-        await using var connection = await _postgres.OpenAsync();
+    // Δ AL-57 — `MerchantIdAsync` removed with `registry.driver_payouts` (migration 1010).
 
-        return await connection.QuerySingleOrDefaultAsync<string?>(
-            "SELECT onepay_merchant_id FROM registry.driver_payouts WHERE driver_id = @DriverId;",
-            new { DriverId = driverId });
-    }
 
     /// <summary>The rows registry-svc queued for <c>registry.events</c> (migration 0309).</summary>
     public async Task<IReadOnlyList<(string EventType, Guid AggregateId, string Payload)>> OutboxAsync(Guid vehicleId)

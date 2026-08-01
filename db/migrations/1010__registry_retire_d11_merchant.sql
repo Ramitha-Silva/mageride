@@ -1,0 +1,29 @@
+-- =====================================================================================
+-- 1010 — registry: drop registry.driver_payouts, D-11's OnePay merchant binding
+-- Source: specs/architecture-design-document.md §1.18 (AL-57) · §11.9 (replaced)
+--
+-- AL-57. **The drop 0316's header promised**, shipping with the component that removes the last
+-- reference to the table.
+--
+-- WHY IT WAITED, AND WHY IT IS C028 AND NOT C050. 0316 added `registry.driver_payout_profiles` and
+-- deliberately left this table alone: DbUp applies this directory to every environment including
+-- the replica, so dropping a table a running service still reads would take it down in the window
+-- between the migration and the code change. 0316's header named C050 as the component that would
+-- carry the drop; implementing C050 showed that was wrong — fare-svc only ever *read* it, and the
+-- last WRITER is registry-svc (`MerchantService`, `DriverPayoutRepository`,
+-- `POST /v1/internal/vehicles/{id}/merchant`). That is this component. Recorded in the change-set
+-- entry in build/progress.md.
+--
+-- WHY IT GOES AT ALL. The table is `(driver_id, onepay_merchant_id, bound_at, status)` and OnePay
+-- supports **one merchant account per merchant**. There is no per-driver sub-account and never was,
+-- so every row it could hold is MageRide's own merchant id repeated once per driver — a column that
+-- says nothing. Where a driver's money goes is `registry.driver_payout_profiles` (AL-58) and
+-- payout-svc's weekly sweep (C133).
+--
+-- IN THE 10xx RANGE rather than 03xx because the ordering constraint is about the fares/payout
+-- chain and not about registry: this has to apply after 1007's widened method CHECK and after
+-- 1109's payout tables, and a 03xx script would run before both on a fresh database. Named for the
+-- change it completes.
+-- =====================================================================================
+
+DROP TABLE IF EXISTS registry.driver_payouts;

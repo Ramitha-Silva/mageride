@@ -27,8 +27,10 @@ four-step Mode-C onboarding machine and the E-03 document-expiry tracker. Everyt
 | `POST /v1/vehicles/{id}/share` · `/share/{grantId}/accept` · `DELETE /share/{grantId}` | US-4.1/4.2/4.3b, D-22 |
 | `GET /v1/vehicles/{id}/subscribers` · `DELETE /subscribers/{userId}` | US-4.7, US-NEW.1 |
 | `POST /v1/share-requests` | US-4.5 |
-| `POST /v1/internal/vehicles/{id}/merchant` | D-11 |
+| ~~`POST /v1/internal/vehicles/{id}/merchant`~~ | **REMOVED — D-11 retired (AL-57)** |
 | `POST /v1/internal/vehicles/{id}/onboarding/recompute` | **not in D3'** — AL-30 (C029 micro-change-set) |
+| `GET` · `PUT /v1/drivers/payout-profile` | **Δ AL-58/AL-59** — where a driver's swept earnings go |
+| `POST /v1/drivers/payout-profile/documents` | **Δ AL-58** — proof of account, and the driver's own LankaQR |
 | `POST /v1/dev/vehicles/{id}/approve` | dev seed path only; **not a contract route** |
 
 **Not here, on purpose.** Gemini extraction, the PII redaction pre-pass and the Tesseract fallback

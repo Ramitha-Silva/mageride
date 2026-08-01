@@ -214,11 +214,12 @@ check_eq "13 iam tables" "13" \
 # (dispatch.scheduled_rides is a passenger's Mode C advance booking and AL-03 forbids a fleet Mode
 # C vehicle), and US-13.1's bulk CSV job is specified completely by fleet.yaml with nowhere to
 # store it — the same gap 0405 raised for bulk trackers (C059 handoff micro-change-sets).
-# 20, not 19: `registry.driver_payout_profiles` is AL-58's (0316) — D-11 assumed OnePay would mint
-# a merchant sub-account per driver, it does not, and a driver's bank details had nowhere to live.
-# `registry.driver_payouts` is still counted here and is dropped with C050's script, once no
-# service names it.
-check_eq "19 registry tables + 1 from C063/AL-58" "20" \
+# 19, and the count is unchanged for a reason worth reading: AL-58 ADDED
+# `registry.driver_payout_profiles` (0316) and AL-57 DROPPED `registry.driver_payouts` (1010), one
+# in and one out. D-11 assumed OnePay would mint a merchant sub-account per driver; it does not, so
+# every row that table could hold was MageRide's own id repeated once per driver. The drop shipped
+# with C028 — the last WRITER — and not with C050 as 0316's header guessed.
+check_eq "19 registry tables (AL-58 in, D-11 out)" "19" \
   "SELECT count(*) FROM information_schema.tables WHERE table_schema='registry' AND table_type='BASE TABLE';"
 # 2 from server_db_schema.md §3 (tracker_bindings, device_certs) + 5 added by C030, each a
 # micro-change-set raised in its handoff: prov.command_log (D3' §0 mandates a per-service

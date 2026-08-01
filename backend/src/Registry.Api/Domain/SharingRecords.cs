@@ -92,8 +92,7 @@ public sealed record Subscriber(
 public sealed record AccessRequest(
     Guid Id, Guid VehicleId, Guid PassengerId, string Status, DateTimeOffset RequestedAt);
 
-/// <summary>A row of <c>registry.driver_payouts</c> — where a driver's settlements land (D-11).</summary>
-public sealed record DriverPayout(Guid DriverId, string OnepayMerchantId, DateTimeOffset BoundAt, string Status);
+// Δ AL-57 — `DriverPayout` REMOVED: `registry.driver_payouts` is dropped with D-11.
 
 /// <summary>
 /// The event types registry-svc writes to <c>registry.outbox</c> (migration 0309).
@@ -111,4 +110,56 @@ public static class RegistryEventTypes
 
     /// <summary>US-2.16. The vehicle leaves the map and every live grant on it is revoked with it.</summary>
     public const string VehicleDeactivated = "vehicle.deactivated";
+}
+
+/// <summary>
+/// One version of a driver's bank &amp; payout profile (AL-58, migration 0316).
+/// </summary>
+/// <remarks>
+/// Shaped exactly like <c>registry.fleet_payout_profiles</c>: the platform must not hold a payee's
+/// bank details in two shapes. <c>LankaqrUploadId</c> is load-bearing beyond payouts — AL-59 makes
+/// a LankaQR ride payment the driver's OWN bank QR, and this is the image a passenger scans.
+/// </remarks>
+public sealed record DriverPayoutProfile(
+    Guid Id,
+    Guid DriverId,
+    string Bank,
+    string Branch,
+    string AccountNo,
+    string AccountHolderName,
+    Guid? ProofUploadId,
+    Guid? LankaqrUploadId,
+    string Status,
+    string? RejectionReason,
+    DateTimeOffset? VerifiedAt)
+{
+    public bool IsPending => Status == DriverPayoutStatuses.PendingVerification;
+
+    public bool IsVerified => Status == DriverPayoutStatuses.Verified;
+}
+
+/// <summary><c>registry.driver_payout_profiles.status</c> (migration 0316).</summary>
+public static class DriverPayoutStatuses
+{
+    public const string PendingVerification = "pending_verification";
+    public const string Verified = "verified";
+    public const string Rejected = "rejected";
+
+    /// <summary>The incumbent an approved edit displaced (0313's fourth value, mirrored).</summary>
+    public const string Superseded = "superseded";
+}
+
+/// <summary>The document slots an AL-58 payout profile carries.</summary>
+public static class DriverPayoutDocumentKinds
+{
+    public const string BankStatement = "bank_statement";
+    public const string PassbookFirstPage = "passbook_first_page";
+
+    /// <summary>AL-59: the driver's own bank-app LankaQR, which a passenger scans to pay them.</summary>
+    public const string LankaqrCode = "lankaqr_code";
+
+    public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.Ordinal)
+    {
+        BankStatement, PassbookFirstPage, LankaqrCode,
+    };
 }

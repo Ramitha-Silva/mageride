@@ -35,12 +35,13 @@ public static class RegistryServiceCollectionExtensions
         services.AddSingleton<IEligibilityRepository, EligibilityRepository>();
         services.AddSingleton<IShareRepository, ShareRepository>();
         services.AddSingleton<ISubscriptionRepository, SubscriptionRepository>();
-        services.AddSingleton<IDriverPayoutRepository, DriverPayoutRepository>();
         services.AddSingleton<IDriverLiveVehicleCache, DriverLiveVehicleCache>();
 
         // C029.
         services.AddSingleton<IDocumentRepository, DocumentRepository>();
         services.AddSingleton<IOnboardingStepRepository, OnboardingStepRepository>();
+        services.AddSingleton<IDriverPayoutProfileRepository, DriverPayoutProfileRepository>();
+        services.AddSingleton<IPayoutDocumentStore, PayoutDocumentStore>();
 
         // C054. `Registry:OcrBaseUrl` is what decides which of the two lands: with it, the real
         // hop to ocr-svc; without it, the honest no-op below. TryAdd is still what registers the
@@ -74,8 +75,8 @@ public static class RegistryServiceCollectionExtensions
         // Scoped: each opens a unit of work per command, so its lifetime is the request's.
         services.AddScoped<IVehicleService, VehicleService>();
         services.AddScoped<IShareService, ShareService>();
-        services.AddScoped<IMerchantService, MerchantService>();
         services.AddScoped<IOnboardingService, OnboardingService>();
+        services.AddScoped<IDriverPayoutProfileService, DriverPayoutProfileService>();
 
         return services;
     }

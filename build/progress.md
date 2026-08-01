@@ -53,7 +53,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C025 | ws-e2e-android-slice ⭑ | 3 | DONE | 2026-07-28 | **WALKING SKELETON REACHED** — one booked ride end to end on the real stack; 2 Android shells assemble; `:shared` gained a jvm() target; wave-1 gate repaired |
 | C026 | iam-svc-auth | 2 | DONE | 2026-07-28 | 209 tests green (118 new); 1 iam migration added (0107) — 4 micro-change-sets raised; `POST /v1/auth/mqtt-token` closes C025 gap (c) |
 | C027 | iam-svc-profile-rbac | 2 | DONE | 2026-07-28 | 330 tests green (121 new); 1 iam migration added (0108); 8 routes D3' does not carry raised as micro-change-sets; URD §2.3 matrix parsed from `specs/` by the test |
-| C028 | registry-svc-vehicles | 2 | DONE | 2026-07-28 | 145 tests green (53 new); 3 registry migrations (0309–0311) + a 7th Redpanda topic; 0308's composite FK relaxed for US-13.9; dispatch-svc now reads the eligibility projection |
+| C028 | registry-svc-vehicles | 2 | DONE | 2026-08-01 | 145 tests green (53 new); 3 registry migrations (0309–0311) + a 7th Redpanda topic; 0308's composite FK relaxed for US-13.9; dispatch-svc now reads the eligibility projection. **Δ 2026-08-01 (AL-57/58/59)**: D-11's merchant binding removed and `registry.driver_payouts` dropped (1010); the driver bank & payout profile put in its place — **175 tests green (+9)** |
 | C029 | registry-svc-onboarding | 2 | DONE | 2026-07-28 | 175 tests green (30 new); 1 registry migration (0312) + the `IDocumentExtractionClient` port C054 implements; `vehicle.registered` finally emitted; 6 new `registry.events` types, none with a spec'd envelope |
 | C030 | provisioning-svc | 2 | DONE | 2026-07-28 | 99 tests green; 4 prov migrations (0402–0405); device mTLS enabled on EMQX 8883 (`peer_cert_as_username = cn`) so a tracker's certificate *is* its topic grant; 7 micro-change-sets |
 | C031 | trip-state-svc | 2 | DONE | 2026-07-28 | 46 tests green; 2 trips migrations (0504–0505); the D-03 mutex is the partial unique index and the Redis half needed a new key — `lock:driver:{driverId}` was already registry's; 6 micro-change-sets |
@@ -9782,3 +9782,88 @@ _Append 3 lines per completed component (Component / Status / Notes)._
 
   **The change set is now closed except for C028**, which removes the last
   `registry.driver_payouts` reference and carries its drop.
+
+---
+
+- **Component:** C028 registry-svc-vehicles — **amendment**, 2026-08-01 (AL-57 / AL-58 / AL-59)
+- **Status:** DONE — 175/175 Registry.Api.Tests green (+9), solution builds, Spectral 0 errors,
+  migrate-verify 461/461. **This closes the AL-57/58/59 change set.**
+- **Handoff:**
+
+  **What went out.** D-11's per-driver OnePay merchant sub-account never existed — OnePay supports
+  one merchant account per merchant (AL-57). Everything that assumed otherwise is gone:
+  `MerchantService.cs`, `IDriverPayoutRepository`, the `DriverPayout` record, `BindMerchantBody` /
+  `BindMerchantResponse`, `POST /v1/internal/vehicles/{id}/merchant`, its DI registration and four
+  tests in `SubscriberAndMerchantTests.cs`. Migration **1010** drops `registry.driver_payouts`.
+  It is a 10xx script and not a 03xx one on purpose: fare-svc stopped reading the table in C050 and
+  a drop that runs before the reader is gone would take the platform down between two deploys.
+
+  **What went in.** `registry.driver_payout_profiles` (migration 0316) and three routes on the
+  existing `/v1/drivers` group — `GET` · `PUT /v1/drivers/payout-profile` and
+  `POST /v1/drivers/payout-profile/documents`. This is a **different kind of thing** from what it
+  replaced and that distinction is the point: D-11 held a platform-side identifier fare-svc needed
+  at payment time; this holds *the driver's own bank account*, which they enter, an officer
+  approves, and payout-svc (C133) sweeps to weekly.
+
+  **Every rule here is fleet-svc's, mirrored deliberately.** `registry.fleet_payout_profiles`
+  (0313, C003/C058) and this table are column-for-column identical, so an operator reading a
+  fleet's account and a driver's reads one shape, the Verification Officer decides both through the
+  same AL-39 queue, and payout-svc's "find the one verified row" is subscription-svc's query with a
+  different owner column. Copying a design is cheaper than reconciling two.
+
+  **BR-31.1 has two halves and the second is the one that protects somebody's money.** An edit to a
+  *pending* version UPDATEs in place — nobody has decided on it and inserting instead would put a
+  second application for one driver on the officer's queue for every digit fixed. An edit to a
+  *verified* version INSERTs and **leaves the incumbent verified and payable**, so a driver who
+  mistypes their account number on Friday is still paid on Sunday, into the account an officer
+  actually approved. `UpdatePendingAsync` guards on `status = 'pending_verification'` in the WHERE
+  rather than trusting the read that chose that path — between the two an officer may have decided,
+  and rewriting a verified row's account number in place is precisely what BR-31.1 exists to
+  prevent. A null return means "re-read and insert a version", which is also the right answer.
+
+  **Uploading a document is an edit too.** Against a verified profile it forks a new pending
+  version carrying the other slot forward: replacing the bank statement behind an approved account
+  is exactly the change an officer would want to see again. `bank_statement` and
+  `passbook_first_page` share one column because BR-31.1 asks for one *or* the other;
+  `lankaqr_code` (AL-59) is its own, and the two do not displace each other.
+
+  **The bytes are written before the `docs.uploads` row** — fleet-svc's rule for the same slots and
+  for the same reason. A crash between them leaves an orphan file that NFR-28's deadline sweeps; the
+  other order leaves a profile pointing at a document the officer is told exists and cannot open.
+  The size ceiling is counted **while streaming**, never read from `Content-Length`: a ceiling
+  enforced against a length the client declared is not a ceiling.
+
+  **`captured_via` is left NULL, on purpose.** AL-43's provenance exists because a gallery pick on
+  an onboarding *photograph* is a fraud signal. A bank statement is exported from a banking app —
+  recording `gallery` would stamp a fraud signal on every payout profile on the platform.
+
+  **⚠ Three gaps this leaves, all named rather than papered over:**
+
+  (a) **The bytes are on local disk, not in D-36's bucket.** `Registry:PayoutDocumentRoot` holds
+  them and `docs.uploads.storage_url` records where. The SSE-KMS bucket and its client are **C125**;
+  until then this is the same interim fleet-svc runs on. **Unset, the root falls back to a
+  temporary directory that a restart can take an officer's evidence with** — the service logs a
+  warning saying exactly that, and the three knobs are in `.env.app.example`.
+
+  (b) **Nothing here sets `verified`.** admin-bff's AL-39 queue does (C063), and its routes are
+  subject-agnostic and already take a driver id — but **C063 shipped before this table existed**, so
+  its `FindSubjectSql` UNION covers vehicle/org/driver *identity* subjects and does **not** yet
+  enumerate driver payout profiles. Until an officer can reach these rows through the queue, the
+  only way a driver's profile becomes `verified` is a direct UPDATE. **C064's session should decide
+  whether that belongs to admin-bff or to a follow-up on C063** — it is a genuine hole in the
+  weekly-sweep path, not a cosmetic one, and it is the last thing standing between a driver
+  submitting bank details and payout-svc being able to pay them.
+
+  (c) **No outbox event.** Nothing downstream waits on a payout profile changing: payout-svc reads
+  the table at sweep time. If admin-bff later wants a live officer queue rather than a polled one,
+  that is the change — `registry.events` already exists.
+
+  **Testing —** 9 new tests. The two BR-31.1 halves are asserted on the database rather than the
+  response, because "the incumbent is still the one that gets paid" is a claim about
+  `ux_driver_payout_verified` admitting exactly one row, not about a JSON field. The officer's
+  approval is simulated with a direct UPDATE rather than by standing admin-bff up — see (b): there
+  is no route to call yet. Both document slots, an unknown kind, an upload with no account to
+  attach it to, and the cross-driver case (which cannot happen — the subject is the token and the
+  path carries no id) are covered.
+
+  **Registry count in `migrate-verify` stays 19** — one table in, one out.

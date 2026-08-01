@@ -143,3 +143,39 @@ public sealed record OnboardingStatusResponse(
 
 /// <summary>All four verdicts. Always all four, even before anything is saved.</summary>
 public sealed record OnboardingStepsResponse(string Details, string Insurance, string Revenue, string Photos);
+
+/// <summary>`PUT /v1/drivers/payout-profile` (Δ AL-58).</summary>
+public sealed record DriverPayoutProfileBody(
+    string? Bank, string? Branch, string? AccountNo, string? AccountHolderName);
+
+/// <summary>`DriverPayoutProfile` — one version of where a driver's earnings go.</summary>
+public sealed record DriverPayoutProfileResponse(
+    string Bank,
+    string Branch,
+    string AccountNo,
+    string AccountHolderName,
+    string? ProofDocId,
+    string? LankaqrDocId,
+    string Status,
+    string? RejectionReason,
+    DateTimeOffset? VerifiedAt)
+{
+    public static DriverPayoutProfileResponse From(MageRide.Registry.Domain.DriverPayoutProfile profile)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+
+        return new DriverPayoutProfileResponse(
+            profile.Bank,
+            profile.Branch,
+            profile.AccountNo,
+            profile.AccountHolderName,
+            profile.ProofUploadId?.ToString(),
+            profile.LankaqrUploadId?.ToString(),
+            profile.Status,
+            profile.RejectionReason,
+            profile.VerifiedAt);
+    }
+}
+
+/// <summary>The 201 of a payout-document upload.</summary>
+public sealed record DriverPayoutDocumentResponse(string DocId, string Kind);

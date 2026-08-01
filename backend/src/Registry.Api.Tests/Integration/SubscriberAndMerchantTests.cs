@@ -7,7 +7,7 @@ using MageRide.TestKit;
 namespace MageRide.Registry.Tests.Integration;
 
 /// <summary>
-/// The Mode B subscriber roster (US-4.7, US-NEW.1) and the D-11 OnePay merchant binding.
+/// The Mode B subscriber roster (US-4.7, US-NEW.1) and the internal plane's own fence.
 /// </summary>
 [Collection<RegistryCollection>]
 public sealed class SubscriberAndMerchantTests(PostgresFixture postgres)
@@ -90,161 +90,16 @@ public sealed class SubscriberAndMerchantTests(PostgresFixture postgres)
             "not-owner");
     }
 
-    /// <summary>
-    /// US-NEW.1: the passenger loses visibility now, and the row stays MUTED on the owner's roster
-    /// until they delete it (US-4.12) — so the grant is still listed, as `unsubscribed`.
-    /// </summary>
-    [Fact]
-    public async Task A_passenger_unsubscribes_and_the_row_stays_muted()
-    {
-        await using var harness = await RegistryHarness.StartAsync(postgres);
-        var ownerId = await harness.CreateDriverAsync();
-        var passengerId = await harness.CreateDriverAsync();
-        var passenger = harness.Tokens.Issue(passengerId, [MageRideRoles.Passenger], MageRideApps.Passenger);
 
-        var vehicleId = await harness.SeedFleetVehicleAsync(ownerId);
-        await harness.SeedSubscriptionGrantAsync(vehicleId, passengerId);
 
-        var response = await harness.DeleteAsync($"/v1/vehicles/{vehicleId}/subscribers/{passengerId}", passenger);
-        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
-
-        // The same directed removal a revoke earns (D-22), carrying the passenger fanout needs.
-        var revocation = Assert.Single(await harness.OutboxAsync(vehicleId), e => e.EventType == "share.revoked");
-        using var payload = JsonDocument.Parse(revocation.Payload);
-        Assert.Equal(passengerId.ToString(), payload.RootElement.GetProperty("passengerId").GetString());
-        Assert.Equal("unsubscribed", payload.RootElement.GetProperty("reason").GetString());
-
-        var roster = await RegistryHarness.ReadJsonAsync(
-            await harness.GetAsync($"/v1/vehicles/{vehicleId}/subscribers", harness.Tokens.Driver(ownerId)));
-
-        var row = Assert.Single(roster.GetProperty("items").EnumerateArray().ToArray());
-        Assert.Equal("unsubscribed", row.GetProperty("status").GetString());
-    }
-
-    /// <summary>
-    /// The owner's removal is a different verb on a different service (subscription.yaml,
-    /// US-4.12): letting them through here would silently perform the wrong one.
-    /// </summary>
-    [Fact]
-    public async Task An_owner_cannot_unsubscribe_somebody_else_through_this_route()
-    {
-        await using var harness = await RegistryHarness.StartAsync(postgres);
-        var ownerId = await harness.CreateDriverAsync();
-        var passengerId = await harness.CreateDriverAsync();
-
-        var vehicleId = await harness.SeedFleetVehicleAsync(ownerId);
-        await harness.SeedSubscriptionGrantAsync(vehicleId, passengerId);
-
-        await ProblemDocument.AssertAsync(
-            await harness.DeleteAsync(
-                $"/v1/vehicles/{vehicleId}/subscribers/{passengerId}", harness.Tokens.Driver(ownerId)),
-            HttpStatusCode.Forbidden,
-            "forbidden");
-    }
-
-    [Fact]
-    public async Task Unsubscribing_without_a_grant_is_not_found()
-    {
-        await using var harness = await RegistryHarness.StartAsync(postgres);
-        var ownerId = await harness.CreateDriverAsync();
-        var passengerId = await harness.CreateDriverAsync();
-
-        var vehicleId = await harness.SeedFleetVehicleAsync(ownerId);
-
-        await ProblemDocument.AssertAsync(
-            await harness.DeleteAsync(
-                $"/v1/vehicles/{vehicleId}/subscribers/{passengerId}",
-                harness.Tokens.Issue(passengerId, [MageRideRoles.Passenger], MageRideApps.Passenger)),
-            HttpStatusCode.NotFound,
-            "not-found");
-    }
-
-    // ---------------------------------------------------------------------------------------
-    // D-11 — the OnePay merchant binding
-    // ---------------------------------------------------------------------------------------
-
-    [Fact]
-    public async Task Approval_binds_the_drivers_OnePay_merchant()
-    {
-        await using var harness = await RegistryHarness.StartAsync(postgres);
-        var driverId = await harness.CreateDriverAsync();
-        var bearer = harness.Tokens.Driver(driverId);
-
-        var vehicleId = await harness.RegisterApprovedVehicleAsync(bearer);
-
-        var response = await harness.PostInternalAsync(
-            $"/v1/internal/vehicles/{vehicleId}/merchant",
-            new { merchantId = "ONEPAY-MR-0001", merchantRef = "ref-1" });
-
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-
-        var body = await RegistryHarness.ReadJsonAsync(response);
-        Assert.Equal(vehicleId, body.GetProperty("vehicleId").GetString());
-        Assert.Equal("ONEPAY-MR-0001", body.GetProperty("merchantId").GetString());
-
-        // Keyed on the driver, not the vehicle: settlement pays a person.
-        Assert.Equal("ONEPAY-MR-0001", await harness.MerchantIdAsync(driverId));
-    }
-
-    /// <summary>A driver's second vehicle reaching APPROVED must not fail on the same binding.</summary>
-    [Fact]
-    public async Task Binding_a_second_vehicle_for_the_same_driver_rebinds_rather_than_failing()
-    {
-        await using var harness = await RegistryHarness.StartAsync(postgres);
-        var driverId = await harness.CreateDriverAsync();
-        var bearer = harness.Tokens.Driver(driverId);
-
-        var first = await harness.RegisterApprovedVehicleAsync(bearer);
-        var second = await harness.RegisterApprovedVehicleAsync(bearer);
-
-        await harness.PostInternalAsync(
-            $"/v1/internal/vehicles/{first}/merchant", new { merchantId = "ONEPAY-A" });
-
-        var response = await harness.PostInternalAsync(
-            $"/v1/internal/vehicles/{second}/merchant", new { merchantId = "ONEPAY-B" });
-
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal("ONEPAY-B", await harness.MerchantIdAsync(driverId));
-    }
-
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    public async Task A_binding_needs_a_merchant_id(string? merchantId)
-    {
-        await using var harness = await RegistryHarness.StartAsync(postgres);
-        var driverId = await harness.CreateDriverAsync();
-
-        var vehicleId = await harness.RegisterApprovedVehicleAsync(harness.Tokens.Driver(driverId));
-
-        await ProblemDocument.AssertAsync(
-            await harness.PostInternalAsync($"/v1/internal/vehicles/{vehicleId}/merchant", new { merchantId }),
-            HttpStatusCode.BadRequest,
-            "validation-failed");
-    }
-
-    /// <summary>
-    /// The gateway refuses <c>/v1/internal/**</c> at the edge (C008), and the service refuses it
-    /// again — a shared secret until C042 lands a mesh.
-    /// </summary>
-    [Theory]
-    [InlineData(null)]
-    [InlineData("the-wrong-key")]
-    public async Task Without_the_internal_secret_the_bind_is_refused(string? apiKey)
-    {
-        await using var harness = await RegistryHarness.StartAsync(postgres);
-        var driverId = await harness.CreateDriverAsync();
-
-        var vehicleId = await harness.RegisterApprovedVehicleAsync(harness.Tokens.Driver(driverId));
-
-        await ProblemDocument.AssertAsync(
-            await harness.PostInternalAsync(
-                $"/v1/internal/vehicles/{vehicleId}/merchant", new { merchantId = "ONEPAY-X" }, apiKey),
-            HttpStatusCode.Unauthorized,
-            "unauthorized");
-
-        Assert.Null(await harness.MerchantIdAsync(driverId));
-    }
+    // -----------------------------------------------------------------------------------------
+    // Δ AL-57 — four merchant-bind tests REMOVED with D-11. OnePay supports one merchant account per
+    // merchant, so the per-driver sub-account `POST /v1/internal/vehicles/{id}/merchant` wrote never
+    // existed: every row it could produce was MageRide's own id repeated once per driver. Where a
+    // driver's money goes is now `registry.driver_payout_profiles` (AL-58) and payout-svc's weekly
+    // sweep, whose own suite proves it. `Without_a_configured_secret_the_route_does_not_exist` is
+    // KEPT below — the internal plane still carries AL-30's recompute, and that fence still holds.
+    // -----------------------------------------------------------------------------------------
 
     /// <summary>
     /// Unset <c>Registry:InternalApiKey</c> means the route is not mapped at all — a deployment
@@ -267,7 +122,7 @@ public sealed class SubscriberAndMerchantTests(PostgresFixture postgres)
         var vehicleId = await harness.RegisterApprovedVehicleAsync(bearer);
 
         var response = await harness.PostAsync(
-            $"/v1/internal/vehicles/{vehicleId}/merchant", new { merchantId = "ONEPAY-X" }, bearer);
+            $"/v1/internal/vehicles/{vehicleId}/onboarding/recompute", null, bearer);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
