@@ -195,37 +195,13 @@ paths:
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
       x-error-codes: [unauthorized, forbidden, payout-batch-exists]
 
-  /v1/admin/payouts/{payoutId}/retry:
-    post:
-      operationId: retryPayout
-      summary: Re-submit a failed instruction.
-      description: |
-        Finance only. Only a `FAILED` instruction may be retried — anything else is
-        `409 payout-not-failed`. The failure already reversed the debit, so the retry raises a fresh
-        instruction against the current balance rather than replaying a stale amount. Audited (D-35).
-      tags: [payout-admin]
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: payoutId
-          in: path
-          required: true
-          schema:
-            $ref: './_shared.yaml#/components/schemas/Ulid'
-        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
-      responses:
-        '200':
-          description: Re-submitted.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Payout'
-        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
-        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
-        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
-        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
-        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
-      x-error-codes: [unauthorized, forbidden, not-found, payout-not-failed]
+  # Δ C133 — REMOVED, do not re-add:
+  #   POST /v1/admin/payouts/{payoutId}/retry
+  #     Incoherent with the rule beside it. A FAILED instruction has ALREADY had its debit reversed
+  #     — the money is back on the driver's wallet — so there is nothing left to re-submit, and the
+  #     next weekly run sweeps the restored balance. Where an operator genuinely needs to pay
+  #     somebody before Sunday, `POST /v1/admin/payouts/batches` is that capability and is
+  #     idempotent on the Colombo date. Found by implementing AL-58; raised in the C133 handoff.
 
   /v1/internal/payouts/{payoutId}/result:
     post:

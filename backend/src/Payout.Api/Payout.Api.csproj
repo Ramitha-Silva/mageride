@@ -1,0 +1,53 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    Payout.Api (C133, payout-svc) — the weekly driver payout run (AL-58).
+
+    WHY THIS SERVICE EXISTS. AL-57 made MageRide the payee of a card-paid ride: the passenger tops
+    up a wallet, the fare moves passenger wallet -> driver wallet, and the driver's balance becomes
+    money the platform OWES. AL-05 had deleted the only outward bank rail, so nothing could
+    discharge it. This service is that discharge and nothing else — it prices nothing, settles no
+    ride, and never decides who may be paid (that is the Verification Officer, through the AL-39
+    queue).
+
+    FENCES:
+      * Weekly FULL sweep — no minimum, no holdback (`Payout:RetainMinor` defaults to 0).
+      * The wallet debit and the `billing.payouts` row are made recoverable rather than atomic:
+        they live in two services, so the payout id is DERIVED from (batch, driver) and the ledger
+        key from the payout id — a re-run replays the debit and completes the insert. See
+        `PayoutIds` for the whole argument.
+      * A driver with no VERIFIED `registry.driver_payout_profiles` row accrues and is never swept.
+        The balance is retained, never lost.
+      * **This service writes no `billing.journal_postings` row.** wallet-svc (C046) is the only
+        writer of the ledger on this platform (D-09); the money moves through its
+        `/v1/internal/wallet/driver-payout` seam, which the AL-58 change set added.
+      * The bank adapter is ONE outbound port and no provider is chosen. Unconfigured, the run
+        still selects, still debits and still records what is owed, and says so at start-up.
+
+    ⚠ Origination via LankaPay/CEFTS needs a sponsor bank and CBSL authorisation (ADD §1.18). That
+    is a go-live gate, not something this service discharges.
+
+    Microsoft.NET.Sdk.Web: an HTTP surface (backend/contracts/payout.yaml) plus a scheduled runner.
+
+    Verify: dotnet test backend/src/Payout.Api.Tests -c Release
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.Payout</RootNamespace>
+    <AssemblyName>MageRide.Payout</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <UserSecretsId>mageride-payout</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Dapper, Npgsql, RS256 auth, the RFC 7807 handler and the command log all arrive through
+         the kernel. No package of this service's own: the bank adapter is an HttpClient behind an
+         interface, and there is no provider to bind to yet. -->
+    <ProjectReference Include="..\MageRide.Shared\MageRide.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Payout.Api.Tests" />
+  </ItemGroup>
+
+</Project>

@@ -278,7 +278,6 @@ components:
         - merchant-not-onboarded
         # Δ AL-58 — the weekly payout run.
         - payout-batch-exists
-        - payout-not-failed
         # `payout-profile-not-verified` already exists above (C058, BR-31.1) and is reused verbatim:
         # a fleet vehicle cannot go Paid and a driver cannot be swept for the same reason.
         - payment-already-settled

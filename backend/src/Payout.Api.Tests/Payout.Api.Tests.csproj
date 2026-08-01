@@ -1,0 +1,55 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    C133 verify target: dotnet test backend/src/Payout.Api.Tests -c Release
+
+    Real Postgres and a **real wallet-svc**, because every claim this component makes is a claim
+    about something outside the process:
+
+      * "the sweep debits each eligible driver's whole balance" is `billing.accounts.balance_minor`
+        after the run — wallet-svc's column, moved by wallet-svc's statement;
+      * "a redelivered bank result neither pays twice nor reverses twice" is
+        `billing.journal_entries.idempotency_key` UNIQUE, which lives on the far side of the seam;
+      * "a driver with no verified payout profile is skipped" is a join against
+        `registry.driver_payout_profiles`;
+      * "running the sweep twice for one Colombo date is a 409" is `run_date` UNIQUE.
+
+    A stub wallet asserting against itself would prove none of them. FleetBilling.Tests (C060) and
+    Subscription.Api.Tests boot wallet-svc for exactly this reason.
+
+    Microsoft.NET.Sdk.Web, not Microsoft.NET.Sdk: the harness builds a WebApplication.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.Payout.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <OutputType>Exe</OutputType>
+    <!--
+      xUnit1041: collection-fixture ctor args are consumed through the primary constructor.
+      xUnit1051: every test is bounded by its own harness lifetime.
+    -->
+    <NoWarn>$(NoWarn);xUnit1041;xUnit1051</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+    <!-- FakeTimeProvider: the sweep is weekly and no suite can wait for Sunday. -->
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Payout.Api\Payout.Api.csproj" />
+    <ProjectReference Include="..\MageRide.TestKit\MageRide.TestKit.csproj" />
+    <!-- The other end of the ledger seam, booted for real. -->
+    <ProjectReference Include="..\Wallet.Api\Wallet.Api.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

@@ -196,6 +196,17 @@ public static partial class MageRideErrors
     /// <summary>The organisation has never submitted a bank and payout profile (AL-49).</summary>
     public static readonly ErrorCode PayoutProfileNotFound = new("payout-profile-not-found", 404, "Fleet payout profile not found");
 
+    /// <summary>
+    /// The Colombo business date has already been swept (AL-58).
+    /// </summary>
+    /// <remarks>
+    /// A code of its own rather than a bare <see cref="Conflict"/>, because Finance running the
+    /// sweep out of band needs to tell "already done today" apart from anything else that could go
+    /// wrong with it — the payout run pays a driver's WHOLE balance, so a second sweep of one day
+    /// would raise an empty instruction for every driver it had just emptied.
+    /// </remarks>
+    public static readonly ErrorCode PayoutBatchExists = new("payout-batch-exists", 409, "This date has already been swept");
+
     /// <summary>Another live organisation already claims this business registration.</summary>
     public static readonly ErrorCode BusinessRegistrationExists = new("business-registration-exists", 409, "A live organisation already uses this business registration");
 

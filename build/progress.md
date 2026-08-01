@@ -76,7 +76,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C048 | subscription-svc-mode-b | 3 | DONE | 2026-07-30 | 112 tests green in `Subscription.Api.Tests` (79 from C047 + 33); **1 migration (1204)** — `subscription.outbox`, because BR-23.11's unsubscribe must publish `share.revoked` *inside* the transaction that mutes the grant and D6' §2.1 gives this service no topic; **the event goes on `registry.events` in registry-svc's exact envelope**, so fanout-svc (C041) consumes a second producer with no change; **AL-25 is one index** — `ux_grant_active` partial on `deleted_at` makes the muted roster row, the owner-only delete and the rejoin-reuses-the-grant rule the same fact; **the pass-through fence is an absence** — no ledger call, no journal entry, and `migrate-verify.sh` now asserts `subscription.payments` has no posting or commission column; `payTo` served only from the single `verified` payout profile and from the last verified snapshot after an edit; "joined 5 Jun ⇒ due 6 Jul" implemented from the worked example, with the anniversary re-derived from `join_day` so a 31st survives February; **1 new contract operation** (the AL-49 signed-URL route D3' asks for and gives no path); `migrate-verify.sh` 307/307 with a C048 section; 11 spec gaps / micro-change-sets |
 | C049 | fare-svc-core | 3 | DONE | 2026-07-31 | 78 tests green in a **new suite** (`Fare.Api.Tests`); **2 migrations (1005, 1006)** — `fares.command_log` and `ux_ride_payments_first_attempt`, the missing "a ride is priced once" index that a `FOR UPDATE` cannot supply because a row that does not exist cannot be locked (six concurrent completions produced four fares); **money never touches a float** — the distance is quantised to whole metres at the boundary and every step after it is `long`, with `(a*b+half)/divisor` as §1.3's single round; D5' §1.1's tariff table reproduced to the minor unit for every tier and every surcharge combination, peak+night stacked additively and never compounded; **E-04 landed** — reject, Kalman, and an accuracy-weighted movement gate that reads the *measurement* uncertainty rather than the filter's posterior, taking a stationary three minutes from 292 m to under 50 m while four right-angle turns keep their length; the estimate now prices the **routed** distance (straight line × 1.3, the same interim and the same constant as query-svc's ETA) instead of the C022 stub's bare haversine; tariffs resolved by `effective_from` at the ride's *request* instant so a mid-journey rate change cannot re-price it; `migrate-verify.sh` 316/316 with a C049 section; 6 spec gaps / micro-change-sets |
 | C050 | fare-svc-payments | 3 | DONE | 2026-08-01 | **112 tests green** (was 113: 3 removed, 2 added). **AL-57/AL-59 rails**: `POST /v1/fare/pay` is now `cash \| wallet \| scan_driver_qr`; the two provider callbacks, both gateway implementations, the D-11 merchant lookup, `merchant-not-onboarded`, the +5 % surcharge and seven `Fare:*` keys are gone. **The outward hop comes FIRST on the wallet rail** — everywhere else it follows the decision, here it IS the decision, and it is idempotent on `trip_payment:{ridePaymentId}` so the crash window repairs itself. An unreachable wallet REFUSES rather than settling. `Failed`/`Retried`/`Pending`/`Overpaid` are unreachable and stay in the machine (historical rows + D5 §8.1), which is why three tests were removed rather than rewritten. **2 corrections to the change set**: the `registry.driver_payouts` drop belongs to C028, not here; and `ck_ride_payments_method` is deliberately NOT narrowed — a CHECK cannot say "nothing writes this any more" without rewriting history |
-| C133 | payout-svc | 3 | PENDING | | |
+| C133 | payout-svc | 3 | DONE | 2026-08-01 | **9 tests green** in a **new suite** (`Payout.Api.Tests`), which boots a **real wallet-svc** because every DoD item is a claim about the far side of the ledger seam; **no new migration** (1109 landed the tables with the change set). **The payout id is DERIVED from (batch, driver), not random** — the debit and the instruction live in two services and no transaction spans them, so a crash between them is made RECOVERABLE instead: re-running replays the same debit as a no-op and completes the insert. Order is debit-then-record because `journal_entry_id` is NOT NULL. **FAILED reverses under a SECOND key, not a second kind** — sharing the debit's key would make it a replay and restore nothing. **Δ contract: the retry route is REMOVED** — a FAILED instruction has already been reversed, so there is nothing to re-submit. The bank is one port with no provider chosen: unconfigured, instructions rest at PENDING so the liability is visible before a rail exists |
 | C051 | notification-svc | 3 | DONE | 2026-07-31 | 86 tests green in a **new suite** (`Notification.Api.Tests`); **2 migrations (1308, 1904)** — `comms.notifications`, the outbound queue **no spec declares**, plus `comms.command_log`, the AL-08 install column on `notification_tokens` and the eighteen §14.4 template keys 1902 deliberately left unseeded; **E-01's "exactly once" is two database facts** — the `Sent → FellBackToSms` claim in the statement that selects the row, and `fallback:{pushId}` on `ux_notifications_dedupe` — so three sweeps of one unacked offer produce one SMS; **D-33 measured** against two gateways on real sockets with a deliberately slow primary (p99 well inside the 5 s, and both gateways written to); P-12's buckets spent **after** the dedupe claim so a redelivered `location.request.issued` costs nothing; AL-44/AL-45's fence held by the type system — `MintedLink` has no token member and no response shape in the assembly can carry one; **a real defect caught**: the kernel's camelCase dictionary-key policy answered a `LOW_BALANCE` mute with `loW_BALANCE`, fixed with iam-svc's `LiteralKeyDictionaryConverter` on both directions of the wire; **4 contract changes** (`POST /v1/notify/ack`, `notificationType`, `phones`, `audience`); `migrate-verify.sh` 330/330 with a C051 section; 14 spec gaps / micro-change-sets |
 | C052 | safety-svc | 3 | DONE | 2026-07-31 | 30 tests green in a **new suite** (`Safety.Api.Tests`), which boots a **real notification-svc** because D-33 is a property of the two services together and runs **dispatch-svc's own candidate query** because US-12.10's gate lives there; **1 migration (0905)** — `safety.outbox` (the admin live feed D3' asks for and `signalr-hub.md` has no group for), `safety.command_log`, `sos_events.dispatched_at` (without it every SOS looks instantaneous and the D-33 SLO is unmeasurable), the `driver_id` a report counts against and its resolution evidence; **the SOS bypasses the notification queue** — C051 gained an inline dispatch for the one type with a latency SLO, so the five seconds do not depend on how many ride offers are queued in front of it, and the per-gateway outcome exists to record at all; **no replay is structural** — the public view reads `veh:meta`, a Redis hash that holds one position and no history, so the store cannot answer the question D-34 forbids; the 410 is produced before the ride row is read, and the test asserts the *body*; **two real defects caught** — an SOS with no ride rendered an empty `{{link}}` and was silently never sent (now a `geo:` URI), and the P-12 tally's keys were camelCased on the wire, which promoted iam-svc's `LiteralKeyDictionaryConverter` into the kernel on its third instance; **5 contract changes** (`smsStatus`, the moderation pair, the trip-end hook, the P-12 read, and C051's `deliveries`); `migrate-verify.sh` 341/341 with a C052 section; 12 spec gaps / micro-change-sets |
 | C053 | support-svc | 3 | DONE | 2026-07-31 | 32 tests green in a **new suite** (`Support.Api.Tests`), all integration against a real Postgres and asserting migration 1902's **actual Sinhala and Tamil strings** rather than fixtures of its own; **1 migration (1309)** — `support.ticket_events` (the thread; §13 holds one `admin_response`, so a second reply overwrites the first and a status change leaves no trace at all), `support.command_log` (R-14, the twelfth), the five columns an agent's handling needs, and `screenshot_upload_id` as a **FK onto `docs.uploads`** because the DoD says "links it by id, not by public URL" and §13's `screenshot_url` **is** that URL; **this service is the platform's first writer of `docs.uploads`** — US-16.2's "attach a screenshot" had no upload surface anywhere, and registry-svc says outright that filling that table is not its job; **the Finance queue is derived from the category, never stored**, because `support.tickets` has three writers and a stored column would default C047's and C050's own rows onto the wrong pile; **one real defect caught** — thread entries stamped from the service clock beside a `resolved_at` stamped by Postgres sorted the thread out of order, so every timestamp on these tables is now `now()`; **10 contract changes** (the upload pair, the internal queue family, the thread, the queue, `TicketRow`); `migrate-verify.sh` 351/351 with a C053 section; 11 spec gaps / micro-change-sets |
@@ -9720,3 +9720,65 @@ _Append 3 lines per completed component (Component / Status / Notes)._
 
   **Next:** **C133 payout-svc** (new), then **C028** — which removes the last `registry.driver_payouts`
   reference and carries its drop — then C048 and C063.
+
+---
+
+- **Component:** C133 payout-svc — 2026-08-01
+- **Status:** DONE — `dotnet test backend/src/Payout.Api.Tests -c Release` is **9/9 green**;
+  `dotnet build backend/MageRide.sln -c Release` 0 warnings; Spectral 0 errors.
+- **Notes:**
+  **What was built —** the weekly sweep that discharges the custody AL-57 created. A new service,
+  two new projects in the solution, **no new migration** (1109 landed the tables with the change
+  set). Scheduled runner, the driver's own history, Finance's view of everything, the out-of-band
+  run, and the bank's result callback.
+
+  **The one design decision the component turns on: the payout id is DERIVED, not random.** AL-58
+  says the wallet debit and the `billing.payouts` row "commit together" — but they live in two
+  services and no transaction spans them. What *can* be made true is that a crash between them is
+  recoverable, and a derived id is what buys it: the id is a deterministic function of
+  `(batchId, driverId)`, wallet-svc composes its ledger key from the id, so re-running a batch
+  regenerates the same id, replays the same debit as a no-op, and completes the insert that did not
+  happen. A random id would make an orphaned debit unfindable and the driver's money with it.
+  `ux_payouts_batch_driver` stops the completing insert becoming a second one.
+  The order is **debit-then-record** and has to be: `journal_entry_id` is `NOT NULL`, so there is no
+  row to write until the money has moved. That order admits an orphaned debit, which the derived id
+  makes findable; the other admits an instruction with no money behind it, which nothing could find.
+
+  **`FAILED` reverses under a second ledger key, not a second kind** —
+  `driver_payout_reversal:{payoutId}`. Sharing the debit's key would make the reversal a *replay* of
+  the debit and restore nothing, so a driver whose transfer bounced would silently lose the week.
+  Asserted both ways: restores exactly once, and a redelivered bank result restores nothing further.
+  A reversal that itself fails is the single state where a driver is out of pocket and is logged at
+  ERROR by name; nothing retries it, because a second automated attempt at money nobody has
+  reconciled is how one mistake becomes two.
+
+  **Δ contract — `POST /v1/admin/payouts/{payoutId}/retry` REMOVED.** `payout.yaml` declared it and
+  implementing AL-58 showed it incoherent with the rule beside it: a FAILED instruction has
+  *already* had its debit reversed, so there is nothing left to re-submit and the next weekly run
+  sweeps the restored balance. `POST /v1/admin/payouts/batches` is the capability an operator
+  actually needs and is idempotent on the Colombo date. `payout-not-failed` came out of
+  `_shared.yaml` with it; `payout-batch-exists` was added to `MageRideErrors` so the registry and
+  the enum stay one-for-one.
+
+  **The bank is one port and no provider is chosen.** Unconfigured, the run still selects, still
+  debits and still records — instructions rest at `PENDING` so the liability is *visible* before a
+  rail exists. That is the designed state, tested as carefully as the configured one, and it is why
+  the switch is announced as an ERROR rather than a warning. ⚠ Origination needs a sponsor bank and
+  CBSL authorisation (ADD §1.18) — a go-live gate this component does not discharge.
+
+  **Testing decision —** the suite boots a **real wallet-svc**, as C060's and C047's do. Every DoD
+  item is a claim about the far side of the seam: "the whole balance was debited" is
+  `billing.accounts`, "neither pays twice nor reverses twice" is
+  `billing.journal_entries.idempotency_key` UNIQUE. A stub would be the suite asserting against its
+  own fixture. Two shared-database traps caught and fixed: `run_date` is globally UNIQUE so **each
+  harness gets its own Colombo Sunday** (28 days apart, because one test advances its own clock by
+  seven), and ledger counts are scoped to a driver rather than counted platform-wide.
+
+  **No Redis, no Kafka, no outbox, no command log.** The durable record is the `billing.payouts`
+  row; D6' §2.1 registers no topic and no consumer waits on one. The two mutations are idempotent
+  by a stronger key than a header — `run_date` UNIQUE and `provider_reference` plus a guarded status
+  transition — so a fifteenth instance of D4' §5's gap would guard operations that already cannot
+  double-apply.
+
+  **The change set is now closed except for C028**, which removes the last
+  `registry.driver_payouts` reference and carries its drop.
