@@ -1,8 +1,7 @@
-using MageRide.Shared.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 
-namespace MageRide.Iam.Rbac;
+namespace MageRide.Shared.Auth;
 
 /// <summary>
 /// Requires <paramref name="Needed"/> in <paramref name="Area"/>, evaluated against URD §2.3.
@@ -30,7 +29,7 @@ public sealed record FeaturePermissionRequirement(FeatureArea Area, PermissionGr
 /// of every privileged request to buy a freshness window measured against a 30-minute token.
 /// </para>
 /// </remarks>
-public sealed class FeatureAuthorizationHandler(IPolicyEvaluator evaluator)
+public sealed class FeatureAuthorizationHandler(IPermissionEvaluator evaluator)
     : AuthorizationHandler<FeaturePermissionRequirement>
 {
     protected override Task HandleRequirementAsync(
@@ -57,8 +56,8 @@ public sealed class FeatureAuthorizationHandler(IPolicyEvaluator evaluator)
             return Task.CompletedTask;
         }
 
-        Domain.FleetMembership? fleet = context.User.TryGetFleetScope(out var fleetRole, out var fleetId)
-            ? new Domain.FleetMembership(fleetId, fleetRole)
+        FleetScope? fleet = context.User.TryGetFleetScope(out var fleetRole, out var fleetId)
+            ? new FleetScope(fleetId, fleetRole)
             : null;
 
         var effective = evaluator.Evaluate(context.User.SubjectId() ?? Guid.Empty, [.. roles], fleet);

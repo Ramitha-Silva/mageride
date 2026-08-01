@@ -144,6 +144,15 @@ the outside the gate works, it just always opens.
 a fact about a person, and only the user key keeps two consequences for one person in order.
 **Neither the topic nor either name is in D6' §2.1**; see the C033 handoff.
 
+## Promoted into the kernel
+
+**Δ C062:** the `audit.events` writer this service carried (`Persistence/AuditRepository.cs`) is
+gone. C062 became the third caller of the same twelve lines and promoted them to
+`MageRide.Shared.Messaging.IAuditEventWriter`, as the C057 handoff asked. What stays is
+`Domain/ReputationAuditActions.cs` — the four facts D5' §4.2 and E-07 entitle this service to
+record — because the vocabulary is this service's and the INSERT into a shared, append-only table
+is not.
+
 ## Schema this service added
 
 `db/migrations/0803` — `reputation.intake_log`, `reputation.outbox`, `reputation.command_log`.

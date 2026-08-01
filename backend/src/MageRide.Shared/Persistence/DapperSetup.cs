@@ -61,6 +61,13 @@ public static class DapperSetup
             SqlMapper.AddTypeHandler(new DateOnlyTypeHandler());
             SqlMapper.AddTypeHandler(new NullableDateOnlyTypeHandler());
 
+            // The wall-clock companion (Δ C062): `fares.peak_windows` keeps recurring daily windows
+            // as TIME, because a surcharge that runs 22:00–05:00 every day is not an instant.
+            SqlMapper.RemoveTypeMap(typeof(TimeOnly));
+            SqlMapper.RemoveTypeMap(typeof(TimeOnly?));
+            SqlMapper.AddTypeHandler(new TimeOnlyTypeHandler());
+            SqlMapper.AddTypeHandler(new NullableTimeOnlyTypeHandler());
+
             _configured = true;
         }
     }

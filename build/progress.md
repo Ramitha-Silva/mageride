@@ -87,7 +87,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C059 | fleet-svc-fleet-ops | 3 | DONE | 2026-07-31 | **93 tests green** in `Fleet.Api.Tests` (was 42), the four new suites integration against a real Postgres because every DoD item is a claim about the database; **4 migrations (0314, 1408, 1807, 1905)** — the assignment validity window 0310's own header named as C059's to close, `registry.fleet_schedules` (US-13.11 has no table anywhere and `dispatch.scheduled_rides` is a passenger's Mode C booking), the bulk-job pair, `spatial.geofences.fleet_id` (a PUT is a replace and §17's table had no owner) and a trilingual `schedule_not_started` template; **US-13.9's "auto-expires" is a predicate, not a sweep** — `driver_eligible_vehicles` evaluates the window at read time, so the row is untouched and simply stops being returned, which is what makes "without manual action" true rather than merely fast; **the overlap rule is an exclusion constraint** (`btree_gist`), because 0306's unique index could not tell an expired assignment from a live one and would have blocked re-hiring a relief driver for ever; **AL-50's approval gate lives here, not where the spec puts it** — registry-svc's approval path is AL-30's Mode C wizard, which refuses Mode A/B outright and derives its verdict from a table a fleet vehicle has no rows in; **`docsStatus` is derived, never stored**, and the gate re-derives every slot *inside* the transaction that writes the status, so a permit that lapsed while the queue item sat there stops the approval; **a bulk row that fails costs only itself** (`SAVEPOINT` per row) and `COMPLETED` with failures is a partial import with a downloadable report, not a failure; **the map and the analytics are scoped by the database** — `telemetry.positions_fleet` + `trips.sessions_fleet`, with the base tables never granted; `migrate-verify.sh` **421/421** (was 391) with a C059 section, Spectral 0 errors, solution build 0 warnings; 2 new error codes, 13 contract changes, 9 spec gaps / micro-change-sets |
 | C060 | fleet-billing-svc | 3 | DONE | 2026-07-31 | **72 tests green** in a **new suite** (`FleetBilling.Tests`), which boots a **real wallet-svc** because both halves of "post to a balanced journal entry" live in that service's schema — `trg_balanced` fires at COMMIT and `billing.journal_entries.idempotency_key` is what makes settling twice move the money once; **2 migrations (1108, 1906)** — the `fleet_invoice` journal kind (1106 gave the invoice a `journal_entry_id` and no kind could ever fill it, which is why C047 handed the consolidation over *unledgered*), `OVERDUE` (the contract has always returned four statuses and the CHECK admitted three), `billing.fleet_invoice_lines`, `fleet_topups`, `fleet_outbox` and `fleet_command_log`, plus a trilingual `fleet_invoice_overdue` template; **this service writes no ledger row** — there is no `INSERT INTO billing.journal_` and no `UPDATE billing.accounts` anywhere in the assembly, and every movement goes through **three new routes on C046's seam** (`/v1/internal/wallet/fleet/{fleetId}/debit` · `/credit` · `/account`); **the lines are a snapshot, not a join** — a live one would make a settled invoice change under a roster edit and Σ lines stop equalling the amount that was paid; **`ux_fleet_invoice_lines_charge` is the guard that matters** — one raised charge reaches one invoice, so a vehicle that changes organisation mid-month is not billed twice; **AL-03 is held by an absence** (1104 raises no Mode A row, so there is nothing to filter) and a Mode-A-only fleet gets a FREE invoice with **zero lines**, which is 1106's own comment honoured; **the PDF is written here rather than taken as a dependency** — base-14 fonts, byte-exact xref, parsed back by the suite — because a renderer is a native binary in every container for one document, and wallet-svc's `415` was not available when the deliverable names PDF outright; **billing is Owner-only on reads as well as writes** (US-13.A5), unlike fleet-svc where the map sits outside the gate; **`fleet-billing.yaml` is a new contract** and `fleet.yaml` loses two paths and a schema — the third instance of C007's and C044's split; `migrate-verify.sh` **441/441** with a C060 section, Spectral 0 errors, solution build 0 warnings; **1 pre-existing cross-suite break found and fixed** (`Subscription.Api.Tests`'s reset could not TRUNCATE a table 1108 gave a foreign key); 1 new error code, 13 contract changes, 12 spec gaps / micro-change-sets |
 | C061 | analytics-read-model | 3 | DONE | 2026-08-01 | **104 tests green** in a **new suite** (`Analytics.Tests`), integration against a real Postgres because every DoD item is a claim about the database; **no migration and no contract change** — C005's `1405__analytics_daily_metrics.sql` already carries AL-38's five figures and `admin-bff.yaml` already declares `getAdminDashboardStats` / `exportAdminDashboardStats`, so the records here are those schemas' field names one-for-one; **built as a LIBRARY, not a service** — D3' gives the endpoint to admin-bff, D6' §I-28.5 says it "aggregates `analytics.daily_metrics`" rather than calling anything, ADD §6's table has no `analytics-svc` row, and the planner already listed this component among those with no `.yaml` (C007 finding (j)); **completed trips come from `rides.transitions.to_state='Completed'`, not from a ride state** — a ride never *rests* in Completed (C022 moves it to PaymentPending in the same transaction) and the terminal states are reached when the *money* settles, which can be the next day; **gross fare is one payment per ride in exactly fare-svc's R-05 terminal set**, taken with `DISTINCT ON … attempt_no DESC` so a D-10 retry chain contributes once, and `VocabularyTests` compares the list against `Fare.Api` so a widened CHECK is a red test rather than a silently under-counted dashboard; **new riders/drivers come from the `iam.user_roles` grant, not `iam.users.role`** — the primary role moves and would retro-edit a past day's figure; **daily-fee revenue matches `fee_date` directly** because subscription-svc already decided that Colombo day under D-13; **both fences are proved by reflection, not by review** (`FenceTests`: one writing statement, targeting `analytics.`, and no `AT TIME ZONE` / `date_trunc` / `::date` / `now()` anywhere — D-38 has one implementation and it is `BusinessCalendar`); **the previous period is arithmetic, not calendar** (the contract's "immediately preceding period of the same length"), so a 31-day range spanning a month boundary compares against 31 days and not "the same dates last month"; **a zero-base delta is `null`**, because growth from nothing has no percentage; **a day with no activity is a zero row**, so "no row" cannot mean both "quiet Sunday" and "job down since Friday"; **the live block is read at request time and asserted invariant under the period filter**; period totals reconcile against a deliberately *differently written* source query (`AT TIME ZONE` + `date_trunc`, grouped in SQL) on every period; 2000 trips roll up in well under the 15-min window; solution build 0 warnings; 1 spec gap (which day "This week" starts on), 1 D7' §4.2 gap, 7 configuration decisions |
-| C062 | admin-bff-core | 3 | PENDING | | |
+| C062 | admin-bff-core | 3 | DONE | 2026-08-01 | **65 tests green** in a **new suite** (`AdminBff.Tests`) plus **3 kernel promotions** (the URD §2.3 matrix, the `audit.events` writer, a `TimeOnly` Dapper handler) and **3 migrations (0202, 1312, 1409)**; the RBAC matrix test reads each route's own requirement off the built endpoint and drives all six internal roles at a real socket, so the expectation IS the spec; D-35 is a **start-up condition** — a mutating route outside the audited group, or one that declares no action, refuses to boot; 3 contract additions, 5 spec gaps / micro-change-sets |
 | C063 | admin-bff-verification | 3 | PENDING | | |
 | C064 | admin-bff-directories | 3 | PENDING | | |
 | C065 | admin-bff-finance-pdpa | 3 | PENDING | | |
@@ -9227,3 +9227,160 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   Redis connection, publishes nothing and speaks to no broker); the replica stayed down throughout.
   `Analytics.Tests` takes ~26 s including the container start and migration.
   **No new NuGet reference, no new PostgreSQL extension, no new migration, no contract change.**
+
+- **Component:** C062 admin-bff-core — 2026-08-01
+- **Status:** DONE — `dotnet test backend/src/AdminBff.Tests -c Release` is **65/65 green**;
+  `dotnet build backend/MageRide.sln -c Release` is 0 warnings 0 errors;
+  `bash infra/scripts/migrate-verify.sh` is **446/446**; Spectral is 0 errors. The three suites the
+  suites the kernel promotions touched were re-run and are green: `MageRide.Shared.Tests` 296,
+  `Iam.Api.Tests` 291, `Reputation.Api.Tests` 84, `Transit.Api.Tests` 84, plus `Fare.Api.Tests` 113
+  and `Analytics.Tests` 104 for the new `TimeOnly` handler and the read model this service hosts.
+- **Notes:**
+  **What was built —** the back-office foundation all six internal roles sign in to (AL-02):
+  `GET /v1/admin/session` (identity + effective permissions + the role-scoped menu manifest),
+  the dashboard with AL-38's period filter and CSV export, moderation (two suspensions, the report
+  queue and its decision, the support-ticket queue and its resolution), configuration (Mode C
+  tariffs, launch cities, feature flags, trains), announcements, `GET /v1/admin/audit-log`, and the
+  SCR-AP-016 GTFS pass-through. C063/C064/C065 map onto the same group in `AdminEndpoints` and
+  inherit both fences without touching either.
+
+  **The four fences, and how each is held structurally —**
+  (1) **AL-06** — every route names a URD §2.3 (feature area, capability) pair; `RbacMatrixTests`
+  reads each endpoint's own `FeaturePermissionRequirement` off the built route table, evaluates it
+  through the same matrix the service enforces, and drives all six internal roles at a real socket.
+  The expectation is therefore the spec rather than a second transcription of it, and a companion
+  test fails on any admin route with no matrix gate **and on any route no probe covers**, so a later
+  component cannot add one that escapes. (2) **D-35** — `AdminBffApplication.GuardTheSurface` runs
+  before the first request and **refuses to start** if a mutating endpoint sits outside the audited
+  group or declares no `.Audited(...)` action; a mutating request that finishes 2xx having recorded
+  nothing throws; and there is **no setting that switches the interceptor off**, because a fence
+  with an off switch is a default. That is how the DoD's "a mutation performed with the audit
+  interceptor disabled fails the test suite" is met — the state is unreachable, and both refusals
+  are asserted. (3) **AL-37** — there is no auth route here at all, asserted against the running
+  route table, and `session` answers `mfaRequired: false` explicitly because D3' §0 and D7' §4.2
+  still carry the pre-AL-37 wording. (4) **AL-02** — every route is under `/v1/admin`, same guard.
+
+  **Promoted into the kernel (3) —** (a) **URD §2.3** left iam-svc: `PermissionMatrix`,
+  `PermissionModel`, `PermissionEvaluator` and `FeatureAuthorization` are now
+  `MageRide.Shared.Auth`, registered by `AddMageRideAuthorization`, and `PermissionMatrixTests`
+  moved with them and still parses §2.3 out of the URD. Two services enforcing one matrix from two
+  copies is how they start disagreeing. `IPolicyEvaluator` → `IPermissionEvaluator` (ASP.NET Core
+  has an `IPolicyEvaluator` in the same problem domain) and `Iam.Domain.FleetMembership` →
+  `Shared.Auth.FleetScope`. (b) **The `audit.events` writer** — the C057 handoff asked the *third*
+  caller to promote it by name, and this was it: `IAuditEventWriter` is the kernel's, reputation-svc
+  and transit-svc now use it and keep only their own action vocabulary. (c) **`TimeOnlyTypeHandler`**
+  — Dapper has no `TimeOnly` mapping, exactly as it had none for `DateOnly`; `fares.peak_windows` is
+  the first `TIME` column anything writes.
+
+  **One kernel behaviour changed, deliberately —** `PermissionCell.Parse("✅")` now yields
+  `Read | Write | Configure`. The legend reads "✅ Full (create/edit/execute)" against "⚙ Configure
+  (settings only)": Full is the broader authority **in the same area**, and changing a setting is
+  editing one. Without it a Super Admin — ✅ on both Platform-config rows — is refused a screen the
+  Admin beside them (⚙ / ◐ subset) may use, which URD §2.4 rules out in as many words. Found by the
+  feature-flag route answering 403 to a Super Admin. Four assertions moved with it — two legend
+  rows and the Super-Admin RBAC cell in `PermissionMatrixTests`, and the passenger grant list in
+  `Iam.Api.Tests`' `Any_caller_may_read_their_own_effective_permissions`.
+
+  **The ownership rule this component had to settle, stated once —** *if the owning service exposes
+  a route for the operation, admin-bff forwards to it; if no service does, admin-bff owns it.*
+  safety-svc (C052) and support-svc (C053) each built a `/v1/internal/**` seam **for this BFF** and
+  say so in their own files, and content-svc (C054) already exposes
+  `POST /v1/admin/content/broadcasts` — so the report decision, the ticket resolution and the
+  announcement are forwarded, and admin-bff supplies the RBAC gate and the D-35 row. Two credentials,
+  because there are two kinds of callee: an internal plane takes the shared key and is told who the
+  human was in the body, a role-gated `/v1/admin/**` route gets the caller's own bearer. Sending the
+  key to a role-gated route would be a bypass. CLAUDE.md's outbox rule is not violated — it is about
+  a *service* reacting to another service's state, not a front door relaying a human's command.
+  What no service routes is written here: the two suspensions, the rate card, the cities, the flags,
+  the trains.
+
+  **Spec gaps and micro-change-sets (5) —**
+  (a) **`config.feature_flags` has no DDL anywhere.** URD §2.3 gives feature flags a whole matrix row
+  and US-14.12 an Admin Portal Config surface; the other three configuration surfaces the deliverable
+  names already have tables and owners (`fares.tariffs` 1001, `billing.plans` 1103,
+  `dispatch.level_config` 0713). **Landed as `0202__config_feature_flags.sql`; needs a
+  `server_db_schema.md` §17b addition.**
+  (b) **`audit.events` cannot hold what D-35 asks it to record.** The deliverable is "actor, action,
+  target, before/after, **ip**", `admin-bff.yaml#AuditEvent` requires **`eventId`** and carries
+  **`actorRole`** and **`ip`**, and D6' §2.3 has consumers dedupe on the event id — §15 prints none
+  of them. **Landed as `1312__audit_events_interceptor.sql` (four columns + a unique index); needs a
+  §15 addition.** `ip` is `TEXT` and not `INET`: an audit trail that refuses a value it cannot parse
+  records less than one that writes down what it was handed.
+  (c) **`TrainInput.routeId` has nowhere to live.** `trips.sessions.route_id` is the line a *journey*
+  ran and D4' §4 puts it there for a reason a train does not share — US-2.17 registers a train
+  *against* a line before it has ever run. **Landed as `1409__registry_vehicle_default_route.sql`
+  (`registry.vehicles.default_route_id`); needs a §2 addition.** In the 14xx range because the FK
+  points at `spatial.routes`, which 1401 creates — the case `db/CLAUDE.md` explicitly allows.
+  (d) **Trains have no URD §2.3 row.** D3' marks `POST /v1/admin/trains` "admin", but the nearest
+  row — "Fleet — org & vehicle onboarding" — gives Admin 👁 and would refuse the very role D3'
+  names. **Resolution taken:** gated on **Platform config · settings · Configure**, which resolves
+  to exactly {Admin, Super Admin} and is the group D2 draws the screen in, beside the GTFS manager.
+  URD §2.3 should gain a row or D3' should name the row it means.
+  (e) **D7' §4.2 gives admin-bff three variables that are not its.** `Login__MaxFailedAttempts`,
+  `Login__LockoutMinutes` and `Login__IpAllowList` belong to **iam-svc**, which owns every credential
+  path (AL-07) and already implements them as `Auth:*` (C026). `Rbac__DenyByDefault` is listed as a
+  variable and **is not a switch at all** — deny-by-default is the kernel's fallback policy plus a
+  per-route gate, and nothing reads a flag. (`Mfa__RequiredForInternal` was already recorded as stale
+  by planner finding 3 and is absent.)
+
+  **Contract changes (3, all Δ C062) —** `GET /v1/admin/session` (+ `AdminSession`,
+  `AdminPermission`, `AdminMenuGroup`, `AdminMenuItem`): URD §2.2 requires the console to be
+  "rendered from the same permission model the API enforces server-side" and nothing in D3' gives
+  that manifest a route, so the portal would otherwise keep a **third** copy of URD §2.3.
+  `GET · PUT /v1/admin/config/feature-flags[/{key}]` (+ `FeatureFlag`): gap (a)'s surface.
+  `AuditEvent` gains **`before` and `after`** beside `detail` — the D-35 deliverable names the pair
+  and the schema had nowhere to put it; they are kept apart because `before`/`after` are what the
+  handler knows about the **entity** and `detail` is what the interceptor knows about the
+  **request**, and one field holding both makes "what changed" unreadable.
+
+  **Decisions worth knowing —**
+  • **URD §2.3's ◐ is enforced, not ignored.** `RequirePlatformWideFeature` demands the capability
+  *unscoped* on the four moderation/support mutations, because the Moderation row's qualifiers are
+  `at onboarding` and `temp on reports` — neither describes a permanent platform-wide suspension,
+  which is the only moderation action this component offers. So a CSR works both queues and cannot
+  ban anybody (URD §2.4: "limited temporary actions"), and somebody holding **both** CSR and Admin
+  can, because the union is additive. Cells whose ◐ describes a *subset of settings* rather than a
+  subset of records keep plain `RequireFeature`.
+  • **No command log.** Every mutation this service owns is idempotent by shape (a suspension is an
+  upsert of a state, a tariff publish keys on `(vehicle_type, effective_from)`, a flag is an upsert)
+  and the three forwarded ones carry the caller's `Idempotency-Key` to services that own theirs. The
+  cost, recorded rather than hidden: a retried `POST /config/cities` or `/trains` answers a
+  well-defined **409** instead of replaying the original 201. A fourteenth instance of D4' §5's gap
+  would guard operations that cannot double-apply.
+  • **A suspension is five tables in one transaction** — `registry.vehicles.dispatch_state`,
+  `trips.sessions` (`end_reason='admin'`), `dispatch.driver_presence`, `iam.users.is_blocked` and
+  `iam.sessions` — because a vehicle marked un-dispatchable while its tracking session is live is
+  still on the passenger's map. It is `dispatch_state`, **not** `status`: `DEACTIVATED` is the end of
+  a registration, which is what US-12.6's third confirmed report reaches (and safety-svc reaches it),
+  and retiring the registration would burn the plate under D-37.
+  • **The GTFS proxy is shadowed in production and that is correct.** `gateway-routes.json` sends
+  `/v1/admin/transit/**` to transit-svc at Order 20, ahead of the Order 90 admin-bff catch-all,
+  because a second hop would double the transfer of a 200 MB feed. admin-bff's copy exists so the
+  Configuration nav group is whole for a deployment reached directly, and so both fences cover the
+  path either way.
+  • **An unconfigured upstream is a 503 on a route that is still mapped and still gated**, announced
+  at start-up — a route that disappears when a setting is absent is a route neither fence enumerates.
+
+  **For C063 / C064 / C065 —** add a `Map…Endpoints(this IEndpointRouteBuilder admin)` and call it
+  from `AdminEndpoints.MapAdminBffEndpoints`; you inherit the D-35 filter, the surface marker and the
+  RBAC test's coverage. Gate with `RequireFeature(area, grant)`, or `RequirePlatformWideFeature`
+  where URD §2.3's ◐ qualifier does not describe your action. Record with
+  `IAdminAuditContext.Record(entityId, before, after)` and flush inside your own transaction
+  (`FlushAsync(unitOfWork, ct)`) — the interceptor writes whatever is left and **throws if you
+  recorded nothing**. `AL-39`'s `DOC_VIEW` and `AL-40`'s `PII_READ` are recorded the same way from a
+  GET: declare `.Audited(...)` on the read route. **Add a probe row to `RbacMatrixTests.Cases` or the
+  route-table test fails** — that is deliberate. `AdminMenu` already carries your nav entries.
+  **`support.tickets` carries `ck_tickets_resolution`** (C061's note): seeding a resolved ticket needs
+  `status` and `resolved_at` together.
+
+  **For C103 / C104 / C105 (Admin Portal) —** `GET /v1/admin/session` is the one call to make after
+  sign-in: it returns the roles, the effective URD §2.3 rows (with the spec's own symbol and
+  qualifier), the nav manifest and `mfaRequired: false`. Nav labels are **resource keys**
+  (`nav.group.configuration`), never text — the portal owns the Si/Ta/En bundles (D-26). An item's
+  `ownedBy` names which service answers its API; several Configuration entries are not admin-bff's.
+  Sign-in itself is iam-svc's `POST /v1/admin/auth/login` and there is **no second-factor step**.
+
+  **Build host —** Docker for one Testcontainers fixture (Postgres only: this service holds no Redis
+  connection and the suite switches audit publishing off, because the durable record is the row).
+  `AdminBff.Tests` takes ~73 s including the container start and migration; the replica stayed down
+  throughout. **No new NuGet reference and no new PostgreSQL extension.**

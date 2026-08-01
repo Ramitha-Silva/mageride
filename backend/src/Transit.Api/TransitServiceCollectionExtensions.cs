@@ -1,4 +1,5 @@
 using System.Net;
+using MageRide.Shared.Messaging;
 using MageRide.Transit.Configuration;
 using MageRide.Transit.Feed;
 using MageRide.Transit.Geo;
@@ -50,7 +51,10 @@ public static class TransitServiceCollectionExtensions
     private static IServiceCollection AddGtfsLifecycle(this IServiceCollection services)
     {
         services.TryAddSingleton<IGtfsFeedVersionRepository, GtfsFeedVersionRepository>();
-        services.TryAddSingleton<IGtfsAuditRepository, GtfsAuditRepository>();
+
+        // No audit registration: `IAuditEventWriter` is the kernel's, registered by
+        // `AddMageRidePostgres`. The copy that used to live here is what the C057 handoff asked the
+        // third caller to promote, and C062 was it.
         services.TryAddSingleton<IGtfsObjectStore, FileSystemGtfsObjectStore>();
         services.TryAddSingleton<IGtfsValidator, GtfsValidator>();
         services.TryAddSingleton<IGtfsImporter, GtfsImporter>();

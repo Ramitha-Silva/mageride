@@ -63,6 +63,14 @@ public static class AuthServiceCollectionExtensions
 
         services.AddSingleton<IAuthorizationHandler, FleetRoleHandler>();
 
+        // URD §2.3 itself (AL-06). Pure and stateless — the matrix is compiled in and the evaluator
+        // holds no per-request state — so a singleton, and exactly one of them: two registrations
+        // would be two opinions about one table. `TryAdd` so a service that registered its own
+        // before C062 promoted these into the kernel is not given a second.
+        services.TryAddSingleton<IPermissionEvaluator, PermissionEvaluator>();
+        services.TryAddEnumerable(
+            ServiceDescriptor.Singleton<IAuthorizationHandler, FeatureAuthorizationHandler>());
+
         var builder = services.AddAuthorizationBuilder();
 
         // Deny-by-default: an endpoint that says nothing still requires an authenticated caller.

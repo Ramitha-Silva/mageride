@@ -1,0 +1,63 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    C062 verify target: dotnet test backend/src/AdminBff.Tests -c Release
+
+    Real Postgres, and a real HTTP server standing in for the four upstreams. Every one of this
+    component's definition-of-done items is a claim about something outside the process:
+
+      * "the RBAC test matrix covers every internal role against every admin endpoint per URD §2.3"
+        is asserted against the RUNNING ROUTE TABLE — the expectation is read off each endpoint's
+        own FeaturePermissionRequirement and evaluated through the kernel's matrix, so a route added
+        later is covered without anybody adding a row to a list, and a route whose gate drifts from
+        the spec fails here.
+      * "a mutation performed with the audit interceptor disabled fails the test suite" is asserted
+        twice over: the service REFUSES TO START when a mutating route is mapped outside the audited
+        group or declares no action, and a handler that records nothing answers 500 rather than
+        succeeding. Both run against a pipeline built the way Program.cs builds it.
+      * "the stats endpoint returns identical numbers to a direct analytics query for the same
+        period" runs the C061 rollup over seeded rides, fares and grants, then compares the HTTP
+        answer with the read model's own — the CSV too, byte for byte against the JSON.
+      * "no login path requests a second factor" is asserted against the route table rather than by
+        reading the code: nothing here may serve an /auth or /mfa path at all.
+
+    No Redis fixture: the service opens none (see AdminBffApplication). No Redpanda fixture either —
+    audit publishing is switched off in the harness, because the DURABLE record is the audit.events
+    row and that is what these tests assert on; the topic is D6' §2.1's sink and C118 covers it.
+
+    Microsoft.NET.Sdk.Web, not Microsoft.NET.Sdk: the harness builds two WebApplications — the
+    service and the stub upstream.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.AdminBff.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <OutputType>Exe</OutputType>
+    <!--
+      xUnit1041: collection-fixture ctor args are consumed through the primary constructor.
+      xUnit1051: every test is bounded by its own harness lifetime.
+    -->
+    <NoWarn>$(NoWarn);xUnit1041;xUnit1051</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+    <PackageReference Include="Dapper" />
+    <PackageReference Include="Npgsql" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AdminBff\AdminBff.csproj" />
+    <!-- C010: the Postgres fixture, so this suite runs the same server build the dev stack does. -->
+    <ProjectReference Include="..\MageRide.TestKit\MageRide.TestKit.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

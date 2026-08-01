@@ -1,4 +1,5 @@
 using MageRide.Shared.Errors;
+using MageRide.Shared.Messaging;
 using MageRide.Shared.Persistence;
 using MageRide.Transit.Configuration;
 using Microsoft.Extensions.Options;
@@ -35,7 +36,7 @@ internal sealed class GtfsUploadService(
     INpgsqlConnectionFactory connections,
     IGtfsFeedVersionRepository repository,
     IGtfsObjectStore objects,
-    IGtfsAuditRepository audit,
+    IAuditEventWriter audit,
     GtfsValidationSignal signal,
     IOptions<TransitOptions> options,
     TimeProvider clock,
@@ -112,19 +113,20 @@ internal sealed class GtfsUploadService(
         await audit.WriteAsync(
             connection,
             transaction,
-            row.UploadedBy,
-            GtfsAuditRepository.FeedUploaded,
-            row.FeedVersionId,
-            // Nothing changed state — a version came into existence — so there is no `before`,
-            // which is the shape `AuditEvent.Observed` uses for the same reason.
-            before: null,
-            after: new
-            {
-                fileName = row.FileName,
-                fileSizeBytes = row.FileSizeBytes,
-                sha256 = row.Sha256,
-                status = row.Status,
-            },
+            new AuditEntry(
+                GtfsAuditActions.FeedUploaded,
+                EntityType: GtfsAuditActions.FeedEntity,
+                EntityId: row.FeedVersionId,
+                ActorId: row.UploadedBy,
+                // Nothing changed state — a version came into existence — so there is no `Before`,
+                // which is the shape `AuditEvent.Observed` uses for the same reason.
+                After: new
+                {
+                    fileName = row.FileName,
+                    fileSizeBytes = row.FileSizeBytes,
+                    sha256 = row.Sha256,
+                    status = row.Status,
+                }),
             row.UploadedAt,
             cancellationToken);
 

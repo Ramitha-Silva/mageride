@@ -4,11 +4,12 @@ using MageRide.Reputation.Domain;
 using MageRide.Reputation.Persistence;
 using MageRide.Shared.Auth;
 using MageRide.Shared.Errors;
+using MageRide.Shared.Messaging;
 using MageRide.Shared.Persistence;
 using MageRide.Shared.Primitives;
 using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 
 namespace MageRide.Reputation.Endpoints;
@@ -114,7 +115,7 @@ public static class AdminReputationEndpoints
         ClaimsPrincipal user,
         IUnitOfWorkFactory unitOfWorkFactory,
         IFraudFlagRepository flags,
-        IAuditRepository audit,
+        IAuditEventWriter audit,
         TimeProvider clock,
         CancellationToken cancellationToken)
     {
@@ -159,12 +160,13 @@ public static class AdminReputationEndpoints
         await audit.WriteAsync(
             unitOfWork.Connection,
             unitOfWork.Transaction,
-            actorId,
-            AuditRepository.FlagResolved,
-            "reputation.fraud_flag",
-            id,
-            before: new { status = before.Status },
-            after: new { status = resolved.Status, note = body?.Note },
+            new AuditEntry(
+                ReputationAuditActions.FlagResolved,
+                EntityType: ReputationAuditActions.FraudFlagEntity,
+                EntityId: id,
+                ActorId: actorId,
+                Before: new { status = before.Status },
+                After: new { status = resolved.Status, note = body?.Note }),
             now,
             cancellationToken);
 

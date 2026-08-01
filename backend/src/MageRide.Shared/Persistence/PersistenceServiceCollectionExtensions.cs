@@ -40,6 +40,12 @@ public static class PersistenceServiceCollectionExtensions
         services.TryAddSingleton<INpgsqlConnectionFactory, NpgsqlConnectionFactory>();
         services.TryAddSingleton<IUnitOfWorkFactory, NpgsqlUnitOfWorkFactory>();
 
+        // audit.events (D-35). Registered with Postgres rather than behind a flag: the table is
+        // shared and append-only, every service that takes an admin decision writes to it, and the
+        // writer holds no state — so the cost of having it available is a type, and the cost of
+        // not having it is a second copy of the INSERT (C057 handoff, promoted by C062).
+        services.TryAddSingleton<Messaging.IAuditEventWriter, Messaging.AuditEventWriter>();
+
         services.AddHealthChecks().AddCheck<PostgresHealthCheck>(
             "postgres",
             HealthStatus.Unhealthy,

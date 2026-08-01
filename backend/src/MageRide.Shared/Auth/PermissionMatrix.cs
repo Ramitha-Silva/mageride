@@ -1,6 +1,4 @@
-using MageRide.Shared.Auth;
-
-namespace MageRide.Iam.Rbac;
+namespace MageRide.Shared.Auth;
 
 /// <summary>
 /// URD §2.3 — the Feature Permission Matrix, compiled into the service (AL-06).

@@ -1,13 +1,13 @@
 using MageRide.Iam.Domain;
+using MageRide.Shared.Auth;
 using MageRide.Iam.Persistence;
-using MageRide.Iam.Rbac;
 using MageRide.Shared.Errors;
 using MageRide.Shared.Persistence;
 
 namespace MageRide.Iam.Profiles;
 
 /// <summary>A profile plus the role facts every response about it carries.</summary>
-public sealed record ProfileView(UserProfile Profile, IReadOnlyList<string> Roles, FleetMembership? Fleet);
+public sealed record ProfileView(UserProfile Profile, IReadOnlyList<string> Roles, FleetScope? Fleet);
 
 /// <summary>The <c>PUT /v1/users/me</c> patch. Every field is optional (US-1.5).</summary>
 public sealed record UpdateProfileCommand(
@@ -48,7 +48,7 @@ public sealed class ProfileService(
     IProfileRepository profiles,
     IUserRepository users,
     IPdpaRequestRepository pdpa,
-    IPolicyEvaluator policies) : IProfileService
+    IPermissionEvaluator policies) : IProfileService
 {
     /// <summary>The three languages every user-facing string exists in (D-26, CLAUDE.md).</summary>
     public static readonly IReadOnlySet<string> Languages =

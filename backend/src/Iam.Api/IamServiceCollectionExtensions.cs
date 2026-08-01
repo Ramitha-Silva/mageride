@@ -89,9 +89,10 @@ public static class IamServiceCollectionExtensions
         services.AddSingleton<IPhoneLookupRepository, PhoneLookupRepository>();
         services.AddSingleton<IBootstrapRepository, BootstrapRepository>();
 
-        // Pure and stateless — the URD §2.3 matrix is compiled in and holds no per-request state.
-        services.AddSingleton<IPolicyEvaluator, PolicyEvaluator>();
-        services.AddSingleton<IAuthorizationHandler, FeatureAuthorizationHandler>();
+        // The evaluator and the handler are the kernel's since C062 promoted the matrix out of this
+        // service; `AddMageRideAuthorization` registers both. Nothing to add here — and nothing to
+        // re-register, because a second `IPermissionEvaluator` would be a second opinion about
+        // URD §2.3.
 
         services.AddScoped<ISessionService, SessionService>();
         services.AddScoped<IOtpService, OtpService>();

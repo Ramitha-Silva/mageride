@@ -1,5 +1,6 @@
 using MageRide.Iam.Domain;
 using MageRide.Iam.Sessions;
+using MageRide.Shared.Auth;
 
 namespace MageRide.Iam.Endpoints;
 
@@ -122,7 +123,7 @@ public sealed record UserProfileResponse(
     IReadOnlyDictionary<string, bool>? NotifPrefs,
     DateTimeOffset CreatedAt)
 {
-    public static UserProfileResponse From(IamUser user, IReadOnlyList<string> roles, FleetMembership? fleet = null)
+    public static UserProfileResponse From(IamUser user, IReadOnlyList<string> roles, FleetScope? fleet = null)
     {
         ArgumentNullException.ThrowIfNull(user);
         ArgumentNullException.ThrowIfNull(roles);
@@ -145,7 +146,7 @@ public sealed record UserProfileResponse(
 
     /// <summary>The profile half's projection — the whole row, notification switches included.</summary>
     public static UserProfileResponse From(
-        UserProfile profile, IReadOnlyList<string> roles, FleetMembership? fleet = null)
+        UserProfile profile, IReadOnlyList<string> roles, FleetScope? fleet = null)
     {
         ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(roles);

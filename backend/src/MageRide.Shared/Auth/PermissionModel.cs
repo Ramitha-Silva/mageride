@@ -1,4 +1,4 @@
-namespace MageRide.Iam.Rbac;
+namespace MageRide.Shared.Auth;
 
 /// <summary>
 /// One capability from the URD §2.3 legend. A cell is a set of these, and a caller's effective
@@ -114,7 +114,12 @@ public sealed record PermissionCell(string Symbol, PermissionGrant Grants, strin
 
         var grants = glyph switch
         {
-            Symbols.Full => PermissionGrant.Read | PermissionGrant.Write,
+            // ✅ carries Configure as well as Write. The legend reads "Full (create/edit/execute)"
+            // against "Configure (settings only)": Full is the broader authority in the same area,
+            // and changing a setting is editing one. Without this a Super Admin — ✅ on both
+            // Platform-config rows — would be refused a screen the Admin beside them (⚙) may use,
+            // which is the one reading of the legend URD §2.4 rules out in as many words.
+            Symbols.Full => PermissionGrant.Read | PermissionGrant.Write | PermissionGrant.Configure,
             Symbols.Configure => PermissionGrant.Read | PermissionGrant.Configure,
             Symbols.ReadOnly => PermissionGrant.Read,
             Symbols.OwnScope => PermissionGrant.Read | PermissionGrant.Write | PermissionGrant.OwnScope,

@@ -108,6 +108,17 @@ public static class MageRideApps
     public static readonly IReadOnlySet<string> Portals = new HashSet<string>(StringComparer.Ordinal) { Admin, Fleet };
 }
 
+/// <summary>
+/// An org-scoped fleet membership — the pair the <c>fleet_role</c> and <c>fleet_id</c> claims carry
+/// (AL-03), and the only thing that narrows the <c>fleet_owner</c> column of URD §2.3.
+/// </summary>
+/// <remarks>
+/// A value type on the claims rather than a row: <see cref="PolicyEvaluator"/> is pure, and the
+/// membership it needs is already in the token. Services that hold the <c>iam.fleet_members</c> row
+/// (iam-svc, fleet-svc) map their own record onto this at the call site.
+/// </remarks>
+public sealed record FleetScope(Guid FleetId, string FleetRole);
+
 /// <summary>Reads MageRide claims off the authenticated principal.</summary>
 public static class ClaimsPrincipalExtensions
 {

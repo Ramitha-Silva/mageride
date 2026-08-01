@@ -3,6 +3,7 @@ using MageRide.Iam.Domain;
 using MageRide.Iam.Persistence;
 using MageRide.Iam.Profiles;
 using MageRide.Iam.Rbac;
+using MageRide.Shared.Auth;
 using MageRide.Shared.Primitives;
 
 namespace MageRide.Iam.Endpoints;

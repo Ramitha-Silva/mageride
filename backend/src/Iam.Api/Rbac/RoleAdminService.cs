@@ -12,7 +12,7 @@ public sealed record UserRoleGrants(
     string PrimaryRole,
     IReadOnlyList<RoleGrant> Grants,
     IReadOnlyList<string> Roles,
-    FleetMembership? Fleet,
+    FleetScope? Fleet,
     EffectivePermissionSet Permissions);
 
 /// <summary>
@@ -41,7 +41,7 @@ public sealed class RoleAdminService(
     IRoleGrantRepository grants,
     IUserRepository users,
     IProfileRepository profiles,
-    IPolicyEvaluator policies) : IRoleAdminService
+    IPermissionEvaluator policies) : IRoleAdminService
 {
     public async Task<IReadOnlyList<RoleCatalogEntry>> CatalogAsync(CancellationToken cancellationToken)
     {

@@ -1,5 +1,4 @@
 using System.Net;
-using MageRide.Iam.Rbac;
 using MageRide.Iam.Tests.Infrastructure;
 using MageRide.Shared.Auth;
 using MageRide.TestKit;
@@ -328,8 +327,12 @@ public sealed class RbacEndpointTests(PostgresFixture postgres, RedisFixture red
         var entries = body.GetProperty("permissions").EnumerateArray().ToArray();
         Assert.Equal(FeatureAreas.All.Count, entries.Length);
 
+        // ✅ is read + write + configure (Δ C062): the legend's "Full (create/edit/execute)" is the
+        // broader authority in the same area as "Configure (settings only)".
         var passenger = entries.Single(e => e.GetProperty("featureArea").GetString() == FeatureAreas.Passenger.Key);
-        Assert.Equal(["read", "write"], passenger.GetProperty("grants").EnumerateArray().Select(g => g.GetString()));
+        Assert.Equal(
+            ["read", "write", "configure"],
+            passenger.GetProperty("grants").EnumerateArray().Select(g => g.GetString()));
         Assert.Equal("✅", passenger.GetProperty("symbol").GetString());
 
         // ➖ areas are present and empty, never absent.

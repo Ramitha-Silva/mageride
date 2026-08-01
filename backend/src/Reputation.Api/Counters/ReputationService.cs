@@ -66,7 +66,7 @@ public sealed class ReputationService(
     IBlockStateRepository blockStates,
     IIntakeLogRepository intakeLog,
     IDriverLevelRepository levels,
-    IAuditRepository audit,
+    IAuditEventWriter audit,
     IOutboxWriter outbox,
     IBlockStatusCache cache,
     TimeProvider clock,
@@ -261,12 +261,13 @@ public sealed class ReputationService(
         await audit.WriteAsync(
             unitOfWork.Connection,
             unitOfWork.Transaction,
-            actorId,
-            AuditRepository.BlockStateOverride,
-            "reputation.block_state",
-            userId,
-            before: new { state = existing.State, source = existing.Source, expiresAt = existing.ExpiresAt },
-            after: new { state = decision.State, source = clearing ? BlockSources.Auto : BlockSources.Manual, expiresAt = decision.ExpiresAt, reason },
+            new AuditEntry(
+                ReputationAuditActions.BlockStateOverride,
+                EntityType: ReputationAuditActions.BlockStateEntity,
+                EntityId: userId,
+                ActorId: actorId,
+                Before: new { state = existing.State, source = existing.Source, expiresAt = existing.ExpiresAt },
+                After: new { state = decision.State, source = clearing ? BlockSources.Auto : BlockSources.Manual, expiresAt = decision.ExpiresAt, reason }),
             now,
             cancellationToken);
 
@@ -318,12 +319,13 @@ public sealed class ReputationService(
         await audit.WriteAsync(
             unitOfWork.Connection,
             unitOfWork.Transaction,
-            actorId,
-            AuditRepository.LevelRestore,
-            "dispatch.driver_level",
-            driverId,
-            before: new { level = before.Level },
-            after: new { level, reason },
+            new AuditEntry(
+                ReputationAuditActions.LevelRestore,
+                EntityType: ReputationAuditActions.DriverLevelEntity,
+                EntityId: driverId,
+                ActorId: actorId,
+                Before: new { level = before.Level },
+                After: new { level, reason }),
             now,
             cancellationToken);
 
@@ -431,12 +433,13 @@ public sealed class ReputationService(
         await audit.WriteAsync(
             unitOfWork.Connection,
             unitOfWork.Transaction,
-            actorId: null,
-            AuditRepository.LevelDecrement,
-            "dispatch.driver_level",
-            fact.SubjectId,
-            before: new { level = current.Level },
-            after: new { level = next, reason = fact.Kind, rideId = fact.RideId },
+            new AuditEntry(
+                ReputationAuditActions.LevelDecrement,
+                EntityType: ReputationAuditActions.DriverLevelEntity,
+                EntityId: fact.SubjectId,
+                ActorId: null,
+                Before: new { level = current.Level },
+                After: new { level = next, reason = fact.Kind, rideId = fact.RideId }),
             now,
             cancellationToken);
 

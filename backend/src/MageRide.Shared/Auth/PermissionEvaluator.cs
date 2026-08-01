@@ -1,6 +1,4 @@
-using MageRide.Shared.Auth;
-
-namespace MageRide.Iam.Rbac;
+namespace MageRide.Shared.Auth;
 
 /// <summary>One feature area as a specific caller may use it.</summary>
 /// <param name="Area">The URD §2.3 row.</param>
@@ -47,7 +45,7 @@ public sealed record EffectivePermission(
 public sealed record EffectivePermissionSet(
     Guid UserId,
     IReadOnlyList<string> Roles,
-    Domain.FleetMembership? Fleet,
+    FleetScope? Fleet,
     IReadOnlyList<EffectivePermission> Permissions)
 {
     private readonly IReadOnlyDictionary<string, EffectivePermission> _byArea =
@@ -71,12 +69,12 @@ public sealed record EffectivePermissionSet(
 /// Resolves a role set into the effective permissions of URD §2.3 (AL-06), narrowed by the
 /// org-scoped fleet sub-role of URD §2.1 (AL-03).
 /// </summary>
-public interface IPolicyEvaluator
+public interface IPermissionEvaluator
 {
-    EffectivePermissionSet Evaluate(Guid userId, IReadOnlyList<string> roles, Domain.FleetMembership? fleet);
+    EffectivePermissionSet Evaluate(Guid userId, IReadOnlyList<string> roles, FleetScope? fleet);
 }
 
-/// <inheritdoc cref="IPolicyEvaluator"/>
+/// <inheritdoc cref="IPermissionEvaluator"/>
 /// <remarks>
 /// <para>
 /// <b>Union, not precedence.</b> URD §2.1: "A user may hold more than one role … Effective
@@ -97,9 +95,9 @@ public interface IPolicyEvaluator
 /// <c>iam.fleet_members</c>; both are read by <c>IUserRepository</c>.
 /// </para>
 /// </remarks>
-public sealed class PolicyEvaluator : IPolicyEvaluator
+public sealed class PermissionEvaluator : IPermissionEvaluator
 {
-    public EffectivePermissionSet Evaluate(Guid userId, IReadOnlyList<string> roles, Domain.FleetMembership? fleet)
+    public EffectivePermissionSet Evaluate(Guid userId, IReadOnlyList<string> roles, FleetScope? fleet)
     {
         ArgumentNullException.ThrowIfNull(roles);
 

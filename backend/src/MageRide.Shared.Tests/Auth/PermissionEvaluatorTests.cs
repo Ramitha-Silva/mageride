@@ -1,17 +1,15 @@
-using MageRide.Iam.Domain;
-using MageRide.Iam.Rbac;
 using MageRide.Shared.Auth;
 
-namespace MageRide.Iam.Tests.Rbac;
+namespace MageRide.Shared.Tests.Auth;
 
 /// <summary>
 /// DoD: "a user holding two roles gets the union of permissions" (URD §2.1, AL-06), plus the
 /// org-scoped fleet sub-model of URD §2.1 (AL-03) and the deny-by-default fence.
 /// </summary>
-public sealed class PolicyEvaluatorTests
+public sealed class PermissionEvaluatorTests
 {
     private static readonly Guid User = Guid.NewGuid();
-    private static readonly PolicyEvaluator Evaluator = new();
+    private static readonly PermissionEvaluator Evaluator = new();
 
     [Fact]
     public void No_role_grants_nothing_anywhere()
@@ -108,7 +106,7 @@ public sealed class PolicyEvaluatorTests
     [Fact]
     public void A_driver_who_is_also_a_fleet_owner_gets_both()
     {
-        var fleet = new FleetMembership(Guid.NewGuid(), FleetRoles.Owner);
+        var fleet = new FleetScope(Guid.NewGuid(), FleetRoles.Owner);
         var effective = Evaluator.Evaluate(User, [MageRideRoles.Driver, MageRideRoles.FleetOwner], fleet);
 
         // From the driver column: ◐ own on the driver app.
@@ -128,7 +126,7 @@ public sealed class PolicyEvaluatorTests
     [Fact]
     public void A_fleet_manager_keeps_operations_and_loses_billing()
     {
-        var fleet = new FleetMembership(Guid.NewGuid(), FleetRoles.Manager);
+        var fleet = new FleetScope(Guid.NewGuid(), FleetRoles.Manager);
         var effective = Evaluator.Evaluate(User, [MageRideRoles.FleetOwner], fleet);
 
         // URD §2.1: "Manager = onboarding, assignment, scheduling, monitoring (no billing…)".
@@ -141,7 +139,7 @@ public sealed class PolicyEvaluatorTests
     [Fact]
     public void A_fleet_viewer_is_read_only_everywhere_the_fleet_role_reaches()
     {
-        var fleet = new FleetMembership(Guid.NewGuid(), FleetRoles.Viewer);
+        var fleet = new FleetScope(Guid.NewGuid(), FleetRoles.Viewer);
         var effective = Evaluator.Evaluate(User, [MageRideRoles.FleetOwner], fleet);
 
         // URD §2.1: "Viewer = read-only fleet map & analytics".
@@ -164,7 +162,7 @@ public sealed class PolicyEvaluatorTests
     [Fact]
     public void The_fleet_sub_role_never_narrows_another_role()
     {
-        var fleet = new FleetMembership(Guid.NewGuid(), FleetRoles.Viewer);
+        var fleet = new FleetScope(Guid.NewGuid(), FleetRoles.Viewer);
 
         var csrAlone = Evaluator.Evaluate(User, [MageRideRoles.SupportCsr], null);
         var both = Evaluator.Evaluate(User, [MageRideRoles.SupportCsr, MageRideRoles.FleetOwner], fleet);
@@ -237,7 +235,7 @@ public sealed class PolicyEvaluatorTests
     {
         // Support: CSR is ✅ (platform-wide) and fleet_owner is ◐ own org. Reporting "own org"
         // alongside an unscoped write would describe a narrower authority than the caller has.
-        var fleet = new FleetMembership(Guid.NewGuid(), FleetRoles.Owner);
+        var fleet = new FleetScope(Guid.NewGuid(), FleetRoles.Owner);
         var effective = Evaluator.Evaluate(User, [MageRideRoles.SupportCsr, MageRideRoles.FleetOwner], fleet);
         var support = effective.For(FeatureAreas.Support);
 
@@ -256,7 +254,7 @@ public sealed class PolicyEvaluatorTests
     [Fact]
     public void Scope_is_tracked_per_capability_not_per_area()
     {
-        var fleet = new FleetMembership(Guid.NewGuid(), FleetRoles.Owner);
+        var fleet = new FleetScope(Guid.NewGuid(), FleetRoles.Owner);
         var effective = Evaluator.Evaluate(User, [MageRideRoles.Admin, MageRideRoles.FleetOwner], fleet);
         var operations = effective.For(FeatureAreas.FleetOperations);
 
@@ -272,7 +270,7 @@ public sealed class PolicyEvaluatorTests
     [Fact]
     public void A_lone_own_scope_grant_still_reports_its_scope()
     {
-        var fleet = new FleetMembership(Guid.NewGuid(), FleetRoles.Owner);
+        var fleet = new FleetScope(Guid.NewGuid(), FleetRoles.Owner);
         var operations = Evaluator.Evaluate(User, [MageRideRoles.FleetOwner], fleet).For(FeatureAreas.FleetOperations);
 
         Assert.True(operations.Grants.HasFlag(PermissionGrant.OwnScope));

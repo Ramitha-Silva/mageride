@@ -98,12 +98,17 @@ D3' §0 and D7' §4.2 still carry pre-AL-37 wording; AL-37 is later and wins (pl
 
 ### The RBAC model (C027)
 
-- **URD §2.3 is compiled in, not configured.** `Rbac/PermissionMatrix.cs` is the 21×9 table
-  transcribed cell for cell; `PermissionMatrixTests` **parses §2.3 out of
-  `specs/user-requirements-document.md`** and compares all 189 cells, so a slip here or a change
-  there fails the build. It is read-only on purpose: the principal who would edit it is the
-  principal it constrains, so a writable matrix is one `UPDATE` away from a Super Admin granting
-  themselves what §2.3 forbids. "Assign roles" is the writable half — `iam.user_roles`.
+- **URD §2.3 is compiled in, not configured — and since C062 it is the kernel's, not this
+  service's.** `MageRide.Shared.Auth.PermissionMatrix` is the 21×9 table transcribed cell for cell;
+  `PermissionMatrixTests` (now in `MageRide.Shared.Tests`) **parses §2.3 out of
+  `specs/user-requirements-document.md`** and compares all 189 cells, so a slip there or a change
+  here fails the build. It moved because admin-bff enforces the same matrix on the same nine roles
+  and a second copy is how two services start disagreeing; what stayed is `RoleAdminService` and
+  `iam.user_roles`, which is the writable half. `IPolicyEvaluator` was renamed
+  `IPermissionEvaluator` on the way (ASP.NET Core has an `IPolicyEvaluator` of its own) and
+  `Domain.FleetMembership` became `MageRide.Shared.Auth.FleetScope`. It is read-only on purpose:
+  the principal who would edit it is the principal it constrains, so a writable matrix is one
+  `UPDATE` away from a Super Admin granting themselves what §2.3 forbids.
 - **Deny-by-default has no fall-through.** `PermissionMatrix.Cell` answers ➖ for a pair it does
   not hold and `FeatureAuthorizationHandler` never succeeds a requirement whose feature area is
   not one of the twenty-one. An endpoint that names an area nobody transcribed answers **403**,

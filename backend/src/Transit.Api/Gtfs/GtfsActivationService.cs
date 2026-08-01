@@ -1,6 +1,7 @@
 using System.Globalization;
 using Dapper;
 using MageRide.Shared.Errors;
+using MageRide.Shared.Messaging;
 using MageRide.Shared.Persistence;
 using MageRide.Transit.Configuration;
 using Microsoft.Extensions.Options;
@@ -52,7 +53,7 @@ internal sealed class GtfsActivationService(
     INpgsqlConnectionFactory connections,
     IGtfsImporter importer,
     IGtfsObjectStore objects,
-    IGtfsAuditRepository audit,
+    IAuditEventWriter audit,
     IOptions<TransitOptions> options,
     TimeProvider clock,
     ILogger<GtfsActivationService> logger) : IGtfsActivationService
@@ -189,34 +190,36 @@ internal sealed class GtfsActivationService(
         await audit.WriteAsync(
             connection,
             transaction,
-            actorId,
-            GtfsAuditRepository.FeedActivated,
-            version.FeedVersionId,
-            before: outgoing is null
-                ? null
-                : new
+            new AuditEntry(
+                GtfsAuditActions.FeedActivated,
+                EntityType: GtfsAuditActions.FeedEntity,
+                EntityId: version.FeedVersionId,
+                ActorId: actorId,
+                Before: outgoing is null
+                    ? null
+                    : new
+                    {
+                        feedVersionId = outgoing.FeedVersionId,
+                        feedInfoVersion = outgoing.FeedInfoVersion,
+                        fileName = outgoing.FileName,
+                        status = outgoing.Status,
+                    },
+                After: new
                 {
-                    feedVersionId = outgoing.FeedVersionId,
-                    feedInfoVersion = outgoing.FeedInfoVersion,
-                    fileName = outgoing.FileName,
-                    status = outgoing.Status,
-                },
-            after: new
-            {
-                feedVersionId = version.FeedVersionId,
-                feedInfoVersion = version.FeedInfoVersion,
-                fileName = version.FileName,
-                status = FeedStatuses.Active,
-                rolledBack = current.Status == FeedStatuses.Archived,
-                counts = new
-                {
-                    routes = summary.Routes,
-                    stops = summary.Stops,
-                    trips = summary.Trips,
-                    stopTimes = summary.StopTimes,
-                    shapes = summary.Shapes,
-                },
-            },
+                    feedVersionId = version.FeedVersionId,
+                    feedInfoVersion = version.FeedInfoVersion,
+                    fileName = version.FileName,
+                    status = FeedStatuses.Active,
+                    rolledBack = current.Status == FeedStatuses.Archived,
+                    counts = new
+                    {
+                        routes = summary.Routes,
+                        stops = summary.Stops,
+                        trips = summary.Trips,
+                        stopTimes = summary.StopTimes,
+                        shapes = summary.Shapes,
+                    },
+                }),
             now,
             cancellationToken);
 

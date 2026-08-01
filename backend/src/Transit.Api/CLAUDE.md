@@ -226,6 +226,11 @@ format two services must agree on** — query-svc encodes a trip's track, this s
 shape, and a client decodes both — so a second copy would let them drift on precision. The same move
 C042 made with `VehicleVisibilityRules` and C052 with `LiteralKeyDictionaryConverter`.
 
+**Δ C062:** the `audit.events` writer this service carried is gone — C062 became its third caller
+and promoted it to `MageRide.Shared.Messaging.IAuditEventWriter`, which is exactly what the C057
+handoff asked for. What stays here is `GtfsAuditActions`, the three facts the GTFS lifecycle is
+entitled to record; the INSERT, and the four columns migration 1312 added to it, are the kernel's.
+
 **Δ C057:** `feed-duplicate`, `feed-not-validated` and `feed-already-active` are now declared in
 `MageRideErrors`. They were coined by C007 in `contracts/_shared.yaml`'s `ErrorCode` enum and had no
 C# declaration until a component could raise them.

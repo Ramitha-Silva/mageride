@@ -1,8 +1,7 @@
 using System.Text.RegularExpressions;
-using MageRide.Iam.Rbac;
 using MageRide.Shared.Auth;
 
-namespace MageRide.Iam.Tests.Rbac;
+namespace MageRide.Shared.Tests.Auth;
 
 /// <summary>
 /// DoD: "the RBAC matrix test covers every (role, privileged endpoint) pair in URD §2.3 with an
@@ -130,7 +129,7 @@ public sealed partial class PermissionMatrixTests
 
     [Theory]
     // The legend, one case per glyph (URD §2.3 "Legend").
-    [InlineData("✅", PermissionGrant.Read | PermissionGrant.Write, null)]
+    [InlineData("✅", PermissionGrant.Read | PermissionGrant.Write | PermissionGrant.Configure, null)]
     [InlineData("⚙", PermissionGrant.Read | PermissionGrant.Configure, null)]
     [InlineData("👁", PermissionGrant.Read, null)]
     [InlineData("➖", PermissionGrant.None, null)]
@@ -143,7 +142,7 @@ public sealed partial class PermissionMatrixTests
     [InlineData("◐ raise/recommend", PermissionGrant.Read | PermissionGrant.Raise | PermissionGrant.OwnScope, "raise/recommend")]
     [InlineData("◐ subset", PermissionGrant.Read | PermissionGrant.Configure | PermissionGrant.OwnScope, "subset")]
     [InlineData("⚙ rates", PermissionGrant.Read | PermissionGrant.Configure, "rates")]
-    [InlineData("✅ approve/execute", PermissionGrant.Read | PermissionGrant.Write, "approve/execute")]
+    [InlineData("✅ approve/execute", PermissionGrant.Read | PermissionGrant.Write | PermissionGrant.Configure, "approve/execute")]
     public void The_legend_parses_the_way_the_spec_reads(string symbol, PermissionGrant grants, string? qualifier)
     {
         var cell = PermissionCell.Parse(symbol);
@@ -185,8 +184,10 @@ public sealed partial class PermissionMatrixTests
             PermissionGrant.None,
             PermissionMatrix.Cell(FeatureAreas.RoleManagement, MageRideRoles.Admin).Grants);
 
+        // ✅ carries Configure as well (Δ C062): "Full (create/edit/execute)" is the broader
+        // authority in the same area as "Configure (settings only)".
         Assert.Equal(
-            PermissionGrant.Read | PermissionGrant.Write,
+            PermissionGrant.Read | PermissionGrant.Write | PermissionGrant.Configure,
             PermissionMatrix.Cell(FeatureAreas.RoleManagement, MageRideRoles.SuperAdmin).Grants);
 
         Assert.Equal(

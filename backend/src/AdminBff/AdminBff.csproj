@@ -1,0 +1,51 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    AdminBff (C062 admin-bff-core) — the Admin Portal's back-office BFF, admin.mageride.lk (AL-02).
+
+    FENCE 1 (AL-06): **deny-by-default on every endpoint.** Every route is gated on a URD §2.3
+    (feature area, capability) pair through the kernel's `RequireFeature`; nothing here falls
+    through to "authenticated is good enough". `RbacMatrixTests` drives every internal role against
+    every route in the running route table.
+    FENCE 2 (D-35): **every mutation writes an audit.events row**, through the interceptor.
+    A mutating route that records nothing answers 500 rather than succeeding silently, and a
+    mutating route that never declares an action fails start-up. `AuditInterceptorTests` asserts
+    both against the route table, so a route added later is covered by construction.
+    FENCE 3 (AL-37): **no MFA, anywhere.** There is no second-factor route and no code path that can
+    return a challenge. Sign-in itself is iam-svc's `POST /v1/admin/auth/login`.
+    FENCE 4 (AL-02): **no driver-facing or passenger-facing surface.** Every path is under
+    `/v1/admin`, and `FenceTests` asserts it against the route table.
+
+    Verification queues (C063), the three directories (C064) and finance/PDPA (C065) are separate
+    components on this same project; this one is the foundation they map their routes onto.
+
+    Verify: dotnet test backend/src/AdminBff.Tests -c Release
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.AdminBff</RootNamespace>
+    <AssemblyName>MageRide.AdminBff</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <UserSecretsId>mageride-admin-bff</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MageRide.Shared\MageRide.Shared.csproj" />
+    <!--
+      C061 is a class library and not a service on a socket: D3' gives `getAdminDashboardStats` to
+      admin-bff, and an HTTP hop would put a network boundary between this process and a read model
+      living in the database it already holds a connection to. See Analytics/CLAUDE.md.
+    -->
+    <ProjectReference Include="..\Analytics\Analytics.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Dapper" />
+    <PackageReference Include="Npgsql" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="AdminBff.Tests" />
+  </ItemGroup>
+
+</Project>

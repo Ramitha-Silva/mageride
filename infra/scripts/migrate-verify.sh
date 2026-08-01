@@ -225,7 +225,10 @@ check_eq "19 registry tables" "19" \
 # table for any of it).
 check_eq "7 prov tables" "7" \
   "SELECT count(*) FROM information_schema.tables WHERE table_schema='prov' AND table_type='BASE TABLE';"
-check_eq "1 config table" "1" \
+# 2 config tables: operating_cities (C003, §17b) + feature_flags (C062). URD §2.3 gives feature
+# flags a matrix row and US-14.12 an Admin Portal Config surface, and no spec prints the DDL —
+# migration 0202's header argues it and the C062 handoff raises the micro-change-set.
+check_eq "2 config tables" "2" \
   "SELECT count(*) FROM information_schema.tables WHERE table_schema='config' AND table_type='BASE TABLE';"
 
 step "Tables owned by C004"
@@ -969,6 +972,33 @@ check_eq "7 transit + 5 transit_staging + 1 analytics tables" "13" \
 check_eq "billing.bank_transfer_topups does not exist (AL-05)" "0" \
   "SELECT count(*) FROM information_schema.tables
     WHERE table_schema='billing' AND table_name='bank_transfer_topups';"
+
+step "C062 — the D-35 interceptor's columns and the Mode A declared route"
+# 1312: server_db_schema §15 prints eight columns and the admin-bff interceptor records four more.
+# Each is named by a document — D6' §2.2's envelope id, admin-bff.yaml#AuditEvent's actorRole/ip
+# and the D-35 deliverable's "ip" — and 1305 has nowhere to put any of them.
+check_eq "audit.events carries event_id, actor_role, ip and detail (D-35)" "4" \
+  "SELECT count(*) FROM information_schema.columns
+    WHERE table_schema='audit' AND table_name='events'
+      AND column_name IN ('event_id','actor_role','ip','detail');"
+# Consumers dedupe on it (D6' §2.3), so two rows sharing an eventId would make one invisible.
+check_eq "audit.events.event_id is UNIQUE" "1" \
+  "SELECT count(*) FROM pg_indexes
+    WHERE schemaname='audit' AND tablename='events' AND indexname='ux_audit_event_id';"
+check_rejects "a duplicate audit event id is rejected" \
+  "INSERT INTO audit.events (event_id, action) VALUES
+     ('00000000-0000-4000-8000-0000000000e1','A'),
+     ('00000000-0000-4000-8000-0000000000e1','B');"
+# 1409: admin-bff.yaml#TrainInput carries routeId and §2 has nowhere to put it. Not the same
+# question as trips.sessions.route_id — that is the line a JOURNEY ran, this is the line the
+# vehicle is REGISTERED for (US-2.17), and nothing derives one from the other.
+check_eq "registry.vehicles.default_route_id references spatial.routes (US-2.17)" "1" \
+  "SELECT count(*) FROM pg_constraint
+    WHERE conrelid='registry.vehicles'::regclass AND contype='f'
+      AND confrelid='spatial.routes'::regclass;"
+# 0202: URD §2.3 gives feature flags a matrix row and no spec prints the table.
+check_rejects "a feature flag key that is not a slug is rejected (0202)" \
+  "INSERT INTO config.feature_flags(key) VALUES ('Not A Key');"
 
 step "Deferred FKs from C003 and C004 are now closed"
 check_eq "trips.sessions.route_id references spatial.routes (C004 note (d))" "1" \

@@ -56,6 +56,8 @@ servers:
     description: Docker Compose dev gateway
 
 tags:
+  - name: admin-session
+    description: The post-sign-in bootstrap and the role-scoped menu manifest (Δ C062, URD §2.2).
   - name: admin-dashboard
     description: Platform metrics and the period-filtered statistics view (AL-38).
   - name: admin-verification
@@ -74,6 +76,43 @@ tags:
     description: Data-subject export and erasure (E-06).
 
 paths:
+
+  # -------------------------------------------------------------------------------------------
+  # Session (Δ C062)
+  # -------------------------------------------------------------------------------------------
+  /v1/admin/session:
+    get:
+      operationId: getAdminSession
+      summary: Identity, effective permissions and the role-scoped menu manifest.
+      description: |
+        **Δ C062.** What the Admin Portal fetches the moment sign-in completes. URD §2.2 requires
+        the console to be "rendered from the same permission model the API enforces server-side"
+        and each role to see "only the menus and records its permissions allow"; nothing in D3'
+        gives that manifest a route, so the portal would otherwise have to keep its own copy of
+        URD §2.3 — a third transcription of the matrix, drifting from the two that exist.
+
+        **Sign-in itself is `iam.yaml`'s `POST /v1/admin/auth/login`** (AL-07), and `mfaRequired`
+        is always `false`: AL-37 removed the second factor, and D3' §0 and D7' §4.2 still carry
+        the pre-AL-37 wording, so a client built from those would wait for a challenge that never
+        comes. Answering the question explicitly is what stops that.
+
+        Authenticated-internal rather than gated on a feature area — every internal role may ask
+        what it is allowed to do, and a role with no menu needs to be told so rather than shown a
+        blank console.
+      tags: [admin-session]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: The caller's session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminSession'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden]
 
   # -------------------------------------------------------------------------------------------
   # Dashboard
@@ -1147,6 +1186,78 @@ paths:
         '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
       x-error-codes: [validation-failed, unauthorized, forbidden, not-found]
+
+  /v1/admin/config/feature-flags:
+    get:
+      operationId: listFeatureFlags
+      summary: Every platform feature flag and its current state.
+      description: |
+        **Δ C062.** URD §2.3 gives feature flags a whole matrix row — "Platform config — Driver
+        Level params, feature flags, system settings", Super Admin ✅, Admin ◐ subset, Auditor 👁 —
+        and US-14.12 makes them an Admin Portal Config surface, but no contract had a route and no
+        spec printed the table. `config.feature_flags` is migration 0202; both are raised as
+        micro-change-sets in the C062 handoff.
+      tags: [admin-config]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Every flag, by key.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FeatureFlag'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden]
+
+  /v1/admin/config/feature-flags/{key}:
+    put:
+      operationId: setFeatureFlag
+      summary: Turn a platform feature flag on or off.
+      description: |
+        **Δ C062.** An upsert: a flag's first appearance and its next change are the same operator
+        action, and a `PUT` that 404'd on a key the running deploy has started reading would leave
+        nobody able to turn on the thing the release shipped. Omitting `description` keeps the one
+        already stored. Audited (D-35).
+      tags: [admin-config]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[a-z][a-z0-9_.-]{1,80}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enabled]
+              properties:
+                enabled:
+                  type: boolean
+                description:
+                  type: string
+                  maxLength: 1000
+      responses:
+        '200':
+          description: The flag as it now stands.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeatureFlag'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden]
 
   /v1/admin/trains:
     post:
@@ -2251,6 +2362,13 @@ components:
 
     AuditEvent:
       type: object
+      description: |
+        One row of the immutable log. **Δ C062:** `before` and `after` join `detail`, because the
+        D-35 deliverable is "actor, action, target, **before/after**, ip" and the schema had
+        nowhere to put the pair. They are different facts and are kept apart: `before`/`after` are
+        what the handler knows about the **entity**, `detail` is what the interceptor knows about
+        the **request** (method, path, the caller's whole role union, the idempotency key). One
+        field holding both would make "what changed" unreadable.
       required: [eventId, actorId, action, occurredAt]
       properties:
         eventId:
@@ -2266,6 +2384,14 @@ components:
           $ref: './_shared.yaml#/components/schemas/Ulid'
         subjectType:
           type: string
+        before:
+          type: [object, 'null']
+          additionalProperties: true
+          description: State before, or `null` where nothing existed — a creation, or a read event.
+        after:
+          type: [object, 'null']
+          additionalProperties: true
+          description: State after, or the observation itself.
         detail:
           type: object
           additionalProperties: true
@@ -2273,6 +2399,124 @@ components:
           type: string
         occurredAt:
           $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    FeatureFlag:
+      type: object
+      description: One row of `config.feature_flags` (Δ C062, migration 0202, US-14.12).
+      required: [key, enabled, updatedAt]
+      properties:
+        key:
+          type: string
+          pattern: '^[a-z][a-z0-9_.-]{1,80}$'
+        enabled:
+          type: boolean
+        description:
+          type: string
+          description: What flipping it does, in the operator's words. Shown beside the toggle.
+        updatedBy:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        updatedAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    AdminSession:
+      type: object
+      description: |
+        Δ C062. The post-sign-in bootstrap (URD §2.2). `permissions` is the caller's row of
+        URD §2.3 as the server evaluated it; `menu` is the same evaluation projected onto the nav,
+        so the console cannot offer a screen the API would refuse.
+      required: [userId, roles, permissions, menu, mfaRequired]
+      properties:
+        userId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        roles:
+          type: array
+          description: Every canonical role held. Effective permissions are their union (AL-06).
+          items:
+            $ref: './_shared.yaml#/components/schemas/Role'
+        permissions:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminPermission'
+        menu:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminMenuGroup'
+        mfaRequired:
+          type: boolean
+          const: false
+          description: |
+            **Always false (AL-37).** There is no second factor for internal roles; the
+            compensating controls are the failed-attempt lock-out and the optional IP allow-list,
+            both iam-svc's. Present precisely because D3' §0 and D7' §4.2 still say otherwise.
+
+    AdminPermission:
+      type: object
+      description: One URD §2.3 row as this caller holds it.
+      required: [featureArea, label, symbol, grants, ownScope]
+      properties:
+        featureArea:
+          type: string
+          description: Stable kebab key of the row, e.g. `platform-settings`.
+          example: moderation
+        label:
+          type: string
+          description: The row's URD §2.3 wording.
+        symbol:
+          type: string
+          description: The cell rendered in the spec's own legend — `✅`, `◐ own org`, `⚙ rates`.
+          example: ✅
+        grants:
+          type: array
+          items:
+            type: string
+            enum: [read, write, configure, raise]
+        qualifier:
+          type: string
+          description: The scope note the cell carries, when anything is scope-limited.
+          example: temp on reports
+        ownScope:
+          type: boolean
+          description: |
+            True when at least one capability here is available **only** within the caller's own
+            records or organisation. A fence, not an answer — the owning service must bound it.
+
+    AdminMenuGroup:
+      type: object
+      required: [key, labelKey, items]
+      properties:
+        key:
+          type: string
+        labelKey:
+          type: string
+          description: |
+            A resource key, never a label. D-26 makes every user-facing string trilingual and the
+            Admin Portal owns the Si/Ta/En bundles.
+          example: nav.group.configuration
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminMenuItem'
+
+    AdminMenuItem:
+      type: object
+      required: [key, labelKey, path, ownedBy]
+      properties:
+        key:
+          type: string
+        labelKey:
+          type: string
+        path:
+          type: string
+          description: The Admin Portal route. The gateway decides which process answers its API.
+        ownedBy:
+          type: string
+          description: |
+            Which service answers this item's API. Several Configuration entries are **not**
+            admin-bff's — the GTFS manager is transit-svc's (AL-54), the daily-fee rates and
+            voucher tiers subscription-svc's, the Driver-Level parameters dispatch-svc's, RBAC
+            provisioning iam-svc's — because each is owned by the service that owns the table it
+            writes. The console is one console; the writers are not one writer.
+          example: transit-svc
 
     PdpaRequest:
       type: object

@@ -1,3 +1,4 @@
+using MageRide.Shared.Messaging;
 using MageRide.Shared.Persistence;
 using MageRide.Transit.Configuration;
 using Microsoft.Extensions.Options;
@@ -169,7 +170,7 @@ internal sealed class GtfsValidationWorker(
         CancellationToken cancellationToken)
     {
         var connections = scope.GetRequiredService<INpgsqlConnectionFactory>();
-        var audit = scope.GetRequiredService<IGtfsAuditRepository>();
+        var audit = scope.GetRequiredService<IAuditEventWriter>();
 
         await using var connection = await connections.OpenAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
@@ -179,19 +180,21 @@ internal sealed class GtfsValidationWorker(
         await audit.WriteAsync(
             connection,
             transaction,
-            // No actor: BR-32.1's pipeline is a queued job and `audit.events.actor_id` is nullable
-            // for exactly this. The person who caused it is on the upload row.
-            actorId: null,
-            GtfsAuditRepository.FeedValidated,
-            version.FeedVersionId,
-            before: new { status = FeedStatuses.Validating },
-            after: new
-            {
-                status = result.Failed ? FeedStatuses.Failed : FeedStatuses.Validated,
-                errors = result.ErrorCount,
-                warnings = result.WarningCount,
-                feedInfoVersion = result.FeedInfoVersion,
-            },
+            new AuditEntry(
+                GtfsAuditActions.FeedValidated,
+                EntityType: GtfsAuditActions.FeedEntity,
+                EntityId: version.FeedVersionId,
+                // No actor: BR-32.1's pipeline is a queued job and `audit.events.actor_id` is
+                // nullable for exactly this. The person who caused it is on the upload row.
+                ActorId: null,
+                Before: new { status = FeedStatuses.Validating },
+                After: new
+                {
+                    status = result.Failed ? FeedStatuses.Failed : FeedStatuses.Validated,
+                    errors = result.ErrorCount,
+                    warnings = result.WarningCount,
+                    feedInfoVersion = result.FeedInfoVersion,
+                }),
             clock.GetUtcNow(),
             cancellationToken);
 

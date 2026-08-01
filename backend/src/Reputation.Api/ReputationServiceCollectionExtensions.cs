@@ -1,10 +1,12 @@
 using MageRide.Reputation.Configuration;
 using MageRide.Reputation.Counters;
 using MageRide.Reputation.Detection;
+using MageRide.Reputation.Domain;
 using MageRide.Reputation.Grpc;
 using MageRide.Reputation.Messaging;
 using MageRide.Reputation.Persistence;
 using MageRide.Reputation.Workers;
+using MageRide.Shared.Messaging;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -34,7 +36,10 @@ public static class ReputationServiceCollectionExtensions
         services.TryAddSingleton<IDriverLevelRepository, DriverLevelRepository>();
         services.TryAddSingleton<IFraudFlagRepository, FraudFlagRepository>();
         services.TryAddSingleton<IDetectionRepository, DetectionRepository>();
-        services.TryAddSingleton<IAuditRepository, AuditRepository>();
+
+        // No audit registration: `IAuditEventWriter` is the kernel's, registered by
+        // `AddMageRidePostgres`. `audit.events` is shared and append-only, and the copy that used
+        // to live in this service is the reason C062 promoted it (C057 handoff).
 
         // The cache is registered against whichever Redis the kernel gave us — and against a null
         // implementation when it gave us none, so a service configured without Redis still answers

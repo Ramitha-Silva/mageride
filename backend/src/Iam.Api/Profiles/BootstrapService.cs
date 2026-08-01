@@ -1,6 +1,5 @@
 using MageRide.Iam.Domain;
 using MageRide.Iam.Persistence;
-using MageRide.Iam.Rbac;
 using MageRide.Shared.Auth;
 using MageRide.Shared.Errors;
 using MageRide.Shared.Persistence;
@@ -13,7 +12,7 @@ namespace MageRide.Iam.Profiles;
 public sealed record LoginBootstrap(
     UserProfile Profile,
     IReadOnlyList<string> Roles,
-    FleetMembership? Fleet,
+    FleetScope? Fleet,
     IReadOnlyList<SavedAddress> SavedAddresses,
     IReadOnlyList<EmergencyContact> EmergencyContacts,
     IReadOnlyList<string> PaymentMethods,
@@ -51,7 +50,7 @@ public sealed class BootstrapService(
     ISavedAddressRepository addresses,
     IEmergencyContactRepository contacts,
     IBootstrapRepository bootstrap,
-    IPolicyEvaluator policies,
+    IPermissionEvaluator policies,
     TimeProvider clock) : IBootstrapService
 {
     public async Task<LoginBootstrap> BuildAsync(Guid userId, CancellationToken cancellationToken)

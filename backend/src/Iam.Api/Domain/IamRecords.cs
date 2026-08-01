@@ -1,3 +1,5 @@
+using MageRide.Shared.Auth;
+
 namespace MageRide.Iam.Domain;
 
 /// <summary>A row of <c>iam.users</c>, as far as the auth half of iam-svc reads it.</summary>
@@ -77,10 +79,10 @@ public sealed record FederatedIdentity(
     DateTimeOffset LinkedAt,
     DateTimeOffset? LastLoginAt);
 
-/// <summary>
-/// A row of <c>iam.fleet_members</c> — the <c>fleet_role</c> / <c>fleet_id</c> claim pair (AL-03).
-/// </summary>
-public sealed record FleetMembership(Guid FleetId, string FleetRole);
+// A row of iam.fleet_members — the fleet_role / fleet_id claim pair (AL-03) — is
+// MageRide.Shared.Auth.FleetScope. It moved into the kernel with the URD §2.3 matrix (C062): the
+// evaluator that narrows the fleet_owner column by it is now shared, and two records of the same
+// shape either side of that boundary is how the two start disagreeing.
 
 /// <summary>
 /// Everything a session and its access token need about the account behind it.
@@ -95,7 +97,7 @@ public sealed record FleetMembership(Guid FleetId, string FleetRole);
 public sealed record SessionPrincipal(
     Guid UserId,
     IReadOnlyList<string> Roles,
-    FleetMembership? Fleet);
+    FleetScope? Fleet);
 
 /// <summary>
 /// What <c>POST /v1/auth/mqtt-token</c> needs to know about a vehicle before it mints a

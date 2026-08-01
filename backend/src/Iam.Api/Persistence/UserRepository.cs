@@ -1,5 +1,6 @@
 using Dapper;
 using MageRide.Iam.Domain;
+using MageRide.Shared.Auth;
 using Npgsql;
 
 namespace MageRide.Iam.Persistence;
@@ -37,7 +38,7 @@ public interface IUserRepository
     /// The account's fleet membership, or <see langword="null"/>. Becomes the
     /// <c>fleet_role</c>/<c>fleet_id</c> claim pair (AL-03).
     /// </summary>
-    Task<FleetMembership?> FleetMembershipAsync(
+    Task<FleetScope?> FleetScopeAsync(
         NpgsqlConnection connection, NpgsqlTransaction? transaction, Guid userId, CancellationToken cancellationToken);
 
     /// <summary>The roles and fleet scope one access token needs, in one round trip.</summary>
@@ -149,7 +150,7 @@ public sealed class UserRepository : IUserRepository
         return [.. roles];
     }
 
-    public Task<FleetMembership?> FleetMembershipAsync(
+    public Task<FleetScope?> FleetScopeAsync(
         NpgsqlConnection connection, NpgsqlTransaction? transaction, Guid userId, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(connection);
@@ -157,7 +158,7 @@ public sealed class UserRepository : IUserRepository
         // A person can be a member of more than one fleet; the token carries one pair, so the
         // most privileged membership wins and the rest are reachable per-fleet through fleet-svc
         // (C058). owner > manager > viewer, matching FleetRoles.Rank.
-        return connection.QuerySingleOrDefaultAsync<FleetMembership>(new CommandDefinition(
+        return connection.QuerySingleOrDefaultAsync<FleetScope>(new CommandDefinition(
             """
             SELECT fleet_id, fleet_role
               FROM iam.fleet_members
@@ -174,7 +175,7 @@ public sealed class UserRepository : IUserRepository
         NpgsqlConnection connection, NpgsqlTransaction? transaction, Guid userId, CancellationToken cancellationToken)
     {
         var roles = await RolesAsync(connection, transaction, userId, cancellationToken);
-        var fleet = await FleetMembershipAsync(connection, transaction, userId, cancellationToken);
+        var fleet = await FleetScopeAsync(connection, transaction, userId, cancellationToken);
 
         return new SessionPrincipal(userId, roles, fleet);
     }
