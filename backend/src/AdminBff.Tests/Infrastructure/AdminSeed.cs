@@ -327,6 +327,84 @@ internal sealed class AdminSeed(PostgresFixture postgres)
     }
 
     /// <summary>
+    /// A driver whose bank &amp; payout profile is waiting on an officer (AL-58, AL-59).
+    /// </summary>
+    /// <param name="alreadyVerified">
+    /// When true the driver already has a <c>verified</c> profile and the pending row is an edit —
+    /// which is the case BR-31.1 exists for, and the one the supersede ordering is about.
+    /// </param>
+    public async Task<(Guid DriverId, Guid ProfileId, Guid ProofUploadId, Guid QrUploadId)>
+        DriverAwaitingPayoutAsync(bool alreadyVerified = false)
+    {
+        var driverId = Guid.CreateVersion7();
+        var profileId = Guid.CreateVersion7();
+        var proofUploadId = Guid.CreateVersion7();
+        var qrUploadId = Guid.CreateVersion7();
+
+        await using var connection = await postgres.OpenAsync();
+
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO iam.users (id, email, role, first_name)
+            VALUES (@DriverId, @Email, 'driver', 'Nimal');
+            INSERT INTO iam.user_roles (user_id, role) VALUES (@DriverId, 'driver') ON CONFLICT DO NOTHING;
+
+            INSERT INTO registry.driver_profiles (driver_id, display_name)
+            VALUES (@DriverId, 'Nimal Perera')
+            ON CONFLICT (driver_id) DO NOTHING;
+
+            INSERT INTO docs.uploads (id, owner_id, storage_url, kind)
+            VALUES (@ProofUploadId, @DriverId, @ProofUrl, 'bank_statement'),
+                   (@QrUploadId,    @DriverId, @QrUrl,    'lankaqr_code');
+
+            -- Explicitly older than the pending row. Both INSERTs share one transaction, so a
+            -- bare now() would give them the SAME created_at and "which version is current" would
+            -- be a coin toss. It is also what actually happened: the incumbent was approved before
+            -- the driver edited it.
+            INSERT INTO registry.driver_payout_profiles
+                (driver_id, bank, branch, account_no, account_holder_name, status,
+                 verified_at, created_at)
+            SELECT @DriverId, 'Bank of Ceylon', 'Kollupitiya', '0070000001', 'Nimal Perera',
+                   'verified', now() - interval '30 days', now() - interval '30 days'
+             WHERE @AlreadyVerified;
+
+            INSERT INTO registry.driver_payout_profiles
+                (id, driver_id, bank, branch, account_no, account_holder_name,
+                 proof_upload_id, lankaqr_upload_id, status)
+            VALUES (@ProfileId, @DriverId, 'Sampath Bank', 'Nugegoda', '0079999999', 'Nimal Perera',
+                    @ProofUploadId, @QrUploadId, 'pending_verification');
+            """,
+            new
+            {
+                DriverId = driverId,
+                ProfileId = profileId,
+                ProofUploadId = proofUploadId,
+                QrUploadId = qrUploadId,
+                AlreadyVerified = alreadyVerified,
+                Email = $"{driverId:N}@driver.test",
+                ProofUrl = $"s3://mageride-docs/payout/{proofUploadId:N}.pdf",
+                QrUrl = $"s3://mageride-docs/payout/{qrUploadId:N}.png",
+            });
+
+        return (driverId, profileId, proofUploadId, qrUploadId);
+    }
+
+    /// <summary>Every version of a driver's payout profile, newest first — the BR-31.1 assertion.</summary>
+    public async Task<IReadOnlyList<string>> DriverPayoutStatusesAsync(Guid driverId)
+    {
+        await using var connection = await postgres.OpenAsync();
+
+        var rows = await connection.QueryAsync<string>(
+            """
+            SELECT status FROM registry.driver_payout_profiles
+             WHERE driver_id = @Id ORDER BY created_at DESC;
+            """,
+            new { Id = driverId });
+
+        return [.. rows];
+    }
+
+    /// <summary>
     /// What registry-svc writes when the driver re-uploads after a rejection: a fresh document with
     /// a fresh doubtful field, and the step it belongs to back at <c>pending_review</c>.
     /// </summary>

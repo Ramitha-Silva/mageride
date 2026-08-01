@@ -873,6 +873,119 @@ paths:
   #     `GET · PUT /v1/drivers/payout-profile` (AL-58) and the weekly payout run (payout.yaml).
 
   # Δ C029 — not in D3'; see the C029 handoff.
+  # ---------------------------------------------------------------------------------------
+  # Δ C063 (AL-58 / AL-59) — the Verification Officer's decision on a driver's payout profile.
+  #
+  # WHY HERE AND NOT IN admin-bff. That BFF writes registry.driver_profiles.verified_at itself,
+  # because an identity verdict is one column and no service exposes a route for it. This is not
+  # that: approving a payout profile is BR-31.1's versioning transition — supersede the incumbent,
+  # THEN verify the replacement, in one transaction and in that order, because
+  # ux_driver_payout_verified (migration 0316) admits exactly one verified row per driver. That
+  # invariant belongs to the service that owns the table, and its other half already lives in this
+  # service's DriverPayoutProfileService. fleet-svc made the same call for the fleet's identical
+  # table and its /v1/internal/fleets/** plane exists for this same caller.
+  #
+  # Micro-change-set; recorded in the C063 handoff in build/progress.md.
+  # ---------------------------------------------------------------------------------------
+  /v1/internal/drivers/{driverId}/payout-profile/approve:
+    post:
+      operationId: approveDriverPayoutProfile
+      summary: Verify a driver's bank & payout profile (AL-58).
+      description: |
+        Called by admin-bff on behalf of a Verification Officer (AL-39). **This is the last gate
+        between a driver submitting bank details and being paid** — until a row is `verified`,
+        payout-svc's weekly sweep skips them, their wallet accrues and nothing is lost, but nothing
+        is paid either. It also puts their own LankaQR on the ride pay sheet (AL-59).
+
+        Supersedes the incumbent and verifies the replacement in one transaction, in that order.
+
+        **Idempotent.** With nothing pending the current version is returned unchanged — a second
+        Approve must not rewrite `verified_at` or `verified_by`.
+
+        `officerId` comes in the body because this plane has no bearer: the caller is a service. The
+        audit trail proper is admin-bff's `audit.events` row (D-35), written where the human's token
+        actually is; `verified_by` is this service's own record of who decided.
+      tags: [drivers]
+      security:
+        - mtls: []
+      parameters:
+        - name: driverId
+          in: path
+          required: true
+          schema: { $ref: './_shared.yaml#/components/schemas/Ulid' }
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [officerId]
+              properties:
+                officerId: { $ref: './_shared.yaml#/components/schemas/Ulid' }
+      responses:
+        '200':
+          description: The version the decision landed on.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DriverPayoutDecision'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-error, unauthorized, payout-profile-not-found, conflict]
+
+  /v1/internal/drivers/{driverId}/payout-profile/reject:
+    post:
+      operationId: rejectDriverPayoutProfile
+      summary: Refuse a driver's bank & payout profile, with a reason (AL-58).
+      description: |
+        **The incumbent is never disturbed.** A mismatched account-holder name is a reason to refuse
+        the *edit*, not a reason to stop paying a driver into details an officer already approved.
+
+        `reason` is mandatory and is shown verbatim on SCR-DA-022a.
+
+        Only a version awaiting verification can be refused — unlike Approve this is a `409` rather
+        than a no-op, because writing a refusal onto an already-decided version would stop an
+        approved driver's payouts by a mis-click.
+      tags: [drivers]
+      security:
+        - mtls: []
+      parameters:
+        - name: driverId
+          in: path
+          required: true
+          schema: { $ref: './_shared.yaml#/components/schemas/Ulid' }
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [officerId, reason]
+              properties:
+                officerId: { $ref: './_shared.yaml#/components/schemas/Ulid' }
+                reason:
+                  type: string
+                  maxLength: 1000
+                  description: Shown verbatim to the driver.
+      responses:
+        '200':
+          description: The version the decision landed on.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DriverPayoutDecision'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-error, unauthorized, payout-profile-not-found, conflict]
+
   /v1/internal/vehicles/{vehicleId}/onboarding/recompute:
     post:
       operationId: recomputeVehicleOnboarding
@@ -951,6 +1064,25 @@ components:
         $ref: './_shared.yaml#/components/schemas/Ulid'
 
   schemas:
+    DriverPayoutDecision:
+      type: object
+      description: One version of a driver's payout profile, after an officer decided on it.
+      required: [profileId, driverId, bank, branch, accountNo, accountHolderName, status]
+      properties:
+        profileId: { $ref: './_shared.yaml#/components/schemas/Ulid' }
+        driverId: { $ref: './_shared.yaml#/components/schemas/Ulid' }
+        bank: { type: string }
+        branch: { type: string }
+        accountNo: { type: string }
+        accountHolderName: { type: string }
+        proofDocId: { type: string, nullable: true }
+        lankaqrDocId: { type: string, nullable: true }
+        status:
+          type: string
+          enum: [pending_verification, verified, rejected, superseded]
+        rejectionReason: { type: string, nullable: true }
+        verifiedAt: { type: string, format: date-time, nullable: true }
+
     DriverPayoutProfile:
       type: object
       description: '**Δ AL-58/AL-59.** One version of a driver''s bank & payout details.'

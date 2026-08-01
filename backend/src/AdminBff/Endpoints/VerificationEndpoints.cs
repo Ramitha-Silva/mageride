@@ -49,7 +49,29 @@ internal static class VerificationEndpoints
             .WithSummary("Fleet organisations awaiting KYC and payout verification (AL-49).")
             .RequireFeature(FeatureAreas.Verification, PermissionGrant.Read);
 
+        admin.MapGet("/verification/queues/driver-payout", ListDriverPayoutQueueAsync)
+            .WithName("listDriverPayoutQueue")
+            .WithSummary("Drivers awaiting a bank & payout decision (AL-58, AL-59).")
+            .RequireFeature(FeatureAreas.Verification, PermissionGrant.Read);
+
         // Before the subject route, so the literal segment is what a two-segment path matches.
+        admin.MapGet("/verification/payout/{driverId:guid}", GetDriverPayoutAsync)
+            .WithName("getDriverPayoutVerification")
+            .WithSummary("A driver's bank details and payout evidence (AL-58, AL-59).")
+            .RequireFeature(FeatureAreas.Verification, PermissionGrant.Read);
+
+        admin.MapPost("/verification/payout/{driverId:guid}/approve", ApproveDriverPayoutAsync)
+            .WithName("approveDriverPayoutProfile")
+            .WithSummary("Verify where a driver's swept earnings go (AL-58).")
+            .RequireFeature(FeatureAreas.Verification, PermissionGrant.Write)
+            .Audited(AdminAuditActions.PayoutProfileApproved, AdminAuditActions.PayoutProfileEntity);
+
+        admin.MapPost("/verification/payout/{driverId:guid}/reject", RejectDriverPayoutAsync)
+            .WithName("rejectDriverPayoutProfile")
+            .WithSummary("Refuse a driver's bank details, with a reason (AL-58).")
+            .RequireFeature(FeatureAreas.Verification, PermissionGrant.Write)
+            .Audited(AdminAuditActions.PayoutProfileRejected, AdminAuditActions.PayoutProfileEntity);
+
         admin.MapGet("/verification/org/{orgId:guid}", GetOrgVerificationAsync)
             .WithName("getOrgVerification")
             .WithSummary("Fleet-org KYC, payout profile and evidence (SCR-AP-003c).")
@@ -129,6 +151,82 @@ internal static class VerificationEndpoints
 
         return TypedResults.Ok(await verification.OrgQueueAsync(
             search, status, PageRequest.Create(cursor, limit), context, cancellationToken));
+    }
+
+    private static async Task<Ok<CursorPage<DriverPayoutQueueRowResponse>>> ListDriverPayoutQueueAsync(
+        string? search,
+        string? status,
+        string? cursor,
+        int? limit,
+        IVerificationService verification,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(verification);
+
+        return TypedResults.Ok(await verification.DriverPayoutQueueAsync(
+            search, status, PageRequest.Create(cursor, limit), cancellationToken));
+    }
+
+    private static async Task<Ok<DriverPayoutVerificationResponse>> GetDriverPayoutAsync(
+        Guid driverId,
+        IVerificationService verification,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(verification);
+
+        return TypedResults.Ok(await verification.DriverPayoutDetailAsync(driverId, cancellationToken));
+    }
+
+    /// <remarks>
+    /// <b>Not the same decision as <c>POST /verification/{driverId}/approve</c>, and deliberately
+    /// not the same route.</b> That one is the driver's identity — their licence and their NIC. This
+    /// one authorises money to be sent to a bank account. The ADD (§1.18 AL-58) describes the
+    /// officer deciding this "through the existing AL-39 queue, whose subject-agnostic routes
+    /// already take a driver id": the queue family is reused, but sharing the verdict route would
+    /// have made one button decide two unrelated questions — and a refusal aimed at an illegible
+    /// bank statement would have refused the driver's licence and stopped them driving. Raised as a
+    /// micro-change-set.
+    /// </remarks>
+    private static async Task<Ok<DriverPayoutDecisionResponse>> ApproveDriverPayoutAsync(
+        Guid driverId,
+        HttpContext context,
+        IVerificationService verification,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(verification);
+
+        return TypedResults.Ok(await verification.ApproveDriverPayoutAsync(
+            driverId, context.User.RequireSubjectId(), context, cancellationToken));
+    }
+
+    private static async Task<Ok<DriverPayoutDecisionResponse>> RejectDriverPayoutAsync(
+        Guid driverId,
+        ReasonBody? body,
+        HttpContext context,
+        IVerificationService verification,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(verification);
+
+        var reason = body?.Reason?.Trim();
+
+        if (string.IsNullOrEmpty(reason) || reason.Length > 1000)
+        {
+            // Shown verbatim on SCR-DA-022a. "Rejected" with nothing to read leaves a driver unable
+            // to fix the one thing standing between them and being paid.
+            throw new MageRideValidationException(new Dictionary<string, string[]>(StringComparer.Ordinal)
+            {
+                ["reason"] =
+                [
+                    "reason is required, must be at most 1000 characters, and is shown verbatim to the driver.",
+                ],
+            });
+        }
+
+        return TypedResults.Ok(await verification.RejectDriverPayoutAsync(
+            driverId, reason, context.User.RequireSubjectId(), context, cancellationToken));
     }
 
     private static async Task<Ok<VerificationDetailResponse>> GetVerificationSubjectAsync(

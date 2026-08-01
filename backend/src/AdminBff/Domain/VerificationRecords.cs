@@ -190,3 +190,74 @@ public static class DocumentSources
     /// <summary>An AL-49 payout document, which has no <c>registry.documents</c> row.</summary>
     public const string DocsUploads = "docs.uploads";
 }
+
+/// <summary>
+/// A driver waiting on a bank &amp; payout decision (AL-58, AL-59) — SCR-AP-003's fourth tab.
+/// </summary>
+/// <remarks>
+/// <para>
+/// <b>This queue is not built from <c>registry.document_fields</c>, and it cannot be.</b> The other
+/// two are "has a flagged extracted field", which is AL-27's fence expressed as a query — but
+/// nothing extracts fields from a bank statement, exactly as nothing does for a fleet's (the org
+/// rail says so in as many words). Membership here is the profile's own
+/// <c>status = 'pending_verification'</c>, which the partial index <c>ix_driver_payout_pending</c>
+/// (migration 0316) exists to serve and whose comment names this queue.
+/// </para>
+/// <para>
+/// <b>Why it is a tab of its own rather than rows on the licence queue.</b> A payout profile is
+/// submitted and edited independently of identity, repeatedly, years apart (BR-31.1) — a driver
+/// approved in March who changes banks in September has nothing pending on their licence and would
+/// appear in no queue at all. That is the gap this closes.
+/// </para>
+/// </remarks>
+public sealed record DriverPayoutQueueRow(
+    Guid DriverId,
+    string Name,
+    string Bank,
+    string AccountNo,
+    DateTimeOffset SubmittedAt,
+    bool HasProof,
+    bool HasLankaQr,
+    /// <summary>The driver's <em>identity</em> verdict, not this profile's — see below.</summary>
+    string Status);
+
+/// <summary>One version of where a driver's swept earnings go, as the officer reads it.</summary>
+public sealed record DriverPayoutProfileRow(
+    Guid ProfileId,
+    Guid DriverId,
+    string Name,
+    string Bank,
+    string Branch,
+    string AccountNo,
+    string AccountHolderName,
+    Guid? ProofUploadId,
+    Guid? LankaqrUploadId,
+    string Status,
+    string? RejectionReason,
+    DateTimeOffset? VerifiedAt);
+
+/// <summary>
+/// <c>registry.driver_payout_profiles.status</c> (migration 0316), as this service reads it.
+/// </summary>
+/// <remarks>
+/// Declared here rather than referenced from registry-svc: a BFF that took a project reference on a
+/// service would be able to reach its repositories, and the wire is the contract between them. The
+/// value is the database's, and the CHECK constraint is what keeps the two honest.
+/// </remarks>
+public static class DriverPayoutStatuses
+{
+    public const string PendingVerification = "pending_verification";
+    public const string Verified = "verified";
+    public const string Rejected = "rejected";
+    public const string Superseded = "superseded";
+}
+
+/// <summary>The two evidence slots on an AL-58 payout profile, as the officer's lightbox labels them.</summary>
+public static class DriverPayoutDocumentKinds
+{
+    /// <summary>A bank statement or a passbook first page — one column, so the label is the slot.</summary>
+    public const string ProofOfAccount = "proof_of_account";
+
+    /// <summary>AL-59: the driver's own bank-app LankaQR, which a passenger scans to pay them.</summary>
+    public const string LankaqrCode = "lankaqr_code";
+}

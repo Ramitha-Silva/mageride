@@ -76,6 +76,18 @@ public interface IVerificationService
         Guid subjectId, string reason, Guid officerId, HttpContext context, CancellationToken cancellationToken);
 
     Task<DocumentView> ViewDocumentAsync(Guid docId, string? variant, CancellationToken cancellationToken);
+
+    Task<CursorPage<DriverPayoutQueueRowResponse>> DriverPayoutQueueAsync(
+        string? search, string? status, PageRequest page, CancellationToken cancellationToken);
+
+    Task<DriverPayoutVerificationResponse> DriverPayoutDetailAsync(
+        Guid driverId, CancellationToken cancellationToken);
+
+    Task<DriverPayoutDecisionResponse> ApproveDriverPayoutAsync(
+        Guid driverId, Guid officerId, HttpContext context, CancellationToken cancellationToken);
+
+    Task<DriverPayoutDecisionResponse> RejectDriverPayoutAsync(
+        Guid driverId, string reason, Guid officerId, HttpContext context, CancellationToken cancellationToken);
 }
 
 /// <inheritdoc cref="IVerificationService"/>
@@ -852,6 +864,167 @@ internal sealed class VerificationService(
     }
 
     // ---------------------------------------------------------------------------------------
+    // The driver's bank & payout profile (AL-58, AL-59)
+    // ---------------------------------------------------------------------------------------
+
+    public async Task<CursorPage<DriverPayoutQueueRowResponse>> DriverPayoutQueueAsync(
+        string? search, string? status, PageRequest page, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(page);
+
+        var rows = await verification.DriverPayoutQueueAsync(
+            QueryFor(search, status, page), cancellationToken);
+
+        return CursorPage<DriverPayoutQueueRow>.FromOverfetch(
+                rows, page.Limit, row => QueueCursors.Encode(row.SubmittedAt, row.DriverId))
+            .Select(row => new DriverPayoutQueueRowResponse(
+                row.DriverId, row.Name, row.Bank, row.AccountNo,
+                row.SubmittedAt, row.HasProof, row.HasLankaQr, row.Status));
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <b>The evidence is opened through the same audited viewer as everything else.</b> A payout
+    /// document is a <c>docs.uploads</c> row with no <c>registry.documents</c> row — exactly like
+    /// AL-49's — and <c>FindDocumentSql</c>'s second branch already resolves it, so the officer's
+    /// lightbox and its <c>DOC_VIEW</c> row work here with nothing added.
+    /// </para>
+    /// <para>
+    /// <b><c>approvable</c> is "there is something to decide", not "the evidence is sufficient".</b>
+    /// Whether a bank statement actually shows this account is the judgement the officer is there to
+    /// make, and a rule that refused Approve without an upload would be this service overruling
+    /// them — a driver may well have proved their account another way. What it does exclude is
+    /// pressing Approve on a version somebody already decided.
+    /// </para>
+    /// </remarks>
+    public async Task<DriverPayoutVerificationResponse> DriverPayoutDetailAsync(
+        Guid driverId, CancellationToken cancellationToken)
+    {
+        var profile = await RequirePayoutProfileAsync(driverId, cancellationToken);
+
+        return new DriverPayoutVerificationResponse(
+            profile.DriverId,
+            profile.Name,
+            profile.Bank,
+            profile.Branch,
+            profile.AccountNo,
+            profile.AccountHolderName,
+            profile.Status,
+            profile.RejectionReason,
+            profile.VerifiedAt,
+            [
+                .. PayoutDocuments(profile).Select(pair => new DocumentRefResponse(
+                    pair.DocId,
+                    pair.Kind,
+                    links.Create(pair.DocId, DocumentVariants.Thumb),
+                    links.Create(pair.DocId, DocumentVariants.Full),
+                    // fleet-svc leaves captured_via NULL on a payout document and registry-svc now
+                    // does the same: AL-43's provenance is about onboarding photographs, and a bank
+                    // statement is exported from a banking app.
+                    CapturedVia: null)),
+            ],
+            Approvable: profile.Status == DriverPayoutStatuses.PendingVerification);
+    }
+
+    /// <summary>The two evidence slots, in the order the officer reads them.</summary>
+    private static IEnumerable<(Guid DocId, string Kind)> PayoutDocuments(DriverPayoutProfileRow profile)
+    {
+        if (profile.ProofUploadId is { } proof)
+        {
+            // The kind is on the docs.uploads row and is either bank_statement or
+            // passbook_first_page; the column cannot say which, so the label is the slot.
+            yield return (proof, DriverPayoutDocumentKinds.ProofOfAccount);
+        }
+
+        if (profile.LankaqrUploadId is { } qr)
+        {
+            yield return (qr, DriverPayoutDocumentKinds.LankaqrCode);
+        }
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <b>Forwarded to registry-svc, and that is the BFF rule rather than an accident.</b> Approving
+    /// is BR-31.1's versioning transition — supersede the incumbent, then verify the replacement, in
+    /// one transaction and in that order, because <c>ux_driver_payout_verified</c> admits one
+    /// verified row. That invariant belongs to the service that owns the table and whose repository
+    /// already holds its other half. The driver's *identity* verdict is written here for the
+    /// opposite reason: it is one column and nobody exposes a route for it.
+    /// </para>
+    /// <para>
+    /// <b>This is a different decision from approving the driver, on the same id.</b> It gets its own
+    /// action and its own entity type, because "I checked this bank statement against this account
+    /// number" and "I checked this driving licence" are different claims — and an officer refusing
+    /// an illegible statement must not thereby refuse somebody's licence and stop them driving.
+    /// </para>
+    /// </remarks>
+    public async Task<DriverPayoutDecisionResponse> ApproveDriverPayoutAsync(
+        Guid driverId, Guid officerId, HttpContext context, CancellationToken cancellationToken)
+    {
+        var before = await RequirePayoutProfileAsync(driverId, cancellationToken);
+
+        var decided = await DecideAsync(driverId, officerId, reason: null, context, cancellationToken);
+
+        audit.Record(
+            driverId,
+            before: new { status = before.Status, accountNo = before.AccountNo, bank = before.Bank },
+            after: new { status = decided.Status, accountNo = decided.AccountNo, bank = decided.Bank },
+            action: AdminAuditActions.PayoutProfileApproved,
+            entityType: AdminAuditActions.PayoutProfileEntity);
+
+        logger.LogInformation(
+            "Officer {OfficerId} approved driver {DriverId}'s payout profile. payout-svc's weekly sweep "
+            + "can now pay them (AL-58).",
+            officerId,
+            driverId);
+
+        return new DriverPayoutDecisionResponse(driverId, decided.Status, Reason: null, decided.VerifiedAt);
+    }
+
+    public async Task<DriverPayoutDecisionResponse> RejectDriverPayoutAsync(
+        Guid driverId, string reason, Guid officerId, HttpContext context, CancellationToken cancellationToken)
+    {
+        var before = await RequirePayoutProfileAsync(driverId, cancellationToken);
+
+        var decided = await DecideAsync(driverId, officerId, reason, context, cancellationToken);
+
+        audit.Record(
+            driverId,
+            before: new { status = before.Status, accountNo = before.AccountNo, bank = before.Bank },
+            after: new { status = decided.Status, reason },
+            action: AdminAuditActions.PayoutProfileRejected,
+            entityType: AdminAuditActions.PayoutProfileEntity);
+
+        return new DriverPayoutDecisionResponse(
+            driverId, decided.Status, decided.RejectionReason ?? reason, decided.VerifiedAt);
+    }
+
+    private async Task<DriverPayoutDecision> DecideAsync(
+        Guid driverId, Guid officerId, string? reason, HttpContext context, CancellationToken cancellationToken)
+    {
+        var verdict = reason is null ? "approve" : "reject";
+
+        using var request = upstream.Request(
+            AdminUpstreams.Registry,
+            HttpMethod.Post,
+            $"/v1/internal/drivers/{driverId:D}/payout-profile/{verdict}");
+
+        request.Content = System.Net.Http.Json.JsonContent.Create(
+            new { officerId = officerId.ToString(), reason }, options: MageRideJson.Options);
+
+        return await upstream.SendAsync<DriverPayoutDecision>(
+            AdminUpstreams.Registry, request, context, cancellationToken);
+    }
+
+    private async Task<DriverPayoutProfileRow> RequirePayoutProfileAsync(
+        Guid driverId, CancellationToken cancellationToken) =>
+        await verification.FindDriverPayoutAsync(driverId, cancellationToken)
+        ?? throw new MageRideException(
+            MageRideErrors.PayoutProfileNotFound,
+            $"Driver {driverId} has not submitted a bank and payout profile. Their earnings accrue on their "
+            + "wallet and are never lost, but nothing can be paid out until they do (AL-58).");
+
+    // ---------------------------------------------------------------------------------------
     // Plumbing
     // ---------------------------------------------------------------------------------------
 
@@ -912,6 +1085,9 @@ internal sealed class VerificationService(
 
     // The upstream shapes, declared here rather than shared: they are another service's wire
     // format and this is the only place that reads them.
+    private sealed record DriverPayoutDecision(
+        string Status, string Bank, string AccountNo, string? RejectionReason, DateTimeOffset? VerifiedAt);
+
     private sealed record FleetQueuePage(IReadOnlyList<FleetQueueRow>? Items);
 
     private sealed record FleetQueueRow(

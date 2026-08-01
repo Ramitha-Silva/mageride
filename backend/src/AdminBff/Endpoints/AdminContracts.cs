@@ -286,3 +286,36 @@ public sealed record AdminMenuGroupResponse(
 
 /// <inheritdoc cref="AdminMenuGroupResponse"/>
 public sealed record AdminMenuItemResponse(string Key, string LabelKey, string Path, string OwnedBy);
+
+/// <summary>SCR-AP-003 tab 4 — a driver awaiting a bank &amp; payout decision (AL-58, AL-59).</summary>
+/// <param name="Status">
+/// The driver's <b>identity</b> verdict, as on the other tabs. Every row here is by construction
+/// awaiting a payout decision, so repeating that would say nothing.
+/// </param>
+public sealed record DriverPayoutQueueRowResponse(
+    Guid DriverId,
+    string Name,
+    string Bank,
+    string AccountNo,
+    DateTimeOffset SubmittedAt,
+    bool HasProof,
+    bool HasLankaQr,
+    string Status);
+
+/// <summary>SCR-AP-003c's sibling for a driver — what the officer decides on (AL-58, AL-59).</summary>
+public sealed record DriverPayoutVerificationResponse(
+    Guid DriverId,
+    string Name,
+    string Bank,
+    string Branch,
+    string AccountNo,
+    string AccountHolderName,
+    string Status,
+    string? RejectionReason,
+    DateTimeOffset? VerifiedAt,
+    IReadOnlyList<DocumentRefResponse> Documents,
+    bool Approvable);
+
+/// <summary>The verdict, echoed back with the version it landed on.</summary>
+public sealed record DriverPayoutDecisionResponse(
+    Guid DriverId, string Status, string? Reason, DateTimeOffset? VerifiedAt);

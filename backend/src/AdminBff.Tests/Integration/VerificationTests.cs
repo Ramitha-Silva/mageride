@@ -635,4 +635,220 @@ public sealed class VerificationTests(PostgresFixture postgres)
                 .Select(item => Guid.Parse(item.GetProperty("vehicleId").GetString()!)),
         ];
     }
+
+    // ---------------------------------------------------------------------------------------
+    // Δ C063 (AL-58 / AL-59) — the driver's bank & payout profile.
+    // ---------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// The gap these routes exist to close: a driver waiting to be paid, in a queue.
+    /// </summary>
+    /// <remarks>
+    /// Before this tab a pending payout profile appeared in no queue at all — the other two are
+    /// "has a flagged <c>registry.document_fields</c> row" and nothing extracts fields from a bank
+    /// statement. A driver approved in March who changed banks in September was invisible, so
+    /// payout-svc skipped them for ever while their wallet accrued.
+    /// </remarks>
+    [Fact]
+    public async Task A_driver_awaiting_a_payout_decision_is_in_the_queue()
+    {
+        Assert.SkipWhen(!postgres.IsAvailable, postgres.SkipReason ?? string.Empty);
+
+        await using var harness = await AdminBffHarness.StartAsync(postgres);
+
+        var (driverId, _, _, _) = await harness.Seed.DriverAwaitingPayoutAsync();
+        var officer = await harness.Seed.InternalUserAsync(MageRideRoles.VerificationOfficer);
+
+        using var response = await harness.GetAsync(
+            "/v1/admin/verification/queues/driver-payout", harness.Tokens.Internal(officer, MageRideRoles.VerificationOfficer));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        using var page = await harness.ReadJsonAsync(response);
+        var row = page.RootElement.GetProperty("items").EnumerateArray()
+            .Single(item => item.GetProperty("driverId").GetGuid() == driverId);
+
+        Assert.Equal("Sampath Bank", row.GetProperty("bank").GetString());
+        Assert.Equal("0079999999", row.GetProperty("accountNo").GetString());
+
+        // Both evidence slots are flagged on the list so the officer knows there is something to
+        // open before opening the row.
+        Assert.True(row.GetProperty("hasProof").GetBoolean());
+        Assert.True(row.GetProperty("hasLankaQr").GetBoolean());
+
+        // The driver's IDENTITY verdict, not the profile's — every row here is by construction
+        // awaiting a payout decision, so repeating that would say nothing.
+        Assert.Equal("PENDING", row.GetProperty("status").GetString());
+    }
+
+    /// <summary>The evidence is opened through the audited viewer, like every other document.</summary>
+    [Fact]
+    public async Task The_payout_detail_links_both_documents_at_the_audited_viewer()
+    {
+        Assert.SkipWhen(!postgres.IsAvailable, postgres.SkipReason ?? string.Empty);
+
+        await using var harness = await AdminBffHarness.StartAsync(postgres);
+
+        var (driverId, _, proofUploadId, qrUploadId) = await harness.Seed.DriverAwaitingPayoutAsync();
+        var officer = await harness.Seed.InternalUserAsync(MageRideRoles.VerificationOfficer);
+
+        using var response = await harness.GetAsync(
+            $"/v1/admin/verification/payout/{driverId:D}",
+            harness.Tokens.Internal(officer, MageRideRoles.VerificationOfficer));
+
+        using var detail = await harness.ReadJsonAsync(response);
+        var body = detail.RootElement;
+
+        Assert.Equal("Sampath Bank", body.GetProperty("bank").GetString());
+        Assert.Equal("Nugegoda", body.GetProperty("branch").GetString());
+        Assert.True(body.GetProperty("approvable").GetBoolean());
+
+        var documents = body.GetProperty("documents").EnumerateArray().ToArray();
+
+        Assert.Equal(2, documents.Length);
+
+        // Not a bucket URL. AL-39 asks for a short-lived signed URL *and* a DOC_VIEW row per read,
+        // and a pre-signed link in thumbUrl would give the first and silently drop the second.
+        foreach (var document in documents)
+        {
+            Assert.StartsWith(
+                $"/v1/admin/documents/{document.GetProperty("docId").GetGuid():D}",
+                document.GetProperty("fullUrl").GetString(),
+                StringComparison.Ordinal);
+        }
+
+        Assert.Contains(documents, d => d.GetProperty("docId").GetGuid() == proofUploadId);
+        Assert.Contains(documents, d => d.GetProperty("docId").GetGuid() == qrUploadId);
+    }
+
+    /// <summary>
+    /// The approval that lets payout-svc pay the driver — forwarded, and audited as its own fact.
+    /// </summary>
+    [Fact]
+    public async Task Approving_a_payout_profile_supersedes_the_incumbent_and_is_its_own_audit_row()
+    {
+        Assert.SkipWhen(!postgres.IsAvailable, postgres.SkipReason ?? string.Empty);
+
+        await using var harness = await AdminBffHarness.StartAsync(postgres);
+
+        var (driverId, _, _, _) = await harness.Seed.DriverAwaitingPayoutAsync(alreadyVerified: true);
+        var officer = await harness.Seed.InternalUserAsync(MageRideRoles.VerificationOfficer);
+
+        using var response = await harness.SendAsync(
+            HttpMethod.Post,
+            $"/v1/admin/verification/payout/{driverId:D}/approve",
+            harness.Tokens.Internal(officer, MageRideRoles.VerificationOfficer));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        using var document = await harness.ReadJsonAsync(response);
+
+        Assert.Equal("verified", document.RootElement.GetProperty("status").GetString());
+
+        // BR-31.1: the edit is now the verified row and the incumbent is superseded, not deleted.
+        Assert.Equal(["verified", "superseded"], await harness.Seed.DriverPayoutStatusesAsync(driverId));
+
+        // PAYOUT_PROFILE_APPROVED, not VERIFICATION_APPROVED. "I checked this statement against this
+        // account number and authorised money to be sent there" is not "I checked a licence" — and
+        // an auditor asking who approved paying this driver must not have to infer it from a
+        // decision about a photograph.
+        var rows = await harness.Seed.AuditRowsByActionAsync(AdminAuditActions.PayoutProfileApproved);
+        var audited = Assert.Single(rows, row => row.EntityId == driverId);
+
+        Assert.Equal(AdminAuditActions.PayoutProfileEntity, audited.EntityType);
+    }
+
+    /// <summary>The rule that is about somebody's wages.</summary>
+    [Fact]
+    public async Task Rejecting_a_payout_edit_never_stops_the_money_already_flowing()
+    {
+        Assert.SkipWhen(!postgres.IsAvailable, postgres.SkipReason ?? string.Empty);
+
+        await using var harness = await AdminBffHarness.StartAsync(postgres);
+
+        var (driverId, _, _, _) = await harness.Seed.DriverAwaitingPayoutAsync(alreadyVerified: true);
+        var officer = await harness.Seed.InternalUserAsync(MageRideRoles.VerificationOfficer);
+
+        using var response = await harness.SendAsync(
+            HttpMethod.Post,
+            $"/v1/admin/verification/payout/{driverId:D}/reject",
+            harness.Tokens.Internal(officer, MageRideRoles.VerificationOfficer),
+            new { reason = "The account holder name does not match the NIC on file." });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        // The incumbent is untouched: refusing the EDIT is not a reason to stop paying a driver
+        // into details an officer already approved.
+        Assert.Equal(["rejected", "verified"], await harness.Seed.DriverPayoutStatusesAsync(driverId));
+
+        var rows = await harness.Seed.AuditRowsByActionAsync(AdminAuditActions.PayoutProfileRejected);
+
+        Assert.Single(rows, row => row.EntityId == driverId);
+    }
+
+    [Fact]
+    public async Task A_refusal_with_no_reason_is_refused()
+    {
+        Assert.SkipWhen(!postgres.IsAvailable, postgres.SkipReason ?? string.Empty);
+
+        await using var harness = await AdminBffHarness.StartAsync(postgres);
+
+        var (driverId, _, _, _) = await harness.Seed.DriverAwaitingPayoutAsync();
+        var officer = await harness.Seed.InternalUserAsync(MageRideRoles.VerificationOfficer);
+
+        using var response = await harness.SendAsync(
+            HttpMethod.Post,
+            $"/v1/admin/verification/payout/{driverId:D}/reject",
+            harness.Tokens.Internal(officer, MageRideRoles.VerificationOfficer),
+            new { reason = "  " });
+
+        // Shown verbatim on SCR-DA-022a: "rejected" with nothing to read leaves a driver unable to
+        // fix the one thing standing between them and their money.
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(["pending_verification"], await harness.Seed.DriverPayoutStatusesAsync(driverId));
+    }
+
+    /// <summary>
+    /// Approving a driver's identity does not approve their bank account, and that is the whole
+    /// reason these are two routes.
+    /// </summary>
+    [Fact]
+    public async Task The_identity_verdict_and_the_payout_verdict_are_separate_decisions()
+    {
+        Assert.SkipWhen(!postgres.IsAvailable, postgres.SkipReason ?? string.Empty);
+
+        await using var harness = await AdminBffHarness.StartAsync(postgres);
+
+        var (driverId, _, _, _) = await harness.Seed.DriverAwaitingPayoutAsync();
+        var officer = await harness.Seed.InternalUserAsync(MageRideRoles.VerificationOfficer);
+        var bearer = harness.Tokens.Internal(officer, MageRideRoles.VerificationOfficer);
+
+        // The ADD puts both on "the existing AL-39 queue, whose subject-agnostic routes already
+        // take a driver id". Sharing the verdict route would have made one button decide two
+        // unrelated questions — so approving the identity must leave the bank account undecided.
+        using var identity = await harness.SendAsync(
+            HttpMethod.Post, $"/v1/admin/verification/{driverId:D}/approve", bearer);
+
+        Assert.Equal(HttpStatusCode.OK, identity.StatusCode);
+        Assert.Equal(["pending_verification"], await harness.Seed.DriverPayoutStatusesAsync(driverId));
+
+        var (verifiedAt, _) = await harness.Seed.DriverVerdictAsync(driverId);
+
+        Assert.NotNull(verifiedAt);
+
+        // And the converse, which is the one that matters: refusing an illegible bank statement
+        // must not refuse somebody's licence and stop them driving.
+        using var payout = await harness.SendAsync(
+            HttpMethod.Post,
+            $"/v1/admin/verification/payout/{driverId:D}/reject",
+            bearer,
+            new { reason = "The statement is illegible." });
+
+        Assert.Equal(HttpStatusCode.OK, payout.StatusCode);
+
+        var (stillVerified, rejection) = await harness.Seed.DriverVerdictAsync(driverId);
+
+        Assert.NotNull(stillVerified);
+        Assert.Null(rejection);
+    }
 }

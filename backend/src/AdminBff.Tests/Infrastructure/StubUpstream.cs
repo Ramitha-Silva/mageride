@@ -249,6 +249,58 @@ internal static class StubInternalPlanes
     /// <summary>registry-svc's <c>POST /v1/internal/vehicles/{id}/onboarding/recompute</c> (C029).</summary>
     public static void MapInternalRegistry(this WebApplication app, PostgresFixture postgres)
     {
+        // Δ C063 (AL-58). registry-svc's payout decision, standing in for the real service exactly
+        // as the recompute below does. The ORDER is the part being stood in for — supersede, then
+        // verify — because `ux_driver_payout_verified` admits one verified row per driver. The real
+        // transition is proven against the real code in Registry.Api.Tests; what these routes let
+        // AdminBff.Tests prove is the forwarding, the audit row and the queue.
+        app.MapPost("/v1/internal/drivers/{driverId:guid}/payout-profile/approve", async (
+            Guid driverId, PayoutDecisionRequest body) =>
+        {
+            await using var connection = await postgres.OpenAsync();
+
+            await connection.ExecuteAsync(
+                """
+                UPDATE registry.driver_payout_profiles SET status = 'superseded'
+                 WHERE driver_id = @Id AND status = 'verified'
+                   AND EXISTS (SELECT 1 FROM registry.driver_payout_profiles p
+                                WHERE p.driver_id = @Id AND p.status = 'pending_verification');
+                """,
+                new { Id = driverId });
+
+            var row = await connection.QuerySingleOrDefaultAsync<PayoutDecisionRow>(
+                """
+                UPDATE registry.driver_payout_profiles
+                   SET status = 'verified', verified_by = @OfficerId, verified_at = now(),
+                       rejection_reason = NULL
+                 WHERE driver_id = @Id AND status = 'pending_verification'
+                RETURNING status AS Status, bank AS Bank, account_no AS AccountNo,
+                          rejection_reason AS RejectionReason, verified_at AS VerifiedAt;
+                """,
+                new { Id = driverId, OfficerId = Guid.Parse(body.OfficerId) });
+
+            return row is null ? Results.Conflict() : Results.Ok(row);
+        });
+
+        app.MapPost("/v1/internal/drivers/{driverId:guid}/payout-profile/reject", async (
+            Guid driverId, PayoutDecisionRequest body) =>
+        {
+            await using var connection = await postgres.OpenAsync();
+
+            // The incumbent is untouched — only the pending row is in scope.
+            var row = await connection.QuerySingleOrDefaultAsync<PayoutDecisionRow>(
+                """
+                UPDATE registry.driver_payout_profiles
+                   SET status = 'rejected', rejection_reason = @Reason, verified_by = @OfficerId
+                 WHERE driver_id = @Id AND status = 'pending_verification'
+                RETURNING status AS Status, bank AS Bank, account_no AS AccountNo,
+                          rejection_reason AS RejectionReason, verified_at AS VerifiedAt;
+                """,
+                new { Id = driverId, OfficerId = Guid.Parse(body.OfficerId), body.Reason });
+
+            return row is null ? Results.Conflict() : Results.Ok(row);
+        });
+
         app.MapPost("/v1/internal/vehicles/{vehicleId:guid}/onboarding/recompute", async (Guid vehicleId) =>
         {
             await using var connection = await postgres.OpenAsync();
@@ -559,3 +611,10 @@ internal static class SeedIds
     public static readonly Guid Ticket = Guid.Parse("01930000-0000-7000-8000-000000000003");
     public static readonly Guid TicketUser = Guid.Parse("01930000-0000-7000-8000-000000000004");
 }
+
+/// <summary>What admin-bff sends registry-svc on a payout decision.</summary>
+internal sealed record PayoutDecisionRequest(string OfficerId, string? Reason);
+
+/// <summary>What it sends back.</summary>
+internal sealed record PayoutDecisionRow(
+    string Status, string Bank, string AccountNo, string? RejectionReason, DateTimeOffset? VerifiedAt);

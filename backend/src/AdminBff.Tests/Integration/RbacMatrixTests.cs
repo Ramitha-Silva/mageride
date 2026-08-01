@@ -73,6 +73,10 @@ public sealed class RbacMatrixTests(PostgresFixture postgres)
         ("PUT", "/v1/admin/verification/01930000-0000-7000-8000-0000000000b2/fields/nic_no", """{}"""),
         ("POST", "/v1/admin/verification/01930000-0000-7000-8000-0000000000b2/approve", null),
         ("POST", "/v1/admin/verification/01930000-0000-7000-8000-0000000000b2/reject", """{"reason":"blurred"}"""),
+        ("GET", "/v1/admin/verification/queues/driver-payout", null),
+        ("GET", "/v1/admin/verification/payout/01930000-0000-7000-8000-0000000000b3", null),
+        ("POST", "/v1/admin/verification/payout/01930000-0000-7000-8000-0000000000b3/approve", null),
+        ("POST", "/v1/admin/verification/payout/01930000-0000-7000-8000-0000000000b3/reject", """{"reason":"name mismatch"}"""),
         ("GET", "/v1/admin/documents/01930000-0000-7000-8000-0000000000b3", null),
 
         ("POST", "/v1/admin/vehicles/01930000-0000-7000-8000-0000000000aa/suspend", """{"reason":"test"}"""),

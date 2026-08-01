@@ -53,6 +53,22 @@ public interface IDriverPayoutProfileRepository
     /// <summary>Points a pending version at an uploaded document.</summary>
     Task<DriverPayoutProfile?> AttachDocumentAsync(
         IUnitOfWork unitOfWork, Guid profileId, Guid uploadId, string kind, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The Verification Officer's approval: supersede the incumbent, then verify the replacement.
+    /// </summary>
+    /// <remarks>
+    /// Both statements, one transaction, <b>in this order</b>. <c>ux_driver_payout_verified</c>
+    /// admits one verified row per driver, so verifying first fails on the index — which migration
+    /// 0316 says out loud on the index's own comment rather than leaving to a 23505. Exactly
+    /// fleet-svc's <c>VerifyAsync</c>, for the table C028 mirrored column for column.
+    /// </remarks>
+    Task<DriverPayoutProfile?> VerifyAsync(
+        IUnitOfWork unitOfWork, Guid driverId, Guid officerId, CancellationToken cancellationToken);
+
+    /// <summary>Refuses the pending version and records why. Never touches the incumbent.</summary>
+    Task<DriverPayoutProfile?> RejectAsync(
+        IUnitOfWork unitOfWork, Guid driverId, Guid officerId, string reason, CancellationToken cancellationToken);
 }
 
 /// <inheritdoc cref="IDriverPayoutProfileRepository"/>
@@ -63,7 +79,8 @@ internal sealed class DriverPayoutProfileRepository : IDriverPayoutProfileReposi
         id AS Id, driver_id AS DriverId, bank AS Bank, branch AS Branch,
         account_no AS AccountNo, account_holder_name AS AccountHolderName,
         proof_upload_id AS ProofUploadId, lankaqr_upload_id AS LankaqrUploadId,
-        status AS Status, rejection_reason AS RejectionReason, verified_at AS VerifiedAt
+        status AS Status, rejection_reason AS RejectionReason,
+        verified_by AS VerifiedBy, verified_at AS VerifiedAt
         """;
 
     /// <remarks>
@@ -182,6 +199,74 @@ internal sealed class DriverPayoutProfileRepository : IDriverPayoutProfileReposi
              RETURNING {Columns};
              """,
             new { ProfileId = profileId, UploadId = uploadId },
+            unitOfWork.Transaction,
+            cancellationToken: cancellationToken));
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <b>Supersede, then verify.</b> The reverse order is refused by
+    /// <c>ux_driver_payout_verified</c> the moment a driver approves a second account, which is the
+    /// ordinary case rather than an exotic one — a driver changing banks.
+    /// </para>
+    /// <para>
+    /// <b>Approving twice must not re-stamp anything.</b> The verify is guarded on
+    /// <c>pending_verification</c>, so a second Approve with nothing pending returns null and the
+    /// caller reads that as "already decided" — <c>verified_at</c> and <c>verified_by</c> keep
+    /// saying when the decision was actually made and who actually made it. fleet-svc's rule, kept.
+    /// </para>
+    /// </remarks>
+    public async Task<DriverPayoutProfile?> VerifyAsync(
+        IUnitOfWork unitOfWork, Guid driverId, Guid officerId, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(unitOfWork);
+
+        await unitOfWork.Connection.ExecuteAsync(new CommandDefinition(
+            """
+            UPDATE registry.driver_payout_profiles
+               SET status = 'superseded'
+             WHERE driver_id = @DriverId
+               AND status = 'verified'
+               AND EXISTS (SELECT 1 FROM registry.driver_payout_profiles pending
+                            WHERE pending.driver_id = @DriverId
+                              AND pending.status = 'pending_verification');
+            """,
+            new { DriverId = driverId },
+            unitOfWork.Transaction,
+            cancellationToken: cancellationToken));
+
+        return await unitOfWork.Connection.QuerySingleOrDefaultAsync<DriverPayoutProfile>(new CommandDefinition(
+            $"""
+             UPDATE registry.driver_payout_profiles
+                SET status = 'verified', verified_by = @OfficerId, verified_at = now(),
+                    rejection_reason = NULL
+              WHERE driver_id = @DriverId AND status = 'pending_verification'
+             RETURNING {Columns};
+             """,
+            new { DriverId = driverId, OfficerId = officerId },
+            unitOfWork.Transaction,
+            cancellationToken: cancellationToken));
+    }
+
+    /// <remarks>
+    /// <b>A rejection never disturbs the incumbent</b> — fleet-svc's rule, and it is about somebody's
+    /// wages. A mismatched account-holder name is a reason to refuse the *edit*, not a reason to
+    /// stop paying a driver into details an officer already approved. So the predicate names the
+    /// pending row only, and the verified one is not in scope of this statement at all.
+    /// </remarks>
+    public async Task<DriverPayoutProfile?> RejectAsync(
+        IUnitOfWork unitOfWork, Guid driverId, Guid officerId, string reason, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(unitOfWork);
+
+        return await unitOfWork.Connection.QuerySingleOrDefaultAsync<DriverPayoutProfile>(new CommandDefinition(
+            $"""
+             UPDATE registry.driver_payout_profiles
+                SET status = 'rejected', rejection_reason = @Reason, verified_by = @OfficerId
+              WHERE driver_id = @DriverId AND status = 'pending_verification'
+             RETURNING {Columns};
+             """,
+            new { DriverId = driverId, OfficerId = officerId, Reason = reason },
             unitOfWork.Transaction,
             cancellationToken: cancellationToken));
     }

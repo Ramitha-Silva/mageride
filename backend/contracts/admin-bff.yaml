@@ -19,7 +19,7 @@ openapi: 3.1.0
 #     only one that also covers the **fleet-org** subject AL-49 needs an officer to approve, so
 #     it is canonical here and the `/admin/onboarding/*` + `/admin/vehicles/{id}/approve|reject`
 #     forms are absent. The semantics D3' Part 2 attached to the old routes are preserved on the
-#     new ones (OnePay merchant bind on approve, D-11; approval blocked while any field is
+#     new ones (approval blocked while any field is
 #     `pending`, US-2.10a). Raised as a micro-change-set in the C007 handoff.
 #   GET /v1/admin/drivers/level-1  (ADD Appendix C)               — SUPERSEDED BY AL-41
 #     `GET /v1/admin/drivers?level=1` is the driver directory's own filter, and a literal
@@ -339,6 +339,193 @@ paths:
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
       x-error-codes: [unauthorized, forbidden]
 
+  # ---------------------------------------------------------------------------------------
+  # Δ C063 (AL-58 / AL-59) — the driver's bank & payout profile.
+  #
+  # The ADD (§1.18 AL-58) has this decided "through the existing AL-39 queue, whose subject-agnostic
+  # routes already take a driver id". The queue FAMILY is reused — same officer, same RBAC row, same
+  # audited lightbox — but three things could not be:
+  #
+  #   1. The queue predicate. The other tabs are "has a flagged registry.document_fields row", which
+  #      is AL-27's fence as a query. Nothing extracts fields from a bank statement (the org tab
+  #      says so for the identical table), so membership here is the profile's own status. Without
+  #      this tab a driver approved in March who changes banks in September appears in NO queue and
+  #      is never paid — the gap these routes exist to close.
+  #   2. The verdict route. A driver id already resolves to the IDENTITY subject, so sharing
+  #      POST /verification/{subjectId}/approve would make one button decide two unrelated
+  #      questions — and a refusal aimed at an illegible bank statement would refuse the driver's
+  #      LICENCE and stop them driving.
+  #   3. The audit action. PAYOUT_PROFILE_APPROVED is its own claim: "I checked this statement
+  #      against this account number and authorised money to be sent there" is not "I checked a
+  #      photograph of a licence".
+  #
+  # Micro-change-set; recorded in the C063 handoff in build/progress.md.
+  # ---------------------------------------------------------------------------------------
+  /v1/admin/verification/queues/driver-payout:
+    get:
+      operationId: listDriverPayoutQueue
+      summary: Drivers awaiting a bank & payout decision (AL-58, AL-59).
+      description: |
+        The fourth SCR-AP-003 tab. Membership is
+        `registry.driver_payout_profiles.status = 'pending_verification'` — the partial index
+        `ix_driver_payout_pending` (migration 0316) exists to serve it.
+
+        `status` is the driver's **identity** verdict, as on the other tabs: every row here is by
+        construction awaiting a payout decision, so repeating that would say nothing. What the
+        officer needs is whether this is somebody they already approved changing their bank.
+      tags: [admin-verification]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/VerificationSearch'
+        - $ref: '#/components/parameters/VerificationStatus'
+        - $ref: './_shared.yaml#/components/parameters/Cursor'
+        - $ref: './_shared.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Queue page.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './_shared.yaml#/components/schemas/CursorPage'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/DriverPayoutQueueRow'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden]
+
+  /v1/admin/verification/payout/{driverId}:
+    get:
+      operationId: getDriverPayoutVerification
+      summary: A driver's bank details and payout evidence (AL-58, AL-59).
+      description: |
+        What the officer decides on. `documents[]` carries the proof of account and the driver's own
+        LankaQR image, each as a `thumbUrl`/`fullUrl` pointing at `GET /v1/admin/documents/{docId}` —
+        the audited viewer, so every look is a `DOC_VIEW` row (AL-39).
+
+        `approvable` means "there is a version awaiting a decision", not "the evidence is
+        sufficient". Whether a statement really shows this account is the judgement the officer is
+        there to make.
+      tags: [admin-verification]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: driverId
+          in: path
+          required: true
+          schema: { $ref: './_shared.yaml#/components/schemas/Ulid' }
+      responses:
+        '200':
+          description: The payout profile and its evidence.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DriverPayoutVerification'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, payout-profile-not-found]
+
+  /v1/admin/verification/payout/{driverId}/approve:
+    post:
+      operationId: approveDriverPayoutProfile
+      summary: Verify where a driver's swept earnings go (AL-58).
+      description: |
+        **This is the last gate between a driver submitting bank details and being paid.** Until a
+        row is `verified`, payout-svc's weekly sweep skips them — the wallet accrues and nothing is
+        lost, but nothing is paid either. It also puts their own LankaQR on the ride pay sheet
+        (AL-59).
+
+        Forwarded to registry-svc's `POST /v1/internal/drivers/{driverId}/payout-profile/approve`,
+        which supersedes the incumbent and verifies the replacement in one transaction and in that
+        order — `ux_driver_payout_verified` admits exactly one verified row per driver.
+
+        **Idempotent.** With nothing pending the current version is returned unchanged: a second
+        Approve must not rewrite `verified_at` or who decided it.
+
+        Audited as `PAYOUT_PROFILE_APPROVED` on `driver_payout_profile` — **not** as
+        `VERIFICATION_APPROVED` on `driver`, which is the identity decision.
+      tags: [admin-verification]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: driverId
+          in: path
+          required: true
+          schema: { $ref: './_shared.yaml#/components/schemas/Ulid' }
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: The verdict.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DriverPayoutDecision'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, payout-profile-not-found, conflict]
+
+  /v1/admin/verification/payout/{driverId}/reject:
+    post:
+      operationId: rejectDriverPayoutProfile
+      summary: Refuse a driver's bank details, with a reason (AL-58).
+      description: |
+        **The incumbent is never disturbed.** A mismatched account-holder name is a reason to refuse
+        the *edit*, not a reason to stop paying a driver into details an officer already approved —
+        so a driver who mistypes on Friday is still paid on Sunday.
+
+        `reason` is mandatory and is shown verbatim on SCR-DA-022a: "rejected" with nothing to read
+        leaves a driver unable to fix the one thing standing between them and their money.
+
+        Only a version awaiting verification can be refused — unlike Approve this is a `409` rather
+        than a no-op, because writing a refusal onto an already-decided version would stop an
+        approved driver's payouts by a mis-click.
+      tags: [admin-verification]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: driverId
+          in: path
+          required: true
+          schema: { $ref: './_shared.yaml#/components/schemas/Ulid' }
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason:
+                  type: string
+                  maxLength: 1000
+                  description: Shown verbatim to the driver.
+      responses:
+        '200':
+          description: The verdict.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DriverPayoutDecision'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-error, unauthorized, forbidden, payout-profile-not-found, conflict]
+
   /v1/admin/verification/org/{orgId}:
     get:
       operationId: getOrgVerification
@@ -477,16 +664,20 @@ paths:
         US-2.9. **Approval is blocked while any field is `verifyStatus='pending'`** (US-2.10a) —
         that is `409 conflict`, not a silent partial approval.
 
-        For a vehicle this sets `status='APPROVED'` and triggers the **OnePay merchant bind**
-        (D-11, `POST /v1/internal/vehicles/{id}/merchant`). Per AL-50 a fleet vehicle is not
-        approvable until `registration` + `insurance` + `revenue_license` — **plus `permit` for
-        Mode A** — are all verified. For an org this also sets the payout profile to `verified`
-        (AL-49). Audited (D-35).
+        For a vehicle this sets `status='APPROVED'`. Per AL-50 a fleet vehicle is not approvable
+        until `registration` + `insurance` + `revenue_license` — **plus `permit` for Mode A** — are
+        all verified. For an org this also sets the payout profile to `verified` (AL-49). Audited
+        (D-35).
 
-        **Δ C063: `merchantBound` is always `false` today, and deliberately.** registry-svc's
-        merchant route requires a `merchantId` and nothing on this platform onboards one, so a
-        `true` here would be a claim that fare settlement has a payee; it answers
-        `402 merchant-not-onboarded` until an OnePay onboarding path exists.
+        **Δ AL-57: there is no OnePay merchant bind and `merchantBound` is always `false`.** D-11 is
+        retired — OnePay supports one merchant account per merchant, so the per-driver sub-account
+        this used to trigger never existed, and `POST /v1/internal/vehicles/{id}/merchant` is gone.
+        The field is kept so a portal built against the earlier contract still parses; it is
+        `deprecated` and nothing sets it.
+
+        **For a driver this decides their IDENTITY only.** Where their money goes is a separate
+        decision on a separate route — `POST /v1/admin/verification/payout/{driverId}/approve` —
+        because refusing an illegible bank statement must not refuse somebody's licence.
 
         **Δ C063: approving a REJECTED subject withdraws the refusal first**, because registry-svc
         declines to auto-approve one ("a Verification Officer's decision that four green steps do
@@ -1946,6 +2137,60 @@ components:
           type: string
           enum: [PENDING, APPROVED, REJECTED]
 
+    DriverPayoutQueueRow:
+      type: object
+      required: [driverId, name, bank, accountNo, submittedAt, hasProof, hasLankaQr, status]
+      properties:
+        driverId: { $ref: './_shared.yaml#/components/schemas/Ulid' }
+        name: { type: string }
+        bank: { type: string }
+        accountNo: { type: string }
+        submittedAt: { type: string, format: date-time }
+        hasProof:
+          type: boolean
+          description: Whether a bank statement or passbook page is attached to open.
+        hasLankaQr:
+          type: boolean
+          description: AL-59 — whether the driver's own bank-app QR is attached.
+        status:
+          type: string
+          description: The driver's IDENTITY verdict, not this profile's. See the queue route.
+          enum: [PENDING, APPROVED, REJECTED]
+
+    DriverPayoutVerification:
+      type: object
+      required: [driverId, name, bank, branch, accountNo, accountHolderName, status, documents, approvable]
+      properties:
+        driverId: { $ref: './_shared.yaml#/components/schemas/Ulid' }
+        name: { type: string }
+        bank: { type: string }
+        branch: { type: string }
+        accountNo: { type: string }
+        accountHolderName: { type: string }
+        status:
+          type: string
+          enum: [pending_verification, verified, rejected, superseded]
+        rejectionReason: { type: string, nullable: true }
+        verifiedAt: { type: string, format: date-time, nullable: true }
+        documents:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentRef'
+        approvable:
+          type: boolean
+          description: There is a version awaiting a decision — not a judgement about the evidence.
+
+    DriverPayoutDecision:
+      type: object
+      required: [driverId, status]
+      properties:
+        driverId: { $ref: './_shared.yaml#/components/schemas/Ulid' }
+        status:
+          type: string
+          enum: [pending_verification, verified, rejected, superseded]
+        reason: { type: string, nullable: true }
+        verifiedAt: { type: string, format: date-time, nullable: true }
+
     OrgQueueRow:
       type: object
       required: [orgId, name, kycStatus, vehicleCount, status]
@@ -2067,8 +2312,10 @@ components:
         reason:
           type: string
         merchantBound:
+          deprecated: true
           type: boolean
-          description: True when approving a vehicle triggered the D-11 OnePay merchant bind.
+          description: |
+            **Δ AL-57 — always `false`.** D-11 is retired and the bind it named no longer exists.
 
     PassengerRow:
       type: object

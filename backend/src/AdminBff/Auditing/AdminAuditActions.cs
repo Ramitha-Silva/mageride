@@ -73,6 +73,21 @@ public static class AdminAuditActions
     /// </remarks>
     public const string VerificationReopened = "VERIFICATION_REOPENED";
 
+    /// <summary>
+    /// A driver's bank &amp; payout profile approved (AL-58) — <b>a different fact from
+    /// <see cref="VerificationApproved"/> on the same id</b>.
+    /// </summary>
+    /// <remarks>
+    /// Its own action because it is its own claim. VERIFICATION_APPROVED on a driver says an officer
+    /// checked a licence; this says they checked a bank statement against an account number and
+    /// authorised money to be sent there. An auditor asking "who approved paying this driver into
+    /// this account" must not have to infer it from a decision about a photograph.
+    /// </remarks>
+    public const string PayoutProfileApproved = "PAYOUT_PROFILE_APPROVED";
+
+    /// <summary>A driver's bank &amp; payout profile refused, with the reason they are shown.</summary>
+    public const string PayoutProfileRejected = "PAYOUT_PROFILE_REJECTED";
+
     // -------------------------------------------------------------------------------------------
     // Configuration
     // -------------------------------------------------------------------------------------------
@@ -122,6 +137,13 @@ public static class AdminAuditActions
 
     /// <summary>One document, whichever of the two tables holds it (AL-39).</summary>
     public const string DocumentEntity = "document";
+
+    /// <summary>
+    /// <c>registry.driver_payout_profiles</c>. Not <see cref="DriverEntity"/>: the row that changed
+    /// is the payout profile, and an audit trail that called both "driver" would make the two
+    /// decisions on one id indistinguishable when read back.
+    /// </summary>
+    public const string PayoutProfileEntity = "driver_payout_profile";
 
     public const string ReportEntity = "vehicle_report";
     public const string TicketEntity = "support_ticket";

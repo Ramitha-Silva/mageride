@@ -34,6 +34,15 @@ public interface IDriverPayoutProfileService
     /// <summary>Attaches an uploaded document to the driver's pending version.</summary>
     Task<DriverPayoutProfile> AttachAsync(
         Guid driverId, Guid uploadId, string kind, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The Verification Officer's approval, arriving from admin-bff's AL-39 queue (C063).
+    /// </summary>
+    Task<DriverPayoutProfile> ApproveAsync(Guid driverId, Guid officerId, CancellationToken cancellationToken);
+
+    /// <summary>The officer's refusal, with the reason the driver reads on SCR-DA-022a.</summary>
+    Task<DriverPayoutProfile> RejectAsync(
+        Guid driverId, Guid officerId, string reason, CancellationToken cancellationToken);
 }
 
 /// <inheritdoc cref="IDriverPayoutProfileService"/>
@@ -147,6 +156,97 @@ internal sealed class DriverPayoutProfileService(
         await unitOfWork.CommitAsync(cancellationToken);
 
         return saved;
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <b>This is the call that lets payout-svc pay the driver.</b> Until a row here is
+    /// <c>verified</c> the weekly sweep skips them entirely — their wallet accrues and nothing is
+    /// lost, but nothing is paid either — so this is the last gate between a driver submitting bank
+    /// details and being paid. It is also what puts their AL-59 LankaQR on the ride pay sheet.
+    /// </para>
+    /// <para>
+    /// <b>Approve is not once-only, and with nothing pending it re-stamps nothing.</b> A driver
+    /// whose profile is already verified and who has not edited it since is returned as they are:
+    /// <c>verified_at</c> and <c>verified_by</c> go on recording when the decision was actually made
+    /// and who made it, so a double-click on the officer's screen cannot rewrite the record of a
+    /// decision. fleet-svc's rule for the same table shape, kept deliberately.
+    /// </para>
+    /// </remarks>
+    public async Task<DriverPayoutProfile> ApproveAsync(
+        Guid driverId, Guid officerId, CancellationToken cancellationToken)
+    {
+        await using var unitOfWork = await unitOfWorkFactory.BeginAsync(cancellationToken: cancellationToken);
+
+        var current = await profiles.FindCurrentAsync(
+            unitOfWork.Connection, unitOfWork.Transaction, driverId, cancellationToken)
+            ?? throw new MageRideException(
+                MageRideErrors.PayoutProfileNotFound,
+                "This driver has not submitted a bank and payout profile, so there is nothing to approve.");
+
+        if (!current.IsPending)
+        {
+            // Already decided. Returning it rather than raising is what makes the officer's Approve
+            // safe to press twice, and a `rejected` row answers here too — re-approving a refusal
+            // needs the driver to resubmit, which is what puts a pending version back in the queue.
+            return current;
+        }
+
+        var verified = await profiles.VerifyAsync(unitOfWork, driverId, officerId, cancellationToken)
+            ?? throw new MageRideException(
+                MageRideErrors.Conflict,
+                "This payout profile was decided while the approval was in flight. Read it back and try again.");
+
+        await unitOfWork.CommitAsync(cancellationToken);
+
+        logger.LogInformation(
+            "Officer {OfficerId} verified payout profile {ProfileId} for driver {DriverId}. payout-svc's "
+            + "weekly sweep can now pay them (AL-58) and their own LankaQR is live on the pay sheet (AL-59).",
+            officerId,
+            verified.Id,
+            driverId);
+
+        return verified;
+    }
+
+    /// <remarks>
+    /// <b>The incumbent is untouched.</b> A driver who mistypes a new account number is still paid on
+    /// Sunday into the account an officer already approved — refusing the edit is not a reason to
+    /// stop paying somebody their wages. The reason is shown verbatim on SCR-DA-022a (US-2.15's
+    /// rule, applied to the payout profile), which is why it is mandatory at the edge.
+    /// </remarks>
+    public async Task<DriverPayoutProfile> RejectAsync(
+        Guid driverId, Guid officerId, string reason, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(reason);
+
+        await using var unitOfWork = await unitOfWorkFactory.BeginAsync(cancellationToken: cancellationToken);
+
+        var current = await profiles.FindCurrentAsync(
+            unitOfWork.Connection, unitOfWork.Transaction, driverId, cancellationToken)
+            ?? throw new MageRideException(
+                MageRideErrors.PayoutProfileNotFound,
+                "This driver has not submitted a bank and payout profile, so there is nothing to reject.");
+
+        if (!current.IsPending)
+        {
+            // Unlike Approve, this is a conflict rather than a no-op: refusing a version nobody
+            // submitted would write a rejection reason onto a decision that was already made, and
+            // a verified profile turned `rejected` would stop the driver's payouts by a mis-click.
+            throw new MageRideException(
+                MageRideErrors.Conflict,
+                $"This driver's payout profile is '{current.Status}'. Only a version awaiting verification "
+                + "can be rejected.");
+        }
+
+        var rejected = await profiles.RejectAsync(unitOfWork, driverId, officerId, reason, cancellationToken)
+            ?? throw new MageRideException(
+                MageRideErrors.Conflict,
+                "This payout profile was decided while the refusal was in flight. Read it back and try again.");
+
+        await unitOfWork.CommitAsync(cancellationToken);
+
+        return rejected;
     }
 
     private static void Validate(DriverPayoutDraft draft)

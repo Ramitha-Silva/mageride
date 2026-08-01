@@ -131,6 +131,7 @@ public sealed record DriverPayoutProfile(
     Guid? LankaqrUploadId,
     string Status,
     string? RejectionReason,
+    Guid? VerifiedBy,
     DateTimeOffset? VerifiedAt)
 {
     public bool IsPending => Status == DriverPayoutStatuses.PendingVerification;

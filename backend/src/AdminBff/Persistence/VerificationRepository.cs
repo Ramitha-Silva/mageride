@@ -122,6 +122,13 @@ public interface IVerificationRepository
     /// <summary>How many vehicles each of these organisations has on its roster.</summary>
     Task<IReadOnlyDictionary<Guid, int>> FleetVehicleCountsAsync(
         IReadOnlyCollection<Guid> fleetIds, CancellationToken cancellationToken);
+
+    /// <summary>Drivers whose bank &amp; payout profile awaits a decision (SCR-AP-003 tab 4).</summary>
+    Task<IReadOnlyList<DriverPayoutQueueRow>> DriverPayoutQueueAsync(
+        VerificationQueueQuery query, CancellationToken cancellationToken);
+
+    /// <summary>The version the officer is deciding on, or null when the driver has none.</summary>
+    Task<DriverPayoutProfileRow?> FindDriverPayoutAsync(Guid driverId, CancellationToken cancellationToken);
 }
 
 /// <inheritdoc cref="IVerificationRepository"/>
@@ -715,6 +722,109 @@ internal sealed class VerificationRepository(INpgsqlConnectionFactory connection
             cancellationToken: cancellationToken));
 
         return rows.ToDictionary(row => row.FleetId, row => (int)row.Count);
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // The driver payout queue (AL-58, AL-59)
+    // ---------------------------------------------------------------------------------------
+
+    /// <remarks>
+    /// <para>
+    /// <b>Membership is the profile's own status, not a flagged field.</b> Nothing extracts fields
+    /// from a bank statement — the org rail says so for the identical table — so AL-27's
+    /// "has a pending <c>registry.document_fields</c> row" cannot express this queue. The partial
+    /// index <c>ix_driver_payout_pending</c> (migration 0316) exists to be this query's index and
+    /// its comment names this queue.
+    /// </para>
+    /// <para>
+    /// <b>The <c>status</c> column is the driver's identity verdict and not the profile's</b>, which
+    /// looks inconsistent and is deliberate: every row here is by construction
+    /// <c>pending_verification</c>, so repeating that would say nothing, and what the officer needs
+    /// is the same thing SCR-AP-003's filter gives them on the other tabs — is this an applicant I
+    /// have already approved changing their bank, or somebody I have never seen. Identical reasoning
+    /// to the licence and vehicle queues, stated on the interface.
+    /// </para>
+    /// <para>
+    /// <c>hasProof</c>/<c>hasLankaQr</c> rather than the ids: the list needs to show whether there
+    /// is anything to open before the officer opens the row, and the ids are on the detail.
+    /// </para>
+    /// </remarks>
+    private const string DriverPayoutQueueSql =
+        """
+        WITH rows AS (
+          SELECT p.driver_id                                   AS "DriverId",
+                 COALESCE(pr.display_name, u.first_name, '')   AS "Name",
+                 p.bank                                        AS "Bank",
+                 p.account_no                                  AS "AccountNo",
+                 p.account_holder_name                         AS "AccountHolderName",
+                 p.created_at                                  AS "SubmittedAt",
+                 (p.proof_upload_id   IS NOT NULL)             AS "HasProof",
+                 (p.lankaqr_upload_id IS NOT NULL)             AS "HasLankaQr",
+                 CASE WHEN pr.verified_at      IS NOT NULL THEN 'APPROVED'
+                      WHEN pr.rejection_reason IS NOT NULL THEN 'REJECTED'
+                      ELSE 'PENDING' END                       AS "Status"
+            FROM registry.driver_payout_profiles p
+            JOIN iam.users u                      ON u.id = p.driver_id
+            LEFT JOIN registry.driver_profiles pr ON pr.driver_id = p.driver_id
+           WHERE p.status = 'pending_verification'
+        )
+        SELECT "DriverId", "Name", "Bank", "AccountNo", "SubmittedAt", "HasProof", "HasLankaQr", "Status"
+          FROM rows
+         WHERE (@Status::text IS NULL OR "Status" = @Status)
+           AND (@Search::text IS NULL
+                OR "Name" ILIKE @Search OR "AccountNo" ILIKE @Search
+                OR "AccountHolderName" ILIKE @Search OR "DriverId"::text ILIKE @Search)
+           AND (@CursorAt::timestamptz IS NULL OR ("SubmittedAt", "DriverId") < (@CursorAt, @CursorId))
+         ORDER BY "SubmittedAt" DESC, "DriverId" DESC
+         LIMIT @Limit;
+        """;
+
+    public async Task<IReadOnlyList<DriverPayoutQueueRow>> DriverPayoutQueueAsync(
+        VerificationQueueQuery query, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        await using var connection = await connections.OpenAsync(cancellationToken);
+
+        var rows = await connection.QueryAsync<DriverPayoutQueueRow>(new CommandDefinition(
+            DriverPayoutQueueSql, Parameters(query), cancellationToken: cancellationToken));
+
+        return [.. rows];
+    }
+
+    /// <remarks>
+    /// <c>superseded</c> is excluded for the reason registry-svc's own read excludes it: it is the
+    /// account an approved edit displaced, and showing an officer the details a driver <em>used</em>
+    /// to be paid into would be showing them the wrong thing to decide on.
+    /// </remarks>
+    public async Task<DriverPayoutProfileRow?> FindDriverPayoutAsync(
+        Guid driverId, CancellationToken cancellationToken)
+    {
+        await using var connection = await connections.OpenAsync(cancellationToken);
+
+        return await connection.QuerySingleOrDefaultAsync<DriverPayoutProfileRow>(new CommandDefinition(
+            """
+            SELECT p.id                                       AS "ProfileId",
+                   p.driver_id                                AS "DriverId",
+                   COALESCE(pr.display_name, u.first_name, '') AS "Name",
+                   p.bank                                     AS "Bank",
+                   p.branch                                   AS "Branch",
+                   p.account_no                               AS "AccountNo",
+                   p.account_holder_name                      AS "AccountHolderName",
+                   p.proof_upload_id                          AS "ProofUploadId",
+                   p.lankaqr_upload_id                        AS "LankaqrUploadId",
+                   p.status                                   AS "Status",
+                   p.rejection_reason                         AS "RejectionReason",
+                   p.verified_at                              AS "VerifiedAt"
+              FROM registry.driver_payout_profiles p
+              JOIN iam.users u                      ON u.id = p.driver_id
+              LEFT JOIN registry.driver_profiles pr ON pr.driver_id = p.driver_id
+             WHERE p.driver_id = @Id AND p.status <> 'superseded'
+             ORDER BY p.created_at DESC
+             LIMIT 1;
+            """,
+            new { Id = driverId },
+            cancellationToken: cancellationToken));
     }
 
     // The two queue rows materialise through settable properties rather than a record constructor.

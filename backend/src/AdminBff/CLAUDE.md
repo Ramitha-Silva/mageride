@@ -23,6 +23,9 @@ either.
 | `GET /v1/admin/verification/{subjectId}` · `/org/{orgId}` | verification · read | AL-39, SCR-AP-003a/003c |
 | `PUT /v1/admin/verification/{subjectId}/fields/{fieldKey}` | verification · write | AL-29, US-2.4a/2.10a |
 | `POST /v1/admin/verification/{subjectId}/approve` · `/reject` | verification · write | US-2.9, US-2.15, AL-49 |
+| `GET /v1/admin/verification/queues/driver-payout` | verification · read | **Δ AL-58/AL-59** — SCR-AP-003 tab 4 |
+| `GET /v1/admin/verification/payout/{driverId}` | verification · read | **Δ AL-58/AL-59** |
+| `POST /v1/admin/verification/payout/{driverId}/approve` · `/reject` | verification · write | **Δ AL-58** |
 | `GET /v1/admin/documents/{docId}` | verification · read | AL-39, SCR-AP-003b, US-24.8 |
 | `GET /v1/admin/dashboard` · `/stats` · `/stats.csv` | analytics · read | US-14.6, AL-38, US-24.7 |
 | `POST /v1/admin/vehicles/{id}/suspend` · `/drivers/{id}/suspend` | moderation · write **platform-wide** | US-14.3 |
@@ -192,9 +195,51 @@ recorded as a micro-change-set in the C062 handoff in `build/progress.md`.
   AL-50's named slots derived by registry-svc's own rule (verified iff no field of it is pending); a
   driver is the one synthetic `profile` step, because a decision rail with nothing in it reads as
   "nothing to check".
-- **D-11's merchant bind is not performed and `merchantBound` is always `false`.** registry-svc's
-  route requires a `merchantId` and nothing on this platform onboards one; claiming otherwise would
-  say fare settlement has a payee. Logged at every approval, and raised in the C063 handoff.
+- **Δ AL-57: D-11 is retired outright and `merchantBound` is permanently `false`.** OnePay supports
+  one merchant account per merchant, so the per-driver sub-account the bind assumed never existed;
+  `POST /v1/internal/vehicles/{id}/merchant` is gone (C028) and the field is kept only so a portal
+  built against the earlier contract still parses. It is marked `deprecated` in `admin-bff.yaml`.
+
+### The driver's bank & payout profile (Δ AL-58 / AL-59)
+
+- **A driver id names two subjects, and they are decided separately.** `/verification/{driverId}/…`
+  is their **identity** — a licence and an NIC. `/verification/payout/{driverId}/…` is where their
+  money goes. Sharing one verdict route, which is what the ADD's "the existing AL-39 queue, whose
+  subject-agnostic routes already take a driver id" (§1.18 AL-58) reads as, would make one button
+  decide two unrelated questions — and a refusal aimed at an illegible bank statement would refuse
+  the driver's licence and stop them driving. The queue *family* is reused; the verdict could not
+  be. **Micro-change-set raised.**
+- **This queue's predicate is the profile's own status, and it has to be.** The other two tabs are
+  "has a flagged `registry.document_fields` row", which is AL-27's fence as a query — but nothing
+  extracts fields from a bank statement, exactly as for a fleet's. The partial index
+  `ix_driver_payout_pending` (migration 0316) exists to serve this query and its comment names it.
+  **Without this tab the gap was total**: a driver approved in March who changes banks in September
+  has nothing pending on their licence, appeared in no queue at all, and payout-svc skipped them
+  for ever while their wallet accrued.
+- **The decision is forwarded; the identity verdict is not.** Both are registry tables, and the
+  difference is what the write *is*. `driver_profiles.verified_at` is one column with no invariant.
+  Approving a payout profile is BR-31.1's versioning transition — supersede the incumbent, **then**
+  verify the replacement, one transaction, that order, because `ux_driver_payout_verified` admits
+  exactly one verified row — and that invariant belongs to the service that owns the table, whose
+  repository already holds its other half. fleet-svc made the same call for the identical table.
+  `Upstreams:Registry` was already configured for the AL-30 recompute, so this costs no new setting.
+- **`PAYOUT_PROFILE_APPROVED` on `driver_payout_profile`, not `VERIFICATION_APPROVED` on `driver`.**
+  "I checked this statement against this account number and authorised money to be sent there" is a
+  different claim from "I checked a photograph of a licence", and an auditor asking who approved
+  paying this driver must not have to infer it from a decision about a photograph.
+- **Approve is idempotent; Reject is not.** With nothing pending, Approve returns the current
+  version unchanged — a second press must not rewrite `verified_at` or `verified_by`. Reject on an
+  already-decided version is a `409`, because writing a refusal onto an approved one would stop a
+  driver's payouts by a mis-click.
+- **A rejection never disturbs the incumbent.** A mismatched account-holder name is a reason to
+  refuse the *edit*, not a reason to stop paying somebody their wages — so a driver who mistypes on
+  Friday is still paid on Sunday.
+- **`approvable` means "there is a version awaiting a decision", not "the evidence is sufficient".**
+  Whether a statement really shows this account is the judgement the officer is there to make; a
+  rule that refused Approve without an upload would be this service overruling them.
+- **The evidence needed nothing new.** A payout document is a `docs.uploads` row with no
+  `registry.documents` row — exactly like AL-49's — and `FindDocumentSql`'s second branch already
+  resolved it, so the audited lightbox and its `DOC_VIEW` row work here as they stand.
 
 ### Configuration surfaces
 

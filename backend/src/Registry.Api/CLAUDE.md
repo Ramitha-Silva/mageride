@@ -31,6 +31,7 @@ four-step Mode-C onboarding machine and the E-03 document-expiry tracker. Everyt
 | `POST /v1/internal/vehicles/{id}/onboarding/recompute` | **not in D3'** — AL-30 (C029 micro-change-set) |
 | `GET` · `PUT /v1/drivers/payout-profile` | **Δ AL-58/AL-59** — where a driver's swept earnings go |
 | `POST /v1/drivers/payout-profile/documents` | **Δ AL-58** — proof of account, and the driver's own LankaQR |
+| `POST /v1/internal/drivers/{id}/payout-profile/approve` · `/reject` | **Δ AL-58** — the officer's decision, from admin-bff |
 | `POST /v1/dev/vehicles/{id}/approve` | dev seed path only; **not a contract route** |
 
 **Not here, on purpose.** Gemini extraction, the PII redaction pre-pass and the Tesseract fallback

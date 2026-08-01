@@ -275,6 +275,228 @@ public sealed class DriverPayoutProfileTests(PostgresFixture postgres)
         return await harness.Client.SendAsync(request);
     }
 
+    // ---------------------------------------------------------------------------------------
+    // The Verification Officer's decision (AL-58) — /v1/internal/drivers/**, called by admin-bff.
+    // ---------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// The approval that lets payout-svc pay the driver, and the ordering the index demands.
+    /// </summary>
+    [Fact]
+    public async Task Approving_an_edit_supersedes_the_incumbent_and_verifies_the_replacement()
+    {
+        Assert.SkipWhen(!postgres.IsAvailable, postgres.SkipReason ?? string.Empty);
+
+        await using var harness = await RegistryHarness.StartAsync(postgres);
+
+        var driverId = await harness.CreateDriverAsync();
+        var bearer = harness.Tokens.Driver(driverId);
+        var officerId = await OfficerAsync(harness);
+
+        await Put(harness, bearer, "Bank of Ceylon", "Kollupitiya", "0071234567", "Nimal Perera");
+        await ApproveAsync(harness, driverId, officerId);
+
+        // The edit BR-31.1 exists for: a driver changing banks.
+        await Put(harness, bearer, "Sampath Bank", "Nugegoda", "0079999999", "Nimal Perera");
+
+        var decided = await ApproveAsync(harness, driverId, officerId);
+
+        Assert.Equal("verified", decided.Status);
+        Assert.Equal("0079999999", decided.AccountNo);
+        Assert.NotNull(decided.VerifiedAt);
+
+        // Supersede THEN verify. The reverse order fails on ux_driver_payout_verified, which admits
+        // one verified row per driver — migration 0316 says so on the index's own comment rather
+        // than leaving it to a 23505.
+        Assert.Equal(["verified", "superseded"], await StatusesAsync(harness, driverId));
+    }
+
+    /// <summary>A second Approve must not rewrite the record of when a decision was made.</summary>
+    [Fact]
+    public async Task Approving_twice_decides_once_and_re_stamps_nothing()
+    {
+        Assert.SkipWhen(!postgres.IsAvailable, postgres.SkipReason ?? string.Empty);
+
+        await using var harness = await RegistryHarness.StartAsync(postgres);
+
+        var driverId = await harness.CreateDriverAsync();
+        var officerId = await OfficerAsync(harness);
+
+        await Put(harness, harness.Tokens.Driver(driverId), "Bank of Ceylon", "Kollupitiya", "0071234567", "N P");
+
+        var first = await ApproveAsync(harness, driverId, officerId);
+        var second = await ApproveAsync(harness, driverId, await OfficerAsync(harness));
+
+        // Same verdict, same instant, and — crucially — a different officer pressing it changes
+        // neither. `verified_by` goes on naming whoever actually decided.
+        Assert.Equal(first.VerifiedAt, second.VerifiedAt);
+        Assert.Equal(["verified"], await StatusesAsync(harness, driverId));
+
+        await using var connection = await harness.OpenAsync();
+
+        Assert.Equal(
+            officerId,
+            await connection.QuerySingleAsync<Guid>(
+                "SELECT verified_by FROM registry.driver_payout_profiles WHERE driver_id = @Id;",
+                new { Id = driverId }));
+    }
+
+    /// <summary>
+    /// The rule that is about somebody's wages: refusing an edit never stops the money already flowing.
+    /// </summary>
+    [Fact]
+    public async Task Rejecting_an_edit_leaves_the_incumbent_verified_and_payable()
+    {
+        Assert.SkipWhen(!postgres.IsAvailable, postgres.SkipReason ?? string.Empty);
+
+        await using var harness = await RegistryHarness.StartAsync(postgres);
+
+        var driverId = await harness.CreateDriverAsync();
+        var bearer = harness.Tokens.Driver(driverId);
+        var officerId = await OfficerAsync(harness);
+
+        await Put(harness, bearer, "Bank of Ceylon", "Kollupitiya", "0071234567", "Nimal Perera");
+        await ApproveAsync(harness, driverId, officerId);
+
+        await Put(harness, bearer, "Sampath Bank", "Nugegoda", "0079999999", "Someone Else");
+
+        using var response = await harness.PostInternalAsync(
+            $"/v1/internal/drivers/{driverId:D}/payout-profile/reject",
+            new { officerId = officerId.ToString(), reason = "Account holder name does not match the NIC." });
+
+        Assert.True(response.IsSuccessStatusCode, await response.Content.ReadAsStringAsync());
+
+        Assert.Equal(["rejected", "verified"], await StatusesAsync(harness, driverId));
+
+        // Sunday's sweep still goes to the account an officer approved.
+        await using var connection = await harness.OpenAsync();
+
+        Assert.Equal(
+            "0071234567",
+            await connection.QuerySingleAsync<string>(
+                """
+                SELECT account_no FROM registry.driver_payout_profiles
+                 WHERE driver_id = @Id AND status = 'verified';
+                """,
+                new { Id = driverId }));
+    }
+
+    [Fact]
+    public async Task A_decided_version_cannot_be_rejected_and_a_reason_is_mandatory()
+    {
+        Assert.SkipWhen(!postgres.IsAvailable, postgres.SkipReason ?? string.Empty);
+
+        await using var harness = await RegistryHarness.StartAsync(postgres);
+
+        var driverId = await harness.CreateDriverAsync();
+        var officerId = await OfficerAsync(harness);
+
+        await Put(harness, harness.Tokens.Driver(driverId), "Bank of Ceylon", "Kollupitiya", "0071234567", "N P");
+
+        using var noReason = await harness.PostInternalAsync(
+            $"/v1/internal/drivers/{driverId:D}/payout-profile/reject",
+            new { officerId = officerId.ToString(), reason = "   " });
+
+        // Shown verbatim on SCR-DA-022a. "Rejected" with nothing to read leaves a driver unable to
+        // fix the one thing standing between them and their money.
+        Assert.Equal(HttpStatusCode.BadRequest, noReason.StatusCode);
+
+        await ApproveAsync(harness, driverId, officerId);
+
+        using var afterDecision = await harness.PostInternalAsync(
+            $"/v1/internal/drivers/{driverId:D}/payout-profile/reject",
+            new { officerId = officerId.ToString(), reason = "changed my mind" });
+
+        // Not a no-op like a second Approve: writing a refusal onto an approved version would stop
+        // a driver's payouts by a mis-click.
+        Assert.Equal(HttpStatusCode.Conflict, afterDecision.StatusCode);
+    }
+
+    [Fact]
+    public async Task There_is_nothing_to_decide_for_a_driver_who_never_submitted_one()
+    {
+        Assert.SkipWhen(!postgres.IsAvailable, postgres.SkipReason ?? string.Empty);
+
+        await using var harness = await RegistryHarness.StartAsync(postgres);
+
+        var driverId = await harness.CreateDriverAsync();
+
+        using var response = await harness.PostInternalAsync(
+            $"/v1/internal/drivers/{driverId:D}/payout-profile/approve",
+            new { officerId = (await OfficerAsync(harness)).ToString() });
+
+        await ProblemDocument.AssertAsync(response, HttpStatusCode.NotFound, "payout-profile-not-found");
+    }
+
+    /// <summary>The decision plane is service-to-service and carries no bearer to fall back on.</summary>
+    [Fact]
+    public async Task The_decision_plane_refuses_a_caller_with_no_internal_key()
+    {
+        Assert.SkipWhen(!postgres.IsAvailable, postgres.SkipReason ?? string.Empty);
+
+        await using var harness = await RegistryHarness.StartAsync(postgres);
+
+        var driverId = await harness.CreateDriverAsync();
+
+        await Put(harness, harness.Tokens.Driver(driverId), "Bank of Ceylon", "Kollupitiya", "0071234567", "N P");
+
+        using var response = await harness.PostInternalAsync(
+            $"/v1/internal/drivers/{driverId:D}/payout-profile/approve",
+            new { officerId = (await OfficerAsync(harness)).ToString() },
+            apiKey: null);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Equal(["pending_verification"], await StatusesAsync(harness, driverId));
+    }
+
+    /// <summary>
+    /// A real Verification Officer. <c>verified_by</c> is an FK onto <c>iam.users</c>, which is the
+    /// point — a column naming who authorised money to be sent somewhere must name somebody who
+    /// exists. In production the id is the officer's own token subject, forwarded by admin-bff.
+    /// </summary>
+    private static async Task<Guid> OfficerAsync(RegistryHarness harness)
+    {
+        var officerId = Guid.CreateVersion7();
+
+        await using var connection = await harness.OpenAsync();
+
+        await connection.ExecuteAsync(
+            "INSERT INTO iam.users (id, email, role) VALUES (@Id, @Email, 'verification_officer');",
+            new { Id = officerId, Email = $"{officerId:N}@officer.test" });
+
+        return officerId;
+    }
+
+    private static async Task<DriverPayoutDecisionResponse> ApproveAsync(
+        RegistryHarness harness, Guid driverId, Guid officerId)
+    {
+        using var response = await harness.PostInternalAsync(
+            $"/v1/internal/drivers/{driverId:D}/payout-profile/approve",
+            new { officerId = officerId.ToString() });
+
+        Assert.True(
+            response.IsSuccessStatusCode,
+            $"approve returned {(int)response.StatusCode}: {await response.Content.ReadAsStringAsync()}");
+
+        return (await response.Content.ReadFromJsonAsync<DriverPayoutDecisionResponse>(
+            MageRide.Shared.Http.MageRideJson.Options))!;
+    }
+
+    /// <summary>Every version, newest first — where BR-31.1 is actually visible.</summary>
+    private static async Task<IReadOnlyList<string>> StatusesAsync(RegistryHarness harness, Guid driverId)
+    {
+        await using var connection = await harness.OpenAsync();
+
+        var rows = await connection.QueryAsync<string>(
+            """
+            SELECT status FROM registry.driver_payout_profiles
+             WHERE driver_id = @Id ORDER BY created_at DESC;
+            """,
+            new { Id = driverId });
+
+        return [.. rows];
+    }
+
     private static async Task<DriverPayoutProfileResponse> Put(
         RegistryHarness harness, string bearer, string bank, string branch, string accountNo, string holder)
     {

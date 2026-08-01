@@ -88,16 +88,21 @@ public static class RegistryApplication
         if (!string.IsNullOrWhiteSpace(internalApiKey))
         {
             app.MapInternalVehicleEndpoints(internalApiKey);
+            app.MapInternalDriverEndpoints(internalApiKey);
         }
         else
         {
             // Δ AL-57: what is lost is AL-30's recompute, not the retired D-11 bind. Without it a
             // Verification Officer's Confirm never reaches this service, so a Mode C vehicle sits at
             // pending_review for a field nobody is still questioning and can never be approved.
+            // Δ AL-58: and the officer's payout-profile decision never arrives either, so no driver
+            // is ever payable — their wallet accrues, the weekly sweep skips them, and the money is
+            // owed rather than lost. Both halves fail silently and look like a queue nobody worked.
             app.Logger.LogWarning(
-                "Registry:InternalApiKey is not configured, so /v1/internal/vehicles/** is unmapped. " +
+                "Registry:InternalApiKey is not configured, so /v1/internal/** is unmapped. " +
                 "A confirmed onboarding field never reaches this service (AL-30), so no Mode C vehicle " +
-                "can be approved.");
+                "can be approved; and no driver payout profile can ever be verified (AL-58), so " +
+                "payout-svc's weekly sweep pays nobody.");
         }
 
         if (DevApprovalEnabled(app))

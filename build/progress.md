@@ -89,7 +89,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C060 | fleet-billing-svc | 3 | DONE | 2026-07-31 | **72 tests green** in a **new suite** (`FleetBilling.Tests`), which boots a **real wallet-svc** because both halves of "post to a balanced journal entry" live in that service's schema — `trg_balanced` fires at COMMIT and `billing.journal_entries.idempotency_key` is what makes settling twice move the money once; **2 migrations (1108, 1906)** — the `fleet_invoice` journal kind (1106 gave the invoice a `journal_entry_id` and no kind could ever fill it, which is why C047 handed the consolidation over *unledgered*), `OVERDUE` (the contract has always returned four statuses and the CHECK admitted three), `billing.fleet_invoice_lines`, `fleet_topups`, `fleet_outbox` and `fleet_command_log`, plus a trilingual `fleet_invoice_overdue` template; **this service writes no ledger row** — there is no `INSERT INTO billing.journal_` and no `UPDATE billing.accounts` anywhere in the assembly, and every movement goes through **three new routes on C046's seam** (`/v1/internal/wallet/fleet/{fleetId}/debit` · `/credit` · `/account`); **the lines are a snapshot, not a join** — a live one would make a settled invoice change under a roster edit and Σ lines stop equalling the amount that was paid; **`ux_fleet_invoice_lines_charge` is the guard that matters** — one raised charge reaches one invoice, so a vehicle that changes organisation mid-month is not billed twice; **AL-03 is held by an absence** (1104 raises no Mode A row, so there is nothing to filter) and a Mode-A-only fleet gets a FREE invoice with **zero lines**, which is 1106's own comment honoured; **the PDF is written here rather than taken as a dependency** — base-14 fonts, byte-exact xref, parsed back by the suite — because a renderer is a native binary in every container for one document, and wallet-svc's `415` was not available when the deliverable names PDF outright; **billing is Owner-only on reads as well as writes** (US-13.A5), unlike fleet-svc where the map sits outside the gate; **`fleet-billing.yaml` is a new contract** and `fleet.yaml` loses two paths and a schema — the third instance of C007's and C044's split; `migrate-verify.sh` **441/441** with a C060 section, Spectral 0 errors, solution build 0 warnings; **1 pre-existing cross-suite break found and fixed** (`Subscription.Api.Tests`'s reset could not TRUNCATE a table 1108 gave a foreign key); 1 new error code, 13 contract changes, 12 spec gaps / micro-change-sets |
 | C061 | analytics-read-model | 3 | DONE | 2026-08-01 | **104 tests green** in a **new suite** (`Analytics.Tests`), integration against a real Postgres because every DoD item is a claim about the database; **no migration and no contract change** — C005's `1405__analytics_daily_metrics.sql` already carries AL-38's five figures and `admin-bff.yaml` already declares `getAdminDashboardStats` / `exportAdminDashboardStats`, so the records here are those schemas' field names one-for-one; **built as a LIBRARY, not a service** — D3' gives the endpoint to admin-bff, D6' §I-28.5 says it "aggregates `analytics.daily_metrics`" rather than calling anything, ADD §6's table has no `analytics-svc` row, and the planner already listed this component among those with no `.yaml` (C007 finding (j)); **completed trips come from `rides.transitions.to_state='Completed'`, not from a ride state** — a ride never *rests* in Completed (C022 moves it to PaymentPending in the same transaction) and the terminal states are reached when the *money* settles, which can be the next day; **gross fare is one payment per ride in exactly fare-svc's R-05 terminal set**, taken with `DISTINCT ON … attempt_no DESC` so a D-10 retry chain contributes once, and `VocabularyTests` compares the list against `Fare.Api` so a widened CHECK is a red test rather than a silently under-counted dashboard; **new riders/drivers come from the `iam.user_roles` grant, not `iam.users.role`** — the primary role moves and would retro-edit a past day's figure; **daily-fee revenue matches `fee_date` directly** because subscription-svc already decided that Colombo day under D-13; **both fences are proved by reflection, not by review** (`FenceTests`: one writing statement, targeting `analytics.`, and no `AT TIME ZONE` / `date_trunc` / `::date` / `now()` anywhere — D-38 has one implementation and it is `BusinessCalendar`); **the previous period is arithmetic, not calendar** (the contract's "immediately preceding period of the same length"), so a 31-day range spanning a month boundary compares against 31 days and not "the same dates last month"; **a zero-base delta is `null`**, because growth from nothing has no percentage; **a day with no activity is a zero row**, so "no row" cannot mean both "quiet Sunday" and "job down since Friday"; **the live block is read at request time and asserted invariant under the period filter**; period totals reconcile against a deliberately *differently written* source query (`AT TIME ZONE` + `date_trunc`, grouped in SQL) on every period; 2000 trips roll up in well under the 15-min window; solution build 0 warnings; 1 spec gap (which day "This week" starts on), 1 D7' §4.2 gap, 7 configuration decisions |
 | C062 | admin-bff-core | 3 | DONE | 2026-08-01 | **65 tests green** in a **new suite** (`AdminBff.Tests`) plus **3 kernel promotions** (the URD §2.3 matrix, the `audit.events` writer, a `TimeOnly` Dapper handler) and **3 migrations (0202, 1312, 1409)**; the RBAC matrix test reads each route's own requirement off the built endpoint and drives all six internal roles at a real socket, so the expectation IS the spec; D-35 is a **start-up condition** — a mutating route outside the audited group, or one that declares no action, refuses to boot; 3 contract additions, 5 spec gaps / micro-change-sets |
-| C063 | admin-bff-verification | 3 | DONE | 2026-08-01 | **17 verification tests green** (`--filter Category=Verification`) and **91/91** across the whole `AdminBff.Tests` suite (was 65), integration against a real Postgres because every DoD item is a claim about the database; **1 migration (0315)** — `registry.driver_profiles.rejection_reason`, because AL-39's family is subject-agnostic and two of its three subjects already had somewhere to keep US-2.15's reason while the driver did not; **a queue is "has a field still `pending`" and that IS AL-27's fence** — an auto-verified document produces no such row, so it cannot appear rather than being filtered out by something that could stop filtering, and the same count is US-2.10a's approval gate so the two cannot disagree; **the vehicle queue is Mode C and fleet alike** because AL-50 reuses AL-29's pipeline and both write the same two tables; **every document fetch goes through the audited route** — `thumbUrl`/`fullUrl` point at `GET /v1/admin/documents/{docId}`, which records `DOC_VIEW` and *then* mints the short-lived signed URL it redirects to, because a pre-signed bucket URL would have satisfied AL-39's first half and silently dropped its second; **the D-35 success window widened to 3xx** for exactly that redirect; **withdrawing a rejection is its own `VERIFICATION_REOPENED` row** — registry-svc will not auto-approve a REJECTED vehicle, so a resubmission could otherwise never be approved, and the trail stays honest when the approval that follows is refused by AL-10; **an edit reaches an unflagged field and a bare confirm does not**, and an edited value becomes `manual` with no confidence (`ck_document_fields_manual_confidence`); **`merchantBound` is always false** because D-11's bind requires a `merchantId` nothing on this platform onboards; `migrate-verify.sh` 446/446, Spectral 0 errors, solution build 0 warnings; 2 new upstreams, 8 contract changes, 4 spec gaps / micro-change-sets |
+| C063 | admin-bff-verification | 3 | DONE | 2026-08-01| **17 verification tests green** (`--filter Category=Verification`) and **91/91** across the whole `AdminBff.Tests` suite (was 65), integration against a real Postgres because every DoD item is a claim about the database; **1 migration (0315)** — `registry.driver_profiles.rejection_reason`, because AL-39's family is subject-agnostic and two of its three subjects already had somewhere to keep US-2.15's reason while the driver did not; **a queue is "has a field still `pending`" and that IS AL-27's fence** — an auto-verified document produces no such row, so it cannot appear rather than being filtered out by something that could stop filtering, and the same count is US-2.10a's approval gate so the two cannot disagree; **the vehicle queue is Mode C and fleet alike** because AL-50 reuses AL-29's pipeline and both write the same two tables; **every document fetch goes through the audited route** — `thumbUrl`/`fullUrl` point at `GET /v1/admin/documents/{docId}`, which records `DOC_VIEW` and *then* mints the short-lived signed URL it redirects to, because a pre-signed bucket URL would have satisfied AL-39's first half and silently dropped its second; **the D-35 success window widened to 3xx** for exactly that redirect; **withdrawing a rejection is its own `VERIFICATION_REOPENED` row** — registry-svc will not auto-approve a REJECTED vehicle, so a resubmission could otherwise never be approved, and the trail stays honest when the approval that follows is refused by AL-10; **an edit reaches an unflagged field and a bare confirm does not**, and an edited value becomes `manual` with no confidence (`ck_document_fields_manual_confidence`); **`merchantBound` is always false** because D-11's bind requires a `merchantId` nothing on this platform onboards; `migrate-verify.sh` 446/446, Spectral 0 errors, solution build 0 warnings; 2 new upstreams, 8 contract changes, 4 spec gaps / micro-change-sets **Δ 2026-08-01 (AL-58/AL-59)**: the driver payout-profile queue, detail and verdict — closes gap (b) the C028 handoff named, where a submitted bank account could never be verified and payout-svc could never pay anyone. Its own queue predicate (nothing extracts fields from a bank statement), its own verdict route (a driver id already names the identity subject, and refusing a statement must not refuse a licence) and its own audit action; the BR-31.1 write is forwarded to registry-svc. **ADD §1.18 AL-58 corrected.** **101 tests green (+6)** |
 | C064 | admin-bff-directories | 3 | PENDING | | |
 | C065 | admin-bff-finance-pdpa | 3 | PENDING | | |
 | C066 | public-bff | 3 | PENDING | | |
@@ -9867,3 +9867,84 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   path carries no id) are covered.
 
   **Registry count in `migrate-verify` stays 19** — one table in, one out.
+
+---
+
+- **Component:** C063 admin-bff-verification — **amendment**, 2026-08-01 (AL-58 / AL-59)
+- **Status:** DONE — AdminBff.Tests 101/101 (+6), Registry.Api.Tests 181/181 (+6), solution builds
+  0 warnings / 0 errors, Spectral 0 errors. **Closes gap (b) in the C028 handoff.**
+- **Handoff:**
+
+  **The gap.** C028 built `registry.driver_payout_profiles` and C063 had already shipped, so nothing
+  could set a row to `verified`. A driver could submit bank details, payout-svc would refuse to
+  sweep them, and no officer had a screen to fix it — the only path was a direct UPDATE. That is now
+  closed end to end.
+
+  **Why it is not the route the ADD described.** §1.18 AL-58 read "approved by a Verification Officer
+  through the existing AL-39 queue, whose subject-agnostic routes already take a driver id". The
+  queue *family* is reused — same officer, same URD §2.3 row, same audited lightbox, same screen —
+  but the sentence does not survive two facts, and **the ADD has been corrected rather than the code
+  bent to it**:
+
+  (a) **The existing queues could not contain these drivers.** A queue here is "has a
+  `registry.document_fields` row still `pending`", which is AL-27's fence expressed as a query.
+  Nothing extracts fields from a bank statement — the fleet-org tab says so in as many words for the
+  identical table — so a pending payout profile appeared in **no queue at all**. A driver approved in
+  March who changes banks in September has nothing pending on their licence: invisible, and never
+  paid. Membership is now the profile's own status, which the partial index
+  `ix_driver_payout_pending` (0316) was created to serve and whose comment names this queue.
+
+  (b) **A driver id already names the identity subject.** Sharing
+  `POST /v1/admin/verification/{subjectId}/approve` would have made one button decide two unrelated
+  questions, and — the part that matters — a refusal aimed at an illegible bank statement would have
+  written `registry.driver_profiles.rejection_reason` and **stopped somebody driving**. So the
+  verdict is its own route, its own audit action and its own entity type. A test asserts both
+  directions: approving the identity leaves the bank account undecided, and refusing the bank
+  account leaves the licence approved.
+
+  **Where the write lives, and why that differs from the identity verdict.** admin-bff writes
+  `driver_profiles.verified_at` itself, because it is one column with no invariant and nobody exposes
+  a route. Approving a *payout profile* is BR-31.1's versioning transition — supersede the incumbent,
+  **then** verify the replacement, one transaction, that order, because `ux_driver_payout_verified`
+  admits exactly one verified row per driver. That invariant belongs to the service that owns the
+  table and whose repository already holds its other half, so registry-svc gained
+  `POST /v1/internal/drivers/{driverId}/payout-profile/approve` · `/reject` and admin-bff forwards —
+  fleet-svc's arrangement for the identical table, and admin-bff's own stated rule ("if the owning
+  service exposes a route for the operation, admin-bff forwards to it"). **No new configuration:**
+  `Upstreams:Registry` was already wired for the AL-30 recompute, and without it the start-up warning
+  now says both halves are lost.
+
+  **Two asymmetries, both deliberate.** Approve is idempotent — with nothing pending it returns the
+  current version and re-stamps nothing, so a double-click cannot rewrite the record of when a
+  decision was made or by whom. Reject is a `409` on an already-decided version, because writing a
+  refusal onto an approved one would stop a driver's payouts by a mis-click. And a rejection never
+  touches the incumbent: refusing an *edit* is not a reason to stop paying somebody their wages.
+
+  **What needed nothing.** No migration — 0316 already had `verified_by`, `verified_at`,
+  `rejection_reason`, the `superseded` status and both indexes. No new error code —
+  `payout-profile-not-found` and `conflict` already existed. No change to the document viewer: a
+  payout document is a `docs.uploads` row with no `registry.documents` row, exactly like AL-49's, and
+  `FindDocumentSql`'s second branch already resolved it, so the `DOC_VIEW` row works as it stood.
+
+  **Also corrected while here —** `admin-bff.yaml` still described D-11's merchant bind on the
+  subject-approve route ("triggers the OnePay merchant bind", "answers `402 merchant-not-onboarded`")
+  for a route C028 deleted and an error code AL-57 retired. Rewritten; `merchantBound` is now marked
+  `deprecated` and documented as permanently `false`.
+
+  **Testing —** 12 new tests across two suites, split by what each can actually prove. The BR-31.1
+  transition itself is asserted in **Registry.Api.Tests against the real code** — supersede-then-verify
+  ordering, the idempotent second Approve keeping `verified_at` and `verified_by`, the refusal that
+  leaves the incumbent payable, the 409 on a decided version, and the internal plane refusing a caller
+  with no key. **AdminBff.Tests proves the forwarding, the queue, the detail links and the audit
+  rows**; its stub upstream reimplements registry-svc's two routes, as it already does the AL-30
+  recompute, so an assertion there is not evidence about registry-svc's SQL. Two traps caught:
+  `verified_by` is an FK onto `iam.users`, so an officer id must name a real user (which is the
+  point — a column recording who authorised sending money must name somebody who exists); and two
+  profile versions seeded in one statement share `now()`, making "which version is current" a coin
+  toss, so the incumbent is now explicitly older.
+
+  **⚠ Still open (unchanged from the C028 handoff):** payout documents are on local disk under
+  `Registry:PayoutDocumentRoot` until C125 brings D-36's bucket, and there is no outbox event on a
+  payout-profile decision — payout-svc reads the table at sweep time. Migration 0316's
+  `COMMENT ON TABLE` still carries the ADD's original wording; a released script is immutable, and
+  the comment is descriptive rather than load-bearing.
