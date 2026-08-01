@@ -577,7 +577,12 @@ internal sealed class SubscriptionHarness : IAsyncDisposable
             -- truncate a referenced table unless the referencing one goes with it. Naming it
             -- rather than adding CASCADE keeps this list's own property — if that FK is ever
             -- dropped, the thread is still emptied instead of silently surviving the reset.
+            -- billing.fleet_invoice_lines and billing.fleet_topups are the same case, arriving from
+            -- C060's migration 1108: a line points at the billing.monthly_subscriptions charge it
+            -- consolidated (which is what makes one raised charge reachable from exactly one
+            -- invoice), and a top-up session points at the billing.accounts row it credits.
             TRUNCATE billing.daily_fee_charges, billing.monthly_subscriptions, billing.fleet_invoices,
+                     billing.fleet_invoice_lines, billing.fleet_topups, billing.fleet_outbox,
                      billing.journal_postings, billing.wallet_transactions, billing.outbox,
                      billing.command_log, billing.topups, billing.voucher_purchases,
                      billing.credit_transfers, subscription.command_log,

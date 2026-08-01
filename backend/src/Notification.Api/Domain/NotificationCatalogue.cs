@@ -180,6 +180,19 @@ public static class NotificationCatalogue
     /// </remarks>
     public const string ScheduleNotStarted = "SCHEDULE_NOT_STARTED";
 
+    /// <summary>
+    /// US-13.10: a fleet's consolidated monthly invoice is past its payment term. <b>Δ C060.</b>
+    /// </summary>
+    /// <remarks>
+    /// <b>Not <see cref="LowBalance"/> and not <see cref="TopUpRequired"/>.</b> Both of those are
+    /// US-9.9 / D5' §9.4's *driver* wallet warnings — wallet-svc emits them edge-triggered on a
+    /// driver account crossing a threshold, and their seeded bodies talk about the next trip. A
+    /// fleet whose invoice is eight days old may have a perfectly healthy balance and simply not
+    /// have paid, and an organisation takes no trips. Mutable: unlike the departure alarm this is a
+    /// bill, and an operator who watches SCR-FP-010 daily is entitled to switch the push off.
+    /// </remarks>
+    public const string FleetInvoiceOverdue = "FLEET_INVOICE_OVERDUE";
+
     private static readonly FrozenDictionary<string, NotificationTypeSpec> Specs = Build();
 
     /// <summary>Every type, ordered by name.</summary>
@@ -278,6 +291,13 @@ public static class NotificationCatalogue
             // language, which is also what the Fleet Portal's own members receive.
             new(ScheduleNotStarted, NotificationChannels.Push, "schedule_not_started",
                 Priority: NotificationPriorities.High, Mutable: false),
+
+            // Δ C060. Normal priority and mutable: a bill is not an emergency and the same fact is
+            // already on SCR-FP-010 as an OVERDUE invoice, so an operator who has seen it there may
+            // switch the push off. The body renders from migration 1906 in the recipient's own
+            // language — every Owner of the organisation gets it, and no string is composed by
+            // fleet-billing-svc (D-26).
+            new(FleetInvoiceOverdue, NotificationChannels.Push, "fleet_invoice_overdue"),
         ];
 
         return specs.ToFrozenDictionary(static spec => spec.Type, StringComparer.Ordinal);

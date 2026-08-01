@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    FleetBilling (C060, fleet-billing-svc) — the fleet wallet and the consolidated monthly
+    per-Mode-B-vehicle invoice (AL-03, AL-05, D-09).
+
+    Three flows. In: subscription-svc's per-vehicle charges (`billing.monthly_subscriptions`,
+    raised by C047's runner) and a Fleet Owner's top-up at OnePay or LankaQR. Middle:
+    `billing.fleet_invoices` + `billing.fleet_invoice_lines` (migration 1108), one invoice per
+    fleet per Colombo month whose lines sum to its total. Out: a balanced `fleet_invoice` journal
+    entry against the fleet's `owner_type='fleet'` ledger account, the Fleet Portal's billing
+    screen (SCR-FP-010) with CSV and PDF, and dunning on `fleet.events` plus a
+    `FLEET_INVOICE_OVERDUE` push through notification-svc.
+
+    FENCES:
+      * Mode A is free and Mode C is never fleet-owned (AL-03). Neither can reach a line — a line
+        exists only for a charge `billing.monthly_subscriptions` raised, and 1104's writer filters
+        `v.mode = 'B'`.
+      * This is the PLATFORM's charge TO the fleet. It is not C048's passenger subscription, which
+        is a pass-through to the fleet owner that MageRide never holds and never ledgers (§18b).
+      * **This service writes no `billing.journal_postings` row.** wallet-svc (C046) is the only
+        writer of the ledger on this platform (D-09); the money moves through its
+        `/v1/internal/wallet/fleet/{fleetId}/debit` and `/credit` seam, which C060 added.
+
+    Microsoft.NET.Sdk.Web: an HTTP surface (D3' fleet-svc route table's billing rows, served here
+    per ADD §6 — see `backend/contracts/fleet-billing.yaml` for why the contract is its own file).
+
+    Verify: dotnet test backend/src/FleetBilling.Tests -c Release
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.FleetBilling</RootNamespace>
+    <AssemblyName>MageRide.FleetBilling</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <UserSecretsId>mageride-fleet-billing</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Dapper, Npgsql, Confluent.Kafka, the outbox dispatcher, the command log, RS256 auth and
+         the RFC 7807 handler all arrive through the kernel. No package of this service's own:
+         the PDF is written here (see Export/InvoicePdf.cs for why a renderer was not taken on)
+         and the two payment rails are an HttpClient and a template. -->
+    <ProjectReference Include="..\MageRide.Shared\MageRide.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="FleetBilling.Tests" />
+  </ItemGroup>
+
+</Project>

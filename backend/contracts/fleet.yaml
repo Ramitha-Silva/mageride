@@ -18,6 +18,13 @@ openapi: 3.1.0
 # cluster from the contract that declares an operation — so declaring it here routes it to a
 # service that does not implement it. Do not re-add it from an earlier-dated spec line.
 #
+# `GET /v1/fleets/{fleetId}/billing`, `POST /v1/fleets/{fleetId}/wallet/topup` and the
+# `FleetInvoice` schema **moved to `fleet-billing.yaml`** (C060). The third instance of the same
+# split: D3' lists both routes in this table and ADD §6 gives the fleet wallet and the monthly
+# per-Mode-B-vehicle invoicing to `fleet-billing-svc`, which "posts to the same `billing` ledger
+# with `owner_type='fleet'`". That file also carries the invoice detail, the CSV/PDF export, the
+# receipt, the Pay verb, the wallet read and the two provider callbacks.
+#
 # Δ C058 (fleet-svc-org), each raised in the build/progress.md handoff:
 #   + GET  /v1/fleets/{fleetId}/members          — members could be provisioned and never read back,
 #                                                  so SCR-FP-002's team list had no source.
@@ -1176,111 +1183,13 @@ paths:
       x-error-codes: [validation-failed, unauthorized, forbidden, not-found]
 
   # -------------------------------------------------------------------------------------------
-  # Billing
+  # Billing — MOVED to `fleet-billing.yaml` (C060). See this file's header for why.
+  # `GET /v1/fleets/{fleetId}/billing` and `POST /v1/fleets/{fleetId}/wallet/topup` are served by
+  # fleet-billing-svc (ADD §6), which also carries the invoice detail, the CSV/PDF export, the
+  # receipt, the Pay verb, the wallet read and the two provider callbacks. Do not re-add them here
+  # from an earlier-dated spec line: the gateway resolves a cluster from the contract that declares
+  # an operation, so declaring one here routes it to a service that does not implement it.
   # -------------------------------------------------------------------------------------------
-  /v1/fleets/{fleetId}/billing:
-    get:
-      operationId: getFleetBilling
-      summary: Monthly per-Mode-B-vehicle invoices.
-      description: |
-        US-13.10. One invoice per Colombo month (`periodMonth` is always the first of the month —
-        `ck_fleet_invoices_period_month_first`, C005 — otherwise the UNIQUE would admit two rows
-        per month and the free period could be re-claimed). The **first month is free** and carries
-        no amount (D-13).
-      tags: [fleet-billing]
-      security:
-        - bearerAuth: []
-      parameters:
-        - $ref: '#/components/parameters/FleetId'
-        - $ref: './_shared.yaml#/components/parameters/Cursor'
-        - $ref: './_shared.yaml#/components/parameters/Limit'
-      responses:
-        '200':
-          description: Invoice history.
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: './_shared.yaml#/components/schemas/CursorPage'
-                  - type: object
-                    properties:
-                      items:
-                        type: array
-                        items:
-                          $ref: '#/components/schemas/FleetInvoice'
-        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
-        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
-        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
-        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
-      x-error-codes: [unauthorized, not-owner, not-found]
-
-  /v1/fleets/{fleetId}/wallet/topup:
-    post:
-      operationId: topupFleetWallet
-      summary: Top up the fleet wallet.
-      description: |
-        US-13.10b. OnePay or LankaQR only — bank transfer is not a top-up method anywhere on the
-        platform (AL-05). The wallet is credited on the provider callback with a balanced
-        double-entry journal credit (D-09).
-      tags: [fleet-billing]
-      security:
-        - bearerAuth: []
-      parameters:
-        - $ref: '#/components/parameters/FleetId'
-        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [amountMinor, method]
-              properties:
-                amountMinor:
-                  type: integer
-                  format: int64
-                  minimum: 1
-                method:
-                  type: string
-                  enum: [onepay, lankaqr]
-                returnUrl:
-                  type: string
-                  format: uri
-      responses:
-        '200':
-          description: Top-up initiated.
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [topupId, state, amountMinor, currency]
-                properties:
-                  topupId:
-                    $ref: './_shared.yaml#/components/schemas/Ulid'
-                  state:
-                    type: string
-                    enum: [Pending, Succeeded, Failed]
-                  amountMinor:
-                    type: integer
-                    format: int64
-                    minimum: 1
-                  currency:
-                    $ref: './_shared.yaml#/components/schemas/Currency'
-                  redirectUrl:
-                    type: string
-                    format: uri
-                  paymentLink:
-                    type: string
-                    format: uri
-                  qrPayload:
-                    type: string
-        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
-        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
-        '402': { $ref: './_shared.yaml#/components/responses/PaymentRequired' }
-        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
-        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
-        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
-      x-error-codes: [invalid-amount, unauthorized, gateway-error, not-owner, not-found]
 
   # -------------------------------------------------------------------------------------------
   # Mode B subscription proxies (Δ 2026-06-21 items 15, 16, 17)
@@ -2324,35 +2233,6 @@ components:
         geofenceName:
           type: string
         raisedAt:
-          $ref: './_shared.yaml#/components/schemas/Timestamp'
-
-    FleetInvoice:
-      type: object
-      required: [invoiceId, periodMonth, amountMinor, currency, status]
-      properties:
-        invoiceId:
-          $ref: './_shared.yaml#/components/schemas/Ulid'
-        periodMonth:
-          description: Always the first of the month.
-          allOf:
-            - $ref: './_shared.yaml#/components/schemas/BusinessDate'
-        periodMonthTzAt:
-          $ref: './_shared.yaml#/components/schemas/Timestamp'
-        vehicleCount:
-          type: integer
-          format: int32
-          minimum: 0
-        amountMinor:
-          type: integer
-          format: int64
-          minimum: 0
-          description: Zero when `status` is `FREE` — the first month carries no amount (D-13).
-        currency:
-          $ref: './_shared.yaml#/components/schemas/Currency'
-        status:
-          type: string
-          enum: [FREE, DUE, PAID, OVERDUE]
-        dueAt:
           $ref: './_shared.yaml#/components/schemas/Timestamp'
 
     AccessRequest:

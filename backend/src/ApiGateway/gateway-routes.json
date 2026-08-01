@@ -103,6 +103,44 @@
         "Match": { "Path": "/v1/fleets/{fleetId}/health" },
         "Metadata": { "RateLimit": "default" }
       },
+      "fleet-billing-invoices": {
+        "ClusterId": "fleet-billing-svc",
+        "Order": 10,
+        "AuthorizationPolicy": "anonymous",
+        "//": [
+          "US-13.10. The third path under /v1/fleets that fleet-svc does not own — D3' lists",
+          "GET /v1/fleets/{id}/billing and POST .../wallet/topup in the fleet-svc table while",
+          "ADD §6 gives the fleet wallet and the monthly per-Mode-B-vehicle invoicing to",
+          "fleet-billing-svc, the same split as the two routes above. The contract lives in",
+          "backend/contracts/fleet-billing.yaml, which is what RouteTableTests resolves the",
+          "expected cluster from. The catch-all matches the bare /billing too."
+        ],
+        "Match": { "Path": "/v1/fleets/{fleetId}/billing/{**remainder}" },
+        "Metadata": { "RateLimit": "default" }
+      },
+      "fleet-billing-wallet": {
+        "ClusterId": "fleet-billing-svc",
+        "Order": 10,
+        "AuthorizationPolicy": "anonymous",
+        "//": [
+          "US-13.10b. The fleet wallet: the balance SCR-FP-010 draws, the top-up initiate and",
+          "the 90-second poll."
+        ],
+        "Match": { "Path": "/v1/fleets/{fleetId}/wallet/{**remainder}" },
+        "Metadata": { "RateLimit": "write" }
+      },
+      "fleet-billing-callbacks": {
+        "ClusterId": "fleet-billing-svc",
+        "Order": 10,
+        "AuthorizationPolicy": "anonymous",
+        "//": [
+          "The two HMAC-signed provider callbacks for a fleet top-up (D6' §7.1/§7.2). Not under",
+          "/v1/fleets/{fleetId}, and it could not be: a payment gateway knows an order reference",
+          "and a transaction id, not which MageRide organisation the session belonged to."
+        ],
+        "Match": { "Path": "/v1/fleet-billing/{**remainder}" },
+        "Metadata": { "RateLimit": "write" }
+      },
       "transit-geo-parse-maps-link": {
         "ClusterId": "transit-svc",
         "Order": 10,
@@ -501,6 +539,15 @@
           "why `hot-path` still declares no `ports:`."
         ],
         "Destinations": { "primary": { "Address": "http://hot-path:5000/" } }
+      },
+      "fleet-billing-svc": {
+        "//": [
+          "C060. Its own cluster because D3' puts two of its operations under /v1/fleets, which",
+          "fleet-svc otherwise owns, and the route table resolves a cluster per path. In the dev",
+          "compose it is one more service inside the combined `app-services` container (D7' §2.1);",
+          "on DOKS it is its own pod."
+        ],
+        "Destinations": { "primary": { "Address": "http://fleet-billing-svc:5000/" } }
       },
       "admin-bff": { "Destinations": { "primary": { "Address": "http://admin-bff:5000/" } } },
       "public-bff": { "Destinations": { "primary": { "Address": "http://public-bff:5000/" } } },

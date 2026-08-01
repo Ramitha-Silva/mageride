@@ -51,6 +51,20 @@ internal static class JournalKinds
     public const string DriverTransfer = "driver_transfer";
 
     /// <summary>
+    /// A fleet's consolidated monthly per-Mode-B-vehicle platform charge (AL-03, US-13.10).
+    /// <b>Δ C060</b> — added to <c>ck_journal_entries_kind</c> by migration 1108.
+    /// </summary>
+    /// <remarks>
+    /// The eleventh kind, and the first that debits a <c>fleet</c> account rather than a driver's.
+    /// Posted only through <see cref="Endpoints.InternalWalletEndpoints"/>'s fleet routes, by
+    /// fleet-billing-svc, which owns <c>billing.fleet_invoices</c> and its per-vehicle breakdown.
+    /// <c>adjustment</c> was the alternative and is wrong: it is the Finance queue's correction kind
+    /// (US-14.11), and netting the platform's largest recurring revenue line into it would make
+    /// revenue and corrections one number for ever.
+    /// </remarks>
+    public const string FleetInvoice = "fleet_invoice";
+
+    /// <summary>
     /// Kinds another service may post as a <b>debit</b> of a driver's wallet.
     /// </summary>
     /// <remarks>
@@ -73,6 +87,34 @@ internal static class JournalKinds
     public static readonly string[] InternalCreditKinds =
         [TipPayout, PaymentRefund, OverpaidReversal, Adjustment];
 
+    /// <summary>
+    /// Kinds fleet-billing-svc may post as a <b>debit</b> of a fleet's wallet. <b>Δ C060.</b>
+    /// </summary>
+    /// <remarks>
+    /// Exactly one. A fleet wallet exists to pay the platform's monthly per-Mode-B-vehicle charge
+    /// (AL-03) and there is no other reason MageRide takes money out of it: a Mode B passenger's
+    /// subscription is a pass-through to the owner that never enters this ledger at all (§18b,
+    /// C048), Mode A is free, and a fleet has no Mode C vehicles to owe a daily fee for. The three
+    /// driver debit kinds are deliberately absent — a `daily_fee` against an organisation would be a
+    /// charge no rule in D5' §2.1 describes.
+    /// </remarks>
+    public static readonly string[] FleetDebitKinds = [FleetInvoice];
+
+    /// <summary>
+    /// Kinds fleet-billing-svc may post as a <b>credit</b> of a fleet's wallet. <b>Δ C060.</b>
+    /// </summary>
+    /// <remarks>
+    /// <b><c>topup</c> is admitted here and refused on the driver route</b>, and the asymmetry is
+    /// deliberate. The driver rails live in this service — <c>billing.topups</c>, the R-19 provider
+    /// dedupe and the amount check are all here — so a caller posting <c>topup</c> through the seam
+    /// would bypass them. The *fleet* rails are fleet-billing-svc's, which ADD §6 gives "top-up via
+    /// card/OnePay/LankaQR" outright; the same two guards live there over
+    /// <c>billing.fleet_topups</c> (migration 1108), and this service holds no fleet session to
+    /// check against. <c>adjustment</c> is admin-bff's correction, which an organisation needs for
+    /// the same reason a driver does.
+    /// </remarks>
+    public static readonly string[] FleetCreditKinds = [Topup, Adjustment];
+
     /// <summary>Whether <paramref name="kind"/> may be posted through the internal debit route.</summary>
     public static bool IsInternalDebit(string? kind) =>
         kind is not null && Array.IndexOf(InternalDebitKinds, kind) >= 0;
@@ -80,6 +122,14 @@ internal static class JournalKinds
     /// <summary>Whether <paramref name="kind"/> may be posted through the internal credit route.</summary>
     public static bool IsInternalCredit(string? kind) =>
         kind is not null && Array.IndexOf(InternalCreditKinds, kind) >= 0;
+
+    /// <summary>Whether <paramref name="kind"/> may be posted through the fleet debit route.</summary>
+    public static bool IsFleetDebit(string? kind) =>
+        kind is not null && Array.IndexOf(FleetDebitKinds, kind) >= 0;
+
+    /// <summary>Whether <paramref name="kind"/> may be posted through the fleet credit route.</summary>
+    public static bool IsFleetCredit(string? kind) =>
+        kind is not null && Array.IndexOf(FleetCreditKinds, kind) >= 0;
 }
 
 /// <summary>

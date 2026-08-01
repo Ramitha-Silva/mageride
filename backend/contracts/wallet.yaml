@@ -24,6 +24,20 @@ openapi: 3.1.0
 #   POST /v1/internal/wallet/{driverId}/debit | /credit   the ledger seam for the services that
 #                                               move a driver's money and do not own the ledger
 #
+# Δ C060 (fleet-billing-svc), raised in its handoff:
+#   POST /v1/internal/wallet/fleet/{fleetId}/debit | /credit | /account
+#                                               the same seam for a fleet's `owner_type='fleet'`
+#                                               wallet (AL-03). ADD §6 gives fleet-billing-svc
+#                                               "posts to the same `billing` ledger with
+#                                               owner_type='fleet'", and the only thing it needs
+#                                               that the driver routes cannot give it is an account
+#                                               resolved by *fleet* id. `/account` moves no money:
+#                                               it exists because the account is created lazily by
+#                                               the first posting, which leaves a top-up session
+#                                               with no `account_id` to record until the
+#                                               organisation has already been invoiced once.
+#   ~ LedgerAccount schema                      the shape `/account` returns.
+#
 # **The voucher purchase and the request/approve/reject flow are here, not in subscription-svc.**
 # C007 left them out of this file because D3' Part 2 prints them under `/v1/vouchers` and
 # `/v1/subscriptions/credit-transfer`. Two things overrule that placement:
@@ -754,6 +768,146 @@ paths:
       x-error-codes: [validation-failed, invalid-amount, not-found]
 
   # -------------------------------------------------------------------------------------------
+  # The fleet side of the same seam (Δ C060, AL-03). A fleet wallet is `billing.accounts` with
+  # `owner_type='fleet'` — the same ledger, the same balanced-entry rule, the same lock ordering.
+  # A separate route family rather than an `ownerType` field on the body, because a body field
+  # that picks whose wallet is debited is one typo away from taking a month's fleet invoice out of
+  # a driver's balance.
+  # -------------------------------------------------------------------------------------------
+  /v1/internal/wallet/fleet/{fleetId}/debit:
+    post:
+      operationId: internalFleetWalletDebit
+      summary: Debit a fleet organisation's wallet on behalf of fleet-billing-svc.
+      description: |
+        **Δ C060.** One caller and one kind:
+
+        | Caller | `kind` | Spec |
+        |---|---|---|
+        | fleet-billing-svc (C060) | `fleet_invoice` | AL-03, US-13.10 — the consolidated monthly
+        per-Mode-B-vehicle charge |
+
+        The three driver debit kinds are deliberately absent: a `daily_fee` against an organisation
+        is a charge no rule in D5' §2.1 describes, and a fleet has no Mode C vehicles to owe one
+        for. `fleet_invoice` was added to `ck_journal_entries_kind` by migration 1108 — before it
+        there was no kind a fleet's monthly fee could be posted under, which is why
+        `billing.fleet_invoices.journal_entry_id` had existed since 1106 and could never be filled.
+
+        `idempotencyKey` is `fleet_invoice:{invoiceId}` (1108), so two replicas settling one
+        invoice at the same instant move the money once.
+
+        `402 insufficient-wallet` when the organisation cannot cover it — which is not an error but
+        the ordinary reason an invoice stays open until the wallet is topped up.
+      tags: [wallet]
+      security:
+        - mtls: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LedgerPostingRequest'
+      responses:
+        '200':
+          description: Posted, or replayed from the ledger when the key was already used.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LedgerPostingResult'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '402': { $ref: './_shared.yaml#/components/responses/PaymentRequired' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-idempotency-exempt: >-
+        The request body carries its own ledger idempotency key, which is UNIQUE on
+        billing.journal_entries and is what makes a retry a no-op; a second header key would be a
+        second, weaker guard over the same money.
+      x-error-codes: [validation-failed, invalid-amount, insufficient-wallet, not-found]
+
+  /v1/internal/wallet/fleet/{fleetId}/credit:
+    post:
+      operationId: internalFleetWalletCredit
+      summary: Credit a fleet organisation's wallet on behalf of fleet-billing-svc.
+      description: |
+        **Δ C060.** Callers and their kinds:
+
+        | Caller | `kind` | Spec |
+        |---|---|---|
+        | fleet-billing-svc (C060) | `topup` | US-13.10b — a settled OnePay/LankaQR fleet top-up |
+        | admin-bff (C065) | `adjustment` | a Finance correction against an organisation |
+
+        **`topup` is admitted here and refused on the driver route**, and the asymmetry is
+        deliberate. The driver rails live in this service — `billing.topups`, the R-19 provider
+        dedupe and the amount check are all here — so a caller posting `topup` through the driver
+        seam would bypass them. The *fleet* rails are fleet-billing-svc's, which ADD §6 gives
+        "top-up via card/OnePay/LankaQR" outright; the same two guards live there over
+        `billing.fleet_topups` (migration 1108), and this service holds no fleet session to check
+        against. `idempotencyKey` is `fleet_topup:{topupId}`.
+      tags: [wallet]
+      security:
+        - mtls: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LedgerPostingRequest'
+      responses:
+        '200':
+          description: Posted, or replayed from the ledger when the key was already used.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LedgerPostingResult'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-idempotency-exempt: >-
+        The request body carries its own ledger idempotency key, which is UNIQUE on
+        billing.journal_entries and is what makes a retry a no-op; a second header key would be a
+        second, weaker guard over the same money.
+      x-error-codes: [validation-failed, invalid-amount, not-found]
+
+  /v1/internal/wallet/fleet/{fleetId}/account:
+    post:
+      operationId: internalFleetWalletAccount
+      summary: Resolve — creating if needed — a fleet organisation's ledger account.
+      description: |
+        **Δ C060.** The only operation on this plane that moves no money.
+
+        `billing.accounts` has exactly one writer (D-09) and creates a fleet's row lazily on its
+        first posting, which would leave fleet-billing-svc unable to record which wallet a top-up
+        session credits until the organisation had already been invoiced once —
+        `billing.fleet_topups.account_id` is NOT NULL, because a session that does not know which
+        wallet it credits is not a session. The alternatives were both worse: posting a synthetic
+        movement to force the row into existence puts a transaction nobody made on a customer's
+        statement, and letting a second service `INSERT INTO billing.accounts` gives the ledger a
+        second writer for the sake of one row.
+
+        Idempotent by `ux_accounts_owner`.
+      tags: [wallet]
+      security:
+        - mtls: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+      responses:
+        '200':
+          description: The organisation's ledger account.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LedgerAccount'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-idempotency-exempt: >-
+        Creates at most one row, arbitrated by the ux_accounts_owner unique index; there is nothing
+        a second header-based guard could add.
+      x-error-codes: [validation-failed]
+
+  # -------------------------------------------------------------------------------------------
   # Admin
   # -------------------------------------------------------------------------------------------
   /v1/wallet/admin/voucher-discount-tiers:
@@ -856,6 +1010,13 @@ components:
 
     DriverId:
       name: driverId
+      in: path
+      required: true
+      schema:
+        $ref: './_shared.yaml#/components/schemas/Ulid'
+
+    FleetId:
+      name: fleetId
       in: path
       required: true
       schema:
@@ -1080,6 +1241,29 @@ components:
         replayed:
           type: boolean
           description: True when the idempotency key had already been used and nothing new was posted.
+
+    LedgerAccount:
+      type: object
+      required: [accountId, ownerId, ownerType, currency, balanceMinor]
+      description: |
+        A wallet-owning ledger account, resolved or created. **Δ C060.**
+      properties:
+        accountId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        ownerId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        ownerType:
+          type: string
+          enum: [driver, fleet]
+          description: |
+            `billing.accounts.owner_type` (§10). There is no `reseller` (AL-01); `platform` and
+            `suspense` are the platform's own singletons and are never resolved through this route.
+        currency:
+          $ref: './_shared.yaml#/components/schemas/Currency'
+        balanceMinor:
+          type: integer
+          format: int64
+          description: Signed per §0 — a ledger balance may be negative.
 
     VoucherDiscountTier:
       type: object

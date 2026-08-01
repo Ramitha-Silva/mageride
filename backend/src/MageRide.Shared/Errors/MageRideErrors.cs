@@ -226,6 +226,19 @@ public static partial class MageRideErrors
     /// </remarks>
     public static readonly ErrorCode DocumentsIncomplete = new("documents-incomplete", 409, "A required document is missing or unverified");
 
+    /// <summary>
+    /// The consolidated fleet invoice carries nothing to pay (US-13.10).
+    /// </summary>
+    /// <remarks>
+    /// <b>Δ C060.</b> Raised when <c>POST …/billing/{invoiceId}/pay</c> names an invoice that is
+    /// <c>FREE</c> — every vehicle in its first month, or a Mode-A-only fleet, so the total is zero
+    /// and no journal entry could balance — or one that has already been settled. A code of its own
+    /// rather than a bare <see cref="Conflict"/> because SCR-FP-010 draws a different thing for
+    /// each: "already paid" is a receipt to open, "nothing to pay" is a month that cost nothing.
+    /// 409 rather than 400 — the request is well formed and would have worked in a different state.
+    /// </remarks>
+    public static readonly ErrorCode InvoiceNotPayable = new("invoice-not-payable", 409, "This invoice has nothing to pay");
+
     // ---------------------------------------------------------------------------------------
     // safety-svc / public-bff (D3')
     // ---------------------------------------------------------------------------------------

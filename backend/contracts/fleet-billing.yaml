@@ -1,0 +1,879 @@
+openapi: 3.1.0
+
+# =============================================================================================
+# fleet-billing-svc — the fleet wallet and the consolidated monthly invoice (AL-03, AL-05, D-09)
+# Source: specs/architecture-design-document.md §6 (`fleet-billing-svc`)
+#         + specs/user-requirements-document.md Epic 13 §13.G (US-13.10, US-13.10b)
+#         + specs/D5_mageride_business_logic.md §2.1 (Mode B monthly, first month free)
+#         + specs/server_db_schema.md §10 (`billing.fleet_invoices`, the double-entry ledger)
+#         + specs/D3_mageride_api_contracts.md fleet-svc route table
+#           ("GET /v1/fleets/{id}/billing · POST /wallet/topup | owner | monthly
+#            per-Mode-B-vehicle invoice + fleet-wallet top-up (US-13.10/10b)")
+#
+# WHY THESE OPERATIONS ARE NOT IN `fleet.yaml` (C060 micro-change-set)
+#   D3' lists both routes in the **fleet-svc** table; ADD §6 gives the fleet wallet and the
+#   monthly per-Mode-B-vehicle invoicing to a service of its own, **fleet-billing-svc**, which
+#   "posts to the same `billing` ledger with `owner_type='fleet'`". That is the same split D3'
+#   Part 2 makes for `POST /v1/fleets/{fleetId}/trackers/bulk` (provisioning-svc, C007) and
+#   `GET /v1/fleets/{id}/health` (fleet-health-svc, C044). The gateway resolves a cluster from
+#   the contract that declares an operation (C008 `RouteTableTests`), so an operation served by
+#   fleet-billing-svc has to be declared here or it is routed to fleet-svc, which does not
+#   implement it. `fleet.yaml` therefore drops both paths and the `FleetInvoice` schema; a note
+#   in its header says where they went. C059's handoff left them deliberately unmapped.
+#
+# Δ C060 — operations D3' does not carry, each raised in the build/progress.md handoff:
+#   + GET  …/billing/{invoiceId}            — US-13.10 asks for "a single consolidated monthly
+#                                             invoice **with a per-vehicle line breakdown**" and
+#                                             the list route returns totals only. Nothing could
+#                                             read the breakdown that is the whole point of the
+#                                             story.
+#   + GET  …/billing/{invoiceId}/export     — SCR-FP-010's Download. The C060 deliverable names
+#                                             "CSV/PDF export for the Fleet Portal billing
+#                                             screen" and no route existed for either.
+#   + GET  …/billing/{invoiceId}/receipt    — US-13.10b's "downloadable receipt/invoice". A
+#                                             receipt exists only for a settled invoice, and
+#                                             there was nowhere to read the journal entry that
+#                                             settled it.
+#   + POST …/billing/{invoiceId}/pay        — settlement also happens by itself on the runner's
+#                                             tick, so this is for the operator who has just
+#                                             topped up and does not want to wait. Without it the
+#                                             Fleet Portal has a balance, an invoice and no verb.
+#   + GET  …/wallet                         — SCR-FP-010 draws a balance and a statement, and
+#                                             `POST …/wallet/topup` was the only wallet route in
+#                                             any contract. `outstandingMinor` is what makes the
+#                                             screen answer "can I cover this month".
+#   + GET  …/wallet/topup/{topupId}         — the 90-second window D6' §7.1 has a client poll.
+#                                             wallet-svc has the same route for a driver (C046).
+#   + POST /v1/fleet-billing/topup/onepay/webhook · …/lankaqr/confirm
+#                                           — the money actually arrives here. Deliberately NOT
+#                                             under `/v1/fleets/{fleetId}`: a payment provider
+#                                             knows an order reference, not which MageRide
+#                                             organisation a session belonged to.
+#   + POST /v1/internal/fleet-billing/run   — generation, settlement and dunning on demand, for
+#                                             the month that was missed while the runner was down.
+#   ~ FleetInvoice gained `invoiceId`-adjacent lifecycle fields (`dueAt`, `overdueAt`,
+#     `settledAt`, `journalEntryId`) — the four instants SCR-FP-010 renders and the entry a
+#     receipt is evidence of. `status` keeps `fleet.yaml`'s four values; migration 1108 adds
+#     `OVERDUE` to the CHECK, which admitted three.
+#   ~ `invoice-not-payable` in `_shared.yaml`'s ErrorCode enum.
+#
+# THE TWO FENCES, VISIBLE IN THIS FILE
+#   * **Mode A vehicles never appear as a charged line, and Mode C is not a fleet option
+#     (AL-03).** There is no `mode` anywhere in this document, because a line exists only for a
+#     charge `billing.monthly_subscriptions` raised and that table carries Mode B rows only. A
+#     Mode-A-only fleet gets a `FREE` invoice with zero lines — the evidence the run considered
+#     them.
+#   * **Bank transfer is not a top-up method (AL-05).** `method` admits `onepay` and `lankaqr`;
+#     `ck_fleet_topups_method` (migration 1108) refuses anything else, so the database rejects
+#     the row rather than a code review rejecting the request.
+# =============================================================================================
+
+info:
+  title: MageRide fleet-billing-svc
+  version: 1.0.0
+  summary: The fleet wallet, and the consolidated monthly per-Mode-B-vehicle invoice.
+  description: |
+    The platform's charge **to** a fleet operator, and the wallet it is paid from (US-13.10,
+    US-13.10b, AL-03).
+
+    **This is not the passenger subscription.** `subscription.payments` (Epic 23, C048) is a fare
+    a passenger pays **to the fleet owner** — a pass-through MageRide never holds, never takes a
+    cut of and never ledgers (§18b). This is MageRide's own monthly fee for each Mode B vehicle,
+    and it is the only one of the pair that posts.
+
+    **One invoice per organisation per Asia/Colombo month, whose lines sum to its total.**
+    subscription-svc raises one `billing.monthly_subscriptions` row per Mode B vehicle per month
+    (~Rs 300, first month free); this service consolidates a fleet's rows into one
+    `billing.fleet_invoices` row with a `billing.fleet_invoice_lines` breakdown snapshotted at
+    generation. Re-running generation for a month adds what is missing and restates nothing.
+
+    **Settled against the fleet wallet, on the same ledger.** The wallet is
+    `billing.accounts` with `owner_type='fleet'`; settlement is a balanced `fleet_invoice`
+    journal entry (D-09) posted through wallet-svc, which is the only writer of
+    `billing.journal_postings` on this platform. There is no parallel ledger.
+
+    **Billing is the Owner's.** US-13.A5: "Owner = full org control + billing; Manager =
+    onboarding/assignment/scheduling/monitoring (no billing/owner changes)". Every route under
+    `/v1/fleets/{fleetId}` here — reads included — requires the `owner` sub-role of *that*
+    organisation, resolved from `iam.fleet_members` rather than from the token's `fleet_role`
+    claim, which carries only the most privileged of a person's memberships.
+  contact:
+    name: MageRide Platform Engineering
+    url: https://mageride.lk
+  license:
+    name: UNLICENSED
+    url: https://mageride.lk/legal/terms
+
+servers:
+  - url: https://api.mageride.lk
+    description: Production gateway (DOKS Singapore)
+  - url: http://localhost:8080
+    description: Docker Compose dev gateway
+
+tags:
+  - name: fleet-billing
+    description: Monthly invoicing and the fleet wallet for one organisation.
+
+paths:
+
+  # -------------------------------------------------------------------------------------------
+  # Invoices
+  # -------------------------------------------------------------------------------------------
+  /v1/fleets/{fleetId}/billing:
+    get:
+      operationId: getFleetBilling
+      summary: Monthly per-Mode-B-vehicle invoices.
+      description: |
+        US-13.10. One invoice per Colombo month (`periodMonth` is always the first of the month —
+        `ck_fleet_invoices_period_first_day`, C005 — otherwise the UNIQUE would admit two rows per
+        month and the free period could be re-claimed). A vehicle's **first month is free** and
+        contributes a zero line (D5' §2.1); a month in which every vehicle is free, or in which
+        the organisation runs Mode A vehicles only, is a `FREE` invoice with a zero total.
+
+        Newest month first. The cursor is opaque and encodes the last row's period.
+      tags: [fleet-billing]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+        - $ref: './_shared.yaml#/components/parameters/Cursor'
+        - $ref: './_shared.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Invoice history.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './_shared.yaml#/components/schemas/CursorPage'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/FleetInvoice'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes:
+        [validation-failed, unauthorized, not-fleet-member, fleet-role-insufficient,
+         fleet-not-approved, fleet-not-found]
+
+  /v1/fleets/{fleetId}/billing/{invoiceId}:
+    get:
+      operationId: getFleetInvoice
+      summary: One invoice, with its per-vehicle breakdown.
+      description: |
+        **Δ C060.** US-13.10's "single consolidated monthly invoice with a per-vehicle line
+        breakdown (so the operator pays once, but the amount is the sum of per-Mode-B-vehicle
+        monthly fees)".
+
+        `lineSumMinor` is Σ of `lines` computed on the way out. It equals `invoice.amountMinor`,
+        and it is returned rather than assumed so a client can check rather than trust.
+
+        The lines are a **snapshot taken at generation**: the plate and the vehicle type are the
+        ones that were billed, not the vehicle's current ones. A vehicle can be re-plated or leave
+        the organisation, and a settled invoice must not change under it.
+      tags: [fleet-billing]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+        - $ref: '#/components/parameters/InvoiceId'
+      responses:
+        '200':
+          description: The invoice and its lines.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FleetInvoiceDetail'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes:
+        [unauthorized, not-fleet-member, fleet-role-insufficient, fleet-not-approved,
+         fleet-not-found, not-found]
+
+  /v1/fleets/{fleetId}/billing/{invoiceId}/export:
+    get:
+      operationId: exportFleetInvoice
+      summary: Download the invoice as CSV or PDF.
+      description: |
+        **Δ C060.** SCR-FP-010's Download. One row per vehicle plus a `TOTAL` row that is Σ of the
+        rows above it, so an operator who sums the amount column in a spreadsheet gets the number
+        the fleet wallet was debited.
+
+        The CSV prints money twice — rupees for a bank reconciliation, integer minor units for a
+        reconciliation against this platform — because a spreadsheet's floating-point sum must
+        never be the authority on somebody's bill. The PDF uses the base-14 fonts every reader has
+        built in, so nothing is embedded; text outside Latin-1 is rendered as `?`, which in
+        practice can only affect an organisation's name (Sri Lankan plates are Latin).
+      tags: [fleet-billing]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+        - $ref: '#/components/parameters/InvoiceId'
+        - name: format
+          in: query
+          required: false
+          description: Defaults to `csv`.
+          schema:
+            type: string
+            enum: [csv, pdf]
+            default: csv
+      responses:
+        '200':
+          description: The invoice document, with a `Content-Disposition` filename.
+          content:
+            text/csv:
+              schema:
+                type: string
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes:
+        [validation-failed, unauthorized, not-fleet-member, fleet-role-insufficient,
+         fleet-not-approved, fleet-not-found, not-found]
+
+  /v1/fleets/{fleetId}/billing/{invoiceId}/receipt:
+    get:
+      operationId: getFleetInvoiceReceipt
+      summary: The receipt for a settled invoice.
+      description: |
+        **Δ C060.** US-13.10b's "downloadable receipt/invoice". A receipt is evidence that money
+        moved, so an invoice that is not `PAID` answers `404` rather than an empty receipt — the
+        latter would let a client render one for a bill nobody paid. `journalEntryId` is the
+        balanced double-entry record the settlement wrote (D-09).
+      tags: [fleet-billing]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+        - $ref: '#/components/parameters/InvoiceId'
+      responses:
+        '200':
+          description: The receipt.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FleetInvoiceReceipt'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes:
+        [unauthorized, not-fleet-member, fleet-role-insufficient, fleet-not-approved,
+         fleet-not-found, not-found]
+
+  /v1/fleets/{fleetId}/billing/{invoiceId}/pay:
+    post:
+      operationId: payFleetInvoice
+      summary: Settle the invoice from the fleet wallet now.
+      description: |
+        **Δ C060.** Settlement also happens by itself on the billing runner's tick
+        (`FleetBilling:AutoSettle`), so this exists for the operator who has just topped up and
+        does not want to wait — which is why it answers the settled invoice rather than a `202`.
+
+        A wallet that cannot cover the total is **`402 insufficient-wallet`** and the invoice is
+        left open: that is an amount to top up, not an outage to wait out. An invoice that is
+        `FREE` or already `PAID` is **`409 invoice-not-payable`**.
+
+        Idempotent by construction rather than by header: the money moves under the ledger key
+        `fleet_invoice:{invoiceId}`, which is UNIQUE in `billing.journal_entries`, so a second
+        press posts nothing.
+      tags: [fleet-billing]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+        - $ref: '#/components/parameters/InvoiceId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: The invoice, settled.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FleetInvoice'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '402': { $ref: './_shared.yaml#/components/responses/PaymentRequired' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+        '503': { $ref: './_shared.yaml#/components/responses/ServiceUnavailable' }
+      x-error-codes:
+        [unauthorized, insufficient-wallet, not-fleet-member, fleet-role-insufficient,
+         fleet-not-approved, fleet-not-found, not-found, invoice-not-payable,
+         dependency-unavailable]
+
+  # -------------------------------------------------------------------------------------------
+  # The fleet wallet
+  # -------------------------------------------------------------------------------------------
+  /v1/fleets/{fleetId}/wallet:
+    get:
+      operationId: getFleetWallet
+      summary: The fleet wallet's balance and recent movements.
+      description: |
+        **Δ C060.** SCR-FP-010's balance card and statement. The balance comes from
+        `billing.accounts` — §10's master — and never from the `billing.wallets` mirror, which
+        exists for dispatch-svc's hot path and would show an operator a number that lags their own
+        top-up.
+
+        `availableMinor` is `balanceMinor − outstandingMinor` and is **signed**, unlike a driver's:
+        a fleet that owes more than it holds is the state this screen most needs to draw, and
+        flooring it at zero would render "you can cover this" over a shortfall.
+
+        An organisation that has never moved money has no ledger account yet and reads a zero
+        balance — with a real `outstandingMinor`, because an invoice can be issued before the first
+        top-up.
+      tags: [fleet-billing]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+        - $ref: './_shared.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: The wallet.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FleetWallet'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes:
+        [unauthorized, not-fleet-member, fleet-role-insufficient, fleet-not-approved,
+         fleet-not-found]
+
+  /v1/fleets/{fleetId}/wallet/topup:
+    post:
+      operationId: topupFleetWallet
+      summary: Top up the fleet wallet.
+      description: |
+        US-13.10b. OnePay or LankaQR only — bank transfer is not a top-up method anywhere on the
+        platform (AL-05). The wallet is credited **on the provider callback** with a balanced
+        double-entry journal credit (D-09), never here: a session the gateway accepted has moved
+        no money, and treating it as a credit is how a balance grows by abandoning a payment page.
+
+        OnePay answers with `redirectUrl` (or `sessionToken`); LankaQR answers with `paymentLink`
+        — AL-15's deep link into the bank app — and, where the deployment has an acquirer payload
+        template, `qrPayload`.
+      tags: [fleet-billing]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amountMinor, method]
+              properties:
+                amountMinor:
+                  type: integer
+                  format: int64
+                  minimum: 1
+                method:
+                  type: string
+                  enum: [onepay, lankaqr]
+                returnUrl:
+                  type: string
+                  format: uri
+      responses:
+        '200':
+          description: Top-up initiated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FleetTopup'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '402': { $ref: './_shared.yaml#/components/responses/PaymentRequired' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+        '503': { $ref: './_shared.yaml#/components/responses/ServiceUnavailable' }
+      x-error-codes:
+        [invalid-amount, validation-failed, unauthorized, gateway-error, not-fleet-member,
+         fleet-role-insufficient, fleet-not-approved, fleet-not-found, dependency-unavailable]
+
+  /v1/fleets/{fleetId}/wallet/topup/{topupId}:
+    get:
+      operationId: getFleetTopup
+      summary: Poll a top-up session.
+      description: |
+        **Δ C060.** The window D6' §7.1 has a client poll; `expired` is true once a `Pending`
+        session has outlived `FleetBilling:TopupPendingWindow` (90 s).
+
+        **The session artefacts are not returned here and were never stored.** A redirect URL, a
+        session token and a QR payload are single-use, seconds-lived instruments of one gateway
+        session; handing one back long after it stopped working would be worse than not having it.
+        A client that lost the initiate response starts a new top-up.
+      tags: [fleet-billing]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/FleetId'
+        - name: topupId
+          in: path
+          required: true
+          schema:
+            $ref: './_shared.yaml#/components/schemas/Ulid'
+      responses:
+        '200':
+          description: The session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FleetTopup'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes:
+        [unauthorized, not-fleet-member, fleet-role-insufficient, fleet-not-approved,
+         fleet-not-found, not-found]
+
+  # -------------------------------------------------------------------------------------------
+  # Provider callbacks. Signed, not bearer-authenticated (D6' §7.1/§7.2).
+  # -------------------------------------------------------------------------------------------
+  /v1/fleet-billing/topup/onepay/webhook:
+    post:
+      operationId: onepayFleetTopupWebhook
+      summary: OnePay settlement callback for a fleet top-up.
+      description: |
+        **Δ C060.** D6' §7.1. HMAC-signed over the **raw** body, verified before any parsing;
+        there is no unsigned mode, and a deployment with no secret configured credits nothing at
+        all.
+
+        **Not under `/v1/fleets/{fleetId}`, and it could not be**: a provider knows an order
+        reference and a transaction id, not which MageRide organisation the session belonged to.
+        The session row resolves the fleet.
+
+        A redelivery answers `200` with the same body — that is what stops a provider retrying for
+        ever — and credits nothing twice (`ux_fleet_topups_provider_txn`, R-19).
+      tags: [fleet-billing]
+      security:
+        - hmacSignature: []
+      x-idempotency-exempt: >-
+        Provider callback. Deduped on provider_transaction_id per R-19; a payment gateway does not
+        send an Idempotency-Key header. See MageRide.Shared AllowMissingIdempotencyKey (C002
+        decision 2).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopupCallback'
+      responses:
+        '200':
+          description: Processed, or recognised as a redelivery.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopupCallbackResult'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, not-found, conflict]
+
+  /v1/fleet-billing/topup/lankaqr/confirm:
+    post:
+      operationId: lankaqrFleetTopupConfirm
+      summary: LankaQR confirmation callback for a fleet top-up.
+      description: |
+        **Δ C060.** D6' §7.2 / D-12, through the Commercial Bank IPG. Same signature rule and same
+        R-19 dedupe as the OnePay callback; the two rails have different secrets, so a callback
+        that arrives on the wrong one for a session is `409` rather than honoured.
+      tags: [fleet-billing]
+      security:
+        - hmacSignature: []
+      x-idempotency-exempt: >-
+        Provider callback. Deduped on provider_transaction_id per R-19; a payment gateway does not
+        send an Idempotency-Key header. See MageRide.Shared AllowMissingIdempotencyKey (C002
+        decision 2).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopupCallback'
+      responses:
+        '200':
+          description: Processed, or recognised as a redelivery.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopupCallbackResult'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, not-found, conflict]
+
+  # -------------------------------------------------------------------------------------------
+  # Internal plane (mTLS, D3' §0). Refused at the gateway edge.
+  # -------------------------------------------------------------------------------------------
+  /v1/internal/fleet-billing/run:
+    post:
+      operationId: runFleetBilling
+      summary: Generate, settle and dun a month, on demand.
+      description: |
+        **Δ C060.** What the hourly runner does, driven by an operator or by admin-bff. Every phase
+        is idempotent, so this is not a second implementation of anything — it exists because "the
+        platform was not billed for March" has to be fixable without waiting for a tick, and
+        because `FleetBilling:InvoicingEnabled=false` is a deployment shape in which the timer does
+        not run at all.
+
+        Idempotency-exempt: the operation's key is the Colombo month and the invoice id, both of
+        which are unique indexes, and a header-based guard over the same money would be weaker.
+      tags: [fleet-billing]
+      security:
+        - mtls: []
+      x-idempotency-exempt: >-
+        The operation's key is the Colombo month and the invoice id, both of which are unique
+        indexes (ux_fleet_invoices_fleet_period, billing.journal_entries.idempotency_key). A
+        header-based guard over the same money would be weaker and would need its own table — the
+        same choice C047 made for its two internal fee routes.
+      parameters:
+        - name: periodMonth
+          in: query
+          required: false
+          description: '`yyyy-MM` or `yyyy-MM-dd`. Absent means the current Colombo month.'
+          schema:
+            type: string
+        - name: fleetId
+          in: query
+          required: false
+          description: Narrows the settlement phase to one organisation. Generation is monthly.
+          schema:
+            $ref: './_shared.yaml#/components/schemas/Ulid'
+      responses:
+        '200':
+          description: What the run did.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BillingRunResult'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, not-found]
+
+components:
+
+  securitySchemes:
+    bearerAuth:
+      $ref: './_shared.yaml#/components/securitySchemes/bearerAuth'
+    hmacSignature:
+      $ref: './_shared.yaml#/components/securitySchemes/hmacSignature'
+    mtls:
+      $ref: './_shared.yaml#/components/securitySchemes/mtls'
+
+  parameters:
+    FleetId:
+      name: fleetId
+      in: path
+      required: true
+      schema:
+        $ref: './_shared.yaml#/components/schemas/Ulid'
+    InvoiceId:
+      name: invoiceId
+      in: path
+      required: true
+      schema:
+        $ref: './_shared.yaml#/components/schemas/Ulid'
+
+  schemas:
+
+    FleetInvoice:
+      type: object
+      required: [invoiceId, periodMonth, amountMinor, currency, status]
+      properties:
+        invoiceId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        periodMonth:
+          description: Always the first of the month.
+          allOf:
+            - $ref: './_shared.yaml#/components/schemas/BusinessDate'
+        periodMonthTzAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+        vehicleCount:
+          type: integer
+          format: int32
+          minimum: 0
+          description: |
+            Per-vehicle lines on this invoice. Mode A vehicles are free and are never a line, so a
+            Mode-A-only organisation reads zero here (AL-03).
+        amountMinor:
+          type: integer
+          format: int64
+          minimum: 0
+          description: |
+            Σ of the per-vehicle lines. Zero when `status` is `FREE` — every vehicle in its first
+            month, or no Mode B vehicles at all (D5' §2.1, AL-03).
+        currency:
+          $ref: './_shared.yaml#/components/schemas/Currency'
+        status:
+          type: string
+          enum: [FREE, DUE, PAID, OVERDUE]
+        dueAt:
+          description: When the payment term lapses. Δ C060.
+          allOf:
+            - $ref: './_shared.yaml#/components/schemas/Timestamp'
+        overdueAt:
+          description: When dunning began. Written once and never moved. Δ C060.
+          allOf:
+            - $ref: './_shared.yaml#/components/schemas/Timestamp'
+        settledAt:
+          description: When the fleet wallet was debited. Present only when `status` is `PAID`. Δ C060.
+          allOf:
+            - $ref: './_shared.yaml#/components/schemas/Timestamp'
+        journalEntryId:
+          description: |
+            The balanced double-entry record that settled it (D-09). Present exactly when `status`
+            is `PAID` — `ck_fleet_invoices_posting` and `ck_fleet_invoices_settled` (migration
+            1108) make that a database fact rather than a convention. Δ C060.
+          allOf:
+            - $ref: './_shared.yaml#/components/schemas/Ulid'
+
+    FleetInvoiceLine:
+      type: object
+      required: [vehicleId, registrationNumber, vehicleType, amountMinor, currency, status]
+      description: |
+        One vehicle's month, snapshotted at generation. Δ C060.
+      properties:
+        vehicleId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        registrationNumber:
+          type: string
+        vehicleType:
+          type: string
+        amountMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        currency:
+          $ref: './_shared.yaml#/components/schemas/Currency'
+        status:
+          type: string
+          enum: [FREE, DUE]
+          description: '`FREE` is this vehicle''s first month on the platform and is worth zero.'
+
+    FleetInvoiceDetail:
+      type: object
+      required: [invoice, lines, lineSumMinor]
+      properties:
+        invoice:
+          $ref: '#/components/schemas/FleetInvoice'
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/FleetInvoiceLine'
+        lineSumMinor:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Σ of `lines`. Equals `invoice.amountMinor`.
+
+    FleetInvoiceReceipt:
+      type: object
+      required: [invoiceId, fleetId, fleetName, periodMonth, amountMinor, currency, settledAt, journalEntryId]
+      properties:
+        invoiceId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        fleetId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        fleetName:
+          type: string
+        periodMonth:
+          $ref: './_shared.yaml#/components/schemas/BusinessDate'
+        amountMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        currency:
+          $ref: './_shared.yaml#/components/schemas/Currency'
+        vehicleCount:
+          type: integer
+          format: int32
+          minimum: 0
+        settledAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+        journalEntryId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+
+    FleetWallet:
+      type: object
+      required: [balanceMinor, outstandingMinor, availableMinor, currency, movements]
+      properties:
+        balanceMinor:
+          type: integer
+          format: int64
+          description: From `billing.accounts`, the ledger master (§10).
+        outstandingMinor:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Σ of this organisation's `DUE` and `OVERDUE` invoices.
+        availableMinor:
+          type: integer
+          format: int64
+          description: |
+            `balanceMinor − outstandingMinor`. **Signed**: an organisation that owes more than it
+            holds is a state this screen has to draw.
+        currency:
+          $ref: './_shared.yaml#/components/schemas/Currency'
+        updatedAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+        movements:
+          type: array
+          items:
+            $ref: '#/components/schemas/FleetWalletMovement'
+
+    FleetWalletMovement:
+      type: object
+      required: [entryId, kind, amountMinor, balanceAfterMinor, ts]
+      properties:
+        entryId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        kind:
+          type: string
+          description: '`topup`, `fleet_invoice` or `adjustment` for a fleet wallet.'
+        amountMinor:
+          type: integer
+          format: int64
+          description: Signed as posted — a settlement is negative.
+        balanceAfterMinor:
+          type: integer
+          format: int64
+        description:
+          type: string
+        ts:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    FleetTopup:
+      type: object
+      required: [topupId, state, amountMinor, currency, method, createdAt]
+      properties:
+        topupId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        state:
+          type: string
+          enum: [Pending, Succeeded, Failed]
+        amountMinor:
+          type: integer
+          format: int64
+          minimum: 1
+        currency:
+          $ref: './_shared.yaml#/components/schemas/Currency'
+        method:
+          type: string
+          enum: [onepay, lankaqr]
+        redirectUrl:
+          type: string
+          format: uri
+          description: OnePay's hosted page. Present on the initiate only.
+        sessionToken:
+          type: string
+          description: OnePay's session token, when it issues one instead of a redirect.
+        paymentLink:
+          type: string
+          format: uri
+          description: AL-15's "Pay" deep link into the bank app. Present on the initiate only.
+        qrPayload:
+          type: string
+          description: |
+            The LankaQR fallback, present only where the deployment has an acquirer payload
+            template. An EMVCo payload's merchant fields and CRC belong to the acquiring bank, so
+            one is never composed here.
+        createdAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+        expired:
+          type: boolean
+          description: A `Pending` session that has outlived the 90-second window (D6' §7.1).
+
+    TopupCallback:
+      type: object
+      required: [providerTransactionId, status]
+      properties:
+        providerTransactionId:
+          type: string
+          description: The gateway's own id. The R-19 dedupe key.
+        topupId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        orderId:
+          type: string
+          description: The reference we sent, echoed back — how a callback with no `topupId` finds its session.
+        status:
+          type: string
+          enum: [SUCCESS, FAILED, PENDING]
+        amountMinor:
+          type: integer
+          format: int64
+          description: |
+            Checked against the session. A mismatch credits **nothing** in either direction and is
+            logged as the settlement exception D6' §7.2 routes to Finance.
+
+    TopupCallbackResult:
+      type: object
+      required: [topupId, state, credited, replayed]
+      properties:
+        topupId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        state:
+          type: string
+          enum: [Pending, Succeeded, Failed]
+        credited:
+          type: boolean
+        replayed:
+          type: boolean
+          description: True for a redelivery. Nothing was credited a second time.
+
+    BillingRunResult:
+      type: object
+      required: [periodMonth, invoicesRaised, linesAdded, settlementsAttempted, settled, insufficient, markedOverdue, notified]
+      properties:
+        periodMonth:
+          $ref: './_shared.yaml#/components/schemas/BusinessDate'
+        invoicesRaised:
+          type: integer
+          format: int32
+        linesAdded:
+          type: integer
+          format: int32
+        settlementsAttempted:
+          type: integer
+          format: int32
+        settled:
+          type: integer
+          format: int32
+        insufficient:
+          type: integer
+          format: int32
+          description: Invoices left open because the organisation's wallet could not cover them.
+        markedOverdue:
+          type: integer
+          format: int32
+        notified:
+          type: integer
+          format: int32

@@ -58,6 +58,13 @@ public sealed class NotificationCatalogueTests
         // seeds `schedule_not_started` in all three languages — a type without a template is a key
         // nobody resolves, which is what 1902 refused to create.
         "SCHEDULE_NOT_STARTED",
+
+        // Δ C060. US-13.10's dunning notice for a consolidated fleet invoice past its payment term,
+        // produced by fleet-billing-svc's invoice runner. Deliberately not LOW_BALANCE or
+        // TOP_UP_REQUIRED, which are US-9.9 / D5' §9.4's driver-wallet warnings about the next trip
+        // and would be about the wrong wallet and the wrong event. Migration 1906 seeds
+        // `fleet_invoice_overdue` in all three languages.
+        "FLEET_INVOICE_OVERDUE",
     ];
 
     [Fact]

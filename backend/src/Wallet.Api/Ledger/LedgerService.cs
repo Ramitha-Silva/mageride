@@ -273,7 +273,14 @@ internal sealed class LedgerService(
             var before = locked[leg.AccountId].BalanceMinor;
             var threshold = _options.LowBalanceThresholdMinor;
 
-            if (leg.BalanceAfterMinor < threshold && before >= threshold)
+            // Drivers only (Δ C060). US-9.9 is a driver's warning — "top up before your next trip" —
+            // and D5' §9.4's second clause is about going online. A fleet's balance is spent once a
+            // month against an invoice it can already see, its dunning is fleet-billing-svc's
+            // OVERDUE signal, and a LOW_BALANCE push at an organisation would resolve to no
+            // recipient and mean the wrong thing if it did.
+            if (locked[leg.AccountId].OwnerType == AccountOwnerTypes.Driver
+                && leg.BalanceAfterMinor < threshold
+                && before >= threshold)
             {
                 await ledger.AddOutboxAsync(
                     connection,

@@ -85,7 +85,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C057 | transit-svc-gtfs-lifecycle | 3 | DONE | 2026-07-31 | **26 GTFS tests green** (`--filter Category=Gtfs`) and **84/84** across the whole transit suite, over a real Postgres with real zips built in memory; **1 migration (1407)** — `transit.command_log`, the eleventh instance of the R-14 gap, because BR-32.2 makes activation idempotent on `Idempotency-Key`; **the swap is a three-way schema rename**, so the live dataset is replaced in the time it takes to take the locks whatever the feed's size — and **the index names are renamed back onto their own side in the same transaction** (the C005 decision), asserted after *two* activations because a one-way rename passes after one; **"a failed activation leaves the previous feed live" is held by which tables each phase touches**, not by unwinding — the staging load never touches `transit.*` — and is asserted by losing the stored zip out from under a validated version; **the upload dedupes on content, not on a header** (sha256, BR-32.1), which is why it is the one POST outside the kernel's replay: the body is 200 MB and the header would be weaker; **3 guards for one 413** because a declared length, a chunked body and the file's own bytes are three different clients; **`trip_headsign` is now mapped**, closing C056's ask — without it "138 to Kottawa" and "138 to Pettah" are the same card twice; **C056's gap (b) is escalated, not closed** — the calendar is validated but §18c has nowhere to store it; **3 error codes landed in the kernel** that C007 coined in the contract enum and nothing could raise; `migrate-verify.sh` 366/366 (was 363), Spectral 0 errors, solution build 0 warnings; 2 contract additions, 5 spec gaps |
 | C058 | fleet-svc-org | 3 | DONE | 2026-07-31 | **42 tests green** in a new suite (`Fleet.Api.Tests`), every one integration against a real Postgres because every DoD item is a claim about the database; **2 migrations (0313, 1806)** — the org's KYC contact (`POST /v1/fleets` **requires** `contactPhone` and §2 has nowhere to put it), `ux_fleets_business_reg_active`, `registry.fleet_command_log` (R-14, the twelfth), and a `superseded` payout status because §26 makes the table versioned **and** admits one verified row per org — when an officer approves an edit the incumbent has to leave `verified` and no printed status could carry it; **the cross-org fence is RLS, asserted as RLS** — five RESTRICTIVE role-targeted policies plus three security-barrier join views, and `RowLevelSecurityTests` connects as a **real non-superuser login** and asks for another org's rows **by primary key** with no fleet-svc code in the path; **RESTRICTIVE, not permissive-only, because twenty services read these tables** and a plain policy would have denied every one of them silently as zero rows; **the approval gate is on the route group, not in the handlers** — C059's vehicle and assignment routes are gated the moment they are mapped, and a test walks the endpoint data source so it fails for the *next* component's mistake; **BR-31.1's second half is the expensive one** — an edit to a verified payout profile *inserts* and leaves the incumbent collecting, asserted against subscription-svc's own pay-sheet query verbatim; **the token's `fleet_role` claim is never the authority** (it carries one membership of possibly several, C027), so every request resolves the seat from `iam.fleet_members` for the org in the **path**; **two verify-script queries narrowed to `BASE TABLE`** — a trigger cannot be attached to a view and a CHECK cannot be declared on one; `migrate-verify.sh` **391/391** (was 366) with a C058 section, Spectral 0 errors, solution build 0 warnings; 7 new error codes, 6 contract changes, 8 spec gaps / micro-change-sets |
 | C059 | fleet-svc-fleet-ops | 3 | DONE | 2026-07-31 | **93 tests green** in `Fleet.Api.Tests` (was 42), the four new suites integration against a real Postgres because every DoD item is a claim about the database; **4 migrations (0314, 1408, 1807, 1905)** — the assignment validity window 0310's own header named as C059's to close, `registry.fleet_schedules` (US-13.11 has no table anywhere and `dispatch.scheduled_rides` is a passenger's Mode C booking), the bulk-job pair, `spatial.geofences.fleet_id` (a PUT is a replace and §17's table had no owner) and a trilingual `schedule_not_started` template; **US-13.9's "auto-expires" is a predicate, not a sweep** — `driver_eligible_vehicles` evaluates the window at read time, so the row is untouched and simply stops being returned, which is what makes "without manual action" true rather than merely fast; **the overlap rule is an exclusion constraint** (`btree_gist`), because 0306's unique index could not tell an expired assignment from a live one and would have blocked re-hiring a relief driver for ever; **AL-50's approval gate lives here, not where the spec puts it** — registry-svc's approval path is AL-30's Mode C wizard, which refuses Mode A/B outright and derives its verdict from a table a fleet vehicle has no rows in; **`docsStatus` is derived, never stored**, and the gate re-derives every slot *inside* the transaction that writes the status, so a permit that lapsed while the queue item sat there stops the approval; **a bulk row that fails costs only itself** (`SAVEPOINT` per row) and `COMPLETED` with failures is a partial import with a downloadable report, not a failure; **the map and the analytics are scoped by the database** — `telemetry.positions_fleet` + `trips.sessions_fleet`, with the base tables never granted; `migrate-verify.sh` **421/421** (was 391) with a C059 section, Spectral 0 errors, solution build 0 warnings; 2 new error codes, 13 contract changes, 9 spec gaps / micro-change-sets |
-| C060 | fleet-billing-svc | 3 | PENDING | | |
+| C060 | fleet-billing-svc | 3 | DONE | 2026-07-31 | **72 tests green** in a **new suite** (`FleetBilling.Tests`), which boots a **real wallet-svc** because both halves of "post to a balanced journal entry" live in that service's schema — `trg_balanced` fires at COMMIT and `billing.journal_entries.idempotency_key` is what makes settling twice move the money once; **2 migrations (1108, 1906)** — the `fleet_invoice` journal kind (1106 gave the invoice a `journal_entry_id` and no kind could ever fill it, which is why C047 handed the consolidation over *unledgered*), `OVERDUE` (the contract has always returned four statuses and the CHECK admitted three), `billing.fleet_invoice_lines`, `fleet_topups`, `fleet_outbox` and `fleet_command_log`, plus a trilingual `fleet_invoice_overdue` template; **this service writes no ledger row** — there is no `INSERT INTO billing.journal_` and no `UPDATE billing.accounts` anywhere in the assembly, and every movement goes through **three new routes on C046's seam** (`/v1/internal/wallet/fleet/{fleetId}/debit` · `/credit` · `/account`); **the lines are a snapshot, not a join** — a live one would make a settled invoice change under a roster edit and Σ lines stop equalling the amount that was paid; **`ux_fleet_invoice_lines_charge` is the guard that matters** — one raised charge reaches one invoice, so a vehicle that changes organisation mid-month is not billed twice; **AL-03 is held by an absence** (1104 raises no Mode A row, so there is nothing to filter) and a Mode-A-only fleet gets a FREE invoice with **zero lines**, which is 1106's own comment honoured; **the PDF is written here rather than taken as a dependency** — base-14 fonts, byte-exact xref, parsed back by the suite — because a renderer is a native binary in every container for one document, and wallet-svc's `415` was not available when the deliverable names PDF outright; **billing is Owner-only on reads as well as writes** (US-13.A5), unlike fleet-svc where the map sits outside the gate; **`fleet-billing.yaml` is a new contract** and `fleet.yaml` loses two paths and a schema — the third instance of C007's and C044's split; `migrate-verify.sh` **441/441** with a C060 section, Spectral 0 errors, solution build 0 warnings; **1 pre-existing cross-suite break found and fixed** (`Subscription.Api.Tests`'s reset could not TRUNCATE a table 1108 gave a foreign key); 1 new error code, 13 contract changes, 12 spec gaps / micro-change-sets |
 | C061 | analytics-read-model | 3 | PENDING | | |
 | C062 | admin-bff-core | 3 | PENDING | | |
 | C063 | admin-bff-verification | 3 | PENDING | | |
@@ -8864,3 +8864,208 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   the throwaway container `migrate-verify.sh` starts; the replica stayed down throughout.
   `Fleet.Api.Tests` takes ~6 m 10 s (93 harness starts, each a fresh service on a real socket).
   **No new NuGet reference.** One new **PostgreSQL extension**: `btree_gist`, for decision (2).
+
+- **Component:** C060 fleet-billing-svc — 2026-07-31
+- **Status:** DONE — `dotnet test backend/src/FleetBilling.Tests -c Release` is **72/72 green**
+  in a new suite. `bash infra/scripts/migrate-verify.sh` **441/441** (was 421). Spectral **0 errors**
+  over all 25 contract files. `dotnet build backend/MageRide.sln -c Release` succeeds with 0
+  warnings. Re-ran the four neighbouring suites the changes touch: `Wallet.Api.Tests` 76/76,
+  `Subscription.Api.Tests` 112/112, `Fleet.Api.Tests` 93/93, `Fare.Api.Tests` 113/113,
+  `Content.Api.Tests` 105/105, `MageRide.Shared.Tests` 257/257, `ApiGateway.Tests` 560/560.
+  All three DoD items pass: an invoice's per-vehicle lines sum to its total *and* to the amount its
+  balanced `fleet_invoice` entry moved; a Mode A vehicle never reaches a line; generation re-run
+  three times leaves one invoice, the same lines and one `fleet.invoice_issued`.
+- **Notes:**
+  **Spec gaps — micro-change-sets, twelve.**
+  (a) **The journal had no kind a fleet's monthly fee could be posted under.**
+  `billing.fleet_invoices.journal_entry_id` has existed since C005/1106 and `ck_journal_entries_kind`
+  admitted ten values, none of them it — so the column could never have been filled, which is exactly
+  why C047's handoff recorded the Mode B consolidation as "handed to C060 **unledgered**". ADD §6 is
+  explicit that fleet-billing-svc "posts to the same `billing` ledger with `owner_type='fleet'`", and
+  the DoD requires a balanced entry. **1108 adds `fleet_invoice`; §10 should carry it.** `adjustment`
+  was the alternative and is wrong: it is the Finance queue's correction kind (US-14.11), and netting
+  the platform's largest recurring revenue line into it would make revenue and corrections one number
+  for ever. AL-01 is untouched — there is still no kind a per-transfer commission could use, and
+  `migrate-verify.sh` asserts both facts.
+  (b) **`billing.fleet_invoices.status` could not hold the state the contract returns.**
+  `fleet.yaml`'s `FleetInvoice.status` enum has always been `[FREE, DUE, PAID, OVERDUE]` and 1106's
+  CHECK admitted three of the four. Without OVERDUE there is nowhere to record that dunning has
+  begun. **§10 should print four.**
+  (c) **An invoice had a total and no lines.** US-13.10 asks for "a single consolidated monthly
+  invoice **with a per-vehicle line breakdown**" and §10 gives `billing.fleet_invoices` a
+  `total_minor` and nothing else. `billing.fleet_invoice_lines` (1108) is the breakdown, snapshotted.
+  (d) **A fleet top-up had nowhere to live.** `billing.topups` (1107) is wallet-svc's and its
+  `driver_id UUID NOT NULL REFERENCES iam.users(id)` is a driver, not an organisation. The same shape
+  as 1107's own argument (1), one level up.
+  (e) **The dunning signal had a producer and two named consumers and no table.** `billing.outbox`
+  (1107) is wallet-svc's and drains to `wallet.events`; one table cannot serve two dispatchers
+  publishing to two topics. `billing.fleet_outbox` → `fleet.events`, the topic C044 opened.
+  (f) **R-14 needs a per-service command log** and `billing.command_log` is wallet-svc's, keyed on
+  the bare idempotency key. Thirteenth bounded context to raise this.
+  (g) **D5' §14.4 has no `FLEET_INVOICE_OVERDUE` row and 1902/1904 seed no key for it** — the whole
+  of Epic 13's billing is missing from the notification tables. 1906 seeds it trilingually, beside
+  the `NotificationCatalogue` entry and the producer, which is the rule 1904's header states.
+  `LOW_BALANCE` is **not** it: that is US-9.9's *driver* warning, wallet-svc emits it edge-triggered
+  on a driver account, and its body talks about the next trip.
+  (h) **D3' places `GET /v1/fleets/{id}/billing` and `POST …/wallet/topup` on fleet-svc; ADD §6 gives
+  the service to fleet-billing-svc.** Resolved the way C007 resolved the tracker-bulk route and C044
+  the health route: a new `backend/contracts/fleet-billing.yaml`, and `fleet.yaml` drops both paths
+  and the `FleetInvoice` schema with a header note saying where they went. The gateway resolves a
+  cluster from the contract that declares an operation, so leaving them in `fleet.yaml` would route
+  them to a service that does not implement them.
+  (i) **D7' §4.2 has no row for this service at all** — it predates the split. Its four shared keys
+  are read under the neighbouring prefixes as well (`Wallet:*`, `Onepay:*`, `LankaQr:*`,
+  `ComBankIpg:*`, `Notification:*`), so a co-located deployment sets each secret once.
+  (j) **No spec pins a payment term.** `FleetBilling:PaymentTerm` (7 d) decides it and the invoice
+  records the answer, so moving the setting cannot retro-date one already issued.
+  (k) **`fleet.events` now has two producers.** D6' §2.1 lists neither (C044 raised the topic itself
+  as a micro-change-set); `bootstrap-topics.sh`'s comment names both.
+  (l) **`invoice-not-payable`** added to `_shared.yaml`'s `ErrorCode` enum and to `MageRideErrors`.
+  SCR-FP-010's Pay button has two refusals that draw differently — "already paid" is a receipt to
+  open, "nothing to pay" is a FREE month — and `conflict` cannot tell them apart.
+
+  **Decisions.**
+  (1) **This service writes no ledger row, and that is enforced by absence.** There is no
+  `INSERT INTO billing.journal_`, no `UPDATE billing.accounts` and no `billing.wallets` write
+  anywhere in the assembly; every movement is an HTTP call to wallet-svc. The fence "postings use the
+  same billing ledger with `owner_type='fleet'`; no parallel ledger" is therefore a property of what
+  is missing rather than of a rule somebody follows. **C046 gained three internal routes**
+  (`/v1/internal/wallet/fleet/{fleetId}/debit` · `/credit` · `/account`), an
+  `EnsureFleetAccountAsync`, the `fleet_invoice` kind and two fleet whitelists.
+  (2) **`topup` is admitted on the fleet credit route and refused on the driver one.** The driver
+  rails live in wallet-svc — `billing.topups`, the R-19 dedupe and the amount check are all there —
+  so a caller posting `topup` through that seam would bypass them. The *fleet* rails are this
+  service's, which ADD §6 gives "top-up via card/OnePay/LankaQR" outright, and the same two guards
+  live here over `billing.fleet_topups`. wallet-svc holds no fleet session to check against.
+  (3) **`POST /v1/internal/wallet/fleet/{fleetId}/account` exists and moves no money.**
+  `billing.accounts` is created lazily by the first posting, which would leave a top-up session
+  unable to record which wallet it credits until the organisation had already been invoiced once —
+  and `billing.fleet_topups.account_id` is NOT NULL, because a session that does not know which
+  wallet it credits is not a session. The two alternatives were worse: a synthetic movement puts a
+  transaction nobody made on a customer's statement, and a second `INSERT INTO billing.accounts`
+  gives the ledger a second writer for the sake of one row.
+  (4) **Generation is three set-based statements in one transaction, and idempotence is three unique
+  indexes.** The invoice is created FREE with a zero total (the only state
+  `ck_fleet_invoices_free` admits before the lines exist — CHECKs are immediate, so every statement
+  has to leave the row valid), the lines are inserted with a bare `ON CONFLICT DO NOTHING` because
+  *two* constraints can refuse one and both mean "already consolidated", and the totals are
+  recomputed unconditionally for every unsettled invoice of the month. A month with ten thousand
+  vehicles costs three round trips.
+  (5) **`ux_fleet_invoice_lines_charge` (UNIQUE on `monthly_subscription_id`) is the guard that
+  matters.** Without it a vehicle that changes organisation mid-month is consolidated onto both
+  fleets' invoices and the platform collects twice, with both invoices looking correct. Asserted by
+  a test that moves a bus between two organisations between two runs.
+  (6) **A settled invoice is never appended to**, because a line added afterwards would break Σ lines
+  = the amount that was paid. A charge raised for a month whose invoice has already settled is
+  therefore stranded — and the run **logs the count**, because the alternative is the platform
+  quietly not being paid for those vehicles. What to do with one is a Finance decision no spec makes;
+  named below.
+  (7) **A Mode-A-only fleet gets a FREE invoice with zero lines**, which is 1106's own table comment
+  ("the row is the evidence the run considered them") and the most direct statement of AL-03 an
+  operator can be handed. A Mode A vehicle is **not** a zero line: a zero line would claim the
+  platform considered charging it.
+  (8) **This service marks `billing.monthly_subscriptions` PAID — a deliberate second writer of one
+  column.** C047 raises those rows and has no route that collects one; its own handoff hands the
+  fleet half here. A row that stayed DUE for ever would grow `ix_monthly_subs_due` without bound and
+  tell the Fleet Portal that a vehicle on a settled invoice still owes for the month. `WHERE
+  ms.status = 'DUE'` narrows it to that transition; a FREE row is left alone, because a month that
+  cost nothing was not paid for.
+  (9) **Debit first, record second** (C047's rule, larger amounts), with two guards that guard
+  different things: the ledger's UNIQUE key stops the *money* moving twice and the
+  `WHERE status IN ('DUE','OVERDUE')` claim stops a second *row* change. The first is load-bearing —
+  two replicas can decide to settle at the same instant and nothing serialises the decision.
+  (10) **Dunning is two signals with two audiences.** The Fleet Portal's is a state plus a
+  `fleet.invoice_overdue` event; notification-svc's is a direct call to its internal plane. Routing
+  the second through Kafka would mean notification-svc growing a `fleet.events` consumer for one
+  message type — a second delivery path for something that already has one, which is the call C059
+  made for the departure alarm. **Only Owners are dunned**: US-13.A5 takes billing away from the
+  Manager, so pushing one about a bill they cannot pay tells the wrong person.
+  (11) **`overdue_at` and `last_dunned_at` are two columns.** "When this went overdue" is written
+  once and never moved; "when we last said so" is what `DunningInterval` reads. One column would lose
+  the first the moment a reminder went out — and without the interval, an hourly sweep would push an
+  operator twenty-four times a day about one bill.
+  (12) **Billing is Owner-only on reads as well as writes**, unlike fleet-svc where the map and the
+  analytics deliberately sit outside the role gate: there is no billing read a Manager is entitled
+  to. Approval gates reading too — a PENDING organisation has no approved vehicles, so every route
+  would answer an empty page, and an empty page is a worse answer than "your organisation is still
+  being reviewed". `No_fleet_scoped_route_answers_a_manager_or_a_non_member` walks the endpoint data
+  source and *drives* every route, so a route mapped outside the group fails that test rather than
+  shipping unscoped (an endpoint filter added to a group leaves no metadata to inspect).
+  (13) **The PDF is written in this repository.** ~250 lines emitting PDF 1.4 with the three base-14
+  fonts every reader has built in — nothing embedded, nothing rasterised, no new NuGet reference. A
+  renderer is a large dependency, a licence question and (in two of three cases) a native binary in
+  every container, for a document with a title, six metadata lines and a table; wallet-svc's `415`
+  was not available because C060's deliverable names PDF export outright. The cross-reference table
+  is the part that has to be exact, so `PdfAssert` parses the file back and checks every offset lands
+  on its own `N 0 obj` and every stream's `/Length` matches its body. The table is set in Courier
+  because base-14 Courier is metrically exact, so the amount column right-aligns by arithmetic.
+  **Its one real limit is stated in a test:** text outside Latin-1 becomes `?`. Sri Lankan plates are
+  Latin, so only an organisation's *name* can be affected, and it is intact in the CSV.
+  (14) **`availableMinor` is signed here and floored at zero for a driver.** A fleet that owes more
+  than it holds is exactly the state SCR-FP-010 has to draw.
+  (15) **wallet-svc's low-balance edge is now driver-only.** US-9.9 is a driver's warning about the
+  next trip; a `LOW_BALANCE` at an organisation would resolve to no recipient and would mean the
+  wrong thing if it did. One condition added to `LedgerService`; C046's 76 tests are unaffected.
+  (16) **A top-up session is stamped with the service's clock, not the database's `now()`.** D6'
+  §7.1's window is measured against `TimeProvider`, and a row stamped by a different clock is a
+  window whose width depends on the drift between two machines. (Found by the expiry test, which
+  could never go true.)
+
+  **A cross-suite break this component caused and fixed —** `Subscription.Api.Tests` went 95/112 red
+  the moment 1108 landed: its reset `TRUNCATE`s `billing.monthly_subscriptions`, and Postgres refuses
+  to truncate a table referenced by a foreign key unless the referencing one goes with it.
+  `billing.fleet_invoice_lines` now points at it (which is what makes one raised charge reachable
+  from exactly one invoice), so the suite's list gained `fleet_invoice_lines`, `fleet_topups` and
+  `fleet_outbox`. Named rather than `CASCADE`d, which is that list's own stated property. 112/112
+  green again.
+
+  **Pre-existing failure, NOT caused by C060 —** `Notification.Api.Tests` is still
+  **1 failed / 85 passed**: `NotifyApiTests.Retention_removes_settled_rows_and_leaves_pending_ones`,
+  the same failure C059's handoff recorded and reproduced on a clean worktree at HEAD. Nothing here
+  touches `comms.notifications` or the retention sweep; the one change this component made to
+  notification-svc is additive (`FLEET_INVOICE_OVERDUE` in the catalogue and in the test's
+  declared-additions list, and the other 85 including
+  `The_catalogue_invents_nothing_beyond_the_declared_additions` are green). Diagnosing it belongs
+  with C051.
+
+  **Not built, and named rather than stubbed —** the OnePay status-poll reconciler (D6' §7.1's
+  "reconcile open orders by status poll"): `TopupPendingWindow` is *read* — a Pending session's age
+  is reported as `expired` — and nothing sweeps, which is wallet-svc's position unchanged. The
+  **individually-owned Mode B vehicle's charge** is still uncollectable: `billing.fleet_invoices`
+  requires a `fleet_id`, so a vehicle belonging to no organisation cannot be invoiced here either.
+  C047 named it; it is named again. **A stranded charge's disposal** (decision 6) needs a Finance
+  route no spec describes.
+
+  **For C065 (admin-bff) —** `POST /v1/internal/fleet-billing/run` takes `?periodMonth=yyyy-MM` and
+  an optional `?fleetId`, behind `FleetBilling:InternalApiKey`/`X-MageRide-Internal-Key`, and answers
+  what the run did. It is the route a Finance officer needs when a month was missed. The two Finance
+  queues this component feeds and does not own: a **top-up amount mismatch** (logged with both
+  numbers, session left `Pending` — D6' §7.2's settlement exception) and a **stranded charge** (a
+  Mode B charge on no invoice because its organisation's month was already settled; the run logs the
+  count). An `adjustment` against a fleet wallet goes through
+  `POST /v1/internal/wallet/fleet/{fleetId}/credit`.
+  **For C115 (Fleet Portal billing, SCR-FP-010) —** every control on that screen has a route:
+  `GET …/billing` (the list), `…/billing/{id}` (the per-vehicle breakdown), `…/export?format=csv|pdf`
+  (Download — send the browser at it directly, it sets `Content-Disposition`), `…/receipt`,
+  `POST …/billing/{id}/pay`, `GET …/wallet`, `POST …/wallet/topup`, `GET …/wallet/topup/{id}` (poll
+  it for up to 90 s). **Branch on `402 insufficient-wallet` (top up and retry) and
+  `409 invoice-not-payable` (nothing to pay / already paid) — they draw differently.**
+  `availableMinor` is **signed**; render a negative as a shortfall rather than clamping. Every route
+  needs the **Owner** sub-role: a Manager gets `403 fleet-role-insufficient` and the screen should
+  not be in their navigation at all.
+  **For C051 (notification-svc) —** `FLEET_INVOICE_OVERDUE` is a real type with a real producer and a
+  trilingual template (1906). Mutable and normal priority deliberately: a bill is not an emergency
+  and the same fact is already on SCR-FP-010. The values it carries are `invoiceId`, `fleetId`,
+  `fleetName`, `periodMonth` (`yyyy-MM`), `amount` (rupees, formatted), `amountMinor` and
+  `daysOverdue`. The two notifications C058 named as missing — org approved/rejected, and the
+  sub-user invitation — are still missing.
+  **For the KMP client (C012/C013) and contract tests (C118) —** **`fleet-billing.yaml` is a new
+  contract file** with 11 operations, and `fleet.yaml` **lost** `getFleetBilling`,
+  `topupFleetWallet` and the `FleetInvoice` schema (they moved). `wallet.yaml` gained three internal
+  operations and a `LedgerAccount` schema. `_shared.yaml`'s `ErrorCode` enum gained
+  `invoice-not-payable`.
+  **Build host —** Docker for two Testcontainers fixtures (Postgres, Redpanda; Redis is declared by
+  the collection because wallet-svc needs it, and this service uses none) plus the throwaway
+  container `migrate-verify.sh` starts; the replica stayed down throughout. `FleetBilling.Tests`
+  takes ~1 m 30 s (each test starts a fresh fleet-billing-svc *and* a fresh wallet-svc on real
+  sockets). **No new NuGet reference and no new PostgreSQL extension.**

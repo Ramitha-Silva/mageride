@@ -934,8 +934,12 @@ check_eq "7 safety tables" "7" \
 # context and D4' §5 prints DDL for `rides.command_log` only.
 check_eq "5 fares tables from C005 + 1 from C049" "6" \
   "SELECT count(*) FROM information_schema.tables WHERE table_schema='fares' AND table_type='BASE TABLE';"
-# 15, not C005's 12: billing.topups, billing.outbox and billing.command_log are C046's (1107).
-check_eq "12 billing tables from C005 + 3 from C046" "15" \
+# 19, not C005's 12: billing.topups, billing.outbox and billing.command_log are C046's (1107),
+# and billing.fleet_invoice_lines, fleet_topups, fleet_outbox and fleet_command_log are C060's
+# (1108). The fleet four are separate from wallet-svc's three on purpose: one outbox table cannot
+# serve two dispatchers publishing to two topics, and two services sharing one command log would
+# let a client's Idempotency-Key collide across a service boundary.
+check_eq "12 billing tables from C005 + 3 from C046 + 4 from C060" "19" \
   "SELECT count(*) FROM information_schema.tables WHERE table_schema='billing' AND table_type='BASE TABLE';"
 # 6, not C005's 4: `subscription.command_log` is C047's (1203) — R-14 needs a replay log per
 # bounded context and D4' §5 prints DDL for `rides.command_log` only — and `subscription.outbox`
@@ -1102,7 +1106,9 @@ check_eq "every seeded notification template exists in all three languages (D-26
 # table, seeded beside the service that resolves them (C051).
 # + `schedule_not_started` (1905), C059: US-13.11's ringing alarm has no D5' §14.4 row and no
 # seeded key, and this build has its producer (fleet-svc's ScheduleAlarmWorker).
-check_eq "twenty-three notification template keys seeded" "23" \
+# + `fleet_invoice_overdue` (1906), C060: US-13.10's dunning notice, same gap and same rule —
+# the key, the NotificationCatalogue type and the producer land together.
+check_eq "twenty-four notification template keys seeded" "24" \
   "SELECT count(DISTINCT template_key) FROM content.notification_templates;"
 check_eq "the E-01 fallback SMS interpolates the two values offer.created carries" "1" \
   "SELECT count(*) FROM content.notification_templates
@@ -2662,6 +2668,127 @@ psql_run "DELETE FROM spatial.geofences WHERE fleet_id IN ('$C059_FLEET','$C059_
           DELETE FROM registry.vehicles WHERE id IN ('$C059_VEH','$C059_VEH_B');
           DELETE FROM iam.users WHERE id IN ('$C059_OWNER','$C059_DRIVER');" >/dev/null \
   || die "could not clean up the C059 fleet-ops fixture."
+
+# ---------------------------------------------------------------------------------------
+# C060 — billing: the fleet invoice's breakdown, the fleet wallet's sessions, this plane's
+#        outbox and replay log (1108). AL-03, AL-05, D-09.
+# ---------------------------------------------------------------------------------------
+step "Objects owned by C060 (AL-03, AL-05, D-09)"
+for t in fleet_invoice_lines fleet_topups fleet_outbox fleet_command_log; do
+  check_eq "billing.$t exists" "1" \
+    "SELECT count(*) FROM information_schema.tables
+      WHERE table_schema='billing' AND table_name='$t';"
+done
+# The gap 1106 left: `billing.fleet_invoices.journal_entry_id` has existed since C005 and there was
+# no journal kind a fleet's monthly platform fee could be posted under, so the column could never
+# have been filled.
+check_eq "the journal admits a fleet_invoice entry (D-09, AL-03)" "1" \
+  "SELECT count(*) FROM pg_constraint
+    WHERE conname='ck_journal_entries_kind' AND pg_get_constraintdef(oid) LIKE '%fleet_invoice%';"
+# AL-01 is not undone by adding one: there is still no kind a per-transfer commission could use.
+check_eq "and still admits no reseller commission (AL-01)" "0" \
+  "SELECT count(*) FROM pg_constraint
+    WHERE conname='ck_journal_entries_kind' AND pg_get_constraintdef(oid) LIKE '%reseller%';"
+# `fleet.yaml` has always returned four statuses and 1106's CHECK admitted three, so the state
+# C060's dunning is about could not be stored.
+check_eq "an invoice can be OVERDUE (fleet-billing.yaml's fourth status)" "1" \
+  "SELECT count(*) FROM pg_constraint
+    WHERE conname='ck_fleet_invoices_status' AND pg_get_constraintdef(oid) LIKE '%OVERDUE%';"
+check_eq "R-19: a fleet top-up's provider_transaction_id is unique where present" "1" \
+  "SELECT count(*) FROM pg_indexes
+    WHERE schemaname='billing' AND indexname='ux_fleet_topups_provider_txn';"
+check_eq "billing.fleet_command_log is keyed on the idempotency key alone" "1" \
+  "SELECT count(*) FROM information_schema.key_column_usage k
+     JOIN information_schema.table_constraints c USING (constraint_schema, constraint_name)
+    WHERE c.table_schema='billing' AND c.table_name='fleet_command_log'
+      AND c.constraint_type='PRIMARY KEY' AND k.column_name='idempotency_key';"
+
+step "AL-05 — bank transfer is not a fleet top-up method either"
+check_rejects "a bank-transfer fleet top-up is rejected by the database (AL-05)" \
+  "INSERT INTO billing.fleet_topups(fleet_id, account_id, initiated_by, method, amount_minor)
+     SELECT '$C058_FLEET_A', a.id, '$C058_OWNER', 'bank_transfer', 100000
+       FROM billing.accounts a WHERE a.owner_type='platform' LIMIT 1;"
+
+step "C060 constraints actually bite"
+psql_run "INSERT INTO billing.accounts(owner_type, owner_id, currency)
+            VALUES ('fleet','$C058_FLEET_A','LKR') ON CONFLICT DO NOTHING;" >/dev/null \
+  || die "could not seed the C060 fleet wallet fixture."
+C060_ACCOUNT="$(psql_q "SELECT id FROM billing.accounts WHERE owner_type='fleet' AND owner_id='$C058_FLEET_A';")"
+# AL-03's fleet wallet, which had no writer before this component: `owner_type='fleet'` has been in
+# ck_accounts_owner_type since 1101 and nothing created a row.
+check_eq "a fleet wallet is an ordinary ledger account (AL-03)" "1" \
+  "SELECT count(*) FROM billing.accounts
+    WHERE owner_type='fleet' AND owner_id='$C058_FLEET_A' AND currency='LKR';"
+check_rejects "a Pending fleet top-up cannot carry a ledger entry" \
+  "INSERT INTO billing.fleet_topups(fleet_id, account_id, initiated_by, method, amount_minor, journal_entry_id)
+     SELECT '$C058_FLEET_A','$C060_ACCOUNT','$C058_OWNER','onepay',100000, e.id
+       FROM billing.journal_entries e LIMIT 1;"
+check_rejects "a zero-amount fleet top-up is rejected" \
+  "INSERT INTO billing.fleet_topups(fleet_id, account_id, initiated_by, method, amount_minor)
+     VALUES ('$C058_FLEET_A','$C060_ACCOUNT','$C058_OWNER','onepay',0);"
+
+psql_run "INSERT INTO billing.fleet_invoices(id, fleet_id, period_month, total_minor, status, due_at)
+            VALUES ('c0000060-0000-0000-0000-000000000001','$C058_FLEET_A','2026-06-01',60000,'DUE',now());" \
+  >/dev/null || die "could not seed the C060 invoice fixture."
+# Only a settled invoice may carry a posting, and a settled one must carry both halves. The pair is
+# what makes `journal_entry_id IS NOT NULL` readable as "this was paid".
+check_rejects "a DUE invoice cannot point at a journal entry" \
+  "UPDATE billing.fleet_invoices SET journal_entry_id =
+     (SELECT id FROM billing.journal_entries LIMIT 1)
+    WHERE id='c0000060-0000-0000-0000-000000000001';"
+check_rejects "a PAID invoice with no journal entry is rejected" \
+  "UPDATE billing.fleet_invoices SET status='PAID', settled_at=now()
+    WHERE id='c0000060-0000-0000-0000-000000000001';"
+# A month is a month: the UNIQUE would otherwise admit two invoices for one period and the free
+# month could be re-claimed.
+check_rejects "an invoice period must be the first of its month" \
+  "INSERT INTO billing.fleet_invoices(fleet_id, period_month, total_minor)
+     VALUES ('$C058_FLEET_A','2026-07-15',0);"
+check_rejects "a FREE invoice cannot carry an amount" \
+  "INSERT INTO billing.fleet_invoices(fleet_id, period_month, total_minor, status)
+     VALUES ('$C058_FLEET_A','2026-05-01',30000,'FREE');"
+
+psql_run "INSERT INTO registry.vehicles(id, owner_id, registration_number, vehicle_type, mode, status, driver_name)
+            VALUES ('c0000060-0000-0000-0000-0000000000a1','$C058_OWNER','WP C060-1','van','B','APPROVED','C060 fixture')
+            ON CONFLICT DO NOTHING;
+          INSERT INTO billing.monthly_subscriptions(id, vehicle_id, period_month, amount_minor, status)
+            VALUES ('c0000060-0000-0000-0000-0000000000b1','c0000060-0000-0000-0000-0000000000a1','2026-06-01',30000,'DUE')
+            ON CONFLICT DO NOTHING;
+          INSERT INTO billing.fleet_invoice_lines
+              (invoice_id, vehicle_id, monthly_subscription_id, registration_number, vehicle_type, amount_minor, status)
+            VALUES ('c0000060-0000-0000-0000-000000000001','c0000060-0000-0000-0000-0000000000a1',
+                    'c0000060-0000-0000-0000-0000000000b1','WP C060-1','van',30000,'DUE');" \
+  >/dev/null || die "could not seed the C060 invoice-line fixture."
+check_rejects "one line per vehicle per invoice — re-running generation cannot duplicate one" \
+  "INSERT INTO billing.fleet_invoice_lines
+       (invoice_id, vehicle_id, monthly_subscription_id, registration_number, vehicle_type, amount_minor, status)
+     VALUES ('c0000060-0000-0000-0000-000000000001','c0000060-0000-0000-0000-0000000000a1',
+             'c0000060-0000-0000-0000-0000000000b1','WP C060-1','van',30000,'DUE');"
+psql_run "INSERT INTO billing.fleet_invoices(id, fleet_id, period_month, total_minor, status)
+            VALUES ('c0000060-0000-0000-0000-000000000002','$C058_FLEET_B','2026-06-01',30000,'DUE');" \
+  >/dev/null || die "could not seed the second C060 invoice fixture."
+# The guard that matters after a vehicle changes organisation mid-month: one raised charge can be
+# consolidated onto exactly one invoice, or the platform collects for it twice.
+check_rejects "one raised charge can be on only one invoice, ever" \
+  "INSERT INTO billing.fleet_invoice_lines
+       (invoice_id, vehicle_id, monthly_subscription_id, registration_number, vehicle_type, amount_minor, status)
+     VALUES ('c0000060-0000-0000-0000-000000000002','c0000060-0000-0000-0000-0000000000a1',
+             'c0000060-0000-0000-0000-0000000000b1','WP C060-1','van',30000,'DUE');"
+check_rejects "a FREE line cannot carry an amount" \
+  "INSERT INTO billing.fleet_invoice_lines
+       (invoice_id, vehicle_id, monthly_subscription_id, registration_number, vehicle_type, amount_minor, status)
+     VALUES ('c0000060-0000-0000-0000-000000000002','c0000060-0000-0000-0000-0000000000a1',
+             'c0000060-0000-0000-0000-0000000000b1','WP C060-1','van',30000,'FREE');"
+
+psql_run "DELETE FROM billing.fleet_invoice_lines
+            WHERE invoice_id IN ('c0000060-0000-0000-0000-000000000001','c0000060-0000-0000-0000-000000000002');
+          DELETE FROM billing.fleet_invoices
+            WHERE id IN ('c0000060-0000-0000-0000-000000000001','c0000060-0000-0000-0000-000000000002');
+          DELETE FROM billing.monthly_subscriptions WHERE id='c0000060-0000-0000-0000-0000000000b1';
+          DELETE FROM billing.fleet_topups WHERE fleet_id='$C058_FLEET_A';
+          DELETE FROM registry.vehicles WHERE id='c0000060-0000-0000-0000-0000000000a1';
+          DELETE FROM billing.accounts WHERE owner_type='fleet' AND owner_id='$C058_FLEET_A';" >/dev/null \
+  || die "could not clean up the C060 fleet billing fixture."
 
 psql_run "DELETE FROM trips.sessions WHERE vehicle_id IN ('$C058_VEH_A','$C058_VEH_B');
           DELETE FROM registry.fleets WHERE id IN ('$C058_FLEET_A','$C058_FLEET_B');

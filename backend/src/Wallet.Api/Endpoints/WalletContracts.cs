@@ -125,6 +125,19 @@ public sealed record LedgerPostingBody(
 public sealed record LedgerPostingResultResponse(
     Guid EntryId, Guid AccountId, long AmountMinor, long BalanceAfterMinor, bool Replayed);
 
+/// <summary>
+/// A wallet-owning account, resolved or created. <b>Δ C060.</b>
+/// </summary>
+/// <remarks>
+/// The one thing on the internal plane that moves no money. <c>billing.accounts</c> has exactly one
+/// writer, and a fleet's account is created lazily by its first posting — which leaves
+/// fleet-billing-svc unable to record which wallet a top-up session will credit until the
+/// organisation has already been invoiced once. Rather than have it post a synthetic movement to
+/// force the row into existence, the create is exposed on its own.
+/// </remarks>
+public sealed record LedgerAccountResponse(
+    Guid AccountId, Guid OwnerId, string OwnerType, string Currency, long BalanceMinor);
+
 /// <summary>Parses the identifiers D3' types as <c>Ulid</c> ("ULID or UUID, rendered canonically").</summary>
 /// <remarks>
 /// The same twelve lines reputation-svc carries. Per service rather than in the kernel because each

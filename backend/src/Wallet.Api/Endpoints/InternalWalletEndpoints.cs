@@ -10,15 +10,27 @@ using Microsoft.AspNetCore.Http.HttpResults;
 namespace MageRide.Wallet.Endpoints;
 
 /// <summary>
-/// <c>/v1/internal/wallet/{driverId}/debit</c> and <c>/credit</c> — the ledger seam.
+/// <c>/v1/internal/wallet/{driverId}/debit</c> · <c>/credit</c> and
+/// <c>/v1/internal/wallet/fleet/{fleetId}/debit</c> · <c>/credit</c> — the ledger seam.
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>Every service that moves a driver's money without owning the ledger comes through here</b>, so
+/// <b>Every service that moves somebody's money without owning the ledger comes through here</b>, so
 /// <c>billing.journal_postings</c> keeps exactly one writer (D-09). subscription-svc charges the D-13
-/// daily fee, fare-svc settles a D-05 penalty and pays out a tip, admin-bff reverses a fee — four
-/// callers, one balanced-entry implementation, one non-negativity rule, one D-08 cache write-through and
+/// daily fee, fare-svc settles a D-05 penalty and pays out a tip, admin-bff reverses a fee,
+/// fleet-billing-svc settles a consolidated fleet invoice and credits a fleet top-up — five callers,
+/// one balanced-entry implementation, one non-negativity rule, one D-08 cache write-through and
 /// one outbox.
+/// </para>
+/// <para>
+/// <b>The fleet pair is a second route family and not a second ledger (<b>Δ C060</b>, AL-03).</b>
+/// ADD §6 gives fleet-billing-svc "posts to the same <c>billing</c> ledger with
+/// <c>owner_type='fleet'</c>", and the only thing it needs that the driver routes cannot give it is
+/// an account resolved by <em>fleet</em> id. Everything downstream — the lock ordering, the Σ = 0
+/// check, the <c>billing.wallets</c> mirror, the history line, the outbox row — is
+/// <c>LedgerService.PostAsync</c>, unchanged. The path is <c>/fleet/{fleetId}/…</c> rather than a
+/// <c>ownerType</c> field on the body because a body field that picks whose wallet is debited is one
+/// typo away from taking a month's fleet invoice out of a driver's balance.
 /// </para>
 /// <para>
 /// <b>The <c>kind</c> whitelist is the boundary.</b> Without it this would be a "write me any entry"
@@ -64,7 +76,37 @@ public static class InternalWalletEndpoints
         internalGroup.MapPost("/{driverId}/debit", DebitAsync).WithName("internalWalletDebit");
         internalGroup.MapPost("/{driverId}/credit", CreditAsync).WithName("internalWalletCredit");
 
+        // Δ C060. Three segments where the driver pair has two, so routing resolves them without an
+        // ambiguity rule: `/fleet/{fleetId}/debit` cannot be read as `/{driverId}/debit`.
+        internalGroup.MapPost("/fleet/{fleetId}/debit", FleetDebitAsync).WithName("internalFleetWalletDebit");
+        internalGroup.MapPost("/fleet/{fleetId}/credit", FleetCreditAsync).WithName("internalFleetWalletCredit");
+        internalGroup.MapPost("/fleet/{fleetId}/account", FleetAccountAsync).WithName("internalFleetWalletAccount");
+
         return endpoints;
+    }
+
+    /// <summary>
+    /// Resolves — creating if needed — the organisation's ledger account. Moves no money. <b>Δ C060.</b>
+    /// </summary>
+    /// <remarks>
+    /// The account is created lazily by the first posting, which leaves fleet-billing-svc unable to
+    /// say which wallet a top-up session will credit until the organisation has already been
+    /// invoiced once. The alternatives were both worse: posting a synthetic movement to force the
+    /// row into existence puts a transaction nobody made on a customer's statement, and letting a
+    /// second service <c>INSERT INTO billing.accounts</c> gives the ledger a second writer for the
+    /// sake of one row. So the create is exposed on its own, idempotent by
+    /// <c>ux_accounts_owner</c> — and it is the only route in this family that is not about money.
+    /// </remarks>
+    private static async Task<Ok<LedgerAccountResponse>> FleetAccountAsync(
+        string fleetId, IAccountRepository accounts, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(accounts);
+
+        var fleet = RequestIds.Require(fleetId, "fleetId");
+        var account = await accounts.EnsureFleetAccountAsync(fleet, cancellationToken);
+
+        return TypedResults.Ok(new LedgerAccountResponse(
+            account.Id, fleet, account.OwnerType, account.Currency, account.BalanceMinor));
     }
 
     private static Task<Ok<LedgerPostingResultResponse>> DebitAsync(
@@ -73,7 +115,7 @@ public static class InternalWalletEndpoints
         IAccountRepository accounts,
         ILedgerService ledger,
         CancellationToken cancellationToken) =>
-        PostAsync(driverId, body, debit: true, accounts, ledger, cancellationToken);
+        PostAsync(driverId, body, debit: true, fleet: false, accounts, ledger, cancellationToken);
 
     private static Task<Ok<LedgerPostingResultResponse>> CreditAsync(
         string driverId,
@@ -81,12 +123,29 @@ public static class InternalWalletEndpoints
         IAccountRepository accounts,
         ILedgerService ledger,
         CancellationToken cancellationToken) =>
-        PostAsync(driverId, body, debit: false, accounts, ledger, cancellationToken);
+        PostAsync(driverId, body, debit: false, fleet: false, accounts, ledger, cancellationToken);
+
+    private static Task<Ok<LedgerPostingResultResponse>> FleetDebitAsync(
+        string fleetId,
+        LedgerPostingBody? body,
+        IAccountRepository accounts,
+        ILedgerService ledger,
+        CancellationToken cancellationToken) =>
+        PostAsync(fleetId, body, debit: true, fleet: true, accounts, ledger, cancellationToken);
+
+    private static Task<Ok<LedgerPostingResultResponse>> FleetCreditAsync(
+        string fleetId,
+        LedgerPostingBody? body,
+        IAccountRepository accounts,
+        ILedgerService ledger,
+        CancellationToken cancellationToken) =>
+        PostAsync(fleetId, body, debit: false, fleet: true, accounts, ledger, cancellationToken);
 
     private static async Task<Ok<LedgerPostingResultResponse>> PostAsync(
-        string driverId,
+        string ownerId,
         LedgerPostingBody? body,
         bool debit,
+        bool fleet,
         IAccountRepository accounts,
         ILedgerService ledger,
         CancellationToken cancellationToken)
@@ -94,7 +153,7 @@ public static class InternalWalletEndpoints
         ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(ledger);
 
-        var driver = RequestIds.Require(driverId, "driverId");
+        var owner = RequestIds.Require(ownerId, fleet ? "fleetId" : "driverId");
 
         if (body?.AmountMinor is not { } amountMinor || amountMinor <= 0)
         {
@@ -105,10 +164,16 @@ public static class InternalWalletEndpoints
 
         var kind = body.Kind;
 
-        if (debit ? !JournalKinds.IsInternalDebit(kind) : !JournalKinds.IsInternalCredit(kind))
+        var allowed = (fleet, debit) switch
         {
-            var allowed = debit ? JournalKinds.InternalDebitKinds : JournalKinds.InternalCreditKinds;
+            (true, true) => JournalKinds.FleetDebitKinds,
+            (true, false) => JournalKinds.FleetCreditKinds,
+            (false, true) => JournalKinds.InternalDebitKinds,
+            (false, false) => JournalKinds.InternalCreditKinds,
+        };
 
+        if (Array.IndexOf(allowed, kind) < 0)
+        {
             throw new MageRideValidationException(
                 new Dictionary<string, string[]>(StringComparer.Ordinal)
                 {
@@ -132,7 +197,10 @@ public static class InternalWalletEndpoints
             });
         }
 
-        var account = await accounts.EnsureDriverAccountAsync(driver, cancellationToken);
+        var account = fleet
+            ? await accounts.EnsureFleetAccountAsync(owner, cancellationToken)
+            : await accounts.EnsureDriverAccountAsync(owner, cancellationToken);
+
         var platform = await accounts.PlatformAccountAsync(cancellationToken);
         var signed = debit ? -amountMinor : amountMinor;
 
@@ -152,7 +220,7 @@ public static class InternalWalletEndpoints
                   ?? throw new MageRideException(
                       MageRideErrors.Conflict,
                       $"Idempotency key '{body.IdempotencyKey}' was used by an entry that does not touch "
-                      + "this driver's wallet.");
+                      + (fleet ? "this fleet's wallet." : "this driver's wallet."));
 
         return TypedResults.Ok(new LedgerPostingResultResponse(
             result.EntryId, account.Id, leg.AmountMinor, leg.BalanceAfterMinor, result.Replayed));

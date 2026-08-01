@@ -86,7 +86,7 @@ services:
     restart: unless-stopped
 
   # -----------------------------------------------------------------------------------
-  # Container 7 — app-services: the 21 domain services as class libraries in one process
+  # Container 7 — app-services: the 22 domain services as class libraries in one process
   # (replica Container 7), plus provisioning-svc's embedded step-ca on the
   # `provisioning-ca-data` volume (T-02).
   # Lands with C026-C066. Reaches Postgres through PgBouncer, never :5432 directly.
@@ -154,7 +154,7 @@ services:
       - path: env/.env.app
         required: false
     environment:
-      # 20 domain clusters -> the co-located app-services process.
+      # 21 domain clusters -> the co-located app-services process.
       ReverseProxy__Clusters__iam-svc__Destinations__primary__Address:          http://app-services:5000/
       ReverseProxy__Clusters__registry-svc__Destinations__primary__Address:     http://app-services:5000/
       ReverseProxy__Clusters__provisioning-svc__Destinations__primary__Address: http://app-services:5000/
@@ -172,10 +172,14 @@ services:
       ReverseProxy__Clusters__content-svc__Destinations__primary__Address:      http://app-services:5000/
       ReverseProxy__Clusters__transit-svc__Destinations__primary__Address:      http://app-services:5000/
       ReverseProxy__Clusters__fleet-svc__Destinations__primary__Address:        http://app-services:5000/
+      # C060. fleet-billing-svc has a cluster of its own because two of its operations sit under
+      # /v1/fleets, which fleet-svc otherwise owns; in this stack both processes are the same
+      # container.
+      ReverseProxy__Clusters__fleet-billing-svc__Destinations__primary__Address: http://app-services:5000/
       ReverseProxy__Clusters__voip-svc__Destinations__primary__Address:         http://app-services:5000/
       ReverseProxy__Clusters__admin-bff__Destinations__primary__Address:        http://app-services:5000/
       ReverseProxy__Clusters__public-bff__Destinations__primary__Address:       http://app-services:5000/
-      # The 21st is the SignalR container, on its own port.
+      # The 22nd is the SignalR container, on its own port.
       ReverseProxy__Clusters__fanout-svc__Destinations__primary__Address:       http://fanout:5001/
     ports:
       - "127.0.0.1:${GATEWAY_PORT:-5000}:5000"

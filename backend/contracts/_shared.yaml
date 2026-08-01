@@ -305,6 +305,12 @@ components:
         # route permit is still pending".
         - driver-not-found
         - documents-incomplete
+        # Δ C060 (fleet-billing-svc), raised in its handoff. `invoice-not-payable` because
+        # SCR-FP-010's Pay button has two refusals that draw differently — "already paid" is a
+        # receipt to open, "nothing to pay" is a FREE month that cost nothing — and `conflict`
+        # cannot tell them apart. A FREE invoice has a zero total and no journal entry could
+        # balance, so this is a state rather than a transient failure.
+        - invoice-not-payable
 
     Problem:
       type: object

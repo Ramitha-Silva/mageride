@@ -1,0 +1,67 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    C060 verify target: dotnet test backend/src/FleetBilling.Tests -c Release
+
+    Real Postgres, a real Redpanda and a **real wallet-svc**. Every claim this component makes is a
+    claim about something outside the process:
+
+      * "an invoice's per-vehicle lines sum to its total and post to a balanced journal entry" is
+        Σ over `billing.fleet_invoice_lines` against `total_minor`, and Σ over
+        `billing.journal_postings` against zero — enforced by `trg_balanced`, a DEFERRABLE
+        constraint trigger that only fires at COMMIT on a real server;
+      * "Mode A vehicles never appear as a charged line" is a property of what `registry.vehicles`
+        and `billing.monthly_subscriptions` contain, which needs both tables and subscription-svc's
+        own raise query;
+      * "re-running invoice generation for a month is idempotent" is three unique indexes;
+      * the ledger seam is an HTTP hop to another service, and half the settlement guarantee
+        (`billing.journal_entries.idempotency_key` UNIQUE) lives on the far side of it — so the
+        suite boots wallet-svc rather than stubbing it, exactly as C047's does.
+
+    Microsoft.NET.Sdk.Web, not Microsoft.NET.Sdk: the harness builds a WebApplication.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.FleetBilling.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <OutputType>Exe</OutputType>
+    <!--
+      xUnit1041: collection-fixture ctor args are consumed through the primary constructor.
+      xUnit1051: every test is bounded by its own harness lifetime, so threading
+                 TestContext.Current.CancellationToken through each call would add noise without
+                 changing behaviour. Matches Wallet/Subscription/Fleet.Api.Tests.
+    -->
+    <NoWarn>$(NoWarn);xUnit1041;xUnit1051</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+    <!-- `fleet.events` is asserted by consuming it, so the outbox claim is made against the broker
+         rather than against a table this service wrote. -->
+    <PackageReference Include="Confluent.Kafka" />
+    <!-- FakeTimeProvider: a payment term is seven days wide, dunning is three, and no suite can
+         wait for either. -->
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\FleetBilling\FleetBilling.csproj" />
+    <!-- C010: the Postgres and Redpanda fixtures, so this suite runs the same server builds the
+         dev stack does. -->
+    <ProjectReference Include="..\MageRide.TestKit\MageRide.TestKit.csproj" />
+    <!-- The other end of the ledger seam. Booted for real: "the money moves once" is
+         `billing.journal_entries.idempotency_key` UNIQUE, which is wallet-svc's table and
+         wallet-svc's statement, and a stub asserting against itself would prove nothing.
+         Subscription.Api.Tests references Wallet.Api for exactly this reason. -->
+    <ProjectReference Include="..\Wallet.Api\Wallet.Api.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

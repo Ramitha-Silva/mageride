@@ -106,7 +106,7 @@ ensure_pair reputation.events    "$EVENT_RETENTION_MS"       # key userId    —
 # "threshold alerts … emitted for the Fleet Portal and notification-svc") and a consumer
 # (US-3.16's email/SMS device-down alert) and no topic; C044 added it, and the handoff raises
 # the micro-change-set against §2.1.
-ensure_pair fleet.events         "$EVENT_RETENTION_MS"       # key fleetId   — fleet-health-svc (outbox)
+ensure_pair fleet.events         "$EVENT_RETENTION_MS"       # key fleetId   — fleet-health-svc + fleet-billing-svc (outbox)
 # Not one of D6' §2.1's six either, and the best-attested of the five that are not: ADD §6's
 # wallet-svc row says it "publishes wallet.debited / wallet.credited events that invalidate
 # dispatch-svc's Redis balance cache", D5' §9.2 makes that cache "debit-invalidated (wallet.debited

@@ -26,6 +26,7 @@ to write one.
 | `POST /v1/wallet/credit-transfer/request` · `/{id}/approve` · `/{id}/reject` · `GET /pending` | Bearer (driver) | **Δ C046** — US-9.10/9.12/9.13, US-9A.10 |
 | `GET`/`PUT /v1/wallet/admin/voucher-discount-tiers` | admin · finance | US-9A.15 |
 | `POST /v1/internal/wallet/{driverId}/debit` · `/credit` | internal | **Δ C046** — the ledger seam |
+| `POST /v1/internal/wallet/fleet/{fleetId}/debit` · `/credit` · `/account` | internal | **Δ C060** — the same seam for an `owner_type='fleet'` wallet (AL-03) |
 
 | Table | Read | Written |
 |---|---|---|
@@ -111,6 +112,21 @@ to write one.
 - **The `kind` whitelist is the boundary of the internal plane.** A caller may post the kinds a spec
   names for it and nothing else — notably not `topup`, `voucher_purchase` or `driver_transfer`, which
   have their own endpoints here carrying arithmetic and provider dedupe the seam would bypass.
+- **The fleet pair is a second route family and not a second ledger (Δ C060, AL-03).** Everything
+  downstream of the route — the lock ordering, the Σ = 0 check, the `billing.wallets` mirror, the
+  history line, the outbox row — is `LedgerService.PostAsync`, unchanged; the only thing
+  fleet-billing-svc needs that the driver routes cannot give it is an account resolved by *fleet*
+  id. The path is `/fleet/{fleetId}/…` rather than an `ownerType` field on the body, because a body
+  field that picks whose wallet is debited is one typo away from taking a month's fleet invoice out
+  of a driver's balance. **`topup` is admitted on the fleet credit route and refused on the driver
+  one**: the driver rails are here and the seam would bypass them, while the fleet rails are
+  fleet-billing-svc's (ADD §6) and carry the same two guards over `billing.fleet_topups` (1108).
+  `POST …/fleet/{fleetId}/account` is the one route on this plane that moves no money — the account
+  is created lazily by the first posting, which would otherwise leave a fleet top-up session with no
+  `account_id` to record until the organisation had already been invoiced once.
+- **The low-balance edge is driver-only (Δ C060).** US-9.9 is a driver's warning about the next
+  trip; a `LOW_BALANCE` at an organisation would resolve to no recipient and would mean the wrong
+  thing if it did. A fleet's dunning is fleet-billing-svc's OVERDUE signal.
 - **The internal routes are idempotency-exempt because the *body* carries the ledger key.** A second,
   header-based guard over the same money would be weaker and would need its own table.
 - **The cache write-through is after COMMIT, and a failure degrades to a delete.** Writing inside the
@@ -176,6 +192,9 @@ rather than additions:
   `wallet.low_balance` with the numbers and a `notificationType`, and no rendered text (D-26).
 - **Mode B subscription money.** subscription-svc's (C048) — a pass-through to the fleet owner that
   MageRide never holds, so it writes no entry here.
+- **The fleet invoice, its per-vehicle breakdown, the fleet top-up session and the dunning.**
+  fleet-billing-svc's (C060). This service holds the fleet's *account* and posts its entries; it
+  owns no `billing.fleet_*` table and knows nothing about what a month costs.
 - **The Dockerfile.** `infra/docker-compose.dev.yml` already carries a `wallet-svc` cluster destination
   pointing at the combined `app-services` container.
 

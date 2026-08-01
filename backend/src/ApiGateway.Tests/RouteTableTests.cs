@@ -168,6 +168,12 @@ public sealed class RouteTableTests : IAsyncLifetime
     // Health: the same split again (C044). D3' lists the route in the fleet-svc table and attributes it
     // to fleet-health-svc in the same line, so the contract lives in fleet-health.yaml.
     [InlineData("GET", "/v1/fleets/01JZ/health", "fleet-health-svc")]
+    // Billing: the same split a third time (C060). ADD §6 gives the fleet wallet and the monthly
+    // per-Mode-B-vehicle invoicing to fleet-billing-svc; D3' lists both routes under fleet-svc.
+    [InlineData("GET", "/v1/fleets/01JZ/billing", "fleet-billing-svc")]
+    [InlineData("GET", "/v1/fleets/01JZ/billing/01JY", "fleet-billing-svc")]
+    [InlineData("POST", "/v1/fleets/01JZ/wallet/topup", "fleet-billing-svc")]
+    [InlineData("POST", "/v1/fleet-billing/topup/onepay/webhook", "fleet-billing-svc")]
     [InlineData("GET", "/v1/fleets/01JZ/map", "fleet-svc")]
     // /v1/geo is split between the geocoder proxy and the GTFS link parser.
     [InlineData("GET", "/v1/geo/search", "query-svc")]

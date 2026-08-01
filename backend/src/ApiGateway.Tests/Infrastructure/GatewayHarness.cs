@@ -46,7 +46,7 @@ internal sealed class GatewayHarness : IAsyncDisposable
 
         var overrides = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
         {
-            // One stub stands in for all 21 clusters; a test asserts which cluster was chosen
+            // One stub stands in for every cluster; a test asserts which cluster was chosen
             // through the X-MageRide-Upstream response header instead of by address.
             ["Gateway:StateStore"] = "Memory",
             ["Gateway:EmitUpstreamHeader"] = "true",

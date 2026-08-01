@@ -58,6 +58,17 @@ internal interface IAccountRepository
     /// </remarks>
     Task<LedgerAccount> EnsureDriverAccountAsync(Guid driverId, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// The fleet organisation's ledger account, created on first use (AL-03). <b>Δ C060.</b>
+    /// </summary>
+    /// <remarks>
+    /// <c>owner_type = 'fleet'</c> has been in <c>ck_accounts_owner_type</c> since 1101 and had no
+    /// writer until fleet-billing-svc; this is it. Lazily for the driver account's reason and one
+    /// more: an organisation is created PENDING and may never be approved, and a wallet for a fleet
+    /// that a Verification Officer rejects is a row nobody needs.
+    /// </remarks>
+    Task<LedgerAccount> EnsureFleetAccountAsync(Guid fleetId, CancellationToken cancellationToken);
+
     /// <summary>The platform's own singleton account — the counterparty of a top-up or a voucher.</summary>
     Task<LedgerAccount> PlatformAccountAsync(CancellationToken cancellationToken);
 
@@ -96,22 +107,36 @@ internal sealed class AccountRepository(INpgsqlConnectionFactory connections) : 
     private const string SelectColumns =
         "id, owner_type, owner_id, currency, balance_minor";
 
-    public async Task<LedgerAccount> EnsureDriverAccountAsync(
-        Guid driverId, CancellationToken cancellationToken)
+    public Task<LedgerAccount> EnsureDriverAccountAsync(Guid driverId, CancellationToken cancellationToken) =>
+        EnsureAccountAsync(AccountOwnerTypes.Driver, driverId, cancellationToken);
+
+    public Task<LedgerAccount> EnsureFleetAccountAsync(Guid fleetId, CancellationToken cancellationToken) =>
+        EnsureAccountAsync(AccountOwnerTypes.Fleet, fleetId, cancellationToken);
+
+    /// <remarks>
+    /// One method for both wallet-owning types rather than two near-copies: the create is
+    /// idempotent under exactly one index and the read is the same read, and a second copy is where
+    /// a driver's non-negativity rule and a fleet's would eventually diverge. <c>owner_type</c> is
+    /// bound as a parameter and never interpolated — it comes from
+    /// <see cref="AccountOwnerTypes"/> here, and <c>ck_accounts_owner_type</c> would refuse anything
+    /// else anyway.
+    /// </remarks>
+    private async Task<LedgerAccount> EnsureAccountAsync(
+        string ownerType, Guid ownerId, CancellationToken cancellationToken)
     {
         await using var connection = await connections.OpenAsync(cancellationToken);
 
         // INSERT … ON CONFLICT DO NOTHING then read: `ux_accounts_owner` is the arbiter, so two
-        // concurrent first movements for one driver cannot create two wallets. `RETURNING` alone would
+        // concurrent first movements for one owner cannot create two wallets. `RETURNING` alone would
         // give the loser of the race nothing.
         await connection.ExecuteAsync(
             new CommandDefinition(
                 """
                 INSERT INTO billing.accounts (owner_type, owner_id, currency)
-                VALUES ('driver', @DriverId, 'LKR')
+                VALUES (@OwnerType, @OwnerId, 'LKR')
                 ON CONFLICT DO NOTHING;
                 """,
-                new { DriverId = driverId },
+                new { OwnerType = ownerType, OwnerId = ownerId },
                 cancellationToken: cancellationToken));
 
         return await connection.QuerySingleAsync<LedgerAccount>(
@@ -119,9 +144,9 @@ internal sealed class AccountRepository(INpgsqlConnectionFactory connections) : 
                 $"""
                 SELECT {SelectColumns}
                   FROM billing.accounts
-                 WHERE owner_type = 'driver' AND owner_id = @DriverId AND currency = 'LKR';
+                 WHERE owner_type = @OwnerType AND owner_id = @OwnerId AND currency = 'LKR';
                 """,
-                new { DriverId = driverId },
+                new { OwnerType = ownerType, OwnerId = ownerId },
                 cancellationToken: cancellationToken));
     }
 
