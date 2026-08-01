@@ -86,7 +86,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C058 | fleet-svc-org | 3 | DONE | 2026-07-31 | **42 tests green** in a new suite (`Fleet.Api.Tests`), every one integration against a real Postgres because every DoD item is a claim about the database; **2 migrations (0313, 1806)** — the org's KYC contact (`POST /v1/fleets` **requires** `contactPhone` and §2 has nowhere to put it), `ux_fleets_business_reg_active`, `registry.fleet_command_log` (R-14, the twelfth), and a `superseded` payout status because §26 makes the table versioned **and** admits one verified row per org — when an officer approves an edit the incumbent has to leave `verified` and no printed status could carry it; **the cross-org fence is RLS, asserted as RLS** — five RESTRICTIVE role-targeted policies plus three security-barrier join views, and `RowLevelSecurityTests` connects as a **real non-superuser login** and asks for another org's rows **by primary key** with no fleet-svc code in the path; **RESTRICTIVE, not permissive-only, because twenty services read these tables** and a plain policy would have denied every one of them silently as zero rows; **the approval gate is on the route group, not in the handlers** — C059's vehicle and assignment routes are gated the moment they are mapped, and a test walks the endpoint data source so it fails for the *next* component's mistake; **BR-31.1's second half is the expensive one** — an edit to a verified payout profile *inserts* and leaves the incumbent collecting, asserted against subscription-svc's own pay-sheet query verbatim; **the token's `fleet_role` claim is never the authority** (it carries one membership of possibly several, C027), so every request resolves the seat from `iam.fleet_members` for the org in the **path**; **two verify-script queries narrowed to `BASE TABLE`** — a trigger cannot be attached to a view and a CHECK cannot be declared on one; `migrate-verify.sh` **391/391** (was 366) with a C058 section, Spectral 0 errors, solution build 0 warnings; 7 new error codes, 6 contract changes, 8 spec gaps / micro-change-sets |
 | C059 | fleet-svc-fleet-ops | 3 | DONE | 2026-07-31 | **93 tests green** in `Fleet.Api.Tests` (was 42), the four new suites integration against a real Postgres because every DoD item is a claim about the database; **4 migrations (0314, 1408, 1807, 1905)** — the assignment validity window 0310's own header named as C059's to close, `registry.fleet_schedules` (US-13.11 has no table anywhere and `dispatch.scheduled_rides` is a passenger's Mode C booking), the bulk-job pair, `spatial.geofences.fleet_id` (a PUT is a replace and §17's table had no owner) and a trilingual `schedule_not_started` template; **US-13.9's "auto-expires" is a predicate, not a sweep** — `driver_eligible_vehicles` evaluates the window at read time, so the row is untouched and simply stops being returned, which is what makes "without manual action" true rather than merely fast; **the overlap rule is an exclusion constraint** (`btree_gist`), because 0306's unique index could not tell an expired assignment from a live one and would have blocked re-hiring a relief driver for ever; **AL-50's approval gate lives here, not where the spec puts it** — registry-svc's approval path is AL-30's Mode C wizard, which refuses Mode A/B outright and derives its verdict from a table a fleet vehicle has no rows in; **`docsStatus` is derived, never stored**, and the gate re-derives every slot *inside* the transaction that writes the status, so a permit that lapsed while the queue item sat there stops the approval; **a bulk row that fails costs only itself** (`SAVEPOINT` per row) and `COMPLETED` with failures is a partial import with a downloadable report, not a failure; **the map and the analytics are scoped by the database** — `telemetry.positions_fleet` + `trips.sessions_fleet`, with the base tables never granted; `migrate-verify.sh` **421/421** (was 391) with a C059 section, Spectral 0 errors, solution build 0 warnings; 2 new error codes, 13 contract changes, 9 spec gaps / micro-change-sets |
 | C060 | fleet-billing-svc | 3 | DONE | 2026-07-31 | **72 tests green** in a **new suite** (`FleetBilling.Tests`), which boots a **real wallet-svc** because both halves of "post to a balanced journal entry" live in that service's schema — `trg_balanced` fires at COMMIT and `billing.journal_entries.idempotency_key` is what makes settling twice move the money once; **2 migrations (1108, 1906)** — the `fleet_invoice` journal kind (1106 gave the invoice a `journal_entry_id` and no kind could ever fill it, which is why C047 handed the consolidation over *unledgered*), `OVERDUE` (the contract has always returned four statuses and the CHECK admitted three), `billing.fleet_invoice_lines`, `fleet_topups`, `fleet_outbox` and `fleet_command_log`, plus a trilingual `fleet_invoice_overdue` template; **this service writes no ledger row** — there is no `INSERT INTO billing.journal_` and no `UPDATE billing.accounts` anywhere in the assembly, and every movement goes through **three new routes on C046's seam** (`/v1/internal/wallet/fleet/{fleetId}/debit` · `/credit` · `/account`); **the lines are a snapshot, not a join** — a live one would make a settled invoice change under a roster edit and Σ lines stop equalling the amount that was paid; **`ux_fleet_invoice_lines_charge` is the guard that matters** — one raised charge reaches one invoice, so a vehicle that changes organisation mid-month is not billed twice; **AL-03 is held by an absence** (1104 raises no Mode A row, so there is nothing to filter) and a Mode-A-only fleet gets a FREE invoice with **zero lines**, which is 1106's own comment honoured; **the PDF is written here rather than taken as a dependency** — base-14 fonts, byte-exact xref, parsed back by the suite — because a renderer is a native binary in every container for one document, and wallet-svc's `415` was not available when the deliverable names PDF outright; **billing is Owner-only on reads as well as writes** (US-13.A5), unlike fleet-svc where the map sits outside the gate; **`fleet-billing.yaml` is a new contract** and `fleet.yaml` loses two paths and a schema — the third instance of C007's and C044's split; `migrate-verify.sh` **441/441** with a C060 section, Spectral 0 errors, solution build 0 warnings; **1 pre-existing cross-suite break found and fixed** (`Subscription.Api.Tests`'s reset could not TRUNCATE a table 1108 gave a foreign key); 1 new error code, 13 contract changes, 12 spec gaps / micro-change-sets |
-| C061 | analytics-read-model | 3 | PENDING | | |
+| C061 | analytics-read-model | 3 | DONE | 2026-08-01 | **104 tests green** in a **new suite** (`Analytics.Tests`), integration against a real Postgres because every DoD item is a claim about the database; **no migration and no contract change** — C005's `1405__analytics_daily_metrics.sql` already carries AL-38's five figures and `admin-bff.yaml` already declares `getAdminDashboardStats` / `exportAdminDashboardStats`, so the records here are those schemas' field names one-for-one; **built as a LIBRARY, not a service** — D3' gives the endpoint to admin-bff, D6' §I-28.5 says it "aggregates `analytics.daily_metrics`" rather than calling anything, ADD §6's table has no `analytics-svc` row, and the planner already listed this component among those with no `.yaml` (C007 finding (j)); **completed trips come from `rides.transitions.to_state='Completed'`, not from a ride state** — a ride never *rests* in Completed (C022 moves it to PaymentPending in the same transaction) and the terminal states are reached when the *money* settles, which can be the next day; **gross fare is one payment per ride in exactly fare-svc's R-05 terminal set**, taken with `DISTINCT ON … attempt_no DESC` so a D-10 retry chain contributes once, and `VocabularyTests` compares the list against `Fare.Api` so a widened CHECK is a red test rather than a silently under-counted dashboard; **new riders/drivers come from the `iam.user_roles` grant, not `iam.users.role`** — the primary role moves and would retro-edit a past day's figure; **daily-fee revenue matches `fee_date` directly** because subscription-svc already decided that Colombo day under D-13; **both fences are proved by reflection, not by review** (`FenceTests`: one writing statement, targeting `analytics.`, and no `AT TIME ZONE` / `date_trunc` / `::date` / `now()` anywhere — D-38 has one implementation and it is `BusinessCalendar`); **the previous period is arithmetic, not calendar** (the contract's "immediately preceding period of the same length"), so a 31-day range spanning a month boundary compares against 31 days and not "the same dates last month"; **a zero-base delta is `null`**, because growth from nothing has no percentage; **a day with no activity is a zero row**, so "no row" cannot mean both "quiet Sunday" and "job down since Friday"; **the live block is read at request time and asserted invariant under the period filter**; period totals reconcile against a deliberately *differently written* source query (`AT TIME ZONE` + `date_trunc`, grouped in SQL) on every period; 2000 trips roll up in well under the 15-min window; solution build 0 warnings; 1 spec gap (which day "This week" starts on), 1 D7' §4.2 gap, 7 configuration decisions |
 | C062 | admin-bff-core | 3 | PENDING | | |
 | C063 | admin-bff-verification | 3 | PENDING | | |
 | C064 | admin-bff-directories | 3 | PENDING | | |
@@ -9069,3 +9069,161 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   container `migrate-verify.sh` starts; the replica stayed down throughout. `FleetBilling.Tests`
   takes ~1 m 30 s (each test starts a fresh fleet-billing-svc *and* a fresh wallet-svc on real
   sockets). **No new NuGet reference and no new PostgreSQL extension.**
+
+- **Component:** C061 analytics-read-model — 2026-08-01
+- **Status:** DONE — `dotnet test backend/src/Analytics.Tests -c Release` is **104 passed / 0
+  failed** (~26 s) and `dotnet build backend/MageRide.sln -c Release` is 0 warnings / 0 errors. All
+  four DoD items pass: a re-run for the same day is idempotent (`RollupTests`), period totals
+  reconcile with a direct query over the source tables for a seeded dataset
+  (`PeriodAggregationTests`, every period), a custom range spanning a month boundary computes the
+  correct previous period (`StatsPeriodTests` and `PeriodAggregationTests`), and a day of seeded
+  volume rolls up far inside its window (`RollupWindowTests`).
+- **Notes:**
+  **The one structural decision — this component is a LIBRARY, not a service.** `backend/src/Analytics`
+  is `Microsoft.NET.Sdk` (not `.Web`), has no endpoints, no `.yaml`, no Dockerfile, no compose
+  service and no gateway route; admin-bff (C062) calls `AddMageRideAnalytics(configuration)` and maps
+  its own contracted routes onto `IDashboardStatsService`. Four things point the same way and none
+  points the other: **D3' gives the surface to admin-bff** (`getAdminDashboardStats` /
+  `exportAdminDashboardStats` are operations of `admin-bff.yaml`, landed by C007); **D6' §I-28.5**
+  says that endpoint "aggregates `analytics.daily_metrics`" rather than calling a service; **ADD §6's
+  service table has no `analytics-svc` row** — the name appears only in AL-38's affected-areas column
+  beside `admin-bff`; and **the planner already recorded it**, listing `analytics-read-model` among
+  the components with no `.yaml` because "none has an HTTP contract in D3'" (C007 finding (j)). An
+  HTTP hop would have put a network boundary between admin-bff and a read model in the database it
+  already holds a connection to. The prompt's fence language ("this service never writes…") still
+  holds verbatim and is proved structurally — see below.
+
+  **No migration and no contract change, which is itself the finding.** C005 landed
+  `db/migrations/1405__analytics_daily_metrics.sql` with exactly AL-38's five figures, the `LKR`
+  column and the D-38 `metric_date_tz_at` companion; C007 landed `DashboardKpis` /
+  `DashboardDeltas` / `DashboardLive` and both operations in `admin-bff.yaml`. The records in
+  `Domain/AnalyticsRecords.cs` are those schemas' field names one-for-one, so **C062 serialises them
+  directly and reshapes nothing**. `migrate-verify.sh` is untouched and Spectral has nothing new to
+  lint.
+
+  **Spec gap — micro-change-set: nothing says which day "This week" starts on.** D2 §SCR-AP-002 and
+  URD US-24.7 both name the filter "Today / This week / This month / custom" and no document in
+  `specs/` defines the week boundary. Taken as **ISO 8601 Monday**, and made a setting
+  (`Analytics:WeekStartsOn`) rather than a constant, because the answer is a local convention rather
+  than a platform invariant. **D2 §SCR-AP-002 or D5' should state it.**
+
+  **Spec gap — D7' §4.2 has no row for this component** (the same shape as C060's and C044's): it
+  predates AL-38. Seven `Analytics__*` keys are documented in `infra/env/.env.app.example` under the
+  admin-bff heading, because that is the process that hosts them.
+
+  **Decisions, each argued at its declaration —**
+  (1) **Completed trips are counted from `rides.transitions` where `to_state='Completed'`, not from
+  `rides.rides.state`.** A ride never rests in `Completed` — C022's `RideService.CompleteAsync`
+  moves it to `PaymentPending` inside the same transaction — so a state predicate would count
+  nothing. Counting the terminal set instead would be worse: `Paid` / `CashSettled` /
+  `CashOnDeliveryCollected` are reached when the *money* settles, which is routinely the next day,
+  and the cancel/no-show terminals are trips that did not happen. `rides.transitions` is append-only
+  with one row per move (ADD Appendix B.2 invariant 4), so that row **is** the trip's end and its
+  `ts` is when it ended.
+  (2) **Gross fare is Σ of one payment per completed ride, in exactly fare-svc's
+  `RidePaymentStates.Terminal`** (`Succeeded`, `FellBackToCash`, `CashOnDeliveryCollected`,
+  `DriverConfirmedQR`). Summing `fares.ride_payments` would bill the dashboard for every attempt of
+  a D-10 retry chain, so the rollup takes `DISTINCT ON (ride_id) … ORDER BY attempt_no DESC` over
+  the settled rows. `Disputed` is a terminal of the ride and not of the money; `Overpaid` (R-19's
+  late callback) means a refund is owed, not that revenue doubled. **`Analytics.Tests` references
+  `Ride.Api` and `Fare.Api` for exactly one purpose** — `VocabularyTests` compares this component's
+  copy of both vocabularies against the services that own them, because a widened CHECK on the far
+  side would silently under-count revenue with every other test in the suite still green.
+  (3) **Gross fare is attributed to the day the trip ended, not the day the money arrived** — so the
+  two cards on one screen describe the same set of trips. The cost is that a metric day is not
+  closed at midnight, which is why the scheduled pass recomputes a **lookback window**
+  (`RollupLookbackDays`, default 3) rather than one day: a cash fare confirmed the next morning, an
+  AL-47 driver-QR attestation claimed overnight and an R-19 late callback all change a figure after
+  the fact, and a recompute makes each of them ordinary rather than a special case.
+  (4) **New riders and new drivers come from the `iam.user_roles` grant, not `iam.users.role`.** The
+  primary role moves — a passenger who later signs up to drive would silently leave a past day's
+  figure the next time that day was recomputed. iam-svc inserts grants `ON CONFLICT DO NOTHING`
+  ("an idempotent retry is not a new decision", C026), so `granted_at` is written once and a past
+  day's count never moves under the rollup. Asserted directly.
+  (5) **Daily-fee revenue matches `billing.daily_fee_charges.fee_date` directly** rather than
+  deriving a day from `charged_at`: that column is already an Asia/Colombo `DATE` written by
+  subscription-svc under D-13, and re-deriving it would make the read model *more precise and less
+  correct* — disagreeing with the owning service for every fee charged near midnight.
+  (6) **A day with no activity is materialised as a zero row.** Without it, "no row" would mean both
+  "nothing happened" and "not rolled up yet", and a period sum could not tell a quiet Sunday from a
+  job that has been down since Friday. This is also why the pass is one statement per day rather
+  than one grouped by day — a grouped rebuild only writes the days that had activity.
+  (7) **The previous period is arithmetic, not calendar.** `admin-bff.yaml#DashboardDeltas` reads
+  "percentage change against the immediately preceding period of the same length", so it is
+  `[from − N, from − 1]`. 15 Jul–14 Aug (31 days) compares against 14 Jun–14 Jul (31 days), not
+  against "the same dates last month" (30 days), which would have compared 31 days of trips against
+  30 and called the difference growth. A month-boundary crossing is therefore a subtraction, not a
+  special case.
+  (8) **A delta with a zero base is `null`.** Growth from a period that had nothing has no
+  percentage; every property of `DashboardDeltas` is optional in the contract precisely so the field
+  can be absent. `0` would say "no change" about a metric that went from nothing to something and
+  `100` would invent a baseline. Both ends zero *is* 0 %. In the CSV it is an empty cell.
+  (9) **"Today", "this week" and "this month" are calendar-anchored and end today** — on the 5th,
+  "This month" is five days, not thirty-one. The rolling-window reading would make "This month"
+  include days of the previous one, which is not something that label can mean.
+  (10) **The live block is read at request time and is asserted invariant under the period filter**
+  (D6' §I-28.5). Online drivers is presence **and** freshness (`Analytics:PresenceFreshness`,
+  2 min = two missed R-08 heartbeats): `dispatch.driver_presence` is the durable half of a state
+  whose live half is a 60 s Redis TTL, so a driver whose app was killed leaves an `AVAILABLE` row
+  for ever and the card would only ever go up. The cutoff is computed from `TimeProvider` and passed
+  as a parameter rather than being `now()` in the SQL, so one clock decides and a test can state
+  where the boundary falls.
+  (11) **Pending verifications is the sum of AL-39's three queues, counted by SUBJECT** — a licence
+  with four doubtful fields is one driver to review, not four. **C063 must use these three
+  predicates** (`registry.document_fields.verify_status='pending'` on a `driving_license`;
+  `registry.onboarding_steps.status='pending_review'`; `registry.fleets.status='PENDING'`), or the
+  card and the screen it opens disagree, which is worse than either being wrong alone.
+  (12) **Open tickets counts `IN_PROGRESS` too**, expressed as "not `RESOLVED`" so a fourth status
+  added later is counted rather than silently dropped. "Open" on an operations dashboard is the work
+  outstanding.
+  (13) **The job is an interval with no lease and every replica runs it** (C060's rule): every pass
+  is idempotent, so a lock would protect an operation that does not need it and would add a way for
+  the dashboard to stop entirely when the holder dies badly. A pass that throws is logged and
+  retried next tick — an unhandled exception would end the `BackgroundService` for the process's
+  lifetime, and a frozen dashboard looks exactly like a quiet week.
+  (14) **Recompute from the source tables rather than project from events.** The fence allows either
+  ("derived from events/read replicas"); recomputing makes a day *re-derivable* rather than
+  accumulated, so a missed message is corrected on the next pass instead of needing a topic replay,
+  and (3)'s late-settlement cases stop being special. When a read-replica DSN exists it belongs in
+  the kernel's `INpgsqlConnectionFactory`, which is the only way this component reaches Postgres —
+  nothing here would change.
+
+  **Both fences are held by reflection, not by review.** `FenceTests` enumerates every SQL constant
+  in the assembly (the SQL is held in `const string` fields precisely so this is possible) and
+  asserts: exactly **one** data-modifying statement exists; every data-modifying keyword targets a
+  **schema-qualified** table starting `analytics.`; the keyword count equals the qualified-target
+  count, so an unqualified write cannot slip past the schema check by failing to match it; and no
+  query anywhere contains `AT TIME ZONE`, `date_trunc`, `::date`, `now()`, `current_timestamp` or
+  `current_date` — **D-38 has exactly one implementation and it is `BusinessCalendar`**, with every
+  day arriving as a half-open UTC pair. The Colombo boundary itself is asserted at the second:
+  18:29:59 Z is yesterday, 18:30:00 Z is today.
+
+  **A pre-existing constraint this suite had to learn (not a bug, and not fixed here) —**
+  `support.tickets` carries `ck_tickets_resolution` from migration 1309
+  (`(status='RESOLVED') = (resolved_at IS NOT NULL)`), so seeding a resolved ticket needs both
+  columns. Recorded because C062/C064 will seed the same table.
+
+  **For C062 (admin-bff-core) —** reference `backend/src/Analytics/Analytics.csproj` and call
+  `AddMageRideAnalytics(builder.Configuration)` after `AddMageRideDefaults`; use
+  `AddMageRideAnalyticsQueriesOnly` on a replica that should not run the job.
+  `IDashboardStatsService.GetAsync(period, from, to, ct)` returns `DashboardStats` whose properties
+  are `admin-bff.yaml`'s field names — serialise `Period`, `Range`, `Kpis`, `DeltaVsPrev` and `Live`
+  and **do not serialise `PreviousRange` / `PreviousKpis`**, which are CSV-only (the JSON contract
+  carries percentages alone). `ExportCsvAsync` returns the bytes for `stats.csv` — `text/csv`, UTF-8
+  with a BOM; set `Content-Disposition` at the route. An invalid query throws
+  `MageRideValidationException`, which the kernel's handler already turns into the `400
+  validation-failed` the contract declares, so **no validation belongs in the BFF**. RBAC and the
+  D-35 audit event are entirely C062's — this assembly enforces neither.
+  **`GET /v1/admin/dashboard`** (the unfiltered US-14.6 landing view) is the same
+  `DashboardKpis` + `DashboardLive` pair with no period; serve it from `GetAsync("today", …)` or a
+  period of your choosing. No spec states which, so this component takes no view.
+  **If C062 wants an operator rebuild route**, `IAnalyticsRollupService.RunRangeAsync(from, to, ct)`
+  is it — bounded by `Analytics:MaxBackfillDays`, and it answers what it did.
+  **For C104/C105 (Admin Portal) —** the `deltaVsPrev` percentages are **nullable**; render an
+  absent one as "—" rather than as 0 %, and note that the three live cards do not move when the
+  period filter changes.
+
+  **Build host —** Docker for one Testcontainers fixture (Postgres only: this component holds no
+  Redis connection, publishes nothing and speaks to no broker); the replica stayed down throughout.
+  `Analytics.Tests` takes ~26 s including the container start and migration.
+  **No new NuGet reference, no new PostgreSQL extension, no new migration, no contract change.**

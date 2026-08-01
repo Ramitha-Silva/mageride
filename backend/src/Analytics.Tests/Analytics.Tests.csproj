@@ -1,0 +1,67 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    C061 verify target: dotnet test backend/src/Analytics.Tests -c Release
+
+    A real Postgres, because every claim this component makes is a claim about the database:
+
+      * "a rollup re-run for the same day is idempotent" is one `ON CONFLICT (metric_date) DO UPDATE`
+        against a real primary key, and the assertion is that the row's values are unchanged while
+        `refreshed_at` moved and `metric_date_tz_at` did not;
+      * "period totals reconcile with a direct query over the source tables" only means anything if
+        the source tables are the real ones with their real constraints — the reconciliation query
+        in `PeriodAggregationTests` is deliberately written a *different* way (`AT TIME ZONE
+        'Asia/Colombo'` + `date_trunc`, grouped in SQL) from the rollup's (per-day UTC bounds
+        computed by `BusinessCalendar`), so agreeing is evidence rather than tautology;
+      * "the job completes within its window for a day of seeded volume" is measured against a day
+        of rows, not against a mock;
+      * the live counters are three predicates over five other services' tables, and what makes them
+        right is that those tables exist with the values their CHECKs admit.
+
+    It also references **Ride.Api and Fare.Api** — not to run them, but to compare this component's
+    copy of two vocabularies against the services that own them. `AnalyticsVocabulary.RideCompleted`
+    and `.SettledPaymentStates` are literals in a rollup query, and if fare-svc widened R-05's
+    terminal set the dashboard would silently under-count revenue with nothing failing. Those two
+    assertions are the whole reason for the references.
+
+    Microsoft.NET.Sdk.Web: the two referenced services are web projects, and the harness builds a
+    host. There is no HTTP surface in the component under test — see Analytics.csproj's header.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.Analytics.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <OutputType>Exe</OutputType>
+    <!--
+      xUnit1041: collection-fixture ctor args are consumed through the primary constructor.
+      xUnit1051: every test is bounded by its own harness lifetime, so threading
+                 TestContext.Current.CancellationToken through each call would add noise without
+                 changing behaviour. Matches Wallet/Subscription/Fleet/FleetBilling tests.
+    -->
+    <NoWarn>$(NoWarn);xUnit1041;xUnit1051</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <!-- FakeTimeProvider: "today" is the axis this whole component turns on, and a suite that used
+         the wall clock would pass or fail depending on the hour it ran at in Colombo. -->
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Analytics\Analytics.csproj" />
+    <!-- C010: the Postgres fixture, so this suite migrates the same server build the dev stack runs. -->
+    <ProjectReference Include="..\MageRide.TestKit\MageRide.TestKit.csproj" />
+    <!-- Vocabulary only. See the header. -->
+    <ProjectReference Include="..\Ride.Api\Ride.Api.csproj" />
+    <ProjectReference Include="..\Fare.Api\Fare.Api.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

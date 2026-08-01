@@ -1,0 +1,67 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Analytics (C061, analytics-read-model) — the read model behind the Admin Portal's dashboard
+    statistics filter (AL-38, D-38, US-24.7, SCR-AP-002).
+
+    Three things. A **materialisation job** that recomputes `analytics.daily_metrics` — one row per
+    Asia/Colombo day carrying completed trips, gross fare, new riders, new drivers and daily-fee
+    revenue. A **period aggregation** over those rows (today | week | month | custom) with the
+    vs-previous-period deltas the contract defines. And the **live block** — online drivers, pending
+    verifications, open tickets — which is read from the operational tables at request time and
+    never from a rollup, because a rolled-up "currently online" is wrong by construction.
+
+    FENCES:
+      * **Derived, never authoritative.** The only table this assembly writes is
+        `analytics.daily_metrics`. Every other statement here is a SELECT, and
+        `TheOnlyTableThisComponentWritesIsAnalyticsDailyMetrics` in Analytics.Tests reflects over
+        every SQL constant in the assembly and proves it rather than trusting a reviewer.
+      * **Asia/Colombo decides the day, not UTC (D-38).** Every boundary comes from
+        `MageRide.Shared.Time.BusinessCalendar`; there is no `::date` cast on a UTC timestamp
+        anywhere in this component.
+
+    Microsoft.NET.Sdk, NOT Microsoft.NET.Sdk.Web — and this is the one structural decision of the
+    component. This is a **library referenced by admin-bff (C062)**, not a service on a socket:
+
+      * D3' gives the surface to admin-bff — `GET /v1/admin/dashboard/stats` and `stats.csv` are
+        operations of `backend/contracts/admin-bff.yaml`, and D6' §I-28.5 says that endpoint
+        "aggregates `analytics.daily_metrics`" rather than calling anything;
+      * ADD §6's service table has no `analytics-svc` row (only AL-38's affected-areas column
+        mentions the name), and the build planner recorded `analytics-read-model` among the
+        components with **no `.yaml`** because "none has an HTTP contract in D3'"
+        (build/progress.md, C007 finding (j));
+      * an HTTP hop would put a network boundary between admin-bff and a read model that lives in
+        the same database it already holds a connection to.
+
+    So C062 calls `AddMageRideAnalytics(configuration)` and maps its own contracted routes onto
+    `IDashboardStatsService` / `IAnalyticsRollupService`. Nothing here draws a route, and nothing
+    here needs a container of its own.
+
+    Verify: dotnet test backend/src/Analytics.Tests -c Release
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.Analytics</RootNamespace>
+    <AssemblyName>MageRide.Analytics</AssemblyName>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The rollup is a BackgroundService and the options bind through IOptions; both live in the
+         ASP.NET Core shared framework rather than in packages, exactly as MageRide.Shared takes
+         them. There is no HTTP surface here — see the header. -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Dapper, Npgsql, the connection factory, the Colombo business calendar and the RFC 7807
+         error registry all arrive through the kernel. This component adds no package of its own:
+         the CSV is written here and the rollup is five aggregate queries. -->
+    <ProjectReference Include="..\MageRide.Shared\MageRide.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Analytics.Tests" />
+  </ItemGroup>
+
+</Project>
