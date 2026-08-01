@@ -40,6 +40,40 @@ public static class AdminAuditActions
     public const string TicketResolved = "TICKET_RESOLVED";
 
     // -------------------------------------------------------------------------------------------
+    // Verification (AL-39, C063)
+    // -------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// A document was opened in the full-size viewer (AL-39, US-24.8, SCR-AP-003b).
+    /// </summary>
+    /// <remarks>
+    /// <b>The one action on this surface a GET writes.</b> <c>server_db_schema.md</c> §23 names it,
+    /// and looking at somebody's licence is itself the auditable act — which is why the viewer route
+    /// is what mints the signed object URL rather than the detail read handing one out.
+    /// </remarks>
+    public const string DocumentViewed = "DOC_VIEW";
+
+    /// <summary>A flagged field was confirmed as read, or corrected and confirmed (US-2.4a/2.10a).</summary>
+    public const string FieldConfirmed = "VERIFICATION_FIELD_CONFIRMED";
+
+    /// <summary>A driver, vehicle or fleet organisation passed verification (US-2.9, US-13.A7).</summary>
+    public const string VerificationApproved = "VERIFICATION_APPROVED";
+
+    /// <summary>A driver, vehicle or fleet organisation was refused, with a reason (US-2.15).</summary>
+    public const string VerificationRejected = "VERIFICATION_REJECTED";
+
+    /// <summary>
+    /// An officer withdrew their own refusal so a resubmission could be judged again.
+    /// </summary>
+    /// <remarks>
+    /// Its own action rather than part of the approval that follows it. registry-svc will not
+    /// auto-approve a REJECTED vehicle — "a Verification Officer's decision that four green steps do
+    /// not overturn" — so reopening is a separate decision, and recording it separately is what
+    /// keeps the trail honest when the approval that follows is itself refused by AL-10.
+    /// </remarks>
+    public const string VerificationReopened = "VERIFICATION_REOPENED";
+
+    // -------------------------------------------------------------------------------------------
     // Configuration
     // -------------------------------------------------------------------------------------------
 
@@ -82,6 +116,13 @@ public static class AdminAuditActions
 
     public const string VehicleEntity = "vehicle";
     public const string DriverEntity = "driver";
+
+    /// <summary>A fleet organisation — <c>registry.fleets</c> (AL-03, AL-49).</summary>
+    public const string FleetOrgEntity = "fleet_org";
+
+    /// <summary>One document, whichever of the two tables holds it (AL-39).</summary>
+    public const string DocumentEntity = "document";
+
     public const string ReportEntity = "vehicle_report";
     public const string TicketEntity = "support_ticket";
     public const string TariffEntity = "fare_tariff";

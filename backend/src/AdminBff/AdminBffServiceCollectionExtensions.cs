@@ -5,6 +5,7 @@ using MageRide.AdminBff.Moderation;
 using MageRide.AdminBff.Persistence;
 using MageRide.AdminBff.Platform;
 using MageRide.AdminBff.Upstream;
+using MageRide.AdminBff.Verification;
 using MageRide.Analytics;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -36,6 +37,11 @@ public static class AdminBffServiceCollectionExtensions
         services.TryAddSingleton<IPlatformConfigRepository, PlatformConfigRepository>();
         services.TryAddSingleton<ITrainRepository, TrainRepository>();
         services.TryAddSingleton<IAuditLogRepository, AuditLogRepository>();
+        services.TryAddSingleton<IVerificationRepository, VerificationRepository>();
+
+        // Singleton: it holds the signing key and a clock, and minting a link is a pure function of
+        // both. A per-request instance would re-read the key on every thumbnail in a grid.
+        services.TryAddSingleton<IDocumentLinks, DocumentLinks>();
 
         // Scoped: the audit context is per request by definition, and the services that record into
         // it must share the same instance the interceptor drains.
@@ -45,6 +51,7 @@ public static class AdminBffServiceCollectionExtensions
         services.TryAddScoped<ITrainService, TrainService>();
         services.TryAddScoped<IReportQueue, ReportQueue>();
         services.TryAddScoped<ISupportTicketQueue, SupportTicketQueue>();
+        services.TryAddScoped<IVerificationService, VerificationService>();
 
         // The filter is resolved per request through the endpoint-filter factory, and holds only
         // options and a logger.
@@ -84,6 +91,8 @@ public static class AdminBffServiceCollectionExtensions
                     AdminUpstreams.Safety => options.Safety,
                     AdminUpstreams.Support => options.Support,
                     AdminUpstreams.Content => options.Content,
+                    AdminUpstreams.Registry => options.Registry,
+                    AdminUpstreams.Fleet => options.Fleet,
                     _ => options.Transit,
                 }).Timeout;
             });

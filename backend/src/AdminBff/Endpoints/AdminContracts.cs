@@ -54,6 +54,116 @@ public sealed record TicketRowResponse(
 /// <summary>`POST /v1/admin/support/tickets/{ticketId}/resolve`.</summary>
 public sealed record ResolveTicketBody(string? Response);
 
+// -------------------------------------------------------------------------------------------------
+// Verification (AL-39, C063)
+// -------------------------------------------------------------------------------------------------
+
+/// <summary>`DriverQueueRow` — SCR-AP-003's driving-licence tab.</summary>
+public sealed record DriverQueueRowResponse(
+    Guid DriverId,
+    string Name,
+    DateTimeOffset SubmittedAt,
+    IReadOnlyList<string> FlaggedFields,
+    string Status);
+
+/// <summary>`VehicleQueueRow` — SCR-AP-003's vehicle-registration tab.</summary>
+public sealed record VehicleQueueRowResponse(
+    Guid VehicleId,
+    string RegNo,
+    Guid? OwnerDriverId,
+    DateTimeOffset SubmittedAt,
+    IReadOnlyList<string> FlaggedFields,
+    string Status);
+
+/// <summary>`OrgQueueRow` — SCR-AP-003's fleet-org tab (AL-49).</summary>
+/// <param name="KycStatus">
+/// Whether there is KYC evidence to read at all: <c>complete</c> once the organisation carries a
+/// business registration and a contact number, <c>incomplete</c> until it does (US-13.A7). The
+/// payout profile's own state is <paramref name="PayoutProfileStatus"/> — the two are separate
+/// decisions and one field could not carry both.
+/// </param>
+public sealed record OrgQueueRowResponse(
+    Guid OrgId,
+    string Name,
+    string KycStatus,
+    int VehicleCount,
+    string Status,
+    string? PayoutProfileStatus);
+
+/// <summary>
+/// `DocumentRef` — one document with the two links SCR-AP-003a/003b open it by.
+/// </summary>
+/// <remarks>
+/// <b>Δ C063: both links point at <c>GET /v1/admin/documents/{docId}</c>, not at the bucket.</b>
+/// AL-39 wants short-lived signed object-storage URLs <em>and</em> a <c>DOC_VIEW</c> row per read;
+/// a bare pre-signed URL here would give the first and silently drop the second. The audited route
+/// mints the signed URL per view and redirects to it — see <c>IDocumentLinks</c>.
+/// </remarks>
+public sealed record DocumentRefResponse(
+    Guid DocId, string Kind, string ThumbUrl, string FullUrl, string? CapturedVia);
+
+/// <summary>`ExtractedField` (_shared.yaml) — one AL-29 field with its provenance.</summary>
+public sealed record ExtractedFieldResponse(
+    string Key, string? Value, string Source, decimal? Confidence, string VerifyStatus);
+
+/// <summary>One row of SCR-AP-003a's decision rail.</summary>
+public sealed record VerificationStepResponse(string Step, string Status);
+
+/// <summary>Who the officer is looking at.</summary>
+public sealed record VerificationSubjectResponse(Guid Id, string Type, string? DisplayName);
+
+/// <summary>`VerificationDetail` — SCR-AP-003a/003c.</summary>
+public sealed record VerificationDetailResponse(
+    VerificationSubjectResponse Subject,
+    IReadOnlyList<ExtractedFieldResponse> Fields,
+    IReadOnlyList<DocumentRefResponse> Documents,
+    IReadOnlyList<VerificationStepResponse> Steps,
+    bool Approvable);
+
+/// <summary>The organisation KYC an officer reads before approving (US-13.A7).</summary>
+public sealed record OrgKycResponse(
+    Guid OrgId,
+    string Name,
+    string? RegistrationNo,
+    string? ContactPhone,
+    string? ContactEmail,
+    string? Address,
+    string Status,
+    string? RejectionReason,
+    OrgPayoutResponse? PayoutProfile);
+
+/// <summary>The bank details AL-49's pay sheet will render once they are verified.</summary>
+public sealed record OrgPayoutResponse(
+    string Bank,
+    string Branch,
+    string AccountNo,
+    string AccountHolderName,
+    string Status,
+    string? RejectionReason,
+    DateTimeOffset? VerifiedAt);
+
+/// <summary>`GET /v1/admin/verification/org/{orgId}` — SCR-AP-003c.</summary>
+public sealed record OrgVerificationResponse(
+    OrgKycResponse Kyc, string? PayoutProfileStatus, IReadOnlyList<DocumentRefResponse> Documents);
+
+/// <summary>
+/// `PUT /v1/admin/verification/{subjectId}/fields/{fieldKey}` — omit `value` to confirm as is.
+/// </summary>
+public sealed record DecideFieldBody(string? Value);
+
+/// <summary>What one field decision left behind.</summary>
+public sealed record DecideFieldResponse(
+    ExtractedFieldResponse Field, string StepStatus, bool Approvable);
+
+/// <summary>`VerificationDecision` — the answer to approve and to reject.</summary>
+/// <param name="MerchantBound">
+/// D-11's OnePay bind. Always <see langword="false"/> today and deliberately so: registry-svc's
+/// <c>POST /v1/internal/vehicles/{id}/merchant</c> requires a `merchantId` and nothing on this
+/// platform onboards one, so a `true` here would be a claim that settlement has a payee.
+/// </param>
+public sealed record VerificationDecisionResponse(
+    Guid SubjectId, string Status, string? Reason, bool MerchantBound);
+
 /// <summary>`Tariff` — one Mode C rate-card row (US-14.4).</summary>
 public sealed record TariffResponse(
     string VehicleType,

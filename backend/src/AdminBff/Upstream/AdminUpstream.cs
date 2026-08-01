@@ -8,7 +8,7 @@ using Microsoft.Net.Http.Headers;
 
 namespace MageRide.AdminBff.Upstream;
 
-/// <summary>The four upstreams, named so a client asks for one by identity rather than by URL.</summary>
+/// <summary>The upstreams, named so a client asks for one by identity rather than by URL.</summary>
 public static class AdminUpstreams
 {
     public const string Safety = "safety-svc";
@@ -16,7 +16,13 @@ public static class AdminUpstreams
     public const string Content = "content-svc";
     public const string Transit = "transit-svc";
 
-    public static readonly IReadOnlyList<string> All = [Safety, Support, Content, Transit];
+    /// <summary>AL-30's onboarding recompute (C063).</summary>
+    public const string Registry = "registry-svc";
+
+    /// <summary>The fleet-org queue and the AL-49/AL-50 decisions (C063).</summary>
+    public const string Fleet = "fleet-svc";
+
+    public static readonly IReadOnlyList<string> All = [Safety, Support, Content, Transit, Registry, Fleet];
 }
 
 /// <summary>
@@ -223,6 +229,8 @@ internal sealed class AdminUpstream(
         AdminUpstreams.Support => _upstreams.Support,
         AdminUpstreams.Content => _upstreams.Content,
         AdminUpstreams.Transit => _upstreams.Transit,
+        AdminUpstreams.Registry => _upstreams.Registry,
+        AdminUpstreams.Fleet => _upstreams.Fleet,
         _ => throw new ArgumentOutOfRangeException(
             nameof(upstream), upstream, $"Not an admin-bff upstream. Known: {string.Join(", ", AdminUpstreams.All)}."),
     };

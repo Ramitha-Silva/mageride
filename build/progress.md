@@ -88,7 +88,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C060 | fleet-billing-svc | 3 | DONE | 2026-07-31 | **72 tests green** in a **new suite** (`FleetBilling.Tests`), which boots a **real wallet-svc** because both halves of "post to a balanced journal entry" live in that service's schema — `trg_balanced` fires at COMMIT and `billing.journal_entries.idempotency_key` is what makes settling twice move the money once; **2 migrations (1108, 1906)** — the `fleet_invoice` journal kind (1106 gave the invoice a `journal_entry_id` and no kind could ever fill it, which is why C047 handed the consolidation over *unledgered*), `OVERDUE` (the contract has always returned four statuses and the CHECK admitted three), `billing.fleet_invoice_lines`, `fleet_topups`, `fleet_outbox` and `fleet_command_log`, plus a trilingual `fleet_invoice_overdue` template; **this service writes no ledger row** — there is no `INSERT INTO billing.journal_` and no `UPDATE billing.accounts` anywhere in the assembly, and every movement goes through **three new routes on C046's seam** (`/v1/internal/wallet/fleet/{fleetId}/debit` · `/credit` · `/account`); **the lines are a snapshot, not a join** — a live one would make a settled invoice change under a roster edit and Σ lines stop equalling the amount that was paid; **`ux_fleet_invoice_lines_charge` is the guard that matters** — one raised charge reaches one invoice, so a vehicle that changes organisation mid-month is not billed twice; **AL-03 is held by an absence** (1104 raises no Mode A row, so there is nothing to filter) and a Mode-A-only fleet gets a FREE invoice with **zero lines**, which is 1106's own comment honoured; **the PDF is written here rather than taken as a dependency** — base-14 fonts, byte-exact xref, parsed back by the suite — because a renderer is a native binary in every container for one document, and wallet-svc's `415` was not available when the deliverable names PDF outright; **billing is Owner-only on reads as well as writes** (US-13.A5), unlike fleet-svc where the map sits outside the gate; **`fleet-billing.yaml` is a new contract** and `fleet.yaml` loses two paths and a schema — the third instance of C007's and C044's split; `migrate-verify.sh` **441/441** with a C060 section, Spectral 0 errors, solution build 0 warnings; **1 pre-existing cross-suite break found and fixed** (`Subscription.Api.Tests`'s reset could not TRUNCATE a table 1108 gave a foreign key); 1 new error code, 13 contract changes, 12 spec gaps / micro-change-sets |
 | C061 | analytics-read-model | 3 | DONE | 2026-08-01 | **104 tests green** in a **new suite** (`Analytics.Tests`), integration against a real Postgres because every DoD item is a claim about the database; **no migration and no contract change** — C005's `1405__analytics_daily_metrics.sql` already carries AL-38's five figures and `admin-bff.yaml` already declares `getAdminDashboardStats` / `exportAdminDashboardStats`, so the records here are those schemas' field names one-for-one; **built as a LIBRARY, not a service** — D3' gives the endpoint to admin-bff, D6' §I-28.5 says it "aggregates `analytics.daily_metrics`" rather than calling anything, ADD §6's table has no `analytics-svc` row, and the planner already listed this component among those with no `.yaml` (C007 finding (j)); **completed trips come from `rides.transitions.to_state='Completed'`, not from a ride state** — a ride never *rests* in Completed (C022 moves it to PaymentPending in the same transaction) and the terminal states are reached when the *money* settles, which can be the next day; **gross fare is one payment per ride in exactly fare-svc's R-05 terminal set**, taken with `DISTINCT ON … attempt_no DESC` so a D-10 retry chain contributes once, and `VocabularyTests` compares the list against `Fare.Api` so a widened CHECK is a red test rather than a silently under-counted dashboard; **new riders/drivers come from the `iam.user_roles` grant, not `iam.users.role`** — the primary role moves and would retro-edit a past day's figure; **daily-fee revenue matches `fee_date` directly** because subscription-svc already decided that Colombo day under D-13; **both fences are proved by reflection, not by review** (`FenceTests`: one writing statement, targeting `analytics.`, and no `AT TIME ZONE` / `date_trunc` / `::date` / `now()` anywhere — D-38 has one implementation and it is `BusinessCalendar`); **the previous period is arithmetic, not calendar** (the contract's "immediately preceding period of the same length"), so a 31-day range spanning a month boundary compares against 31 days and not "the same dates last month"; **a zero-base delta is `null`**, because growth from nothing has no percentage; **a day with no activity is a zero row**, so "no row" cannot mean both "quiet Sunday" and "job down since Friday"; **the live block is read at request time and asserted invariant under the period filter**; period totals reconcile against a deliberately *differently written* source query (`AT TIME ZONE` + `date_trunc`, grouped in SQL) on every period; 2000 trips roll up in well under the 15-min window; solution build 0 warnings; 1 spec gap (which day "This week" starts on), 1 D7' §4.2 gap, 7 configuration decisions |
 | C062 | admin-bff-core | 3 | DONE | 2026-08-01 | **65 tests green** in a **new suite** (`AdminBff.Tests`) plus **3 kernel promotions** (the URD §2.3 matrix, the `audit.events` writer, a `TimeOnly` Dapper handler) and **3 migrations (0202, 1312, 1409)**; the RBAC matrix test reads each route's own requirement off the built endpoint and drives all six internal roles at a real socket, so the expectation IS the spec; D-35 is a **start-up condition** — a mutating route outside the audited group, or one that declares no action, refuses to boot; 3 contract additions, 5 spec gaps / micro-change-sets |
-| C063 | admin-bff-verification | 3 | PENDING | | |
+| C063 | admin-bff-verification | 3 | DONE | 2026-08-01 | **17 verification tests green** (`--filter Category=Verification`) and **91/91** across the whole `AdminBff.Tests` suite (was 65), integration against a real Postgres because every DoD item is a claim about the database; **1 migration (0315)** — `registry.driver_profiles.rejection_reason`, because AL-39's family is subject-agnostic and two of its three subjects already had somewhere to keep US-2.15's reason while the driver did not; **a queue is "has a field still `pending`" and that IS AL-27's fence** — an auto-verified document produces no such row, so it cannot appear rather than being filtered out by something that could stop filtering, and the same count is US-2.10a's approval gate so the two cannot disagree; **the vehicle queue is Mode C and fleet alike** because AL-50 reuses AL-29's pipeline and both write the same two tables; **every document fetch goes through the audited route** — `thumbUrl`/`fullUrl` point at `GET /v1/admin/documents/{docId}`, which records `DOC_VIEW` and *then* mints the short-lived signed URL it redirects to, because a pre-signed bucket URL would have satisfied AL-39's first half and silently dropped its second; **the D-35 success window widened to 3xx** for exactly that redirect; **withdrawing a rejection is its own `VERIFICATION_REOPENED` row** — registry-svc will not auto-approve a REJECTED vehicle, so a resubmission could otherwise never be approved, and the trail stays honest when the approval that follows is refused by AL-10; **an edit reaches an unflagged field and a bare confirm does not**, and an edited value becomes `manual` with no confidence (`ck_document_fields_manual_confidence`); **`merchantBound` is always false** because D-11's bind requires a `merchantId` nothing on this platform onboards; `migrate-verify.sh` 446/446, Spectral 0 errors, solution build 0 warnings; 2 new upstreams, 8 contract changes, 4 spec gaps / micro-change-sets |
 | C064 | admin-bff-directories | 3 | PENDING | | |
 | C065 | admin-bff-finance-pdpa | 3 | PENDING | | |
 | C066 | public-bff | 3 | PENDING | | |
@@ -9384,3 +9384,148 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   connection and the suite switches audit publishing off, because the durable record is the row).
   `AdminBff.Tests` takes ~73 s including the container start and migration; the replica stayed down
   throughout. **No new NuGet reference and no new PostgreSQL extension.**
+
+---
+
+- **Component:** C063 admin-bff-verification — 2026-08-01
+- **Status:** DONE — `dotnet test backend/src/AdminBff.Tests -c Release --filter Category=Verification`
+  is **17/17 green** and the whole suite is **91/91** (was 65);
+  `dotnet build backend/MageRide.sln -c Release` is 0 warnings 0 errors;
+  `bash infra/scripts/migrate-verify.sh` is **446/446**; Spectral is 0 errors.
+- **Notes:**
+  **What was built —** the Verification Officer's whole surface (SCR-AP-003/003a/003b/003c): three
+  queue feeds with search and a status filter, one subject-agnostic detail carrying the flagged
+  fields, the attached documents and SCR-AP-003a's per-step decision rail, the fleet-org detail with
+  its AL-49 payout evidence, `PUT …/fields/{key}` (confirm, or edit and confirm), `POST …/approve`
+  and `…/reject`, and `GET /v1/admin/documents/{docId}` — the audited viewer. Mapped on C062's
+  group, so it inherited the AL-06 gate, the D-35 interceptor, the surface marker and the RBAC
+  test's coverage; nine probe rows were added to `RbacMatrixTests.Cases`, which is what that test
+  demands rather than merely permits.
+
+  **The two decisions this component is actually about.**
+
+  • **A queue is a query over `registry.document_fields.verify_status = 'pending'`, and that *is*
+  AL-27's fence.** The prompt states it as a rule to obey ("the officer sees only PENDING items");
+  making membership *be* that predicate means an auto-verified document cannot appear rather than
+  being filtered out by code that could later stop filtering. The partial index
+  `ix_document_fields_pending` (0305) exists to be this query's index, and **the same count is
+  US-2.10a's approval gate** — one source, so the queue and the refusal can never disagree about
+  whether a submission is settled. What a row's `status` carries is therefore the *subject's* own
+  registration status, not the queue's: every member is by construction awaiting review, and what
+  the officer needs to know is whether this is a renewal on an already-approved applicant or a
+  resubmission after a refusal. That is what D2's status filter filters on.
+
+  • **Every document fetch goes through the audited route.** AL-39 asks for two things at once —
+  short-lived signed object-storage URLs **and** a `DOC_VIEW` row per read — and the obvious reading
+  (put a pre-signed bucket URL in `thumbUrl`) satisfies the first while silently breaking the
+  second: the officer's browser would fetch somebody's licence straight from storage and nothing
+  would record it. So `thumbUrl`/`fullUrl` are `/v1/admin/documents/{docId}?variant=…`, and *that*
+  route records the view and then mints the signed URL it `302`s to. The signed URL is where it
+  always was; what changed is that it is minted per view, on the way out of the row that records the
+  view. **One view is one row** — a grid of four thumbnails is four looks at four documents. The
+  cost is one C062 change: the D-35 interceptor's success window is now 2xx **and** 3xx, because
+  treating a redirect as a failure would make the one audited read on this surface the one that
+  records nothing.
+
+  **Who writes what, and why this is not a second writer.** The BFF rule held: the AL-30 recompute
+  is registry-svc's (it built `/v1/internal/vehicles/{id}/onboarding/recompute` **for this caller**
+  and its own file says so), and AL-50's fleet-vehicle gate plus AL-49's organisation approval are
+  fleet-svc's (its whole `/v1/internal/fleets/**` plane exists for this BFF). What is written here
+  is what nobody exposes a route for: `registry.vehicles.rejection_reason` — registry-svc's file
+  leaves it to this component **by name** — `registry.driver_profiles.verified_at` and its new
+  `rejection_reason`, and the confirmations on `registry.document_fields`. Two new upstreams
+  (`Registry`, `Fleet`), both `/v1/internal` planes, both taking the shared key with the officer's
+  id on the body — C052/C053's split exactly.
+
+  **Ordering that is load-bearing —** the field, the audit row and the commit go together, and the
+  recompute follows the commit because registry-svc has to read what that transaction wrote. An
+  unreachable registry-svc is therefore a `503` on a request whose field is already confirmed; both
+  halves are idempotent so the retry is clean, and the alternative — swallowing it — is precisely
+  the gap that route was built to close (a vehicle left at `pending_review` for a question the
+  officer already answered).
+
+  **Four smaller rules, each with a failure behind it —**
+  • **A field key is decided on every row that carries it.** A licence is two documents; confirming
+  one row leaves the subject unapprovable for a field the officer believes they cleared.
+  • **An edit reaches an unflagged field; a bare confirm does not.** AL-29's premise is that OCR can
+  be confidently *wrong*, so correcting an `auto_verified` value is legitimate — while confirming
+  one nobody flagged is a decision with no question in front of it, and a double click must change
+  nothing. An edited value becomes `manual` with `confidence` NULL, which is what
+  `ck_document_fields_manual_confidence` demands and what stops an invented score reading as
+  evidence.
+  • **Withdrawing a rejection is its own fact.** registry-svc declines to auto-approve a REJECTED
+  vehicle ("a decision that four green steps do not overturn"), so approving a resubmission has to
+  reopen it first. `VERIFICATION_REOPENED` is recorded separately, which keeps the trail honest when
+  the approval that follows is then refused by AL-10 — and the reopen answers `409
+  registration-exists` when the plate the rejection freed has since been claimed (D-37), because
+  PENDING is inside `ux_vehicles_regno_active`'s predicate.
+  • **The rail speaks the vocabulary of the surface that produced the subject.** A Mode C vehicle's
+  steps are AL-30's four saved rows and are authoritative; a fleet vehicle has none, so its rail is
+  AL-50's named slots derived by registry-svc's own rule (verified iff no field of it is pending); a
+  driver is one synthetic `profile` step, because a decision rail with nothing in it reads as
+  "nothing to check".
+
+  **Spec gaps / micro-change-sets raised —**
+  1. ⚠ **A rejected driver had nowhere to put the reason.** Migration **0315** adds
+  `registry.driver_profiles.rejection_reason`. AL-39 makes the family subject-agnostic and US-2.15
+  makes the reason mandatory and "surfaced verbatim to the applicant"; `registry.vehicles` (0303)
+  and `registry.fleets` (0301) both have the column and `registry.driver_profiles` (0304) had
+  `verified_at` and nothing else, so an officer's refusal of a licence could be recorded in
+  `audit.events` and never shown to the driver it was about. **server_db_schema.md §2 / D4' §2
+  should carry it.** No companion timestamp and no `status` column: the state is derived exactly as
+  `onboarding_status` is.
+  2. ⚠ **SCR-AP-003's search and status filter had no parameters.** D2 §SCR-AP-003 requires "search +
+  status filter" on all three tabs and D3's AL-39 block declares neither. Added to `admin-bff.yaml`
+  as `VerificationSearch` / `VerificationStatus`. **D3' Δ 2026-06-28 item 8 should carry them.**
+  3. ⚠ **`VerificationDetail` had no per-step breakdown.** SCR-AP-003a's decision rail is "per-step
+  breakdown; Approve unlocks when all confirmed" and the AL-39 response shape is
+  `{subject, fields, documents}`. Added `steps` + a `VerificationStep` schema. **D3' should carry
+  it.**
+  4. ⚠ **D-11's merchant bind has no merchant id anywhere on this build map.** `approve` is specified
+  to trigger `POST /v1/internal/vehicles/{id}/merchant`, which **requires** a `merchantId`; no
+  component produces one. `merchantBound` answers `false`, the approval logs the fact, and fare-svc
+  keeps answering `402 merchant-not-onboarded`. **An OnePay merchant-onboarding path is missing from
+  the build map**, not just from this component.
+
+  **Contract changes (`admin-bff.yaml`, 8) —** `search` + `status` on the three queues;
+  `VerificationDetail.steps` + the `VerificationStep` schema; `DocumentRef`'s links respelled as the
+  audited viewer with the reason; `variant` on `GET /v1/admin/documents/{docId}`;
+  `OrgQueueRow.kycStatus` given an enum and a definition (`complete` once the org carries a business
+  registration and a contact number — the payout profile's own state is the separate
+  `payoutProfileStatus`, added); `OrgQueueRow.status` lost `SUSPENDED`, matching C058's `FleetStatus`
+  and the three-value CHECK; `registration-exists` added to approve's `x-error-codes`. **No new
+  error code** — every refusal maps onto one the kernel already has.
+
+  **A C062 behaviour changed (one line, argued) —** `AuditInterceptor`'s success window is
+  `2xx..3xx` rather than `2xx`. Nothing else on the surface answers a 3xx today; the GTFS
+  pass-through sets its own status and records before it streams, so it is unaffected.
+
+  **Testing decision worth knowing —** `StubUpstream` gained two planes that **write**, unlike the
+  four that only answer. "Approving a fleet org's payout profile makes `payTo` available to
+  subscription-svc" is a claim about `registry.fleet_payout_profiles`, and asserting it against a
+  canned `{"status":"verified"}` would assert nothing — so the stubbed registry recompute applies
+  AL-30's rule and the stubbed fleet approval does AL-49's supersede-then-verify in the order
+  `ux_payout_profile_verified` demands, both against the same Postgres. The test then reads the
+  table with subscription-svc's own predicate. AL-10's mandatory-document gate is deliberately not
+  modelled: registry-svc's suite proves it and admin-bff only ever reads its outcome.
+  `AdminBffHarness`'s client no longer follows redirects, because the 302's `Location` is the
+  assertion.
+
+  **For C064 / C065 —** the pattern is unchanged and now has a second worked example: add a
+  `Map…Endpoints(this IEndpointRouteBuilder admin)`, gate with `RequireFeature`, record with
+  `IAdminAuditContext.Record(...)` and `FlushAsync(unitOfWork, ct)` inside your own transaction, and
+  **add a probe row to `RbacMatrixTests.Cases` or the route-table test fails**. C064's vehicle
+  directory (AL-42) wants document thumbnails "→ the AL-39 viewer": use `IDocumentLinks.Create(docId,
+  variant)` and do **not** mint a second link shape — the viewer is what writes `DOC_VIEW`, and
+  AL-40's `PII_READ` is recorded the same way (`.Audited(...)` on a GET, handler calls `Record`).
+  `IVerificationRepository.FindDocumentAsync` resolves a doc id out of either `registry.documents`
+  or `docs.uploads`. **A Dapper trap this component hit twice:** `DefaultTypeMap.FindConstructor`
+  matches a record's constructor **positionally and by reader field type**, so a projection whose
+  column order differs from the constructor fails at *run time*, and Npgsql reports `text[]` as
+  `System.Array` — an aggregated `string[]` must come back through a settable property, not a
+  constructor parameter.
+
+  **Build host —** Docker for one Testcontainers fixture (Postgres only). The full `AdminBff.Tests`
+  suite takes ~2 min including the container start and migration; `--filter Category=Verification`
+  ~34 s. `migrate-verify.sh` was re-run for 0315 and is 446/446. The replica stayed down throughout.
+  **No new NuGet reference and no new PostgreSQL extension.**

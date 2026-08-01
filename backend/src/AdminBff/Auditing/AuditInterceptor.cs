@@ -115,7 +115,12 @@ internal sealed class AuditInterceptor(
         // returned, so `StatusCode` alone is 200 for a 201 that has not been executed yet.
         var status = StatusOf(http, result);
 
-        if (status is < 200 or >= 300)
+        // Successes only — and a redirect is one. AL-39's document viewer (C063) answers `302` with
+        // the short-lived signed object-storage URL, and its `DOC_VIEW` row is written on the way
+        // out of exactly that response; treating 3xx as a failure would make the one audited read on
+        // this surface the one that records nothing. A 4xx changed nothing and a 5xx is worse than
+        // useless, and both still fall outside.
+        if (status is < 200 or >= 400)
         {
             return result;
         }

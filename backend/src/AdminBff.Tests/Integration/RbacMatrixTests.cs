@@ -65,6 +65,16 @@ public sealed class RbacMatrixTests(PostgresFixture postgres)
         ("GET", "/v1/admin/dashboard/stats?period=today", null),
         ("GET", "/v1/admin/dashboard/stats.csv?period=today", null),
 
+        ("GET", "/v1/admin/verification/queues/driving-license", null),
+        ("GET", "/v1/admin/verification/queues/vehicle-registration", null),
+        ("GET", "/v1/admin/verification/queues/fleet-org", null),
+        ("GET", "/v1/admin/verification/org/01930000-0000-7000-8000-0000000000b1", null),
+        ("GET", "/v1/admin/verification/01930000-0000-7000-8000-0000000000b2", null),
+        ("PUT", "/v1/admin/verification/01930000-0000-7000-8000-0000000000b2/fields/nic_no", """{}"""),
+        ("POST", "/v1/admin/verification/01930000-0000-7000-8000-0000000000b2/approve", null),
+        ("POST", "/v1/admin/verification/01930000-0000-7000-8000-0000000000b2/reject", """{"reason":"blurred"}"""),
+        ("GET", "/v1/admin/documents/01930000-0000-7000-8000-0000000000b3", null),
+
         ("POST", "/v1/admin/vehicles/01930000-0000-7000-8000-0000000000aa/suspend", """{"reason":"test"}"""),
         ("POST", "/v1/admin/drivers/01930000-0000-7000-8000-0000000000ab/suspend", """{"reason":"test"}"""),
         ("GET", "/v1/admin/reports/queue", null),

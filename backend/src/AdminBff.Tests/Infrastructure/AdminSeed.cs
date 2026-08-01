@@ -162,6 +162,253 @@ internal sealed class AdminSeed(PostgresFixture postgres)
         return id;
     }
 
+    // -------------------------------------------------------------------------------------------
+    // Verification (C063)
+    // -------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// A driver who finished Profile Setup with one field a Verification Officer must decide.
+    /// </summary>
+    /// <remarks>
+    /// The exact shape AL-29 produces: <c>licence_no</c> extracted with high confidence and
+    /// therefore <c>auto_verified</c>, <c>nic_no</c> typed by the driver because the scan was
+    /// unclear and therefore <c>manual</c> + <c>pending</c>. Only the second puts the driver in the
+    /// queue, which is AL-27's fence — the first is invisible to the officer.
+    /// </remarks>
+    public async Task<(Guid DriverId, Guid DocId, Guid UploadId)> DriverAwaitingLicenceAsync()
+    {
+        var driverId = Guid.CreateVersion7();
+        var docId = Guid.CreateVersion7();
+        var uploadId = Guid.CreateVersion7();
+        var storageUrl = $"s3://mageride-docs/licences/{uploadId:N}.jpg";
+
+        await using var connection = await postgres.OpenAsync();
+
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO iam.users (id, phone, role, first_name)
+            VALUES (@DriverId, @Phone, 'driver', 'Nimal');
+            INSERT INTO iam.user_roles (user_id, role) VALUES (@DriverId, 'driver') ON CONFLICT DO NOTHING;
+
+            INSERT INTO registry.driver_profiles (driver_id, display_name, nic_no)
+            VALUES (@DriverId, 'Nimal Perera', '199012345678');
+
+            INSERT INTO docs.uploads (id, owner_id, storage_url, kind, captured_via)
+            VALUES (@UploadId, @DriverId, @StorageUrl, 'driving_license', 'camera_dragcrop');
+
+            INSERT INTO registry.documents (id, driver_id, vehicle_id, kind, file_url)
+            VALUES (@DocId, @DriverId, NULL, 'driving_license', @StorageUrl);
+
+            INSERT INTO registry.document_fields
+                (document_id, field_key, field_value, confidence, source, verify_status)
+            VALUES
+                (@DocId, 'licence_no',    'B1234567',     0.960, 'ai',     'auto_verified'),
+                (@DocId, 'nic_no',        '199012345678', NULL,  'manual', 'pending');
+            """,
+            new
+            {
+                DriverId = driverId,
+                DocId = docId,
+                UploadId = uploadId,
+                StorageUrl = storageUrl,
+                Phone = $"+9471{Random.Shared.Next(1000000, 9999999)}",
+            });
+
+        return (driverId, docId, uploadId);
+    }
+
+    /// <summary>
+    /// A Mode C vehicle mid-wizard: three steps verified, the insurance step held by one doubtful
+    /// field (AL-30).
+    /// </summary>
+    public async Task<(Guid DriverId, Guid VehicleId, Guid DocId)> VehicleAwaitingReviewAsync()
+    {
+        var driverId = Guid.CreateVersion7();
+        var vehicleId = Guid.CreateVersion7();
+        var docId = Guid.CreateVersion7();
+        var storageUrl = $"s3://mageride-docs/insurance/{docId:N}.jpg";
+
+        await using var connection = await postgres.OpenAsync();
+
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO iam.users (id, phone, role, first_name)
+            VALUES (@DriverId, @Phone, 'driver', 'Sunil');
+            INSERT INTO iam.user_roles (user_id, role) VALUES (@DriverId, 'driver') ON CONFLICT DO NOTHING;
+
+            INSERT INTO registry.vehicles
+              (id, owner_id, registration_number, vehicle_type, mode, status, driver_name, onboarding_status)
+            VALUES (@VehicleId, @DriverId, @RegNo, 'three_wheeler', 'C', 'PENDING', 'Sunil Silva', 'incomplete');
+
+            INSERT INTO docs.uploads (id, owner_id, storage_url, kind, captured_via)
+            VALUES (gen_random_uuid(), @DriverId, @StorageUrl, 'insurance', 'gallery');
+
+            INSERT INTO registry.documents (id, driver_id, vehicle_id, kind, file_url, expires_at)
+            VALUES (@DocId, @DriverId, @VehicleId, 'insurance', @StorageUrl, now() + interval '300 days');
+
+            -- One doubtful field is the whole reason this vehicle is in the queue (AL-29's
+            -- below-threshold rule; registry-svc writes exactly this row).
+            INSERT INTO registry.document_fields
+                (document_id, field_key, field_value, confidence, source, verify_status)
+            VALUES (@DocId, 'insurance_expiry', '2027-05-01', 0.410, 'ai', 'pending');
+
+            INSERT INTO registry.onboarding_steps (vehicle_id, step, status, saved_at) VALUES
+                (@VehicleId, 'details',   'verified',       now()),
+                (@VehicleId, 'insurance', 'pending_review', now()),
+                (@VehicleId, 'revenue',   'verified',       now()),
+                (@VehicleId, 'photos',    'verified',       now());
+            """,
+            new
+            {
+                DriverId = driverId,
+                VehicleId = vehicleId,
+                DocId = docId,
+                StorageUrl = storageUrl,
+                Phone = $"+9472{Random.Shared.Next(1000000, 9999999)}",
+                RegNo = $"V{vehicleId:N}",
+            });
+
+        return (driverId, vehicleId, docId);
+    }
+
+    /// <summary>
+    /// A PENDING fleet organisation with a pending payout profile and its two AL-49 documents.
+    /// </summary>
+    public async Task<(Guid OrgId, Guid OwnerId, Guid ProfileId, Guid ProofUploadId)> FleetOrgAwaitingKycAsync()
+    {
+        var ownerId = Guid.CreateVersion7();
+        var orgId = Guid.CreateVersion7();
+        var profileId = Guid.CreateVersion7();
+        var proofUploadId = Guid.CreateVersion7();
+        var vehicleId = Guid.CreateVersion7();
+
+        await using var connection = await postgres.OpenAsync();
+
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO iam.users (id, email, role, first_name)
+            VALUES (@OwnerId, @Email, 'fleet_owner', 'Ranjith');
+            INSERT INTO iam.user_roles (user_id, role) VALUES (@OwnerId, 'fleet_owner') ON CONFLICT DO NOTHING;
+
+            INSERT INTO registry.fleets (id, owner_id, name, business_reg, status, contact_phone, address)
+            VALUES (@OrgId, @OwnerId, 'Ruhunu Transport (Pvt) Ltd', @BusinessReg, 'PENDING',
+                    '+94112345678', '12 Galle Road, Colombo 03');
+
+            INSERT INTO docs.uploads (id, owner_id, storage_url, kind)
+            VALUES (@ProofUploadId, @OwnerId, @StorageUrl, 'bank_statement');
+
+            INSERT INTO registry.fleet_payout_profiles
+                (id, fleet_id, bank, branch, account_no, account_holder_name, proof_upload_id, status)
+            VALUES (@ProfileId, @OrgId, 'Bank of Ceylon', 'Kollupitiya', '0071234567',
+                    'Ruhunu Transport (Pvt) Ltd', @ProofUploadId, 'pending_verification');
+
+            -- One vehicle on the roster, so OrgQueueRow.vehicleCount is a real count.
+            INSERT INTO registry.vehicles
+              (id, owner_id, registration_number, vehicle_type, mode, status, driver_name)
+            VALUES (@VehicleId, @OwnerId, @RegNo, 'bus', 'A', 'PENDING', 'Ruhunu Transport');
+
+            INSERT INTO registry.fleet_vehicles (fleet_id, vehicle_id, mode)
+            VALUES (@OrgId, @VehicleId, 'A');
+            """,
+            new
+            {
+                OwnerId = ownerId,
+                OrgId = orgId,
+                ProfileId = profileId,
+                ProofUploadId = proofUploadId,
+                VehicleId = vehicleId,
+                Email = $"{ownerId:N}@fleet.test",
+                BusinessReg = $"PV{orgId:N}"[..12],
+                StorageUrl = $"s3://mageride-docs/payout/{proofUploadId:N}.pdf",
+                RegNo = $"F{vehicleId:N}",
+            });
+
+        return (orgId, ownerId, profileId, proofUploadId);
+    }
+
+    /// <summary>
+    /// What registry-svc writes when the driver re-uploads after a rejection: a fresh document with
+    /// a fresh doubtful field, and the step it belongs to back at <c>pending_review</c>.
+    /// </summary>
+    public async Task<Guid> ReuploadInsuranceAsync(Guid vehicleId)
+    {
+        var docId = Guid.CreateVersion7();
+
+        await using var connection = await postgres.OpenAsync();
+
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO registry.documents (id, driver_id, vehicle_id, kind, file_url, expires_at)
+            SELECT @DocId, v.owner_id, v.id, 'insurance', @StorageUrl, now() + interval '360 days'
+              FROM registry.vehicles v WHERE v.id = @VehicleId;
+
+            INSERT INTO registry.document_fields
+                (document_id, field_key, field_value, confidence, source, verify_status)
+            VALUES (@DocId, 'insurance_expiry', '2027-07-01', 0.520, 'ai', 'pending');
+
+            UPDATE registry.onboarding_steps
+               SET status = 'pending_review', saved_at = now()
+             WHERE vehicle_id = @VehicleId AND step = 'insurance';
+            """,
+            new { DocId = docId, VehicleId = vehicleId, StorageUrl = $"s3://mageride-docs/insurance/{docId:N}.jpg" });
+
+        return docId;
+    }
+
+    public async Task<string> RegistrationNumberAsync(Guid vehicleId)
+    {
+        await using var connection = await postgres.OpenAsync();
+
+        return await connection.QuerySingleAsync<string>(
+            "SELECT registration_number FROM registry.vehicles WHERE id = @Id;", new { Id = vehicleId });
+    }
+
+    /// <summary>One <c>registry.document_fields</c> row, read back after a decision.</summary>
+    public async Task<DocumentFieldSnapshot?> FieldAsync(Guid documentId, string fieldKey)
+    {
+        await using var connection = await postgres.OpenAsync();
+
+        return await connection.QuerySingleOrDefaultAsync<DocumentFieldSnapshot>(
+            """
+            SELECT field_value AS FieldValue, source AS Source, confidence AS Confidence,
+                   verify_status AS VerifyStatus, confirmed_by AS ConfirmedBy, confirmed_at AS ConfirmedAt
+              FROM registry.document_fields
+             WHERE document_id = @DocumentId AND field_key = @FieldKey;
+            """,
+            new { DocumentId = documentId, FieldKey = fieldKey });
+    }
+
+    public async Task<(string Status, string? RejectionReason)> VehicleVerdictAsync(Guid vehicleId)
+    {
+        await using var connection = await postgres.OpenAsync();
+
+        var row = await connection.QuerySingleAsync<(string Status, string? RejectionReason)>(
+            "SELECT status, rejection_reason FROM registry.vehicles WHERE id = @Id;", new { Id = vehicleId });
+
+        return row;
+    }
+
+    public async Task<(DateTimeOffset? VerifiedAt, string? RejectionReason)> DriverVerdictAsync(Guid driverId)
+    {
+        await using var connection = await postgres.OpenAsync();
+
+        return await connection.QuerySingleAsync<(DateTimeOffset? VerifiedAt, string? RejectionReason)>(
+            "SELECT verified_at, rejection_reason FROM registry.driver_profiles WHERE driver_id = @Id;",
+            new { Id = driverId });
+    }
+
+    /// <summary>Exactly what subscription-svc's pay sheet reads: the org's <c>verified</c> rows.</summary>
+    public async Task<IReadOnlyList<string>> PayoutProfileStatusesAsync(Guid fleetId)
+    {
+        await using var connection = await postgres.OpenAsync();
+
+        var rows = await connection.QueryAsync<string>(
+            "SELECT status FROM registry.fleet_payout_profiles WHERE fleet_id = @Id ORDER BY created_at;",
+            new { Id = fleetId });
+
+        return [.. rows];
+    }
+
     /// <summary>Every audit row written for one entity, newest first.</summary>
     public async Task<IReadOnlyList<AuditRowSnapshot>> AuditRowsAsync(Guid entityId)
     {
@@ -248,6 +495,15 @@ internal sealed class AdminSeed(PostgresFixture postgres)
             "SELECT state FROM dispatch.driver_presence WHERE driver_id = @Id;", new { Id = driverId });
     }
 }
+
+/// <summary>One <c>registry.document_fields</c> row as a test reads it back.</summary>
+internal sealed record DocumentFieldSnapshot(
+    string? FieldValue,
+    string Source,
+    decimal? Confidence,
+    string VerifyStatus,
+    Guid? ConfirmedBy,
+    DateTimeOffset? ConfirmedAt);
 
 /// <summary>One <c>audit.events</c> row as a test reads it back.</summary>
 internal sealed record AuditRowSnapshot(

@@ -100,7 +100,14 @@ internal sealed class AdminBffHarness : IAsyncDisposable
         var address = app.Services.GetRequiredService<IServer>()
             .Features.Get<IServerAddressesFeature>()!.Addresses.First();
 
-        Client = new HttpClient { BaseAddress = new Uri(address), Timeout = TimeSpan.FromSeconds(120) };
+        // Redirects are not followed: AL-39's document viewer answers 302 with a signed
+        // object-storage URL, and the assertion is about that Location header. Following it would
+        // send the test at a bucket that does not exist on this box.
+        Client = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false })
+        {
+            BaseAddress = new Uri(address),
+            Timeout = TimeSpan.FromSeconds(120),
+        };
     }
 
     public HttpClient Client { get; }
@@ -127,7 +134,7 @@ internal sealed class AdminBffHarness : IAsyncDisposable
         postgres.RequireAvailable();
         await postgres.EnsureMigratedAsync();
 
-        var upstream = await StubUpstream.StartAsync();
+        var upstream = await StubUpstream.StartAsync(postgres);
         var tokens = new TestTokenIssuer();
 
         var overrides = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
@@ -147,6 +154,18 @@ internal sealed class AdminBffHarness : IAsyncDisposable
             ["AdminBff:Upstreams:Support:InternalApiKey"] = StubUpstream.InternalKey,
             ["AdminBff:Upstreams:Content:BaseUrl"] = upstream.BaseUrl,
             ["AdminBff:Upstreams:Transit:BaseUrl"] = upstream.BaseUrl,
+
+            // C063's two. Both are /v1/internal planes, so both take the shared key and are told
+            // who the officer was on the body — the same split C052 and C053 use.
+            ["AdminBff:Upstreams:Registry:BaseUrl"] = upstream.BaseUrl,
+            ["AdminBff:Upstreams:Registry:InternalApiKey"] = StubUpstream.InternalKey,
+            ["AdminBff:Upstreams:Fleet:BaseUrl"] = upstream.BaseUrl,
+            ["AdminBff:Upstreams:Fleet:InternalApiKey"] = StubUpstream.InternalKey,
+
+            // A fixed key so a signed object URL is reproducible inside one run, and a base URL so
+            // the 302's Location is the absolute form a bucket would serve.
+            ["AdminBff:Documents:SigningKey"] = "test-document-signing-key",
+            ["AdminBff:Documents:PublicBaseUrl"] = "https://docs.mageride.test",
 
             // The audit ROW is what D-35 is about and what these tests assert on; the topic is
             // D6' §2.1's sink and there is no broker in this suite.

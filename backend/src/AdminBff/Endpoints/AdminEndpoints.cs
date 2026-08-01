@@ -46,6 +46,7 @@ public static class AdminEndpoints
 
         admin.MapSessionEndpoints();
         admin.MapDashboardEndpoints();
+        admin.MapVerificationEndpoints();
         admin.MapModerationEndpoints();
         admin.MapConfigurationEndpoints();
         admin.MapAnnouncementEndpoints();

@@ -225,10 +225,19 @@ paths:
       description: |
         AL-39, SCR-AP-003. `flaggedFields` are the values that came back doubtful, driver-entered
         or mismatched (AL-29/AL-30) — the reason the driver is in this queue at all.
+
+        **Δ C063: membership is "has a `registry.document_fields` row still `pending`".** That is
+        AL-27's fence stated as the query it is — an auto-verified document produces no such row
+        and therefore cannot appear, rather than being filtered out by something that could stop
+        filtering. `status` is the *subject's* own registration status, which is what the
+        SCR-AP-003 filter filters on: a renewal flagged on an already-approved applicant reads
+        `APPROVED`, and a resubmission after a refusal reads `REJECTED`.
       tags: [admin-verification]
       security:
         - bearerAuth: []
       parameters:
+        - $ref: '#/components/parameters/VerificationSearch'
+        - $ref: '#/components/parameters/VerificationStatus'
         - $ref: './_shared.yaml#/components/parameters/Cursor'
         - $ref: './_shared.yaml#/components/parameters/Limit'
       responses:
@@ -254,11 +263,21 @@ paths:
     get:
       operationId: listVehicleRegistrationQueue
       summary: Vehicles awaiting registration verification.
-      description: AL-39, SCR-AP-003. Vehicles held Incomplete by at least one `PENDING_REVIEW` step.
+      description: |
+        AL-39, SCR-AP-003. Vehicles held by at least one flagged field.
+
+        **Δ C063: Mode C and fleet vehicles alike.** AL-50 reuses AL-29's extraction pipeline in as
+        many words, so a Fleet Portal document slot writes the same `registry.documents` /
+        `document_fields` pair a wizard step does and the officer's queue does not need to know
+        which surface uploaded them. What differs is who owns the decision, which is read from the
+        vehicle's mode when the officer acts. `DEACTIVATED` registrations are excluded — a retired
+        vehicle is not an application.
       tags: [admin-verification]
       security:
         - bearerAuth: []
       parameters:
+        - $ref: '#/components/parameters/VerificationSearch'
+        - $ref: '#/components/parameters/VerificationStatus'
         - $ref: './_shared.yaml#/components/parameters/Cursor'
         - $ref: './_shared.yaml#/components/parameters/Limit'
       responses:
@@ -287,10 +306,18 @@ paths:
       description: |
         AL-39. Also the queue where an org's **payout profile** is approved or rejected — AL-49
         adds the payout documents to the org's `documents[]`.
+
+        **Δ C063: forwarded to fleet-svc's `GET /v1/internal/fleets/queue`, which has no cursor.**
+        That plane answers a flat capped list and its own file says why, so `cursor` is `null` and
+        `hasMore` is `false` here rather than invented. `search` is applied by admin-bff for the
+        same reason. `vehicleCount` is counted from `registry.fleet_vehicles` on this side: the
+        field is on `OrgQueueRow` and fleet-svc's internal row does not carry it.
       tags: [admin-verification]
       security:
         - bearerAuth: []
       parameters:
+        - $ref: '#/components/parameters/VerificationSearch'
+        - $ref: '#/components/parameters/VerificationStatus'
         - $ref: './_shared.yaml#/components/parameters/Cursor'
         - $ref: './_shared.yaml#/components/parameters/Limit'
       responses:
@@ -455,6 +482,17 @@ paths:
         approvable until `registration` + `insurance` + `revenue_license` — **plus `permit` for
         Mode A** — are all verified. For an org this also sets the payout profile to `verified`
         (AL-49). Audited (D-35).
+
+        **Δ C063: `merchantBound` is always `false` today, and deliberately.** registry-svc's
+        merchant route requires a `merchantId` and nothing on this platform onboards one, so a
+        `true` here would be a claim that fare settlement has a payee; it answers
+        `402 merchant-not-onboarded` until an OnePay onboarding path exists.
+
+        **Δ C063: approving a REJECTED subject withdraws the refusal first**, because registry-svc
+        declines to auto-approve one ("a Verification Officer's decision that four green steps do
+        not overturn") and a resubmission could otherwise never be approved. That reopening is its
+        own `VERIFICATION_REOPENED` audit row, and it can answer `409 registration-exists` when the
+        plate the rejection freed has since been claimed (D-37).
       tags: [admin-verification]
       security:
         - bearerAuth: []
@@ -473,7 +511,7 @@ paths:
         '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
         '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
-      x-error-codes: [unauthorized, forbidden, not-found, conflict]
+      x-error-codes: [unauthorized, forbidden, not-found, conflict, registration-exists]
 
   /v1/admin/verification/{subjectId}/reject:
     post:
@@ -523,6 +561,12 @@ paths:
         AL-39, SCR-AP-003b, US-24.8. Redirects to a **short-lived signed** object-storage URL and
         **emits a `DOC_VIEW` audit event** — looking at someone's licence is itself an auditable
         act.
+
+        **Δ C063: this is the only way to fetch a document, and one view is one row.** Both links on
+        `DocumentRef` come here, so opening the grid of thumbnails records a view per thumbnail and
+        opening the lightbox records another — each is a look at somebody's document. `docId` names
+        either a `registry.documents` row (an onboarding document) or a `docs.uploads` row (an AL-49
+        payout document, which has no `registry.documents` row at all); the viewer resolves both.
       tags: [admin-verification]
       security:
         - bearerAuth: []
@@ -532,6 +576,14 @@ paths:
           required: true
           schema:
             $ref: './_shared.yaml#/components/schemas/Ulid'
+        - name: variant
+          in: query
+          required: false
+          description: '**Δ C063.** Which rendition the caller is opening. Recorded on the `DOC_VIEW` row.'
+          schema:
+            type: string
+            enum: [thumb, full]
+            default: full
       responses:
         '302':
           description: Redirect to the signed URL.
@@ -1696,6 +1748,27 @@ components:
       description: A driver, vehicle or fleet-org id — the verification family is subject-agnostic (AL-39).
       schema:
         $ref: './_shared.yaml#/components/schemas/Ulid'
+    VerificationSearch:
+      name: search
+      in: query
+      required: false
+      description: |
+        **Δ C063.** SCR-AP-003's search box, which D2 requires on all three tabs and which the AL-39
+        shape did not give a parameter. Case-insensitive substring over the name (driver, org) or
+        the registration number and driver name (vehicle), and over the subject id.
+      schema:
+        type: string
+        maxLength: 100
+    VerificationStatus:
+      name: status
+      in: query
+      required: false
+      description: |
+        **Δ C063.** SCR-AP-003's status filter, over the **subject's own** registration status —
+        queue membership is always "a field is still flagged" (AL-27).
+      schema:
+        type: string
+        enum: [PENDING, APPROVED, REJECTED]
     DriverId:
       name: driverId
       in: path
@@ -1883,16 +1956,34 @@ components:
           type: string
         kycStatus:
           type: string
+          description: |
+            **Δ C063.** Whether there is US-13.A7 evidence to read at all — `complete` once the
+            organisation carries a business registration and a contact number, `incomplete` until
+            it does. The payout profile's own state is `payoutProfileStatus`: the two are separate
+            decisions and one field could not carry both.
+          enum: [complete, incomplete]
         vehicleCount:
           type: integer
           format: int32
           minimum: 0
         status:
           type: string
-          enum: [PENDING, APPROVED, REJECTED, SUSPENDED]
+          enum: [PENDING, APPROVED, REJECTED]
+        payoutProfileStatus:
+          type: string
+          description: '**Δ C063.** The AL-49 version awaiting this officer, when there is one.'
+          enum: [pending_verification, verified, rejected]
 
     DocumentRef:
       type: object
+      description: |
+        **Δ C063: both links point at `GET /v1/admin/documents/{docId}`, not at the bucket.**
+        AL-39 asks for two things at once — reads use short-lived signed object-storage URLs *and*
+        every read emits `DOC_VIEW`. A pre-signed bucket URL handed out here would satisfy the first
+        and silently break the second: the officer's browser would fetch somebody's licence straight
+        from storage and nothing would record it. The audited route mints the signed URL per view
+        and `302`s to it, so the signed URL is where it always was and every fetch passes the row
+        that records it.
       required: [docId, kind]
       properties:
         docId:
@@ -1901,11 +1992,10 @@ components:
           type: string
         thumbUrl:
           type: string
-          format: uri
-          description: Short-lived signed object-storage URL.
+          description: '`/v1/admin/documents/{docId}?variant=thumb` — audited, and redirects to the signed URL.'
         fullUrl:
           type: string
-          format: uri
+          description: '`/v1/admin/documents/{docId}?variant=full`.'
         capturedVia:
           type: string
           description: '`drag_crop` for the AL-43 in-app scanner, `upload` otherwise.'
@@ -1913,7 +2003,7 @@ components:
 
     VerificationDetail:
       type: object
-      required: [subject, fields, documents]
+      required: [subject, fields, documents, steps]
       properties:
         subject:
           type: object
@@ -1934,9 +2024,36 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/DocumentRef'
+        steps:
+          type: array
+          description: |
+            **Δ C063.** SCR-AP-003a's decision rail: the per-step Verified/Pending breakdown D2
+            requires beside the Approve button, which the AL-39 shape omitted.
+
+            Two vocabularies, because there are two onboarding surfaces. A Mode C vehicle has
+            AL-30's four saved `registry.onboarding_steps` and they are authoritative — registry-svc
+            recomputes them and admin-bff must not derive a second opinion. A fleet vehicle has
+            none at all, so its rail is AL-50's named slots (`registration`, `insurance`,
+            `revenue_license`, `permit`) under their own names — which is what SCR-FP-004 showed the
+            operator who uploaded them. A driver's licence is the single synthetic step `profile`;
+            an organisation's is `kyc`.
+          items:
+            $ref: '#/components/schemas/VerificationStep'
         approvable:
           type: boolean
           description: False while any field is still `pending` (US-2.10a).
+
+    VerificationStep:
+      type: object
+      description: One row of SCR-AP-003a's decision rail (Δ C063).
+      required: [step, status]
+      properties:
+        step:
+          type: string
+          example: insurance
+        status:
+          type: string
+          enum: [VERIFIED, PENDING_REVIEW, PENDING_INPUT]
 
     VerificationDecision:
       type: object

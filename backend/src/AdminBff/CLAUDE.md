@@ -1,4 +1,4 @@
-# admin-bff (C062 admin-bff-core) — the Admin Portal's back-office BFF
+# admin-bff (C062 admin-bff-core + C063 admin-bff-verification) — the Admin Portal's back-office BFF
 
 Stack: .NET 10 Minimal API + Dapper over Npgsql. References `MageRide.Shared` (C002) and
 `Analytics` (C061, a library — not a service). **No Redis, no consumer, no outbox, no command
@@ -12,12 +12,18 @@ the code.
 ## What this service is
 
 The single back-office front door for all six internal roles (AL-02, `admin.mageride.lk`). C062 is
-its foundation; **C063 (verification), C064 (directories) and C065 (finance/PDPA) map onto the same
-group** in `AdminEndpoints` and inherit both fences without touching either.
+its foundation and **C063 is the Verification Officer's whole surface**; C064 (directories) and C065
+(finance/PDPA) map onto the same group in `AdminEndpoints` and inherit both fences without touching
+either.
 
 | Endpoint | URD §2.3 gate | Spec |
 |---|---|---|
 | `GET /v1/admin/session` | authenticated internal | **Δ C062** — URD §2.2, AL-37 |
+| `GET /v1/admin/verification/queues/{driving-license,vehicle-registration,fleet-org}` | verification · read | AL-39, SCR-AP-003 |
+| `GET /v1/admin/verification/{subjectId}` · `/org/{orgId}` | verification · read | AL-39, SCR-AP-003a/003c |
+| `PUT /v1/admin/verification/{subjectId}/fields/{fieldKey}` | verification · write | AL-29, US-2.4a/2.10a |
+| `POST /v1/admin/verification/{subjectId}/approve` · `/reject` | verification · write | US-2.9, US-2.15, AL-49 |
+| `GET /v1/admin/documents/{docId}` | verification · read | AL-39, SCR-AP-003b, US-24.8 |
 | `GET /v1/admin/dashboard` · `/stats` · `/stats.csv` | analytics · read | US-14.6, AL-38, US-24.7 |
 | `POST /v1/admin/vehicles/{id}/suspend` · `/drivers/{id}/suspend` | moderation · write **platform-wide** | US-14.3 |
 | `GET /v1/admin/reports/queue` | moderation · read | ADD Appendix C |
@@ -50,6 +56,10 @@ recorded as a micro-change-set in the C062 handoff in `build/progress.md`.
   action (`AdminBffApplication.GuardTheSurface`); a mutating request that finishes 2xx with nothing
   recorded **throws**, which is a 500 and a failed test, not a silent gap; and there is no setting
   that switches the interceptor off, because a fence with an off switch is a default.
+  **Δ C063: the success window is 2xx *and* 3xx**, because AL-39's document viewer answers `302`
+  with the signed URL and its `DOC_VIEW` row is written on the way out of exactly that response —
+  treating a redirect as a failure would make the one audited read on this surface the one that
+  records nothing.
 - **AL-37 — no MFA, ever.** There is no auth route here at all: sign-in is iam-svc's
   `POST /v1/admin/auth/login` (the gateway sends `/v1/admin/auth/**` there at Order 20).
   `No_login_path_asks_for_a_second_factor` asserts the *absence* against the running route table,
@@ -134,6 +144,58 @@ recorded as a micro-change-set in the C062 handoff in `build/progress.md`.
   because each is owned by the service that owns the table it writes. The console is one console;
   the writers are not one writer.
 
+### Verification (C063)
+
+- **A queue is "has a field still `pending`", and that *is* AL-27's fence.** The officer sees only
+  submissions with a live question on them because an auto-verified document produces no
+  `registry.document_fields` row in that state — not because something filters them out. The
+  partial index `ix_document_fields_pending` (migration 0305) exists to be this query's index, and
+  the same count is US-2.10a's approval gate, so the queue and the gate cannot disagree.
+- **The `status` on a queue row is the subject's, not the queue's.** Every member is by construction
+  awaiting review, so repeating that would say nothing; what the officer needs is whether this is a
+  renewal on an already-approved applicant or a resubmission after a refusal — which is what
+  SCR-AP-003's status filter filters on.
+- **One route family, three subjects, and the owner of each decision decides it.** The AL-30
+  recompute is registry-svc's — it built `/v1/internal/vehicles/{id}/onboarding/recompute` for this
+  caller and says so. AL-50's fleet-vehicle gate and AL-49's organisation approval are fleet-svc's;
+  its whole `/v1/internal/fleets/**` plane exists for this BFF. What is written here is what nobody
+  exposes a route for: `registry.vehicles.rejection_reason` (registry-svc's file leaves it to this
+  component by name), `registry.driver_profiles.verified_at` and its new `rejection_reason`, and
+  `registry.document_fields`' confirmations.
+- **The confirmation is one transaction and the recompute follows it.** The field, the audit row and
+  the commit go together; only then is registry-svc asked to re-derive, because it has to read what
+  this transaction wrote. An unreachable registry-svc is a `503` on a request whose field is already
+  confirmed — the retry is idempotent both halves, and silently leaving a vehicle at
+  `pending_review` is the exact gap that route was built to close.
+- **A field key is decided on every row that carries it.** A licence is two documents and the
+  officer confirms "the NIC number", not "the NIC number as read off the back". Deciding one row
+  would leave the subject unapprovable for a field the officer believes they cleared.
+- **An edit reaches an unflagged field; a bare confirm does not.** AL-29's premise is that OCR can be
+  confidently wrong, so correcting an `auto_verified` value is a legitimate act — while confirming
+  one nobody flagged is a decision with no question in front of it, and re-confirming on a double
+  click must change nothing. An edited value becomes `manual` with no confidence, which is what
+  `ck_document_fields_manual_confidence` demands and what stops an invented score reading as
+  evidence.
+- **Withdrawing a rejection is its own audited fact.** registry-svc declines to auto-approve a
+  REJECTED vehicle — "a decision that four green steps do not overturn" — so approving a
+  resubmission has to reopen it first. `VERIFICATION_REOPENED` keeps the trail honest when the
+  approval that follows is then refused by AL-10, and the reopen can answer `409` because PENDING is
+  inside `ux_vehicles_regno_active` and the plate may have been claimed (D-37).
+- **Every document fetch goes through the audited route, and that is how AL-39's two halves hold
+  together.** It asks for short-lived signed object-storage URLs *and* a `DOC_VIEW` row per read; a
+  pre-signed bucket URL in `thumbUrl` would give the first and silently drop the second. So
+  `thumbUrl`/`fullUrl` are `/v1/admin/documents/{docId}?variant=…`, and *that* route mints the
+  signed URL and `302`s to it. One view is one row — opening a grid of four thumbnails records four,
+  because each is a look at somebody's licence.
+- **The rail speaks the vocabulary of the surface that produced the subject.** A Mode C vehicle's
+  steps are AL-30's four saved rows and are authoritative; a fleet vehicle has none, so its rail is
+  AL-50's named slots derived by registry-svc's own rule (verified iff no field of it is pending); a
+  driver is the one synthetic `profile` step, because a decision rail with nothing in it reads as
+  "nothing to check".
+- **D-11's merchant bind is not performed and `merchantBound` is always `false`.** registry-svc's
+  route requires a `merchantId` and nothing on this platform onboards one; claiming otherwise would
+  say fare settlement has a payee. Logged at every approval, and raised in the C063 handoff.
+
 ### Configuration surfaces
 
 - **A tariff version is inserted, never updated, and never backdated.** D-10 makes a published rate
@@ -182,6 +244,7 @@ Admin beside them (⚙) may use, which URD §2.4 rules out in as many words.
 |---|---|---|
 | `0202` | `config.feature_flags` | URD §2.3 gives feature flags a whole matrix row and US-14.12 an Admin Portal Config surface; **no spec prints the DDL**. The other three configuration surfaces the deliverable names already have tables and owners — `fares.tariffs` (1001), `billing.plans` (1103), `dispatch.level_config` (0713) — and this is the fourth |
 | `1312` | `audit.events.event_id` · `.actor_role` · `.ip` · `.detail` | §15 prints eight columns and the D-35 interceptor records four more. Each is named by a document — D6' §2.2's envelope id, `admin-bff.yaml#AuditEvent`'s `actorRole`/`ip`, the deliverable's "before/after, ip" — and 1305 has nowhere to put any of them. `ip` is `TEXT` and not `INET`: an audit trail that refuses a value it cannot parse records less than one that writes down what it was handed |
+| `0315` | `registry.driver_profiles.rejection_reason` | **C063.** AL-39's family is subject-agnostic and US-2.15 makes a rejection reason mandatory and shown to the applicant. Two of the three subjects already have a column — `registry.vehicles` (0303) and `registry.fleets` (0301) — and the driver did not, so an officer's refusal of a licence could be recorded in `audit.events` and never shown to the driver it was about. No companion timestamp and no `status`: the state is derived (`verified_at` ⇒ APPROVED, else this ⇒ REJECTED, else PENDING), exactly as `onboarding_status` is |
 | `1409` | `registry.vehicles.default_route_id` | `TrainInput.routeId` had nowhere to live. **Not** the same question as `trips.sessions.route_id`: that is the line a *journey* ran, this is the line the vehicle is *registered for* (US-2.17), and nothing derives one from the other. In the 14xx range because the FK points at `spatial.routes`, which 1401 creates |
 
 ## Not here, and named rather than stubbed
@@ -194,9 +257,16 @@ Admin beside them (⚙) may use, which URD §2.4 rules out in as many words.
 - **Daily-fee rates, bulk-voucher tiers, Driver-Level parameters.** subscription-svc's
   `/v1/admin/fees/rates` and `/v1/admin/voucher-discount-tiers`, dispatch-svc's
   `/v1/admin/drivers/level-config`. Same shape, same reason.
-- **The verification queues (C063), the three directories (C064), finance and PDPA (C065).** Separate
-  components on this project. `AdminMenu` already carries their nav entries, because the portal's
-  shell must not depend on build order.
+- **The three directories (C064), finance and PDPA (C065).** Separate components on this project.
+  `AdminMenu` already carries their nav entries, because the portal's shell must not depend on build
+  order.
+- **The object store itself (C063).** D-36's SSE-KMS bucket is C125's. This service mints the signed
+  URL and redirects to it; it never holds a byte, which is what keeps an unredacted document on the
+  far side of the perimeter. `AdminBff:Documents:PublicBaseUrl` is what makes the redirect
+  resolvable, and its absence is an ERROR at start-up rather than an invented host.
+- **The OnePay merchant onboarding D-11 needs (C063).** registry-svc owns the bind and requires a
+  `merchantId`; no component on this build map produces one. `merchantBound` answers `false` and
+  fare-svc answers `402 merchant-not-onboarded` until one does.
 - **A command log.** Every mutation this service owns is idempotent by shape — a suspension is an
   upsert of a state, a tariff publish keys on `(vehicle_type, effective_from)`, a feature flag is an
   upsert — and the forwarded ones carry the caller's `Idempotency-Key` to services that own their
@@ -220,7 +290,12 @@ Every knob is documented at its declaration in `AdminBffOptions` and in `infra/e
 | `AuditLogDefaultWindow` | 30 d | **no spec** — the table is append-only and unbounded |
 | `Upstreams:{Safety,Support}:BaseUrl` + `:InternalApiKey` | — | C052/C053's `/v1/internal/**` planes. Unset ⇒ 503 on those routes |
 | `Upstreams:{Content,Transit}:BaseUrl` | — | role-gated `/v1/admin/**`; the caller's bearer is forwarded, no key |
+| `Upstreams:Registry:BaseUrl` + `:InternalApiKey` | — | **C063.** AL-30's recompute. Unset ⇒ a confirmed field never reaches registry-svc and a Mode C vehicle can never be approved |
+| `Upstreams:Fleet:BaseUrl` + `:InternalApiKey` | — | **C063.** The fleet-org queue, AL-49's payout approval, AL-50's gate. Unset ⇒ no organisation can be approved, so nothing can go Paid |
 | `Upstreams:*:Timeout` | 5 min | **no spec** — bounded by the 200 MB GTFS upload (BR-32.1), not by the queue reads |
+| `Documents:PublicBaseUrl` | — | **C063, no spec.** Where the D-36 store is reachable from a browser. Unset ⇒ the stored pointer is redirected to unchanged; the DOC_VIEW row is unaffected. ERROR at start-up |
+| `Documents:SigningKey` | *(per process)* | **C063, no spec.** Unset ⇒ a URL minted by one replica does not verify on another. Warned |
+| `Documents:UrlTtl` | 5 min | **C063, no spec** beyond AL-39's "short-lived" |
 
 `ConnectionStrings:Postgres`, `Jwt:*` and `Kafka:BootstrapServers` are required through the kernel.
 There is no `ConnectionStrings:Redis` and no `Outbox:*`, and there must not be. The `Analytics:*`

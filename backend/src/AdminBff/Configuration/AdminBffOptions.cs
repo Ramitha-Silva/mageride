@@ -36,6 +36,57 @@ public sealed class AdminBffOptions
     [Range(typeof(TimeSpan), "1.00:00:00", "3650.00:00:00")]
     public TimeSpan AuditLogDefaultWindow { get; init; } = TimeSpan.FromDays(30);
 
+    /// <summary>The AL-39 document viewer's links (C063).</summary>
+    [Required]
+    public DocumentOptions Documents { get; init; } = new();
+
+    /// <summary>
+    /// How the AL-39 viewer turns a stored object pointer into something an officer's browser can
+    /// open (US-24.8, SCR-AP-003b).
+    /// </summary>
+    /// <remarks>
+    /// There is no object-storage client on this platform yet — D-36's bucket is C125's — and
+    /// fleet-svc's own file records that admin-bff is the service that mints these links. Every knob
+    /// here exists because of that gap and each is argued at its declaration.
+    /// </remarks>
+    public sealed class DocumentOptions
+    {
+        /// <summary>
+        /// Where the object store is reachable from an officer's browser, e.g.
+        /// <c>https://docs.mageride.lk</c>. Prefixed to a stored pointer that is not already an
+        /// absolute http(s) URL.
+        /// </summary>
+        /// <remarks>
+        /// <b>Unset ⇒ the stored pointer is passed through unchanged</b>, which is a filesystem path
+        /// on a deployment whose uploads went to fleet-svc's <c>DocumentRoot</c> — the officer's
+        /// lightbox will not resolve it. Announced at start-up rather than papered over: inventing a
+        /// host would produce a link that 404s somewhere nobody is looking.
+        /// </remarks>
+        public string? PublicBaseUrl { get; init; }
+
+        /// <summary>
+        /// The HMAC key the signed object URL carries.
+        /// </summary>
+        /// <remarks>
+        /// <b>Unset ⇒ a key generated per process</b>, so a URL minted by one replica does not
+        /// verify on another. Logged as a warning by <c>DocumentLinks</c>, exactly as
+        /// subscription-svc and fleet-svc do for their own signed links.
+        /// </remarks>
+        public string? SigningKey { get; init; }
+
+        /// <summary>
+        /// How long a signed object URL lives.
+        /// </summary>
+        /// <remarks>
+        /// <b>No spec</b> beyond AL-39's "short-lived". Five minutes: long enough for a lightbox to
+        /// load a scan of a licence over a slow connection, short enough that a URL copied out of a
+        /// browser's history is worthless by the time anybody pastes it. The audited route can
+        /// always mint another.
+        /// </remarks>
+        [Range(typeof(TimeSpan), "00:00:30", "01:00:00")]
+        public TimeSpan UrlTtl { get; init; } = TimeSpan.FromMinutes(5);
+    }
+
     /// <summary>The D-35 audit interceptor.</summary>
     public sealed class AuditOptions
     {
@@ -106,6 +157,30 @@ public sealed class AdminBffOptions
         /// <summary>transit-svc — the AL-54 GTFS Dataset Manager (SCR-AP-016).</summary>
         [Required]
         public UpstreamService Transit { get; init; } = new();
+
+        /// <summary>
+        /// registry-svc — AL-30's recompute, which is what turns a confirmed field into an approved
+        /// Mode C vehicle (C029, C063).
+        /// </summary>
+        /// <remarks>
+        /// registry-svc built <c>POST /v1/internal/vehicles/{id}/onboarding/recompute</c> for this
+        /// caller and says so: "admin-bff writes <c>document_fields.verify_status='confirmed'</c>
+        /// and then has no way to tell registry-svc, so the vehicle would sit at
+        /// <c>pending_review</c> for a field that is no longer pending".
+        /// </remarks>
+        [Required]
+        public UpstreamService Registry { get; init; } = new();
+
+        /// <summary>
+        /// fleet-svc — the fleet-org queue and both AL-49/AL-50 decisions (C058, C059, C063).
+        /// </summary>
+        /// <remarks>
+        /// The whole <c>/v1/internal/fleets/**</c> plane exists for this BFF; fleet-svc's file says
+        /// so. Approving an organisation here is what sets <c>payout_profiles.status='verified'</c>
+        /// and therefore what makes <c>payTo</c> available to subscription-svc (AL-49, BR-31.1).
+        /// </remarks>
+        [Required]
+        public UpstreamService Fleet { get; init; } = new();
     }
 
     /// <summary>One upstream this BFF forwards to.</summary>

@@ -177,6 +177,15 @@ public static class AdminBffApplication
                 name);
         }
 
+        if (string.IsNullOrWhiteSpace(options.Documents.PublicBaseUrl))
+        {
+            logger.LogError(
+                "AdminBff:Documents:PublicBaseUrl is unset, so GET /v1/admin/documents/{{docId}} redirects to the "
+                + "pointer stored on the row — a filesystem path on any deployment whose uploads did not go to "
+                + "object storage. The DOC_VIEW audit row is written either way (AL-39); what does not work is the "
+                + "SCR-AP-003b lightbox actually rendering the document.");
+        }
+
         if (!options.Audit.PublishToTopic)
         {
             logger.LogWarning(
@@ -198,6 +207,8 @@ public static class AdminBffApplication
         AdminUpstreams.Safety => "Safety",
         AdminUpstreams.Support => "Support",
         AdminUpstreams.Content => "Content",
+        AdminUpstreams.Registry => "Registry",
+        AdminUpstreams.Fleet => "Fleet",
         _ => "Transit",
     };
 }
