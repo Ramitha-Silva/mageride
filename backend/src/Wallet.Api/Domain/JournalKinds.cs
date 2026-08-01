@@ -26,7 +26,15 @@ internal static class JournalKinds
     /// <summary>The D-13 daily platform fee, charged before a driver's second trip of the day.</summary>
     public const string DailyFee = "daily_fee";
 
-    /// <summary>A wallet-paid fare (D-10).</summary>
+    /// <summary>
+    /// A wallet-paid fare (D-10). <b>Δ AL-57: it now has two wallet legs, not one.</b>
+    /// </summary>
+    /// <remarks>
+    /// Before AL-57 this debited a driver against the platform — fare-svc settling a D-05 penalty
+    /// into a fare. The AL-57 rail is a different movement under the same kind: the passenger's
+    /// balance moves to the driver's, and MageRide is the custodian rather than a party. Both are
+    /// "a fare was paid from a wallet", which is what the kind means, and the legs say which.
+    /// </remarks>
     public const string TripPayment = "trip_payment";
 
     /// <summary>The D-05 cross-trip cancellation penalty, settled on a later trip (D5' §7.1).</summary>
@@ -63,6 +71,29 @@ internal static class JournalKinds
     /// revenue and corrections one number for ever.
     /// </remarks>
     public const string FleetInvoice = "fleet_invoice";
+
+    /// <summary>
+    /// A weekly sweep of a driver's balance to their bank (<b>Δ AL-58</b>, migration 1109).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The twelfth kind, and the one that discharges what AL-57 created: a card-paid fare leaves the
+    /// driver holding a claim on MageRide, and this is the entry that extinguishes it. Driver debit,
+    /// platform credit — the mirror of a top-up, and for the same reason: the platform account is
+    /// the counterparty of every movement of real-world cash.
+    /// </para>
+    /// <para>
+    /// <b>Not <c>adjustment</c>.</b> That is the Finance queue's correction kind (US-14.11), and
+    /// netting the platform's entire outward payment flow into it would make corrections and payouts
+    /// one number for ever — the same argument C060 made for <c>fleet_invoice</c>.
+    /// </para>
+    /// <para>
+    /// Posted only through this service's own <c>/driver-payout</c> routes, never through the
+    /// debit/credit seam: the key is composed from the payout id here so a retried run cannot pay
+    /// twice, and a caller free to choose its own key could.
+    /// </para>
+    /// </remarks>
+    public const string DriverPayout = "driver_payout";
 
     /// <summary>
     /// Kinds another service may post as a <b>debit</b> of a driver's wallet.
@@ -148,4 +179,25 @@ internal static class LedgerKeys
     public static string VoucherPurchase(Guid purchaseId) => $"voucher_purchase:{purchaseId}";
 
     public static string DriverTransfer(Guid transferId) => $"driver_transfer:{transferId}";
+
+    /// <summary>
+    /// The AL-57 wallet fare. <b>1101's own header fixes this spelling</b> —
+    /// <c>'trip_payment:' || ride_payment_id</c> — so it is composed here from the id fare-svc
+    /// sends rather than accepted from the body: a caller free to choose the key is a caller free to
+    /// pay one fare twice.
+    /// </summary>
+    public static string TripPayment(Guid ridePaymentId) => $"trip_payment:{ridePaymentId}";
+
+    /// <summary>The AL-58 sweep. One key per payout id, so a retried run debits once.</summary>
+    public static string DriverPayout(Guid payoutId) => $"driver_payout:{payoutId}";
+
+    /// <summary>
+    /// The reversal a <c>FAILED</c> instruction earns.
+    /// </summary>
+    /// <remarks>
+    /// A second key rather than a second kind: the movement is still about that payout and belongs
+    /// beside it in the driver's history, and the sign says which direction it went. Sharing the
+    /// debit's key would make the reversal a replay of the debit and restore nothing.
+    /// </remarks>
+    public static string DriverPayoutReversal(Guid payoutId) => $"driver_payout_reversal:{payoutId}";
 }

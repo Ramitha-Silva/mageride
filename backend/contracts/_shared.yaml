@@ -276,8 +276,6 @@ components:
         # fare-svc's last reference is removed, so this registry and MageRideErrors stay
         # one-for-one; delete both in the same change.
         - merchant-not-onboarded
-        # Δ AL-57 — the passenger's wallet is short for the fare. Cash and driver-QR stay offered.
-        - insufficient-wallet-balance
         # Δ AL-58 — the weekly payout run.
         - payout-batch-exists
         - payout-not-failed

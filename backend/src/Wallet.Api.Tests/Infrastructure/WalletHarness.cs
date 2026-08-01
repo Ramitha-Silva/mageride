@@ -379,16 +379,42 @@ internal sealed class WalletHarness : IAsyncDisposable
     }
 
     /// <summary>A driver's balance, from <c>billing.accounts</c> — the master (§10).</summary>
-    public async Task<long> BalanceAsync(Guid driverId)
+    public async Task<long> BalanceAsync(Guid driverId) =>
+        await BalanceAsync(driverId, "driver");
+
+    /// <summary>One owner's balance. <b>Δ AL-57</b> — a passenger has one now too.</summary>
+    public async Task<long> BalanceAsync(Guid ownerId, string ownerType)
     {
         await using var connection = await _postgres.OpenAsync();
 
         return await connection.ExecuteScalarAsync<long?>(
             """
             SELECT balance_minor FROM billing.accounts
-             WHERE owner_type = 'driver' AND owner_id = @DriverId AND currency = 'LKR';
+             WHERE owner_type = @OwnerType AND owner_id = @OwnerId AND currency = 'LKR';
             """,
-            new { DriverId = driverId }) ?? 0;
+            new { OwnerId = ownerId, OwnerType = ownerType }) ?? 0;
+    }
+
+    /// <summary>
+    /// Puts an opening balance on a passenger's wallet without going through a gateway (Δ AL-57).
+    /// </summary>
+    /// <remarks>
+    /// The mirror of <c>CreditDirectlyAsync</c>: a card top-up is wallet-svc's own rail and the
+    /// tests below are about what happens to the balance afterwards, not about OnePay.
+    /// </remarks>
+    public async Task CreditPassengerDirectlyAsync(Guid passengerId, long amountMinor)
+    {
+        await using var connection = await _postgres.OpenAsync();
+
+        // `billing.accounts` is the master the ledger locks and checks; the `billing.wallets` mirror
+        // is written by the first real posting. Ids are fresh per test, so no conflict handling —
+        // and ux_accounts_owner is partial, which an ON CONFLICT target would have to repeat.
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO billing.accounts (owner_type, owner_id, currency, balance_minor)
+            VALUES ('passenger', @Id, 'LKR', @Amount);
+            """,
+            new { Id = passengerId, Amount = amountMinor });
     }
 
     /// <summary>The <c>billing.wallets</c> mirror, for the tests that assert the two agree.</summary>

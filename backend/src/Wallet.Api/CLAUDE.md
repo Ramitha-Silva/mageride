@@ -1,4 +1,4 @@
-# wallet-svc (C046) — the driver wallet on a balanced double-entry ledger
+# wallet-svc (C046) — the passenger and driver wallet on a balanced double-entry ledger
 
 Stack: .NET 10 Minimal API + Dapper over Npgsql + StackExchange.Redis + Confluent.Kafka. References
 `MageRide.Shared` (C002).
@@ -27,10 +27,12 @@ to write one.
 | `GET`/`PUT /v1/wallet/admin/voucher-discount-tiers` | admin · finance | US-9A.15 |
 | `POST /v1/internal/wallet/{driverId}/debit` · `/credit` | internal | **Δ C046** — the ledger seam |
 | `POST /v1/internal/wallet/fleet/{fleetId}/debit` · `/credit` · `/account` | internal | **Δ C060** — the same seam for an `owner_type='fleet'` wallet (AL-03) |
+| `POST /v1/internal/wallet/trip-payment` | internal | **Δ AL-57** — the wallet-paid fare, two wallet legs in one entry |
+| `POST /v1/internal/wallet/driver-payout` · `/{payoutId}/reverse` | internal | **Δ AL-58** — the weekly sweep's debit, and a failed instruction returning |
 
 | Table | Read | Written |
 |---|---|---|
-| `billing.accounts` · `journal_entries` · `journal_postings` | balances, replays | **this service only** |
+| `billing.accounts` · `journal_entries` · `journal_postings` | balances, replays | **this service only** — `owner_type` now includes `passenger` (Δ AL-57) |
 | `billing.wallets` · `wallet_transactions` | history, dispatch's gate | this service (projections) |
 | `billing.topups` (1107) | the poll | this service |
 | `billing.voucher_discount_tiers` | the ladder | admin PUT here **and** subscription-svc's own admin route (C047) |
@@ -124,6 +126,32 @@ to write one.
   `POST …/fleet/{fleetId}/account` is the one route on this plane that moves no money — the account
   is created lazily by the first posting, which would otherwise leave a fleet top-up session with no
   `account_id` to record until the organisation had already been invoiced once.
+- **A passenger holds a wallet, and it is the same wallet (Δ AL-57).** OnePay supports one merchant
+  account per merchant, so a card *ride* fare could only ever land in MageRide's own account —
+  D-11's per-driver merchant never existed. Card acceptance moved one step earlier: a passenger tops
+  up here, where MageRide legitimately *is* the payee, and spends it with `method: "wallet"`.
+  `owner_type` gains `passenger` (1109) and `IsWalletOwner` gains it too, which is what matters —
+  the `billing.wallets` mirror, the history line and **the non-negativity rule** all follow from
+  being a wallet owner, and the last of those is the point: a passenger paying a fare from a balance
+  they do not have would be MageRide lending them the fare. A passenger top-up and a driver top-up
+  are **the same route and the same entry**; only the account the credit leg lands on differs.
+- **A wallet fare is one entry with two wallet legs and no platform leg (Δ AL-57).** Two calls to
+  the debit/credit seam would be two entries — passenger debit against the platform, driver credit
+  against the platform — and a crash between them either creates money or destroys it. Here the
+  passenger's balance simply becomes the driver's, and MageRide is the custodian rather than a party
+  to the fare. The `trip_payment` kind covers both shapes; the legs say which.
+- **The ledger key for a fare and for a payout is composed here, never accepted.** 1101's own header
+  fixes `'trip_payment:' || ride_payment_id`; a caller free to choose it is a caller free to pay one
+  fare twice. Same for `driver_payout:{payoutId}` — which is also why `driver_payout` is **not** in
+  the debit whitelist: it has its own route precisely so the key cannot come from the body.
+- **A failed payout returns under a second key, not a second kind (Δ AL-58).** The movement is still
+  about that payout and belongs beside it in the driver's history, and the sign says which direction
+  it went. Sharing the debit's key would make the reversal a *replay* of the debit and restore
+  nothing — a driver whose bank transfer bounced would silently lose the week.
+- **The payout is the mirror of a top-up.** Driver debit, platform credit, because the platform
+  account is the counterparty of every movement of real-world cash: money in at top-up, money out at
+  payout, and the wallet balances in between are claims. That is the whole AL-57 custody model in
+  three entries.
 - **The low-balance edge is driver-only (Δ C060).** US-9.9 is a driver's warning about the next
   trip; a `LOW_BALANCE` at an organisation would resolve to no recipient and would mean the wrong
   thing if it did. A fleet's dunning is fleet-billing-svc's OVERDUE signal.

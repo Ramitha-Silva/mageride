@@ -211,7 +211,7 @@ paths:
         **Δ AL-57/AL-59 — no ride fare is charged to a platform merchant account.** `wallet` is a
         single balanced `trip_payment` journal entry — passenger wallet debit, driver wallet credit —
         inside one transaction, so it is **`Succeeded` on the spot with no `Pending` and no gateway
-        callback**; a short balance is `402 insufficient-wallet-balance` with cash and driver-QR
+        callback**; a short balance is `402 insufficient-wallet` with cash and driver-QR
         still offered, never a silent fallback to cash. `cash` and `scan_driver_qr` settle on
         confirmation (the latter by AL-47 attestation, into the driver's own bank).
 
@@ -257,7 +257,7 @@ paths:
         '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
       x-error-codes:
-        [payment-method-invalid, invalid-amount, attestation-failed, insufficient-wallet-balance,
+        [payment-method-invalid, invalid-amount, attestation-failed, insufficient-wallet,
          gateway-error, not-ride-participant, not-found, conflict, payment-already-settled]
 
   /v1/fare/pay/{paymentId}/status:

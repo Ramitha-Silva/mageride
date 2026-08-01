@@ -82,6 +82,14 @@ public static class InternalWalletEndpoints
         internalGroup.MapPost("/fleet/{fleetId}/credit", FleetCreditAsync).WithName("internalFleetWalletCredit");
         internalGroup.MapPost("/fleet/{fleetId}/account", FleetAccountAsync).WithName("internalFleetWalletAccount");
 
+        // Δ AL-57 / AL-58. Two movements the debit/credit seam deliberately cannot express: one has
+        // two wallet legs rather than a wallet and the platform, and the other composes its own
+        // ledger key so a retried payout run cannot pay twice.
+        internalGroup.MapPost("/trip-payment", TripPaymentAsync).WithName("internalWalletTripPayment");
+        internalGroup.MapPost("/driver-payout", DriverPayoutAsync).WithName("internalWalletDriverPayout");
+        internalGroup.MapPost("/driver-payout/{payoutId}/reverse", DriverPayoutReversalAsync)
+            .WithName("internalWalletDriverPayoutReverse");
+
         return endpoints;
     }
 
@@ -140,6 +148,194 @@ public static class InternalWalletEndpoints
         ILedgerService ledger,
         CancellationToken cancellationToken) =>
         PostAsync(fleetId, body, debit: false, fleet: true, accounts, ledger, cancellationToken);
+
+    /// <summary>
+    /// The AL-57 wallet fare: the passenger's balance becomes the driver's, in one balanced entry.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Why this cannot be two calls to the debit/credit seam.</b> Those post one wallet leg
+    /// against the platform, so a fare would be a passenger debit and a driver credit in two
+    /// entries — and a crash between them either creates money or destroys it. Here the two legs are
+    /// one <c>trip_payment</c> entry that Σ = 0 by construction: MageRide is the custodian of the
+    /// balance, not a party to the fare.
+    /// </para>
+    /// <para>
+    /// <b>The key is composed here, not accepted.</b> 1101's own header fixes the spelling
+    /// (<c>'trip_payment:' || ride_payment_id</c>), and a caller free to choose it is a caller free
+    /// to pay one fare twice. That is also why <c>trip_payment</c> stays out of this route's reach
+    /// through the seam's whitelist for the passenger direction.
+    /// </para>
+    /// <para>
+    /// <b>A short balance is the ledger's own refusal.</b> <c>LedgerService</c> already enforces
+    /// non-negativity for every wallet owner and a passenger is one (Δ AL-57), so an insufficient
+    /// balance surfaces as <c>402 insufficient-wallet</c> without a second check here that could
+    /// disagree with it. fare-svc turns that into "pay cash or scan the driver's QR" — never a
+    /// silent fallback.
+    /// </para>
+    /// </remarks>
+    private static async Task<Ok<TripPaymentResultResponse>> TripPaymentAsync(
+        TripPaymentBody? body,
+        IAccountRepository accounts,
+        ILedgerService ledger,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(accounts);
+        ArgumentNullException.ThrowIfNull(ledger);
+
+        var ridePaymentId = RequestIds.Require(body?.RidePaymentId, "ridePaymentId");
+        var passengerId = RequestIds.Require(body?.PassengerId, "passengerId");
+        var driverId = RequestIds.Require(body?.DriverId, "driverId");
+        var amountMinor = RequireAmount(body?.AmountMinor);
+
+        if (passengerId == driverId)
+        {
+            // Σ = 0 would still hold and the balance would not move, so the ledger would accept it
+            // silently. A fare paid by its own driver is a caller bug, and a no-op entry on somebody's
+            // statement is worse than a refusal.
+            throw new MageRideValidationException(new Dictionary<string, string[]>(StringComparer.Ordinal)
+            {
+                ["driverId"] = ["A passenger cannot pay a fare to themselves."],
+            });
+        }
+
+        var passenger = await accounts.EnsurePassengerAccountAsync(passengerId, cancellationToken);
+        var driver = await accounts.EnsureDriverAccountAsync(driverId, cancellationToken);
+
+        var result = await ledger.PostAsync(
+            new LedgerEntry(
+                JournalKinds.TripPayment,
+                LedgerKeys.TripPayment(ridePaymentId),
+                body!.Description ?? $"Ride fare {ridePaymentId:D}",
+                [
+                    new LedgerLeg(passenger.Id, -amountMinor, ridePaymentId.ToString()),
+                    new LedgerLeg(driver.Id, amountMinor, ridePaymentId.ToString()),
+                ]),
+            beforeCommit: null,
+            cancellationToken);
+
+        var passengerLeg = RequireLeg(result, passenger.Id, LedgerKeys.TripPayment(ridePaymentId));
+        var driverLeg = RequireLeg(result, driver.Id, LedgerKeys.TripPayment(ridePaymentId));
+
+        return TypedResults.Ok(new TripPaymentResultResponse(
+            result.EntryId,
+            passenger.Id,
+            passengerLeg.BalanceAfterMinor,
+            driver.Id,
+            driverLeg.BalanceAfterMinor,
+            amountMinor,
+            result.Replayed));
+    }
+
+    /// <summary>
+    /// The AL-58 sweep: a driver's balance leaves the platform for their bank.
+    /// </summary>
+    /// <remarks>
+    /// The mirror of a top-up — driver debit, platform credit — because the platform account is the
+    /// counterparty of every movement of real-world cash. payout-svc calls this inside the same
+    /// transaction as the <c>billing.payouts</c> row it raises: an instruction with no debit pays a
+    /// driver twice on a retry, and a debit with no instruction loses their money.
+    /// </remarks>
+    private static Task<Ok<LedgerPostingResultResponse>> DriverPayoutAsync(
+        DriverPayoutBody? body,
+        IAccountRepository accounts,
+        ILedgerService ledger,
+        CancellationToken cancellationToken) =>
+        PayoutMovementAsync(
+            RequestIds.Require(body?.PayoutId, "payoutId"),
+            body?.DriverId,
+            body?.AmountMinor,
+            debit: true,
+            body?.Description,
+            accounts,
+            ledger,
+            cancellationToken);
+
+    /// <summary>
+    /// The reversal a <c>FAILED</c> instruction earns: the money goes back on the driver's wallet.
+    /// </summary>
+    /// <remarks>
+    /// A second ledger key rather than a second kind — the movement is still about that payout and
+    /// belongs beside it in the driver's history. Sharing the debit's key would make this a replay
+    /// of the debit and restore nothing, which is the failure mode worth naming: a driver whose
+    /// bank rejected the transfer would silently lose the week.
+    /// </remarks>
+    private static Task<Ok<LedgerPostingResultResponse>> DriverPayoutReversalAsync(
+        string payoutId,
+        DriverPayoutReversalBody? body,
+        IAccountRepository accounts,
+        ILedgerService ledger,
+        CancellationToken cancellationToken) =>
+        PayoutMovementAsync(
+            RequestIds.Require(payoutId, "payoutId"),
+            body?.DriverId,
+            body?.AmountMinor,
+            debit: false,
+            body?.FailureReason is { Length: > 0 } reason ? $"Payout returned: {reason}" : "Payout returned",
+            accounts,
+            ledger,
+            cancellationToken);
+
+    private static async Task<Ok<LedgerPostingResultResponse>> PayoutMovementAsync(
+        Guid payoutId,
+        string? driverId,
+        long? amountMinor,
+        bool debit,
+        string? description,
+        IAccountRepository accounts,
+        ILedgerService ledger,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(accounts);
+        ArgumentNullException.ThrowIfNull(ledger);
+
+        var driver = RequestIds.Require(driverId, "driverId");
+        var amount = RequireAmount(amountMinor);
+
+        var account = await accounts.EnsureDriverAccountAsync(driver, cancellationToken);
+        var platform = await accounts.PlatformAccountAsync(cancellationToken);
+        var signed = debit ? -amount : amount;
+
+        var key = debit ? LedgerKeys.DriverPayout(payoutId) : LedgerKeys.DriverPayoutReversal(payoutId);
+
+        var result = await ledger.PostAsync(
+            new LedgerEntry(
+                JournalKinds.DriverPayout,
+                key,
+                description ?? $"Weekly payout {payoutId:D}",
+                [
+                    new LedgerLeg(account.Id, signed, payoutId.ToString()),
+                    new LedgerLeg(platform.Id, -signed),
+                ]),
+            beforeCommit: null,
+            cancellationToken);
+
+        var leg = RequireLeg(result, account.Id, key);
+
+        return TypedResults.Ok(new LedgerPostingResultResponse(
+            result.EntryId, account.Id, leg.AmountMinor, leg.BalanceAfterMinor, result.Replayed));
+    }
+
+    private static long RequireAmount(long? amountMinor) =>
+        amountMinor is { } amount && amount > 0
+            ? amount
+            : throw new MageRideException(
+                MageRideErrors.InvalidAmount,
+                "amountMinor is required and is unsigned — the route says which way the money moves.");
+
+    /// <summary>
+    /// The leg for an account this entry must have touched.
+    /// </summary>
+    /// <remarks>
+    /// A miss means the key was spent by an entry about somebody else — a composed key colliding is
+    /// a caller bug worth a conflict rather than a null-reference. The same guard the debit/credit
+    /// routes make, extracted because three call sites now need it.
+    /// </remarks>
+    private static PostedLeg RequireLeg(LedgerResult result, Guid accountId, string key) =>
+        result.For(accountId)
+        ?? throw new MageRideException(
+            MageRideErrors.Conflict,
+            $"Idempotency key '{key}' was used by an entry that does not touch this wallet.");
 
     private static async Task<Ok<LedgerPostingResultResponse>> PostAsync(
         string ownerId,

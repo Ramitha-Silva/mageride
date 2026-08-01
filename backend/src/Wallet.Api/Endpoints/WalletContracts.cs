@@ -116,6 +116,36 @@ public sealed record UpdateVoucherTiersBody(IReadOnlyList<VoucherTierBody>? Tier
 /// <summary>One submitted tier.</summary>
 public sealed record VoucherTierBody(long? DenominationMinor, int? DiscountBps, bool? Active);
 
+/// <summary>`POST /v1/internal/wallet/trip-payment` — the AL-57 wallet fare.</summary>
+/// <param name="RidePaymentId">
+/// <c>fares.ride_payments.id</c>. The ledger key is composed from it here (1101's fixed spelling),
+/// so a retried settlement is a no-op rather than a second fare.
+/// </param>
+public sealed record TripPaymentBody(
+    string? RidePaymentId,
+    string? PassengerId,
+    string? DriverId,
+    long? AmountMinor,
+    string? Description);
+
+/// <summary>Both legs of a wallet fare, so fare-svc can render either balance without a second read.</summary>
+public sealed record TripPaymentResultResponse(
+    Guid EntryId,
+    Guid PassengerAccountId,
+    long PassengerBalanceAfterMinor,
+    Guid DriverAccountId,
+    long DriverBalanceAfterMinor,
+    long AmountMinor,
+    bool Replayed);
+
+/// <summary>`POST /v1/internal/wallet/driver-payout` — the AL-58 weekly sweep's debit.</summary>
+public sealed record DriverPayoutBody(
+    string? PayoutId, string? DriverId, long? AmountMinor, string? Description);
+
+/// <summary>`POST /v1/internal/wallet/driver-payout/{payoutId}/reverse` — a FAILED instruction returning.</summary>
+public sealed record DriverPayoutReversalBody(
+    string? DriverId, long? AmountMinor, string? FailureReason);
+
 /// <summary>`POST /v1/internal/wallet/{driverId}/debit` · `/credit`.</summary>
 public sealed record LedgerPostingBody(
     long? AmountMinor, string? Kind, string? IdempotencyKey, string? Description, string? Reference);

@@ -352,7 +352,7 @@ stateDiagram-v2
 - **`wallet` has no `Pending`.** Every other rail waits on an acquirer; this one is a single balanced
   `trip_payment` journal entry — passenger wallet debit, driver wallet credit — inside one
   transaction. It reaches `Succeeded` or it does not happen, and a short balance is
-  `402 insufficient-wallet-balance` with cash and driver-QR still offered rather than a silent
+  `402 insufficient-wallet` with cash and driver-QR still offered rather than a silent
   fallback to cash.
 - **The driver's wallet is the fare accumulation account (AL-57/AL-58).** Fares credit it, the D-08
   daily fee debits it, and the weekly payout run sweeps it in full. ⚠ **Interaction with §2:** the

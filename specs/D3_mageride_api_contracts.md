@@ -450,7 +450,7 @@ Response 200:
   "method":"wallet", "amountMinor":50000, "surchargeMinor":0,   // no surcharge on any surviving rail
   "walletBalanceAfterMinor":125000 }                            // `wallet` only
 ```
-Errors: |409 `payment-already-settled`| · |402 `insufficient-wallet-balance`|the passenger's balance is short; cash and driver-QR remain offered (AL-57)|
+Errors: |409 `payment-already-settled`| · |402 `insufficient-wallet`|the passenger's balance is short; cash and driver-QR remain offered (AL-57)|
 Side Effects: payment state machine `Initiated→Pending→Succeeded/Failed/Retried/FellBackToCash`
 (§11.8, D-10); driver earning posts only on terminal (R-05); proxy payer routing (P-04). Idempotent: yes.
 

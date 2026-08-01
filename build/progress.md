@@ -71,7 +71,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C043 | tcp-adapter | 2 | DONE | 2026-07-30 | 89 tests green in a **new suite** (`TcpAdapter.Tests`); **no migration** — this service writes nothing anywhere, and reads `registry.vehicles` read-only; four golden frames, one per protocol family, byte-exact with real checksums; the platform's first `Microsoft.NET.Sdk.Worker` service (no HTTP surface at all, so no `AddMageRideDefaults`); a read-only Postgres dependency D7' §2.1's Container 9 row does not list, argued below; `POST /v1/internal/sessions/ignition` finally has a caller; 9 micro-change-sets |
 | C044 | fleet-health-svc | 2 | DONE | 2026-07-30 | 57 tests green in a **new suite** (`FleetHealth.Tests`); **1 telemetry migration (1805)** — `telemetry.device_health`, `fleet_health_alerts`, this plane's outbox and the four-state classifier, none of which any DDL source prints; US-3.13's ladder landed as **one SQL function both the dashboard read and the sweep call**, so an operator cannot be shown one state while an alert fires on another; **`GET /v1/fleets/{fleetId}/health` moved out of `fleet.yaml` into a new `fleet-health.yaml`**, the same split D3' Part 2 makes for the tracker-bulk route; a 10th Redpanda topic (`fleet.events`); `migrate-verify.sh` expects 4 telemetry tables and 8 views, not 1 and 6; **the p95 for a 1000-vehicle fleet measured at 99.7 ms against the DoD's 200**; 12 micro-change-sets |
 | C045 | content-svc | 3 | DONE | 2026-07-30 | 105 tests green in a **new suite** (`Content.Api.Tests`); **2 migrations (1307, 1903)** — the template approval workflow, the broadcast window, `content.onboarding_slides` + its Si/Ta/En seed, `content.command_log`, and the trilingual rule as a **deferred constraint trigger** that checks the old pair as well as the new; the fence is enforced three times over (a type that cannot hold two languages, a field-level `validation-failed`, a COMMIT-time trigger); **6 new contract operations** — FAQ, the AL-28 carousel, template approve + history, broadcast publish, cache purge; `Cache__Ttl` honoured as D7' spells it; `migrate-verify.sh` 275/275 with a C045 section (5 content tables, not 3); 17 spec gaps / micro-change-sets |
-| C046 | wallet-svc | 3 | DONE | 2026-07-30 | 76 tests green in a **new suite** (`Wallet.Api.Tests`) + 15 in `MageRide.Shared.Tests`; **1 billing migration (1107)** — `billing.topups` (a top-up session had an id, a state and a gateway reference and nowhere to live), this plane's outbox and the replay log; **one writer for `billing.journal_postings`**, and every money movement is one method; the AL-01 fee row is impossible rather than absent (no journal kind could carry it); AL-05 held by `ck_topups_method`; **7 new contract operations** incl. the voucher purchase and the whole request/approve/reject flow moved here from subscription-svc (ADD §11.6) and the internal ledger seam C047–C050 and C065 all need; `WebhookSignature` promoted into the kernel for the platform's six payment callbacks; an 11th Redpanda topic (`wallet.events`); 16 spec gaps / micro-change-sets |
+| C046 | wallet-svc | 3 | DONE | 2026-08-01 | **84 tests green** (was 76; 8 new `Category=Custody`). **AL-57/AL-58 extension**: `owner_type='passenger'` on the existing ledger, plus `trip-payment` and `driver-payout`(+`/reverse`) on the internal seam. **A wallet fare is ONE entry with TWO wallet legs** — settling it through the debit/credit seam would be two entries and a crash between them creates or destroys money; MageRide is the custodian, not a party. `IsWalletOwner` gains `passenger` rather than special-casing it, so the mirror, the history line and the **non-negativity rule** all follow. Ledger keys composed here, never accepted (1101's fixed spelling), which is why `driver_payout` stays out of the debit whitelist. A failed payout returns under a **second key**, not a second kind — sharing the debit's key would make it a replay and restore nothing. 1 correction to the change set: `insufficient-wallet-balance` collapsed onto the pre-existing `insufficient-wallet`. No new migration |
 | C047 | subscription-svc-daily-fee | 3 | DONE | 2026-07-30 | 79 tests green in a **new suite** (`Subscription.Api.Tests`), which boots a **real wallet-svc** because half the "debits once" guarantee is an index in C046's schema; **2 migrations (1203, 0713)** — `subscription.command_log` and the missing `dispatch.offers` index both callers of `tripsToday` were sequential-scanning; **this service writes no ledger row** — the fee is a `daily_fee` debit through wallet-svc's internal seam, keyed `daily_fee:{driverId}:{vehicleId}:{feeDate}`; **debit first, record second**, because only that order is recoverable; `tripsToday` **switched to `dispatch.offers`** so the D-08 gate and the charge cannot disagree; the Mode A fence held twice (the admin PUT refuses a non-zero Mode A rate, the charge path zeroes one anyway); Mode B monthly charge + the AL-03 per-fleet consolidation **handed to C060 unledgered**, because §10 gives the per-vehicle row no `journal_entry_id` and no journal kind could carry it; **5 new contract operations**; `migrate-verify.sh` 295/295 with a C047 section; 11 spec gaps / micro-change-sets |
 | C048 | subscription-svc-mode-b | 3 | DONE | 2026-07-30 | 112 tests green in `Subscription.Api.Tests` (79 from C047 + 33); **1 migration (1204)** — `subscription.outbox`, because BR-23.11's unsubscribe must publish `share.revoked` *inside* the transaction that mutes the grant and D6' §2.1 gives this service no topic; **the event goes on `registry.events` in registry-svc's exact envelope**, so fanout-svc (C041) consumes a second producer with no change; **AL-25 is one index** — `ux_grant_active` partial on `deleted_at` makes the muted roster row, the owner-only delete and the rejoin-reuses-the-grant rule the same fact; **the pass-through fence is an absence** — no ledger call, no journal entry, and `migrate-verify.sh` now asserts `subscription.payments` has no posting or commission column; `payTo` served only from the single `verified` payout profile and from the last verified snapshot after an edit; "joined 5 Jun ⇒ due 6 Jul" implemented from the worked example, with the anniversary re-derived from `join_day` so a 31st survives February; **1 new contract operation** (the AL-49 signed-URL route D3' asks for and gives no path); `migrate-verify.sh` 307/307 with a C048 section; 11 spec gaps / micro-change-sets |
 | C049 | fare-svc-core | 3 | DONE | 2026-07-31 | 78 tests green in a **new suite** (`Fare.Api.Tests`); **2 migrations (1005, 1006)** — `fares.command_log` and `ux_ride_payments_first_attempt`, the missing "a ride is priced once" index that a `FOR UPDATE` cannot supply because a row that does not exist cannot be locked (six concurrent completions produced four fares); **money never touches a float** — the distance is quantised to whole metres at the boundary and every step after it is `long`, with `(a*b+half)/divisor` as §1.3's single round; D5' §1.1's tariff table reproduced to the minor unit for every tier and every surcharge combination, peak+night stacked additively and never compounded; **E-04 landed** — reject, Kalman, and an accuracy-weighted movement gate that reads the *measurement* uncertainty rather than the filter's posterior, taking a stationary three minutes from 292 m to under 50 m while four right-angle turns keep their length; the estimate now prices the **routed** distance (straight line × 1.3, the same interim and the same constant as query-svc's ETA) instead of the C022 stub's bare haversine; tariffs resolved by `effective_from` at the ride's *request* instant so a mid-journey rate change cannot re-price it; `migrate-verify.sh` 316/316 with a C049 section; 6 spec gaps / micro-change-sets |
@@ -9621,3 +9621,50 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   entry) and `driver-payout` (the debit and its reversal). Then **C050 fare-svc**, then **C133
   payout-svc**, then C028/C048/C063. Nothing on the running platform is broken in the meantime: the
   `402` already blocks the dead rail and the app falls back to cash.
+
+---
+
+- **Component:** C046 wallet-svc (AL-57/AL-58 extension) — 2026-08-01
+- **Status:** DONE — `dotnet test backend/src/Wallet.Api.Tests -c Release` is **84/84** (was 76;
+  8 new under `--filter Category=Custody`); `dotnet build backend/MageRide.sln -c Release` 0
+  warnings; Spectral 0 errors.
+- **Notes:**
+  **What was added —** `owner_type='passenger'` on the existing ledger, and two rails on the
+  internal seam that already carried `/{driverId}/debit|credit` and `/fleet/{fleetId}/…`:
+  `POST /v1/internal/wallet/trip-payment` (AL-57) and `POST /v1/internal/wallet/driver-payout`
+  + `/{payoutId}/reverse` (AL-58). No new table, no new migration — 1109 had already landed them.
+
+  **The one design decision worth the name: a wallet fare is ONE entry with TWO wallet legs.**
+  Settling it through the existing seam would be two entries — passenger debit against the platform,
+  driver credit against the platform — and a crash between them either creates money or destroys it.
+  The passenger's balance simply becomes the driver's; MageRide is the custodian, not a party. The
+  `trip_payment` kind covers both shapes and the legs say which. That is also why `IsWalletOwner`
+  gains `passenger` rather than the code special-casing it: the mirror, the history line and **the
+  non-negativity rule** all follow from being a wallet owner, and the last is the point — a
+  passenger paying from a balance they do not have would be MageRide lending them the fare.
+
+  **Keys are composed here, never accepted.** 1101's header fixes
+  `'trip_payment:' || ride_payment_id`; a caller free to choose the key is a caller free to pay one
+  fare twice. Same for `driver_payout:{payoutId}` — which is *why* `driver_payout` is kept out of
+  the debit whitelist and given its own route. A failed payout returns under a **second key**
+  (`driver_payout_reversal:{payoutId}`) and not a second kind: sharing the debit's key would make
+  the reversal a replay of the debit and restore nothing, so a driver whose transfer bounced would
+  silently lose the week. Asserted both ways — the reversal restores exactly once, and a redelivered
+  bank result restores nothing further.
+
+  **A correction to the AL-57 change set —** it introduced `insufficient-wallet-balance` when
+  `insufficient-wallet` already existed and means exactly this. Two codes for one condition is the
+  drift the ErrorCode registry exists to prevent, so the new one was removed and every reference
+  (D3, D5, fare.yaml, the manifest, C050's prompt) collapsed onto the existing code. The passenger's
+  short balance is now refused by `LedgerService`'s own non-negativity rule with no second check
+  here that could disagree with it.
+
+  **Two smaller calls —** a fare where passenger and driver are the same person is a `400` rather
+  than a legal Σ = 0 no-op entry on somebody's statement; and `ReadSummaryAsync`'s
+  `owner_type IN (...)` filter gained `passenger`, which incidentally makes `availableMinor` correct
+  for the first time — `dispatch.cancellation_penalties.passenger_id` is a *passenger's* D5' §7.1
+  debt, and it was being netted off a driver's account where it is almost always zero.
+
+  **Next:** **C050 fare-svc** — the `wallet` method calling `trip-payment`, `onepay`/`lankaqr`
+  removed as ride methods, and the migration that drops `registry.driver_payouts` and narrows
+  `ck_ride_payments_method` once no code names either. Then **C133 payout-svc**, then C028/C048/C063.

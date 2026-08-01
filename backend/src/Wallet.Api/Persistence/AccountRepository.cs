@@ -10,6 +10,18 @@ namespace MageRide.Wallet.Persistence;
 /// </summary>
 internal static class AccountOwnerTypes
 {
+    /// <summary>
+    /// A passenger's prepaid balance (<b>Δ AL-57</b>, migration 1109).
+    /// </summary>
+    /// <remarks>
+    /// The newest owner type and the reason there is one: OnePay supports a single merchant account
+    /// per merchant, so a card ride fare could only ever land in MageRide's own account. Card
+    /// acceptance moved one step earlier — a passenger tops up here, where MageRide legitimately
+    /// <em>is</em> the payee, and spends it with <c>POST /v1/fare/pay {method:"wallet"}</c>. Before
+    /// AL-57 the only wallet this platform had was the driver's, for daily fees.
+    /// </remarks>
+    public const string Passenger = "passenger";
+
     public const string Driver = "driver";
     public const string Fleet = "fleet";
 
@@ -19,9 +31,15 @@ internal static class AccountOwnerTypes
     /// <summary>Money in flight — a gateway session that has settled but not been attributed.</summary>
     public const string Suspense = "suspense";
 
-    /// <summary>The two owner types that have a wallet screen and a balance a driver can spend.</summary>
+    /// <summary>The owner types with a wallet screen and a balance somebody can spend.</summary>
+    /// <remarks>
+    /// A passenger joins the two (Δ AL-57) and inherits everything that follows from being one: the
+    /// <c>billing.wallets</c> mirror, a <c>wallet_transactions</c> history line, and the
+    /// non-negativity rule. That last is the point — a passenger paying a fare from a balance they
+    /// do not have would be MageRide lending them the fare.
+    /// </remarks>
     public static bool IsWalletOwner(string ownerType) =>
-        ownerType is Driver or Fleet;
+        ownerType is Passenger or Driver or Fleet;
 }
 
 /// <summary>One ledger account, as the posting path needs it.</summary>
@@ -69,6 +87,15 @@ internal interface IAccountRepository
     /// </remarks>
     Task<LedgerAccount> EnsureFleetAccountAsync(Guid fleetId, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// The passenger's ledger account, created on first use (<b>Δ AL-57</b>).
+    /// </summary>
+    /// <remarks>
+    /// Lazily, for the driver account's reason: most passengers pay cash and will never have one,
+    /// and a wallet with no movements is a row nobody needs. The first top-up creates it.
+    /// </remarks>
+    Task<LedgerAccount> EnsurePassengerAccountAsync(Guid passengerId, CancellationToken cancellationToken);
+
     /// <summary>The platform's own singleton account — the counterparty of a top-up or a voucher.</summary>
     Task<LedgerAccount> PlatformAccountAsync(CancellationToken cancellationToken);
 
@@ -112,6 +139,9 @@ internal sealed class AccountRepository(INpgsqlConnectionFactory connections) : 
 
     public Task<LedgerAccount> EnsureFleetAccountAsync(Guid fleetId, CancellationToken cancellationToken) =>
         EnsureAccountAsync(AccountOwnerTypes.Fleet, fleetId, cancellationToken);
+
+    public Task<LedgerAccount> EnsurePassengerAccountAsync(Guid passengerId, CancellationToken cancellationToken) =>
+        EnsureAccountAsync(AccountOwnerTypes.Passenger, passengerId, cancellationToken);
 
     /// <remarks>
     /// One method for both wallet-owning types rather than two near-copies: the create is
@@ -259,7 +289,11 @@ internal sealed class AccountRepository(INpgsqlConnectionFactory connections) : 
                   FROM billing.accounts a
                   LEFT JOIN billing.wallets w ON w.account_id = a.id
                  WHERE a.owner_id = @UserId AND a.currency = 'LKR'
-                   AND a.owner_type IN ('driver','fleet');
+                   -- Δ AL-57: 'passenger' joins the two. The debt sub-select above is finally about
+                   -- the account it names — dispatch.cancellation_penalties.passenger_id is a
+                   -- PASSENGER's D5' §7.1 debt, so `availableMinor` is now net of it for the person
+                   -- who actually owes it, and stays the "nearly always zero" it was for a driver.
+                   AND a.owner_type IN ('passenger','driver','fleet');
                 """,
                 new { UserId = userId },
                 cancellationToken: cancellationToken));
