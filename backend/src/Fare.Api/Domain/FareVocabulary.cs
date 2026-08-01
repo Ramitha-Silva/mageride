@@ -46,7 +46,31 @@ public static class RidePaymentStates
 public static class RidePaymentMethods
 {
     public const string Cash = "cash";
+
+    /// <summary>
+    /// The AL-57 card rail: a prepaid balance, spent as one balanced ledger entry.
+    /// </summary>
+    /// <remarks>
+    /// Card acceptance did not survive as a *ride* rail — OnePay has one merchant account per
+    /// merchant, so a card fare could only ever land in MageRide's own account. It survives one step
+    /// earlier: the passenger tops their wallet up through wallet-svc, where MageRide legitimately
+    /// is the payee, and this method spends it. There is no gateway leg, so no <c>Pending</c>.
+    /// </remarks>
+    public const string Wallet = "wallet";
+
+    /// <summary>
+    /// <b>RETIRED as a ride method (AL-59).</b> Historical rows only.
+    /// </summary>
+    /// <remarks>
+    /// This pointed at <c>LankaQr:MerchantId</c> — the <em>platform's</em> merchant — so it collected
+    /// fares into MageRide's account while crediting the driver nothing but a
+    /// <c>fares.driver_earnings</c> read-model row. A LankaQR ride payment is now the driver's OWN
+    /// bank QR and is <see cref="ScanDriverQr"/>, which settles by AL-47 attestation precisely
+    /// because money moving into somebody else's bank produces no platform webhook.
+    /// </remarks>
     public const string LankaQr = "lankaqr";
+
+    /// <summary><b>RETIRED as a ride method (AL-57).</b> Historical rows only — see <see cref="Wallet"/>.</summary>
     public const string Onepay = "onepay";
 
     /// <summary>Package delivery, booking-time (P-08).</summary>
@@ -55,9 +79,19 @@ public static class RidePaymentMethods
     /// <summary>Settlement-time, chosen when the passenger scans the driver's own QR (AL-22/AL-47).</summary>
     public const string ScanDriverQr = "scan_driver_qr";
 
+    /// <summary>
+    /// Every value <c>fares.ride_payments.method</c> admits — <b>including the two AL-57/AL-59
+    /// retired.</b>
+    /// </summary>
+    /// <remarks>
+    /// This mirrors the database CHECK, and the CHECK still admits them deliberately: a row saying
+    /// somebody paid by OnePay in July is a fact, and a CHECK cannot express "nothing writes this
+    /// any more" without rewriting history. What stops a new one is that no route, no config and no
+    /// contract enum can produce one — see <c>PaymentService.PayableMethods</c>.
+    /// </remarks>
     public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.Ordinal)
     {
-        Cash, LankaQr, Onepay, Cod, ScanDriverQr,
+        Cash, Wallet, LankaQr, Onepay, Cod, ScanDriverQr,
     };
 }
 

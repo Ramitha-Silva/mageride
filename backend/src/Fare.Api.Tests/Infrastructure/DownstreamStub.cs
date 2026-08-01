@@ -60,6 +60,23 @@ internal sealed class DownstreamStub : IAsyncDisposable
     public IReadOnlyList<RecordedCall> Settlements =>
         [.. _calls.Where(c => c.Path.Contains("/payment-settled", StringComparison.Ordinal))];
 
+    /// <summary>
+    /// Makes the next wallet fare answer <c>402 insufficient-wallet</c> (Δ AL-57).
+    /// </summary>
+    /// <remarks>
+    /// A switch rather than an amount threshold: what the test means is "the passenger's balance
+    /// will not cover this", and tying that to a fare large enough to trip a bound would make the
+    /// case depend on the tariff as well as on the wallet.
+    /// </remarks>
+    public bool RefuseTripPayment
+    {
+        get => State.RefuseTripPayment;
+        set => State.RefuseTripPayment = value;
+    }
+
+    /// <summary>Mutable knobs the route handlers close over, set before the call under test.</summary>
+    internal StubState State { get; private init; } = new();
+
     /// <summary>Every ledger movement asked of wallet-svc — the fence's subject.</summary>
     public IReadOnlyList<RecordedCall> LedgerPostings =>
         [.. _calls.Where(c => c.Path.Contains("/v1/internal/wallet/", StringComparison.Ordinal))];
@@ -80,6 +97,7 @@ internal sealed class DownstreamStub : IAsyncDisposable
         // The routes close over this queue and the instance exposes the same one — there is exactly
         // one, so a call recorded by a handler is a call a test can see.
         var calls = new ConcurrentQueue<RecordedCall>();
+        var state = new StubState();
 
         app.MapPost("/v1/internal/rides/{rideId}/payment-settled", async (string rideId, HttpContext context) =>
         {
@@ -99,9 +117,33 @@ internal sealed class DownstreamStub : IAsyncDisposable
             return Results.Ok(new { entryId = Guid.NewGuid(), replayed = false });
         });
 
+        // Δ AL-57 — the wallet fare rail. Two behaviours the tests drive it into: the ordinary
+        // move, and `402` when the passenger's balance will not cover the fare. The amount is the
+        // switch rather than a flag, so a test says what it means at the call site.
+        app.MapPost("/v1/internal/wallet/trip-payment", async (HttpContext context) =>
+        {
+            await RecordAsync(calls, context);
+
+            if (state.RefuseTripPayment)
+            {
+                return Results.Json(
+                    new
+                    {
+                        type = "https://mageride.lk/errors/insufficient-wallet",
+                        title = "Wallet balance is insufficient",
+                        status = 402,
+                        detail = "The passenger's wallet will not cover this fare.",
+                    },
+                    contentType: "application/problem+json",
+                    statusCode: 402);
+            }
+
+            return Results.Ok(new { entryId = Guid.NewGuid(), replayed = false });
+        });
+
         await app.StartAsync();
 
-        return new DownstreamStub(app, calls);
+        return new DownstreamStub(app, calls) { State = state };
     }
 
     private static async Task RecordAsync(ConcurrentQueue<RecordedCall> calls, HttpContext context)
@@ -126,4 +168,11 @@ internal sealed class DownstreamStub : IAsyncDisposable
             Console.Error.WriteLine($"warning: could not stop the downstream stub: {exception.Message}");
         }
     }
+}
+
+/// <summary>What a test can change about how the stub answers.</summary>
+internal sealed class StubState
+{
+    /// <summary>Δ AL-57 — the next wallet fare is answered `402 insufficient-wallet`.</summary>
+    public bool RefuseTripPayment { get; set; }
 }

@@ -29,7 +29,6 @@ public static class FareServiceCollectionExtensions
         services.AddSingleton<IDriverEarningsRepository, DriverEarningsRepository>();
         services.AddSingleton<IRefundRepository, RefundRepository>();
         services.AddSingleton<ISupportTicketRepository, SupportTicketRepository>();
-        services.AddSingleton<IDriverPayoutRepository, DriverPayoutRepository>();
 
         services.AddSingleton<FarePricingService>();
         services.AddSingleton<FareEstimator>();
@@ -38,9 +37,9 @@ public static class FareServiceCollectionExtensions
         services.AddSingleton<IWalletLedgerClient, WalletLedgerClient>();
         services.AddSingleton<IRideSettlementClient, RideSettlementClient>();
 
-        // Δ C050 — the payment machine. Two gateways behind one seam, resolved by method.
-        services.AddSingleton<IFareGateway, OnepayFareGateway>();
-        services.AddSingleton<IFareGateway, LankaQrFareGateway>();
+        // Δ AL-57/AL-59 — the two ride gateways and the D-11 merchant repository are gone. No ride
+        // fare reaches an acquirer, so there is no session to open and no merchant to look up; the
+        // `wallet` rail posts through IWalletLedgerClient above, which is registered already.
         services.AddSingleton<PaymentSettlementService>();
 
         // Scoped: it takes IUnitOfWorkFactory, which the kernel registers scoped so one request
@@ -50,7 +49,6 @@ public static class FareServiceCollectionExtensions
         // Scoped for the same reason: each takes IUnitOfWorkFactory.
         services.AddScoped<PaymentService>();
         services.AddScoped<DriverQrService>();
-        services.AddScoped<CallbackService>();
         services.AddScoped<RefundService>();
 
         services.AddHostedService<QrNudgeSweeper>();
@@ -70,17 +68,9 @@ public static class FareServiceCollectionExtensions
         services.AddHttpClient(RideSettlementClient.HttpClientName, client =>
             ConfigureInternal(client, settings.RideBaseUrl, settings.InternalTimeout));
 
-        // The gateway hop is a payment provider on the public internet, not an internal service, so
-        // it gets its own budget rather than D6' §8.3's 2 s.
-        services.AddHttpClient(OnepayFareGateway.HttpClientName, client =>
-        {
-            ConfigureInternal(client, settings.OnepayBaseUrl, TimeSpan.FromSeconds(20));
-
-            if (!string.IsNullOrWhiteSpace(settings.OnepayApiKey))
-            {
-                client.DefaultRequestHeaders.TryAddWithoutValidation("Authorization", $"Bearer {settings.OnepayApiKey}");
-            }
-        });
+        // Δ AL-57 — the OnePay ride client is gone with the rail. The only OnePay integration left
+        // on the platform is wallet-svc's top-up, where MageRide is the payee and one merchant
+        // account is exactly right.
 
         return services;
     }

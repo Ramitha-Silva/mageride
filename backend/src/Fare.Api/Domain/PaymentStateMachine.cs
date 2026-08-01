@@ -28,6 +28,16 @@ public enum PaymentTrigger
     /// <summary>US-8.15's cash fallback, and the terminal an ordinary cash ride settles at.</summary>
     SettledInCash,
 
+    /// <summary>
+    /// AL-57: the fare moved from the passenger's wallet to the driver's. <b>Terminal.</b>
+    /// </summary>
+    /// <remarks>
+    /// The only trigger that reaches <c>Succeeded</c> without a gateway. A wallet payment is one
+    /// balanced ledger entry inside wallet-svc's transaction — it either moved or it did not — so
+    /// there is nothing to wait for and no <c>Pending</c> to sit in.
+    /// </remarks>
+    SettledFromWallet,
+
     /// <summary>P-08: a package booked COD is awaiting collection at delivery.</summary>
     CodAwaited,
 
@@ -165,6 +175,10 @@ public static class PaymentStateMachine
 
             // Pending --> Succeeded: provider ok
             new(RidePaymentStates.Pending, PaymentTrigger.GatewaySucceeded, RidePaymentStates.Succeeded, true),
+
+            // Initiated --> Succeeded: wallet — a ledger move, no provider (AL-57).
+            // The one edge into a terminal that skips Pending, because there is nothing to wait for.
+            new(RidePaymentStates.Initiated, PaymentTrigger.SettledFromWallet, RidePaymentStates.Succeeded, true),
 
             // Pending --> Failed: provider error/timeout
             new(RidePaymentStates.Pending, PaymentTrigger.GatewayFailed, RidePaymentStates.Failed, false),

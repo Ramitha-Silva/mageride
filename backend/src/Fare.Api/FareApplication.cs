@@ -139,14 +139,16 @@ public static class FareApplication
                 + "earning is recorded but the ride never closes (R-05).");
         }
 
-        if (string.IsNullOrWhiteSpace(options.OnepayWebhookSecret)
-            || string.IsNullOrWhiteSpace(options.LankaQrWebhookSecret))
+        // Δ AL-57 — the two gateway-secret warnings are gone with the callbacks they guarded. What
+        // matters now is the wallet seam: without it the `wallet` rail refuses every fare, which is
+        // the correct failure (nothing moved) but leaves card-holding passengers on cash.
+        if (string.IsNullOrWhiteSpace(options.WalletBaseUrl) || string.IsNullOrWhiteSpace(options.WalletInternalApiKey))
         {
             logger.LogWarning(
-                "Fare:OnepayWebhookSecret / Fare:LankaQrWebhookSecret is not configured, so the matching payment "
-                + "callback refuses every delivery. A passenger who pays through that rail is never marked paid, "
-                + "the ride stalls, and the driver has to be settled in cash by hand. There is no accept-unsigned "
-                + "mode: an unsigned callback that settles a fare is a free-ride endpoint.");
+                "Fare:WalletBaseUrl / Fare:WalletInternalApiKey is not configured, so the `wallet` ride rail "
+                + "answers 503 and every card-paying passenger is offered cash or the driver's QR instead. "
+                + "Nothing is charged and nothing is lost — but AL-57's whole point is that card acceptance "
+                + "survives, and without this it does not.");
         }
 
         logger.LogWarning(

@@ -40,9 +40,7 @@ internal sealed class FareHarness : IAsyncDisposable
     public const string EstimateTokenKey = "c049-fare-estimate-token-key-not-a-secret";
 
     /// <summary>The HMAC secrets the two payment callbacks are signed with (Δ C050).</summary>
-    public const string OnepayWebhookSecret = "c050-onepay-webhook-secret-not-a-secret";
 
-    public const string LankaQrWebhookSecret = "c050-lankaqr-webhook-secret-not-a-secret";
 
     /// <summary>
     /// 09:00 UTC on 30 July 2026 — 14:30 in Colombo. Deliberately outside every seeded window, so a
@@ -104,10 +102,6 @@ internal sealed class FareHarness : IAsyncDisposable
             // logging under an assertion makes "the sweep found it" indistinguishable from "a
             // previous pass did".
             ["Fare:QrNudgeEnabled"] = "false",
-            ["Fare:OnepayWebhookSecret"] = OnepayWebhookSecret,
-            ["Fare:LankaQrWebhookSecret"] = LankaQrWebhookSecret,
-            ["Fare:LankaQrMerchantId"] = "MAGERIDE-TEST-MERCHANT",
-            ["Fare:LankaQrDeepLinkTemplate"] = "lankaqrpay://pay?m={merchant}&amt={amount}&ref={reference}",
             ["Fare:RideBaseUrl"] = downstream?.BaseAddress,
             ["Fare:RideInternalApiKey"] = downstream is null ? null : DownstreamStub.InternalApiKey,
             ["Fare:WalletBaseUrl"] = downstream?.BaseAddress,

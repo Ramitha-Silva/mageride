@@ -31,25 +31,33 @@ internal sealed class PaymentService(
     IUnitOfWorkFactory unitOfWorkFactory,
     IRideRepository rides,
     IRidePaymentRepository payments,
-    IDriverPayoutRepository merchants,
-    IEnumerable<IFareGateway> gateways,
+    Settlement.IWalletLedgerClient wallet,
     PaymentSettlementService settlement,
-    IOptions<FareOptions> options,
     ILogger<PaymentService> logger)
 {
-    private readonly FareOptions _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
 
-    /// <summary>The methods <c>POST /v1/fare/pay</c> accepts (<c>fare.yaml</c>'s <c>PaymentMethod</c>).</summary>
+    /// <summary>
+    /// The methods <c>POST /v1/fare/pay</c> accepts (<c>fare.yaml</c>'s <c>PaymentMethod</c>).
+    /// </summary>
     /// <remarks>
-    /// <c>cod</c> is absent and belongs elsewhere: it is a <em>booking-time</em> choice (C004 note
-    /// (f)) and it settles through ride-svc's <c>POST /v1/rides/{id}/cod-collected</c>, not through
-    /// a passenger tapping Pay.
+    /// <para>
+    /// <b>This set is the AL-57/AL-59 fence.</b> <c>onepay</c> and platform-merchant <c>lankaqr</c>
+    /// are gone: OnePay has one merchant account per merchant, so a card fare could only ever land
+    /// in MageRide's own account, and <c>lankaqr</c> pointed at the platform's merchant while
+    /// crediting the driver nothing but a read-model row. **No ride fare on this surface can reach a
+    /// platform merchant account**, and the mechanism is that there is no value for one — not a
+    /// check somewhere that could be relaxed.
+    /// </para>
+    /// <para>
+    /// <c>cod</c> is absent for its own reason: it is a <em>booking-time</em> choice (C004 note (f))
+    /// and settles through ride-svc's <c>POST /v1/rides/{id}/cod-collected</c>, not by a passenger
+    /// tapping Pay.
+    /// </para>
     /// </remarks>
     private static readonly IReadOnlySet<string> PayableMethods = new HashSet<string>(StringComparer.Ordinal)
     {
         RidePaymentMethods.Cash,
-        RidePaymentMethods.LankaQr,
-        RidePaymentMethods.Onepay,
+        RidePaymentMethods.Wallet,
         RidePaymentMethods.ScanDriverQr,
     };
 
@@ -76,47 +84,46 @@ internal sealed class PaymentService(
         var payerRole = PayerRoleFor(method);
         var payerUserId = payerRole == PayerRoles.Booker ? ride.BookerId : ride.PassengerId;
 
-        // US-8.11: OnePay adds 5%, stated separately so the passenger sees the difference before
-        // committing. Every other rail is zero — there is no other surcharged method.
-        var surchargeMinor = method == RidePaymentMethods.Onepay
-            ? FareFormula.DivideRounded(payment.AmountMinor * _options.OnepaySurchargeBps, 10_000)
-            : 0;
-
-        // §11.8's retry: a passenger tapping Pay again after a gateway refused them. The failed row
-        // is closed as `Retried` and a new attempt carries the next try, because
-        // provider_transaction_id is UNIQUE and must stay one-to-one with a gateway call — reusing
-        // the row would give two attempts one reference and make the chain unreconstructable.
-        if (string.Equals(payment.State, RidePaymentStates.Failed, StringComparison.Ordinal))
-        {
-            payment = await RetryAsync(payment, ride, method, surchargeMinor, cancellationToken);
-        }
-
-        var session = await OpenSessionAsync(ride, payment, method, surchargeMinor, cancellationToken);
+        // Δ AL-57: there is no surcharge on any surviving rail. The +5% recovered OnePay's ~3% on the
+        // ride, and no ride rail touches an acquirer any more — OnePay sits on the wallet top-up
+        // instead, where MageRide is the payee. The column stays so historical rows still read.
+        const long surchargeMinor = 0;
 
         var patch = new PaymentPatch(
             Method: method,
             SurchargeMinor: surchargeMinor,
             TipAmountMinor: tipMinor > 0 ? tipMinor : null,
-            // P-04 is resolved here and not at booking: a passenger who booked cash and pays by card
-            // moves the charge to the booker, which is exactly what the rule is for.
+            // P-04 is resolved here and not at booking: a passenger who booked cash and pays from
+            // their wallet moves the charge to the booker, which is exactly what the rule is for.
             PayerRole: payerRole,
             PayerUserId: payerUserId);
 
-        // Cash and driver-QR never reach a gateway, so they do not become Pending. Cash closes here
-        // — the driver has the money in their hand and no third party will ever confirm it — while
-        // driver-QR only records the method and waits for the AL-47 attestation pair.
+        // The wallet rail moves the money BEFORE the state moves, which inverts this service's usual
+        // order — and has to. For every other rail the outward hop *follows* the decision; here the
+        // hop IS the decision, because whether the fare can be paid at all is a question only the
+        // ledger can answer. The call is idempotent on `trip_payment:{ridePaymentId}`, so the one bad
+        // interleaving — ledger moved, this process died before transitioning — is repaired by the
+        // passenger simply tapping Pay again: the replay is a no-op and the transition completes.
+        if (method == RidePaymentMethods.Wallet)
+        {
+            await SettleFromWalletAsync(ride, payment, payerUserId, cancellationToken);
+        }
+
+        // Cash and driver-QR reach no ledger and no gateway. Cash closes here — the driver has the
+        // money in their hand and no third party will ever confirm it — while driver-QR only records
+        // the method and waits for the AL-47 attestation pair.
         var trigger = method switch
         {
             RidePaymentMethods.Cash => (PaymentTrigger?)PaymentTrigger.SettledInCash,
-            RidePaymentMethods.ScanDriverQr => null,
-            _ => PaymentTrigger.GatewaySessionOpened,
+            RidePaymentMethods.Wallet => PaymentTrigger.SettledFromWallet,
+            _ => null,
         };
 
         var moved = trigger is { } fired
             ? await ApplyAsync(payment, fired, patch, ride, cancellationToken)
             : await PatchOnlyAsync(payment, patch, cancellationToken);
 
-        return new InitiatedPayment(moved, session);
+        return new InitiatedPayment(moved, GatewaySession.None);
     }
 
     /// <summary>US-8.15 — the passenger stranded by a gateway outage settles in the vehicle.</summary>
@@ -229,45 +236,12 @@ internal sealed class PaymentService(
         return moved;
     }
 
-    /// <summary>
-    /// Closes a failed attempt and opens the next one (§11.8, D5' §8.1's <c>Failed → Retried</c>).
-    /// </summary>
-    /// <remarks>
-    /// Both halves are one transaction: a <c>Retried</c> row with no successor is a payment nothing
-    /// can settle, and a successor with its predecessor still <c>Failed</c> would let the passenger
-    /// be charged on two live attempts.
-    /// </remarks>
-    private async Task<RidePayment> RetryAsync(
-        RidePayment failed, RideFacts ride, string method, long surchargeMinor, CancellationToken cancellationToken)
-    {
-        if (!PaymentStateMachine.TryResolve(
-                failed.State, PaymentTrigger.RetryRequested, out var transition, out var refusal))
-        {
-            throw Refused(failed, PaymentTrigger.RetryRequested, refusal);
-        }
-
-        await using var unitOfWork = await unitOfWorkFactory.BeginAsync(cancellationToken: cancellationToken);
-
-        var closed = await payments.TransitionAsync(
-                         unitOfWork, failed.Id, transition.From, transition.To, null, cancellationToken)
-                     ?? throw new MageRideException(
-                         MageRideErrors.Conflict,
-                         $"Payment {failed.Id} moved while a retry was being opened. Poll its status.");
-
-        var next = await payments.CreateRetryAsync(
-            unitOfWork, closed, method, closed.AmountMinor, surchargeMinor, cancellationToken);
-
-        await unitOfWork.CommitAsync(cancellationToken);
-
-        logger.LogInformation(
-            "Payment {FailedId} on ride {RideId} was retried as {NextId} (attempt {AttemptNo}).",
-            failed.Id,
-            ride.RideId,
-            next.Id,
-            next.AttemptNo);
-
-        return next;
-    }
+    // Δ AL-57 — `RetryAsync` REMOVED. §11.8's retry chain closed a `Failed` attempt and opened
+    // the next one, and `Failed` was only ever reached by `GatewayFailed`. With no ride gateway
+    // there is nothing to fail: a wallet payment either moves the ledger or is refused before any
+    // row changes, and cash and driver-QR never had a provider. The states and the
+    // `Failed -> Retried` edge stay in the machine — historical rows carry them and D5' §8.1 still
+    // describes them — but nothing on this surface can reach them.
 
     /// <summary>Updates columns without moving the state — the driver-QR method record.</summary>
     private async Task<RidePayment> PatchOnlyAsync(
@@ -286,41 +260,53 @@ internal sealed class PaymentService(
         return moved;
     }
 
-    private async Task<GatewaySession> OpenSessionAsync(
-        RideFacts ride, RidePayment payment, string method, long surchargeMinor, CancellationToken cancellationToken)
+    // Δ AL-57/AL-59 — `OpenSessionAsync` REMOVED with the two ride gateways it opened, and with it
+    // the D-11 merchant lookup and `402 merchant-not-onboarded`: OnePay has one merchant account per
+    // merchant, so the per-driver binding it checked for never existed. No surviving ride rail has a
+    // session to open.
+
+    /// <summary>
+    /// Moves a wallet-paid fare from the passenger's balance to the driver's (AL-57).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// One balanced <c>trip_payment</c> entry in wallet-svc — passenger debit, driver credit, no
+    /// platform leg. This service writes no journal row, as it never has (D-09).
+    /// </para>
+    /// <para>
+    /// <b>An unreachable wallet-svc refuses the payment rather than settling it.</b> Everywhere else
+    /// on this surface a failed outward hop degrades — the fare is still correct, the debt waits for
+    /// the next trip. Here the hop is the payment: reporting <c>Succeeded</c> because the ledger was
+    /// unreachable would tell a driver they had been paid a fare that never moved.
+    /// </para>
+    /// </remarks>
+    private async Task SettleFromWalletAsync(
+        RideFacts ride, RidePayment payment, Guid payerUserId, CancellationToken cancellationToken)
     {
-        var gateway = gateways.FirstOrDefault(g => string.Equals(g.Method, method, StringComparison.Ordinal));
-
-        if (gateway is null)
+        if (ride.AcceptedDriverId is not { } driverId)
         {
-            return GatewaySession.None;
+            throw new MageRideException(
+                MageRideErrors.Conflict,
+                "This ride has no accepted driver, so there is nobody for a wallet fare to be paid to.");
         }
 
-        string? merchantId = null;
+        var posted = await wallet.TripPaymentAsync(
+            payment.Id, payerUserId, driverId, payment.AmountMinor, cancellationToken);
 
-        if (method == RidePaymentMethods.Onepay)
+        if (posted is null)
         {
-            // D-11 / ADD §11.9: without a merchant binding the money has nowhere to land, and the
-            // ADD's own answer is that fare-svc "cannot route in-app payments for this driver and
-            // falls back to cash". 402 is what the contract declares, and the app offers cash.
-            merchantId = ride.AcceptedDriverId is { } driver
-                ? await merchants.ReadMerchantIdAsync(driver, cancellationToken)
-                : null;
+            logger.LogError(
+                "The wallet rail is unreachable, so ride payment {PaymentId} was not settled. The passenger "
+                + "keeps cash and the driver's QR; nothing moved.",
+                payment.Id);
 
-            if (string.IsNullOrWhiteSpace(merchantId))
-            {
-                throw new MageRideException(
-                    MageRideErrors.MerchantNotOnboarded,
-                    "This driver has no active OnePay merchant account, so a card payment cannot be routed to "
-                    + "them (D-11). Pay in cash or by LankaQR.");
-            }
+            throw new MageRideException(
+                MageRideErrors.DependencyUnavailable,
+                "The wallet could not be reached, so nothing was charged. Pay in cash or by the driver's QR.");
         }
-
-        return await gateway.StartAsync(
-            payment.Id, ride.RideId, payment.AmountMinor + surchargeMinor, merchantId, cancellationToken);
     }
 
-    /// <summary>The ride and its computed fare, or the right refusal.</summary>
+    /// <summary>The ride and its computed fare, or the right refusal.</summary>    /// <summary>The ride and its computed fare, or the right refusal.</summary>
     private async Task<(RideFacts Ride, RidePayment Payment)> RequirePayableAsync(
         Guid rideId, CancellationToken cancellationToken)
     {
@@ -357,8 +343,15 @@ internal sealed class PaymentService(
     /// Driver-QR follows cash: the passenger transfers from their own bank app to the driver's, in
     /// the vehicle, so it is the person in the vehicle who pays.
     /// </remarks>
+    /// <remarks>
+    /// P-04, restated for the AL-57 rails: **cash and driver-QR are paid by the rider; the wallet is
+    /// charged to the booker.** The rule was always about *whose instrument settles it* — the person
+    /// in the car hands over cash or scans a QR, and a stored balance belongs to whoever booked and
+    /// topped it up. The two retired methods kept the same side of the line, so nothing about the
+    /// rule changed; only the values did.
+    /// </remarks>
     internal static string PayerRoleFor(string method) =>
-        method is RidePaymentMethods.LankaQr or RidePaymentMethods.Onepay
+        method is RidePaymentMethods.Wallet or RidePaymentMethods.LankaQr or RidePaymentMethods.Onepay
             ? PayerRoles.Booker
             : PayerRoles.Rider;
 

@@ -105,48 +105,21 @@ public sealed class FareOptions
     // Gateways (D-10, D-12, Δ C050)
     // -------------------------------------------------------------------------------------------
 
-    /// <summary>
-    /// OnePay's surcharge, in basis points. 500 = +5% (US-8.11).
-    /// </summary>
-    /// <remarks>
-    /// Basis points rather than a percentage so the value stays an integer all the way into
-    /// <c>round(fare * pct / 100)</c> — D5' §8.1 writes the rule as 5%, and 500 bps is the same
-    /// number with room for a rate that is not a whole percent. <b>OnePay only</b>: every other rail
-    /// is zero, and there is no per-method table because there is no other surcharged rail.
-    /// </remarks>
-    [Range(0, 10_000)]
-    public int OnepaySurchargeBps { get; set; } = 500;
-
-    /// <summary>OnePay's create-session endpoint (D6' §7.1). Unset ⇒ `onepay` answers 503.</summary>
-    public string? OnepayBaseUrl { get; set; }
-
-    public string? OnepayApiKey { get; set; }
-
-    /// <summary>HMAC secret for `POST /v1/fare/pay/onepay/webhook`. Unset refuses every callback.</summary>
-    public string? OnepayWebhookSecret { get; set; }
-
-    /// <summary>HMAC secret for `POST /v1/fare/pay/lankaqr/confirm`. Unset refuses every callback.</summary>
-    public string? LankaQrWebhookSecret { get; set; }
-
-    /// <summary>
-    /// The merchant reference the LankaQR "Pay" deep link is built against (AL-15, D6' §7.2).
-    /// </summary>
-    /// <remarks>
-    /// Unset ⇒ `lankaqr` answers 503. The deep link is what US-8.10a asks for; the scannable QR is
-    /// the fallback for a handset with no compatible bank app installed.
-    /// </remarks>
-    public string? LankaQrMerchantId { get; set; }
-
-    /// <summary>
-    /// The <c>lankaqr://</c>-style deep-link template, with <c>{merchant}</c>, <c>{amount}</c> and
-    /// <c>{reference}</c> placeholders.
-    /// </summary>
-    /// <remarks>
-    /// <b>No spec prints the scheme.</b> D6' §7.2 says "Pay deep link to bank app" and stops, and
-    /// the acquirer's real scheme is a deployment fact — so it is a template rather than a constant,
-    /// and a deployment that has not been given one gets the QR payload and no link.
-    /// </remarks>
-    public string? LankaQrDeepLinkTemplate { get; set; }
+    // -------------------------------------------------------------------------------------------
+    // Δ AL-57/AL-59 — REMOVED, do not re-add:
+    //
+    //   OnepaySurchargeBps   the +5% recovered OnePay's ~3% on the ride. No ride rail touches an
+    //                        acquirer any more, so there is no fee on a ride to recover; OnePay's
+    //                        cost is borne on the wallet top-up, where MageRide is the payee.
+    //   OnepayBaseUrl · OnepayApiKey · OnepayWebhookSecret
+    //   LankaQrWebhookSecret · LankaQrMerchantId · LankaQrDeepLinkTemplate
+    //                        the two ride gateways are gone. OnePay has one merchant account per
+    //                        merchant, so a card fare could only ever land in MageRide's own
+    //                        account; the LankaQR ride rail pointed at the platform's own merchant
+    //                        while crediting the driver nothing but a read-model row.
+    //
+    // The equivalents that survive are wallet-svc's — `Onepay:*` and `LankaQr:*` there settle a
+    // TOP-UP, which is the one case a single merchant account serves correctly.
 
     // -------------------------------------------------------------------------------------------
     // AL-47 driver-QR attestation (Δ C050)

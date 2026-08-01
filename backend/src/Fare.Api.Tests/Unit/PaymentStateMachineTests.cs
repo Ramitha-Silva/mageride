@@ -20,7 +20,13 @@ public sealed class PaymentStateMachineTests
     private static readonly (string From, PaymentTrigger Trigger, string To)[] Diagram =
     [
         // Initiated --> Pending: OnePay/LankaQR provider (timeout 90s)
+        // Δ AL-57: no route can fire this any more — both ride gateways are retired — but the edge
+        // stays, because historical rows sit in Pending and D5' §8.1 still describes how they got
+        // there. The machine is the diagram, including the parts nothing reaches today.
         ("Initiated", PaymentTrigger.GatewaySessionOpened, "Pending"),
+
+        // Initiated --> Succeeded: wallet — a ledger move, no provider (AL-57).
+        ("Initiated", PaymentTrigger.SettledFromWallet, "Succeeded"),
         // Pending --> Succeeded: provider ok
         ("Pending", PaymentTrigger.GatewaySucceeded, "Succeeded"),
         // Pending --> Failed: provider error/timeout

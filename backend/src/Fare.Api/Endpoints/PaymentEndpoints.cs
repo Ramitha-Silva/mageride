@@ -104,19 +104,14 @@ public static class PaymentEndpoints
 
         var pay = endpoints.MapGroup("/v1/fare/pay").WithTags("payments").RequireAuthorization();
 
-        // The two provider callbacks. AllowAnonymous because a gateway presents no bearer — the HMAC
-        // signature over the raw body is what authenticates them (D6' §7.1/§7.2) — and
-        // idempotency-exempt because an external gateway cannot send our header; they dedupe on
-        // provider_transaction_id (R-19).
-        pay.MapPost("/onepay/webhook", OnepayWebhookAsync)
-            .AllowAnonymous()
-            .AllowMissingIdempotencyKey()
-            .WithName("onepayPaymentWebhook");
-
-        pay.MapPost("/lankaqr/confirm", LankaQrConfirmAsync)
-            .AllowAnonymous()
-            .AllowMissingIdempotencyKey()
-            .WithName("lankaqrPaymentConfirm");
+        // Δ AL-57/AL-59 — REMOVED, do not re-add:
+        //   POST /v1/fare/pay/onepay/webhook   OnePay has one merchant account per merchant, so a
+        //     card ride fare could only ever land in MageRide's own account. Card acceptance moved
+        //     to the wallet top-up, where MageRide IS the payee — that webhook is wallet-svc's.
+        //   POST /v1/fare/pay/lankaqr/confirm  the platform-merchant LankaQR ride rail is retired
+        //     into scan_driver_qr, which settles by AL-47 attestation precisely because money moving
+        //     into the driver's own bank produces no platform webhook at all.
+        // No ride fare on this surface reaches an acquirer, so this group has no anonymous route.
 
         pay.MapPost("/scan-driver-qr", ScanDriverQrAsync).WithTags("driver-qr").WithName("payByScanningDriverQr");
 
@@ -294,95 +289,9 @@ public static class PaymentEndpoints
     }
 
     // -----------------------------------------------------------------------------------------
-    // Provider callbacks
+    // Δ AL-57/AL-59 — the provider-callback section is GONE, and so is `ProviderCallbackBody`.
+    // No ride fare reaches an acquirer, so nothing on this surface receives one. The two callbacks
+    // that remain on the platform are wallet-svc's top-up webhooks, where MageRide is the payee.
     // -----------------------------------------------------------------------------------------
 
-    private static Task<Ok<CallbackAcceptedResponse>> OnepayWebhookAsync(
-        HttpContext context,
-        CallbackService callbacks,
-        IOptions<FareOptions> options,
-        ILoggerFactory loggers,
-        CancellationToken cancellationToken) =>
-        HandleCallbackAsync(
-            RidePaymentMethods.Onepay, options?.Value.OnepayWebhookSecret, context, callbacks, loggers, cancellationToken);
-
-    private static Task<Ok<CallbackAcceptedResponse>> LankaQrConfirmAsync(
-        HttpContext context,
-        CallbackService callbacks,
-        IOptions<FareOptions> options,
-        ILoggerFactory loggers,
-        CancellationToken cancellationToken) =>
-        HandleCallbackAsync(
-            RidePaymentMethods.LankaQr, options?.Value.LankaQrWebhookSecret, context, callbacks, loggers, cancellationToken);
-
-    /// <summary>Verifies the signature over the <b>raw</b> body, then settles.</summary>
-    /// <remarks>
-    /// <b>Unsigned is refused, and an unset secret refuses everything.</b> A callback that settles a
-    /// fare without a signature is a free-ride endpoint for anyone who finds the URL — and on the
-    /// late-callback path it would also mint a refund out of a settled cash ride.
-    /// </remarks>
-    private static async Task<Ok<CallbackAcceptedResponse>> HandleCallbackAsync(
-        string method,
-        string? secret,
-        HttpContext context,
-        CallbackService callbacks,
-        ILoggerFactory loggers,
-        CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(context);
-        ArgumentNullException.ThrowIfNull(callbacks);
-        ArgumentNullException.ThrowIfNull(loggers);
-
-        var logger = loggers.CreateLogger(typeof(PaymentEndpoints));
-
-        context.Request.EnableBuffering();
-
-        using var buffer = new MemoryStream();
-        await context.Request.Body.CopyToAsync(buffer, cancellationToken);
-        var raw = buffer.ToArray();
-        context.Request.Body.Position = 0;
-
-        var presented = context.Request.Headers[WebhookSignature.HeaderName].ToString();
-
-        if (!WebhookSignature.IsValid(raw, presented, secret))
-        {
-            logger.LogWarning(
-                "A {Method} payment callback arrived with an invalid or missing {Header} and was refused. "
-                + "Secret configured: {HasSecret}.",
-                method,
-                WebhookSignature.HeaderName,
-                !string.IsNullOrWhiteSpace(secret));
-
-            throw new MageRideException(
-                MageRideErrors.Unauthorized, "The callback signature could not be verified.");
-        }
-
-        var body = JsonSerializer.Deserialize<ProviderCallbackBody>(raw, MageRideJson.Options)
-                   ?? throw new MageRideValidationException(new Dictionary<string, string[]>(StringComparer.Ordinal)
-                   {
-                       ["body"] = ["The callback body is empty."],
-                   });
-
-        if (string.IsNullOrWhiteSpace(body.ProviderTransactionId))
-        {
-            throw new MageRideValidationException(new Dictionary<string, string[]>(StringComparer.Ordinal)
-            {
-                ["providerTransactionId"] = ["providerTransactionId is required — it is the R-19 dedupe key."],
-            });
-        }
-
-        await callbacks.HandleAsync(
-            new ProviderCallback(
-                body.ProviderTransactionId,
-                RequestIds.Optional(body.PaymentId),
-                body.Status ?? string.Empty,
-                body.AmountMinor),
-            cancellationToken);
-
-        return TypedResults.Ok(new CallbackAcceptedResponse(true));
-    }
-
-    /// <summary>The wire shape of <c>fare.yaml</c>'s <c>ProviderCallback</c>.</summary>
-    private sealed record ProviderCallbackBody(
-        string? ProviderTransactionId, string? PaymentId, string? Status, long? AmountMinor);
 }

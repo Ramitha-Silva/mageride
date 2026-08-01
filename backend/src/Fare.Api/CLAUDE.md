@@ -20,12 +20,12 @@ the final distance is measured with, the D-05 cross-trip cancellation settlement
 |---|---|---|
 | `GET /v1/fare/estimate` | Bearer | US-8.9, D5' §1.1/§1.2, AL-19 |
 | `POST /v1/fare/calculate` | internal | E-04, D5' §1.2/§7.1 — ride-svc's completion hop |
-| `POST /v1/fare/pay` | Bearer | **Δ C050** — D-10, US-8.11, P-04, D-11 |
+| `POST /v1/fare/pay` | Bearer | **Δ C050**, **Δ AL-57/AL-59** — D-10, P-04. `cash \| wallet \| scan_driver_qr` |
 | `GET /v1/fare/pay/{id}/status` | Bearer | **Δ C050** — US-8.15 |
 | `POST /v1/fare/pay/{id}/fallback-cash` | Bearer | **Δ C050** — US-8.15 |
 | `POST /v1/fare/pay/scan-driver-qr` | Bearer | **Δ C050** — AL-22 |
 | `POST /v1/fare/pay/driver-qr/claim` · `/confirm` · `/dispute` | Bearer | **Δ C050** — AL-47, US-26.1 |
-| `POST /v1/fare/pay/onepay/webhook` · `/lankaqr/confirm` | HMAC | **Δ C050** — R-19, D6' §7.1/§7.2 |
+| ~~`POST /v1/fare/pay/onepay/webhook` · `/lankaqr/confirm`~~ | — | **REMOVED by AL-57/AL-59** — no ride fare reaches an acquirer |
 | `POST /v1/admin/fare/refund` | finance · admin | **Δ C050** — E-05 |
 
 | Table | Read | Written |
@@ -35,7 +35,7 @@ the final distance is measured with, the D-05 cross-trip cancellation settlement
 | `fares.refunds` | how much has already gone back | **this service** — and it *is* the Finance queue |
 | `fares.driver_earnings` | — | **this service**, on every R-05 terminal |
 | `support.tickets` | — | **support-svc** (C053) — one AL-47 dispute row written here |
-| `registry.driver_payouts` | D-11's merchant binding | **registry-svc** — read-only here |
+| ~~`registry.driver_payouts`~~ | — | **D-11 retired (AL-57)** — no per-driver OnePay merchant exists. Dropped with C028 |
 | `fares.command_log` | the kernel's replay | this service |
 | `rides.rides` · `transitions` | what to price, and the window to measure | **ride-svc** (R-01) — read-only here |
 | `telemetry.positions` | the E-04 track | **the ingest plane** — read-only here |
@@ -61,12 +61,32 @@ the final distance is measured with, the D-05 cross-trip cancellation settlement
 - **Driver-QR payments have NO gateway callback (AL-47).** They settle by attestation and behave
   like cash. `DriverQrService` contains no ledger call at all, and the test asserts the *absence* of
   a request against a wallet stub that is running and reachable — the fence is proved, not assumed.
-- **Gateway-verified `Succeeded` is OnePay-only (D-10).** Only the OnePay route is wired to a
-  gateway that can produce one; the fence lives in which secret verifies which route, and LankaQR's
-  confirm is the acquirer reporting a transfer that already landed.
-- **P-04: cash is always paid by the rider, LankaQR/OnePay always by the booker.** Resolved from the
-  method chosen *at payment*, not at booking — so a passenger who booked cash and pays by card moves
-  the charge to the booker, which is what the rule is for.
+- **No ride fare reaches a platform merchant account (AL-57/AL-59), and the mechanism is absence.**
+  `PayableMethods` has no value for `onepay` or platform-merchant `lankaqr`, `fare.yaml`'s enum has
+  none, the two gateway implementations and their config are deleted, and the two provider-callback
+  routes are gone — so nothing on this surface *could* confirm one. `ck_ride_payments_method` still
+  admits both, deliberately: a row saying somebody paid by OnePay in July is a fact, and a CHECK
+  cannot say "nothing writes this any more" without rewriting history.
+- **A `wallet` payment has no `Pending`, and the outward hop comes FIRST.** Everywhere else on this
+  surface the hop follows the decision — the fare is still correct if wallet-svc is down, and the
+  debt waits for the next trip. Here the hop *is* the decision: whether the fare can be paid at all
+  is a question only the ledger can answer. The call is idempotent on `trip_payment:{ridePaymentId}`,
+  so the one bad interleaving — ledger moved, this process died before transitioning — is repaired
+  by the passenger tapping Pay again.
+- **An unreachable wallet refuses the payment rather than settling it.** Reporting `Succeeded`
+  because the ledger could not be reached would tell a driver they had been paid a fare that never
+  moved. A short balance is `402 insufficient-wallet` and is likewise **not** a silent fallback to
+  cash: the passenger chose a rail and has to be told it is short, with cash and driver-QR still
+  offered.
+- **`Failed`, `Retried`, `Pending` and `Overpaid` are unreachable and stay in the machine.** All four
+  needed a provider callback. `PaymentStateMachineTests` still asserts them against D5' §8.1 and
+  historical rows carry them — but no route can produce one, which is why three integration tests
+  that drove them were removed rather than rewritten.
+- **P-04: cash and driver-QR are paid by the rider, the wallet is charged to the booker.** The rule
+  was always about *whose instrument settles it* — the person in the car hands over cash or scans a
+  QR, and a stored balance belongs to whoever booked and topped it up — so AL-57 changed the values
+  and not the rule. Resolved from the method chosen *at payment*, not at booking, so a passenger who
+  booked cash and pays from their wallet moves the charge to the booker.
 
 ## Rules that are load-bearing
 
@@ -256,13 +276,9 @@ what this service signs. One section, two readers, one key; without it every boo
 | `Kalman:MovementGateSigma` · `MaxAccuracyM` · `MaxSpeedMps` | 1.0 · 50 m · 55 m/s | **no spec** — each argued at its declaration |
 | `MaxTrackSamples` | 20 000 | **no spec** — a bound, not a working limit |
 | `PenaltySettlementEnabled` · `DispatchBaseUrl` · `DispatchInternalApiKey` | on · unset · unset | **unset ⇒ no D-05 penalty is ever collected** |
-| `WalletBaseUrl` · `WalletInternalApiKey` | unset | **unset with dispatch set ⇒ the penalty is collected and cannot be paid out.** Set both or neither |
 | `InternalTimeout` | 2 s | D6' §8.3's internal hop |
 | `RideBaseUrl` · `RideInternalApiKey` | unset | **Δ C050 — unset ⇒ no ride ever leaves `PaymentPending`.** R-05's only hop |
-| `OnepaySurchargeBps` | 500 | US-8.11's +5%, in basis points so it stays an integer. OnePay only |
-| `OnepayBaseUrl` · `OnepayApiKey` | unset | **unset ⇒ `onepay` answers 503** and the app offers another rail |
-| `OnepayWebhookSecret` · `LankaQrWebhookSecret` | unset | **unset ⇒ that callback refuses every delivery.** No accept-unsigned mode |
-| `LankaQrMerchantId` · `LankaQrDeepLinkTemplate` | unset | AL-15's "Pay" deep link; unset ⇒ `lankaqr` answers 503. **No spec prints the scheme** |
+| `WalletBaseUrl` · `WalletInternalApiKey` | unset | Two jobs. **Unset with dispatch set ⇒ the D-05 penalty is collected and cannot be paid out** (set both or neither). **Δ AL-57: it is also the `wallet` ride rail** — unset, every card-paying passenger is offered cash or the driver's QR. Nothing is charged; card acceptance simply does not work |
 | `QrNudgeEnabled` · `QrNudgeAfter` · `QrNudgeInterval` | on · 5 min · 1 min | AL-47 / US-26.1. **The sweep runs; the push is C052's** |
 
 `ConnectionStrings:Postgres` and `Jwt:*` are required. `CommandLog:*` defaults to `fares` /

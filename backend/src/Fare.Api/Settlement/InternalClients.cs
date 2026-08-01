@@ -211,6 +211,29 @@ internal interface IWalletLedgerClient
     Task<LedgerPostingResult?> CreditAsync(
         Guid driverId, long amountMinor, string kind, string idempotencyKey,
         string description, string? reference, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Moves a wallet-paid fare from the passenger's balance to the driver's (AL-57).
+    /// </summary>
+    /// <remarks>
+    /// <b>Not two calls to <see cref="DebitAsync"/> and <see cref="CreditAsync"/>.</b> Those post
+    /// one wallet leg each against the platform, so a fare would be two entries and a crash between
+    /// them either creates money or destroys it. wallet-svc's <c>/trip-payment</c> writes one
+    /// balanced entry with two wallet legs; MageRide is the custodian of the balance, not a party.
+    /// The ledger key is composed on that side from <paramref name="ridePaymentId"/>, so a retry is
+    /// a no-op.
+    /// </remarks>
+    /// <returns>
+    /// The posting, or <see langword="null"/> when the seam is unreachable. <b>An insufficient
+    /// balance throws</b> rather than returning null: it is the passenger's answer, not an outage,
+    /// and the caller must not treat it as one.
+    /// </returns>
+    Task<LedgerPostingResult?> TripPaymentAsync(
+        Guid ridePaymentId,
+        Guid passengerId,
+        Guid driverId,
+        long amountMinor,
+        CancellationToken cancellationToken);
 }
 
 /// <inheritdoc cref="IWalletLedgerClient"/>
@@ -234,6 +257,61 @@ internal sealed class WalletLedgerClient(
         Guid driverId, long amountMinor, string kind, string idempotencyKey,
         string description, string? reference, CancellationToken cancellationToken) =>
         PostAsync("credit", driverId, amountMinor, kind, idempotencyKey, description, reference, cancellationToken);
+
+    /// <remarks>
+    /// <b>An insufficient balance throws where the driver rails return null.</b> The asymmetry is
+    /// the difference between whose money it is: a D-05 leg the driver cannot forward is a
+    /// reconciliation matter and must not fail the passenger's ride, whereas a passenger whose
+    /// balance will not cover the fare has been *answered* — they must be told, and offered cash or
+    /// the driver's QR, rather than having the ride settle as though it were paid.
+    /// </remarks>
+    public async Task<LedgerPostingResult?> TripPaymentAsync(
+        Guid ridePaymentId,
+        Guid passengerId,
+        Guid driverId,
+        long amountMinor,
+        CancellationToken cancellationToken)
+    {
+        if (!IsConfigured)
+        {
+            return null;
+        }
+
+        var client = clients.CreateClient(HttpClientName);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "v1/internal/wallet/trip-payment")
+        {
+            Content = JsonContent.Create(
+                new { ridePaymentId, passengerId, driverId, amountMinor },
+                options: MageRideJson.Options),
+        };
+
+        request.Headers.TryAddWithoutValidation(InternalKeyFilter.ApiKeyHeader, _options.WalletInternalApiKey);
+
+        using var response = await client.SendAsync(request, cancellationToken);
+
+        if (response.IsSuccessStatusCode)
+        {
+            return await response.Content.ReadFromJsonAsync<LedgerPostingResult>(
+                MageRideJson.Options, cancellationToken) ?? new LedgerPostingResult(null, false);
+        }
+
+        if (response.StatusCode == System.Net.HttpStatusCode.PaymentRequired)
+        {
+            throw new MageRideException(
+                MageRideErrors.InsufficientWallet,
+                "The passenger's wallet will not cover this fare. Top up, or pay cash or by the "
+                + "driver's QR.");
+        }
+
+        logger.LogError(
+            "wallet-svc answered {Status} on the trip payment for ride payment {RidePaymentId}; the fare "
+            + "did not move and the payment stays open.",
+            (int)response.StatusCode,
+            ridePaymentId);
+
+        return null;
+    }
 
     private async Task<LedgerPostingResult?> PostAsync(
         string direction,

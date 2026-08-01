@@ -12,6 +12,22 @@ namespace MageRide.Fare.Tests.Integration;
 [Collection<FareCollection>]
 public sealed class PaymentFlowTests(PostgresFixture postgres)
 {
+    // -----------------------------------------------------------------------------------------
+    // Δ AL-57 — three tests REMOVED with the behaviour they described:
+    //
+    //   A_duplicate_gateway_callback_settles_once
+    //   A_late_success_after_cash_becomes_an_overpayment_on_the_finance_queue
+    //   A_failed_payment_can_be_retried_on_a_new_attempt
+    //
+    // All three needed a ride payment to reach `Pending` or `Failed`, and both states were only ever
+    // reached by a provider callback. No ride fare touches an acquirer any more: a `wallet` payment
+    // is a ledger move that either happens or is refused before any row changes, and cash and
+    // driver-QR never had a provider. The states, the R-19 dedupe and the retry chain remain in the
+    // machine — `PaymentStateMachineTests` still asserts them against D5' §8.1, and historical rows
+    // carry them — but nothing on this surface can reach them, so a test that drove one would be
+    // testing its own fixture.
+    // -----------------------------------------------------------------------------------------
+
     /// <summary>Prices a completed ride the way ride-svc does, so there is a fare to pay.</summary>
     private static async Task<(SeededRide Ride, Guid PaymentId, long AmountMinor)> PricedAsync(FareHarness harness)
     {
@@ -52,11 +68,16 @@ public sealed class PaymentFlowTests(PostgresFixture postgres)
     }
 
     /// <summary>
-    /// US-8.11: OnePay adds 5% and states it separately, so the passenger sees the difference before
-    /// committing. Every other rail is zero.
+    /// AL-57/AL-59: <b>no ride fare on this surface can reach a platform merchant account</b>, and
+    /// no surviving rail is surcharged.
     /// </summary>
+    /// <remarks>
+    /// The +5% existed to recover OnePay's ~3% on the ride. OnePay now sits on the wallet top-up,
+    /// where MageRide is the payee, so there is no acquirer fee on a ride to recover — and the two
+    /// methods that reached a platform merchant are not values this route accepts.
+    /// </remarks>
     [Fact]
-    public async Task Onepay_adds_five_percent_and_nothing_else_does()
+    public async Task Neither_platform_merchant_rail_is_a_payment_method_and_nothing_is_surcharged()
     {
         await using var downstream = await DownstreamStub.StartAsync();
         await using var harness = await FareHarness.StartAsync(postgres, downstream: downstream);
@@ -64,37 +85,31 @@ public sealed class PaymentFlowTests(PostgresFixture postgres)
         var (ride, _, amountMinor) = await PricedAsync(harness);
         var passenger = harness.Tokens.Passenger(ride.PassengerId);
 
-        // D-11: without a merchant binding the money has nowhere to land.
-        await ModeBFreeOfMerchant(harness, ride, passenger, amountMinor);
+        foreach (var retired in new[] { "onepay", "lankaqr" })
+        {
+            using var refused = await harness.PostAsync(
+                "/v1/fare/pay", new { rideId = ride.RideId.ToString(), method = retired }, passenger);
 
-        await harness.Seed.MerchantAsync(ride.DriverId, "ONEPAY-MERCHANT-1");
+            var (code, _) = await FareHarness.ProblemAsync(refused);
 
-        var lankaqr = await harness.OkAsync<PaymentInitiationResponse>(
+            // 402, not 400: `payment-method-invalid` is "this rail is not usable for this ride",
+            // which is what the app branches on to offer the passenger another one.
+            Assert.Equal(HttpStatusCode.PaymentRequired, refused.StatusCode);
+            Assert.Equal("payment-method-invalid", code);
+        }
+
+        // Nothing was charged by either refusal, and the surviving card rail carries no surcharge.
+        Assert.Empty(downstream.LedgerPostings);
+
+        var paid = await harness.OkAsync<PaymentInitiationResponse>(
             await harness.PostAsync(
-                "/v1/fare/pay", new { rideId = ride.RideId.ToString(), method = "lankaqr" }, passenger),
-            "pay by LankaQR");
+                "/v1/fare/pay", new { rideId = ride.RideId.ToString(), method = "wallet" }, passenger),
+            "pay from the wallet");
 
-        Assert.Equal(0, lankaqr.SurchargeMinor);
-        Assert.Equal("Pending", lankaqr.State);
-
-        // AL-15: the deep link is primary and the QR is the fallback.
-        Assert.NotNull(lankaqr.LankaQr?.PaymentLink);
-        Assert.NotNull(lankaqr.LankaQr?.QrPayload);
-        Assert.Null(lankaqr.Onepay);
+        Assert.Equal(0, paid.SurchargeMinor);
+        Assert.Equal(amountMinor, paid.AmountMinor);
     }
 
-    private static async Task ModeBFreeOfMerchant(
-        FareHarness harness, SeededRide ride, string passenger, long amountMinor)
-    {
-        using var refused = await harness.PostAsync(
-            "/v1/fare/pay", new { rideId = ride.RideId.ToString(), method = "onepay" }, passenger);
-
-        var (code, _) = await FareHarness.ProblemAsync(refused);
-
-        Assert.Equal(HttpStatusCode.PaymentRequired, refused.StatusCode);
-        Assert.Equal("merchant-not-onboarded", code);
-        Assert.True(amountMinor > 0);
-    }
 
     /// <summary>
     /// Definition of done: a driver-QR confirm posts the driver earning and closes the ride payment
@@ -208,46 +223,6 @@ public sealed class PaymentFlowTests(PostgresFixture postgres)
         Assert.Empty(downstream.LedgerPostings);
     }
 
-    /// <summary>Definition of done: a duplicate OnePay callback is a no-op.</summary>
-    [Fact]
-    public async Task A_duplicate_gateway_callback_settles_once()
-    {
-        await using var downstream = await DownstreamStub.StartAsync();
-        await using var harness = await FareHarness.StartAsync(postgres, downstream: downstream);
-
-        var (ride, paymentId, amountMinor) = await PricedAsync(harness);
-        var passenger = harness.Tokens.Passenger(ride.PassengerId);
-
-        await harness.OkAsync<PaymentInitiationResponse>(
-            await harness.PostAsync(
-                "/v1/fare/pay", new { rideId = ride.RideId.ToString(), method = "lankaqr" }, passenger),
-            "pay by LankaQR");
-
-        var callback = new
-        {
-            providerTransactionId = "LANKAQR-C050-0001",
-            paymentId = paymentId.ToString(),
-            status = "SUCCESS",
-            amountMinor,
-        };
-
-        for (var delivery = 0; delivery < 3; delivery++)
-        {
-            using var response = await harness.PostSignedAsync(
-                "/v1/fare/pay/lankaqr/confirm", callback, FareHarness.LankaQrWebhookSecret);
-
-            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        }
-
-        var status = await harness.GetAsync<PaymentStatusResponse>(
-            $"/v1/fare/pay/{paymentId}/status", passenger);
-
-        Assert.Equal("Succeeded", status.State);
-
-        // Settled once: one earning of one trip, and one report to ride-svc.
-        Assert.Equal((1, amountMinor), await harness.EarningsAsync(ride.DriverId));
-        Assert.Single(downstream.Settlements);
-    }
 
     /// <summary>An unsigned or wrongly signed callback settles nothing.</summary>
     [Fact]
@@ -275,54 +250,6 @@ public sealed class PaymentFlowTests(PostgresFixture postgres)
         Assert.Empty(downstream.Settlements);
     }
 
-    /// <summary>
-    /// R-19 / §11.14: a provider <c>Succeeded</c> arriving after the ride was settled in cash makes
-    /// the payment <c>Overpaid</c> and puts a reversal on the Finance queue — and does <b>not</b>
-    /// drag the ride to Disputed.
-    /// </summary>
-    [Fact]
-    public async Task A_late_success_after_cash_becomes_an_overpayment_on_the_finance_queue()
-    {
-        await using var downstream = await DownstreamStub.StartAsync();
-        await using var harness = await FareHarness.StartAsync(postgres, downstream: downstream);
-
-        var (ride, paymentId, amountMinor) = await PricedAsync(harness);
-        var passenger = harness.Tokens.Passenger(ride.PassengerId);
-
-        await harness.OkAsync<PaymentInitiationResponse>(
-            await harness.PostAsync(
-                "/v1/fare/pay", new { rideId = ride.RideId.ToString(), method = "cash" }, passenger),
-            "pay cash");
-
-        // The card the passenger had already given up on authorises an hour later.
-        using (var late = await harness.PostSignedAsync(
-            "/v1/fare/pay/onepay/webhook",
-            new
-            {
-                providerTransactionId = "ONEPAY-C050-LATE",
-                paymentId = paymentId.ToString(),
-                status = "SUCCESS",
-                amountMinor,
-            },
-            FareHarness.OnepayWebhookSecret))
-        {
-            Assert.Equal(HttpStatusCode.OK, late.StatusCode);
-        }
-
-        var status = await harness.GetAsync<PaymentStatusResponse>(
-            $"/v1/fare/pay/{paymentId}/status", passenger);
-
-        Assert.Equal("Overpaid", status.State);
-
-        var queued = Assert.Single(await harness.RefundQueueAsync());
-        Assert.Equal("overpaid_reversal", queued.Kind);
-        Assert.Equal(amountMinor, queued.AmountMinor);
-        Assert.Equal("Requested", queued.Status);
-
-        // The cash settlement stands: one earning, and the ride was told once — about the cash.
-        Assert.Equal((1, amountMinor), await harness.EarningsAsync(ride.DriverId));
-        Assert.Equal("FellBackToCash", Assert.Single(downstream.Settlements).String("paymentState"));
-    }
 
     /// <summary>
     /// Definition of done: a refund leaves the ledger balanced and is visible in the Finance queue.
@@ -342,24 +269,12 @@ public sealed class PaymentFlowTests(PostgresFixture postgres)
         var (ride, paymentId, amountMinor) = await PricedAsync(harness);
         var passenger = harness.Tokens.Passenger(ride.PassengerId);
 
+        // Δ AL-57: the wallet rail settles on the spot — one balanced ledger entry in
+        // wallet-svc, no gateway and therefore no callback to wait for.
         await harness.OkAsync<PaymentInitiationResponse>(
             await harness.PostAsync(
-                "/v1/fare/pay", new { rideId = ride.RideId.ToString(), method = "lankaqr" }, passenger),
-            "pay by LankaQR");
-
-        using (var settled = await harness.PostSignedAsync(
-            "/v1/fare/pay/lankaqr/confirm",
-            new
-            {
-                providerTransactionId = "LANKAQR-C050-REFUND",
-                paymentId = paymentId.ToString(),
-                status = "SUCCESS",
-                amountMinor,
-            },
-            FareHarness.LankaQrWebhookSecret))
-        {
-            Assert.Equal(HttpStatusCode.OK, settled.StatusCode);
-        }
+                "/v1/fare/pay", new { rideId = ride.RideId.ToString(), method = "wallet" }, passenger),
+            "pay from the wallet");
 
         var financeUser = await harness.Seed.UserAsync("finance_officer");
 
@@ -383,7 +298,12 @@ public sealed class PaymentFlowTests(PostgresFixture postgres)
         Assert.Equal(refund.RefundId, queued.Id);
         Assert.Equal("partial", queued.Kind);
 
-        var posting = Assert.Single(downstream.LedgerPostings);
+        // Δ AL-57: the wallet fare is itself a ledger movement now, so the seam carries two calls —
+        // the `trip-payment` that settled the ride and the refund that gave part of it back. The
+        // refund is the one this test is about.
+        var posting = Assert.Single(
+            downstream.LedgerPostings, call => call.Path.EndsWith("/debit", StringComparison.Ordinal));
+
         Assert.Equal("payment_refund", posting.String("kind"));
         Assert.Equal(10_000, posting.Number("amountMinor"));
         Assert.Equal($"payment_refund:{refund.RefundId}", posting.String("idempotencyKey"));
@@ -392,6 +312,89 @@ public sealed class PaymentFlowTests(PostgresFixture postgres)
             $"/v1/fare/pay/{paymentId}/status", passenger);
 
         Assert.Equal("PartiallyRefunded", status.State);
+    }
+
+    /// <summary>
+    /// DoD: a wallet payment moves <b>exactly one</b> balanced entry and is <c>Succeeded</c> without
+    /// any gateway call.
+    /// </summary>
+    [Fact]
+    public async Task A_wallet_fare_settles_on_the_spot_through_one_ledger_call()
+    {
+        await using var downstream = await DownstreamStub.StartAsync();
+        await using var harness = await FareHarness.StartAsync(postgres, downstream: downstream);
+
+        var (ride, _, amountMinor) = await PricedAsync(harness);
+        var passenger = harness.Tokens.Passenger(ride.PassengerId);
+
+        var paid = await harness.OkAsync<PaymentInitiationResponse>(
+            await harness.PostAsync(
+                "/v1/fare/pay", new { rideId = ride.RideId.ToString(), method = "wallet" }, passenger),
+            "pay from the wallet");
+
+        // No Pending: a wallet payment is a ledger move inside wallet-svc's transaction, so there is
+        // nothing to wait for and no callback that could arrive.
+        Assert.Equal("Succeeded", paid.State);
+        Assert.Equal("wallet", paid.Method);
+        Assert.Equal(0, paid.SurchargeMinor);
+
+        var posting = Assert.Single(downstream.LedgerPostings);
+
+        Assert.EndsWith("/trip-payment", posting.Path, StringComparison.Ordinal);
+        Assert.Equal(amountMinor, posting.Number("amountMinor"));
+
+        // Passenger and driver, no platform leg — MageRide is the custodian, not a party.
+        Assert.Equal(ride.PassengerId.ToString(), posting.String("passengerId"));
+        Assert.Equal(ride.DriverId.ToString(), posting.String("driverId"));
+
+        // R-05: the earning posts because the payment closed, and ride-svc is told.
+        Assert.Equal((1, amountMinor), await harness.EarningsAsync(ride.DriverId));
+        Assert.Equal("Succeeded", Assert.Single(downstream.Settlements).String("paymentState"));
+    }
+
+    /// <summary>
+    /// DoD: a wallet payment against a short balance <b>refuses and moves no money</b> — and the
+    /// passenger keeps cash and the driver's QR rather than being silently fallen back.
+    /// </summary>
+    [Fact]
+    public async Task A_wallet_fare_the_passenger_cannot_afford_settles_nothing()
+    {
+        await using var downstream = await DownstreamStub.StartAsync();
+        await using var harness = await FareHarness.StartAsync(postgres, downstream: downstream);
+
+        var (ride, paymentId, amountMinor) = await PricedAsync(harness);
+        var passenger = harness.Tokens.Passenger(ride.PassengerId);
+
+        downstream.RefuseTripPayment = true;
+
+        using (var refused = await harness.PostAsync(
+            "/v1/fare/pay", new { rideId = ride.RideId.ToString(), method = "wallet" }, passenger))
+        {
+            var (code, _) = await FareHarness.ProblemAsync(refused);
+
+            Assert.Equal(HttpStatusCode.PaymentRequired, refused.StatusCode);
+            Assert.Equal("insufficient-wallet", code);
+        }
+
+        // The payment did NOT move and the driver earned nothing: a refusal is not a settlement, and
+        // it is deliberately not a silent fallback to cash either — the passenger chose a rail and
+        // has to be told it is short.
+        var status = await harness.GetAsync<PaymentStatusResponse>(
+            $"/v1/fare/pay/{paymentId}/status", passenger);
+
+        Assert.Equal("Initiated", status.State);
+        Assert.Null(await harness.EarningsAsync(ride.DriverId));
+        Assert.Empty(downstream.Settlements);
+
+        // …and the rails that remain still work on the same payment.
+        downstream.RefuseTripPayment = false;
+
+        var cash = await harness.OkAsync<PaymentStatusResponse>(
+            await harness.PostAsync($"/v1/fare/pay/{paymentId}/fallback-cash", null, passenger),
+            "settle in cash instead");
+
+        Assert.Equal("FellBackToCash", cash.State);
+        Assert.Equal((1, amountMinor), await harness.EarningsAsync(ride.DriverId));
     }
 
     /// <summary>A refund cannot give back more than the payment took.</summary>
@@ -404,24 +407,12 @@ public sealed class PaymentFlowTests(PostgresFixture postgres)
         var (ride, paymentId, amountMinor) = await PricedAsync(harness);
         var passenger = harness.Tokens.Passenger(ride.PassengerId);
 
+        // Δ AL-57: the wallet rail settles on the spot — one balanced ledger entry in
+        // wallet-svc, no gateway and therefore no callback to wait for.
         await harness.OkAsync<PaymentInitiationResponse>(
             await harness.PostAsync(
-                "/v1/fare/pay", new { rideId = ride.RideId.ToString(), method = "lankaqr" }, passenger),
-            "pay by LankaQR");
-
-        using (var settled = await harness.PostSignedAsync(
-            "/v1/fare/pay/lankaqr/confirm",
-            new
-            {
-                providerTransactionId = "LANKAQR-C050-CAP",
-                paymentId = paymentId.ToString(),
-                status = "SUCCESS",
-                amountMinor,
-            },
-            FareHarness.LankaQrWebhookSecret))
-        {
-            Assert.Equal(HttpStatusCode.OK, settled.StatusCode);
-        }
+                "/v1/fare/pay", new { rideId = ride.RideId.ToString(), method = "wallet" }, passenger),
+            "pay from the wallet");
 
         var financeUser = await harness.Seed.UserAsync("finance_officer");
 
@@ -459,7 +450,7 @@ public sealed class PaymentFlowTests(PostgresFixture postgres)
 
     /// <summary>US-8.15: a passenger stranded by a gateway outage settles in the vehicle.</summary>
     [Fact]
-    public async Task A_stranded_gateway_payment_falls_back_to_cash()
+    public async Task A_payment_that_was_never_completed_falls_back_to_cash()
     {
         await using var downstream = await DownstreamStub.StartAsync();
         await using var harness = await FareHarness.StartAsync(postgres, downstream: downstream);
@@ -467,11 +458,9 @@ public sealed class PaymentFlowTests(PostgresFixture postgres)
         var (ride, paymentId, amountMinor) = await PricedAsync(harness);
         var passenger = harness.Tokens.Passenger(ride.PassengerId);
 
-        await harness.OkAsync<PaymentInitiationResponse>(
-            await harness.PostAsync(
-                "/v1/fare/pay", new { rideId = ride.RideId.ToString(), method = "lankaqr" }, passenger),
-            "pay by LankaQR");
-
+        // Δ AL-57: there is no gateway left to be stranded BY, so the payment is simply one that
+        // was priced and never completed — `Initiated`. US-8.15's fallback is unchanged and still
+        // the answer: the passenger settles in the vehicle.
         var cash = await harness.OkAsync<PaymentStatusResponse>(
             await harness.PostAsync($"/v1/fare/pay/{paymentId}/fallback-cash", null, passenger),
             "fall back to cash");
@@ -529,13 +518,14 @@ public sealed class PaymentFlowTests(PostgresFixture postgres)
         // Booked as cash — so C049 opened the row with payer_role = rider…
         Assert.Equal("rider", Assert.Single(await harness.PaymentsAsync(ride.RideId)).PayerRole);
 
-        // …and paying by LankaQR moves the charge to the booker.
+        // …and paying from the wallet moves the charge to the booker (Δ AL-57: the rule was always
+        // about whose instrument settles it, and a stored balance is the booker's).
         await harness.OkAsync<PaymentInitiationResponse>(
             await harness.PostAsync(
                 "/v1/fare/pay",
-                new { rideId = ride.RideId.ToString(), method = "lankaqr" },
+                new { rideId = ride.RideId.ToString(), method = "wallet" },
                 harness.Tokens.Passenger(ride.PassengerId)),
-            "pay by LankaQR");
+            "pay from the wallet");
 
         await using var connection = await harness.OpenAsync();
 
@@ -547,62 +537,4 @@ public sealed class PaymentFlowTests(PostgresFixture postgres)
         Assert.Equal("booker", payerRole);
     }
 
-    /// <summary>
-    /// §11.8's retry: a gateway refusal is not the end of the payment. The failed attempt is closed
-    /// as <c>Retried</c> and a new row carries the next try, so `provider_transaction_id` stays
-    /// one-to-one with a gateway call and the chain is reconstructable.
-    /// </summary>
-    [Fact]
-    public async Task A_failed_payment_can_be_retried_on_a_new_attempt()
-    {
-        await using var downstream = await DownstreamStub.StartAsync();
-        await using var harness = await FareHarness.StartAsync(postgres, downstream: downstream);
-
-        var (ride, paymentId, amountMinor) = await PricedAsync(harness);
-        var passenger = harness.Tokens.Passenger(ride.PassengerId);
-
-        await harness.OkAsync<PaymentInitiationResponse>(
-            await harness.PostAsync(
-                "/v1/fare/pay", new { rideId = ride.RideId.ToString(), method = "lankaqr" }, passenger),
-            "pay by LankaQR");
-
-        using (var failed = await harness.PostSignedAsync(
-            "/v1/fare/pay/lankaqr/confirm",
-            new { providerTransactionId = "LANKAQR-C050-FAIL", paymentId = paymentId.ToString(), status = "FAILED" },
-            FareHarness.LankaQrWebhookSecret))
-        {
-            Assert.Equal(HttpStatusCode.OK, failed.StatusCode);
-        }
-
-        var retry = await harness.OkAsync<PaymentInitiationResponse>(
-            await harness.PostAsync(
-                "/v1/fare/pay", new { rideId = ride.RideId.ToString(), method = "lankaqr" }, passenger),
-            "retry");
-
-        Assert.NotEqual(paymentId, retry.PaymentId);
-        Assert.Equal("Pending", retry.State);
-        Assert.Equal(amountMinor, retry.AmountMinor);
-
-        var rows = await harness.PaymentsAsync(ride.RideId);
-        Assert.Equal(2, rows.Count);
-        Assert.Equal("Retried", rows[0].State);
-        Assert.Equal("Pending", rows[1].State);
-
-        // The second attempt settles, and only it earns the driver.
-        using (var ok = await harness.PostSignedAsync(
-            "/v1/fare/pay/lankaqr/confirm",
-            new
-            {
-                providerTransactionId = "LANKAQR-C050-RETRY",
-                paymentId = retry.PaymentId.ToString(),
-                status = "SUCCESS",
-                amountMinor,
-            },
-            FareHarness.LankaQrWebhookSecret))
-        {
-            Assert.Equal(HttpStatusCode.OK, ok.StatusCode);
-        }
-
-        Assert.Equal((1, amountMinor), await harness.EarningsAsync(ride.DriverId));
-    }
 }
