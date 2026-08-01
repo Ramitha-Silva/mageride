@@ -1,0 +1,353 @@
+openapi: 3.1.0
+
+# =============================================================================================
+# payout-svc — the weekly driver payout run
+# Source: specs/architecture-design-document.md §1.18 (AL-58) + §11.9a
+#         specs/D3_mageride_api_contracts.md "payout-svc — the weekly driver payout run"
+#
+# WHY THIS SERVICE EXISTS. AL-57 made MageRide the payee of a card-paid ride: the passenger tops
+# up a wallet, the fare moves passenger wallet -> driver wallet, and the driver's balance becomes
+# money the platform OWES. AL-05 had deleted the only outward bank rail, so nothing could discharge
+# it. This service is that discharge and nothing else — it prices nothing, it settles no ride, and
+# it never decides who may be paid (that is the Verification Officer, through the AL-39 queue).
+#
+# ⚠ Origination via LankaPay/CEFTS needs a sponsor bank and CBSL authorisation (ADD §1.18). The
+# bank adapter is ONE outbound port; unconfigured, the run still selects, still debits and still
+# records what is owed, and announces the gap at start-up — an operator can see the liability
+# before a rail exists.
+# =============================================================================================
+
+info:
+  title: MageRide payout-svc
+  version: 1.0.0
+  summary: Weekly full sweep of driver wallet balances to their verified bank accounts.
+  description: |
+    **Policy: weekly, full sweep, no minimum and no holdback.** Whatever a driver's balance is on
+    run day is paid out in full. `Payout:RetainMinor` exists and defaults to `0` — see the D5 §8.1
+    note on its interaction with the D-08 daily fee, which is charged from the *second* trip of each
+    Colombo day and therefore bites a cash-earning driver the morning after a sweep.
+
+    **The wallet debit and the payout instruction commit together.** An instruction with no debit
+    pays a driver twice on a retry; a debit with no instruction loses their money. `FAILED` reverses
+    the debit under the same idempotency-key discipline every other movement uses (D3' §0), so the
+    balance is restored exactly once and the next run picks it up.
+
+    **A driver with no `verified` payout profile accrues and is never swept.** The balance is
+    retained, never lost, and they surface on the Finance exception queue (SCR-AP-006). The profile
+    itself is `registry.yaml`'s `GET · PUT /v1/drivers/payout-profile`, approved by a Verification
+    Officer through the SCR-AP-003 queue.
+
+    Money is integer minor units throughout.
+  contact:
+    name: MageRide Platform Engineering
+    url: https://mageride.lk
+  license:
+    name: UNLICENSED
+    url: https://mageride.lk/legal/terms
+
+servers:
+  - url: https://api.mageride.lk
+    description: Production gateway (DOKS Singapore)
+  - url: http://localhost:8080
+    description: Docker Compose dev gateway
+
+tags:
+  - name: payouts
+    description: The driver's own payout history.
+  - name: payout-admin
+    description: Finance's view of every instruction, and the manual run.
+  - name: payout-internal
+    description: The bank origination adapter reporting back.
+
+paths:
+
+  /v1/drivers/payouts:
+    get:
+      operationId: listDriverPayouts
+      summary: This driver's payout history.
+      description: |
+        AL-58, SCR-DA-022a. What was swept, when, and whether it arrived. A driver with no verified
+        payout profile sees an empty page and the screen explains why — the money is on their wallet.
+      tags: [payouts]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/Cursor'
+        - $ref: './_shared.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Payout page.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './_shared.yaml#/components/schemas/CursorPage'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Payout'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden]
+
+  /v1/admin/payouts:
+    get:
+      operationId: listPayouts
+      summary: Every instruction, for Finance.
+      description: AL-58, SCR-AP-006. Filterable by batch, status or driver.
+      tags: [payout-admin]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: batchId
+          in: query
+          required: false
+          schema:
+            $ref: './_shared.yaml#/components/schemas/Ulid'
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/PayoutStatus'
+        - name: driverId
+          in: query
+          required: false
+          schema:
+            $ref: './_shared.yaml#/components/schemas/Ulid'
+        - $ref: './_shared.yaml#/components/parameters/Cursor'
+        - $ref: './_shared.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Payout page.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './_shared.yaml#/components/schemas/CursorPage'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Payout'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden]
+
+  /v1/admin/payouts/batches:
+    get:
+      operationId: listPayoutBatches
+      summary: Run history — date, instruction count, total.
+      description: |
+        AL-58, SCR-AP-006. One row per weekly sweep, newest first. `totalMinor` is what left the
+        platform that week and is the figure Finance reconciles the bank statement against.
+      tags: [payout-admin]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/Cursor'
+        - $ref: './_shared.yaml#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Batch page.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: './_shared.yaml#/components/schemas/CursorPage'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/PayoutBatch'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden]
+    post:
+      operationId: runPayoutBatch
+      summary: Run the sweep now, out of band.
+      description: |
+        Finance only. **Idempotent on the business date**, not on the header: a second call for a
+        date already swept is `409 payout-batch-exists` rather than a second sweep, because the run
+        selects "the whole balance" and running it twice in a day would pay an empty second
+        instruction to every driver. Audited (D-35).
+      tags: [payout-admin]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      responses:
+        '202':
+          description: Run accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayoutBatch'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, payout-batch-exists]
+
+  /v1/admin/payouts/{payoutId}/retry:
+    post:
+      operationId: retryPayout
+      summary: Re-submit a failed instruction.
+      description: |
+        Finance only. Only a `FAILED` instruction may be retried — anything else is
+        `409 payout-not-failed`. The failure already reversed the debit, so the retry raises a fresh
+        instruction against the current balance rather than replaying a stale amount. Audited (D-35).
+      tags: [payout-admin]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: payoutId
+          in: path
+          required: true
+          schema:
+            $ref: './_shared.yaml#/components/schemas/Ulid'
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Re-submitted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Payout'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, not-found, payout-not-failed]
+
+  /v1/internal/payouts/{payoutId}/result:
+    post:
+      operationId: reportPayoutResult
+      summary: The bank origination adapter reporting an outcome.
+      description: |
+        Internal, mTLS only. `PAID` or `FAILED`, deduped on `providerReference` — R-19's shape,
+        because a bank's own retry must not reverse a debit twice. A `FAILED` result restores the
+        balance exactly once; the next run sweeps it again.
+      tags: [payout-internal]
+      security:
+        - mtls: []
+      parameters:
+        - name: payoutId
+          in: path
+          required: true
+          schema:
+            $ref: './_shared.yaml#/components/schemas/Ulid'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status, providerReference]
+              properties:
+                status:
+                  type: string
+                  enum: [PAID, FAILED]
+                providerReference:
+                  type: string
+                  maxLength: 128
+                failureReason:
+                  type: string
+                  maxLength: 500
+      responses:
+        '200':
+          description: Recorded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Payout'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, not-found]
+      x-idempotency-exempt: >
+        The bank adapter is an external caller that cannot mint our header; the result dedupes on
+        providerReference (R-19), exactly as the six payment-provider callbacks do.
+
+components:
+  securitySchemes:
+    bearerAuth:
+      $ref: './_shared.yaml#/components/securitySchemes/bearerAuth'
+    mtls:
+      $ref: './_shared.yaml#/components/securitySchemes/mtls'
+
+  schemas:
+    PayoutStatus:
+      type: string
+      description: |
+        `PENDING` — debited and recorded, not yet submitted (also the resting state on a deployment
+        with no bank adapter configured). `SUBMITTED` — handed to the bank. `PAID` / `FAILED` —
+        terminal; `FAILED` has already restored the balance.
+      enum: [PENDING, SUBMITTED, PAID, FAILED]
+
+    Payout:
+      type: object
+      required: [payoutId, batchId, driverId, amountMinor, currency, status, createdAt]
+      properties:
+        payoutId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        batchId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        driverId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        amountMinor:
+          type: integer
+          format: int64
+          minimum: 0
+          description: The driver's whole balance at sweep time — no minimum, no holdback.
+        currency:
+          $ref: './_shared.yaml#/components/schemas/Currency'
+        status:
+          $ref: '#/components/schemas/PayoutStatus'
+        accountNoMasked:
+          type: string
+          description: Last four digits of the verified account the money was sent to.
+        failureReason:
+          type: string
+        providerReference:
+          type: string
+        createdAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+        settledAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    PayoutBatch:
+      type: object
+      required: [batchId, runDate, status, instructionCount, totalMinor]
+      properties:
+        batchId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        runDate:
+          type: string
+          format: date
+          description: The Asia/Colombo business date of the sweep (D-13/D-38).
+        tzAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+        status:
+          type: string
+          enum: [RUNNING, COMPLETED, FAILED]
+        instructionCount:
+          type: integer
+          format: int32
+          minimum: 0
+        totalMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        startedAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+        completedAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'

@@ -271,7 +271,18 @@ components:
         - invalid-amount
         - unserviceable-area
         - gateway-error
+        # Δ AL-57 — RETIRED with D-11. OnePay has one merchant account per merchant, so a
+        # per-driver binding never existed and nothing can raise this. The entry stays until
+        # fare-svc's last reference is removed, so this registry and MageRideErrors stay
+        # one-for-one; delete both in the same change.
         - merchant-not-onboarded
+        # Δ AL-57 — the passenger's wallet is short for the fare. Cash and driver-QR stay offered.
+        - insufficient-wallet-balance
+        # Δ AL-58 — the weekly payout run.
+        - payout-batch-exists
+        - payout-not-failed
+        # `payout-profile-not-verified` already exists above (C058, BR-31.1) and is reused verbatim:
+        # a fleet vehicle cannot go Paid and a driver cannot be swept for the same reason.
         - payment-already-settled
         - payout-profile-not-verified
         - route-unavailable

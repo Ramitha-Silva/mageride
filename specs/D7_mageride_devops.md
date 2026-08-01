@@ -187,7 +187,8 @@ edge. **K3s single-node uses the same images/manifests** (§5).
 |---|---|---|---|---|---|
 | iam-svc | `Sms__NotifyLkApiKey` · `Jwt__SigningKeyPem` (RS256) · `Otp__ResendCooldownSec`=60 · `Otp__MaxPerHour`=5 (D-32) | OTP/JWT (D-29) | yes | — | **yes** |
 | iam-svc | `Google__ClientId` · `Apple__ClientId` | Admin Portal (Password/Google — **no MFA, AL-37**; `Mfa__IssuerName` removed) + Fleet Portal (Email/Google/Apple); apps = Phone OTP only (AL-07) | no | — | yes |
-| registry-svc | `Ocr__Endpoint` · `Onepay__MerchantOnboardingUrl` (D-11) | reg + merchant | yes | — | yes |
+| registry-svc | `Ocr__Endpoint` | reg + payout profile | yes | — | yes |
+| payout-svc | `Payout__Enabled` · `Payout__Cron` (weekly) · `Payout__RetainMinor`=0 · `Payout__BankBaseUrl` · `Payout__BankApiKey` (**AL-58**) | payout | yes | — | **yes** |
 | provisioning-svc | `StepCa__Url` · `StepCa__RootKeyPath`=/var/step · `Cred__RotationDays`=90 (T-02) | tracker certs | yes | — | **yes** |
 | query-svc | `Tiles__BaseUrl` · `Nominatim__Url` (D-14) | map data | yes | — | no |
 | trip-state-svc | `Session__IdleTimeoutMin`=30 · `Geofence__AutoEndM`=100 | A/B sessions | yes | — | no |

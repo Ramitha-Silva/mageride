@@ -214,7 +214,11 @@ check_eq "13 iam tables" "13" \
 # (dispatch.scheduled_rides is a passenger's Mode C advance booking and AL-03 forbids a fleet Mode
 # C vehicle), and US-13.1's bulk CSV job is specified completely by fleet.yaml with nowhere to
 # store it — the same gap 0405 raised for bulk trackers (C059 handoff micro-change-sets).
-check_eq "19 registry tables" "19" \
+# 20, not 19: `registry.driver_payout_profiles` is AL-58's (0316) — D-11 assumed OnePay would mint
+# a merchant sub-account per driver, it does not, and a driver's bank details had nowhere to live.
+# `registry.driver_payouts` is still counted here and is dropped with C050's script, once no
+# service names it.
+check_eq "19 registry tables + 1 from C063/AL-58" "20" \
   "SELECT count(*) FROM information_schema.tables WHERE table_schema='registry' AND table_type='BASE TABLE';"
 # 2 from server_db_schema.md §3 (tracker_bindings, device_certs) + 5 added by C030, each a
 # micro-change-set raised in its handoff: prov.command_log (D3' §0 mandates a per-service
@@ -942,7 +946,10 @@ check_eq "5 fares tables from C005 + 1 from C049" "6" \
 # (1108). The fleet four are separate from wallet-svc's three on purpose: one outbox table cannot
 # serve two dispatchers publishing to two topics, and two services sharing one command log would
 # let a client's Idempotency-Key collide across a service boundary.
-check_eq "12 billing tables from C005 + 3 from C046 + 4 from C060" "19" \
+# 21, not 19: `billing.payout_batches` and `billing.payouts` are AL-58's (1109) — the weekly sweep
+# that discharges the custody AL-57 created. They live in `billing` and not in a schema of their
+# own because a payout is a ledger movement first and an instruction second.
+check_eq "12 billing tables from C005 + 3 from C046 + 4 from C060 + 2 from AL-58" "21" \
   "SELECT count(*) FROM information_schema.tables WHERE table_schema='billing' AND table_type='BASE TABLE';"
 # 6, not C005's 4: `subscription.command_log` is C047's (1203) — R-14 needs a replay log per
 # bounded context and D4' §5 prints DDL for `rides.command_log` only — and `subscription.outbox`
@@ -1056,7 +1063,10 @@ check_eq "accounts.owner_type has no 'reseller' (AL-01)" "0" \
   "SELECT count(*) FROM pg_constraint
     WHERE conrelid='billing.accounts'::regclass AND contype='c'
       AND pg_get_constraintdef(oid) LIKE '%reseller%';"
-check_eq "accounts.owner_type is exactly the four AL-01/AL-03 values" "driver,fleet,platform,suspense" \
+# 5, not 4: AL-57 added `passenger`. A card ride fare cannot reach the driver — OnePay has one
+# merchant account per merchant — so it is held as a prepaid balance and spent with the `wallet`
+# method. Before AL-57 the "wallet" this platform had was the DRIVER's, for daily fees.
+check_eq "accounts.owner_type is exactly the five AL-01/AL-03/AL-57 values" "driver,fleet,passenger,platform,suspense" \
   "SELECT string_agg(m[1], ',' ORDER BY m[1] COLLATE \"C\")
      FROM pg_constraint c, LATERAL regexp_matches(pg_get_constraintdef(c.oid), '''([a-z_]+)''', 'g') AS m
     WHERE c.conrelid='billing.accounts'::regclass AND c.conname='ck_accounts_owner_type';"
@@ -1076,7 +1086,10 @@ check_eq "ride_payments.state carries both AL-47 attestation states and Partiall
       AND pg_get_constraintdef(oid) LIKE '%QrClaimedByPassenger%'
       AND pg_get_constraintdef(oid) LIKE '%DriverConfirmedQR%'
       AND pg_get_constraintdef(oid) LIKE '%PartiallyRefunded%';"
-check_eq "ride_payments.method is exactly the five AL-22 values" "cash,cod,lankaqr,onepay,scan_driver_qr" \
+# 6, not 5: AL-57 added `wallet`. `onepay` and `lankaqr` are RETIRED as ride methods by AL-57/AL-59
+# and are still admitted here on purpose — the CHECK has to accept rows already written, and
+# fare-svc still writes them until C050's change lands. Both come out in C050's own script.
+check_eq "ride_payments.method carries the AL-22 five plus AL-57's wallet" "cash,cod,lankaqr,onepay,scan_driver_qr,wallet" \
   "SELECT string_agg(m[1], ',' ORDER BY m[1] COLLATE \"C\")
      FROM pg_constraint c, LATERAL regexp_matches(pg_get_constraintdef(c.oid), '''([a-z_]+)''', 'g') AS m
     WHERE c.conrelid='fares.ride_payments'::regclass AND c.conname='ck_ride_payments_method';"
@@ -2825,6 +2838,90 @@ psql_run "DELETE FROM trips.sessions WHERE vehicle_id IN ('$C058_VEH_A','$C058_V
           DELETE FROM registry.vehicles WHERE id IN ('$C058_VEH_A','$C058_VEH_B');
           DELETE FROM iam.users WHERE id IN ('$C058_OWNER','$C058_DRIVER','$C058_DRIVER_B');" >/dev/null \
   || die "could not clean up the C058 fleet fixture."
+
+# =======================================================================================
+# Objects owned by the AL-57 / AL-58 / AL-59 payment-custody change set
+# =======================================================================================
+# The change these checks are about: OnePay has ONE merchant account per merchant, so D-11's
+# per-driver merchant never existed and a card ride fare has nowhere to land except MageRide's own
+# account. Card acceptance moved to a passenger wallet, which makes MageRide a custodian and a
+# driver's balance a liability — so the account type that receives the money and the tables that
+# get it out again are asserted together.
+step "Objects owned by AL-57 / AL-58 (payment custody)"
+
+AL57_DRIVER=c0000057-0000-0000-0000-0000000000d1
+AL57_PASSENGER=c0000057-0000-0000-0000-0000000000a1
+AL57_PROFILE=c0000057-0000-0000-0000-0000000000f1
+AL57_BATCH=c0000057-0000-0000-0000-0000000000b1
+
+check_eq "registry.driver_payout_profiles exists" "1" \
+  "SELECT count(*) FROM information_schema.tables
+    WHERE table_schema='registry' AND table_name='driver_payout_profiles';"
+check_eq "billing.payout_batches and billing.payouts exist" "2" \
+  "SELECT count(*) FROM information_schema.tables
+    WHERE table_schema='billing' AND table_name IN ('payout_batches','payouts');"
+check_eq "the journal admits a driver_payout entry (AL-58)" "1" \
+  "SELECT count(*) FROM pg_constraint
+    WHERE conrelid='billing.journal_entries'::regclass AND conname='ck_journal_entries_kind'
+      AND pg_get_constraintdef(oid) LIKE '%driver_payout%';"
+check_eq "and still admits no reseller commission (AL-01)" "0" \
+  "SELECT count(*) FROM pg_constraint
+    WHERE conrelid='billing.journal_entries'::regclass AND contype='c'
+      AND pg_get_constraintdef(oid) LIKE '%reseller%';"
+check_eq "payouts.journal_entry_id is NOT NULL — the debit and the instruction commit together" "NO" \
+  "SELECT is_nullable FROM information_schema.columns
+    WHERE table_schema='billing' AND table_name='payouts' AND column_name='journal_entry_id';"
+
+psql_run "INSERT INTO iam.users(id, phone, role, first_name)
+            VALUES ('$AL57_DRIVER','+94770000581','driver','AL57 Driver'),
+                   ('$AL57_PASSENGER','+94770000582','passenger','AL57 Rider');
+          INSERT INTO registry.driver_payout_profiles(id, driver_id, bank, branch, account_no, account_holder_name, status)
+            VALUES ('$AL57_PROFILE','$AL57_DRIVER','Bank of Ceylon','Kollupitiya','0071234567','AL57 Driver','verified');
+          INSERT INTO billing.payout_batches(id, run_date, tz_at)
+            VALUES ('$AL57_BATCH', DATE '2026-08-02', TIMESTAMPTZ '2026-08-02 00:00:00+05:30');" >/dev/null \
+  || die "could not seed the AL-58 payout fixture."
+
+step "AL-57/AL-58 constraints actually bite"
+
+check_accepts "a passenger owns a wallet account (AL-57)" \
+  "INSERT INTO billing.accounts(owner_type, owner_id, currency)
+     VALUES ('passenger','$AL57_PASSENGER','LKR');"
+check_rejects "a passenger account with no owner is rejected" \
+  "INSERT INTO billing.accounts(owner_type, owner_id, currency) VALUES ('passenger',NULL,'LKR');"
+check_rejects "a second verified payout profile for one driver is rejected (AL-58)" \
+  "INSERT INTO registry.driver_payout_profiles(driver_id, bank, branch, account_no, account_holder_name, status)
+     VALUES ('$AL57_DRIVER','Sampath','Nugegoda','1234567890','AL57 Driver','verified');"
+check_accepts "a superseded profile may sit beside the verified one" \
+  "INSERT INTO registry.driver_payout_profiles(driver_id, bank, branch, account_no, account_holder_name, status)
+     VALUES ('$AL57_DRIVER','Sampath','Nugegoda','1234567890','AL57 Driver','superseded');"
+check_rejects "a second sweep for one Colombo business date is rejected (AL-58)" \
+  "INSERT INTO billing.payout_batches(run_date, tz_at)
+     VALUES (DATE '2026-08-02', TIMESTAMPTZ '2026-08-02 00:00:00+05:30');"
+check_rejects "a zero-amount payout instruction is rejected — a full sweep pays something or nothing" \
+  "INSERT INTO billing.payouts(batch_id, driver_id, payout_profile_id, amount_minor, journal_entry_id)
+     SELECT '$AL57_BATCH','$AL57_DRIVER','$AL57_PROFILE',0, e.id FROM billing.journal_entries e LIMIT 1;"
+check_rejects "a payout instruction with no wallet debit is rejected" \
+  "INSERT INTO billing.payouts(batch_id, driver_id, payout_profile_id, amount_minor, journal_entry_id)
+     VALUES ('$AL57_BATCH','$AL57_DRIVER','$AL57_PROFILE',50000,NULL);"
+check_rejects "a FAILED payout that does not say why is rejected" \
+  "INSERT INTO billing.payouts(batch_id, driver_id, payout_profile_id, amount_minor, status, journal_entry_id)
+     SELECT '$AL57_BATCH','$AL57_DRIVER','$AL57_PROFILE',50000,'FAILED', e.id
+       FROM billing.journal_entries e LIMIT 1;"
+check_accepts "the wallet ride-payment method is admitted (AL-57)" \
+  "SELECT 1 WHERE EXISTS (SELECT 1 FROM pg_constraint
+     WHERE conrelid='fares.ride_payments'::regclass AND conname='ck_ride_payments_method'
+       AND pg_get_constraintdef(oid) LIKE '%wallet%');"
+check_eq "the driver's own LankaQR is on the payout profile, not on a platform merchant (AL-59)" "1" \
+  "SELECT count(*) FROM information_schema.columns
+    WHERE table_schema='registry' AND table_name='driver_payout_profiles'
+      AND column_name='lankaqr_upload_id';"
+
+psql_run "DELETE FROM billing.payouts WHERE batch_id='$AL57_BATCH';
+          DELETE FROM billing.payout_batches WHERE id='$AL57_BATCH';
+          DELETE FROM billing.accounts WHERE owner_type='passenger' AND owner_id='$AL57_PASSENGER';
+          DELETE FROM registry.driver_payout_profiles WHERE driver_id='$AL57_DRIVER';
+          DELETE FROM iam.users WHERE id IN ('$AL57_DRIVER','$AL57_PASSENGER');" >/dev/null \
+  || die "could not clean up the AL-58 payout fixture."
 
 # ---------------------------------------------------------------------------------------
 printf '\n'

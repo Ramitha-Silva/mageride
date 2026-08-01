@@ -741,55 +741,136 @@ paths:
       x-error-codes: [validation-failed, unauthorized, vehicle-not-found, conflict]
 
   # -------------------------------------------------------------------------------------------
-  # Internal
+  # Driver bank & payout profile (Δ AL-58/AL-59) — replaces the retired D-11 merchant binding
   # -------------------------------------------------------------------------------------------
-  /v1/internal/vehicles/{vehicleId}/merchant:
-    post:
-      operationId: bindOnepayMerchant
-      summary: Bind the driver's OnePay merchant account on approval.
+  /v1/drivers/payout-profile:
+    get:
+      operationId: getDriverPayoutProfile
+      summary: Where this driver's swept earnings are sent, and their own LankaQR.
       description: |
-        Internal, mTLS only. D-11 — called when a vehicle reaches `APPROVED`, so that fare
-        settlement has a payee. A driver with no merchant binding causes
-        `402 merchant-not-onboarded` at `POST /v1/fare/pay`.
-      tags: [vehicles]
+        **AL-58/AL-59.** Shaped exactly like the Fleet Portal's `GET /v1/fleets/{id}/payout-profile`
+        and for the same reason: the platform never holds a payee's bank details in more than one
+        shape. `lankaqrUploadId` is the driver's **own** bank-app QR — what a passenger scans to pay
+        them (`scan_driver_qr`), and what makes AL-59's "the money never passes through MageRide"
+        true for that rail.
+      tags: [drivers]
       security:
-        - mtls: []
-      parameters:
-        - $ref: '#/components/parameters/VehicleId'
-        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+        - bearerAuth: []
+      responses:
+        '200':
+          description: The current profile version.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DriverPayoutProfile'
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [unauthorized, forbidden, not-found]
+    put:
+      operationId: upsertDriverPayoutProfile
+      summary: Set or change the driver's bank details.
+      description: |
+        **AL-58.** Any edit re-enters `pending_verification` and a **new version row is inserted** —
+        the incumbent `verified` row keeps paying until an officer approves the change, exactly as
+        BR-31.1 requires for a fleet. Approved by a Verification Officer through the SCR-AP-003
+        driving-licence queue: AL-39's routes are subject-agnostic and already take a driver id.
+
+        **Payouts do not run until the profile is `verified`.** Earnings accrue on the wallet and
+        are never lost; the driver simply is not swept.
+      tags: [drivers]
+      security:
+        - bearerAuth: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [merchantId]
+              required: [bank, branch, accountNo, accountHolderName]
               properties:
-                merchantId:
+                bank:
                   type: string
-                  maxLength: 128
-                  description: OnePay merchant identifier.
-                merchantRef:
+                  maxLength: 120
+                branch:
                   type: string
-                  maxLength: 128
+                  maxLength: 120
+                accountNo:
+                  type: string
+                  maxLength: 40
+                accountHolderName:
+                  type: string
+                  maxLength: 200
       responses:
         '200':
-          description: Merchant bound.
+          description: Stored; pending verification.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DriverPayoutProfile'
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, unauthorized, forbidden]
+
+  /v1/drivers/payout-profile/documents:
+    post:
+      operationId: uploadDriverPayoutDocument
+      summary: Attach proof of account, or the driver's own LankaQR image.
+      description: |
+        **AL-58/AL-59.** Multipart. A document is an edit too — uploading against a `verified`
+        profile forks a new pending version carrying the other slot forward, because replacing the
+        bank statement behind an approved account is exactly the change an officer would want to see
+        again.
+      tags: [drivers]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [kind, file]
+              properties:
+                kind:
+                  type: string
+                  enum: [bank_statement, passbook_first_page, lankaqr_code]
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: Stored.
           content:
             application/json:
               schema:
                 type: object
-                required: [vehicleId, merchantId]
+                required: [docId, kind]
                 properties:
-                  vehicleId:
+                  docId:
                     $ref: './_shared.yaml#/components/schemas/Ulid'
-                  merchantId:
+                  kind:
                     type: string
         '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
         '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
-        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '403': { $ref: './_shared.yaml#/components/responses/Forbidden' }
+        '413': { $ref: './_shared.yaml#/components/responses/PayloadTooLarge' }
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
-      x-error-codes: [validation-failed, unauthorized, vehicle-not-found]
+      x-error-codes: [validation-failed, unauthorized, forbidden, payload-too-large]
+
+  # -------------------------------------------------------------------------------------------
+  # Internal
+  # -------------------------------------------------------------------------------------------
+  # Δ AL-57 — REMOVED, do not re-add:
+  #   POST /v1/internal/vehicles/{vehicleId}/merchant   — D-11 RETIRED. OnePay supports one merchant
+  #     account per merchant; per-driver sub-accounts do not exist, so this route could only ever
+  #     store MageRide's own id against every driver. Where a driver's money goes is now
+  #     `GET · PUT /v1/drivers/payout-profile` (AL-58) and the weekly payout run (payout.yaml).
 
   # Δ C029 — not in D3'; see the C029 handoff.
   /v1/internal/vehicles/{vehicleId}/onboarding/recompute:
@@ -870,6 +951,31 @@ components:
         $ref: './_shared.yaml#/components/schemas/Ulid'
 
   schemas:
+    DriverPayoutProfile:
+      type: object
+      description: '**Δ AL-58/AL-59.** One version of a driver''s bank & payout details.'
+      required: [bank, branch, accountNo, accountHolderName, status]
+      properties:
+        bank:
+          type: string
+        branch:
+          type: string
+        accountNo:
+          type: string
+        accountHolderName:
+          type: string
+        proofDocId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        lankaqrDocId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        status:
+          type: string
+          enum: [pending_verification, verified, rejected, superseded]
+        rejectionReason:
+          type: string
+        verifiedAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+
     Imei:
       type: string
       description: 15-digit IMEI.

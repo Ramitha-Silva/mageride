@@ -921,7 +921,7 @@ components:
   deliverables:
     - GET/PUT /v1/users/me, driver + passenger profile surfaces, notification preferences
     - iam.roles / user_roles / fleet_members + policy evaluation matching URD §2.3 exactly
-    - iam.user_prefs (language si/ta/en, default_payment cash|lankaqr|onepay), operating_city_code (AL-27)
+    - "iam.user_prefs (language si/ta/en, default_payment cash|wallet|scan_driver_qr — AL-57/AL-59), operating_city_code (AL-27)"
     - iam.saved_addresses — Home/Work + label + line1/2/3 + geo (AL-26, US-22.2)
     - iam.emergency_contacts for driver SOS fan-out (AL-13)
     - GET /v1/users/lookup-by-phone -> {registered:bool} for proxy booking, phone hashed at rest (P-03)
@@ -947,7 +947,8 @@ components:
     - specs/D5_mageride_business_logic.md#3-2-hard-eligibility-gates
   scope: |
     Vehicle lifecycle and sharing: CRUD, canonical types, the one-live-publisher rule, deactivation,
-    Mode B share grants and revocation, fleet-assigned vehicles, and OnePay merchant onboarding.
+    Mode B share grants and revocation, fleet-assigned vehicles, and the driver's bank & payout profile
+    (AL-58/AL-59 — replaces D-11's retired OnePay merchant onboarding).
     ADD: [AL-03, AL-09, AL-23, D-03, D-11, D-22, D-37, E-03].
   fences:
     - Train (Mode A) registration is admin-only via admin-bff. The Driver App must expose no train path.
@@ -958,7 +959,9 @@ components:
     - GET /v1/vehicles/mine incl. temporarily-assigned fleet vehicles (US-13.9) as a separate group
     - single active publisher selection + Redis lock:driver:{driverId} coordination (D-03)
     - Mode B share grants + DELETE subscribers -> `share.revoked` outbox event (D-22)
-    - registry.driver_payouts OnePay merchant binding during approval (D-11)
+    - "registry.driver_payout_profiles — bank/branch/account no/holder name + the driver's OWN bank-app LankaQR image; versioned, one verified row per driver, Verification-Officer approved through the AL-39 queue (AL-58/AL-59)"
+    - "GET · PUT /v1/drivers/payout-profile + POST /v1/drivers/payout-profile/documents — shaped exactly like the Fleet Portal's SCR-FP-002a"
+    - "REMOVE: registry.driver_payouts and POST /v1/internal/vehicles/{id}/merchant — D-11 RETIRED (AL-57): OnePay has one merchant account per merchant, so a per-driver bind never existed"
     - go-online eligibility projection consumed by dispatch (approved Mode C owned, or assigned/shared Mode A/B)
   definition_of_done:
     - only an APPROVED Mode C vehicle or an assigned/shared Mode A/B vehicle is go-live eligible (US-9.6)
@@ -1522,14 +1525,22 @@ components:
     - specs/D6_mageride_integration.md#7-1-onepay-card-wallet
     - specs/architecture-design-document.md#11-6-driver-to-driver-credit-transfer-flow
   scope: |
-    The driver wallet on a balanced double-entry ledger: in-app top-ups, bulk credit vouchers, and
-    driver-to-driver credit transfers. ADD: [D-09, D-12, AL-01, AL-05, AL-15, AL-34].
+    The passenger AND driver wallet on a balanced double-entry ledger: in-app top-ups, bulk credit
+    vouchers, and driver-to-driver credit transfers. The passenger wallet (AL-57) is how card
+    acceptance survives the retirement of the `onepay` ride rail; the driver wallet is also the fare
+    accumulation account the AL-58 payout run sweeps.
+    ADD: [D-09, D-12, AL-01, AL-05, AL-15, AL-34, AL-57].
   fences:
+    - "OnePay and the platform LankaQR merchant are used ONLY where MageRide is the payee — top-ups, daily fees, vouchers (AL-57/AL-59)."
+    - "A passenger top-up and a driver top-up are the SAME route and the SAME ledger movement; only the account the credit leg lands on differs. Do not build a second top-up surface."
     - "Bank-transfer top-up is REMOVED (AL-05). Do not build a receipt flow or a manual reconciliation queue for it."
     - "\"Reseller\" is not a role, account or capability (AL-01). One wallet per driver; transfers move the EXACT value with no commission."
     - Credit requests are Driver-ID only — the QR-scan path was removed (AL-34).
   deliverables:
     - GET /v1/wallet/{userId} + /transactions; balanced double-entry postings (billing.accounts / journal_entries / journal_postings)
+    - "billing.accounts.owner_type gains 'passenger' (AL-57) — a passenger wallet had no ledger existence at all"
+    - "POST /v1/internal/wallet/trip-payment — the AL-57 rail fare-svc calls: passenger wallet debit + driver wallet credit as ONE balanced trip_payment entry, keyed 'trip_payment:' || ride_payment_id"
+    - "POST /v1/internal/wallet/driver-payout/{payoutId} — the AL-58 debit, keyed 'driver_payout:' || payout_id; and its reversal on FAILED"
     - POST /v1/wallet/topup/card | /onepay | /lankaqr (deep link to bank app, QR fallback — AL-15) + OnePay webhook and LankaQR confirm
     - POST /v1/wallet/voucher/purchase — per-denomination discount from billing.voucher_discount_tiers applied only at purchase, credited to the buyer's own wallet
     - POST /v1/wallet/credit-transfer/initiate + request/approve/reject flow by Driver ID; GET /v1/wallet/{driverId}/transfers
@@ -1540,6 +1551,8 @@ components:
     - a Rs 1,000 voucher at a 10 % tier debits Rs 900 and credits Rs 1,000 exactly once, idempotent on the gateway reference
     - a credit transfer of X debits the sender X and credits the recipient X — no fee row is ever written
     - a replayed OnePay webhook (same provider_transaction_id) credits the wallet only once
+    - a passenger top-up and a driver top-up produce structurally identical entries against different accounts
+    - a trip payment moves the fare from the passenger's account to the driver's in one balanced entry, and replays to a no-op
     - no bank-transfer endpoint or table is referenced anywhere
   verify_cmd: "dotnet test backend/src/Wallet.Api.Tests -c Release"
   est_sessions: 2
@@ -1592,6 +1605,7 @@ components:
   fences:
     - Access requests and grants are PER VEHICLE, never account-global (AL-23).
     - Subscription money is a pass-through to the fleet owner. MageRide holds none of it and takes no cut.
+    - "`onepay` is NOT a subscription rail (AL-59) — OnePay has one merchant account per merchant, so it would land subscriber money in MageRide's account."
     - "`payTo` comes only from a VERIFIED fleet payout profile; Paid classification 409s until then (AL-49)."
     - Unsubscribed rows stay MUTED until the owner hard-deletes them (AL-25).
   deliverables:
@@ -1653,26 +1667,70 @@ components:
     - specs/D3_mageride_api_contracts.md#fare-svc-driver-qr-attestation-settlement
     - specs/D6_mageride_integration.md#7-2-lankaqr-commercial-bank-ipg
   scope: |
-    The persisted ride-payment state machine and every settlement path: cash, LankaQR deep link,
-    scan-driver-QR attestation, OnePay (+5 %), COD, refunds, disputes and late callbacks.
-    ADD: [D-10, R-19, E-05, P-04, P-08, P-14, AL-15, AL-22, AL-47].
+    The persisted ride-payment state machine and every settlement path: cash, the `wallet` rail,
+    scan-driver-QR attestation, COD, refunds, disputes and late callbacks.
+    ADD: [D-10, R-19, E-05, P-04, P-08, P-14, AL-15, AL-22, AL-47, AL-57, AL-59].
   fences:
+    - "NO ride fare is charged to a platform merchant account (AL-57/AL-59). `onepay` and platform-merchant `lankaqr` are NOT ride methods."
     - Driver-QR payments have NO gateway callback. They settle by attestation (QrClaimedByPassenger -> DriverConfirmedQR) and behave like cash (AL-47).
-    - Gateway-verified `Succeeded` is OnePay-only.
-    - "Proxy routing (P-04): Cash is always paid by the rider; LankaQR/OnePay are always charged to the booker."
+    - "`wallet` has no Pending state: it is one balanced trip_payment entry inside one transaction, terminal on the spot."
+    - "Proxy routing (P-04): Cash is always paid by the rider; `wallet` always debits the booker."
   deliverables:
-    - POST /v1/fare/pay (cash | lankaqr | onepay | scan_driver_qr) + GET /v1/fare/pay/{id}/status
+    - POST /v1/fare/pay (cash | wallet | scan_driver_qr | cod) + GET /v1/fare/pay/{id}/status
+    - "`wallet` settlement — passenger wallet debit + driver wallet credit as ONE balanced trip_payment entry (AL-57)"
+    - a short balance is 402 insufficient-wallet-balance with cash and driver-QR still offered — never a silent fallback
     - driver-QR claim / confirm / dispute endpoints, +5 min nudge push, Support -> Finance dispute routing (AL-47)
-    - OnePay webhook (idempotent on provider_transaction_id) and LankaQR confirm; +5 % surcharge only on OnePay
+    - "REMOVE: the onepay ride webhook, the lankaqr ride confirm, the +5 % surcharge and merchant-not-onboarded (AL-57/AL-59)"
     - late-callback handling — Succeeded after FellBackToCash -> Overpaid -> admin refund queue (R-19)
     - fares.refunds full/partial/overpaid_reversal with balanced payment_refund journal entries (E-05)
     - COD lifecycle -> CashOnDeliveryCollected, uncollected > 24 h -> Disputed (P-08, P-14)
   definition_of_done:
     - every state and transition in D5 §8.1 is exercised by a test, including all terminal states
+    - a wallet payment moves exactly one balanced entry and is Succeeded without any gateway call
+    - a wallet payment against a short balance refuses and moves no money
     - a driver-QR confirm posts the driver earning and closes the ride payment with no money movement through MageRide
-    - a duplicate OnePay callback is a no-op
+    - no route, method enum or config key on this surface can charge a ride to a platform merchant account
     - a refund leaves the ledger balanced and is visible in the Finance queue
   verify_cmd: "dotnet test backend/src/Fare.Api.Tests -c Release"
+  est_sessions: 3
+
+- id: C133
+  name: payout-svc
+  wave: 3
+  depends_on: [C046, C028]
+  stack: backend/CLAUDE.md
+  spec_anchors:
+    - specs/architecture-design-document.md#11-9a-automated-driver-payout-run-al-58
+    - specs/architecture-design-document.md#1-18-remediation-log-add-v3-6-payment-custody-change-set-2026-08-01-3-changes
+    - specs/D3_mageride_api_contracts.md#payout-svc-the-weekly-driver-payout-run
+    - specs/server_db_schema.md#10-billing
+  scope: |
+    The weekly driver payout run — the discharge of the custody AL-57 created. A card-paid ride
+    moves passenger wallet -> driver wallet, so the driver's balance is money MageRide OWES; AL-05
+    had deleted the only outward bank rail. This service is that rail and nothing else: it prices
+    nothing, settles no ride, and never decides who may be paid.
+    ADD: [AL-57, AL-58, D-09, D-38, R-19].
+  fences:
+    - "Weekly FULL sweep — no minimum and no holdback. Whatever the balance is on run day is paid in full (Payout:RetainMinor defaults to 0)."
+    - "The wallet debit and the payout instruction commit TOGETHER. An instruction with no debit pays twice on a retry; a debit with no instruction loses the driver's money."
+    - "A driver with no VERIFIED payout profile accrues and is never swept. The balance is retained, never lost, and they surface on the Finance exception queue."
+    - "This service writes NO ledger row itself — every movement goes through wallet-svc's internal plane, as C060 does (D-09)."
+    - "The bank adapter is ONE outbound port and no provider is chosen. Unconfigured, the run still selects, still debits and still records what is owed, and announces the gap at start-up."
+  deliverables:
+    - billing.payout_batches + billing.payouts, and the driver_payout journal kind (AL-58)
+    - the scheduled weekly run — select drivers with a verified profile and a positive balance, debit, raise an instruction
+    - GET /v1/drivers/payouts (SCR-DA-022a) and GET /v1/admin/payouts + /batches (SCR-AP-006)
+    - POST /v1/admin/payouts/batches — run out of band, idempotent on the Colombo business date (409 payout-batch-exists)
+    - POST /v1/admin/payouts/{id}/retry for a FAILED instruction, and the internal result callback deduped on provider_reference (R-19)
+    - "FAILED reverses the debit under the same idempotency-key discipline, exactly once, and the next run picks the balance up again"
+  definition_of_done:
+    - a sweep debits each eligible driver's whole balance and raises exactly one instruction, in one transaction each
+    - a driver with no verified payout profile is skipped and keeps every rupee
+    - a redelivered bank result neither pays twice nor reverses twice
+    - a FAILED instruction restores the balance exactly once and the following run sweeps it again
+    - running the sweep twice for one Colombo date is a 409, not a second set of instructions
+    - with no bank adapter configured the run still records what is owed and says so at start-up
+  verify_cmd: "dotnet test backend/src/Payout.Api.Tests -c Release"
   est_sessions: 3
 
 - id: C051
@@ -2713,12 +2771,12 @@ components:
     - finding driver overlay with the 2-minute no-driver timeout and cancel
     - ride in progress — live driver position, ETA, driver/vehicle card, SOS, share trip, call with ▾ opening the chooser
     - call-type chooser sheet — Free call (VoIP) vs Normal call (direct dial), remembers last choice, first-call number-visibility tooltip
-    - payment method — Cash default / LankaQR / OnePay (+5 % shown explicitly)
+    - "payment method — Cash default / Wallet (balance shown; Top up when short) / Driver QR (AL-57/AL-59); no surcharge on any rail"
     - pay fare — camera "Scan driver's QR", LankaQR deep link, "I've paid" CTA with optional receipt screenshot, "Waiting for driver to confirm…" then Confirmed ✓, >5 min help link
     - trip summary with fare breakdown and optional tip; rate driver with stars + text
   definition_of_done:
     - every screen matches its wireframe layout, controls, states and navigation
-    - the +5 % OnePay surcharge is displayed before confirmation
+    - "no surcharge is ever displayed on a ride — the +5 % died with the OnePay ride rail (AL-57)"
     - the QR flow reaches Confirmed ✓ on DriverConfirmedQR and offers support after 5 unconfirmed minutes
     - cancelling after acceptance surfaces the Rs 50 outstanding-balance consequence
     - no masking language remains anywhere in the call UI
@@ -2786,7 +2844,7 @@ components:
   deliverables:
     - access request — Vehicle ID (pre-filled or typed), request + pending/accepted/rejected states
     - my subscriptions — per-vehicle cards with Paid (amount/mo + next due) or Free, 💳 Pay, 🧾 history, compact ✕ unsubscribe, muted-until-owner-deletes note
-    - subscription payment — LankaQR deep link / LankaQR scan / OnePay (+5 %) / online transfer with screenshot attach
+    - "subscription payment — LankaQR deep link / LankaQR scan / online transfer with screenshot attach / cash (AL-59: OnePay removed — payTo is the OWNER's account)"
     - payment history — month, date, method, amount, status (Paid / Pending verification / Paid-cash)
   definition_of_done:
     - every screen matches its wireframe layout, controls, states and navigation
@@ -4123,7 +4181,7 @@ components:
   deliverables:
     - daily fee — first trip free, charge before the 2nd, idempotency across a day boundary in Asia/Colombo
     - wallet — card/OnePay/LankaQR top-up incl. replayed webhooks, voucher purchase at a discount tier, credit transfer request/approve and direct send
-    - ride payment — cash, LankaQR, OnePay +5 %, scan-driver-QR claim/confirm and the dispute path, late callback -> Overpaid -> refund
+    - "ride payment — cash, wallet, scan-driver-QR claim/confirm and the dispute path, late callback -> Overpaid -> refund (AL-57/AL-59)"
     - Mode B subscription payments — all five methods incl. transfer-slip verification and owner cash marking
   definition_of_done:
     - every scenario passes repeatably and leaves the ledger balanced

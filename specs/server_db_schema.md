@@ -231,11 +231,23 @@ CREATE TABLE registry.driver_profiles (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now());
 
-CREATE TABLE registry.driver_payouts (                        -- OnePay merchant binding (D-11)
-  driver_id UUID PRIMARY KEY REFERENCES iam.users(id) ON DELETE CASCADE,
-  onepay_merchant_id TEXT NOT NULL,
-  bound_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','SUSPENDED')));
+CREATE TABLE registry.driver_payout_profiles (               -- [NEW AL-58] driver bank & payout — replaces registry.driver_payouts (D-11 retired by AL-57)
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  driver_id UUID NOT NULL REFERENCES iam.users(id) ON DELETE CASCADE,
+  bank TEXT NOT NULL, branch TEXT NOT NULL,
+  account_no TEXT NOT NULL, account_holder_name TEXT NOT NULL,
+  proof_upload_id UUID REFERENCES docs.uploads(id),          -- bank_statement | passbook_first_page
+  lankaqr_upload_id UUID REFERENCES docs.uploads(id),        -- the driver's OWN bank-app LankaQR (AL-59); the ride pay sheet renders this
+  status TEXT NOT NULL DEFAULT 'pending_verification'
+    CHECK (status IN ('pending_verification','verified','rejected','superseded')),
+  rejection_reason TEXT,
+  verified_by UUID REFERENCES iam.users(id), verified_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now());
+-- Versioned exactly like registry.fleet_payout_profiles: an edit INSERTs and re-verifies, and the
+-- weekly payout run pays the single verified row. Approved by a Verification Officer through the
+-- AL-39 queue, whose routes are subject-agnostic and already take a driver id.
+CREATE UNIQUE INDEX ux_driver_payout_verified
+  ON registry.driver_payout_profiles(driver_id) WHERE status = 'verified';
 
 CREATE TABLE registry.documents (                             -- doc expiry tracking (E-03)
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -804,7 +816,7 @@ CREATE TABLE billing.monthly_subscriptions (                  -- Mode B ~Rs300/m
 -- Double-entry ledger (D-09):
 CREATE TABLE billing.accounts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  owner_type TEXT NOT NULL CHECK (owner_type IN ('driver','fleet','platform','suspense')),  -- AL-01/AL-03
+  owner_type TEXT NOT NULL CHECK (owner_type IN ('passenger','driver','fleet','platform','suspense')),  -- AL-01/AL-03; +'passenger' for the AL-57 card rail
   owner_id UUID,
   currency CHAR(3) NOT NULL DEFAULT 'LKR',
   balance_minor BIGINT NOT NULL DEFAULT 0,                    -- may be negative (suspense); driver non-negativity in app
@@ -816,7 +828,7 @@ CREATE TABLE billing.journal_entries (
   ts TIMESTAMPTZ NOT NULL DEFAULT now(),
   kind TEXT NOT NULL CHECK (kind IN ('topup','daily_fee','trip_payment','penalty_settle',
     'adjustment','tip_payout','payment_refund','overpaid_reversal',
-    'voucher_purchase','driver_transfer')),  -- no 'reseller_commission' (AL-01: no per-transfer commission)
+    'voucher_purchase','driver_transfer','fleet_invoice','driver_payout')),  -- no 'reseller_commission' (AL-01); 'driver_payout' [NEW AL-58]
   idempotency_key TEXT NOT NULL UNIQUE,
   description TEXT);
 
@@ -827,6 +839,28 @@ CREATE TABLE billing.journal_postings (
   amount_minor BIGINT NOT NULL);                              -- Σ per entry MUST = 0 (trigger below)
 CREATE INDEX ix_postings_account ON billing.journal_postings(account_id);
 CREATE INDEX ix_postings_entry ON billing.journal_postings(entry_id);
+
+CREATE TABLE billing.payout_batches (                        -- [NEW AL-58] one weekly sweep
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  run_date DATE NOT NULL UNIQUE, tz_at TIMESTAMPTZ NOT NULL,  -- D-38 Asia/Colombo business-date companion
+  status TEXT NOT NULL DEFAULT 'RUNNING' CHECK (status IN ('RUNNING','COMPLETED','FAILED')),
+  instruction_count INT NOT NULL DEFAULT 0,
+  total_minor BIGINT NOT NULL DEFAULT 0 CHECK (total_minor >= 0),
+  started_at TIMESTAMPTZ NOT NULL DEFAULT now(), completed_at TIMESTAMPTZ);
+CREATE TABLE billing.payouts (                               -- [NEW AL-58] one instruction per driver per batch
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  batch_id UUID NOT NULL REFERENCES billing.payout_batches(id) ON DELETE CASCADE,
+  driver_id UUID NOT NULL REFERENCES iam.users(id),
+  payout_profile_id UUID NOT NULL REFERENCES registry.driver_payout_profiles(id),
+  amount_minor BIGINT NOT NULL CHECK (amount_minor >= 0),    -- the WHOLE balance: weekly full sweep, no minimum, no holdback
+  status TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING','SUBMITTED','PAID','FAILED')),
+  failure_reason TEXT, provider_reference TEXT,              -- the bank's own id, once originated
+  journal_entry_id UUID NOT NULL REFERENCES billing.journal_entries(id),   -- the wallet debit; commits WITH this row
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE UNIQUE INDEX ux_payouts_batch_driver ON billing.payouts(batch_id, driver_id);
+CREATE UNIQUE INDEX ux_payouts_provider_ref
+  ON billing.payouts(provider_reference) WHERE provider_reference IS NOT NULL;   -- R-19's shape
+
 
 -- Balanced-entry enforcement (deferred, so a multi-row entry can be inserted in one txn):
 CREATE OR REPLACE FUNCTION billing.assert_balanced() RETURNS trigger AS $$
@@ -1301,7 +1335,7 @@ CREATE TABLE transit.gtfs_shapes (
 | `document.status` | VALID, EXPIRING, EXPIRED, REJECTED | `registry.documents` (E-03) |
 | `credential_type` | x509, psk | `prov.tracker_bindings`, `prov.device_certs` (T-02) |
 | `journal.kind` | topup, daily_fee, trip_payment, penalty_settle, adjustment, tip_payout, payment_refund, overpaid_reversal, voucher_purchase, driver_transfer | `billing.journal_entries` (D-09); no `reseller_commission` (AL-01) |
-| `owner_type` | driver, fleet, platform, suspense | `billing.accounts` (AL-01/AL-03; **no `reseller`**) |
+| `owner_type` | **passenger**, driver, fleet, platform, suspense | `billing.accounts` (AL-01/AL-03; **no `reseller`**; `passenger` added by AL-57 for the card rail) |
 
 > **Note on `NoShowDriver` (B0 GAP-G3 / backlog B4):** the state is present in the `ride.state` CHECK for
 > completeness, but D5 §7 models driver-side no-show as `CancelledByDriver`. No transition currently writes

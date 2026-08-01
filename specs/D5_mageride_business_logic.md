@@ -328,21 +328,40 @@ restored after a configurable cooldown or admin/CSR reinstatement.
 ```mermaid
 stateDiagram-v2
   [*] --> Initiated: passenger taps Pay (method)
-  Initiated --> Pending: OnePay/LankaQR provider (timeout 90s)
+  Initiated --> Succeeded: wallet — ledger move, no provider (AL-57)
+  Initiated --> Failed: wallet balance short (AL-57)
+  Initiated --> Pending: legacy provider leg (retained for COD)
   Pending --> Succeeded: provider ok
   Pending --> Failed: provider error/timeout
   Failed --> Retried: passenger retry (new row, retry_of_payment_id)
   Failed --> FellBackToCash: after 3 retries / override (US-8.15)
   Pending --> CashOnDelivery: package COD (P-08)
   CashOnDelivery --> CashOnDeliveryCollected: driver "Cash received"
+  Initiated --> QrClaimedByPassenger: scan_driver_qr, "I've paid" (AL-47)
+  QrClaimedByPassenger --> DriverConfirmedQR: driver confirms (TERMINAL)
   Succeeded --> [*]
   FellBackToCash --> Overpaid: late provider Succeeded after cash (R-19)
   Overpaid --> Refunded: admin refund queue
 ```
-- **Methods:** Cash (default, driver collects) · LankaQR (no surcharge) · OnePay (**+5% surcharge**,
-  US-8.11) · COD (package only). Surcharge: `surchargeMinor = round(fare*5/100)` for OnePay.
-- **Proxy payer routing (P-04):** Cash ⇒ rider pays driver; LankaQR/OnePay ⇒ booker charged
-  (`payer_role`, regardless of who is at pickup).
+- **Methods (Δ AL-57/AL-59):** Cash (default, driver collects) · **`wallet`** (prepaid balance,
+  topped up by card — **no surcharge, no gateway leg, terminal on the spot**) · **`scan_driver_qr`**
+  (the driver's own bank LankaQR, settles by AL-47 attestation) · COD (package only).
+  **`onepay` and platform-merchant `lankaqr` are removed**, and with them the +5% surcharge:
+  no ride fare is charged to a platform merchant account, so there is no acquirer fee on the ride to
+  recover. OnePay's ~3% is now borne on the **top-up**, where MageRide is the payee.
+- **`wallet` has no `Pending`.** Every other rail waits on an acquirer; this one is a single balanced
+  `trip_payment` journal entry — passenger wallet debit, driver wallet credit — inside one
+  transaction. It reaches `Succeeded` or it does not happen, and a short balance is
+  `402 insufficient-wallet-balance` with cash and driver-QR still offered rather than a silent
+  fallback to cash.
+- **The driver's wallet is the fare accumulation account (AL-57/AL-58).** Fares credit it, the D-08
+  daily fee debits it, and the weekly payout run sweeps it in full. ⚠ **Interaction with §2:** the
+  sweep leaves a zero balance, and the daily fee is charged from the **2nd trip** of each Colombo
+  day — so a driver whose passengers pay in cash (which never touches the wallet) is short on their
+  second trip after a sweep until they top up. Policy is a full sweep with no holdback
+  (`Payout:RetainMinor = 0`); the knob exists so the remedy is a setting.
+- **Proxy payer routing (P-04):** Cash ⇒ rider pays driver; **`wallet` ⇒ the booker's wallet is
+  debited** (`payer_role`, regardless of who is at pickup).
 - **Mid-trip failure (US-8.15):** notify, retry, or fall back to cash **without losing trip history**.
 - Driver earning posts only on terminal `Paid`/`CashSettled`/`CashOnDeliveryCollected` (R-05).
 

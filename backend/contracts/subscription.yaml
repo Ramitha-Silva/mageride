@@ -1000,43 +1000,10 @@ paths:
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
       x-error-codes: [unauthorized, not-owner, not-found, conflict]
 
-  /v1/mode-b/pay/onepay/webhook:
-    post:
-      operationId: modeBOnepayWebhook
-      summary: OnePay confirmation for a subscription payment.
-      description: |
-        HMAC-signed. Idempotent on `provider_transaction_id` (R-19). The credit is a
-        **pass-through to the owner** — no platform ledger entry is written for a Mode B
-        subscription payment (C005).
-      tags: [mode-b]
-      security:
-        - hmacSignature: []
-      x-idempotency-exempt: >-
-        Provider callback. Deduped on provider_transaction_id per R-19; OnePay does not send an
-        Idempotency-Key header. See MageRide.Shared AllowMissingIdempotencyKey (C002 decision 2).
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SubscriptionProviderCallback'
-      responses:
-        '200':
-          description: Callback accepted (also returned for a redelivery).
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [received]
-                properties:
-                  received:
-                    type: boolean
-                    const: true
-        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
-        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
-        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
-        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
-      x-error-codes: [validation-failed, unauthorized, not-found]
+  # Δ AL-59 — REMOVED, do not re-add:
+  #   POST /v1/mode-b/pay/onepay/webhook  — there is no OnePay subscription rail to confirm. The
+  #     bulk-voucher purchase above keeps `onepay`, and correctly: a driver buying vouchers is
+  #     paying MageRide, which is the one case a single merchant account serves.
 
   /v1/mode-b/pay/lankaqr/confirm:
     post:
@@ -1874,7 +1841,11 @@ components:
     SubscriptionPayMethod:
       type: string
       description: Matches the `subscription.payments.method` CHECK (C005).
-      enum: [lankaqr_deeplink, lankaqr_scan, onepay, online_transfer, cash]
+      enum: [lankaqr_deeplink, lankaqr_scan, online_transfer, cash]
+      # Δ AL-59 — `onepay` REMOVED. `payTo` is the fleet OWNER's verified account (AL-49) and
+      # OnePay has one merchant account per merchant, so an OnePay subscription payment would have
+      # landed subscriber money in MageRide's account — against AL-49's "MageRide still holds no
+      # subscriber money". The four surviving rails all pay the owner directly.
 
     PayTo:
       type: object

@@ -31,7 +31,7 @@
   changes — use the transactional outbox (D6' §2.4).
 
 ## Build Manifest
-- The build plan lives in `build/manifest.yaml` — **132 components, waves 0–6**.
+- The build plan lives in `build/manifest.yaml` — **133 components, waves 0–6**.
 - Each session works on ONE component only; read its prompt at `build/prompts/Cxxx.md`.
 - After completing a component, append a 3-line handoff to `build/progress.md`.
 - No wave N+1 work begins until all wave N verify commands pass.

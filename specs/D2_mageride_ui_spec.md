@@ -465,7 +465,7 @@ Rs 50 confirm; Offline → driver marker frozen + banner. **Anim:** marker move,
 arrival haptic.
 
 ### SCR-PA-016 / SCR-PI-016 · `payment_method` — Payment selection · **[REPLACE]** (payment hard rule, NY Juspay→native)
-Sheet: **Cash (default) · LankaQR (no surcharge) · OnePay (+5%)**; for packages add **COD**.
+Sheet (**Δ AL-57/AL-59**): **Cash (default) · Wallet (prepaid balance, no surcharge — shows the balance and, when short, a Top up action) · Driver QR (scan the driver's own bank LankaQR, no surcharge)**; for packages add **COD**. **OnePay is not a ride method** — a card passenger tops up the wallet first, which is where MageRide is legitimately the payee.
 ```
 ╭──────────────────────────╮
 │  ═  Payment method       │
@@ -1007,12 +1007,25 @@ In-app **Card / OnePay / LankaQR** + **bulk credit vouchers** (Rs 1k/2k/3k/5k/10
 transfer (AL-05); no web portal — everything in-app.**
 | Component | Compose | SwiftUI | Content |
 |---|---|---|---|
-| Method | `RadioButton`s | `Picker` | Card / OnePay / LankaQR (US-9.18) |
+| Method | `RadioButton`s | `Picker` | Card / OnePay / LankaQR (US-9.18). **Δ AL-57: the same screen serves the passenger**, whose card top-up is what makes the `wallet` ride method possible |
 | Amount | `OutlinedTextField` | `TextField` | Rs |
 | Voucher tiles | `LazyRow` `Card` | `ScrollView` `HStack` | 1k–10k, DB-configured discount %, credited to wallet at purchase (US-9.19) |
 | Pay | CTA | `.borderedProminent` | OnePay sheet / LankaQR Pay deep link (AL-15) |
 
 **States:** Processing → spinner; Success → receipt + count-up; Failed → retry. **Anim:** success check.
+
+### SCR-DA-022a / SCR-DI-022a · `driver_payout` — Bank & Payout Details · **[NEW]** (AL-58/AL-59)
+Where the driver's swept earnings are sent, and where their **own bank-app LankaQR** lives.
+Bank ▾ / Branch / Account number / Account holder name; uploads **latest bank statement _or_
+passbook first page** + **bank-app LankaQR code image**. Status chip **Pending verification →
+Verified** (Verification Officer, via the SCR-AP-003 driving-licence queue — the AL-39 routes are
+subject-agnostic) **→ Rejected + reason**. Any edit re-enters Pending. Shaped exactly like the Fleet
+Portal's SCR-FP-002a, and for the same reason.
+**Two consequences shown on the screen:** the QR image here is what a passenger scans to pay this
+driver (SCR-PA/PI ride pay sheet), and **payouts do not run until the profile is Verified** —
+earnings accrue on the wallet and are never lost, but nothing is swept out.
+Below: **Payout history** — date, amount, status (Pending / Submitted / Paid / Failed + reason).
+**Weekly sweep, no minimum:** whatever the balance is on run day is paid in full.
 
 ### SCR-DA-023 / SCR-DI-023 · `request_credit` — Request credit (Driver ID) · **[NEW]** (US-9.10)
 Enter another **driver's Driver ID** **or scan their QR** → request a credit transfer; that driver approves (**exact value, no commission**, US-9.13). No special reseller codes.
@@ -1370,7 +1383,7 @@ All in-scope items ✅ — **document NOT `[INCOMPLETE]`.**
 | SCR-ID(s) | Screen | Key elements | Item |
 |---|---|---|---|
 | SCR-PA-012a / SCR-PI-012a | **Paste-link → pin** (ModalBottomSheet / `.sheet` detent) | clipboard **Paste** affordance (`ClipboardManager` / `UIPasteControl`) → states **Empty → Parsing ("Reading link…") → Resolved → Error**; full URLs parsed on-device, short `maps.app.goo.gl` resolved via `transit-svc /geo/parse-maps-link` (BR-23.4 / I-23.1, AL-20); **Resolved** shows pin preview + reverse-geocoded address (Nominatim) + lat/lng → **Use this location**; **Error** (unparseable / 3 s timeout) → "couldn't read that link — pick on map". Opened from every Paste-link entry (010b proxy pickup, 012 package pickup & drop-off) | 5, 6 |
-| SCR-PA-025a / SCR-PI-025a | **Subscription payment** | amount + mode picker: LankaQR deep-link / LankaQR scan / OnePay (+5%) / Online transfer (attach screenshot) → routed to fleet owner | 16e |
+| SCR-PA-025a / SCR-PI-025a | **Subscription payment** | amount + mode picker: LankaQR deep-link / LankaQR scan / Online transfer (attach screenshot) / Cash → routed to fleet owner (**Δ AL-59: OnePay removed — `payTo` is the owner's account and OnePay would land it in MageRide's**) | 16e |
 | SCR-PA-025b / SCR-PI-025b | **Subscription payment history** | per-subscriber statement: month, date, method, amount, status (Paid / Pending verification / Paid-cash) | 16h |
 | SCR-PA-026a / SCR-PI-026a | **Add address (ModalBottomSheet)** | opens after pin drop; **Address Line 1 / 2 / 3 + Label** ("Gym","Mum's House","Office"); Save | 7 |
 | SCR-PA-033 / SCR-PI-033 | **Menu / nav drawer (passenger)** | Private transport → 024, My subscriptions → 025, Saved addresses → 026, Profile & settings → 027 (+ Help, Log out) | 9 |

@@ -6,7 +6,7 @@ After completing a component, set its Status and append the 3-line handoff under
 
 - Status values: `PENDING` · `IN PROGRESS` · `DONE` · `PARTIAL` · `BLOCKED`
 - No wave N+1 work begins until every wave N verify command passes.
-- Total components: **132** · estimated sessions: **267**
+- Total components: **133** · estimated sessions: **270**
 
 ## Wave gates
 
@@ -15,7 +15,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | 0 | C001–C010 (10) | all DDL applies twice cleanly, shared kernel + gateway tests green, slim compose healthy, CI parses |
 | 1 | C011–C019 (9) | `./gradlew :shared:testDebugUnitTest detekt ktlintCheck` green (common + Android targets; iOS verified on macOS) |
 | 2 | C020–C044 (25) | walking skeleton books one ride end to end + every core service test suite green |
-| 3 | C045–C066 (22) | every business service test suite green; ledger balances in all money tests |
+| 3 | C045–C066 (23) | every business service test suite green; ledger balances in all money tests |
 | 4a | C067–C084 (18) | both Android apps build and every owned SCR-* screen matches its wireframe |
 | 4b | C085–C102 (18) | both iOS apps build and test **on macOS**; parity with 4a confirmed screen-for-screen |
 | 4c | C103–C117 (15) | all three web surfaces lint + test + build; zero runtime CSS-in-JS in any bundle |
@@ -76,6 +76,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C048 | subscription-svc-mode-b | 3 | DONE | 2026-07-30 | 112 tests green in `Subscription.Api.Tests` (79 from C047 + 33); **1 migration (1204)** — `subscription.outbox`, because BR-23.11's unsubscribe must publish `share.revoked` *inside* the transaction that mutes the grant and D6' §2.1 gives this service no topic; **the event goes on `registry.events` in registry-svc's exact envelope**, so fanout-svc (C041) consumes a second producer with no change; **AL-25 is one index** — `ux_grant_active` partial on `deleted_at` makes the muted roster row, the owner-only delete and the rejoin-reuses-the-grant rule the same fact; **the pass-through fence is an absence** — no ledger call, no journal entry, and `migrate-verify.sh` now asserts `subscription.payments` has no posting or commission column; `payTo` served only from the single `verified` payout profile and from the last verified snapshot after an edit; "joined 5 Jun ⇒ due 6 Jul" implemented from the worked example, with the anniversary re-derived from `join_day` so a 31st survives February; **1 new contract operation** (the AL-49 signed-URL route D3' asks for and gives no path); `migrate-verify.sh` 307/307 with a C048 section; 11 spec gaps / micro-change-sets |
 | C049 | fare-svc-core | 3 | DONE | 2026-07-31 | 78 tests green in a **new suite** (`Fare.Api.Tests`); **2 migrations (1005, 1006)** — `fares.command_log` and `ux_ride_payments_first_attempt`, the missing "a ride is priced once" index that a `FOR UPDATE` cannot supply because a row that does not exist cannot be locked (six concurrent completions produced four fares); **money never touches a float** — the distance is quantised to whole metres at the boundary and every step after it is `long`, with `(a*b+half)/divisor` as §1.3's single round; D5' §1.1's tariff table reproduced to the minor unit for every tier and every surcharge combination, peak+night stacked additively and never compounded; **E-04 landed** — reject, Kalman, and an accuracy-weighted movement gate that reads the *measurement* uncertainty rather than the filter's posterior, taking a stationary three minutes from 292 m to under 50 m while four right-angle turns keep their length; the estimate now prices the **routed** distance (straight line × 1.3, the same interim and the same constant as query-svc's ETA) instead of the C022 stub's bare haversine; tariffs resolved by `effective_from` at the ride's *request* instant so a mid-journey rate change cannot re-price it; `migrate-verify.sh` 316/316 with a C049 section; 6 spec gaps / micro-change-sets |
 | C050 | fare-svc-payments | 3 | PARTIAL | 2026-07-31 | 113 tests green (35 added); **D5' §8.1's machine is a table and the test compares it with a hand transcription of the diagram**, so an invented transition fails as loudly as a missing one; every move is a guarded `UPDATE … WHERE state = @From`, which is the whole concurrency argument and all R-19 needs beside the `provider_transaction_id` UNIQUE; a late gateway success after cash becomes `Overpaid` with an `overpaid_reversal` on the Finance queue and **does not touch the ride** (§11.14); AL-47's driver-QR trio settles with **zero** requests to the ledger seam, asserted against a wallet stub that is running and unused; **ride-svc had no `DriverConfirmedQR` terminal** so no driver-QR fare could ever settle a ride — added, mapped to `CashSettled` exactly as 1002's column comment always said; retry implemented as a new attempt because `provider_transaction_id` must stay one-to-one with a gateway call; no migration and no outbox; **PARTIAL: the AL-47 nudge push and the COD state sync are not built** (no notification-svc, and ride-svc's `cod-collected` never reaches fare-svc); 6 spec gaps |
+| C133 | payout-svc | 3 | PENDING | | |
 | C051 | notification-svc | 3 | DONE | 2026-07-31 | 86 tests green in a **new suite** (`Notification.Api.Tests`); **2 migrations (1308, 1904)** — `comms.notifications`, the outbound queue **no spec declares**, plus `comms.command_log`, the AL-08 install column on `notification_tokens` and the eighteen §14.4 template keys 1902 deliberately left unseeded; **E-01's "exactly once" is two database facts** — the `Sent → FellBackToSms` claim in the statement that selects the row, and `fallback:{pushId}` on `ux_notifications_dedupe` — so three sweeps of one unacked offer produce one SMS; **D-33 measured** against two gateways on real sockets with a deliberately slow primary (p99 well inside the 5 s, and both gateways written to); P-12's buckets spent **after** the dedupe claim so a redelivered `location.request.issued` costs nothing; AL-44/AL-45's fence held by the type system — `MintedLink` has no token member and no response shape in the assembly can carry one; **a real defect caught**: the kernel's camelCase dictionary-key policy answered a `LOW_BALANCE` mute with `loW_BALANCE`, fixed with iam-svc's `LiteralKeyDictionaryConverter` on both directions of the wire; **4 contract changes** (`POST /v1/notify/ack`, `notificationType`, `phones`, `audience`); `migrate-verify.sh` 330/330 with a C051 section; 14 spec gaps / micro-change-sets |
 | C052 | safety-svc | 3 | DONE | 2026-07-31 | 30 tests green in a **new suite** (`Safety.Api.Tests`), which boots a **real notification-svc** because D-33 is a property of the two services together and runs **dispatch-svc's own candidate query** because US-12.10's gate lives there; **1 migration (0905)** — `safety.outbox` (the admin live feed D3' asks for and `signalr-hub.md` has no group for), `safety.command_log`, `sos_events.dispatched_at` (without it every SOS looks instantaneous and the D-33 SLO is unmeasurable), the `driver_id` a report counts against and its resolution evidence; **the SOS bypasses the notification queue** — C051 gained an inline dispatch for the one type with a latency SLO, so the five seconds do not depend on how many ride offers are queued in front of it, and the per-gateway outcome exists to record at all; **no replay is structural** — the public view reads `veh:meta`, a Redis hash that holds one position and no history, so the store cannot answer the question D-34 forbids; the 410 is produced before the ride row is read, and the test asserts the *body*; **two real defects caught** — an SOS with no ride rendered an empty `{{link}}` and was silently never sent (now a `geo:` URI), and the P-12 tally's keys were camelCased on the wire, which promoted iam-svc's `LiteralKeyDictionaryConverter` into the kernel on its third instance; **5 contract changes** (`smsStatus`, the moderation pair, the trip-end hook, the P-12 read, and C051's `deliveries`); `migrate-verify.sh` 341/341 with a C052 section; 12 spec gaps / micro-change-sets |
 | C053 | support-svc | 3 | DONE | 2026-07-31 | 32 tests green in a **new suite** (`Support.Api.Tests`), all integration against a real Postgres and asserting migration 1902's **actual Sinhala and Tamil strings** rather than fixtures of its own; **1 migration (1309)** — `support.ticket_events` (the thread; §13 holds one `admin_response`, so a second reply overwrites the first and a status change leaves no trace at all), `support.command_log` (R-14, the twelfth), the five columns an agent's handling needs, and `screenshot_upload_id` as a **FK onto `docs.uploads`** because the DoD says "links it by id, not by public URL" and §13's `screenshot_url` **is** that URL; **this service is the platform's first writer of `docs.uploads`** — US-16.2's "attach a screenshot" had no upload surface anywhere, and registry-svc says outright that filling that table is not its job; **the Finance queue is derived from the category, never stored**, because `support.tickets` has three writers and a stored column would default C047's and C050's own rows onto the wrong pile; **one real defect caught** — thread entries stamped from the service clock beside a `resolved_at` stamped by Postgres sorted the thread out of order, so every timestamp on these tables is now `now()`; **10 contract changes** (the upload pair, the internal queue family, the thread, the queue, `TicketRow`); `migrate-verify.sh` 351/351 with a C053 section; 11 spec gaps / micro-change-sets |
@@ -9529,3 +9530,94 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   suite takes ~2 min including the container start and migration; `--filter Category=Verification`
   ~34 s. `migrate-verify.sh` was re-run for 0315 and is 446/446. The replica stayed down throughout.
   **No new NuGet reference and no new PostgreSQL extension.**
+
+---
+
+- **Change set:** ADD v3.6 — payment custody (AL-57 / AL-58 / AL-59) — 2026-08-01
+- **Status:** SPECS + CONTRACTS + MANIFEST DONE — no service code changed yet.
+  Spectral 0 errors; `dotnet build backend/MageRide.sln -c Release` 0 warnings;
+  `build/tools/generate_build_plan.py` re-run (133 components, 202 screens mapped).
+- **Notes:**
+  **The vendor fact.** OnePay supports **one merchant account per merchant** and does not create
+  per-driver merchant sub-accounts. D-11 assumed it did, so `registry.driver_payouts`,
+  `POST /v1/internal/vehicles/{id}/merchant`, `Onepay__MerchantOnboardingUrl` and
+  `402 merchant-not-onboarded` could only ever hold or check MageRide's own id — the same value for
+  every driver. **D-11 is retired, not completed.**
+
+  **The decision taken (user, 2026-08-01).** Card acceptance is kept. A card passenger tops up a
+  **passenger wallet** and pays with the new `wallet` method; **MageRide takes custody** of that
+  money and discharges it through a **new automated weekly payout rail**. LankaQR ride payments
+  become the **driver's own** bank QR. The rule the three changes reduce to: *OnePay and the
+  platform's LankaQR merchant are used only where MageRide is the **payee**; where the payee is a
+  driver or a fleet owner, the rail is the payee's own bank instrument.*
+
+  **Two things found while writing it, neither of which was the reported gap.**
+  • **`billing.accounts.owner_type` had no `passenger` value** — `driver`/`fleet`/`platform`/
+  `suspense` only. The "wallet" this platform has built is the *driver's*, for daily fees. A
+  passenger wallet has no ledger existence, so AL-57 is a new account type plus a passenger-facing
+  top-up and balance surface, not a reuse of something already there.
+  • **The `lankaqr` ride rail already collected into a platform merchant** (`Fare:LankaQrMerchantId`)
+  and credited the driver nothing but a `fares.driver_earnings` read-model row. That is a second,
+  undetected custody path **live since C050** and predating this decision. AL-59 closes it.
+
+  **Payout policy, as instructed:** weekly, **full sweep, no minimum, no holdback**. The driver's
+  existing wallet is the fare accumulation account — fares credit it, the D-08 daily fee debits it,
+  payouts sweep it. `Payout:RetainMinor` exists and **defaults to 0**.
+  ⚠ **Named consequence (D5 §8.1, accepted as a risk):** `WalletGate.Decide` has two refusal
+  branches, not one. `unconfirmable` is the billing-outage case; **`insufficient` is a normal-state
+  balance check** — on the 2nd trip of a Colombo day with the fee unpaid and the wallet at zero the
+  driver is dropped from the candidate set. Cash and driver-QR fares never credit the wallet, so
+  after a sweep those drivers get their free first trip and are refused every trip after it until
+  they top up. The remedy is `RetainMinor = one daily fee`; it is a setting, not a redesign.
+  ⚠ **Licensing precondition, unresolved:** custody of passenger balances + outward bank transfers
+  makes MageRide a payment intermediary — CBSL authorisation under the Payment and Settlement
+  Systems Act, and a sponsor bank for LankaPay/CEFTS origination. **A go-live gate, not an
+  engineering task.** No component discharges it.
+
+  **Specs changed —** ADD §1.18 (new), §11.9 **replaced** by the passenger-wallet flow, §11.9a
+  (new) for the payout run, §6 (`payout-svc` added; registry/wallet/fare rows rewritten), §9.1
+  vocabularies, the D-11 decision row and the implementation checklist. D4 + `server_db_schema.md`:
+  `registry.driver_payouts` → `registry.driver_payout_profiles`, plus `billing.payout_batches` /
+  `billing.payouts`, `owner_type` +`passenger`, journal kind +`driver_payout`. D3: the `/fare/pay`
+  method enum, the merchant route struck out for `GET·PUT /v1/drivers/payout-profile`, a whole
+  `payout-svc` route table, Mode B loses `onepay`. D5 §8.1: the `wallet` transition, the AL-47 QR
+  arm the diagram was missing, and the surcharge removed with the rail it recovered. D7 §4.2 and
+  D2 (SCR-DA-022a new; both pay sheets).
+
+  **Contracts changed (5 + the index + 1 new) —** `fare.yaml` (methods, both ride-gateway callbacks
+  removed, `PaymentInitiation` reshaped, `ProviderCallback` deleted), `registry.yaml` (merchant
+  route out, three payout-profile routes + `DriverPayoutProfile` in), `wallet.yaml`,
+  `subscription.yaml` (`onepay` out of Mode B — **kept** on bulk-voucher purchase, where a driver
+  pays MageRide and one merchant account is exactly right), `_shared.yaml`, the directory's
+  `CLAUDE.md`, and **new `payout.yaml`**. `admin-bff.yaml` is untouched by this change set — the
+  verification surface does not name a payment rail. `payout-profile-not-verified` is **reused** from C058 rather than duplicated.
+  `merchant-not-onboarded` deliberately **stays** in the enum with a retirement comment: it mirrors
+  `MageRideErrors` one-for-one and fare-svc still references it — both come out in the same change.
+
+  **Manifest —** C028 (D-11 deliverable out, payout profile in), C046 (passenger wallet, the two
+  internal ledger rails), C048 (`onepay` fence), C050 (rails rewritten, 6 new DoD items), the app
+  components' pay sheets, and **new C133 `payout-svc`** (wave 3, after C046/C028, 3 sessions).
+  **Regenerating `progress.md` overwrites the Status column, the Session Handoffs log and any
+  hand-written wave-gate annotation** — all three were spliced back from the pre-run copy and the
+  diff verified down to the three intended lines. Do the same next time.
+
+  **Migrations landed 2026-08-01 — 0316, 1007, 1109, 1313; `migrate-verify.sh` 461/461** (was 446;
+  15 new checks, 2 count assertions and 2 enum assertions revised). **Every one is additive**, and
+  that is the whole sequencing decision: `registry.driver_payouts` is NOT dropped and
+  `fares.ride_payments.method` still admits `onepay`/`lankaqr`, because registry-svc and fare-svc
+  are DONE components that still name both. DbUp applies this directory to the replica, so a drop
+  here would take two running services down between the migration and the code that stops
+  referencing them. **The drop ships with C050**, as its own numbered script — a released script is
+  immutable and a correction is a new file. The contract enum is already narrow while the CHECK is
+  not, deliberately: the contract states the intent and the database moves last.
+  Two ordering facts worth keeping: `docs.uploads` is C005's (1301) and the 03xx registry range
+  runs first, so 0316 declares the two upload columns bare and **1313** closes the FKs — C003's own
+  arrangement for `registry.fleet_payout_profiles`; and `billing.payouts.journal_entry_id` is
+  `NOT NULL` so the schema cannot hold half of the debit/instruction pair.
+
+  **Next, in order:** **C046 wallet-svc** — passenger accounts on the existing ledger, plus two
+  rails on the internal seam that already carries `/{driverId}/debit|credit` and
+  `/fleet/{fleetId}/debit|credit`: `trip-payment` (passenger wallet → driver wallet as ONE balanced
+  entry) and `driver-payout` (the debit and its reversal). Then **C050 fare-svc**, then **C133
+  payout-svc**, then C028/C048/C063. Nothing on the running platform is broken in the meantime: the
+  `402` already blocks the dead rail and the app falls back to cash.

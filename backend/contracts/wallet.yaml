@@ -57,7 +57,7 @@ openapi: 3.1.0
 info:
   title: MageRide wallet-svc
   version: 1.0.0
-  summary: Driver wallet — balance, OnePay/LankaQR top-up, transaction history, credit sends.
+  summary: Passenger and driver wallet — balance, OnePay/LankaQR top-up, transaction history, credit sends.
   description: |
     Balances are a **projection of the double-entry ledger** (D-09): `billing.journal_entries`
     plus its balanced `billing.postings` legs are the truth, and every entry is asserted balanced
@@ -66,6 +66,19 @@ info:
 
     A credit changes dispatch behaviour, so `wallet.credited` is emitted to invalidate the 5-second
     balance cache dispatch reads before offering a second trip (D-08).
+
+    **Δ AL-57 — the wallet is the passenger's too, and it is how card acceptance survives.**
+    `billing.accounts.owner_type` gains `passenger`. OnePay has one merchant account per merchant,
+    so a card *ride* fare could only ever land in MageRide's own account; the `onepay` ride method is
+    retired and a card passenger tops up **here** — where MageRide legitimately *is* the payee —
+    then pays with `POST /v1/fare/pay {method:"wallet"}`. **A passenger top-up and a driver top-up
+    are the same route and the same ledger movement**; only the account the credit leg lands on
+    differs, so there is no second top-up surface to keep in step.
+
+    **The driver's wallet is now also the fare accumulation account.** Wallet-paid fares credit it,
+    the D-08 daily fee debits it, and the AL-58 weekly payout run sweeps it in full — one account,
+    one balance. MageRide therefore holds money it owes drivers; `payout.yaml` is how that is
+    discharged.
 
     The transaction stream is deduped per `(account, entry)` — the ledger event stream is
     at-least-once (C002 decision 3), so a redelivered entry must not append a second history line

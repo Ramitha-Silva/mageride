@@ -71,7 +71,7 @@
 | `rider-app` (BAP) auth/profile | **iam-svc** | `[ADAPT]` opaque token → RS256 JWT + refresh; +94 SMS-gateway OTP; no Beckn/Aadhaar; **apps = Phone OTP only; Google/Apple/Password on the Admin & Fleet portals only** (AL-07) |
 | `rider-app` search→confirm (Beckn) | **ride-svc** + **fare-svc** + **dispatch-svc** | `[REPLACE]` Beckn `search/init/confirm` round-trip → direct `POST /rides/request` (idempotent) → server dispatch; no ONDC gateway |
 | `driver-app` ride lifecycle (`Ride.hs`) | **ride-svc** (Mode C) + **trip-state-svc** (A/B) | `[REPLACE]`/`[ADAPT]` split: Mode C ride aggregate (R-01) vs Mode A/B tracking sessions |
-| `driver-app` onboarding/KYC | **registry-svc** + **ocr-svc** | `[ADAPT]` DL/RC + Gemini OCR; **drop** Aadhaar/PAN/GST/UPI; add OnePay merchant onboarding (D-11). **Change 6/22:** split into driver-identity Profile Setup (name/photo/DL) + optional **Mode-C 4-step vehicle onboarding** with **Gemini Flash 3.0 auto-verify → auto-approve** (Mode A/B + permits = Fleet Portal) |
+| `driver-app` onboarding/KYC | **registry-svc** + **ocr-svc** | `[ADAPT]` DL/RC + Gemini OCR; **drop** Aadhaar/PAN/GST/UPI; **driver payout profile** — bank + own LankaQR, Verification-Officer approved (AL-58/AL-59; D-11's OnePay merchant onboarding retired by AL-57). **Change 6/22:** split into driver-identity Profile Setup (name/photo/DL) + optional **Mode-C 4-step vehicle onboarding** with **Gemini Flash 3.0 auto-verify → auto-approve** (Mode A/B + permits = Fleet Portal) |
 | `Allocator` worker (FCM offer) | **dispatch-svc** | `[REPLACE]` candidate scoring + 15s Redis offer + Job Board + Driver Level + Directional |
 | `driver-app` Plans/fees (Juspay) | **subscription-svc** + **wallet-svc** | `[REPLACE]` Juspay mandate → daily-fee + wallet + vouchers + reseller capability (top-up via **OnePay/LankaQR only — no bank transfer**, AL-05) |
 | rider/driver Payment (Juspay) | **fare-svc** + **wallet-svc** | `[REPLACE]` Juspay SDK → OnePay/LankaQR/Cash payment state machine |
@@ -155,7 +155,7 @@ Notes: backed by `config.operating_cities` (D4 §17b); admin-managed in the Admi
 (`POST/PATCH /v1/admin/config/cities`, admin-bff, audited D-35). **Cacheable** (ETag / `Cache-Control`, see D6 §7) —
 launching a new city needs no app release. The chosen `code` persists on `iam.users.operating_city_code`.
 
-## registry-svc — vehicles, sharing, device binding, merchant (`/v1/vehicles`)
+## registry-svc — vehicles, sharing, device binding, driver payout profile (`/v1/vehicles`)
 
 ### registry-svc — POST /v1/vehicles   [ADAPT] (NY `register/dl`+`register/rc`; Change 6/22 = Mode-C 4-step auto-verify)
 Purpose: onboard the driver's own **Mode C standby vehicle** (SCR-DA/DI-004 → 004a/b/c) with its 4 documents;
@@ -206,7 +206,9 @@ When **all four = VERIFIED**, registry-svc auto-sets `status=APPROVED` & `onboar
 | DELETE `/v1/vehicles/{id}/subscribers/{userId}` | Bearer | [NEW] | 204 | Mode B unsubscribe (US-NEW.1) |
 | POST `/v1/share-requests` | Bearer (passenger) | [NEW] | `{vehicleId}` → `{requestId,status}` | request Mode B access (US-4.5) |
 | POST `/v1/vehicles/{id}/device` | Bearer | [NEW] | `{imei}` → `{bindingId}` | bind IMEI (US-3.1, → provisioning) |
-| POST `/v1/internal/vehicles/{id}/merchant` | mTLS | [NEW] | OnePay merchant bind | **D-11** on approval |
+| _(removed)_ | — | — | **`POST /v1/internal/vehicles/{id}/merchant` deleted — D-11 retired (AL-57): OnePay has one merchant account per merchant, so a per-driver bind never existed** |
+| GET · PUT `/v1/drivers/payout-profile` | Bearer (driver) | [NEW] | bank/branch/account no/holder name + **the driver's own bank-app LankaQR image**; any edit re-enters `pending_verification` (**AL-58/AL-59**, mirrors `PUT /v1/fleets/{id}/payout-profile`) |
+| POST `/v1/drivers/payout-profile/documents` | Bearer (driver) | [NEW] | multipart; kind: `bank_statement` \| `passbook_first_page` \| `lankaqr_code` → `docs.uploads` (**AL-58**) |
 
 ## provisioning-svc — tracker credentials & binding (`/v1/trackers`, `/v1/fleets`)   all [NEW] (T-02, T-09)
 
@@ -428,21 +430,27 @@ Response 200:
 ```
 Errors: |400 `unserviceable-area`| · |422 `route-unavailable`|
 
-### fare-svc — POST /v1/fare/pay   [REPLACE] (NY Juspay → OnePay/LankaQR/Cash) (D-10)
+### fare-svc — POST /v1/fare/pay   [REPLACE] (NY Juspay → wallet / driver-QR / cash) (D-10, AL-57/AL-59)
 Purpose: initiate in-app payment. **Auth:** Bearer (payer) + attestation. Idempotency-Key.
+
+> **Δ AL-57/AL-59 — no ride fare is charged to a platform merchant account.** `onepay` and the
+> platform-merchant `lankaqr` are **removed** as ride methods: OnePay has one merchant account per
+> merchant, so a card fare could only ever land in MageRide's own account, and `lankaqr` pointed at
+> `LankaQr__MerchantId` — the platform's — while crediting the driver nothing but a read-model row.
+> Card acceptance is preserved one step earlier: the passenger **tops up their wallet** by card
+> (`POST /v1/wallet/topup/onepay`, where MageRide *is* the payee) and pays with **`wallet`**.
 Request:
 ```jsonc
-{ "rideId":"ulid", "method":"enum cash|lankaqr|onepay",
+{ "rideId":"ulid", "method":"enum cash|wallet|scan_driver_qr|cod",
   "tipMinor":"long? // E-10" }
 ```
 Response 200:
 ```jsonc
-{ "paymentId":"ulid", "state":"Initiated|Pending",
-  "method":"onepay", "amountMinor":52500, "surchargeMinor":2500, // +5% OnePay (US-8.11)
-  "onepay": { "redirectUrl":"string?", "sessionToken":"string?" },
-  "lankaqr": { "qrPayload":"string?", "paymentLink":"string?" } }   // null per method
+{ "paymentId":"ulid", "state":"Initiated|Succeeded",   // `wallet` is TERMINAL on the spot — no Pending
+  "method":"wallet", "amountMinor":50000, "surchargeMinor":0,   // no surcharge on any surviving rail
+  "walletBalanceAfterMinor":125000 }                            // `wallet` only
 ```
-Errors: |409 `payment-already-settled`| · |402 `merchant-not-onboarded`|driver OnePay merchant missing (D-11)|
+Errors: |409 `payment-already-settled`| · |402 `insufficient-wallet-balance`|the passenger's balance is short; cash and driver-QR remain offered (AL-57)|
 Side Effects: payment state machine `Initiated→Pending→Succeeded/Failed/Retried/FellBackToCash`
 (§11.8, D-10); driver earning posts only on terminal (R-05); proxy payer routing (P-04). Idempotent: yes.
 
@@ -506,6 +514,40 @@ Side Effects: OnePay initiate; on webhook → balanced double-entry journal cred
 | GET `/v1/wallet/admin/voucher-discount-tiers` | admin | [NEW] | list bulk-voucher commission % per voucher value + usage (US-9A.15, Admin Portal) |
 | PUT `/v1/wallet/admin/voucher-discount-tiers` | admin | [NEW] | set bulk-voucher commission % per voucher value (denomination) (Admin Portal) |
 | _(removed)_ | — | — | **`/wallet/topup/bank-transfer` + `/wallet/admin/*bank-transfer*` deleted — bank transfer is not a top-up method (AL-05)** |
+
+> **Δ AL-57 — the wallet is now the passenger's too.** `billing.accounts.owner_type` gains
+> `passenger`, and every route above is reachable by a passenger for their own account: a card
+> top-up (`/topup/onepay`) is how card acceptance survives the retirement of the `onepay` ride rail,
+> and `POST /v1/fare/pay {method:"wallet"}` spends it. **A passenger top-up and a driver top-up are
+> the same route and the same ledger movement** — what differs is only which account the credit
+> leg lands on, so there is no second top-up surface to keep in step. The driver's wallet is
+> unchanged and is now also the **fare accumulation account**: fares credit it, daily fees debit it,
+> and the AL-58 payout run sweeps it.
+
+### payout-svc — the weekly driver payout run   [NEW] (AL-58)
+Purpose: discharge the liability an AL-57 wallet fare creates. **Weekly full sweep — no minimum,
+no holdback:** whatever the driver's balance is on run day is paid out in full.
+
+| Verb · Path | Auth | Tag | Notes |
+|---|---|---|---|
+| GET `/v1/drivers/payouts` | Bearer (driver) | [NEW] | this driver's payout history — amount, status, when (SCR-DA-022a) |
+| GET `/v1/admin/payouts` | finance · admin | [NEW] | every instruction, filterable by batch / status / driver (SCR-AP-006) |
+| GET `/v1/admin/payouts/batches` | finance · admin | [NEW] | run history: date, instruction count, total |
+| POST `/v1/admin/payouts/batches` | finance | [NEW] | run the sweep now, out of band. Idempotent on `run_date` — a second call for a date already swept is `409` |
+| POST `/v1/admin/payouts/{payoutId}/retry` | finance | [NEW] | re-submit a `FAILED` instruction; the reversal has already restored the balance |
+| POST `/v1/internal/payouts/{payoutId}/result` | mTLS | [NEW] | the bank origination adapter reporting `PAID` \| `FAILED`; idempotent on `provider_reference` (R-19's shape) |
+
+Side Effects: the wallet debit (`driver_payout` journal kind) and the `billing.payouts` row commit
+**together** — an instruction with no debit pays twice on retry, a debit with no instruction loses
+the driver's money. `FAILED` reverses the debit under the same idempotency-key discipline (§0), so
+the balance is restored exactly once and the next run picks it up.
+Errors: |409 `payout-batch-exists`| · |409 `payout-not-failed`| · |422 `payout-profile-not-verified`|
+
+> **A driver with no `verified` payout profile accrues and is never paid out** — the balance is
+> retained, never lost, and they surface on the Finance exception queue. **Origination is one
+> outbound port and no provider is chosen**: unconfigured, the run still records what is owed and
+> announces the gap at start-up, so the liability is visible before a rail exists.
+> ⚠ CEFTS/LankaPay origination needs a sponsor bank and CBSL authorisation — ADD §1.18.
 
 ## query-svc — nearby, trips, earnings (`/v1/nearby`, `/v1/trips`, `/v1/earnings`)   [REPLACE] (map hard rule)
 
@@ -614,7 +656,7 @@ Every mutation passes an **audit interceptor** → `audit.events` (D-35, US-19.3
 | Verb · Path | Auth | Tag | Notes |
 |---|---|---|---|
 | GET `/v1/admin/dashboard` | admin | [ADAPT] | platform metrics (US-14.6) |
-| POST `/v1/admin/vehicles/{id}/approve` · `/reject` | admin / verification_officer | [ADAPT] | + reason (US-2.9/2.15); OnePay merchant (D-11). **Approve blocked while any field `verifyStatus='pending'`** (US-2.10a) |
+| POST `/v1/admin/vehicles/{id}/approve` · `/reject` | admin / verification_officer | [ADAPT] | + reason (US-2.9/2.15); **no merchant bind — D-11 retired (AL-57)**. **Approve blocked while any field `verifyStatus='pending'`** (US-2.10a) |
 | GET `/v1/admin/onboarding/queue` | verification_officer | [NEW] | flagged drivers/vehicles with per-field `{key,value,source,confidence,verifyStatus}` + per-step status (SCR-AP-003, US-2.10a) |
 | POST `/v1/admin/onboarding/{vehicleOrDriverId}/fields/{fieldKey}/confirm` | verification_officer | [NEW] | confirm a flagged field as-is → `verifyStatus='confirmed'` (audited); NIC/allowed-types/insurance/revenue/reg-mismatch (US-2.4a/2.10a) |
 | PATCH `/v1/admin/onboarding/{vehicleOrDriverId}/fields/{fieldKey}` | verification_officer | [NEW] | edit & confirm `{value}` → `verifyStatus='confirmed'` (audited). When no field remains pending the step → VERIFIED and the vehicle may be approved (US-2.10a) |
@@ -743,7 +785,7 @@ present** (E-01), unlike NY (FCM/gRPC only).
 | **D-06** Job Board ST_DWithin | dispatch `GET /rides/job-board?radius=30km` | ✅ |
 | **D-08** wallet 5s-TTL cache + degraded rule | subscription `charge-before-trip` + ride accept `insufficient-wallet` | ✅ |
 | **D-10** payment state machine in API | fare `POST /fare/pay` (Initiated→…→FellBackToCash) | ✅ |
-| **D-11** OnePay merchant onboarding | registry `POST /internal/vehicles/{id}/merchant`; admin approve | ✅ |
+| ~~**D-11** OnePay merchant onboarding~~ **RETIRED (AL-57)** | no per-driver OnePay merchant exists; replaced by `GET·PUT /v1/drivers/payout-profile` (AL-58) + the weekly payout run | ✅ |
 | **D-24** voip-svc tokens | voip `POST /voip/token` | ✅ |
 | **D-26** content-svc localised templates | content-svc `/v1/content/*` | ✅ |
 | **D-29** 30-min RS256 access + refresh | §0 conventions; iam `/auth/refresh` | ✅ |
@@ -801,7 +843,7 @@ POST /admin/transit/gtfs-import                      # admin: import/refresh GTF
 ```
 POST /fare/pay/scan-driver-qr   # complete fare by scanning the driver's QR (printed/on-screen/sticker); body: {rideId, qrPayload}
 ```
-`POST /fare/pay` `method` enum extended: `cash | lankaqr | onepay | scan_driver_qr`.
+`POST /fare/pay` `method` enum is **`cash | wallet | scan_driver_qr | cod`** (AL-57/AL-59: `onepay` and platform-merchant `lankaqr` removed).
 
 ### subscription-svc — Mode B subscriptions, requests & payments (Epic 23; items 8,15,16,17)
 ```
@@ -814,7 +856,8 @@ POST   /mode-b/subscriptions/{id}/unsubscribe              # unsubscribe → rev
 DELETE /mode-b/{vehicleId}/subscribers/{subId}            # OWNER deletes a muted/unsubscribed subscriber (hard-delete)    [owner]
 PUT    /mode-b/{vehicleId}/subscribers/{subId}/fare        # set/override per-subscriber monthly fare (item 16f)            [owner]
 GET    /mode-b/{vehicleId}/subscribers                      # roster (fare, cycle, this-month status, muted flag)            [owner/driver]
-POST   /mode-b/subscriptions/{id}/pay                      # init payment: lankaqr_deeplink|lankaqr_scan|onepay|online_transfer  [passenger]
+POST   /mode-b/subscriptions/{id}/pay                      # init payment: lankaqr_deeplink|lankaqr_scan|online_transfer|cash  [passenger]
+                                                           #   AL-59: `onepay` REMOVED — payTo is the fleet OWNER's account (AL-49) and OnePay would land it in MageRide's
 POST   /mode-b/payments/{paymentId}/transfer-slip          # upload transfer screenshot → pending_verification (item 16e)   [passenger]
 POST   /mode-b/payments/{paymentId}/confirm                # OWNER confirms transfer slip → paid (item 16f)                 [owner]
 POST   /mode-b/{vehicleId}/subscribers/{subId}/mark-cash   # OWNER marks cash received → paid (item 16f)                    [owner]

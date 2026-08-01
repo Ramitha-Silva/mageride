@@ -206,15 +206,19 @@ paths:
       operationId: initiatePayment
       summary: Start paying for a completed ride.
       description: |
-        D-10. Drives `fares.ride_payments` from `Initiated`. The response carries exactly one
-        method-specific block: `onepay` (redirect + session token) or `lankaqr` (QR payload +
-        bank-app pay link); `cash` carries neither and settles on the driver's confirmation.
+        D-10. Drives `fares.ride_payments` from `Initiated`.
 
-        OnePay adds a **5% surcharge** (US-8.11) which is stated as `surchargeMinor` so the
-        passenger sees the difference before committing. A proxy booking routes the charge to the
-        **payer** — the booker, not the rider (P-04). `tipMinor` is optional (E-10).
+        **Δ AL-57/AL-59 — no ride fare is charged to a platform merchant account.** `wallet` is a
+        single balanced `trip_payment` journal entry — passenger wallet debit, driver wallet credit —
+        inside one transaction, so it is **`Succeeded` on the spot with no `Pending` and no gateway
+        callback**; a short balance is `402 insufficient-wallet-balance` with cash and driver-QR
+        still offered, never a silent fallback to cash. `cash` and `scan_driver_qr` settle on
+        confirmation (the latter by AL-47 attestation, into the driver's own bank).
 
-        A driver with no OnePay merchant binding is `402 merchant-not-onboarded` (D-11).
+        **There is no surcharge on any surviving rail** — the +5% existed to recover OnePay's ~3% on
+        the ride, and OnePay now sits on the wallet top-up instead, where MageRide is the payee.
+        A proxy booking routes the charge to the **payer** — the booker's wallet, not the rider's
+        (P-04). `tipMinor` is optional (E-10).
       tags: [payments]
       security:
         - bearerAuth: []
@@ -253,8 +257,8 @@ paths:
         '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
       x-error-codes:
-        [payment-method-invalid, invalid-amount, attestation-failed, merchant-not-onboarded, gateway-error,
-         not-ride-participant, not-found, conflict, payment-already-settled]
+        [payment-method-invalid, invalid-amount, attestation-failed, insufficient-wallet-balance,
+         gateway-error, not-ride-participant, not-found, conflict, payment-already-settled]
 
   /v1/fare/pay/{paymentId}/status:
     get:
@@ -484,81 +488,14 @@ paths:
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
       x-error-codes: [validation-failed, unauthorized, not-ride-participant, not-found]
 
-  /v1/fare/pay/onepay/webhook:
-    post:
-      operationId: onepayPaymentWebhook
-      summary: OnePay payment confirmation callback.
-      description: |
-        HMAC-signed, verified before the body is parsed (D6' §7.1). **Idempotent on
-        `provider_transaction_id`** (R-19) — a redelivered callback is a no-op, which is why this
-        operation carries no `Idempotency-Key`: an external gateway cannot send our header.
-        A terminal state here drives `POST /v1/internal/rides/{rideId}/payment-settled` (R-05).
-      tags: [payments]
-      security:
-        - hmacSignature: []
-      x-idempotency-exempt: >-
-        Provider callback. Deduped on provider_transaction_id per R-19; OnePay does not send an
-        Idempotency-Key header. See MageRide.Shared AllowMissingIdempotencyKey (C002 decision 2).
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ProviderCallback'
-      responses:
-        '200':
-          description: Callback accepted (also returned for a redelivery).
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [received]
-                properties:
-                  received:
-                    type: boolean
-                    const: true
-        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
-        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
-        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
-        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
-      x-error-codes: [validation-failed, unauthorized, not-found]
-
-  /v1/fare/pay/lankaqr/confirm:
-    post:
-      operationId: lankaqrPaymentConfirm
-      summary: LankaQR / Commercial Bank IPG payment confirmation callback.
-      description: |
-        HMAC-signed (D-12, D6' §7.2). **Idempotent on `provider_transaction_id`** (R-19), and
-        exempt from `Idempotency-Key` for the same reason as the OnePay callback.
-      tags: [payments]
-      security:
-        - hmacSignature: []
-      x-idempotency-exempt: >-
-        Provider callback. Deduped on provider_transaction_id per R-19; the bank IPG does not send
-        an Idempotency-Key header. See MageRide.Shared AllowMissingIdempotencyKey (C002 decision 2).
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ProviderCallback'
-      responses:
-        '200':
-          description: Callback accepted (also returned for a redelivery).
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [received]
-                properties:
-                  received:
-                    type: boolean
-                    const: true
-        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
-        '401': { $ref: './_shared.yaml#/components/responses/Unauthorized' }
-        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
-        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
-      x-error-codes: [validation-failed, unauthorized, not-found]
+  # Δ AL-57/AL-59 — REMOVED, do not re-add:
+  #   POST /v1/fare/pay/onepay/webhook    — no ride fare is charged to a platform merchant account,
+  #                                          so there is no ride-side OnePay callback. The top-up
+  #                                          webhook lives in wallet.yaml, where MageRide IS the payee.
+  #   POST /v1/fare/pay/lankaqr/confirm   — the platform-merchant LankaQR ride rail is retired into
+  #                                          `scan_driver_qr`, which settles by AL-47 attestation
+  #                                          because a payment into the driver's own bank produces
+  #                                          no platform webhook at all.
 
   /v1/admin/fare/refund:
     post:
@@ -650,7 +587,13 @@ components:
         Settlement-time method. Matches the `fares.ride_payments.method` CHECK (C005) and is
         deliberately wider than the booking-time `rides.rides.payment_method`, which carries
         `cod` instead of `scan_driver_qr` (C004 note (f)).
-      enum: [cash, lankaqr, onepay, scan_driver_qr]
+      enum: [cash, wallet, scan_driver_qr, cod]
+      # Δ AL-57/AL-59 — `onepay` and platform-merchant `lankaqr` REMOVED as ride methods.
+      # OnePay has one merchant account per merchant, so a card fare could only ever land in
+      # MageRide's own account, and `lankaqr` pointed at LankaQr__MerchantId — the platform's —
+      # while crediting the driver nothing but a `fares.driver_earnings` read-model row. Card
+      # acceptance survives one step earlier: top up the wallet (MageRide *is* the payee there)
+      # and pay with `wallet`. `scan_driver_qr` is the driver's OWN bank LankaQR (AL-47/AL-59).
 
     FareBreakdown:
       type: object
@@ -695,28 +638,32 @@ components:
           type: integer
           format: int64
           minimum: 0
-          description: OnePay adds 5% (US-8.11); zero for every other method.
+          description: |
+            **Δ AL-57: always zero.** The +5% recovered OnePay's ~3% on the ride, and no surviving
+            ride rail touches an acquirer — OnePay now sits on the wallet top-up. Retained in the
+            shape so a client that renders it keeps working.
         currency:
           $ref: './_shared.yaml#/components/schemas/Currency'
-        onepay:
-          description: 'Present only for `method: onepay`.'
+        wallet:
+          description: 'Present only for `method: wallet` (Δ AL-57).'
           type: object
           properties:
-            redirectUrl:
-              type: string
-              format: uri
-            sessionToken:
-              type: string
-        lankaqr:
-          description: 'Present only for `method: lankaqr`.'
+            balanceAfterMinor:
+              type: integer
+              format: int64
+              minimum: 0
+              description: The passenger's balance once the fare has been debited.
+        driverQr:
+          description: |
+            Present only for `method: scan_driver_qr` (Δ AL-59) — the driver's **own** bank-app
+            LankaQR from their verified payout profile, as a short-lived signed URL. Settlement is
+            AL-47 attestation: there is no callback, because the money never passes through
+            MageRide.
           type: object
           properties:
-            qrPayload:
-              type: string
-            paymentLink:
+            qrImageUrl:
               type: string
               format: uri
-              description: '"Pay" deep link into the bank app; the QR is the fallback (AL-15).'
 
     PaymentStatus:
       type: object
@@ -747,27 +694,6 @@ components:
         settledAt:
           $ref: './_shared.yaml#/components/schemas/Timestamp'
 
-    ProviderCallback:
-      type: object
-      description: |
-        Common shape of a gateway callback. `providerTransactionId` is the dedupe key (R-19); the
-        raw provider envelope is preserved in `raw` for reconciliation.
-      required: [providerTransactionId, status]
-      properties:
-        providerTransactionId:
-          type: string
-          maxLength: 128
-        paymentId:
-          $ref: './_shared.yaml#/components/schemas/Ulid'
-        status:
-          type: string
-          enum: [SUCCESS, FAILED, PENDING]
-        amountMinor:
-          type: integer
-          format: int64
-          minimum: 0
-        currency:
-          $ref: './_shared.yaml#/components/schemas/Currency'
-        raw:
-          type: object
-          additionalProperties: true
+    # Δ AL-57/AL-59 — `ProviderCallback` REMOVED with the two ride-gateway callbacks it typed.
+    # No ride fare reaches an acquirer any more, so nothing on this surface receives one; the
+    # top-up callback and its schema live in wallet.yaml, where MageRide is the payee.

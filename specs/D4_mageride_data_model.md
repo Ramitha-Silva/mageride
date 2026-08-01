@@ -214,10 +214,23 @@ CREATE TABLE registry.driver_profiles (                      -- [ADAPT] (NY driv
   allowed_vehicle_types TEXT[],                              -- AL-29: licence classes extracted from the licence (or manual); US-2.4a
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now());
 
-CREATE TABLE registry.driver_payouts (                       -- [NEW] OnePay merchant binding (D-11)
-  driver_id UUID PRIMARY KEY REFERENCES iam.users(id) ON DELETE CASCADE,
-  onepay_merchant_id TEXT NOT NULL, bound_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','SUSPENDED')));
+CREATE TABLE registry.driver_payout_profiles (               -- [NEW AL-58] driver bank & payout — replaces registry.driver_payouts (D-11 retired by AL-57)
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  driver_id UUID NOT NULL REFERENCES iam.users(id) ON DELETE CASCADE,
+  bank TEXT NOT NULL, branch TEXT NOT NULL,
+  account_no TEXT NOT NULL, account_holder_name TEXT NOT NULL,
+  proof_upload_id UUID REFERENCES docs.uploads(id),          -- bank_statement | passbook_first_page
+  lankaqr_upload_id UUID REFERENCES docs.uploads(id),        -- the driver's OWN bank-app LankaQR (AL-59); the ride pay sheet renders this
+  status TEXT NOT NULL DEFAULT 'pending_verification'
+    CHECK (status IN ('pending_verification','verified','rejected','superseded')),
+  rejection_reason TEXT,
+  verified_by UUID REFERENCES iam.users(id), verified_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now());
+-- Versioned exactly like registry.fleet_payout_profiles: an edit INSERTs and re-verifies, and the
+-- weekly payout run pays the single verified row. Approved by a Verification Officer through the
+-- AL-39 queue, whose routes are subject-agnostic and already take a driver id.
+CREATE UNIQUE INDEX ux_driver_payout_verified
+  ON registry.driver_payout_profiles(driver_id) WHERE status = 'verified';
 
 CREATE TABLE registry.documents (                            -- [NEW] doc expiry tracking (E-03; NY had per-doc tables)
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -767,14 +780,15 @@ CREATE TABLE billing.monthly_subscriptions (                -- [NEW] Mode B ~Rs3
 -- Double-entry ledger (D-09) — replaces NY simple wallet/transaction tables:
 CREATE TABLE billing.accounts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  owner_type TEXT NOT NULL CHECK (owner_type IN ('driver','fleet','platform','suspense')),  -- [REPLACE] no 'reseller' (AL-01); +'fleet' (AL-03)
+  owner_type TEXT NOT NULL CHECK (owner_type IN ('passenger','driver','fleet','platform','suspense')),  -- [REPLACE] no 'reseller' (AL-01); +'fleet' (AL-03); +'passenger' for the AL-57 card rail
   owner_id UUID, currency CHAR(3) NOT NULL DEFAULT 'LKR',
   balance_minor BIGINT NOT NULL DEFAULT 0,                   -- may be negative (suspense); driver CHECK in app
   created_at TIMESTAMPTZ NOT NULL DEFAULT now());
 CREATE TABLE billing.journal_entries (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(), ts TIMESTAMPTZ NOT NULL DEFAULT now(),
   kind TEXT NOT NULL CHECK (kind IN ('topup','daily_fee','trip_payment','penalty_settle',
-    'adjustment','tip_payout','payment_refund','overpaid_reversal','voucher_purchase','driver_transfer')),  -- no 'reseller_commission' (AL-01: no per-transfer commission)
+    'adjustment','tip_payout','payment_refund','overpaid_reversal','voucher_purchase','driver_transfer',
+    'fleet_invoice','driver_payout')),  -- no 'reseller_commission' (AL-01); 'driver_payout' [NEW AL-58] discharges the AL-57 custody liability
   idempotency_key TEXT NOT NULL UNIQUE, description TEXT);
 CREATE TABLE billing.journal_postings (
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -819,6 +833,28 @@ CREATE TABLE billing.fleet_invoices (                        -- [NEW] monthly pe
   journal_entry_id UUID REFERENCES billing.journal_entries(id),
   UNIQUE (fleet_id, period_month));
 ```
+
+CREATE TABLE billing.payout_batches (                        -- [NEW AL-58] one weekly sweep
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  run_date DATE NOT NULL UNIQUE, tz_at TIMESTAMPTZ NOT NULL,  -- D-38 Asia/Colombo business-date companion
+  status TEXT NOT NULL DEFAULT 'RUNNING' CHECK (status IN ('RUNNING','COMPLETED','FAILED')),
+  instruction_count INT NOT NULL DEFAULT 0,
+  total_minor BIGINT NOT NULL DEFAULT 0 CHECK (total_minor >= 0),
+  started_at TIMESTAMPTZ NOT NULL DEFAULT now(), completed_at TIMESTAMPTZ);
+CREATE TABLE billing.payouts (                               -- [NEW AL-58] one instruction per driver per batch
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  batch_id UUID NOT NULL REFERENCES billing.payout_batches(id) ON DELETE CASCADE,
+  driver_id UUID NOT NULL REFERENCES iam.users(id),
+  payout_profile_id UUID NOT NULL REFERENCES registry.driver_payout_profiles(id),
+  amount_minor BIGINT NOT NULL CHECK (amount_minor >= 0),    -- the WHOLE balance: weekly full sweep, no minimum, no holdback
+  status TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING','SUBMITTED','PAID','FAILED')),
+  failure_reason TEXT, provider_reference TEXT,              -- the bank's own id, once originated
+  journal_entry_id UUID NOT NULL REFERENCES billing.journal_entries(id),   -- the wallet debit; commits WITH this row
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE UNIQUE INDEX ux_payouts_batch_driver ON billing.payouts(batch_id, driver_id);
+CREATE UNIQUE INDEX ux_payouts_provider_ref
+  ON billing.payouts(provider_reference) WHERE provider_reference IS NOT NULL;   -- R-19's shape
+
 
 ---
 
@@ -1117,7 +1153,7 @@ telemetry).
 | **D-03** driver-vehicle exclusivity partial index | `ux_sessions_active_driver` (trips.sessions) | ✅ |
 | **D-04** reputation counters | reputation.counters / block_states | ✅ |
 | **D-09** double-entry ledger | billing.accounts/journal_entries/journal_postings + balanced trigger | ✅ |
-| **D-11** registry.driver_payouts | registry.driver_payouts (OnePay merchant) | ✅ |
+| ~~**D-11** registry.driver_payouts~~ **RETIRED (AL-57)** | OnePay has one merchant account per merchant — no per-driver sub-account exists. Replaced by `registry.driver_payout_profiles` (AL-58) + `billing.payout_batches`/`billing.payouts` | ✅ |
 | **D-13** daily-fee PK | billing.daily_fee_charges PK (driver_id,vehicle_id,fee_date) Asia/Colombo | ✅ |
 | **D-26** content tables | content.notification_templates/faq_articles/broadcasts | ✅ |
 | **D-37** vehicle reg uniqueness | `ux_vehicles_regno_active` partial | ✅ |
