@@ -84,6 +84,51 @@ public interface ISosRepository
 
     /// <summary>AL-13's contact, or <see langword="null"/> when there is no such account.</summary>
     Task<EmergencyContact?> FindEmergencyContactAsync(Guid userId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Who an AL-44 web SOS is about and who it reaches, resolved from the share token alone.
+    /// </summary>
+    /// <remarks>
+    /// <b>Δ C066.</b> One query rather than a token read followed by a ride read: the alert is on
+    /// D-33's five-second budget and the two facts come out of one join.
+    /// </remarks>
+    Task<WebSosSubject?> FindWebSosSubjectAsync(string shareToken, CancellationToken cancellationToken);
+}
+
+/// <summary>
+/// What a share token says about the alert raised through it (AL-44, US-25.5).
+/// </summary>
+/// <remarks>
+/// <para>
+/// <b>The recipient is the booker, and D6' I-29.4 says so in as many words</b> — "recipient = the
+/// booker's registered mobile". Not an emergency contact: the person on an SCR-WT page has no
+/// MageRide account and therefore no <c>iam.users.emergency_contact_phone</c> to read, and the one
+/// party the platform knows is connected to them is whoever arranged the journey.
+/// </para>
+/// <para>
+/// <b>The number never leaves this service.</b> public-bff hands over a token and coordinates and is
+/// told an id and an outcome; the booker's MSISDN is resolved here, used here and returned to
+/// nobody. That is P-02/P-09's fence held by where the column is read rather than by a redaction
+/// step on the way out.
+/// </para>
+/// </remarks>
+/// <param name="RaiserName">
+/// Whoever is on the page — the proxy rider or the package recipient, as the ride names them. Goes
+/// into <c>sos_alert</c>'s <c>{{name}}</c>, which reads "{{name}} has raised an SOS": the booker
+/// needs to know <em>who</em> is in trouble, and on a proxy ride that is not the account holder.
+/// </param>
+public sealed record WebSosSubject(
+    string Token,
+    string Scope,
+    DateTimeOffset ExpiresAt,
+    DateTimeOffset? RevokedAt,
+    Guid? TripId,
+    string? BookerPhone,
+    string? RaiserName)
+{
+    public bool IsLiveAt(DateTimeOffset now) => RevokedAt is null && ExpiresAt > now;
+
+    public bool CanBeReached => !string.IsNullOrWhiteSpace(BookerPhone);
 }
 
 /// <inheritdoc cref="ISosRepository"/>
@@ -193,6 +238,36 @@ internal sealed class SosRepository(INpgsqlConnectionFactory connections) : ISos
                  WHERE id = @UserId;
                 """,
                 new { UserId = userId },
+                cancellationToken: cancellationToken));
+    }
+
+    public async Task<WebSosSubject?> FindWebSosSubjectAsync(
+        string shareToken, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(shareToken);
+
+        await using var connection = await _connections.OpenAsync(cancellationToken);
+
+        // The raiser is whoever the ride says is being carried or delivered to; the recipient is the
+        // booker. `booker_id` is NOT NULL on every ride (0601), so a live trip-scoped token always
+        // resolves to somebody — a NULL phone here means an account with only an email, which
+        // `ck_users_credential` permits and which no passenger has.
+        return await connection.QuerySingleOrDefaultAsync<WebSosSubject>(
+            new CommandDefinition(
+                """
+                SELECT t.token,
+                       t.scope,
+                       t.expires_at,
+                       t.revoked_at,
+                       t.trip_id,
+                       b.phone                                     AS booker_phone,
+                       CASE WHEN r.kind = 2 THEN r.recipient_name ELSE r.rider_name END AS raiser_name
+                  FROM safety.trip_share_tokens t
+                  LEFT JOIN rides.rides r ON r.id = t.trip_id
+                  LEFT JOIN iam.users b   ON b.id = r.booker_id
+                 WHERE t.token = @Token;
+                """,
+                new { Token = shareToken },
                 cancellationToken: cancellationToken));
     }
 }

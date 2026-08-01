@@ -24,6 +24,7 @@ they never want to see again.
 | `POST` · `DELETE /v1/drivers/{driverId}/block` | Bearer | US-12.10 |
 | `GET /v1/internal/safety/reports/queue` · `POST .../{reportId}/resolve` | internal | **Δ C052** — the moderation pair admin-bff forwards |
 | `POST /v1/internal/safety/trips/{tripId}/close` | internal | **Δ C052** — D-34's "trip end + 1 h" |
+| `POST /v1/internal/safety/sos/web` | internal | **Δ C066** — AL-44/US-25.5's web SOS, the caller C052 named |
 | `GET /v1/internal/safety/location-requests/{bookerId}` | internal | **Δ C052** — P-12's forensic read |
 
 | Table | Read | Written |
@@ -155,9 +156,24 @@ tables, the SLO column, the driver a report counts against, and five rejection c
 - **`safety.location_request_audit`'s writes.** ride-svc's (C037), inside the transaction that
   resolves each request — the only place they can be correct. A second writer here would
   double-count every outcome.
-- **The web SOS (`source='web'`).** AL-44/US-25.5's alert from an SCR-WT page carries a share token
-  instead of an account; the column, the CHECK and `RaiseSosCommand.ShareToken` all admit it, and
-  public-bff (C057) is the caller that does not exist yet.
+- ~~**The web SOS (`source='web'`).**~~ **Δ C066: landed.** `POST /v1/internal/safety/sos/web` is
+  the seam public-bff calls, and it is a second entry point rather than a flag on `RaiseAsync` —
+  three things differ all the way down. The caller is a service, so there is no bearer and no
+  `user_id`. The recipient is D6' I-29.4's **booker** rather than AL-13's emergency contact, which
+  somebody with no account does not have, so the "add a contact before using SOS" refusal is
+  meaningless here. And the credential is a `safety.trip_share_tokens` row, which is **re-checked
+  against the table this service owns** rather than trusted from the caller — this is the one route
+  on the platform by which a caller with no bearer writes a safety event. A boolean on the existing
+  command would have made every one of those an `if` in the middle of the platform's most
+  time-critical path.
+  **Everything after the resolution is identical, deliberately**: the same row, the same
+  `sos.raised` inside the same transaction, the same dual-gateway dispatch, the same measured
+  `ts → dispatched_at`. A web SOS is not a lesser alert, and an operator's console must not be able
+  to tell where it came from except by reading `source`. **The booker's number never leaves this
+  service** — public-bff sends a token and two coordinates and is told an id and an outcome, which
+  is P-02/P-09 held by where the column is read.
+  `pickup_confirm` is refused: it names a location request, there is no ride and no booker, and
+  SCR-WT-003 has no SOS button because the person reading it has not been picked up by anybody yet.
 - **`admin_acked_at`.** US-12.11's acknowledgement is an admin action on an admin screen (C065). The
   column is read and never written here.
 - **The block `reason`.** `safety.blocked_drivers` has no column for one, US-12.10 asks for none, and

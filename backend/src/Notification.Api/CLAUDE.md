@@ -34,7 +34,8 @@ user-facing string is composed here.** Every body is rendered from
 | `comms.notifications` | the two workers | **this service** — the queue, the log and the E-01 fence |
 | `comms.notification_tokens` | every push | **this service** |
 | `comms.command_log` | the kernel's replay | the same |
-| `safety.trip_share_tokens` | — | **this service mints**; revocation and metering are safety-svc's (C052) |
+| `safety.trip_share_tokens` | — | **this service mints**; revocation and metering are safety-svc's (C052), the `pickup_confirm` burn is public-bff's (C066) |
+| `package:delivery-code:{rideId}` (Redis) | — | **this service** (Δ C066) — read by public-bff for SCR-WT-002 |
 | `iam.users` | language, phone, preferences | **this service writes `notif_prefs` and nothing else** — see below |
 | `rides.location_requests` | `request_id` → `id`, for AL-45's token | **ride-svc** — read-only here |
 | `content.notification_templates` | every render, over HTTP | **content-svc** (C045) |
@@ -53,6 +54,25 @@ user-facing string is composed here.** Every body is rendered from
   nothing, and `The_limit_is_per_booker_not_per_rider` asserts it.
 - **No masked-number relay.** AL-48 removed D-25; nothing here dials, bridges or leases a number,
   and `comms.call_log` is not touched by this service at all.
+
+## Δ C066 — the delivery code the web page shows
+
+**The code still stays out of the SMS, and now it reaches the page that was supposed to show it.**
+ADD §11.16 hands the delivery OTP to the recipient at pickup and D6' I-23.3 has the web page show it
+"post token validation", so the SMS carries a link and not four digits — that decision is unchanged.
+What was missing is the other half: ride-svc mints the plaintext at pickup and keeps only the digest
+("in the clear for one hop instead of for the whole booking", C037), and `package.picked_up` is that
+hop. This handler is what is listening, and public-bff — which serves SCR-WT-002 — had nothing to
+read. **The unregistered recipient, who is the entire audience of that page, was the one party on
+the platform with no way to learn their own code.**
+
+`IDeliveryCodeStore` writes it to `RedisKeys.PackageDeliveryCode` in the same branch that mints the
+`package_recipient` token, for `Notification:PackageRecipientTokenTtl` — the same window, because
+both exist so one handover can happen and neither should outlive it. **Redis rather than a column**:
+a `delivery_otp_plain` on `rides.rides` would put a live credential for every in-flight parcel in the
+system of record, in backups and in reach of every read that touches a ride. **Best-effort and
+loud**: a recipient with a link and no code can still be delivered to by photo proof (P-10); one with
+no link cannot be delivered to at all, so a Redis failure is logged and the SMS still goes.
 
 ## Rules that are load-bearing
 

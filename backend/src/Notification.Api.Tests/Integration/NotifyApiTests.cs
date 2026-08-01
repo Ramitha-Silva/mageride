@@ -400,11 +400,22 @@ public sealed class NotifyApiTests(PostgresFixture postgres, RedisFixture redis)
 
         await harness.DeliverAsync();
 
-        // `created_at` is the database's clock, so the sweep is driven by moving its cut-off rather
-        // than by moving the fake one.
+        // **Aged against the harness clock, because that is the clock the cut-off comes from.**
+        // `RetentionWorker.SweepAsync` purges everything before `clock.GetUtcNow() - Retention`, and
+        // `clock` is the `FakeTimeProvider` this harness registers as the `TimeProvider` singleton —
+        // not the database's. `created_at` defaults to `now()` at insert, so the two agree in
+        // production and diverge here by however far the fake instant sits from today.
+        //
+        // Written as `now() - interval '2 days'` this test passed on the day it was written and
+        // failed silently thereafter: with the fake clock pinned and `now()` advancing, a row aged
+        // two days behind the *database* eventually lands after a cut-off derived from a *fixed*
+        // date, and the sweep correctly purged nothing. Pinning the value to the same clock the
+        // production code reads makes the assertion independent of the wall clock for good.
         await using (var connection = await harness.OpenAsync())
         {
-            await connection.ExecuteAsync("UPDATE comms.notifications SET created_at = now() - interval '2 days';");
+            await connection.ExecuteAsync(
+                "UPDATE comms.notifications SET created_at = @CreatedAt;",
+                new { CreatedAt = harness.Clock.GetUtcNow() - TimeSpan.FromDays(2) });
         }
 
         Assert.Equal(1, await harness.Resolve<MageRide.Notification.Sending.RetentionWorker>()

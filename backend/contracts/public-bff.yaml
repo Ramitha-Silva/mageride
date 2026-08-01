@@ -104,6 +104,15 @@ paths:
         Server-sent events. A client that cannot hold an SSE connection open falls back to polling
         with `?since=<cursor>`, which returns the events after that cursor as a JSON batch — the
         page works on a bad connection without a socket.
+
+        **Δ C066 — the cursor describes what the client already knows, and indexes nothing.**
+        There is no server-side buffer: resuming means "tell me what has changed since I knew
+        this", answered from what is true now. So a client disconnected for an hour resumes
+        correctly and learns nothing about the hour (a replayable feed would be the historical
+        replay D-34 forbids, reached through the back door), and any replica can resume a stream it
+        never served. A browser's `EventSource` needs no query parameter: each frame carries the
+        cursor in `id:`, which is echoed back as `Last-Event-ID` and honoured identically. An
+        unparseable cursor is answered with the current state rather than refused.
       tags: [public-track]
       security: []
       parameters:
@@ -233,17 +242,29 @@ paths:
               $ref: './_shared.yaml#/components/schemas/GeoPointWithAccuracy'
       responses:
         '202':
-          description: Alert dispatched.
+          description: |
+            Alert recorded and announced. **Δ C066: `dispatchedAt` is nullable and `smsStatus` is
+            beside it**, the same micro-change-set `safety.yaml` carries on `POST /v1/sos` and for
+            the same reason — without the status a caller cannot tell "the alert went out" from
+            "the alert is on the admin console and nowhere else", and on this surface that is the
+            difference between somebody having been told and nobody having been.
           content:
             application/json:
               schema:
                 type: object
-                required: [sosId, dispatchedAt]
+                required: [sosId, smsStatus]
                 properties:
                   sosId:
                     $ref: './_shared.yaml#/components/schemas/Ulid'
                   dispatchedAt:
-                    $ref: './_shared.yaml#/components/schemas/Timestamp'
+                    oneOf:
+                      - $ref: './_shared.yaml#/components/schemas/Timestamp'
+                      - type: 'null'
+                    description: When a gateway took it. Null when none did.
+                  smsStatus:
+                    type: string
+                    enum: [Dispatched, Failed, NoContact]
+                    description: safety-svc's own vocabulary (`safety.sos_events.sms_status`).
         '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
         '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
         '410': { $ref: './_shared.yaml#/components/responses/Gone' }
@@ -283,7 +304,7 @@ paths:
         '410': { $ref: './_shared.yaml#/components/responses/Gone' }
         '429': { $ref: './_shared.yaml#/components/responses/TooManyRequests' }
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
-      x-error-codes: [token-unknown, illegal-transition, token-expired-or-revoked, rate-limited]
+      x-error-codes: [token-unknown, receipt-not-ready, token-expired-or-revoked, rate-limited]
 
 components:
   parameters:

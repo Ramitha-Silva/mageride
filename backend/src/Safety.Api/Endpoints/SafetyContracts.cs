@@ -85,6 +85,17 @@ public sealed record ResolveReportResponse(
 /// <summary>`POST /v1/internal/safety/trips/{tripId}/close` (Δ C052).</summary>
 public sealed record CloseTripSharesResponse(Guid TripId, int Revoked);
 
+/// <summary>
+/// `POST /v1/internal/safety/sos/web` (Δ C066) — AL-44/US-25.5's alert from an SCR-WT page.
+/// </summary>
+/// <remarks>
+/// <b>No ride id, no role and no recipient.</b> All three are facts about the token, and accepting
+/// any of them from the caller would let public-bff raise an alert against a ride whose link it does
+/// not hold, or aim one at a number it chose. <c>accuracy</c> is likewise absent:
+/// <c>safety.sos_events</c> has no column for it and D-33's alert is a place, not a measurement.
+/// </remarks>
+public sealed record WebSosBody(string? ShareToken, double? Lat, double? Lng);
+
 /// <summary>One outcome of a proxy location request (P-12).</summary>
 /// <remarks>
 /// The subject is a digest, never a number: 0904 stores <c>rider_phone_hash</c> because the rider

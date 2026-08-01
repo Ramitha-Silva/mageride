@@ -44,6 +44,10 @@ public static class NotificationServiceCollectionExtensions
         services.AddSingleton<ILocationRequestLookup, LocationRequestLookup>();
         services.AddSingleton<IShareTokenMinter, ShareTokenMinter>();
 
+        // Δ C066. Beside the minter because it is written in the same handler and for the same
+        // recipient: the token opens SCR-WT-002 and this is the code that page shows.
+        services.AddSingleton<IDeliveryCodeStore, DeliveryCodeStore>();
+
         // The rendered-template cache lives in this instance, so the source is a singleton and the
         // purge subscriber below shares it.
         services.AddSingleton<ITemplateSource, ContentTemplateClient>();

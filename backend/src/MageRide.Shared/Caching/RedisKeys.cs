@@ -355,4 +355,29 @@ public static class RedisKeys
 
     /// <summary>Pre-signed URL to a generated PDPA export ZIP, TTL 30 d (E-06).</summary>
     public static string PdpaExport(Guid requestId) => $"pdpa:export:{requestId}";
+
+    /// <summary>
+    /// The plaintext delivery code for a package in transit — the four digits SCR-WT-002 shows an
+    /// unregistered recipient (US-20.5, P-07). TTL = the delivery window.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Not in ADD §9.4's key space</b> — a micro-change-set raised in the C066 handoff, the same
+    /// shape as the five keys above it. It exists because three components each made a correct local
+    /// decision that left one gap between them: ride-svc mints the code at pickup and keeps only the
+    /// digest ("in the clear for one hop instead of for the whole booking", C037); notification-svc
+    /// pushes it to a recipient who has the app and deliberately leaves it out of the SMS for one who
+    /// does not, because D6' I-23.3 has the web page show it "post token validation"; and public-bff,
+    /// which serves that page, had nowhere to read it from. The unregistered recipient — the entire
+    /// audience of SCR-WT-002 — could not learn their own code.
+    /// </para>
+    /// <para>
+    /// <b>Written by notification-svc alone</b> (C051), in the same handler that mints the
+    /// <c>package_recipient</c> token, and read by public-bff alone (C066) for the holder of that
+    /// token. Redis rather than a column on purpose: the value is a short-lived credential for one
+    /// handover, it expires with the delivery whether or not anything remembers to clear it, it
+    /// reaches no backup, and a PDPA erasure has nothing to reach.
+    /// </para>
+    /// </remarks>
+    public static string PackageDeliveryCode(Guid rideId) => $"package:delivery-code:{rideId}";
 }

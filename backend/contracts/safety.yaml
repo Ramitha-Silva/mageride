@@ -23,6 +23,14 @@ openapi: 3.1.0
 #     knows when a trip ends; ride-svc and trip-state-svc do.
 #   * /v1/internal/safety/location-requests/{bookerId} — P-12's rows are ride-svc's to write and the
 #     question they exist to answer had nowhere to be asked.
+#
+# Δ C066 — one change:
+#   * /v1/internal/safety/sos/web — AL-44/US-25.5's alert from an SCR-WT page. The C052 handoff left
+#     this named rather than stubbed ("public-bff is the caller that does not exist yet"); it exists
+#     now. It is here rather than in public-bff because safety.sos_events has one writer, and the
+#     row, its sos.raised outbox event and D-33's dual-gateway dispatch are one transaction and one
+#     five-second SLO. The share token travels and the booker's MSISDN does not: D6' I-29.4's
+#     recipient is resolved inside this service and returned to nobody (P-02/P-09).
 # =============================================================================================
 
 info:
@@ -490,6 +498,79 @@ paths:
         '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
       x-error-codes: [not-found]
+
+  /v1/internal/safety/sos/web:
+    post:
+      operationId: raiseWebSos
+      summary: Raise an SOS from an SCR-WT page, where a share token is the only identity.
+      description: |
+        **Δ C066.** AL-44 / US-25.5. Writes `safety.sos_events` with **`user_id = NULL`**,
+        **`source = 'web'`** and the originating `share_token` — `ck_sos_events_actor` demands one
+        of the two, and a web guest has only the token. The `sos.raised` outbox event commits with
+        the row, so an operator sees the alert whether or not a gateway takes it, and the SMS goes
+        to **the booker's registered mobile** (D6' I-29.4) rather than to AL-13's emergency contact,
+        which somebody with no account does not have.
+
+        **The token is re-checked here against the table this service owns**, not trusted from the
+        caller: this is the one route on the platform by which a caller with no bearer writes a
+        safety event. A `pickup_confirm` token is refused — it names a location request rather than
+        a trip, there is no ride and no booker, and SCR-WT-003 has no SOS button.
+
+        No `rideId`, no `role` and no recipient in the body: all three are facts about the token,
+        and accepting any of them would let the caller raise an alert against a ride whose link it
+        does not hold, or aim one at a number it chose.
+      tags: [safety-internal]
+      security:
+        - mtls: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [shareToken, lat, lng]
+              properties:
+                shareToken:
+                  type: string
+                  minLength: 16
+                  maxLength: 128
+                  description: A live `package_recipient` or `proxy_rider` token.
+                lat:
+                  type: number
+                  format: double
+                  minimum: -90
+                  maximum: 90
+                lng:
+                  type: number
+                  format: double
+                  minimum: -180
+                  maximum: 180
+      responses:
+        '202':
+          description: Recorded and announced; the SMS outcome is on `smsStatus`.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sosId, smsStatus]
+                properties:
+                  sosId:
+                    $ref: './_shared.yaml#/components/schemas/Ulid'
+                  dispatchedAt:
+                    description: |
+                      When a gateway took the alert. **Absent when none did** — the event is still
+                      recorded and still on the admin live feed.
+                    $ref: './_shared.yaml#/components/schemas/Timestamp'
+                  smsStatus:
+                    type: string
+                    enum: [Dispatched, Failed, NoContact]
+        '400': { $ref: './_shared.yaml#/components/responses/BadRequest' }
+        '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
+        '410': { $ref: './_shared.yaml#/components/responses/Gone' }
+        '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
+      x-error-codes: [validation-failed, token-unknown, token-expired-or-revoked]
 
   /v1/internal/safety/location-requests/{bookerId}:
     get:

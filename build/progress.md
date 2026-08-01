@@ -92,7 +92,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C063 | admin-bff-verification | 3 | DONE | 2026-08-01| **17 verification tests green** (`--filter Category=Verification`) and **91/91** across the whole `AdminBff.Tests` suite (was 65), integration against a real Postgres because every DoD item is a claim about the database; **1 migration (0315)** — `registry.driver_profiles.rejection_reason`, because AL-39's family is subject-agnostic and two of its three subjects already had somewhere to keep US-2.15's reason while the driver did not; **a queue is "has a field still `pending`" and that IS AL-27's fence** — an auto-verified document produces no such row, so it cannot appear rather than being filtered out by something that could stop filtering, and the same count is US-2.10a's approval gate so the two cannot disagree; **the vehicle queue is Mode C and fleet alike** because AL-50 reuses AL-29's pipeline and both write the same two tables; **every document fetch goes through the audited route** — `thumbUrl`/`fullUrl` point at `GET /v1/admin/documents/{docId}`, which records `DOC_VIEW` and *then* mints the short-lived signed URL it redirects to, because a pre-signed bucket URL would have satisfied AL-39's first half and silently dropped its second; **the D-35 success window widened to 3xx** for exactly that redirect; **withdrawing a rejection is its own `VERIFICATION_REOPENED` row** — registry-svc will not auto-approve a REJECTED vehicle, so a resubmission could otherwise never be approved, and the trail stays honest when the approval that follows is refused by AL-10; **an edit reaches an unflagged field and a bare confirm does not**, and an edited value becomes `manual` with no confidence (`ck_document_fields_manual_confidence`); **`merchantBound` is always false** because D-11's bind requires a `merchantId` nothing on this platform onboards; `migrate-verify.sh` 446/446, Spectral 0 errors, solution build 0 warnings; 2 new upstreams, 8 contract changes, 4 spec gaps / micro-change-sets **Δ 2026-08-01 (AL-58/AL-59)**: the driver payout-profile queue, detail and verdict — closes gap (b) the C028 handoff named, where a submitted bank account could never be verified and payout-svc could never pay anyone. Its own queue predicate (nothing extracts fields from a bank statement), its own verdict route (a driver id already names the identity subject, and refusing a statement must not refuse a licence) and its own audit action; the BR-31.1 write is forwarded to registry-svc. **ADD §1.18 AL-58 corrected.** **101 tests green (+6)** |
 | C064 | admin-bff-directories | 3 | DONE | 2026-08-01 | **15 directory tests green** (`--filter Category=Directories`) and **122/122** across the whole `AdminBff.Tests` suite (was 101), integration against a real Postgres because every DoD item is a claim about a joined view; **5 index-only migrations (0109, 0317, 0507, 0610, 1110)** — no new table and no new column, three directories over other services' tables needing two keyset orderings and three reverse lookups nobody had needed before; **each directory is gated on the URD §2.3 row whose cells are *exactly* D3''s printed role list, with ◐ fenced by `RequirePlatformWideFeature`** — Support for passengers (not Passenger, whose PAX cell is ✅ and would let any passenger list every passenger), Driver-wallet for drivers and Fleet-monitoring for vehicles (not Driver-app / Fleet-operations, which both give Finance ➖ where BR-28.8 names Finance) — so the two specs agree instead of one overruling the other; **two rows, two questions**: the row above opens the screen, `account-management · write` held unscoped unmasks it, which is what makes "a Support CSR sees masked PII" fall out of the matrix rather than out of a hard-coded role list; **a list is masked for every role**, so every clear MSISDN this surface has emitted has a `PII_READ` row behind it; **one detail open is exactly one `PII_READ` row** and the row records `piiRevealed`, because the actor alone does not answer the question a privacy investigation asks; **the vehicle detail is audited too** (URD §2.3's clause names all three, `server_db_schema.md` §23 names two — micro-change-set); **the page is chosen before anything is counted** — keyset index under a LIMIT, then LATERAL per-row aggregates — which is why 10k rows answer the first page at **29.5 ms p95** against a 500 ms budget; `migrate-verify.sh` **461/461**, Spectral 0 errors, solution build 0 warnings; 1 spec conflict resolved, 3 micro-change-sets |
 | C065 | admin-bff-finance-pdpa | 3 | DONE | 2026-08-01 | **27 finance/PDPA tests green** (`--filter Category=FinancePdpa`) and **162/162** across the whole `AdminBff.Tests` suite (was 122); **four migrations, none of them a table** — `0110 iam.users.anonymised_at` (the column an erasure writes, which is what finally makes C064's `PassengerRow.status='deleted'` producible), `1314 pdpa.requests.decided_by/.decision_reason` (D3' gives `/reject` a required reason and §16 gave it nowhere to go), and two read-path indexes (`1008` the R-19 Overpaid queue, `1111` the per-rail settlement read); **the finance surface writes nothing** — wallet-svc posts the reversal, fare-svc raises the refund, reputation-svc resolves a flag — asserted as a class with no `INSERT` and against the route table by `Only_two_finance_routes_mutate_and_both_forward`; **four URD §2.3 rows, not one**, and the fence "reversals are Finance/Super-Admin only" falls out of the matrix rather than out of a role list; **the exception queue's four classes are derived, never stored**, because wallet-svc records no exception column; **an erasure's hold list has two kinds of entry** — blocking (409, lifts on its own) and retention (`FulfilledHold`) — and conflating them would either refuse every erasure for ever or anonymise somebody mid-ride; **`audit.events` is never touched and the fulfilment writes to it**; **`/v1/pdpa` is the one prefix outside `/v1/admin`** and the start-up guard names it; `migrate-verify.sh` **469/469**, Spectral 0 errors, solution build 0 warnings; **1 spec conflict resolved, 5 micro-change-sets** |
-| C066 | public-bff | 3 | PENDING | | |
+| C066 | public-bff | 3 | DONE | 2026-08-01 | **51/51 green** in a new `PublicBff.Tests` suite that boots a real ride-svc and a real safety-svc, because three DoD items are claims about *their* rows; **no migration** — every row this surface reads was landed by C004/C005/C037/C052 and the two it writes are columns 0901 created for this caller; **no authentication scheme is registered at all**, so the token in the path is the credential by construction and the start-up guard refuses a route that asks for authorization, sits outside `/public/track`, escapes the token gate, or is named `/call` (AL-48); **each scope is a closed type with no field for what it may not carry**, asserted on the JSON rather than on the DTO because the half that matters is what is absent; **the 410 is asserted on the body**, not the status code; **the `deliveryOtp` hole is closed** — ride-svc keeps only the digest and notification-svc deliberately keeps the code out of the SMS *because this page shows it*, so the unregistered recipient could not learn their own code until C066 gave notification-svc a kernel Redis key to leave it in; **the web SOS is safety-svc's** (`POST /v1/internal/safety/sos/web`, the seam C052 named) and the booker's MSISDN never reaches this process; **the live cursor describes what the client knows and indexes nothing**, so a replica that never served a stream resumes it and no buffer exists to replay (D-34); Spectral 0 errors, solution build 0 warnings; **3 spec gaps recorded, 5 micro-change-sets**; also fixed a **pre-existing, calendar-triggered** failure in `Notification.Api.Tests` (85/86 → **86/86**) where a pinned fake clock was compared against a `now()`-seeded column — the row is now aged against the clock the production sweep actually reads |
 | C067 | driver-android-shell | 4a | PENDING | | |
 | C068 | driver-android-auth-onboarding | 4a | PENDING | | |
 | C069 | driver-android-vehicle-onboarding | 4a | PENDING | | |
@@ -10362,3 +10362,185 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   whole suite including the container start and ~1 min for `Category=FinancePdpa`; `migrate-verify.sh`
   ~4 min. **No new NuGet reference, no new project, no new PostgreSQL extension** — the ZIP is
   `System.IO.Compression` and the PDF is bytes.
+
+- **Component:** C066 public-bff — 2026-08-01
+- **Status:** DONE — `dotnet test backend/src/PublicBff.Tests -c Release` is **51/51 green** in a new
+  suite; `dotnet build backend/MageRide.sln -c Release` is clean with 0 warnings; the Spectral lint
+  over `backend/contracts/*.yaml` is 0 errors; `MageRide.Shared.Tests` (**307/307**), `Safety.Api.Tests`
+  (**30/30**) and `Notification.Api.Tests` (**86/86**) green against the deltas this component landed
+  in them — the last of those was 85/86 on a **pre-existing, calendar-triggered** failure that
+  reproduces with the C066 delta stashed, and it is fixed here (see below). All
+  five DoD items are asserted against the services that actually own them — a real ride-svc moves the
+  `rides.location_requests` row and a real safety-svc writes the `safety.sos_events` one, because a
+  stub would have proved only that this BFF calls what it calls. **No migration.**
+- **Notes:**
+  **The token is the whole credential, and the composition root is what makes that structural.**
+  `UseAuthentication = false`: there is no authentication scheme registered in this process at all,
+  so a bearer could not be validated if one arrived; what *is* registered is the kernel's
+  authorization with its deny-by-default fallback, which is what makes the group's explicit
+  `AllowAnonymous` a decision rather than a default. `GuardTheSurface` refuses to start on a route
+  that asks for authorization, sits outside `/public/track`, or was mapped outside the group that
+  carries the token gate — and **refuses `/call` by name**, because AL-48 removed the proxy-DID lease
+  in full while several pre-AL-48 spec lines still describe it, and one string comparison is what
+  stands between an earlier-dated document and a CPaaS dependency the platform deliberately does not
+  have. `FenceTests` asserts all four against the running route table.
+
+  **Every scope's response is a closed type with no field for what it may not carry.** The
+  recipient's snapshot has nowhere to put the sender's number and `PublicFareResponse` has nowhere to
+  put a payment instrument, so P-02/P-09 survive a change to the projection rather than depending on
+  one. `SnapshotTests` asserts on the **JSON**, not on the DTO: the half that matters is what is
+  absent, and a test that deserialised into the DTO would say nothing about it. The 410 for a dead
+  token is likewise asserted on the **body** — ride id, driver name, plate, state and coordinates all
+  checked for absence — because the 404/410 is produced before any ride row is read at all.
+
+  **Three spec gaps, one of which was a hole nothing on the platform could fill.**
+  (a) **`deliveryOtp` had no source.** ride-svc mints the plaintext at pickup and keeps only the
+  digest ("in the clear for one hop instead of for the whole booking", C037); notification-svc pushes
+  it to a recipient with the app and *deliberately* leaves it out of the SMS for one without, because
+  D6' I-23.3 has **this page** show it "post token validation". Nobody was listening on the hop, so
+  **the unregistered recipient — the entire audience of SCR-WT-002 — was the one party with no way to
+  learn their own code.** Closed by notification-svc writing it to a new kernel Redis key,
+  `package:delivery-code:{rideId}`, in the same handler that mints the `package_recipient` token;
+  public-bff reads it back for the holder of that token and only while the parcel is aboard. **Redis
+  rather than a column, and that is the decision**: a `delivery_otp_plain` on `rides.rides` would put
+  a live credential for every in-flight parcel in the system of record, in backups and in reach of
+  every read that touches a ride, whereas this expires with the delivery window whether or not
+  anything clears it and a PDPA erasure has nothing to reach. The write is best-effort and loud —
+  a recipient with a link and no code can still be delivered to by photo proof (P-10); one with no
+  link cannot be delivered to at all.
+  (b) **`startOtp` has no source and cannot have one.** `ride.yaml` and ride-svc's own
+  `RideContracts` both say a rider start OTP is "accepted and ignored in this build: no endpoint
+  issues one", and the two OTP columns on `rides.rides` are package-only. Omitted: four digits no
+  driver could be asked to check would be worse than an absent optional field. **Micro-change-set
+  raised** — D3' Δ 2026-07-05 prints `startOtp:"5678"` for a scope the platform cannot populate.
+  (c) **`dropoff.addr` has no column.** `rides.rides` stores a `dropoff_geo` and no address; the
+  object is omitted rather than filled with coordinates the schema has no field for.
+
+  **Five micro-change-sets, each argued where it lands.**
+  (1) **`receipt-not-ready` (409) coined** — `public-bff.yaml` answered `409` on the receipt and
+  listed `illegal-transition` beside it, which is `400` in the registry and is ride-svc's, where 400
+  is what D3' prints. Moving the shared code's status would turn every one of ride-svc's illegal
+  transitions into a 409; plain `conflict` says nothing, and SCR-WT-005 needs to distinguish "come
+  back when the trip ends" from any other conflict. Landed in all three places the convention
+  requires (`MageRideErrors`, `_shared.yaml`, the operation's `x-error-codes`).
+  (2) **The 202 on `sos` gained `smsStatus` and `dispatchedAt` became nullable** — the same
+  micro-change-set C052 made on `POST /v1/sos`, applied to the second surface that raises one.
+  Without the status a caller cannot tell "the alert went out" from "the alert is on the admin
+  console and nowhere else", and on this surface that is the difference between somebody having been
+  told and nobody having been.
+  (3) **`safety.yaml` gained `POST /v1/internal/safety/sos/web`** — the seam the C052 handoff left
+  named rather than stubbed ("public-bff is the caller that does not exist yet").
+  (4) **`RedisKeys.PackageDeliveryCode`** is not in ADD §9.4's key space, the same shape as the five
+  keys above it.
+  (5) **D7' §4.2 has no row for public-bff at all** — the same gap C008 and C043 record. The whole
+  block is in `infra/env/.env.app.example` with every knob argued.
+
+  **The web SOS is safety-svc's, and the booker's number never reaches this process.** A second
+  entry point on `ISosService` rather than a flag on the first, because three things differ all the
+  way down: the caller is a service so there is no bearer and no `user_id`; the recipient is D6'
+  I-29.4's **booker** rather than AL-13's emergency contact, which somebody with no account does not
+  have; and the credential is a `trip_share_tokens` row, **re-checked against the table safety-svc
+  owns** rather than trusted from the caller — this is the one route on the platform by which a
+  caller with no bearer writes a safety event. A boolean would have made every one of those an `if`
+  in the middle of the platform's most time-critical path. Everything after the resolution is
+  identical, deliberately: same row, same `sos.raised` inside the same transaction, same dual-gateway
+  dispatch, same measured `ts → dispatched_at`. public-bff sends a token and two coordinates and is
+  told an id and an outcome; `RaisedWebSos` has no field that could carry a recipient.
+
+  **The live feed's cursor describes what the client already knows and indexes nothing.** There is no
+  server-side buffer and there must not be — a replayable feed would be exactly the historical replay
+  D-34 forbids, reached through the back door. Two consequences worth keeping: a client disconnected
+  for an hour resumes correctly and learns nothing about the hour, and **a replica that never served
+  the first connection resumes it as well as the one that did**, so the stream survives a reconnect
+  through a different pod with no shared state at all. One diff function serves SSE and the `?since`
+  poll, because the failure mode of building them separately is a page that behaves differently on a
+  bad connection — which is the connection the fallback exists for. The stream re-reads the token
+  every tick, and that is the only thing that can carry a revocation to somebody who left the tab
+  open.
+
+  **Idempotency without a command log.** Every write here is forwarded, so the caller's
+  `Idempotency-Key` is forwarded with it; a BFF minting a fresh key per call would defeat the dedupe
+  of the two services it forwards to, and on the SOS route that means a double-tapped panic button
+  sending two messages. When the page sends none the key is **derived from the business fact**:
+  `pickup:{verb}:{token}` is stable for ever (a request can be answered once, so a retried tap should
+  replay rather than read a refusal), and `sos:{window}:{token}` is windowed (a stable key would make
+  a second genuine emergency twenty minutes later replay the first and send nobody anything). The
+  token is hashed rather than embedded, so a key in another service's log line is not a credential.
+
+  **Two derivations that are honest rather than clever.** SCR-WT-002 draws four steps and the ride
+  machine has three states for them (ADD Appendix B.2 invariant 6 — a package adds none), so
+  `PickedUp` vs `InTransit` is decided by whether the vehicle has left the sender, and **with no
+  position the conservative answer stands**: claiming the parcel is on its way with nothing to show
+  for it would be a guess told as a fact. And the receipt's `proof` is ordered dispute → money →
+  evidence, so a COD parcel that was both photographed and paid for reports the payment, which is the
+  question a receipt is opened to answer. `Receiptable` is deliberately **narrower than "terminal"** —
+  six of D5' §6's ten terminals are cancellations and no-shows, and answering one with
+  `proof: otp_verified` would record a handoff that never took place.
+
+  **US-25.6's `proof` vocabulary is a delivery's, applied to both kinds by a screen headed
+  "Delivered / Trip Summary".** `disputed` and `cod_collected` are genuine on a proxy ride;
+  `otp_verified` degenerates to "the journey ended the ordinary way", which the `state` beside it says
+  precisely. Recorded rather than papered over.
+
+  **For C104 (web-passenger) —** the six pages are exactly the six routes and there is no seventh;
+  `driver.phone` is a **real E.164 MSISDN** for a plain `tel:` link and never a masked one, so no
+  confirm-your-number step and no `/call` round-trip. `deliveryOtp` and `position` are **omitted when
+  absent**, not null — the kernel's serializer drops a null member, so "no code yet" and "no such
+  field" are the same wire fact. The live feed is `EventSource` with no query parameter (each frame's
+  `id:` is echoed as `Last-Event-ID`) or `?since=<cursor>` for a hand-rolled poll; a `resolved` frame
+  means stop reconnecting and go to SCR-WT-005 or SCR-WT-006. `route.polyline` is an **origin and a
+  destination, not a road path** (ADD §7.6 puts routing in Phase 3) — draw it as a hint, not as a
+  route. `ttlRemainingSec` is the countdown; the 300 s deadline is the request row, so a page left
+  open past it gets a 410 rather than a silent no-op.
+
+  **For C118 (contract tests) —** `public-bff.yaml` gained no operation (all six were already
+  declared) and changed three things: `getPublicReceipt`'s `x-error-codes` (`illegal-transition` →
+  `receipt-not-ready`), `raisePublicSos`'s 202 (nullable `dispatchedAt`, required `smsStatus`), and
+  `streamPublicTrack`'s description of the cursor. `safety.yaml` gained **one operation**
+  (`raiseWebSos`); `_shared.yaml`'s `ErrorCode` enum gained **one entry**.
+
+  **Named rather than stubbed —** D6' I-29.1 describes this service as "subscribing to the same
+  SignalR geocell/ride channels the apps use". What it actually needs is one vehicle's current
+  position and one ride's state, and both are in stores this process already holds a connection to;
+  a socket to fanout-svc would add a hop, a reconnect protocol and a second copy of the entitlement
+  question for data it can read directly. **Micro-change-set raised.** The ETA is a straight line
+  with a detour factor, the same method and caveat as query-svc's `EtaEstimator` — deliberately
+  duplicated rather than reached by a `ProjectReference` from a passenger-facing pod into another
+  service; **promoting `EtaEstimator` to the kernel is the right fix and is proposed here**, since it
+  is now the second implementation of one Phase-1 approximation. The admin live feed's consumer
+  (`sos.raised` has no SignalR group and no `SosRaised` event) is unchanged and still open from C052.
+
+  **A pre-existing time bomb in C051's suite, found by running it and fixed here (one test line).**
+  `Notification.Api.Tests` was failing `Retention_removes_settled_rows_and_leaves_pending_ones`;
+  **confirmed pre-existing** by reproducing it with the C066 delta stashed and `DeliveryCodeStore.cs`
+  moved aside. `NotificationHarness` pins its `FakeTimeProvider` at **2026-07-30** and registers it as
+  the `TimeProvider` singleton; `RetentionWorker.SweepAsync` therefore computes its cut-off as
+  `fakeClock - Retention`, which with the test's 1-day retention is 2026-07-29 — while the test aged
+  the rows with Postgres' **real** `now() - interval '2 days'`. That was 2026-07-28 on the day C051
+  ran (before the cut-off, one row purged, green) and is 2026-07-30 today (after it, nothing purged,
+  red). **A fixed fake instant compared against a database clock that keeps moving**, so the test
+  decayed silently rather than regressing.
+  **Fixed in the test, not in the sweep**: `created_at` is now set from `harness.Clock.GetUtcNow()`,
+  the same clock the production code reads, so both sides of the comparison derive from one constant
+  and the assertion no longer depends on the wall clock at all. `RetentionWorker` is untouched and
+  correct — `created_at` defaults to `now()` and the worker reads the injected `TimeProvider`, which
+  in production are the same instant. **86/86.**
+  This is the trap `PublicBffHarness` documents at its own `Now`, which is why that harness starts its
+  fake provider at **real UTC** and only ever *advances* it: the 300 s location-request window is
+  decided by Postgres (`issued_at + make_interval(secs => ttl_seconds) > now()`), so a pinned instant
+  would have put every seeded row outside a window the database evaluates against today.
+  **Checked whether the trap is armed anywhere else: it is not.** Seven suites pin a fake clock in
+  their harness (`Analytics`, `Fare.Api`, `FleetBilling`, `Notification.Api`, `Safety.Api`,
+  `Subscription.Api`, `Support.Api`), and **notification-svc's was the only one that also aged a row
+  with past-relative SQL** — which is exactly why it was the one that broke. The others pin a clock
+  but never compare it against a database-written timestamp; suites that do seed with `now()`
+  (`AdminBff` most heavily) run on the real `TimeProvider`, where the two agree. **The rule worth
+  keeping is one line: age a row against the clock the code under test reads**, and prefer a fake
+  provider that starts at real UTC and only advances when the assertion is about a database
+  predicate.
+
+  **Build host —** Docker for two Testcontainers fixtures (Postgres, Redis); the replica stack stayed
+  down throughout. `PublicBff.Tests` takes ~3 min for the whole suite including the container start;
+  it boots **three** WebApplications per test (public-bff, a real ride-svc, a real safety-svc) plus a
+  recording notification stub. `MageRide.Shared.Tests` ~35 s. **No new NuGet reference, no new
+  migration, no new PostgreSQL extension** — one new project pair and one new Redis key.

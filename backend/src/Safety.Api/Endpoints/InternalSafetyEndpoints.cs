@@ -5,6 +5,7 @@ using MageRide.Safety.Configuration;
 using MageRide.Safety.Persistence;
 using MageRide.Safety.Reports;
 using MageRide.Safety.Sharing;
+using MageRide.Safety.Sos;
 using MageRide.Shared.Errors;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.Extensions.Options;
@@ -56,6 +57,10 @@ public static class InternalSafetyEndpoints
 
         internalSafety.MapPost("/trips/{tripId:guid}/close", CloseTripAsync).WithName("closeTripShares");
 
+        // Δ C066 — AL-44/US-25.5's web SOS. The C052 handoff left this named rather than stubbed
+        // ("public-bff is the caller that does not exist yet"); it exists now.
+        internalSafety.MapPost("/sos/web", RaiseWebSosAsync).WithName("raiseWebSos");
+
         internalSafety.MapGet("/location-requests/{bookerId:guid}", AuditAsync)
             .WithName("listLocationRequestAudit");
 
@@ -106,6 +111,62 @@ public static class InternalSafetyEndpoints
 
         return TypedResults.Ok(new ResolveReportResponse(
             resolved.Report.Id, resolved.Report.Status, resolved.ConfirmedTotal, resolved.Delisted));
+    }
+
+    /// <summary>
+    /// <c>POST /v1/internal/safety/sos/web</c> — the one route by which a token-only caller writes a
+    /// safety event.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Here rather than in public-bff, because <c>safety.sos_events</c> has one writer.</b> The
+    /// row, the <c>sos.raised</c> event that puts it on the admin live feed and D-33's dual-gateway
+    /// dispatch are one transaction and one SLO; a second component writing that table would put
+    /// the five-second budget and the "record, announce, dispatch" ordering in two places and give
+    /// the operator's console two sources for the same alert.
+    /// </para>
+    /// <para>
+    /// <b>The token travels and the booker's number does not.</b> public-bff sends a share token and
+    /// two coordinates and is told an id and an outcome. Resolving the recipient here is what keeps
+    /// D6' I-29.4's "the booker's registered mobile" out of a passenger-facing process altogether,
+    /// which is P-02/P-09's fence held by where the column is read.
+    /// </para>
+    /// </remarks>
+    private static async Task<Accepted<RaiseSosResponse>> RaiseWebSosAsync(
+        WebSosBody? body,
+        ISosService sos,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(sos);
+
+        var errors = new Dictionary<string, string[]>(StringComparer.Ordinal);
+
+        if (string.IsNullOrWhiteSpace(body?.ShareToken))
+        {
+            errors["shareToken"] = ["shareToken is the credential for a web SOS and is required."];
+        }
+
+        if (body?.Lat is not { } lat || lat is < -90 or > 90)
+        {
+            errors["lat"] = ["lat must be a latitude between -90 and 90."];
+        }
+
+        if (body?.Lng is not { } lng || lng is < -180 or > 180)
+        {
+            errors["lng"] = ["lng must be a longitude between -180 and 180."];
+        }
+
+        if (errors.Count > 0)
+        {
+            throw new MageRideValidationException(errors);
+        }
+
+        var raised = await sos.RaiseWebAsync(
+            new RaiseWebSosCommand(body!.ShareToken!, body.Lat!.Value, body.Lng!.Value), cancellationToken);
+
+        return TypedResults.Accepted(
+            (string?)null,
+            new RaiseSosResponse(raised.Event.Id, raised.Event.DispatchedAt, raised.Event.SmsStatus ?? string.Empty));
     }
 
     private static async Task<Ok<CloseTripSharesResponse>> CloseTripAsync(

@@ -1,0 +1,62 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    C066 verify target: dotnet test backend/src/PublicBff.Tests -c Release
+
+    Three of the five definition-of-done items are claims about what happens in OTHER services, so
+    this suite boots them rather than faking them:
+
+      * "a web pickup-confirm resolves the same location request an in-app confirm would" runs a
+        REAL ride-svc (C037) and asserts the `rides.location_requests` row, not a stub's call log.
+        A fake would prove that public-bff calls what it calls; it would not prove that the row
+        moved, which is the whole of AL-45.
+      * "no endpoint leases a DID or returns a masked number" is asserted against the running route
+        table and against every response body the surface can produce, not by reading the code.
+      * the web SOS boots a REAL safety-svc (C052), because `safety.sos_events(source='web')`, its
+        outbox row and the recipient being the BOOKER are all facts about that service's
+        transaction. Only its notification-svc hop is stubbed, and only to read back which number
+        the SMS was aimed at.
+
+    The remaining two — scope shaping and the 410 with no ride data — are asserted on the response
+    BODY rather than on a status code, because the fence is that nothing about the trip is in it.
+
+    Microsoft.NET.Sdk.Web, not Microsoft.NET.Sdk: the harness builds three WebApplications and a stub.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.PublicBff.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <OutputType>Exe</OutputType>
+    <!--
+      xUnit1041: collection-fixture ctor args are consumed through the primary constructor.
+      xUnit1051: every test is bounded by its own harness lifetime.
+    -->
+    <NoWarn>$(NoWarn);xUnit1041;xUnit1051</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Dapper" />
+    <PackageReference Include="Npgsql" />
+    <PackageReference Include="NetTopologySuite" />
+    <PackageReference Include="StackExchange.Redis" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PublicBff\PublicBff.csproj" />
+    <!-- AL-45's other half: the state machine a web confirm has to move is ride-svc's. -->
+    <ProjectReference Include="..\Ride.Api\Ride.Api.csproj" />
+    <!-- US-25.5's other half: the row, the outbox event and the booker lookup are safety-svc's. -->
+    <ProjectReference Include="..\Safety.Api\Safety.Api.csproj" />
+    <ProjectReference Include="..\MageRide.TestKit\MageRide.TestKit.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

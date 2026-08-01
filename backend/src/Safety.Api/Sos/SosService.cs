@@ -19,8 +19,36 @@ namespace MageRide.Safety.Sos;
 public sealed record RaiseSosCommand(
     Guid? UserId, string Role, Guid? RideId, double Lat, double Lng, string Source, string? ShareToken);
 
+/// <summary>
+/// The body of <c>POST /v1/internal/safety/sos/web</c> (Δ C066), after validation.
+/// </summary>
+/// <remarks>
+/// There is no <c>rideId</c> and no role: both are facts about the token, and taking either from
+/// the caller would let public-bff raise an alert against a ride whose link it does not hold.
+/// </remarks>
+public sealed record RaiseWebSosCommand(string ShareToken, double Lat, double Lng);
+
 /// <summary>What the caller is told, and what the row now holds.</summary>
 public sealed record RaisedSos(SosEvent Event, bool Dispatched);
+
+/// <summary>
+/// Who the SMS goes to and whose name is in it — the two things the dispatch needs, whichever
+/// route raised the alert.
+/// </summary>
+/// <remarks>
+/// <b>Δ C066.</b> An app SOS reaches AL-13's emergency contact and a web SOS reaches D6' I-29.4's
+/// booker; those are different people found in different tables, and the D-33 dispatch does not care
+/// which. Named rather than passing an <see cref="EmergencyContact"/> with three of its five fields
+/// meaningless, which is what would have made the web path look like a special case of AL-13 when
+/// it is not one.
+/// </remarks>
+public sealed record AlertRecipient(string? Phone, string? RaiserName)
+{
+    public bool CanBeReached => !string.IsNullOrWhiteSpace(Phone);
+
+    public static AlertRecipient? From(EmergencyContact? contact) =>
+        contact is null ? null : new AlertRecipient(contact.Phone, contact.RaiserName);
+}
 
 /// <summary>
 /// D-33: button tap to SMS dispatched, p99 ≤ 5 s, through both gateways at once.
@@ -48,6 +76,31 @@ public sealed record RaisedSos(SosEvent Event, bool Dispatched);
 public interface ISosService
 {
     Task<RaisedSos> RaiseAsync(RaiseSosCommand command, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// US-25.5's alert from an SCR-WT page: the share token is the identity and the booker is who
+    /// is told.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Δ C066, and it is a second entry point rather than a flag on the first.</b> Three things
+    /// differ all the way down and none of them is a branch inside
+    /// <see cref="RaiseAsync(RaiseSosCommand, CancellationToken)"/>: the caller is a service and not
+    /// a person, so there is no bearer and no <c>user_id</c>; the recipient is D6' I-29.4's booker
+    /// and not AL-13's emergency contact, so the whole "add a contact before using SOS" refusal is
+    /// meaningless here; and the credential is a row in <c>safety.trip_share_tokens</c>, which has
+    /// to be checked before anything is written. A boolean on the existing command would have made
+    /// every one of those an <c>if</c> in the middle of the platform's most time-critical path.
+    /// </para>
+    /// <para>
+    /// <b>Everything after the resolution is identical, deliberately.</b> The same row, the same
+    /// <c>sos.raised</c> outbox event inside the same transaction, the same dual-gateway dispatch and
+    /// the same measured <c>ts → dispatched_at</c> interval. A web SOS is not a lesser alert, and an
+    /// operator's console must not be able to tell where it came from except by reading
+    /// <c>source</c>.
+    /// </para>
+    /// </remarks>
+    Task<RaisedSos> RaiseWebAsync(RaiseWebSosCommand command, CancellationToken cancellationToken);
 
     /// <summary>Own history only; the admin console reads the same events through the live feed.</summary>
     Task<IReadOnlyList<SosEvent>> HistoryAsync(
@@ -115,7 +168,76 @@ internal sealed class SosService(
             "SOS {SosId} raised by {Role} {UserId} at ({Lat},{Lng}) on ride {RideId} (source {Source}).",
             raised.Id, command.Role, command.UserId, command.Lat, command.Lng, command.RideId, command.Source);
 
-        var dispatched = await DispatchAsync(raised, contact, cancellationToken);
+        var dispatched = await DispatchAsync(raised, AlertRecipient.From(contact), cancellationToken);
+
+        return new RaisedSos(dispatched, dispatched.SmsStatus == SosSmsStatuses.Dispatched);
+    }
+
+    public async Task<RaisedSos> RaiseWebAsync(RaiseWebSosCommand command, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+
+        var subject = await sosEvents.FindWebSosSubjectAsync(command.ShareToken, cancellationToken)
+                      ?? throw new MageRideException(MageRideErrors.TokenUnknown, "No such tracking link.");
+
+        var now = clock.GetUtcNow();
+
+        // **Checked here as well as in public-bff, and that is the point of the check.** This is the
+        // one route on the platform by which a caller with no bearer writes a safety event, so the
+        // credential is verified by the service that owns the table rather than trusted from the
+        // service that read it a moment ago.
+        if (!subject.IsLiveAt(now))
+        {
+            throw new MageRideException(
+                MageRideErrors.TokenExpiredOrRevoked, "This link has expired or was closed.");
+        }
+
+        // `pickup_confirm` is deliberately refused. It names a location request rather than a trip
+        // (0901's ck_trip_share_tokens_subject), there is no ride, no booker and nobody in a
+        // vehicle — and SCR-WT-003 has no SOS button, because the person reading it has not been
+        // picked up by anybody yet.
+        if (!ShareTokenScopes.TripScoped.Contains(subject.Scope))
+        {
+            throw new MageRideException(
+                MageRideErrors.TokenUnknown, "This link cannot raise an alert.");
+        }
+
+        SosEvent raised;
+
+        await using (var unitOfWork = await unitOfWorkFactory.BeginAsync(cancellationToken: cancellationToken))
+        {
+            raised = await sosEvents.CreateAsync(
+                unitOfWork,
+                new NewSosEvent(
+                    // No account, by construction: `ck_sos_events_actor` demands a user id or a
+                    // token, and the token is the whole identity a web guest has (AL-44).
+                    UserId: null,
+
+                    // Whoever raises an alert from an SCR-WT page is being carried or delivered to.
+                    // The only other value the CHECK admits is 'driver', and a driver has an app.
+                    Role: SosRoles.Passenger,
+                    RideId: subject.TripId,
+                    Lat: command.Lat,
+                    Lng: command.Lng,
+
+                    // The booker's number, recorded on the row like every other alert's recipient.
+                    EmergencyContact: subject.BookerPhone,
+                    Source: SosSources.Web,
+                    ShareToken: subject.Token),
+                cancellationToken);
+
+            await outbox.WriteAsync(
+                unitOfWork, SafetyEvents.SosRaised(raised, contactName: null), cancellationToken);
+
+            await unitOfWork.CommitAsync(cancellationToken);
+        }
+
+        logger.LogWarning(
+            "Web SOS {SosId} raised on trip {TripId} at ({Lat},{Lng}) through a {Scope} link.",
+            raised.Id, subject.TripId, command.Lat, command.Lng, subject.Scope);
+
+        var dispatched = await DispatchAsync(
+            raised, new AlertRecipient(subject.BookerPhone, subject.RaiserName), cancellationToken);
 
         return new RaisedSos(dispatched, dispatched.SmsStatus == SosSmsStatuses.Dispatched);
     }
@@ -138,7 +260,7 @@ internal sealed class SosService(
     // -----------------------------------------------------------------------------------------
 
     private async Task<SosEvent> DispatchAsync(
-        SosEvent raised, EmergencyContact? contact, CancellationToken cancellationToken)
+        SosEvent raised, AlertRecipient? contact, CancellationToken cancellationToken)
     {
         if (contact?.CanBeReached != true)
         {

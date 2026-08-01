@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    PublicBff (C066 public-bff) — the no-login Passenger Web subview, passenger.mageride.lk (AL-44).
+
+    FENCE 1: **no Bearer auth and no session.** The `safety.trip_share_tokens` token in the path IS
+    the credential (D-34, P-09). Every route is anonymous by construction and `FenceTests` asserts
+    it against the running route table; `PublicBffApplication.GuardTheSurface` refuses to start if a
+    route asks for authentication or sits outside `/public`.
+    FENCE 2: **responses are shaped strictly by token scope.** A recipient never sees the sender's
+    number and a proxy rider never sees the booker's payment instruments (P-02/P-09). Each scope has
+    its own closed response type with no field for what it may not carry, so the redaction is a
+    property of the type rather than of a `if` somebody can delete.
+    FENCE 3: **a dead, expired or unknown token returns zero ride data.** The 404/410 is produced
+    before any ride row is read, exactly as safety-svc's public view does it.
+    FENCE 4 (AL-48): **`POST /public/track/{token}/call` does not exist.** No DID is leased and no
+    masked number is returned anywhere; the snapshot carries `driver.phone` for a plain `tel:` link.
+
+    Verify: dotnet test backend/src/PublicBff.Tests -c Release
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.PublicBff</RootNamespace>
+    <AssemblyName>MageRide.PublicBff</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <UserSecretsId>mageride-public-bff</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MageRide.Shared\MageRide.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Dapper" />
+    <PackageReference Include="Npgsql" />
+    <!-- The per-token and per-IP token buckets, the one live position the page may draw, and the
+         delivery code notification-svc leaves for the recipient's page. All three have to be
+         shared across replicas: a per-process bucket is a limit on nothing, and the other two are
+         written by other services. -->
+    <PackageReference Include="StackExchange.Redis" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="PublicBff.Tests" />
+  </ItemGroup>
+
+</Project>

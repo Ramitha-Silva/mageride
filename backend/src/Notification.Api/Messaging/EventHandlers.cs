@@ -171,6 +171,7 @@ internal sealed class RideEventHandler(
     IRecipientRepository recipients,
     ILocationRequestLookup locationRequests,
     IShareTokenMinter tokens,
+    IDeliveryCodeStore deliveryCodes,
     IOptions<NotificationOptions> options,
     TimeProvider clock,
     ILogger<RideEventHandler> logger) : IEventHandler
@@ -480,6 +481,13 @@ internal sealed class RideEventHandler(
     /// the recipient at pickup, and the app is a place to show it; an SMS is not — D6' I-23.3 has the
     /// web page show it "post token validation", so the token is what carries it and the message
     /// body does not.
+    /// <para>
+    /// <b>Δ C066: on the unregistered branch the code is left where that page can read it.</b> The
+    /// sentence above was true and incomplete — public-bff serves SCR-WT-002 and had nothing to read
+    /// the code from, because ride-svc keeps only the digest and this event is the one hop the
+    /// plaintext takes. <see cref="IDeliveryCodeStore"/> is where it is left, beside the token that
+    /// is the only thing allowed to fetch it.
+    /// </para>
     /// </remarks>
     private async Task PackagePickedUpAsync(EventEnvelope envelope, CancellationToken cancellationToken)
     {
@@ -534,6 +542,14 @@ internal sealed class RideEventHandler(
             ride,
             clock.GetUtcNow() + _options.PackageRecipientTokenTtl,
             cancellationToken);
+
+        // Δ C066. The code stays out of the SMS — that decision is unchanged and argued above — and
+        // is left for the page the link opens. Best-effort: a recipient with a link and no code can
+        // still be delivered to by photo proof (P-10); one with no link cannot be delivered to at all.
+        if (envelope.Text("deliveryOtp") is { Length: > 0 } webOtp)
+        {
+            await deliveryCodes.PutAsync(ride, webOtp, cancellationToken);
+        }
 
         await notifications.EnqueueAsync(
             new NotificationRequest(

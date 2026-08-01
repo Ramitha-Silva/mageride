@@ -258,6 +258,21 @@ public static partial class MageRideErrors
     public static readonly ErrorCode TokenUnknown = new("token-unknown", 404, "Share token is unknown");
     public static readonly ErrorCode TokenExpiredOrRevoked = new("token-expired-or-revoked", 410, "Share token has expired or was revoked");
 
+    /// <summary>
+    /// SCR-WT-005 was opened before the journey it summarises finished (US-25.6).
+    /// </summary>
+    /// <remarks>
+    /// <b>Δ C066, and it replaces a code that could not carry the status the contract declares.</b>
+    /// <c>public-bff.yaml</c> answers <c>409</c> on this route and listed
+    /// <see cref="IllegalTransition"/> beside it — but that entry is <c>400</c> here and is
+    /// ride-svc's, where 400 is what D3' prints. One of the two documents had to move, and moving
+    /// the shared code's status would turn every one of ride-svc's illegal transitions into a 409.
+    /// A plain <see cref="Conflict"/> was the other option and says nothing: the page needs to
+    /// distinguish "come back when the trip ends" from any other conflict, because that is the whole
+    /// difference between SCR-WT-002 and SCR-WT-005. Micro-change-set raised.
+    /// </remarks>
+    public static readonly ErrorCode ReceiptNotReady = new("receipt-not-ready", 409, "The journey has not finished yet");
+
     // ---------------------------------------------------------------------------------------
     // transit-svc — the GTFS Dataset Manager (AL-54, SCR-AP-016). Coined by C007 in
     // `contracts/_shared.yaml`'s ErrorCode enum and declared here by C057, which is the first

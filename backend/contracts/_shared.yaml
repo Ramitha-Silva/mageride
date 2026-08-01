@@ -287,6 +287,14 @@ components:
         - no-emergency-contact
         - token-unknown
         - token-expired-or-revoked
+        # Δ C066 — SCR-WT-005 opened before the journey it summarises finished. `public-bff.yaml`
+        # declares 409 on that route and originally listed `illegal-transition` beside it, which is
+        # 400 in the registry and is ride-svc's, where 400 is what D3' prints; moving the shared
+        # code's status would turn every one of ride-svc's illegal transitions into a 409. Plain
+        # `conflict` says nothing, and the page needs to distinguish "come back when the trip ends"
+        # from any other conflict — that is the whole difference between SCR-WT-002 and SCR-WT-005.
+        # Micro-change-set raised in the C066 handoff.
+        - receipt-not-ready
         # transit-svc GTFS Dataset Manager (AL-54) — coined by C007, see the handoff note.
         - feed-duplicate
         - feed-not-validated
