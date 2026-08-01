@@ -4,6 +4,7 @@ using System.Text;
 using MageRide.AdminBff.Configuration;
 using MageRide.AdminBff.Domain;
 using MageRide.AdminBff.Endpoints;
+using MageRide.Shared.Storage;
 using Microsoft.Extensions.Options;
 
 namespace MageRide.AdminBff.Verification;
@@ -25,12 +26,17 @@ namespace MageRide.AdminBff.Verification;
 /// through the row that records the view.
 /// </para>
 /// <para>
-/// <b>There is no object-storage client on this platform yet.</b> D-36's SSE-KMS bucket is C125's,
-/// and fleet-svc's file says in as many words that it holds no signing key and that admin-bff mints
-/// these. So the signature here is an HMAC over the doc id, the rendition, the deadline and the
-/// stored object key — the shape a bucket or CDN in front of D-36 verifies, and the properties that
-/// actually matter in the meantime: the link expires, and it cannot be re-pointed at another
-/// document by editing a path segment.
+/// <b>Δ D-36: the signed URL is now the bucket's own.</b> <see cref="SignedObjectUrl"/> asks the
+/// kernel's <c>IObjectStore</c> to presign a GET, which is what AL-39 asked for all along — the
+/// credential is an AWS SigV4 signature the storage provider verifies, the TTL is enforced by the
+/// provider, and no MageRide process carries the bytes.
+/// </para>
+/// <para>
+/// <b>The HMAC path is kept for a deployment with no bucket, and only for that.</b> Where
+/// <c>Storage:*</c> is unset the store cannot presign, and the fallback is the same HMAC over the
+/// doc id, the rendition, the deadline and the stored object key — the link still expires and still
+/// cannot be re-pointed at another document by editing a path segment. Which one a deployment got
+/// is visible in the start-up log rather than inferred.
 /// </para>
 /// <para>
 /// <b>No bearer travels in a query string.</b> The redirect target is fetched by an image loader
@@ -49,7 +55,9 @@ public interface IDocumentLinks
     /// </summary>
     (string Url, DateTimeOffset ExpiresAt) SignedObjectUrl(StoredDocument document, string variant);
 
-    /// <summary>Whether an object URL this service minted is still valid. For C125's bucket to reuse.</summary>
+    /// <summary>
+    /// Whether an HMAC object URL this service minted is still valid — the no-bucket path only.
+    /// </summary>
     bool Verify(Guid docId, string variant, string storageUrl, string? expires, string? signature);
 }
 
@@ -57,15 +65,21 @@ public interface IDocumentLinks
 internal sealed class DocumentLinks : IDocumentLinks
 {
     private readonly AdminBffOptions.DocumentOptions _options;
+    private readonly IObjectStore _objects;
     private readonly TimeProvider _clock;
     private readonly byte[] _key;
 
-    public DocumentLinks(IOptions<AdminBffOptions> options, TimeProvider clock, ILogger<DocumentLinks> logger)
+    public DocumentLinks(
+        IOptions<AdminBffOptions> options,
+        IObjectStore objects,
+        TimeProvider clock,
+        ILogger<DocumentLinks> logger)
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(logger);
 
         _options = options.Value.Documents;
+        _objects = objects ?? throw new ArgumentNullException(nameof(objects));
         _clock = clock ?? TimeProvider.System;
 
         if (string.IsNullOrWhiteSpace(_options.SigningKey))
@@ -75,10 +89,13 @@ internal sealed class DocumentLinks : IDocumentLinks
             // opened a second ago.
             _key = RandomNumberGenerator.GetBytes(32);
 
+            // Harmless once a bucket is configured — nothing signs with this key then — so the
+            // warning names the condition under which it actually bites.
             logger.LogWarning(
-                "AdminBff:Documents:SigningKey is not configured, so the signed object-storage URLs behind "
-                + "GET /v1/admin/documents/{{docId}} are signed with a key generated for this process. They will "
-                + "not verify on another replica or survive a restart.");
+                "AdminBff:Documents:SigningKey is not configured, so the fallback document URLs are signed with "
+                + "a key generated for this process. With no Storage:* bucket configured that means a URL minted "
+                + "by one replica does not verify on another, and the officer sees a broken image in a lightbox "
+                + "the server opened a second ago.");
         }
         else
         {
@@ -99,6 +116,14 @@ internal sealed class DocumentLinks : IDocumentLinks
         RequireKnownVariant(variant);
 
         var expiresAt = _clock.GetUtcNow() + _options.UrlTtl;
+
+        // D-36's bucket signs its own reads. Preferred over the HMAC below because the provider
+        // enforces the deadline and the object never passes through a MageRide process.
+        if (_objects.TryPresign(document.StorageUrl, _options.UrlTtl, out var presigned))
+        {
+            return (presigned, expiresAt);
+        }
+
         var expires = expiresAt.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture);
         var target = Resolve(document.StorageUrl);
         var separator = target.Contains('?', StringComparison.Ordinal) ? '&' : '?';

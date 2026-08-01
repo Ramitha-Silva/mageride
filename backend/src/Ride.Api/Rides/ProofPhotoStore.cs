@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using MageRide.Ride.Configuration;
 using MageRide.Shared.Errors;
 using Microsoft.Extensions.Logging;
+using MageRide.Shared.Storage;
 using Microsoft.Extensions.Options;
 
 namespace MageRide.Ride.Rides;
@@ -36,16 +37,31 @@ public interface IProofPhotoStore
 }
 
 /// <summary>
-/// The filesystem implementation. One file per artifact under <c>Ride:ProofPhotoRoot</c>.
+/// Δ D-36: the object store, falling back to <c>Ride:ProofPhotoRoot</c> when there is no bucket.
 /// </summary>
 /// <remarks>
-/// A pod's filesystem is ephemeral, and this is said out loud at start-up rather than discovered
+/// <para>
+/// A pod's filesystem is ephemeral, and that is said out loud at start-up rather than discovered
 /// during a dispute six weeks later: with no object store configured the platform keeps the digest,
-/// the artifact row and the state change — everything the receipt and the audit are built from — and
-/// may lose the image itself on a restart.
+/// the artifact row and the state change — everything the receipt and the audit are built from —
+/// and may lose the image itself on a restart.
+/// </para>
+/// <para>
+/// A proof photograph <b>is</b> raw evidence, so it carries NFR-28's deadline and lands under the
+/// bucket's expiring prefix — unlike a payment QR, which the platform keeps serving.
+/// </para>
 /// </remarks>
 public sealed class FileSystemProofPhotoStore : IProofPhotoStore
 {
+    /// <summary>The Content-Type the officer's browser is handed back, from the closed extension list.</summary>
+    private static string ContentTypeOf(string extension) => extension switch
+    {
+        ".png" => "image/png",
+        ".webp" => "image/webp",
+        ".heic" => "image/heic",
+        _ => "image/jpeg",
+    };
+
     /// <summary>What a delivery photo is named when the client sends no filename.</summary>
     private const string DefaultExtension = ".jpg";
 
@@ -53,21 +69,33 @@ public sealed class FileSystemProofPhotoStore : IProofPhotoStore
 
     private readonly string _root;
 
-    public FileSystemProofPhotoStore(IOptions<RideOptions> options, ILogger<FileSystemProofPhotoStore> logger)
+    private readonly IObjectStore _objects;
+    private readonly long _maxBytes;
+    private readonly TimeSpan _retention;
+
+    public FileSystemProofPhotoStore(
+        IObjectStore objects,
+        IOptions<ObjectStoreOptions> storage,
+        IOptions<RideOptions> options,
+        ILogger<FileSystemProofPhotoStore> logger)
     {
         ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(storage);
         ArgumentNullException.ThrowIfNull(logger);
+
+        _objects = objects ?? throw new ArgumentNullException(nameof(objects));
+        _maxBytes = options.Value.ProofPhotoMaxBytes;
+        _retention = storage.Value.RawRetention;
 
         _root = string.IsNullOrWhiteSpace(options.Value.ProofPhotoRoot)
             ? Path.Combine(Path.GetTempPath(), "mageride", "proof-artifacts")
             : options.Value.ProofPhotoRoot;
 
-        Directory.CreateDirectory(_root);
-
         logger.LogInformation(
-            "Delivery proof photos (P-10) are written to {Root}. This is not object storage: D-36 puts them on " +
-            "SSE-KMS buckets, so a pod restart can lose the image while rides.proof_artifacts keeps its digest.",
-            _root);
+            "Delivery proof photos (P-10) are stored in {Store}. On a filesystem — which is what an unset " +
+            "Storage:S3:Endpoint gives — a pod restart can lose the image while rides.proof_artifacts keeps " +
+            "its digest.",
+            _objects.Description);
     }
 
     public async Task<StoredProofPhoto> SaveAsync(
@@ -79,32 +107,16 @@ public sealed class FileSystemProofPhotoStore : IProofPhotoStore
 
         // Foldered by ride, so an operator handed a ride id can find every artifact of it without
         // an index, and named by the artifact id, which is what the 201 returns.
-        var directory = Path.Combine(_root, rideId.ToString("D"));
-        Directory.CreateDirectory(directory);
+        var stored = await _objects.PutAsync(
+            new ObjectPutRequest(
+                $"rides/{rideId:D}/{artifactId:D}{extension}",
+                content,
+                ContentTypeOf(extension),
+                _maxBytes,
+                _retention),
+            cancellationToken);
 
-        var path = Path.Combine(directory, artifactId.ToString("D") + extension);
-
-        byte[] digest;
-        long written;
-
-        await using (var file = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, 64 * 1024, useAsync: true))
-        {
-            // Hashed on the way through rather than by re-reading the file: one pass over an
-            // upload, and the digest describes the same bytes the write produced even if something
-            // replaces the file afterwards.
-            using var hasher = SHA256.Create();
-            await using var hashing = new CryptoStream(file, hasher, CryptoStreamMode.Write, leaveOpen: true);
-
-            await content.CopyToAsync(hashing, cancellationToken);
-            await hashing.FlushFinalBlockAsync(cancellationToken);
-
-            digest = hasher.Hash!;
-            written = file.Length;
-        }
-
-        var url = new UriBuilder("file", string.Empty) { Path = path }.Uri.ToString();
-
-        return new StoredProofPhoto(url, digest, written);
+        return new StoredProofPhoto(stored.StorageUrl, stored.Sha256, stored.Length);
     }
 
     /// <summary>

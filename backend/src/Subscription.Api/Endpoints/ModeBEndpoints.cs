@@ -601,12 +601,17 @@ public static class ModeBEndpoints
 
         var opened = await payments.OpenFileAsync(kind, documentId, context.User.SubjectId(), cancellationToken);
 
-        // Nothing to stream means the pointer is an object-store URL this process cannot read, which
-        // is what a deployment with D-36's bucket in front of it looks like: redirect and let the
-        // store serve its own bytes.
-        return opened is { } file
-            ? TypedResults.Stream(file.Content, file.ContentType)
-            : throw new MageRideException(MageRideErrors.NotFound, "This document is no longer stored.");
+        // Δ D-36: on a bucket the bytes are not this process's to stream, so the caller follows a
+        // short-lived presigned URL instead. The signature was verified above, so the redirect is
+        // only ever issued to somebody who proved the link.
+        if (opened is not { } file)
+        {
+            throw new MageRideException(MageRideErrors.NotFound, "This document is no longer stored.");
+        }
+
+        return file.RedirectUrl is { } direct
+            ? TypedResults.Redirect(direct, permanent: false, preserveMethod: false)
+            : TypedResults.Stream(file.Content!, file.ContentType!);
     }
 
     // -----------------------------------------------------------------------------------------

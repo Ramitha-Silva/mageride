@@ -3,6 +3,7 @@ using MageRide.Registry.Onboarding;
 using MageRide.Registry.Persistence;
 using MageRide.Registry.Sharing;
 using MageRide.Registry.Vehicles;
+using MageRide.Shared.Storage;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -42,6 +43,12 @@ public static class RegistryServiceCollectionExtensions
         services.AddSingleton<IOnboardingStepRepository, OnboardingStepRepository>();
         services.AddSingleton<IDriverPayoutProfileRepository, DriverPayoutProfileRepository>();
         services.AddSingleton<IPayoutDocumentStore, PayoutDocumentStore>();
+
+        // Δ D-36. `Registry:PayoutDocumentRoot` stays honoured as the filesystem fallback's root so
+        // a deployment that has not set `Storage:*` behaves exactly as it did, and so the rows it
+        // already wrote go on resolving after it has.
+        services.AddMageRideObjectStore(
+            configuration, ObjectBucket.Documents, configuration["Registry:PayoutDocumentRoot"]);
 
         // C054. `Registry:OcrBaseUrl` is what decides which of the two lands: with it, the real
         // hop to ocr-svc; without it, the honest no-op below. TryAdd is still what registers the

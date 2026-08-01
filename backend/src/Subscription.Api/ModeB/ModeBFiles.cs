@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using MageRide.Shared.Errors;
 using MageRide.Subscriptions.Configuration;
+using MageRide.Shared.Storage;
 using Microsoft.Extensions.Options;
 
 namespace MageRide.Subscriptions.ModeB;
@@ -149,6 +150,9 @@ public sealed record StoredSlip(string StorageUrl, long Bytes);
 /// The implementation below writes to a configured directory, which is a deployment concern rather
 /// than a domain one.
 /// </remarks>
+/// <summary>A stored Mode B document: bytes this process can stream, or a link to follow.</summary>
+public sealed record ModeBFile(Stream? Content, string? ContentType, string? RedirectUrl);
+
 public interface ITransferSlipStore
 {
     Task<StoredSlip> SaveAsync(Guid paymentId, string? fileName, Stream content, CancellationToken cancellationToken);
@@ -158,9 +162,12 @@ public interface ITransferSlipStore
     /// process cannot read — an object-store URL, which the route redirects to instead.
     /// </summary>
     (Stream Content, string ContentType)? Open(string storageUrl);
+
+    /// <summary>A short-lived direct link when the store can mint one, else null.</summary>
+    string? Presign(string storageUrl);
 }
 
-/// <summary>The filesystem implementation. One file per payment under <c>Subscription:SlipRoot</c>.</summary>
+/// <summary>Δ D-36: the object store, falling back to <c>Subscription:SlipRoot</c> with no bucket.</summary>
 /// <remarks>
 /// A pod's filesystem is ephemeral, and this is said out loud at start-up rather than discovered
 /// during a dispute: with no object store configured the platform keeps the payment row, its status
@@ -184,24 +191,35 @@ public sealed class FileSystemTransferSlipStore : ITransferSlipStore
     };
 
     private readonly string _root;
+    private readonly IObjectStore _objects;
+    private readonly long _maxBytes;
+    private readonly TimeSpan _retention;
+    private readonly TimeSpan _urlTtl;
 
     public FileSystemTransferSlipStore(
-        IOptions<SubscriptionOptions> options, ILogger<FileSystemTransferSlipStore> logger)
+        IObjectStore objects,
+        IOptions<ObjectStoreOptions> storage,
+        IOptions<SubscriptionOptions> options,
+        ILogger<FileSystemTransferSlipStore> logger)
     {
         ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(storage);
         ArgumentNullException.ThrowIfNull(logger);
+
+        _objects = objects ?? throw new ArgumentNullException(nameof(objects));
+        _maxBytes = options.Value.SlipMaxBytes;
+        _retention = storage.Value.RawRetention;
+        _urlTtl = storage.Value.UrlTtl;
 
         _root = string.IsNullOrWhiteSpace(options.Value.SlipRoot)
             ? Path.Combine(Path.GetTempPath(), "mageride", "subscription-slips")
             : options.Value.SlipRoot;
 
-        Directory.CreateDirectory(_root);
-
         logger.LogInformation(
-            "Mode B transfer slips (US-23.4) are written to {Root}. This is not object storage: D-36 puts them "
-            + "on SSE-KMS buckets, so a pod restart can lose the screenshot while subscription.payments keeps "
-            + "the row the owner confirmed.",
-            _root);
+            "Mode B transfer slips (US-23.4) are stored in {Store}. On a filesystem — which is what an unset "
+            + "Storage:S3:Endpoint gives — a pod restart can lose the screenshot while subscription.payments "
+            + "keeps the row the owner confirmed.",
+            _objects.Description);
     }
 
     public async Task<StoredSlip> SaveAsync(
@@ -210,19 +228,23 @@ public sealed class FileSystemTransferSlipStore : ITransferSlipStore
         ArgumentNullException.ThrowIfNull(content);
 
         var extension = ResolveExtension(fileName);
-        var path = Path.Combine(_root, paymentId.ToString("D") + extension);
 
-        long written;
+        // A transfer slip is evidence of a payment somebody disputes, so it carries NFR-28's
+        // deadline and lands under the bucket's expiring prefix.
+        var stored = await _objects.PutAsync(
+            new ObjectPutRequest(
+                $"subscription/slips/{paymentId:D}{extension}",
+                content,
+                ContentTypes.TryGetValue(extension, out var type) ? type : "application/octet-stream",
+                _maxBytes,
+                _retention),
+            cancellationToken);
 
-        await using (var file = new FileStream(
-            path, FileMode.Create, FileAccess.Write, FileShare.None, 64 * 1024, useAsync: true))
-        {
-            await content.CopyToAsync(file, cancellationToken);
-            written = file.Length;
-        }
-
-        return new StoredSlip(new UriBuilder("file", string.Empty) { Path = path }.Uri.ToString(), written);
+        return new StoredSlip(stored.StorageUrl, stored.Length);
     }
+
+    public string? Presign(string storageUrl) =>
+        _objects.TryPresign(storageUrl, _urlTtl, out var url) ? url : null;
 
     public (Stream Content, string ContentType)? Open(string storageUrl)
     {

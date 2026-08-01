@@ -203,6 +203,57 @@ public sealed class DriverPayoutProfileTests(PostgresFixture postgres)
         Assert.Equal(1, await VersionsAsync(harness, driverId));
     }
 
+    /// <summary>
+    /// NFR-28 expires the evidence and must never touch the payment QR (Δ D-36).
+    /// </summary>
+    /// <remarks>
+    /// <b>This is the assertion that keeps drivers getting paid.</b> AL-59 makes a driver's own
+    /// bank-app LankaQR what a passenger scans to pay them on <em>every ride</em> — live payment
+    /// infrastructure, not a document somebody checked once. Before D-36 was wired every payout
+    /// document was stamped with a 90-day deadline including the QR; nothing swept it, so the bug
+    /// was invisible. Wiring a real bucket lifecycle rule would have made it start deleting
+    /// drivers' QR codes 90 days after upload, one driver at a time, with nothing to see.
+    /// </remarks>
+    [Fact]
+    public async Task The_bank_statement_expires_and_the_lankaqr_never_does()
+    {
+        Assert.SkipWhen(!postgres.IsAvailable, postgres.SkipReason ?? string.Empty);
+
+        await using var harness = await RegistryHarness.StartAsync(postgres);
+
+        var driverId = await harness.CreateDriverAsync();
+        var bearer = harness.Tokens.Driver(driverId);
+
+        await Put(harness, bearer, "Bank of Ceylon", "Kollupitiya", "0071234567", "Nimal Perera");
+
+        var withProof = await UploadAsync(harness, bearer, "bank_statement", [1, 2, 3]);
+        var withQr = await UploadAsync(harness, bearer, "lankaqr_code", [4, 5, 6]);
+
+        await using var connection = await harness.OpenAsync();
+
+        var proofDeadline = await connection.QuerySingleAsync<DateTimeOffset?>(
+            "SELECT auto_delete_at FROM docs.uploads WHERE id = @Id;",
+            new { Id = Guid.Parse(withProof.ProofDocId!) });
+
+        var qrDeadline = await connection.QuerySingleAsync<DateTimeOffset?>(
+            "SELECT auto_delete_at FROM docs.uploads WHERE id = @Id;",
+            new { Id = Guid.Parse(withQr.LankaqrDocId!) });
+
+        Assert.NotNull(proofDeadline);
+        Assert.Null(qrDeadline);
+
+        // And the same split in the object key, which is what the bucket's lifecycle rule matches
+        // on — `ephemeral/` is expired, `retained/` is not.
+        var storage = await connection.QueryAsync<string>(
+            "SELECT storage_url FROM docs.uploads WHERE owner_id = @Id ORDER BY created_at;",
+            new { Id = driverId });
+
+        var urls = storage.ToArray();
+
+        Assert.Contains("/ephemeral/", urls[0], StringComparison.Ordinal);
+        Assert.Contains("/retained/", urls[1], StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task A_document_with_no_account_to_attach_it_to_is_refused()
     {

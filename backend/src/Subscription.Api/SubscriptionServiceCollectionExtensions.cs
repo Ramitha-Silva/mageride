@@ -1,5 +1,6 @@
 using MageRide.Shared.Resilience;
 using MageRide.Subscriptions.Configuration;
+using MageRide.Shared.Storage;
 using MageRide.Subscriptions.Fees;
 using MageRide.Subscriptions.ModeB;
 using MageRide.Subscriptions.Persistence;
@@ -43,6 +44,10 @@ public static class SubscriptionServiceCollectionExtensions
 
         services.AddSingleton<IModeBFileLinks, ModeBFileLinks>();
         services.AddSingleton<ITransferSlipStore, FileSystemTransferSlipStore>();
+
+        // Δ D-36. The service's own root stays the filesystem fallback, so a deployment with no
+        // `Storage:*` behaves as before and the rows it already wrote still resolve.
+        services.AddMageRideObjectStore(configuration, ObjectBucket.Documents, configuration["Subscription:SlipRoot"]);
 
         services.AddSingleton<IWalletLedgerClient, WalletLedgerClient>();
         services.AddSingleton<IWalletForwarder, WalletForwarder>();

@@ -1,4 +1,5 @@
 using MageRide.Ocr.Configuration;
+using MageRide.Shared.Storage;
 using Microsoft.Extensions.Options;
 
 namespace MageRide.Ocr.Storage;
@@ -11,10 +12,10 @@ public sealed record RawDocument(ReadOnlyMemory<byte> Bytes, string ContentType)
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>One method, because the implementation behind it is a deployment concern.</b> D-36 puts raw
-/// documents on an SSE-KMS bucket with signed-URL access and a 90-day deletion (NFR-28); no service
-/// in this build has an S3 client (C125), and support-svc's screenshot store is the same seam with
-/// the same note. What ocr-svc owes regardless of where the bytes sit is that they are read
+/// <b>Δ D-36: the implementation is the kernel's <c>IObjectStore</c>.</b> The same bucket the three
+/// uploading services write to, so this service reads exactly what they wrote rather than hoping a
+/// path resolves the same way in two containers. What ocr-svc owes regardless of where the bytes sit
+/// is that they are read
 /// <em>here</em> — registry-svc resolves the id and never touches the file, which is what keeps an
 /// unredacted image on this side of the perimeter — and that the row carries a deletion deadline.
 /// </para>
@@ -31,13 +32,25 @@ public interface IRawDocumentStore
 
 /// <inheritdoc />
 /// <remarks>
-/// The filesystem stand-in for the bucket. A <c>storage_url</c> is treated as a path relative to
-/// <see cref="OcrOptions.StorageOptions.Root"/>, and one that resolves outside it is refused —
-/// the value comes from a row this service does not own, and <c>../../etc/passwd</c> is a
-/// <c>docs.uploads</c> insert away from being read and posted to an external model.
+/// <para>
+/// Delegates to the kernel store, which resolves an <c>s3://</c> pointer against D-36's bucket and
+/// a <c>file://</c> one against the filesystem — so a document written before the bucket existed is
+/// still extractable afterwards, and the traversal refusal is made in one place for the platform.
+/// </para>
+/// <para>
+/// <b>An <c>http(s)</c> pointer stays this service's own decision, behind its own switch.</b>
+/// Fetching an arbitrary URL out of a table is an SSRF primitive and the kernel store refuses them
+/// outright; <c>Ocr:Storage:AllowHttpSources</c> is what re-enables it here.
+/// </para>
+/// <para>
+/// <b>Nothing here throws for a document it cannot read.</b> A missing object and an oversized one
+/// both answer <see langword="null"/>: the extraction then fails, the onboarding step still saves,
+/// and a Verification Officer takes it.
+/// </para>
 /// </remarks>
 public sealed class FileSystemRawDocumentStore : IRawDocumentStore
 {
+    private readonly IObjectStore _objects;
     private readonly OcrOptions _options;
     private readonly IHttpClientFactory _clients;
     private readonly ILogger<FileSystemRawDocumentStore> _logger;
@@ -46,8 +59,12 @@ public sealed class FileSystemRawDocumentStore : IRawDocumentStore
     public const string HttpClientName = "document-storage";
 
     public FileSystemRawDocumentStore(
-        IOptions<OcrOptions> options, IHttpClientFactory clients, ILogger<FileSystemRawDocumentStore> logger)
+        IObjectStore objects,
+        IOptions<OcrOptions> options,
+        IHttpClientFactory clients,
+        ILogger<FileSystemRawDocumentStore> logger)
     {
+        _objects = objects ?? throw new ArgumentNullException(nameof(objects));
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
         _clients = clients ?? throw new ArgumentNullException(nameof(clients));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -63,73 +80,25 @@ public sealed class FileSystemRawDocumentStore : IRawDocumentStore
             return await ReadOverHttpAsync(absolute, cancellationToken);
         }
 
-        return await ReadFromDiskAsync(storageUrl, cancellationToken);
-    }
+        var bytes = await _objects.ReadAsync(storageUrl, cancellationToken);
 
-    private async Task<RawDocument?> ReadFromDiskAsync(string storageUrl, CancellationToken cancellationToken)
-    {
-        var root = _options.Storage.Root;
-
-        if (string.IsNullOrWhiteSpace(root))
+        if (bytes is null)
         {
-            _logger.LogError(
-                "Ocr:Storage:Root is not configured, so no document can be read and nothing can be extracted "
-                + "(D-36's bucket, until C125 lands an object-storage client).");
-
             return null;
         }
 
-        var fullRoot = Path.GetFullPath(root);
-        var relative = storageUrl.TrimStart('/');
-
-        // file:// paths are written by some producers; take the path and treat it the same way.
-        if (Uri.TryCreate(storageUrl, UriKind.Absolute, out var uri) && uri.IsFile)
-        {
-            relative = uri.LocalPath.TrimStart('/');
-        }
-
-        var path = Path.GetFullPath(Path.Combine(fullRoot, relative));
-
-        if (!path.StartsWith(fullRoot + Path.DirectorySeparatorChar, StringComparison.Ordinal)
-            && !string.Equals(path, fullRoot, StringComparison.Ordinal))
-        {
-            _logger.LogError(
-                "A docs.uploads.storage_url resolved outside Ocr:Storage:Root and was refused. "
-                + "storage_url is written by another service and is not a path this one will follow anywhere.");
-
-            return null;
-        }
-
-        var file = new FileInfo(path);
-
-        if (!file.Exists)
-        {
-            _logger.LogWarning("There is no document at {Path}; the extraction cannot run.", path);
-
-            return null;
-        }
-
-        if (file.Length > _options.Storage.MaxBytes)
+        if (bytes.Bytes.Length > _options.Storage.MaxBytes)
         {
             _logger.LogWarning(
-                "A document of {Bytes} bytes exceeds Ocr:Storage:MaxBytes ({Max}) and was refused before decoding.",
-                file.Length, _options.Storage.MaxBytes);
+                "Document at {StorageUrl} is {Length} bytes, over the {Max} ceiling, and was not read.",
+                storageUrl,
+                bytes.Bytes.Length,
+                _options.Storage.MaxBytes);
 
             return null;
         }
 
-        try
-        {
-            var bytes = await File.ReadAllBytesAsync(path, cancellationToken);
-
-            return new RawDocument(bytes, ContentTypes.FromBytes(bytes, path));
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-        {
-            _logger.LogError(exception, "A document at {Path} could not be read.", path);
-
-            return null;
-        }
+        return new RawDocument(bytes.Bytes, bytes.ContentType);
     }
 
     private async Task<RawDocument?> ReadOverHttpAsync(Uri uri, CancellationToken cancellationToken)

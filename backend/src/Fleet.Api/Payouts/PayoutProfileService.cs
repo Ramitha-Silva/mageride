@@ -162,7 +162,9 @@ internal sealed class PayoutProfileService(
             stored.StorageUrl,
             stored.Sha256,
             kind,
-            _options.DocumentRetention,
+            // NULL for a LankaQR (AL-49): it is rendered on the pay sheet rather than checked
+            // once, so NFR-28's deadline must not reach it. See IDocumentStore.RetentionFor.
+            store.RetentionFor(kind),
             cancellationToken);
 
         var isLankaQr = PayoutDocumentKinds.IsLankaQr(kind);

@@ -3,6 +3,7 @@ using MageRide.Support.Faq;
 using MageRide.Support.Persistence;
 using MageRide.Support.Screenshots;
 using MageRide.Support.Tickets;
+using MageRide.Shared.Storage;
 
 namespace MageRide.Support;
 
@@ -27,6 +28,10 @@ public static class SupportServiceCollectionExtensions
         // The store holds a root path and the links hold a signing key; both are read-only after
         // construction, and the key is resolved once so a missing one is warned about once.
         services.AddSingleton<IScreenshotStore, FileSystemScreenshotStore>();
+
+        // Δ D-36. `Support:ScreenshotRoot` remains the filesystem fallback's root.
+        services.AddMageRideObjectStore(
+            configuration, ObjectBucket.Screenshots, configuration["Support:ScreenshotRoot"]);
         services.AddSingleton<IScreenshotLinks, ScreenshotLinks>();
 
         // The FAQ service composes read-only repositories and holds no transaction.

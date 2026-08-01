@@ -8,6 +8,7 @@ using MageRide.Fleet.Payouts;
 using MageRide.Fleet.Persistence;
 using MageRide.Fleet.Subscriptions;
 using MageRide.Fleet.Vehicles;
+using MageRide.Shared.Storage;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 
@@ -47,7 +48,12 @@ public static class FleetServiceCollectionExtensions
         services.AddSingleton<IFleetScopedReader>(provider => provider.GetRequiredService<FleetScopedReader>());
 
         // Holds a root path, resolved once at construction.
-        services.AddSingleton<IDocumentStore, FileSystemDocumentStore>();
+        services.AddSingleton<IDocumentStore, ObjectDocumentStore>();
+
+        // Δ D-36. `Fleet:DocumentRoot` stays the filesystem fallback's root, so a deployment with
+        // no `Storage:*` behaves as before and the rows it already wrote still resolve.
+        services.AddMageRideObjectStore(
+            configuration, ObjectBucket.Documents, configuration["Fleet:DocumentRoot"]);
 
         // Holds one HMAC key, resolved once at construction.
         services.AddSingleton<IErrorReportLinks, ErrorReportLinks>();

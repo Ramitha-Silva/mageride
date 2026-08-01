@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using MageRide.Shared.Errors;
 using MageRide.Support.Configuration;
+using MageRide.Shared.Storage;
 using Microsoft.Extensions.Options;
 
 namespace MageRide.Support.Screenshots;
@@ -27,8 +28,10 @@ public sealed record StoredScreenshot(string StorageUrl, byte[] Sha256, long Byt
 /// <c>IProofPhotoStore</c> and subscription-svc's <c>ITransferSlipStore</c> open, and for the same
 /// reason: D-36 puts every uploaded image on SSE-KMS object storage with Postgres holding a pointer,
 /// D7' §4.2 names <c>Storage__ScreenshotBucket</c> for this service, and no service in this build has
-/// an S3 client (C125). The implementation below writes to a configured directory, which is a
-/// deployment concern rather than a domain one.
+/// Δ D-36: the implementation is now the kernel's <c>IObjectStore</c> — SSE, presigned reads and
+/// NFR-28 expiry enforced by the bucket. A screenshot IS raw evidence, so unlike a payment QR it
+/// carries the deadline. With no <c>Storage:*</c> configured it falls back to a directory, which is
+/// a deployment concern rather than a domain one.
 /// </para>
 /// <para>
 /// <b>The digest is over the bytes as written</b>, not over what the client claimed, because a
@@ -45,14 +48,17 @@ public interface IScreenshotStore
     /// process cannot read — an object-store URL, which the route redirects to instead.
     /// </summary>
     (Stream Content, string ContentType)? Open(string storageUrl);
+
+    /// <summary>A short-lived direct link when the store can mint one, else null.</summary>
+    string? Presign(string storageUrl);
 }
 
-/// <summary>The filesystem implementation. One file per upload under <c>Support:ScreenshotRoot</c>.</summary>
+/// <summary>D-36's bucket, or the filesystem stand-in when there isn't one.</summary>
 /// <remarks>
-/// A pod's filesystem is ephemeral, and this is said out loud at start-up rather than discovered
-/// during a dispute: with no object store configured the platform keeps the ticket, its thread and
-/// the digest — everything the complaint and its answer are built from — and may lose the image on a
-/// restart.
+/// With no object store configured a pod's filesystem is ephemeral, and that is said out loud at
+/// start-up rather than discovered during a dispute: the platform keeps the ticket, its thread and
+/// the digest — everything the complaint and its answer are built from — and may lose the image on
+/// a restart.
 /// </remarks>
 public sealed class FileSystemScreenshotStore : IScreenshotStore
 {
@@ -70,12 +76,26 @@ public sealed class FileSystemScreenshotStore : IScreenshotStore
     };
 
     private readonly string _root;
+    private readonly IObjectStore _objects;
+    private readonly long _maxBytes;
+    private readonly TimeSpan _retention;
+    private readonly TimeSpan _urlTtl;
 
     public FileSystemScreenshotStore(
-        IOptions<SupportOptions> options, ILogger<FileSystemScreenshotStore> logger)
+        IObjectStore objects,
+        IOptions<ObjectStoreOptions> storage,
+        IOptions<SupportOptions> options,
+        ILogger<FileSystemScreenshotStore> logger)
     {
         ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(storage);
         ArgumentNullException.ThrowIfNull(logger);
+
+        _objects = objects ?? throw new ArgumentNullException(nameof(objects));
+        _urlTtl = storage.Value.UrlTtl;
+
+        _maxBytes = options.Value.ScreenshotMaxBytes;
+        _retention = options.Value.ScreenshotRetention;
 
         _root = string.IsNullOrWhiteSpace(options.Value.ScreenshotRoot)
             ? Path.Combine(Path.GetTempPath(), "mageride", "support-screenshots")
@@ -84,10 +104,10 @@ public sealed class FileSystemScreenshotStore : IScreenshotStore
         Directory.CreateDirectory(_root);
 
         logger.LogInformation(
-            "Support screenshots (US-16.2) are written to {Root}. This is not object storage: D-36 puts them on "
-            + "SSE-KMS buckets (D7' §4.2 Storage__ScreenshotBucket), so a pod restart can lose the image while the "
-            + "ticket and its thread survive.",
-            _root);
+            "Support screenshots (US-16.2) are stored in {Store}. On a filesystem — which is what an unset "
+            + "Storage:ServiceUrl gives — a pod restart can lose the image while the ticket, its thread and the "
+            + "digest survive.",
+            _objects.Description);
     }
 
     public async Task<StoredScreenshot> SaveAsync(
@@ -95,31 +115,27 @@ public sealed class FileSystemScreenshotStore : IScreenshotStore
     {
         ArgumentNullException.ThrowIfNull(content);
 
-        var path = Path.Combine(_root, uploadId.ToString("D") + ResolveExtension(fileName));
+        var extension = ResolveExtension(fileName);
 
-        byte[] digest;
-        long written;
+        // A screenshot IS raw evidence, so unlike a payment QR it carries NFR-28's deadline and
+        // lands under the bucket's expiring prefix.
+        var stored = await _objects.PutAsync(
+            new ObjectPutRequest(
+                $"support/screenshots/{uploadId:D}{extension}",
+                content,
+                ContentTypes.TryGetValue(extension, out var type) ? type : "application/octet-stream",
+                _maxBytes,
+                _retention),
+            cancellationToken);
 
-        await using (var file = new FileStream(
-            path, FileMode.Create, FileAccess.Write, FileShare.None, 64 * 1024, useAsync: true))
-        {
-            // Hashed on the way through rather than by re-reading the file: one pass over the
-            // upload, and the digest describes the same bytes the write produced even if something
-            // replaces the file afterwards.
-            using var hasher = SHA256.Create();
-            await using var hashing = new CryptoStream(file, hasher, CryptoStreamMode.Write, leaveOpen: true);
-
-            await content.CopyToAsync(hashing, cancellationToken);
-            await hashing.FlushFinalBlockAsync(cancellationToken);
-
-            digest = hasher.Hash!;
-            written = file.Length;
-        }
-
-        return new StoredScreenshot(
-            new UriBuilder("file", string.Empty) { Path = path }.Uri.ToString(), digest, written);
+        return new StoredScreenshot(stored.StorageUrl, stored.Sha256, stored.Length);
     }
 
+    /// <remarks>
+    /// Only ever a local file. An object-store URL answers null here and the route redirects to
+    /// <see cref="Presign"/> instead — streaming a bucket object through this process would put
+    /// every screenshot byte through a pod that has no reason to carry them.
+    /// </remarks>
     public (Stream Content, string ContentType)? Open(string storageUrl)
     {
         if (!Uri.TryCreate(storageUrl, UriKind.Absolute, out var uri) || !uri.IsFile || !File.Exists(uri.LocalPath))
@@ -132,6 +148,9 @@ public sealed class FileSystemScreenshotStore : IScreenshotStore
 
         return (File.OpenRead(uri.LocalPath), contentType);
     }
+
+    public string? Presign(string storageUrl) =>
+        _objects.TryPresign(storageUrl, _urlTtl, out var url) ? url : null;
 
     /// <summary>
     /// The extension, from a closed list. Anything else — including a filename with a path in it —

@@ -13,6 +13,12 @@
 
   <ItemGroup Label="Data access — Dapper over Npgsql (AL-53; no EF Core, ever)">
     <PackageVersion Include="Dapper" Version="2.1.79" />
+    <!-- C063 Δ D-36 — the object store. S3-compatible on purpose: MinIO in dev and on the replica
+         (lightweight-production-replica.md Container 10), Cloudflare R2 / Wasabi / S3 in production,
+         one client for all of them. `AWSSDK.S3` rather than the MinIO SDK because the production
+         targets are not MinIO and a client that only speaks to the dev stand-in would have to be
+         replaced at exactly the moment the stakes are highest. -->
+    <PackageVersion Include="AWSSDK.S3" Version="4.0.101.6" />
     <PackageVersion Include="Npgsql" Version="10.0.3" />
     <PackageVersion Include="Npgsql.NetTopologySuite" Version="10.0.3" />
     <PackageVersion Include="Npgsql.OpenTelemetry" Version="10.0.3" />

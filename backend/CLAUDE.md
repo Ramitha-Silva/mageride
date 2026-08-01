@@ -10,6 +10,15 @@
   `UseMageRideDefaults`: RFC 7807 errors, `Idempotency-Key` replay, Dapper/Npgsql, Redis, Redpanda,
   RS256 auth, `/health/live` + `/health/ready`, OpenTelemetry. Cross-cutting code goes there, not
   into a service.
+- **Uploaded bytes go through `AddMageRideObjectStore` / `IObjectStore`** (C002 kernel, Δ C063 D-36):
+  S3-compatible object storage (MinIO in dev and on the replica, R2/Wasabi/S3 in production), server
+  -side encrypted, presigned reads, NFR-28's expiry enforced by the bucket's own lifecycle rule.
+  **Never write uploaded bytes to a service-local directory** — seven services each had their own
+  and every one of them lost documents on a pod restart. Unset `Storage__S3__Endpoint` still falls
+  back to that directory, and each service says which it got at start-up. Two rules when calling it:
+  pass `Retention: null` for anything the platform keeps *serving* (a driver's LankaQR is scanned on
+  every ride — expiring it breaks the payment rail), and build the key from ids you minted, never
+  from a client filename.
 - **Central package management** (`backend/Directory.Packages.props`): `<PackageReference>` carries
   no `Version`. Add a `<PackageVersion>` entry there first or the build fails NU1008.
 - **Integration tests use `src/MageRide.TestKit`** (C010) — Testcontainers fixtures for

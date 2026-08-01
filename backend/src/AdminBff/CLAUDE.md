@@ -305,7 +305,12 @@ Admin beside them (⚙) may use, which URD §2.4 rules out in as many words.
 - **The three directories (C064), finance and PDPA (C065).** Separate components on this project.
   `AdminMenu` already carries their nav entries, because the portal's shell must not depend on build
   order.
-- **The object store itself (C063).** D-36's SSE-KMS bucket is C125's. This service mints the signed
+- **Δ D-36 is wired (C063).** With `Storage:S3:*` configured, `GET /v1/admin/documents/{docId}`
+  records its `DOC_VIEW` row and 302s to **the bucket's own presigned GET** — a SigV4 signature the
+  storage provider verifies, with the TTL enforced by the provider and no MageRide process carrying
+  the bytes. The HMAC-over-a-pointer path below is the fallback for a deployment with no bucket, and
+  only that. This service still writes no bytes; it holds the store only to presign a read.
+- **The object store itself (superseded).** This service mints the signed
   URL and redirects to it; it never holds a byte, which is what keeps an unredacted document on the
   far side of the perimeter. `AdminBff:Documents:PublicBaseUrl` is what makes the redirect
   resolvable, and its absence is an ERROR at start-up rather than an invented host.

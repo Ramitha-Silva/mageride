@@ -140,7 +140,14 @@ public static class OnboardingEndpoints
 
         await using var content = file.OpenReadStream();
 
-        var uploadId = await documents.WriteAsync(driverId, kind, content, cancellationToken);
+        var uploadId = await documents.WriteAsync(
+            driverId,
+            kind,
+            content,
+            // What the client said it is. Recorded rather than trusted: it decides the Content-Type
+            // the officer's browser is handed back, and nothing branches on it.
+            string.IsNullOrWhiteSpace(file.ContentType) ? "application/octet-stream" : file.ContentType,
+            cancellationToken);
 
         await profiles.AttachAsync(driverId, uploadId, kind, cancellationToken);
 

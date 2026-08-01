@@ -1,5 +1,6 @@
 using MageRide.Ocr.Configuration;
 using MageRide.Ocr.Endpoints;
+using MageRide.Shared.Storage;
 using MageRide.Ocr.Gemini;
 using MageRide.Ocr.Ocr;
 using MageRide.Ocr.Persistence;
@@ -42,6 +43,11 @@ public static class OcrServiceCollectionExtensions
         services.TryAddSingleton<TesseractFieldExtractor>();
         services.TryAddSingleton<GeminiFieldExtractor>();
         services.TryAddSingleton<IRawDocumentStore, FileSystemRawDocumentStore>();
+
+        // Δ D-36. `Ocr:Storage:Root` stays the filesystem fallback's root, so a deployment that has
+        // not set `Storage:*` reads exactly where it read before.
+        services.AddMageRideObjectStore(
+            configuration, ObjectBucket.Documents, configuration["Ocr:Storage:Root"]);
 
         // Scoped: it takes the repository, which takes the connection factory. One document, one
         // scope — see ExtractionWorker.

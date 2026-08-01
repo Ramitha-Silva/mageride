@@ -1,5 +1,6 @@
 using MageRide.AdminBff.Auditing;
 using MageRide.AdminBff.Authorization;
+using MageRide.Shared.Storage;
 using MageRide.AdminBff.Configuration;
 using MageRide.AdminBff.Moderation;
 using MageRide.AdminBff.Persistence;
@@ -42,6 +43,10 @@ public static class AdminBffServiceCollectionExtensions
         // Singleton: it holds the signing key and a clock, and minting a link is a pure function of
         // both. A per-request instance would re-read the key on every thumbnail in a grid.
         services.TryAddSingleton<IDocumentLinks, DocumentLinks>();
+
+        // Δ D-36. admin-bff writes no bytes; it needs the store only to presign a read. Unset
+        // `Storage:*` leaves `TryPresign` answering false and `DocumentLinks` on its HMAC fallback.
+        services.AddMageRideObjectStore(configuration);
 
         // Scoped: the audit context is per request by definition, and the services that record into
         // it must share the same instance the interceptor drains.

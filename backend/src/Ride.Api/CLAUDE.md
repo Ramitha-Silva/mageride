@@ -231,7 +231,7 @@ undeliverable by code (photo proof is what an in-flight delivery falls back to).
 | `LocationRequestTtl` | 5 min | P-02 / ADD §11.15; the contract pins `ttl` at `const: 300` |
 | `LocationRequestsPerHour` / `PerDay` | 5 / 30 | P-12 |
 | `CodUncollectedGrace` | 24 h | P-14 / D5' §8.3 |
-| `ProofPhotoRoot` | *(temp dir)* | **not object storage** — D-36's bucket, when a client exists |
+| `ProofPhotoRoot` | *(temp dir)* | **D-36 (Δ C063)** — bytes go to the kernel's `IObjectStore` (`AddMageRideObjectStore`): S3-compatible, server-side encrypted, presigned reads, and NFR-28's expiry applied by the bucket's own lifecycle rule scoped to the `ephemeral/` key prefix. This setting is now the **filesystem fallback's root**, used when `Storage__S3__Endpoint` is unset. Proof photos are raw evidence and DO carry the deadline |
 | `ProofPhotoMaxBytes` | 8 MiB | **no spec pins it** — argued at its declaration |
 | `IamTimeout` | 3 s | it sits in front of a booker tapping a button |
 

@@ -15,12 +15,21 @@ the `migrate` container.
 | `RedisFixture` | `redis:7-alpine` | live geo, locks, rate limits, caches, SignalR backplane (ADD §9.4) |
 | `RedpandaFixture` | `redpandadata/redpanda:v24.2.26` | the D6' §2.1 event backbone; `CreateRegistryTopicsAsync()` |
 | `EmqxFixture` (C024) | `emqx/emqx:5.8` | the D6' §3 MQTT plane, running the **deployed** broker policy |
+| `MinioFixture` (Δ C063) | `minio/minio:latest` | D-36's object store — the bucket every uploaded document goes to |
 
 Every image matches `infra/docker-compose.dev.slim.yml` exactly. **Keep them in step** — a
 test that passes against a different server build than the dev stack runs is worth very
 little, and the Postgres image in particular is load-bearing: C006's DDL creates a
 hypertable and four continuous aggregates, so `postgis/postgis` cannot apply the migration
 set at all.
+
+`MinioFixture` sets **`MINIO_KMS_SECRET_KEY`**, and it is not optional: MinIO implements SSE-S3
+(`AES256`) through its KMS, so an unconfigured MinIO answers *"Server side encryption specified but
+KMS is not configured"* to **every** encrypted PUT — not just to SSE-KMS. Since D-36 requires
+encryption at rest and the kernel's store always asks for it, a MinIO without that variable cannot
+store a single document. The value must decode to **exactly 32 bytes** or MinIO exits at boot with
+"invalid key length", which presents as a container that starts and immediately dies. The dev
+compose file sets the same variable for the same reason.
 
 `EmqxFixture` goes further than matching an image: the csproj copies
 `infra/deploy/emqx/emqx.conf` and `acl.conf` into the test output and the fixture bind-mounts

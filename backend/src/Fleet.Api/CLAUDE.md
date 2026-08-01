@@ -330,7 +330,7 @@ need for their screens, and two error codes — `driver-not-found` and `document
   on a *vehicle* decision is validated here and recorded by admin-bff in `audit.events` (D-35),
   which is where the organisation's decision is recorded too.
 - **Signed thumbnail and full-document URLs on a slot.** `fleet.yaml` offers `thumbUrl` and
-  `fullUrl`; this service holds no signing key and no object-storage client (C125), and a
+  `fullUrl`; this service holds no signing key, and a
   `file://` path on the wire would be a storage layout no browser can follow. admin-bff mints them,
   as it does for the payout documents (US-24.8).
 - **The Verification Officer's screen.** The Admin Portal's (C107) behind admin-bff (C062), which is
@@ -358,7 +358,7 @@ Every knob is documented at its declaration in `FleetOptions` and in `infra/env/
 | `RlsEnabled` | `true` | D7' §4.2. **false ⇒ a cross-org read is prevented by application SQL alone** — the escape hatch is a login role that has not been granted `mageride_fleet_reader`. Logged as an ERROR |
 | `VerificationGate` | `true` | D7' §4.2, US-13.A7. **false ⇒ an unapproved org can onboard vehicles and assign drivers.** ERROR |
 | `InternalApiKey` | unset | **unset ⇒ `/v1/internal/fleets/**` is not mapped**: no organisation can ever be approved, so nothing on the platform can go Paid. ERROR |
-| `DocumentRoot` | *(temp dir)* | **not object storage** — D-36's bucket, when a client exists (C125) |
+| `DocumentRoot` | *(temp dir)* | **D-36 (Δ C063)** — bytes go to the kernel's `IObjectStore` (`AddMageRideObjectStore`): S3-compatible, server-side encrypted, presigned reads, and NFR-28's expiry applied by the bucket's own lifecycle rule scoped to the `ephemeral/` key prefix. This setting is now the **filesystem fallback's root**, used when `Storage__S3__Endpoint` is unset. A **LankaQR is stored `retained`** — AL-49 renders it on the pay sheet, so NFR-28 must not reach it |
 | `DocumentMaxBytes` | 8 MiB | **no spec** — the same bound as `Support:ScreenshotMaxBytes`; the idempotency request buffer is raised to match |
 | `DocumentRetention` | 90 d | NFR-28. Written to `docs.uploads.auto_delete_at`; the sweeper is not this service's |
 | `MaxPageSize` | 50 | **no spec** — D3' §0 caps a page at 100; the queue logs when it bites |

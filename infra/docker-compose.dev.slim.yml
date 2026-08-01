@@ -294,6 +294,15 @@ services:
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-mageride_dev}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-mageride_dev_secret}
+      # Δ D-36 (C063). WITHOUT THIS MINIO REFUSES EVERY ENCRYPTED UPLOAD — including plain
+      # SSE-S3 (`AES256`), because MinIO implements SSE-S3 through its KMS. Since D-36 requires
+      # encryption at rest and the kernel's object store always asks for it, an unconfigured
+      # MinIO answers "Server side encryption specified but KMS is not configured" to every PUT
+      # and not one document can be stored. The value must decode to EXACTLY 32 bytes or MinIO
+      # exits at boot with "invalid key length", which presents as a container that starts and
+      # immediately dies. This is the single-key stand-in for a full KES server; production
+      # (Cloudflare R2 / S3) uses the provider's own KMS and sets `Storage__KmsKeyId` instead.
+      MINIO_KMS_SECRET_KEY: ${MINIO_KMS_SECRET_KEY:-mageride-dev-key:bWFnZXJpZGUtZGV2LWttcy1rZXktMzItYnl0ZXMtMDE=}
     volumes:
       - miniodata:/data
     ports:
@@ -311,6 +320,9 @@ services:
     restart: unless-stopped
 
   # --- One-shot: create the four buckets .env.common names ------------------------------
+  # Δ D-36 (C063): each service now also creates its own bucket and applies the NFR-28 lifecycle
+  # rule at start-up (`Storage__EnsureBucket`), so this one-shot is belt and braces rather than
+  # the only path — a service pointed at a bucket that does not exist creates it.
   minio-init:
     image: minio/minio:latest
     entrypoint:

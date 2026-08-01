@@ -1,5 +1,6 @@
 using MageRide.Ride.Configuration;
 using MageRide.Ride.Mqtt;
+using MageRide.Shared.Storage;
 using MageRide.Ride.Observability;
 using MageRide.Ride.Persistence;
 using MageRide.Ride.Rides;
@@ -47,6 +48,10 @@ public static class RideServiceCollectionExtensions
         services.AddSingleton<PackageOtpCodec>();
 
         services.AddSingleton<IProofPhotoStore, FileSystemProofPhotoStore>();
+
+        // Δ D-36. The service's own root stays the filesystem fallback, so a deployment with no
+        // `Storage:*` behaves as before and the rows it already wrote still resolve.
+        services.AddMageRideObjectStore(configuration, ObjectBucket.Proofs, configuration["Ride:ProofPhotoRoot"]);
 
         // AL-16 for as long as reputation-svc (C033) does not exist. Registered against the
         // interface so the swap is one line here and nothing else — see the type's remarks.

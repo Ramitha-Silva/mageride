@@ -9948,3 +9948,97 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   payout-profile decision — payout-svc reads the table at sweep time. Migration 0316's
   `COMMENT ON TABLE` still carries the ADD's original wording; a released script is immutable, and
   the comment is descriptive rather than load-bearing.
+
+---
+
+- **Component:** Δ D-36 object storage — cross-cutting, 2026-08-01 (kernel + 7 services)
+- **Status:** DONE — 8 suites green: MageRide.Shared 307 (+11), Registry 182 (+1), Ride 314,
+  Subscription 112, Fleet 93, Ocr 113, AdminBff 101, Support 32. Solution builds 0 warnings /
+  0 errors; `docker compose config` passes. **No migration.**
+- **Handoff:**
+
+  **What was wrong.** D-36 puts every uploaded document on an SSE-KMS bucket with signed-URL reads
+  and a 90-day expiry (NFR-28). Nothing implemented it. **Seven services had each written their own
+  filesystem stand-in** — `Registry:PayoutDocumentRoot`, `Fleet:DocumentRoot`,
+  `Support:ScreenshotRoot`, `Ocr:Storage:Root`, `Ride:ProofPhotoRoot`, `Subscription:SlipRoot` —
+  each with a comment saying an object-storage client did not exist yet. Consequences: a pod restart
+  lost documents, a second replica could not read what the first wrote, nothing was encrypted at
+  rest, NFR-28's deadline was recorded in `docs.uploads.auto_delete_at` and enforced by nobody, and
+  admin-bff's "signed object-storage URL" was an HMAC over a filesystem path. MinIO was already
+  running in the dev compose and in the replica, and `.env.common.example` already declared
+  `Storage__S3__*` and four bucket names — **bound by nothing**.
+
+  **What it is now.** One kernel seam, `MageRide.Shared/Storage/IObjectStore`, behind
+  `AddMageRideObjectStore`. `S3ObjectStore` (AWSSDK.S3 — chosen over the MinIO SDK because the
+  production targets are R2/Wasabi/S3 and a client that only speaks to the dev stand-in would have
+  to be replaced exactly when the stakes are highest), `FileSystemObjectStore`, and a
+  `CompositeObjectStore` that writes to the bucket and reads from **either**. Bound to the env names
+  C009 already wrote, including its four buckets.
+
+  **The read fallback is a migration, not defensive coding.** Every `docs.uploads` row written
+  before this holds a `file://` pointer, and those are the documents behind every application in a
+  Verification Officer's queue right now. Switching the write path to S3 without keeping the old
+  read path would have made all of them unopenable on the day of the deploy. Tested explicitly.
+
+  **⚠ A live defect this work found and fixed.** Both payout writers stamped
+  `auto_delete_at = now() + 90d` on **every** document — including `lankaqr_code`. AL-59 makes a
+  driver's own bank-app QR what a passenger scans to pay them on *every ride*, and AL-49 renders a
+  fleet owner's on the Mode B pay sheet: live payment infrastructure, not evidence somebody checked
+  once. Nothing swept the column, so the bug was invisible — and wiring a real bucket lifecycle rule
+  is exactly what would have made it start deleting drivers' QR codes 90 days after upload, one
+  driver at a time, with nothing to see. Hence `ObjectRetentionClasses`: the retention class is a
+  **key prefix** (`ephemeral/` · `retained/`), the NFR-28 lifecycle rule is scoped to the first, and
+  a null retention writes no `auto_delete_at`. A bucket-wide expiry rule would have been the same
+  bug at the bucket level.
+
+  **Three things only real MinIO could have told us**, all found by running the tests:
+
+  (a) **MinIO refuses every encrypted upload without `MINIO_KMS_SECRET_KEY`** — including plain
+  SSE-S3 (`AES256`), because MinIO implements SSE-S3 through its KMS. Since D-36 requires encryption
+  and the store always asks for it, the dev stack and the replica could not have stored a single
+  document. The key must decode to **exactly 32 bytes** or MinIO exits at boot with "invalid key
+  length", which looks like a container that starts and immediately dies. Set in the compose file
+  and the fixture, with the reason written at both.
+
+  (b) **The presigner ignores `ServiceURL`'s scheme and `AmazonS3Config.UseHttp`** and defaults to
+  HTTPS. Against MinIO that produced `https://` links to a server speaking plain HTTP. Every bucket
+  API call still worked, so it would have surfaced only as document thumbnails failing the TLS
+  handshake in an officer's browser. Fixed with an explicit `Protocol` on the presign request.
+
+  (c) **AWSSDK v4 leaves response collections null rather than empty**, so `ListBuckets().Buckets`
+  is null on a fresh MinIO and bucket creation threw.
+
+  **SSE-KMS vs SSE-S3, said out loud rather than left to a default.** `Storage:KmsKeyId` unset does
+  **not** mean unencrypted — it means SSE-S3 with the provider's own key. The difference is real:
+  SSE-KMS gives a key you control, rotate and audit access to. MinIO cannot do SSE-KMS without a KES
+  server, so dev and the replica run SSE-S3 and production sets the key. The service names which one
+  it got at start-up, because a compliance claim should not rest on an unread default.
+
+  **admin-bff's signed URL is now the bucket's own.** A SigV4 presigned GET the storage provider
+  verifies, with the TTL enforced by the provider and no MageRide process carrying the bytes — which
+  is what AL-39 asked for. The `DOC_VIEW` row is still written first and the redirect still issued
+  only after it. The HMAC path remains for a deployment with no bucket and only that. support-svc's
+  and subscription-svc's document routes gained the same redirect; both had a comment saying "this
+  is where a redirect goes" above code that answered 404.
+
+  **Testing — 12 new tests, 11 of them against a real MinIO** (`MinioFixture`, the image the compose
+  files pin). Deliberate: nearly every claim worth making here is about S3 behaviour rather than our
+  code — that a presigned URL an **unauthenticated** client follows returns the bytes and that the
+  same object without the signature is refused, that an expired one stops working, that a lifecycle
+  rule scoped to one prefix reads back scoped to that prefix, that encryption is reported on the
+  stored object, that an oversize upload leaves the bucket empty, that a `file://` row still reads
+  after the switch. A fake `IObjectStore` would have asserted that our own test double works, and
+  would have found none of (a), (b) or (c). The twelfth is in Registry.Api.Tests and is the retention
+  split end to end: the bank statement gets a deadline, the LankaQR gets none, and the two land under
+  different key prefixes.
+
+  **⚠ What is NOT covered, stated plainly.** The seven services' own suites still run on the
+  **filesystem fallback** — no test stands a service up against MinIO. So per-service S3 behaviour
+  (presign round-trip through admin-bff's viewer route, the support/subscription redirects) is
+  proven at the kernel and by inspection, not end to end. The retention split is the one
+  service-level property that is tested, because it is the one that was actually wrong. A follow-up
+  worth doing is pointing one service harness at `MinioFixture`.
+
+  **Also not done:** no backfill of existing `file://` rows into the bucket — by design, the
+  composite store keeps reading them, and a migration can happen later or never. `Storage__ProfileBucket`
+  is declared and still unused: nothing on this build map uploads a profile picture yet.

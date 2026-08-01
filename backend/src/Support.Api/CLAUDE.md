@@ -230,7 +230,7 @@ Every knob is documented at its declaration in `SupportOptions` and in `infra/en
 | Setting | Default | Where it comes from |
 |---|---|---|
 | `InternalApiKey` | unset | **unset ⇒ `/v1/internal/support/**` is not mapped**: no ticket can be assigned, answered or resolved, and every one stays OPEN for ever |
-| `ScreenshotRoot` | *(temp dir)* | **not object storage** — D-36's bucket, when a client exists (C125). D7' §4.2's `Storage__ScreenshotBucket` is in `.env.common` |
+| `ScreenshotRoot` | *(temp dir)* | **D-36 (Δ C063)** — bytes go to the kernel's `IObjectStore` (`AddMageRideObjectStore`): S3-compatible, server-side encrypted, presigned reads, and NFR-28's expiry applied by the bucket's own lifecycle rule scoped to the `ephemeral/` key prefix. This setting is now the **filesystem fallback's root**, used when `Storage__S3__Endpoint` is unset. The bucket is D7' §4.2's `Storage__ScreenshotBucket`; the viewer route now 302s to a presigned GET |
 | `ScreenshotMaxBytes` | 8 MiB | **no spec** — the same bound as `Ride:ProofPhotoMaxBytes` and `Subscription:SlipMaxBytes`; the idempotency request buffer is raised to match |
 | `ScreenshotRetention` | 90 d | NFR-28. Written to `docs.uploads.auto_delete_at`; the sweeper is not this service's |
 | `FileLinkSigningKey` | unset | **unset ⇒ a key per process**: a link minted by one replica does not verify on another |

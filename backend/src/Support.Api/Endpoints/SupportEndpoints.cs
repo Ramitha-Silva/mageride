@@ -302,9 +302,16 @@ public static class SupportEndpoints
 
         if (opened is not { } file)
         {
-            // Nothing this process can read. With an object store configured this is where a
-            // redirect to a pre-signed URL goes; on a filesystem it means the pod that wrote the
-            // image is gone, which `FileSystemScreenshotStore` warns about at start-up.
+            // Δ D-36: on a bucket the bytes are not this process's to stream, so the officer's
+            // browser is redirected to a short-lived presigned URL. The signature check above has
+            // already happened, so the redirect is issued only to a caller who proved the link.
+            if (store.Presign(upload.StorageUrl) is { } direct)
+            {
+                return TypedResults.Redirect(direct, permanent: false, preserveMethod: false);
+            }
+
+            // On a filesystem this means the pod that wrote the image is gone, which the store
+            // warns about at start-up.
             return TypedResults.NotFound();
         }
 

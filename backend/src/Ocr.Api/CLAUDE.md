@@ -209,7 +209,7 @@ Every knob is documented at its declaration in `OcrOptions` and in `infra/env/.e
 | `ConfidenceThreshold` | 0.80 | **no spec** — AL-29/BR-25.2/D6' §7.5 all say "below threshold". The same value and argument as `Registry:OcrConfidenceThreshold`; bounded at 0.5 |
 | `TesseractConfidenceCeiling` | 0.60 | **no spec** — D6' §7.5's "below threshold → manual admin review", made structural. Validated to be below the threshold |
 | `RawRetention` | 90 d | NFR-28. Written to `docs.uploads.auto_delete_at` when it is NULL, never overwritten |
-| `Storage:Root` | unset | **not object storage** — D-36's SSE-KMS bucket, when a client exists (C125). Unset ⇒ nothing can be read |
+| `Storage:Root` | unset | **D-36 (Δ C063)** — bytes go to the kernel's `IObjectStore` (`AddMageRideObjectStore`): S3-compatible, server-side encrypted, presigned reads, and NFR-28's expiry applied by the bucket's own lifecycle rule scoped to the `ephemeral/` key prefix. This setting is now the **filesystem fallback's root**, used when `Storage__S3__Endpoint` is unset — and then it must be the same volume the uploaders write to, or nothing can be read |
 | `Storage:MaxBytes` | 16 MiB | **no spec** — the same bound as `Support:ScreenshotMaxBytes`; refused before decoding |
 | `Storage:AllowHttpSources` | off | on ⇒ this service will fetch a URL another service wrote into a row |
 | `Gemini:Enabled` · `BaseUrl` · `ApiKey` | on · Google · unset | **unset ⇒ every document takes the on-prem path** and AL-27 is unreachable |

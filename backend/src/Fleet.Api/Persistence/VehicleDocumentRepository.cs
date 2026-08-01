@@ -59,7 +59,7 @@ public interface IVehicleDocumentRepository
         string storageUrl,
         byte[] sha256,
         string kind,
-        TimeSpan retention,
+        TimeSpan? retention,
         CancellationToken cancellationToken);
 
     /// <summary>The <c>docs.uploads</c> row's storage URL, so ocr-svc can be pointed at the bytes.</summary>
@@ -157,7 +157,7 @@ internal sealed class VehicleDocumentRepository : IVehicleDocumentRepository
         string storageUrl,
         byte[] sha256,
         string kind,
-        TimeSpan retention,
+        TimeSpan? retention,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(connection);
@@ -176,7 +176,9 @@ internal sealed class VehicleDocumentRepository : IVehicleDocumentRepository
         return await connection.ExecuteScalarAsync<Guid>(new CommandDefinition(
             """
             INSERT INTO docs.uploads (id, owner_id, storage_url, sha256, kind, captured_via, auto_delete_at)
-            VALUES (@UploadId, @OwnerId, @StorageUrl, @Sha256, @Kind, 'other', now() + @Retention)
+            VALUES (@UploadId, @OwnerId, @StorageUrl, @Sha256, @Kind, 'other', -- NULL retention means "never expire". A vehicle document is always raw evidence so this
+                    -- is always set here; the nullable type keeps one shape across both upload paths.
+                    CASE WHEN @Retention::interval IS NULL THEN NULL ELSE now() + @Retention END)
             RETURNING id;
             """,
             new

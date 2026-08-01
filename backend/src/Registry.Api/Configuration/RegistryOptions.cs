@@ -94,7 +94,12 @@ public sealed class RegistryOptions
     public long PayoutDocumentMaxBytes { get; set; } = 8 * 1024 * 1024;
 
     /// <summary>How long a raw payout document is kept (NFR-28).</summary>
-    /// <remarks>Written to <c>docs.uploads.auto_delete_at</c>; the sweeper is not this service's.</remarks>
+    /// <remarks>
+    /// Δ D-36: written to <c>docs.uploads.auto_delete_at</c> <b>and</b> applied by the bucket's own
+    /// lifecycle rule, so the deadline is enforced rather than merely recorded. It does <b>not</b>
+    /// reach a driver's LankaQR — that is stored <c>retained</c>, because AL-59 makes it what a
+    /// passenger scans to pay them on every ride rather than evidence somebody checked once.
+    /// </remarks>
     public TimeSpan PayoutDocumentRetention { get; set; } = TimeSpan.FromDays(90);
 
     // -----------------------------------------------------------------------------------------

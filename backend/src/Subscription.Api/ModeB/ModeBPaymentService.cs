@@ -465,8 +465,13 @@ internal sealed class ModeBPaymentService(
             : links.Create(ModeBFileKinds.Slip, payment.PaymentId);
     }
 
-    /// <summary>Resolves and opens a signed document link, or throws the right 403/404.</summary>
-    public async Task<(Stream Content, string ContentType)?> OpenFileAsync(
+    /// <summary>Resolves a signed document link to bytes or to a redirect, or throws 403/404.</summary>
+    /// <remarks>
+    /// Δ D-36: on a bucket the bytes are not this process's to stream, so the caller is redirected
+    /// to a short-lived presigned URL. The signature check has already happened, so the redirect is
+    /// only ever issued to somebody who proved the link.
+    /// </remarks>
+    public async Task<ModeBFile?> OpenFileAsync(
         string kind, Guid id, Guid? callerId, CancellationToken cancellationToken)
     {
         var storageUrl = kind switch
@@ -481,7 +486,14 @@ internal sealed class ModeBPaymentService(
             throw new MageRideException(MageRideErrors.NotFound, "No such document.");
         }
 
-        return slips.Open(storageUrl);
+        if (slips.Open(storageUrl) is { } local)
+        {
+            return new ModeBFile(local.Content, local.ContentType, RedirectUrl: null);
+        }
+
+        return slips.Presign(storageUrl) is { } presigned
+            ? new ModeBFile(Content: null, ContentType: null, presigned)
+            : null;
     }
 
     /// <summary>The month a payment covers when the caller does not name one.</summary>

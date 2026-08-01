@@ -33,7 +33,7 @@ public interface IPayoutDocumentRepository
         string storageUrl,
         byte[] sha256,
         string kind,
-        TimeSpan retention,
+        TimeSpan? retention,
         CancellationToken cancellationToken);
 
     /// <summary>The payout documents attached to one profile version, for the officer's queue.</summary>
@@ -54,7 +54,7 @@ internal sealed class PayoutDocumentRepository : IPayoutDocumentRepository
         string storageUrl,
         byte[] sha256,
         string kind,
-        TimeSpan retention,
+        TimeSpan? retention,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(connection);
@@ -69,7 +69,10 @@ internal sealed class PayoutDocumentRepository : IPayoutDocumentRepository
         return await connection.QuerySingleAsync<PayoutDocument>(new CommandDefinition(
             """
             INSERT INTO docs.uploads (owner_id, storage_url, sha256, kind, auto_delete_at)
-            VALUES (@OwnerId, @StorageUrl, @Sha256, @Kind, now() + @Retention)
+            VALUES (@OwnerId, @StorageUrl, @Sha256, @Kind,
+                    -- NULL retention means "never expire": a fleet owner's LankaQR is on the Mode B
+                    -- pay sheet and is not raw evidence (AL-49). NFR-28 covers the statement only.
+                    CASE WHEN @Retention::interval IS NULL THEN NULL ELSE now() + @Retention END)
             RETURNING id, owner_id, storage_url, kind, auto_delete_at, created_at;
             """,
             new { OwnerId = ownerId, StorageUrl = storageUrl, Sha256 = sha256, Kind = kind, Retention = retention },
