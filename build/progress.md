@@ -90,7 +90,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C061 | analytics-read-model | 3 | DONE | 2026-08-01 | **104 tests green** in a **new suite** (`Analytics.Tests`), integration against a real Postgres because every DoD item is a claim about the database; **no migration and no contract change** — C005's `1405__analytics_daily_metrics.sql` already carries AL-38's five figures and `admin-bff.yaml` already declares `getAdminDashboardStats` / `exportAdminDashboardStats`, so the records here are those schemas' field names one-for-one; **built as a LIBRARY, not a service** — D3' gives the endpoint to admin-bff, D6' §I-28.5 says it "aggregates `analytics.daily_metrics`" rather than calling anything, ADD §6's table has no `analytics-svc` row, and the planner already listed this component among those with no `.yaml` (C007 finding (j)); **completed trips come from `rides.transitions.to_state='Completed'`, not from a ride state** — a ride never *rests* in Completed (C022 moves it to PaymentPending in the same transaction) and the terminal states are reached when the *money* settles, which can be the next day; **gross fare is one payment per ride in exactly fare-svc's R-05 terminal set**, taken with `DISTINCT ON … attempt_no DESC` so a D-10 retry chain contributes once, and `VocabularyTests` compares the list against `Fare.Api` so a widened CHECK is a red test rather than a silently under-counted dashboard; **new riders/drivers come from the `iam.user_roles` grant, not `iam.users.role`** — the primary role moves and would retro-edit a past day's figure; **daily-fee revenue matches `fee_date` directly** because subscription-svc already decided that Colombo day under D-13; **both fences are proved by reflection, not by review** (`FenceTests`: one writing statement, targeting `analytics.`, and no `AT TIME ZONE` / `date_trunc` / `::date` / `now()` anywhere — D-38 has one implementation and it is `BusinessCalendar`); **the previous period is arithmetic, not calendar** (the contract's "immediately preceding period of the same length"), so a 31-day range spanning a month boundary compares against 31 days and not "the same dates last month"; **a zero-base delta is `null`**, because growth from nothing has no percentage; **a day with no activity is a zero row**, so "no row" cannot mean both "quiet Sunday" and "job down since Friday"; **the live block is read at request time and asserted invariant under the period filter**; period totals reconcile against a deliberately *differently written* source query (`AT TIME ZONE` + `date_trunc`, grouped in SQL) on every period; 2000 trips roll up in well under the 15-min window; solution build 0 warnings; 1 spec gap (which day "This week" starts on), 1 D7' §4.2 gap, 7 configuration decisions |
 | C062 | admin-bff-core | 3 | DONE | 2026-08-01 | **65 tests green** in a **new suite** (`AdminBff.Tests`) plus **3 kernel promotions** (the URD §2.3 matrix, the `audit.events` writer, a `TimeOnly` Dapper handler) and **3 migrations (0202, 1312, 1409)**; the RBAC matrix test reads each route's own requirement off the built endpoint and drives all six internal roles at a real socket, so the expectation IS the spec; D-35 is a **start-up condition** — a mutating route outside the audited group, or one that declares no action, refuses to boot; 3 contract additions, 5 spec gaps / micro-change-sets |
 | C063 | admin-bff-verification | 3 | DONE | 2026-08-01| **17 verification tests green** (`--filter Category=Verification`) and **91/91** across the whole `AdminBff.Tests` suite (was 65), integration against a real Postgres because every DoD item is a claim about the database; **1 migration (0315)** — `registry.driver_profiles.rejection_reason`, because AL-39's family is subject-agnostic and two of its three subjects already had somewhere to keep US-2.15's reason while the driver did not; **a queue is "has a field still `pending`" and that IS AL-27's fence** — an auto-verified document produces no such row, so it cannot appear rather than being filtered out by something that could stop filtering, and the same count is US-2.10a's approval gate so the two cannot disagree; **the vehicle queue is Mode C and fleet alike** because AL-50 reuses AL-29's pipeline and both write the same two tables; **every document fetch goes through the audited route** — `thumbUrl`/`fullUrl` point at `GET /v1/admin/documents/{docId}`, which records `DOC_VIEW` and *then* mints the short-lived signed URL it redirects to, because a pre-signed bucket URL would have satisfied AL-39's first half and silently dropped its second; **the D-35 success window widened to 3xx** for exactly that redirect; **withdrawing a rejection is its own `VERIFICATION_REOPENED` row** — registry-svc will not auto-approve a REJECTED vehicle, so a resubmission could otherwise never be approved, and the trail stays honest when the approval that follows is refused by AL-10; **an edit reaches an unflagged field and a bare confirm does not**, and an edited value becomes `manual` with no confidence (`ck_document_fields_manual_confidence`); **`merchantBound` is always false** because D-11's bind requires a `merchantId` nothing on this platform onboards; `migrate-verify.sh` 446/446, Spectral 0 errors, solution build 0 warnings; 2 new upstreams, 8 contract changes, 4 spec gaps / micro-change-sets **Δ 2026-08-01 (AL-58/AL-59)**: the driver payout-profile queue, detail and verdict — closes gap (b) the C028 handoff named, where a submitted bank account could never be verified and payout-svc could never pay anyone. Its own queue predicate (nothing extracts fields from a bank statement), its own verdict route (a driver id already names the identity subject, and refusing a statement must not refuse a licence) and its own audit action; the BR-31.1 write is forwarded to registry-svc. **ADD §1.18 AL-58 corrected.** **101 tests green (+6)** |
-| C064 | admin-bff-directories | 3 | PENDING | | |
+| C064 | admin-bff-directories | 3 | DONE | 2026-08-01 | **15 directory tests green** (`--filter Category=Directories`) and **122/122** across the whole `AdminBff.Tests` suite (was 101), integration against a real Postgres because every DoD item is a claim about a joined view; **5 index-only migrations (0109, 0317, 0507, 0610, 1110)** — no new table and no new column, three directories over other services' tables needing two keyset orderings and three reverse lookups nobody had needed before; **each directory is gated on the URD §2.3 row whose cells are *exactly* D3''s printed role list, with ◐ fenced by `RequirePlatformWideFeature`** — Support for passengers (not Passenger, whose PAX cell is ✅ and would let any passenger list every passenger), Driver-wallet for drivers and Fleet-monitoring for vehicles (not Driver-app / Fleet-operations, which both give Finance ➖ where BR-28.8 names Finance) — so the two specs agree instead of one overruling the other; **two rows, two questions**: the row above opens the screen, `account-management · write` held unscoped unmasks it, which is what makes "a Support CSR sees masked PII" fall out of the matrix rather than out of a hard-coded role list; **a list is masked for every role**, so every clear MSISDN this surface has emitted has a `PII_READ` row behind it; **one detail open is exactly one `PII_READ` row** and the row records `piiRevealed`, because the actor alone does not answer the question a privacy investigation asks; **the vehicle detail is audited too** (URD §2.3's clause names all three, `server_db_schema.md` §23 names two — micro-change-set); **the page is chosen before anything is counted** — keyset index under a LIMIT, then LATERAL per-row aggregates — which is why 10k rows answer the first page at **29.5 ms p95** against a 500 ms budget; `migrate-verify.sh` **461/461**, Spectral 0 errors, solution build 0 warnings; 1 spec conflict resolved, 3 micro-change-sets |
 | C065 | admin-bff-finance-pdpa | 3 | PENDING | | |
 | C066 | public-bff | 3 | PENDING | | |
 | C067 | driver-android-shell | 4a | PENDING | | |
@@ -10042,3 +10042,137 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   **Also not done:** no backfill of existing `file://` rows into the bucket — by design, the
   composite store keeps reading them, and a migration can happen later or never. `Storage__ProfileBucket`
   is declared and still unused: nothing on this build map uploads a profile picture yet.
+
+---
+
+- **Component:** C064 admin-bff-directories — 2026-08-01
+- **Status:** DONE — `dotnet test backend/src/AdminBff.Tests -c Release --filter Category=Directories`
+  is **15/15 green** and the whole suite is **122/122** (was 101);
+  `dotnet build backend/MageRide.sln -c Release` is 0 warnings 0 errors;
+  `bash infra/scripts/migrate-verify.sh` is **461/461** (was 446); Spectral is 0 errors.
+- **Notes:**
+  **What was built —** the three directories (SCR-AP-010…015): `GET /v1/admin/passengers` with
+  name / mobile / id / email and a detail carrying Trips / Payments / Packages / Disputes;
+  `GET /v1/admin/drivers` with name / mobile / id / NIC / reg-no / level / status (verified by
+  default) and a detail carrying profile-wallet-level, linked vehicles and Trips / Wallet ledger /
+  Daily fee / Credit transfers / Reports; `GET /v1/admin/vehicles` with reg-no / id / type / mode /
+  owner-mobile / fleet-org / status and a detail carrying registration, insurance and revenue-licence
+  expiries, the tracker, a document-thumbnail grid onto C063's audited viewer, and Trips / Earnings /
+  Daily fee / Reports. Every criterion is a conjunct, so they work singly and in any combination.
+  Six routes, all GET, all under the C062 group and therefore inside both fences without touching
+  either.
+
+  **The spec conflict, and how it was resolved rather than picked.** D3' prints a role list per route
+  (`[support|admin|auditor]`, `[support|admin|finance|auditor]`) and URD §2.3 is the matrix every
+  service is gated on; the obvious row disagrees with the printed list on two of the three
+  directories. Rather than let one document overrule the other, **each directory is gated on the row
+  whose cells are *exactly* D3''s list once ◐ is fenced by `RequirePlatformWideFeature`** — Support
+  for passengers, Driver-wallet for drivers, Fleet-monitoring for vehicles. The rejected candidates
+  are worth recording: the **Passenger** row gives the passenger column ✅, so gating an operator
+  console on it would have let any passenger list every passenger on the platform; **Driver-app** and
+  **Fleet-operations** both give Finance ➖, and BR-28.8 names Finance in as many words — half of
+  SCR-AP-013 is the wallet ledger, the daily fee and the credit transfers, and a Finance Officer
+  refused the driver directory cannot reconcile what they are told to reconcile. `AdminMenu`'s three
+  C062 placeholders were moved onto the same three pairs, because a nav item gated on anything else
+  promises a screen the API refuses.
+
+  **Two rows, two questions — which is what makes the masking rule fall out of the matrix.** Opening
+  a directory is the row above, held as Read. Seeing a mobile, an email or an NIC **in the clear** is
+  `account-management` · **Write, held unscoped** — the row about people as accounts, whose two ◐
+  qualifiers name exactly who is bounded (`◐ verification`, `◐ on tickets`). So an Admin and a Super
+  Admin read the number and a Support CSR, a Verification Officer, a Finance Officer and an Auditor
+  read the mask, which is the DoD's "a Support/CSR sees masked PII where the matrix says so" read off
+  URD §2.3 rather than hard-coded. **A list is masked for every role, including the two that may
+  unmask a detail** — so every clear MSISDN this surface has ever emitted has a `PII_READ` row behind
+  it, and that is the property that makes the audit trail answer "who has seen this person's number"
+  completely. Masks: `+9477*****67` for an MSISDN (`_shared.yaml`'s own example, to the character),
+  `a***@domain` for an email (still `format: email`, so a schema-validating client does not reject
+  the response), and **last two characters only for an NIC** — its leading digits are the holder's
+  year of birth and day of year, so a prefix is not a hint.
+
+  **One detail open is exactly one `PII_READ` row, and the row says whether anything was revealed.**
+  Every permitted role can open every record, so the actor alone does not answer a privacy question;
+  `piiRevealed` does, and it is a fact by the time it is recorded rather than an inference. A 404
+  records nothing — there was nobody to look at. The mechanism is C063's: a GET that declares
+  `.Audited(...)`, the handler recording and the interceptor writing after a successful response.
+
+  **Performance is a property of the query shape.** Each search filters and orders on its keyset
+  index under a `LIMIT`, and only then joins the per-row facts (trip counts, plates, the owning
+  organisation) by `LATERAL` — so the aggregates run at most `limit + 1` times whatever the size of
+  the platform. Measured **29.5 ms p95 for the first page over 10,000 rows** against the DoD's 500 ms;
+  the test keeps the 500 ms ceiling because it exists to catch a regression to counting-before-paging,
+  not to race a loaded box.
+
+  **Five migrations, all index-only (0109, 0317, 0507, 0610, 1110).** No new table and no new column:
+  a directory is a read over other services' tables, and what it needed was two ordering keys
+  (`iam.users(role, created_at DESC, id DESC)`, `registry.vehicles(created_at DESC, id DESC)`) and
+  three reverse lookups nobody had needed before — `trips.sessions(driver_id, …)` because
+  `ux_sessions_active_driver` is partial on ACTIVE and holds at most one row, which is the opposite
+  set; `rides.rides(accepted_vehicle_id, …)` because 0601 indexes a ride by *person* and SCR-AP-014
+  asks by vehicle; `billing.daily_fee_charges(vehicle_id, fee_date DESC)` because D-13's
+  `(driver_id, vehicle_id, fee_date)` PK cannot serve a vehicle-first read as a prefix. No new
+  extension: substring search is `ILIKE` over a bounded page rather than a trigram index, because
+  adding `pg_trgm` is a platform decision belonging to 0001.
+
+  **Three micro-change-sets.**
+  (a) **`PII_READ` is written by the vehicle detail as well.** `server_db_schema.md` §23 and D4' §14
+  introduce the action as "passenger/driver directory detail opened" and D3' marks only those two
+  routes, but URD §2.3's privacy clause requires a read-access entry for "all
+  passenger/driver/**vehicle** directory lookups" and a vehicle detail resolves to a named owner and
+  an organisation. Inventing a second action would split one auditor question across two filters;
+  `entity_type` already distinguishes the three. **§23's wording should be widened to name all three.**
+  (b) **The tab item schemas in `admin-bff.yaml` were `type: object, additionalProperties: true`** —
+  a placeholder for something nobody had implemented. All ten are now typed (`DirectoryTrip`,
+  `DirectoryPayment`, `DirectoryPackage`, `DirectoryDispute`, `LinkedVehicle`, `WalletLedgerEntry`,
+  `DailyFeeCharge`, `DirectoryCreditTransfer`, `DirectoryVehicleReport`, `VehicleEarningsDay`), which
+  is what C012/C013's generated clients and C118's contract tests need to be worth anything. The two
+  profile blocks gained the identity fields a detail obviously carries (`passengerId`, `driverId`,
+  `name`, `status`) and the vehicle info block gained `vehicleId`, `ownerId`, `fleetId`,
+  `dispatchState`, `onboardingStatus` and `registeredAt`.
+  (c) **A detail's `mobile` could not be typed `PhoneE164` and also be maskable** — the pattern
+  `^\+947\d{8}$` refuses `+9477*****67`. New local schema `MaskablePhone` (a `oneOf` of the two
+  shared forms) with the role rule written on it. Email and NIC needed no change: both masks stay
+  inside their declared types.
+
+  **Two spec gaps found, both resolved in code and worth recording.**
+  (i) **`PassengerRow.status` has a `deleted` value nothing can produce.** A PDPA erasure is C065's
+  and no column records one; answering `active` for an account nobody erased is the honest value and
+  the enum is left alone so C065 can fill it.
+  (ii) **Nothing defines which accounts a "passenger directory" contains.** `iam.users.role` (the
+  primary role, 0101) is used rather than the `iam.user_roles` union — deliberately the *opposite* of
+  C061's choice for the same two tables, and for a reason worth stating: that component counts new
+  riders out of the grant table because a historical count must not move when somebody later signs up
+  to drive, while this one answers "which directory does this account live in", and an account lives
+  in one. The union would put every driver who has ever booked a ride into the passenger directory a
+  CSR is searching.
+
+  **Decisions that are load-bearing and cheap to get wrong later.** A Trips tab is a **union of
+  `rides.rides` and `trips.sessions`** on every surface that has one — ride-svc ≠ trip-state-svc is
+  about who *writes* the row, and a directory that read only one would render an empty tab for every
+  bus on the platform. A driver's status is **derived**, and suspension outranks verification because
+  it is the later fact. A vehicle's earnings are **derived from the settled payment of its own
+  rides**, not read from `fares.driver_earnings`, whose `(driver_id, earn_date)` key loses a vehicle
+  two drivers shared on one day; the settled-state list is **C061's
+  `AnalyticsVocabulary.SettledPaymentStates` used rather than copied**, since this process already
+  hosts that read model. Document links are C063's audited `/v1/admin/documents/{docId}` and never a
+  bucket URL. Tabs are capped at **50 rows** as a constant rather than a setting — a knob would be a
+  promise this component can serve an unbounded read, and a three-year-old driver's wallet is tens of
+  thousands of rows.
+
+  **`getDriverDetail` answers `not-found`, not `driver-not-found`.** The contract declared the former
+  and the contract wins; the distinct code exists for a route that takes a driver *and* a vehicle and
+  has to say which half was wrong, which a path whose only parameter is the driver does not.
+
+  **Read-only is asserted against the route table**, not asserted in prose:
+  `No_directory_route_accepts_a_write` enumerates every route under the three prefixes and allows
+  exactly C062's two suspensions, so C065 cannot hang a refund off a directory path without this
+  failing. The reversal button on SCR-AP-013 remains C065's Finance-gated route.
+
+  **For C065 —** `AdminMenu`'s finance group is already gated and the three directories now exist to
+  link *from*: a wallet reversal reached from SCR-AP-013 should land on
+  `POST /v1/admin/drivers/wallet/{driverId}/reverse-fee` and will need its own audit action, not
+  `PII_READ`. `PassengerRow.status = deleted` is waiting for whatever column an erasure writes.
+
+  **Build host:** the replica stayed down throughout; `AdminBff.Tests` takes ~4 min for the whole
+  suite including the container start, the migration and the 10k-row fixture. **No new NuGet
+  reference, no new PostgreSQL extension, no new project.**

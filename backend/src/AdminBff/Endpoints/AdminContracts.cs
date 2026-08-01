@@ -319,3 +319,252 @@ public sealed record DriverPayoutVerificationResponse(
 /// <summary>The verdict, echoed back with the version it landed on.</summary>
 public sealed record DriverPayoutDecisionResponse(
     Guid DriverId, string Status, string? Reason, DateTimeOffset? VerifiedAt);
+
+// -------------------------------------------------------------------------------------------------
+// Directories (AL-40/41/42, C064)
+// -------------------------------------------------------------------------------------------------
+
+/// <summary>`PassengerRow` — one row of SCR-AP-010.</summary>
+/// <param name="MobileMasked">
+/// <b>Masked for every caller, whatever they hold.</b> `admin-bff.yaml` types it <c>PhoneMasked</c>
+/// and says the clear number requires the audited detail read — which is what makes "every clear
+/// MSISDN this surface emitted has a <c>PII_READ</c> row behind it" true rather than approximate.
+/// </param>
+public sealed record PassengerRowResponse(
+    Guid PassengerId,
+    string Name,
+    string? MobileMasked,
+    int Trips,
+    DateTimeOffset JoinedAt,
+    string Status);
+
+/// <summary>`PassengerDetail` — SCR-AP-011. Emits `PII_READ`.</summary>
+public sealed record PassengerDetailResponse(
+    PassengerProfileResponse Profile,
+    IReadOnlyList<TripResponse> Trips,
+    IReadOnlyList<PaymentResponse> Payments,
+    IReadOnlyList<PackageResponse> Packages,
+    IReadOnlyList<DisputeResponse> Disputes);
+
+/// <summary>The profile block. `mobile` and `email` are clear or masked by role — see `IPiiPolicy`.</summary>
+public sealed record PassengerProfileResponse(
+    Guid PassengerId,
+    string Name,
+    string? Mobile,
+    string? Email,
+    DateTimeOffset JoinedAt,
+    double? Rating,
+    string DefaultPay,
+    string Status,
+    IReadOnlyList<SosContactResponse> SosContacts);
+
+/// <summary>One emergency contact (AL-13). The number is masked by the same rule as the passenger's.</summary>
+public sealed record SosContactResponse(string Name, string? Phone);
+
+/// <summary>
+/// One row of any Trips tab.
+/// </summary>
+/// <param name="Kind">
+/// <c>ride</c> (Mode C, <c>rides.rides</c>) or <c>session</c> (Mode A/B, <c>trips.sessions</c>).
+/// Both appear because a directory is not mode-aware — the ride-svc / trip-state-svc boundary is
+/// about who writes the row, not about what an operator may read back.
+/// </param>
+/// <param name="CounterpartyName">The other party: the driver on a passenger's tab, the passenger on a driver's.</param>
+public sealed record TripResponse(
+    Guid TripId,
+    string Kind,
+    string State,
+    string? VehicleType,
+    Guid? VehicleId,
+    string? RegNo,
+    Guid? CounterpartyId,
+    string? CounterpartyName,
+    long? FareMinor,
+    string? Currency,
+    DateTimeOffset StartedAt,
+    DateTimeOffset? EndedAt);
+
+/// <summary>One row of SCR-AP-011's Payments tab — one attempt of D-10's state machine.</summary>
+public sealed record PaymentResponse(
+    Guid PaymentId,
+    Guid RideId,
+    string Method,
+    string State,
+    long AmountMinor,
+    long SurchargeMinor,
+    long TipMinor,
+    string Currency,
+    int AttemptNo,
+    DateTimeOffset CreatedAt);
+
+/// <summary>One row of SCR-AP-011's Packages tab (P-06).</summary>
+public sealed record PackageResponse(
+    Guid RideId,
+    string State,
+    string? PackageSize,
+    string? Description,
+    string? RecipientName,
+    string? RecipientMobile,
+    long? FareMinor,
+    string? Currency,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? CompletedAt);
+
+/// <summary>One row of SCR-AP-011's Disputes tab (<c>support.tickets</c>).</summary>
+public sealed record DisputeResponse(
+    Guid TicketId,
+    string Category,
+    string Status,
+    string? Description,
+    string? Response,
+    Guid? RideId,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt);
+
+/// <summary>`DriverRow` — one row of SCR-AP-012.</summary>
+public sealed record DriverRowResponse(
+    Guid DriverId,
+    string Name,
+    string? MobileMasked,
+    IReadOnlyList<string> Vehicles,
+    int Level,
+    int Trips,
+    string Status);
+
+/// <summary>`DriverDetail` — SCR-AP-013. Emits `PII_READ`.</summary>
+public sealed record DriverDetailResponse(
+    DriverProfileResponse Profile,
+    IReadOnlyList<LinkedVehicleResponse> Vehicles,
+    IReadOnlyList<TripResponse> Trips,
+    IReadOnlyList<WalletLedgerResponse> WalletLedger,
+    IReadOnlyList<DailyFeeResponse> DailyFee,
+    IReadOnlyList<CreditTransferResponse> CreditTransfers,
+    IReadOnlyList<VehicleReportResponse> Reports);
+
+/// <summary>The profile block. `mobile` and `nic` are clear or masked by role.</summary>
+public sealed record DriverProfileResponse(
+    Guid DriverId,
+    string Name,
+    string? Mobile,
+    string? Nic,
+    DateTimeOffset JoinedAt,
+    double? Rating,
+    long WalletMinor,
+    string Currency,
+    int Level,
+    int Points,
+    string Status,
+    DateTimeOffset? VerifiedAt);
+
+/// <summary>A vehicle chip on SCR-AP-013.</summary>
+/// <param name="Owned">
+/// Whether the driver owns the registration or merely drives it: a Mode C driver owns their vehicle,
+/// a fleet's driver is assigned one (AL-03). Both are "linked vehicles" (US-24.10) and an operator
+/// looking at a suspension needs to know which.
+/// </param>
+/// <param name="Link">The vehicle detail this chip jumps to.</param>
+public sealed record LinkedVehicleResponse(
+    Guid VehicleId,
+    string RegNo,
+    string Type,
+    string Mode,
+    string Status,
+    string DispatchState,
+    bool Owned,
+    string Link);
+
+/// <summary>One row of the Wallet-ledger tab (D-09 §10). Signed: a debit is negative.</summary>
+public sealed record WalletLedgerResponse(
+    long EntryNo,
+    string Kind,
+    long AmountMinor,
+    long BalanceAfterMinor,
+    string? Description,
+    DateTimeOffset Ts);
+
+/// <summary>One row of a Daily-fee tab (D-13). `feeDate` is the Asia/Colombo business date (D-38).</summary>
+public sealed record DailyFeeResponse(
+    DateOnly FeeDate,
+    Guid DriverId,
+    Guid VehicleId,
+    string? RegNo,
+    long AmountMinor,
+    string Currency,
+    int TripsThatDay,
+    string Status,
+    DateTimeOffset ChargedAt);
+
+/// <summary>One row of the Credit-transfers tab (US-9.13/9.21).</summary>
+/// <param name="Direction"><c>out</c> when this driver sent it, <c>in</c> when they received it.</param>
+/// <param name="Initiation">
+/// <c>REQUESTED</c> or <c>DIRECT</c> — who started it, which is the stored <c>direction</c> column
+/// and a different question from which way the money went.
+/// </param>
+public sealed record CreditTransferResponse(
+    Guid TransferId,
+    string Direction,
+    string Initiation,
+    Guid CounterpartyId,
+    string? CounterpartyName,
+    long AmountMinor,
+    string Currency,
+    string Status,
+    DateTimeOffset CreatedAt);
+
+/// <summary>One row of a Reports tab (<c>safety.vehicle_reports</c>, US-12.6).</summary>
+public sealed record VehicleReportResponse(
+    Guid ReportId,
+    Guid VehicleId,
+    string? RegNo,
+    string Reason,
+    string Status,
+    DateTimeOffset CreatedAt);
+
+/// <summary>`VehicleRow` — one row of SCR-AP-014.</summary>
+public sealed record VehicleRowResponse(
+    Guid VehicleId,
+    string Type,
+    string Mode,
+    string? Owner,
+    string? FleetOrg,
+    string RegNo,
+    int Trips,
+    string Status);
+
+/// <summary>`AdminVehicleDetail` — SCR-AP-015.</summary>
+public sealed record AdminVehicleDetailResponse(
+    VehicleInfoResponse Info,
+    IReadOnlyList<DocumentRefResponse> Documents,
+    IReadOnlyList<TripResponse> Trips,
+    IReadOnlyList<VehicleEarningsResponse> Earnings,
+    IReadOnlyList<DailyFeeResponse> DailyFee,
+    IReadOnlyList<VehicleReportResponse> Reports);
+
+/// <summary>SCR-AP-015's registration / insurance / revenue-licence / tracker block.</summary>
+public sealed record VehicleInfoResponse(
+    Guid VehicleId,
+    string Type,
+    string RegNo,
+    string Mode,
+    Guid OwnerId,
+    string? Owner,
+    Guid? FleetId,
+    string? FleetOrg,
+    string Status,
+    string DispatchState,
+    string OnboardingStatus,
+    DateOnly? InsuranceExpiry,
+    DateOnly? RevenueLicenceExpiry,
+    DateTimeOffset RegisteredAt,
+    TrackerResponse? Tracker);
+
+/// <summary>The bound tracker (T-08), or absent where the vehicle has none.</summary>
+/// <param name="Online">
+/// Whether it has pinged inside US-3.13's 30-minute silence window — the same threshold C044's
+/// fleet-health screen uses, so the two surfaces cannot disagree about one device.
+/// </param>
+public sealed record TrackerResponse(string Imei, bool Online, string State, DateTimeOffset? LastSeen);
+
+/// <summary>One row of SCR-AP-015's Earnings tab — one Colombo business day (D-38).</summary>
+public sealed record VehicleEarningsResponse(
+    DateOnly EarnDate, int Trips, long GrossMinor, string Currency);

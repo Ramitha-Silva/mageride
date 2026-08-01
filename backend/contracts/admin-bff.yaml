@@ -798,8 +798,16 @@ paths:
       operationId: searchPassengers
       summary: Search the passenger directory.
       description: |
-        AL-40, US-24.9. Multi-criteria. Phone numbers are **masked** in the list; the clear value
-        requires the detail read, which emits `PII_READ`.
+        AL-40, US-24.9. Multi-criteria, and the criteria combine with **AND**. Phone numbers are
+        **masked** in the list for every caller; the clear value requires the detail read, which
+        emits `PII_READ`.
+
+        **Δ C064 — gated on URD §2.3's Support row, held platform-wide**, which is the row whose
+        cells are exactly `[support|admin|auditor]` once `◐ own org` (Fleet Owner) and
+        `◐ financial` (Finance) are fenced, and the row that describes the job: URD §2.4 gives the
+        Support CSR "support ticket queue; **trip/user read-only lookup**; investigate disputes".
+        Not the Passenger row, whose passenger cell is ✅ — gating an operator console on it would
+        let any passenger list every passenger.
       tags: [admin-directories]
       security:
         - bearerAuth: []
@@ -840,8 +848,9 @@ paths:
       operationId: getPassengerDetail
       summary: Passenger profile with tabbed activity.
       description: |
-        AL-40, US-24.9. **Emits a `PII_READ` audit event.** Read-only: trips, payments, packages
-        and disputes are joined read-models, and refunds still route to Finance.
+        AL-40, US-24.9. **Emits a `PII_READ` audit event** — exactly one per open, carrying whether
+        the contact details were actually revealed. Read-only: trips, payments, packages and disputes
+        are joined read-models, and refunds still route to Finance.
       tags: [admin-directories]
       security:
         - bearerAuth: []
@@ -871,6 +880,12 @@ paths:
       description: |
         AL-41, US-24.10. Multi-criteria, **defaulting to verified drivers**. `level=1` is how the
         Level-1 list ADD Appendix C asked for is obtained.
+
+        **Δ C064 — gated on URD §2.3's Driver wallet & credit transfers row, held platform-wide.**
+        It is the only row whose cells are exactly `[support|admin|finance|auditor]`, and Finance has
+        to be there: BR-28.8 names them, and half of SCR-AP-013 is the wallet ledger, the daily fee
+        and the credit transfers. Not the Driver-app row, which gives Finance ➖. The driver's own
+        `◐ own` cell is "your own wallet in the Driver App" and is fenced out here.
       tags: [admin-directories]
       security:
         - bearerAuth: []
@@ -932,7 +947,8 @@ paths:
       operationId: getDriverDetail
       summary: Driver profile with wallet, level and tabbed activity.
       description: |
-        AL-41, US-24.10. **Emits a `PII_READ` audit event.** Reversals stay Finance-only through
+        AL-41, US-24.10. **Emits a `PII_READ` audit event** — exactly one per open, carrying whether
+        the contact details were actually revealed. Reversals stay Finance-only through
         `POST /v1/admin/drivers/wallet/{driverId}/reverse-fee`; nothing here moves money.
       tags: [admin-directories]
       security:
@@ -956,7 +972,14 @@ paths:
     get:
       operationId: searchVehicles
       summary: Search the vehicle directory.
-      description: AL-42, US-24.11. Mode A/B rows also show the owning fleet organisation.
+      description: |
+        AL-42, US-24.11. Mode A/B rows also show the owning fleet organisation.
+
+        **Δ C064 — gated on URD §2.3's Fleet live-map & per-vehicle analytics row, held
+        platform-wide**: cells exactly `[support|admin|finance|auditor]`, and per-vehicle analytics
+        is what the detail's Trips / Earnings / Daily-fee tabs are. Not the Fleet-operations row
+        (onboarding, assignment, scheduling), which is the Fleet Portal's write surface and gives
+        Finance ➖. A Fleet Owner's `◐ own org` is not a platform-wide registry and is fenced out.
       tags: [admin-directories]
       security:
         - bearerAuth: []
@@ -1026,6 +1049,13 @@ paths:
         AL-42, US-24.11. Registration, insurance and revenue-licence expiries, tracker binding,
         document thumbnails (which open the AL-39 viewer), and the trips / earnings / daily-fee /
         reports tabs.
+
+        **Δ C064: this emits a `PII_READ` event too.** `server_db_schema.md` §23 introduces the
+        action as "passenger/driver directory detail opened", but URD §2.3's privacy clause is
+        broader in as many words — "All passenger/driver/**vehicle** directory lookups … write a
+        read-access audit entry" — and a vehicle detail resolves to a named owner and an
+        organisation. A second action for the third subject would split one auditor question across
+        two filters; `entityType` already says which kind of record was opened. Micro-change-set.
       tags: [admin-directories]
       security:
         - bearerAuth: []
@@ -2317,6 +2347,21 @@ components:
           description: |
             **Δ AL-57 — always `false`.** D-11 is retired and the bind it named no longer exists.
 
+    MaskablePhone:
+      description: |
+        **Δ C064.** An MSISDN a directory *detail* may render either way. The clear `PhoneE164` for
+        a caller who holds URD §2.3's End-user account management row as **write, unscoped** (Admin,
+        Super Admin); the `PhoneMasked` form for everybody else — a Support CSR is `◐ on tickets` and
+        a Verification Officer is `◐ verification`, and neither qualifier describes browsing the
+        directory. The mask is applied server-side and the clear value is not in the payload beside
+        it.
+
+        A **list** row is never this: it is always `PhoneMasked`, so every clear number this surface
+        has emitted has a `PII_READ` row behind it.
+      oneOf:
+        - $ref: './_shared.yaml#/components/schemas/PhoneE164'
+        - $ref: './_shared.yaml#/components/schemas/PhoneMasked'
+
     PassengerRow:
       type: object
       required: [passengerId, name, mobileMasked, trips, joinedAt, status]
@@ -2331,10 +2376,14 @@ components:
           type: integer
           format: int32
           minimum: 0
+          description: Rides that reached a terminal successful state (R-05). Deliveries are counted too.
         joinedAt:
           $ref: './_shared.yaml#/components/schemas/Timestamp'
         status:
           type: string
+          description: |
+            **Δ C064: `deleted` is never answered yet.** A PDPA erasure is C065's and no column
+            records one; answering `active` for an account nobody erased is the honest value.
           enum: [active, blocked, deleted]
 
     PassengerDetail:
@@ -2343,13 +2392,21 @@ components:
       properties:
         profile:
           type: object
-          required: [mobile, joinedAt]
+          required: [passengerId, name, mobile, joinedAt, defaultPay, status]
           properties:
+            passengerId:
+              $ref: './_shared.yaml#/components/schemas/Ulid'
+            name:
+              type: string
             mobile:
-              $ref: './_shared.yaml#/components/schemas/PhoneE164'
+              $ref: '#/components/schemas/MaskablePhone'
             email:
               type: string
               format: email
+              description: |
+                **Δ C064.** Masked as `a***@domain` for a caller without the grant — still a valid
+                address, because a mask that broke `format: email` would make a schema-validating
+                client reject the whole response.
             joinedAt:
               $ref: './_shared.yaml#/components/schemas/Timestamp'
             rating:
@@ -2357,37 +2414,167 @@ components:
               format: double
               minimum: 0
               maximum: 5
+              description: What drivers rated them (`driver_to_passenger`, US-18.2). Absent until somebody has.
             defaultPay:
               type: string
+              enum: [cash, lankaqr, onepay]
+            status:
+              type: string
+              enum: [active, blocked, deleted]
             sosContacts:
               type: array
               items:
                 type: object
+                required: [name]
                 properties:
                   name:
                     type: string
                   phone:
-                    $ref: './_shared.yaml#/components/schemas/PhoneE164'
+                    $ref: '#/components/schemas/MaskablePhone'
         trips:
           type: array
           items:
-            type: object
-            additionalProperties: true
+            $ref: '#/components/schemas/DirectoryTrip'
         payments:
           type: array
           items:
-            type: object
-            additionalProperties: true
+            $ref: '#/components/schemas/DirectoryPayment'
         packages:
           type: array
           items:
-            type: object
-            additionalProperties: true
+            $ref: '#/components/schemas/DirectoryPackage'
         disputes:
           type: array
           items:
-            type: object
-            additionalProperties: true
+            $ref: '#/components/schemas/DirectoryDispute'
+
+    DirectoryTrip:
+      type: object
+      description: |
+        **Δ C064.** One journey, from either surface: `kind: ride` is a Mode C booking
+        (`rides.rides`, R-01) and `kind: session` is a Mode A/B journey (`trips.sessions`, D-03).
+        Both appear because a directory is not mode-aware — the ride-svc / trip-state-svc boundary is
+        about who writes the row, not about what an operator may read back. A session carries no fare.
+      required: [tripId, kind, state, startedAt]
+      properties:
+        tripId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        kind:
+          type: string
+          enum: [ride, session]
+        state:
+          type: string
+        vehicleType:
+          $ref: './_shared.yaml#/components/schemas/VehicleType'
+        vehicleId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        regNo:
+          type: string
+        counterpartyId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        counterpartyName:
+          type: string
+          description: The driver on a passenger's tab, the passenger on a driver's.
+        fareMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        currency:
+          $ref: './_shared.yaml#/components/schemas/Currency'
+        startedAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+        endedAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    DirectoryPayment:
+      type: object
+      description: '**Δ C064.** One attempt of D-10''s payment state machine; retries are their own rows.'
+      required: [paymentId, rideId, method, state, amountMinor, currency, attemptNo, createdAt]
+      properties:
+        paymentId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        rideId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        method:
+          type: string
+          enum: [cash, lankaqr, onepay, cod, scan_driver_qr, wallet]
+        state:
+          type: string
+        amountMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        surchargeMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        tipMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        currency:
+          $ref: './_shared.yaml#/components/schemas/Currency'
+        attemptNo:
+          type: integer
+          format: int32
+          minimum: 1
+        createdAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    DirectoryPackage:
+      type: object
+      description: '**Δ C064.** A `kind = 2` ride (P-06). The recipient''s number is masked by the same rule as the passenger''s own.'
+      required: [rideId, state, createdAt]
+      properties:
+        rideId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        state:
+          type: string
+        packageSize:
+          type: string
+          enum: [S, M, L]
+        description:
+          type: string
+        recipientName:
+          type: string
+        recipientMobile:
+          $ref: '#/components/schemas/MaskablePhone'
+        fareMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        currency:
+          $ref: './_shared.yaml#/components/schemas/Currency'
+        createdAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+        completedAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    DirectoryDispute:
+      type: object
+      description: |
+        **Δ C064.** One `support.tickets` row. The whole ticket list rather than a "disputes"
+        subset — the `category` column is free text and US-9.23's daily-fee refund request rides in
+        it, so a server-side filter on a vocabulary nobody has fixed would silently hide tickets.
+      required: [ticketId, category, status, createdAt, updatedAt]
+      properties:
+        ticketId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        category:
+          type: string
+        status:
+          type: string
+          enum: [OPEN, IN_PROGRESS, RESOLVED]
+        description:
+          type: string
+        response:
+          type: string
+        rideId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        createdAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+        updatedAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
 
     DriverRow:
       type: object
@@ -2409,12 +2596,17 @@ components:
           format: int32
           minimum: 1
           maximum: 3
+          description: '**Δ C064.** `dispatch.driver_levels.level`, defaulting to 3 — the column''s own default — for a driver nobody has scored.'
         trips:
           type: integer
           format: int32
           minimum: 0
         status:
           type: string
+          description: |
+            **Δ C064: derived, not stored.** Verified when `registry.driver_profiles.verified_at` is
+            set, suspended when `iam.users.is_blocked` is, pending otherwise. Suspended wins over
+            verified — it is the later fact and the one the row was opened to find.
           enum: [verified, pending, suspended]
 
     DriverDetail:
@@ -2423,12 +2615,20 @@ components:
       properties:
         profile:
           type: object
-          required: [mobile, joinedAt, walletMinor, level, points]
+          required: [driverId, name, mobile, joinedAt, walletMinor, currency, level, points, status]
           properties:
+            driverId:
+              $ref: './_shared.yaml#/components/schemas/Ulid'
+            name:
+              type: string
             mobile:
-              $ref: './_shared.yaml#/components/schemas/PhoneE164'
+              $ref: '#/components/schemas/MaskablePhone'
             nic:
               type: string
+              description: |
+                **Δ C064.** Masked to its last two characters for a caller without the grant. Harder
+                than a phone number, deliberately: an NIC's leading digits are the holder's year of
+                birth and day of year, so a prefix is not a hint — it is a date of birth.
             joinedAt:
               $ref: './_shared.yaml#/components/schemas/Timestamp'
             rating:
@@ -2450,36 +2650,164 @@ components:
             points:
               type: integer
               format: int32
+            status:
+              type: string
+              enum: [verified, pending, suspended]
+            verifiedAt:
+              $ref: './_shared.yaml#/components/schemas/Timestamp'
         vehicles:
           type: array
           items:
-            type: object
-            additionalProperties: true
+            $ref: '#/components/schemas/LinkedVehicle'
         trips:
           type: array
           items:
-            type: object
-            additionalProperties: true
+            $ref: '#/components/schemas/DirectoryTrip'
         walletLedger:
           type: array
           items:
-            type: object
-            additionalProperties: true
+            $ref: '#/components/schemas/WalletLedgerEntry'
         dailyFee:
           type: array
           items:
-            type: object
-            additionalProperties: true
+            $ref: '#/components/schemas/DailyFeeCharge'
         creditTransfers:
           type: array
           items:
-            type: object
-            additionalProperties: true
+            $ref: '#/components/schemas/DirectoryCreditTransfer'
         reports:
           type: array
           items:
-            type: object
-            additionalProperties: true
+            $ref: '#/components/schemas/DirectoryVehicleReport'
+
+    LinkedVehicle:
+      type: object
+      description: |
+        **Δ C064.** A vehicle chip on SCR-AP-013 — owned *or* assigned. A Mode C driver owns their
+        vehicle; a fleet's driver owns nothing and drives what `registry.fleet_assignments` gives
+        them (AL-03), and both are "linked vehicles" (US-24.10).
+      required: [vehicleId, regNo, type, mode, status, dispatchState, owned, link]
+      properties:
+        vehicleId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        regNo:
+          type: string
+        type:
+          $ref: './_shared.yaml#/components/schemas/VehicleType'
+        mode:
+          $ref: './_shared.yaml#/components/schemas/OperatingMode'
+        status:
+          type: string
+          enum: [PENDING, APPROVED, REJECTED, DEACTIVATED]
+        dispatchState:
+          type: string
+          enum: [ACTIVE, DISPATCH_SUSPENDED]
+        owned:
+          type: boolean
+        link:
+          type: string
+          description: '`/v1/admin/vehicles/{vehicleId}` — the detail this chip jumps to.'
+
+    WalletLedgerEntry:
+      type: object
+      description: '**Δ C064.** One `billing.wallet_transactions` row (D-09 §10). Signed: a debit is negative.'
+      required: [entryNo, kind, amountMinor, balanceAfterMinor, ts]
+      properties:
+        entryNo:
+          type: integer
+          format: int64
+        kind:
+          type: string
+        amountMinor:
+          type: integer
+          format: int64
+        balanceAfterMinor:
+          type: integer
+          format: int64
+        description:
+          type: string
+        ts:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    DailyFeeCharge:
+      type: object
+      description: '**Δ C064.** One D-13 charge. `feeDate` is the Asia/Colombo business date (D-38).'
+      required: [feeDate, driverId, vehicleId, amountMinor, currency, tripsThatDay, status, chargedAt]
+      properties:
+        feeDate:
+          $ref: './_shared.yaml#/components/schemas/BusinessDate'
+        driverId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        vehicleId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        regNo:
+          type: string
+        amountMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        currency:
+          $ref: './_shared.yaml#/components/schemas/Currency'
+        tripsThatDay:
+          type: integer
+          format: int32
+          minimum: 0
+        status:
+          type: string
+          enum: [PAID, WAIVED_FIRST_TRIP]
+        chargedAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    DirectoryCreditTransfer:
+      type: object
+      description: |
+        **Δ C064.** One `billing.credit_transfers` row (US-9.13/9.21). Exact value, no commission
+        (AL-01). `direction` is computed against the driver whose detail this is; `initiation` is the
+        stored column — who started it — and they answer different questions.
+      required: [transferId, direction, initiation, counterpartyId, amountMinor, currency, status, createdAt]
+      properties:
+        transferId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        direction:
+          type: string
+          enum: [in, out]
+        initiation:
+          type: string
+          enum: [REQUESTED, DIRECT]
+        counterpartyId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        counterpartyName:
+          type: string
+        amountMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        currency:
+          $ref: './_shared.yaml#/components/schemas/Currency'
+        status:
+          type: string
+          enum: [PENDING, APPROVED, REJECTED]
+        createdAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    DirectoryVehicleReport:
+      type: object
+      description: '**Δ C064.** One `safety.vehicle_reports` row. The third CONFIRMED one delists the vehicle (US-12.6).'
+      required: [reportId, vehicleId, reason, status, createdAt]
+      properties:
+        reportId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        vehicleId:
+          $ref: './_shared.yaml#/components/schemas/Ulid'
+        regNo:
+          type: string
+        reason:
+          type: string
+        status:
+          type: string
+          enum: [PENDING, CONFIRMED, DISMISSED]
+        createdAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
 
     VehicleRow:
       type: object
@@ -2502,6 +2830,7 @@ components:
           type: integer
           format: int32
           minimum: 0
+          description: '**Δ C064.** Completed Mode C rides **plus** completed Mode A/B sessions — a bus has no rides.'
         status:
           type: string
           enum: [PENDING, APPROVED, REJECTED, DEACTIVATED]
@@ -2512,31 +2841,58 @@ components:
       properties:
         info:
           type: object
-          required: [type, regNo, mode]
+          required: [vehicleId, type, regNo, mode, ownerId, status, dispatchState, onboardingStatus, registeredAt]
           properties:
+            vehicleId:
+              $ref: './_shared.yaml#/components/schemas/Ulid'
             type:
               $ref: './_shared.yaml#/components/schemas/VehicleType'
             regNo:
               type: string
             mode:
               $ref: './_shared.yaml#/components/schemas/OperatingMode'
+            ownerId:
+              $ref: './_shared.yaml#/components/schemas/Ulid'
             owner:
               type: string
+            fleetId:
+              $ref: './_shared.yaml#/components/schemas/Ulid'
             fleetOrg:
               type: string
+            status:
+              type: string
+              enum: [PENDING, APPROVED, REJECTED, DEACTIVATED]
+            dispatchState:
+              type: string
+              description: '`DISPATCH_SUSPENDED` is E-03''s "do not offer rides to it" and is not the end of a registration.'
+              enum: [ACTIVE, DISPATCH_SUSPENDED]
+            onboardingStatus:
+              type: string
+              enum: [incomplete, approved]
             insuranceExpiry:
               type: string
               format: date
+              description: '**Δ C064.** The newest certificate''s expiry, as an Asia/Colombo calendar date (D-38).'
             revenueLicenceExpiry:
               type: string
               format: date
+            registeredAt:
+              $ref: './_shared.yaml#/components/schemas/Timestamp'
             tracker:
               type: object
+              description: '**Δ C064.** The bound tracker (T-08), absent where the vehicle has none.'
+              required: [imei, online, state]
               properties:
                 imei:
                   type: string
                 online:
                   type: boolean
+                  description: |
+                    Pinged inside US-3.13's 30-minute silence window — the same threshold
+                    fleet-health (C044) uses, so the two screens cannot disagree about one device.
+                state:
+                  type: string
+                  enum: [ACTIVE, QUARANTINED, REVOKED]
                 lastSeen:
                   $ref: './_shared.yaml#/components/schemas/Timestamp'
         documents:
@@ -2546,23 +2902,41 @@ components:
         trips:
           type: array
           items:
-            type: object
-            additionalProperties: true
+            $ref: '#/components/schemas/DirectoryTrip'
         earnings:
           type: array
           items:
-            type: object
-            additionalProperties: true
+            $ref: '#/components/schemas/VehicleEarningsDay'
         dailyFee:
           type: array
           items:
-            type: object
-            additionalProperties: true
+            $ref: '#/components/schemas/DailyFeeCharge'
         reports:
           type: array
           items:
-            type: object
-            additionalProperties: true
+            $ref: '#/components/schemas/DirectoryVehicleReport'
+
+    VehicleEarningsDay:
+      type: object
+      description: |
+        **Δ C064.** One Asia/Colombo business day (D-38) of settled fare on this vehicle's rides.
+        Derived from `fares.ride_payments` rather than read from `fares.driver_earnings`: that rollup
+        is keyed `(driver_id, earn_date)` and a vehicle two drivers shared on one day appears in it
+        twice under neither of them.
+      required: [earnDate, trips, grossMinor, currency]
+      properties:
+        earnDate:
+          $ref: './_shared.yaml#/components/schemas/BusinessDate'
+        trips:
+          type: integer
+          format: int32
+          minimum: 0
+        grossMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        currency:
+          $ref: './_shared.yaml#/components/schemas/Currency'
 
     ModerationResult:
       type: object

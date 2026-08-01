@@ -97,13 +97,16 @@ public static class AdminMenu
 
         new("directories", "nav.group.directories",
         [
-            // C064's three.
+            // C064's three. Each names the row its endpoint names and carries the same
+            // platform-wide flag — see DirectoryEndpoints for why these three rows and not the
+            // obvious ones. A nav item gated on anything else would promise a screen the API
+            // refuses, which is the failure this record's PlatformWide remark is about.
             new("passengers", "nav.passengers", "/passengers",
-                FeatureAreas.Passenger, PermissionGrant.Read, Self),
+                FeatureAreas.Support, PermissionGrant.Read, Self, PlatformWide: true),
             new("drivers", "nav.drivers", "/drivers",
-                FeatureAreas.DriverApp, PermissionGrant.Read, Self),
+                FeatureAreas.DriverWallet, PermissionGrant.Read, Self, PlatformWide: true),
             new("vehicles", "nav.vehicles", "/vehicles",
-                FeatureAreas.FleetOperations, PermissionGrant.Read, Self),
+                FeatureAreas.FleetMonitoring, PermissionGrant.Read, Self, PlatformWide: true),
         ]),
 
         new("moderation", "nav.group.moderation",

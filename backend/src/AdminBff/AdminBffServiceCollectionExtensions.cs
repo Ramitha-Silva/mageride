@@ -1,5 +1,6 @@
 using MageRide.AdminBff.Auditing;
 using MageRide.AdminBff.Authorization;
+using MageRide.AdminBff.Directories;
 using MageRide.Shared.Storage;
 using MageRide.AdminBff.Configuration;
 using MageRide.AdminBff.Moderation;
@@ -39,6 +40,11 @@ public static class AdminBffServiceCollectionExtensions
         services.TryAddSingleton<ITrainRepository, TrainRepository>();
         services.TryAddSingleton<IAuditLogRepository, AuditLogRepository>();
         services.TryAddSingleton<IVerificationRepository, VerificationRepository>();
+        services.TryAddSingleton<IDirectoryRepository, DirectoryRepository>();
+
+        // Singleton: the PII gate is a pure function of the caller's claims over the compiled
+        // URD §2.3 matrix — no state, no I/O, and the evaluator it wraps is itself stateless.
+        services.TryAddSingleton<IPiiPolicy, PiiPolicy>();
 
         // Singleton: it holds the signing key and a clock, and minting a link is a pure function of
         // both. A per-request instance would re-read the key on every thumbnail in a grid.
@@ -57,6 +63,11 @@ public static class AdminBffServiceCollectionExtensions
         services.TryAddScoped<IReportQueue, ReportQueue>();
         services.TryAddScoped<ISupportTicketQueue, SupportTicketQueue>();
         services.TryAddScoped<IVerificationService, VerificationService>();
+
+        // Scoped for the same reason the verification service is: it records into the request's
+        // own audit context, and a singleton would be recording a PII_READ into somebody else's
+        // request.
+        services.TryAddScoped<IDirectoryService, DirectoryService>();
 
         // The filter is resolved per request through the endpoint-filter factory, and holds only
         // options and a logger.

@@ -89,6 +89,30 @@ public static class AdminAuditActions
     public const string PayoutProfileRejected = "PAYOUT_PROFILE_REJECTED";
 
     // -------------------------------------------------------------------------------------------
+    // Directories (AL-40/41/42, C064)
+    // -------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// A directory detail was opened (AL-40/41/42, US-24.9/10/11, I-28.6).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The second action on this surface a GET writes</b>, and `server_db_schema.md` §23 names it
+    /// alongside <see cref="DocumentViewed"/> for exactly that reason: opening somebody's record is
+    /// itself the auditable act, whether or not anything changed.
+    /// </para>
+    /// <para>
+    /// <b>One action for all three directories.</b> §23 introduces it as "passenger/driver directory
+    /// detail opened" and D3' marks the two people routes, but URD §2.3's privacy clause requires a
+    /// read-access entry for "all passenger/driver/**vehicle** directory lookups" — and a vehicle
+    /// detail resolves to a named owner and an organisation. A second action for the third subject
+    /// would split one auditor question across two filters; <c>entity_type</c> already says which
+    /// kind of record was opened. Recorded as a micro-change-set.
+    /// </para>
+    /// </remarks>
+    public const string PiiRead = "PII_READ";
+
+    // -------------------------------------------------------------------------------------------
     // Configuration
     // -------------------------------------------------------------------------------------------
 
@@ -131,6 +155,16 @@ public static class AdminAuditActions
 
     public const string VehicleEntity = "vehicle";
     public const string DriverEntity = "driver";
+
+    /// <summary>
+    /// An end-user account read through the passenger directory (AL-40).
+    /// </summary>
+    /// <remarks>
+    /// Not <see cref="DriverEntity"/> and not a bare "user": the two people-directories are two
+    /// screens over two populations, and an auditor asking "who has been reading riders' numbers"
+    /// must be able to ask it without also getting every driver lookup.
+    /// </remarks>
+    public const string PassengerEntity = "passenger";
 
     /// <summary>A fleet organisation — <c>registry.fleets</c> (AL-03, AL-49).</summary>
     public const string FleetOrgEntity = "fleet_org";

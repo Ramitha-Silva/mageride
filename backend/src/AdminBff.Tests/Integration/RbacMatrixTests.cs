@@ -79,6 +79,17 @@ public sealed class RbacMatrixTests(PostgresFixture postgres)
         ("POST", "/v1/admin/verification/payout/01930000-0000-7000-8000-0000000000b3/reject", """{"reason":"name mismatch"}"""),
         ("GET", "/v1/admin/documents/01930000-0000-7000-8000-0000000000b3", null),
 
+        // C064's three directories. Each is gated on the URD §2.3 row whose cells are exactly the
+        // role list D3' prints for the route, with ◐ fenced by RequirePlatformWideFeature — see
+        // DirectoryEndpoints. The theory reads that pair off the endpoint, so this file states no
+        // expectation of its own.
+        ("GET", "/v1/admin/passengers", null),
+        ("GET", "/v1/admin/passengers/01930000-0000-7000-8000-0000000000c1", null),
+        ("GET", "/v1/admin/drivers", null),
+        ("GET", "/v1/admin/drivers/01930000-0000-7000-8000-0000000000c2", null),
+        ("GET", "/v1/admin/vehicles", null),
+        ("GET", "/v1/admin/vehicles/01930000-0000-7000-8000-0000000000c3", null),
+
         ("POST", "/v1/admin/vehicles/01930000-0000-7000-8000-0000000000aa/suspend", """{"reason":"test"}"""),
         ("POST", "/v1/admin/drivers/01930000-0000-7000-8000-0000000000ab/suspend", """{"reason":"test"}"""),
         ("GET", "/v1/admin/reports/queue", null),

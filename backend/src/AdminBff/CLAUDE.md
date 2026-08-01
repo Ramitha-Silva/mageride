@@ -1,4 +1,4 @@
-# admin-bff (C062 admin-bff-core + C063 admin-bff-verification) — the Admin Portal's back-office BFF
+# admin-bff (C062 core + C063 verification + C064 directories) — the Admin Portal's back-office BFF
 
 Stack: .NET 10 Minimal API + Dapper over Npgsql. References `MageRide.Shared` (C002) and
 `Analytics` (C061, a library — not a service). **No Redis, no consumer, no outbox, no command
@@ -12,9 +12,9 @@ the code.
 ## What this service is
 
 The single back-office front door for all six internal roles (AL-02, `admin.mageride.lk`). C062 is
-its foundation and **C063 is the Verification Officer's whole surface**; C064 (directories) and C065
-(finance/PDPA) map onto the same group in `AdminEndpoints` and inherit both fences without touching
-either.
+its foundation, **C063 is the Verification Officer's whole surface** and **C064 is the three
+directories**; C065 (finance/PDPA) maps onto the same group in `AdminEndpoints` and inherits both
+fences without touching either.
 
 | Endpoint | URD §2.3 gate | Spec |
 |---|---|---|
@@ -27,6 +27,9 @@ either.
 | `GET /v1/admin/verification/payout/{driverId}` | verification · read | **Δ AL-58/AL-59** |
 | `POST /v1/admin/verification/payout/{driverId}/approve` · `/reject` | verification · write | **Δ AL-58** |
 | `GET /v1/admin/documents/{docId}` | verification · read | AL-39, SCR-AP-003b, US-24.8 |
+| `GET /v1/admin/passengers` · `/{passengerId}` | support · read **platform-wide** | **C064** — AL-40, SCR-AP-010/011 |
+| `GET /v1/admin/drivers` · `/{driverId}` | driver-wallet · read **platform-wide** | **C064** — AL-41, SCR-AP-012/013 |
+| `GET /v1/admin/vehicles` · `/{vehicleId}` | fleet-monitoring · read **platform-wide** | **C064** — AL-42, SCR-AP-014/015 |
 | `GET /v1/admin/dashboard` · `/stats` · `/stats.csv` | analytics · read | US-14.6, AL-38, US-24.7 |
 | `POST /v1/admin/vehicles/{id}/suspend` · `/drivers/{id}/suspend` | moderation · write **platform-wide** | US-14.3 |
 | `GET /v1/admin/reports/queue` | moderation · read | ADD Appendix C |
@@ -241,6 +244,73 @@ recorded as a micro-change-set in the C062 handoff in `build/progress.md`.
   `registry.documents` row — exactly like AL-49's — and `FindDocumentSql`'s second branch already
   resolved it, so the audited lightbox and its `DOC_VIEW` row work here as they stand.
 
+### The three directories (C064)
+
+- **Each directory is gated on the URD §2.3 row whose cells are *exactly* the role list D3' prints
+  for the route, with ◐ fenced by `RequirePlatformWideFeature`.** That is what makes the two
+  documents agree instead of one overruling the other — and it is worth stating because the obvious
+  row is the wrong one twice. Passengers → **Support** (not Passenger, whose PAX cell is ✅: gating an
+  operator console on it would let any passenger list every passenger; and URD §2.4 gives the CSR
+  "trip/user read-only lookup", which is this screen). Drivers → **Driver wallet & credit transfers**
+  (not Driver-app, which gives Finance ➖ — and BR-28.8 names Finance, because half of SCR-AP-013 is
+  the wallet ledger, the daily fee and the credit transfers). Vehicles → **Fleet live map &
+  per-vehicle analytics** (not Fleet-operations, which is the Fleet Portal's write surface and also
+  gives Finance ➖). `AdminMenu`'s three entries carry the same pairs and the same flag, because a
+  nav item gated on anything else promises a screen the API refuses.
+- **Two rows, two questions: one opens the directory, the other unmasks it.** Reaching the screen is
+  the row above, held as Read. Seeing a mobile, an email or an NIC in the clear is
+  **`account-management` · Write, held unscoped** — the row about people *as accounts*, whose two ◐
+  qualifiers say who is bounded (`◐ verification` for the officer, `◐ on tickets` for the CSR) and
+  therefore who sees the mask. So a Support CSR may open every record and read nobody's number, which
+  is what BR-28.8's "PII fields render only for roles whose RBAC grant permits them" means once you
+  ask *which* grant.
+- **A list is masked for everybody, including the roles that may unmask a detail.** `admin-bff.yaml`
+  says the clear number requires the audited detail read, and that is what makes the audit claim
+  complete: every clear MSISDN this surface has emitted has a `PII_READ` row behind it. There is no
+  response anywhere that carries the clear value beside the masked one — the portal is given one
+  string, decided server-side.
+- **One detail open is exactly one `PII_READ` row, and the row records whether anything was
+  revealed.** Every permitted role can open every record, so the actor alone does not answer the
+  question a privacy investigation asks. `piiRevealed` does, and it is a fact by then rather than an
+  inference. A 404 records nothing: there was nobody to look at.
+- **The vehicle detail writes one too, and that is a deliberate reading.** `server_db_schema.md` §23
+  introduces `PII_READ` as "passenger/driver directory detail opened" and D3' marks only those two;
+  URD §2.3's privacy clause requires a read-access entry for "all passenger/driver/**vehicle**
+  directory lookups", and a vehicle resolves to a named owner. A second action would split one
+  auditor question across two filters. **Micro-change-set raised.**
+- **The page is chosen before anything is counted.** Each search filters and orders on its keyset
+  index under a `LIMIT`, and only then joins the per-row facts (trip counts, plates, the owning
+  organisation) by `LATERAL` — so the aggregates run at most `limit + 1` times whatever the size of
+  the platform. That is what makes the DoD's 500 ms p95 a property of the query shape rather than of
+  the current row count, and it is the thing to preserve: counting first and paging afterwards is
+  the same answer at a cost that grows with the table.
+- **`iam.users.role` decides which directory an account is in — deliberately not the choice C061
+  made.** That component counts new riders out of `iam.user_roles` because a historical count must
+  not move when somebody later signs up to drive. This one answers "which directory does this
+  account live in", and an account lives in one: the union would put every driver who has ever
+  booked a ride into the passenger directory a CSR is searching.
+- **A Trips tab is a union of `rides.rides` and `trips.sessions`, on every surface that has one.** A
+  Mode C driver's journeys are rides and a fleet driver's are sessions; a directory that showed only
+  one would render an empty tab for every bus on the platform. **ride-svc ≠ trip-state-svc is about
+  who writes the row**, not about what an operator may read back — and this reads both and writes
+  neither.
+- **A driver's status is derived and suspension outranks verification.** There is no status column:
+  verified is `driver_profiles.verified_at`, suspended is `iam.users.is_blocked`, pending is neither.
+  A driver approved in March and blocked in July is suspended, because that is the later fact and the
+  one the row was opened to find.
+- **Earnings are derived per vehicle, not read from `fares.driver_earnings`.** That rollup is keyed
+  `(driver_id, earn_date)`, so a vehicle two drivers shared on one day appears in it twice under
+  neither of them. The tab sums the settled payment of each of the vehicle's rides — one row per ride
+  over D-10's retry chain — bucketed by the Colombo business date. The settled-state list is
+  **C061's `AnalyticsVocabulary.SettledPaymentStates`, used rather than copied**: this process
+  already hosts that read model, and a second literal would be the copy nobody notices drifting.
+- **The document grid mints C063's audited links.** `thumbUrl`/`fullUrl` point at
+  `GET /v1/admin/documents/{docId}`, never at the bucket — a directory that handed out pre-signed
+  URLs would be a second door onto the same documents with no `DOC_VIEW` row behind it.
+- **Read-only is asserted against the route table.** `No_directory_route_accepts_a_write` enumerates
+  every route under the three prefixes and allows exactly the two C062 suspensions, so a later
+  component cannot hang a write off a directory path without the suite failing.
+
 ### Configuration surfaces
 
 - **A tariff version is inserted, never updated, and never backdated.** D-10 makes a published rate
@@ -290,6 +360,7 @@ Admin beside them (⚙) may use, which URD §2.4 rules out in as many words.
 | `0202` | `config.feature_flags` | URD §2.3 gives feature flags a whole matrix row and US-14.12 an Admin Portal Config surface; **no spec prints the DDL**. The other three configuration surfaces the deliverable names already have tables and owners — `fares.tariffs` (1001), `billing.plans` (1103), `dispatch.level_config` (0713) — and this is the fourth |
 | `1312` | `audit.events.event_id` · `.actor_role` · `.ip` · `.detail` | §15 prints eight columns and the D-35 interceptor records four more. Each is named by a document — D6' §2.2's envelope id, `admin-bff.yaml#AuditEvent`'s `actorRole`/`ip`, the deliverable's "before/after, ip" — and 1305 has nowhere to put any of them. `ip` is `TEXT` and not `INET`: an audit trail that refuses a value it cannot parse records less than one that writes down what it was handed |
 | `0315` | `registry.driver_profiles.rejection_reason` | **C063.** AL-39's family is subject-agnostic and US-2.15 makes a rejection reason mandatory and shown to the applicant. Two of the three subjects already have a column — `registry.vehicles` (0303) and `registry.fleets` (0301) — and the driver did not, so an officer's refusal of a licence could be recorded in `audit.events` and never shown to the driver it was about. No companion timestamp and no `status`: the state is derived (`verified_at` ⇒ APPROVED, else this ⇒ REJECTED, else PENDING), exactly as `onboarding_status` is |
+| `0109`, `0317`, `0507`, `0610`, `1110` | five directory read-path indexes | **C064.** No new table and no new column: three directories over other services' tables need ordering keys and two reverse lookups nobody had needed before. `iam.users(role, created_at DESC, id DESC)` is both people-directories' keyset; `registry.vehicles(created_at DESC, id DESC)` is the vehicle directory's — 0303's three indexes all *find* a vehicle and none orders by registration date. `trips.sessions(driver_id, started_at DESC)` because `ux_sessions_active_driver` is partial on ACTIVE and holds at most one row, which is the opposite set; `rides.rides(accepted_vehicle_id, …)` because 0601 indexes a ride by *person* and SCR-AP-014/015 asks by vehicle; `billing.daily_fee_charges(vehicle_id, fee_date DESC)` because the `(driver_id, vehicle_id, fee_date)` PK cannot serve a vehicle-first read as a prefix |
 | `1409` | `registry.vehicles.default_route_id` | `TrainInput.routeId` had nowhere to live. **Not** the same question as `trips.sessions.route_id`: that is the line a *journey* ran, this is the line the vehicle is *registered for* (US-2.17), and nothing derives one from the other. In the 14xx range because the FK points at `spatial.routes`, which 1401 creates |
 
 ## Not here, and named rather than stubbed
@@ -302,9 +373,10 @@ Admin beside them (⚙) may use, which URD §2.4 rules out in as many words.
 - **Daily-fee rates, bulk-voucher tiers, Driver-Level parameters.** subscription-svc's
   `/v1/admin/fees/rates` and `/v1/admin/voucher-discount-tiers`, dispatch-svc's
   `/v1/admin/drivers/level-config`. Same shape, same reason.
-- **The three directories (C064), finance and PDPA (C065).** Separate components on this project.
-  `AdminMenu` already carries their nav entries, because the portal's shell must not depend on build
-  order.
+- **Finance and PDPA (C065).** A separate component on this project. `AdminMenu` already carries its
+  nav entries, because the portal's shell must not depend on build order. The reversal button on
+  SCR-AP-013's wallet tab is C065's `POST /v1/admin/drivers/wallet/{driverId}/reverse-fee` — the
+  directory renders the ledger and moves nothing (BR-28.8).
 - **Δ D-36 is wired (C063).** With `Storage:S3:*` configured, `GET /v1/admin/documents/{docId}`
   records its `DOC_VIEW` row and 302s to **the bucket's own presigned GET** — a SigV4 signature the
   storage provider verifies, with the TTL enforced by the provider and no MageRide process carrying

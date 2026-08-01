@@ -572,7 +572,292 @@ internal sealed class AdminSeed(PostgresFixture postgres)
         return await connection.QuerySingleOrDefaultAsync<string>(
             "SELECT state FROM dispatch.driver_presence WHERE driver_id = @Id;", new { Id = driverId });
     }
+
+    // -------------------------------------------------------------------------------------------
+    // Directories (C064)
+    // -------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// One of everything the three directories read, wired together the way the platform wires it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>One fixture rather than one per assertion</b>, because the claims C064's DoD makes are
+    /// about a *joined* view: "every documented criterion, singly and combined" is only meaningful
+    /// against a subject that has a name and a mobile and an NIC and a plate and a level at once,
+    /// and a Trips tab that renders is one where the ride, the vehicle and the payment all point at
+    /// each other.
+    /// </para>
+    /// <para>
+    /// Two vehicles, deliberately: a Mode C three-wheeler the driver owns (which is what the driver
+    /// directory's reg-no search, the daily fee and the reports hang off) and a Mode B van on a
+    /// fleet's roster (which is what the vehicle directory's <c>fleetOrg</c> search needs).
+    /// <c>registry.fleet_vehicles.mode</c> admits only A and B — AL-03 keeps Mode C out of fleets —
+    /// so one vehicle could not have played both parts.
+    /// </para>
+    /// </remarks>
+    public async Task<DirectoryFixture> DirectoryFixtureAsync()
+    {
+        var fixture = new DirectoryFixture(
+            PassengerId: Guid.CreateVersion7(),
+            PassengerName: $"Ayesha {Guid.NewGuid():N}"[..24],
+            PassengerPhone: $"+9470{Random.Shared.Next(1000000, 9999999)}",
+            PassengerEmail: $"ayesha{Guid.NewGuid():N}@rider.test",
+            SosPhone: $"+9470{Random.Shared.Next(1000000, 9999999)}",
+            DriverId: Guid.CreateVersion7(),
+            DriverName: $"Nimal {Guid.NewGuid():N}"[..22],
+            DriverPhone: $"+9471{Random.Shared.Next(1000000, 9999999)}",
+            DriverNic: $"1990{Random.Shared.Next(10000000, 99999999)}",
+            CounterpartyDriverId: Guid.CreateVersion7(),
+            VehicleId: Guid.CreateVersion7(),
+            FleetVehicleId: Guid.CreateVersion7(),
+            FleetId: Guid.CreateVersion7(),
+            FleetName: $"Ruhunu Transport {Guid.NewGuid():N}"[..28],
+            RideId: Guid.CreateVersion7(),
+            PackageRideId: Guid.CreateVersion7(),
+            TicketId: Guid.CreateVersion7(),
+            ReportId: Guid.CreateVersion7(),
+            InsuranceDocId: Guid.CreateVersion7(),
+            RevenueDocId: Guid.CreateVersion7(),
+            Imei: $"3579{Random.Shared.Next(10000000, 99999999)}0",
+            RegNo: $"WP-{Guid.NewGuid():N}"[..14].ToUpperInvariant(),
+            FleetRegNo: $"NB-{Guid.NewGuid():N}"[..14].ToUpperInvariant());
+
+        await using var connection = await postgres.OpenAsync();
+
+        await connection.ExecuteAsync(
+            """
+            -- The passenger, their emergency contact and the account they pay with.
+            INSERT INTO iam.users (id, phone, email, role, first_name, default_payment_method)
+            VALUES (@PassengerId, @PassengerPhone, @PassengerEmail, 'passenger', @PassengerName, 'onepay');
+            INSERT INTO iam.user_roles (user_id, role)
+            VALUES (@PassengerId, 'passenger') ON CONFLICT DO NOTHING;
+            INSERT INTO iam.emergency_contacts (user_id, name, phone)
+            VALUES (@PassengerId, 'Amma', @SosPhone);
+
+            -- A verified Level-1 driver, which is the directory's default population.
+            INSERT INTO iam.users (id, phone, role, first_name)
+            VALUES (@DriverId, @DriverPhone, 'driver', @DriverName);
+            INSERT INTO iam.user_roles (user_id, role) VALUES (@DriverId, 'driver') ON CONFLICT DO NOTHING;
+            INSERT INTO registry.driver_profiles (driver_id, display_name, nic_no, verified_at)
+            VALUES (@DriverId, @DriverName, @DriverNic, now() - interval '10 days');
+            INSERT INTO dispatch.driver_levels (driver_id, level, rating_points)
+            VALUES (@DriverId, 1, 620);
+
+            -- The other side of the credit transfer (US-9.13: the pair is two drivers).
+            INSERT INTO iam.users (id, phone, role, first_name)
+            VALUES (@CounterpartyDriverId, @CounterpartyPhone, 'driver', 'Kamal');
+            INSERT INTO iam.user_roles (user_id, role)
+            VALUES (@CounterpartyDriverId, 'driver') ON CONFLICT DO NOTHING;
+
+            -- The driver's own Mode C vehicle.
+            INSERT INTO registry.vehicles
+              (id, owner_id, registration_number, vehicle_type, mode, status, driver_name, onboarding_status)
+            VALUES (@VehicleId, @DriverId, @RegNo, 'three_wheeler', 'C', 'APPROVED', @DriverName, 'approved');
+
+            -- A fleet and its Mode B van, so `?fleetOrg=` has something to match (AL-03).
+            INSERT INTO iam.users (id, email, role, first_name)
+            VALUES (@FleetOwnerId, @FleetEmail, 'fleet_owner', 'Ruhunu Owner');
+            INSERT INTO registry.fleets (id, owner_id, name, status)
+            VALUES (@FleetId, @FleetOwnerId, @FleetName, 'APPROVED');
+            INSERT INTO registry.vehicles
+              (id, owner_id, registration_number, vehicle_type, mode, status, driver_name)
+            VALUES (@FleetVehicleId, @FleetOwnerId, @FleetRegNo, 'van', 'B', 'APPROVED', 'Ruhunu Owner');
+            INSERT INTO registry.fleet_vehicles (fleet_id, vehicle_id, mode)
+            VALUES (@FleetId, @FleetVehicleId, 'B');
+
+            -- E-03's two dated documents, each with the upload row AL-43's provenance comes from.
+            INSERT INTO docs.uploads (id, owner_id, storage_url, kind, captured_via) VALUES
+                (gen_random_uuid(), @DriverId, @InsuranceUrl, 'insurance',       'camera_dragcrop'),
+                (gen_random_uuid(), @DriverId, @RevenueUrl,   'revenue_license', 'gallery');
+            INSERT INTO registry.documents (id, driver_id, vehicle_id, kind, file_url, expires_at) VALUES
+                (@InsuranceDocId, @DriverId, @VehicleId, 'insurance',       @InsuranceUrl,
+                 timestamptz '2027-05-01 00:00:00+05:30'),
+                (@RevenueDocId,   @DriverId, @VehicleId, 'revenue_license', @RevenueUrl,
+                 timestamptz '2026-12-31 00:00:00+05:30');
+
+            -- A live tracker (T-08): ACTIVE and pinging, so `online` is true.
+            INSERT INTO prov.tracker_bindings
+              (imei, vehicle_id, credential_serial, credential_type, state, rotates_at, last_seen_at)
+            VALUES (@Imei, @VehicleId, @Imei || '-cert', 'psk', 'ACTIVE', now() + interval '90 days', now());
+
+            -- One completed, paid Mode C ride and the fare that collected on it (R-05).
+            INSERT INTO rides.rides
+                (id, passenger_id, booker_id, client_request_id, accepted_driver_id, accepted_vehicle_id,
+                 vehicle_type, pickup_geo, dropoff_geo, state, payment_method, created_at, terminal_at)
+            VALUES
+                (@RideId, @PassengerId, @PassengerId, gen_random_uuid(), @DriverId, @VehicleId,
+                 'three_wheeler',
+                 ST_SetSRID(ST_MakePoint(79.861, 6.927), 4326)::geography,
+                 ST_SetSRID(ST_MakePoint(79.884, 6.901), 4326)::geography,
+                 'Paid', 'onepay', now() - interval '2 days', now() - interval '2 days');
+            INSERT INTO fares.ride_payments
+                (ride_id, attempt_no, method, amount_minor, surcharge_minor, tip_amount_minor,
+                 currency, state, created_at)
+            VALUES (@RideId, 1::smallint, 'onepay', 45000, 2250, 1000, 'LKR', 'Succeeded',
+                    now() - interval '2 days');
+
+            -- One delivery (P-06). The OTP hashes and the recipient number are what
+            -- ck_rides_package_complete and ck_rides_package_recipient demand of a kind=2 row.
+            INSERT INTO rides.rides
+                (id, passenger_id, booker_id, client_request_id, accepted_driver_id, accepted_vehicle_id,
+                 vehicle_type, pickup_geo, dropoff_geo, state, kind, package_size, package_description,
+                 recipient_name, recipient_phone, pickup_otp_hash, delivery_otp_hash,
+                 created_at, terminal_at)
+            VALUES
+                (@PackageRideId, @PassengerId, @PassengerId, gen_random_uuid(), @DriverId, @VehicleId,
+                 'motorbike',
+                 ST_SetSRID(ST_MakePoint(79.861, 6.927), 4326)::geography,
+                 ST_SetSRID(ST_MakePoint(79.884, 6.901), 4326)::geography,
+                 'CashOnDeliveryCollected', 2::smallint, 'S', 'Documents',
+                 'Sunil', @RecipientPhone, '\x00'::bytea, '\x01'::bytea,
+                 now() - interval '1 day', now() - interval '1 day');
+
+            -- The delivery's own settlement, one Colombo day after the ride's — so the vehicle's
+            -- Earnings tab has two buckets and the day boundary is something an assertion can see.
+            INSERT INTO fares.ride_payments
+                (ride_id, attempt_no, method, amount_minor, currency, state, created_at)
+            VALUES (@PackageRideId, 1::smallint, 'cod', 12000, 'LKR', 'CashOnDeliveryCollected',
+                    now() - interval '1 day');
+
+            -- A dispute and a report, which are the two tabs fed by other services' tables.
+            INSERT INTO support.tickets (id, user_id, category, description, ride_id, status)
+            VALUES (@TicketId, @PassengerId, 'fare_dispute', 'Charged twice for one ride', @RideId, 'OPEN');
+            INSERT INTO safety.vehicle_reports (id, reporter_id, vehicle_id, ride_id, reason, status)
+            VALUES (@ReportId, @PassengerId, @VehicleId, @RideId, 'Reckless driving', 'PENDING');
+
+            -- The driver's wallet: a ledger account, its read-model mirror and one posting's
+            -- projection (D-09 §10). The journal entry exists because wallet_transactions.entry_id
+            -- references it; no postings, so the balanced-entry trigger has nothing to reject.
+            INSERT INTO billing.accounts (id, owner_type, owner_id, currency, balance_minor)
+            VALUES (@AccountId, 'driver', @DriverId, 'LKR', 125000);
+            INSERT INTO billing.wallets (account_id, balance_minor) VALUES (@AccountId, 125000);
+            INSERT INTO billing.journal_entries (id, kind, idempotency_key, description)
+            VALUES (@EntryId, 'topup', 'directory-fixture:' || @EntryId::text, 'Wallet top-up');
+            INSERT INTO billing.wallet_transactions
+                (account_id, entry_id, kind, amount_minor, balance_after_minor, description)
+            VALUES (@AccountId, @EntryId, 'topup', 125000, 125000, 'Wallet top-up');
+
+            -- D-13's charge for today's Colombo business date.
+            INSERT INTO billing.daily_fee_charges
+                (driver_id, vehicle_id, amount_minor, trips_that_day, status)
+            VALUES (@DriverId, @VehicleId, 15000, 4, 'PAID');
+
+            -- US-9.13: an approved driver-to-driver transfer, exact value, no commission (AL-01).
+            INSERT INTO billing.credit_transfers
+                (sender_driver_id, recipient_driver_id, amount_minor, direction, status)
+            VALUES (@DriverId, @CounterpartyDriverId, 50000, 'DIRECT', 'APPROVED');
+            """,
+            new
+            {
+                fixture.PassengerId,
+                fixture.PassengerName,
+                fixture.PassengerPhone,
+                fixture.PassengerEmail,
+                fixture.SosPhone,
+                fixture.DriverId,
+                fixture.DriverName,
+                fixture.DriverPhone,
+                fixture.DriverNic,
+                fixture.CounterpartyDriverId,
+                fixture.VehicleId,
+                fixture.FleetVehicleId,
+                fixture.FleetId,
+                fixture.FleetName,
+                fixture.RideId,
+                fixture.PackageRideId,
+                fixture.TicketId,
+                fixture.ReportId,
+                fixture.InsuranceDocId,
+                fixture.RevenueDocId,
+                fixture.Imei,
+                fixture.RegNo,
+                fixture.FleetRegNo,
+                CounterpartyPhone = $"+9472{Random.Shared.Next(1000000, 9999999)}",
+                RecipientPhone = $"+9473{Random.Shared.Next(1000000, 9999999)}",
+                FleetOwnerId = Guid.CreateVersion7(),
+                FleetEmail = $"{Guid.NewGuid():N}@fleet.test",
+                AccountId = Guid.CreateVersion7(),
+                EntryId = Guid.CreateVersion7(),
+                InsuranceUrl = $"s3://mageride-docs/insurance/{fixture.InsuranceDocId:N}.jpg",
+                RevenueUrl = $"s3://mageride-docs/revenue/{fixture.RevenueDocId:N}.jpg",
+            });
+
+        return fixture;
+    }
+
+    /// <summary>
+    /// Fills the passenger directory to the size C064's performance claim is made against.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// One statement rather than ten thousand round trips, and <c>ANALYZE</c> afterwards because a
+    /// table the planner still believes is empty is a sequential scan whatever indexes exist — which
+    /// would make the measurement a test of the planner's statistics rather than of the query.
+    /// </para>
+    /// <para>
+    /// <b>No <c>iam.user_roles</c> rows.</b> These accounts exist to be paged over; giving them
+    /// grant rows would add ten thousand riders to C061's "new riders" rollup and move a number
+    /// another suite asserts on.
+    /// </para>
+    /// </remarks>
+    public async Task BulkPassengersAsync(int count)
+    {
+        await using var connection = await postgres.OpenAsync();
+
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO iam.users (id, phone, email, role, first_name, created_at)
+            SELECT gen_random_uuid(),
+                   '+9478' || lpad(g::text, 7, '0'),
+                   'bulk' || g || '@mageride.test',
+                   'passenger',
+                   'Bulk Rider ' || g,
+                   now() - (g || ' minutes')::interval
+              FROM generate_series(1, @Count) AS g
+             ON CONFLICT DO NOTHING;
+            """,
+            new { Count = count },
+            commandTimeout: 120);
+
+        await connection.ExecuteAsync("ANALYZE iam.users;", commandTimeout: 120);
+    }
+
+    /// <summary>How many accounts the passenger directory can see, for the size assertion.</summary>
+    public async Task<int> PassengerCountAsync()
+    {
+        await using var connection = await postgres.OpenAsync();
+
+        return await connection.ExecuteScalarAsync<int>(
+            "SELECT count(*)::int FROM iam.users WHERE role = 'passenger';");
+    }
 }
+
+/// <summary>Every id the directory fixture minted, so an assertion can name what it is about.</summary>
+internal sealed record DirectoryFixture(
+    Guid PassengerId,
+    string PassengerName,
+    string PassengerPhone,
+    string PassengerEmail,
+    string SosPhone,
+    Guid DriverId,
+    string DriverName,
+    string DriverPhone,
+    string DriverNic,
+    Guid CounterpartyDriverId,
+    Guid VehicleId,
+    Guid FleetVehicleId,
+    Guid FleetId,
+    string FleetName,
+    Guid RideId,
+    Guid PackageRideId,
+    Guid TicketId,
+    Guid ReportId,
+    Guid InsuranceDocId,
+    Guid RevenueDocId,
+    string Imei,
+    string RegNo,
+    string FleetRegNo);
 
 /// <summary>One <c>registry.document_fields</c> row as a test reads it back.</summary>
 internal sealed record DocumentFieldSnapshot(
