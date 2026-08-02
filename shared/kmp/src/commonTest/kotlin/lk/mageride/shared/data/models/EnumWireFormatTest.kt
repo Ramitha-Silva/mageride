@@ -226,7 +226,7 @@ class EnumWireFormatTest {
             listOf("confirmed", "pending", "rejected"),
             VerifyStatus.entries.map { wireOf(it) }.sorted(),
         )
-        assertEquals(listOf("manual", "ocr"), FieldSource.entries.map { wireOf(it) }.sorted())
+        assertEquals(listOf("ai", "manual"), FieldSource.entries.map { wireOf(it) }.sorted())
         assertEquals(
             listOf("accepted", "pending", "rejected"),
             AccessRequestStatus.entries.map { wireOf(it) }.sorted(),

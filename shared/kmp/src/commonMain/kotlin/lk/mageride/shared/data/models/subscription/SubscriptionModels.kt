@@ -279,6 +279,7 @@ public data class DailyFeeRateList(val items: List<DailyFeeRate> = emptyList())
 @Serializable
 public data class TodaysDailyFee(
     val vehicleType: VehicleType,
+    val vehicleId: Ulid,
     val dailyRateMinor: Long,
     val status: DailyFeeDayStatus,
     val deductedMinor: Long? = null,

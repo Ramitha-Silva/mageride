@@ -1,8 +1,6 @@
 package lk.mageride.shared.domain.fare
 
 import lk.mageride.shared.data.models.Money
-import lk.mageride.shared.data.models.fare.LankaqrInitiation
-import lk.mageride.shared.data.models.fare.OnepayInitiation
 import lk.mageride.shared.data.models.fare.PaymentInitiation
 import lk.mageride.shared.data.models.fare.PaymentMethod
 import lk.mageride.shared.data.models.ride.RideKind
@@ -50,6 +48,14 @@ public sealed interface FarePaymentAction {
 
     /** Cash in the vehicle, the platform default. The driver confirms collection (§8.1). */
     public data object CollectCash : FarePaymentAction
+
+    /**
+     * The fare came out of the passenger's wallet and is already settled (Δ AL-57).
+     *
+     * One balanced `trip_payment` entry, passenger wallet → driver wallet, terminal on the spot —
+     * so the sheet has nothing to open and nothing to wait for.
+     */
+    public data object SettledFromWallet : FarePaymentAction
 
     /**
      * Open the bank app on a LankaQR "Pay" deep link (AL-15, US-8.10a).
@@ -159,7 +165,13 @@ public object PaymentMethods {
      */
     public fun payerRole(method: PaymentMethod): PayerRole = when (method) {
         PaymentMethod.CASH, PaymentMethod.SCAN_DRIVER_QR -> PayerRole.RIDER
-        PaymentMethod.LANKAQR, PaymentMethod.ONEPAY -> PayerRole.BOOKER
+
+        // Δ AL-57 — the wallet is the booker's account, so it routes as the two retired gateway
+        // rails did. `cod` is collected from whoever takes delivery, which is P-08's own rule and
+        // the reason the booking-time overload below already answers RIDER for it.
+        PaymentMethod.WALLET, PaymentMethod.LANKAQR, PaymentMethod.ONEPAY -> PayerRole.BOOKER
+
+        PaymentMethod.COD -> PayerRole.RIDER
     }
 
     /** The booking-time spelling of [payerRole]. `cod` is collected from whoever takes delivery. */
@@ -184,24 +196,42 @@ public object PaymentMethods {
 
         // Anything else may still end in cash (US-8.15) or by scanning the driver's QR (AL-22),
         // whichever way it was booked — the booking-time choice is a preference, not a lock.
-        else -> setOf(PaymentMethod.CASH, PaymentMethod.LANKAQR, PaymentMethod.ONEPAY, PaymentMethod.SCAN_DRIVER_QR)
+        // Δ AL-57/AL-59: the two platform-merchant rails are retired, and card acceptance moved
+        // to the wallet. A ride booked any way may still end in cash (US-8.15), out of the
+        // passenger's wallet, or by scanning the driver's own QR (AL-22) — the booking-time
+        // choice is a preference, not a lock.
+        else -> setOf(PaymentMethod.CASH, PaymentMethod.WALLET, PaymentMethod.SCAN_DRIVER_QR)
     }
 
     /**
      * What the pay sheet does next, given what the server sent back.
      *
+     * **No `bankAppAvailable` parameter any more.** AL-15's deep-link-then-QR rule applied to the
+     * platform-merchant LankaQR ride rail, which AL-57 retired; the rule itself is unchanged and
+     * still governs the wallet **top-up** sheet, which calls [lankaQrAction] directly. Keeping a
+     * parameter no branch reads would have suggested this function still made that choice.
+     *
      * @param initiation The `POST /v1/fare/pay` response.
-     * @param bankAppAvailable Whether a bank app can open a LankaQR deep link on this handset. The
-     *   app answers this — Android resolves the intent, iOS asks `canOpenURL` — and it is the only
-     *   thing that may promote the QR fallback over the deep link (AL-15).
      */
-    public fun actionFor(initiation: PaymentInitiation, bankAppAvailable: Boolean = true): FarePaymentAction =
-        when (initiation.method) {
-            PaymentMethod.CASH -> FarePaymentAction.CollectCash
-            PaymentMethod.SCAN_DRIVER_QR -> FarePaymentAction.ScanDriverQr
-            PaymentMethod.ONEPAY -> onepayAction(initiation.onepay)
-            PaymentMethod.LANKAQR -> lankaQrAction(initiation.lankaqr, bankAppAvailable)
-        }
+    public fun actionFor(initiation: PaymentInitiation): FarePaymentAction = when (initiation.method) {
+        PaymentMethod.CASH, PaymentMethod.COD -> FarePaymentAction.CollectCash
+
+        PaymentMethod.SCAN_DRIVER_QR -> FarePaymentAction.ScanDriverQr
+
+        // Δ AL-57 — the wallet fare is one balanced ledger entry, terminal on the spot. There
+        // is no gateway round trip to hand off to and nothing for the sheet to open.
+        PaymentMethod.WALLET -> FarePaymentAction.SettledFromWallet
+
+        // Δ AL-57/AL-59 — both platform-merchant ride rails are retired, and `fare.yaml`'s
+        // `PaymentMethod` is now `[cash, wallet, scan_driver_qr, cod]`. fare-svc cannot answer
+        // with either any more, so there is no block to act on and no sheet to open.
+        //
+        // The two values SURVIVE in this enum on purpose: `ride.yaml`'s booking-time
+        // `RidePaymentMethod` and `iam.yaml`'s `DefaultPaymentMethod` still declare them, so
+        // the platform is mid-migration and removing them here would make three contracts
+        // disagree three ways instead of two. Recorded as a finding in the MCS-02 handoff.
+        PaymentMethod.ONEPAY, PaymentMethod.LANKAQR -> FarePaymentAction.Unavailable
+    }
 
     /**
      * The AL-15 rule on its own, for the wallet top-up sheet, which faces the same choice.
@@ -220,12 +250,4 @@ public object PaymentMethods {
             // hand the passenger a link that opens a browser error.
             else -> FarePaymentAction.Unavailable
         }
-
-    private fun lankaQrAction(initiation: LankaqrInitiation?, bankAppAvailable: Boolean): FarePaymentAction =
-        lankaQrAction(initiation?.paymentLink, initiation?.qrPayload, bankAppAvailable)
-
-    private fun onepayAction(initiation: OnepayInitiation?): FarePaymentAction {
-        val url = initiation?.redirectUrl
-        return if (url.isNullOrBlank()) FarePaymentAction.Unavailable else FarePaymentAction.OpenOnepay(url)
-    }
 }

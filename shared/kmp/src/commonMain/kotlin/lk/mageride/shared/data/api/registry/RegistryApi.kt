@@ -2,13 +2,13 @@ package lk.mageride.shared.data.api.registry
 
 import lk.mageride.shared.data.api.ApiService
 import lk.mageride.shared.data.api.ApiTransport
-import lk.mageride.shared.data.api.FileUpload
+import lk.mageride.shared.data.api.CapturedDocument
 import lk.mageride.shared.data.api.apiDelete
 import lk.mageride.shared.data.api.apiGet
 import lk.mageride.shared.data.api.apiPost
 import lk.mageride.shared.data.api.apiPut
+import lk.mageride.shared.data.api.capturedDocumentPart
 import lk.mageride.shared.data.api.decode
-import lk.mageride.shared.data.api.filePart
 import lk.mageride.shared.data.api.jsonBody
 import lk.mageride.shared.data.api.multipartBody
 import lk.mageride.shared.data.api.pageParameters
@@ -17,9 +17,8 @@ import lk.mageride.shared.data.models.Page
 import lk.mageride.shared.data.models.PageRequest
 import lk.mageride.shared.data.models.RideVehicleType
 import lk.mageride.shared.data.models.Ulid
+import lk.mageride.shared.data.models.VehicleType
 import lk.mageride.shared.data.models.registry.AcceptShareGrantResponse
-import lk.mageride.shared.data.models.registry.BindOnepayMerchantRequest
-import lk.mageride.shared.data.models.registry.BindOnepayMerchantResponse
 import lk.mageride.shared.data.models.registry.BindVehicleDeviceRequest
 import lk.mageride.shared.data.models.registry.BindVehicleDeviceResponse
 import lk.mageride.shared.data.models.registry.CreateShareGrantRequest
@@ -53,8 +52,39 @@ import lk.mageride.shared.data.models.registry.VehicleStatusResponse
 @Suppress("TooManyFunctions")
 public interface RegistryApi {
 
-    /** `PUT /v1/drivers/profile` — create or update the driver identity and its OCR fields. */
+    /**
+     * `PUT /v1/drivers/profile` with a JSON body — the driver identity, by upload id.
+     *
+     * The three `…FileId`s must already be on file. Use [uploadDriverProfile] to send the images
+     * themselves instead; on a mobile client that is almost always the one you want, because
+     * nothing else mints those ids.
+     */
     public suspend fun upsertDriverProfile(request: UpsertDriverProfileRequest): UpsertDriverProfileResponse
+
+    /**
+     * `PUT /v1/drivers/profile` with `multipart/form-data` — Profile Setup in one request
+     * (SCR-DA/DI-003a).
+     *
+     * **Δ MCS-01.** The images go up with the name, land in `docs.uploads` and are what the JSON
+     * arm's ids refer to. Before this arm existed no route on the platform created a
+     * `docs.uploads` row for an onboarding document, so this screen could not be completed at all.
+     *
+     * Each image carries its own [CapturedDocument.capturedVia] (AL-43): the licence usually comes
+     * from the SCR-DA/DI-005 scanner and the avatar from the gallery, in the same submission.
+     *
+     * `413 payload-too-large` above the per-image ceiling.
+     *
+     * @param nicNo Sent only when the scan was unclear and the driver typed it — registry-svc is
+     *   what stamps it `source='manual'`, `verify_status='pending'` (AL-29, US-2.4a).
+     */
+    public suspend fun uploadDriverProfile(
+        driverName: String,
+        photo: CapturedDocument,
+        licenseFront: CapturedDocument,
+        licenseBack: CapturedDocument,
+        nicNo: String? = null,
+        allowedVehicleTypes: List<VehicleType>? = null,
+    ): UpsertDriverProfileResponse
 
     /**
      * `POST /v1/vehicles` — register a Mode-C vehicle. Attested (D-30).
@@ -96,14 +126,18 @@ public interface RegistryApi {
      *
      * The drag-crop capture path (AL-43): a perspective-corrected document image goes up with
      * the step's fields in one request. `413 payload-too-large` above the ceiling.
+     *
+     * **Δ MCS-01: registry-svc now implements this arm**, and each image carries its own capture
+     * source. The arm was declared from the start and the service bound JSON only, so a form
+     * posted here reached a handler that saw no fields at all.
      */
     public suspend fun uploadVehicleOnboardingStep(
         vehicleId: Ulid,
         step: OnboardingStep,
         registrationNumber: String? = null,
         vehicleType: RideVehicleType? = null,
-        file: FileUpload? = null,
-        fileBack: FileUpload? = null,
+        file: CapturedDocument? = null,
+        fileBack: CapturedDocument? = null,
     ): SaveOnboardingStepResponse
 
     /** `POST /v1/vehicles/{vehicleId}/deactivate` — take a vehicle out of service. */
@@ -154,17 +188,6 @@ public interface RegistryApi {
         request: RequestVehicleAccessRequest,
         idempotencyKey: String? = null,
     ): RequestVehicleAccessResponse
-
-    /**
-     * `POST /v1/internal/vehicles/{vehicleId}/merchant` — attach the OnePay merchant id (D-11).
-     *
-     * **Service-to-service (mTLS).** Present for contract coverage; not reachable from an app.
-     */
-    public suspend fun bindOnepayMerchant(
-        vehicleId: Ulid,
-        request: BindOnepayMerchantRequest,
-        idempotencyKey: String? = null,
-    ): BindOnepayMerchantResponse
 }
 
 @Suppress("TooManyFunctions")
@@ -172,6 +195,26 @@ internal class KtorRegistryApi(private val transport: ApiTransport) : RegistryAp
 
     override suspend fun upsertDriverProfile(request: UpsertDriverProfileRequest): UpsertDriverProfileResponse =
         transport.apiPut(SERVICE, "upsertDriverProfile", "/v1/drivers/profile") { jsonBody(request) }.decode()
+
+    override suspend fun uploadDriverProfile(
+        driverName: String,
+        photo: CapturedDocument,
+        licenseFront: CapturedDocument,
+        licenseBack: CapturedDocument,
+        nicNo: String?,
+        allowedVehicleTypes: List<VehicleType>?,
+    ): UpsertDriverProfileResponse = transport.apiPut(SERVICE, "upsertDriverProfile", "/v1/drivers/profile") {
+        multipartBody {
+            textPart("driverName", driverName)
+            capturedDocumentPart("photo", photo)
+            capturedDocumentPart("licenseFront", licenseFront)
+            capturedDocumentPart("licenseBack", licenseBack)
+            textPart("nicNo", nicNo)
+            // Repeated rather than joined: `multipart/form-data` has no array type, the contract
+            // accepts either, and a repeated field cannot be broken by a value containing a comma.
+            allowedVehicleTypes?.forEach { type -> textPart("allowedVehicleTypes", type.wire) }
+        }
+    }.decode()
 
     override suspend fun registerVehicle(
         request: VehicleRegistration,
@@ -209,14 +252,14 @@ internal class KtorRegistryApi(private val transport: ApiTransport) : RegistryAp
         step: OnboardingStep,
         registrationNumber: String?,
         vehicleType: RideVehicleType?,
-        file: FileUpload?,
-        fileBack: FileUpload?,
+        file: CapturedDocument?,
+        fileBack: CapturedDocument?,
     ): SaveOnboardingStepResponse = transport.apiPut(SERVICE, "saveVehicleOnboardingStep", stepPath(vehicleId, step)) {
         multipartBody {
             textPart("registrationNumber", registrationNumber)
             textPart("vehicleType", vehicleType?.wire)
-            file?.let { filePart("file", it) }
-            fileBack?.let { filePart("fileBack", it) }
+            file?.let { capturedDocumentPart("file", it) }
+            fileBack?.let { capturedDocumentPart("fileBack", it) }
         }
     }.decode()
 
@@ -285,17 +328,6 @@ internal class KtorRegistryApi(private val transport: ApiTransport) : RegistryAp
         service = SERVICE,
         operationId = "requestVehicleAccess",
         path = "/v1/share-requests",
-        idempotencyKey = idempotencyKey,
-    ) { jsonBody(request) }.decode()
-
-    override suspend fun bindOnepayMerchant(
-        vehicleId: Ulid,
-        request: BindOnepayMerchantRequest,
-        idempotencyKey: String?,
-    ): BindOnepayMerchantResponse = transport.apiPost(
-        service = SERVICE,
-        operationId = "bindOnepayMerchant",
-        path = "/v1/internal/vehicles/$vehicleId/merchant",
         idempotencyKey = idempotencyKey,
     ) { jsonBody(request) }.decode()
 

@@ -5,8 +5,8 @@ import io.ktor.http.headersOf
 import kotlinx.coroutines.test.runTest
 import lk.mageride.shared.data.models.ErrorCode
 import lk.mageride.shared.data.models.ProviderCallbackStatus
-import lk.mageride.shared.data.models.fare.ProviderCallback
 import lk.mageride.shared.data.models.ride.OtpAttempt
+import lk.mageride.shared.data.models.wallet.TopupCallback
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -98,14 +98,14 @@ class RetryAndBackoffTest {
 
     @Test
     fun a_post_without_an_idempotency_key_is_never_retried() = runTest {
-        // The six provider callbacks are `x-idempotency-exempt` and dedupe on
+        // The provider callbacks are `x-idempotency-exempt` and dedupe on
         // provider_transaction_id (R-19). Repeating one is the platform's business, not ours.
         val test =
             testApi { _, _ -> respondProblem(HttpStatusCode.ServiceUnavailable, ErrorCode.SERVICE_UNAVAILABLE.wire) }
 
         assertFailsWith<MageRideError.Server> {
-            test.api.fare.onepayPaymentWebhook(
-                ProviderCallback(providerTransactionId = "OP-1", status = ProviderCallbackStatus.SUCCESS),
+            test.api.wallet.onepayTopupWebhook(
+                TopupCallback(providerTransactionId = "OP-1", status = ProviderCallbackStatus.SUCCESS),
             )
         }
 

@@ -2,8 +2,7 @@ package lk.mageride.shared.domain.fare
 
 import lk.mageride.shared.data.models.Money
 import lk.mageride.shared.data.models.PaymentState
-import lk.mageride.shared.data.models.fare.LankaqrInitiation
-import lk.mageride.shared.data.models.fare.OnepayInitiation
+import lk.mageride.shared.data.models.fare.DriverQrInitiation
 import lk.mageride.shared.data.models.fare.PaymentInitiation
 import lk.mageride.shared.data.models.fare.PaymentMethod
 import lk.mageride.shared.data.models.ride.RideKind
@@ -20,17 +19,12 @@ import kotlin.test.assertTrue
  */
 class PaymentMethodsTest {
 
-    private fun initiation(
-        method: PaymentMethod,
-        onepay: OnepayInitiation? = null,
-        lankaqr: LankaqrInitiation? = null,
-    ) = PaymentInitiation(
+    private fun initiation(method: PaymentMethod, driverQr: DriverQrInitiation? = null) = PaymentInitiation(
         paymentId = "01JPAY0000000000000000000",
         state = PaymentState.Initiated,
         method = method,
         amountMinor = 48_000,
-        onepay = onepay,
-        lankaqr = lankaqr,
+        driverQr = driverQr,
     )
 
     // ----------------------------------------------------------------------------------------
@@ -132,28 +126,23 @@ class PaymentMethodsTest {
     // ----------------------------------------------------------------------------------------
 
     @Test
-    fun lankaqr_opens_the_bank_app_first_and_falls_back_to_a_code() {
-        val withBoth = initiation(
-            PaymentMethod.LANKAQR,
-            lankaqr = LankaqrInitiation(qrPayload = "0002010102", paymentLink = "lankaqr://pay?x=1"),
-        )
-
+    fun the_al_15_deep_link_rule_survives_on_the_top_up_sheet() {
+        // Δ AL-57 — LankaQR is gone as a RIDE rail, so `actionFor` no longer reaches this. The
+        // rule itself is unchanged and still applies to the wallet top-up, which faces the same
+        // choice, so it is exercised through the public overload the top-up sheet calls.
         assertEquals(
             FarePaymentAction.OpenBankApp("lankaqr://pay?x=1"),
-            PaymentMethods.actionFor(withBoth, bankAppAvailable = true),
+            PaymentMethods.lankaQrAction("lankaqr://pay?x=1", "0002010102", bankAppAvailable = true),
         )
         assertEquals(
             FarePaymentAction.ShowLankaQrFallback("0002010102"),
-            PaymentMethods.actionFor(withBoth, bankAppAvailable = false),
-            "the QR is reachable only when no bank app can open the link (AL-15)",
+            PaymentMethods.lankaQrAction("lankaqr://pay?x=1", "0002010102", bankAppAvailable = false),
         )
     }
 
     @Test
-    fun a_lankaqr_initiation_with_nothing_usable_is_reported_rather_than_guessed_at() {
-        val empty = initiation(PaymentMethod.LANKAQR, lankaqr = LankaqrInitiation())
-
-        assertEquals(FarePaymentAction.Unavailable, PaymentMethods.actionFor(empty))
+    fun a_top_up_with_nothing_usable_is_reported_rather_than_guessed_at() {
+        assertEquals(FarePaymentAction.Unavailable, PaymentMethods.lankaQrAction(null, null, true))
     }
 
     @Test
@@ -166,13 +155,12 @@ class PaymentMethodsTest {
     }
 
     @Test
-    fun onepay_opens_its_hosted_page() {
-        val action = PaymentMethods.actionFor(
-            initiation(PaymentMethod.ONEPAY, onepay = OnepayInitiation(redirectUrl = "https://onepay.lk/s/1")),
-        )
-
-        val open = assertIs<FarePaymentAction.OpenOnepay>(action)
-        assertEquals("https://onepay.lk/s/1", open.redirectUrl)
+    fun a_retired_ride_rail_has_no_sheet_to_open() {
+        // Δ AL-57/AL-59. fare-svc's `PaymentMethod` is now `[cash, wallet, scan_driver_qr, cod]`,
+        // so neither value can come back on a real initiation. They survive in this enum because
+        // `ride.yaml` and `iam.yaml` still declare them — see the MCS-02 handoff.
+        assertEquals(FarePaymentAction.Unavailable, PaymentMethods.actionFor(initiation(PaymentMethod.ONEPAY)))
+        assertEquals(FarePaymentAction.Unavailable, PaymentMethods.actionFor(initiation(PaymentMethod.LANKAQR)))
     }
 
     @Test

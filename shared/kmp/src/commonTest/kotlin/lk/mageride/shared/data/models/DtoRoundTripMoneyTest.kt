@@ -84,6 +84,7 @@ class DtoRoundTripMoneyTest {
                 firstTripFree = true,
                 feeDate = Sample.DAY,
                 feeDateTzAt = Sample.AT,
+                vehicleId = Sample.ULID_C,
             ),
         )
         assertRoundTrips(

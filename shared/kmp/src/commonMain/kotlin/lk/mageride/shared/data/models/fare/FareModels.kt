@@ -49,6 +49,19 @@ public enum class PaymentMethod(public val wire: String) {
 
     @SerialName("scan_driver_qr")
     SCAN_DRIVER_QR("scan_driver_qr"),
+
+    /**
+     * The passenger wallet (Δ AL-57) — where card acceptance survives.
+     *
+     * OnePay collects on the **top-up**, where MageRide is the payee; the fare itself is one
+     * balanced `trip_payment` entry, passenger wallet → driver wallet, terminal on the spot.
+     */
+    @SerialName("wallet")
+    WALLET("wallet"),
+
+    /** Cash on delivery — package only (P-08). Settlement-time only; booking-time carries `cod`. */
+    @SerialName("cod")
+    COD("cod"),
 }
 
 /**
@@ -184,22 +197,29 @@ public data class FinalFareResponse(
 public data class InitiatePaymentRequest(val rideId: Ulid, val method: PaymentMethod, val tipMinor: Long? = null)
 
 /**
- * The OnePay block of a [PaymentInitiation]. Present only for [PaymentMethod.ONEPAY].
+ * The wallet block of a [PaymentInitiation]. Present only for `method: wallet` (Δ AL-57).
  *
- * @property redirectUrl The hosted page the app opens.
- * @property sessionToken The provider session this attempt belongs to.
+ * The passenger wallet is where card acceptance survives: OnePay collects on the **top-up**, where
+ * MageRide is the payee, and the fare itself is one balanced `trip_payment` entry from the
+ * passenger's wallet to the driver's.
+ *
+ * @property balanceAfterMinor The passenger's balance once the fare has been debited.
  */
 @Serializable
-public data class OnepayInitiation(val redirectUrl: String? = null, val sessionToken: String? = null)
+public data class WalletInitiation(val balanceAfterMinor: Long? = null)
 
 /**
- * The LankaQR block of a [PaymentInitiation]. Present only for [PaymentMethod.LANKAQR].
+ * The driver-QR block of a [PaymentInitiation]. Present only for `method: scan_driver_qr`
+ * (Δ AL-59).
  *
- * @property qrPayload The QR to render.
- * @property paymentLink "Pay" deep link into the bank app; the QR is the fallback (AL-15).
+ * The driver's **own** bank-app LankaQR from their verified payout profile. There is no callback
+ * and no gateway: the money never passes through MageRide, so settlement is AL-47's attestation
+ * pair — the passenger claims, the driver confirms.
+ *
+ * @property qrImageUrl Short-lived signed URL to the driver's QR image.
  */
 @Serializable
-public data class LankaqrInitiation(val qrPayload: String? = null, val paymentLink: String? = null)
+public data class DriverQrInitiation(val qrImageUrl: String? = null)
 
 /**
  * `POST /v1/fare/pay` — 200 (`fare.yaml#/components/schemas/PaymentInitiation`).
@@ -213,8 +233,10 @@ public data class LankaqrInitiation(val qrPayload: String? = null, val paymentLi
  * @property amountMinor The fare, minor units.
  * @property surchargeMinor OnePay adds 5% (US-8.11); zero for every other method.
  * @property currency Always LKR.
- * @property onepay Present only for [PaymentMethod.ONEPAY].
- * @property lankaqr Present only for [PaymentMethod.LANKAQR].
+ * @property wallet Present only for [PaymentMethod.WALLET] (Δ AL-57).
+ * @property driverQr Present only for [PaymentMethod.SCAN_DRIVER_QR] (Δ AL-59) — the driver's own
+ *   bank-app LankaQR, as a short-lived signed URL. There is no callback: the money never passes
+ *   through MageRide, so settlement is AL-47 attestation.
  */
 @Serializable
 public data class PaymentInitiation(
@@ -226,8 +248,8 @@ public data class PaymentInitiation(
     @OptIn(ExperimentalSerializationApi::class)
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val currency: Currency = Currency.LKR,
-    val onepay: OnepayInitiation? = null,
-    val lankaqr: LankaqrInitiation? = null,
+    val wallet: WalletInitiation? = null,
+    val driverQr: DriverQrInitiation? = null,
 ) : MoneyHolder {
     override val money: Money get() = Money(amountMinor = amountMinor, currency = currency)
 }

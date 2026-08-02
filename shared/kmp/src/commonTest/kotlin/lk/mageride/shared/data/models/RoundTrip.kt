@@ -43,7 +43,7 @@ internal object Sample {
     val EXTRACTED_FIELD: ExtractedField = ExtractedField(
         key = "licenceNo",
         value = "B1234567",
-        source = FieldSource.OCR,
+        source = FieldSource.AI,
         confidence = 0.94,
         verifyStatus = VerifyStatus.CONFIRMED,
     )

@@ -44,6 +44,7 @@ import lk.mageride.shared.data.models.subscription.SubscriptionPayment
 import lk.mageride.shared.data.models.subscription.SubscriptionPaymentStatus
 import lk.mageride.shared.data.models.subscription.TodaysDailyFee
 import lk.mageride.shared.data.models.support.TicketDetail
+import lk.mageride.shared.data.models.support.TicketQueue
 import lk.mageride.shared.data.models.support.TicketStatus
 import lk.mageride.shared.data.models.transit.FeedStatus
 import lk.mageride.shared.data.models.transit.FeedUploadStatus
@@ -150,7 +151,7 @@ class ContractPayloadTest {
             {"status":"PENDING","onboardingStatus":"incomplete","nextStep":"revenue",
              "steps":{"details":"VERIFIED","insurance":"VERIFIED","revenue":"PENDING_INPUT",
                       "photos":"PENDING_REVIEW"},
-             "fields":[{"key":"licenceNo","value":"B1234567","source":"ocr","confidence":0.94,
+             "fields":[{"key":"licenceNo","value":"B1234567","source":"ai","confidence":0.94,
                         "verifyStatus":"confirmed"},
                        {"key":"nicNo","value":null,"source":"manual","verifyStatus":"pending"}]}
             """.trimIndent(),
@@ -372,36 +373,42 @@ class ContractPayloadTest {
     }
 
     @Test
-    fun an_onepay_initiation_carries_its_redirect_and_states_the_five_percent_surcharge() {
-        // fare.yaml POST /v1/fare/pay — US-8.11. Exactly one method block is present.
+    fun a_wallet_initiation_carries_the_balance_the_fare_leaves_behind() {
+        // fare.yaml POST /v1/fare/pay. Δ AL-57 — `onepay` is gone as a ride method and card
+        // acceptance moved one step earlier, to the wallet top-up where MageRide is the payee.
+        // Exactly one method block is present.
         val decoded = decode<PaymentInitiation>(
             """
-            {"paymentId":"$rideId","state":"Pending","method":"onepay","amountMinor":45000,
-             "surchargeMinor":2250,"currency":"LKR",
-             "onepay":{"redirectUrl":"https://pay.onepay.lk/s/abc","sessionToken":"sess_abc"}}
+            {"paymentId":"$rideId","state":"Pending","method":"wallet","amountMinor":45000,
+             "surchargeMinor":0,"currency":"LKR",
+             "wallet":{"balanceAfterMinor":120000}}
             """.trimIndent(),
         )
 
-        assertEquals(PaymentMethod.ONEPAY, decoded.method)
+        assertEquals(PaymentMethod.WALLET, decoded.method)
         assertEquals(PaymentState.Pending, decoded.state)
-        assertEquals(2_250L, decoded.surchargeMinor)
-        assertEquals("https://pay.onepay.lk/s/abc", decoded.onepay?.redirectUrl)
-        assertNull(decoded.lankaqr, "a payment initiation carries exactly one method block")
+        // Δ AL-57: the +5% recovered OnePay's ~3% on the ride, and no surviving ride rail touches
+        // an acquirer. The field stays in the shape so a client that renders it keeps working.
+        assertEquals(0L, decoded.surchargeMinor)
+        assertEquals(120_000L, decoded.wallet?.balanceAfterMinor)
+        assertNull(decoded.driverQr, "a payment initiation carries exactly one method block")
     }
 
     @Test
-    fun a_lankaqr_initiation_carries_the_deep_link_with_the_qr_as_fallback() {
-        // AL-15: the "Pay" deep link is primary; the QR is the fallback.
+    fun a_driver_qr_initiation_carries_the_drivers_own_bank_qr() {
+        // Δ AL-59 — the driver's OWN LankaQR from their verified payout profile, not the
+        // platform's merchant QR. There is no callback: the money never passes through MageRide.
         val decoded = decode<PaymentInitiation>(
             """
-            {"paymentId":"$rideId","state":"Pending","method":"lankaqr","amountMinor":45000,
-             "currency":"LKR",
-             "lankaqr":{"qrPayload":"00020101021230","paymentLink":"lankaqr://pay?ref=abc"}}
+            {"paymentId":"$rideId","state":"Pending","method":"scan_driver_qr","amountMinor":45000,
+             "surchargeMinor":0,"currency":"LKR",
+             "driverQr":{"qrImageUrl":"https://cdn.mageride.lk/qr/abc.png"}}
             """.trimIndent(),
         )
 
-        assertEquals("lankaqr://pay?ref=abc", decoded.lankaqr?.paymentLink)
-        assertNull(decoded.onepay)
+        assertEquals(PaymentMethod.SCAN_DRIVER_QR, decoded.method)
+        assertEquals("https://cdn.mageride.lk/qr/abc.png", decoded.driverQr?.qrImageUrl)
+        assertNull(decoded.wallet)
     }
 
     @Test
@@ -435,7 +442,7 @@ class ContractPayloadTest {
         // subscription.yaml GET /v1/fees/{driverId}/today — D-13 plus the D-38 tzAt companion.
         val decoded = decode<TodaysDailyFee>(
             """
-            {"vehicleType":"three_wheeler","dailyRateMinor":10000,"status":"UNPAID",
+            {"vehicleType":"three_wheeler","vehicleId":"$vehicleId","dailyRateMinor":10000,"status":"UNPAID",
              "deductedMinor":0,"tripsToday":1,"firstTripFree":true,
              "feeDate":"2026-07-27","feeDateTzAt":"2026-07-26T18:30:00Z"}
             """.trimIndent(),
@@ -563,7 +570,7 @@ class ContractPayloadTest {
             {"options":[{"kind":"direct","totalDurationSec":2700,"walkingDistanceM":450,
                          "legs":[{"routeId":"R138","routeShortName":"138",
                                   "headsign":"Colombo Fort","boardStopId":"S1","alightStopId":"S9"}]}],
-             "feedVersion":"2026-07-01"}
+             "feedVersion":"2026-07-01","coverage":"active"}
             """.trimIndent(),
         )
 
@@ -629,14 +636,21 @@ class ContractPayloadTest {
         val decoded = decode<TicketDetail>(
             """
             {"ticketId":"$rideId","category":"daily_fee_refund","status":"IN_PROGRESS",
-             "tripId":"$vehicleId","createdAt":"2026-07-27T04:15:00Z",
+             "queue":"finance","tripId":"$vehicleId","createdAt":"2026-07-27T04:15:00Z",
              "description":"Charged twice on the same day",
-             "screenshotUrl":"https://cdn.mageride.lk/s.png","adminResponse":"Reviewing"}
+             "screenshotUrl":"https://cdn.mageride.lk/s.png","adminResponse":"Reviewing",
+             "thread":[{"kind":"opened","at":"2026-07-27T04:15:00Z","toStatus":"OPEN"},
+                       {"kind":"responded","at":"2026-07-27T05:00:00Z","fromStatus":"OPEN",
+                        "toStatus":"IN_PROGRESS","body":"Reviewing","actorRole":"support_agent"}]}
             """.trimIndent(),
         )
 
         assertEquals(TicketStatus.IN_PROGRESS, decoded.status)
         assertEquals("daily_fee_refund", decoded.category)
+        // Δ C053: a `daily_fee_refund` is Finance's pile, not Support's, and the queue is derived
+        // from the category rather than stored — so the two can never disagree.
+        assertEquals(TicketQueue.FINANCE, decoded.queue)
+        assertEquals(2, decoded.thread.size, "the thread is what makes a resolution visible")
         assertNull(decoded.resolvedAt)
     }
 

@@ -20,12 +20,14 @@ import lk.mageride.shared.data.models.content.NotificationTemplate
 import lk.mageride.shared.data.models.content.NotificationTemplateVersion
 import lk.mageride.shared.data.models.content.OperatingCity
 import lk.mageride.shared.data.models.content.OperatingCityListResponse
+import lk.mageride.shared.data.models.content.TemplateVersionStatus
 import lk.mageride.shared.data.models.content.TrilingualText
 import lk.mageride.shared.data.models.content.UpdateNotificationTemplateRequest
 import lk.mageride.shared.data.models.query.EarningsPeriod
 import lk.mageride.shared.data.models.query.EarningsSummary
 import lk.mageride.shared.data.models.query.GeocodedPlace
 import lk.mageride.shared.data.models.query.GeocodedPlaceSource
+import lk.mageride.shared.data.models.query.GeometrySource
 import lk.mageride.shared.data.models.query.NearbyVehicle
 import lk.mageride.shared.data.models.query.NearbyVehiclesResponse
 import lk.mageride.shared.data.models.query.PlaceSearchResponse
@@ -44,6 +46,7 @@ import lk.mageride.shared.data.models.safety.SharedTripView
 import lk.mageride.shared.data.models.safety.SosDispatched
 import lk.mageride.shared.data.models.safety.SosEvent
 import lk.mageride.shared.data.models.safety.SosRole
+import lk.mageride.shared.data.models.safety.SosSmsStatus
 import lk.mageride.shared.data.models.safety.SosSource
 import lk.mageride.shared.data.models.safety.TriggerSosRequest
 import lk.mageride.shared.data.models.safety.TripShareLink
@@ -55,6 +58,9 @@ import lk.mageride.shared.data.models.support.FaqListResponse
 import lk.mageride.shared.data.models.support.FaqSummary
 import lk.mageride.shared.data.models.support.Ticket
 import lk.mageride.shared.data.models.support.TicketDetail
+import lk.mageride.shared.data.models.support.TicketEvent
+import lk.mageride.shared.data.models.support.TicketEventKind
+import lk.mageride.shared.data.models.support.TicketQueue
 import lk.mageride.shared.data.models.support.TicketRef
 import lk.mageride.shared.data.models.support.TicketStatus
 import lk.mageride.shared.data.models.transit.FeedIssue
@@ -66,6 +72,7 @@ import lk.mageride.shared.data.models.transit.GtfsValidationReport
 import lk.mageride.shared.data.models.transit.ImportGtfsFeedRequest
 import lk.mageride.shared.data.models.transit.ImportGtfsFeedResponse
 import lk.mageride.shared.data.models.transit.ParsedMapsLink
+import lk.mageride.shared.data.models.transit.TransitCoverage
 import lk.mageride.shared.data.models.transit.TransitLeg
 import lk.mageride.shared.data.models.transit.TransitOption
 import lk.mageride.shared.data.models.transit.TransitOptionKind
@@ -147,6 +154,7 @@ class DtoRoundTripReadTest {
                 durationSec = 900,
                 driver = TripDriver(Sample.ULID_B, "Nimal", "WP-CAB-1234"),
                 rating = 5,
+                geometrySource = GeometrySource.TELEMETRY,
             ),
         )
     }
@@ -216,7 +224,7 @@ class DtoRoundTripReadTest {
             legs = listOf(leg),
         )
         assertRoundTrips(option)
-        assertRoundTrips(TransitOptionsResponse(listOf(option), feedVersion = "2026-07-01"))
+        assertRoundTrips(TransitOptionsResponse(listOf(option), "2026-07-01", TransitCoverage.ACTIVE))
         val stop = TransitStop("S1", "Kottawa", 6.8410, 79.9650, sequence = 1, distanceM = 120)
         assertRoundTrips(stop)
         assertRoundTrips(
@@ -275,7 +283,7 @@ class DtoRoundTripReadTest {
     @Test
     fun the_safety_dtos_round_trip() {
         assertRoundTrips(TriggerSosRequest(Sample.ULID_A, 6.9271, 79.8612, SosRole.DRIVER))
-        assertRoundTrips(SosDispatched(Sample.ULID_A, Sample.AT))
+        assertRoundTrips(SosDispatched(Sample.ULID_A, Sample.AT, SosSmsStatus.DISPATCHED))
         assertRoundTrips(
             SosEvent(
                 sosId = Sample.ULID_A,
@@ -337,19 +345,40 @@ class DtoRoundTripReadTest {
             CreateSupportTicketRequest("daily_fee_refund", "Charged twice", Sample.ULID_B, Sample.ULID_C),
         )
         assertRoundTrips(
-            Ticket(Sample.ULID_A, "daily_fee_refund", TicketStatus.RESOLVED, Sample.ULID_B, Sample.AT, Sample.LATER),
+            Ticket(
+                ticketId = Sample.ULID_A,
+                category = "daily_fee_refund",
+                status = TicketStatus.RESOLVED,
+                queue = TicketQueue.FINANCE,
+                tripId = Sample.ULID_B,
+                createdAt = Sample.AT,
+                updatedAt = Sample.LATER,
+                resolvedAt = Sample.LATER,
+            ),
         )
         assertRoundTrips(
             TicketDetail(
                 ticketId = Sample.ULID_A,
                 category = "daily_fee_refund",
                 status = TicketStatus.IN_PROGRESS,
+                queue = TicketQueue.FINANCE,
                 tripId = Sample.ULID_B,
                 createdAt = Sample.AT,
+                updatedAt = Sample.LATER,
                 resolvedAt = Sample.LATER,
                 description = "Charged twice on the same day",
                 screenshotUrl = Sample.URL,
                 adminResponse = "Reviewing",
+                thread = listOf(
+                    TicketEvent(
+                        kind = TicketEventKind.RESPONDED,
+                        at = Sample.LATER,
+                        fromStatus = TicketStatus.OPEN,
+                        toStatus = TicketStatus.IN_PROGRESS,
+                        body = "Reviewing",
+                        actorRole = "support_agent",
+                    ),
+                ),
             ),
         )
     }
@@ -371,10 +400,10 @@ class DtoRoundTripReadTest {
         val text = TrilingualText(si = "s", ta = "t", en = "e")
         assertRoundTrips(text)
         assertRoundTrips(
-            NotificationTemplate("ride_offer", Language.EN, 3, "New ride", "Pickup {{pickup}}"),
+            NotificationTemplate("ride_offer", Language.EN, 3, "New ride", "Pickup {{pickup}}", listOf("pickup")),
         )
         assertRoundTrips(UpdateNotificationTemplateRequest(text, text))
-        assertRoundTrips(NotificationTemplateVersion("ride_offer", 4))
+        assertRoundTrips(NotificationTemplateVersion("ride_offer", 4, TemplateVersionStatus.DRAFT))
         val broadcast = Broadcast(Sample.ULID_A, "Service update", Sample.AT, Sample.LATER)
         assertRoundTrips(broadcast)
         assertRoundTrips(BroadcastListResponse(listOf(broadcast)))
@@ -401,14 +430,13 @@ class DtoRoundTripReadTest {
         assertRoundTrips(NotificationPreferences(mapOf("SCHEDULED_REMINDER" to true)))
         assertRoundTrips(
             SendNotificationRequest(
+                notificationType = "RIDE_OFFER",
                 templateKey = "ride_offer",
                 recipients = listOf(Sample.ULID_A, Sample.ULID_B),
                 data = JsonObject(mapOf("pickup" to JsonPrimitive("Colombo Fort"))),
-                priority = NotificationPriority.HIGH,
-                silent = true,
             ),
         )
-        assertRoundTrips(SendNotificationResponse(Sample.ULID_A, accepted = 2))
+        assertRoundTrips(SendNotificationResponse(Sample.ULID_A, accepted = 2, suppressed = 1, undeliverable = 0))
     }
 
     // ---- version-check.yaml ------------------------------------------------------------------

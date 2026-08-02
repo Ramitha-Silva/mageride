@@ -131,9 +131,16 @@ public data class NearbyVehicle(
  * @property vehicles The visible vehicles.
  * @property asOf When the snapshot was taken. A client uses it to decide whether a socket frame
  *   it already holds is newer.
+ * @property limitedLive **Redis was unreachable, so this is not a full answer** (ADD §12, Δ C042).
+ *   Always present, including when false: a client that could not tell "no vehicles nearby" from
+ *   "we do not know" would render an outage as a quiet afternoon.
  */
 @Serializable
-public data class NearbyVehiclesResponse(val vehicles: List<NearbyVehicle> = emptyList(), val asOf: Timestamp)
+public data class NearbyVehiclesResponse(
+    val vehicles: List<NearbyVehicle> = emptyList(),
+    val asOf: Timestamp,
+    val limitedLive: Boolean = false,
+)
 
 /**
  * One way to reach a destination (`query.yaml#/components/schemas/TransportOption`, US-7.15).
@@ -216,6 +223,9 @@ public data class TripDriver(
  * @property durationSec Trip duration in seconds.
  * @property driver Who drove.
  * @property rating The rating left for this trip, 1–5.
+ * @property geometrySource Which relation [polyline] came from and at what grain (Δ C042). The
+ *   planes differ by an order of magnitude and a client drawing both must not present one as the
+ *   other — `aggregate_1m` in particular omits `distanceKm` rather than understating it.
  */
 @Serializable
 public data class TripDetail(
@@ -233,7 +243,32 @@ public data class TripDetail(
     val durationSec: Int? = null,
     val driver: TripDriver? = null,
     val rating: Int? = null,
+    val geometrySource: GeometrySource,
 )
+
+/**
+ * Which relation a [TripDetail.polyline] came from (`query.yaml#/components/schemas/TripDetail`).
+ *
+ * @property wire The value as it appears on the wire.
+ */
+@Serializable
+public enum class GeometrySource(public val wire: String) {
+    /** Full-resolution `telemetry.positions`, via the stored session summary (Mode A/B). */
+    @SerialName("telemetry")
+    TELEMETRY("telemetry"),
+
+    /** The 1/min `trips.position_samples`; `distanceKm` is a lower bound. */
+    @SerialName("operational")
+    OPERATIONAL("operational"),
+
+    /** The `telemetry.positions_1m` continuous aggregate. **Mode C only**, and no `distanceKm`. */
+    @SerialName("aggregate_1m")
+    AGGREGATE_1M("aggregate_1m"),
+
+    /** The journey produced no usable line. */
+    @SerialName("none")
+    NONE("none"),
+}
 
 /**
  * `GET /v1/earnings/{driverId}` — 200 (US-9.22).

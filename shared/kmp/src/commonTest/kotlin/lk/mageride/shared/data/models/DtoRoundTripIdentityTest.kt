@@ -24,8 +24,6 @@ import lk.mageride.shared.data.models.iam.UserProfile
 import lk.mageride.shared.data.models.iam.VerifyOtpRequest
 import lk.mageride.shared.data.models.iam.VerifyOtpResponse
 import lk.mageride.shared.data.models.registry.AcceptShareGrantResponse
-import lk.mageride.shared.data.models.registry.BindOnepayMerchantRequest
-import lk.mageride.shared.data.models.registry.BindOnepayMerchantResponse
 import lk.mageride.shared.data.models.registry.BindVehicleDeviceRequest
 import lk.mageride.shared.data.models.registry.BindVehicleDeviceResponse
 import lk.mageride.shared.data.models.registry.CreateShareGrantRequest
@@ -266,6 +264,10 @@ class DtoRoundTripIdentityTest {
             UpsertDriverProfileResponse(
                 driverId = Sample.ULID_A,
                 status = RegistrationStatus.PENDING,
+                displayName = "Nimal Perera",
+                photoUrl = Sample.URL,
+                nicNo = "199012345678",
+                allowedVehicleTypes = listOf(VehicleType.THREE_WHEELER, VehicleType.SEDAN),
                 fields = listOf(Sample.EXTRACTED_FIELD),
             ),
         )
@@ -301,6 +303,7 @@ class DtoRoundTripIdentityTest {
                 registrationNumber = "WP-CAB-1234",
                 verification = verdicts,
                 onboardingStatus = OnboardingStatus.INCOMPLETE,
+                nextStep = OnboardingStep.INSURANCE,
                 createdAt = Sample.AT,
             ),
         )
@@ -375,7 +378,9 @@ class DtoRoundTripIdentityTest {
             SaveOnboardingStepResponse(
                 stepStatus = StepVerdict.PENDING_REVIEW,
                 onboardingStatus = OnboardingStatus.INCOMPLETE,
+                status = RegistrationStatus.PENDING,
                 nextStep = OnboardingStep.PHOTOS,
+                ocrJobId = Sample.ULID_C,
             ),
         )
         assertRoundTrips(UpdateVehicleDriverProfileRequest("Nimal", Sample.URL))
@@ -401,8 +406,6 @@ class DtoRoundTripIdentityTest {
         assertRoundTrips(
             RequestVehicleAccessResponse(Sample.ULID_A, AccessRequestStatus.PENDING),
         )
-        assertRoundTrips(BindOnepayMerchantRequest("MID-1234", "REF-5678"))
-        assertRoundTrips(BindOnepayMerchantResponse(Sample.ULID_A, "MID-1234"))
     }
 
     // ---- trip-state.yaml ---------------------------------------------------------------------

@@ -1,5 +1,6 @@
 package lk.mageride.shared.data.models.support
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import lk.mageride.shared.data.models.Language
 import lk.mageride.shared.data.models.Timestamp
@@ -94,6 +95,8 @@ public data class CreateSupportTicketRequest(
  * @property ticketId The ticket.
  * @property category The topic key.
  * @property status Where it stands. Tickets open in [TicketStatus.OPEN].
+ * @property queue Which back-office pile it belongs to (Δ C053). Derived from the category and
+ *   never stored: `daily_fee_refund` is Finance's, everything else is Support's.
  * @property tripId The attached trip, when there is one.
  * @property createdAt When it was raised.
  * @property resolvedAt When an agent closed it.
@@ -103,9 +106,69 @@ public data class Ticket(
     val ticketId: Ulid,
     val category: String,
     val status: TicketStatus,
+    val queue: TicketQueue,
     val tripId: Ulid? = null,
     val createdAt: Timestamp,
+    val updatedAt: Timestamp? = null,
     val resolvedAt: Timestamp? = null,
+)
+
+/**
+ * Which back-office pile a ticket belongs to (`support.yaml`, Δ C053).
+ *
+ * Derived from the category, never stored: `daily_fee_refund` → [FINANCE] (US-9.23, US-14.11),
+ * everything else → [SUPPORT] (US-14.13).
+ *
+ * @property wire The value as it appears on the wire.
+ */
+@Serializable
+public enum class TicketQueue(public val wire: String) {
+    @SerialName("support")
+    SUPPORT("support"),
+
+    @SerialName("finance")
+    FINANCE("finance"),
+}
+
+/** What kind of entry a [TicketEvent] is (`support.yaml`, Δ C053). */
+@Serializable
+public enum class TicketEventKind(public val wire: String) {
+    @SerialName("opened")
+    OPENED("opened"),
+
+    /** Recorded and **never returned to the user** — who is handling a complaint is not theirs. */
+    @SerialName("assigned")
+    ASSIGNED("assigned"),
+
+    @SerialName("responded")
+    RESPONDED("responded"),
+
+    @SerialName("resolved")
+    RESOLVED("resolved"),
+
+    @SerialName("reopened")
+    REOPENED("reopened"),
+}
+
+/**
+ * One entry in a ticket's thread (`support.yaml#/components/schemas/TicketEvent`, Δ C053).
+ *
+ * @property kind What happened.
+ * @property at When.
+ * @property fromStatus Status before, on a transition.
+ * @property toStatus Status after.
+ * @property body The agent's words on `responded` and `resolved`, verbatim.
+ * @property actorRole The canonical role of whoever caused it. The agent's **identity** is never
+ *   returned to the user.
+ */
+@Serializable
+public data class TicketEvent(
+    val kind: TicketEventKind,
+    val at: Timestamp,
+    val fromStatus: TicketStatus? = null,
+    val toStatus: TicketStatus? = null,
+    val body: String? = null,
+    val actorRole: String? = null,
 )
 
 /**
@@ -114,17 +177,22 @@ public data class Ticket(
  *
  * @property description What the user wrote.
  * @property screenshotUrl Short-lived signed object-storage URL.
- * @property adminResponse The agent's reply, once there is one.
+ * @property adminResponse The latest agent reply. Every reply is also in [thread].
+ * @property thread Oldest first (Δ C053). Carries every status transition and every agent reply,
+ *   which is what makes a resolution visible rather than a status the user has to interpret.
  */
 @Serializable
 public data class TicketDetail(
     val ticketId: Ulid,
     val category: String,
     val status: TicketStatus,
+    val queue: TicketQueue,
     val tripId: Ulid? = null,
     val createdAt: Timestamp,
+    val updatedAt: Timestamp? = null,
     val resolvedAt: Timestamp? = null,
     val description: String,
     val screenshotUrl: String? = null,
     val adminResponse: String? = null,
+    val thread: List<TicketEvent> = emptyList(),
 )

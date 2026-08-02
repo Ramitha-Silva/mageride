@@ -150,6 +150,36 @@ public enum class GrantStatus(public val wire: String) {
 // ---------------------------------------------------------------------------------------------
 
 /**
+ * Where one uploaded onboarding image came from
+ * (`registry.yaml#/components/schemas/CaptureSource`, AL-43).
+ *
+ * **Δ MCS-01.** Stored on `docs.uploads.captured_via` and declared **per file part**, never per
+ * request: a driver scans the licence through SCR-DA/DI-005 and picks the avatar out of the
+ * gallery in one submission, so a single value for the whole form would be wrong about one of
+ * them.
+ *
+ * [GALLERY] is permitted and **flagged** — a file already on the handset is how a document
+ * belonging to somebody else arrives, and it is what the Verification-Officer queue sorts on. It
+ * has no default for the same reason: claiming [CAMERA_DRAG_CROP] would record a scan that did
+ * not happen.
+ *
+ * The column's third value, `other`, is the Fleet Portal's desktop file picker (AL-50) and is not
+ * part of this enum — an app has no way to produce it.
+ *
+ * @property wire The value as it appears on the wire.
+ */
+@Serializable
+public enum class CaptureSource(public val wire: String) {
+    /** The in-app camera document-scanner with the drag-crop quad (SCR-DA/DI-005). */
+    @SerialName("camera_dragcrop")
+    CAMERA_DRAG_CROP("camera_dragcrop"),
+
+    /** Picked from the handset's gallery. */
+    @SerialName("gallery")
+    GALLERY("gallery"),
+}
+
+/**
  * `PUT /v1/drivers/profile` — Profile Setup (SCR-DA/DI-003a).
  *
  * Precedes Home and needs no vehicle. Queues Gemini Flash 3.0 extraction of licence number,
@@ -178,14 +208,27 @@ public data class UpsertDriverProfileRequest(
 /**
  * `PUT /v1/drivers/profile` — 200.
  *
+ * The screen that follows Profile Setup shows the driver their own name and classes back, so the
+ * response carries what was **stored** rather than leaving the client to assume its request won —
+ * which is untrue whenever OCR supplied a NIC or a licence class the request did not carry
+ * (Δ C029).
+ *
  * @property driverId The driver whose profile was written.
  * @property status Registration status after the write.
+ * @property displayName The name as stored.
+ * @property photoUrl The stored profile photo.
+ * @property nicNo NIC as stored, whether extracted or driver-supplied.
+ * @property allowedVehicleTypes The licence classes as stored.
  * @property fields Per-field OCR verdicts; what the officer screen renders.
  */
 @Serializable
 public data class UpsertDriverProfileResponse(
     val driverId: Ulid,
     val status: RegistrationStatus,
+    val displayName: String,
+    val photoUrl: String? = null,
+    val nicNo: String? = null,
+    val allowedVehicleTypes: List<VehicleType> = emptyList(),
     val fields: List<ExtractedField> = emptyList(),
 )
 
@@ -201,6 +244,12 @@ public data class UpsertDriverProfileResponse(
  * [ServiceMode.C] by the contract's `const: C`.
  *
  * Once a vehicle is approved, calling this again starts a **new** vehicle at step 1/4 (AL-30).
+ *
+ * **The four document ids are optional** (Δ C029). Supplied, the vehicle is onboarded in one shot
+ * and can come back approved from this single call — the behaviour D3' describes. Absent, this
+ * call carries exactly the `details` step (type + plate) and the wizard walks the other three
+ * through `PUT /v1/vehicles/{id}/onboarding/{step}` — the behaviour AL-30 describes, and the only
+ * one the driver app can produce, because nothing mints a `docs.uploads` id before an upload.
  *
  * @property registrationNumber Plate, at most 32 characters. Unique within the active set (D-37).
  * @property vehicleType Mode-C driver-app types only (AL-09).
@@ -220,10 +269,10 @@ public data class VehicleRegistration(
     // `const: C` and `required`, so it is forced onto the wire despite `encodeDefaults = false`.
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val mode: ServiceMode = ServiceMode.C,
-    val insuranceFileId: Ulid,
-    val revenueLicenseFileId: Ulid,
-    val vehiclePhotoFrontFileId: Ulid,
-    val vehiclePhotoBackFileId: Ulid,
+    val insuranceFileId: Ulid? = null,
+    val revenueLicenseFileId: Ulid? = null,
+    val vehiclePhotoFrontFileId: Ulid? = null,
+    val vehiclePhotoBackFileId: Ulid? = null,
     val driverName: String? = null,
     val driverPhotoFileId: Ulid? = null,
 )
@@ -254,20 +303,26 @@ public data class VehicleVerificationVerdicts(
  * @property vehicleId The new vehicle.
  * @property status Registration status; [RegistrationStatus.APPROVED] straight away when all four
  *   documents came back verified (Change 6/22).
- * @property ocrJobId The queued extraction job.
+ * @property ocrJobId The queued extraction job. `null` when the registration carried no documents
+ *   — a wizard's Step 1/4 queues no extraction, and inventing an id no service recognises would
+ *   leave a client polling it forever (Δ C029).
  * @property registrationNumber The plate as stored.
  * @property verification Per-document verdicts.
  * @property onboardingStatus Derived from the four steps.
+ * @property nextStep Where the wizard opens next. Registration **saves Step 1/4** — this request
+ *   carries exactly what the `details` step stores — so a fresh vehicle resumes at
+ *   [OnboardingStep.INSURANCE] and the client does not have to ask (Δ C029).
  * @property createdAt When the vehicle row was created.
  */
 @Serializable
 public data class RegisterVehicleResponse(
     val vehicleId: Ulid,
     val status: RegistrationStatus,
-    val ocrJobId: Ulid,
+    val ocrJobId: Ulid? = null,
     val registrationNumber: String,
     val verification: VehicleVerificationVerdicts,
     val onboardingStatus: OnboardingStatus,
+    val nextStep: OnboardingStep? = null,
     val createdAt: Timestamp,
 )
 
@@ -431,12 +486,18 @@ public data class OnboardingStepInput(
  * @property stepStatus Verdict on the step just saved.
  * @property onboardingStatus Derived status after the save.
  * @property nextStep Where the wizard resumes; `null` when every step is verified.
+ * @property status Registration status **after** this save. Saving the fourth verified step
+ *   auto-approves the vehicle with no officer step (AL-27), so the response that caused it says so
+ *   rather than making the app poll (Δ C029).
+ * @property ocrJobId The extraction queued by this step's document, where it queued one.
  */
 @Serializable
 public data class SaveOnboardingStepResponse(
     val stepStatus: StepVerdict,
     val onboardingStatus: OnboardingStatus,
+    val status: RegistrationStatus,
     val nextStep: OnboardingStep? = null,
+    val ocrJobId: Ulid? = null,
 )
 
 /**
@@ -537,28 +598,3 @@ public data class RequestVehicleAccessRequest(val vehicleId: Ulid)
  */
 @Serializable
 public data class RequestVehicleAccessResponse(val requestId: Ulid, val status: AccessRequestStatus)
-
-// ---------------------------------------------------------------------------------------------
-// Internal (mTLS)
-// ---------------------------------------------------------------------------------------------
-
-/**
- * `POST /v1/internal/vehicles/{vehicleId}/merchant` (D-11).
- *
- * Called when a vehicle reaches approved, so fare settlement has a payee. A driver with no
- * merchant binding causes `402 merchant-not-onboarded` at `POST /v1/fare/pay`.
- *
- * @property merchantId OnePay merchant identifier.
- * @property merchantRef Provider-side reference for the binding.
- */
-@Serializable
-public data class BindOnepayMerchantRequest(val merchantId: String, val merchantRef: String? = null)
-
-/**
- * `POST /v1/internal/vehicles/{vehicleId}/merchant` — 200.
- *
- * @property vehicleId The vehicle the merchant was bound to.
- * @property merchantId The bound merchant.
- */
-@Serializable
-public data class BindOnepayMerchantResponse(val vehicleId: Ulid, val merchantId: String)

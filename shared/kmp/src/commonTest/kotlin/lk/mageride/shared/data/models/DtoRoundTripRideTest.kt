@@ -22,12 +22,11 @@ import lk.mageride.shared.data.models.fare.CalculateFinalFareRequest
 import lk.mageride.shared.data.models.fare.ClaimDriverQrRequest
 import lk.mageride.shared.data.models.fare.ConfirmDriverQrRequest
 import lk.mageride.shared.data.models.fare.DisputeDriverQrRequest
+import lk.mageride.shared.data.models.fare.DriverQrInitiation
 import lk.mageride.shared.data.models.fare.FareBreakdown
 import lk.mageride.shared.data.models.fare.FareEstimateResponse
 import lk.mageride.shared.data.models.fare.FinalFareResponse
 import lk.mageride.shared.data.models.fare.InitiatePaymentRequest
-import lk.mageride.shared.data.models.fare.LankaqrInitiation
-import lk.mageride.shared.data.models.fare.OnepayInitiation
 import lk.mageride.shared.data.models.fare.PaymentInitiation
 import lk.mageride.shared.data.models.fare.PaymentMethod
 import lk.mageride.shared.data.models.fare.PaymentStatus
@@ -37,6 +36,7 @@ import lk.mageride.shared.data.models.fare.RefundKind
 import lk.mageride.shared.data.models.fare.RefundResponse
 import lk.mageride.shared.data.models.fare.RefundStatus
 import lk.mageride.shared.data.models.fare.ScanDriverQrRequest
+import lk.mageride.shared.data.models.fare.WalletInitiation
 import lk.mageride.shared.data.models.ride.AcceptRideOfferRequest
 import lk.mageride.shared.data.models.ride.AcceptRideOfferResponse
 import lk.mageride.shared.data.models.ride.CancelRideRequest
@@ -366,18 +366,18 @@ class DtoRoundTripRideTest {
         assertRoundTrips(
             InitiatePaymentRequest(Sample.ULID_A, PaymentMethod.ONEPAY, tipMinor = 5_000),
         )
-        assertRoundTrips(OnepayInitiation("https://pay.onepay.lk/s/abc", "sess_abc"))
-        assertRoundTrips(LankaqrInitiation("00020101021230", "lankaqr://pay?ref=abc"))
+        assertRoundTrips(WalletInitiation(balanceAfterMinor = 120_000))
+        assertRoundTrips(DriverQrInitiation(Sample.URL))
         assertRoundTrips(
             PaymentInitiation(
                 paymentId = Sample.ULID_A,
                 state = PaymentState.Pending,
-                method = PaymentMethod.LANKAQR,
+                method = PaymentMethod.SCAN_DRIVER_QR,
                 amountMinor = 45_000,
                 surchargeMinor = 0,
                 currency = Currency.LKR,
-                onepay = OnepayInitiation("https://pay.onepay.lk/s/abc", "sess_abc"),
-                lankaqr = LankaqrInitiation("00020101021230", "lankaqr://pay?ref=abc"),
+                wallet = WalletInitiation(balanceAfterMinor = 120_000),
+                driverQr = DriverQrInitiation(Sample.URL),
             ),
         )
         assertRoundTrips(

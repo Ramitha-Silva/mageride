@@ -6,6 +6,7 @@ import io.ktor.http.headersOf
 import kotlinx.coroutines.test.runTest
 import lk.mageride.shared.data.models.ServiceMode
 import lk.mageride.shared.data.models.VehicleType
+import lk.mageride.shared.data.models.registry.CaptureSource
 import lk.mageride.shared.data.models.registry.OnboardingStep
 import lk.mageride.shared.data.models.wallet.TransferDirectionFilter
 import kotlin.test.Test
@@ -102,13 +103,16 @@ class TypedClientTest {
     @Test
     fun an_onboarding_step_can_be_sent_as_json_or_as_multipart() = runTest {
         val test = testApi { _, _ ->
-            respondJson("""{"stepStatus":"VERIFIED","onboardingStatus":"incomplete"}""")
+            // `status` is required on this response (Δ C029): saving the fourth verified step
+            // auto-approves the vehicle, so the response that caused it says so rather than
+            // making the app poll for it.
+            respondJson("""{"stepStatus":"VERIFIED","onboardingStatus":"incomplete","status":"PENDING"}""")
         }
 
         test.api.registry.uploadVehicleOnboardingStep(
             vehicleId = "01VEHICLE",
             step = OnboardingStep.INSURANCE,
-            file = FileUpload("insurance.jpg", byteArrayOf(9)),
+            file = CapturedDocument(FileUpload("insurance.jpg", byteArrayOf(9)), CaptureSource.CAMERA_DRAG_CROP),
         )
 
         val request = test.requests.single()

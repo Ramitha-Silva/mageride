@@ -85,7 +85,28 @@ public data class TriggerSosRequest(val rideId: Ulid? = null, val lat: Double, v
  * @property dispatchedAt When the parallel SMS fan-out went out.
  */
 @Serializable
-public data class SosDispatched(val sosId: Ulid, val dispatchedAt: Timestamp)
+public data class SosDispatched(val sosId: Ulid, val dispatchedAt: Timestamp? = null, val smsStatus: SosSmsStatus)
+
+/**
+ * What D-33's parallel gateways managed (`safety.yaml`, Δ C052).
+ *
+ * [FAILED] is not an error response: the alert **is** recorded and **is** on the admin live feed,
+ * and reporting a dispatch that did not happen would tell somebody in trouble that help was on
+ * the way. [NO_CONTACT] is AL-13 — nobody on file to send to.
+ *
+ * @property wire The value as it appears on the wire.
+ */
+@Serializable
+public enum class SosSmsStatus(public val wire: String) {
+    @SerialName("Dispatched")
+    DISPATCHED("Dispatched"),
+
+    @SerialName("Failed")
+    FAILED("Failed"),
+
+    @SerialName("NoContact")
+    NO_CONTACT("NoContact"),
+}
 
 /**
  * One past SOS (`safety.yaml#/components/schemas/SosEvent`).

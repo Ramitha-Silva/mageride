@@ -1,5 +1,6 @@
 package lk.mageride.shared.data.models.content
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import lk.mageride.shared.data.models.GeoPoint
 import lk.mageride.shared.data.models.Language
@@ -100,6 +101,7 @@ public data class NotificationTemplate(
     val version: Int,
     val title: String? = null,
     val body: String,
+    val placeholders: List<String> = emptyList(),
 )
 
 /**
@@ -124,7 +126,25 @@ public data class UpdateNotificationTemplateRequest(
  * @property version The new current version.
  */
 @Serializable
-public data class NotificationTemplateVersion(val key: String, val version: Int)
+public data class NotificationTemplateVersion(val key: String, val version: Int, val status: TemplateVersionStatus)
+
+/**
+ * Whether an admin write went live (`content.yaml#/components/schemas/TemplateVersionRef`).
+ *
+ * `Content:PublishOnEdit` is the deployment's policy and defaults to off, so an edit normally
+ * creates a **draft** that `POST /v1/admin/content/{key}/approve` publishes. The response says
+ * which happened rather than leaving the caller to know the configuration.
+ *
+ * @property wire The value as it appears on the wire.
+ */
+@Serializable
+public enum class TemplateVersionStatus(public val wire: String) {
+    @SerialName("draft")
+    DRAFT("draft"),
+
+    @SerialName("published")
+    PUBLISHED("published"),
+}
 
 /**
  * An in-app announcement currently in force

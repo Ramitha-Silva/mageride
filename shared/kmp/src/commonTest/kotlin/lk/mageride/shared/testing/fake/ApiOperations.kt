@@ -78,8 +78,6 @@ import lk.mageride.shared.data.models.query.TransportOptionsResponse
 import lk.mageride.shared.data.models.query.TripDetail
 import lk.mageride.shared.data.models.query.TripSummary
 import lk.mageride.shared.data.models.registry.AcceptShareGrantResponse
-import lk.mageride.shared.data.models.registry.BindOnepayMerchantRequest
-import lk.mageride.shared.data.models.registry.BindOnepayMerchantResponse
 import lk.mageride.shared.data.models.registry.BindVehicleDeviceRequest
 import lk.mageride.shared.data.models.registry.BindVehicleDeviceResponse
 import lk.mageride.shared.data.models.registry.CreateShareGrantRequest
@@ -419,14 +417,6 @@ internal object ApiOperations {
             201,
             sends<RequestVehicleAccessRequest>(),
         ),
-        op<BindOnepayMerchantResponse>(
-            "bindOnepayMerchant",
-            ApiService.REGISTRY,
-            "POST",
-            "/v1/internal/vehicles/{vehicleId}/merchant",
-            200,
-            sends<BindOnepayMerchantRequest>(),
-        ),
 
         // trip-state-svc — Mode A/B tracking sessions (never a Mode C ride) (7)
         op<Session>(
@@ -762,22 +752,6 @@ internal object ApiOperations {
             201,
             sends<DisputeDriverQrRequest>(),
         ),
-        op<CallbackAck>(
-            "onepayPaymentWebhook",
-            ApiService.FARE,
-            "POST",
-            "/v1/fare/pay/onepay/webhook",
-            200,
-            sends<ProviderCallback>(),
-        ),
-        op<CallbackAck>(
-            "lankaqrPaymentConfirm",
-            ApiService.FARE,
-            "POST",
-            "/v1/fare/pay/lankaqr/confirm",
-            200,
-            sends<ProviderCallback>(),
-        ),
         op<RefundResponse>(
             "refundFare",
             ApiService.FARE,
@@ -922,14 +896,6 @@ internal object ApiOperations {
             "POST",
             "/v1/mode-b/payments/{paymentId}/confirm",
             200,
-        ),
-        op<CallbackAck>(
-            "modeBOnepayWebhook",
-            ApiService.SUBSCRIPTION,
-            "POST",
-            "/v1/mode-b/pay/onepay/webhook",
-            200,
-            sends<SubscriptionProviderCallback>(),
         ),
         op<CallbackAck>(
             "modeBLankaqrConfirm",

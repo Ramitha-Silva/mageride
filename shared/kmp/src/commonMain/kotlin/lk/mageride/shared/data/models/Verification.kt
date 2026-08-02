@@ -30,12 +30,18 @@ public enum class VerifyStatus(public val wire: String) {
  * Anything the driver typed because a scan was unclear lands `manual` / `pending` and routes to
  * the officer queue (US-2.4a) — the distinction is the whole point of the field.
  *
+ * **The extracted value is `ai`, not `ocr`.** `registry.document_fields.source` is
+ * `CHECK (source IN ('ai','manual'))` (D4' §2) and `_shared.yaml` spells the enum `[ai, manual]`;
+ * this enum said `ocr` until MCS-02, which meant a real registry-svc response failed to
+ * deserialise on the one screen group that reads it. `ContractShapeTest` is what should have
+ * caught it and could not — see the MCS-02 handoff.
+ *
  * @property wire The value as it appears on the wire.
  */
 @Serializable
 public enum class FieldSource(public val wire: String) {
-    @SerialName("ocr")
-    OCR("ocr"),
+    @SerialName("ai")
+    AI("ai"),
 
     @SerialName("manual")
     MANUAL("manual"),

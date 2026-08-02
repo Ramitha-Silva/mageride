@@ -191,18 +191,24 @@ public data class NotificationPreferences(val preferences: Map<String, Boolean> 
  */
 @Serializable
 public data class SendNotificationRequest(
-    val templateKey: String,
-    val recipients: List<Ulid>,
+    val notificationType: String,
+    val templateKey: String? = null,
+    val recipients: List<Ulid>? = null,
     val data: JsonObject? = null,
-    val priority: NotificationPriority? = null,
-    val silent: Boolean? = null,
 )
 
 /**
  * `POST /v1/internal/notify/send` — 202.
  *
  * @property dispatchId The fan-out batch.
- * @property accepted Recipients with at least one live device token.
+ * @property accepted Recipients queued for delivery.
+ * @property suppressed Refused by a preference (US-10.7) or a limit (P-12).
+ * @property undeliverable Recipients with no account, no number and no device.
  */
 @Serializable
-public data class SendNotificationResponse(val dispatchId: Ulid, val accepted: Int)
+public data class SendNotificationResponse(
+    val dispatchId: Ulid,
+    val accepted: Int,
+    val suppressed: Int,
+    val undeliverable: Int,
+)

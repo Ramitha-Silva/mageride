@@ -126,13 +126,32 @@ public data class TransitOption(
  * booking screen degrades to private tiers instead of failing.
  *
  * @property options Direct and transfer options.
- * @property feedVersion `feed_info` version of the active feed the answer came from.
+ * @property feedVersion `feed_info` version of the active feed the answer came from. Null when
+ *   [coverage] is [TransitCoverage.NO_FEED] — there is no feed to name.
+ * @property coverage Whether route matching could answer at all (Δ C056). `active` makes an empty
+ *   list an answer — no bus serves this corridor; `no_feed` is AL-55's safety net, and SCR-PA-009
+ *   keeps live buses and private tiers while hiding route matching.
  */
 @Serializable
 public data class TransitOptionsResponse(
     val options: List<TransitOption> = emptyList(),
     val feedVersion: String? = null,
+    val coverage: TransitCoverage,
 )
+
+/**
+ * Whether route matching could answer (`transit.yaml`, Δ C056, AL-55).
+ *
+ * @property wire The value as it appears on the wire.
+ */
+@Serializable
+public enum class TransitCoverage(public val wire: String) {
+    @SerialName("active")
+    ACTIVE("active"),
+
+    @SerialName("no_feed")
+    NO_FEED("no_feed"),
+}
 
 /**
  * One stop on a route (`transit.yaml#/components/schemas/TransitStop`).

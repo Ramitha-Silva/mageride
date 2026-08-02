@@ -5,10 +5,8 @@ import lk.mageride.shared.data.api.ApiService
 import lk.mageride.shared.data.api.ApiTransport
 import lk.mageride.shared.data.api.apiGet
 import lk.mageride.shared.data.api.apiPost
-import lk.mageride.shared.data.api.apiPostExempt
 import lk.mageride.shared.data.api.decode
 import lk.mageride.shared.data.api.jsonBody
-import lk.mageride.shared.data.models.CallbackAck
 import lk.mageride.shared.data.models.RideVehicleType
 import lk.mageride.shared.data.models.Ulid
 import lk.mageride.shared.data.models.fare.CalculateFinalFareRequest
@@ -21,7 +19,6 @@ import lk.mageride.shared.data.models.fare.FinalFareResponse
 import lk.mageride.shared.data.models.fare.InitiatePaymentRequest
 import lk.mageride.shared.data.models.fare.PaymentInitiation
 import lk.mageride.shared.data.models.fare.PaymentStatus
-import lk.mageride.shared.data.models.fare.ProviderCallback
 import lk.mageride.shared.data.models.fare.RefundFareRequest
 import lk.mageride.shared.data.models.fare.RefundResponse
 import lk.mageride.shared.data.models.fare.ScanDriverQrRequest
@@ -116,19 +113,6 @@ public interface FareApi {
         idempotencyKey: String? = null,
     ): TicketRef
 
-    /**
-     * `POST /v1/fare/pay/onepay/webhook` — OnePay reports a settlement (D6' §7.1).
-     *
-     * **Inbound to the platform, HMAC-signed, and `x-idempotency-exempt`**: it dedupes on
-     * `provider_transaction_id` (R-19) because a gateway cannot send our header. No app calls
-     * this; it is here so `fare.yaml` is covered, and the transport deliberately does not retry
-     * it.
-     */
-    public suspend fun onepayPaymentWebhook(request: ProviderCallback): CallbackAck
-
-    /** `POST /v1/fare/pay/lankaqr/confirm` — the bank IPG equivalent of [onepayPaymentWebhook]. */
-    public suspend fun lankaqrPaymentConfirm(request: ProviderCallback): CallbackAck
-
     /** `POST /v1/admin/fare/refund` — Finance Officer issues a refund. */
     public suspend fun refundFare(request: RefundFareRequest, idempotencyKey: String? = null): RefundResponse
 }
@@ -218,16 +202,6 @@ internal class KtorFareApi(private val transport: ApiTransport) : FareApi {
             path = "$DRIVER_QR_PATH/dispute",
             idempotencyKey = idempotencyKey,
         ) { jsonBody(request) }.decode()
-
-    override suspend fun onepayPaymentWebhook(request: ProviderCallback): CallbackAck =
-        transport.apiPostExempt(SERVICE, "onepayPaymentWebhook", "$PAY_PATH/onepay/webhook") {
-            jsonBody(request)
-        }.decode()
-
-    override suspend fun lankaqrPaymentConfirm(request: ProviderCallback): CallbackAck =
-        transport.apiPostExempt(SERVICE, "lankaqrPaymentConfirm", "$PAY_PATH/lankaqr/confirm") {
-            jsonBody(request)
-        }.decode()
 
     override suspend fun refundFare(request: RefundFareRequest, idempotencyKey: String?): RefundResponse =
         transport.apiPost(

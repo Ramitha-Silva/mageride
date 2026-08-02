@@ -4,9 +4,9 @@ import kotlinx.coroutines.test.runTest
 import lk.mageride.shared.data.models.PageRequest
 import lk.mageride.shared.data.models.ProviderCallbackStatus
 import lk.mageride.shared.data.models.RideVehicleType
-import lk.mageride.shared.data.models.fare.ProviderCallback
 import lk.mageride.shared.data.models.iam.RequestOtpRequest
 import lk.mageride.shared.data.models.ride.OtpAttempt
+import lk.mageride.shared.data.models.wallet.TopupCallback
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -84,12 +84,13 @@ class RequestConventionsTest {
 
     @Test
     fun an_idempotency_exempt_provider_callback_carries_no_key() = runTest {
-        // The six HMAC-signed callbacks dedupe on provider_transaction_id (R-19); sending our
-        // header would imply a guarantee the gateway does not make for them.
+        // The HMAC-signed callbacks dedupe on provider_transaction_id (R-19); sending our header
+        // would imply a guarantee the gateway does not make for them. The top-up webhook is the
+        // example because AL-57 left OnePay collecting only where MageRide is the payee.
         val test = testApi { _, _ -> respondJson("""{"received":true}""") }
 
-        test.api.fare.onepayPaymentWebhook(
-            ProviderCallback(providerTransactionId = "OP-1", status = ProviderCallbackStatus.SUCCESS),
+        test.api.wallet.onepayTopupWebhook(
+            TopupCallback(providerTransactionId = "OP-1", status = ProviderCallbackStatus.SUCCESS),
         )
 
         assertNull(test.requests.single().idempotencyKey)

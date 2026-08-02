@@ -204,9 +204,17 @@ paths:
 
   /v1/content/faq:
     get:
-      operationId: listFaqArticles
+      operationId: listAuthoredFaqArticles
       summary: List FAQ articles in one language.
       description: |
+        **Δ MCS-02 — renamed from `listFaqArticles`.** `support.yaml` declares that id for
+        `GET /v1/support/faq`, so two different operations carried one `operationId`. Every
+        MageRide client routes, stubs and records by `operationId` (`ApiTransport` puts it in the
+        request attributes and `FakeApiBackend` keys on it), so the duplicate made the two
+        indistinguishable and silently pointed the app-facing FAQ read at the authoring surface's
+        schema. OpenAPI requires uniqueness within a document; this platform requires it across
+        the set.
+
         **Δ C045.** The C045 deliverable names `GET /v1/content/faq` and the C053 fence says "FAQ
         content is owned by content-svc; support-svc serves and filters it, it does not author
         it" — so this is the authored source and `GET /v1/support/faq` (US-16.1) is the app-facing

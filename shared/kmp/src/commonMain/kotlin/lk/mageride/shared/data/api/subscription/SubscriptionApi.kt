@@ -170,14 +170,11 @@ public interface SubscriptionApi {
     public suspend fun confirmTransferSlip(paymentId: Ulid, idempotencyKey: String? = null): SubscriptionPayment
 
     /**
-     * `POST /v1/mode-b/pay/onepay/webhook` — OnePay reports a subscription payment.
+     * `POST /v1/mode-b/pay/lankaqr/confirm` — the bank IPG reports a subscription payment.
      *
      * **Inbound, HMAC-signed and `x-idempotency-exempt`** (R-19). Not an app call; present for
      * contract coverage and never retried by the transport.
      */
-    public suspend fun modeBOnepayWebhook(request: SubscriptionProviderCallback): CallbackAck
-
-    /** `POST /v1/mode-b/pay/lankaqr/confirm` — the bank IPG equivalent of [modeBOnepayWebhook]. */
     public suspend fun modeBLankaqrConfirm(request: SubscriptionProviderCallback): CallbackAck
 
     /** `GET /v1/mode-b/{vehicleId}/subscribers` — the owner's subscriber roster. */
@@ -385,11 +382,6 @@ internal class KtorSubscriptionApi(private val transport: ApiTransport) : Subscr
             path = "$MODE_B_PATH/payments/$paymentId/confirm",
             idempotencyKey = idempotencyKey,
         ).decode()
-
-    override suspend fun modeBOnepayWebhook(request: SubscriptionProviderCallback): CallbackAck =
-        transport.apiPostExempt(SERVICE, "modeBOnepayWebhook", "$MODE_B_PATH/pay/onepay/webhook") {
-            jsonBody(request)
-        }.decode()
 
     override suspend fun modeBLankaqrConfirm(request: SubscriptionProviderCallback): CallbackAck =
         transport.apiPostExempt(SERVICE, "modeBLankaqrConfirm", "$MODE_B_PATH/pay/lankaqr/confirm") {
