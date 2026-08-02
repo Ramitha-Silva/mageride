@@ -340,6 +340,19 @@ public data class LookupUserResponse(val registered: Boolean, val userId: Ulid? 
 @Serializable
 public data class LanguagePreference(val language: Language)
 
+/**
+ * `PUT /v1/me/prefs/operating-city` — the request body and the 200 are the same shape.
+ *
+ * AL-27 / US-1.3a. The code chosen on the first-run language/city screen (SCR-DA/DI-002); it keys
+ * `config.operating_cities` and seeds the map centroid. An unknown or deactivated code is
+ * `400 validation-failed` — a city the platform does not operate in is a client working from a
+ * stale list, not a preference.
+ *
+ * @property operatingCityCode The chosen city's stable machine key, e.g. `colombo`.
+ */
+@Serializable
+public data class OperatingCityPreference(val operatingCityCode: String)
+
 // ---------------------------------------------------------------------------------------------
 // Saved addresses (AL-26, US-22.x)
 // ---------------------------------------------------------------------------------------------

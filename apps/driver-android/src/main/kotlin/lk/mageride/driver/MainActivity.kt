@@ -1,12 +1,14 @@
 package lk.mageride.driver
 
 import android.content.ActivityNotFoundException
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import lk.mageride.driver.onboarding.DriverLocale
 import lk.mageride.driver.push.PushRouter
 import lk.mageride.driver.shell.DriverShell
 import lk.mageride.driver.ui.theme.MageRideTheme
@@ -23,6 +25,18 @@ import org.koin.android.ext.android.inject
 internal class MainActivity : ComponentActivity() {
 
     private val pushes: PushRouter by inject()
+
+    /**
+     * Applies the language SCR-DA-002 chose (D-26, AL-26).
+     *
+     * `Resources` are resolved once per configuration and the first resolution happens before
+     * `onCreate`, so this is the only hook early enough. Android's per-app locale API is API 33+
+     * and the URD NFR-22 floor is 26; wrapping the base context works on every level and needs no
+     * `appcompat`. A language change calls `recreate()`, which comes back through here.
+     */
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(DriverLocale.wrap(newBase))
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

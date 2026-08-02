@@ -94,7 +94,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C065 | admin-bff-finance-pdpa | 3 | DONE | 2026-08-01 | **27 finance/PDPA tests green** (`--filter Category=FinancePdpa`) and **162/162** across the whole `AdminBff.Tests` suite (was 122); **four migrations, none of them a table** — `0110 iam.users.anonymised_at` (the column an erasure writes, which is what finally makes C064's `PassengerRow.status='deleted'` producible), `1314 pdpa.requests.decided_by/.decision_reason` (D3' gives `/reject` a required reason and §16 gave it nowhere to go), and two read-path indexes (`1008` the R-19 Overpaid queue, `1111` the per-rail settlement read); **the finance surface writes nothing** — wallet-svc posts the reversal, fare-svc raises the refund, reputation-svc resolves a flag — asserted as a class with no `INSERT` and against the route table by `Only_two_finance_routes_mutate_and_both_forward`; **four URD §2.3 rows, not one**, and the fence "reversals are Finance/Super-Admin only" falls out of the matrix rather than out of a role list; **the exception queue's four classes are derived, never stored**, because wallet-svc records no exception column; **an erasure's hold list has two kinds of entry** — blocking (409, lifts on its own) and retention (`FulfilledHold`) — and conflating them would either refuse every erasure for ever or anonymise somebody mid-ride; **`audit.events` is never touched and the fulfilment writes to it**; **`/v1/pdpa` is the one prefix outside `/v1/admin`** and the start-up guard names it; `migrate-verify.sh` **469/469**, Spectral 0 errors, solution build 0 warnings; **1 spec conflict resolved, 5 micro-change-sets** |
 | C066 | public-bff | 3 | DONE | 2026-08-01 | **51/51 green** in a new `PublicBff.Tests` suite that boots a real ride-svc and a real safety-svc, because three DoD items are claims about *their* rows; **no migration** — every row this surface reads was landed by C004/C005/C037/C052 and the two it writes are columns 0901 created for this caller; **no authentication scheme is registered at all**, so the token in the path is the credential by construction and the start-up guard refuses a route that asks for authorization, sits outside `/public/track`, escapes the token gate, or is named `/call` (AL-48); **each scope is a closed type with no field for what it may not carry**, asserted on the JSON rather than on the DTO because the half that matters is what is absent; **the 410 is asserted on the body**, not the status code; **the `deliveryOtp` hole is closed** — ride-svc keeps only the digest and notification-svc deliberately keeps the code out of the SMS *because this page shows it*, so the unregistered recipient could not learn their own code until C066 gave notification-svc a kernel Redis key to leave it in; **the web SOS is safety-svc's** (`POST /v1/internal/safety/sos/web`, the seam C052 named) and the booker's MSISDN never reaches this process; **the live cursor describes what the client knows and indexes nothing**, so a replica that never served a stream resumes it and no buffer exists to replay (D-34); Spectral 0 errors, solution build 0 warnings; **3 spec gaps recorded, 5 micro-change-sets**; also fixed a **pre-existing, calendar-triggered** failure in `Notification.Api.Tests` (85/86 → **86/86**) where a pinned fake clock was compared against a `now()`-seeded column — the row is now aged against the clock the production sweep actually reads |
 | C067 | driver-android-shell | 4a | DONE | 2026-08-01 | **34 tests green** in a new `apps/driver-android` unit-test source set and `assembleDebug` clean, plus `detekt`/`ktlintCheck`; C025's walking skeleton **deleted** (4 files) and replaced by the real shell — Koin graph binding the five things `:shared` leaves to an app, `MageRideTheme` transcribed from D2' §0.2 with **Outfit + Inter shipped as real OFL fonts**, trilingual `values`/`values-si`/`values-ta` with a test that fails on a key present in one file and not the others, a `NavHost` registering **every** C068–C075 destination as a placeholder so no screen group invents a path, the AL-31 four-tab bottom bar with **no hamburger**, a MapLibre **OpenGL-flavour** host over `pmtiles://` with light/dark styles, and the D6' §3 foreground service (FusedLocation + HiveMQ + wake lock + `PositionPipeline`, whose R-17 replay and D5' §5.2 cadence are asserted on the JVM with no radio); **FCM registered but inert** — no `google-services.json` (C124); **Play Integrity wired but not verified on a device**; **the wave-1 `:shared` gate is red on arrival** and not from anything here — see the handoff |
-| C068 | driver-android-auth-onboarding | 4a | PENDING | | |
+| C068 | driver-android-auth-onboarding | 4a | PARTIAL | 2026-08-02 | **72 tests green** (was 34) and `assembleDebug` clean, plus `detekt`/`ktlintCheck`; all five cluster-1 screens built to the wireframe — SCR-DA-001 boot router, SCR-DA-002 with the AL-28 `HorizontalPager` carousel, AL-26 Sinhala-first vertical language boxes and the AL-27 city list from `GET /config/cities`, SCR-DA-003 `+94` phone + six-digit OTP with the D-32 resend cooldown, SCR-DA-003a Profile Setup with the AI-extract card and the AL-29 manual-entry ⚑ path, and SCR-DA-007's five permission rows with the Settings deep link — plus ~60 new trilingual strings and `setOperatingCity` added to `:shared`'s `IamApi`. **PARTIAL for one reason: no contract route creates a `docs.uploads` row for a driver photo or licence**, so `PUT /v1/drivers/profile` cannot actually be called on a real gateway; the uploader is a bound seam that fails loudly and the whole flow is proven against a fake. Micro-change-set raised — see the handoff |
 | C069 | driver-android-vehicle-onboarding | 4a | PENDING | | |
 | C070 | driver-android-dashboard-dispatch | 4a | PENDING | | |
 | C071 | driver-android-delivery | 4a | PENDING | | |
@@ -10731,3 +10731,143 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   spelled `kotlin-test-junit`, because that turns `kotlin-test` into a group and breaks
   `libs.kotlin.test.get()` in `shared/kmp/build.gradle.kts`; and AGP 9 deprecated
   `resourceConfigurations` in favour of `androidResources.localeFilters`.
+
+- **Component:** C068 driver-android-auth-onboarding — 2026-08-02
+- **Status:** PARTIAL — `./gradlew :apps:driver-android:testDebugUnitTest :apps:driver-android:assembleDebug`
+  exits 0 with **72 tests green** (34 before this component, 0 failed) and a clean debug APK;
+  `:apps:driver-android:detekt` and `ktlintCheck` are clean, and so are `:shared`'s. Four of the five
+  DoD items are met and demonstrated by tests. The fifth — *"a driver reaches Home after Profile Setup
+  with no vehicle registered"* — is met **as navigation** (`OnboardingRouterTest`, `LoginViewModelTest`)
+  but **cannot complete against a real gateway**, because no route in `backend/contracts` uploads a
+  driver's profile photo or licence. That is gap (a) below and it is not this component's to close.
+- **Notes:**
+  **Gaps found — all four are micro-change-sets, none of them app-side.**
+  (a) ***`PUT /v1/drivers/profile` takes `docs.uploads` ids that nothing can create.*** The contract
+  requires `profilePhotoFileId`, `licenseFrontFileId` and `licenseBackFileId` as **already uploaded**
+  ids, and `OnboardingService.RequireUploadAsync` rejects one that is not on file. The eight `upload*`
+  operations across all 26 contracts cover payout documents, fleet documents, package proof, transfer
+  slips, support screenshots and the GTFS zip; the only onboarding multipart
+  (`PUT /v1/vehicles/{id}/onboarding/{step}`) is **vehicle-scoped**, and Profile Setup has no vehicle
+  by construction (AL-27). `ocr.yaml`'s own header says so: *"Filling `docs.uploads` for onboarding is
+  still unowned"*. **The fix is a multipart arm on `PUT /v1/drivers/profile`** mirroring the
+  vehicle-step one — contract + registry-svc (**C029**) + one KMP client function (**C013**). The app
+  side is ready for it: `DriverDocumentUploader` is the interface, `UnavailableDriverDocumentUploader`
+  is the binding that fails loudly and names the reason, and `RecordingDocumentUploader` in the test
+  kit proves the rest of the screen end to end. **Deliberately not stubbed with a fabricated id** —
+  that would turn a missing endpoint into a `404` one layer further from the cause.
+  (b) ***`PUT /v1/me/prefs/operating-city` had no KMP client — fixed here.*** AL-27/US-1.3a persists
+  the first-run city to `iam.users.operating_city_code`, `iam.yaml` has declared the route since C027,
+  and `IamApi` (C013, which ran earlier) never gained the function, so `ContractCoverageTest` had been
+  reporting it missing. Added: `OperatingCityPreference`, `IamApi.setOperatingCity`, the `KtorIamApi`
+  implementation and the `ApiOperations` row (`EXPECTED_OPERATIONS` 179 → 180). **The `:shared` gate's
+  failure set is byte-identical before and after** — 13 pre-existing failures in
+  `ApiOperationTableTest` / `ContractCoverageTest` / `ContractShapeTest`, the contract-vs-client drift
+  C067 raised, which still blocks the wave-4a entry condition and is still C012/C013's.
+  (c) ***AL-28's carousel assets have no content-svc route.*** BR-25.1 says the three slides' strings
+  and illustrations are served by content-svc; `content.yaml` declares operating cities, mTLS
+  notification templates and in-app broadcasts, and nothing else. The slides ship as trilingual
+  resources (`FeatureSlides` + `onboarding_slide_*`), which satisfies the rule that actually matters —
+  Si/Ta/En, enforced by `StringResourceTest` — and leaves one list to replace. Illustrations are icon
+  panels; there are no illustration assets anywhere in the repo to use.
+  (d) ***The wireframe draws a ✎ on all four extracted licence fields; the contract accepts two.***
+  `PUT /v1/drivers/profile` takes `nicNo` and `allowedVehicleTypes` and nothing else, and AL-29 /
+  BR-25.2 name exactly those two as the driver-typed pair. `licence_no` and `licence_expiry` are
+  therefore rendered as read verdicts with their ⚑ state; an editable field with nowhere to send the
+  edit would be silently dropped on save. **Either the wireframe's ✎ on those two rows is decorative,
+  or the contract needs two more optional fields** — a decision for whoever owns D2, not for a screen.
+
+  **Decisions —**
+  (1) **The screen order is the wireframe's: Splash → Language/City → Login → Profile Setup →
+  Permissions → Home.** D1' B.7 numbers Login as step 1 and Language/City as step 2; the wireframe and
+  D2' §B put 002 before 003, and `driver_android.html` is this component's stated baseline. It is also
+  the only order that works: a driver who has not chosen a language would otherwise meet the login
+  screen in the handset's locale, which for most drivers here is none of the three. The cost is that
+  the two choices are made **signed out** — hence (2).
+  (2) **The first-run answers are stored locally and pushed on the first authenticated call.**
+  `OnboardingPreferences` (a private `SharedPreferences` file, no secrets — C018's database is
+  encrypted and opening it is `suspend`, which `attachBaseContext` cannot wait for) holds the language,
+  the city and "permissions screen seen"; `OnboardingRepository.syncPreferences()` sends the first two
+  to `iam.users` from the login screen the moment a bearer token exists, and leaves the pending flag
+  set if it fails.
+  (3) **`OnboardingRouter.next(...)` is a pure function and the only router.** Splash, login-after-verify
+  and Profile Setup all ask it. Its inputs mention **no vehicle** — that is AL-27's fence expressed as
+  the shape of a signature rather than as a rule someone has to remember not to add.
+  (4) **The two "has this driver a profile?" failure paths answer differently, on purpose.** On the
+  splash a failed `GET /v1/users/me` answers **yes** (the session was restored from the secure store,
+  so this driver has been through Profile Setup; a flat tunnel must not put a working driver back on an
+  onboarding form). On the login screen it answers **no** (the network worked a second ago, `PUT
+  /v1/drivers/profile` is idempotent, and a brand-new driver belongs there anyway).
+  (5) **Profile Setup saves twice, and the wireframe is why.** `PUT /v1/drivers/profile` is what
+  *queues* the Gemini extraction, so the "✦ AI-extracted" card cannot exist before the first save. A
+  clean extraction continues immediately; anything doubtful, unread or typed holds the driver on the
+  card, and the second tap sends the correction and continues **regardless of the new verdicts** —
+  a `manual` field is `pending` by design (BR-25.2, "the driver may proceed"), so waiting for it to
+  clear would trap them there for ever.
+  (6) **The client never stamps a provenance.** It sends `nicNo` / `allowedVehicleTypes`; registry-svc
+  writes `source='manual'`, `verify_status='pending'` and queues the officer review. A client that
+  could claim `source='ai'` would make AL-29 advisory. The tests assert the typed value reaches the
+  request body and that the returned verdict renders as the ⚑ chip.
+  (7) **A proper noun is data, not copy.** The language endonyms (`සිංහල`, `தமிழ்`, `English`), the
+  `+94` prefix and the `7X XXX XXXX` mask are Kotlin constants, not resources: they are the same
+  string in all three files, and `StringResourceTest` reads three identical values as a translation
+  nobody did — correctly. It is the argument `OperatingCity`'s own KDoc already makes about city names.
+  (8) **Language is applied by wrapping the Activity's base context** (`DriverLocale`), not by
+  `LocaleManager` (API 33+, the floor is 26) and not by adding `appcompat` for its backport. Choosing a
+  new language calls `recreate()`, which re-enters the splash and routes straight on to Login — which
+  is where Continue was going.
+  (9) **`SYSTEM_ALERT_WINDOW` added to the manifest.** The wireframe's "Display over apps" row cannot
+  open `ACTION_MANAGE_OVERLAY_PERMISSION` for an app that has not declared it. It is a **special app
+  access**, not a runtime permission — `DriverPermissionTest` asserts the two settings-backed rows are
+  never `required`, because a screen whose Continue depends on a settings page that may never come back
+  is a dead end. Continue is never disabled here at all: AL-27 puts nothing between Profile Setup and
+  Home, and what a refusal actually costs is going **online** (US-9.6), which the dashboard gates.
+  (10) **`DocumentCaptureCoordinator` is the seam to SCR-DA-005, because the route has no arguments.**
+  `DriverRoute.DocumentCapture` was fixed by C067 before any screen group existed, so "capture the
+  licence front and give it back to Profile Setup" cannot be a navigation argument. C069 reads
+  `pending` for its app-bar title and calls `deliver(image)`; the six targets (two licence, four
+  vehicle) are declared in one enum so the scanner has one switch. Profile Setup ignores the four that
+  are not its own, and there is a test for that.
+  (11) **Two detekt rules gained `ignoreAnnotated: ['Composable']`** in the shared
+  `config/detekt/detekt.yml`, which that file's own header invites. A screen function **is** the
+  wireframe's layout tree — splitting one at sixty lines produces a `ScreenTop` and a `ScreenBottom`
+  whose only relationship is that they used to be adjacent, which is harder to compare against
+  `specs/wireframes/*.html`, not easier — and a Compose component's parameter list is an M3 slot API.
+  Nothing non-composable is exempt. Also added `ControlTokens` to `ui/theme/Dimens.kt`: a border width,
+  a paging dot and an OTP cell are measurements of one control, not spacing between two, so they cannot
+  honestly be `Spacing` — and `ui/theme/**` is where `MagicNumber` is already excluded.
+  (12) **The C019 test kit jar was missing its `.kotlin_module`, and this component was the first
+  consumer to notice.** Without it a consumer resolves the kit's **classes** and none of its
+  **top-level** declarations: `FakeApiBackend` imports and `backend.mageRideApi()` is "unresolved
+  reference", because Kotlin finds a package's file-facade classes through that file and nowhere else.
+  One `include("META-INF/*.kotlin_module")` in `testKitJar`. **C076 and every later app module would
+  have hit the same wall.**
+
+  **Testing —** 38 new tests over five classes. `OnboardingRouterTest` is the five-way boot table;
+  `PhoneNumberTest` covers the four ways a Sri Lankan number is written down (the trunk-zero form is
+  what a driver reading their own handset will type); `DriverPermissionTest` holds the SCR-DA-007 row
+  set and the runtime-versus-settings split; `LanguageCityViewModelTest` and `LoginViewModelTest` and
+  `ProfileSetupViewModelTest` drive the view models over C019's `FakeApiBackend` — the **production**
+  Ktor clients on MockEngine, so the idempotency key, the `401` refresh and the real serializers are
+  all still in the loop. **They are `runBlocking` with an explicit `await { … }` rather than `runTest`**:
+  a MockEngine call resolves on its own engine dispatcher and no virtual clock advances past it, so
+  pretending the work is schedulable produces exactly the flake it looks like it prevents. Two real
+  races were found and fixed that way — the CTA is refused while a request is in flight, so a test that
+  taps twice has to wait for the first to land; and the resend countdown is a nested coroutine that
+  `Dispatchers.Unconfined` queues rather than runs, so it can land a tick after the request does. Six
+  consecutive `--rerun-tasks` runs are clean.
+
+  **For C069 —** your four capture slots go up inside `PUT /v1/vehicles/{id}/onboarding/{step}`'s
+  multipart arm (`RegistryApi.uploadVehicleOnboardingStep`), so gap (a) does **not** block you; only
+  Profile Setup's three documents are stranded. `DocumentCaptureCoordinator` is waiting for SCR-DA-005
+  — read `pending` for the app-bar title, call `deliver(image)` with the perspective-corrected bytes,
+  and the requesting screen consumes the replay itself. `CaptureTile`, `AdminVerifyChip`,
+  `ExtractedFieldRow`, `NoticeCard` and `ui/VehicleTypeLabels.kt` are written for your wizard as much
+  as for Profile Setup; the ten vehicle-type labels are already trilingual. `DriverRoute.DocumentCapture`
+  and `VehicleOnboarding*` are still placeholders in `DriverNavHost` — replace the lines, do not add a
+  `NavHost`.
+
+  **Build host —** no Docker and no compose stack; the replica stayed down throughout. **No new
+  dependency and no catalogue entry** — the carousel is `androidx.compose.foundation.pager`, the photo
+  pick is `ActivityResultContracts.PickVisualMedia`, and the permission rows are
+  `RequestMultiplePermissions` plus two `Settings` intents, all of which the shell already had on the
+  classpath. A warm `testDebugUnitTest` + `assembleDebug` is ~70 s; `--rerun-tasks` about the same.

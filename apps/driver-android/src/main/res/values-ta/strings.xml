@@ -38,8 +38,95 @@
     <string name="action_retry">மீண்டும் முயற்சி</string>
     <string name="action_dismiss">நிராகரி</string>
     <string name="action_close">மூடு</string>
+    <string name="action_continue">தொடரவும்</string>
+    <string name="action_back">பின்செல்</string>
+    <string name="action_tap_to_capture">படம் எடுக்க தட்டவும்</string>
+    <string name="status_done">முடிந்தது</string>
     <string name="error_generic">ஏதோ தவறு நடந்தது. மீண்டும் முயற்சிக்கவும்.</string>
     <string name="session_expired">உங்கள் அமர்வு முடிந்தது. மீண்டும் உள்நுழையவும்.</string>
+
+    <string name="error_offline">இணைப்பு இல்லை. நெட்வொர்க்கைச் சரிபார்த்து மீண்டும் முயற்சிக்கவும்.</string>
+    <string name="error_otp_invalid">அந்தக் குறியீடு தவறானது. மீண்டும் முயற்சிக்கவும்.</string>
+    <string name="error_otp_expired">அந்தக் குறியீட்டின் காலம் முடிந்தது. புதியதைக் கேளுங்கள்.</string>
+    <string name="error_otp_locked">பல தவறான குறியீடுகள் உள்ளிடப்பட்டன. பிறகு முயற்சிக்கவும்.</string>
+    <string name="error_otp_rate_limited">பல முயற்சிகள் செய்யப்பட்டன. மீண்டும் கேட்பதற்கு முன் சிறிது காத்திருக்கவும்.</string>
+    <string name="error_device_mismatch">இந்தக் குறியீடு வேறு சாதனத்திற்கு அனுப்பப்பட்டது.</string>
+    <string name="error_user_blocked">இந்த எண்ணில் உள்நுழைய முடியாது. ஆதரவைத் தொடர்பு கொள்ளவும்.</string>
+    <string name="error_validation_failed">நீங்கள் உள்ளிட்ட தகவலைச் சரிபார்த்து மீண்டும் முயற்சிக்கவும்.</string>
+    <string name="error_upload_unavailable">இந்தப் பதிப்பில் இன்னும் ஆவணங்களைப் பதிவேற்ற முடியாது.</string>
+
+    <!-- C068 · SCR-DA-001…003a + 007 -->
+
+    <string name="onboarding_welcome_title">வரவேற்கிறோம்</string>
+    <string name="onboarding_language_label">மொழி</string>
+    <string name="onboarding_city_label">இயங்கும் நகரம்</string>
+    <string name="onboarding_city_load_failed">நகரப் பட்டியலை ஏற்ற முடியவில்லை.</string>
+
+    <string name="onboarding_slide_earn_title">சில வினாடிகளில் ஆன்லைனில் வந்து சம்பாதியுங்கள்</string>
+    <string name="onboarding_slide_earn_body">உங்கள் வாகனத்தைப் பதிவு செய்யுங்கள், 15 வினாடிகளில் வாடகைகளை ஏற்கவும், திசைப் பயணத்தை அமைக்கவும், பணப்பை மற்றும் தினக் கட்டணத்தை ஒரே செயலியில் பாருங்கள்.</string>
+    <string name="onboarding_slide_earn_caption">தொடக்கம்</string>
+    <string name="onboarding_slide_dispatch_title">15 வினாடிகளில் ஒரு வாடகை</string>
+    <string name="onboarding_slide_dispatch_body">பயணி ஏறும் இடம், இறங்கும் இடம், கட்டணத்துடன் வாய்ப்புகள் வரும் — 15 வினாடி நேரத்துடன். ஏற்றுப் புறப்படுங்கள்.</string>
+    <string name="onboarding_slide_dispatch_caption">வாடகை ஒதுக்கீடு</string>
+    <string name="onboarding_slide_wallet_title">பணப்பையும் தினக் கட்டணமும் ஒரே இடத்தில்</string>
+    <string name="onboarding_slide_wallet_body">ஒவ்வொரு வருமானத்தையும் பாருங்கள், செயலியிலேயே பணம் சேர்க்கவும், தினக் கட்டணத்தையும் செலுத்தவும். ஒவ்வொரு நாளும் முதல் பயணம் இலவசம்.</string>
+    <string name="onboarding_slide_wallet_caption">பணப்பை</string>
+
+    <string name="login_title">ஓட்டுநர் கைபேசி எண்</string>
+    <string name="login_phone_otp_only">கைபேசி OTP மட்டுமே — Google உள்நுழைவு இல்லை.</string>
+    <string name="login_enter_code">குறியீட்டை உள்ளிடவும்</string>
+    <string name="login_resend_code">இன்னும் குறியீடு வரவில்லையா?</string>
+    <string name="login_resend_action">மீண்டும் அனுப்பு</string>
+    <string name="login_resend_in">%1$d வினாடிகளில்</string>
+    <string name="login_attempts_remaining">%1$d முயற்சிகள் மீதம்</string>
+
+    <string name="profile_setup_title">உங்கள் சுயவிவரத்தை அமைக்கவும்</string>
+    <string name="profile_setup_photo_caption">சுயவிவரப் படம் — பயணிகளுக்குக் காட்டப்படும்</string>
+    <string name="profile_setup_photo_required">தேவை</string>
+    <string name="profile_setup_photo_action">சுயவிவரப் படத்தைத் தேர்ந்தெடுக்கவும்</string>
+    <string name="profile_setup_name_label">ஓட்டுநர் பெயர்</string>
+    <string name="profile_setup_licence_label">ஓட்டுநர் உரிமம் (முன் மற்றும் பின்)</string>
+    <string name="profile_setup_licence_front">முன்பக்கம்</string>
+    <string name="profile_setup_licence_back">பின்பக்கம்</string>
+    <string name="profile_setup_extract_title">உரிமத்திலிருந்து படிக்கப்பட்டது · தனிப்பட்ட தகவல் மறைக்கப்பட்டது</string>
+    <string name="profile_setup_field_licence_no">உரிம எண்</string>
+    <string name="profile_setup_field_expiry">காலாவதி தேதி</string>
+    <string name="profile_setup_field_nic">தே. அ. அட்டை எண்</string>
+    <string name="profile_setup_field_allowed_types">அனுமதிக்கப்பட்ட வாகன வகைகள்</string>
+    <string name="profile_setup_field_unread">படிக்க முடியவில்லை</string>
+    <string name="profile_setup_nic_label">தேசிய அடையாள அட்டை எண்</string>
+    <string name="profile_setup_allowed_types_label">உங்கள் உரிமம் அனுமதிக்கும் வாகன வகைகள்</string>
+    <string name="profile_setup_manual_supporting">ஸ்கேன் படிக்க முடியவில்லை என்றால் நீங்களே தட்டச்சு செய்யவும்.</string>
+    <string name="profile_setup_manual_title">சரிபார்ப்பு தேவை</string>
+    <string name="profile_setup_manual_body">நீங்களே தட்டச்சு செய்த எதுவும் சரிபார்ப்பு அதிகாரிக்கு அனுப்பப்படும். அதுவரை நீங்கள் தொடரலாம்.</string>
+    <string name="profile_setup_save">சேமித்துத் தொடரவும்</string>
+
+    <string name="flag_admin_verify">நிர்வாக சரிபார்ப்பு</string>
+
+    <string name="permissions_title">அனுமதிகளை வழங்கவும்</string>
+    <string name="permissions_intro">பயணங்களைப் பெறவும் உங்கள் இருப்பிடத்தைப் பகிரவும் ஓட்டுநர் பயன்முறைக்கு இவை தேவை.</string>
+    <string name="permissions_continue">டாஷ்போர்டுக்குச் செல்</string>
+    <string name="permission_location_title">இருப்பிடம்</string>
+    <string name="permission_location_rationale">அருகிலுள்ள வாடகைகளைக் கண்டறிய</string>
+    <string name="permission_background_location_title">ஓட்டும்போது இருப்பிடம்</string>
+    <string name="permission_background_location_rationale">திரை அணைந்திருக்கும்போதும் இருப்பிடத்தைப் பகிரும்</string>
+    <string name="permission_notifications_title">அறிவிப்புகள்</string>
+    <string name="permission_notifications_rationale">வாடகை வாய்ப்புகள் சரியான நேரத்தில் வரும்</string>
+    <string name="permission_battery_title">பேட்டரி சிக்கனம் நிறுத்தப்பட்டது</string>
+    <string name="permission_battery_rationale">நீண்ட பயணத்தில் இருப்பிடத்தை நேரலையில் வைக்கும்</string>
+    <string name="permission_overlay_title">மற்ற செயலிகள் மேல் காட்டு</string>
+    <string name="permission_overlay_rationale">வேறு செயலியில் இருந்தாலும் வாடகை வாய்ப்பைக் காட்டும்</string>
+
+    <string name="vehicle_type_motorbike">மோட்டார் சைக்கிள்</string>
+    <string name="vehicle_type_three_wheeler">முச்சக்கர வண்டி</string>
+    <string name="vehicle_type_flex">ஃபிளெக்ஸ்</string>
+    <string name="vehicle_type_sedan">செடான்</string>
+    <string name="vehicle_type_mini_van">மினி வேன்</string>
+    <string name="vehicle_type_van">வேன்</string>
+    <string name="vehicle_type_truck">லாரி</string>
+    <string name="vehicle_type_mini_truck">மினி லாரி</string>
+    <string name="vehicle_type_bus">பேருந்து</string>
+    <string name="vehicle_type_train">ரயில்</string>
 
     <string name="map_recentre">மையப்படுத்து</string>
     <string name="map_content_description">வரைபடம்</string>

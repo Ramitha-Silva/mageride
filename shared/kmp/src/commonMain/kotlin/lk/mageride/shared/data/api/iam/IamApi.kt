@@ -22,6 +22,7 @@ import lk.mageride.shared.data.models.iam.IssueMqttTokenRequest
 import lk.mageride.shared.data.models.iam.IssueMqttTokenResponse
 import lk.mageride.shared.data.models.iam.LanguagePreference
 import lk.mageride.shared.data.models.iam.LookupUserResponse
+import lk.mageride.shared.data.models.iam.OperatingCityPreference
 import lk.mageride.shared.data.models.iam.PasswordLogin
 import lk.mageride.shared.data.models.iam.RefreshSessionRequest
 import lk.mageride.shared.data.models.iam.RequestOtpRequest
@@ -153,6 +154,16 @@ public interface IamApi {
 
     /** `PUT /v1/me/prefs/language` — set the UI language (D-26). */
     public suspend fun setLanguagePreference(request: LanguagePreference): LanguagePreference
+
+    /**
+     * `PUT /v1/me/prefs/operating-city` — set the launch city chosen at onboarding (AL-27).
+     *
+     * The read side of AL-27 is content-svc's `GET /v1/config/cities`; this is the write side, and
+     * it is what persists `iam.users.operating_city_code` (US-1.3a). The first-run screen offers
+     * the city **before** there is a session, so the choice is held on the device and sent here on
+     * the first authenticated call after sign-in.
+     */
+    public suspend fun setOperatingCity(request: OperatingCityPreference): OperatingCityPreference
 }
 
 @Suppress("TooManyFunctions")
@@ -292,6 +303,11 @@ internal class KtorIamApi(private val transport: ApiTransport) : IamApi {
 
     override suspend fun setLanguagePreference(request: LanguagePreference): LanguagePreference =
         transport.apiPut(SERVICE, "setLanguagePreference", "/v1/me/prefs/language") {
+            jsonBody(request)
+        }.decode()
+
+    override suspend fun setOperatingCity(request: OperatingCityPreference): OperatingCityPreference =
+        transport.apiPut(SERVICE, "setOperatingCity", "/v1/me/prefs/operating-city") {
             jsonBody(request)
         }.decode()
 

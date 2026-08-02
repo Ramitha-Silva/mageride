@@ -34,6 +34,13 @@
          dialog; the app never assumes the exemption was granted. -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
+    <!-- SCR-DA-007's "Display over apps" row (C068). A special app access, not a runtime grant:
+         `Settings.canDrawOverlays` answers false until the driver turns it on in Settings, and
+         `ACTION_MANAGE_OVERLAY_PERMISSION` cannot be opened for an app that has not declared it.
+         It is what lets an E-01 offer take over while the driver is in another app; the offer
+         itself is C070's. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
     <!-- GPS is not `required`: a handset without it can still hold an account, see its wallet and
          complete onboarding. What it cannot do is go online, and the dashboard says so. -->
     <uses-feature android:name="android.hardware.location.gps" android:required="false" />

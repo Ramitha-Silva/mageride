@@ -370,6 +370,12 @@ val testKitJar = tasks.register<Jar>("testKitJar") {
         tasks.named("compileAndroidHostTest").map { compile ->
             compile.outputs.files.asFileTree.matching {
                 include("lk/mageride/shared/testing/**")
+                // **Δ C068.** Without the `.kotlin_module` a consumer resolves the kit's CLASSES
+                // and none of its TOP-LEVEL declarations: `FakeApiBackend` imports, and
+                // `backend.mageRideApi()` — a top-level extension in the same package — is
+                // "unresolved reference". Kotlin finds a package's file-facade classes through
+                // this file and nowhere else, so a jar of classes alone is only half the kit.
+                include("META-INF/*.kotlin_module")
                 // The kit's OWN tests compile into the same output and have no business on an
                 // app's classpath. Nothing the kit publishes ends in `Test` — `TestClock` and
                 // `TestTime` start with it — so the suffix separates the two cleanly.

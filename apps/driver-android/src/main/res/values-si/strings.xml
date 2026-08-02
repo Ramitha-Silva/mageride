@@ -39,8 +39,95 @@
     <string name="action_retry">නැවත උත්සාහ කරන්න</string>
     <string name="action_dismiss">ඉවත් කරන්න</string>
     <string name="action_close">වසන්න</string>
+    <string name="action_continue">ඉදිරියට</string>
+    <string name="action_back">ආපසු</string>
+    <string name="action_tap_to_capture">ඡායාරූපය ගැනීමට තට්ටු කරන්න</string>
+    <string name="status_done">සම්පූර්ණයි</string>
     <string name="error_generic">යම් දෝෂයක් ඇති විය. නැවත උත්සාහ කරන්න.</string>
     <string name="session_expired">ඔබේ සැසිය අවසන් විය. නැවත පිවිසෙන්න.</string>
+
+    <string name="error_offline">සම්බන්ධතාවයක් නැත. ජාලය පරීක්ෂා කර නැවත උත්සාහ කරන්න.</string>
+    <string name="error_otp_invalid">එම කේතය වැරදියි. නැවත උත්සාහ කරන්න.</string>
+    <string name="error_otp_expired">එම කේතයේ කාලය ඉකුත් වී ඇත. නව එකක් ඉල්ලන්න.</string>
+    <string name="error_otp_locked">වැරදි කේත ගණනාවක් ඇතුළත් කර ඇත. පසුව උත්සාහ කරන්න.</string>
+    <string name="error_otp_rate_limited">උත්සාහ ගණනාවක් කර ඇත. නැවත ඉල්ලීමට පෙර මොහොතක් රැඳී සිටින්න.</string>
+    <string name="error_device_mismatch">මෙම කේතය යවා ඇත්තේ වෙනත් උපාංගයකට ය.</string>
+    <string name="error_user_blocked">මෙම අංකයෙන් පිවිසිය නොහැක. සහාය අමතන්න.</string>
+    <string name="error_validation_failed">ඔබ ඇතුළත් කළ තොරතුරු පරීක්ෂා කර නැවත උත්සාහ කරන්න.</string>
+    <string name="error_upload_unavailable">මෙම නිකුතුවෙන් තවම ලේඛන උඩුගත කළ නොහැක.</string>
+
+    <!-- C068 · SCR-DA-001…003a + 007 -->
+
+    <string name="onboarding_welcome_title">සාදරයෙන් පිළිගනිමු</string>
+    <string name="onboarding_language_label">භාෂාව</string>
+    <string name="onboarding_city_label">ක්‍රියාකාරී නගරය</string>
+    <string name="onboarding_city_load_failed">නගර ලැයිස්තුව ලබා ගත නොහැකි විය.</string>
+
+    <string name="onboarding_slide_earn_title">තත්පර කිහිපයකින් සබැඳි වී ඉපයීම අරඹන්න</string>
+    <string name="onboarding_slide_earn_body">ඔබේ වාහනය ලියාපදිංචි කරන්න, තත්පර 15කින් කුලී භාර ගන්න, දිශානුගත ගමන් සකසන්න, පසුම්බිය සහ දෛනික ගාස්තුව එකම යෙදුමකින් බලන්න.</string>
+    <string name="onboarding_slide_earn_caption">ආරම්භය</string>
+    <string name="onboarding_slide_dispatch_title">තත්පර 15කින් කුලියක්</string>
+    <string name="onboarding_slide_dispatch_body">පිකප් ස්ථානය, ගමනාන්තය සහ ගාස්තුව සමඟ ඉල්ලීම් ඔබ වෙත එයි — තත්පර 15ක කාලයක් සමඟ. භාර ගෙන පිටත් වන්න.</string>
+    <string name="onboarding_slide_dispatch_caption">කුලී බෙදාහැරීම</string>
+    <string name="onboarding_slide_wallet_title">පසුම්බිය සහ දෛනික ගාස්තුව එකම තැනක</string>
+    <string name="onboarding_slide_wallet_body">සෑම ඉපැයීමක්ම බලන්න, යෙදුම තුළදීම මුදල් එකතු කරන්න, දෛනික ගාස්තුව ගෙවන්න. දිනකට පළමු ගමන නොමිලේ.</string>
+    <string name="onboarding_slide_wallet_caption">පසුම්බිය</string>
+
+    <string name="login_title">රියදුරු ජංගම දුරකථන අංකය</string>
+    <string name="login_phone_otp_only">දුරකථන OTP පමණයි — Google පිවිසුමක් නැත.</string>
+    <string name="login_enter_code">කේතය ඇතුළත් කරන්න</string>
+    <string name="login_resend_code">තවම කේතයක් ලැබුණේ නැද්ද?</string>
+    <string name="login_resend_action">නැවත එවන්න</string>
+    <string name="login_resend_in">තත්පර %1$d කින්</string>
+    <string name="login_attempts_remaining">උත්සාහ %1$d ක් ඉතිරියි</string>
+
+    <string name="profile_setup_title">ඔබේ පැතිකඩ සකසන්න</string>
+    <string name="profile_setup_photo_caption">පැතිකඩ ඡායාරූපය — මගීන්ට පෙන්වයි</string>
+    <string name="profile_setup_photo_required">අවශ්‍යයි</string>
+    <string name="profile_setup_photo_action">පැතිකඩ ඡායාරූපයක් තෝරන්න</string>
+    <string name="profile_setup_name_label">රියදුරුගේ නම</string>
+    <string name="profile_setup_licence_label">රියදුරු බලපත්‍රය (ඉදිරිපස සහ පිටුපස)</string>
+    <string name="profile_setup_licence_front">ඉදිරිපස</string>
+    <string name="profile_setup_licence_back">පිටුපස</string>
+    <string name="profile_setup_extract_title">බලපත්‍රයෙන් කියවා ගන්නා ලදී · පෞද්ගලික තොරතුරු ආවරණය කර ඇත</string>
+    <string name="profile_setup_field_licence_no">බලපත්‍ර අංකය</string>
+    <string name="profile_setup_field_expiry">කල් ඉකුත් වන දිනය</string>
+    <string name="profile_setup_field_nic">ජා. හැ. අංකය</string>
+    <string name="profile_setup_field_allowed_types">අනුමත වාහන වර්ග</string>
+    <string name="profile_setup_field_unread">කියවා ගත නොහැකි විය</string>
+    <string name="profile_setup_nic_label">ජාතික හැඳුනුම්පත් අංකය</string>
+    <string name="profile_setup_allowed_types_label">ඔබේ බලපත්‍රයට අනුමත වාහන වර්ග</string>
+    <string name="profile_setup_manual_supporting">ස්කෑන් කිරීමෙන් කියවා ගත නොහැකි නම් ඔබම ටයිප් කරන්න.</string>
+    <string name="profile_setup_manual_title">පරීක්ෂා කිරීම අවශ්‍යයි</string>
+    <string name="profile_setup_manual_body">ඔබ විසින්ම ටයිප් කළ ඕනෑම තොරතුරක් සත්‍යාපන නිලධාරියෙකු වෙත යවනු ලැබේ. එතෙක් ඔබට ඉදිරියට යා හැක.</string>
+    <string name="profile_setup_save">සුරකිමින් ඉදිරියට</string>
+
+    <string name="flag_admin_verify">පරිපාලක සත්‍යාපනය</string>
+
+    <string name="permissions_title">අවසර ලබා දෙන්න</string>
+    <string name="permissions_intro">ගමන් ලබා ගැනීමට සහ ඔබේ ස්ථානය බෙදා ගැනීමට රියදුරු ප්‍රකාරයට මේවා අවශ්‍යයි.</string>
+    <string name="permissions_continue">උපකරණ පුවරුවට යන්න</string>
+    <string name="permission_location_title">ස්ථානය</string>
+    <string name="permission_location_rationale">ඔබ අසල ඇති කුලී සොයා ගැනීමට</string>
+    <string name="permission_background_location_title">රිය පදවන විට ස්ථානය</string>
+    <string name="permission_background_location_rationale">තිරය වසා ඇති විටත් ඔබේ ස්ථානය බෙදා ගනී</string>
+    <string name="permission_notifications_title">දැනුම්දීම්</string>
+    <string name="permission_notifications_rationale">කුලී ඉල්ලීම් නියමිත වේලාවට ලැබේ</string>
+    <string name="permission_battery_title">බැටරි ප්‍රශස්තිකරණය ක්‍රියාවිරහිතයි</string>
+    <string name="permission_battery_rationale">දිගු ගමනකදී ඔබේ ස්ථානය සජීවීව තබා ගනී</string>
+    <string name="permission_overlay_title">වෙනත් යෙදුම් මත පෙන්වන්න</string>
+    <string name="permission_overlay_rationale">වෙනත් යෙදුමක සිටියදීත් කුලී ඉල්ලීම පෙන්වයි</string>
+
+    <string name="vehicle_type_motorbike">යතුරුපැදිය</string>
+    <string name="vehicle_type_three_wheeler">ත්‍රීරෝද රථය</string>
+    <string name="vehicle_type_flex">ෆ්ලෙක්ස්</string>
+    <string name="vehicle_type_sedan">සෙඩාන් රථය</string>
+    <string name="vehicle_type_mini_van">මිනි වෑන් රථය</string>
+    <string name="vehicle_type_van">වෑන් රථය</string>
+    <string name="vehicle_type_truck">ට්‍රක් රථය</string>
+    <string name="vehicle_type_mini_truck">මිනි ට්‍රක් රථය</string>
+    <string name="vehicle_type_bus">බස් රථය</string>
+    <string name="vehicle_type_train">දුම්රිය</string>
 
     <string name="map_recentre">නැවත මධ්‍යගත කරන්න</string>
     <string name="map_content_description">සිතියම</string>

@@ -54,6 +54,7 @@ import lk.mageride.shared.data.models.iam.IssueMqttTokenRequest
 import lk.mageride.shared.data.models.iam.IssueMqttTokenResponse
 import lk.mageride.shared.data.models.iam.LanguagePreference
 import lk.mageride.shared.data.models.iam.LookupUserResponse
+import lk.mageride.shared.data.models.iam.OperatingCityPreference
 import lk.mageride.shared.data.models.iam.PasswordLogin
 import lk.mageride.shared.data.models.iam.RefreshSessionRequest
 import lk.mageride.shared.data.models.iam.RequestOtpRequest
@@ -209,7 +210,7 @@ internal object ApiOperations {
 
     /** Every operation, grouped by service in `ApiService` declaration order. */
     val ALL: List<FakeOperation> = listOf(
-        // iam-svc — auth, profile, session, saved addresses (19)
+        // iam-svc — auth, profile, session, saved addresses (20)
         op<RequestOtpResponse>(
             "requestOtp",
             ApiService.IAM,
@@ -312,6 +313,14 @@ internal object ApiOperations {
             "/v1/me/prefs/language",
             200,
             sends<LanguagePreference>(),
+        ),
+        op<OperatingCityPreference>(
+            "setOperatingCity",
+            ApiService.IAM,
+            "PUT",
+            "/v1/me/prefs/operating-city",
+            200,
+            sends<OperatingCityPreference>(),
         ),
 
         // registry-svc — driver identity, vehicles, onboarding, sharing (17)

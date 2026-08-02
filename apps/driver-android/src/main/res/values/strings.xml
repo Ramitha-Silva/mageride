@@ -58,8 +58,109 @@
     <string name="action_retry">Retry</string>
     <string name="action_dismiss">Dismiss</string>
     <string name="action_close">Close</string>
+    <string name="action_continue">Continue</string>
+    <string name="action_back">Back</string>
+    <string name="action_tap_to_capture">Tap to capture</string>
+    <string name="status_done">Done</string>
     <string name="error_generic">Something went wrong. Please try again.</string>
     <string name="session_expired">Your session ended. Please sign in again.</string>
+
+    <!-- D-26: an app resolves its copy from a problem+details `code`, never from the server's own
+         English `title`/`detail`. These are the codes cluster 1 can meet (C068). -->
+    <string name="error_offline">No connection. Check your network and try again.</string>
+    <string name="error_otp_invalid">That code is wrong. Try again.</string>
+    <string name="error_otp_expired">That code has expired. Ask for a new one.</string>
+    <string name="error_otp_locked">Too many wrong codes. Try again later.</string>
+    <string name="error_otp_rate_limited">Too many attempts. Wait a while before asking again.</string>
+    <string name="error_device_mismatch">This code was sent to another device.</string>
+    <string name="error_user_blocked">This number cannot sign in. Contact support.</string>
+    <string name="error_validation_failed">Check what you entered and try again.</string>
+    <string name="error_upload_unavailable">Documents cannot be uploaded on this build yet.</string>
+
+    <!-- ==========================================================================
+         C068 · SCR-DA-001…003a + 007 — first run.
+         ========================================================================== -->
+
+    <!-- SCR-DA-002 · language / city. The three language names themselves are NOT here: an
+         endonym is the same string in all three files, which this file's own rule forbids.
+         See `LanguageCityScreen.endonym`. -->
+    <string name="onboarding_welcome_title">Welcome</string>
+    <string name="onboarding_language_label">Language</string>
+    <string name="onboarding_city_label">Operating city</string>
+    <string name="onboarding_city_load_failed">Could not load the city list.</string>
+
+    <!-- AL-28's three feature slides (BR-25.1). Presentation only — nothing here gates anything. -->
+    <string name="onboarding_slide_earn_title">Go online and earn in seconds</string>
+    <string name="onboarding_slide_earn_body">Onboard your vehicle, accept hires in 15 seconds, set Directional Travel, and track your wallet and daily fee — all in one app.</string>
+    <string name="onboarding_slide_earn_caption">Getting started</string>
+    <string name="onboarding_slide_dispatch_title">A hire in 15 seconds</string>
+    <string name="onboarding_slide_dispatch_body">Offers reach you with the pickup, the drop-off and the fare, and a 15-second timer. Accept and go.</string>
+    <string name="onboarding_slide_dispatch_caption">Dispatch</string>
+    <string name="onboarding_slide_wallet_title">Wallet and daily fee in one place</string>
+    <string name="onboarding_slide_wallet_body">See every earning, top up inside the app, and pay your daily fee without leaving it. Your first trip each day is free.</string>
+    <string name="onboarding_slide_wallet_caption">Wallet</string>
+
+    <!-- SCR-DA-003 · phone + OTP. The `7X XXX XXXX` mask is a constant in `PhoneNumber`, not a
+         string: it is the same characters in all three languages. -->
+    <string name="login_title">Driver mobile number</string>
+    <string name="login_phone_otp_only">Phone and OTP only — there is no Google sign-in.</string>
+    <string name="login_enter_code">enter code</string>
+    <string name="login_resend_code">No code yet?</string>
+    <string name="login_resend_action">Resend</string>
+    <string name="login_resend_in">in %1$d s</string>
+    <string name="login_attempts_remaining">%1$d attempts left</string>
+
+    <!-- SCR-DA-003a · profile setup. -->
+    <string name="profile_setup_title">Set up your profile</string>
+    <string name="profile_setup_photo_caption">Profile photo — shown to passengers</string>
+    <string name="profile_setup_photo_required">required</string>
+    <string name="profile_setup_photo_action">Choose a profile photo</string>
+    <string name="profile_setup_name_label">Driver name</string>
+    <string name="profile_setup_licence_label">Driving licence (front and back)</string>
+    <string name="profile_setup_licence_front">Front</string>
+    <string name="profile_setup_licence_back">Back</string>
+    <string name="profile_setup_extract_title">Read from your licence · personal details redacted</string>
+    <string name="profile_setup_field_licence_no">Licence no</string>
+    <string name="profile_setup_field_expiry">Expiry</string>
+    <string name="profile_setup_field_nic">NIC no</string>
+    <string name="profile_setup_field_allowed_types">Allowed vehicle types</string>
+    <string name="profile_setup_field_unread">Not read</string>
+    <string name="profile_setup_nic_label">National identity card no</string>
+    <string name="profile_setup_allowed_types_label">Vehicle types your licence allows</string>
+    <string name="profile_setup_manual_supporting">Type it in if the scan could not read it.</string>
+    <string name="profile_setup_manual_title">Needs checking</string>
+    <string name="profile_setup_manual_body">Anything you typed in yourself goes to a verification officer. You can carry on in the meantime.</string>
+    <string name="profile_setup_save">Save and continue</string>
+
+    <!-- AL-29's ⚑. A field is flagged when the driver typed it or the scan was doubtful. -->
+    <string name="flag_admin_verify">Admin verify</string>
+
+    <!-- SCR-DA-007 · permissions. -->
+    <string name="permissions_title">Allow permissions</string>
+    <string name="permissions_intro">Driver mode needs these to receive trips and share your location.</string>
+    <string name="permissions_continue">Continue to dashboard</string>
+    <string name="permission_location_title">Location</string>
+    <string name="permission_location_rationale">Find hires near you</string>
+    <string name="permission_background_location_title">Location while driving</string>
+    <string name="permission_background_location_rationale">Share your position with the screen off</string>
+    <string name="permission_notifications_title">Notifications</string>
+    <string name="permission_notifications_rationale">Hire offers reach you in time</string>
+    <string name="permission_battery_title">Battery optimisation off</string>
+    <string name="permission_battery_rationale">Keeps your position live on a long trip</string>
+    <string name="permission_overlay_title">Display over apps</string>
+    <string name="permission_overlay_rationale">Shows a hire offer over other apps</string>
+
+    <!-- AL-09's canonical vehicle types. The enum value is a machine key; this is its label. -->
+    <string name="vehicle_type_motorbike">Motorbike</string>
+    <string name="vehicle_type_three_wheeler">Three-wheeler</string>
+    <string name="vehicle_type_flex">Flex</string>
+    <string name="vehicle_type_sedan">Sedan</string>
+    <string name="vehicle_type_mini_van">Mini van</string>
+    <string name="vehicle_type_van">Van</string>
+    <string name="vehicle_type_truck">Truck</string>
+    <string name="vehicle_type_mini_truck">Mini truck</string>
+    <string name="vehicle_type_bus">Bus</string>
+    <string name="vehicle_type_train">Train</string>
 
     <!-- Map (D2' §0.3). The recentre FAB is on both apps. -->
     <string name="map_recentre">Recentre</string>

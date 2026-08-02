@@ -22,14 +22,16 @@ lk.mageride.driver
 ├── di/                       DriverEnvironment (the only BuildConfig reader) + the app module
 ├── nav/                      DriverRoute (every destination), DriverTab, DriverNavHost, bottom bar
 ├── shell/                    DriverShell (Scaffold host), offline banner, update gate, connectivity
-├── ui/theme/                 D2' §0.2 tokens — colour, type, spacing/radius/elevation
-├── ui/component/             MageRideCta — §0.2's 56 dp CTA token
+├── ui/theme/                 D2' §0.2 tokens — colour, type, spacing/radius/elevation/controls
+├── ui/component/             MageRideCta + the cluster-1 controls (C068)
 ├── map/                      MageRideMap (MapLibre host), MapStyles, VehicleLayers (MAP-*)
 ├── location/                 PositionForegroundService, PositionPipeline, MQTT transport, journal
-└── push/                     FCM service, PushRouter (deep links), channels
+├── push/                     FCM service, PushRouter (deep links), channels, PushTokenProvider
+├── capture/                  CapturedImage + DocumentCaptureCoordinator — the seam to SCR-DA-005
+└── onboarding/               C068 · SCR-DA-001, 002, 003, 003a, 007 + their data layer
 ```
 
-**To add a screen (C068–C075):**
+**To add a screen (C069–C075):**
 
 1. Its route is already in `nav/DriverRoute.kt`. Use it; do not invent a path.
 2. Replace its `placeholder(...)` line in `nav/DriverNavHost.kt` with the real composable. That file
@@ -40,6 +42,33 @@ lk.mageride.driver
 4. Reach for `MageRideTheme.spacing` / `.radius` / `.elevation` / `.status` / `.vehicle` / `.mode`
    and `MaterialTheme.colorScheme` — never a raw `dp` or hex. `ThemeTokensTest` holds §0.2.
 5. The full-width orange bar in the wireframes is `MageRideCta`, not a `Button`.
+
+## Cluster 1 (C068) — what the next screen group can reuse
+
+- **`OnboardingRouter.next(...)` is the only place that decides where a driver belongs.** Splash,
+  the login screen after a verify and Profile Setup after a save all call it. If a new gate is ever
+  added before Home it goes in that function, not in a screen.
+- **`DocumentCaptureCoordinator` is the seam to SCR-DA-005** (C069's scanner). A screen calls
+  `open(target)` and navigates to `DriverRoute.DocumentCapture`; the scanner reads `pending`, shows
+  the right title and calls `deliver(image)`. The route carries no arguments, so this is the only
+  way to say what a capture is for.
+- **`DriverDocumentUploader` has no route behind it.** `PUT /v1/drivers/profile` takes
+  `docs.uploads` ids and nothing in `backend/contracts` creates one for a driver photo or licence.
+  The binding is `UnavailableDriverDocumentUploader`, which fails loudly; swap it when the route
+  lands. C069's four vehicle documents do **not** need it — they go up inside
+  `PUT /v1/vehicles/{id}/onboarding/{step}`.
+- **`OnboardingPreferences`** holds the three answers given before there is a session (language,
+  operating city, permissions-seen) and `OnboardingRepository.syncPreferences()` pushes the first
+  two to `iam.users` on the first authenticated call.
+- **Language is applied by `MainActivity.attachBaseContext`** through `DriverLocale.wrap`, and a
+  change calls `recreate()`. Per-app locale (`LocaleManager`) is API 33+; the floor here is 26.
+- Reusable UI: `SelectionBox`, `SectionLabel`, `PagerDots`, `IllustrationPanel`,
+  `LabelledTextField`, `PhoneNumberField`, `OtpEntry`/`OtpProgress`, `CaptureTile`,
+  `AdminVerifyChip`, `ExtractedFieldRow`, `NoticeCard`, and `ui/VehicleTypeLabels.kt`.
+- **A proper noun is data, not copy.** The language endonyms (`සිංහල`), the `+94` prefix and the
+  `7X XXX XXXX` mask are Kotlin constants, because three identical values in the three
+  `strings.xml` files is exactly what `StringResourceTest` (correctly) fails on. City names come
+  from `config.operating_cities` for the same reason.
 
 ## Rules this module is built on
 
@@ -76,6 +105,12 @@ lk.mageride.driver
   add `android-sdk-ktx`: it depends on the default artifact and fails `checkDuplicateClasses`.
 - **Kotlin block comments nest.** A KDoc containing `values*/strings.xml` closes itself on the `*/`
   and the file stops parsing several declarations later. Same trap C014 hit.
+- **detekt's `LongMethod` and `LongParameterList` carry `ignoreAnnotated: ['Composable']`**
+  (C068, in `config/detekt/detekt.yml`). A screen function is the wireframe's layout tree and a
+  component's parameter list is an M3 slot API; nothing non-composable is exempt.
+- **The C019 test kit's top-level functions need the jar's `.kotlin_module`.** Without it
+  `FakeApiBackend` imports and `backend.mageRideApi()` does not — Kotlin finds a package's
+  file-facade classes through that file alone. Fixed in `shared/kmp/build.gradle.kts` by C068.
 - **ktlint's `function-naming` needs the `@Composable` exemption**, which is set once in the repo
   root `.editorconfig`. detekt's config is `config/detekt/detekt.yml`, also shared.
 - **`kotlin-test` resolves to no variant under AGP's built-in Kotlin.** Use `libs.kotlin.testjunit`

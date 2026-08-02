@@ -60,6 +60,13 @@ naming:
       - '**/src/test/**'
 
 complexity:
+  LongMethod:
+    # A `@Composable` screen function IS the screen's layout tree — the wireframe's app bar,
+    # its six controls and its CTA, in the order they are drawn. Splitting one at sixty lines
+    # produces a `ScreenTop` and a `ScreenBottom` whose only relationship is that they used to
+    # be adjacent, which is strictly harder to compare against `specs/wireframes/*.html` than
+    # the whole screen in one place. Non-composable functions still obey the default. (C068)
+    ignoreAnnotated: ['Composable']
   LongParameterList:
     # A wire DTO's constructor *is* the contract's field list — `RideDetail` has eighteen
     # properties because `ride.yaml#/components/schemas/RideDetail` has eighteen. Splitting one
@@ -72,6 +79,12 @@ complexity:
     # cross-cutting convention D3' §0 applies to a request. Grouping them into invented holder
     # types would put a layer between the signature and the contract it has to match.
     # Everything else in `:shared` still obeys the default.
+    #
+    # `@Composable` is the third case (C068): a Compose component's parameter list is `value`,
+    # `onValueChange`, `modifier` and one slot per optional piece of the control — `modifier`
+    # alone is a convention every M3 component carries. Folding them into a holder type makes
+    # the one control in the app that does not read like the M3 component it wraps.
+    ignoreAnnotated: ['Composable']
     excludes:
       - '**/data/models/**'
       - '**/data/api/**'

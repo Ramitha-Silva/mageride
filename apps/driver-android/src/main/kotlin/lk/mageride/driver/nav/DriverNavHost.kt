@@ -15,15 +15,20 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import lk.mageride.driver.R
+import lk.mageride.driver.onboarding.LanguageCityScreen
+import lk.mageride.driver.onboarding.LoginScreen
+import lk.mageride.driver.onboarding.PermissionsScreen
+import lk.mageride.driver.onboarding.ProfileSetupScreen
+import lk.mageride.driver.onboarding.SplashScreen
 import lk.mageride.driver.ui.theme.MageRideTheme
 
 /**
  * The app's single `NavHost`, with one entry per [DriverRoute].
  *
- * **Every destination is registered here and every one is a placeholder today.** That is the
- * shape C067 is supposed to leave behind: the host exists, the graph is complete, and each screen
- * group replaces the body of its own routes without touching the graph. A component that added a
- * destination of its own would put the app's navigation in eight files.
+ * **Every destination is registered here, and a screen group replaces the body of its own routes
+ * without touching the graph.** That is the shape C067 left behind and the shape it keeps: a
+ * component that added a destination of its own would put the app's navigation in eight files.
+ * C068 has taken the five cluster-1 routes; the rest are still standing placeholders.
  *
  * The start destination is [DriverRoute.Splash] — SCR-DA-001 is the driver-info router, and its
  * states ("no token → Login · registered/not approved → RegistrationHub · approved+perms →
@@ -37,11 +42,29 @@ internal fun DriverNavHost(controller: NavHostController, modifier: Modifier = M
         modifier = modifier,
     ) {
         // ---- C068 · auth / onboarding --------------------------------------------------
-        placeholder(DriverRoute.Splash, "SCR-DA-001 splash")
-        placeholder(DriverRoute.LanguageCity, "SCR-DA-002 language / city")
-        placeholder(DriverRoute.Login, "SCR-DA-003 phone + OTP")
-        placeholder(DriverRoute.ProfileSetup, "SCR-DA-003a profile setup")
-        placeholder(DriverRoute.Permissions, "SCR-DA-007 permissions")
+        composable(DriverRoute.Splash.path) {
+            SplashScreen(onResolved = { controller.replaceOnboarding(it.route) })
+        }
+        composable(DriverRoute.LanguageCity.path) {
+            LanguageCityScreen(onContinue = { controller.replaceOnboarding(DriverRoute.Login) })
+        }
+        composable(DriverRoute.Login.path) {
+            LoginScreen(
+                onSignedIn = { controller.replaceOnboarding(it.route) },
+                onBack = { controller.popBackStack() },
+            )
+        }
+        composable(DriverRoute.ProfileSetup.path) {
+            ProfileSetupScreen(
+                // AL-43: the scanner is SCR-DA-005's and C069 owns it. Profile Setup stays on the
+                // back stack so the captured image returns to the form it belongs to.
+                onCaptureRequested = { controller.navigate(DriverRoute.DocumentCapture.path) },
+                onComplete = { controller.replaceOnboarding(DriverRoute.Permissions) },
+            )
+        }
+        composable(DriverRoute.Permissions.path) {
+            PermissionsScreen(onContinue = { controller.replaceOnboarding(DriverRoute.Home) })
+        }
 
         // ---- C069 · vehicle onboarding -------------------------------------------------
         placeholder(DriverRoute.VehicleOnboarding, "SCR-DA-004 vehicle onboarding")
@@ -68,6 +91,21 @@ internal fun DriverNavHost(controller: NavHostController, modifier: Modifier = M
 /** Registers [route] with the standing placeholder. One line per screen the shell is waiting for. */
 private fun NavGraphBuilder.placeholder(route: DriverRoute, screen: String) {
     composable(route.path) { RoutePlaceholder(screen) }
+}
+
+/**
+ * Moves forward through onboarding, leaving nothing behind.
+ *
+ * Every step of cluster 1 is a one-way door: Back from Login must leave the app rather than
+ * return to the splash, Back from Profile Setup must not return to the OTP screen of a session
+ * that already exists, and Back from Home must never re-enter onboarding at all. Popping the
+ * whole graph on each step is what makes all three true with one rule (C068).
+ */
+private fun NavHostController.replaceOnboarding(route: DriverRoute) {
+    navigate(route.path) {
+        popUpTo(graph.id) { inclusive = true }
+        launchSingleTop = true
+    }
 }
 
 /**

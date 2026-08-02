@@ -2,7 +2,20 @@ package lk.mageride.driver.di
 
 import io.ktor.client.engine.HttpClientEngine
 import io.ktor.client.engine.okhttp.OkHttp
+import lk.mageride.driver.capture.DocumentCaptureCoordinator
+import lk.mageride.driver.onboarding.AndroidOnboardingPreferences
+import lk.mageride.driver.onboarding.DriverDocumentUploader
+import lk.mageride.driver.onboarding.DriverPermissions
+import lk.mageride.driver.onboarding.DriverProfileRepository
+import lk.mageride.driver.onboarding.LanguageCityViewModel
+import lk.mageride.driver.onboarding.LoginViewModel
+import lk.mageride.driver.onboarding.OnboardingPreferences
+import lk.mageride.driver.onboarding.OnboardingRepository
+import lk.mageride.driver.onboarding.ProfileSetupViewModel
+import lk.mageride.driver.onboarding.SplashViewModel
+import lk.mageride.driver.onboarding.UnavailableDriverDocumentUploader
 import lk.mageride.driver.push.PushRouter
+import lk.mageride.driver.push.PushTokenProvider
 import lk.mageride.driver.shell.ConnectivityMonitor
 import lk.mageride.shared.data.api.ApiConfig
 import lk.mageride.shared.data.api.AttestationProvider
@@ -16,6 +29,7 @@ import lk.mageride.shared.platform.PlatformAttestationProvider
 import lk.mageride.shared.platform.PlatformSecureStore
 import lk.mageride.shared.platform.SecureStore
 import org.koin.android.ext.koin.androidContext
+import org.koin.androidx.viewmodel.dsl.viewModel
 import org.koin.core.module.Module
 import org.koin.dsl.module
 
@@ -78,4 +92,36 @@ internal fun driverAppModule(environment: DriverEnvironment = DriverEnvironment.
     // ---- shell ------------------------------------------------------------------------
     single { ConnectivityMonitor(androidContext()) }
     single { PushRouter() }
+    single { PushTokenProvider() }
+
+    // ---- C068 · auth / onboarding -----------------------------------------------------
+    // The first-run answers are given before there is a session, so they live on the device and
+    // are pushed to `iam.users` on the first authenticated call (AL-26 language, AL-27 city).
+    single<OnboardingPreferences> { AndroidOnboardingPreferences(androidContext()) }
+    single { DriverPermissions(androidContext()) }
+
+    // The seam to SCR-DA-005 (C069). Process-wide because the scanner is a destination, not a
+    // dialog: the screen that asked for the capture is not composed while it is on screen.
+    single { DocumentCaptureCoordinator() }
+
+    // `PUT /v1/drivers/profile` takes `docs.uploads` ids and no contract route creates one for a
+    // driver's photo or licence. Bound to the implementation that says so rather than to one that
+    // invents an id — see `DriverDocumentUploader` and the C068 handoff.
+    single<DriverDocumentUploader> { UnavailableDriverDocumentUploader() }
+
+    single { OnboardingRepository(content = get(), iam = get(), preferences = get()) }
+    single { DriverProfileRepository(registry = get(), iam = get(), uploader = get()) }
+
+    viewModel { SplashViewModel(sessions = get(), profiles = get(), preferences = get()) }
+    viewModel { LanguageCityViewModel(repository = get()) }
+    viewModel {
+        LoginViewModel(
+            sessions = get(),
+            onboarding = get(),
+            profiles = get(),
+            preferences = get(),
+            pushTokens = get(),
+        )
+    }
+    viewModel { ProfileSetupViewModel(profiles = get(), captures = get()) }
 }
