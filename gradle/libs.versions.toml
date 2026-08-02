@@ -46,6 +46,33 @@ androidxCore = "1.18.0"      # newest whose AAR metadata still says minCompileSd
 androidxActivity = "1.11.0"
 androidxLifecycle = "2.10.0"
 
+# ---- App shell (C067) --------------------------------------------------------------
+# D2' §0.1: "a screen = a Compose @Composable route inside a NavHost/Scaffold". 2.9.8 is the
+# newest STABLE line — 2.10.0-beta01 is the only newer release and a beta navigation library
+# under eight screen groups is a bad trade.
+androidxNavigation = "2.9.8"
+# The foreground service's fix source (D6' §3, D5' §5). Google Maven, not Central.
+playServicesLocation = "21.4.0"
+# E-01's ride pushes. The BOM pins firebase-messaging; the `google-services` Gradle plugin is
+# deliberately NOT applied — it hard-fails without a `google-services.json`, and the Firebase
+# project is C124's (D7' §13 secrets). See the C067 handoff.
+firebaseBom = "34.17.0"
+# Koin's Android bindings — `androidContext()`, `androidLogger()`, `koinViewModel()`. Same
+# version line as the koin-core the shared module already carries.
+# (versioned by `koin` above)
+
+# ---- Map (C067) ---------------------------------------------------------------------
+# D2' §0.1/§0.3: "Maps are MapLibre GL Native (Android/iOS SDK) over self-served PMTiles on
+# Cloudflare R2 — no Google Maps". PMTiles is native from MapLibre Native 11 (the `pmtiles://`
+# file source is in the shipped .so).
+#
+# **The `-opengl` flavour, not the default `android-sdk`.** From 13.x the default artifact
+# declares `<uses-feature android:name="android.hardware.vulkan.version" android:required="true">`,
+# which Play uses to filter devices — on the URD NFR-22 floor (Android 8.0) that would cut off
+# exactly the budget handsets this platform is for. The OpenGL ES flavour carries the same
+# `org.maplibre.android` API. Do not swap it back without a micro-change-set.
+maplibre = "13.4.1"
+
 # ---- Realtime clients (C025) ---------------------------------------------------------
 # D6' §5: "Client = SignalR Java client (Android) / SignalR Swift client (iOS)". Microsoft
 # versions this artifact with ASP.NET Core, so 10.0.x is the line that matches the .NET 10
@@ -113,6 +140,11 @@ detekt = "1.23.8"
 ktlintGradle = "14.2.0"
 ktlint = "1.8.0"
 
+# ---- test (C067) --------------------------------------------------------------------
+# The last JUnit 4 release. AGP's local unit tests run on JUnit 4, and this is only here so
+# `kotlin-test` can resolve its `-junit` variant — no test imports `org.junit` directly.
+junit = "4.13.2"
+
 [plugins]
 android-application  = { id = "com.android.application",                   version.ref = "agp" }
 android-library      = { id = "com.android.library",                       version.ref = "agp" }
@@ -144,6 +176,27 @@ androidx-core-ktx          = { module = "androidx.core:core-ktx",               
 androidx-activity-compose  = { module = "androidx.activity:activity-compose",                  version.ref = "androidxActivity" }
 androidx-lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-runtime-compose", version.ref = "androidxLifecycle" }
 androidx-lifecycle-viewmodel-compose = { module = "androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "androidxLifecycle" }
+
+# ---- App shell (C067) ---------------------------------------------------------------------
+# Versionless where the Compose BOM covers it; pinned where it does not.
+compose-material-icons-extended = { module = "androidx.compose.material:material-icons-extended" }
+compose-ui-tooling             = { module = "androidx.compose.ui:ui-tooling" }
+compose-ui-test-junit4         = { module = "androidx.compose.ui:ui-test-junit4" }
+androidx-navigation-compose    = { module = "androidx.navigation:navigation-compose",  version.ref = "androidxNavigation" }
+androidx-lifecycle-service     = { module = "androidx.lifecycle:lifecycle-service",    version.ref = "androidxLifecycle" }
+androidx-lifecycle-process     = { module = "androidx.lifecycle:lifecycle-process",    version.ref = "androidxLifecycle" }
+# Koin's Android bindings. Same version line as koin-core, which `:shared` already exports.
+koin-android                   = { module = "io.insert-koin:koin-android",             version.ref = "koin" }
+koin-androidx-compose          = { module = "io.insert-koin:koin-androidx-compose",    version.ref = "koin" }
+# FusedLocationProviderClient — the foreground service's fix source.
+play-services-location         = { module = "com.google.android.gms:play-services-location", version.ref = "playServicesLocation" }
+# FCM. The BOM pins the version; see the `firebaseBom` note on the missing google-services plugin.
+firebase-bom                   = { module = "com.google.firebase:firebase-bom",        version.ref = "firebaseBom" }
+firebase-messaging             = { module = "com.google.firebase:firebase-messaging" }
+
+# ---- Map (C067) ---------------------------------------------------------------------------
+# The OpenGL ES flavour — see the `maplibre` version note on why not the default artifact.
+maplibre-android    = { module = "org.maplibre.gl:android-sdk-opengl", version.ref = "maplibre" }
 
 # ---- Realtime clients (C025) -------------------------------------------------------------
 # JVM/Android only. See the version comments: the iOS halves are C094's Swift clients.
@@ -200,6 +253,16 @@ sqlcipher-android                = { module = "net.zetetic:sqlcipher-android",  
 
 # ---- test ---------------------------------------------------------------------------
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
+# C067. `kotlin-test`'s Gradle metadata picks a framework variant from an attribute the Kotlin
+# Gradle Plugin sets — and AGP 9's BUILT-IN Kotlin support does not set it, so in an
+# `com.android.application` module plain `kotlin-test` resolves to no variant and `kotlin.test.Test`
+# does not exist. Naming the JUnit 4 variant outright is the fix; `junit` itself is what it needs
+# on the classpath. No test imports `org.junit` directly.
+# Named `kotlin-testjunit`, not `kotlin-test-junit`: the latter would make `kotlin-test` a GROUP
+# prefix as well as a leaf, and `libs.kotlin.test.get()` (shared/kmp's testKitElements) stops
+# resolving. A sibling alias keeps both usable.
+kotlin-testjunit = { module = "org.jetbrains.kotlin:kotlin-test-junit", version.ref = "kotlin" }
+junit       = { module = "junit:junit",                      version.ref = "junit" }
 turbine     = { module = "app.cash.turbine:turbine",         version.ref = "turbine" }
 # androidHostTest only — see the `snakeyaml` version comment.
 snakeyaml   = { module = "org.yaml:snakeyaml",               version.ref = "snakeyaml" }

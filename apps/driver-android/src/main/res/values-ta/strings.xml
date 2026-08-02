@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  MageRide Driver — shell strings, Tamil (ta).
+
+  Keys are in the same order as `values/strings.xml`; `StringResourceTest` fails the build if one
+  is missing, is left equal to the English, or drops a format placeholder.
+-->
+<resources>
+
+    <string name="app_name">MageRide ஓட்டுநர்</string>
+
+    <string name="nav_home">முகப்பு</string>
+    <string name="nav_jobs">வேலைகள்</string>
+    <string name="nav_wallet">பணப்பை</string>
+    <string name="nav_menu">மெனு</string>
+
+    <string name="offline_banner_message">இணைப்பு துண்டிக்கப்பட்டது — கடைசித் தகவல் காட்டப்படுகிறது</string>
+    <string name="offline_banner_restored">மீண்டும் இணைக்கப்பட்டது</string>
+
+    <string name="update_required_title">புதுப்பிப்பு தேவை</string>
+    <string name="update_mandatory_message">தொடர்வதற்கு MageRide ஓட்டுநர் புதிய பதிப்பு தேவை.</string>
+    <string name="update_optional_message">MageRide ஓட்டுநர் புதிய பதிப்பு கிடைக்கிறது.</string>
+    <string name="update_action_now">இப்போது புதுப்பிக்கவும்</string>
+    <string name="update_action_later">பின்னர்</string>
+
+    <string name="location_channel_name">இருப்பிடப் பகிர்வு</string>
+    <string name="location_channel_description">நீங்கள் ஆன்லைனில் அல்லது பயணத்தில் இருக்கும்போது உங்கள் இருப்பிடத்தை நேரலையில் வைத்திருக்கும்.</string>
+    <string name="location_notification_title">MageRide ஓட்டுநர் ஆன்லைனில் உள்ளது</string>
+    <string name="location_notification_text">உங்கள் இருப்பிடம் பகிரப்படுகிறது</string>
+    <string name="location_notification_buffering">ஆஃப்லைன் — %1$d இருப்பிடங்கள் சேமிக்கப்பட்டன</string>
+    <string name="location_notification_stop">ஆஃப்லைன் ஆகவும்</string>
+
+    <string name="push_channel_rides_name">பயண வாய்ப்புகள்</string>
+    <string name="push_channel_rides_description">வாடகை வாய்ப்புகள், பயணப் புதுப்பிப்புகள் மற்றும் ரத்துகள்.</string>
+    <string name="push_channel_general_name">பொது</string>
+    <string name="push_channel_general_description">அறிவிப்புகள், பணப்பை மற்றும் கணக்குத் தகவல்கள்.</string>
+
+    <string name="action_retry">மீண்டும் முயற்சி</string>
+    <string name="action_dismiss">நிராகரி</string>
+    <string name="action_close">மூடு</string>
+    <string name="error_generic">ஏதோ தவறு நடந்தது. மீண்டும் முயற்சிக்கவும்.</string>
+    <string name="session_expired">உங்கள் அமர்வு முடிந்தது. மீண்டும் உள்நுழையவும்.</string>
+
+    <string name="map_recentre">மையப்படுத்து</string>
+    <string name="map_content_description">வரைபடம்</string>
+
+    <string name="route_placeholder_title">இன்னும் உருவாக்கப்படவில்லை</string>
+    <string name="route_placeholder_body">%1$s அதன் திரைக் குழுவுடன் வழங்கப்படும்.</string>
+
+</resources>

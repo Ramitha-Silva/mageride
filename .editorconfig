@@ -63,6 +63,13 @@ indent_size = 4
 ij_kotlin_allow_trailing_comma = true
 ij_kotlin_allow_trailing_comma_on_call_site = true
 ktlint_code_style = intellij_idea
+# A `@Composable` function is PascalCase by convention — `Text`, `Scaffold`, `MageRideCta` — and
+# every Compose tutorial, sample and lint rule in the Android ecosystem assumes it. ktlint's
+# `function-naming` rule does not know that on its own, so the two would otherwise disagree on
+# every composable in both app shells (C067 / C076). Not a style preference: renaming them to
+# camelCase would make MageRide's composables the only ones on the platform that read like
+# ordinary functions.
+ktlint_function_naming_ignore_when_annotated_with = Composable
 
 [*.java]
 indent_size = 4

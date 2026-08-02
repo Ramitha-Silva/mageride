@@ -1,12 +1,73 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Walking-skeleton strings only.
+  MageRide Driver — shell strings (C067 driver-android-shell). English, the fallback locale.
 
-  NOT trilingual, and that is this component's fence rather than an oversight: the platform rule
-  is Si/Ta/En from resource files with no hard-coded literals (CLAUDE.md), and C069 owns the
-  driver app's real string catalogue. Three half-written translations of screens Wave 4a will
-  delete would be worse than none.
+  SCOPE. Only what the SHELL renders lives here: the app label, the bottom-nav tabs, the offline
+  banner, the update gate, the two notification channels and the foreground-service notification,
+  plus the handful of actions and errors every screen group shares. A screen group's own copy
+  belongs to that component (C068-C075) and is added to all three files together.
+
+  THE RULE (CLAUDE.md). Every user-facing string is Si + Ta + En, and nothing is hard-coded in a
+  composable. `StringResourceTest` fails the build if a key exists here and not in values-si or
+  values-ta, if a translation is left equal to the English, or if a format string does not carry
+  the same placeholders in all three.
+
+  ORDER. Si -> Ta -> En is the language ORDER the onboarding screen offers (AL-26); it is not the
+  fallback order. Android resolves an untranslated key to this file, which is why every key must
+  be present in the other two rather than relying on it.
 -->
 <resources>
-    <string name="app_name">MageRide Driver (skeleton)</string>
+
+    <!-- Launcher label. The brand name is not translated; the descriptor beside it is. -->
+    <string name="app_name">MageRide Driver</string>
+
+    <!-- Bottom navigation (AL-31). Four tabs; Menu is the entry point that replaces the
+         hamburger the dashboard must not have. -->
+    <string name="nav_home">Home</string>
+    <string name="nav_jobs">Jobs</string>
+    <string name="nav_wallet">Wallet</string>
+    <string name="nav_menu">Menu</string>
+
+    <!-- Offline banner (US-15.6, SCR-*-032): a top banner, never a full takeover. -->
+    <string name="offline_banner_message">Connection lost — showing last known</string>
+    <string name="offline_banner_restored">Back online</string>
+
+    <!-- App-update gate (D-31). `mandatory` blocks; `optional` is dismissible. -->
+    <string name="update_required_title">Update required</string>
+    <string name="update_mandatory_message">A newer version of MageRide Driver is needed to continue.</string>
+    <string name="update_optional_message">A newer version of MageRide Driver is available.</string>
+    <string name="update_action_now">Update now</string>
+    <string name="update_action_later">Later</string>
+
+    <!-- Foreground service (D6' §3). Its notification is the driver visible proof that the app is
+         publishing position, so the text says what is being shared, not that a service is running. -->
+    <string name="location_channel_name">Location sharing</string>
+    <string name="location_channel_description">Keeps your position live while you are online or on a trip.</string>
+    <string name="location_notification_title">MageRide Driver is online</string>
+    <string name="location_notification_text">Sharing your location</string>
+    <string name="location_notification_buffering">Offline — %1$d positions saved</string>
+    <string name="location_notification_stop">Go offline</string>
+
+    <!-- Push channels (E-01). Ride offers are high importance; everything else is not. -->
+    <string name="push_channel_rides_name">Ride offers</string>
+    <string name="push_channel_rides_description">Hire offers, ride updates and cancellations.</string>
+    <string name="push_channel_general_name">General</string>
+    <string name="push_channel_general_description">Announcements, wallet and account notices.</string>
+
+    <!-- Shared actions and errors. -->
+    <string name="action_retry">Retry</string>
+    <string name="action_dismiss">Dismiss</string>
+    <string name="action_close">Close</string>
+    <string name="error_generic">Something went wrong. Please try again.</string>
+    <string name="session_expired">Your session ended. Please sign in again.</string>
+
+    <!-- Map (D2' §0.3). The recentre FAB is on both apps. -->
+    <string name="map_recentre">Recentre</string>
+    <string name="map_content_description">Map</string>
+
+    <!-- A route the shell knows about whose screen group has not landed. Trilingual because it
+         renders on a real device during wave 4a, same as anything else. -->
+    <string name="route_placeholder_title">Not built yet</string>
+    <string name="route_placeholder_body">%1$s arrives with its screen group.</string>
+
 </resources>

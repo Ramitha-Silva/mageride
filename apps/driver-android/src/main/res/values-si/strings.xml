@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  MageRide Driver — shell strings, Sinhala (si).
+
+  Sinhala is the DEFAULT language the onboarding screen offers (AL-26), not a secondary
+  translation: most drivers on this platform will never change it. Keys are in the same order as
+  `values/strings.xml`; `StringResourceTest` fails the build if one is missing.
+-->
+<resources>
+
+    <string name="app_name">MageRide රියදුරු</string>
+
+    <string name="nav_home">මුල් පිටුව</string>
+    <string name="nav_jobs">රැකියා</string>
+    <string name="nav_wallet">පසුම්බිය</string>
+    <string name="nav_menu">මෙනුව</string>
+
+    <string name="offline_banner_message">සම්බන්ධතාවය නැති විය — අවසන් තොරතුරු පෙන්වයි</string>
+    <string name="offline_banner_restored">නැවත සබැඳි විය</string>
+
+    <string name="update_required_title">යාවත්කාලීන කිරීම අවශ්‍යයි</string>
+    <string name="update_mandatory_message">දිගටම කරගෙන යාමට MageRide රියදුරු නව අනුවාදයක් අවශ්‍යයි.</string>
+    <string name="update_optional_message">MageRide රියදුරු නව අනුවාදයක් තිබේ.</string>
+    <string name="update_action_now">දැන් යාවත්කාලීන කරන්න</string>
+    <string name="update_action_later">පසුව</string>
+
+    <string name="location_channel_name">ස්ථානය බෙදාගැනීම</string>
+    <string name="location_channel_description">ඔබ සබැඳිව හෝ ගමනක සිටින විට ඔබේ ස්ථානය සජීවීව තබා ගනී.</string>
+    <string name="location_notification_title">MageRide රියදුරු සබැඳියි</string>
+    <string name="location_notification_text">ඔබේ ස්ථානය බෙදා ගනිමින්</string>
+    <string name="location_notification_buffering">ඕෆ්ලයින් — ස්ථාන %1$d ක් සුරකින ලදී</string>
+    <string name="location_notification_stop">ඕෆ්ලයින් වන්න</string>
+
+    <string name="push_channel_rides_name">ගමන් ඉල්ලීම්</string>
+    <string name="push_channel_rides_description">කුලී ඉල්ලීම්, ගමන් යාවත්කාලීන සහ අවලංගු කිරීම්.</string>
+    <string name="push_channel_general_name">සාමාන්‍ය</string>
+    <string name="push_channel_general_description">නිවේදන, පසුම්බිය සහ ගිණුම් දැනුම්දීම්.</string>
+
+    <string name="action_retry">නැවත උත්සාහ කරන්න</string>
+    <string name="action_dismiss">ඉවත් කරන්න</string>
+    <string name="action_close">වසන්න</string>
+    <string name="error_generic">යම් දෝෂයක් ඇති විය. නැවත උත්සාහ කරන්න.</string>
+    <string name="session_expired">ඔබේ සැසිය අවසන් විය. නැවත පිවිසෙන්න.</string>
+
+    <string name="map_recentre">නැවත මධ්‍යගත කරන්න</string>
+    <string name="map_content_description">සිතියම</string>
+
+    <string name="route_placeholder_title">තවම සාදා නැත</string>
+    <string name="route_placeholder_body">%1$s එහි තිර කාණ්ඩය සමඟ ලැබේ.</string>
+
+</resources>

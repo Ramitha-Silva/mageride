@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Debug-only manifest overlay (C067).
+
+  The dev gateway is `http://10.0.2.2:5000` — plain HTTP inside the emulator's loopback — and the
+  dev PMTiles archive is served the same way. `usesCleartextTraffic` is scoped to this variant so
+  the release manifest physically cannot carry it; production is HTTPS at HAProxy (ADD §12.2).
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <application
+        android:usesCleartextTraffic="true"
+        tools:targetApi="m" />
+</manifest>

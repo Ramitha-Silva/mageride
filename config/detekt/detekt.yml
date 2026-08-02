@@ -11,7 +11,9 @@
 #
 # Test source-set names follow AGP 9's Kotlin-Multiplatform library plugin: `androidHostTest`
 # (local JVM unit tests) and `androidDeviceTest` (instrumented), not the variant-era
-# `androidUnitTest` / `androidInstrumentedTest`.
+# `androidUnitTest` / `androidInstrumentedTest`. The **application** modules (`apps/*-android`,
+# C067/C076) are on `com.android.application`, which does have build variants, so their local
+# unit tests are the conventional `src/test` — every test exclusion below names both spellings.
 
 config:
   validation: true
@@ -23,12 +25,21 @@ style:
     maxLineLength: 120
   MagicNumber:
     # A test's whole job is to name a concrete value; forcing every one into a constant makes
-    # the expectation harder to read, not easier.
+    # the expectation harder to read, not easier. `src/test` is the AGP application-module
+    # spelling of the same thing (C067) — that plugin has build variants, so its local unit
+    # tests live in `src/test`, not `androidHostTest`.
+    #
+    # `ui/theme` is the D2' §0.2 token table transcribed. Every number in it is the spec's and
+    # the property name IS the token name — `val Primary = Color(0xFFFF6D00)`. Hoisting each
+    # hex to a `const` above the property it names would double the file and put the token one
+    # line further from its value, which is the opposite of what this rule is for. C067.
     excludes:
       - '**/commonTest/**'
       - '**/androidHostTest/**'
       - '**/androidDeviceTest/**'
       - '**/iosTest/**'
+      - '**/src/test/**'
+      - '**/ui/theme/**'
     # An enum entry's argument is already named — by the entry. `NMEA_MQTT(4)` is the wire code
     # of a `SMALLINT CHECK (source BETWEEN 0 AND 4)` column (C006); hoisting it to a constant
     # would put the number one line further from the name it belongs to. C012.
@@ -46,6 +57,7 @@ naming:
       - '**/androidHostTest/**'
       - '**/androidDeviceTest/**'
       - '**/iosTest/**'
+      - '**/src/test/**'
 
 complexity:
   LongParameterList:
@@ -75,6 +87,7 @@ complexity:
       - '**/androidHostTest/**'
       - '**/androidDeviceTest/**'
       - '**/iosTest/**'
+      - '**/src/test/**'
   TooManyFunctions:
     # A repository interface's function count IS the operation set of the table behind it:
     # `OutboxStore` declares thirteen because `mobile_db_schema.md` §1.4's write path needs
@@ -91,6 +104,7 @@ complexity:
       - '**/androidHostTest/**'
       - '**/androidDeviceTest/**'
       - '**/iosTest/**'
+      - '**/src/test/**'
 
 exceptions:
   TooGenericExceptionCaught:
@@ -100,3 +114,4 @@ exceptions:
     excludes:
       - '**/commonTest/**'
       - '**/androidHostTest/**'
+      - '**/src/test/**'

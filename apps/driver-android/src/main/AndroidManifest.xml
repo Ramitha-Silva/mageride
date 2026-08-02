@@ -1,35 +1,95 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Driver Android — walking-skeleton shell (C025).
+  MageRide Driver — application shell (C067).
 
-  INTERNET is the only permission. The real app needs location (C070's home map centres on the
-  passenger) and notifications (E-01's ride pushes), and both belong with the screens that
-  justify them: a permission asked for by a shell nobody ships is a permission nobody reviews.
+  PERMISSIONS ARE A SCREEN'S JUSTIFICATION, NOT A SHELL'S CONVENIENCE. Every one below exists
+  because something in this component needs it, and SCR-DA-007 (C068) is where the driver is asked
+  for the runtime ones with a rationale. Nothing is declared "in case a later screen wants it".
 
-  `usesCleartextTraffic` is on for the debug build alone, because the dev gateway is
-  `http://10.0.2.2:5000` — plain HTTP inside the emulator's loopback. Production is HTTPS at
-  HAProxy (ADD §12.2) and the release manifest must not carry this.
+  `usesCleartextTraffic` is NOT here — it belongs to the debug variant alone and lives in
+  src/debug/AndroidManifest.xml. Production is HTTPS at HAProxy (ADD §12.2).
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!-- D6' §3 / D5' §5 — the position plane. BACKGROUND_LOCATION is what keeps the stream alive
+         with the app behind the lock screen, which is where a mounted handset spends a ride. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+
+    <!-- The PARTIAL_WAKE_LOCK the position service holds so Doze cannot stretch the D5' §5.2
+         cadence into minutes. See PositionForegroundService. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!-- E-01's ride offers live 15 seconds; a driver who cannot be notified cannot be dispatched. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- SCR-DA-007's battery-optimisation intent. Declaring it lets the screen open the system
+         dialog; the app never assumes the exemption was granted. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
+    <!-- GPS is not `required`: a handset without it can still hold an account, see its wallet and
+         complete onboarding. What it cannot do is go online, and the dashboard says so. -->
+    <uses-feature android:name="android.hardware.location.gps" android:required="false" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+
     <application
+        android:name=".DriverApplication"
         android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
-        android:supportsRtl="true"
-        android:usesCleartextTraffic="true"
-        android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        android:supportsRtl="false"
+        android:theme="@style/Theme.MageRideDriver">
 
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:label="@string/app_name">
+            android:label="@string/app_name"
+            android:launchMode="singleTop"
+            android:windowSoftInputMode="adjustResize">
+
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <!-- notification-svc's deep links (`DeepLinks` in its EventHandlers.cs; D6' I-23.3):
+                 mageride://ride/{id}, //package/{id}, //wallet, //documents. `PushRouter` resolves
+                 the URI against the known route table rather than navigating to it directly. -->
+            <intent-filter android:autoVerify="false">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="mageride" />
+            </intent-filter>
         </activity>
+
+        <!-- D6' §3: the MQTT client lives in a native foreground service. `location` is the type
+             that keeps FusedLocation delivering with the screen off. -->
+        <service
+            android:name=".location.PositionForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="location" />
+
+        <!-- E-01. A backgrounded app has no socket (`signalr-hub.md` §6), so this is the only
+             delivery path for an offer that has 15 seconds to live. -->
+        <service
+            android:name=".push.DriverMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="ride_offers" />
+
     </application>
 </manifest>

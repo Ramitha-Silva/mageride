@@ -93,7 +93,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C064 | admin-bff-directories | 3 | DONE | 2026-08-01 | **15 directory tests green** (`--filter Category=Directories`) and **122/122** across the whole `AdminBff.Tests` suite (was 101), integration against a real Postgres because every DoD item is a claim about a joined view; **5 index-only migrations (0109, 0317, 0507, 0610, 1110)** — no new table and no new column, three directories over other services' tables needing two keyset orderings and three reverse lookups nobody had needed before; **each directory is gated on the URD §2.3 row whose cells are *exactly* D3''s printed role list, with ◐ fenced by `RequirePlatformWideFeature`** — Support for passengers (not Passenger, whose PAX cell is ✅ and would let any passenger list every passenger), Driver-wallet for drivers and Fleet-monitoring for vehicles (not Driver-app / Fleet-operations, which both give Finance ➖ where BR-28.8 names Finance) — so the two specs agree instead of one overruling the other; **two rows, two questions**: the row above opens the screen, `account-management · write` held unscoped unmasks it, which is what makes "a Support CSR sees masked PII" fall out of the matrix rather than out of a hard-coded role list; **a list is masked for every role**, so every clear MSISDN this surface has emitted has a `PII_READ` row behind it; **one detail open is exactly one `PII_READ` row** and the row records `piiRevealed`, because the actor alone does not answer the question a privacy investigation asks; **the vehicle detail is audited too** (URD §2.3's clause names all three, `server_db_schema.md` §23 names two — micro-change-set); **the page is chosen before anything is counted** — keyset index under a LIMIT, then LATERAL per-row aggregates — which is why 10k rows answer the first page at **29.5 ms p95** against a 500 ms budget; `migrate-verify.sh` **461/461**, Spectral 0 errors, solution build 0 warnings; 1 spec conflict resolved, 3 micro-change-sets |
 | C065 | admin-bff-finance-pdpa | 3 | DONE | 2026-08-01 | **27 finance/PDPA tests green** (`--filter Category=FinancePdpa`) and **162/162** across the whole `AdminBff.Tests` suite (was 122); **four migrations, none of them a table** — `0110 iam.users.anonymised_at` (the column an erasure writes, which is what finally makes C064's `PassengerRow.status='deleted'` producible), `1314 pdpa.requests.decided_by/.decision_reason` (D3' gives `/reject` a required reason and §16 gave it nowhere to go), and two read-path indexes (`1008` the R-19 Overpaid queue, `1111` the per-rail settlement read); **the finance surface writes nothing** — wallet-svc posts the reversal, fare-svc raises the refund, reputation-svc resolves a flag — asserted as a class with no `INSERT` and against the route table by `Only_two_finance_routes_mutate_and_both_forward`; **four URD §2.3 rows, not one**, and the fence "reversals are Finance/Super-Admin only" falls out of the matrix rather than out of a role list; **the exception queue's four classes are derived, never stored**, because wallet-svc records no exception column; **an erasure's hold list has two kinds of entry** — blocking (409, lifts on its own) and retention (`FulfilledHold`) — and conflating them would either refuse every erasure for ever or anonymise somebody mid-ride; **`audit.events` is never touched and the fulfilment writes to it**; **`/v1/pdpa` is the one prefix outside `/v1/admin`** and the start-up guard names it; `migrate-verify.sh` **469/469**, Spectral 0 errors, solution build 0 warnings; **1 spec conflict resolved, 5 micro-change-sets** |
 | C066 | public-bff | 3 | DONE | 2026-08-01 | **51/51 green** in a new `PublicBff.Tests` suite that boots a real ride-svc and a real safety-svc, because three DoD items are claims about *their* rows; **no migration** — every row this surface reads was landed by C004/C005/C037/C052 and the two it writes are columns 0901 created for this caller; **no authentication scheme is registered at all**, so the token in the path is the credential by construction and the start-up guard refuses a route that asks for authorization, sits outside `/public/track`, escapes the token gate, or is named `/call` (AL-48); **each scope is a closed type with no field for what it may not carry**, asserted on the JSON rather than on the DTO because the half that matters is what is absent; **the 410 is asserted on the body**, not the status code; **the `deliveryOtp` hole is closed** — ride-svc keeps only the digest and notification-svc deliberately keeps the code out of the SMS *because this page shows it*, so the unregistered recipient could not learn their own code until C066 gave notification-svc a kernel Redis key to leave it in; **the web SOS is safety-svc's** (`POST /v1/internal/safety/sos/web`, the seam C052 named) and the booker's MSISDN never reaches this process; **the live cursor describes what the client knows and indexes nothing**, so a replica that never served a stream resumes it and no buffer exists to replay (D-34); Spectral 0 errors, solution build 0 warnings; **3 spec gaps recorded, 5 micro-change-sets**; also fixed a **pre-existing, calendar-triggered** failure in `Notification.Api.Tests` (85/86 → **86/86**) where a pinned fake clock was compared against a `now()`-seeded column — the row is now aged against the clock the production sweep actually reads |
-| C067 | driver-android-shell | 4a | PENDING | | |
+| C067 | driver-android-shell | 4a | DONE | 2026-08-01 | **34 tests green** in a new `apps/driver-android` unit-test source set and `assembleDebug` clean, plus `detekt`/`ktlintCheck`; C025's walking skeleton **deleted** (4 files) and replaced by the real shell — Koin graph binding the five things `:shared` leaves to an app, `MageRideTheme` transcribed from D2' §0.2 with **Outfit + Inter shipped as real OFL fonts**, trilingual `values`/`values-si`/`values-ta` with a test that fails on a key present in one file and not the others, a `NavHost` registering **every** C068–C075 destination as a placeholder so no screen group invents a path, the AL-31 four-tab bottom bar with **no hamburger**, a MapLibre **OpenGL-flavour** host over `pmtiles://` with light/dark styles, and the D6' §3 foreground service (FusedLocation + HiveMQ + wake lock + `PositionPipeline`, whose R-17 replay and D5' §5.2 cadence are asserted on the JVM with no radio); **FCM registered but inert** — no `google-services.json` (C124); **Play Integrity wired but not verified on a device**; **the wave-1 `:shared` gate is red on arrival** and not from anything here — see the handoff |
 | C068 | driver-android-auth-onboarding | 4a | PENDING | | |
 | C069 | driver-android-vehicle-onboarding | 4a | PENDING | | |
 | C070 | driver-android-dashboard-dispatch | 4a | PENDING | | |
@@ -10544,3 +10544,190 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   it boots **three** WebApplications per test (public-bff, a real ride-svc, a real safety-svc) plus a
   recording notification stub. `MageRide.Shared.Tests` ~35 s. **No new NuGet reference, no new
   migration, no new PostgreSQL extension** — one new project pair and one new Redis key.
+
+- **Component:** C067 driver-android-shell — 2026-08-01
+- **Status:** DONE (with two lines verifiable only on a device, named below) —
+  `./gradlew :apps:driver-android:testDebugUnitTest :apps:driver-android:assembleDebug` green:
+  **34 tests passed, 0 failed, 0 skipped** in a new unit-test source set, and a debug APK that
+  builds from clean. `./gradlew :apps:driver-android:detekt :apps:driver-android:ktlintCheck`
+  clean. C025's walking-skeleton composables (`MainActivity`'s body, `MainViewModel`,
+  `SkeletonClient`, `DriverMqtt`) are **deleted**, as that component said they would be; nothing in
+  this module is throwaway now. ~2,300 lines of Kotlin, ~600 of test, two shipped font binaries and
+  two MapLibre style resources.
+
+  **Two DoD lines are wired and asserted as far as this host allows, and no further.** *"the
+  foreground service survives Doze and keeps publishing at the phase-appropriate cadence"* — the
+  cadence, the coalesce rule and the broker ceiling are asserted in `PositionPipelineTest`, and the
+  Doze half is a `PARTIAL_WAKE_LOCK` plus `foregroundServiceType="location"` whose **declarations**
+  `ManifestTest` checks; Doze itself needs an idle handset. *"Play Integrity tokens reach the
+  `X-Attestation` header on sensitive calls"* — the app binds `PlatformAttestationProvider` over
+  C013's `Unavailable` default and warms it up in `Application.onCreate`, and C013's suite already
+  proves the header goes out on exactly the operations declaring it; but
+  `INTEGRITY_CLOUD_PROJECT` is `0` in both build types because **no Play Console project exists
+  yet** (C124), so on this build the provider correctly answers `null` and the gateway correctly
+  answers 401. Both need a device and a Play Console entry, and both are C124's to finish.
+- **Notes:**
+  **The wave-1 gate was already red when this component started, and not because of it.**
+  `./gradlew :shared:testDebugUnitTest` fails in `ApiOperationTableTest` and `ContractCoverageTest`.
+  Reproduced with **every file this component touched outside `apps/driver-android` stashed**
+  (`.editorconfig`, `config/detekt/detekt.yml`, `gradle/libs.versions.toml`,
+  `apps/driver-android/build.gradle.kts`) — still red. The cause is drift between
+  `backend/contracts` and the KMP client: `backend/contracts/*.yaml` last changed at C066 and
+  `ApiOperations.kt` last changed at **C025**. Concretely, `bindOnepayMerchant`,
+  `lankaqrPaymentConfirm`, `modeBOnepayWebhook` and `onepayPaymentWebhook` are still declared by
+  `RegistryApi`/`FareApi` and the fake's table but have been **removed from the contracts** (C028's
+  D-11 retirement and the webhooks moving server-side), and the scan now sees **26** contract files
+  where C019 wrote "the sixteen contracts". **This is C012/C013's to close, not a screen group's** —
+  and it blocks the manifest's "no wave N+1 work begins until all wave N verify commands pass" for
+  the whole of wave 4a. Raised as a micro-change-set.
+
+  **Decisions —**
+  (1) **The MapLibre artifact is `android-sdk-opengl`, not `android-sdk`.** From 13.x the default
+  artifact's own manifest declares
+  `<uses-feature android:name="android.hardware.vulkan.version" android:required="true">`, which
+  Play uses as a **device filter**. On the URD NFR-22 floor (Android 8.0) that removes exactly the
+  budget handsets this platform exists for. Verified by unpacking both AARs: the OpenGL flavour
+  carries the identical `org.maplibre.android` API and no Vulkan feature. `android-sdk-ktx` is
+  deliberately absent — it depends on the default artifact, and having both fails
+  `checkDuplicateClasses` on every class in the package.
+  (2) **PMTiles needs no protocol shim.** The `pmtiles://` file source is compiled into the shipped
+  `.so` (confirmed by grepping `libmaplibre.so`), so `MapStyles` only has to substitute the archive
+  URL into the style JSON. That is the whole reason D2' §0.1 could choose "self-served PMTiles on
+  R2" over a tile server.
+  (3) **The cartography is deliberately thin.** `res/raw/map_style_{light,dark}.json` carry nine
+  layers each against the Protomaps basemap's source-layer names — background, earth, landuse,
+  water, road casing and fill, buildings, boundaries, place labels — in the §0.2 palette. It is a
+  legible map, not a designed one. **A full basemap style is a design asset**, and a shell that
+  invented one would be making cartographic decisions nobody reviewed. C077 (the passenger live
+  map) is the natural owner if the two apps are to share one.
+  (4) **Outfit and Inter ship as real font binaries.** §0.2 names both, and a type scale with the
+  platform default face is not that scale. Both are upstream **variable** fonts (no static cuts
+  exist for either family), which is why one file covers every weight: Compose fills in
+  `FontVariation.Settings(weight, style)` and Android has honoured `wght` since API 26 — exactly
+  the minSdk floor. **Si and Ta are not covered by either family** and fall back to Noto Sans
+  Sinhala / Noto Sans Tamil, which every Android 8.0 handset ships: the sizes and weights still
+  apply, the face does not. That is a real deviation from §0.2 for two of the three languages and
+  is recorded rather than papered over — closing it needs a licensed Sinhala/Tamil face, which is a
+  design procurement decision.
+  (5) **No dynamic colour.** M3's `dynamicLightColorScheme` would hand the app the wallpaper's
+  palette on Android 12+; §0.2 is explicit that the table is the single source of truth shared with
+  Figma, SwiftUI and the Tailwind preset. `ThemeTokensTest` types every expectation from the spec
+  rather than reading it back out of the production object, which is the only way a test of a
+  constant is worth anything.
+  (6) **The route table is the shell's; the screens are the groups'.** `nav/DriverRoute.kt` declares
+  every C068–C075 destination and `DriverNavHost` registers all of them as placeholders today. A
+  screen group replaces the body of its own routes and touches nothing else — which is what makes
+  AL-27's `Profile Setup → Permissions → Home` a compile-time reference instead of a string three
+  components have to spell identically.
+  (7) **`gps_buffer` is the record; `PositionReplayQueue` is the pacing window over it.** C017's
+  ring and C018's table overlap, and holding the backlog in only one of them is wrong in both
+  directions: memory alone loses it on a process kill, disk alone drops every R-09 rate rule.
+  `PositionPipeline` records first, publishes second, and refills the ring from disk on reconnect;
+  `buffer()` drops anything at or below the highest `seq` it has seen, so refilling is idempotent.
+  (8) **A fix the cadence rejects consumes no `seq`.** `seq` numbers what was captured for the wire,
+  and burning one per rejected tick would run the server's watermark ahead of the samples it exists
+  to order. Asserted.
+  (9) **A clean disconnect publishes `offline` explicitly.** The broker does *not* fire the last
+  will on a graceful DISCONNECT, so without that publish a driver who goes offline deliberately is
+  indistinguishable from one whose phone died — except that nobody is told at all (R-15, T-04).
+  (10) **`DriverEnvironment` is the only file allowed to read `BuildConfig`.** The gateway origin
+  and the MQTT host are the two values a release build cannot afford to have wrong, and a value
+  read at two call sites is one that gets overridden at one of them.
+  (11) **The update gate is the single subscriber to `MageRideApiSignals.upgradeRequired`.** D-31
+  runs at the edge on every route, so any of the 176 operations can answer 426; a mandatory gate
+  swallows `onDismissRequest` (there is no other hook for the scrim and the back button) and an
+  optional one must not, or a driver mid-shift is blocked by a release that did not require it. The
+  payload survives rotation through a hand-written `Saver`, because `UpgradeRequiredSignal` is a
+  `:shared` data class and cannot be `Parcelable`.
+  (12) **The deep link is resolved against the route table, never handed to the navigator.**
+  `PushRouter` parses by hand rather than with `android.net.Uri` so the mapping is asserted on the
+  JVM. A `ride_offer` push routes to **Home** whatever `deeplink` it carries: `offer.created` mints
+  the *passenger's* ride link, and E-01's offer is a 15-second takeover the dashboard owns.
+  (13) **Two notification channels, not one per type.** A channel is the unit a *user* silences, and
+  a driver who mutes wallet reminders must not thereby mute a ride offer. The split follows
+  notification-svc's own `priority` field.
+  (14) **Four config files outside this module changed, each once.** `gradle/libs.versions.toml`
+  (the C067 entries it was reserved for, plus `androidCompileSdk` **confirmed at 36** as C001 asked
+  — 37 exists but `androidx.core` 1.19.0 is the only thing that wants it and it is not on this
+  build); `config/detekt/detekt.yml` (`**/src/test/**` beside the KMP test-source globs, because an
+  application module has build variants and its unit tests live in `src/test`; plus `**/ui/theme/**`
+  for `MagicNumber`, where the property name *is* the token name); `.editorconfig`
+  (`ktlint_function_naming_ignore_when_annotated_with = Composable` — PascalCase composables are the
+  ecosystem's convention and both app shells need it); and `apps/driver-android/CLAUDE.md`,
+  rewritten for the shell.
+
+  **Gaps found —**
+  (a) ***`POST /v1/notify/ack` has no KMP client function.*** C051's handoff asks the app to "call
+  it from the silent data message's handler with `data.notificationId`, inside three seconds", and
+  `notification.yaml` declares `acknowledgeNotification` — but `NotificationApi` (C013, which ran
+  before C051) has only `registerPushToken`, `updateNotificationPreferences` and `sendNotification`.
+  `DriverMessagingService` therefore reads `notificationId` off every push and does not ack.
+  **C012/C013's to add**; it is the same drift as the gate failure above and should be closed in one
+  pass.
+  (b) ***The foreground service cannot learn its own vehicle id.*** `START_STICKY` recreation does
+  not redeliver the intent, so the service stops itself when restarted without one. The real answer
+  is to re-read the active vehicle from `active_ride`/`vehicles` on restart — that row is **C069's**
+  (vehicle management) and **C070's** (the standby toggle that starts the service). Recorded rather
+  than guessed at: inventing a "last vehicle" key here would be the shell deciding which vehicle a
+  driver is on.
+  (c) ***No `google-services.json`, so FCM is inert.*** The `google-services` plugin is deliberately
+  not applied — it hard-fails the build without that file. `DriverMessagingService` is registered
+  and correct; it will not receive anything until C124 lands the Firebase project (D7' §13's
+  secrets). **A backgrounded app has no socket** (`signalr-hub.md` §6), so until then a
+  backgrounded driver cannot be offered a ride at all. Worth knowing before anyone tests E-01
+  end to end.
+  (d) ***The debug APK is 77 MB, and ~70 MB of that is MapLibre.*** Four ABIs of native renderer,
+  unsplit and unshrunk. On a Sri Lankan data plan that is not shippable, and it is not a debug-only
+  artefact of this build — the native libraries are the same in release. **C103** should add
+  `splits { abi { … } }` or an App Bundle (Play delivers one ABI per device, which takes it to
+  ~25 MB) and R8 for the Java half. Recorded here because the number is a property of the
+  dependency this component chose, not of the release configuration that will carry it.
+  (e) ***`res/raw/map_style_*.json` name a glyph endpoint that does not exist yet.***
+  `https://tiles.mageride.lk/fonts/{fontstack}/{range}.pbf` — MapLibre needs SDF glyph PBFs for
+  `text-field`, and the PMTiles archive does not carry them. Place labels will not render until that
+  path is served beside the archive. **Infra, not app**: same bucket, one `fonts/` prefix.
+
+  **For later components —**
+  **C068–C075 (the screen groups):** your routes already exist in `nav/DriverRoute.kt` — use them,
+  do not add paths. Replace your `placeholder(...)` line in `DriverNavHost`; that is the only
+  `NavHost` in the app and a second one would fork the back stack. Add strings to **all three**
+  `strings.xml` files in the same commit (`StringResourceTest` fails on a missing key, on a
+  translation left in English, and on a dropped format placeholder). Use `MageRideCta` for the
+  wireframes' full-width orange bar and `MageRideTheme.*` for every dp — `ThemeTokensTest` is what
+  keeps §0.2 true. The bottom bar appears on the four tab routes only; anything full-bleed is
+  correct by default.
+  **C070 (dashboard):** `PositionForegroundService.start(context, vehicleId)` is the standby
+  toggle's other half, and gap (b) is yours to close. `MageRideMap`'s `onMapReady` hands you the
+  `Style`; `VehicleLayers.addVehicles/addCircles` install the MAP-03/05/06/02/10 primitives and
+  `markerColourExpression` takes the theme's colours so no hex is written twice. You still ship the
+  marker **image** — `style.addImage(...)` — because the icon is per vehicle type and that is a
+  screen's decision.
+  **C076 (passenger-android shell):** everything in `ui/theme`, `nav/DriverTab`'s pattern,
+  `ConnectivityMonitor`, `OfflineBanner`, `UpdateGate` and `MageRideMap` are written to be lifted
+  almost verbatim — they contain nothing driver-specific except the tab set. **Do not copy them into
+  a third place**: if the passenger shell needs them, promote them to a shared Android UI module in
+  that session and leave one implementation. The catalogue entries, the detekt excludes and the
+  `.editorconfig` composable rule are already in place for you. Bind `AppSurface.PASSENGER` and
+  `MageRideApp.PASSENGER`, and note the passenger app needs **no** foreground service.
+  **C085 (driver iOS):** the D2' §0.2 hexes in `ui/theme/Color.kt` and the eight type rows are the
+  asset catalogue's; `nav/DriverRoute.kt`'s path strings are the `NavigationStack` route names.
+  Keep both in step — a divergence shows up as two apps that look almost the same.
+  **C103 / C124 (release):** signing, R8 and the `INTEGRITY_CLOUD_PROJECT` / `google-services.json`
+  pair are yours; the release build type already fixes the production gateway, MQTT host and PMTiles
+  URL so a release build cannot be pointed at a laptop by omission.
+
+  **Build host —** no Docker and no compose stack; the replica stayed down throughout. Gradle and
+  the Android SDK at `/opt/android-sdk` only. Five new coordinates, all Android-only:
+  `androidx.navigation:navigation-compose` 2.9.8 (the newest **stable** line — 2.10.0-beta01 is the
+  only newer release and a beta navigation library under eight screen groups is a bad trade),
+  `io.insert-koin:koin-android`/`koin-androidx-compose` 4.2.2, `com.google.android.gms:play-services-location`
+  21.4.0, the Firebase BOM 34.17.0 with `firebase-messaging`, and `org.maplibre.gl:android-sdk-opengl`
+  13.4.1. A clean `assembleDebug` takes ~4 min cold, ~20 s warm; MapLibre alone is a ~196 MB AAR
+  (four ABIs of native code), which is most of the first build. Three things worth knowing next
+  time: **Kotlin block comments nest**, so a KDoc containing `values*/strings.xml` closes on the
+  `*/` and the file stops parsing several declarations later (the same trap C014 recorded);
+  **`kotlin-test` resolves to no variant at all** under AGP 9's built-in Kotlin, so an application
+  module needs the `kotlin-test-junit` artifact by name — and the catalogue alias must **not** be
+  spelled `kotlin-test-junit`, because that turns `kotlin-test` into a group and breaks
+  `libs.kotlin.test.get()` in `shared/kmp/build.gradle.kts`; and AGP 9 deprecated
+  `resourceConfigurations` in favour of `androidResources.localeFilters`.

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The Activity theme, light appearance.
+
+  Almost nothing: every pixel of this app is Compose, and `MageRideTheme` (ui/theme/Theme.kt) is
+  where D2' §0.2's tokens live. What an Android theme is still needed for is the window itself —
+  the background the system draws before the first frame, and the status/navigation bars
+  `enableEdgeToEdge()` draws behind. A colour here that disagreed with the Compose theme would show
+  as a flash of the wrong colour on every cold start, which is why the two backgrounds match.
+-->
+<resources>
+    <style name="Theme.MageRideDriver" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/window_background</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+    </style>
+</resources>
