@@ -53,6 +53,12 @@ androidxLifecycle = "2.10.0"
 androidxNavigation = "2.9.8"
 # The foreground service's fix source (D6' §3, D5' §5). Google Maven, not Central.
 playServicesLocation = "21.4.0"
+
+# ---- Document scanner (C069, AL-43) -------------------------------------------------
+# CameraX. ADD AL-43 names `ImageCapture` as the Android half of SCR-DA-005; 1.6.1 is the newest
+# stable whose AAR metadata still says minCompileSdk=36 (1.7.x is alpha). Its own floor is API 21,
+# well under URD NFR-22's Android 8.0.
+camerax = "1.6.1"
 # E-01's ride pushes. The BOM pins firebase-messaging; the `google-services` Gradle plugin is
 # deliberately NOT applied — it hard-fails without a `google-services.json`, and the Firebase
 # project is C124's (D7' §13 secrets). See the C067 handoff.
@@ -193,6 +199,14 @@ play-services-location         = { module = "com.google.android.gms:play-service
 # FCM. The BOM pins the version; see the `firebaseBom` note on the missing google-services plugin.
 firebase-bom                   = { module = "com.google.firebase:firebase-bom",        version.ref = "firebaseBom" }
 firebase-messaging             = { module = "com.google.firebase:firebase-messaging" }
+
+# ---- Document scanner (C069) --------------------------------------------------------------
+# SCR-DA-005's viewfinder. `camera-view` carries `PreviewView`; `camera-lifecycle` is what binds
+# the use cases to a `LifecycleOwner` so the camera is released with the composable.
+androidx-camera-core      = { module = "androidx.camera:camera-core",      version.ref = "camerax" }
+androidx-camera-camera2   = { module = "androidx.camera:camera-camera2",   version.ref = "camerax" }
+androidx-camera-lifecycle = { module = "androidx.camera:camera-lifecycle", version.ref = "camerax" }
+androidx-camera-view      = { module = "androidx.camera:camera-view",      version.ref = "camerax" }
 
 # ---- Map (C067) ---------------------------------------------------------------------------
 # The OpenGL ES flavour — see the `maplibre` version note on why not the default artifact.

@@ -1,7 +1,9 @@
 package lk.mageride.driver.ui
 
 import androidx.annotation.StringRes
+import androidx.compose.ui.graphics.Color
 import lk.mageride.driver.R
+import lk.mageride.driver.ui.theme.VehicleColors
 import lk.mageride.shared.data.models.RideVehicleType
 import lk.mageride.shared.data.models.VehicleType
 
@@ -29,3 +31,23 @@ internal fun VehicleType.labelRes(): Int = when (this) {
 /** The same, for the Mode-C subset a driver app can offer (`bus` and `train` are Fleet Portal). */
 @StringRes
 internal fun RideVehicleType.labelRes(): Int = toVehicleType().labelRes()
+
+/**
+ * MAP-03's legend colour for a vehicle type (D2' §0.2).
+ *
+ * The same eleven hexes the map markers use, so the dot beside `Three-wheeler · ABC-1234` on My
+ * Vehicles (SCR-DA-026) is the colour that vehicle is on the map. The wireframe draws it as
+ * `--vehTuk`, `--vehSedan`, `--vehVan`; this is that table.
+ */
+internal fun VehicleColors.forType(type: VehicleType): Color = when (type) {
+    VehicleType.MOTORBIKE -> motorbike
+    VehicleType.THREE_WHEELER -> threeWheeler
+    VehicleType.FLEX -> flex
+    VehicleType.SEDAN -> sedan
+    VehicleType.MINI_VAN -> miniVan
+    VehicleType.VAN -> van
+    VehicleType.TRUCK -> truck
+    VehicleType.MINI_TRUCK -> miniTruck
+    VehicleType.BUS -> bus
+    VehicleType.TRAIN -> train
+}

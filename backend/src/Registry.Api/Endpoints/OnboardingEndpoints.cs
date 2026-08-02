@@ -1,3 +1,5 @@
+using System.Text.Json;
+using MageRide.Registry.Domain;
 using MageRide.Registry.Onboarding;
 using MageRide.Registry.Vehicles;
 using MageRide.Shared.Auth;
@@ -34,7 +36,12 @@ public static class OnboardingEndpoints
             .WithTags("drivers")
             .RequireMageRideRole(MageRideRoles.Driver);
 
-        drivers.MapPut("/profile", UpsertProfileAsync).WithName("upsertDriverProfile");
+        // Δ MCS-01 — `DisableAntiforgery` because the route now also takes multipart/form-data.
+        // The token would be a browser-form defence on an endpoint only a bearer-authenticated
+        // mobile client reaches, and its absence is what ASP.NET refuses a form over otherwise.
+        drivers.MapPut("/profile", UpsertProfileAsync)
+            .WithName("upsertDriverProfile")
+            .DisableAntiforgery();
 
         // Δ AL-58/AL-59 — where a driver's swept earnings go, and the LankaQR a passenger scans to
         // pay them. Replaces D-11's merchant binding, which never existed (AL-57).
@@ -48,7 +55,9 @@ public static class OnboardingEndpoints
             .WithTags("vehicles")
             .RequireMageRideRole(MageRideRoles.Driver);
 
-        vehicles.MapPut("/{vehicleId}/onboarding/{step}", SaveStepAsync).WithName("saveVehicleOnboardingStep");
+        vehicles.MapPut("/{vehicleId}/onboarding/{step}", SaveStepAsync)
+            .WithName("saveVehicleOnboardingStep")
+            .DisableAntiforgery();
         vehicles.MapGet("/{vehicleId}/onboarding-status", GetStatusAsync).WithName("getVehicleOnboardingStatus");
 
         return endpoints;
@@ -155,18 +164,34 @@ public static class OnboardingEndpoints
             (string?)null, new DriverPayoutDocumentResponse(uploadId.ToString(), kind));
     }
 
+    /// <summary>
+    /// <c>PUT /v1/drivers/profile</c> — Profile Setup, as JSON upload ids or as the images
+    /// themselves (SCR-DA/DI-003a, AL-27).
+    /// </summary>
+    /// <remarks>
+    /// The body is read by hand rather than bound, because this operation declares **two** media
+    /// types and a bound complex parameter would answer `415` to the multipart one before the
+    /// handler ran. `saveVehicleOnboardingStep` is the same shape for the same reason.
+    /// </remarks>
     private static async Task<Ok<DriverProfileResponse>> UpsertProfileAsync(
-        UpsertDriverProfileBody? body,
         HttpContext context,
         IOnboardingService onboarding,
+        IOnboardingDocumentStore documents,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(onboarding);
+        ArgumentNullException.ThrowIfNull(documents);
+
+        var driverId = context.User.RequireSubjectId();
+
+        var body = context.Request.HasFormContentType
+            ? await ReadProfileFormAsync(context, driverId, documents, cancellationToken)
+            : await ReadJsonBodyAsync<UpsertDriverProfileBody>(context, cancellationToken);
 
         var result = await onboarding.UpsertProfileAsync(
             new UpsertDriverProfileCommand(
-                context.User.RequireSubjectId(),
+                driverId,
                 body?.DriverName,
                 body?.ProfilePhotoFileId,
                 body?.LicenseFrontFileId,
@@ -178,20 +203,28 @@ public static class OnboardingEndpoints
         return TypedResults.Ok(DriverProfileResponse.From(result));
     }
 
+    /// <inheritdoc cref="UpsertProfileAsync" path="/remarks"/>
     private static async Task<Ok<SaveOnboardingStepResponse>> SaveStepAsync(
         string vehicleId,
         string step,
-        OnboardingStepBody? body,
         HttpContext context,
         IOnboardingService onboarding,
+        IOnboardingDocumentStore documents,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(onboarding);
+        ArgumentNullException.ThrowIfNull(documents);
+
+        var driverId = context.User.RequireSubjectId();
+
+        var body = context.Request.HasFormContentType
+            ? await ReadStepFormAsync(context, driverId, step, documents, cancellationToken)
+            : await ReadJsonBodyAsync<OnboardingStepBody>(context, cancellationToken);
 
         var state = await onboarding.SaveStepAsync(
             new SaveOnboardingStepCommand(
-                context.User.RequireSubjectId(),
+                driverId,
                 VehicleEndpoints.RequireVehicleId(vehicleId),
                 step,
                 body?.RegistrationNumber,
@@ -202,6 +235,172 @@ public static class OnboardingEndpoints
             cancellationToken);
 
         return TypedResults.Ok(SaveOnboardingStepResponse.From(state, step));
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // Δ MCS-01 — the multipart arms. Each stores its parts and hands the rest of the pipeline the
+    // same body the JSON arm produces, so `OnboardingService` sees one shape and every AL-29/AL-30
+    // verdict rule stays where it was.
+    //
+    // The bytes are stored BEFORE the service checks anything, so a request the service then
+    // rejects — a vehicle the caller does not own, a step name that is not one of the four — leaves
+    // an object nobody references. NFR-28's deadline reclaims it, which is the same trade
+    // fleet-svc's document upload and this file's payout upload already make, and the alternative
+    // is buffering an 8 MiB image in memory to find out.
+    // -------------------------------------------------------------------------------------------
+
+    private static async Task<UpsertDriverProfileBody> ReadProfileFormAsync(
+        HttpContext context,
+        Guid driverId,
+        IOnboardingDocumentStore documents,
+        CancellationToken cancellationToken)
+    {
+        var form = await context.Request.ReadFormAsync(cancellationToken);
+
+        var photo = await StorePartAsync(
+            form, "photo", OnboardingUploadKinds.ProfilePhoto, driverId, documents, cancellationToken);
+        var front = await StorePartAsync(
+            form, "licenseFront", DocumentKinds.DrivingLicense, driverId, documents, cancellationToken);
+        var back = await StorePartAsync(
+            form, "licenseBack", DocumentKinds.DrivingLicense, driverId, documents, cancellationToken);
+
+        return new UpsertDriverProfileBody(
+            form["driverName"].ToString(),
+            photo,
+            front,
+            back,
+            NullIfBlank(form["nicNo"].ToString()),
+            ReadList(form, "allowedVehicleTypes"));
+    }
+
+    private static async Task<OnboardingStepBody> ReadStepFormAsync(
+        HttpContext context,
+        Guid driverId,
+        string step,
+        IOnboardingDocumentStore documents,
+        CancellationToken cancellationToken)
+    {
+        var form = await context.Request.ReadFormAsync(cancellationToken);
+
+        // `details` carries no document — its multipart arm is the type and the plate. The other
+        // three each save one, and `photos` saves two.
+        var kind = OnboardingSteps.DocumentKind(step);
+
+        if (kind is not null && form.Files.GetFile("file") is null)
+        {
+            throw new MageRideValidationException(new Dictionary<string, string[]>(StringComparer.Ordinal)
+            {
+                ["file"] = ["file is required on this step."],
+            });
+        }
+
+        var file = kind is null
+            ? null
+            : await StorePartAsync(form, "file", kind, driverId, documents, cancellationToken);
+
+        // Only step 4 has a back, and the service is what insists on it (D5' §14.1a: one photo
+        // cannot show a vehicle's front and back plates at once).
+        var fileBack = form.Files.GetFile("fileBack") is null || kind is null
+            ? null
+            : await StorePartAsync(form, "fileBack", kind, driverId, documents, cancellationToken);
+
+        return new OnboardingStepBody(
+            NullIfBlank(form["registrationNumber"].ToString()),
+            NullIfBlank(form["vehicleType"].ToString()),
+            file,
+            fileBack,
+            Fields: null);
+    }
+
+    /// <summary>Stores one file part and answers its <c>docs.uploads</c> id, as a string.</summary>
+    private static async Task<string?> StorePartAsync(
+        IFormCollection form,
+        string part,
+        string kind,
+        Guid driverId,
+        IOnboardingDocumentStore documents,
+        CancellationToken cancellationToken)
+    {
+        var file = form.Files.GetFile(part);
+
+        if (file is null)
+        {
+            return null;
+        }
+
+        if (file.Length == 0)
+        {
+            throw new MageRideValidationException(new Dictionary<string, string[]>(StringComparer.Ordinal)
+            {
+                [part] = [$"{part} must not be empty."],
+            });
+        }
+
+        await using var content = file.OpenReadStream();
+
+        // Per part, not per request. A driver scans the licence through SCR-DA/DI-005 and picks the
+        // avatar out of the gallery in the same submission, so one `capturedVia` for the whole form
+        // would be wrong about one of them — and AL-43's whole value is that the officer can tell.
+        var uploadId = await documents.WriteAsync(
+            driverId,
+            kind,
+            form[$"{part}CapturedVia"].ToString().Trim(),
+            content,
+            // Recorded rather than trusted: it decides the Content-Type an officer's browser is
+            // handed back, and nothing branches on it.
+            string.IsNullOrWhiteSpace(file.ContentType) ? "application/octet-stream" : file.ContentType,
+            cancellationToken);
+
+        return uploadId.ToString();
+    }
+
+    /// <summary>
+    /// Reads the JSON arm, when there is one.
+    /// </summary>
+    /// <remarks>
+    /// A request with no body — or one whose content type is neither JSON nor a form — resolves to
+    /// <see langword="null"/> and falls through to the service's own "driverName is required".
+    /// That is what the bound parameter did before this route took two media types, and the tests
+    /// that assert those messages are asserting the service's rule, not the binder's.
+    /// </remarks>
+    private static async Task<T?> ReadJsonBodyAsync<T>(HttpContext context, CancellationToken cancellationToken)
+    {
+        if (!context.Request.HasJsonContentType())
+        {
+            return default;
+        }
+
+        try
+        {
+            return await context.Request.ReadFromJsonAsync<T>(cancellationToken);
+        }
+        catch (JsonException cause)
+        {
+            throw new MageRideValidationException(new Dictionary<string, string[]>(StringComparer.Ordinal)
+            {
+                ["body"] = [$"The request body is not valid JSON: {cause.Message}"],
+            });
+        }
+    }
+
+    private static string? NullIfBlank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    /// <summary>
+    /// A repeated form field, or one field carrying a comma-separated list.
+    /// </summary>
+    /// <remarks>
+    /// Both because both are written in the wild: `multipart/form-data` has no array type, so a
+    /// client either repeats the field or joins it, and refusing one of the two would be a rule
+    /// nobody can read off the contract.
+    /// </remarks>
+    private static IReadOnlyList<string>? ReadList(IFormCollection form, string key)
+    {
+        var values = form[key]
+            .SelectMany(value => (value ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries
+                | StringSplitOptions.TrimEntries))
+            .ToArray();
+
+        return values.Length == 0 ? null : values;
     }
 
     private static async Task<Ok<OnboardingStatusResponse>> GetStatusAsync(

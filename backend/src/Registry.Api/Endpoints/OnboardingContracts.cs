@@ -74,10 +74,21 @@ public sealed record DriverProfileResponse(
 /// (<c>registry.yaml#/components/schemas/OnboardingStepInput</c>).
 /// </summary>
 /// <remarks>
-/// JSON with upload ids only. The contract also offers <c>multipart/form-data</c> carrying the
-/// bytes; that variant is not mapped, because the bytes belong in object storage (D-36, NFR-28)
-/// and streaming them through registry-svc would put an unredacted image on this service's disk —
-/// exactly what the redaction pre-pass exists to avoid. Recorded in the C029 handoff.
+/// <para>
+/// The shape both arms produce. The JSON arm carries upload ids; the <c>multipart/form-data</c>
+/// arm carries the bytes and the endpoint converts them into ids through
+/// <see cref="IOnboardingDocumentStore"/> before anything downstream sees a difference.
+/// </para>
+/// <para>
+/// <b>Δ MCS-01 — the multipart arm used to be unmapped, and the reason recorded here was wrong.</b>
+/// It said streaming the bytes "would put an unredacted image on this service's disk". They do not
+/// touch this service's disk: they go straight to D-36's SSE-KMS bucket through the kernel's
+/// <c>IObjectStore</c>, which is where this same file's AL-58 payout upload has been putting them
+/// since. The redaction pre-pass guards what reaches the **external model**, and that is still
+/// ocr-svc's, which still fetches by <c>storage_url</c>. Leaving the arm unmapped did not protect
+/// the perimeter; it left <c>docs.uploads</c> with no writer, which made both onboarding screens
+/// unreachable on a real gateway.
+/// </para>
 /// </remarks>
 public sealed record OnboardingStepBody(
     string? RegistrationNumber = null,

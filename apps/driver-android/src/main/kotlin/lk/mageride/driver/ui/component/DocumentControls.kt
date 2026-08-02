@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import lk.mageride.driver.ui.theme.ControlTokens
 import lk.mageride.driver.ui.theme.MageRideTheme
 
@@ -43,7 +44,11 @@ import lk.mageride.driver.ui.theme.MageRideTheme
  * @param label What the slot is — "front", "back". Always a string resource.
  * @param captureHint The tap affordance, shown while [captured] is false.
  * @param doneLabel The `Done ✓` copy, shown once it is true.
+ * @param height The wireframe draws this at three sizes — a pair of 88 dp licence tiles
+ *   (SCR-DA-003a), a full-width 120 dp document panel (SCR-DA-004a/b) and a pair of 100 dp vehicle
+ *   photo panels (SCR-DA-004c). One composable at three heights, not three composables.
  */
+@Suppress("LongParameterList") // A slot's identity, its two captions, its state and its size.
 @Composable
 internal fun CaptureTile(
     label: String,
@@ -52,11 +57,12 @@ internal fun CaptureTile(
     captured: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    height: Dp = ControlTokens.CaptureTile,
 ) {
     val shape = RoundedCornerShape(MageRideTheme.radius.md)
     Column(
         modifier = modifier
-            .height(ControlTokens.CaptureTile)
+            .height(height)
             .border(
                 width = if (captured) ControlTokens.BorderSelected else ControlTokens.Border,
                 color = if (captured) MageRideTheme.status.success else MaterialTheme.colorScheme.outline,
@@ -220,6 +226,66 @@ internal fun NoticeCard(
             content()
         }
     }
+}
+
+/**
+ * What a status pill is saying.
+ *
+ * Three tones and no more, because D2' §0.2 gives `status` exactly two colours plus the surface:
+ * a fourth would be a colour invented by a screen. [PENDING] is the wireframe's amber
+ * `Incomplete · Step 3 of 4`, [DONE] its green `Done ✓` / `Approved`, [NEUTRAL] the plain
+ * surface chip a fleet-assigned vehicle carries.
+ */
+internal enum class StatusTone {
+    DONE,
+    PENDING,
+    NEUTRAL,
+}
+
+/**
+ * The wireframe's `pill-status` — `Done ✓`, `Approved`, `Incomplete · Step 3 of 4`, `FLEET`.
+ *
+ * One composable rather than one per screen: the same pill appears on three of C069's four screens
+ * and on C068's capture tiles, and three sessions drawing it separately is how a design system
+ * becomes three design systems.
+ */
+@Composable
+internal fun StatusPill(label: String, tone: StatusTone, modifier: Modifier = Modifier) {
+    val accent = when (tone) {
+        StatusTone.DONE -> MageRideTheme.status.success
+        StatusTone.PENDING -> MageRideTheme.status.warning
+        StatusTone.NEUTRAL -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Text(
+        text = label,
+        modifier = modifier
+            .background(
+                color = accent.copy(alpha = CHIP_TINT),
+                shape = RoundedCornerShape(MageRideTheme.radius.sm),
+            )
+            .padding(horizontal = MageRideTheme.spacing.xs, vertical = MageRideTheme.spacing.xxs),
+        style = MaterialTheme.typography.labelSmall,
+        color = accent,
+    )
+}
+
+/**
+ * The wireframe's `MODE C` badge in the wizard's app bar.
+ *
+ * A solid badge in D2' §0.2's mode colour rather than a tinted one: it is an identity, not a
+ * status, and it is the one thing on SCR-DA-004 that says which onboarding surface the driver is
+ * on — Mode A/B vehicles are the Fleet Portal's (AL-27).
+ */
+@Composable
+internal fun ModeCBadge(label: String, modifier: Modifier = Modifier) {
+    Text(
+        text = label,
+        modifier = modifier
+            .background(MageRideTheme.mode.modeC, RoundedCornerShape(MageRideTheme.radius.sm))
+            .padding(horizontal = MageRideTheme.spacing.xs, vertical = MageRideTheme.spacing.xxs),
+        style = MaterialTheme.typography.labelSmall,
+        color = MageRideTheme.status.onStatus,
+    )
 }
 
 /** How much of the accent colour a tinted card or chip keeps. Light enough to read text over. */

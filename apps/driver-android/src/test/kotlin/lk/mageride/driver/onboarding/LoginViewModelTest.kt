@@ -220,11 +220,7 @@ class LoginViewModelTest {
         return LoginViewModel(
             sessions = sessions,
             onboarding = OnboardingRepository(content = api.content, iam = api.iam, preferences = preferences),
-            profiles = DriverProfileRepository(
-                registry = api.registry,
-                iam = api.iam,
-                uploader = RecordingDocumentUploader(),
-            ),
+            profiles = DriverProfileRepository(registry = api.registry, iam = api.iam),
             preferences = preferences,
             pushTokens = PushTokenProvider(),
         )

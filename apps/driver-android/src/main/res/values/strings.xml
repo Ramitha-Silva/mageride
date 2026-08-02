@@ -75,7 +75,7 @@
     <string name="error_device_mismatch">This code was sent to another device.</string>
     <string name="error_user_blocked">This number cannot sign in. Contact support.</string>
     <string name="error_validation_failed">Check what you entered and try again.</string>
-    <string name="error_upload_unavailable">Documents cannot be uploaded on this build yet.</string>
+    <string name="error_image_too_large">That image is too large. Take it again from a little further back.</string>
 
     <!-- ==========================================================================
          C068 · SCR-DA-001…003a + 007 — first run.
@@ -170,5 +170,121 @@
          renders on a real device during wave 4a, same as anything else. -->
     <string name="route_placeholder_title">Not built yet</string>
     <string name="route_placeholder_body">%1$s arrives with its screen group.</string>
+
+    <!-- ==========================================================================
+         C069 · SCR-DA-004…004c, 005, 006, 026/026a — Mode-C vehicle onboarding.
+         ========================================================================== -->
+
+    <!-- Shared with cluster 1: the four vehicle error codes and two more status words. -->
+    <string name="status_not_captured">Not captured</string>
+    <string name="mode_c_badge">MODE C</string>
+    <string name="error_registration_exists">That registration number is already on a live vehicle.</string>
+    <string name="error_mode_not_allowed">Only your own standby (Mode C) vehicle is onboarded here. Buses, school vans and route permits are handled in the Fleet Portal.</string>
+    <string name="error_not_owner">This vehicle is not yours to change.</string>
+    <string name="error_vehicle_not_found">That vehicle is no longer on file.</string>
+
+    <!-- SCR-DA-005 · the shared camera document-scanner (AL-43). -->
+    <string name="capture_title">Capture: %1$s</string>
+    <string name="capture_title_generic">Capture document</string>
+    <string name="capture_flash">Flash</string>
+    <string name="capture_hint">Drag the corners so the whole document fills the frame</string>
+    <string name="capture_retake">Retake</string>
+    <string name="capture_use_photo">Use photo</string>
+    <string name="capture_failed">That photo could not be used. Take it again.</string>
+    <string name="capture_permission_title">Allow camera</string>
+    <string name="capture_permission_body">The scanner straightens your document so the details can be read the first time.</string>
+    <string name="capture_permission_allow">Allow camera</string>
+    <string name="capture_from_gallery">Choose from gallery instead</string>
+    <string name="capture_target_licence_front">Licence front</string>
+    <string name="capture_target_licence_back">Licence back</string>
+    <string name="capture_target_insurance">Insurance</string>
+    <string name="capture_target_revenue_licence">Revenue licence</string>
+    <string name="capture_target_vehicle_front">Vehicle front</string>
+    <string name="capture_target_vehicle_back">Vehicle back</string>
+
+    <!-- SCR-DA-004 → 004c · the four wizard steps. -->
+    <string name="vehicle_onboard_step_of">Step %1$d of %2$d · %3$s</string>
+    <string name="vehicle_onboard_title">Onboard standby vehicle</string>
+    <string name="vehicle_onboard_insurance_title">Insurance</string>
+    <string name="vehicle_onboard_revenue_title">Revenue licence</string>
+    <string name="vehicle_onboard_photos_title">Vehicle photos</string>
+    <string name="vehicle_onboard_details_caption">Vehicle details</string>
+    <string name="vehicle_onboard_insurance_caption">Insurance card or paper</string>
+    <string name="vehicle_onboard_revenue_caption">Vehicle revenue licence</string>
+    <string name="vehicle_onboard_photos_caption">Front and back, number plate visible</string>
+    <string name="vehicle_onboard_cta_details">Continue · Insurance</string>
+    <string name="vehicle_onboard_cta_insurance">Save and continue · Revenue licence</string>
+    <string name="vehicle_onboard_cta_revenue">Save and continue · Vehicle photos</string>
+    <string name="vehicle_onboard_cta_submit">Save and submit for review</string>
+    <string name="vehicle_onboard_type_label">Vehicle type</string>
+    <string name="vehicle_onboard_registration_label">Registration No</string>
+    <string name="vehicle_onboard_mode_c_title">Standby vehicle</string>
+    <string name="vehicle_onboard_mode_c_body">Mode C is your own standby vehicle, onboarded here in the app. Buses, school and staff vans and their route permits are handled in the Fleet Portal — there is no permit or tracker field here.</string>
+    <string name="vehicle_onboard_insurance_slot">Insurance document</string>
+    <string name="vehicle_onboard_revenue_slot">Revenue licence</string>
+    <string name="vehicle_onboard_photos_slot">Front and back photos</string>
+    <string name="vehicle_onboard_photo_front">Front and plate</string>
+    <string name="vehicle_onboard_photo_back">Back and plate</string>
+    <string name="vehicle_onboard_plate_match">The plate read from these photos is matched against %1$s. If it does not match, this step is held for an officer to check.</string>
+    <string name="vehicle_onboard_extract_title">Read from your document</string>
+    <string name="vehicle_onboard_pending_title">Held for checking</string>
+    <string name="vehicle_onboard_pending_body">Something on this document could not be read clearly, so an officer will check it. You can carry on in the meantime.</string>
+
+    <!-- Extracted-field row labels (registry.document_fields keys, AL-29). -->
+    <string name="vehicle_field_policy_no">Policy no</string>
+    <string name="vehicle_field_insurer">Insurer</string>
+    <string name="vehicle_field_revenue_no">Licence no</string>
+    <string name="vehicle_field_plate_text">Plate read</string>
+    <string name="vehicle_field_plate_match">Plate check</string>
+    <string name="vehicle_field_confidence">Confidence</string>
+    <string name="vehicle_confidence_doubtful">%1$s — doubtful</string>
+    <string name="vehicle_plate_matched">Matches</string>
+    <string name="vehicle_plate_mismatch">Does not match</string>
+
+    <!-- SCR-DA-006 · the four-document verdict list. -->
+    <string name="vehicle_status_title">Vehicle under review</string>
+    <string name="vehicle_status_approved_title">Vehicle approved</string>
+    <string name="vehicle_status_verifying">Checking your documents…</string>
+    <string name="vehicle_status_approved_caption">Ready to go online</string>
+    <string name="vehicle_status_documents">Document verification (%1$d)</string>
+    <string name="vehicle_status_pending_banner">Held for an officer to check: %1$d. You will be notified.</string>
+    <string name="vehicle_status_auto_approve">When all four are verified the vehicle is approved on its own, with no waiting, and appears in My Vehicles.</string>
+    <string name="vehicle_status_rejected_title">Sent back</string>
+    <string name="vehicle_status_resume">Finish the remaining steps</string>
+    <string name="vehicle_status_my_vehicles">Go to My Vehicles</string>
+    <string name="vehicle_status_unknown">Open a vehicle from My Vehicles to see how its documents are going.</string>
+    <string name="vehicle_document_details">Vehicle details (type and reg)</string>
+    <string name="vehicle_document_insurance">Insurance</string>
+    <string name="vehicle_document_revenue">Revenue licence</string>
+    <string name="vehicle_document_photos">Front and back photos</string>
+    <string name="verdict_verified">Verified</string>
+    <string name="verdict_pending_review">With an officer</string>
+    <string name="verdict_pending_input">Not uploaded</string>
+
+    <!-- SCR-DA-026 / 026a · My Vehicles. -->
+    <string name="vehicles_title">My vehicles</string>
+    <string name="vehicles_add">Add a vehicle</string>
+    <string name="vehicles_one_live">Only one vehicle can be live at a time</string>
+    <string name="vehicles_mine_label">My vehicles</string>
+    <string name="vehicles_assigned_label">Temporarily assigned to me</string>
+    <string name="vehicles_fleet_badge">FLEET</string>
+    <string name="vehicles_resume">Resume</string>
+    <string name="vehicles_view_status">Documents</string>
+    <string name="vehicles_deactivate">Remove</string>
+    <string name="vehicles_deactivate_title">Remove this vehicle?</string>
+    <string name="vehicles_deactivate_body">%1$s will be taken off the map and out of your list. The registration number becomes free to use again.</string>
+    <string name="vehicles_active_now">Active now</string>
+    <string name="vehicles_incomplete">Incomplete</string>
+    <string name="vehicles_incomplete_step">Incomplete · Step %1$d of %2$d</string>
+    <string name="vehicles_empty_title">No vehicles yet</string>
+    <string name="vehicles_empty_body">Add your own standby vehicle, or wait to be assigned or shared one.</string>
+    <string name="vehicles_onboard_prompt_title">Onboard a standby vehicle?</string>
+    <string name="vehicles_onboard_prompt_body">You have no vehicles. Would you like to onboard your own standby vehicle now?</string>
+    <string name="vehicles_onboard_prompt_yes">Yes, onboard</string>
+    <string name="vehicles_onboard_prompt_not_now">Not now</string>
+    <string name="vehicle_registration_pending">Being checked</string>
+    <string name="vehicle_registration_approved">Approved</string>
+    <string name="vehicle_registration_rejected">Sent back</string>
+    <string name="vehicle_registration_deactivated">Removed</string>
 
 </resources>

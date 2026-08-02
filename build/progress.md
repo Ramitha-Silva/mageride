@@ -94,8 +94,8 @@ After completing a component, set its Status and append the 3-line handoff under
 | C065 | admin-bff-finance-pdpa | 3 | DONE | 2026-08-01 | **27 finance/PDPA tests green** (`--filter Category=FinancePdpa`) and **162/162** across the whole `AdminBff.Tests` suite (was 122); **four migrations, none of them a table** — `0110 iam.users.anonymised_at` (the column an erasure writes, which is what finally makes C064's `PassengerRow.status='deleted'` producible), `1314 pdpa.requests.decided_by/.decision_reason` (D3' gives `/reject` a required reason and §16 gave it nowhere to go), and two read-path indexes (`1008` the R-19 Overpaid queue, `1111` the per-rail settlement read); **the finance surface writes nothing** — wallet-svc posts the reversal, fare-svc raises the refund, reputation-svc resolves a flag — asserted as a class with no `INSERT` and against the route table by `Only_two_finance_routes_mutate_and_both_forward`; **four URD §2.3 rows, not one**, and the fence "reversals are Finance/Super-Admin only" falls out of the matrix rather than out of a role list; **the exception queue's four classes are derived, never stored**, because wallet-svc records no exception column; **an erasure's hold list has two kinds of entry** — blocking (409, lifts on its own) and retention (`FulfilledHold`) — and conflating them would either refuse every erasure for ever or anonymise somebody mid-ride; **`audit.events` is never touched and the fulfilment writes to it**; **`/v1/pdpa` is the one prefix outside `/v1/admin`** and the start-up guard names it; `migrate-verify.sh` **469/469**, Spectral 0 errors, solution build 0 warnings; **1 spec conflict resolved, 5 micro-change-sets** |
 | C066 | public-bff | 3 | DONE | 2026-08-01 | **51/51 green** in a new `PublicBff.Tests` suite that boots a real ride-svc and a real safety-svc, because three DoD items are claims about *their* rows; **no migration** — every row this surface reads was landed by C004/C005/C037/C052 and the two it writes are columns 0901 created for this caller; **no authentication scheme is registered at all**, so the token in the path is the credential by construction and the start-up guard refuses a route that asks for authorization, sits outside `/public/track`, escapes the token gate, or is named `/call` (AL-48); **each scope is a closed type with no field for what it may not carry**, asserted on the JSON rather than on the DTO because the half that matters is what is absent; **the 410 is asserted on the body**, not the status code; **the `deliveryOtp` hole is closed** — ride-svc keeps only the digest and notification-svc deliberately keeps the code out of the SMS *because this page shows it*, so the unregistered recipient could not learn their own code until C066 gave notification-svc a kernel Redis key to leave it in; **the web SOS is safety-svc's** (`POST /v1/internal/safety/sos/web`, the seam C052 named) and the booker's MSISDN never reaches this process; **the live cursor describes what the client knows and indexes nothing**, so a replica that never served a stream resumes it and no buffer exists to replay (D-34); Spectral 0 errors, solution build 0 warnings; **3 spec gaps recorded, 5 micro-change-sets**; also fixed a **pre-existing, calendar-triggered** failure in `Notification.Api.Tests` (85/86 → **86/86**) where a pinned fake clock was compared against a `now()`-seeded column — the row is now aged against the clock the production sweep actually reads |
 | C067 | driver-android-shell | 4a | DONE | 2026-08-01 | **34 tests green** in a new `apps/driver-android` unit-test source set and `assembleDebug` clean, plus `detekt`/`ktlintCheck`; C025's walking skeleton **deleted** (4 files) and replaced by the real shell — Koin graph binding the five things `:shared` leaves to an app, `MageRideTheme` transcribed from D2' §0.2 with **Outfit + Inter shipped as real OFL fonts**, trilingual `values`/`values-si`/`values-ta` with a test that fails on a key present in one file and not the others, a `NavHost` registering **every** C068–C075 destination as a placeholder so no screen group invents a path, the AL-31 four-tab bottom bar with **no hamburger**, a MapLibre **OpenGL-flavour** host over `pmtiles://` with light/dark styles, and the D6' §3 foreground service (FusedLocation + HiveMQ + wake lock + `PositionPipeline`, whose R-17 replay and D5' §5.2 cadence are asserted on the JVM with no radio); **FCM registered but inert** — no `google-services.json` (C124); **Play Integrity wired but not verified on a device**; **the wave-1 `:shared` gate is red on arrival** and not from anything here — see the handoff |
-| C068 | driver-android-auth-onboarding | 4a | PARTIAL | 2026-08-02 | **72 tests green** (was 34) and `assembleDebug` clean, plus `detekt`/`ktlintCheck`; all five cluster-1 screens built to the wireframe — SCR-DA-001 boot router, SCR-DA-002 with the AL-28 `HorizontalPager` carousel, AL-26 Sinhala-first vertical language boxes and the AL-27 city list from `GET /config/cities`, SCR-DA-003 `+94` phone + six-digit OTP with the D-32 resend cooldown, SCR-DA-003a Profile Setup with the AI-extract card and the AL-29 manual-entry ⚑ path, and SCR-DA-007's five permission rows with the Settings deep link — plus ~60 new trilingual strings and `setOperatingCity` added to `:shared`'s `IamApi`. **PARTIAL for one reason: no contract route creates a `docs.uploads` row for a driver photo or licence**, so `PUT /v1/drivers/profile` cannot actually be called on a real gateway; the uploader is a bound seam that fails loudly and the whole flow is proven against a fake. Micro-change-set raised — see the handoff |
-| C069 | driver-android-vehicle-onboarding | 4a | PENDING | | |
+| C068 | driver-android-auth-onboarding | 4a | DONE | 2026-08-02 | **72 tests green** (was 34) and `assembleDebug` clean, plus `detekt`/`ktlintCheck`; all five cluster-1 screens built to the wireframe — SCR-DA-001 boot router, SCR-DA-002 with the AL-28 `HorizontalPager` carousel, AL-26 Sinhala-first vertical language boxes and the AL-27 city list from `GET /config/cities`, SCR-DA-003 `+94` phone + six-digit OTP with the D-32 resend cooldown, SCR-DA-003a Profile Setup with the AI-extract card and the AL-29 manual-entry ⚑ path, and SCR-DA-007's five permission rows with the Settings deep link — plus ~60 new trilingual strings and `setOperatingCity` added to `:shared`'s `IamApi`. It shipped PARTIAL because **no route on the platform created a `docs.uploads` row for a driver photo or licence**, which left `PUT /v1/drivers/profile` uncallable on a real gateway; **MCS-01 closed that** (multipart arms on both onboarding routes) and the app's upload seam was deleted in the same pass. Now DONE on all five DoD items |
+| C069 | driver-android-vehicle-onboarding | 4a | DONE | 2026-08-02 | **107 tests green** (was 72; 35 new) and `assembleDebug` clean, plus `detekt`/`ktlintCheck`; all eight owned screens built to the wireframe — the Mode-C four-step wizard (SCR-DA-004…004c) with per-step save, AL-30 resume-at-next-incomplete and the ⚑ Pending card, the **SCR-DA-005 CameraX scanner** with a draggable four-corner quad, an auto edge-detect proposal and a `setPolyToPoly` perspective correction on confirm (AL-43), the SCR-DA-006 four-document verdict list with the automatic APPROVED read, and SCR-DA-026/026a My Vehicles with the two groups, the US-9.6 go-live gate, deactivate-confirm and the empty-state popup — plus ~85 new trilingual strings, CameraX 1.6.1 and the `CAMERA` permission. Three `:shared` registry DTOs were **corrected against the C029 contract** (`VehicleRegistration`'s four file ids optional, `RegisterVehicleResponse.nextStep`, `SaveOnboardingStepResponse.status`) — without the last one the app cannot see its own auto-approval. Three spec gaps recorded: no `fields` part on the step's multipart arm, no fleet name/expiry on `VehicleSummary`, and no active-vehicle operation. The `:shared` gate is **13 red on arrival** and none of it is C069's — see the handoff |
 | C070 | driver-android-dashboard-dispatch | 4a | PENDING | | |
 | C071 | driver-android-delivery | 4a | PENDING | | |
 | C072 | driver-android-jobs-level-earnings | 4a | PENDING | | |
@@ -10871,3 +10871,257 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   pick is `ActivityResultContracts.PickVisualMedia`, and the permission rows are
   `RequestMultiplePermissions` plus two `Settings` intents, all of which the shell already had on the
   classpath. A warm `testDebugUnitTest` + `assembleDebug` is ~70 s; `--rerun-tasks` about the same.
+
+- **Component:** MCS-01 registry-svc onboarding document uploads (micro-change-set, not a manifest entry) — 2026-08-02
+- **Status:** DONE — `dotnet test backend/src/Registry.Api.Tests` **188/189**, the one failure being a
+  pre-existing flake (below); `./gradlew :shared:testDebugUnitTest` failure set **byte-identical to the
+  baseline** captured before the change (13, all the C067-recorded contract drift); `./gradlew
+  :apps:driver-android:testDebugUnitTest :apps:driver-android:assembleDebug` green at **72 tests, 0
+  failed**; `detekt` and `ktlintCheck` clean on `:shared` and the app; `dotnet build backend/MageRide.sln`
+  clean. **C068 is flipped to DONE** — its fifth DoD line was the thing this change set existed to unblock.
+- **Notes:**
+  **The finding was bigger than the C068 handoff said, and the correction matters for C069.**
+  C068 reported that Profile Setup had no upload route. It is worse: **`docs.uploads` had no writer for
+  *any* onboarding document**. `PUT /v1/vehicles/{id}/onboarding/{step}` has declared a
+  `multipart/form-data` arm since C029 and `OnboardingEndpoints.SaveStepAsync` bound
+  `OnboardingStepBody? body` — JSON only — so the KMP `uploadVehicleOnboardingStep`, which has always
+  posted a form, reached a handler that saw no fields at all. The only `INSERT INTO docs.uploads` in
+  registry-svc was the AL-58 payout store, and this suite's own `RegistryHarness.SeedUploadAsync` filled
+  the table by hand with the comment *"as the upload surface would. No service owns that table yet."*
+  **C069's four capture slots were stranded by the same gap**, which is why this ran before it and not
+  after. (The C068 handoff's "C069 is not blocked by it" was wrong; corrected here.)
+
+  **Shape chosen — (A), multipart arms on the two routes that already reference uploads.**
+  `upsertDriverProfile` gains one; `saveVehicleOnboardingStep`'s is implemented. **No new
+  `operationId`**, so the 180-operation count, `ApiOperations`, `ContractCoverageTest` and
+  `ApiOperationTableTest` are untouched, and one KMP function that was already written became correct
+  instead of a second way to do the same thing. Option (B), a standalone `POST /v1/docs/uploads`, was
+  rejected: it adds an operation and a round trip per file for a capability nothing in D1'/D2' asks for
+  (no screen uploads a document before the record that owns it exists).
+
+  **Decisions —**
+  (1) **The endpoint resolves the form; `OnboardingService` was not touched at all.** The multipart
+  reader writes each part through `IOnboardingDocumentStore` and hands the pipeline the *same body the
+  JSON arm produces*, so every AL-29/AL-30 verdict rule, the ownership check and the extraction path
+  stay exactly where they were and stay covered by the tests that already existed. That is the single
+  biggest risk reduction available here.
+  (2) **Both handlers read their body by hand**, because a bound complex parameter makes Minimal APIs
+  answer `415` to the multipart arm before the handler runs. `HasJsonContentType()` false ⇒ a null body
+  ⇒ the service's own "driverName is required", which is what the bound parameter did before, so the
+  existing tests are still asserting the service's rule rather than the binder's.
+  (3) **`captured_via` is required, per file part, and never defaulted** (AL-43). Defaulting to
+  `camera_dragcrop` would record a scan that did not happen; defaulting to `gallery` would flag every
+  honest capture from a client that forgot the field. Per part rather than per request because the real
+  submission is mixed — the Driver App picks the avatar out of the gallery and scans the licence through
+  SCR-DA-005 in one save, and `OnboardingUploadTests` asserts exactly that split. New contract schema
+  `CaptureSource` (`camera_dragcrop|gallery`); the column's third value `other` is the Fleet Portal's
+  desktop picker and is refused here.
+  (4) **The bytes are written before the service checks anything**, so a request the service then
+  rejects leaves an object nobody references. NFR-28's deadline reclaims it. Same trade fleet-svc's
+  document upload and this file's payout upload already make, and the alternative is buffering an 8 MiB
+  image to find out. Called out in the code.
+  (5) **Retention is never null on this path.** The payout store has an exception because a driver's
+  LankaQR is live payment infrastructure (AL-59); everything reaching this store is raw identity
+  evidence, so every row carries `auto_delete_at`. New `Registry:OnboardingDocumentMaxBytes` (8 MiB) and
+  `Registry:OnboardingDocumentRetention` (90 d), named apart from the payout pair because a phone
+  photograph and a bank-app export will not stay the same number forever.
+  (6) **`docs.uploads.kind = 'profile_photo'` is new, and is not a `registry.documents.kind`.** That
+  column is CHECKed and fixed; `docs.uploads.kind` is free text because migration 1301 says "the set
+  grows with every onboarding surface". The avatar is an upload and not a document — it is shown to
+  passengers (US-2.12), no officer verifies it, and it never becomes a `registry.documents` row.
+  (7) **`CapturedDocument` pairs a file with its provenance in the KMP client**, rather than two
+  parameters per image. The wire pairs them, and separating them makes it possible to send four files
+  and three provenances. On the app side `CapturedImage` carries the same field, so `readImage` (the
+  gallery) stamps `GALLERY` and SCR-DA-005 will stamp `CAMERA_DRAG_CROP` — the signal is true by
+  construction rather than by a call site remembering.
+  (8) **Two stale comments were corrected rather than left.** `OnboardingStepBody`'s KDoc said the
+  multipart arm was unmapped because streaming bytes "would put an unredacted image on this service's
+  disk", and `Registry.Api/CLAUDE.md` said the upload surface was not this service's because it "never
+  sees the bytes". Both stopped being true when AL-58's payout upload landed in this same service, and
+  neither was ever what D-36 protects: the perimeter is what reaches the **external model**, which is
+  still ocr-svc's redaction pre-pass, and ocr-svc still fetches by `storage_url`. What the old rule
+  actually achieved was leaving `docs.uploads` with no writer. fleet-svc already owns the identical
+  surface for SCR-FP-004, so the platform rule is "the service that owns the document's record owns its
+  upload" and registry-svc now obeys it.
+
+  **Two pre-existing failures observed and NOT caused here — both reproduce on the untouched tree.**
+  (a) `Registry.Api.Tests` `OutboxPipelineTests.Share_revoked_reaches_redpanda_through_the_outbox`
+  fails in a full run and **passes in isolation** — a test-isolation flake that consumes another test's
+  `share.revoked` off the shared Redpanda topic. It failed identically on the 182-test baseline taken
+  before any edit.
+  (b) `ApiGateway.Tests` `RouteTableTests.Every_public_contract_operation_routes_to_its_own_service`
+  fails on **seven AL-58 payout routes** (`listDriverPayouts`, the three `admin/payouts`, and the three
+  `drivers/payout-profile`) that are unrouted or pointed at admin-bff instead of payout-svc. MCS-01
+  added no operation and no path, so it cannot be implicated; it belongs to whoever wires payout-svc
+  into the gateway.
+
+  **For C069 —** your four capture slots now work: `RegistryApi.uploadVehicleOnboardingStep(vehicleId,
+  step, file = CapturedDocument(…), fileBack = …)` posts the image with the step's fields in one
+  request and registry-svc writes `docs.uploads` for you. **Stamp `CaptureSource.CAMERA_DRAG_CROP` on
+  what SCR-DA-005 produces and `GALLERY` on anything picked** — `CapturedImage` carries the field and
+  `DocumentCaptureCoordinator.deliver` passes whatever the scanner built. The `details` step takes no
+  file. `OnboardingUploadTests` covers insurance (one file) and photos (two); the four-step wizard's
+  verdict logic was not touched.
+
+  **Files —** contract + spec: `backend/contracts/registry.yaml` (two multipart arms, `CaptureSource`),
+  `specs/D3_mageride_api_contracts.md` (both route-table rows). Service: `Onboarding/
+  OnboardingDocumentStore.cs` (new), `Endpoints/OnboardingEndpoints.cs`, `Endpoints/
+  OnboardingContracts.cs`, `Configuration/RegistryOptions.cs`, `RegistryServiceCollectionExtensions.cs`,
+  `Registry.Api/CLAUDE.md`. Tests: `Integration/OnboardingUploadTests.cs` (new, 7),
+  `Infrastructure/RegistryHarness.cs`. Client: `data/api/CapturedDocument.kt` (new),
+  `data/api/registry/RegistryApi.kt`, `data/models/registry/RegistryModels.kt`. App: the
+  `DriverDocumentUploader` seam **deleted**, `DriverProfileRepository`, `capture/DocumentCapture.kt`,
+  `capture/ImageLoading.kt`, `OnboardingErrors.kt`, the Koin module, three `strings.xml`
+  (`error_upload_unavailable` → `error_image_too_large`, which is the failure that actually exists now)
+  and two test classes.
+
+---
+
+- **Component:** C069 driver-android-vehicle-onboarding — 2026-08-02
+- **Status:** DONE — `./gradlew :apps:driver-android:testDebugUnitTest :apps:driver-android:assembleDebug`
+  → **107 tests, 0 failed** (72 → 107; 35 new) and a clean debug APK. `:apps:driver-android:detekt`
+  and `:ktlintCheck` green. `:shared:detekt` / `:ktlintCheck` green; `:shared:testDebugUnitTest`
+  is **817 tests / 13 failed, all thirteen pre-existing** — see (a) below.
+- **Notes:**
+
+  **The three `:shared` DTOs that were wrong, and why the third one mattered.** `registry.yaml` has
+  moved twice since C012 wrote these and the client did not follow. (i) `VehicleRegistration`'s four
+  document ids were **required and non-null**, which C029 had already made optional — a vehicle that
+  must arrive with four documents has no Step 2/4 to walk to (C029 finding (c)), and the wizard
+  literally could not create one. (ii) `RegisterVehicleResponse.ocrJobId` was non-null and
+  `nextStep` was absent, so a 201 for a wizard registration — which queues no extraction and
+  therefore carries no `ocrJobId` — **failed to deserialise**, and the server's own resume pointer
+  was dropped on the floor. (iii) `SaveOnboardingStepResponse` was missing `status`, which the
+  contract marks **required**: saving the fourth verified step is what auto-approves the vehicle
+  (AL-27) and that response is where the platform says so. Without it the app would have had to
+  poll for a transition it had just caused. All three are now as `registry.yaml` declares them.
+  `TypedClientTest`'s canned step response gained the `status` field it was always required to have.
+
+  **Two wireframe deviations remain, both blocked on a contract change, both listed under the spec
+  gaps below.** SCR-DA-004a/004b draw a **✎** on each extracted value and SCR-DA-026 prints the
+  assigning fleet and the assignment expiry on a temporarily-assigned row; neither is expressible
+  over the contract as it stands, so both are omitted rather than faked. **Each needs a
+  micro-change-set before the screen can be called wireframe-exact** — see (a) and (b), and
+  `build/prompts/MCS-02-onboarding-corrections-fleet-display-client-drift.md`, which closes both
+  plus the retired-operation half of the `:shared` drift and is meant to run **before C070**.
+  Everything
+  else on the eight screens is built, including the `Confidence · 0.62 — doubtful` row (the lowest
+  confidence of the step's fields, with "doubtful" read off the server's `verifyStatus` rather than
+  against a client-side copy of `Registry:OcrConfidenceThreshold`).
+
+  **Spec gaps — three, none blocking, all raised rather than worked around.**
+  (a) ***A driver cannot correct a doubtful extracted field on steps 2–4.*** The wireframes draw a
+  ✎ on the insurance expiry and the revenue licence no. The multipart arm of `PUT /v1/vehicles/{id}/
+  onboarding/{step}` declares `registrationNumber`, `vehicleType`, `file`, `fileBack` and the two
+  `…CapturedVia` parts and **no `fields` part**; the JSON arm that does carry `fields` needs a
+  `fileId`, and `SaveOnboardingStepResponse` returns none — so on this surface the JSON arm is
+  unreachable from an app, and `OnboardingService.SaveDocumentStepAsync` requires a `fileId` on
+  every document step anyway, so a fields-only correction is refused server-side too. The extract
+  card therefore renders **read-only verdicts with the ⚑ chip**, which is not a dead end: BR-25.3
+  sends a doubtful field to the Verification Officer either way, and that is the documented
+  behaviour. **A micro-change-set is needed** to add a `fields` part to the multipart arm (or a
+  `fileId` to the step response) before the ✎ can exist. Same shape as C068's finding on
+  `licence_no` / `licence_expiry`, which is still open.
+  (b) ***`VehicleSummary` cannot render the "Temporarily assigned to me" caption.*** The wireframe
+  prints *"Lanka Fleet (Pvt) Ltd · until 30 Jun"* and `GET /v1/vehicles/mine` returns neither the
+  assigning fleet nor the validity — `fleetId` is on `VehicleDetail`, is an id rather than a name,
+  and no route on the driver's surface resolves a fleet name. The group is rendered with the type,
+  the plate and a `FLEET` badge; the two missing facts are omitted rather than faked. **D3' should
+  add `fleetName` + `assignedUntil` to `VehicleSummary`.**
+  (c) ***Nothing on the platform records which vehicle a driver has selected to go live.*** There
+  is no such operation in `registry.yaml`, and on inspection there does not need to be: the choice
+  is a property of *this handset*, and the MQTT username **is** the vehicle id (D6' §3), so the
+  broker learns it at CONNECT. `ActiveVehicleStore` is therefore a local `SharedPreferences` value
+  and `vehicle/ActiveVehicleStore.kt` argues the case at the declaration. **C070 reads it** for the
+  dashboard's live-vehicle chip and the US-9.6 go-online gate; if a later component wants the
+  selection to survive a handset change, that is a new endpoint, not a bug here.
+
+  **Decisions —**
+  (1) **One route and one composable for all four wizard steps.** They share an app bar, a progress
+  bar and a CTA and differ only in the body; four destinations would have put AL-30's resume rule in
+  the navigation graph, where it cannot be tested. `ResumePoint` is that rule as a type instead.
+  (2) **`POST /v1/vehicles` is Step 1/4** (C029 decision (1)), so a fresh vehicle is created by the
+  first Continue and there is no second call to save `details`. Stepping *back* to Step 1 on an
+  existing vehicle goes through `PUT …/onboarding/details`, which is what re-judges the plate match.
+  (3) **The CTA is two-beat only on a step that comes back Pending.** The extract card cannot exist
+  before the upload, because the upload is what queues the extraction — so a `VERIFIED` step never
+  stops, and a `PENDING_REVIEW` one leaves the driver on the ⚑ card once. A second tap continues:
+  BR-25.3 makes a pending step an *officer's* to clear, and waiting for it would trap the driver in
+  the wizard for ever.
+  (4) **Owned = Mode C, temporarily assigned = Mode A/B.** `VehicleSummary` carries no ownership
+  flag, and it does not need one: the Driver App onboards Mode C only (AL-27), so a Mode A/B vehicle
+  in this driver's list arrived by fleet assignment or share (US-13.9) and there is no other way for
+  one to be there. `canGoLive` reads the same split — an owned Mode C vehicle needs `status=APPROVED`
+  **and** `onboardingStatus=approved` (AL-30 makes them different questions); an assigned Mode A/B
+  one was approved in the Fleet Portal and carries no onboarding steps to gate on.
+  (5) **The scanner's frame is fixed at 4:3 and the preview is `FIT_CENTER`.** The crop quad is
+  normalised and applied to the captured still, so the preview and the capture have to be the same
+  rectangle. The default `FILL_CENTER` crops the sides away, and a corner the driver put on the edge
+  of what they could see would land somewhere else in the file that gets uploaded.
+  (6) **Only the decisions are testable, so only the decisions are pure Kotlin.** `CropQuad` (winding
+  order, clamping, refusing a drag that folds the quad, output sizing) and `DocumentEdgeDetector`
+  (the auto-propose) have no Android type in them and carry 14 of the 35 new tests; everything that
+  touches a `Bitmap` is in `DocumentImaging` and is exercised on a device, not here.
+  (7) **The edge-detect proposal is an axis-aligned box, and says so.** BR-28.4 makes the manual drag
+  the authority ("auto edge-detect proposes a quad; manual drag overrides"), and a proposal that
+  guesses a skew *wrongly* is worse than one that is honestly square — the driver has to drag every
+  corner back rather than only the ones that are out. Fitting a true quadrilateral wants Canny +
+  Hough, i.e. OpenCV, i.e. a ~40 MB native dependency this app does not otherwise carry. Recorded at
+  the declaration.
+  (8) **A gallery fallback is offered on the camera-denied state.** AL-43 permits it (`captured_via
+  = 'gallery'`, and the flag is the point), the profile wireframe already allows a picked avatar, and
+  without it a handset with a broken camera cannot be onboarded at all. `readImage` stamps `GALLERY`;
+  `DocumentScannerViewModel.confirm()` is the only thing in the app allowed to claim
+  `CAMERA_DRAG_CROP`.
+
+  **Pre-existing failures observed and NOT caused here — 13 on `:shared:testDebugUnitTest`.** All
+  thirteen are **contract ↔ typed-client drift** in files C069 did not touch, and all of them are
+  the same two facts: (i) `bindOnepayMerchant` / `POST /v1/internal/vehicles/{id}/merchant` is
+  **retired from `registry.yaml` by AL-57** and is still declared in `RegistryApi`, which makes
+  `ApiOperationTableTest` (×4) and `ContractShapeTest` (×3) throw `Key bindOnepayMerchant is missing
+  in the map`; (ii) the sixteen contracts now declare **241 operations against the client's 179**,
+  with 66 having no typed client at all (the AL-58 payout profile, RBAC, emergency contacts, the
+  wallet transfer set, the internal support/safety surfaces), which is `ContractCoverageTest` (×5).
+  Verified pre-existing: `git show HEAD:backend/contracts/registry.yaml` contains no
+  `bindOnepayMerchant` while `git show HEAD:…/RegistryApi.kt` contains three. **This belongs to
+  whoever owns `:shared`'s client**, and it is worth doing soon for one reason beyond tidiness:
+  `ContractShapeTest` throws on that missing key *before* it validates anything, so **no DTO on this
+  surface is currently being checked against its contract at all** — which is exactly how the three
+  registry DTOs fixed above drifted without anyone noticing.
+
+  **Also not caused here:** `:shared`'s `assemble` / `assembleXCFramework` defect recorded in
+  `shared/kmp/CLAUDE.md` is untouched and still open.
+
+  **For C070 (dashboard) —** three things are waiting for you. `ActiveVehicleStore.activeVehicleId`
+  is the single active publisher (D-03) and the reg no for the *"Live: 3W · ABC-1234"* chip;
+  `VehiclesState.canGoOnline` is US-9.6's gate expressed once, and `VehicleSummary.canGoLive` is the
+  per-vehicle rule behind it — **do not re-derive either**. `DriverRoute.Vehicles` is where the
+  disabled toggle's prompt should send a driver with no vehicle (SCR-DA-026a raises itself on an
+  empty list). The Menu tab (C073) needs two rows the nav-drawer wireframe names: **My Vehicles →
+  `DriverRoute.Vehicles`** and **Vehicle Onboarding (Mode C) → `DriverRoute.VehicleOnboarding`**;
+  the second is safe to point straight at the wizard, because `resume()` decides between resuming
+  and starting a new vehicle.
+
+  **For C085 (iOS shell) —** SCR-DI-004…004c/005/006/026 mirror these. `VisionKit`'s
+  `VNDocumentCameraViewController` gives you the quad and the de-skew for free (AL-43 names it), so
+  the iOS half of the scanner is smaller — but the **capture-source stamp is not free**: a document
+  picked from Photos must land `CaptureSource.GALLERY` or the Verification-Officer queue loses the
+  signal it sorts on.
+
+  **Files —** client: `data/models/registry/RegistryModels.kt` (three DTOs corrected),
+  `data/api/TypedClientTest.kt`, `data/models/DtoRoundTripIdentityTest.kt`. App, new:
+  `capture/CropQuad.kt`, `capture/DocumentEdgeDetector.kt`, `capture/DocumentImaging.kt`,
+  `capture/CameraXBinding.kt`, `capture/DocumentScannerScreen.kt`, `capture/DocumentScannerViewModel.kt`,
+  `vehicle/VehicleOnboardingRepository.kt`, `vehicle/VehicleOnboardingSession.kt`,
+  `vehicle/VehicleOnboardingViewModel.kt`, `vehicle/VehicleOnboardingScreen.kt`,
+  `vehicle/VehicleOnboardingLabels.kt`, `vehicle/VehicleOnboardingStatusViewModel.kt`,
+  `vehicle/VehicleOnboardingStatusScreen.kt`, `vehicle/VehiclesViewModel.kt`,
+  `vehicle/VehiclesScreen.kt`, `vehicle/ActiveVehicleStore.kt`. App, changed: `nav/DriverNavHost.kt`
+  (four placeholders replaced), `di/DriverAppModule.kt`, `onboarding/OnboardingErrors.kt` (four
+  vehicle codes), `ui/component/DocumentControls.kt` (`StatusPill`, `ModeCBadge`, `CaptureTile`
+  height), `ui/VehicleTypeLabels.kt` (`VehicleColors.forType`), `ui/theme/Color.kt` (`ScannerColors`),
+  `ui/theme/Dimens.kt`, three `strings.xml`, `AndroidManifest.xml` (`CAMERA`), `build.gradle.kts` and
+  `gradle/libs.versions.toml` (CameraX 1.6.1), `apps/driver-android/CLAUDE.md`. Tests, new:
+  `capture/CropQuadTest.kt` (8), `capture/DocumentEdgeDetectorTest.kt` (6),
+  `vehicle/VehicleOnboardingViewModelTest.kt` (11), `vehicle/VehiclesViewModelTest.kt` (6),
+  `vehicle/VehicleOnboardingStatusViewModelTest.kt` (4), `vehicle/VehicleTestKit.kt`.

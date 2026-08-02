@@ -103,6 +103,26 @@ public sealed class RegistryOptions
     public TimeSpan PayoutDocumentRetention { get; set; } = TimeSpan.FromDays(90);
 
     // -----------------------------------------------------------------------------------------
+    // Onboarding documents (Δ MCS-01) — the licence, the profile photo and the four vehicle docs
+    // -----------------------------------------------------------------------------------------
+
+    /// <summary>Ceiling on one onboarding document.</summary>
+    /// <remarks>
+    /// <b>No spec</b> — the same 8 MiB bound fleet-svc and the payout slots use. Named separately
+    /// from <see cref="PayoutDocumentMaxBytes"/> because these are photographs taken on a handset
+    /// and those are exports from a banking app; the two will not stay the same number forever.
+    /// </remarks>
+    public long OnboardingDocumentMaxBytes { get; set; } = 8 * 1024 * 1024;
+
+    /// <summary>How long a raw onboarding document is kept (NFR-28).</summary>
+    /// <remarks>
+    /// <b>Always set.</b> Every one of these is raw identity evidence — a licence, a NIC, a plate —
+    /// so unlike the payout slots there is no retained class here and no exception to argue about:
+    /// the extraction outlives the image, which is the whole of NFR-28.
+    /// </remarks>
+    public TimeSpan OnboardingDocumentRetention { get; set; } = TimeSpan.FromDays(90);
+
+    // -----------------------------------------------------------------------------------------
     // C054 — the ocr-svc hop (D6' §7.5)
     // -----------------------------------------------------------------------------------------
 

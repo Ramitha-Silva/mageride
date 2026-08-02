@@ -3,8 +3,8 @@ package lk.mageride.driver.di
 import io.ktor.client.engine.HttpClientEngine
 import io.ktor.client.engine.okhttp.OkHttp
 import lk.mageride.driver.capture.DocumentCaptureCoordinator
+import lk.mageride.driver.capture.DocumentScannerViewModel
 import lk.mageride.driver.onboarding.AndroidOnboardingPreferences
-import lk.mageride.driver.onboarding.DriverDocumentUploader
 import lk.mageride.driver.onboarding.DriverPermissions
 import lk.mageride.driver.onboarding.DriverProfileRepository
 import lk.mageride.driver.onboarding.LanguageCityViewModel
@@ -13,10 +13,16 @@ import lk.mageride.driver.onboarding.OnboardingPreferences
 import lk.mageride.driver.onboarding.OnboardingRepository
 import lk.mageride.driver.onboarding.ProfileSetupViewModel
 import lk.mageride.driver.onboarding.SplashViewModel
-import lk.mageride.driver.onboarding.UnavailableDriverDocumentUploader
 import lk.mageride.driver.push.PushRouter
 import lk.mageride.driver.push.PushTokenProvider
 import lk.mageride.driver.shell.ConnectivityMonitor
+import lk.mageride.driver.vehicle.ActiveVehicleStore
+import lk.mageride.driver.vehicle.AndroidActiveVehicleStore
+import lk.mageride.driver.vehicle.VehicleOnboardingRepository
+import lk.mageride.driver.vehicle.VehicleOnboardingSession
+import lk.mageride.driver.vehicle.VehicleOnboardingStatusViewModel
+import lk.mageride.driver.vehicle.VehicleOnboardingViewModel
+import lk.mageride.driver.vehicle.VehiclesViewModel
 import lk.mageride.shared.data.api.ApiConfig
 import lk.mageride.shared.data.api.AttestationProvider
 import lk.mageride.shared.data.models.AppSurface
@@ -104,13 +110,8 @@ internal fun driverAppModule(environment: DriverEnvironment = DriverEnvironment.
     // dialog: the screen that asked for the capture is not composed while it is on screen.
     single { DocumentCaptureCoordinator() }
 
-    // `PUT /v1/drivers/profile` takes `docs.uploads` ids and no contract route creates one for a
-    // driver's photo or licence. Bound to the implementation that says so rather than to one that
-    // invents an id — see `DriverDocumentUploader` and the C068 handoff.
-    single<DriverDocumentUploader> { UnavailableDriverDocumentUploader() }
-
     single { OnboardingRepository(content = get(), iam = get(), preferences = get()) }
-    single { DriverProfileRepository(registry = get(), iam = get(), uploader = get()) }
+    single { DriverProfileRepository(registry = get(), iam = get()) }
 
     viewModel { SplashViewModel(sessions = get(), profiles = get(), preferences = get()) }
     viewModel { LanguageCityViewModel(repository = get()) }
@@ -124,4 +125,22 @@ internal fun driverAppModule(environment: DriverEnvironment = DriverEnvironment.
         )
     }
     viewModel { ProfileSetupViewModel(profiles = get(), captures = get()) }
+
+    // ---- C069 · vehicle onboarding ----------------------------------------------------
+    // Which vehicle SCR-DA-006 is about, held process-wide for the same reason the capture
+    // coordinator is: `DriverRoute.VehicleOnboardingStatus` carries no arguments, and the screen
+    // that names the vehicle is not composed while the one that reads it is on top.
+    single { VehicleOnboardingSession() }
+
+    // D-03's single active publisher. Local by design — there is no "set my active vehicle"
+    // operation on the platform, and there does not need to be: the MQTT username IS the vehicle
+    // id, so the broker learns the choice on CONNECT. See ActiveVehicleStore.
+    single<ActiveVehicleStore> { AndroidActiveVehicleStore(androidContext()) }
+
+    single { VehicleOnboardingRepository(registry = get()) }
+
+    viewModel { DocumentScannerViewModel(captures = get()) }
+    viewModel { VehicleOnboardingViewModel(vehicles = get(), captures = get(), session = get()) }
+    viewModel { VehicleOnboardingStatusViewModel(vehicles = get(), session = get()) }
+    viewModel { VehiclesViewModel(vehicles = get(), session = get(), activeVehicle = get()) }
 }

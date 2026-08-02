@@ -127,6 +127,27 @@ internal data class ModeColors(val modeA: Color, val modeB: Color, val modeC: Co
     }
 }
 
+/**
+ * SCR-DA-005's viewfinder palette (C069).
+ *
+ * **The one screen in this app that is not on the M3 colour scheme, and it has to be.** A camera
+ * preview under a light surface is a light leak on every side of the document, so `driver_android
+ * .html` draws the scanner on `#0f1115` with the `#FFB68A` primary tint on its actions and a grey
+ * for the hint line. Those three hexes are the wireframe's; they live here rather than in the
+ * screen because this file is where a colour is allowed to be a number.
+ *
+ * One appearance, not two: a viewfinder does not have a light theme.
+ *
+ * @property background The `screen` behind the camera surface.
+ * @property accent `Use photo ›`, the flash toggle, the crop quad and its handles.
+ * @property hint The capture hint and a disabled action on the capture bar.
+ */
+internal object ScannerColors {
+    val background: Color = Color(0xFF0F1115)
+    val accent: Color = Color(0xFFFFB68A)
+    val hint: Color = Color(0xFF9AA0A6)
+}
+
 /** Map pin colours — D2' §0.3: "`pickup` green, `dropoff` red, `user` blue dot". */
 internal object PinColors {
     val Pickup = Color(0xFF2E9E4F)

@@ -7,6 +7,9 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import lk.mageride.shared.data.api.CapturedDocument
+import lk.mageride.shared.data.api.FileUpload
+import lk.mageride.shared.data.models.registry.CaptureSource
 
 /**
  * One captured or picked image, in memory.
@@ -22,10 +25,25 @@ import kotlinx.coroutines.flow.asStateFlow
  * @property fileName Name to send in the part's `Content-Disposition`.
  * @property bytes The image, already perspective-corrected when it came from SCR-DA-005.
  * @property mimeType Media type, e.g. `image/jpeg`.
+ * @property capturedVia How this image was obtained (AL-43). Carried on the image rather than
+ *   passed at the call site, because the two travel together all the way to
+ *   `docs.uploads.captured_via` and an image that lost its provenance would be recorded as a scan
+ *   that never happened — which is the one thing the Verification-Officer queue sorts on.
  */
-internal class CapturedImage(val fileName: String, val bytes: ByteArray, val mimeType: String = "image/jpeg") {
+internal class CapturedImage(
+    val fileName: String,
+    val bytes: ByteArray,
+    val mimeType: String = "image/jpeg",
+    val capturedVia: CaptureSource = CaptureSource.CAMERA_DRAG_CROP,
+) {
     /** How many bytes this is, for the size guard on the upload. */
     val sizeBytes: Int get() = bytes.size
+
+    /** This image as the shared client's multipart part. */
+    fun asDocument(): CapturedDocument = CapturedDocument(
+        file = FileUpload(fileName = fileName, bytes = bytes, contentType = mimeType),
+        capturedVia = capturedVia,
+    )
 }
 
 /**

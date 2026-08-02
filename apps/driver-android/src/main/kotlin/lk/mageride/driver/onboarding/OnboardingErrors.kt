@@ -13,15 +13,18 @@ import lk.mageride.shared.data.models.ErrorCode
  * trilingual app becomes an English one at exactly the moment it matters. The kebab `code` is the
  * key; the copy is `strings.xml`'s, in all three languages.
  *
- * Everything cluster 1 can fail with is here, in one place, because the same six OTP codes appear
- * on the login screen, the resend and the verify.
+ * Everything cluster 1 and the Mode-C wizard can fail with is here, in one place, because the same
+ * six OTP codes appear on the login screen, the resend and the verify, and the same four vehicle
+ * codes appear on all four wizard steps (C069).
  */
 internal object OnboardingErrors {
 
     /** The string resource for [cause], falling back to the shell's generic message. */
     @StringRes
     fun messageFor(cause: Throwable): Int = when (cause) {
-        is DocumentUploadUnavailableException -> R.string.error_upload_unavailable
+        // A document too large for the gateway. Its own message, because "try again" is wrong
+        // advice for a photograph that will be the same size next time (Δ MCS-01).
+        is MageRideError.PayloadTooLarge -> R.string.error_image_too_large
 
         is MageRideError.Network, is MageRideError.Timeout, is MageRideError.CircuitOpen ->
             R.string.error_offline
@@ -50,6 +53,19 @@ internal object OnboardingErrors {
         ErrorCode.USER_BLOCKED -> R.string.error_user_blocked
 
         ErrorCode.VALIDATION_FAILED -> R.string.error_validation_failed
+
+        // ---- C069 · the Mode-C wizard (SCR-DA-004…004c) ------------------------------------
+        // D-37's active-set uniqueness. The wizard also renders this one *inline on the plate
+        // field* rather than as a screen error, because that one field is what has to change.
+        ErrorCode.REGISTRATION_EXISTS -> R.string.error_registration_exists
+
+        // AL-27's fence, seen from the client side: the Driver App onboards Mode C only, and a
+        // Mode A/B vehicle or a route permit belongs to the Fleet Portal.
+        ErrorCode.MODE_NOT_ALLOWED, ErrorCode.INVALID_VEHICLE_TYPE -> R.string.error_mode_not_allowed
+
+        ErrorCode.NOT_OWNER -> R.string.error_not_owner
+
+        ErrorCode.VEHICLE_NOT_FOUND -> R.string.error_vehicle_not_found
 
         else -> R.string.error_generic
     }

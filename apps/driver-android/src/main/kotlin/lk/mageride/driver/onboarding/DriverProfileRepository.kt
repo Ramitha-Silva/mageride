@@ -8,7 +8,6 @@ import lk.mageride.shared.data.models.FieldSource
 import lk.mageride.shared.data.models.VehicleType
 import lk.mageride.shared.data.models.VerifyStatus
 import lk.mageride.shared.data.models.iam.UserProfile
-import lk.mageride.shared.data.models.registry.UpsertDriverProfileRequest
 
 /**
  * The four licence fields Gemini Flash extracts, as the keys `registry.document_fields` stores
@@ -113,40 +112,34 @@ internal data class LicenceExtraction(val fields: List<LicenceField>, val displa
  * and it precedes Home; no vehicle is involved, and the Mode-C wizard that onboards one is
  * optional and belongs to C069.
  */
-internal class DriverProfileRepository(
-    private val registry: RegistryApi,
-    private val iam: IamApi,
-    private val uploader: DriverDocumentUploader,
-) {
+internal class DriverProfileRepository(private val registry: RegistryApi, private val iam: IamApi) {
 
     /** `GET /v1/users/me` — the splash router's input for "has this driver a profile yet?". */
     suspend fun me(): UserProfile = iam.getMyProfile()
 
     /**
-     * Uploads the images, then upserts the profile.
+     * `PUT /v1/drivers/profile` — the three images and the name, in one request.
      *
-     * The order matters: `upsertDriverProfile` takes `docs.uploads` ids, so all three files exist
-     * server-side before the profile row does. A driver-supplied [ProfileDraft.nicNo] or
-     * [ProfileDraft.allowedVehicleTypes] is sent as-is — registry-svc is what stamps it
-     * `source='manual'`, `verify_status='pending'` and queues the officer review (AL-29,
-     * US-2.4a); the client never claims a provenance of its own.
+     * The multipart arm (Δ MCS-01): registry-svc writes each image to `docs.uploads` and the
+     * profile row in the same call, so there is no id for a client to mint and nothing to hold
+     * between two requests on a mobile network. Each image carries its own capture source (AL-43)
+     * — the avatar came from the picker, the licence from SCR-DA-005 — and that provenance is
+     * what the Verification-Officer queue sorts on.
+     *
+     * A driver-supplied [ProfileDraft.nicNo] or [ProfileDraft.allowedVehicleTypes] is sent as-is:
+     * **registry-svc** is what stamps it `source='manual'`, `verify_status='pending'` and queues
+     * the officer review (AL-29, US-2.4a). The client never claims a provenance of its own.
      */
     suspend fun submit(draft: ProfileDraft): LicenceExtraction {
         require(draft.isComplete) { "Profile Setup needs a name, a photo and both licence sides" }
 
-        val photoId = uploader.upload(DriverDocumentKind.PROFILE_PHOTO, requireNotNull(draft.photo))
-        val frontId = uploader.upload(DriverDocumentKind.LICENCE_FRONT, requireNotNull(draft.licenceFront))
-        val backId = uploader.upload(DriverDocumentKind.LICENCE_BACK, requireNotNull(draft.licenceBack))
-
-        val response = registry.upsertDriverProfile(
-            UpsertDriverProfileRequest(
-                driverName = draft.name.trim(),
-                profilePhotoFileId = photoId,
-                licenseFrontFileId = frontId,
-                licenseBackFileId = backId,
-                nicNo = draft.nicNo?.takeIf(String::isNotBlank),
-                allowedVehicleTypes = draft.allowedVehicleTypes?.takeIf(List<VehicleType>::isNotEmpty),
-            ),
+        val response = registry.uploadDriverProfile(
+            driverName = draft.name.trim(),
+            photo = requireNotNull(draft.photo).asDocument(),
+            licenseFront = requireNotNull(draft.licenceFront).asDocument(),
+            licenseBack = requireNotNull(draft.licenceBack).asDocument(),
+            nicNo = draft.nicNo?.takeIf(String::isNotBlank),
+            allowedVehicleTypes = draft.allowedVehicleTypes?.takeIf(List<VehicleType>::isNotEmpty),
         )
 
         return extractionOf(response.fields, draft.name.trim())
@@ -159,7 +152,7 @@ internal class DriverProfileRepository(
             LicenceField(
                 key = key,
                 value = field?.value,
-                source = field?.source ?: FieldSource.OCR,
+                source = field?.source ?: FieldSource.AI,
                 // A key the server did not answer for at all has not been verified either; the
                 // screen shows it as unread, which is the same prompt to type it in.
                 needsOfficerReview = field == null || field.verifyStatus == VerifyStatus.PENDING,

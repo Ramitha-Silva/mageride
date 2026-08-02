@@ -27,11 +27,12 @@ lk.mageride.driver
 ├── map/                      MageRideMap (MapLibre host), MapStyles, VehicleLayers (MAP-*)
 ├── location/                 PositionForegroundService, PositionPipeline, MQTT transport, journal
 ├── push/                     FCM service, PushRouter (deep links), channels, PushTokenProvider
-├── capture/                  CapturedImage + DocumentCaptureCoordinator — the seam to SCR-DA-005
-└── onboarding/               C068 · SCR-DA-001, 002, 003, 003a, 007 + their data layer
+├── capture/                  C069 · SCR-DA-005 — the scanner, its geometry and its coordinator
+├── onboarding/               C068 · SCR-DA-001, 002, 003, 003a, 007 + their data layer
+└── vehicle/                  C069 · SCR-DA-004…004c, 006, 026/026a + their data layer
 ```
 
-**To add a screen (C069–C075):**
+**To add a screen (C070–C075):**
 
 1. Its route is already in `nav/DriverRoute.kt`. Use it; do not invent a path.
 2. Replace its `placeholder(...)` line in `nav/DriverNavHost.kt` with the real composable. That file
@@ -52,11 +53,11 @@ lk.mageride.driver
   `open(target)` and navigates to `DriverRoute.DocumentCapture`; the scanner reads `pending`, shows
   the right title and calls `deliver(image)`. The route carries no arguments, so this is the only
   way to say what a capture is for.
-- **`DriverDocumentUploader` has no route behind it.** `PUT /v1/drivers/profile` takes
-  `docs.uploads` ids and nothing in `backend/contracts` creates one for a driver photo or licence.
-  The binding is `UnavailableDriverDocumentUploader`, which fails loudly; swap it when the route
-  lands. C069's four vehicle documents do **not** need it — they go up inside
-  `PUT /v1/vehicles/{id}/onboarding/{step}`.
+- **Images go up with the request that needs them, and there is no uploader seam.** MCS-01 landed
+  the multipart arm of `PUT /v1/drivers/profile` and `PUT /v1/vehicles/{id}/onboarding/{step}`, so
+  registry-svc writes `docs.uploads` and the row that references it in one call; the
+  `DriverDocumentUploader` interface C068 left behind for a route that did not exist was deleted
+  with it. Nothing on this surface mints a `docs.uploads` id for a client to hold.
 - **`OnboardingPreferences`** holds the three answers given before there is a session (language,
   operating city, permissions-seen) and `OnboardingRepository.syncPreferences()` pushes the first
   two to `iam.users` on the first authenticated call.
@@ -69,6 +70,35 @@ lk.mageride.driver
   `7X XXX XXXX` mask are Kotlin constants, because three identical values in the three
   `strings.xml` files is exactly what `StringResourceTest` (correctly) fails on. City names come
   from `config.operating_cities` for the same reason.
+
+## Cluster 2 (C069) — the Mode-C wizard and the scanner
+
+- **`CropQuad` and `DocumentEdgeDetector` are pure Kotlin and are where SCR-DA-005's decisions
+  live.** Everything that touches a `Bitmap` is in `DocumentImaging` and is untestable on this
+  host, so the geometry (winding order, refusing a drag that folds the quad, the output size) and
+  the edge-detect proposal are deliberately kept out of it. If you add behaviour to the scanner,
+  add it there.
+- **The scanner's frame is fixed at 4:3 and the viewfinder is `FIT_CENTER`.** The crop quad is
+  normalised and applied to the *captured still*, so the preview and the capture have to be the
+  same rectangle. A `FILL_CENTER` preview crops the sides away and every corner then means
+  something different in the file that is uploaded.
+- **`CaptureSource.CAMERA_DRAG_CROP` is stamped in `DocumentScannerViewModel.confirm()` and
+  nowhere else** (AL-43). `readImage` stamps `GALLERY`. A screen never chooses a provenance — it
+  is what the Verification-Officer queue sorts on.
+- **AL-30 lives in `VehicleOnboardingRepository.resume()`, as a `ResumePoint`.** Re-opening the
+  wizard opens the first non-verified step and never Step 1; when the current vehicle is approved
+  the same call answers `Fresh` and the wizard starts a **new** vehicle. No screen decides this.
+- **`POST /v1/vehicles` IS Step 1/4** (Δ C029). It carries the type and plate the `details` step
+  stores, so a fresh vehicle comes back with one saved step and `nextStep = insurance`. Do not add
+  a second call to save details on a vehicle that was just created.
+- **`ActiveVehicleStore` is local, on purpose.** No operation on the platform sets a driver's
+  active vehicle, and none is needed: the MQTT username **is** the vehicle id, so the broker learns
+  the choice at CONNECT. C070 reads this store for the dashboard chip and the US-9.6 go-online gate.
+- **`VehicleOnboardingSession` is to SCR-DA-006 what `DocumentCaptureCoordinator` is to
+  SCR-DA-005** — the route carries no arguments, so the vehicle id is passed through a process-wide
+  holder instead.
+- Reusable UI added here: `StatusPill` + `StatusTone`, `ModeCBadge`, `CaptureTile(height = …)`,
+  `VehicleColors.forType`, and `ScannerColors` in `ui/theme`.
 
 ## Rules this module is built on
 
@@ -113,6 +143,17 @@ lk.mageride.driver
   file-facade classes through that file alone. Fixed in `shared/kmp/build.gradle.kts` by C068.
 - **ktlint's `function-naming` needs the `@Composable` exemption**, which is set once in the repo
   root `.editorconfig`. detekt's config is `config/detekt/detekt.yml`, also shared.
+- **`Modifier.menuAnchor()` with no argument is deprecated in Material3 1.4**, and the type is
+  spelled **`ExposedDropdownMenuAnchorType`** there — `MenuAnchorType` is the 1.3 name and does not
+  resolve. The Compose BOM `2026.06.01` pins material3 1.4.0.
+- **detekt's `TooManyFunctions` has NO `@Composable` exemption** (only `LongMethod` and
+  `LongParameterList` do), and the ceiling is 11 per file. A wireframe screen with more bodies than
+  that gets split — C069 put its label table in `vehicle/VehicleOnboardingLabels.kt` and its CameraX
+  plumbing in `capture/CameraXBinding.kt` for exactly this reason.
+- **`MagicNumber` excludes `ui/theme` and nothing else.** A hex or a `dp` anywhere else is a build
+  failure, which is the same rule as "never a raw dp or hex" above, enforced.
+- **CameraX is pinned at 1.6.1** — the newest whose AAR metadata still says `minCompileSdk=36`.
+  1.7.x is alpha and would raise the floor past this module's `compileSdk`.
 - **`kotlin-test` resolves to no variant under AGP's built-in Kotlin.** Use `libs.kotlin.testjunit`
   (the `kotlin-test-junit` artifact) — the alias is deliberately not named `kotlin-test-junit`,
   because that would turn `kotlin-test` into a catalogue *group* and break `libs.kotlin.test.get()`

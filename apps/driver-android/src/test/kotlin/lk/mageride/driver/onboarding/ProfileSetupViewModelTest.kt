@@ -7,6 +7,7 @@ import lk.mageride.shared.data.models.ExtractedField
 import lk.mageride.shared.data.models.FieldSource
 import lk.mageride.shared.data.models.VehicleType
 import lk.mageride.shared.data.models.VerifyStatus
+import lk.mageride.shared.data.models.registry.CaptureSource
 import lk.mageride.shared.data.models.registry.RegistrationStatus
 import lk.mageride.shared.data.models.registry.UpsertDriverProfileResponse
 import lk.mageride.shared.testing.fake.FakeApiBackend
@@ -14,7 +15,6 @@ import lk.mageride.shared.testing.fake.mageRideApi
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
-import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -34,7 +34,6 @@ class ProfileSetupViewModelTest {
 
     private val main = MainDispatcher()
     private val backend = FakeApiBackend()
-    private val uploader = RecordingDocumentUploader()
     private val captures = DocumentCaptureCoordinator()
 
     @BeforeTest
@@ -55,7 +54,7 @@ class ProfileSetupViewModelTest {
         model.onNameChanged("K. Fernando")
         assertFalse(model.state.value.canSave, "no photo — US-2.12 makes it required")
 
-        model.onPhotoPicked(testImage("photo.jpg"))
+        model.onPhotoPicked(testImage("photo.jpg", CaptureSource.GALLERY))
         assertFalse(model.state.value.canSave, "no licence")
 
         captures.open(DocumentCaptureTarget.LICENCE_FRONT)
@@ -77,15 +76,17 @@ class ProfileSetupViewModelTest {
 
         assertTrue(model.state.value.done, "nothing to review, so nothing to stop for")
         assertFalse(model.state.value.hasOfficerFlag)
-        // All three images exist server-side before the profile row does — the contract takes ids.
-        assertContentEquals(
-            listOf(
-                DriverDocumentKind.PROFILE_PHOTO,
-                DriverDocumentKind.LICENCE_FRONT,
-                DriverDocumentKind.LICENCE_BACK,
-            ),
-            uploader.uploads,
-        )
+
+        // Δ MCS-01: one request carries the name and all three images. There is no id for the
+        // client to mint any more, and nothing to hold between two calls on a mobile network.
+        val body = backend.lastCall("upsertDriverProfile").body
+        assertEquals(1, backend.callsTo("upsertDriverProfile").size)
+        assertTrue(body.contains("photo.jpg"), "the avatar")
+        assertTrue(body.contains("front.jpg") && body.contains("back.jpg"), "both licence sides")
+
+        // AL-43: each image says how it was captured, and they did not all come the same way.
+        assertTrue(body.contains("gallery"), "the avatar came from the picker")
+        assertTrue(body.contains("camera_dragcrop"), "the licence came from the scanner")
     }
 
     @Test
@@ -118,10 +119,12 @@ class ProfileSetupViewModelTest {
         model.save()
         model.state.await { it.done || it.error != null }
 
-        val body = backend.lastCall("upsertDriverProfile").json
-        assertEquals("199012345678", body["nicNo"]?.toString()?.trim('"'), "the typed NIC reaches the request")
+        // The request is `multipart/form-data` now (Δ MCS-01), so the typed values are form parts
+        // rather than JSON properties — read as text, which is what the wire carries.
+        val body = backend.lastCall("upsertDriverProfile").body
+        assertTrue(body.contains("nicNo") && body.contains("199012345678"), "the typed NIC reaches the request")
         assertTrue(
-            body["allowedVehicleTypes"].toString().contains("three_wheeler"),
+            body.contains("allowedVehicleTypes") && body.contains("three_wheeler"),
             "and so do the licence classes",
         )
 
@@ -146,19 +149,17 @@ class ProfileSetupViewModelTest {
     }
 
     @Test
-    fun the_missing_upload_route_is_reported_as_itself_and_not_as_a_generic_failure() = runBlocking {
-        // The honest state of the platform today: no contract route creates a `docs.uploads` row
-        // for a driver's photo or licence. The screen says so rather than showing "something went
-        // wrong", which would send someone hunting for a network fault that is not there.
-        val model = viewModel(uploader = UnavailableDriverDocumentUploader())
-        fillForm(model)
+    fun an_image_over_the_gateways_ceiling_says_so_rather_than_something_went_wrong() = runBlocking {
+        // `413` is the one failure a retry cannot fix — the photograph will be the same size next
+        // time — so it gets its own copy rather than the generic "try again" (D-26, Δ MCS-01).
+        backend.fails("upsertDriverProfile", io.ktor.http.HttpStatusCode.PayloadTooLarge, "payload-too-large")
+        val model = completedForm()
 
         model.save()
         model.state.await { it.error != null }
 
-        assertEquals(lk.mageride.driver.R.string.error_upload_unavailable, model.state.value.error)
+        assertEquals(lk.mageride.driver.R.string.error_image_too_large, model.state.value.error)
         assertFalse(model.state.value.done)
-        assertFalse(backend.called("upsertDriverProfile"), "nothing is posted with ids the server would refuse")
     }
 
     @Test
@@ -178,17 +179,17 @@ class ProfileSetupViewModelTest {
 
     private fun fillForm(model: ProfileSetupViewModel) {
         model.onNameChanged("K. Fernando")
-        model.onPhotoPicked(testImage("photo.jpg"))
+        model.onPhotoPicked(testImage("photo.jpg", CaptureSource.GALLERY))
         captures.open(DocumentCaptureTarget.LICENCE_FRONT)
         captures.deliver(testImage("front.jpg"))
         captures.open(DocumentCaptureTarget.LICENCE_BACK)
         captures.deliver(testImage("back.jpg"))
     }
 
-    private fun viewModel(uploader: DriverDocumentUploader = this.uploader): ProfileSetupViewModel {
+    private fun viewModel(): ProfileSetupViewModel {
         val api = backend.mageRideApi()
         return ProfileSetupViewModel(
-            profiles = DriverProfileRepository(registry = api.registry, iam = api.iam, uploader = uploader),
+            profiles = DriverProfileRepository(registry = api.registry, iam = api.iam),
             captures = captures,
         )
     }
@@ -197,6 +198,8 @@ class ProfileSetupViewModelTest {
     private fun response(nic: ExtractedField) = UpsertDriverProfileResponse(
         driverId = "01JDRIVER00000000000000000",
         status = RegistrationStatus.PENDING,
+        // Δ C029 — the response carries what was STORED, which is not always what was sent.
+        displayName = "K. Fernando",
         fields = listOf(
             confirmed("licence_no", "B1234567"),
             confirmed("licence_expiry", "2028-04-30"),
@@ -208,7 +211,7 @@ class ProfileSetupViewModelTest {
     private fun confirmed(key: String, value: String) = ExtractedField(
         key = key,
         value = value,
-        source = FieldSource.OCR,
+        source = FieldSource.AI,
         confidence = 0.97,
         verifyStatus = VerifyStatus.CONFIRMED,
     )
@@ -216,7 +219,7 @@ class ProfileSetupViewModelTest {
     private fun pending(key: String, value: String?) = ExtractedField(
         key = key,
         value = value,
-        source = if (value == null) FieldSource.OCR else FieldSource.MANUAL,
+        source = if (value == null) FieldSource.AI else FieldSource.MANUAL,
         confidence = if (value == null) 0.2 else null,
         verifyStatus = VerifyStatus.PENDING,
     )

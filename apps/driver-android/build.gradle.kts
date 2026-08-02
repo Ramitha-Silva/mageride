@@ -173,6 +173,15 @@ dependencies {
     // The foreground service's fix source.
     implementation(libs.play.services.location)
 
+    // AL-43 / SCR-DA-005 — the camera document-scanner with the draggable-corner crop. ADD names
+    // `ImageCapture` for Android specifically, so this is the contract, not a choice of library.
+    // The crop geometry and the edge-detect proposal are deliberately NOT here: they are pure
+    // Kotlin in `capture/`, which is what makes them testable on this host.
+    implementation(libs.androidx.camera.core)
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.view)
+
     // E-01's ride pushes. Inert until a `google-services.json` exists — see the plugins block.
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.messaging)

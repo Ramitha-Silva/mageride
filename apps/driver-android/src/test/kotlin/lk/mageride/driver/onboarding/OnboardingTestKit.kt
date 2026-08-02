@@ -8,7 +8,7 @@ import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withTimeout
 import lk.mageride.driver.capture.CapturedImage
 import lk.mageride.shared.data.models.Language
-import lk.mageride.shared.data.models.Ulid
+import lk.mageride.shared.data.models.registry.CaptureSource
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -26,30 +26,18 @@ internal class FakeOnboardingPreferences(
 ) : OnboardingPreferences
 
 /**
- * A [DriverDocumentUploader] that succeeds, and remembers what it was handed.
+ * A one-pixel stand-in for a captured document. Nothing here reads the bytes.
  *
- * Stands in for the upload route that does not exist yet (see [DriverDocumentUploader]); it is
- * what lets the rest of Profile Setup be tested end to end today, and what the real binding will
- * be swapped for when the route lands.
+ * The capture source is part of the image (AL-43) — the scanner's by default, because that is what
+ * a licence tile produces; the profile photo comes from the gallery and says so.
  */
-internal class RecordingDocumentUploader : DriverDocumentUploader {
-
-    /** Every upload, in the order Profile Setup made them. */
-    val uploads: MutableList<DriverDocumentKind> = mutableListOf()
-
-    override suspend fun upload(kind: DriverDocumentKind, image: CapturedImage): Ulid {
-        uploads += kind
-        return "01JUPLOAD${kind.ordinal}0000000000000000".take(ULID_LENGTH)
-    }
-
-    private companion object {
-        const val ULID_LENGTH = 26
-    }
-}
-
-/** A one-pixel stand-in for a captured document. Nothing here reads the bytes. */
-internal fun testImage(name: String): CapturedImage =
-    CapturedImage(fileName = name, bytes = ByteArray(size = 1), mimeType = "image/jpeg")
+internal fun testImage(name: String, capturedVia: CaptureSource = CaptureSource.CAMERA_DRAG_CROP): CapturedImage =
+    CapturedImage(
+        fileName = name,
+        bytes = ByteArray(size = 1),
+        mimeType = "image/jpeg",
+        capturedVia = capturedVia,
+    )
 
 /**
  * Puts `Dispatchers.Main` under test control for a `ViewModel`.

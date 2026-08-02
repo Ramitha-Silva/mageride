@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Dapper;
@@ -208,6 +209,37 @@ internal sealed class RegistryHarness : IAsyncDisposable
 
         Authorize(request, bearer);
         return Client.SendAsync(request);
+    }
+
+    /// <summary>
+    /// The multipart arm of an onboarding route (Δ MCS-01) — the images themselves rather than ids.
+    /// </summary>
+    public Task<HttpResponseMessage> PutMultipartAsync(string path, MultipartFormDataContent content, string? bearer)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Put, path) { Content = content };
+
+        Authorize(request, bearer);
+        return Client.SendAsync(request);
+    }
+
+    /// <summary>
+    /// One image part, with the AL-43 capture source that goes beside it.
+    /// </summary>
+    /// <remarks>
+    /// The bytes are arbitrary — nothing under test reads them. What matters is that a part
+    /// arrives, that the store puts it somewhere and that `captured_via` records which of the two
+    /// ways it was captured, because that is the signal the officer queue sorts on.
+    /// </remarks>
+    public static void AddImagePart(
+        MultipartFormDataContent content, string part, string capturedVia = "camera_dragcrop")
+    {
+        ArgumentNullException.ThrowIfNull(content);
+
+        var image = new ByteArrayContent([0xFF, 0xD8, 0xFF, 0xE0]);
+        image.Headers.ContentType = new MediaTypeHeaderValue("image/jpeg");
+
+        content.Add(image, part, $"{part}.jpg");
+        content.Add(new StringContent(capturedVia), $"{part}CapturedVia");
     }
 
     public Task<HttpResponseMessage> DeleteAsync(string path, string? bearer)

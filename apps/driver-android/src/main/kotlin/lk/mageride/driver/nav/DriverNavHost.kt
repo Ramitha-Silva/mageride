@@ -15,12 +15,16 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import lk.mageride.driver.R
+import lk.mageride.driver.capture.DocumentScannerScreen
 import lk.mageride.driver.onboarding.LanguageCityScreen
 import lk.mageride.driver.onboarding.LoginScreen
 import lk.mageride.driver.onboarding.PermissionsScreen
 import lk.mageride.driver.onboarding.ProfileSetupScreen
 import lk.mageride.driver.onboarding.SplashScreen
 import lk.mageride.driver.ui.theme.MageRideTheme
+import lk.mageride.driver.vehicle.VehicleOnboardingScreen
+import lk.mageride.driver.vehicle.VehicleOnboardingStatusScreen
+import lk.mageride.driver.vehicle.VehiclesScreen
 
 /**
  * The app's single `NavHost`, with one entry per [DriverRoute].
@@ -67,10 +71,50 @@ internal fun DriverNavHost(controller: NavHostController, modifier: Modifier = M
         }
 
         // ---- C069 · vehicle onboarding -------------------------------------------------
-        placeholder(DriverRoute.VehicleOnboarding, "SCR-DA-004 vehicle onboarding")
-        placeholder(DriverRoute.DocumentCapture, "SCR-DA-005 document capture")
-        placeholder(DriverRoute.VehicleOnboardingStatus, "SCR-DA-006 onboarding status")
-        placeholder(DriverRoute.Vehicles, "SCR-DA-026 my vehicles")
+        composable(DriverRoute.VehicleOnboarding.path) {
+            VehicleOnboardingScreen(
+                onCaptureRequested = { controller.navigate(DriverRoute.DocumentCapture.path) },
+                // Step 4/4 is saved, so the wizard is done with. Replacing it rather than stacking
+                // is what stops Back from SCR-DA-006 re-opening a step the driver has submitted.
+                onSubmitted = {
+                    controller.navigate(DriverRoute.VehicleOnboardingStatus.path) {
+                        popUpTo(DriverRoute.VehicleOnboarding.path) { inclusive = true }
+                    }
+                },
+                // "Back exits the wizard" from Step 1/4 (D2' §SCR-DA-004). Every other step's
+                // back is a step backwards and never reaches here.
+                onExit = { controller.popBackStack() },
+            )
+        }
+        composable(DriverRoute.DocumentCapture.path) {
+            // SCR-DA-005 delivers through `DocumentCaptureCoordinator`; the screen that asked for
+            // the capture is still on the back stack underneath and collects it there.
+            DocumentScannerScreen(onFinished = { controller.popBackStack() })
+        }
+        composable(DriverRoute.VehicleOnboardingStatus.path) {
+            VehicleOnboardingStatusScreen(
+                onDone = {
+                    controller.navigate(DriverRoute.Vehicles.path) {
+                        popUpTo(DriverRoute.VehicleOnboardingStatus.path) { inclusive = true }
+                    }
+                },
+                onResume = {
+                    controller.navigate(DriverRoute.VehicleOnboarding.path) {
+                        popUpTo(DriverRoute.VehicleOnboardingStatus.path) { inclusive = true }
+                    }
+                },
+            )
+        }
+        composable(DriverRoute.Vehicles.path) {
+            VehiclesScreen(
+                // The ＋ and a row's Resume are the same navigation: AL-30 decides whether the
+                // wizard opens at the next incomplete step or starts a NEW vehicle at Step 1/4,
+                // and it decides that in the repository, not here.
+                onAddVehicle = { controller.navigate(DriverRoute.VehicleOnboarding.path) },
+                onOpenStatus = { controller.navigate(DriverRoute.VehicleOnboardingStatus.path) },
+                onBack = { controller.popBackStack() },
+            )
+        }
 
         // ---- C070 · dashboard / dispatch -----------------------------------------------
         placeholder(DriverRoute.Home, "SCR-DA-010 dashboard")

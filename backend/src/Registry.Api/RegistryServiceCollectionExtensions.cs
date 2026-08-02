@@ -44,6 +44,10 @@ public static class RegistryServiceCollectionExtensions
         services.AddSingleton<IDriverPayoutProfileRepository, DriverPayoutProfileRepository>();
         services.AddSingleton<IPayoutDocumentStore, PayoutDocumentStore>();
 
+        // Δ MCS-01. The upload surface for onboarding documents — the one `docs.uploads` never had,
+        // which left Profile Setup and the Mode-C wizard unreachable on a real gateway.
+        services.AddSingleton<IOnboardingDocumentStore, OnboardingDocumentStore>();
+
         // Δ D-36. `Registry:PayoutDocumentRoot` stays honoured as the filesystem fallback's root so
         // a deployment that has not set `Storage:*` behaves exactly as it did, and so the rows it
         // already wrote go on resolving after it has.

@@ -54,7 +54,7 @@
     <string name="error_device_mismatch">මෙම කේතය යවා ඇත්තේ වෙනත් උපාංගයකට ය.</string>
     <string name="error_user_blocked">මෙම අංකයෙන් පිවිසිය නොහැක. සහාය අමතන්න.</string>
     <string name="error_validation_failed">ඔබ ඇතුළත් කළ තොරතුරු පරීක්ෂා කර නැවත උත්සාහ කරන්න.</string>
-    <string name="error_upload_unavailable">මෙම නිකුතුවෙන් තවම ලේඛන උඩුගත කළ නොහැක.</string>
+    <string name="error_image_too_large">එම පින්තූරය විශාල වැඩියි. තව ටිකක් ඈතට වී නැවත ගන්න.</string>
 
     <!-- C068 · SCR-DA-001…003a + 007 -->
 
@@ -134,5 +134,113 @@
 
     <string name="route_placeholder_title">තවම සාදා නැත</string>
     <string name="route_placeholder_body">%1$s එහි තිර කාණ්ඩය සමඟ ලැබේ.</string>
+
+    <!-- C069 · SCR-DA-004…004c, 005, 006, 026/026a — මාදිලි C වාහන ලියාපදිංචිය. -->
+
+    <string name="status_not_captured">ගෙන නැත</string>
+    <string name="mode_c_badge">මාදිලි C</string>
+    <string name="error_registration_exists">එම ලියාපදිංචි අංකය දැනටමත් ක්‍රියාකාරී වාහනයකට තිබේ.</string>
+    <string name="error_mode_not_allowed">මෙහිදී ලියාපදිංචි කළ හැක්කේ ඔබේම රියදුරු (මාදිලි C) වාහනය පමණි. බස්, පාසල් වෑන් සහ මාර්ග බලපත්‍ර හසුරුවනු ලබන්නේ Fleet Portal එකෙනි.</string>
+    <string name="error_not_owner">මෙම වාහනය වෙනස් කිරීමට ඔබට අයිතියක් නැත.</string>
+    <string name="error_vehicle_not_found">එම වාහනය තවදුරටත් ලේඛනගත කර නැත.</string>
+
+    <string name="capture_title">ගන්න: %1$s</string>
+    <string name="capture_title_generic">ලේඛනය ගන්න</string>
+    <string name="capture_flash">ෆ්ලෑෂ්</string>
+    <string name="capture_hint">මුළු ලේඛනයම රාමුවට පිරෙන ලෙස කොන් ඇදගෙන යන්න</string>
+    <string name="capture_retake">නැවත ගන්න</string>
+    <string name="capture_use_photo">මෙම ඡායාරූපය භාවිතා කරන්න</string>
+    <string name="capture_failed">එම ඡායාරූපය භාවිතා කළ නොහැකි විය. නැවත ගන්න.</string>
+    <string name="capture_permission_title">කැමරාවට අවසර දෙන්න</string>
+    <string name="capture_permission_body">ස්කෑනරය ඔබේ ලේඛනය කෙළින් කරන නිසා විස්තර පළමු වරටම කියවා ගත හැකිය.</string>
+    <string name="capture_permission_allow">කැමරාවට අවසර දෙන්න</string>
+    <string name="capture_from_gallery">ඒ වෙනුවට ගැලරියෙන් තෝරන්න</string>
+    <string name="capture_target_licence_front">බලපත්‍රයේ ඉදිරිපස</string>
+    <string name="capture_target_licence_back">බලපත්‍රයේ පිටුපස</string>
+    <string name="capture_target_insurance">රක්ෂණය</string>
+    <string name="capture_target_revenue_licence">ආදායම් බලපත්‍රය</string>
+    <string name="capture_target_vehicle_front">වාහනයේ ඉදිරිපස</string>
+    <string name="capture_target_vehicle_back">වාහනයේ පිටුපස</string>
+
+    <string name="vehicle_onboard_step_of">පියවර %1$d න් %2$d · %3$s</string>
+    <string name="vehicle_onboard_title">රියදුරු වාහනය එක් කරන්න</string>
+    <string name="vehicle_onboard_insurance_title">රක්ෂණය</string>
+    <string name="vehicle_onboard_revenue_title">ආදායම් බලපත්‍රය</string>
+    <string name="vehicle_onboard_photos_title">වාහනයේ ඡායාරූප</string>
+    <string name="vehicle_onboard_details_caption">වාහන විස්තර</string>
+    <string name="vehicle_onboard_insurance_caption">රක්ෂණ කාඩ්පත හෝ ලේඛනය</string>
+    <string name="vehicle_onboard_revenue_caption">වාහනයේ ආදායම් බලපත්‍රය</string>
+    <string name="vehicle_onboard_photos_caption">ඉදිරිපස සහ පිටුපස, අංක තහඩුව පෙනෙන සේ</string>
+    <string name="vehicle_onboard_cta_details">ඉදිරියට · රක්ෂණය</string>
+    <string name="vehicle_onboard_cta_insurance">සුරකින්න · ආදායම් බලපත්‍රය</string>
+    <string name="vehicle_onboard_cta_revenue">සුරකින්න · වාහන ඡායාරූප</string>
+    <string name="vehicle_onboard_cta_submit">සුරකා සමාලෝචනයට යොමු කරන්න</string>
+    <string name="vehicle_onboard_type_label">වාහන වර්ගය</string>
+    <string name="vehicle_onboard_registration_label">ලියාපදිංචි අංකය</string>
+    <string name="vehicle_onboard_mode_c_title">රියදුරු වාහනය</string>
+    <string name="vehicle_onboard_mode_c_body">මාදිලි C යනු ඔබේම රියදුරු වාහනයයි, එය මෙම යෙදුමෙන්ම එක් කරයි. බස්, පාසල් හා කාර්ය මණ්ඩල වෑන් සහ ඒවායේ මාර්ග බලපත්‍ර හසුරුවනු ලබන්නේ Fleet Portal එකෙනි — මෙහි බලපත්‍ර හෝ ට්‍රැකර් ක්ෂේත්‍රයක් නැත.</string>
+    <string name="vehicle_onboard_insurance_slot">රක්ෂණ ලේඛනය</string>
+    <string name="vehicle_onboard_revenue_slot">ආදායම් බලපත්‍රය</string>
+    <string name="vehicle_onboard_photos_slot">ඉදිරිපස හා පිටුපස ඡායාරූප</string>
+    <string name="vehicle_onboard_photo_front">ඉදිරිපස හා තහඩුව</string>
+    <string name="vehicle_onboard_photo_back">පිටුපස හා තහඩුව</string>
+    <string name="vehicle_onboard_plate_match">මෙම ඡායාරූපවලින් කියවන අංක තහඩුව %1$s සමඟ ගැළපේදැයි පරීක්ෂා කරයි. නොගැළපේ නම්, මෙම පියවර නිලධාරියෙකුගේ පරීක්ෂාවට යොමු වේ.</string>
+    <string name="vehicle_onboard_extract_title">ඔබේ ලේඛනයෙන් කියවා ගත් දේ</string>
+    <string name="vehicle_onboard_pending_title">පරීක්ෂාව සඳහා රඳවා ඇත</string>
+    <string name="vehicle_onboard_pending_body">මෙම ලේඛනයේ යමක් පැහැදිලිව කියවා ගත නොහැකි වූ නිසා නිලධාරියෙක් එය පරීක්ෂා කරයි. ඒ අතරතුර ඔබට ඉදිරියට යා හැකිය.</string>
+
+    <string name="vehicle_field_policy_no">ඔප්පු අංකය</string>
+    <string name="vehicle_field_insurer">රක්ෂණ සමාගම</string>
+    <string name="vehicle_field_revenue_no">බලපත්‍ර අංකය</string>
+    <string name="vehicle_field_plate_text">කියවූ තහඩුව</string>
+    <string name="vehicle_field_plate_match">තහඩු පරීක්ෂාව</string>
+    <string name="vehicle_field_confidence">නිරවද්‍යතාව</string>
+    <string name="vehicle_confidence_doubtful">%1$s — සැක සහිතයි</string>
+    <string name="vehicle_plate_matched">ගැළපේ</string>
+    <string name="vehicle_plate_mismatch">නොගැළපේ</string>
+
+    <string name="vehicle_status_title">වාහනය සමාලෝචනයේ</string>
+    <string name="vehicle_status_approved_title">වාහනය අනුමතයි</string>
+    <string name="vehicle_status_verifying">ඔබේ ලේඛන පරීක්ෂා කරමින්…</string>
+    <string name="vehicle_status_approved_caption">සේවයට සූදානම්</string>
+    <string name="vehicle_status_documents">ලේඛන සත්‍යාපනය (%1$d)</string>
+    <string name="vehicle_status_pending_banner">නිලධාරියෙකුගේ පරීක්ෂාවට රඳවා ඇත: %1$d. ඔබට දැනුම් දෙනු ලැබේ.</string>
+    <string name="vehicle_status_auto_approve">හතරම සත්‍යාපනය වූ විට වාහනය රැඳී සිටීමකින් තොරව තනිවම අනුමත වී “මගේ වාහන” තුළ දිස් වේ.</string>
+    <string name="vehicle_status_rejected_title">ආපසු එවා ඇත</string>
+    <string name="vehicle_status_resume">ඉතිරි පියවර සම්පූර්ණ කරන්න</string>
+    <string name="vehicle_status_my_vehicles">මගේ වාහන වෙත යන්න</string>
+    <string name="vehicle_status_unknown">ලේඛනවල තත්ත්වය බැලීමට “මගේ වාහන” වෙතින් වාහනයක් විවෘත කරන්න.</string>
+    <string name="vehicle_document_details">වාහන විස්තර (වර්ගය හා අංකය)</string>
+    <string name="vehicle_document_insurance">රක්ෂණය</string>
+    <string name="vehicle_document_revenue">ආදායම් බලපත්‍රය</string>
+    <string name="vehicle_document_photos">ඉදිරිපස හා පිටුපස ඡායාරූප</string>
+    <string name="verdict_verified">සත්‍යාපිතයි</string>
+    <string name="verdict_pending_review">නිලධාරියෙකු ළඟ</string>
+    <string name="verdict_pending_input">උඩුගත කර නැත</string>
+
+    <string name="vehicles_title">මගේ වාහන</string>
+    <string name="vehicles_add">වාහනයක් එක් කරන්න</string>
+    <string name="vehicles_one_live">එකවර ක්‍රියාත්මක විය හැක්කේ එක් වාහනයකට පමණි</string>
+    <string name="vehicles_mine_label">මගේ වාහන</string>
+    <string name="vehicles_assigned_label">තාවකාලිකව මට පවරා ඇති</string>
+    <string name="vehicles_fleet_badge">වාහන සමූහය</string>
+    <string name="vehicles_resume">ඉදිරියට</string>
+    <string name="vehicles_view_status">ලේඛන</string>
+    <string name="vehicles_deactivate">ඉවත් කරන්න</string>
+    <string name="vehicles_deactivate_title">මෙම වාහනය ඉවත් කරන්නද?</string>
+    <string name="vehicles_deactivate_body">%1$s සිතියමෙන් සහ ඔබේ ලැයිස්තුවෙන් ඉවත් වේ. ලියාපදිංචි අංකය නැවත භාවිතයට නිදහස් වේ.</string>
+    <string name="vehicles_active_now">දැන් ක්‍රියාත්මකයි</string>
+    <string name="vehicles_incomplete">අසම්පූර්ණයි</string>
+    <string name="vehicles_incomplete_step">අසම්පූර්ණයි · පියවර %1$d න් %2$d</string>
+    <string name="vehicles_empty_title">තවම වාහන නැත</string>
+    <string name="vehicles_empty_body">ඔබේම රියදුරු වාහනය එක් කරන්න, නැතහොත් එකක් පවරන තෙක් හෝ බෙදාගන්නා තෙක් රැඳී සිටින්න.</string>
+    <string name="vehicles_onboard_prompt_title">රියදුරු වාහනයක් එක් කරන්නද?</string>
+    <string name="vehicles_onboard_prompt_body">ඔබට වාහන නොමැත. දැන් ඔබේම රියදුරු වාහනය එක් කිරීමට කැමතිද?</string>
+    <string name="vehicles_onboard_prompt_yes">ඔව්, එක් කරන්න</string>
+    <string name="vehicles_onboard_prompt_not_now">දැන් නොවේ</string>
+    <string name="vehicle_registration_pending">පරීක්ෂා වෙමින්</string>
+    <string name="vehicle_registration_approved">අනුමතයි</string>
+    <string name="vehicle_registration_rejected">ආපසු එවා ඇත</string>
+    <string name="vehicle_registration_deactivated">ඉවත් කර ඇත</string>
 
 </resources>

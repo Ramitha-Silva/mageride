@@ -31,13 +31,19 @@ four-step Mode-C onboarding machine and the E-03 document-expiry tracker. Everyt
 | `POST /v1/internal/vehicles/{id}/onboarding/recompute` | **not in D3'** — AL-30 (C029 micro-change-set) |
 | `GET` · `PUT /v1/drivers/payout-profile` | **Δ AL-58/AL-59** — where a driver's swept earnings go |
 | `POST /v1/drivers/payout-profile/documents` | **Δ AL-58** — proof of account, and the driver's own LankaQR |
+| `PUT /v1/drivers/profile` · `PUT /v1/vehicles/{id}/onboarding/{step}` **multipart arms** | **Δ MCS-01** — the images in the same request as the fields; per-part `…CapturedVia` (AL-43) |
 | `POST /v1/internal/drivers/{id}/payout-profile/approve` · `/reject` | **Δ AL-58** — the officer's decision, from admin-bff |
 | `POST /v1/dev/vehicles/{id}/approve` | dev seed path only; **not a contract route** |
 
 **Not here, on purpose.** Gemini extraction, the PII redaction pre-pass and the Tesseract fallback
-are **C054**, behind `IDocumentExtractionClient`. The upload surface that fills `docs.uploads` is
-not this service's either — registry-svc resolves a file id and never sees the bytes, which is
-what keeps an unredacted image on the far side of the D-36 perimeter. The Verification-Officer
+are **C054**, behind `IDocumentExtractionClient`. (**Δ MCS-01:** the *upload* surface that fills
+`docs.uploads` for an onboarding document **is** this service's now — see `IOnboardingDocumentStore`.
+It was previously recorded here as somebody else's on the grounds that registry-svc "never sees the
+bytes"; that stopped being true when AL-58's payout upload landed in this same service, and it was
+never what D-36 protected. The perimeter is what reaches the **external model**, which is still
+ocr-svc's redaction pre-pass, and ocr-svc still fetches by `storage_url`. What the old rule actually
+achieved was leaving `docs.uploads` with no writer at all, so Profile Setup and the Mode-C wizard
+could not be completed against a real gateway.) The Verification-Officer
 queue screens are **C062**; this service feeds them (`document.review_required`,
 `registry.document_fields.verify_status='pending'`) and takes their answer back through the
 internal recompute route. The rejection path (`registry.vehicles.rejection_reason`, US-2.15) is

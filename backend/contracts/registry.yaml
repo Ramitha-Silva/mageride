@@ -99,6 +99,58 @@ paths:
                   type: array
                   items:
                     $ref: './_shared.yaml#/components/schemas/VehicleType'
+          # Δ MCS-01. The images themselves, in the same request as the fields — the arm
+          # `saveVehicleOnboardingStep` has always declared, for the one screen that could not
+          # use it. Before this, `docs.uploads` had no writer for an onboarding document at all
+          # (the only one in registry-svc was the AL-58 payout store), so the JSON arm above
+          # required three ids nothing on the platform could mint and SCR-DA/DI-003a could not
+          # be completed against a real gateway.
+          #
+          # `capturedVia` is per part and required (AL-43): the driver scans the licence with
+          # SCR-DA/DI-005 and picks the avatar out of the gallery in one submission, and a
+          # gallery pick is the fraud signal the Verification-Officer queue sorts on. One value
+          # for the whole form would be wrong about one of them.
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - driverName
+                - photo
+                - photoCapturedVia
+                - licenseFront
+                - licenseFrontCapturedVia
+                - licenseBack
+                - licenseBackCapturedVia
+              properties:
+                driverName:
+                  type: string
+                  maxLength: 200
+                photo:
+                  type: string
+                  format: binary
+                  description: Profile photo. Required — it is what a passenger recognises the driver by (US-2.12).
+                photoCapturedVia:
+                  $ref: '#/components/schemas/CaptureSource'
+                licenseFront:
+                  type: string
+                  format: binary
+                licenseFrontCapturedVia:
+                  $ref: '#/components/schemas/CaptureSource'
+                licenseBack:
+                  type: string
+                  format: binary
+                licenseBackCapturedVia:
+                  $ref: '#/components/schemas/CaptureSource'
+                nicNo:
+                  type: string
+                  maxLength: 20
+                allowedVehicleTypes:
+                  type: array
+                  items:
+                    $ref: './_shared.yaml#/components/schemas/VehicleType'
+                  description: >-
+                    Repeated field, or one field carrying a comma-separated list. `multipart/form-data`
+                    has no array type and both forms are written in the wild.
       responses:
         '200':
           description: Profile stored; OCR queued.
@@ -384,6 +436,9 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/OnboardingStepInput'
+          # Δ MCS-01 — this arm is now implemented. It was declared from the start and registry-svc
+          # bound JSON only, so a client posting a form (which the KMP `uploadVehicleOnboardingStep`
+          # has always done) reached a handler that saw no fields at all.
           multipart/form-data:
             schema:
               type: object
@@ -396,9 +451,14 @@ paths:
                   type: string
                   format: binary
                   description: Perspective-corrected document or photo capture (AL-43).
+                fileCapturedVia:
+                  $ref: '#/components/schemas/CaptureSource'
                 fileBack:
                   type: string
                   format: binary
+                  description: Step 4/4 only — one photo cannot show a vehicle's front and back plates.
+                fileBackCapturedVia:
+                  $ref: '#/components/schemas/CaptureSource'
       responses:
         '200':
           description: Step saved; verdict and resume point.
@@ -1125,6 +1185,24 @@ components:
         confirmed, `approved` once all four are. Only `approved` Mode-C vehicles are go-live
         eligible.
       enum: [incomplete, approved]
+
+    CaptureSource:
+      type: string
+      description: |
+        **Δ MCS-01.** Where one uploaded image came from (AL-43), stored on
+        `docs.uploads.captured_via`. Required on every onboarding upload and declared per file
+        part, never per request: a driver scans the licence through SCR-DA/DI-005 and picks the
+        avatar out of the gallery in one submission.
+
+        `gallery` is permitted and **flagged** — it is a file that was already on the handset,
+        which is how a document belonging to somebody else arrives, and it is what the
+        Verification-Officer queue sorts on. It is not defaulted: defaulting to `camera_dragcrop`
+        would record a scan that did not happen, and defaulting to `gallery` would flag every
+        honest capture from a client that forgot the field.
+
+        The column's third value, `other`, is the Fleet Portal's desktop file picker (AL-50) and
+        is not accepted here.
+      enum: [camera_dragcrop, gallery]
 
     OnboardingStep:
       type: string

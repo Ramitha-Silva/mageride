@@ -114,6 +114,23 @@ internal object ControlTokens {
     /** One cell of SCR-DA-003's six-digit OTP entry. */
     val OtpCell: Dp = 44.dp
 
+    /** SCR-DA-005's shutter (C069). A camera's shutter is a size, not a spacing. */
+    val Shutter: Dp = 64.dp
+
+    /** SCR-DA-005's crop quad: its outline, its rule-of-thirds grid and a corner handle. */
+    val ScannerQuadStroke: Dp = 2.dp
+    val ScannerGridStroke: Dp = 1.dp
+    val ScannerHandle: Dp = 10.dp
+
+    /** SCR-DA-004a…004c's wide capture panel — the wireframe's `illus` at `height:120px`. */
+    val CapturePanel: Dp = 120.dp
+
+    /** The wireframe's status dot on a My Vehicles row (`cdot`). */
+    val StatusDot: Dp = 12.dp
+
+    /** SCR-DA-006's ⏳ verdict avatar. */
+    val StatusAvatar: Dp = 60.dp
+
     /** SCR-DA-001's white app mark, its corner and the spinner under it. */
     val SplashMark: Dp = 84.dp
     val SplashMarkRadius: Dp = 22.dp

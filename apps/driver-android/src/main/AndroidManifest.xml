@@ -41,10 +41,18 @@
          itself is C070's. -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
+    <!-- SCR-DA-005's document scanner (AL-43, C069). Every onboarding image — the two licence
+         sides and the four vehicle documents — is captured through it, and a denied grant is a
+         state the screen draws ("Allow camera"), never a crash. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+
     <!-- GPS is not `required`: a handset without it can still hold an account, see its wallet and
-         complete onboarding. What it cannot do is go online, and the dashboard says so. -->
+         complete onboarding. What it cannot do is go online, and the dashboard says so.
+         The camera is `required="false"` for the same reason and one more: the scanner falls back
+         to the gallery picker, so a handset with a broken camera can still be onboarded. -->
     <uses-feature android:name="android.hardware.location.gps" android:required="false" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
 
     <application
         android:name=".DriverApplication"
