@@ -91,6 +91,15 @@ paths:
                   $ref: './_shared.yaml#/components/schemas/Ulid'
                 licenseBackFileId:
                   $ref: './_shared.yaml#/components/schemas/Ulid'
+                # Δ MCS-02 — the two the C068 handoff recorded as unsendable. SCR-DA/DI-003a
+                # draws a ✎ on the licence number and its expiry, and AL-29's manual path exists
+                # for exactly the unreadable scan; only `nicNo` and `allowedVehicleTypes` could
+                # be corrected, so the other two rows were read-only for no reason but omission.
+                licenceNo:
+                  type: string
+                licenceExpiry:
+                  type: string
+                  format: date
                 nicNo:
                   type: string
                   maxLength: 20
@@ -459,6 +468,29 @@ paths:
                   description: Step 4/4 only — one photo cannot show a vehicle's front and back plates.
                 fileBackCapturedVia:
                   $ref: '#/components/schemas/CaptureSource'
+                # Δ MCS-02 — driver corrections. SCR-DA/DI-004a and 004b draw a ✎ on every
+                # extracted value and BR-25.3 is built around the driver editing one ("any element
+                # doubtful OR EDITED → this step's status is Pending"), but this arm carried no
+                # way to send it and the JSON arm needs a `fileId` no response on this surface
+                # returns. Named parts rather than a free map: `DocumentFieldKeys.AcceptedFor`
+                # already fixes the accepted set per kind and side, so the contract can say it too.
+                #
+                # `file` is NOT required when a correction is sent on a step that already saved
+                # its document — re-photographing a licence to retype its expiry is not a thing to
+                # ask of a driver on a roadside. Each correction lands `source='manual'`,
+                # `verifyStatus='pending'` and routes to the Verification Officer (AL-29).
+                insuranceExpiry:
+                  type: string
+                  format: date
+                  description: Step 2/4. Corrects a doubtful or unread `insurance_expiry`.
+                insurancePolicyNo:
+                  type: string
+                revenueNo:
+                  type: string
+                  description: Step 3/4. Corrects a doubtful or unread `revenue_no`.
+                revenueExpiry:
+                  type: string
+                  format: date
       responses:
         '200':
           description: Step saved; verdict and resume point.
@@ -1291,6 +1323,19 @@ components:
           $ref: './_shared.yaml#/components/schemas/OperatingMode'
         status:
           $ref: '#/components/schemas/RegistrationStatus'
+        # Δ MCS-02 — SCR-DA/DI-026's "Temporarily assigned to me" group prints
+        # "Lanka Fleet (Pvt) Ltd · until 30 Jun" (US-13.9) and this schema could say neither.
+        # Both are absent on an owned vehicle; `assignedUntil` is also absent on an open-ended
+        # assignment, which is a different fact the screen renders the same way.
+        fleetName:
+          type: string
+          description: The assigning fleet's display name.
+        assignedUntil:
+          description: |
+            When the assignment lapses. US-13.9's auto-expiry needs no sweep — the eligibility
+            view stops returning the vehicle the moment this passes (migration 0314) — so this
+            is for display, not for a client-side check.
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
         onboardingStatus:
           $ref: '#/components/schemas/OnboardingStatus'
         modeBBilling:

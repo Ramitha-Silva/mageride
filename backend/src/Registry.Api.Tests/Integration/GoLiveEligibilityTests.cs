@@ -95,6 +95,85 @@ public sealed class GoLiveEligibilityTests(PostgresFixture postgres, RedisFixtur
         Assert.True(assigned[0].GetProperty("isSelected").GetBoolean());
     }
 
+    /// <summary>
+    /// Δ MCS-02 — SCR-DA/DI-026's caption: "Lanka Fleet (Pvt) Ltd · until 30 Jun". The list read
+    /// could name neither the fleet nor the date, so the group rendered without the two facts
+    /// that make it meaningful.
+    /// </summary>
+    [Fact]
+    public async Task An_assigned_vehicle_carries_the_fleet_name_and_the_assignment_expiry()
+    {
+        await using var harness = await RegistryHarness.StartAsync(postgres);
+        var fleetOwnerId = await harness.CreateDriverAsync();
+        var driverId = await harness.CreateDriverAsync();
+        var bearer = harness.Tokens.Driver(driverId);
+
+        var expiresAt = DateTimeOffset.UtcNow.AddDays(30);
+        var vehicleId = await harness.SeedFleetVehicleAsync(fleetOwnerId);
+        await harness.AssignToFleetAsync(vehicleId, driverId, fleetOwnerId, expiresAt, "Lanka Fleet (Pvt) Ltd");
+
+        var mine = await RegistryHarness.ReadJsonAsync(await harness.GetAsync("/v1/vehicles/mine", bearer));
+        var assigned = mine.GetProperty("assigned").EnumerateArray().Single();
+
+        Assert.Equal("Lanka Fleet (Pvt) Ltd", assigned.GetProperty("fleetName").GetString());
+        Assert.Equal(
+            expiresAt.ToUnixTimeSeconds(),
+            assigned.GetProperty("assignedUntil").GetDateTimeOffset().ToUnixTimeSeconds());
+    }
+
+    /// <summary>
+    /// US-13.9's auto-expiry, end to end: an assignment whose window has closed is gone from the
+    /// list with nobody having revoked anything. The view is what enforces it (migration 0314) —
+    /// this asserts the app sees the result rather than having to check a date itself.
+    /// </summary>
+    [Fact]
+    public async Task An_expired_assignment_disappears_with_no_revocation()
+    {
+        await using var harness = await RegistryHarness.StartAsync(postgres);
+        var fleetOwnerId = await harness.CreateDriverAsync();
+        var driverId = await harness.CreateDriverAsync();
+        var bearer = harness.Tokens.Driver(driverId);
+
+        var vehicleId = await harness.SeedFleetVehicleAsync(fleetOwnerId);
+        // `ck_fleet_assign_window` refuses an assignment that expires before it starts — an
+        // assignment like that confers nothing and would sit in the roster looking live (0314).
+        // A lapsed one is a window that opened in the past and has since closed.
+        await harness.AssignToFleetAsync(
+            vehicleId,
+            driverId,
+            fleetOwnerId,
+            expiresAt: DateTimeOffset.UtcNow.AddMinutes(-1),
+            validFrom: DateTimeOffset.UtcNow.AddHours(-2));
+
+        var mine = await RegistryHarness.ReadJsonAsync(await harness.GetAsync("/v1/vehicles/mine", bearer));
+
+        Assert.Empty(mine.GetProperty("assigned").EnumerateArray());
+
+        // And it cannot be selected either — the same view answers both questions (US-9.6).
+        var select = await harness.PostAsync($"/v1/vehicles/{vehicleId}/select-live", null, bearer);
+        Assert.NotEqual(HttpStatusCode.OK, select.StatusCode);
+    }
+
+    /// <summary>An owned vehicle carries neither field — they are the assignment's, not the vehicle's.</summary>
+    [Fact]
+    public async Task An_owned_vehicle_carries_no_fleet_caption()
+    {
+        await using var harness = await RegistryHarness.StartAsync(postgres);
+        var driverId = await harness.CreateDriverAsync();
+        var bearer = harness.Tokens.Driver(driverId);
+
+        await harness.RegisterVehicleAsync(bearer);
+
+        // The response is `items` (everything) plus `assigned` (the US-13.9 subset); there is no
+        // separate `owned` array — the app slices on `source`.
+        var mine = await RegistryHarness.ReadJsonAsync(await harness.GetAsync("/v1/vehicles/mine", bearer));
+        var owned = mine.GetProperty("items").EnumerateArray()
+            .Single(item => item.GetProperty("source").GetString() == "owned");
+
+        Assert.False(owned.TryGetProperty("fleetName", out _));
+        Assert.False(owned.TryGetProperty("assignedUntil", out _));
+    }
+
     /// <summary>US-13.8: revoking the assignment takes the entitlement away immediately.</summary>
     [Fact]
     public async Task A_revoked_assignment_is_no_longer_eligible_or_listed()

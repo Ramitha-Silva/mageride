@@ -15,7 +15,9 @@ public sealed record UpsertDriverProfileBody(
     string? LicenseFrontFileId,
     string? LicenseBackFileId,
     string? NicNo = null,
-    IReadOnlyList<string>? AllowedVehicleTypes = null);
+    IReadOnlyList<string>? AllowedVehicleTypes = null,
+    string? LicenceNo = null,
+    string? LicenceExpiry = null);
 
 /// <summary>
 /// One row of <c>_shared.yaml#/components/schemas/ExtractedField</c> — a value with its provenance.

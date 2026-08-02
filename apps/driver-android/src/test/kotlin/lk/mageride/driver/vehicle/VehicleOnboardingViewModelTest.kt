@@ -252,6 +252,55 @@ class VehicleOnboardingViewModelTest {
     }
 
     @Test
+    fun a_doubtful_value_is_corrected_without_a_second_photograph() = runBlocking {
+        // Δ MCS-02 — the wireframe's ✎, and BR-25.3's "any element doubtful OR EDITED". Until the
+        // step arm carried a correction this was unreachable and the card was read-only.
+        val model = resumedAt(OnboardingStep.INSURANCE)
+        backend.returns("saveVehicleOnboardingStep", stepSaved(stepStatus = StepVerdict.PENDING_REVIEW))
+        backend.returns(
+            "getVehicleOnboardingStatus",
+            onboardingStatus(
+                steps = verdicts(insurance = StepVerdict.PENDING_REVIEW),
+                nextStep = OnboardingStep.INSURANCE,
+                fields = listOf(field(VehicleFieldKeys.INSURANCE_EXPIRY, "2026-12-31", VerifyStatus.PENDING)),
+            ),
+        )
+
+        captures.open(DocumentCaptureTarget.INSURANCE)
+        captures.deliver(testImage("insurance.jpg"))
+        model.onContinue()
+        model.state.await { it.savedVerdict != null || it.error != null }
+        val uploadsAfterFirstSave = backend.callsTo("saveVehicleOnboardingStep").size
+
+        // The scan read 2026-12-31 and the certificate says 2027-03-31.
+        model.toggleEdit(VehicleFieldKeys.INSURANCE_EXPIRY)
+        model.onCorrectionChanged(VehicleFieldKeys.INSURANCE_EXPIRY, "2027-03-31")
+        assertTrue(model.state.value.hasCorrections)
+        assertTrue(model.state.value.canContinue, "a correction is a save of its own")
+
+        model.onContinue()
+        model.state.await { !it.busy && it.corrections.isEmpty() }
+
+        assertEquals(uploadsAfterFirstSave + 1, backend.callsTo("saveVehicleOnboardingStep").size)
+
+        val body = backend.lastCall("saveVehicleOnboardingStep").body
+        assertTrue(body.contains("insuranceExpiry") && body.contains("2027-03-31"), "the typed value")
+        // The whole point: no image in the correction. Re-photographing a certificate to retype
+        // its expiry is the roadside experience BR-25.3 exists to avoid.
+        assertFalse(body.contains("insurance.jpg"), "a correction carries no document")
+    }
+
+    @Test
+    fun the_plate_rows_are_never_the_drivers_to_retype() {
+        // Step 4/4's two fields ARE the fraud check. A driver who could retype the plate the
+        // camera read would be verifying their own vehicle, so neither is correctable.
+        assertFalse(VehicleFieldKeys.PLATE_TEXT in VehicleFieldKeys.Correctable)
+        assertFalse(VehicleFieldKeys.REG_NO_MATCH in VehicleFieldKeys.Correctable)
+        assertTrue(VehicleFieldKeys.INSURANCE_EXPIRY in VehicleFieldKeys.Correctable)
+        assertTrue(VehicleFieldKeys.REVENUE_NO in VehicleFieldKeys.Correctable)
+    }
+
+    @Test
     fun a_licence_capture_never_lands_on_the_wizard() = runBlocking {
         // C068's Profile Setup shares the coordinator and owns the two licence slots. AL-27 keeps
         // driver identity and vehicle onboarding apart, in both directions.

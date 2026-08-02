@@ -337,6 +337,11 @@ public data class RegisterVehicleResponse(
  * @property onboardingStatus Incomplete / approved (AL-30).
  * @property modeBBilling "Service payment" setting; `null` for Mode A and Mode C.
  * @property defaultMonthlyFareMinor Default per-subscriber monthly fare, minor units.
+ * @property fleetName The assigning fleet, for SCR-DA/DI-026's "Temporarily assigned to me"
+ *   caption (Δ MCS-02, US-13.9). `null` on an owned vehicle.
+ * @property assignedUntil When that assignment lapses. `null` on an owned vehicle **and** on an
+ *   open-ended assignment. Display only — the eligibility view stops returning an expired
+ *   assignment on its own, so a client never has to check this to decide eligibility.
  */
 @Serializable
 public data class VehicleSummary(
@@ -348,6 +353,8 @@ public data class VehicleSummary(
     val onboardingStatus: OnboardingStatus,
     val modeBBilling: ModeBBilling? = null,
     val defaultMonthlyFareMinor: Long? = null,
+    val fleetName: String? = null,
+    val assignedUntil: Timestamp? = null,
 )
 
 /** The driver shown to passengers for a vehicle (US-2.12) — cosmetic, not verified identity. */
@@ -479,6 +486,35 @@ public data class OnboardingStepInput(
     val fileIdBack: Ulid? = null,
     val fields: Map<String, String>? = null,
 )
+
+/**
+ * Driver corrections to a step's extracted fields (Δ MCS-02, AL-29 / BR-25.3).
+ *
+ * **Not a map.** `multipart/form-data` has no object type, and the keys a step accepts are fixed
+ * per document kind by `DocumentFieldKeys.AcceptedFor` — so naming them lets the contract say
+ * what it takes and the compiler stop a caller sending `reg_no_match`, which is the plate check
+ * and not the driver's to answer.
+ *
+ * Every value here lands `source='manual'`, `verifyStatus='pending'` and takes its step back to
+ * [StepVerdict.PENDING_REVIEW]. That is by design: BR-25.2 lets the driver carry on and trusts
+ * the value only once a Verification Officer confirms it.
+ *
+ * @property insuranceExpiry Step 2/4 — the one field D5' §14.1a verifies insurance on.
+ * @property insurancePolicyNo Step 2/4, an extra ocr-svc returns.
+ * @property revenueNo Step 3/4 — verified together with the expiry.
+ * @property revenueExpiry Step 3/4.
+ */
+public data class OnboardingCorrections(
+    val insuranceExpiry: String? = null,
+    val insurancePolicyNo: String? = null,
+    val revenueNo: String? = null,
+    val revenueExpiry: String? = null,
+) {
+    /** Whether anything is actually being corrected. An empty set must not be sent. */
+    public val isEmpty: Boolean
+        get() = insuranceExpiry == null && insurancePolicyNo == null &&
+            revenueNo == null && revenueExpiry == null
+}
 
 /**
  * `PUT /v1/vehicles/{vehicleId}/onboarding/{step}` — 200.

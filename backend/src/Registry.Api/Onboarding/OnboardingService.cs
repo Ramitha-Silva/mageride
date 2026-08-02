@@ -22,7 +22,9 @@ public sealed record UpsertDriverProfileCommand(
     string? LicenseFrontFileId,
     string? LicenseBackFileId,
     string? NicNo,
-    IReadOnlyList<string>? AllowedVehicleTypes);
+    IReadOnlyList<string>? AllowedVehicleTypes,
+    string? LicenceNo = null,
+    string? LicenceExpiry = null);
 
 /// <summary>
 /// What Profile Setup produced: the stored profile plus every field and where it came from.
@@ -125,6 +127,8 @@ public sealed class OnboardingService(
         var displayName = RequireDriverName(command.DriverName);
         var nicNo = RequireNic(command.NicNo);
         var allowedTypes = RequireAllowedVehicleTypes(command.AllowedVehicleTypes);
+        var licenceNo = NullIfBlank(command.LicenceNo);
+        var licenceExpiry = NullIfBlank(command.LicenceExpiry);
 
         // AL-27: "name + **required** photo + driving-license front/back". All three are required
         // at this screen, and a profile written without the photo would send a driver to Home with
@@ -153,6 +157,19 @@ public sealed class OnboardingService(
         if (allowedTypes is not null)
         {
             manual[DocumentFieldKeys.AllowedVehicleTypes] = string.Join(',', allowedTypes);
+        }
+
+        // Δ MCS-02 — the two SCR-DA/DI-003a draws a ✎ on and C068 could not send. Same rule as
+        // the other two: the driver correcting an unclear scan replaces what was read and carries
+        // manual provenance, so the officer queue sees it (AL-29, US-2.4a).
+        if (licenceNo is not null)
+        {
+            manual[DocumentFieldKeys.LicenceNo] = licenceNo;
+        }
+
+        if (licenceExpiry is not null)
+        {
+            manual[DocumentFieldKeys.LicenceExpiry] = licenceExpiry;
         }
 
         await using var unitOfWork = await unitOfWorkFactory.BeginAsync(cancellationToken: cancellationToken);
@@ -321,6 +338,18 @@ public sealed class OnboardingService(
         SaveOnboardingStepCommand command, string step, Vehicle vehicle, CancellationToken cancellationToken)
     {
         var kind = OnboardingSteps.DocumentKind(step)!;
+        var manualFields = RequireManualFields(command.Fields);
+
+        // Δ MCS-02 — a corrections-only save. BR-25.3 lets the driver edit a doubtful extracted
+        // value ("any element doubtful OR EDITED → this step's status is Pending"), and until now
+        // there was no way to send one: this arm demanded a file, so correcting an expiry meant
+        // re-photographing the document. The step has to already own a document — a correction
+        // with nothing to correct is a validation failure, not an empty step.
+        if (command.FileId is null && manualFields.Count > 0)
+        {
+            return await ApplyStepCorrectionsAsync(step, kind, vehicle, manualFields, cancellationToken);
+        }
+
         var uploads = new List<(PendingUpload Upload, string? Side)>();
 
         if (step == OnboardingSteps.Photos)
@@ -342,7 +371,7 @@ public sealed class OnboardingService(
             prepared.Add(await PrepareAsync(upload, kind, side, vehicle.RegistrationNumber, cancellationToken));
         }
 
-        var manual = RequireManualFields(command.Fields);
+        var manual = manualFields;
 
         await using var unitOfWork = await unitOfWorkFactory.BeginAsync(cancellationToken: cancellationToken);
 
@@ -384,6 +413,119 @@ public sealed class OnboardingService(
         await unitOfWork.CommitAsync(cancellationToken);
 
         return state with { OcrJobId = prepared.Select(document => document.Extraction.JobId).FirstOrDefault(id => id is not null) };
+    }
+
+    /// <summary>
+    /// Applies driver corrections to the documents a step already saved, with no new upload
+    /// (Δ MCS-02, AL-29 / BR-25.3).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The corrected field keeps its place on the document it belongs to and becomes
+    /// <c>source='manual'</c>, <c>verify_status='pending'</c>, <c>confidence=NULL</c> — so the
+    /// step returns to <c>pending_review</c> and the value routes to the Verification Officer.
+    /// That is BR-25.2's rule and it is deliberate: the driver may proceed, and the value is
+    /// trusted only once an officer confirms it.
+    /// </para>
+    /// <para>
+    /// A key the document's kind does not accept is dropped rather than stored, by the same
+    /// <see cref="DocumentFieldKeys.AcceptedFor"/> filter the upload path uses — otherwise a
+    /// driver could write <c>reg_no_match</c> and verify their own plate.
+    /// </para>
+    /// </remarks>
+    private async Task<OnboardingState> ApplyStepCorrectionsAsync(
+        string step,
+        string kind,
+        Vehicle vehicle,
+        IReadOnlyDictionary<string, string> corrections,
+        CancellationToken cancellationToken)
+    {
+        await using var unitOfWork = await unitOfWorkFactory.BeginAsync(cancellationToken: cancellationToken);
+
+        var saved = await steps.ListAsync(unitOfWork.Connection, unitOfWork.Transaction, vehicle.Id, cancellationToken);
+        var row = saved.FirstOrDefault(entry => entry.Step == step);
+        var documentIds = row is null ? [] : DocumentIdsOf(row);
+
+        if (documentIds.Count == 0)
+        {
+            throw new MageRideValidationException(new Dictionary<string, string[]>(StringComparer.Ordinal)
+            {
+                ["file"] = ["This step has no saved document to correct. Upload one first."],
+            });
+        }
+
+        var applicable = corrections
+            .Where(entry => DocumentFieldKeys.AcceptedFor(kind, null).Contains(entry.Key))
+            .ToDictionary(StringComparer.Ordinal);
+
+        if (applicable.Count == 0)
+        {
+            throw new MageRideValidationException(new Dictionary<string, string[]>(StringComparer.Ordinal)
+            {
+                ["fields"] = [$"No correctable field was supplied for the {step} step."],
+            });
+        }
+
+        foreach (var documentId in documentIds)
+        {
+            foreach (var (key, value) in applicable)
+            {
+                await ReplaceFieldAsync(unitOfWork, documentId, key, value, cancellationToken);
+            }
+        }
+
+        var state = await SettleAsync(unitOfWork, vehicle, step, cancellationToken);
+
+        await unitOfWork.CommitAsync(cancellationToken);
+
+        logger.LogInformation(
+            "Driver corrected {FieldCount} field(s) on the {Step} step of vehicle {VehicleId}",
+            applicable.Count, step, vehicle.Id);
+
+        return state;
+    }
+
+    /// <summary>Replaces one field's value with a driver-supplied one, or writes it if absent.</summary>
+    private static async Task ReplaceFieldAsync(
+        IUnitOfWork unitOfWork, Guid documentId, string fieldKey, string value, CancellationToken cancellationToken)
+    {
+        await using var update = new NpgsqlCommand(
+            $"""
+             UPDATE registry.document_fields
+                SET field_value = $3,
+                    source = '{FieldSources.Manual}',
+                    verify_status = '{VerifyStatuses.Pending}',
+                    confidence = NULL
+              WHERE document_id = $1 AND field_key = $2;
+             """,
+            unitOfWork.Connection,
+            unitOfWork.Transaction);
+
+        update.Parameters.Add(new NpgsqlParameter { NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Uuid, Value = documentId });
+        update.Parameters.Add(new NpgsqlParameter { NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Text, Value = fieldKey });
+        update.Parameters.Add(new NpgsqlParameter { NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Text, Value = value });
+
+        if (await update.ExecuteNonQueryAsync(cancellationToken) > 0)
+        {
+            return;
+        }
+
+        // The key was never written — extraction returned it for a kind whose required set does
+        // not name it. Write it, so the correction is not silently dropped.
+        await using var insert = new NpgsqlCommand(
+            $"""
+             INSERT INTO registry.document_fields
+               (document_id, field_key, field_value, confidence, source, verify_status)
+             VALUES ($1, $2, $3, NULL, '{FieldSources.Manual}', '{VerifyStatuses.Pending}');
+             """,
+            unitOfWork.Connection,
+            unitOfWork.Transaction);
+
+        insert.Parameters.Add(new NpgsqlParameter { NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Uuid, Value = documentId });
+        insert.Parameters.Add(new NpgsqlParameter { NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Text, Value = fieldKey });
+        insert.Parameters.Add(new NpgsqlParameter { NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Text, Value = value });
+
+        await insert.ExecuteNonQueryAsync(cancellationToken);
     }
 
     /// <summary>
@@ -1035,6 +1177,10 @@ public sealed class OnboardingService(
                 $"'{string.Join("', '", invalid)}' are not canonical vehicle types. AL-09 renamed 'car' to 'sedan'; " +
                 "the set is " + string.Join(", ", VehicleTypes.All.Order(StringComparer.Ordinal)) + ".");
     }
+
+    /// <summary>Trims a form value and treats blank as absent.</summary>
+    private static string? NullIfBlank(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static IReadOnlyDictionary<string, string> RequireManualFields(IReadOnlyDictionary<string, string>? fields)
     {

@@ -6,6 +6,7 @@ import lk.mageride.shared.data.models.ExtractedField
 import lk.mageride.shared.data.models.RideVehicleType
 import lk.mageride.shared.data.models.ServiceMode
 import lk.mageride.shared.data.models.Ulid
+import lk.mageride.shared.data.models.registry.OnboardingCorrections
 import lk.mageride.shared.data.models.registry.OnboardingStatus
 import lk.mageride.shared.data.models.registry.OnboardingStep
 import lk.mageride.shared.data.models.registry.OnboardingStepVerdicts
@@ -39,6 +40,17 @@ internal object VehicleFieldKeys {
     /** Step 4/4. `reg_no_match` is the plate check; `plate_text` is what the plate was read as. */
     const val REG_NO_MATCH = "reg_no_match"
     const val PLATE_TEXT = "plate_text"
+
+    /**
+     * The keys a driver may retype (Δ MCS-02, BR-25.3).
+     *
+     * `plate_text` and `reg_no_match` are deliberately absent: they are the check Step 4/4 exists
+     * to perform, and a driver who could retype the plate the camera read would be verifying
+     * their own vehicle. The server filters on the same rule — this list only decides which rows
+     * draw a ✎.
+     */
+    val Correctable: Set<String> =
+        setOf(INSURANCE_EXPIRY, INSURANCE_POLICY_NO, REVENUE_NO, REVENUE_EXPIRY)
 
     /** The keys each step's extract card lists, in the order the wireframe draws them. */
     fun forStep(step: OnboardingStep): List<String> = when (step) {
@@ -218,6 +230,21 @@ internal class VehicleOnboardingRepository(private val registry: RegistryApi) {
         file = front.asDocument(),
         fileBack = back?.asDocument(),
     ).asSavedStep(vehicleId)
+
+    /**
+     * A driver correction to a step that already saved its document (Δ MCS-02, BR-25.3).
+     *
+     * No file: the document is already on record and the correction is applied to it. The value
+     * lands `source='manual'`, `verifyStatus='pending'` — **registry-svc stamps that**, not the
+     * client — and takes the step back to `PENDING_REVIEW`, which is the rule rather than a
+     * failure: BR-25.2 lets the driver carry on and trusts the value once an officer confirms it.
+     */
+    suspend fun saveCorrections(vehicleId: Ulid, step: OnboardingStep, corrections: OnboardingCorrections): SavedStep =
+        registry.uploadVehicleOnboardingStep(
+            vehicleId = vehicleId,
+            step = step,
+            corrections = corrections,
+        ).asSavedStep(vehicleId)
 
     /** `POST /v1/vehicles/{id}/deactivate` — US-2.16, and it releases the plate (D-37). */
     suspend fun deactivate(vehicleId: Ulid) {

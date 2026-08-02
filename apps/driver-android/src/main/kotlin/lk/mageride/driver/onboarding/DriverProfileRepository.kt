@@ -34,6 +34,9 @@ internal object LicenceFieldKeys {
  * @property licenceBack Back of the same licence.
  * @property nicNo Typed only when the scan was unclear; goes up as `source='manual'` (AL-29).
  * @property allowedVehicleTypes Same, for the licence classes.
+ * @property licenceNo Same, for the licence number (Δ MCS-02 — the C068 handoff recorded this as
+ *   unsendable, because `PUT /v1/drivers/profile` carried no part for it).
+ * @property licenceExpiry Same, for its expiry.
  */
 internal data class ProfileDraft(
     val name: String = "",
@@ -42,6 +45,8 @@ internal data class ProfileDraft(
     val licenceBack: CapturedImage? = null,
     val nicNo: String? = null,
     val allowedVehicleTypes: List<VehicleType>? = null,
+    val licenceNo: String? = null,
+    val licenceExpiry: String? = null,
 ) {
     /** Whether Save is allowed: name, photo and both licence sides are all required (AL-27). */
     val isComplete: Boolean
@@ -49,7 +54,8 @@ internal data class ProfileDraft(
 
     /** Whether the driver typed a value the scan should have supplied — the AL-29 manual path. */
     val hasManualEntry: Boolean
-        get() = !nicNo.isNullOrBlank() || !allowedVehicleTypes.isNullOrEmpty()
+        get() = !nicNo.isNullOrBlank() || !allowedVehicleTypes.isNullOrEmpty() ||
+            !licenceNo.isNullOrBlank() || !licenceExpiry.isNullOrBlank()
 
     /**
      * Just the two driver-typed values, for comparing one save against the next.
@@ -58,8 +64,13 @@ internal data class ProfileDraft(
      * the second CTA tap needs to know is whether a **correction** was typed, not whether the
      * same photograph is still in memory.
      */
-    val manualValues: Pair<String?, List<VehicleType>?>
-        get() = nicNo?.takeIf(String::isNotBlank) to allowedVehicleTypes?.takeIf(List<VehicleType>::isNotEmpty)
+    val manualValues: List<Any?>
+        get() = listOf(
+            nicNo?.takeIf(String::isNotBlank),
+            allowedVehicleTypes?.takeIf(List<VehicleType>::isNotEmpty),
+            licenceNo?.takeIf(String::isNotBlank),
+            licenceExpiry?.takeIf(String::isNotBlank),
+        )
 }
 
 /**
@@ -140,6 +151,8 @@ internal class DriverProfileRepository(private val registry: RegistryApi, privat
             licenseBack = requireNotNull(draft.licenceBack).asDocument(),
             nicNo = draft.nicNo?.takeIf(String::isNotBlank),
             allowedVehicleTypes = draft.allowedVehicleTypes?.takeIf(List<VehicleType>::isNotEmpty),
+            licenceNo = draft.licenceNo?.takeIf(String::isNotBlank),
+            licenceExpiry = draft.licenceExpiry?.takeIf(String::isNotBlank),
         )
 
         return extractionOf(response.fields, draft.name.trim())

@@ -48,6 +48,7 @@ import lk.mageride.driver.ui.theme.ControlTokens
 import lk.mageride.driver.ui.theme.MageRideTheme
 import lk.mageride.shared.data.models.registry.OnboardingStep
 import lk.mageride.shared.data.models.registry.RegistrationStatus
+import lk.mageride.shared.util.BusinessCalendar
 import org.koin.androidx.compose.koinViewModel
 
 /**
@@ -257,6 +258,18 @@ private fun VehicleCard(
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurface,
                     )
+
+                    // Δ MCS-02 — the wireframe's "Lanka Fleet (Pvt) Ltd · until 30 Jun". Absent
+                    // on an owned vehicle, and the date is absent again on an open-ended
+                    // assignment, which is a real state rather than a missing value.
+                    row.assignmentCaption()?.let { caption ->
+                        Text(
+                            text = caption,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+
                     VehicleStatusPill(row = row, active = active)
                 }
 
@@ -388,6 +401,31 @@ private fun DeactivateDialog(registrationNumber: String, onConfirm: () -> Unit, 
             TextButton(onClick = onDismiss) { Text(text = stringResource(R.string.action_dismiss)) }
         },
     )
+}
+
+/**
+ * The wireframe's assignment caption — the fleet, and the date the loan ends (Δ MCS-02, US-13.9).
+ *
+ * `null` for an owned vehicle. The date goes through `BusinessCalendar` because D-38 gives the
+ * platform one timezone for a business date and it is **Asia/Colombo**, not the handset's — a
+ * driver in another zone must not read a different expiry from the one the fleet set.
+ */
+@Composable
+private fun VehicleRow.assignmentCaption(): String? {
+    val fleet = summary.fleetName
+    val until = summary.assignedUntil
+
+    return when {
+        fleet == null -> null
+
+        until == null -> fleet
+
+        else -> stringResource(
+            R.string.vehicles_assigned_until,
+            fleet,
+            BusinessCalendar.businessDate(until).toString(),
+        )
+    }
 }
 
 /** The registration status as the driver reads it (US-2.13). */

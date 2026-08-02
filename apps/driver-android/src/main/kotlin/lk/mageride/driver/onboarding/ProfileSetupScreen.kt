@@ -152,7 +152,12 @@ internal fun ProfileSetupScreen(
             }
 
             state.extraction?.let { extraction ->
-                ExtractionCard(extraction = extraction, draft = state.draft, viewModel = viewModel)
+                ExtractionCard(
+                    extraction = extraction,
+                    draft = state.draft,
+                    viewModel = viewModel,
+                    editingKey = state.editingKey,
+                )
             }
 
             if (state.hasOfficerFlag) {
@@ -259,18 +264,19 @@ private fun ProfilePhoto(captured: Boolean, onPick: () -> Unit, modifier: Modifi
 /**
  * The wireframe's "✦ AI-extracted from licence (Gemini Flash · PII redacted)" card.
  *
- * **`licence_no` and `licence_expiry` are read-only here, and the wireframe draws a ✎ on them.**
- * `PUT /v1/drivers/profile` accepts exactly two driver-supplied values — `nicNo` and
- * `allowedVehicleTypes` (AL-29 / BR-25.2 name those two and no others) — so an edit to either of
- * the other rows would have nowhere to go and would be silently dropped on save. Showing them as
- * read verdicts is the honest rendering; the deviation is raised as a micro-change-set in the
- * C068 handoff.
+ * **Δ MCS-02 — `licence_no` and `licence_expiry` are editable now.** The C068 handoff recorded
+ * them as read-only because `PUT /v1/drivers/profile` carried parts for `nicNo` and
+ * `allowedVehicleTypes` and nothing else, so an edit to either of the other two rows would have
+ * been silently dropped on save. The multipart arm now carries them, which is what AL-29's manual
+ * path was always for: the driver types what the scan could not read, and registry-svc — never
+ * this screen — stamps it `source='manual'`, `verify_status='pending'`.
  */
 @Composable
 private fun ExtractionCard(
     extraction: LicenceExtraction,
     draft: ProfileDraft,
     viewModel: ProfileSetupViewModel,
+    editingKey: String?,
     modifier: Modifier = Modifier,
 ) {
     NoticeCard(
@@ -280,12 +286,34 @@ private fun ExtractionCard(
         modifier = modifier,
     ) {
         extraction.fields.forEach { field ->
+            val editable = field.key == LicenceFieldKeys.LICENCE_NO || field.key == LicenceFieldKeys.LICENCE_EXPIRY
+            val typed = when (field.key) {
+                LicenceFieldKeys.LICENCE_NO -> draft.licenceNo
+                LicenceFieldKeys.LICENCE_EXPIRY -> draft.licenceExpiry
+                else -> null
+            }
+
             ExtractedFieldRow(
                 label = stringResource(field.fieldLabelRes()),
-                value = field.value,
+                value = typed ?: field.value,
                 emptyLabel = stringResource(R.string.profile_setup_field_unread),
                 flagLabel = stringResource(R.string.flag_admin_verify).takeIf { field.needsOfficerReview },
+                editLabel = stringResource(R.string.action_edit).takeIf { editable },
+                onEdit = if (editable) {
+                    { viewModel.toggleEdit(field.key) }
+                } else {
+                    null
+                },
             )
+
+            if (editingKey == field.key) {
+                LabelledTextField(
+                    label = stringResource(field.fieldLabelRes()),
+                    value = typed ?: field.value.orEmpty(),
+                    onValueChange = { viewModel.onLicenceFieldChanged(field.key, it) },
+                    supporting = stringResource(R.string.profile_setup_manual_supporting),
+                )
+            }
         }
 
         // The two values the contract lets a driver supply. They appear only when the scan did not

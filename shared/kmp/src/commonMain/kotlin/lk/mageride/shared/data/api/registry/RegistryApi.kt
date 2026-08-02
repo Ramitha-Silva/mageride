@@ -23,6 +23,7 @@ import lk.mageride.shared.data.models.registry.BindVehicleDeviceRequest
 import lk.mageride.shared.data.models.registry.BindVehicleDeviceResponse
 import lk.mageride.shared.data.models.registry.CreateShareGrantRequest
 import lk.mageride.shared.data.models.registry.CreateShareGrantResponse
+import lk.mageride.shared.data.models.registry.OnboardingCorrections
 import lk.mageride.shared.data.models.registry.OnboardingStep
 import lk.mageride.shared.data.models.registry.OnboardingStepInput
 import lk.mageride.shared.data.models.registry.RegisterVehicleResponse
@@ -76,6 +77,9 @@ public interface RegistryApi {
      *
      * @param nicNo Sent only when the scan was unclear and the driver typed it — registry-svc is
      *   what stamps it `source='manual'`, `verify_status='pending'` (AL-29, US-2.4a).
+     * @param licenceNo Same, for the licence number (Δ MCS-02 — SCR-DA/DI-003a draws a ✎ on it
+     *   and until now nothing could carry the correction).
+     * @param licenceExpiry Same, for its expiry date.
      */
     public suspend fun uploadDriverProfile(
         driverName: String,
@@ -84,6 +88,8 @@ public interface RegistryApi {
         licenseBack: CapturedDocument,
         nicNo: String? = null,
         allowedVehicleTypes: List<VehicleType>? = null,
+        licenceNo: String? = null,
+        licenceExpiry: String? = null,
     ): UpsertDriverProfileResponse
 
     /**
@@ -130,6 +136,11 @@ public interface RegistryApi {
      * **Δ MCS-01: registry-svc now implements this arm**, and each image carries its own capture
      * source. The arm was declared from the start and the service bound JSON only, so a form
      * posted here reached a handler that saw no fields at all.
+     *
+     * **Δ MCS-02: [corrections] may be sent with no [file].** BR-25.3 lets a driver edit a
+     * doubtful extracted value, and asking them to re-photograph the document to retype its
+     * expiry is the roadside experience that rule exists to avoid. The step must already own a
+     * document; correcting one that has none is `400 validation-failed`.
      */
     public suspend fun uploadVehicleOnboardingStep(
         vehicleId: Ulid,
@@ -138,6 +149,7 @@ public interface RegistryApi {
         vehicleType: RideVehicleType? = null,
         file: CapturedDocument? = null,
         fileBack: CapturedDocument? = null,
+        corrections: OnboardingCorrections? = null,
     ): SaveOnboardingStepResponse
 
     /** `POST /v1/vehicles/{vehicleId}/deactivate` — take a vehicle out of service. */
@@ -203,6 +215,8 @@ internal class KtorRegistryApi(private val transport: ApiTransport) : RegistryAp
         licenseBack: CapturedDocument,
         nicNo: String?,
         allowedVehicleTypes: List<VehicleType>?,
+        licenceNo: String?,
+        licenceExpiry: String?,
     ): UpsertDriverProfileResponse = transport.apiPut(SERVICE, "upsertDriverProfile", "/v1/drivers/profile") {
         multipartBody {
             textPart("driverName", driverName)
@@ -210,6 +224,8 @@ internal class KtorRegistryApi(private val transport: ApiTransport) : RegistryAp
             capturedDocumentPart("licenseFront", licenseFront)
             capturedDocumentPart("licenseBack", licenseBack)
             textPart("nicNo", nicNo)
+            textPart("licenceNo", licenceNo)
+            textPart("licenceExpiry", licenceExpiry)
             // Repeated rather than joined: `multipart/form-data` has no array type, the contract
             // accepts either, and a repeated field cannot be broken by a value containing a comma.
             allowedVehicleTypes?.forEach { type -> textPart("allowedVehicleTypes", type.wire) }
@@ -254,12 +270,17 @@ internal class KtorRegistryApi(private val transport: ApiTransport) : RegistryAp
         vehicleType: RideVehicleType?,
         file: CapturedDocument?,
         fileBack: CapturedDocument?,
+        corrections: OnboardingCorrections?,
     ): SaveOnboardingStepResponse = transport.apiPut(SERVICE, "saveVehicleOnboardingStep", stepPath(vehicleId, step)) {
         multipartBody {
             textPart("registrationNumber", registrationNumber)
             textPart("vehicleType", vehicleType?.wire)
             file?.let { capturedDocumentPart("file", it) }
             fileBack?.let { capturedDocumentPart("fileBack", it) }
+            textPart("insuranceExpiry", corrections?.insuranceExpiry)
+            textPart("insurancePolicyNo", corrections?.insurancePolicyNo)
+            textPart("revenueNo", corrections?.revenueNo)
+            textPart("revenueExpiry", corrections?.revenueExpiry)
         }
     }.decode()
 

@@ -242,4 +242,7 @@
     <string name="vehicle_registration_rejected">திருப்பி அனுப்பப்பட்டது</string>
     <string name="vehicle_registration_deactivated">நீக்கப்பட்டது</string>
 
+    <string name="action_edit">திருத்து</string>
+    <string name="vehicle_onboard_correction_supporting">ஆவணத்தில் உள்ளதை அப்படியே தட்டச்சு செய்யவும். ஓர் அதிகாரி அதைச் சரிபார்ப்பார்.</string>
+    <string name="vehicles_assigned_until">%1$s · %2$s வரை</string>
 </resources>

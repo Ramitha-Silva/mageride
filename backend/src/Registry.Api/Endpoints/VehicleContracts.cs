@@ -104,6 +104,15 @@ public sealed record RegisterVehicleResponse(
 /// say which is which. See the C028 handoff.
 /// </param>
 /// <param name="FleetId">The assigning fleet, which US-13.9's group header shows. Null when owned.</param>
+/// <param name="FleetName">
+/// Δ MCS-02. The fleet's display name — SCR-DA/DI-026 prints "Lanka Fleet (Pvt) Ltd · until
+/// 30 Jun" and <see cref="FleetId"/> is an identifier, not a caption. Null when owned.
+/// </param>
+/// <param name="AssignedUntil">
+/// Δ MCS-02. When the assignment lapses (US-13.9's auto-expiry). Null when owned <em>and</em>
+/// when the assignment is open-ended — the two are different facts, and the screen renders
+/// neither, so they collapse safely.
+/// </param>
 public sealed record VehicleSummaryResponse(
     string VehicleId,
     string RegistrationNumber,
@@ -115,6 +124,8 @@ public sealed record VehicleSummaryResponse(
     bool IsSelected,
     string Source,
     string? FleetId,
+    string? FleetName,
+    DateTimeOffset? AssignedUntil,
     bool IsGoLiveEligible)
 {
     public static VehicleSummaryResponse From(DriverVehicle vehicle)
@@ -134,6 +145,8 @@ public sealed record VehicleSummaryResponse(
             vehicle.IsSelected,
             entitlement.Source,
             entitlement.FleetId?.ToString(),
+            entitlement.FleetName,
+            entitlement.AssignedUntil,
             entitlement.IsGoLiveEligible);
     }
 }

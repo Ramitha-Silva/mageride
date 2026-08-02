@@ -19,6 +19,7 @@ import lk.mageride.shared.data.models.ExtractedField
 import lk.mageride.shared.data.models.RideVehicleType
 import lk.mageride.shared.data.models.Ulid
 import lk.mageride.shared.data.models.VerifyStatus
+import lk.mageride.shared.data.models.registry.OnboardingCorrections
 import lk.mageride.shared.data.models.registry.OnboardingStep
 import lk.mageride.shared.data.models.registry.StepVerdict
 
@@ -42,6 +43,9 @@ import lk.mageride.shared.data.models.registry.StepVerdict
  * @property error Resolved copy for the last failure.
  * @property registrationTaken `409 registration-exists` (D-37) — an inline error on the plate
  *   field rather than a screen-level one, because it is that one field that has to change.
+ * @property corrections What the driver has retyped over a doubtful extracted value, keyed by
+ *   `registry.document_fields` key (Δ MCS-02, BR-25.3). Sent on the next save.
+ * @property editingKey The row whose ✎ is open, or `null` when none is.
  * @property submitted Step 4/4 is saved; the wizard hands over to SCR-DA-006.
  * @property exited Back from Step 1/4 — *"back exits the wizard"* (D2' §SCR-DA-004).
  */
@@ -60,6 +64,8 @@ internal data class VehicleOnboardingState(
     val busy: Boolean = false,
     @param:StringRes val error: Int? = null,
     val registrationTaken: Boolean = false,
+    val corrections: Map<String, String> = emptyMap(),
+    val editingKey: String? = null,
     val submitted: Boolean = false,
     val exited: Boolean = false,
 ) {
@@ -72,7 +78,10 @@ internal data class VehicleOnboardingState(
 
     /** Whether the CTA is live: this step has everything it needs to be saved. */
     val canContinue: Boolean
-        get() = !busy && !loading && when (step) {
+        get() = !busy && !loading && (hasCorrections || whenStepIsComplete)
+
+    private val whenStepIsComplete: Boolean
+        get() = when (step) {
             OnboardingStep.DETAILS -> registrationNumber.isNotBlank() && vehicleType != null
 
             OnboardingStep.INSURANCE -> insurance != null
@@ -86,6 +95,9 @@ internal data class VehicleOnboardingState(
 
     /** Whether this step has been saved and came back needing a Verification Officer (BR-25.3). */
     val isPendingReview: Boolean get() = savedVerdict == StepVerdict.PENDING_REVIEW
+
+    /** Whether the driver has retyped something the next save has to carry. */
+    val hasCorrections: Boolean get() = corrections.values.any { it.isNotBlank() }
 
     /** The extract card's rows for the step on screen, in the order the wireframe draws them. */
     val stepFields: List<ExtractedField>
@@ -125,6 +137,7 @@ internal data class VehicleOnboardingState(
  * at it (BR-25.3). A second tap continues — a `pending_review` step is pending **by design** and
  * waiting for it to clear would trap the driver in the wizard forever.
  */
+@Suppress("TooManyFunctions") // One wizard, four steps: eight driver actions plus load/save/advance.
 internal class VehicleOnboardingViewModel(
     private val vehicles: VehicleOnboardingRepository,
     private val captures: DocumentCaptureCoordinator,
@@ -188,6 +201,26 @@ internal class VehicleOnboardingViewModel(
         captures.open(target)
     }
 
+    /** The ✎ on an extracted row (Δ MCS-02). Opens it for editing; a second tap closes it. */
+    fun toggleEdit(key: String) {
+        mutableState.update { it.copy(editingKey = if (it.editingKey == key) null else key) }
+    }
+
+    /**
+     * The driver retyped a value the scan got wrong or could not read (BR-25.3).
+     *
+     * Held until the next save. **The client never stamps a provenance** — registry-svc writes
+     * `source='manual'`, `verify_status='pending'` and queues the officer review, because a client
+     * that could claim `source='ai'` would make AL-29 advisory.
+     */
+    fun onCorrectionChanged(key: String, value: String) {
+        mutableState.update { current ->
+            val corrections = current.corrections.toMutableMap()
+            if (value.isBlank()) corrections.remove(key) else corrections[key] = value
+            current.copy(corrections = corrections, error = null)
+        }
+    }
+
     /**
      * The ‹ in the app bar.
      *
@@ -200,7 +233,9 @@ internal class VehicleOnboardingViewModel(
         if (previous == null) {
             mutableState.update { it.copy(exited = true) }
         } else {
-            mutableState.update { it.copy(step = previous, savedVerdict = null, error = null) }
+            mutableState.update {
+                it.copy(step = previous, savedVerdict = null, corrections = emptyMap(), editingKey = null, error = null)
+            }
         }
     }
 
@@ -214,8 +249,9 @@ internal class VehicleOnboardingViewModel(
         val current = mutableState.value
         if (!current.canContinue) return
 
-        // Already saved, and the driver has read the verdict. Move on.
-        if (current.savedVerdict != null) {
+        // A correction is a save of its own, even on a step that is already saved — it is the
+        // one thing that can change a verdict without a new photograph (Δ MCS-02, BR-25.3).
+        if (current.savedVerdict != null && !current.hasCorrections) {
             advance(current.step)
             return
         }
@@ -240,6 +276,8 @@ internal class VehicleOnboardingViewModel(
                         vehicleId = saved.vehicleId,
                         savedVerdict = saved.stepStatus,
                         fields = fields,
+                        corrections = emptyMap(),
+                        editingKey = null,
                         busy = false,
                     )
                 }
@@ -272,17 +310,18 @@ internal class VehicleOnboardingViewModel(
                 }
             }
 
-            OnboardingStep.INSURANCE -> vehicles.saveDocument(
-                vehicleId = requireNotNull(vehicleId),
-                step = OnboardingStep.INSURANCE,
-                front = requireNotNull(current.insurance),
-            )
+            OnboardingStep.INSURANCE, OnboardingStep.REVENUE -> {
+                val id = requireNotNull(vehicleId)
+                val capture = if (current.step == OnboardingStep.INSURANCE) current.insurance else current.revenue
 
-            OnboardingStep.REVENUE -> vehicles.saveDocument(
-                vehicleId = requireNotNull(vehicleId),
-                step = OnboardingStep.REVENUE,
-                front = requireNotNull(current.revenue),
-            )
+                // A correction with the document already on record needs no upload at all — which
+                // is the whole point of it (Δ MCS-02). A first save still carries the image.
+                if (current.savedVerdict != null && current.hasCorrections) {
+                    vehicles.saveCorrections(id, current.step, current.corrections.asCorrections())
+                } else {
+                    vehicles.saveDocument(id, current.step, requireNotNull(capture))
+                }
+            }
 
             OnboardingStep.PHOTOS -> vehicles.saveDocument(
                 vehicleId = requireNotNull(vehicleId),
@@ -307,7 +346,9 @@ internal class VehicleOnboardingViewModel(
             return
         }
         val next = serverNext ?: OnboardingStep.entries[from.ordinal + 1]
-        mutableState.update { it.copy(step = next, savedVerdict = null, error = null) }
+        mutableState.update {
+            it.copy(step = next, savedVerdict = null, corrections = emptyMap(), editingKey = null, error = null)
+        }
     }
 
     private fun apply(target: DocumentCaptureTarget, image: CapturedImage) {
@@ -331,6 +372,20 @@ internal class VehicleOnboardingViewModel(
         }
     }
 }
+
+/**
+ * The driver's retyped values as the client's typed correction set (Δ MCS-02).
+ *
+ * A map here and a named type on the wire: the screen collects by
+ * `registry.document_fields` key, and `OnboardingCorrections` is what stops a key the step does
+ * not accept — `reg_no_match` above all — reaching the request at all.
+ */
+internal fun Map<String, String>.asCorrections(): OnboardingCorrections = OnboardingCorrections(
+    insuranceExpiry = this[VehicleFieldKeys.INSURANCE_EXPIRY]?.takeIf(String::isNotBlank),
+    insurancePolicyNo = this[VehicleFieldKeys.INSURANCE_POLICY_NO]?.takeIf(String::isNotBlank),
+    revenueNo = this[VehicleFieldKeys.REVENUE_NO]?.takeIf(String::isNotBlank),
+    revenueExpiry = this[VehicleFieldKeys.REVENUE_EXPIRY]?.takeIf(String::isNotBlank),
+)
 
 /** `409 registration-exists` — the plate is already on a live vehicle (D-37, US-2.7). */
 private val Throwable.isRegistrationTaken: Boolean

@@ -243,4 +243,7 @@
     <string name="vehicle_registration_rejected">ආපසු එවා ඇත</string>
     <string name="vehicle_registration_deactivated">ඉවත් කර ඇත</string>
 
+    <string name="action_edit">සංස්කරණය</string>
+    <string name="vehicle_onboard_correction_supporting">ලේඛනයේ ඇත්ත වශයෙන්ම ඇති දේ ටයිප් කරන්න. නිලධාරියෙක් එය පරීක්ෂා කරයි.</string>
+    <string name="vehicles_assigned_until">%1$s · %2$s දක්වා</string>
 </resources>

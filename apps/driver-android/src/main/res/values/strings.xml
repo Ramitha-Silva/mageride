@@ -287,4 +287,7 @@
     <string name="vehicle_registration_rejected">Sent back</string>
     <string name="vehicle_registration_deactivated">Removed</string>
 
+    <string name="action_edit">Edit</string>
+    <string name="vehicle_onboard_correction_supporting">Type what the document actually says. An officer will check it.</string>
+    <string name="vehicles_assigned_until">%1$s · until %2$s</string>
 </resources>

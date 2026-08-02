@@ -185,6 +185,172 @@ public sealed class OnboardingUploadTests(PostgresFixture postgres)
                 new { DriverId = driverId }));
     }
 
+    /// <summary>
+    /// Δ MCS-02 — the DoD line: a driver corrects a doubtful extracted value **without
+    /// re-photographing the document**, and the correction routes to the officer queue.
+    /// </summary>
+    [Fact]
+    public async Task A_doubtful_field_is_corrected_without_a_second_upload()
+    {
+        Assert.SkipWhen(!postgres.IsAvailable, postgres.SkipReason ?? string.Empty);
+        await using var harness = await RegistryHarness.StartAsync(postgres);
+
+        var driverId = await harness.CreateDriverAsync();
+        var bearer = harness.Tokens.Driver(driverId);
+        var vehicleId = (await harness.RegisterVehicleAsync(bearer)).GetProperty("vehicleId").GetString()!;
+
+        using (var upload = new MultipartFormDataContent())
+        {
+            RegistryHarness.AddImagePart(upload, "file");
+            var saved = await harness.PutMultipartAsync(
+                $"/v1/vehicles/{vehicleId}/onboarding/insurance", upload, bearer);
+
+            Assert.Equal(HttpStatusCode.OK, saved.StatusCode);
+        }
+
+        await using var connection = await harness.OpenAsync();
+
+        var uploadsBefore = await connection.ExecuteScalarAsync<int>(
+            "SELECT count(*) FROM docs.uploads WHERE owner_id = @DriverId;", new { DriverId = driverId });
+
+        // The correction, with no file part at all.
+        using var correction = new MultipartFormDataContent
+        {
+            { new StringContent("2027-03-31"), "insuranceExpiry" },
+        };
+
+        var response = await harness.PutMultipartAsync(
+            $"/v1/vehicles/{vehicleId}/onboarding/insurance", correction, bearer);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var body = await RegistryHarness.ReadJsonAsync(response);
+
+        // BR-25.3: a driver-entered value is pending BY DESIGN. The step goes back to review and
+        // the driver may still carry on — that is the rule, not a failure.
+        Assert.Equal("PENDING_REVIEW", body.GetProperty("stepStatus").GetString());
+
+        // Nothing was uploaded. This is the whole point: re-photographing a certificate to retype
+        // its expiry is the roadside experience BR-25.3 exists to avoid.
+        Assert.Equal(
+            uploadsBefore,
+            await connection.ExecuteScalarAsync<int>(
+                "SELECT count(*) FROM docs.uploads WHERE owner_id = @DriverId;", new { DriverId = driverId }));
+
+        // One row for the key, carrying the driver's value with manual provenance (AL-29).
+        var field = await connection.QuerySingleAsync<(string Value, string Source, string VerifyStatus)>(
+            """
+            SELECT f.field_value AS "Value", f.source AS "Source", f.verify_status AS "VerifyStatus"
+              FROM registry.document_fields f
+              JOIN registry.documents d ON d.id = f.document_id
+             WHERE d.vehicle_id = @VehicleId AND f.field_key = 'insurance_expiry';
+            """,
+            new { VehicleId = Guid.Parse(vehicleId) });
+
+        Assert.Equal("2027-03-31", field.Value);
+        Assert.Equal("manual", field.Source);
+        Assert.Equal("pending", field.VerifyStatus);
+    }
+
+    /// <summary>A correction needs something to correct; an empty step is a validation failure.</summary>
+    [Fact]
+    public async Task A_correction_on_a_step_with_no_document_is_refused()
+    {
+        Assert.SkipWhen(!postgres.IsAvailable, postgres.SkipReason ?? string.Empty);
+        await using var harness = await RegistryHarness.StartAsync(postgres);
+
+        var driverId = await harness.CreateDriverAsync();
+        var bearer = harness.Tokens.Driver(driverId);
+        var vehicleId = (await harness.RegisterVehicleAsync(bearer)).GetProperty("vehicleId").GetString()!;
+
+        using var form = new MultipartFormDataContent
+        {
+            { new StringContent("2027-03-31"), "insuranceExpiry" },
+        };
+
+        var response = await harness.PutMultipartAsync(
+            $"/v1/vehicles/{vehicleId}/onboarding/insurance", form, bearer);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    /// <summary>
+    /// A key the step's document kind does not accept is refused, not stored. Without the
+    /// <c>AcceptedFor</c> filter a driver could write <c>reg_no_match</c> and verify their own plate.
+    /// </summary>
+    [Fact]
+    public async Task A_correction_that_does_not_belong_to_the_step_is_refused()
+    {
+        Assert.SkipWhen(!postgres.IsAvailable, postgres.SkipReason ?? string.Empty);
+        await using var harness = await RegistryHarness.StartAsync(postgres);
+
+        var driverId = await harness.CreateDriverAsync();
+        var bearer = harness.Tokens.Driver(driverId);
+        var vehicleId = (await harness.RegisterVehicleAsync(bearer)).GetProperty("vehicleId").GetString()!;
+
+        using (var upload = new MultipartFormDataContent())
+        {
+            RegistryHarness.AddImagePart(upload, "file");
+            await harness.PutMultipartAsync($"/v1/vehicles/{vehicleId}/onboarding/insurance", upload, bearer);
+        }
+
+        // `revenue_no` belongs to the revenue licence, not to the insurance certificate.
+        using var form = new MultipartFormDataContent
+        {
+            { new StringContent("RL-558231"), "revenueNo" },
+        };
+
+        var response = await harness.PutMultipartAsync(
+            $"/v1/vehicles/{vehicleId}/onboarding/insurance", form, bearer);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    /// <summary>
+    /// Δ MCS-02 — the C068 finding, closed: the licence number and its expiry are correctable.
+    /// </summary>
+    [Fact]
+    public async Task Profile_setup_accepts_a_corrected_licence_number_and_expiry()
+    {
+        Assert.SkipWhen(!postgres.IsAvailable, postgres.SkipReason ?? string.Empty);
+        await using var harness = await RegistryHarness.StartAsync(postgres);
+
+        var driverId = await harness.CreateDriverAsync();
+
+        using var form = new MultipartFormDataContent
+        {
+            { new StringContent("Nimal Perera"), "driverName" },
+            { new StringContent("B1234567"), "licenceNo" },
+            { new StringContent("2029-04-30"), "licenceExpiry" },
+        };
+
+        RegistryHarness.AddImagePart(form, "photo", "gallery");
+        RegistryHarness.AddImagePart(form, "licenseFront");
+        RegistryHarness.AddImagePart(form, "licenseBack");
+
+        var response = await harness.PutMultipartAsync(
+            "/v1/drivers/profile", form, harness.Tokens.Driver(driverId));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        await using var connection = await harness.OpenAsync();
+
+        var rows = await connection.QueryAsync<(string Key, string Value, string Source)>(
+            """
+            SELECT f.field_key AS "Key", f.field_value AS "Value", f.source AS "Source"
+              FROM registry.document_fields f
+              JOIN registry.documents d ON d.id = f.document_id
+             WHERE d.driver_id = @DriverId AND f.field_key IN ('licence_no', 'licence_expiry');
+            """,
+            new { DriverId = driverId });
+
+        var byKey = rows.ToDictionary(row => row.Key, StringComparer.Ordinal);
+
+        Assert.Equal("B1234567", byKey["licence_no"].Value);
+        Assert.Equal("manual", byKey["licence_no"].Source);
+        Assert.Equal("2029-04-30", byKey["licence_expiry"].Value);
+    }
+
     /// <summary>Step 4 needs both plates, and the multipart arm has to carry both (D5' §14.1a).</summary>
     [Fact]
     public async Task The_photos_step_carries_a_front_and_a_back_in_one_request()

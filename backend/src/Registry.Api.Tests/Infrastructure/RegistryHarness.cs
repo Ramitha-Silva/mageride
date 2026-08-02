@@ -272,7 +272,13 @@ internal sealed class RegistryHarness : IAsyncDisposable
     /// the US-13.9 "temporarily assigned" state. fleet-svc (C059) owns writing these; registry-svc
     /// only reads them through the eligibility projection.
     /// </summary>
-    public async Task<Guid> AssignToFleetAsync(Guid vehicleId, Guid driverId, Guid fleetOwnerId)
+    public async Task<Guid> AssignToFleetAsync(
+        Guid vehicleId,
+        Guid driverId,
+        Guid fleetOwnerId,
+        DateTimeOffset? expiresAt = null,
+        string fleetName = "Test Fleet",
+        DateTimeOffset? validFrom = null)
     {
         var fleetId = Guid.NewGuid();
 
@@ -281,15 +287,24 @@ internal sealed class RegistryHarness : IAsyncDisposable
         await connection.ExecuteAsync(
             """
             INSERT INTO registry.fleets (id, owner_id, name, status)
-            VALUES (@FleetId, @OwnerId, 'Test Fleet', 'APPROVED');
+            VALUES (@FleetId, @OwnerId, @FleetName, 'APPROVED');
 
             INSERT INTO registry.fleet_vehicles (fleet_id, vehicle_id, mode)
             VALUES (@FleetId, @VehicleId, 'B');
 
-            INSERT INTO registry.fleet_assignments (fleet_id, vehicle_id, driver_id)
-            VALUES (@FleetId, @VehicleId, @DriverId);
+            INSERT INTO registry.fleet_assignments (fleet_id, vehicle_id, driver_id, valid_from, expires_at)
+            VALUES (@FleetId, @VehicleId, @DriverId, COALESCE(@ValidFrom, now()), @ExpiresAt);
             """,
-            new { FleetId = fleetId, OwnerId = fleetOwnerId, VehicleId = vehicleId, DriverId = driverId });
+            new
+            {
+                FleetId = fleetId,
+                OwnerId = fleetOwnerId,
+                VehicleId = vehicleId,
+                DriverId = driverId,
+                ExpiresAt = expiresAt,
+                FleetName = fleetName,
+                ValidFrom = validFrom,
+            });
 
         return fleetId;
     }

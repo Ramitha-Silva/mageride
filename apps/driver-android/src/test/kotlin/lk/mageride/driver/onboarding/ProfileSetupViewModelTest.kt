@@ -135,6 +135,28 @@ class ProfileSetupViewModelTest {
     }
 
     @Test
+    fun the_licence_number_and_expiry_are_correctable_now() = runBlocking {
+        // Δ MCS-02 — the C068 finding, closed. `PUT /v1/drivers/profile` carried parts for `nicNo`
+        // and `allowedVehicleTypes` only, so an edit to either of the other two rows had nowhere
+        // to go; the wireframe draws a ✎ on all of them and AL-29's manual path is exactly this.
+        backend.returns("upsertDriverProfile", response(nic = pending("nic_no", value = null)))
+        val model = completedForm()
+        model.save()
+        model.state.await { it.extraction != null && !it.busy }
+
+        model.toggleEdit(LicenceFieldKeys.LICENCE_NO)
+        model.onLicenceFieldChanged(LicenceFieldKeys.LICENCE_NO, "B7654321")
+        model.onLicenceFieldChanged(LicenceFieldKeys.LICENCE_EXPIRY, "2029-04-30")
+
+        model.save()
+        model.state.await { it.done || it.error != null }
+
+        val body = backend.lastCall("upsertDriverProfile").body
+        assertTrue(body.contains("licenceNo") && body.contains("B7654321"), "the typed licence number")
+        assertTrue(body.contains("licenceExpiry") && body.contains("2029-04-30"), "and its expiry")
+    }
+
+    @Test
     fun a_second_tap_with_nothing_new_to_send_continues_without_calling_again() = runBlocking {
         backend.returns("upsertDriverProfile", response(nic = pending("nic_no", value = null)))
         val model = completedForm()

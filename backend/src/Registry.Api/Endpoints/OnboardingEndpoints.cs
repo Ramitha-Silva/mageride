@@ -197,7 +197,9 @@ public static class OnboardingEndpoints
                 body?.LicenseFrontFileId,
                 body?.LicenseBackFileId,
                 body?.NicNo,
-                body?.AllowedVehicleTypes),
+                body?.AllowedVehicleTypes,
+                body?.LicenceNo,
+                body?.LicenceExpiry),
             cancellationToken);
 
         return TypedResults.Ok(DriverProfileResponse.From(result));
@@ -270,7 +272,9 @@ public static class OnboardingEndpoints
             front,
             back,
             NullIfBlank(form["nicNo"].ToString()),
-            ReadList(form, "allowedVehicleTypes"));
+            ReadList(form, "allowedVehicleTypes"),
+            NullIfBlank(form["licenceNo"].ToString()),
+            NullIfBlank(form["licenceExpiry"].ToString()));
     }
 
     private static async Task<OnboardingStepBody> ReadStepFormAsync(
@@ -286,15 +290,22 @@ public static class OnboardingEndpoints
         // three each save one, and `photos` saves two.
         var kind = OnboardingSteps.DocumentKind(step);
 
-        if (kind is not null && form.Files.GetFile("file") is null)
+        // Δ MCS-02 — a corrections-only save carries no file, and must not. BR-25.3 lets a driver
+        // edit a doubtful extracted value, and asking them to re-photograph the document to retype
+        // its expiry is the roadside experience that rule exists to avoid. The service is what
+        // decides whether the step actually HAS a document to correct; refusing here would refuse
+        // the legitimate case as well.
+        var corrections = ReadCorrections(form);
+
+        if (kind is not null && form.Files.GetFile("file") is null && corrections.Count == 0)
         {
             throw new MageRideValidationException(new Dictionary<string, string[]>(StringComparer.Ordinal)
             {
-                ["file"] = ["file is required on this step."],
+                ["file"] = ["file is required on this step unless the request carries a correction."],
             });
         }
 
-        var file = kind is null
+        var file = kind is null || form.Files.GetFile("file") is null
             ? null
             : await StorePartAsync(form, "file", kind, driverId, documents, cancellationToken);
 
@@ -309,7 +320,38 @@ public static class OnboardingEndpoints
             NullIfBlank(form["vehicleType"].ToString()),
             file,
             fileBack,
-            Fields: null);
+            corrections.Count == 0 ? null : corrections);
+    }
+
+    /// <summary>
+    /// The driver corrections a step form may carry (Δ MCS-02, AL-29 / BR-25.3).
+    /// </summary>
+    /// <remarks>
+    /// Named parts rather than a free map: <see cref="DocumentFieldKeys.AcceptedFor"/> already
+    /// fixes which keys a document kind accepts, and the service filters against it again — so a
+    /// key that does not belong to the step is dropped there rather than stored here. Listing them
+    /// keeps the contract able to say what it accepts, which a `Dictionary&lt;string,string&gt;`
+    /// over `multipart/form-data` cannot.
+    /// </remarks>
+    private static Dictionary<string, string> ReadCorrections(IFormCollection form)
+    {
+        var corrections = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        void Add(string part, string key)
+        {
+            var value = NullIfBlank(form[part].ToString());
+            if (value is not null)
+            {
+                corrections[key] = value;
+            }
+        }
+
+        Add("insuranceExpiry", DocumentFieldKeys.InsuranceExpiry);
+        Add("insurancePolicyNo", DocumentFieldKeys.InsurancePolicyNo);
+        Add("revenueNo", DocumentFieldKeys.RevenueNo);
+        Add("revenueExpiry", DocumentFieldKeys.RevenueExpiry);
+
+        return corrections;
     }
 
     /// <summary>Stores one file part and answers its <c>docs.uploads</c> id, as a string.</summary>

@@ -11125,3 +11125,93 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   `capture/CropQuadTest.kt` (8), `capture/DocumentEdgeDetectorTest.kt` (6),
   `vehicle/VehicleOnboardingViewModelTest.kt` (11), `vehicle/VehiclesViewModelTest.kt` (6),
   `vehicle/VehicleOnboardingStatusViewModelTest.kt` (4), `vehicle/VehicleTestKit.kt`.
+
+---
+
+- **Component:** MCS-02 onboarding corrections, fleet-assignment display, retired client operations
+  (micro-change-set, not a manifest entry) — 2026-08-02
+- **Status:** DONE, all three parts. `dotnet test backend/src/Registry.Api.Tests -c Release` →
+  **196 passed, 0 failed** (189 baseline → 196; 7 new). `bash infra/scripts/migrate-verify.sh` →
+  **469/469**. `:apps:driver-android:testDebugUnitTest` → **110 passed, 0 failed** (107 → 110) and
+  `assembleDebug` clean; detekt + ktlintCheck green on `:shared` and the app; passenger-android and
+  the e2e harness compile. `:shared:testDebugUnitTest` → **817 tests, 6 failed**, down from 13 and
+  all six in MCS-03's set.
+- **Notes:**
+
+  **Part C found far more than it was scoped to.** Deleting four retired operations was meant to
+  stop `ContractShapeTest` throwing; what it actually did was let that check run for the first time
+  in months, and it immediately found **17 drifted operations**. The one that matters:
+  **`FieldSource` serialised `ocr` while the DB CHECK and `_shared.yaml` both say `ai`** — a real
+  registry-svc response could not be deserialised on the one screen group that reads it, and
+  `EnumWireFormatTest` had transcribed the enum rather than the contract, so the test meant to
+  catch it locked it in. Also: `listFaqArticles` was declared in **two** contracts, which breaks
+  operationId routing outright (every client stubs and records by it), and `PaymentInitiation`
+  still carried the two ride rails AL-57 retired. All fixed; the full list is in the commit.
+
+  **A correction I have to make: Part B's finding was wrong.** The C069 handoff recorded "no expiry
+  column exists — nothing on the platform can auto-expire an assignment". That is false. **C059's
+  migration 0314 added `registry.fleet_assignments.valid_from` + `expires_at`**, an exclusion
+  constraint over the window, and the auto-expiry predicate in
+  `registry.driver_eligible_vehicles`; US-13.9 has needed no sweep since. I read D4' §2's printed
+  DDL and did not check the migrations after it. **What is actually stale is the spec** — D4' §2
+  still shows `(assigned_at, revoked_at)` and the superseded `ux_fleet_assign_active` index, which
+  0314's own header had already asked someone to fix. D4' §2 is corrected in this pass.
+
+  The real Part B gap was therefore much smaller and purely a display one: the view carried
+  `fleet_id` (an identifier, not a caption) and dropped `expires_at` after using it in the WHERE
+  clause, so `GET /v1/vehicles/mine` could name neither the assigning fleet nor the date. Migration
+  **0318** adds `fleet_name` and `assigned_until` to the view — two columns, no table touched.
+
+  **Decisions —**
+  (1) **Named correction parts, not a free `fields` map** (option A1 of the prompt).
+  `DocumentFieldKeys.AcceptedFor` already fixes the accepted set per document kind, so the contract
+  can say what it takes; a `Dictionary<string,string>` over `multipart/form-data` cannot. It also
+  makes `reg_no_match` and `plate_text` unsendable **by shape** — those two are the Step 4/4 fraud
+  check, and a driver who could retype the plate the camera read would be verifying their own
+  vehicle. The server filters on the same rule, so the fence holds on both sides.
+  (2) **`file` is no longer required on a document step that is only being corrected.** This was
+  the substantive half: `SaveDocumentStepAsync` demanded an upload unconditionally, so correcting
+  an expiry meant re-photographing the certificate. A corrections-only save now applies to the
+  documents the step already recorded (`registry.onboarding_steps.fields.documentIds`) and
+  re-derives the verdict. A correction on a step with **no** document is still a `400` — that is a
+  different mistake and should read as one.
+  (3) **The value replaces rather than appends.** `registry.document_fields` has no unique key on
+  `(document_id, field_key)`, so an INSERT would have left the old pending row beside the new one
+  and the step would have stayed pending whatever the driver typed. `ReplaceFieldAsync` updates in
+  place and inserts only when the key was never written.
+  (4) **`ck_fleet_assign_window` is right and my first test was wrong.** It refuses an assignment
+  that expires before it starts; a *lapsed* assignment is a window that opened in the past and has
+  since closed, which is what the test now seeds.
+  (5) **`fleetName` and `assignedUntil` are display only.** The eligibility view stops returning an
+  assignment the moment its window closes, so no client checks the date to decide eligibility —
+  and the app renders the date through `BusinessCalendar` (D-38: Asia/Colombo, never the handset's
+  zone, or a driver abroad reads a different expiry from the one the fleet set).
+
+  **Findings recorded, not fixed —**
+  (a) ***AL-57 is half-applied across the contracts.*** `fare.yaml`'s settlement-time
+  `PaymentMethod` is `[cash, wallet, scan_driver_qr, cod]`, but `ride.yaml`'s booking-time
+  `RidePaymentMethod` is still `[cash, lankaqr, onepay, cod]` and `iam.yaml`'s
+  `DefaultPaymentMethod` still offers both retired rails. A passenger can therefore still *choose*
+  a method that can no longer *settle*. `:shared` keeps `ONEPAY`/`LANKAQR` in the fare enum for
+  exactly that reason — removing them there would make three contracts disagree three ways instead
+  of two — and `PaymentMethods.actionFor` answers `Unavailable` for both. **Whoever completes AL-57
+  owns this.**
+  (b) ***`EnumWireFormatTest` transcribes enums instead of reading contracts.*** That is why the
+  `FieldSource` defect survived. It is a real hole in the same class as the one Part C closed, and
+  it wants the `ContractShapeTest` treatment.
+  (c) ***`registry.fleet_assignments` may still have no writer.*** fleet-svc owns assignment writes
+  (C059); Part B's display path is proved against seeded rows, so if nothing writes them yet the
+  group is untestable end to end outside these tests.
+
+  **Files —** contracts: `registry.yaml` (correction parts on both multipart arms; `VehicleSummary`
+  + `fleetName`/`assignedUntil`), `content.yaml` (`listAuthoredFaqArticles`). Specs:
+  `D3_mageride_api_contracts.md` (three rows), `D4_mageride_data_model.md` (§2 corrected to 0314).
+  Migration: `0318__registry_eligible_fleet_display.sql`. Service: `OnboardingService`
+  (`ApplyStepCorrectionsAsync`, `ReplaceFieldAsync`, licence corrections),
+  `OnboardingEndpoints`/`OnboardingContracts`, `VehicleContracts`, `EligibilityRepository`,
+  `SharingRecords`. Tests: `OnboardingUploadTests` (+4), `GoLiveEligibilityTests` (+3),
+  `RegistryHarness`. Client: `RegistryApi`, `RegistryModels` (`OnboardingCorrections`,
+  `VehicleSummary`), plus Part C's 17 DTO corrections across fare/query/transit/support/content/
+  comms/safety/registry. App: `VehicleOnboardingRepository`/`ViewModel`/`Screen`,
+  `VehiclesScreen`, `ProfileSetupScreen`/`ViewModel`, `DriverProfileRepository`, three
+  `strings.xml`, and +3 tests.

@@ -302,8 +302,18 @@ CREATE TABLE registry.fleet_assignments (                    -- [NEW] driver↔v
   fleet_id UUID NOT NULL REFERENCES registry.fleets(id) ON DELETE CASCADE,
   vehicle_id UUID NOT NULL REFERENCES registry.vehicles(id) ON DELETE CASCADE,
   driver_id UUID NOT NULL REFERENCES iam.users(id),
-  assigned_at TIMESTAMPTZ NOT NULL DEFAULT now(), revoked_at TIMESTAMPTZ);
-CREATE UNIQUE INDEX ux_fleet_assign_active ON registry.fleet_assignments(vehicle_id, driver_id) WHERE revoked_at IS NULL;
+  assigned_at TIMESTAMPTZ NOT NULL DEFAULT now(), revoked_at TIMESTAMPTZ,
+  valid_from TIMESTAMPTZ NOT NULL DEFAULT now(),             -- [Δ C059, migration 0314]
+  expires_at TIMESTAMPTZ,                                    -- US-13.9's auto-expiry; NULL = open-ended
+  CONSTRAINT ck_fleet_assign_window CHECK (expires_at IS NULL OR expires_at > valid_from));
+-- Δ C059 (0314): ux_fleet_assign_active is REPLACED by an exclusion constraint. "One open assignment per
+-- (vehicle, driver)" was right while an assignment had no end; with a window it would permanently block
+-- re-hiring the same relief driver on the same bus next month. The rule that holds is "no two open
+-- assignments of one driver to one vehicle whose windows overlap", which is also the only form that
+-- survives two managers assigning at once.
+ALTER TABLE registry.fleet_assignments ADD CONSTRAINT ex_fleet_assign_overlap
+  EXCLUDE USING gist (vehicle_id WITH =, driver_id WITH =, tstzrange(valid_from, expires_at) WITH &&)
+  WHERE (revoked_at IS NULL);
 
 CREATE TABLE registry.shares (                               -- [ADAPT] Mode B sharing grant (NY no equiv)
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

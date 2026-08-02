@@ -43,6 +43,7 @@ import lk.mageride.driver.capture.DocumentCaptureTarget
 import lk.mageride.driver.ui.component.AdminVerifyChip
 import lk.mageride.driver.ui.component.CaptureTile
 import lk.mageride.driver.ui.component.ExtractedFieldRow
+import lk.mageride.driver.ui.component.LabelledTextField
 import lk.mageride.driver.ui.component.MageRideCta
 import lk.mageride.driver.ui.component.ModeCBadge
 import lk.mageride.driver.ui.component.NoticeCard
@@ -156,6 +157,7 @@ internal fun VehicleOnboardingScreen(
                         viewModel.requestCapture(DocumentCaptureTarget.INSURANCE)
                         onCaptureRequested()
                     },
+                    viewModel = viewModel,
                 )
 
                 OnboardingStep.REVENUE -> DocumentStep(
@@ -166,6 +168,7 @@ internal fun VehicleOnboardingScreen(
                         viewModel.requestCapture(DocumentCaptureTarget.REVENUE_LICENCE)
                         onCaptureRequested()
                     },
+                    viewModel = viewModel,
                 )
 
                 OnboardingStep.PHOTOS -> PhotosStep(
@@ -285,12 +288,14 @@ private fun DetailsStep(
  * composable. The extract card appears only after a save, because the save is what queues the
  * Gemini Flash extraction — see [VehicleOnboardingViewModel].
  */
+@Suppress("LongParameterList") // A slot's identity, its caption, its action and the edit seam.
 @Composable
 private fun DocumentStep(
     state: VehicleOnboardingState,
     target: DocumentCaptureTarget,
     slotLabel: String,
     onCapture: () -> Unit,
+    viewModel: VehicleOnboardingViewModel,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -307,7 +312,7 @@ private fun DocumentStep(
         )
 
         SlotStatusRow(label = slotLabel, done = state.captured(target))
-        ExtractionCard(fields = state.stepFields)
+        ExtractionCard(state = state, viewModel = viewModel)
     }
 }
 
@@ -361,7 +366,9 @@ private fun PhotosStep(
             )
         }
 
-        ExtractionCard(fields = state.stepFields)
+        // No view model: Step 4/4's two rows are the plate check itself and are never the
+        // driver's to retype — see ExtractionCard.
+        ExtractionCard(state = state, viewModel = null)
     }
 }
 
@@ -386,19 +393,25 @@ private fun SlotStatusRow(label: String, done: Boolean, modifier: Modifier = Mod
 }
 
 /**
- * The wireframe's *"✦ AI-extracted (Gemini Flash 3.0)"* card.
+ * The wireframe's *"✦ AI-extracted (Gemini Flash 3.0)"* card, with the ✎ it draws.
  *
- * **Every row is read-only, and the wireframe draws a ✎ on some of them.** The multipart arm of
- * `PUT /v1/vehicles/{id}/onboarding/{step}` carries `registrationNumber`, `vehicleType`, `file`
- * and `fileBack` — it has **no `fields` part** — and the JSON arm that does needs a `fileId` no
- * response on this surface ever returns. So a correction typed here would have nowhere to go and
- * would be silently dropped on save. Showing the verdicts with the ⚑ chip is the honest
- * rendering, and it is not a dead end: a doubtful field is `pending_review` and goes to the
- * Verification Officer, which is exactly what BR-25.3 asks for. Raised as a micro-change-set in
- * the C069 handoff; same shape as C068's finding on `licence_no` / `licence_expiry`.
+ * **Δ MCS-02 — the rows are editable again.** Until this change set the multipart arm of
+ * `PUT /v1/vehicles/{id}/onboarding/{step}` carried no `fields` part and the JSON arm needed a
+ * `fileId` no response returns, so a correction had nowhere to go and the card was read-only.
+ * That is closed: [OnboardingCorrections] carries the driver's value and the document already on
+ * record is corrected in place — no second photograph.
+ *
+ * Only the keys the step's document kind accepts are editable. `plate_text` and `reg_no_match`
+ * are **not**: they are the fraud check Step 4/4 exists to perform, and a driver who could retype
+ * the plate the camera read would be verifying their own vehicle.
  */
 @Composable
-private fun ExtractionCard(fields: List<ExtractedField>, modifier: Modifier = Modifier) {
+private fun ExtractionCard(
+    state: VehicleOnboardingState,
+    viewModel: VehicleOnboardingViewModel?,
+    modifier: Modifier = Modifier,
+) {
+    val fields = state.stepFields
     if (fields.isEmpty()) return
 
     NoticeCard(
@@ -408,12 +421,29 @@ private fun ExtractionCard(fields: List<ExtractedField>, modifier: Modifier = Mo
         modifier = modifier,
     ) {
         fields.forEach { field ->
+            val editable = viewModel != null && field.key in VehicleFieldKeys.Correctable
+
             ExtractedFieldRow(
                 label = stringResource(field.labelRes()),
-                value = field.displayValue(),
+                value = state.corrections[field.key] ?: field.displayValue(),
                 emptyLabel = stringResource(R.string.profile_setup_field_unread),
                 flagLabel = stringResource(R.string.flag_admin_verify).takeIf { field.needsOfficerReview },
+                editLabel = stringResource(R.string.action_edit).takeIf { editable },
+                onEdit = if (editable) {
+                    { viewModel.toggleEdit(field.key) }
+                } else {
+                    null
+                },
             )
+
+            if (state.editingKey == field.key && viewModel != null) {
+                LabelledTextField(
+                    label = stringResource(field.labelRes()),
+                    value = state.corrections[field.key] ?: field.value.orEmpty(),
+                    onValueChange = { viewModel.onCorrectionChanged(field.key, it) },
+                    supporting = stringResource(R.string.vehicle_onboard_correction_supporting),
+                )
+            }
         }
 
         // The wireframe's `Confidence · 0.62 — doubtful` row. The **lowest** of the step's fields,

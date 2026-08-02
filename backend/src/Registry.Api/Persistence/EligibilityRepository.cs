@@ -35,7 +35,8 @@ public interface IEligibilityRepository
 public sealed class EligibilityRepository : IEligibilityRepository
 {
     private const string Columns =
-        "driver_id, vehicle_id, source, fleet_id, owner_id, registration_number, vehicle_type, " +
+        "driver_id, vehicle_id, source, fleet_id, fleet_name, assigned_until, owner_id, " +
+        "registration_number, vehicle_type, " +
         "mode, status, dispatch_state, onboarding_status, driver_name, driver_photo_url, " +
         "created_at, is_go_live_eligible";
 

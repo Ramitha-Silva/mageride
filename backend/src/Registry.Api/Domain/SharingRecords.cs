@@ -18,6 +18,8 @@ public sealed record EligibleVehicle(
     Guid VehicleId,
     string Source,
     Guid? FleetId,
+    string? FleetName,
+    DateTimeOffset? AssignedUntil,
     Guid OwnerId,
     string RegistrationNumber,
     string VehicleType,

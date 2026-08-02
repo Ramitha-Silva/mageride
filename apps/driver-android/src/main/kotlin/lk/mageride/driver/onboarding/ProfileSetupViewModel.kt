@@ -21,6 +21,7 @@ import lk.mageride.shared.data.models.VehicleType
  * @property extraction The verdict card, once a save has come back. `null` before the first one.
  * @property busy A save is in flight.
  * @property error Resolved copy for the last failure.
+ * @property editingKey The extracted row whose ✎ is open, or `null` (Δ MCS-02).
  * @property done Set when Profile Setup is finished; the screen navigates to SCR-DA-007.
  */
 internal data class ProfileSetupState(
@@ -28,6 +29,7 @@ internal data class ProfileSetupState(
     val extraction: LicenceExtraction? = null,
     val busy: Boolean = false,
     @param:StringRes val error: Int? = null,
+    val editingKey: String? = null,
     val done: Boolean = false,
 ) {
     /** Name, photo and both licence sides — all three are required before Save (AL-27). */
@@ -102,6 +104,23 @@ internal class ProfileSetupViewModel(
     /** Same, for the licence classes the scan could not read. */
     fun onAllowedVehicleTypesChanged(types: List<VehicleType>) {
         mutableState.update { it.copy(draft = it.draft.copy(allowedVehicleTypes = types), error = null) }
+    }
+
+    /** The ✎ on an extracted row (Δ MCS-02). A second tap closes it. */
+    fun toggleEdit(key: String) {
+        mutableState.update { it.copy(editingKey = if (it.editingKey == key) null else key) }
+    }
+
+    /** The driver retyped the licence number or its expiry — the two C068 could not send. */
+    fun onLicenceFieldChanged(key: String, value: String) {
+        mutableState.update { current ->
+            val draft = when (key) {
+                LicenceFieldKeys.LICENCE_NO -> current.draft.copy(licenceNo = value)
+                LicenceFieldKeys.LICENCE_EXPIRY -> current.draft.copy(licenceExpiry = value)
+                else -> current.draft
+            }
+            current.copy(draft = draft, error = null)
+        }
     }
 
     /**
