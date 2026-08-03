@@ -32,8 +32,11 @@ class DtoFixturesTest {
     fun every_field_of_a_dto_is_populated_including_the_optional_ones() {
         val document = DtoFixtures.jsonOf<RideDetail>().jsonObject
 
-        // RideDetail has twenty properties and only six of them are required. All twenty.
-        assertEquals(20, document.size, document.keys.sorted().toString())
+        // RideDetail has twenty-three properties and only six of them are required. All
+        // twenty-three — the last three are Δ C037's `recipientName` / `senderPhone` /
+        // `recipientPhone`, added to the class by C071 (AL-33 draws a call button beside each end
+        // of a delivery, and one `counterpartyPhone` cannot answer two buttons).
+        assertEquals(23, document.size, document.keys.sorted().toString())
         assertTrue("packageDescription" in document, "an optional field must be populated too")
         assertTrue("counterpartyPhone" in document, "a nullable field must be populated too")
     }

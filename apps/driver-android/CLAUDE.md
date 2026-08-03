@@ -32,6 +32,7 @@ lk.mageride.driver
 ├── vehicle/                  C069 · SCR-DA-004…004c, 006, 026/026a + their data layer
 ├── home/                     C070 · SCR-DA-010, 011, 013, 014 + the map and the offer inbox
 ├── ride/                     C070 · SCR-DA-015 + its three sheets and its data layer
+├── delivery/                 C071 · SCR-DA-016a/b/c + the proof queue and its data layer
 └── menu/                     C070 · SCR-DA-036 — AL-31's drawer, as a tab
 ```
 
@@ -133,6 +134,34 @@ lk.mageride.driver
 - Reusable UI added here: `DashboardSheet`, `OnlineToggle`, `DashboardBanner`, `CountdownRing`,
   `SolidBadge`, `VehicleChip`, `StatusCta`, and `ui/MoneyFormat.kt` (`Rs 1,240`, `1.2 km`,
   `01:12:40`) — all integer arithmetic, because `Money` deliberately does not format itself.
+
+## Cluster 4 (C071) — the delivery
+
+- **A package ride is the SAME destination as a passenger ride.** R-01 keeps one aggregate and
+  `PushRouter` resolves both `mageride://ride/{id}` and `mageride://package/{id}` to
+  `DriverRoute.ActiveRide`, so the kind is not known until the ride has been read: `ActiveRideScreen`
+  reads it and hands over to `DeliveryScreen` on `RideKind.PACKAGE`. SCR-DA-015's poll is switched
+  off for a package (`ActiveRideState.isPollable`) so only one loop folds server states onto a ride.
+- **Which of the three sheets is up is derived from the ride, never counted.** `package.picked_up`
+  IS the `→ InProgress` move (D5' §11 skips `DriverArrived` for a parcel), so a driver whose app died
+  between the two doors comes back to the right sheet from one read. Sheet 1's **Start delivery** is
+  the one local step and sends nothing.
+- **`PackageHandoff` (C015) is the five-attempt rule — do not count attempts in a screen.** The view
+  model holds its `RideProjection` for the screen's whole life rather than re-seating it per read,
+  because re-seating throws the handoff away with it. `canSubmit` refuses a malformed code without
+  spending an attempt; the **fifth** wrong code locks the gate (which is also when ride-svc raises
+  the admin-queue item), so there is no sixth request to make.
+- **The proof photograph completes the delivery** (Δ C037), so it is uploaded by the *"Delivery
+  completed"* tap and not by the shutter. `ProofUploadQueue` is in memory and `mobile_db_schema.md`
+  §3.6's durable table is deliberately unused here — read that class's KDoc before changing it.
+- **`DocumentCaptureTarget.DELIVERY_PROOF` is the first non-document use of SCR-DA-005.** A proof
+  photo goes to `rides.proof_artifacts` and carries no `captured_via`, so AL-43's provenance stamp is
+  dropped at the upload rather than filed against the Verification-Officer queue.
+- **AL-33's fences:** *"Delivery completed"* replaces *"Cash received (COD)"* and nothing here calls
+  `POST …/cod-collected`; both call buttons are a **direct PSTN dial** with no AL-48 chooser, and
+  each logs its own `CalleeRole` through `RideContact.startCall(rideId, calleeRole, type)`.
+- Reusable UI added here: `ui/PackageLabels.kt` (the size and payment-method label tables SCR-DA-014
+  used to keep privately) and `ControlTokens.CallButtonWidth`/`.CallButtonHeight`.
 
 ## Rules this module is built on
 

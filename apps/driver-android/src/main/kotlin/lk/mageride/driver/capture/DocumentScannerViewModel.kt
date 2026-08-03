@@ -192,6 +192,7 @@ internal val DocumentCaptureTarget.fileName: String
         DocumentCaptureTarget.REVENUE_LICENCE -> "revenue-licence.jpg"
         DocumentCaptureTarget.VEHICLE_FRONT -> "vehicle-front.jpg"
         DocumentCaptureTarget.VEHICLE_BACK -> "vehicle-back.jpg"
+        DocumentCaptureTarget.DELIVERY_PROOF -> "delivery-proof.jpg"
     }
 
 /** The trilingual name of what is being captured — the wireframe's `Capture: Licence front`. */
@@ -203,4 +204,5 @@ internal fun DocumentCaptureTarget.labelRes(): Int = when (this) {
     DocumentCaptureTarget.REVENUE_LICENCE -> R.string.capture_target_revenue_licence
     DocumentCaptureTarget.VEHICLE_FRONT -> R.string.capture_target_vehicle_front
     DocumentCaptureTarget.VEHICLE_BACK -> R.string.capture_target_vehicle_back
+    DocumentCaptureTarget.DELIVERY_PROOF -> R.string.capture_target_delivery_proof
 }

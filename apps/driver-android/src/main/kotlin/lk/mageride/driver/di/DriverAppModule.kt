@@ -4,6 +4,9 @@ import io.ktor.client.engine.HttpClientEngine
 import io.ktor.client.engine.okhttp.OkHttp
 import lk.mageride.driver.capture.DocumentCaptureCoordinator
 import lk.mageride.driver.capture.DocumentScannerViewModel
+import lk.mageride.driver.delivery.DeliveryRepository
+import lk.mageride.driver.delivery.DeliveryViewModel
+import lk.mageride.driver.delivery.ProofUploadQueue
 import lk.mageride.driver.home.AndroidJourneyPreferences
 import lk.mageride.driver.home.DirectionalViewModel
 import lk.mageride.driver.home.DriverIdentity
@@ -204,5 +207,30 @@ private fun Module.dashboardBindings() {
     viewModel { DirectionalViewModel(standby = get(), query = get(), iam = get(), location = get()) }
     viewModel { (rideId: Ulid) ->
         ActiveRideViewModel(rideId = rideId, rides = get(), contact = get(), location = get())
+    }
+
+    deliveryBindings()
+}
+
+/**
+ * The C071 slice — SCR-DA-016a/b/c, the three delivery sheets.
+ *
+ * [ProofUploadQueue] is a `single` for the reason [DocumentCaptureCoordinator] is: the photograph is
+ * taken on a full-screen destination, so the composition that asked for it is not alive when it
+ * comes back, and the entry has to outlive both.
+ */
+private fun Module.deliveryBindings() {
+    single { ProofUploadQueue() }
+    single { DeliveryRepository(ride = get()) }
+
+    viewModel { (rideId: Ulid) ->
+        DeliveryViewModel(
+            rideId = rideId,
+            deliveries = get(),
+            contact = get(),
+            location = get(),
+            proofs = get(),
+            captures = get(),
+        )
     }
 }

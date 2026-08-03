@@ -97,7 +97,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C068 | driver-android-auth-onboarding | 4a | DONE | 2026-08-02 | **72 tests green** (was 34) and `assembleDebug` clean, plus `detekt`/`ktlintCheck`; all five cluster-1 screens built to the wireframe — SCR-DA-001 boot router, SCR-DA-002 with the AL-28 `HorizontalPager` carousel, AL-26 Sinhala-first vertical language boxes and the AL-27 city list from `GET /config/cities`, SCR-DA-003 `+94` phone + six-digit OTP with the D-32 resend cooldown, SCR-DA-003a Profile Setup with the AI-extract card and the AL-29 manual-entry ⚑ path, and SCR-DA-007's five permission rows with the Settings deep link — plus ~60 new trilingual strings and `setOperatingCity` added to `:shared`'s `IamApi`. It shipped PARTIAL because **no route on the platform created a `docs.uploads` row for a driver photo or licence**, which left `PUT /v1/drivers/profile` uncallable on a real gateway; **MCS-01 closed that** (multipart arms on both onboarding routes) and the app's upload seam was deleted in the same pass. Now DONE on all five DoD items |
 | C069 | driver-android-vehicle-onboarding | 4a | DONE | 2026-08-02 | **107 tests green** (was 72; 35 new) and `assembleDebug` clean, plus `detekt`/`ktlintCheck`; all eight owned screens built to the wireframe — the Mode-C four-step wizard (SCR-DA-004…004c) with per-step save, AL-30 resume-at-next-incomplete and the ⚑ Pending card, the **SCR-DA-005 CameraX scanner** with a draggable four-corner quad, an auto edge-detect proposal and a `setPolyToPoly` perspective correction on confirm (AL-43), the SCR-DA-006 four-document verdict list with the automatic APPROVED read, and SCR-DA-026/026a My Vehicles with the two groups, the US-9.6 go-live gate, deactivate-confirm and the empty-state popup — plus ~85 new trilingual strings, CameraX 1.6.1 and the `CAMERA` permission. Three `:shared` registry DTOs were **corrected against the C029 contract** (`VehicleRegistration`'s four file ids optional, `RegisterVehicleResponse.nextStep`, `SaveOnboardingStepResponse.status`) — without the last one the app cannot see its own auto-approval. Three spec gaps recorded: no `fields` part on the step's multipart arm, no fleet name/expiry on `VehicleSummary`, and no active-vehicle operation. The `:shared` gate is **13 red on arrival** and none of it is C069's — see the handoff |
 | C070 | driver-android-dashboard-dispatch | 4a | DONE | 2026-08-03 | **138 tests green** (was 107; 28 new + 3 suites) and `assembleDebug` clean, plus `detekt`/`ktlintCheck`; all six owned screens built to the wireframe — **SCR-DA-010** Mode C standby (US-9.6 go-online gating, own-vehicle-only map per AL-31, live reg-no chip, daily-fee/low-balance/2nd-trip banners, offline scrim, no hamburger), **SCR-DA-011** Mode A/B Start/End Journey as *home* with the AL-32 ignition banner the dashboard can override and the US-5.10 restart grace, **SCR-DA-013** Directional Travel (DT-01..08, and turning it off still spends the use), **SCR-DA-014** the 15 s takeover with the ring, the three badges, audio + haptic and the Taken/Expired split kept apart, **SCR-DA-015** arrive/start-OTP/complete with SOS, the AL-48 call-type chooser and the **AL-47 QR confirm**, and **SCR-DA-036**'s eight-row drawer. ~95 new trilingual strings; two device seams added (`DriverLocationSource`, `PositionPublisher`) so a view model holds no `Context`. **Five routes added to the shell's table** — SCR-DA-013 plus the four SCR-DA-036 named that had none. Four spec gaps recorded: no driver-rating read, no `GET` for `DirectionalConfig`, no presence read, no Mode A route list; plus **no SignalR client in `:shared`**, so SCR-DA-015 polls the documented fallback |
-| C071 | driver-android-delivery | 4a | PENDING | | |
+| C071 | driver-android-delivery | 4a | DONE | 2026-08-03 | **151 tests green** (was 138; 13 new across 2 suites), `assembleDebug` + `detekt` + `ktlintCheck` clean; SCR-DA-016a/b/c built as three sequential sheets over the package ride machine — review with both parties' call buttons, pickup OTP against `:shared`'s `PackageHandoff` budget, and a *"Delivery completed"* that takes the recipient's OTP **or** P-10's photograph. `RideDetail` gained Δ C037's `recipientName`/`senderPhone`/`recipientPhone` in `:shared`, which the DTO was missing. Four spec gaps: AL-33's re-dispatch on Cancel has no server path, `cod-collected` now has no caller, no `senderName`, no ETA for sheet 2's banner |
 | C072 | driver-android-jobs-level-earnings | 4a | PENDING | | |
 | C073 | driver-android-wallet-credit | 4a | PENDING | | |
 | C074 | driver-android-tracker-sharing-profile | 4a | PENDING | | |
@@ -11379,3 +11379,114 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   CTA, distinct from §0.2's one primary `MageRideCta`); plus `ui/MoneyFormat.kt` — `Rs 1,240`,
   `1.2 km`, `01:12:40` and `1:42`, all integer arithmetic, because `Money` deliberately does not
   format itself and a `Double` for money is a C012 fence violation.
+
+---
+
+- **Component:** C071 driver-android-delivery — 2026-08-03
+- **Status:** DONE — `:apps:driver-android:testDebugUnitTest` **151 passed, 0 failed** (was 138),
+  `assembleDebug` clean, `detekt` and `ktlintCheck` green. All three screens under `## Screens` are
+  built to `specs/wireframes/driver_android.html`, and every DoD line is covered by a test.
+  `:shared`'s own gate is unchanged: `testDebugUnitTest` is **819 tests / 5 failed**, and those five
+  are the pre-existing `ContractCoverageTest` (4) + `ApiOperationTableTest` (1) drift MCS-02 was
+  raised for — measured on a clean tree before this component touched anything, and identical after.
+- **Notes:**
+
+  **A delivery is a ride, so it is the same destination — and a different set of sheets.** R-01
+  keeps one aggregate and `PushRouter` already resolves `mageride://package/{id}` and
+  `mageride://ride/{id}` to `DriverRoute.ActiveRide`, so the kind is not knowable until the ride has
+  been read. `ActiveRideScreen` therefore reads it and hands over to `DeliveryScreen` on
+  `RideKind.PACKAGE` — the same shape C070 used to swap Home's sheet on `isScheduledMode`. No route
+  was added, no drawer row moved, and `PushRouter`'s comment (*"both links land on the same
+  screen"*) stays true. The cost is one extra `GET /v1/rides/{rideId}`, and SCR-DA-015's five-second
+  poll is switched off for a package (`ActiveRideState.isPollable`) so two loops never fold server
+  states onto one ride.
+
+  **Which sheet is up is the ride's business, not a step counter.** `package.picked_up` *is* the
+  `→ InProgress` move (D5' §11 takes a package straight from `Accepted`, with no arrival marker), so
+  `DeliveryState.sheet` is derived: `InProgress` or later → sheet 3, otherwise sheet 2 once the
+  driver has tapped Start, otherwise sheet 1. A driver whose app died between the two doors comes
+  back to the right sheet from one read, and there is nothing local that could disagree with the
+  server about where the parcel is. **Start delivery is the one local step** and sends nothing —
+  `POST …/arrive` is the passenger flow's geofence marker and inventing a transition to make a
+  button feel busy would put a state on the aggregate that AL-33 never asked for.
+
+  **The five-attempt budget is `:shared`'s.** C015 already ships `PackageHandoff` — two gates, five
+  attempts each, `PackageGateOutcome.AdminQueue` on the fifth — and `RideProjection` owns one per
+  package ride. This screen holds the projection for its whole life rather than re-seating it on
+  each read (SCR-DA-015 re-seats, which would throw the attempt count away with it) and renders the
+  outcome. Two consequences worth stating: `canSubmit` refuses a malformed code **without spending
+  an attempt** (a typo the client can see is not a guess), and **the sixth attempt is never sent** —
+  the fifth is what locks the gate, on the server (`PackageService` raises the queue item on the
+  attempt that *spends* the budget, not the one after) and identically in `PackageHandoff`. So the
+  DoD's *"a 6th wrong OTP shows the locked state and the admin-queue message"* is covered by two
+  tests rather than one: the fifth wrong code locks the gate, disables the entry and prints the
+  admin-queue copy, and a server `423 otp-locked` sets the same state for a driver whose local count
+  is behind — a reinstall, or the same handoff resumed on a second handset.
+
+  **`RideDetail` was three fields short of its own contract, and AL-33 needs all three.** `ride.yaml`
+  declares `recipientName`, `senderPhone` and `recipientPhone` (Δ C037, "AL-33's delivery sheets put
+  a call button beside **both** parties and `RideDetail` carried one number") and `Ride.Api` returns
+  them; `:shared`'s DTO had none of them, so sheets 1 and 3 could not have been drawn. Added, with
+  the same terms as `counterpartyPhone` — `Accepted` onward, participants only. `ProofArtifactResponse`
+  gained the declared `state`/`version` for the same reason, and `uploadPackageProofPhoto` gained the
+  `lat`/`lng` parts that carry `rides.proof_artifacts.captured_geo` (D5' §11 names the position as
+  part of the proof). `DtoFixturesTest`'s field-count canary moved 20 → 23 and the canonical
+  `PackageDelivery` scenario now carries both numbers.
+
+  **The photograph completes the delivery, so it cannot be a background upload.** Δ C037 makes
+  `POST …/package/proof-photo` an alternative *into* `Completed` rather than a filing beside it — a
+  route that only stored the picture would leave the parcel delivered and the ride running. That is
+  why `ProofUploadQueue` is in memory and `mobile_db_schema.md` §3.6's durable `proof_upload_queue`
+  is **not** used on this surface: a drain worker would defer a *delivery*, and nothing in the Driver
+  App has opened a database yet (`localDbModule` binds a factory and deliberately not one). What the
+  queue does earn its place doing is the case that actually happens at a doorstep — the upload fails
+  on a bad signal and the driver retries **without re-photographing**. Its verbs are §3.6's own
+  (`enqueue`/`claim`/`markUploaded`/`reschedule`/`markFailed`/`discard`), so swapping in the durable
+  table later is a change to that one class.
+
+  **AL-33's fences, as built.** *"Delivery completed"* replaces *"Cash received (COD)"* and nothing
+  on these sheets calls `POST …/cod-collected`; the cash is reconciled separately and an uncollected
+  COD becomes `Disputed` after 24 h (P-14). Both call buttons place a **direct PSTN dial** with no
+  chooser — AL-48's Free-call/Normal-call pair is a *ride's* decision — and each logs its own
+  `CalleeRole` (`sender` / `recipient`) through `POST /v1/calls/start`, best-effort, because a
+  failure to write `comms.call_log` must never stop a courier reaching a door.
+
+  ### Spec gaps found (four, none worked around)
+
+  1. **AL-33's *"Cancel releases the offer back to dispatch → next eligible driver"* has no server
+     path — micro-change-set.** The only operation a driver holding a ride has is
+     `POST /v1/rides/{rideId}/cancel`, and §11.12's matrix makes `(Accepted, DriverCancel)` terminal
+     `CancelledByDriver`; `Dispatch.Api`'s `RideEventHandler` retires the ride on `ride.cancelled`
+     and returns the driver to the pool rather than re-offering it. So Cancel does the half a client
+     owns — it releases the delivery from this driver and returns them to standby, which is what the
+     DoD line is tested against — and the re-dispatch does not happen. Making it happen means a
+     package driver-cancel from `Accepted` landing back on `Matching`, which is ride-svc's decision
+     and not a client's. `RideCancelReason` is also the *rider's* list (`RIDER_CHANGED_MIND`,
+     `DRIVER_TOO_FAR`, `EMERGENCY`, `OTHER`) with nothing that names a release, so `OTHER` is sent.
+  2. **`confirmCashOnDelivery` now has no caller on the driver surface.** AL-33 removed the button
+     that called it and named no replacement. The endpoint still exists, `P-08` still makes
+     `CashOnDeliveryCollected` the terminal that posts the earning (R-05), and the 24-hour
+     `cod_uncollected` timer still fires without it. Somewhere has to reconcile collected cash —
+     most plausibly the wallet/earnings surface (C072) — but no spec puts it on a screen. Raised
+     rather than smuggled onto sheet 3, which is exactly what AL-33 took off it.
+  3. **There is no sender *name* on the wire.** Δ C037 added `recipientName` and no counterpart for
+     the account that booked the delivery, so the wireframe's *"Sender · Nimal"* renders as
+     **`Sender`** with the number underneath; `riderName` means the rider of a proxy booking and
+     borrowing it would put a different fact under the same label. `senderName` on `RideDetail`
+     would close it.
+  4. **Sheet 2's banner has a distance and no minutes.** The wireframe prints *"Navigate to pickup ·
+     1.2 km · 4 min"*. AL-19 keeps an arrival time off a tier by construction and
+     `RideDriver.etaSeconds` is dispatch's estimate of the *driver*, for the passenger — there is no
+     read that answers "how long to the sender's door" on this surface. The distance is rendered
+     (haversine from the device's own fix, `:shared`'s `distanceMetres`) and the minutes are omitted
+     rather than fabricated. Both (3) and (4) are **wireframe deviations blocked on a contract
+     change**, in the same sense C069 recorded its two.
+
+  **For C072–C075 —** `ui/PackageLabels.kt` now holds the package-size and payment-method label
+  tables that SCR-DA-014 had privately (both screens read one table, so a delivery cannot describe
+  itself differently before and after it is accepted). `DocumentCaptureTarget.DELIVERY_PROOF` is the
+  first non-document use of SCR-DA-005 — the app's one camera — and it is deliberate: a proof photo
+  goes to `rides.proof_artifacts` and carries no `captured_via`, so AL-43's provenance stamp is
+  dropped at the upload rather than filed against a Verification-Officer queue it has nothing to do
+  with. `RideContact.startCall` gained an overload that takes the `CalleeRole` outright, because a
+  delivery's two buttons mean the ride's *kind* can no longer decide who is being rung.

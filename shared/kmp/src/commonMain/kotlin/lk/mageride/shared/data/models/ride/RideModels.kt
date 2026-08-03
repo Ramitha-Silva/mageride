@@ -398,6 +398,12 @@ public data class RideDriver(
  * assignment. This field is what makes the client-side `tel:` fallback possible — there is no
  * masking bridge, and `normal_masked` was removed with it.
  *
+ * **A package ride states the pair, because AL-33's sheets draw two call buttons.** On a delivery
+ * [counterpartyPhone] is the *recipient* — the far end — and one number cannot answer a screen that
+ * puts a button beside the sender as well, so [senderPhone] and [recipientPhone] are named
+ * separately and on the same terms. Δ C037 declared all three plus [recipientName] on the contract;
+ * they were absent from this class until C071 needed them (see that handoff).
+ *
  * @property rideId The ride.
  * @property kind Booking kind.
  * @property state Where the ride is.
@@ -417,6 +423,11 @@ public data class RideDriver(
  * @property packageSize Package bookings only.
  * @property packageDescription Package bookings only.
  * @property packageStatus Handoff progress, package bookings only.
+ * @property recipientName Who the parcel is for (P-06). Package bookings only.
+ * @property senderPhone The sender's number — the account that booked the delivery. Package
+ *   bookings only, and on the same terms as [counterpartyPhone]: from `Accepted` onward, to a
+ *   participant, never to anybody else.
+ * @property recipientPhone The recipient's number, on the same terms as [senderPhone].
  * @property createdAt When the ride was requested.
  */
 @Serializable
@@ -440,6 +451,9 @@ public data class RideDetail(
     val packageSize: PackageSize? = null,
     val packageDescription: String? = null,
     val packageStatus: PackageStatus? = null,
+    val recipientName: String? = null,
+    val senderPhone: PhoneE164? = null,
+    val recipientPhone: PhoneE164? = null,
     val createdAt: Timestamp,
 )
 
@@ -581,10 +595,21 @@ public data class ConfirmCashOnDeliveryRequest(val collectedMinor: Long) : Money
  * The fallback when no one is there to read out the delivery OTP. The receipt at
  * `GET /public/track/{token}/receipt` then reports `photo_proof` instead of `otp_verified`.
  *
+ * **Δ C037 — the photograph completes the delivery**, exactly as the delivery OTP does: ADD §11.16
+ * draws the two as alternatives into `Completed`, so a route that only filed the picture would
+ * leave the parcel delivered and the ride running. [state] and [version] are that move, reported
+ * here so the app need not re-read the ride to learn it happened.
+ *
  * @property artifactId The stored `rides.proof_artifacts(kind='delivery_photo')` row.
+ * @property state Where the ride landed. Absent only from a server that predates Δ C037.
+ * @property version The new version. Echo it back on the next mutation (R-14).
  */
 @Serializable
-public data class ProofArtifactResponse(val artifactId: Ulid)
+public data class ProofArtifactResponse(
+    val artifactId: Ulid,
+    val state: RideState? = null,
+    val version: RideVersion? = null,
+)
 
 // ---------------------------------------------------------------------------------------------
 // History (AL-36, US-24.4)

@@ -161,6 +161,7 @@
     <string name="capture_target_revenue_licence">ආදායම් බලපත්‍රය</string>
     <string name="capture_target_vehicle_front">වාහනයේ ඉදිරිපස</string>
     <string name="capture_target_vehicle_back">වාහනයේ පිටුපස</string>
+    <string name="capture_target_delivery_proof">බෙදාහැරීමේ සාක්ෂිය</string>
 
     <string name="vehicle_onboard_step_of">පියවර %1$d න් %2$d · %3$s</string>
     <string name="vehicle_onboard_title">රියදුරු වාහනය එක් කරන්න</string>
@@ -349,4 +350,26 @@
     <string name="menu_ride_history">ගමන් ඉතිහාසය සහ ශ්‍රේණිගත කිරීම්</string>
     <string name="menu_support">සහාය සහ ගාස්තු ආපසු ගෙවීම්</string>
     <string name="menu_notifications">දැනුම්දීම්</string>
+
+    <string name="delivery_title">පාර්සල් බෙදාහැරීම</string>
+    <string name="delivery_leg_pickup">බාරගැනීම</string>
+    <string name="delivery_leg_drop">බාරදීම</string>
+    <string name="delivery_payment">ගෙවීම</string>
+    <string name="delivery_party_sender">යවන්නා</string>
+    <string name="delivery_party_recipient">ලබන්නා</string>
+    <string name="delivery_call_party">මෙම අංකයට අමතන්න</string>
+    <string name="delivery_cancel">අත්හරින්න</string>
+    <string name="delivery_start">බෙදාහැරීම අරඹන්න</string>
+    <string name="delivery_navigate_pickup_distance">බාරගැනීමේ ස්ථානයට යන්න · %1$s</string>
+    <string name="delivery_pickup_at">බාරගැනීම: %1$s</string>
+    <string name="delivery_pickup_otp_label">යවන්නාගෙන් ලැබෙන බාරගැනීමේ OTP ඇතුළු කරන්න</string>
+    <string name="delivery_verify_pickup">බාරගැනීම තහවුරු කරන්න</string>
+    <string name="delivery_complete_title">බෙදාහැරීම සම්පූර්ණ කරන්න</string>
+    <string name="delivery_delivery_otp_label">ලබන්නාගෙන් ලැබෙන බෙදාහැරීමේ OTP ඇතුළු කරන්න</string>
+    <string name="delivery_photo_proof">ඡායාරූප සාක්ෂිය</string>
+    <string name="delivery_photo_retake">නැවත ඡායාරූපයක් ගන්න</string>
+    <string name="delivery_completed">බෙදාහැරීම සම්පූර්ණයි</string>
+    <string name="delivery_otp_wrong">එම කේතය වැරදියි. නැවත කියවා දෙන ලෙස ඉල්ලන්න.</string>
+    <string name="delivery_otp_attempts_left">මෙම භාරදීම සහාය කණ්ඩායමට යාමට පෙර උත්සාහ %1$d ක් ඉතිරිය.</string>
+    <string name="delivery_otp_locked">වැරදි කේත පහක්. මෙම භාරදීම දැන් අපගේ සහාය කණ්ඩායම සතුය — ඔවුන් ඔබට කතා කරයි.</string>
 </resources>

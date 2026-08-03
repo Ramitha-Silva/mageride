@@ -201,6 +201,7 @@
     <string name="capture_target_revenue_licence">Revenue licence</string>
     <string name="capture_target_vehicle_front">Vehicle front</string>
     <string name="capture_target_vehicle_back">Vehicle back</string>
+    <string name="capture_target_delivery_proof">Delivery proof</string>
 
     <!-- SCR-DA-004 → 004c · the four wizard steps. -->
     <string name="vehicle_onboard_step_of">Step %1$d of %2$d · %3$s</string>
@@ -403,4 +404,27 @@
     <string name="menu_ride_history">Trip history and ratings</string>
     <string name="menu_support">Support and fee refunds</string>
     <string name="menu_notifications">Alerts</string>
+
+    <!-- SCR-DA-016a/b/c · the three package-delivery sheets (AL-33). -->
+    <string name="delivery_title">Package delivery</string>
+    <string name="delivery_leg_pickup">Pickup</string>
+    <string name="delivery_leg_drop">Drop</string>
+    <string name="delivery_payment">Payment</string>
+    <string name="delivery_party_sender">Sender</string>
+    <string name="delivery_party_recipient">Recipient</string>
+    <string name="delivery_call_party">Call this number</string>
+    <string name="delivery_cancel">Cancel</string>
+    <string name="delivery_start">Start delivery</string>
+    <string name="delivery_navigate_pickup_distance">Navigate to the pickup · %1$s</string>
+    <string name="delivery_pickup_at">Pickup: %1$s</string>
+    <string name="delivery_pickup_otp_label">Enter the pickup OTP, from the sender</string>
+    <string name="delivery_verify_pickup">Verify pickup</string>
+    <string name="delivery_complete_title">Complete delivery</string>
+    <string name="delivery_delivery_otp_label">Enter the delivery OTP, from the recipient</string>
+    <string name="delivery_photo_proof">Photo proof</string>
+    <string name="delivery_photo_retake">Retake photo</string>
+    <string name="delivery_completed">Delivery completed</string>
+    <string name="delivery_otp_wrong">That code is wrong. Ask them to read it out again.</string>
+    <string name="delivery_otp_attempts_left">%1$d tries left before this handover goes to support.</string>
+    <string name="delivery_otp_locked">Five wrong codes. This handover is with our support team now — they will call you.</string>
 </resources>

@@ -213,6 +213,11 @@ private fun packageDetail(state: RideState, version: RideVersion): RideDetail = 
     packageSize = PackageSize.M,
     packageDescription = "Documents, do not fold",
     packageStatus = packageStatusAt(state),
+    recipientName = "N. Jayasuriya",
+    // AL-33's sheets draw a call button beside each end of the delivery, so both numbers appear
+    // together and on the same terms as `counterpartyPhone` — from Accepted onward, never before.
+    senderPhone = Fixtures.PASSENGER_PHONE.takeIf { state.isDriverAssigned },
+    recipientPhone = Fixtures.DRIVER_PHONE.takeIf { state.isDriverAssigned },
 )
 
 /** Handoff progress runs beside the ride state, so it has to be derived from it. */

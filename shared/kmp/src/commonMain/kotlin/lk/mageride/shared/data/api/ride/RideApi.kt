@@ -174,11 +174,25 @@ public interface RideApi {
         idempotencyKey: String? = null,
     ): RideStateChange
 
-    /** `POST /v1/rides/{rideId}/package/proof-photo` — proof of delivery, as `multipart/form-data`. */
+    /**
+     * `POST /v1/rides/{rideId}/package/proof-photo` — proof of delivery, as `multipart/form-data`.
+     *
+     * **It completes the delivery** (Δ C037): the photograph is the delivery OTP's alternative, not
+     * a filing beside it, so this is legal only from `InProgress` and the response carries the
+     * ride's new state.
+     *
+     * @param lat Where the handset says the photo was taken, for
+     *   `rides.proof_artifacts.captured_geo` (D5' §11). Absent means no fix — a lift well, a
+     *   basement — which is a photo without a position rather than a refused delivery.
+     * @param lng The other half of that coordinate.
+     */
+    @Suppress("LongParameterList") // Five multipart parts, and each is one the contract declares.
     public suspend fun uploadPackageProofPhoto(
         rideId: Ulid,
         file: FileUpload,
         note: String? = null,
+        lat: Double? = null,
+        lng: Double? = null,
         idempotencyKey: String? = null,
     ): ProofArtifactResponse
 
@@ -409,10 +423,13 @@ internal class KtorRideApi(private val transport: ApiTransport) : RideApi {
         idempotencyKey = idempotencyKey,
     ) { jsonBody(request) }.decode()
 
+    @Suppress("LongParameterList") // The interface's; see its KDoc.
     override suspend fun uploadPackageProofPhoto(
         rideId: Ulid,
         file: FileUpload,
         note: String?,
+        lat: Double?,
+        lng: Double?,
         idempotencyKey: String?,
     ): ProofArtifactResponse = transport.apiPost(
         service = SERVICE,
@@ -423,6 +440,8 @@ internal class KtorRideApi(private val transport: ApiTransport) : RideApi {
         multipartBody {
             filePart("file", file)
             textPart("note", note)
+            textPart("lat", lat?.toString())
+            textPart("lng", lng?.toString())
         }
     }.decode()
 

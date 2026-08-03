@@ -35,14 +35,13 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.getSystemService
 import lk.mageride.driver.R
 import lk.mageride.driver.ui.MoneyFormat
+import lk.mageride.driver.ui.PackageLabels
 import lk.mageride.driver.ui.component.CountdownRing
 import lk.mageride.driver.ui.component.SolidBadge
 import lk.mageride.driver.ui.theme.CtaTokens
 import lk.mageride.driver.ui.theme.MageRideTheme
-import lk.mageride.shared.data.models.PackageSize
 import lk.mageride.shared.data.models.Ulid
 import lk.mageride.shared.data.models.ride.RideKind
-import lk.mageride.shared.data.models.ride.RidePaymentMethod
 import lk.mageride.shared.domain.dispatch.OfferOutcome
 import lk.mageride.shared.domain.dispatch.RideOffer
 
@@ -154,7 +153,7 @@ private fun OfferContent(
             color = MaterialTheme.colorScheme.inverseOnSurface,
         )
         Text(
-            text = stringResource(paymentLabel(detail?.paymentMethod)),
+            text = stringResource(PackageLabels.payment(detail?.paymentMethod)),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.inverseOnSurface,
         )
@@ -229,7 +228,7 @@ private fun OfferBadges(state: OfferUiState, directional: Boolean, modifier: Mod
         }
         (detail?.packageSize ?: state.offer?.packageSize)?.let { size ->
             SolidBadge(
-                label = stringResource(R.string.offer_badge_package, stringResource(size.labelRes())),
+                label = stringResource(R.string.offer_badge_package, stringResource(PackageLabels.size(size))),
                 accent = MageRideTheme.vehicle.truck,
             )
         }
@@ -314,23 +313,6 @@ private fun OfferAlert(offerId: String?) {
             RingtoneManager.getRingtone(context, uri)?.play()
         }
     }
-}
-
-/** The trilingual label for a package's size (US-20.3). `S`/`M`/`L` is a code, its name is copy. */
-@StringRes
-private fun PackageSize.labelRes(): Int = when (this) {
-    PackageSize.S -> R.string.package_size_small
-    PackageSize.M -> R.string.package_size_medium
-    PackageSize.L -> R.string.package_size_large
-}
-
-/** How the passenger chose to pay, as the driver reads it. */
-@StringRes
-private fun paymentLabel(method: RidePaymentMethod?): Int = when (method) {
-    RidePaymentMethod.LANKAQR -> R.string.payment_lankaqr
-    RidePaymentMethod.ONEPAY -> R.string.payment_onepay
-    RidePaymentMethod.COD -> R.string.payment_cod
-    else -> R.string.payment_cash
 }
 
 /**

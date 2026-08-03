@@ -36,7 +36,16 @@ internal class RideContact(private val voip: VoipApi, private val safety: Safety
      * **best-effort** for the same reason — a failure here must never stop the dial.
      */
     suspend fun startCall(rideId: Ulid, kind: RideKind, type: CallType): StartCallResponse =
-        voip.startCall(StartCallRequest(rideId = rideId, calleeRole = calleeRole(kind), callType = type))
+        startCall(rideId, calleeRole(kind), type)
+
+    /**
+     * The same call, with the role named rather than derived (AL-33).
+     *
+     * SCR-DA-016a/c put a button beside **both** ends of a delivery, so the kind cannot decide who
+     * is being rung — the driver's tap is what decides, and the log has to record which.
+     */
+    suspend fun startCall(rideId: Ulid, calleeRole: CalleeRole, type: CallType): StartCallResponse =
+        voip.startCall(StartCallRequest(rideId = rideId, calleeRole = calleeRole, callType = type))
 
     /**
      * `POST /v1/sos` — the driver's own SOS, during an active trip only (US-12.8, AL-13).

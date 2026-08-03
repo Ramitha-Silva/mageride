@@ -53,6 +53,13 @@ internal class CapturedImage(
  * **one** screen shared by C068's two licence slots and C069's four vehicle-document slots
  * (AL-43). The scanner needs to name the document in its app bar, and that title is a property of
  * the target rather than of whoever navigated.
+ *
+ * [DELIVERY_PROOF] is the one entry that is not a document, and it is here for the same reason the
+ * other six are: SCR-DA-005 is the app's only camera, and a second one would be a second set of
+ * permission handling, torch control and gallery fallback. What it is *not* is a `docs.uploads` row
+ * — a proof photo goes to `rides.proof_artifacts` and carries no `captured_via`, so AL-43's
+ * provenance stamp is dropped at the upload rather than filed against a Verification Officer's
+ * queue that has nothing to do with it (C071).
  */
 internal enum class DocumentCaptureTarget {
 
@@ -73,6 +80,9 @@ internal enum class DocumentCaptureTarget {
 
     /** SCR-DA-004c — vehicle back, number plate visible (C069). */
     VEHICLE_BACK,
+
+    /** SCR-DA-016c — proof that a parcel was delivered when the recipient was absent (P-10). */
+    DELIVERY_PROOF,
 }
 
 /** A finished capture, on its way back to the screen that asked for one. */

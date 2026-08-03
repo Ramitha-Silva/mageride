@@ -31,6 +31,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import lk.mageride.driver.R
+import lk.mageride.driver.delivery.DeliveryScreen
 import lk.mageride.driver.home.DriverHomeMap
 import lk.mageride.driver.ui.MoneyFormat
 import lk.mageride.driver.ui.component.DashboardBanner
@@ -64,6 +65,15 @@ internal fun ActiveRideScreen(rideId: Ulid, onFinished: () -> Unit, modifier: Mo
     val viewModel: ActiveRideViewModel = koinViewModel { parametersOf(rideId) }
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
+
+    // A parcel is not a passenger. `DriverRoute.ActiveRide` is the destination for every live job —
+    // R-01 keeps one aggregate and `PushRouter` resolves `mageride://package/{id}` to it — so the
+    // kind is not known until the ride has been read, and this is where it is answered. Same shape
+    // as Home swapping its sheet on `LiveVehicle.isScheduledMode` (C070).
+    if (state.isPackage) {
+        DeliveryScreen(rideId = rideId, onFinished = onFinished, modifier = modifier)
+        return
+    }
 
     Column(modifier = modifier.fillMaxSize()) {
         DashboardBanner(

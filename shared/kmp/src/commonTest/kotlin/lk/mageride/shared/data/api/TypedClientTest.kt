@@ -91,12 +91,19 @@ class TypedClientTest {
             rideId = "01RIDE",
             file = FileUpload(fileName = "proof.jpg", bytes = byteArrayOf(1, 2, 3), contentType = "image/jpeg"),
             note = "left with the neighbour",
+            lat = 6.9271,
+            lng = 79.8612,
         )
 
         val request = test.requests.single()
         assertTrue(request.contentType?.startsWith("multipart/form-data") == true, "was ${request.contentType}")
         assertTrue(request.body.contains("proof.jpg"), "the filename should be in the part headers")
         assertTrue(request.body.contains("left with the neighbour"))
+
+        // Δ C037's `captured_geo`. It is what makes the photograph evidence of a delivery at a
+        // place rather than of a photograph.
+        assertTrue(request.body.contains("6.9271"), "the captured latitude should be a text part")
+        assertTrue(request.body.contains("79.8612"), "the captured longitude should be a text part")
         assertTrue(request.idempotencyKey != null, "an upload is still a POST mutation")
     }
 

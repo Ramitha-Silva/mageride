@@ -69,6 +69,24 @@ internal data class ActiveRideState(
     val rideState: RideState? get() = ride?.state
 
     /**
+     * Whether this job is a parcel rather than a passenger.
+     *
+     * A delivery is the same aggregate on the same route (R-01, and `PushRouter` lands both deep
+     * links here), but it is a different set of sheets: SCR-DA-016a/b/c and its two OTP handoffs,
+     * owned by C071. This screen hands over as soon as the first read says so.
+     */
+    val isPackage: Boolean get() = ride?.kind == RideKind.PACKAGE
+
+    /**
+     * Whether the state poll should run.
+     *
+     * A ride that is over has nothing left to learn, one mid-command is about to be told by the
+     * response, one not yet read has no version to compare, and a **package** belongs to
+     * SCR-DA-016, which polls it itself.
+     */
+    val isPollable: Boolean get() = !finished && !busy && ride != null && !isPackage
+
+    /**
      * Whether this ride settles by **AL-47 attestation** rather than by a gateway callback.
      *
      * The passenger scanned the driver's own bank LankaQR, so the money moved bank-to-bank and
@@ -310,7 +328,9 @@ internal class ActiveRideViewModel(
             while (isActive) {
                 delay(POLL)
                 val current = mutableState.value
-                if (current.finished || current.busy || current.ride == null) continue
+                // A package ride has been handed to SCR-DA-016, which polls it itself. Two loops
+                // folding server states onto one ride would race each other's `advancedTo`.
+                if (!current.isPollable) continue
                 runCatching { rides.snapshot(rideId) }.getOrNull()?.let { snapshot ->
                     projection?.onServerState(snapshot)
                     mutableState.update { it.advancedTo(snapshot) }

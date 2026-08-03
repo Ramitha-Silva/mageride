@@ -157,4 +157,16 @@ internal object ControlTokens {
 
     /** SCR-DA-036's modal navigation drawer (`width:250px`, on M3's 280 dp standard sheet). */
     val DrawerWidth: Dp = 280.dp
+
+    // ---- C071 · the delivery sheets ----------------------------------------------------
+
+    /**
+     * SCR-DA-016a/c's 📞 button beside a sender or recipient row (`.btn-out`, `46 x 38`).
+     *
+     * Rounded onto the 4 px grid, the same way C068 rounded the wireframe's `1.5px` outline: the
+     * numbers in the HTML are CSS pixels and the grid is what keeps the row the same height as
+     * every other control in the sheet.
+     */
+    val CallButtonWidth: Dp = 48.dp
+    val CallButtonHeight: Dp = 40.dp
 }
