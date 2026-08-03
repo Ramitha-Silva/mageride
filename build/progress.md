@@ -11215,3 +11215,69 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   comms/safety/registry. App: `VehicleOnboardingRepository`/`ViewModel`/`Screen`,
   `VehiclesScreen`, `ProfileSetupScreen`/`ViewModel`, `DriverProfileRepository`, three
   `strings.xml`, and +3 tests.
+
+---
+
+- **Component:** MCS-03 KMP client contract coverage — **app-facing set** (micro-change-set, not a
+  manifest entry) — 2026-08-03
+- **Status:** PARTIAL by design, and the part that was asked for is DONE. **All 25 app-facing
+  operations of the 65 are landed**; the remaining 40 (29 `/v1/internal/**`, 11 admin-only) are a
+  follow-up. `:shared:testDebugUnitTest` → **819 tests, 5 failed** (was 6 at MCS-02);
+  `:shared:detekt` / `:ktlintCheck` green; `:apps:driver-android` **110 passed, 0 failed** +
+  `assembleDebug`; passenger-android and the e2e harness compile.
+- **Notes:**
+
+  **The count was 65, not 64** — MCS-02's `listFaqArticles` rename created one. More usefully, the
+  65 split **29 internal · 11 admin · 25 app-facing**, and *neither dispatch nor ride has an
+  app-facing operation on it*. C070 (dashboard + dispatch + ride) was never blocked by any of this.
+  That split is why the work was sequenced by surface rather than by contract.
+
+  **Landed, in six verified slices:** dispatch's internal penalty ledger (2, taken first as the
+  pattern-setter), comms (2), content + support (4), wallet (6), iam (7), registry + subscription
+  (6).
+
+  **The gate moved once, and for a reason worth recording.** `ContractCoverageTest`'s attestation
+  check went green with the wallet slice: it had been failing on exactly
+  `requestWalletCreditTransfer`, `approveWalletCreditTransfer` and `purchaseVoucherFromWallet`,
+  which carry `XAttestation` in the YAML and had no client to pass `attested = true`. So
+  `EXPECTED_ATTESTED = 20` was right all along and the client was three short — the opposite of
+  what a stale-looking constant suggests, and a reminder to check which side is wrong before
+  editing the number.
+
+  **A third and fourth name collision, after MCS-02's two.** The pattern is now established enough
+  to name: **schema names are not unique across contract documents, and the client's
+  one-package-per-contract rule is the only thing keeping them apart.**
+  (a) `dispatch.yaml` and `ride.yaml` both declare **`CancellationPenalty`** — the ride one is
+  *what a cancellation will cost you*, quoted on the cancel response; the dispatch one is *a debt
+  on the books*, with the passenger, the accruing ride, the driver owed and whether it is
+  collected. Modelled as `dispatch.OutstandingPenalty`.
+  (b) `wallet.yaml` and `subscription.yaml` both declare **`VoucherPurchase`** — subscription
+  spells the discount `discountBpsApplied` and stops at the currency; wallet spells it
+  `discountBps` and goes on to the resulting balance and the ledger entry. Modelled as
+  `wallet.WalletVoucherPurchase`.
+  Both were caught by `ContractShapeTest` the moment the wrong DTO was reused, which is that check
+  earning its keep for the third time since MCS-02 unblinded it.
+
+  **A prerequisite MCS-03 did not know it had.** `getSupportScreenshot` and `getModeBFile` both
+  answer `200` with binary (`image/*`, `application/pdf`), and
+  `lk.mageride.shared.testing.fake.FakeOperation` can express **a JSON body or no body and nothing
+  else**. A `noBody` row breaks `the_bodiless_operations_are_exactly_the_ones_the_contracts_declare_bodiless`
+  (bodiless must be 204 or 302); an `op<ByteArray>` row makes the fake synthesise JSON for a schema
+  that declares none, and `ContractShapeTest` rightly refuses it. **Both client functions are
+  landed and correct** — C075 and C079 need them — and both table rows wait on a `FakeOperation`
+  that can say "binary". `downloadSignedGtfsObject` is a third occurrence in the internal set.
+  **MCS-03 cannot reach 0 failures without that test-kit change**, which is small, is C019's
+  territory, and was deliberately not done inside these slices.
+
+  **Findings recorded, not fixed —** AL-57 remains half-applied (MCS-02's finding, unchanged):
+  `fare.yaml` retired `onepay`/`lankaqr` as ride methods while `ride.yaml`'s booking-time enum and
+  `iam.yaml`'s profile default still offer both.
+
+  **Still open, for the follow-up session:** 40 operations — wallet 8 internal, safety 5, support
+  5, ride 3, registry 3, dispatch 2, subscription 1, content 1, trip-state 1, transit 1, plus the
+  11 admin-only. `ContractCoverageTest` and one `ApiOperationTableTest` assertion stay red until
+  they land **and** the binary-response gap is closed. `EXPECTED_OPERATIONS` is 201 of a contract
+  241; `FakeApiBackendTest.EXPECTED_OPERATIONS` tracks the table and is updated per slice.
+
+  **For C070 —** nothing here blocks you. Dispatch and ride were already fully covered.
+
