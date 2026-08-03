@@ -286,3 +286,67 @@ public data class VoucherDiscountTierUsage(
  */
 @Serializable
 public data class VoucherDiscountTierUsageList(val tiers: List<VoucherDiscountTierUsage> = emptyList())
+
+/**
+ * `POST /v1/wallet/credit-transfer/request` (Δ C046, US-9.13).
+ *
+ * The **pull** half of AL-01's driver-to-driver credit: a driver who is short asks a holder for
+ * credit, and the holder approves. `initiate` is the push half — the holder sends without being
+ * asked — and both post the same balanced `driver_transfer` entry with **no fee leg**, because
+ * there is no journal kind that could carry one.
+ *
+ * @property holderDriverId The driver holding the credit — the one who will approve.
+ * @property amountMinor How much is being asked for, minor units.
+ */
+@Serializable
+public data class RequestWalletCreditTransferRequest(val holderDriverId: Ulid, val amountMinor: Long)
+
+/**
+ * `POST /v1/wallet/voucher/purchase` (Δ C046, US-9A.15).
+ *
+ * Buying discounted credit at a `billing.voucher_discount_tiers` denomination. The discount is the
+ * tier's, not the caller's — this names the denomination and the server prices it.
+ *
+ * @property denominationMinor Which tier, by face value in minor units.
+ * @property gatewayRef The settled gateway reference this was paid with, when there is one.
+ */
+@Serializable
+public data class PurchaseVoucherFromWalletRequest(val denominationMinor: Long, val gatewayRef: String? = null)
+
+/**
+ * `POST /v1/wallet/voucher/purchase` — 201 (`wallet.yaml#/components/schemas/VoucherPurchase`).
+ *
+ * **Not subscription-svc's `VoucherPurchase`, and the two must not be merged.** `wallet.yaml` and
+ * `subscription.yaml` both declare a schema by that name and they are different shapes: the
+ * subscription one spells the discount `discountBpsApplied` and stops at the currency; this one
+ * spells it `discountBps` and goes on to say what the purchase did to the balance and which
+ * ledger entry recorded it. C012's one-package-per-contract rule keeps them apart, and this name
+ * says which is which. Third such collision found by MCS-03 — see the handoff.
+ *
+ * `paidMinor` is the discounted price and `creditedMinor` the face value; the gap is the buyer's
+ * margin when they pass the credit on at par (AL-01).
+ *
+ * @property purchaseId The purchase.
+ * @property denominationMinor The tier bought, by face value.
+ * @property discountBps The tier's discount, basis points.
+ * @property paidMinor What it cost.
+ * @property creditedMinor What landed in the wallet.
+ * @property currency Always LKR.
+ * @property balanceAfterMinor The wallet once it had landed.
+ * @property entryId The `billing.journal_entries` row that recorded it.
+ * @property createdAt When.
+ */
+@Serializable
+public data class WalletVoucherPurchase(
+    val purchaseId: Ulid,
+    val denominationMinor: Long,
+    val discountBps: Int,
+    val paidMinor: Long,
+    val creditedMinor: Long,
+    val currency: Currency,
+    val balanceAfterMinor: Long,
+    val entryId: Ulid? = null,
+    val createdAt: Timestamp,
+) : MoneyHolder {
+    override val money: Money get() = Money(amountMinor = paidMinor, currency = currency)
+}

@@ -186,12 +186,15 @@ import lk.mageride.shared.data.models.version.AppVersionCheck
 import lk.mageride.shared.data.models.wallet.InitiateWalletCreditTransferRequest
 import lk.mageride.shared.data.models.wallet.LankaqrTopupRequest
 import lk.mageride.shared.data.models.wallet.OnepayTopupRequest
+import lk.mageride.shared.data.models.wallet.PurchaseVoucherFromWalletRequest
+import lk.mageride.shared.data.models.wallet.RequestWalletCreditTransferRequest
 import lk.mageride.shared.data.models.wallet.Topup
 import lk.mageride.shared.data.models.wallet.TopupCallback
 import lk.mageride.shared.data.models.wallet.TransferRow
 import lk.mageride.shared.data.models.wallet.VoucherDiscountTierUsageList
 import lk.mageride.shared.data.models.wallet.Wallet
 import lk.mageride.shared.data.models.wallet.WalletTransaction
+import lk.mageride.shared.data.models.wallet.WalletVoucherPurchase
 
 /**
  * Every operation `backend/contracts/` declares and [lk.mageride.shared.data.api.MageRideApi]
@@ -1247,6 +1250,44 @@ internal object ApiOperations {
             "/v1/support/screenshots",
             201,
         ),
+        op<TransferRow>(
+            "requestWalletCreditTransfer",
+            ApiService.WALLET,
+            "POST",
+            "/v1/wallet/credit-transfer/request",
+            201,
+            sends<RequestWalletCreditTransferRequest>(),
+        ),
+        op<Page<TransferRow>>(
+            "listPendingWalletCreditTransfers",
+            ApiService.WALLET,
+            "GET",
+            "/v1/wallet/credit-transfer/pending",
+            200,
+        ),
+        op<TransferRow>(
+            "approveWalletCreditTransfer",
+            ApiService.WALLET,
+            "POST",
+            "/v1/wallet/credit-transfer/{transferId}/approve",
+            200,
+        ),
+        op<TransferRow>(
+            "rejectWalletCreditTransfer",
+            ApiService.WALLET,
+            "POST",
+            "/v1/wallet/credit-transfer/{transferId}/reject",
+            200,
+        ),
+        op<WalletVoucherPurchase>(
+            "purchaseVoucherFromWallet",
+            ApiService.WALLET,
+            "POST",
+            "/v1/wallet/voucher/purchase",
+            201,
+            sends<PurchaseVoucherFromWalletRequest>(),
+        ),
+        op<Topup>("getTopup", ApiService.WALLET, "GET", "/v1/wallet/topup/{topupId}", 200),
         op<AppVersionCheck>("checkAppVersion", ApiService.VERSION, "GET", "/v1/version/check", 200),
     )
 

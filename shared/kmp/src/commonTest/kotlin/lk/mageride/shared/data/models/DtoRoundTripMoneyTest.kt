@@ -41,6 +41,8 @@ import lk.mageride.shared.data.models.subscription.VoucherPurchase
 import lk.mageride.shared.data.models.wallet.InitiateWalletCreditTransferRequest
 import lk.mageride.shared.data.models.wallet.LankaqrTopupRequest
 import lk.mageride.shared.data.models.wallet.OnepayTopupRequest
+import lk.mageride.shared.data.models.wallet.PurchaseVoucherFromWalletRequest
+import lk.mageride.shared.data.models.wallet.RequestWalletCreditTransferRequest
 import lk.mageride.shared.data.models.wallet.Topup
 import lk.mageride.shared.data.models.wallet.TopupCallback
 import lk.mageride.shared.data.models.wallet.TopupState
@@ -51,6 +53,7 @@ import lk.mageride.shared.data.models.wallet.VoucherDiscountTierUsage
 import lk.mageride.shared.data.models.wallet.VoucherDiscountTierUsageList
 import lk.mageride.shared.data.models.wallet.Wallet
 import lk.mageride.shared.data.models.wallet.WalletTransaction
+import lk.mageride.shared.data.models.wallet.WalletVoucherPurchase
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -288,6 +291,22 @@ class DtoRoundTripMoneyTest {
             ),
         )
         assertRoundTrips(InitiateWalletCreditTransferRequest(Sample.ULID_B, 100_000))
+        // Δ MCS-03 — AL-01's pull half (a driver asks a holder), and the voucher tier purchase.
+        assertRoundTrips(RequestWalletCreditTransferRequest(Sample.ULID_B, 25_000))
+        assertRoundTrips(PurchaseVoucherFromWalletRequest(50_000, gatewayRef = "OP-99213"))
+        assertRoundTrips(
+            WalletVoucherPurchase(
+                purchaseId = Sample.ULID_A,
+                denominationMinor = 50_000,
+                discountBps = 500,
+                paidMinor = 47_500,
+                creditedMinor = 50_000,
+                currency = Currency.LKR,
+                balanceAfterMinor = 122_500,
+                entryId = Sample.ULID_B,
+                createdAt = Sample.AT,
+            ),
+        )
     }
 
     @Test

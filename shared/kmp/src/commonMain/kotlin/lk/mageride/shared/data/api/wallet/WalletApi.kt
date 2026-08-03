@@ -22,6 +22,8 @@ import lk.mageride.shared.data.models.subscription.VoucherDiscountTierList
 import lk.mageride.shared.data.models.wallet.InitiateWalletCreditTransferRequest
 import lk.mageride.shared.data.models.wallet.LankaqrTopupRequest
 import lk.mageride.shared.data.models.wallet.OnepayTopupRequest
+import lk.mageride.shared.data.models.wallet.PurchaseVoucherFromWalletRequest
+import lk.mageride.shared.data.models.wallet.RequestWalletCreditTransferRequest
 import lk.mageride.shared.data.models.wallet.Topup
 import lk.mageride.shared.data.models.wallet.TopupCallback
 import lk.mageride.shared.data.models.wallet.TransferDirectionFilter
@@ -29,6 +31,7 @@ import lk.mageride.shared.data.models.wallet.TransferRow
 import lk.mageride.shared.data.models.wallet.VoucherDiscountTierUsageList
 import lk.mageride.shared.data.models.wallet.Wallet
 import lk.mageride.shared.data.models.wallet.WalletTransaction
+import lk.mageride.shared.data.models.wallet.WalletVoucherPurchase
 
 /**
  * wallet-svc — balance, ledger, driver-to-driver transfers and top-ups
@@ -88,6 +91,43 @@ public interface WalletApi {
         idempotencyKey: String? = null,
     ): TransferRow
 
+    /**
+     * `POST /v1/wallet/credit-transfer/request` — ask a holder for credit (US-9.13). Attested.
+     *
+     * The **pull** half of AL-01's transfer; [initiateWalletCreditTransfer] is the push half.
+     * Creates a `PENDING` row the holder then approves or rejects.
+     */
+    public suspend fun requestWalletCreditTransfer(
+        request: RequestWalletCreditTransferRequest,
+        idempotencyKey: String? = null,
+    ): TransferRow
+
+    /** `GET /v1/wallet/credit-transfer/pending` — requests waiting on this driver's decision. */
+    public suspend fun listPendingWalletCreditTransfers(page: PageRequest = PageRequest.FIRST): Page<TransferRow>
+
+    /**
+     * `POST /v1/wallet/credit-transfer/{transferId}/approve` — move the money (US-9.13). Attested.
+     *
+     * **Only the holding driver may approve, and only a `PENDING` request.** Posts one balanced
+     * `driver_transfer` entry — the holder debited, the requester credited, **no fee leg ever**
+     * (AL-01). `402 insufficient-wallet` when the holder cannot cover it at approval time;
+     * approving twice is a `409` and moves nothing.
+     */
+    public suspend fun approveWalletCreditTransfer(transferId: Ulid, idempotencyKey: String? = null): TransferRow
+
+    /** `POST /v1/wallet/credit-transfer/{transferId}/reject` — the holder declines. */
+    public suspend fun rejectWalletCreditTransfer(transferId: Ulid, idempotencyKey: String? = null): TransferRow
+
+    /**
+     * `POST /v1/wallet/voucher/purchase` — buy discounted credit at a tier (US-9A.15). Attested.
+     *
+     * The discount is the tier's and the server prices it; this names the denomination.
+     */
+    public suspend fun purchaseVoucherFromWallet(
+        request: PurchaseVoucherFromWalletRequest,
+        idempotencyKey: String? = null,
+    ): WalletVoucherPurchase
+
     /** `GET /v1/wallet/voucher/discount-tiers` — the active voucher denominations and discounts. */
     public suspend fun listVoucherDiscountTiers(): VoucherDiscountTierList
 
@@ -100,6 +140,16 @@ public interface WalletApi {
 
     /** `POST /v1/wallet/topup/lankaqr` — start a LankaQR top-up (D-12). Attested. */
     public suspend fun topupWithLankaqr(request: LankaqrTopupRequest, idempotencyKey: String? = null): Topup
+
+    /**
+     * `GET /v1/wallet/topup/{topupId}` — the state of one top-up session (Δ C046).
+     *
+     * **What a client polls after returning from the OnePay page.** The wallet is credited on the
+     * *callback*, so an app coming back from the gateway may arrive before the webhook does;
+     * D6' §7.1 gives the session a 90-second pending window and this is how the driver's screen
+     * resolves it without guessing. Only the session's own driver may read it.
+     */
+    public suspend fun getTopup(topupId: Ulid): Topup
 
     /**
      * `POST /v1/wallet/topup/onepay/webhook` — OnePay reports a completed top-up.
@@ -171,6 +221,50 @@ internal class KtorWalletApi(private val transport: ApiTransport) : WalletApi {
         attested = true,
     ) { jsonBody(request) }.decode()
 
+    override suspend fun requestWalletCreditTransfer(
+        request: RequestWalletCreditTransferRequest,
+        idempotencyKey: String?,
+    ): TransferRow = transport.apiPost(
+        service = SERVICE,
+        operationId = "requestWalletCreditTransfer",
+        path = "$WALLET_PATH/credit-transfer/request",
+        idempotencyKey = idempotencyKey,
+        attested = true,
+    ) { jsonBody(request) }.decode()
+
+    override suspend fun listPendingWalletCreditTransfers(page: PageRequest): Page<TransferRow> =
+        transport.apiGet(SERVICE, "listPendingWalletCreditTransfers", "$WALLET_PATH/credit-transfer/pending") {
+            pageParameters(page)
+        }.decode()
+
+    override suspend fun approveWalletCreditTransfer(transferId: Ulid, idempotencyKey: String?): TransferRow =
+        transport.apiPost(
+            service = SERVICE,
+            operationId = "approveWalletCreditTransfer",
+            path = "$WALLET_PATH/credit-transfer/$transferId/approve",
+            idempotencyKey = idempotencyKey,
+            attested = true,
+        ).decode()
+
+    override suspend fun rejectWalletCreditTransfer(transferId: Ulid, idempotencyKey: String?): TransferRow =
+        transport.apiPost(
+            service = SERVICE,
+            operationId = "rejectWalletCreditTransfer",
+            path = "$WALLET_PATH/credit-transfer/$transferId/reject",
+            idempotencyKey = idempotencyKey,
+        ).decode()
+
+    override suspend fun purchaseVoucherFromWallet(
+        request: PurchaseVoucherFromWalletRequest,
+        idempotencyKey: String?,
+    ): WalletVoucherPurchase = transport.apiPost(
+        service = SERVICE,
+        operationId = "purchaseVoucherFromWallet",
+        path = "$WALLET_PATH/voucher/purchase",
+        idempotencyKey = idempotencyKey,
+        attested = true,
+    ) { jsonBody(request) }.decode()
+
     override suspend fun listVoucherDiscountTiers(): VoucherDiscountTierList =
         transport.apiGet(SERVICE, "listVoucherDiscountTiers", "$WALLET_PATH/voucher/discount-tiers").decode()
 
@@ -183,6 +277,9 @@ internal class KtorWalletApi(private val transport: ApiTransport) : WalletApi {
             attested = true,
             requestTimeout = transport.config.timeouts.paymentRequestTimeout,
         ) { jsonBody(request) }.decode()
+
+    override suspend fun getTopup(topupId: Ulid): Topup =
+        transport.apiGet(SERVICE, "getTopup", "$TOPUP_PATH/$topupId").decode()
 
     override suspend fun topupWithLankaqr(request: LankaqrTopupRequest, idempotencyKey: String?): Topup =
         transport.apiPost(
