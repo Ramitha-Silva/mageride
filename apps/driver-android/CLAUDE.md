@@ -33,6 +33,9 @@ lk.mageride.driver
 ├── home/                     C070 · SCR-DA-010, 011, 013, 014 + the map and the offer inbox
 ├── ride/                     C070 · SCR-DA-015 + its three sheets and its data layer
 ├── delivery/                 C071 · SCR-DA-016a/b/c + the proof queue and its data layer
+├── jobs/                     C072 · SCR-DA-017, 018 + the dispatch reads and the Colombo labels
+├── level/                    C072 · SCR-DA-019
+├── earnings/                 C072 · SCR-DA-020 + its buckets and its chart
 └── menu/                     C070 · SCR-DA-036 — AL-31's drawer, as a tab
 ```
 
@@ -162,6 +165,45 @@ lk.mageride.driver
   each logs its own `CalleeRole` through `RideContact.startCall(rideId, calleeRole, type)`.
 - Reusable UI added here: `ui/PackageLabels.kt` (the size and payment-method label tables SCR-DA-014
   used to keep privately) and `ControlTokens.CallButtonWidth`/`.CallButtonHeight`.
+
+## Cluster 5 (C072) — the board, the level and the money
+
+- **The Job Board is POST-INTENT ONLY, and dispatch-svc has no route that would let it be
+  otherwise.** `GET /v1/rides/job-board` and `POST …/{id}/intent` are the whole surface; at T-30 min
+  the booking becomes a ride and reaches the driver as an ordinary offer on SCR-DA-014. Anything on
+  this screen that looked like an accept would be a second way to win a ride, racing the first.
+- **"Ranked by Driver Level" ranks DRIVERS, not rows.** D5' §3.7 picks *"the closest
+  intent-submitting driver by Level"* at T-30; a device knows neither the other bidders nor their
+  levels, which is why `:shared`'s `JobBoard` deliberately ships no ranking function. The board is
+  ordered by pickup time, soonest first.
+- **`JobStanding.hasJobBoardAccess` is three-valued and the third value matters.** `true` opens the
+  board, `false` is US-6A.8's gate, and **`null` is "reputation did not answer"** — which must never
+  render as the gate, because that tells a Level-3 driver they are Level 1. `JobBoardState` carries
+  `isUnavailable` for exactly that.
+- **Every clock on this cluster is Asia/Colombo** (D-38). `ScheduleLabels` and `EarningsBuckets`
+  each resolve `ZoneId` from `:shared`'s `BusinessCalendar.ZONE` rather than naming the zone twice,
+  and both are tested against `Fixtures.MIDNIGHT_EDGE`, which is already the next day in Colombo and
+  is not in UTC.
+- **The T-30 lead is `JobBoard.GO_LIVE_LEAD` on both screens.** SCR-DA-017's expiry and SCR-DA-018's
+  *"reminder sent"* are the same instant (D5' §3.7 dispatches then; §14.4 pushes then), so neither
+  screen keeps a threshold of its own. `JobBoardViewModel.EXPIRY_FADE` is the only local number, and
+  it is the animation, not the rule.
+- **The earnings summary is query-svc's arithmetic and is printed as sent.** `EarningsSummary` is
+  the aggregate; the per-trip rows feed the breakdown list and the chart and are never re-summed
+  into a second total. R-05 means an in-flight payment is on neither.
+- **Levels stop at 3.** The wireframe draws *"510 / 500 pts → Level 4"*; D5' §4.2 caps at
+  `min(level + 1, 3)`. The layout is the wireframe's and the number is D5''s — see
+  `DriverLevelViewModel`'s KDoc before changing the points line.
+- **Two view models take an injected `clock`** (`JobBoardViewModel`, `ScheduledRidesViewModel`).
+  Their whole behaviour is a comparison against T-30, and a test that could only wait for real time
+  would have to sleep for half an hour to assert the rule.
+- Reusable UI added here: `StatusTone.INFO` (the wireframe's `pill-status.info`, resolved to
+  `colorScheme.secondary` — the same role C070's info banner uses), `MoneyFormat.radius`, and
+  `ControlTokens.LevelBadge` / `.LevelProgress` / `.ProgressGap` / `.EarningsChart`.
+- **Three routes were added** (`ScheduledRides`, `DriverLevel`, `Earnings`) because the shell's
+  table had only `Jobs`, and their entry points are SCR-DA-017's app bar, SCR-DA-010's `L3` badge
+  and SCR-DA-010's *"Today: 4 trips · Rs 3,180"* line. The Menu stays at SCR-DA-036's **eight**
+  rows — `MenuDestinationTest` pins that, and none of these three belongs there.
 
 ## Rules this module is built on
 

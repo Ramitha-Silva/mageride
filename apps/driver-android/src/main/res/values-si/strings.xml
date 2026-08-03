@@ -372,4 +372,51 @@
     <string name="delivery_otp_wrong">එම කේතය වැරදියි. නැවත කියවා දෙන ලෙස ඉල්ලන්න.</string>
     <string name="delivery_otp_attempts_left">මෙම භාරදීම සහාය කණ්ඩායමට යාමට පෙර උත්සාහ %1$d ක් ඉතිරිය.</string>
     <string name="delivery_otp_locked">වැරදි කේත පහක්. මෙම භාරදීම දැන් අපගේ සහාය කණ්ඩායම සතුය — ඔවුන් ඔබට කතා කරයි.</string>
+
+    <!-- SCR-DA-017 · රැකියා පුවරුව (US-6A.5, US-6A.8). කැමැත්ත දැනුම් දීම පමණි — මෙහි පිළිගැනීමක් නැත. -->
+    <string name="job_board_title">රැකියා පුවරුව</string>
+    <string name="job_board_radius">%1$s ඇතුළත</string>
+    <string name="job_board_loading">ඔබ අසල රැකියා සොයමින්</string>
+    <string name="job_board_empty">%1$s ඇතුළත රැකියා නැත</string>
+    <string name="job_board_level_gate">රැකියා පුවරුව භාවිතයට මට්ටම %1$d ට පැමිණෙන්න. එතෙක් සාමාන්‍ය ගමන් ඔබට ලැබේ.</string>
+    <string name="job_board_post_intent">කැමැත්ත දන්වන්න</string>
+    <string name="job_board_intent_posted">කැමැත්ත දන්වා ඇත ✓</string>
+    <string name="job_board_expired">වැසී ඇත</string>
+    <string name="job_board_no_position">ඔබ අසල රැකියා සොයාගැනීමට ස්ථානය සක්‍රිය කරන්න.</string>
+    <string name="job_board_unavailable">ඔබේ රියදුරු මට්ටම කියවිය නොහැකි විය. මොහොතකින් නැවත උත්සාහ කරන්න.</string>
+
+    <!-- SCR-DA-017 සහ SCR-DA-018 දෙකටම. -->
+    <string name="schedule_today">අද</string>
+    <string name="schedule_tomorrow">හෙට</string>
+
+    <!-- SCR-DA-018 · නියමිත ගමන් (US-6A.15). මෙහි නොපැමිණීමකින් මට්ටමක් අහිමි වේ (US-6A.7). -->
+    <string name="scheduled_title">නියමිත ගමන්</string>
+    <string name="scheduled_empty">තවම කිසිවක් වෙන් කර නැත. නියමිත ගමන් ලබාගැනීමට රැකියා පුවරුවේ කැමැත්ත දන්වන්න.</string>
+    <string name="scheduled_accepted">පිළිගෙන ඇත</string>
+    <string name="scheduled_in_minutes">මිනිත්තු %1$d කින්</string>
+    <string name="scheduled_reminder_fired">මතක් කිරීම යවා ඇත</string>
+    <string name="scheduled_cancel">මෙම ගමන අත්හරින්න</string>
+
+    <!-- SCR-DA-019 · රියදුරු මට්ටම සහ සංඛ්‍යාලේඛන (US-6A.6, US-6A.14). -->
+    <string name="level_title">රියදුරු මට්ටම</string>
+    <string name="level_loading">ඔබේ මට්ටම කියවමින්</string>
+    <string name="level_points_to_next">මට්ටම %3$d ට ලකුණු %1$d / %2$d</string>
+    <string name="level_top">මට්ටම %1$d උසම මට්ටමයි</string>
+    <string name="level_acceptance">පිළිගැනීම</string>
+    <string name="level_no_shows">නොපැමිණීම්</string>
+    <string name="level_reports_warning">මගී පැමිණිලි %1$d ක් නිසා මට්ටමක් සහ තාවකාලික ඉවත් කිරීමක් සිදුවේ.</string>
+
+    <!-- SCR-DA-020 · ඉපැයීම් උපකරණ පුවරුව (US-9.22, US-8.8). -->
+    <string name="earnings_title">ඉපැයීම්</string>
+    <string name="earnings_period_today">අද</string>
+    <string name="earnings_period_week">සතිය</string>
+    <string name="earnings_period_month">මාසය</string>
+    <string name="earnings_net_for">%1$s — ඔබට ඉතිරි වන මුදල</string>
+    <string name="earnings_fares_received">ගමන් %1$d ක් · ලැබුණු ගාස්තු</string>
+    <string name="earnings_tips">තෑගි මුදල්</string>
+    <string name="earnings_daily_fee">දෛනික ගාස්තුව අඩු කෙරිණි</string>
+    <string name="earnings_penalties">දඩ අඩු කෙරිණි</string>
+    <string name="earnings_net">ශුද්ධ මුදල</string>
+    <string name="earnings_trips">ගමනින් ගමන</string>
+    <string name="earnings_empty">මෙම කාලය තුළ සම්පූර්ණ කළ ගමන් නැත.</string>
 </resources>

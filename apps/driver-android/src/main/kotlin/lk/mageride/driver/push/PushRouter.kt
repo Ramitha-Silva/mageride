@@ -46,6 +46,15 @@ internal data class PushMessage(
 
         /** E-01's 15 s atomic offer. The only kind that takes over the screen. */
         const val KIND_RIDE_OFFER: String = "ride_offer"
+
+        /**
+         * US-6A.15's 30-minute reminder before a scheduled pickup (D5' §14.4).
+         *
+         * The SCREAMING form, because notification-svc's catalogue spells it that way
+         * (`NotificationCatalogue.ScheduledReminder`) and `kind` carries the type name for every
+         * push the service does not special-case.
+         */
+        const val KIND_SCHEDULED_REMINDER: String = "SCHEDULED_REMINDER"
     }
 }
 
@@ -102,6 +111,13 @@ internal class PushRouter {
             // and it must open even though `offer.created` carries a ride deeplink for the
             // passenger side. Routing it to Home is what puts the driver where the sheet shows.
             PushMessage.KIND_RIDE_OFFER -> DriverRoute.Home
+
+            // US-6A.15 — D2' §SCR-DA-018: "30-min reminder push deep-links here". It carries no
+            // deeplink to follow: `DeepLinks` in Notification.Api mints four URIs and none of them
+            // names a scheduled ride, so the routing is on the **type**, which D5' §14.4 and
+            // notification-svc's catalogue both fix. Recorded as a spec gap in the C072 handoff;
+            // if a `mageride://scheduled` host is ever minted, `resolve` is where it belongs.
+            PushMessage.KIND_SCHEDULED_REMINDER -> DriverRoute.ScheduledRides
 
             else -> resolve(message.deeplink)
         }

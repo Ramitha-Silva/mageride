@@ -1,5 +1,6 @@
 package lk.mageride.driver.home
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -40,6 +41,9 @@ import lk.mageride.driver.ui.theme.MageRideTheme
  *
  * @param onOpenVehicles US-9.6's empty state — *"Add or get assigned a vehicle to go online"*,
  *   which routes to My Vehicles and raises SCR-DA-026a when the list is empty.
+ * @param onOpenEarnings SCR-DA-020 (Δ C072). The *"Today: 4 trips · Rs 3,180"* line **is** the
+ *   earnings dashboard's Today figure — `EarningsSummary.netMinor` for `?period=today`, read
+ *   through the same query-svc endpoint — so tapping it opens the screen it is a summary of.
  */
 @Composable
 internal fun StandbySheet(
@@ -47,6 +51,7 @@ internal fun StandbySheet(
     onToggleOnline: (Boolean) -> Unit,
     onOpenDirectional: () -> Unit,
     onOpenVehicles: () -> Unit,
+    onOpenEarnings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     DashboardSheet(modifier = modifier) {
@@ -74,7 +79,9 @@ internal fun StandbySheet(
                 text = todayStats(state),
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable(onClick = onOpenEarnings),
             )
         }
     }

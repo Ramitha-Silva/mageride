@@ -101,14 +101,39 @@ internal sealed interface DriverRoute {
         }
     }
 
-    // ---- C071 · jobs / level / earnings ------------------------------------------------
+    // ---- C072 · jobs / level / earnings ------------------------------------------------
+    //
+    // Δ C072: the shell's table had `Jobs` and nothing else, and this group is four screens. The
+    // other three are pushed destinations — every one of their wireframes draws a `‹` app bar —
+    // so they are registered here rather than invented at a call site, the same way C070 added
+    // the four SCR-DA-036 rows it found missing.
 
-    /** The job board. Bottom-nav tab 2. */
+    /** SCR-DA-017 — the Job Board. Bottom-nav tab 2, and **post-intent only** (US-6A.5). */
     data object Jobs : DriverRoute {
         override val path: String = "jobs"
     }
 
-    // ---- C072 · wallet / daily fee -----------------------------------------------------
+    /**
+     * SCR-DA-018 — the driver's own upcoming scheduled rides.
+     *
+     * Under `jobs/` because that is what it is: the Job Board is what a driver bids on and this is
+     * what came of it. US-6A.15's 30-minute reminder opens it; see `PushRouter`.
+     */
+    data object ScheduledRides : DriverRoute {
+        override val path: String = "jobs/scheduled"
+    }
+
+    /** SCR-DA-019 — Driver Level, points and the US-6A.14 stats. Opened by SCR-DA-010's `L3` badge. */
+    data object DriverLevel : DriverRoute {
+        override val path: String = "driver/level"
+    }
+
+    /** SCR-DA-020 — the earnings dashboard. Opened by SCR-DA-010's *"Today: 4 trips · Rs 3,180"*. */
+    data object Earnings : DriverRoute {
+        override val path: String = "earnings"
+    }
+
+    // ---- C073 · wallet / daily fee -----------------------------------------------------
 
     /** Wallet, daily fee and credit transfer. Bottom-nav tab 3, and `mageride://wallet`. */
     data object Wallet : DriverRoute {
@@ -189,6 +214,9 @@ internal sealed interface DriverRoute {
             Home,
             Directional,
             Jobs,
+            ScheduledRides,
+            DriverLevel,
+            Earnings,
             Wallet,
             Menu,
             Documents,

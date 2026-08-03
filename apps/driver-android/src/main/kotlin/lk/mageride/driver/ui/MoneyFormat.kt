@@ -46,6 +46,15 @@ internal object MoneyFormat {
         String.format(Locale.ROOT, "%.0f m", metres)
     }
 
+    /**
+     * `30000` → `30 km`. A **radius**, not a measured distance.
+     *
+     * Distinct from [distance] because the two are different kinds of number: a distance is measured
+     * and its tenth of a kilometre is information, while the Job Board's catchment is a round figure
+     * a spec fixed (D-06's 30 km), and `≤ 30.0 km` reads as a measurement of something.
+     */
+    fun radius(metres: Int): String = String.format(Locale.ROOT, "%d km", metres / METRES_IN_KM.toInt())
+
     /** `01:12:40` — SCR-DA-011's live session timer (US-5.6). */
     fun clock(seconds: Long): String {
         val safe = if (seconds < 0) 0 else seconds

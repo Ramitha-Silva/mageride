@@ -105,4 +105,31 @@ class NavigationShellTest {
         val announcement = PushMessage.from(mapOf("kind" to "BROADCAST"))
         assertNull(PushRouter.routeFor(announcement))
     }
+
+    @Test
+    fun the_thirty_minute_scheduled_reminder_opens_the_upcoming_list() {
+        // US-6A.15 / D2' §SCR-DA-018: "30-min reminder push deep-links here". It carries no link to
+        // follow — `DeepLinks` in Notification.Api mints four URIs and none names a scheduled ride —
+        // so the routing is on the type name D5' §14.4 and `NotificationCatalogue` both fix.
+        val reminder = PushMessage.from(
+            mapOf("kind" to "SCHEDULED_REMINDER", "notificationId" to "01JNOTIF000000000000000000"),
+        )
+
+        assertEquals(DriverRoute.ScheduledRides, PushRouter.routeFor(reminder))
+        assertNull(PushRouter.resolve("mageride://scheduled"), "there is no such host, and none is invented")
+    }
+
+    @Test
+    fun the_c072_screens_are_registered_destinations() {
+        // SCR-DA-018/019/020 are pushed screens — each wireframe draws a `‹` app bar — and the
+        // shell's table had none of them (Δ C072). A screen registered nowhere is a tap that does
+        // nothing, which is the same failure `MenuDestinationTest` guards the drawer against.
+        listOf(DriverRoute.Jobs, DriverRoute.ScheduledRides, DriverRoute.DriverLevel, DriverRoute.Earnings)
+            .forEach { assertTrue(it in DriverRoute.Static, "${it.path} is not registered") }
+
+        assertTrue(!isTabRoute(DriverRoute.ScheduledRides.path), "a pushed screen shows no bottom bar")
+        assertTrue(!isTabRoute(DriverRoute.DriverLevel.path))
+        assertTrue(!isTabRoute(DriverRoute.Earnings.path))
+        assertTrue(isTabRoute(DriverRoute.Jobs.path), "the Job Board IS tab 2")
+    }
 }

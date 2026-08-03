@@ -427,4 +427,51 @@
     <string name="delivery_otp_wrong">That code is wrong. Ask them to read it out again.</string>
     <string name="delivery_otp_attempts_left">%1$d tries left before this handover goes to support.</string>
     <string name="delivery_otp_locked">Five wrong codes. This handover is with our support team now — they will call you.</string>
+
+    <!-- SCR-DA-017 · the Job Board (US-6A.5, US-6A.8). Post intent only — there is no accept here. -->
+    <string name="job_board_title">Job Board</string>
+    <string name="job_board_radius">Within %1$s</string>
+    <string name="job_board_loading">Looking for jobs near you</string>
+    <string name="job_board_empty">No jobs within %1$s</string>
+    <string name="job_board_level_gate">Reach Level %1$d to use the Job Board. You still get ordinary rides in the meantime.</string>
+    <string name="job_board_post_intent">Post intent</string>
+    <string name="job_board_intent_posted">Intent posted ✓</string>
+    <string name="job_board_expired">Closed</string>
+    <string name="job_board_no_position">Turn location on so we can find jobs near you.</string>
+    <string name="job_board_unavailable">We could not read your Driver Level. Try again in a moment.</string>
+
+    <!-- Shared by SCR-DA-017 and SCR-DA-018. -->
+    <string name="schedule_today">Today</string>
+    <string name="schedule_tomorrow">Tomorrow</string>
+
+    <!-- SCR-DA-018 · scheduled rides (US-6A.15). A no-show here costs a level (US-6A.7). -->
+    <string name="scheduled_title">Scheduled rides</string>
+    <string name="scheduled_empty">Nothing booked yet. Post intent on the Job Board to get scheduled rides.</string>
+    <string name="scheduled_accepted">Accepted</string>
+    <string name="scheduled_in_minutes">in %1$d min</string>
+    <string name="scheduled_reminder_fired">reminder sent</string>
+    <string name="scheduled_cancel">Give up this ride</string>
+
+    <!-- SCR-DA-019 · Driver Level and stats (US-6A.6, US-6A.14). -->
+    <string name="level_title">Driver Level</string>
+    <string name="level_loading">Reading your level</string>
+    <string name="level_points_to_next">%1$d / %2$d points to Level %3$d</string>
+    <string name="level_top">Level %1$d is the highest level</string>
+    <string name="level_acceptance">Acceptance</string>
+    <string name="level_no_shows">No-shows</string>
+    <string name="level_reports_warning">%1$d passenger reports cost you a level and a temporary delisting.</string>
+
+    <!-- SCR-DA-020 · the earnings dashboard (US-9.22, US-8.8). -->
+    <string name="earnings_title">Earnings</string>
+    <string name="earnings_period_today">Today</string>
+    <string name="earnings_period_week">Week</string>
+    <string name="earnings_period_month">Month</string>
+    <string name="earnings_net_for">%1$s — what you keep</string>
+    <string name="earnings_fares_received">%1$d trips · fares received</string>
+    <string name="earnings_tips">Tips</string>
+    <string name="earnings_daily_fee">Daily fee deducted</string>
+    <string name="earnings_penalties">Penalties deducted</string>
+    <string name="earnings_net">Net</string>
+    <string name="earnings_trips">Trip by trip</string>
+    <string name="earnings_empty">No completed trips in this period.</string>
 </resources>

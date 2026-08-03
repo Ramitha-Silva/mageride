@@ -1,6 +1,7 @@
 package lk.mageride.driver.home
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -50,6 +51,11 @@ import org.koin.androidx.compose.koinViewModel
  *
  * @param onOpenRide SCR-DA-015. Reached three ways — winning an offer, tapping the resume banner,
  *   and a cold start that found a ride already in hand.
+ * @param onOpenLevel SCR-DA-019, from the `L3` badge (Δ C072). D2' §SCR-DA-019's traceability row
+ *   is *"Driver Level badge | SCR-DA-019 + SCR-DA-010 badge"* — the badge is the level screen's
+ *   entry point, and it is the only one the wireframes draw.
+ * @param onOpenEarnings SCR-DA-020, from the *"Today: 4 trips · Rs 3,180"* line on the standby
+ *   sheet (Δ C072) — that figure **is** the earnings dashboard's headline for the Today window.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -57,6 +63,8 @@ internal fun HomeScreen(
     onOpenDirectional: () -> Unit,
     onOpenVehicles: () -> Unit,
     onOpenRide: (Ulid) -> Unit,
+    onOpenLevel: () -> Unit,
+    onOpenEarnings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val viewModel: HomeViewModel = koinViewModel()
@@ -66,7 +74,7 @@ internal fun HomeScreen(
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
-        topBar = { HomeTopBar(state = state) },
+        topBar = { HomeTopBar(state = state, onOpenLevel = onOpenLevel) },
     ) { insets ->
         Column(modifier = Modifier.padding(insets).fillMaxSize()) {
             HomeBanners(state = state)
@@ -99,6 +107,7 @@ internal fun HomeScreen(
                     onToggleOnline = viewModel::toggleOnline,
                     onOpenDirectional = onOpenDirectional,
                     onOpenVehicles = onOpenVehicles,
+                    onOpenEarnings = onOpenEarnings,
                 )
             }
         }
@@ -140,12 +149,17 @@ internal fun HomeScreen(
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun HomeTopBar(state: HomeState, modifier: Modifier = Modifier) {
+private fun HomeTopBar(state: HomeState, onOpenLevel: () -> Unit, modifier: Modifier = Modifier) {
     TopAppBar(
         modifier = modifier,
         title = {
             state.standing.level?.let { level ->
-                SolidBadge(label = DashboardLabels.level(level), accent = MaterialTheme.colorScheme.primary)
+                // Δ C072 — the badge is SCR-DA-019's entry point, and the only one D2' names.
+                SolidBadge(
+                    label = DashboardLabels.level(level),
+                    accent = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.clickable(onClick = onOpenLevel),
+                )
             }
         },
         actions = {

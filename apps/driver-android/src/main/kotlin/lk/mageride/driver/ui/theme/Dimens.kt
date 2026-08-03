@@ -169,4 +169,23 @@ internal object ControlTokens {
      */
     val CallButtonWidth: Dp = 48.dp
     val CallButtonHeight: Dp = 40.dp
+
+    // ---- C072 · jobs, level, earnings --------------------------------------------------
+
+    /** SCR-DA-019's Driver Level badge — the wireframe's `96 x 96` `primaryContainer` square. */
+    val LevelBadge: Dp = 96.dp
+
+    /** SCR-DA-019's points bar (`.progress`, `height:8px`), which M3 draws at 4 dp by default. */
+    val LevelProgress: Dp = 8.dp
+
+    /**
+     * The gap M3 1.3+ leaves between a `LinearProgressIndicator`'s track and its fill.
+     *
+     * Zero, because the wireframe's bar is one continuous rounded rail — the same reason its stop
+     * indicator is drawn away. A token rather than a literal so the value is arguable in one place.
+     */
+    val ProgressGap: Dp = 0.dp
+
+    /** SCR-DA-020's trend chart (`.bars`, `height:90px`), rounded onto the 4 px grid. */
+    val EarningsChart: Dp = 88.dp
 }

@@ -98,7 +98,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C069 | driver-android-vehicle-onboarding | 4a | DONE | 2026-08-02 | **107 tests green** (was 72; 35 new) and `assembleDebug` clean, plus `detekt`/`ktlintCheck`; all eight owned screens built to the wireframe — the Mode-C four-step wizard (SCR-DA-004…004c) with per-step save, AL-30 resume-at-next-incomplete and the ⚑ Pending card, the **SCR-DA-005 CameraX scanner** with a draggable four-corner quad, an auto edge-detect proposal and a `setPolyToPoly` perspective correction on confirm (AL-43), the SCR-DA-006 four-document verdict list with the automatic APPROVED read, and SCR-DA-026/026a My Vehicles with the two groups, the US-9.6 go-live gate, deactivate-confirm and the empty-state popup — plus ~85 new trilingual strings, CameraX 1.6.1 and the `CAMERA` permission. Three `:shared` registry DTOs were **corrected against the C029 contract** (`VehicleRegistration`'s four file ids optional, `RegisterVehicleResponse.nextStep`, `SaveOnboardingStepResponse.status`) — without the last one the app cannot see its own auto-approval. Three spec gaps recorded: no `fields` part on the step's multipart arm, no fleet name/expiry on `VehicleSummary`, and no active-vehicle operation. The `:shared` gate is **13 red on arrival** and none of it is C069's — see the handoff |
 | C070 | driver-android-dashboard-dispatch | 4a | DONE | 2026-08-03 | **138 tests green** (was 107; 28 new + 3 suites) and `assembleDebug` clean, plus `detekt`/`ktlintCheck`; all six owned screens built to the wireframe — **SCR-DA-010** Mode C standby (US-9.6 go-online gating, own-vehicle-only map per AL-31, live reg-no chip, daily-fee/low-balance/2nd-trip banners, offline scrim, no hamburger), **SCR-DA-011** Mode A/B Start/End Journey as *home* with the AL-32 ignition banner the dashboard can override and the US-5.10 restart grace, **SCR-DA-013** Directional Travel (DT-01..08, and turning it off still spends the use), **SCR-DA-014** the 15 s takeover with the ring, the three badges, audio + haptic and the Taken/Expired split kept apart, **SCR-DA-015** arrive/start-OTP/complete with SOS, the AL-48 call-type chooser and the **AL-47 QR confirm**, and **SCR-DA-036**'s eight-row drawer. ~95 new trilingual strings; two device seams added (`DriverLocationSource`, `PositionPublisher`) so a view model holds no `Context`. **Five routes added to the shell's table** — SCR-DA-013 plus the four SCR-DA-036 named that had none. Four spec gaps recorded: no driver-rating read, no `GET` for `DirectionalConfig`, no presence read, no Mode A route list; plus **no SignalR client in `:shared`**, so SCR-DA-015 polls the documented fallback |
 | C071 | driver-android-delivery | 4a | DONE | 2026-08-03 | **151 tests green** (was 138; 13 new across 2 suites), `assembleDebug` + `detekt` + `ktlintCheck` clean; SCR-DA-016a/b/c built as three sequential sheets over the package ride machine — review with both parties' call buttons, pickup OTP against `:shared`'s `PackageHandoff` budget, and a *"Delivery completed"* that takes the recipient's OTP **or** P-10's photograph. `RideDetail` gained Δ C037's `recipientName`/`senderPhone`/`recipientPhone` in `:shared`, which the DTO was missing. Four spec gaps: AL-33's re-dispatch on Cancel has no server path, `cod-collected` now has no caller, no `senderName`, no ETA for sheet 2's banner |
-| C072 | driver-android-jobs-level-earnings | 4a | PENDING | | |
+| C072 | driver-android-jobs-level-earnings | 4a | DONE | 2026-08-03 | **183 tests green** (was 151; 32 new across 6 suites), `assembleDebug` + `detekt` + `ktlintCheck` clean; SCR-DA-017/018/019/020 built to the wireframes. The board is post-intent only and the fence is asserted (no operation containing "accept" is reachable); US-6A.8 is **three**-valued so an unread level never renders as the L1 gate; T-30 is `JobBoard.GO_LIVE_LEAD` on both job screens; earnings print query-svc's own summary and never a second total; every date is Asia/Colombo through `BusinessCalendar`. Three routes added (`ScheduledRides`, `DriverLevel`, `Earnings`) — the Menu stays at eight rows. Five spec gaps: `ScheduledRide` carries no fare and no address, dispatch-svc sends `hasIntent`/`paymentMethod` the contract does not declare, driver-side cancellation of a scheduled ride has no route, `SCHEDULED_REMINDER` has no deep link and no read carries the report count. Two wireframe deviations: there is no Level 4 (D5' §4.2 caps at 3) and no payment-method split (no read answers one) |
 | C073 | driver-android-wallet-credit | 4a | PENDING | | |
 | C074 | driver-android-tracker-sharing-profile | 4a | PENDING | | |
 | C075 | driver-android-comms-safety-support | 4a | PENDING | | |
@@ -11490,3 +11490,146 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   dropped at the upload rather than filed against a Verification-Officer queue it has nothing to do
   with. `RideContact.startCall` gained an overload that takes the `CalleeRole` outright, because a
   delivery's two buttons mean the ride's *kind* can no longer decide who is being rung.
+
+---
+
+- **Component:** C072 driver-android-jobs-level-earnings — 2026-08-03
+- **Status:** DONE — `:apps:driver-android:testDebugUnitTest` **183 passed, 0 failed** (was 151),
+  `assembleDebug` clean, `detekt` and `ktlintCheck` green. All four screens under `## Screens` are
+  built to `specs/wireframes/driver_android.html`, and every DoD line has a test. Nothing in
+  `:shared` or `backend/` was touched, so the wave-1 gate is unchanged by this component; the five
+  spec gaps below are recorded rather than worked around.
+- **Notes:**
+
+  **The Job Board is post-intent only because dispatch-svc has no other route, and that is the
+  design.** `ScheduledRideEndpoints` maps `GET /job-board` and `POST /job-board/{id}/intent` and
+  nothing else; at T-30 min the booking is materialised into a ride and offered to the closest
+  intent-poster, tie-broken on the higher Level, and **that** offer is accepted on SCR-DA-014
+  through ride-svc like every other one. `JobBoardViewModelTest` asserts the fence directly — the
+  only call the screen can be made to produce is `postJobBoardIntent`, and no operation containing
+  "accept" is ever reached.
+
+  **"Ranked by Driver Level" ranks drivers, not rows — the deliverable's wording reads the other
+  way and the spec does not.** D5' §3.7 is *"dispatched to closest intent-submitting driver by Level
+  (ties → higher level rung first)"*: it decides who wins one booking, against every driver's
+  presence row, at T-30. A handset knows neither the other bidders nor their levels, which is
+  exactly why `:shared`'s `JobBoard` ships `canPostIntent` and deliberately **no** ranking function
+  ("*which intent wins is decided by dispatch-svc*", its own KDoc). The board is therefore ordered
+  by pickup time, soonest first — the order the wireframe prints its two cards in, and the order
+  `GET /v1/rides/scheduled/{driverId}` already documents for the sibling list.
+
+  **US-6A.8 is three-valued, and the third value is the one that could do harm.** `true` opens the
+  board, `false` is the gate, and **`null` is "reputation did not answer"**. Rendering the gate on
+  `null` would tell a Level-3 driver whose level read timed out that they are Level 1 — the single
+  failure this story must not produce — so `JobBoardState` carries `isUnavailable` beside `gated`
+  and `isEmpty`, three distinct states with three distinct sentences. The gated path also never
+  spends the board read: a `GET /v1/rides/job-board` a driver may not act on is a round trip to draw
+  a list of disabled buttons.
+
+  **T-30 is one constant used by two screens.** SCR-DA-017's expiry and SCR-DA-018's *"reminder
+  sent"* are the same instant — D5' §3.7 dispatches at T-30 and §14.4 pushes `SCHEDULED_REMINDER` at
+  30 min for a driver — so both read `JobBoard.GO_LIVE_LEAD` and neither keeps a threshold of its
+  own. `EXPIRY_FADE` (3 s) is the only local number and is the *animation*: D2' §SCR-DA-017's
+  "card expire fade" is what stops a row vanishing under the driver's thumb looking like a tap that
+  lost them a job. A row that was **already** past its window when the read landed is filtered
+  before it is ever drawn, because the fade is for a card that dies on screen, not for a corpse.
+
+  **The earnings dashboard reconciles by not doing the arithmetic.** `EarningsSummary` is query-svc's
+  own aggregate and is printed as sent — gross, the US-9.22 daily fee, penalties, tips, net — and
+  `listEarningSessions` feeds only the per-trip breakdown and the chart. Re-summing the rows would
+  produce a second total that disagrees the first time a penalty lands between the two reads, and
+  R-05 already means an in-flight payment is on neither. The test proves it the blunt way: rows
+  summing to Rs 1 under a card that still says Rs 3,180.
+
+  **Two view models take an injected clock** (`JobBoardViewModel`, `ScheduledRidesViewModel`). Their
+  entire behaviour is a comparison against T-30; a test that could only wait for wall-clock time
+  would have to sleep for half an hour to assert the rule the DoD names.
+
+  **Every date on this cluster is Asia/Colombo** (D-38). `ScheduleLabels` and `EarningsBuckets` each
+  resolve their `ZoneId` from `:shared`'s `BusinessCalendar.ZONE` rather than naming the zone twice,
+  and both are asserted against `Fixtures.MIDNIGHT_EDGE` — 19:00 UTC, which is already the 28th in
+  Colombo. Bucketed in the handset's zone, that trip lands on the day the card has stopped counting.
+  The earnings trend is bucketed by **hour** for Today (a day has no trend but a shift does) and by
+  **Colombo day** for a week or a month, from the same rows the breakdown list draws.
+
+  **Navigation: three routes added, and no ninth drawer row.** The shell's table had `Jobs` and
+  nothing else, and SCR-DA-018/019/020 are all pushed screens — each wireframe draws a `‹` app bar.
+  `ScheduledRides`, `DriverLevel` and `Earnings` were added the way C070 added its four, and their
+  entry points are the ones D2' actually names: the level screen opens from SCR-DA-010's **`L3`
+  badge** (D2's own traceability row is *"Driver Level badge | SCR-DA-019 + SCR-DA-010 badge"*), the
+  earnings screen from SCR-DA-010's *"Today: 4 trips · Rs 3,180"* line — which **is** its Today
+  figure, the same `EarningsSummary.netMinor` through the same endpoint — and the upcoming list from
+  an action on the Job Board's app bar. SCR-DA-036 stays at eight rows; `MenuDestinationTest` pins
+  that and none of these three belongs there.
+
+  ### Spec gaps found (five, none worked around)
+
+  1. **`ScheduledRide` carries no fare, and both wireframes print one.** SCR-DA-017's cards read
+     *"08:30 · Maharagama → Fort — Rs 980"* and SCR-DA-018's *"Sedan · Rs 980 · reminder fired"*.
+     `dispatch.yaml#/components/schemas/ScheduledRide` declares `scheduledRideId, rideId, pickup,
+     dropoff, vehicleType, pickupTime, status, distanceM, intentCount` — no money at all — and
+     `ScheduledRideResponse` sends none. A driver is therefore asked to post intent on a job without
+     being told what it pays, which is the decision the card exists to support. Omitted rather than
+     estimated: `fare-svc`'s estimate needs a `fareEstimateToken` the booking does not expose here.
+     A `fareEstimateMinor` on `ScheduledRide` would close it — micro-change-set.
+  2. **`Place.address` is null on every scheduled ride, so the route line is two dashes.**
+     `POST /v1/rides/schedule` takes bare coordinates and `PlaceResponse`'s own remark says
+     *"`address` is never populated … there is no address to echo"*. `ScheduleLabels.route` renders
+     `—` rather than decimal degrees, and `ScheduleLabelsTest` pins that. Reverse-geocoding client
+     side would put a different address on the card from the one the passenger booked.
+  3. **dispatch-svc already answers `hasIntent` and `paymentMethod` on every `ScheduledRide`, and
+     `dispatch.yaml` declares neither.** `ScheduledRideResponse` has both; the contract's schema has
+     neither, so `:shared`'s DTO cannot carry them (`ContractShapeTest` treats an undeclared property
+     as an error, correctly). The consequence is that *"Intent posted ✓"* is backed by an in-memory
+     set and does not survive a restart — a repeat tap is then an idempotent replay, which is
+     harmless but is not what the wireframe promises. **This is the one gap where the fix is already
+     written on the server**; adding the two fields to the contract is a micro-change-set, not a
+     feature.
+  4. **`DELETE /v1/rides/schedule/{id}` is a passenger route, so a driver cannot cancel.**
+     `ScheduledRideEndpoints` splits the group by role — *"the passenger books and the driver
+     browses"* — and this is the only cancellation route `dispatch.yaml` has. The deliverable asks
+     SCR-DA-018 for cancellation, so the button is wired, refused locally once the row is
+     `DISPATCHED` (from T-30 the ride exists and ride-svc's penalty matrix owns it), and the
+     server's `403` is rendered as copy with the booking left in the list. What is actually missing
+     is a *driver-side withdrawal* — giving up a claimed scheduled ride before T-30 without it
+     counting as the US-6A.7 no-show that costs a level. No spec names one.
+  5. **`SCHEDULED_REMINDER` has no deep link, and no read carries the passenger-report count.**
+     D2' §SCR-DA-018 says the 30-minute reminder *"deep-links here"*, but `DeepLinks` in
+     `Notification.Api` mints four URIs (`ride`, `package`, `wallet`, `documents`) and none names a
+     scheduled ride — and nothing raises `SCHEDULED_REMINDER` yet either. `PushRouter` therefore
+     routes on the **type name**, which D5' §14.4 and `NotificationCatalogue` both fix, and invents
+     no `mageride://scheduled` host; `NavigationShellTest` asserts both halves. Separately,
+     `GET /v1/drivers/{id}/stats` answers `acceptanceRate`, `noShows` and `points` and **no report
+     count** (reputation's counters are C033's gRPC and portal surface), so SCR-DA-019's
+     *"⚠ 3 reports → level drop + temporary delisting"* is rendered as the rule it literally states
+     and never as a live tally.
+
+  ### Wireframe deviations, and why
+
+  - **SCR-DA-019's *"510 / 500 pts → Level 4"* does not exist.** D5' §4.2 runs levels 1–3 and levels
+    up with `min(level + 1, 3)`; `:shared`'s `DriverLevelRules.MAX_LEVEL` is 3. The layout is the
+    wireframe's — badge, points line, bar, the two stat cards, the warning — and the copy on the
+    points line becomes *"Level 3 is the highest level"* at the cap, with the bar full. **Specs win
+    over code, and D5' is the spec here**; a screen promising a rung dispatch cannot award is worse
+    than one that says the ladder ends. The 500 itself is never baked: `levelUpThreshold` is read
+    from `GET …/level` when the server sends it, because `PUT /v1/admin/drivers/level-config`
+    (US-14.12) can move it.
+  - **The Job Board's app bar gained one action.** SCR-DA-018 has a `‹` app bar and no screen in any
+    wireframe opens it. The action sits beside the wireframe's *"≤ 30 km"* label rather than
+    replacing it.
+  - **SCR-DA-010's `L3` badge and its *"Today"* line became tappable.** Neither wireframe draws an
+    affordance; both are the only entry points D2' names for SCR-DA-019 and SCR-DA-020.
+  - **SCR-DA-020 has no payment-method split.** The deliverable asks for one; **no read on the
+    platform answers it.** `EarningsSummary` and `SessionEarning` carry money and a trip id,
+    `TripSummary` carries no payment method, and fare-svc's payment records are per-payment with no
+    listing for a driver over a period. The wireframe's own card does not draw one. A split derived
+    from anything else here would be a guess presented as a reconciliation, so it is omitted and
+    raised — `paymentMethod` on `SessionEarning` would close it.
+
+  **For C073–C075 —** `jobs/JobsRepository` is the one seam onto dispatch-svc's level and stats reads
+  and is already three-valued about "we do not know" (see above); `earnings/EarningsRepository`
+  is the query-svc one. `jobs/ScheduleLabels` is the Colombo clock and calendar every later screen
+  that prints a pickup time should use rather than reaching for the handset's zone.
+  `DriverRoute.Wallet` is still the standing placeholder and is C073's. `StatusTone.INFO` and
+  `MoneyFormat.radius` are new and shared; `ui/theme/ControlTokens` gained `LevelBadge`,
+  `LevelProgress`, `ProgressGap` and `EarningsChart`.

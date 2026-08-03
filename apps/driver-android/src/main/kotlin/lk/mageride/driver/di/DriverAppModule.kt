@@ -7,6 +7,8 @@ import lk.mageride.driver.capture.DocumentScannerViewModel
 import lk.mageride.driver.delivery.DeliveryRepository
 import lk.mageride.driver.delivery.DeliveryViewModel
 import lk.mageride.driver.delivery.ProofUploadQueue
+import lk.mageride.driver.earnings.EarningsRepository
+import lk.mageride.driver.earnings.EarningsViewModel
 import lk.mageride.driver.home.AndroidJourneyPreferences
 import lk.mageride.driver.home.DirectionalViewModel
 import lk.mageride.driver.home.DriverIdentity
@@ -16,6 +18,10 @@ import lk.mageride.driver.home.JourneyRepository
 import lk.mageride.driver.home.OfferInbox
 import lk.mageride.driver.home.OfferViewModel
 import lk.mageride.driver.home.StandbyRepository
+import lk.mageride.driver.jobs.JobBoardViewModel
+import lk.mageride.driver.jobs.JobsRepository
+import lk.mageride.driver.jobs.ScheduledRidesViewModel
+import lk.mageride.driver.level.DriverLevelViewModel
 import lk.mageride.driver.location.AndroidDriverLocationSource
 import lk.mageride.driver.location.AndroidPositionPublisher
 import lk.mageride.driver.location.DriverLocationSource
@@ -233,4 +239,26 @@ private fun Module.deliveryBindings() {
             captures = get(),
         )
     }
+
+    jobsBindings()
+}
+
+/**
+ * The C072 slice — SCR-DA-017/018/019 and SCR-DA-020.
+ *
+ * [JobsRepository] is one binding for three screens because they are one service and one gate: the
+ * Job Board is only open to a driver `GET /v1/drivers/{id}/level` says is Level 2 or above (US-6A.8),
+ * and that same read is what SCR-DA-019 draws. `JobBoard` itself is deliberately **not** bound —
+ * it is a value type built from `LevelConfig`, and binding one at start-up would pin whatever the
+ * admin's thresholds were when the app launched (the rule `fareWalletModule` and
+ * `rideDispatchModule` already follow in `:shared`).
+ */
+private fun Module.jobsBindings() {
+    single { JobsRepository(dispatch = get()) }
+    single { EarningsRepository(query = get()) }
+
+    viewModel { JobBoardViewModel(identity = get(), jobs = get(), location = get()) }
+    viewModel { ScheduledRidesViewModel(identity = get(), jobs = get()) }
+    viewModel { DriverLevelViewModel(identity = get(), jobs = get()) }
+    viewModel { EarningsViewModel(identity = get(), earnings = get()) }
 }

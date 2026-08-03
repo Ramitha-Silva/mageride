@@ -16,8 +16,12 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import lk.mageride.driver.R
 import lk.mageride.driver.capture.DocumentScannerScreen
+import lk.mageride.driver.earnings.EarningsScreen
 import lk.mageride.driver.home.DirectionalScreen
 import lk.mageride.driver.home.HomeScreen
+import lk.mageride.driver.jobs.JobBoardScreen
+import lk.mageride.driver.jobs.ScheduledRidesScreen
+import lk.mageride.driver.level.DriverLevelScreen
 import lk.mageride.driver.menu.MenuScreen
 import lk.mageride.driver.onboarding.LanguageCityScreen
 import lk.mageride.driver.onboarding.LoginScreen
@@ -36,7 +40,7 @@ import lk.mageride.driver.vehicle.VehiclesScreen
  * **Every destination is registered here, and a screen group replaces the body of its own routes
  * without touching the graph.** That is the shape C067 left behind and the shape it keeps: a
  * component that added a destination of its own would put the app's navigation in eight files.
- * C068 has taken the five cluster-1 routes; the rest are still standing placeholders.
+ * C068–C072 have taken their routes; the rest are still standing placeholders.
  *
  * The start destination is [DriverRoute.Splash] — SCR-DA-001 is the driver-info router, and its
  * states ("no token → Login · registered/not approved → RegistrationHub · approved+perms →
@@ -124,6 +128,12 @@ internal fun DriverNavHost(controller: NavHostController, modifier: Modifier = M
         composable(DriverRoute.Home.path) {
             HomeScreen(
                 onOpenDirectional = { controller.navigate(DriverRoute.Directional.path) },
+                // D2' §SCR-DA-019's traceability row is "Driver Level badge | SCR-DA-019 +
+                // SCR-DA-010 badge", so the `L3` in the dashboard's app bar is what opens the level
+                // screen, and the "Today: 4 trips · Rs 3,180" line is what opens SCR-DA-020. Both
+                // are pushed — the wireframes draw them with a `‹` app bar (Δ C072).
+                onOpenLevel = { controller.navigate(DriverRoute.DriverLevel.path) },
+                onOpenEarnings = { controller.navigate(DriverRoute.Earnings.path) },
                 // US-9.6's empty state. My Vehicles raises SCR-DA-026a for itself when the list
                 // comes back empty, so there is one screen for "no vehicle" rather than two.
                 onOpenVehicles = { controller.navigate(DriverRoute.Vehicles.path) },
@@ -160,8 +170,21 @@ internal fun DriverNavHost(controller: NavHostController, modifier: Modifier = M
             )
         }
 
-        // ---- C071–C075 · jobs, wallet, profile, documents, support ---------------------
-        placeholder(DriverRoute.Jobs, "SCR-DA-017 job board")
+        // ---- C072 · jobs, level, earnings ----------------------------------------------
+        composable(DriverRoute.Jobs.path) {
+            JobBoardScreen(onOpenScheduled = { controller.navigate(DriverRoute.ScheduledRides.path) })
+        }
+        composable(DriverRoute.ScheduledRides.path) {
+            ScheduledRidesScreen(onBack = { controller.popBackStack() })
+        }
+        composable(DriverRoute.DriverLevel.path) {
+            DriverLevelScreen(onBack = { controller.popBackStack() })
+        }
+        composable(DriverRoute.Earnings.path) {
+            EarningsScreen(onBack = { controller.popBackStack() })
+        }
+
+        // ---- C073–C075 · wallet, profile, documents, support ---------------------------
         placeholder(DriverRoute.Wallet, "SCR-DA-021 wallet")
         placeholder(DriverRoute.Documents, "SCR-DA-029a documents")
         placeholder(DriverRoute.Profile, "SCR-DA-029 profile")

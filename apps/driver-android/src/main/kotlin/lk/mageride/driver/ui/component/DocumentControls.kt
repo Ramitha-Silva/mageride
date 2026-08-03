@@ -231,15 +231,20 @@ internal fun NoticeCard(
 /**
  * What a status pill is saying.
  *
- * Three tones and no more, because D2' §0.2 gives `status` exactly two colours plus the surface:
- * a fourth would be a colour invented by a screen. [PENDING] is the wireframe's amber
- * `Incomplete · Step 3 of 4`, [DONE] its green `Done ✓` / `Approved`, [NEUTRAL] the plain
- * surface chip a fleet-assigned vehicle carries.
+ * [PENDING] is the wireframe's amber `Incomplete · Step 3 of 4`, [DONE] its green `Done ✓` /
+ * `Approved`, [NEUTRAL] the plain surface chip a fleet-assigned vehicle carries, and [INFO] the
+ * blue `Accepted` on SCR-DA-018.
+ *
+ * **No tone invents a colour.** D2' §0.2 gives `status` two colours plus the surface, and the
+ * wireframe's own `pill-status.info` is `background:var(--secondaryContainer);color:var(--secondary)`
+ * — the same `secondary` role C070 already resolved the *"info"* banner to. Added by C072; a fifth
+ * tone would need a fifth role, which §0.2 does not have.
  */
 internal enum class StatusTone {
     DONE,
     PENDING,
     NEUTRAL,
+    INFO,
 }
 
 /**
@@ -255,6 +260,7 @@ internal fun StatusPill(label: String, tone: StatusTone, modifier: Modifier = Mo
         StatusTone.DONE -> MageRideTheme.status.success
         StatusTone.PENDING -> MageRideTheme.status.warning
         StatusTone.NEUTRAL -> MaterialTheme.colorScheme.onSurfaceVariant
+        StatusTone.INFO -> MaterialTheme.colorScheme.secondary
     }
     Text(
         text = label,
