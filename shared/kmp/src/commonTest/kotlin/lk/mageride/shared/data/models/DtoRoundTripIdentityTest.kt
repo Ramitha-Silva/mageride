@@ -1,15 +1,28 @@
 package lk.mageride.shared.data.models
 
+import lk.mageride.shared.data.models.iam.ActiveTrip
+import lk.mageride.shared.data.models.iam.ActiveTripKind
+import lk.mageride.shared.data.models.iam.ActiveTripRole
+import lk.mageride.shared.data.models.iam.AppConfig
 import lk.mageride.shared.data.models.iam.AuthSessionResponse
 import lk.mageride.shared.data.models.iam.DefaultPaymentMethod
+import lk.mageride.shared.data.models.iam.DefaultPaymentMethodPreference
 import lk.mageride.shared.data.models.iam.DeleteAccountResponse
+import lk.mageride.shared.data.models.iam.DriverShift
+import lk.mageride.shared.data.models.iam.EffectivePermissions
+import lk.mageride.shared.data.models.iam.EmergencyContact
+import lk.mageride.shared.data.models.iam.EmergencyContactInput
+import lk.mageride.shared.data.models.iam.EmergencyContactListResponse
 import lk.mageride.shared.data.models.iam.GoogleAuthCodeLogin
 import lk.mageride.shared.data.models.iam.IdTokenLogin
 import lk.mageride.shared.data.models.iam.IssueMqttTokenRequest
 import lk.mageride.shared.data.models.iam.IssueMqttTokenResponse
 import lk.mageride.shared.data.models.iam.LanguagePreference
+import lk.mageride.shared.data.models.iam.LoginBootstrap
 import lk.mageride.shared.data.models.iam.LookupUserResponse
 import lk.mageride.shared.data.models.iam.PasswordLogin
+import lk.mageride.shared.data.models.iam.PermissionEntry
+import lk.mageride.shared.data.models.iam.PermissionGrant
 import lk.mageride.shared.data.models.iam.RefreshSessionRequest
 import lk.mageride.shared.data.models.iam.RequestOtpRequest
 import lk.mageride.shared.data.models.iam.RequestOtpResponse
@@ -140,6 +153,90 @@ class DtoRoundTripIdentityTest {
         notifPrefs = mapOf("SCHEDULED_REMINDER" to true, "LOW_BALANCE" to false),
         createdAt = Sample.AT,
     )
+
+    @Test
+    fun the_emergency_contact_and_payment_preference_dtos_round_trip() {
+        // Δ MCS-03 — D-33's SOS recipients (AL-13) and AL-14's payment default.
+        val contact = EmergencyContact(Sample.ULID_A, isPrimary = true, name = "Amara", phone = Sample.PHONE)
+        assertRoundTrips(EmergencyContactInput("Amara", Sample.PHONE))
+        assertRoundTrips(contact)
+        assertRoundTrips(EmergencyContactListResponse(listOf(contact)))
+        assertRoundTrips(DefaultPaymentMethodPreference(DefaultPaymentMethod.CASH))
+    }
+
+    /** A Mode C ride in flight — the state a device switch has to restore (US-1.14). */
+    private val activeTrip = ActiveTrip(
+        tripId = Sample.ULID_C,
+        kind = ActiveTripKind.RIDE,
+        role = ActiveTripRole.PASSENGER,
+        state = "Accepted",
+        mode = ServiceMode.C,
+        vehicleId = Sample.ULID_A,
+        counterpartyId = Sample.ULID_B,
+        pickup = Sample.POINT,
+        dropoff = Sample.POINT,
+        startedAt = Sample.AT,
+    )
+
+    /** Today's shift, from the `fares.driver_earnings` rollup for the Colombo day (D-38). */
+    private val driverShift = DriverShift(
+        isOnline = true,
+        activeSessionId = Sample.ULID_A,
+        activeVehicleId = Sample.ULID_B,
+        businessDate = Sample.DAY,
+        todayTrips = 4,
+        todayGross = Money(amountMinor = 128_000, currency = Currency.LKR),
+        todayDailyFee = Money(amountMinor = 10_000, currency = Currency.LKR),
+    )
+
+    @Test
+    fun the_bootstrap_and_rbac_dtos_round_trip() {
+        // Δ MCS-03 — AL-14/US-1.15's eager-fetch payload and AL-06's RBAC matrix.
+        val saved = SavedAddress(
+            addressId = Sample.ULID_A,
+            label = "Home",
+            line1 = "42 Galle Road",
+            line2 = "Bambalapitiya",
+            line3 = "Colombo 04",
+            lat = 6.8905,
+            lng = 79.8565,
+            isHome = true,
+            isWork = false,
+        )
+
+        val contact = EmergencyContact(Sample.ULID_A, isPrimary = true, name = "Amara", phone = Sample.PHONE)
+
+        val permissions = EffectivePermissions(
+            userId = Sample.ULID_A,
+            roles = listOf(Role.DRIVER, Role.PASSENGER),
+            fleetRole = FleetRole.MANAGER,
+            fleetId = Sample.ULID_B,
+            permissions = listOf(
+                PermissionEntry(
+                    featureArea = "end-user-account-management",
+                    label = "End-user account management",
+                    grants = listOf(PermissionGrant.READ, PermissionGrant.WRITE),
+                    scopedGrants = listOf(PermissionGrant.OWN_SCOPE),
+                    symbol = "◐ on tickets",
+                    qualifier = "own org",
+                ),
+            ),
+        )
+        assertRoundTrips(permissions)
+        assertRoundTrips(
+            LoginBootstrap(
+                profile = profile,
+                savedAddresses = listOf(saved),
+                emergencyContacts = listOf(contact),
+                defaultPaymentMethod = DefaultPaymentMethod.CASH,
+                paymentMethods = listOf(DefaultPaymentMethod.CASH),
+                activeTrip = activeTrip,
+                driver = driverShift,
+                config = AppConfig(cities = emptyList(), featureFlags = mapOf("directional" to true)),
+                permissions = permissions,
+            ),
+        )
+    }
 
     @Test
     fun the_auth_dtos_round_trip() {

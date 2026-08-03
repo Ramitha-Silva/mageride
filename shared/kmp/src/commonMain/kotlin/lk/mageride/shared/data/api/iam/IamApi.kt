@@ -15,12 +15,18 @@ import lk.mageride.shared.data.api.jsonBody
 import lk.mageride.shared.data.models.PhoneE164
 import lk.mageride.shared.data.models.Ulid
 import lk.mageride.shared.data.models.iam.AuthSessionResponse
+import lk.mageride.shared.data.models.iam.DefaultPaymentMethodPreference
 import lk.mageride.shared.data.models.iam.DeleteAccountResponse
+import lk.mageride.shared.data.models.iam.EffectivePermissions
+import lk.mageride.shared.data.models.iam.EmergencyContact
+import lk.mageride.shared.data.models.iam.EmergencyContactInput
+import lk.mageride.shared.data.models.iam.EmergencyContactListResponse
 import lk.mageride.shared.data.models.iam.GoogleAuthCodeLogin
 import lk.mageride.shared.data.models.iam.IdTokenLogin
 import lk.mageride.shared.data.models.iam.IssueMqttTokenRequest
 import lk.mageride.shared.data.models.iam.IssueMqttTokenResponse
 import lk.mageride.shared.data.models.iam.LanguagePreference
+import lk.mageride.shared.data.models.iam.LoginBootstrap
 import lk.mageride.shared.data.models.iam.LookupUserResponse
 import lk.mageride.shared.data.models.iam.OperatingCityPreference
 import lk.mageride.shared.data.models.iam.PasswordLogin
@@ -164,6 +170,41 @@ public interface IamApi {
      * the first authenticated call after sign-in.
      */
     public suspend fun setOperatingCity(request: OperatingCityPreference): OperatingCityPreference
+
+    /** `PUT /v1/me/prefs/payment-method` — the pre-selected method a booking uses (AL-14). */
+    public suspend fun setDefaultPaymentMethod(request: DefaultPaymentMethodPreference): DefaultPaymentMethodPreference
+
+    /** `GET /v1/me/emergency-contacts` — who D-33's SOS SMS goes to (AL-13). */
+    public suspend fun listEmergencyContacts(): EmergencyContactListResponse
+
+    /** `POST /v1/me/emergency-contacts` — add one. */
+    public suspend fun createEmergencyContact(
+        request: EmergencyContactInput,
+        idempotencyKey: String? = null,
+    ): EmergencyContact
+
+    /** `PUT /v1/me/emergency-contacts/{contactId}` — correct a name or number. */
+    public suspend fun updateEmergencyContact(contactId: Ulid, request: EmergencyContactInput): EmergencyContact
+
+    /** `DELETE /v1/me/emergency-contacts/{contactId}` — remove one. */
+    public suspend fun deleteEmergencyContact(contactId: Ulid)
+
+    /**
+     * `GET /v1/me/bootstrap` — everything a signed-in app needs before its first screen.
+     *
+     * **One round trip instead of seven** (AL-14, US-1.14/1.15, NFR-51): profile, addresses,
+     * emergency contacts, payment default, any trip already in flight, the driver's shift, config
+     * and the RBAC matrix.
+     */
+    public suspend fun getLoginBootstrap(): LoginBootstrap
+
+    /**
+     * `GET /v1/me/permissions` — the caller's effective RBAC set (AL-06).
+     *
+     * The union of every role held, deny-by-default. Areas with no grant come back present and
+     * empty, so a client can render the whole matrix without knowing the row set.
+     */
+    public suspend fun getMyPermissions(): EffectivePermissions
 }
 
 @Suppress("TooManyFunctions")
@@ -306,6 +347,41 @@ internal class KtorIamApi(private val transport: ApiTransport) : IamApi {
             jsonBody(request)
         }.decode()
 
+    override suspend fun setDefaultPaymentMethod(
+        request: DefaultPaymentMethodPreference,
+    ): DefaultPaymentMethodPreference =
+        transport.apiPut(SERVICE, "setDefaultPaymentMethod", "/v1/me/prefs/payment-method") {
+            jsonBody(request)
+        }.decode()
+
+    override suspend fun listEmergencyContacts(): EmergencyContactListResponse =
+        transport.apiGet(SERVICE, "listEmergencyContacts", EMERGENCY_CONTACTS_PATH).decode()
+
+    override suspend fun createEmergencyContact(
+        request: EmergencyContactInput,
+        idempotencyKey: String?,
+    ): EmergencyContact = transport.apiPost(
+        service = SERVICE,
+        operationId = "createEmergencyContact",
+        path = EMERGENCY_CONTACTS_PATH,
+        idempotencyKey = idempotencyKey,
+    ) { jsonBody(request) }.decode()
+
+    override suspend fun updateEmergencyContact(contactId: Ulid, request: EmergencyContactInput): EmergencyContact =
+        transport.apiPut(SERVICE, "updateEmergencyContact", "$EMERGENCY_CONTACTS_PATH/$contactId") {
+            jsonBody(request)
+        }.decode()
+
+    override suspend fun deleteEmergencyContact(contactId: Ulid) {
+        transport.apiDelete(SERVICE, "deleteEmergencyContact", "$EMERGENCY_CONTACTS_PATH/$contactId")
+    }
+
+    override suspend fun getLoginBootstrap(): LoginBootstrap =
+        transport.apiGet(SERVICE, "getLoginBootstrap", "/v1/me/bootstrap").decode()
+
+    override suspend fun getMyPermissions(): EffectivePermissions =
+        transport.apiGet(SERVICE, "getMyPermissions", "/v1/me/permissions").decode()
+
     override suspend fun setOperatingCity(request: OperatingCityPreference): OperatingCityPreference =
         transport.apiPut(SERVICE, "setOperatingCity", "/v1/me/prefs/operating-city") {
             jsonBody(request)
@@ -313,6 +389,7 @@ internal class KtorIamApi(private val transport: ApiTransport) : IamApi {
 
     private companion object {
         val SERVICE = ApiService.IAM
+        const val EMERGENCY_CONTACTS_PATH = "/v1/me/emergency-contacts"
         const val ME_PATH = "/v1/users/me"
         const val SAVED_ADDRESSES_PATH = "/v1/me/saved-addresses"
         const val ADMIN_LOGIN_PATH = "/v1/admin/auth/login"

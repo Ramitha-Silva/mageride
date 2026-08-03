@@ -55,11 +55,17 @@ import lk.mageride.shared.data.models.fare.RefundFareRequest
 import lk.mageride.shared.data.models.fare.RefundResponse
 import lk.mageride.shared.data.models.fare.ScanDriverQrRequest
 import lk.mageride.shared.data.models.iam.AuthSessionResponse
+import lk.mageride.shared.data.models.iam.DefaultPaymentMethodPreference
 import lk.mageride.shared.data.models.iam.DeleteAccountResponse
+import lk.mageride.shared.data.models.iam.EffectivePermissions
+import lk.mageride.shared.data.models.iam.EmergencyContact
+import lk.mageride.shared.data.models.iam.EmergencyContactInput
+import lk.mageride.shared.data.models.iam.EmergencyContactListResponse
 import lk.mageride.shared.data.models.iam.IdTokenLogin
 import lk.mageride.shared.data.models.iam.IssueMqttTokenRequest
 import lk.mageride.shared.data.models.iam.IssueMqttTokenResponse
 import lk.mageride.shared.data.models.iam.LanguagePreference
+import lk.mageride.shared.data.models.iam.LoginBootstrap
 import lk.mageride.shared.data.models.iam.LookupUserResponse
 import lk.mageride.shared.data.models.iam.OperatingCityPreference
 import lk.mageride.shared.data.models.iam.PasswordLogin
@@ -1288,6 +1294,46 @@ internal object ApiOperations {
             sends<PurchaseVoucherFromWalletRequest>(),
         ),
         op<Topup>("getTopup", ApiService.WALLET, "GET", "/v1/wallet/topup/{topupId}", 200),
+        op<DefaultPaymentMethodPreference>(
+            "setDefaultPaymentMethod",
+            ApiService.IAM,
+            "PUT",
+            "/v1/me/prefs/payment-method",
+            200,
+            sends<DefaultPaymentMethodPreference>(),
+        ),
+        op<EmergencyContactListResponse>(
+            "listEmergencyContacts",
+            ApiService.IAM,
+            "GET",
+            "/v1/me/emergency-contacts",
+            200,
+        ),
+        op<EmergencyContact>(
+            "createEmergencyContact",
+            ApiService.IAM,
+            "POST",
+            "/v1/me/emergency-contacts",
+            201,
+            sends<EmergencyContactInput>(),
+        ),
+        op<EmergencyContact>(
+            "updateEmergencyContact",
+            ApiService.IAM,
+            "PUT",
+            "/v1/me/emergency-contacts/{contactId}",
+            200,
+            sends<EmergencyContactInput>(),
+        ),
+        noBody(
+            "deleteEmergencyContact",
+            ApiService.IAM,
+            "DELETE",
+            "/v1/me/emergency-contacts/{contactId}",
+            204,
+        ),
+        op<LoginBootstrap>("getLoginBootstrap", ApiService.IAM, "GET", "/v1/me/bootstrap", 200),
+        op<EffectivePermissions>("getMyPermissions", ApiService.IAM, "GET", "/v1/me/permissions", 200),
         op<AppVersionCheck>("checkAppVersion", ApiService.VERSION, "GET", "/v1/version/check", 200),
     )
 

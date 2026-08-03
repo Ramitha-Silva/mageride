@@ -3,12 +3,17 @@ package lk.mageride.shared.data.models.iam
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import lk.mageride.shared.data.models.AppSurface
+import lk.mageride.shared.data.models.BusinessDate
 import lk.mageride.shared.data.models.FleetRole
+import lk.mageride.shared.data.models.GeoPoint
 import lk.mageride.shared.data.models.Language
+import lk.mageride.shared.data.models.Money
 import lk.mageride.shared.data.models.PhoneE164
 import lk.mageride.shared.data.models.Role
+import lk.mageride.shared.data.models.ServiceMode
 import lk.mageride.shared.data.models.Timestamp
 import lk.mageride.shared.data.models.Ulid
+import lk.mageride.shared.data.models.content.OperatingCity
 
 // iam-svc — auth, profile, session, saved addresses.
 // Source: backend/contracts/iam.yaml (D3' "iam-svc — auth, profile, token").
@@ -415,3 +420,234 @@ public data class SavedAddress(
  */
 @Serializable
 public data class SavedAddressListResponse(val items: List<SavedAddress> = emptyList())
+
+// ---------------------------------------------------------------------------------------------
+// Emergency contacts (D-33, AL-13) — Δ MCS-03
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * `POST` / `PUT /v1/me/emergency-contacts` — what the caller supplies.
+ *
+ * @property name At most 120 characters.
+ * @property phone E.164, `+947XXXXXXXX`.
+ */
+@Serializable
+public data class EmergencyContactInput(val name: String, val phone: PhoneE164)
+
+/**
+ * One stored emergency contact (`iam.yaml#/components/schemas/EmergencyContact` —
+ * `allOf(…, EmergencyContactInput)`, flattened).
+ *
+ * @property contactId The contact.
+ * @property isPrimary The one denormalised onto `iam.users.emergency_contact_name/phone` for
+ *   D-33's SOS fast path — **exactly one per account that has any**, because the SOS budget is
+ *   p99 ≤ 5 s and a join is not in it.
+ * @property name The contact's name.
+ * @property phone Where the SMS goes.
+ */
+@Serializable
+public data class EmergencyContact(val contactId: Ulid, val isPrimary: Boolean, val name: String, val phone: PhoneE164)
+
+/** `GET /v1/me/emergency-contacts` — 200. */
+@Serializable
+public data class EmergencyContactListResponse(val items: List<EmergencyContact> = emptyList())
+
+/** `PUT /v1/me/prefs/payment-method` — request and response alike (AL-14, US-22.4). */
+@Serializable
+public data class DefaultPaymentMethodPreference(val defaultPaymentMethod: DefaultPaymentMethod)
+
+// ---------------------------------------------------------------------------------------------
+// RBAC and the eager-fetch login payload (AL-06, AL-14, US-1.14/1.15, NFR-51) — Δ MCS-03
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * One capability from the URD §2.3 legend.
+ *
+ * A cell holds a set of these: ✅ Full = [READ]+[WRITE], ⚙ Configure = [READ]+[CONFIGURE],
+ * 👁 Read-only = [READ], ◐ Own-scope = the same set plus [OWN_SCOPE], "raise"/"report" = [RAISE],
+ * ➖ = empty.
+ *
+ * @property wire The value as it appears on the wire.
+ */
+@Serializable
+public enum class PermissionGrant(public val wire: String) {
+    @SerialName("read")
+    READ("read"),
+
+    @SerialName("write")
+    WRITE("write"),
+
+    @SerialName("configure")
+    CONFIGURE("configure"),
+
+    @SerialName("raise")
+    RAISE("raise"),
+
+    @SerialName("ownScope")
+    OWN_SCOPE("ownScope"),
+}
+
+/**
+ * One URD §2.3 feature area and what the caller may do in it.
+ *
+ * @property featureArea Stable key for the row, e.g. `driver-wallet-adjustments`.
+ * @property label The row's URD §2.3 wording.
+ * @property grants Every capability the caller holds here, **from any role** — permissions are the
+ *   union of the roles held, deny-by-default (AL-06).
+ * @property scopedGrants The subset available only within the caller's own records or
+ *   organisation. Per capability rather than per cell, because somebody who is both an Admin
+ *   (platform-wide read) and a Fleet Owner (own-org write) may read everything and write only
+ *   their own organisation.
+ * @property symbol The URD §2.3 cell verbatim, qualifier included.
+ * @property qualifier The scope note the cell carries, if any — `own`, `own org`, `financial`.
+ */
+@Serializable
+public data class PermissionEntry(
+    val featureArea: String,
+    val label: String,
+    val grants: List<PermissionGrant> = emptyList(),
+    val scopedGrants: List<PermissionGrant> = emptyList(),
+    val symbol: String,
+    val qualifier: String? = null,
+)
+
+/**
+ * `GET /v1/me/permissions` — 200 (AL-06's nine-role deny-by-default RBAC).
+ *
+ * @property userId Whose permissions these are.
+ * @property roles Every role held; the effective set is their union.
+ * @property fleetRole The caller's role inside [fleetId], when they belong to a fleet.
+ * @property fleetId The organisation own-scope grants are scoped to.
+ * @property permissions One entry per feature area. **Areas with no grant are present and empty**,
+ *   so a client can render the whole matrix without knowing the row set.
+ */
+@Serializable
+public data class EffectivePermissions(
+    val userId: Ulid,
+    val roles: List<Role> = emptyList(),
+    val fleetRole: FleetRole? = null,
+    val fleetId: Ulid? = null,
+    val permissions: List<PermissionEntry> = emptyList(),
+)
+
+/**
+ * The non-terminal journey the caller is part of, whichever plane it lives on.
+ *
+ * A Mode C `rides.rides` row (ride-svc) or a Mode A/B `trips.sessions` row (trip-state-svc) —
+ * **R-01's boundary is not crossed**, the two are simply both reachable from one eager read.
+ * Always part of the bootstrap set so a mid-trip device switch restores state (US-1.14).
+ *
+ * @property tripId The ride or session.
+ * @property kind Which plane it is on.
+ * @property role Which end of the trip the caller is.
+ * @property state `rides.rides.state` or `trips.sessions.state`, verbatim.
+ * @property mode Operating mode, where the plane has one.
+ * @property vehicleId The vehicle.
+ * @property counterpartyId The other party.
+ * @property pickup Where it started.
+ * @property dropoff Where it is going.
+ * @property startedAt When it started.
+ */
+@Serializable
+public data class ActiveTrip(
+    val tripId: Ulid,
+    val kind: ActiveTripKind,
+    val role: ActiveTripRole,
+    val state: String,
+    val mode: ServiceMode? = null,
+    val vehicleId: Ulid? = null,
+    val counterpartyId: Ulid? = null,
+    val pickup: GeoPoint? = null,
+    val dropoff: GeoPoint? = null,
+    val startedAt: Timestamp,
+)
+
+/** Which plane an [ActiveTrip] lives on (R-01). @property wire The value on the wire. */
+@Serializable
+public enum class ActiveTripKind(public val wire: String) {
+    /** Mode C booking — ride-svc's aggregate. */
+    @SerialName("ride")
+    RIDE("ride"),
+
+    /** Mode A/B tracking session — trip-state-svc's. */
+    @SerialName("session")
+    SESSION("session"),
+}
+
+/** Which end of an [ActiveTrip] the caller is on. @property wire The value on the wire. */
+@Serializable
+public enum class ActiveTripRole(public val wire: String) {
+    @SerialName("passenger")
+    PASSENGER("passenger"),
+
+    @SerialName("driver")
+    DRIVER("driver"),
+}
+
+/**
+ * US-1.15 item 5 — shift status and today's earnings summary.
+ *
+ * The three figures come from the `fares.driver_earnings` rollup for the current **Asia/Colombo**
+ * business day (D-38), never from aggregating the ledger.
+ *
+ * @property isOnline Whether the driver is on standby now.
+ * @property activeSessionId The Mode A/B session they are in, if any.
+ * @property activeVehicleId What they are live on (US-9.6).
+ * @property businessDate The Colombo day the figures are for.
+ * @property todayTrips Completed trips today.
+ * @property todayGross Gross earnings today.
+ * @property todayDailyFee What the daily fee took (US-9.7).
+ */
+@Serializable
+public data class DriverShift(
+    val isOnline: Boolean,
+    val activeSessionId: Ulid? = null,
+    val activeVehicleId: Ulid? = null,
+    val businessDate: BusinessDate? = null,
+    val todayTrips: Int,
+    val todayGross: Money,
+    val todayDailyFee: Money,
+)
+
+/**
+ * US-1.15 item 6 — app config and feature flags.
+ *
+ * @property cities Active launch cities, `sortOrder` first (AL-27).
+ * @property featureFlags Server-driven flags. **Empty until a store exists** — ADD §1.12 gives
+ *   Super Admin "feature flags" and no spec models a table for them (C027).
+ */
+@Serializable
+public data class AppConfig(
+    val cities: List<OperatingCity> = emptyList(),
+    val featureFlags: Map<String, Boolean> = emptyMap(),
+)
+
+/**
+ * `GET /v1/me/bootstrap` — 200 (AL-14, US-1.14/1.15, NFR-51).
+ *
+ * **One round trip instead of seven.** Everything a signed-in app needs before its first screen:
+ * the profile, saved addresses, emergency contacts, the payment default and what may be paid
+ * with, any trip already in flight, the driver's shift, config and the RBAC matrix.
+ *
+ * @property profile The caller.
+ * @property savedAddresses AL-14's address book.
+ * @property emergencyContacts D-33's SOS recipients.
+ * @property defaultPaymentMethod The pre-selected method.
+ * @property paymentMethods Payment-method **metadata** — what this account may pay with.
+ * @property activeTrip A journey already in flight, so a device switch restores it.
+ * @property driver Shift and today's earnings; absent for a passenger.
+ * @property config Cities and feature flags.
+ * @property permissions The effective RBAC set.
+ */
+@Serializable
+public data class LoginBootstrap(
+    val profile: UserProfile,
+    val savedAddresses: List<SavedAddress> = emptyList(),
+    val emergencyContacts: List<EmergencyContact> = emptyList(),
+    val defaultPaymentMethod: DefaultPaymentMethod,
+    val paymentMethods: List<DefaultPaymentMethod> = emptyList(),
+    val activeTrip: ActiveTrip? = null,
+    val driver: DriverShift? = null,
+    val config: AppConfig,
+    val permissions: EffectivePermissions,
+)
