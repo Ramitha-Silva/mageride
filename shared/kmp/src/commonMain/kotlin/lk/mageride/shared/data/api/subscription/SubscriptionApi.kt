@@ -1,5 +1,6 @@
 package lk.mageride.shared.data.api.subscription
 
+import io.ktor.client.call.body
 import io.ktor.client.request.parameter
 import lk.mageride.shared.data.api.ApiService
 import lk.mageride.shared.data.api.ApiTransport
@@ -25,11 +26,15 @@ import lk.mageride.shared.data.models.subscription.ChargeDailyFeeRequest
 import lk.mageride.shared.data.models.subscription.CreditTransfer
 import lk.mageride.shared.data.models.subscription.DailyFeeCharge
 import lk.mageride.shared.data.models.subscription.DailyFeeRateList
+import lk.mageride.shared.data.models.subscription.FeeRefundRequest
+import lk.mageride.shared.data.models.subscription.FeeRefundRequestList
 import lk.mageride.shared.data.models.subscription.MarkSubscriberCashPaidRequest
+import lk.mageride.shared.data.models.subscription.ModeBFileKind
 import lk.mageride.shared.data.models.subscription.PayModeBSubscriptionRequest
 import lk.mageride.shared.data.models.subscription.PurchaseVoucherRequest
 import lk.mageride.shared.data.models.subscription.RejectAccessRequest
 import lk.mageride.shared.data.models.subscription.RequestCreditTransferRequest
+import lk.mageride.shared.data.models.subscription.RequestDailyFeeRefundRequest
 import lk.mageride.shared.data.models.subscription.RequestModeBAccessRequest
 import lk.mageride.shared.data.models.subscription.SendCreditToDriverRequest
 import lk.mageride.shared.data.models.subscription.SetSubscriberFareRequest
@@ -67,6 +72,29 @@ public interface SubscriptionApi {
      * `firstTripFree` is the D-08 degraded-mode allowance surfacing in the read model.
      */
     public suspend fun getTodaysDailyFee(driverId: Ulid): TodaysDailyFee
+
+    /**
+     * `POST /v1/fees/{driverId}/refund-requests` — dispute a daily-fee charge (Δ C047, US-9.23).
+     *
+     * Raises one `support.tickets` row, so its status is the ticket's and support-svc owns it.
+     */
+    public suspend fun requestDailyFeeRefund(
+        driverId: Ulid,
+        request: RequestDailyFeeRefundRequest,
+        idempotencyKey: String? = null,
+    ): FeeRefundRequest
+
+    /** `GET /v1/fees/{driverId}/refund-requests` — the driver's disputes, newest first. */
+    public suspend fun listDailyFeeRefundRequests(driverId: Ulid, limit: Int? = null): FeeRefundRequestList
+
+    /**
+     * `GET /v1/mode-b/files/{kind}/{id}` — a Mode-B document behind a signed link.
+     *
+     * **Unauthenticated, because the signature is the credential** — the same reasoning as
+     * support-svc's screenshot read. The URL goes to an image loader, which carries no bearer,
+     * and an access token in a query string is an access token in every proxy log on the way.
+     */
+    public suspend fun getModeBFile(kind: ModeBFileKind, id: Ulid, expires: Long, signature: String): ByteArray
 
     /** `GET /v1/fees/{driverId}/history` — past daily-fee charges, optionally date-bounded. */
     public suspend fun listDailyFeeHistory(
@@ -223,6 +251,28 @@ internal class KtorSubscriptionApi(private val transport: ApiTransport) : Subscr
 
     override suspend fun getTodaysDailyFee(driverId: Ulid): TodaysDailyFee =
         transport.apiGet(SERVICE, "getTodaysDailyFee", "$FEES_PATH/$driverId/today").decode()
+
+    override suspend fun requestDailyFeeRefund(
+        driverId: Ulid,
+        request: RequestDailyFeeRefundRequest,
+        idempotencyKey: String?,
+    ): FeeRefundRequest = transport.apiPost(
+        service = SERVICE,
+        operationId = "requestDailyFeeRefund",
+        path = "$FEES_PATH/$driverId/refund-requests",
+        idempotencyKey = idempotencyKey,
+    ) { jsonBody(request) }.decode()
+
+    override suspend fun listDailyFeeRefundRequests(driverId: Ulid, limit: Int?): FeeRefundRequestList =
+        transport.apiGet(SERVICE, "listDailyFeeRefundRequests", "$FEES_PATH/$driverId/refund-requests") {
+            limit?.let { parameter("limit", it) }
+        }.decode()
+
+    override suspend fun getModeBFile(kind: ModeBFileKind, id: Ulid, expires: Long, signature: String): ByteArray =
+        transport.apiGet(SERVICE, "getModeBFile", "$MODE_B_PATH/files/${kind.wire}/$id") {
+            parameter("expires", expires)
+            parameter("signature", signature)
+        }.body()
 
     override suspend fun listDailyFeeHistory(
         driverId: Ulid,

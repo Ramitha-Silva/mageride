@@ -26,7 +26,7 @@ import kotlin.test.assertTrue
  * The reading taken here is the strong one. There is no second implementation of `RideApi` to keep
  * in step with the first — the clients under test are the production ones, and what is faked is
  * the *backend*. So "the same surface" is not a property somebody has to maintain; it is the same
- * sixteen interfaces, and the sweep below proves every one of their 196 operations answers with
+ * sixteen interfaces, and the sweep below proves every one of their 201 operations answers with
  * something its own return type accepts.
  */
 class FakeApiBackendTest {
@@ -175,16 +175,16 @@ class FakeApiBackendTest {
          *
          * **Δ MCS-02: 180 → 176.** Four operations retired by AL-57/AL-47 were deleted.
          *
-         * **Δ MCS-03: 176 → 196**, as the 65 missing operations land a slice at a time. The
+         * **Δ MCS-03: 176 → 201**, as the 65 missing operations land a slice at a time. The
          * in-scope contracts declare **241**, so this number is still climbing and
          * `ContractCoverageTest` stays red until it arrives.
          *
-         * One of the 65 is deliberately **not** here: `getSupportScreenshot` answers `200` with
+         * One of the 65 is deliberately **not** here: `getSupportScreenshot` and `getModeBFile` answer `200` with
          * `image/jpeg`, and [lk.mageride.shared.testing.fake.FakeOperation] can express a JSON
          * body or no body and nothing else. Its client function exists; the row waits on a table
          * that can say "binary". `downloadSignedGtfsObject` is the same shape. See the MCS-03
          * handoff.
          */
-        const val EXPECTED_OPERATIONS = 196
+        const val EXPECTED_OPERATIONS = 201
     }
 }

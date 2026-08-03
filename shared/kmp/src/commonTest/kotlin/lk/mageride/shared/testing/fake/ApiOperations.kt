@@ -95,6 +95,7 @@ import lk.mageride.shared.data.models.registry.BindVehicleDeviceRequest
 import lk.mageride.shared.data.models.registry.BindVehicleDeviceResponse
 import lk.mageride.shared.data.models.registry.CreateShareGrantRequest
 import lk.mageride.shared.data.models.registry.CreateShareGrantResponse
+import lk.mageride.shared.data.models.registry.DriverPayoutProfile
 import lk.mageride.shared.data.models.registry.OnboardingStepInput
 import lk.mageride.shared.data.models.registry.RegisterVehicleResponse
 import lk.mageride.shared.data.models.registry.RequestVehicleAccessRequest
@@ -102,6 +103,8 @@ import lk.mageride.shared.data.models.registry.RequestVehicleAccessResponse
 import lk.mageride.shared.data.models.registry.SaveOnboardingStepResponse
 import lk.mageride.shared.data.models.registry.Subscriber
 import lk.mageride.shared.data.models.registry.UpdateVehicleDriverProfileRequest
+import lk.mageride.shared.data.models.registry.UploadedPayoutDocument
+import lk.mageride.shared.data.models.registry.UpsertDriverPayoutProfileRequest
 import lk.mageride.shared.data.models.registry.UpsertDriverProfileRequest
 import lk.mageride.shared.data.models.registry.UpsertDriverProfileResponse
 import lk.mageride.shared.data.models.registry.VehicleDetail
@@ -151,11 +154,14 @@ import lk.mageride.shared.data.models.subscription.ChargeDailyFeeRequest
 import lk.mageride.shared.data.models.subscription.CreditTransfer
 import lk.mageride.shared.data.models.subscription.DailyFeeCharge
 import lk.mageride.shared.data.models.subscription.DailyFeeRateList
+import lk.mageride.shared.data.models.subscription.FeeRefundRequest
+import lk.mageride.shared.data.models.subscription.FeeRefundRequestList
 import lk.mageride.shared.data.models.subscription.MarkSubscriberCashPaidRequest
 import lk.mageride.shared.data.models.subscription.PayModeBSubscriptionRequest
 import lk.mageride.shared.data.models.subscription.PurchaseVoucherRequest
 import lk.mageride.shared.data.models.subscription.RejectAccessRequest
 import lk.mageride.shared.data.models.subscription.RequestCreditTransferRequest
+import lk.mageride.shared.data.models.subscription.RequestDailyFeeRefundRequest
 import lk.mageride.shared.data.models.subscription.RequestModeBAccessRequest
 import lk.mageride.shared.data.models.subscription.SendCreditToDriverRequest
 import lk.mageride.shared.data.models.subscription.SetSubscriberFareRequest
@@ -1334,6 +1340,43 @@ internal object ApiOperations {
         ),
         op<LoginBootstrap>("getLoginBootstrap", ApiService.IAM, "GET", "/v1/me/bootstrap", 200),
         op<EffectivePermissions>("getMyPermissions", ApiService.IAM, "GET", "/v1/me/permissions", 200),
+        op<DriverPayoutProfile>(
+            "getDriverPayoutProfile",
+            ApiService.REGISTRY,
+            "GET",
+            "/v1/drivers/payout-profile",
+            200,
+        ),
+        op<DriverPayoutProfile>(
+            "upsertDriverPayoutProfile",
+            ApiService.REGISTRY,
+            "PUT",
+            "/v1/drivers/payout-profile",
+            200,
+            sends<UpsertDriverPayoutProfileRequest>(),
+        ),
+        op<UploadedPayoutDocument>(
+            "uploadDriverPayoutDocument",
+            ApiService.REGISTRY,
+            "POST",
+            "/v1/drivers/payout-profile/documents",
+            201,
+        ),
+        op<FeeRefundRequest>(
+            "requestDailyFeeRefund",
+            ApiService.SUBSCRIPTION,
+            "POST",
+            "/v1/fees/{driverId}/refund-requests",
+            201,
+            sends<RequestDailyFeeRefundRequest>(),
+        ),
+        op<FeeRefundRequestList>(
+            "listDailyFeeRefundRequests",
+            ApiService.SUBSCRIPTION,
+            "GET",
+            "/v1/fees/{driverId}/refund-requests",
+            200,
+        ),
         op<AppVersionCheck>("checkAppVersion", ApiService.VERSION, "GET", "/v1/version/check", 200),
     )
 

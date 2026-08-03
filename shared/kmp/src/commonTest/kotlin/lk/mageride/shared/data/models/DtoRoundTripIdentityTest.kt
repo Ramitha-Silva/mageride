@@ -42,12 +42,15 @@ import lk.mageride.shared.data.models.registry.BindVehicleDeviceResponse
 import lk.mageride.shared.data.models.registry.CreateShareGrantRequest
 import lk.mageride.shared.data.models.registry.CreateShareGrantResponse
 import lk.mageride.shared.data.models.registry.DispatchState
+import lk.mageride.shared.data.models.registry.DriverPayoutProfile
 import lk.mageride.shared.data.models.registry.GrantStatus
 import lk.mageride.shared.data.models.registry.ModeBBilling
 import lk.mageride.shared.data.models.registry.OnboardingStatus
 import lk.mageride.shared.data.models.registry.OnboardingStep
 import lk.mageride.shared.data.models.registry.OnboardingStepInput
 import lk.mageride.shared.data.models.registry.OnboardingStepVerdicts
+import lk.mageride.shared.data.models.registry.PayoutDocumentKind
+import lk.mageride.shared.data.models.registry.PayoutProfileStatus
 import lk.mageride.shared.data.models.registry.RegisterVehicleResponse
 import lk.mageride.shared.data.models.registry.RegistrationStatus
 import lk.mageride.shared.data.models.registry.RequestVehicleAccessRequest
@@ -56,6 +59,8 @@ import lk.mageride.shared.data.models.registry.SaveOnboardingStepResponse
 import lk.mageride.shared.data.models.registry.StepVerdict
 import lk.mageride.shared.data.models.registry.Subscriber
 import lk.mageride.shared.data.models.registry.UpdateVehicleDriverProfileRequest
+import lk.mageride.shared.data.models.registry.UploadedPayoutDocument
+import lk.mageride.shared.data.models.registry.UpsertDriverPayoutProfileRequest
 import lk.mageride.shared.data.models.registry.UpsertDriverProfileRequest
 import lk.mageride.shared.data.models.registry.UpsertDriverProfileResponse
 import lk.mageride.shared.data.models.registry.VehicleDetail
@@ -381,6 +386,23 @@ class DtoRoundTripIdentityTest {
                 driverPhotoFileId = Sample.ULID_B,
             ),
         )
+
+        // Δ MCS-03 — AL-58/AL-59's payout profile: what a payout is actually sent to.
+        assertRoundTrips(UpsertDriverPayoutProfileRequest("BOC", "Bambalapitiya", "8012345678", "K. Fernando"))
+        assertRoundTrips(
+            DriverPayoutProfile(
+                bank = "BOC",
+                branch = "Bambalapitiya",
+                accountNo = "8012345678",
+                accountHolderName = "K. Fernando",
+                proofDocId = Sample.ULID_A,
+                lankaqrDocId = Sample.ULID_B,
+                status = PayoutProfileStatus.PENDING_VERIFICATION,
+                rejectionReason = "Statement unreadable",
+                verifiedAt = Sample.LATER,
+            ),
+        )
+        assertRoundTrips(UploadedPayoutDocument(Sample.ULID_C, PayoutDocumentKind.LANKAQR_CODE))
     }
 
     @Test

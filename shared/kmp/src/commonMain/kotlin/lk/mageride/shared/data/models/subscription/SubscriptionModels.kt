@@ -705,3 +705,63 @@ public data class SubscriptionProviderCallback(
     val currency: Currency? = null,
     val raw: JsonObject? = null,
 )
+
+/**
+ * `POST /v1/fees/{driverId}/refund-requests` (Δ C047, US-9.23).
+ *
+ * @property feeDate The **Asia/Colombo** business day whose charge is disputed (D-13/D-38).
+ * @property reason What the driver says happened. Triaged by Support.
+ * @property rideId The ride it concerns, when there is one.
+ */
+@Serializable
+public data class RequestDailyFeeRefundRequest(val feeDate: BusinessDate, val reason: String, val rideId: Ulid? = null)
+
+/**
+ * A raised daily-fee refund request (Δ C047, US-9.23).
+ *
+ * **It is one `support.tickets` row**, which is why [status] is the ticket's and belongs to
+ * support-svc (C053) — and why [feeDate], [amountMinor] and [currency] come back on the create
+ * and **not** on the list: `support.tickets` holds no column for any of them.
+ *
+ * @property requestId The ticket.
+ * @property driverId Who raised it.
+ * @property status The ticket's own status.
+ * @property feeDate The disputed Colombo day. Create only.
+ * @property amountMinor The charge being disputed, as subscription-svc recorded it. Create only.
+ * @property currency Always LKR. Create only.
+ * @property createdAt When it was raised.
+ */
+@Serializable
+public data class FeeRefundRequest(
+    val requestId: Ulid,
+    val driverId: Ulid,
+    val status: FeeRefundStatus,
+    val feeDate: BusinessDate? = null,
+    val amountMinor: Long? = null,
+    val currency: Currency? = null,
+    val createdAt: Timestamp,
+)
+
+/** A refund request's ticket status, owned by support-svc (C053). */
+@Serializable
+public enum class FeeRefundStatus {
+    OPEN,
+    IN_PROGRESS,
+    RESOLVED,
+}
+
+/** `GET /v1/fees/{driverId}/refund-requests` — 200. Newest first. */
+@Serializable
+public data class FeeRefundRequestList(val items: List<FeeRefundRequest> = emptyList())
+
+/** Which Mode-B document a signed link serves (`subscription.yaml`). @property wire The wire value. */
+@Serializable
+public enum class ModeBFileKind(public val wire: String) {
+    /** The fleet owner's bank-app LankaQR image, by payout profile. */
+    @SerialName("lankaqr")
+    LANKAQR("lankaqr"),
+
+    /** A bank-transfer slip screenshot, by payment. */
+    @SerialName("slips")
+    SLIPS("slips"),
+}

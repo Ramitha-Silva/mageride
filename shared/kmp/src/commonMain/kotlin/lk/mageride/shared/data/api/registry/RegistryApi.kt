@@ -23,15 +23,19 @@ import lk.mageride.shared.data.models.registry.BindVehicleDeviceRequest
 import lk.mageride.shared.data.models.registry.BindVehicleDeviceResponse
 import lk.mageride.shared.data.models.registry.CreateShareGrantRequest
 import lk.mageride.shared.data.models.registry.CreateShareGrantResponse
+import lk.mageride.shared.data.models.registry.DriverPayoutProfile
 import lk.mageride.shared.data.models.registry.OnboardingCorrections
 import lk.mageride.shared.data.models.registry.OnboardingStep
 import lk.mageride.shared.data.models.registry.OnboardingStepInput
+import lk.mageride.shared.data.models.registry.PayoutDocumentKind
 import lk.mageride.shared.data.models.registry.RegisterVehicleResponse
 import lk.mageride.shared.data.models.registry.RequestVehicleAccessRequest
 import lk.mageride.shared.data.models.registry.RequestVehicleAccessResponse
 import lk.mageride.shared.data.models.registry.SaveOnboardingStepResponse
 import lk.mageride.shared.data.models.registry.Subscriber
 import lk.mageride.shared.data.models.registry.UpdateVehicleDriverProfileRequest
+import lk.mageride.shared.data.models.registry.UploadedPayoutDocument
+import lk.mageride.shared.data.models.registry.UpsertDriverPayoutProfileRequest
 import lk.mageride.shared.data.models.registry.UpsertDriverProfileRequest
 import lk.mageride.shared.data.models.registry.UpsertDriverProfileResponse
 import lk.mageride.shared.data.models.registry.VehicleDetail
@@ -151,6 +155,35 @@ public interface RegistryApi {
         fileBack: CapturedDocument? = null,
         corrections: OnboardingCorrections? = null,
     ): SaveOnboardingStepResponse
+
+    /**
+     * `GET /v1/drivers/payout-profile` — the driver's bank details (AL-58/AL-59).
+     *
+     * `404` before they have entered any. MageRide takes custody of card fares and discharges it
+     * through the payout rail, so this is what a payout is actually sent to.
+     */
+    public suspend fun getDriverPayoutProfile(): DriverPayoutProfile
+
+    /**
+     * `PUT /v1/drivers/payout-profile` — store or replace them.
+     *
+     * **Any edit re-enters `pending_verification`** (AL-59). The account a payout lands in is not
+     * a field an approved profile lets you change quietly, so the version is superseded and an
+     * officer approves the new one through the AL-39 queue.
+     */
+    public suspend fun upsertDriverPayoutProfile(request: UpsertDriverPayoutProfileRequest): DriverPayoutProfile
+
+    /**
+     * `POST /v1/drivers/payout-profile/documents` — the statement, passbook page or LankaQR image.
+     *
+     * The `lankaqr_code` slot is the driver's **own** bank-app QR (AL-59) — the same code a
+     * passenger scans to pay them directly under AL-47.
+     */
+    public suspend fun uploadDriverPayoutDocument(
+        kind: PayoutDocumentKind,
+        file: CapturedDocument,
+        idempotencyKey: String? = null,
+    ): UploadedPayoutDocument
 
     /** `POST /v1/vehicles/{vehicleId}/deactivate` — take a vehicle out of service. */
     public suspend fun deactivateVehicle(vehicleId: Ulid, idempotencyKey: String? = null)
@@ -284,6 +317,30 @@ internal class KtorRegistryApi(private val transport: ApiTransport) : RegistryAp
         }
     }.decode()
 
+    override suspend fun getDriverPayoutProfile(): DriverPayoutProfile =
+        transport.apiGet(SERVICE, "getDriverPayoutProfile", PAYOUT_PROFILE_PATH).decode()
+
+    override suspend fun upsertDriverPayoutProfile(request: UpsertDriverPayoutProfileRequest): DriverPayoutProfile =
+        transport.apiPut(SERVICE, "upsertDriverPayoutProfile", PAYOUT_PROFILE_PATH) {
+            jsonBody(request)
+        }.decode()
+
+    override suspend fun uploadDriverPayoutDocument(
+        kind: PayoutDocumentKind,
+        file: CapturedDocument,
+        idempotencyKey: String?,
+    ): UploadedPayoutDocument = transport.apiPost(
+        service = SERVICE,
+        operationId = "uploadDriverPayoutDocument",
+        path = "$PAYOUT_PROFILE_PATH/documents",
+        idempotencyKey = idempotencyKey,
+    ) {
+        multipartBody {
+            textPart("kind", kind.wire)
+            capturedDocumentPart("file", file)
+        }
+    }.decode()
+
     override suspend fun deactivateVehicle(vehicleId: Ulid, idempotencyKey: String?) {
         transport.apiPost(SERVICE, "deactivateVehicle", "$VEHICLES_PATH/$vehicleId/deactivate", idempotencyKey)
     }
@@ -358,5 +415,6 @@ internal class KtorRegistryApi(private val transport: ApiTransport) : RegistryAp
     private companion object {
         val SERVICE = ApiService.REGISTRY
         const val VEHICLES_PATH = "/v1/vehicles"
+        const val PAYOUT_PROFILE_PATH = "/v1/drivers/payout-profile"
     }
 }

@@ -634,3 +634,102 @@ public data class RequestVehicleAccessRequest(val vehicleId: Ulid)
  */
 @Serializable
 public data class RequestVehicleAccessResponse(val requestId: Ulid, val status: AccessRequestStatus)
+
+// ---------------------------------------------------------------------------------------------
+// Driver payout profile (AL-58/AL-59) — Δ MCS-03
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * `PUT /v1/drivers/payout-profile` — the driver's bank details.
+ *
+ * **Any edit re-enters `pending_verification`** (AL-59): the account a payout lands in is not a
+ * field an approved profile lets you change quietly.
+ *
+ * @property bank The bank.
+ * @property branch The branch.
+ * @property accountNo Account number, at most 40 characters.
+ * @property accountHolderName As it appears on the account, at most 200.
+ */
+@Serializable
+public data class UpsertDriverPayoutProfileRequest(
+    val bank: String,
+    val branch: String,
+    val accountNo: String,
+    val accountHolderName: String,
+)
+
+/**
+ * One version of a driver's bank and payout details (Δ AL-58/AL-59).
+ *
+ * MageRide takes custody of card fares and discharges it through the payout rail, so this is what
+ * a payout is actually sent to — and why it is Verification-Officer approved through the AL-39
+ * queue rather than trusted as typed.
+ *
+ * @property bank The bank.
+ * @property branch The branch.
+ * @property accountNo Account number.
+ * @property accountHolderName As it appears on the account.
+ * @property proofDocId The bank statement or passbook first page.
+ * @property lankaqrDocId The driver's own bank-app LankaQR image (AL-59) — the same code a
+ *   passenger scans to pay them directly.
+ * @property status Where the version stands.
+ * @property rejectionReason Why it was refused, when it was.
+ * @property verifiedAt When an officer approved it.
+ */
+@Serializable
+public data class DriverPayoutProfile(
+    val bank: String,
+    val branch: String,
+    val accountNo: String,
+    val accountHolderName: String,
+    val proofDocId: Ulid? = null,
+    val lankaqrDocId: Ulid? = null,
+    val status: PayoutProfileStatus,
+    val rejectionReason: String? = null,
+    val verifiedAt: Timestamp? = null,
+)
+
+/**
+ * Where a payout profile version stands (`registry.driver_payout_profiles.status`).
+ *
+ * [SUPERSEDED] is what an edit does to the version before it — versions are kept, not overwritten,
+ * because a payout that has already gone out was sent to the details of its day.
+ *
+ * @property wire The value as it appears on the wire.
+ */
+@Serializable
+public enum class PayoutProfileStatus(public val wire: String) {
+    @SerialName("pending_verification")
+    PENDING_VERIFICATION("pending_verification"),
+
+    @SerialName("verified")
+    VERIFIED("verified"),
+
+    @SerialName("rejected")
+    REJECTED("rejected"),
+
+    @SerialName("superseded")
+    SUPERSEDED("superseded"),
+}
+
+/** Which payout document is being uploaded (AL-58). @property wire The value on the wire. */
+@Serializable
+public enum class PayoutDocumentKind(public val wire: String) {
+    @SerialName("bank_statement")
+    BANK_STATEMENT("bank_statement"),
+
+    @SerialName("passbook_first_page")
+    PASSBOOK_FIRST_PAGE("passbook_first_page"),
+
+    @SerialName("lankaqr_code")
+    LANKAQR_CODE("lankaqr_code"),
+}
+
+/**
+ * `POST /v1/drivers/payout-profile/documents` — 201.
+ *
+ * @property docId The stored document.
+ * @property kind Which slot it filled.
+ */
+@Serializable
+public data class UploadedPayoutDocument(val docId: Ulid, val kind: PayoutDocumentKind)
