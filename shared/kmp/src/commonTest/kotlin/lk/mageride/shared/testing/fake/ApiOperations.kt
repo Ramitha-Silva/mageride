@@ -6,8 +6,10 @@ import lk.mageride.shared.data.api.ApiService
 import lk.mageride.shared.data.models.CallbackAck
 import lk.mageride.shared.data.models.GeoPointWithAccuracy
 import lk.mageride.shared.data.models.Page
+import lk.mageride.shared.data.models.comms.AcknowledgeNotificationRequest
 import lk.mageride.shared.data.models.comms.IssueVoipTokenRequest
 import lk.mageride.shared.data.models.comms.NotificationPreferences
+import lk.mageride.shared.data.models.comms.RecordCallOutcomeRequest
 import lk.mageride.shared.data.models.comms.RegisterPushTokenRequest
 import lk.mageride.shared.data.models.comms.SendNotificationRequest
 import lk.mageride.shared.data.models.comms.SendNotificationResponse
@@ -1204,6 +1206,22 @@ internal object ApiOperations {
             "/v1/internal/passengers/{passengerId}/penalties/settle",
             200,
             sends<SettlePenaltiesRequest>(),
+        ),
+        noBody(
+            "recordCallOutcome",
+            ApiService.VOIP,
+            "POST",
+            "/v1/calls/{callId}/outcome",
+            204,
+            sends<RecordCallOutcomeRequest>(),
+        ),
+        noBody(
+            "acknowledgeNotification",
+            ApiService.NOTIFICATION,
+            "POST",
+            "/v1/notify/ack",
+            204,
+            sends<AcknowledgeNotificationRequest>(),
         ),
         op<AppVersionCheck>("checkAppVersion", ApiService.VERSION, "GET", "/v1/version/check", 200),
     )

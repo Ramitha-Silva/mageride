@@ -26,7 +26,7 @@ import kotlin.test.assertTrue
  * The reading taken here is the strong one. There is no second implementation of `RideApi` to keep
  * in step with the first — the clients under test are the production ones, and what is faked is
  * the *backend*. So "the same surface" is not a property somebody has to maintain; it is the same
- * sixteen interfaces, and the sweep below proves every one of their 178 operations answers with
+ * sixteen interfaces, and the sweep below proves every one of their 180 operations answers with
  * something its own return type accepts.
  */
 class FakeApiBackendTest {
@@ -170,12 +170,12 @@ class FakeApiBackendTest {
         /**
          * `ContractCoverageTest` (C013) counts the same number from the YAML.
          *
-         * **Δ C068: 179 → 178.** `setOperatingCity` (`PUT /v1/me/prefs/operating-city`) has been
+         * **Δ C068: 179 → 180.** `setOperatingCity` (`PUT /v1/me/prefs/operating-city`) has been
          * in `iam.yaml` since C027 and had no typed client; AL-27's first-run city screen is the
          * caller, so C068 added the client function and this row. The two contract-scanning tests
          * next door still disagree with the YAML for reasons that predate both — see the C067
          * handoff, which raised that drift as a micro-change-set.
          */
-        const val EXPECTED_OPERATIONS = 178
+        const val EXPECTED_OPERATIONS = 180
     }
 }

@@ -2,11 +2,14 @@ package lk.mageride.shared.data.models
 
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import lk.mageride.shared.data.models.comms.AcknowledgeNotificationRequest
 import lk.mageride.shared.data.models.comms.CallCounterparty
+import lk.mageride.shared.data.models.comms.CallOutcome
 import lk.mageride.shared.data.models.comms.CalleeRole
 import lk.mageride.shared.data.models.comms.IssueVoipTokenRequest
 import lk.mageride.shared.data.models.comms.NotificationPreferences
 import lk.mageride.shared.data.models.comms.NotificationPriority
+import lk.mageride.shared.data.models.comms.RecordCallOutcomeRequest
 import lk.mageride.shared.data.models.comms.RegisterPushTokenRequest
 import lk.mageride.shared.data.models.comms.SendNotificationRequest
 import lk.mageride.shared.data.models.comms.SendNotificationResponse
@@ -428,6 +431,10 @@ class DtoRoundTripReadTest {
         assertRoundTrips(StartCallResponse(Sample.ULID_A, CallType.FREE_VOIP, session))
         assertRoundTrips(RegisterPushTokenRequest("fcm-token", ClientPlatform.IOS, "device-1"))
         assertRoundTrips(NotificationPreferences(mapOf("SCHEDULED_REMINDER" to true)))
+
+        // Δ MCS-03 — E-01's acknowledgement and AL-48's call outcome.
+        assertRoundTrips(AcknowledgeNotificationRequest(Sample.ULID_A))
+        assertRoundTrips(RecordCallOutcomeRequest(CallOutcome.VOIP_FAILED))
         assertRoundTrips(
             SendNotificationRequest(
                 notificationType = "RIDE_OFFER",
