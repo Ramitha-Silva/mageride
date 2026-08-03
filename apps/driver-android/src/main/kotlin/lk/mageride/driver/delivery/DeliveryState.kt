@@ -52,6 +52,7 @@ internal enum class DeliveryParty {
  * @property otp What has been typed into the sheet's four boxes.
  * @property proof A photograph queued against this delivery (P-10), if one has been taken.
  * @property dialNumber A number the screen should hand to the platform dialler, once.
+ * @property sosRequested The driver tapped **SOS**; the screen opens SCR-DA-032 (Δ C075).
  * @property finished The delivery is off this driver's hands — handed over, or released.
  * @property busy A command is in flight.
  * @property error Resolved copy for the last failure.
@@ -64,6 +65,7 @@ internal data class DeliveryState(
     val otp: String = "",
     val proof: ProofUpload? = null,
     val dialNumber: String? = null,
+    val sosRequested: Boolean = false,
     val finished: Boolean = false,
     val busy: Boolean = false,
     @param:StringRes val error: Int? = null,

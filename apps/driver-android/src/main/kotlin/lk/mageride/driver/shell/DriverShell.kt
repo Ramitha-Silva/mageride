@@ -23,6 +23,7 @@ import lk.mageride.driver.nav.isTabRoute
 import lk.mageride.driver.push.PushRouter
 import lk.mageride.shared.data.api.MageRideApiSignals
 import lk.mageride.shared.data.api.UpgradeRequiredSignal
+import lk.mageride.shared.data.api.version.VersionApi
 import lk.mageride.shared.domain.auth.AuthSessionManager
 import lk.mageride.shared.domain.auth.SessionEvent
 import org.koin.compose.koinInject
@@ -52,6 +53,7 @@ internal fun DriverShell(
     val signals = koinInject<MageRideApiSignals>()
     val pushes = koinInject<PushRouter>()
     val sessions = koinInject<AuthSessionManager>()
+    val versions = koinInject<VersionApi>()
 
     val online by connectivity.isOnline.collectAsStateWithLifecycle(initialValue = true)
     val backStackEntry by controller.currentBackStackEntryAsState()
@@ -65,6 +67,15 @@ internal fun DriverShell(
     // sees it — which is the case on a cold start whose very first request was refused.
     LaunchedEffect(signals) {
         signals.upgradeRequired.collect { upgrade = it }
+    }
+
+    // US-17.1/17.2 (Δ C075) — ask before anything else does. The gate is enforced at the edge on
+    // every route, so without this the first thing a driver below the floor sees is a login screen
+    // whose OTP request failed. `GET /v1/version/check` is public and unattested precisely so a
+    // build too old to authenticate can still learn that it is too old, and it publishes on the
+    // SAME signal a mid-session 426 does — one wall, one subscriber, either way in.
+    LaunchedEffect(versions) {
+        runCatching { versions.checkAppVersion() }
     }
 
     // A push that names a screen. `consume()` clears the replay cache so a rotation does not

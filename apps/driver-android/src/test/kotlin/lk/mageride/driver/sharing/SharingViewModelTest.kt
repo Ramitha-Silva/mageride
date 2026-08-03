@@ -121,7 +121,10 @@ class SharingViewModelTest {
         backend.returns("createShareGrant", CreateShareGrantResponse(grantId = "01JGRANT00000000000000001"))
 
         val model = viewModel()
-        model.state.await { !it.loading }
+        // `loading` goes false BEFORE the per-vehicle lists are read (Δ C075), so awaiting it alone
+        // and then asserting on the roster is a race with `readListsFor` rather than a claim about
+        // the grant.
+        model.state.await { !it.loading && it.grantees.isNotEmpty() }
         model.onUserIdChange(Fixtures.PASSENGER_ID)
         model.onExpiryChange(Fixtures.NOW)
         assertTrue(model.state.value.canGrant)
@@ -172,10 +175,13 @@ class SharingViewModelTest {
         backend.returns("listModeBAccessRequests", Page(items = emptyList<AccessRequest>()))
         model.decide(requestId, accept = true)
 
-        val state = model.state.await { it.requests.isEmpty() }
+        // Both conditions in one predicate (Δ C075): `readListsFor` folds the lists in and `decide`
+        // clears `busyRequestId` in a SECOND update, so awaiting the empty queue alone can land on
+        // the state between them — a conflated `StateFlow` makes that a coin toss rather than a
+        // bug in the view model.
+        val state = model.state.await { it.requests.isEmpty() && it.busyRequestId == null }
         assertTrue(backend.called("acceptModeBAccessRequest"))
         assertEquals(listOf(Fixtures.PASSENGER_ID), state.grantees.map { it.userId })
-        assertEquals(null, state.busyRequestId)
     }
 
     @Test

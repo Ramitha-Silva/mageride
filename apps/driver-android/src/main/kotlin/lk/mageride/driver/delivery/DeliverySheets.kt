@@ -193,8 +193,10 @@ internal fun DeliveryPickupSheet(state: DeliveryState, viewModel: DeliveryViewMo
                 )
             }
             OutlinedButton(
-                onClick = viewModel::triggerSos,
+                onClick = viewModel::openSos,
                 modifier = Modifier.weight(1f),
+                // SCR-DA-032 needs a fix to attach to the alarm — `POST /v1/sos` has no
+                // positionless form. See `SosState.awaitingPosition`.
                 enabled = state.position != null,
             ) {
                 Icon(

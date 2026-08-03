@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import lk.mageride.driver.R
+import lk.mageride.driver.shell.BufferedSamplesCard
 import lk.mageride.driver.ui.MoneyFormat
 import lk.mageride.driver.ui.component.DashboardSheet
 import lk.mageride.driver.ui.component.OnlineToggle
@@ -55,6 +56,9 @@ internal fun StandbySheet(
     modifier: Modifier = Modifier,
 ) {
     DashboardSheet(modifier = modifier) {
+        // SCR-DA-035 (Δ C075). Draws nothing while the handset is online — see its own KDoc.
+        BufferedSamplesCard()
+
         OnlineToggle(
             label = stringResource(if (state.online) R.string.home_online else R.string.home_offline),
             online = state.online,

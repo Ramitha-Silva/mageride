@@ -15,6 +15,7 @@ import kotlinx.coroutines.launch
 import lk.mageride.driver.MainActivity
 import lk.mageride.driver.R
 import lk.mageride.driver.home.OfferInbox
+import lk.mageride.driver.notifications.NotificationInbox
 import lk.mageride.shared.data.api.comms.NotificationApi
 import lk.mageride.shared.data.models.ClientPlatform
 import lk.mageride.shared.data.models.comms.RegisterPushTokenRequest
@@ -40,6 +41,7 @@ internal class DriverMessagingService : FirebaseMessagingService() {
     private val sessions: AuthSessionManager by inject()
     private val notifications: NotificationApi by inject()
     private val offers: OfferInbox by inject()
+    private val inbox: NotificationInbox by inject()
 
     // FirebaseMessagingService's callbacks run on a background thread with a ~20 s budget and no
     // lifecycle of their own. A service-owned scope cancelled in onDestroy is what keeps a token
@@ -77,14 +79,37 @@ internal class DriverMessagingService : FirebaseMessagingService() {
     override fun onMessageReceived(message: RemoteMessage) {
         val push = PushMessage.from(message.data)
 
-        // Three things happen, in this order and independently: the OFFER is put in the driver's
+        // Four things happen, in this order and independently: the OFFER is put in the driver's
         // single slot (C070 — the fifteen seconds start now, not when the shell composes), the
         // destination is offered to the shell (which acts on it only if the app is in the
-        // foreground), and a notification is posted (which is what reaches a driver who is not
-        // looking at the screen).
+        // foreground), a notification is posted (which is what reaches a driver who is not looking
+        // at the screen), and the push is filed in the local inbox SCR-DA-034 reads (Δ C075).
         offers.onPush(push)
         router.offer(push)
         post(push, message)
+        record(push, message)
+    }
+
+    /**
+     * Files the push in `mobile_db_schema.md` §1.6, which **is** SCR-DA-034's list.
+     *
+     * Every push, not only the ones that get a tray notification: an alert a driver dismissed from
+     * the shade is still one they should be able to go back and read, and there is no server-side
+     * *"list my notifications"* operation to fall back on (see `NotificationInbox`).
+     *
+     * On the service's own scope and wrapped, because this callback has a ~20 s budget it shares
+     * with an E-01 offer that has fifteen: a SQLite write that failed must never cost a ride.
+     */
+    private fun record(push: PushMessage, message: RemoteMessage) {
+        scope.launch {
+            runCatching {
+                inbox.record(
+                    push = push,
+                    title = message.notification?.title ?: push.data[DATA_TITLE],
+                    body = message.notification?.body ?: push.data[DATA_BODY],
+                )
+            }
+        }
     }
 
     /**

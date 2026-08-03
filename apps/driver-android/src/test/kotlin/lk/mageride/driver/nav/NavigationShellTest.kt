@@ -150,6 +150,40 @@ class NavigationShellTest {
     }
 
     @Test
+    fun the_call_and_the_alarm_are_parameterised_takeovers_and_never_tabs() {
+        // SCR-DA-031 and SCR-DA-032 (Δ C075). Both are *about* a ride, so both carry its id rather
+        // than reading a process-wide holder; both are full-screen with no bottom bar, because a
+        // driver on a call or raising an alarm has nowhere else to be.
+        val call = DriverRoute.VoipCall("01JRIDE0000000000000000000")
+        val sos = DriverRoute.Sos("01JRIDE0000000000000000000")
+
+        assertEquals("call/01JRIDE0000000000000000000", call.path)
+        assertEquals("sos/01JRIDE0000000000000000000", sos.path)
+        assertTrue(!isTabRoute(call.path))
+        assertTrue(!isTabRoute(sos.path))
+
+        // Absent from `Static` on purpose — the NavHost registers their PATTERNs, exactly as it
+        // does for `ActiveRide`.
+        assertTrue(DriverRoute.Static.none { it.path == call.path || it.path == sos.path })
+        assertEquals("call/{rideId}", DriverRoute.VoipCall.PATTERN)
+        assertEquals("sos/{rideId}", DriverRoute.Sos.PATTERN)
+    }
+
+    @Test
+    fun the_two_menu_destinations_c075_owns_are_registered_and_are_not_tabs() {
+        // SCR-DA-033 and SCR-DA-034 — the last two rows of AL-31's drawer to get a real screen.
+        listOf(DriverRoute.Support, DriverRoute.Notifications).forEach {
+            assertTrue(it in DriverRoute.Static, "${it.path} is not registered")
+            assertTrue(!isTabRoute(it.path), "${it.path} must not show the bottom bar")
+        }
+
+        // `mageride://` has no host for either, and none is invented: the alerts list is reached
+        // from the Menu, and support from the Menu or from a ticket a driver already raised.
+        assertNull(PushRouter.resolve("mageride://support"))
+        assertNull(PushRouter.resolve("mageride://notifications"))
+    }
+
+    @Test
     fun the_wallet_deep_link_lands_on_the_tab_and_not_on_one_of_its_four_children() {
         // `mageride://wallet` is one of the four URIs `DeepLinks` mints and it names the *screen
         // group*, not a screen in it. LOW_BALANCE and TOP_UP_REQUIRED both carry it, and both mean

@@ -90,6 +90,19 @@ internal object MoneyFormat {
         )
     }
 
+    /**
+     * `00:42` — SCR-DA-031's call timer (Δ C075).
+     *
+     * Minutes and seconds, with the hours rolled into the minutes rather than dropped: a call is
+     * measured from zero and a `01:12:40` would be [clock]'s shape, which belongs to a *session*
+     * that started at a wall-clock time. Nothing on this platform bills a call, so an hour-long one
+     * reading `62:15` is honest and needs no third field.
+     */
+    fun timer(seconds: Long): String {
+        val safe = if (seconds < 0) 0 else seconds
+        return String.format(Locale.ROOT, "%02d:%02d", safe / SECONDS_IN_MINUTE, safe % SECONDS_IN_MINUTE)
+    }
+
     /** `1:42` — the Directional banner's *"1:42 left"*, hours and minutes only. */
     fun countdown(seconds: Long): String {
         val safe = if (seconds < 0) 0 else seconds

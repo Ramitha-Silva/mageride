@@ -219,12 +219,60 @@ internal sealed interface DriverRoute {
         override val path: String = "notifications"
     }
 
+    // ---- C075 · the two screens the ride opens (Δ C075) ---------------------------------
+    //
+    // SCR-DA-031 and SCR-DA-032 are full-screen takeovers with no app bar and no bottom bar, and
+    // both are *about* a ride — so both carry its id rather than reading a process-wide holder the
+    // way SCR-DA-006 does. The shell's table had neither, because C067 registered only the screens
+    // the Menu reaches and these two are reached from SCR-DA-015 / SCR-DA-016 alone.
+
+    /**
+     * SCR-DA-031 — the in-app VoIP call (US-6A.16, P-05, D-24).
+     *
+     * Reached from SCR-DA-015's **Call** button once the driver picks *"Free call"* on AL-48's
+     * chooser. *"Normal call"* never comes here: it is a `tel:` dial placed where it was chosen,
+     * and so are both of SCR-DA-016's call buttons (AL-33).
+     *
+     * @property rideId The ride the call belongs to. voip-svc scopes the token to it, and the room
+     *   is `ride_{rideId}`.
+     */
+    data class VoipCall(val rideId: String) : DriverRoute {
+        override val path: String = "call/$rideId"
+
+        companion object {
+            const val ARG_RIDE_ID: String = "rideId"
+
+            /** The pattern the NavHost registers. */
+            const val PATTERN: String = "call/{$ARG_RIDE_ID}"
+        }
+    }
+
+    /**
+     * SCR-DA-032 — the driver SOS (US-12.8, AL-13, D-33).
+     *
+     * **Active trip only**, which is why it is parameterised: D2' §SCR-DA-032 scopes the driver's
+     * alarm to a ride in progress, and `POST /v1/sos` carries that ride so the SMS and the admin
+     * live feed say *which* trip. Reached from SCR-DA-015's and SCR-DA-016's SOS buttons.
+     *
+     * @property rideId The trip the alarm is raised on.
+     */
+    data class Sos(val rideId: String) : DriverRoute {
+        override val path: String = "sos/$rideId"
+
+        companion object {
+            const val ARG_RIDE_ID: String = "rideId"
+
+            /** The pattern the NavHost registers. */
+            const val PATTERN: String = "sos/{$ARG_RIDE_ID}"
+        }
+    }
+
     companion object {
 
         /**
          * Every static destination, for the NavHost to register and for the coverage test to
-         * walk. [ActiveRide] is absent because it is parameterised — the NavHost registers
-         * [ActiveRide.PATTERN] instead.
+         * walk. [ActiveRide], [VoipCall] and [Sos] are absent because they are parameterised —
+         * the NavHost registers their `PATTERN`s instead.
          */
         val Static: List<DriverRoute> = listOf(
             Splash,

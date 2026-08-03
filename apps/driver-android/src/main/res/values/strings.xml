@@ -683,4 +683,93 @@
     <string name="history_rate_no_passenger">This trip was booked for somebody without an account, so there is nobody to rate.</string>
     <string name="history_rate_submit">Submit rating</string>
 
+    <!-- SCR-DA-031 . VoIP call (US-6A.16, P-05, D-24, AL-48). -->
+    <string name="call_in_app">In-app call . the number stays hidden</string>
+    <string name="call_rider">Rider</string>
+    <string name="call_rider_named">%1$s (rider)</string>
+    <string name="call_connecting">Connecting…</string>
+    <string name="call_connected">Connected</string>
+    <string name="call_mute">Mute</string>
+    <string name="call_unmute">Unmute</string>
+    <string name="call_speaker">Speaker</string>
+    <string name="call_hang_up">Hang up</string>
+    <string name="call_failed_signalling">The free call could not be set up.</string>
+    <string name="call_failed_media">The free call dropped before it connected.</string>
+    <string name="call_failed_unavailable">Free calling is not available on this version of the app.</string>
+    <string name="call_fallback_question">Call normally instead?</string>
+    <string name="call_fallback_action">Call normally</string>
+
+    <!-- SCR-DA-032 . driver SOS (US-12.8, AL-13, D-33). -->
+    <string name="sos_title">Driver SOS</string>
+    <string name="sos_armed">Tap SOS to send now, or wait and it goes by itself.</string>
+    <string name="sos_waiting_position">Waiting for your position…</string>
+    <string name="sos_sending">Sending…</string>
+    <string name="sos_sending_body">Sending your position and this trip to your emergency contact by SMS.</string>
+    <string name="sos_dispatched">Sent. Our operators can see this trip now.</string>
+    <string name="sos_failed">The alert did not leave your phone. Try again.</string>
+    <string name="sos_no_position">Your position is not known yet, and the alert needs it. Wait a moment and try again.</string>
+    <string name="sos_no_contact">No emergency contact yet. Add one in your profile.</string>
+    <string name="sos_sms_sent">Sent</string>
+    <string name="sos_sms_failed">SMS failed</string>
+    <string name="sos_sms_no_contact">No contact</string>
+
+    <!-- SCR-DA-033 / 033a . support, daily-fee refund and the raise-ticket sheet (US-16.1/16.2, US-9.23). -->
+    <string name="support_title">Support</string>
+    <string name="support_search_hint">Search help</string>
+    <string name="support_search_empty">Nothing matches that. Raise a ticket and we will answer.</string>
+    <string name="support_quick_actions">Quick actions</string>
+    <string name="support_refund_title">Request daily-fee refund</string>
+    <string name="support_refund_hint">For example, the app crashed when you went online.</string>
+    <string name="support_refund_action">Request</string>
+    <string name="support_your_tickets">Your tickets</string>
+    <string name="support_tickets_empty">You have not raised a ticket yet.</string>
+    <string name="support_raise_ticket">Raise a ticket</string>
+    <string name="support_ticket_raised">Ticket raised. It is in the list below.</string>
+    <string name="support_issue_label">Issue description</string>
+    <string name="support_issue_hint">Tell us what went wrong…</string>
+    <string name="support_related_trip">Related trip</string>
+    <string name="support_trip_none">No trip</string>
+    <string name="support_trip_unnamed">Trip</string>
+    <string name="support_attach">Attach a screenshot</string>
+    <string name="support_attached">Screenshot attached</string>
+    <string name="support_submit_ticket">Submit ticket</string>
+    <string name="support_loading">Loading…</string>
+    <string name="support_category_refund">Daily-fee refund</string>
+    <string name="support_category_general">Support request</string>
+    <string name="support_status_open">Open</string>
+    <string name="support_status_in_progress">Being looked at</string>
+    <string name="support_status_resolved">Resolved</string>
+    <string name="support_event_opened">You raised this</string>
+    <string name="support_event_responded">Support replied</string>
+    <string name="support_event_resolved">Marked resolved</string>
+    <string name="support_event_reopened">Opened again</string>
+
+    <!-- SCR-DA-034 . alerts (Epic 10). -->
+    <string name="alerts_title">Alerts</string>
+    <string name="alerts_empty">Nothing here yet.</string>
+    <string name="alerts_mark_all_read">Mark all read</string>
+    <string name="alert_kind_ride_offer">Ride offer</string>
+    <string name="alert_kind_directional">Destination filter</string>
+    <string name="alert_kind_low_balance">Low balance</string>
+    <string name="alert_kind_money_in">Payment confirmed</string>
+    <string name="alert_kind_share">Share request</string>
+    <string name="alert_kind_package">Package</string>
+    <string name="alert_kind_safety">Safety alert</string>
+    <string name="alert_kind_other">Notice</string>
+    <string name="alert_age_now">Just now</string>
+    <string name="alert_age_minutes">%1$d min ago</string>
+    <string name="alert_age_hours">%1$d h ago</string>
+    <string name="alert_age_yesterday">Yesterday</string>
+    <string name="alert_age_days">%1$d d ago</string>
+
+    <!-- SCR-DA-035 . offline buffering (R-17, US-15.1). -->
+    <string name="offline_buffered_title">Buffered samples</string>
+    <string name="offline_buffered_replay">They will be sent when the connection is back.</string>
+    <string name="offline_buffered_count">%1$d queued</string>
+
+    <!-- C075 error copy (D-26 . resolved from the kebab code, never from the server sentence). -->
+    <string name="error_no_emergency_contact">No emergency contact is on file, so no SMS went out. The alert still reached our operators.</string>
+    <string name="error_ride_terminal">This trip has ended, so there is nobody left to reach.</string>
+    <string name="error_not_ride_participant">This is not your trip.</string>
+
 </resources>

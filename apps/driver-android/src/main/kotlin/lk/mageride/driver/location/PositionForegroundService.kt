@@ -24,9 +24,9 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import lk.mageride.driver.MainActivity
 import lk.mageride.driver.R
+import lk.mageride.driver.di.DriverDatabase
 import lk.mageride.shared.data.models.Timestamp
 import lk.mageride.shared.data.models.Ulid
-import lk.mageride.shared.db.MageRideDatabaseFactory
 import lk.mageride.shared.domain.auth.MqttSessionToken
 import lk.mageride.shared.domain.auth.MqttSessionTokenManager
 import lk.mageride.shared.mqtt.CommandDelivery
@@ -72,7 +72,7 @@ internal class PositionForegroundService : LifecycleService() {
 
     private val mqttConfig: MqttConfig by inject()
     private val tokens: MqttSessionTokenManager by inject()
-    private val databases: MageRideDatabaseFactory by inject()
+    private val databases: DriverDatabase by inject()
 
     private val transport by lazy { MqttPositionTransport(mqttConfig) }
     private val locations by lazy { LocationServices.getFusedLocationProviderClient(this) }
@@ -144,8 +144,10 @@ internal class PositionForegroundService : LifecycleService() {
         lifecycleScope.launch {
             // C018 deliberately does not bind an open database in the Koin graph — opening it is
             // suspending, and a `runBlocking` single would unwrap the key on whichever thread
-            // first touched the graph. The service opens it on its own scope instead.
-            val database = databases.openDriver()
+            // first touched the graph. `DriverDatabase` is the app's deferred binding, so the
+            // service opens it on its own scope and SCR-DA-034's inbox shares the handle (Δ C075)
+            // rather than opening a second connection to the same encrypted file.
+            val database = databases.get()
             pipeline = PositionPipeline(
                 transport = transport,
                 journal = GpsBufferJournal(database.gpsBuffer(vehicle)),

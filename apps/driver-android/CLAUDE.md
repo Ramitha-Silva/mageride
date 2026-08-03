@@ -41,10 +41,14 @@ lk.mageride.driver
 ├── sharing/                  C074 · SCR-DA-028 — Mode B grants, per vehicle
 ├── profile/                  C074 · SCR-DA-029 + its three editors and the contact picker
 ├── history/                  C074 · SCR-DA-030 + the rate-passenger sheet
+├── comms/                    C075 · SCR-DA-031 + the WebRTC seam
+├── safety/                   C075 · SCR-DA-032 — the driver SOS
+├── support/                  C075 · SCR-DA-033 / 033a + the FAQ and ticket sheets
+├── notifications/            C075 · SCR-DA-034 — the local push inbox
 └── menu/                     C070 · SCR-DA-036 — AL-31's drawer, as a tab
 ```
 
-**To add a screen (C070–C075):**
+**To add a screen (C070–C075 took theirs; `Documents` is the one placeholder left):**
 
 1. Its route is already in `nav/DriverRoute.kt`. Use it; do not invent a path.
 2. Replace its `placeholder(...)` line in `nav/DriverNavHost.kt` with the real composable. That file
@@ -272,6 +276,60 @@ lk.mageride.driver
   `capture/cameraProvider` went `internal` so the QR viewfinder binds an `ImageAnalysis` through the
   same helper; `Language.endonym` / `.englishName` went `internal` so the profile's language sheet
   and SCR-DA-002 share one endonym table.
+
+## Cluster 7 (C075) — the call, the alarm, support and the system states
+
+- **The VoIP media client is NOT here, and it is a dependency wall rather than a decision.** D6' §6
+  names LiveKit and D2' §SCR-DA-031 says *"WebRTC + ConnectionService"*, but
+  `io.livekit:livekit-android` depends on `com.github.davidliu:audioswitch`, which is published
+  **only on JitPack** — and this repo resolves from a content-filtered `google()` plus
+  `mavenCentral()` with `FAIL_ON_PROJECT_REPOS`. Widening that is an edit to `settings.gradle.kts`,
+  which is C001's. So `VoipEngine` is the seam, `AbsentVoipEngine` is what `driverAppModule` binds,
+  and SCR-DA-031's **signalling half is real** (`POST /v1/calls/start` mints the room and writes
+  `comms.call_log`) while the media half reports `NO_MEDIA_CLIENT` — which is exactly the condition
+  AL-48 legislates for, so the screen offers *"Call normally instead?"* and the driver reaches the
+  rider. Landing the real engine is **one binding**, plus `RECORD_AUDIO` / `MODIFY_AUDIO_SETTINGS`
+  in the manifest (absent on purpose — a permission with no code behind it is what that file's own
+  header forbids).
+- **SCR-DA-015's Call and SOS buttons NAVIGATE now; they do not act.** `ActiveRideViewModel.call`
+  raises `voipCall` for **Free call** and dials for **Normal call**; `openSos` raises `sosRequested`.
+  Both new destinations carry the ride id (`DriverRoute.VoipCall` / `.Sos`) because both are *about*
+  a trip and neither has a process-wide holder to read. `POST /v1/calls/start` is made by
+  SCR-DA-031 and by nothing else, or one tap would write two `comms.call_log` rows.
+- **`POST /v1/sos` has no positionless form**, so SCR-DA-032 waits for a fix before it arms.
+  `TriggerSosRequest.lat`/`.lng` are required; BR-29.4 contemplates a positionless SOS for the *web*
+  surface and the app-facing contract carries no equivalent. In practice this is milliseconds —
+  `DriverLocationSource` emits the **last known** fix before it registers for updates — and the
+  countdown starts on that first emission rather than on composition.
+- **The three-second cancel window is not a spec number**, and it spends the D-33 budget. §14.3
+  fixes p99 ≤ 5 s for the *dispatch* and says nothing about a confirmation; three seconds is what is
+  left of that urgency once a mis-tap on the largest control in the app has to be recoverable. A
+  deliberate tap sends immediately. `SosSmsStatus.FAILED` is **not** an error state on that screen:
+  the alert is recorded and is on the admin live feed either way.
+- **The daily-fee refund is a `category`, not an endpoint** (US-9.23). It and *"Raise a ticket"* are
+  one flow — SCR-DA-033a — posting the same `POST /v1/support/tickets`; `daily_fee_refund` is what
+  derives `TicketQueue.FINANCE` and everything else Support's. A second screen for a second value of
+  one field would have been two ways to open the same row. The screenshot is a **separate upload**
+  whose id the ticket links, and a failed upload never costs the driver their ticket.
+- **SCR-DA-034 is read from the device, not from the platform.** There is no *"list my
+  notifications"* operation anywhere on the app-facing surface, so the list is
+  `mobile_db_schema.md` §1.6 — which is also why it works with no connection. `DriverMessagingService`
+  files **every** push, `AlertKind.of` matches the catalogue's names by prefix and falls back to a
+  neutral row (`data.kind` grows without a contract change), and a stored `deeplink` is still
+  resolved through `PushRouter` rather than trusted.
+- **`DriverDatabase` is the app's deferred answer to C018's un-bound database.** Opening it is
+  `suspend`, so it is opened by the first caller behind a `Mutex` and shared: the position service,
+  SCR-DA-034's inbox and SCR-DA-035's backlog count are three callers of one handle rather than
+  three SQLite connections to one encrypted file. `PositionForegroundService` was moved onto it.
+- **SCR-DA-035 is two things and neither is a route.** The banner and the update gate were C067's;
+  C075 added `BufferedSamplesCard` (self-contained — it reads connectivity and `gps_buffer` itself,
+  so each home sheet adds one line and draws nothing while online) and the **cold-start**
+  `GET /v1/version/check`, which publishes on the same `upgradeRequired` signal a mid-session `426`
+  does. One wall, one subscriber, either way in.
+- Reusable UI added here: `ui/theme/CallColors` + `SosColors` (the second and third screens that are
+  not on the M3 scheme, after `ScannerColors`), `ControlTokens.CallAction`/`.CallEnd`/`.SosButton`/
+  `.SosHalo`/`.SearchBar`/`.ListRowIcon`, and `MoneyFormat.timer` (`00:42` — minutes and seconds,
+  distinct from `clock`'s `01:12:40`).
 
 ## Rules this module is built on
 

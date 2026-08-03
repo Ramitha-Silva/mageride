@@ -4,6 +4,9 @@ import io.ktor.client.engine.HttpClientEngine
 import io.ktor.client.engine.okhttp.OkHttp
 import lk.mageride.driver.capture.DocumentCaptureCoordinator
 import lk.mageride.driver.capture.DocumentScannerViewModel
+import lk.mageride.driver.comms.AbsentVoipEngine
+import lk.mageride.driver.comms.VoipCallViewModel
+import lk.mageride.driver.comms.VoipEngine
 import lk.mageride.driver.delivery.DeliveryRepository
 import lk.mageride.driver.delivery.DeliveryViewModel
 import lk.mageride.driver.delivery.ProofUploadQueue
@@ -28,6 +31,9 @@ import lk.mageride.driver.location.AndroidDriverLocationSource
 import lk.mageride.driver.location.AndroidPositionPublisher
 import lk.mageride.driver.location.DriverLocationSource
 import lk.mageride.driver.location.PositionPublisher
+import lk.mageride.driver.notifications.LocalNotificationInbox
+import lk.mageride.driver.notifications.NotificationInbox
+import lk.mageride.driver.notifications.NotificationsViewModel
 import lk.mageride.driver.onboarding.AndroidOnboardingPreferences
 import lk.mageride.driver.onboarding.DriverPermissions
 import lk.mageride.driver.onboarding.DriverProfileRepository
@@ -44,9 +50,13 @@ import lk.mageride.driver.push.PushTokenProvider
 import lk.mageride.driver.ride.ActiveRideRepository
 import lk.mageride.driver.ride.ActiveRideViewModel
 import lk.mageride.driver.ride.RideContact
+import lk.mageride.driver.safety.SosViewModel
 import lk.mageride.driver.sharing.SharingRepository
 import lk.mageride.driver.sharing.SharingViewModel
+import lk.mageride.driver.shell.BufferedSampleCounter
 import lk.mageride.driver.shell.ConnectivityMonitor
+import lk.mageride.driver.support.SupportRepository
+import lk.mageride.driver.support.SupportViewModel
 import lk.mageride.driver.tracker.AndroidTrackerBindingStore
 import lk.mageride.driver.tracker.TrackerBindingStore
 import lk.mageride.driver.tracker.TrackerPairingViewModel
@@ -141,6 +151,11 @@ internal fun driverAppModule(environment: DriverEnvironment = DriverEnvironment.
     // This app is `MageRideApp.DRIVER` and physically cannot open the passenger tables.
     single { MageRideApp.DRIVER }
     single<DatabaseDriverFactory> { PlatformDatabaseDriverFactory(androidContext()) }
+
+    // The open database C018 deliberately leaves to the app, deferred so the Keystore round trip
+    // is not on `Application.onCreate` (Δ C075). One handle for the position service, SCR-DA-034's
+    // inbox and SCR-DA-035's backlog count — see `DriverDatabase`.
+    single { DriverDatabase(factory = get()) }
 
     // ---- C017 / D6' §3 ----------------------------------------------------------------
     // One config for the process. The socket itself belongs to the foreground service.
@@ -358,4 +373,41 @@ private fun Module.trackerAndProfileBindings() {
     viewModel { SharingViewModel(identity = get(), sharing = get()) }
     viewModel { DriverProfileViewModel(identity = get(), profiles = get()) }
     viewModel { RideHistoryViewModel(identity = get(), history = get()) }
+
+    commsSafetySupportBindings()
+}
+
+/**
+ * The C075 slice — SCR-DA-031/032/033/033a/034/035.
+ *
+ * **[VoipEngine] is the one binding here that is a seam rather than a screen's**, and the
+ * implementation bound is [AbsentVoipEngine]: this build carries no WebRTC client, because
+ * `io.livekit:livekit-android` resolves `audioswitch` from JitPack and this repository's repository
+ * set is `google()` + `mavenCentral()` with `FAIL_ON_PROJECT_REPOS`. Read that class's KDoc before
+ * changing this line — it is the whole of what SCR-DA-031 can and cannot do, and swapping it is the
+ * only edit landing the real engine needs on this side.
+ *
+ * [NotificationInbox] and [BufferedSampleCounter] are `single`s because both hold the process-wide
+ * [DriverDatabase] handle: two instances would be two callers of one `suspend` open, which is
+ * exactly what that class's mutex exists to make harmless — but a second instance would also mean a
+ * second `DriverAlert` cache and no reason for one.
+ *
+ * `SosViewModel` and `VoipCallViewModel` take a `rideId` parameter for the reason
+ * `ActiveRideViewModel` does: both routes are parameterised, and the alarm and the call are about a
+ * specific trip.
+ */
+private fun Module.commsSafetySupportBindings() {
+    single<VoipEngine> { AbsentVoipEngine() }
+    single<NotificationInbox> { LocalNotificationInbox(databases = get()) }
+    single { BufferedSampleCounter(databases = get(), vehicles = get()) }
+    single { SupportRepository(support = get(), query = get()) }
+
+    viewModel { (rideId: Ulid) ->
+        VoipCallViewModel(rideId = rideId, rides = get(), contact = get(), engine = get())
+    }
+    viewModel { (rideId: Ulid) ->
+        SosViewModel(rideId = rideId, contact = get(), profiles = get(), location = get())
+    }
+    viewModel { SupportViewModel(identity = get(), support = get()) }
+    viewModel { NotificationsViewModel(inbox = get()) }
 }

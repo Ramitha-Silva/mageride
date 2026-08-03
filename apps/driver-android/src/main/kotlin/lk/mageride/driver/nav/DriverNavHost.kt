@@ -16,6 +16,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import lk.mageride.driver.R
 import lk.mageride.driver.capture.DocumentScannerScreen
+import lk.mageride.driver.comms.VoipCallScreen
 import lk.mageride.driver.earnings.EarningsScreen
 import lk.mageride.driver.history.RideHistoryScreen
 import lk.mageride.driver.home.DirectionalScreen
@@ -24,6 +25,7 @@ import lk.mageride.driver.jobs.JobBoardScreen
 import lk.mageride.driver.jobs.ScheduledRidesScreen
 import lk.mageride.driver.level.DriverLevelScreen
 import lk.mageride.driver.menu.MenuScreen
+import lk.mageride.driver.notifications.NotificationsScreen
 import lk.mageride.driver.onboarding.LanguageCityScreen
 import lk.mageride.driver.onboarding.LoginScreen
 import lk.mageride.driver.onboarding.PermissionsScreen
@@ -31,7 +33,9 @@ import lk.mageride.driver.onboarding.ProfileSetupScreen
 import lk.mageride.driver.onboarding.SplashScreen
 import lk.mageride.driver.profile.DriverProfileScreen
 import lk.mageride.driver.ride.ActiveRideScreen
+import lk.mageride.driver.safety.SosScreen
 import lk.mageride.driver.sharing.SharingScreen
+import lk.mageride.driver.support.SupportScreen
 import lk.mageride.driver.tracker.TrackerPairingScreen
 import lk.mageride.driver.ui.theme.MageRideTheme
 import lk.mageride.driver.vehicle.VehicleOnboardingScreen
@@ -49,7 +53,8 @@ import lk.mageride.driver.wallet.WalletScreen
  * **Every destination is registered here, and a screen group replaces the body of its own routes
  * without touching the graph.** That is the shape C067 left behind and the shape it keeps: a
  * component that added a destination of its own would put the app's navigation in eight files.
- * C068–C074 have taken their routes; the three C075 owns are still standing placeholders.
+ * C068–C075 have taken their routes; `Documents` is the one standing placeholder left, and its KDoc
+ * at the bottom of this file says why.
  *
  * The start destination is [DriverRoute.Splash] — SCR-DA-001 is the driver-info router, and its
  * states ("no token → Login · registered/not approved → RegistrationHub · approved+perms →
@@ -168,6 +173,15 @@ internal fun DriverNavHost(controller: NavHostController, modifier: Modifier = M
                         launchSingleTop = true
                     }
                 },
+                // Both are pushed over the ride and pop back to it (Δ C075): a call and an alarm
+                // are things that happen *during* a trip, and the trip is what the driver returns
+                // to. `launchSingleTop` because a second tap on either must not stack a second one.
+                onOpenVoipCall = { rideId ->
+                    controller.navigate(DriverRoute.VoipCall(rideId).path) { launchSingleTop = true }
+                },
+                onOpenSos = { rideId ->
+                    controller.navigate(DriverRoute.Sos(rideId).path) { launchSingleTop = true }
+                },
             )
         }
 
@@ -243,10 +257,38 @@ internal fun DriverNavHost(controller: NavHostController, modifier: Modifier = M
             )
         }
 
-        // ---- C075 · documents, support, alerts ------------------------------------------
+        // ---- C075 · comms, safety, support, alerts --------------------------------------
+        composable(DriverRoute.VoipCall.PATTERN) { entry ->
+            VoipCallScreen(
+                rideId = entry.arguments?.getString(DriverRoute.VoipCall.ARG_RIDE_ID).orEmpty(),
+                // Hung up, dialled normally, or dismissed. Back to the ride underneath — never to
+                // Home: the trip did not end because a call did.
+                onFinished = { controller.popBackStack() },
+            )
+        }
+        composable(DriverRoute.Sos.PATTERN) { entry ->
+            SosScreen(
+                rideId = entry.arguments?.getString(DriverRoute.Sos.ARG_RIDE_ID).orEmpty(),
+                onFinished = { controller.popBackStack() },
+            )
+        }
+        composable(DriverRoute.Support.path) {
+            SupportScreen(onBack = { controller.popBackStack() })
+        }
+        composable(DriverRoute.Notifications.path) {
+            NotificationsScreen(
+                onBack = { controller.popBackStack() },
+                // An alert's deep link is already resolved to a known destination — an
+                // unrecognised one never reaches here. See `NotificationsViewModel`.
+                onOpen = { route -> controller.navigate(route.path) { launchSingleTop = true } },
+            )
+        }
+
+        // SCR-DA-029a — driver documents and their expiry (E-03, `mageride://documents`). NOT a
+        // C075 screen: the `## Screens` list this component builds against is 031–035, and D2' has
+        // no SCR-DA-029a entry at all — the route exists because `PushRouter` resolves a link
+        // notification-svc mints for it. Left on the standing placeholder rather than invented.
         placeholder(DriverRoute.Documents, "SCR-DA-029a documents")
-        placeholder(DriverRoute.Support, "SCR-DA-033 support")
-        placeholder(DriverRoute.Notifications, "SCR-DA-034 notifications")
     }
 }
 

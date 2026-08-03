@@ -185,15 +185,21 @@ internal class DeliveryViewModel(
         }
     }
 
-    /** US-12.8's driver SOS — the same alarm SCR-DA-015 raises, on the same active trip. */
-    fun triggerSos() {
-        val at = mutableState.value.position?.asPoint() ?: return
-        launchGuarded { contact.triggerSos(rideId, at) }
+    /**
+     * US-12.8's driver SOS — **opens SCR-DA-032**, the same screen SCR-DA-015's button opens
+     * (Δ C075).
+     *
+     * The alarm was raised from here directly until C075 built the screen D2' §SCR-DA-032 specifies:
+     * a confirmation, a cancel window, the emergency contact it will reach and the dispatched state.
+     * One irrevocable `POST /v1/sos` deserves one door.
+     */
+    fun openSos() {
+        mutableState.update { it.copy(sosRequested = true) }
     }
 
-    /** Clears a consumed dial number or the last failure. */
+    /** Clears a consumed dial number, navigation request or the last failure. */
     fun consume() {
-        mutableState.update { it.copy(dialNumber = null, error = null) }
+        mutableState.update { it.copy(dialNumber = null, sosRequested = false, error = null) }
     }
 
     /**

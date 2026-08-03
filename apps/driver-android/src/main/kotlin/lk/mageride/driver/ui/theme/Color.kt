@@ -148,6 +148,57 @@ internal object ScannerColors {
     val hint: Color = Color(0xFF9AA0A6)
 }
 
+/**
+ * SCR-DA-031's call palette (C075).
+ *
+ * **The second screen in this app that is not on the M3 colour scheme**, for the same reason
+ * [ScannerColors] is the first: `driver_android.html` draws the call on `#15171B` with a `#2A2D31`
+ * avatar, a `#AEB3BC` caption and a `#9FCAFF` connected line, and a call that switched to a white
+ * surface in daylight would be a different screen twice a day. A phone call has one appearance.
+ *
+ * `connected` is D2' §0.2's **dark** `secondary` and `background` is very close to its dark
+ * `background`; they are transcribed from the wireframe rather than aliased to the dark scheme,
+ * because this screen is dark in the *light* theme too and reading it out of `MageRideDark` would
+ * make it change when that table did.
+ *
+ * @property background The `screen` the whole call sits on.
+ * @property surface The avatar disc, and the mute / speaker actions.
+ * @property onCall The name and the dialled state, at full contrast.
+ * @property hint *"In-app call · number hidden"*, and the avatar glyph.
+ * @property connected *"Connected · 00:42"* — the one line that says media is flowing.
+ */
+internal object CallColors {
+    val background: Color = Color(0xFF15171B)
+    val surface: Color = Color(0xFF2A2D31)
+    val onCall: Color = Color(0xFFFFFFFF)
+    val hint: Color = Color(0xFFAEB3BC)
+    val connected: Color = Color(0xFF9FCAFF)
+}
+
+/**
+ * SCR-DA-032's palette (C075).
+ *
+ * The wireframe draws the driver SOS on `#2A0A0A` with a `#3A1414` contact card outlined in
+ * `#5A2020`, a `#FFB4AB` status line and the §0.2 `error` disc inside a translucent halo of itself.
+ * Dark in both appearances, like [CallColors] and [ScannerColors]: an alarm screen that could be
+ * mistaken for an ordinary one is the failure mode this palette exists to prevent.
+ *
+ * @property background The `screen`.
+ * @property surface The emergency-contact card.
+ * @property outline That card's border.
+ * @property onSos Titles and card text.
+ * @property hint *"Sending GPS + active trip to your emergency contact…"*.
+ * @property halo The ring around the SOS disc — `rgba(211,47,47,.25)`, the §0.2 `error` at 25%.
+ */
+internal object SosColors {
+    val background: Color = Color(0xFF2A0A0A)
+    val surface: Color = Color(0xFF3A1414)
+    val outline: Color = Color(0xFF5A2020)
+    val onSos: Color = Color(0xFFFFFFFF)
+    val hint: Color = Color(0xFFFFB4AB)
+    val halo: Color = Color(0x40D32F2F)
+}
+
 /** Map pin colours — D2' §0.3: "`pickup` green, `dropoff` red, `user` blue dot". */
 internal object PinColors {
     val Pickup = Color(0xFF2E9E4F)

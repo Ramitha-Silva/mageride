@@ -45,8 +45,11 @@ internal object OnboardingErrors {
      * contract, which is the only way this table stays true.
      */
     @StringRes
-    private fun forCode(code: ErrorCode?): Int =
-        onboardingCode(code) ?: dashboardCode(code) ?: walletCode(code) ?: R.string.error_generic
+    private fun forCode(code: ErrorCode?): Int = onboardingCode(code)
+        ?: dashboardCode(code)
+        ?: walletCode(code)
+        ?: safetyCode(code)
+        ?: R.string.error_generic
 
     @StringRes
     @Suppress("ReturnCount")
@@ -140,6 +143,29 @@ internal object OnboardingErrors {
         ErrorCode.CONFLICT -> R.string.error_already_done
 
         ErrorCode.NOT_FOUND -> R.string.error_not_found
+
+        else -> null
+    }
+
+    /**
+     * C075 · the comms, safety and support cluster (SCR-DA-031…034).
+     *
+     * Three codes, and the first is the one that matters: `400 no-emergency-contact` is a **setup**
+     * failure, and `SafetyApi`'s own KDoc says it is *"something the app should have prevented on
+     * the safety screen, not something to surface mid-emergency"*. SCR-DA-032 warns about it before
+     * the alarm is armed; this copy is what a driver sees if it slipped through anyway, and it says
+     * that the alert still went to the operators.
+     */
+    @StringRes
+    private fun safetyCode(code: ErrorCode?): Int? = when (code) {
+        ErrorCode.NO_EMERGENCY_CONTACT -> R.string.error_no_emergency_contact
+
+        // A call or an alarm raised against a ride that has already ended. On SCR-DA-031 this is
+        // what makes the direct-dial fallback wrong advice — there is nobody left to reach.
+        ErrorCode.RIDE_TERMINAL -> R.string.error_ride_terminal
+
+        // Somebody else's ride. Reachable only from a stale screen or a stale deep link.
+        ErrorCode.NOT_RIDE_PARTICIPANT -> R.string.error_not_ride_participant
 
         else -> null
     }

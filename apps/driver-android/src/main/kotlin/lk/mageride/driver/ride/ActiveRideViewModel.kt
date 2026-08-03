@@ -13,7 +13,6 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import lk.mageride.driver.location.DriverLocationSource
 import lk.mageride.driver.location.Fix
-import lk.mageride.driver.location.asPoint
 import lk.mageride.driver.onboarding.OnboardingErrors
 import lk.mageride.shared.data.models.CallType
 import lk.mageride.shared.data.models.GeoPoint
@@ -49,6 +48,8 @@ internal enum class RideSheet {
  * @property position The driver's own last fix — the map marker and the SOS coordinate.
  * @property sheet Which sheet is up, if any.
  * @property dialNumber A number the screen should hand to the platform dialler, once.
+ * @property voipCall The driver chose **Free call**; the screen opens SCR-DA-031 (Δ C075).
+ * @property sosRequested The driver tapped **SOS**; the screen opens SCR-DA-032 (Δ C075).
  * @property qrAttested Whether the driver has already answered AL-47's *"QR payment received?"*.
  * @property finished The ride has reached a state that takes the driver back to standby.
  * @property busy A command is in flight.
@@ -59,6 +60,8 @@ internal data class ActiveRideState(
     val position: Fix? = null,
     val sheet: RideSheet? = null,
     val dialNumber: String? = null,
+    val voipCall: Boolean = false,
+    val sosRequested: Boolean = false,
     val qrAttested: Boolean = false,
     val finished: Boolean = false,
     val busy: Boolean = false,
@@ -263,28 +266,43 @@ internal class ActiveRideViewModel(
     }
 
     /**
-     * AL-48's call-type chooser, and the dial it produces.
+     * AL-48's call-type chooser, and what each answer does.
      *
-     * [CallType.FREE_VOIP] mints the WebRTC session; [CallType.DIRECT_DIAL] hands the real number
-     * to the platform dialler and records that it happened. The log is best-effort — a failure to
-     * write `comms.call_log` must never stop a driver reaching the rider — so the number is put in
-     * the state either way.
+     * **[CallType.FREE_VOIP] leaves this screen** (Δ C075): SCR-DA-031 is where the room is joined,
+     * the call is timed and — when the media path fails — *"Call normally instead?"* is offered, so
+     * the chooser navigates rather than calling. `POST /v1/calls/start` is made **there**, once, by
+     * the screen that owns the call; making it here as well would write two `comms.call_log` rows
+     * for one tap.
+     *
+     * [CallType.DIRECT_DIAL] never leaves: it hands the real number to the platform dialler and
+     * records that it happened. The log is best-effort — a failure to write `comms.call_log` must
+     * never stop a driver reaching the rider — so the number is put in the state either way.
      */
     fun call(type: CallType) {
         val ride = mutableState.value.ride ?: return
         open(sheet = null)
+
+        if (type == CallType.FREE_VOIP) {
+            mutableState.update { it.copy(voipCall = true) }
+            return
+        }
+
         launchGuarded {
             runCatching { contact.startCall(rideId, ride.kind, type) }
-            if (type == CallType.DIRECT_DIAL) {
-                mutableState.update { it.copy(dialNumber = ride.counterpartyPhone) }
-            }
+            mutableState.update { it.copy(dialNumber = ride.counterpartyPhone) }
         }
     }
 
-    /** US-12.8's driver SOS. Active trip only, which is the only state this screen exists in. */
-    fun triggerSos() {
-        val at = mutableState.value.position?.asPoint() ?: return
-        launchGuarded { contact.triggerSos(rideId, at) }
+    /**
+     * US-12.8's driver SOS — **opens SCR-DA-032** rather than raising the alarm here (Δ C075).
+     *
+     * The alarm is not a one-tap action any more: D2' §SCR-DA-032 is a screen with a confirmation,
+     * a cancel window, the emergency contact it will reach and the dispatched state. Raising it
+     * from a button on the sheet as well would be a second, unconfirmed door to the same
+     * irrevocable `POST /v1/sos`.
+     */
+    fun openSos() {
+        mutableState.update { it.copy(sosRequested = true) }
     }
 
     /** Raises one of SCR-DA-015's three sheets, or `null` to take whichever is up back down. */
@@ -292,9 +310,9 @@ internal class ActiveRideViewModel(
         mutableState.update { it.copy(sheet = sheet) }
     }
 
-    /** Clears a consumed dial number or the last failure. */
+    /** Clears a consumed dial number, navigation request or the last failure. */
     fun consume() {
-        mutableState.update { it.copy(dialNumber = null, error = null) }
+        mutableState.update { it.copy(dialNumber = null, voipCall = false, sosRequested = false, error = null) }
     }
 
     /**

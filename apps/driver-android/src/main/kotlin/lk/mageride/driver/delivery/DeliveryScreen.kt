@@ -39,7 +39,12 @@ import org.koin.core.parameter.parametersOf
  * @param onFinished The parcel is handed over, or the job was released. Back to standby.
  */
 @Composable
-internal fun DeliveryScreen(rideId: Ulid, onFinished: () -> Unit, modifier: Modifier = Modifier) {
+internal fun DeliveryScreen(
+    rideId: Ulid,
+    onFinished: () -> Unit,
+    onOpenSos: (Ulid) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val viewModel: DeliveryViewModel = koinViewModel { parametersOf(rideId) }
     val state by viewModel.state.collectAsStateWithLifecycle()
 
@@ -103,6 +108,14 @@ internal fun DeliveryScreen(rideId: Ulid, onFinished: () -> Unit, modifier: Modi
                     Intent(Intent.ACTION_DIAL, Uri.parse("tel:$number")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
                 )
             }
+            viewModel.consume()
+        }
+    }
+
+    // SCR-DA-032 (Δ C075) — the SOS button opens the alarm screen rather than raising it here.
+    LaunchedEffect(state.sosRequested) {
+        if (state.sosRequested) {
+            onOpenSos(rideId)
             viewModel.consume()
         }
     }

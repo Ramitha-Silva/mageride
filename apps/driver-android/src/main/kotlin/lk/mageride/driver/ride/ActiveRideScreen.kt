@@ -59,9 +59,18 @@ import org.koin.core.parameter.parametersOf
  * settlement, and confirming is what posts the earning (R-05).
  *
  * @param onFinished The ride reached a terminal state; the driver goes back to standby.
+ * @param onOpenVoipCall SCR-DA-031 (Δ C075) — AL-48's chooser answered **Free call**.
+ * @param onOpenSos SCR-DA-032 (Δ C075) — the alarm is a screen with a confirmation, not a button
+ *   that fires.
  */
 @Composable
-internal fun ActiveRideScreen(rideId: Ulid, onFinished: () -> Unit, modifier: Modifier = Modifier) {
+internal fun ActiveRideScreen(
+    rideId: Ulid,
+    onFinished: () -> Unit,
+    onOpenVoipCall: (Ulid) -> Unit,
+    onOpenSos: (Ulid) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val viewModel: ActiveRideViewModel = koinViewModel { parametersOf(rideId) }
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -71,7 +80,7 @@ internal fun ActiveRideScreen(rideId: Ulid, onFinished: () -> Unit, modifier: Mo
     // kind is not known until the ride has been read, and this is where it is answered. Same shape
     // as Home swapping its sheet on `LiveVehicle.isScheduledMode` (C070).
     if (state.isPackage) {
-        DeliveryScreen(rideId = rideId, onFinished = onFinished, modifier = modifier)
+        DeliveryScreen(rideId = rideId, onFinished = onFinished, onOpenSos = onOpenSos, modifier = modifier)
         return
     }
 
@@ -113,6 +122,21 @@ internal fun ActiveRideScreen(rideId: Ulid, onFinished: () -> Unit, modifier: Mo
                     Intent(Intent.ACTION_DIAL, Uri.parse("tel:$number")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
                 )
             }
+            viewModel.consume()
+        }
+    }
+
+    // The two screens C075 added. Both are takeovers about this ride, so both carry its id.
+    LaunchedEffect(state.voipCall) {
+        if (state.voipCall) {
+            onOpenVoipCall(rideId)
+            viewModel.consume()
+        }
+    }
+
+    LaunchedEffect(state.sosRequested) {
+        if (state.sosRequested) {
+            onOpenSos(rideId)
             viewModel.consume()
         }
     }
@@ -180,8 +204,10 @@ private fun ActiveRideSheet(state: ActiveRideState, viewModel: ActiveRideViewMod
                 )
             }
             OutlinedButton(
-                onClick = viewModel::triggerSos,
+                onClick = viewModel::openSos,
                 modifier = Modifier.weight(1f),
+                // SCR-DA-032 needs a fix to attach to the alarm — `POST /v1/sos` has no
+                // positionless form. See `SosState.awaitingPosition`.
                 enabled = state.position != null,
             ) {
                 Icon(

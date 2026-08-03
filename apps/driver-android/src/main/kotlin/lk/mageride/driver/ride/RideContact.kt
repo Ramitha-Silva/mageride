@@ -5,7 +5,9 @@ import lk.mageride.shared.data.api.safety.SafetyApi
 import lk.mageride.shared.data.models.CallType
 import lk.mageride.shared.data.models.GeoPoint
 import lk.mageride.shared.data.models.Ulid
+import lk.mageride.shared.data.models.comms.CallOutcome
 import lk.mageride.shared.data.models.comms.CalleeRole
+import lk.mageride.shared.data.models.comms.RecordCallOutcomeRequest
 import lk.mageride.shared.data.models.comms.StartCallRequest
 import lk.mageride.shared.data.models.comms.StartCallResponse
 import lk.mageride.shared.data.models.ride.RideKind
@@ -46,6 +48,20 @@ internal class RideContact(private val voip: VoipApi, private val safety: Safety
      */
     suspend fun startCall(rideId: Ulid, calleeRole: CalleeRole, type: CallType): StartCallResponse =
         voip.startCall(StartCallRequest(rideId = rideId, calleeRole = calleeRole, callType = type))
+
+    /**
+     * `POST /v1/calls/{callId}/outcome` — how the call ended (Δ C075).
+     *
+     * **The only way the platform sees a call that never connected.** AL-48's fallback hangs on
+     * [lk.mageride.shared.data.models.comms.CallOutcome.VOIP_FAILED]: SCR-DA-031 sends it when it
+     * puts up *"Call normally instead?"*, and the `direct_dial` row that follows on the same ride is
+     * then the fallback being taken rather than a driver who simply preferred to dial.
+     *
+     * Best-effort, like the log it writes to — a driver reaching the rider must never depend on it.
+     */
+    suspend fun reportCallOutcome(callId: Ulid, outcome: CallOutcome) {
+        voip.recordCallOutcome(callId, RecordCallOutcomeRequest(outcome))
+    }
 
     /**
      * `POST /v1/sos` — the driver's own SOS, during an active trip only (US-12.8, AL-13).

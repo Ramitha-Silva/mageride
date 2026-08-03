@@ -101,7 +101,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C072 | driver-android-jobs-level-earnings | 4a | DONE | 2026-08-03 | **183 tests green** (was 151; 32 new across 6 suites), `assembleDebug` + `detekt` + `ktlintCheck` clean; SCR-DA-017/018/019/020 built to the wireframes. The board is post-intent only and the fence is asserted (no operation containing "accept" is reachable); US-6A.8 is **three**-valued so an unread level never renders as the L1 gate; T-30 is `JobBoard.GO_LIVE_LEAD` on both job screens; earnings print query-svc's own summary and never a second total; every date is Asia/Colombo through `BusinessCalendar`. Three routes added (`ScheduledRides`, `DriverLevel`, `Earnings`) — the Menu stays at eight rows. Five spec gaps: `ScheduledRide` carries no fare and no address, dispatch-svc sends `hasIntent`/`paymentMethod` the contract does not declare, driver-side cancellation of a scheduled ride has no route, `SCHEDULED_REMINDER` has no deep link and no read carries the report count. Two wireframe deviations: there is no Level 4 (D5' §4.2 caps at 3) and no payment-method split (no read answers one) |
 | C073 | driver-android-wallet-credit | 4a | DONE | 2026-08-03 | **237 tests green** (was 183; 54 new — 7 new wallet suites plus one case each in `ScheduleLabelsTest` and `NavigationShellTest`), `assembleDebug` + `detekt` + `ktlintCheck` clean; SCR-DA-021/022/023/024/025 built to the wireframes. Three fences are asserted rather than remembered (`WalletFenceTest`): `TopupMethod` has exactly three entries and no source or copy in the package names a bank transfer in any of the three languages, nothing here opens a camera (AL-34), and a transfer's two legs are equal at every amount with no commission in any string. A Rs 1,000 voucher at 10 % prices at Rs 900 and credits Rs 1,000 — and goes to `POST /v1/vouchers/purchase`, **not** to a top-up of the discounted price, which would credit Rs 1,900. Four routes added; the balance is read, never computed. Five spec gaps: the wireframe's `DRV-22011` does not exist (the Driver ID is the platform ULID and no route resolves one form into the other), no notification type carries a credit-transfer request, no per-driver low-balance threshold is stored anywhere, `TransferRow` carries no vehicle, and `VoucherPurchase` carries no LankaQR deep link. One dependency added (`com.google.zxing:core`, encoder only) for AL-15's fallback
 | C074 | driver-android-tracker-sharing-profile | 4a | DONE | 2026-08-03 | **283 tests green** (was 237; 46 new across 6 suites), `assembleDebug` + `detekt` + `ktlintCheck` clean; SCR-DA-027/028/029/030 built to the wireframes. The C074 fence is a decorator on the publisher seam, not a check in a screen: `TrackerPositionPublisher` refuses `start(vehicleId)` for a paired vehicle, which closes all three doors onto the position service at once, and pairing stops a stream that is already running. SCR-DA-028 **re-reads** on every selector change rather than filtering — both endpoints take the vehicle in the path, so AL-35's "never mixed across vehicles" is enforced by emptying the lists on the tap. The rate-passenger sheet is a `ModalBottomSheet` (AL-35) and its list source is query-svc's `GET /v1/trips/{driverId}`, whose `rating` is joined on `rater_id` and therefore means "the stars I already left". Six spec gaps: **no route writes a `subject_kind='ride'` rating** although the column, query-svc's read and D3' §Part 3 all expect one; no owner-facing unbind; the bind wrapper drops `method`/`bindCode`; nothing reads a tracker binding back; no read serves a driver their own star average; and no notification type exists for a Mode B access request. Zero new dependencies — the QR reader is the half of `zxing:core` C073 already added |
-| C075 | driver-android-comms-safety-support | 4a | PENDING | | |
+| C075 | driver-android-comms-safety-support | 4a | DONE | 2026-08-03 | **322 tests green** (was 283; 39 new across 5 suites), `assembleDebug` + `detekt` + `ktlintCheck` clean; SCR-DA-031/032/033/033a/034/035 built to the wireframes. **The LiveKit Android SDK cannot be resolved in this repo** — it depends on `audioswitch`, published only on JitPack, and the repository set is `google()` + `mavenCentral()` under `FAIL_ON_PROJECT_REPOS` — so the signalling half of SCR-DA-031 is real and the media half reports `NO_MEDIA_CLIENT`, which is exactly AL-48's condition: the screen offers *"Call normally instead?"* and logs `voip_failed`. Landing a real engine is one binding (`VoipEngine`). SCR-DA-015's Call and SOS buttons now **navigate**: two parameterised routes added (`VoipCall`, `Sos`), and `POST /v1/calls/start` is made by one screen so one tap writes one `comms.call_log` row. The daily-fee refund is a **category** (`daily_fee_refund` → Finance), not an endpoint, and shares SCR-DA-033a with *"Raise a ticket"*. SCR-DA-034 reads `mobile_db_schema.md` §1.6 because no operation lists notifications, which is also why it works offline; `DriverDatabase` is the app's deferred one-handle open of the local DB. Six spec gaps: no positionless `POST /v1/sos`, no spec number for the SOS confirmation window, no server-side notification list, `TicketEventKind.ASSIGNED` is unrenderable, no `TK-` ticket series exists, and `category` is free text. Zero new dependencies |
 | C076 | passenger-android-shell | 4a | PENDING | | |
 | C077 | passenger-android-auth-onboarding | 4a | PENDING | | |
 | C078 | passenger-android-live-map-search | 4a | PENDING | | |
@@ -11937,3 +11937,140 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   **SCR-DA-034 (C075) is the screen the six gap-6 notifications would land on**, and
   `DriverNotificationGroup` is the table its preferences already switch — add a row there if a
   sharing type is ever minted.
+
+---
+
+- **Component:** C075 driver-android-comms-safety-support — 2026-08-03
+- **Status:** DONE — `:apps:driver-android:testDebugUnitTest` **322 passed, 0 failed** (was 283),
+  `assembleDebug` clean, `detekt` and `ktlintCheck` green, and the suite was re-run **four times**
+  from a cold task graph to be sure none of the new cases is order-dependent. All six screens under
+  `## Screens` are built to `specs/wireframes/driver_android.html`. **No new dependency** — and the
+  one this component wanted could not be had; see the first note. 39 new tests across 5 suites,
+  ~80 new trilingual strings, two routes added.
+- **Notes:**
+
+  ### The headline: the VoIP media client cannot be added, and the fence still holds
+
+  D6' §6 names **LiveKit + coturn** and D2' §SCR-DA-031's component note says *"Δ Android: WebRTC +
+  ConnectionService"*, so the intended client is `io.livekit:livekit-android`. It **cannot be
+  resolved in this repository**: `livekit-android` depends on `com.github.davidliu:audioswitch`,
+  which is published only on **JitPack**, and `settings.gradle.kts` resolves from a content-filtered
+  `google()` plus `mavenCentral()` under `RepositoriesMode.FAIL_ON_PROJECT_REPOS`. Adding a
+  build-from-source GitHub proxy to the resolution set for every module in the repo is a
+  supply-chain change to C001's file, not this component's to make. (Verified by adding the
+  dependency and running `assembleDebug`; the failure is `Could not find
+  com.github.davidliu:audioswitch:039a35ae…`, searched on Maven Central only. Reverted.)
+
+  What shipped instead is **the whole screen against a seam**. `VoipEngine` has three states
+  (`Connecting` / `Connected` / `Failed`) and `AbsentVoipEngine` is the binding, so:
+
+  - the **signalling half is real and complete** — `POST /v1/calls/start` with `free_voip` against
+    `calleeRole = passenger` (P-05 — the rider, never the booker), voip-svc mints the room token and
+    writes `comms.call_log`;
+  - the media half reports `VoipFailure.NO_MEDIA_CLIENT`, which is **exactly the condition AL-48
+    legislates for**: SCR-DA-031 puts up *"Call normally instead?"* and the driver reaches the rider
+    on a `tel:` dial of the number the ride already carries;
+  - `POST /v1/calls/{callId}/outcome` reports `voip_failed`, so the platform's own log tells the
+    truth about what this build can do — and the `direct_dial` row that follows on the same ride is
+    legible as the fallback being taken rather than a driver who preferred to dial.
+
+  Landing the real engine is **one line in `driverAppModule`**, plus `RECORD_AUDIO` and
+  `MODIFY_AUDIO_SETTINGS` in the manifest — both deliberately absent, because a permission with no
+  code behind it is what that file's own header forbids. `VoipCallViewModelTest`'s
+  `this_build_never_reaches_the_connected_state_and_says_so` is the test that should start failing
+  the day it lands. **C131 (voip-tracker-acceptance-sg) depends on this**; nothing between here and
+  there owns a WebRTC client, so it needs an explicit owner.
+
+  ### Spec gaps found
+
+  1. **`POST /v1/sos` has no positionless form.** `TriggerSosRequest.lat`/`.lng` are required, while
+     BR-29.4 explicitly contemplates the case for the *web* surface — *"geolocation denied → SOS
+     still fires with the last known driver-reported position, marked `accuracy=unknown`"*. The app
+     has no equivalent, so SCR-DA-032 waits for the first fix before it arms and refuses to invent a
+     coordinate. In practice this is milliseconds (`DriverLocationSource` emits the last-known fix
+     before registering), but a handset with location off can raise no alarm at all — which is worse
+     than the web surface's answer to the same problem.
+  2. **D5' §14.3 fixes the dispatch budget and says nothing about the confirmation before it.**
+     p99 ≤ 5 s is measured from the request; the cancel window is spent *before* it. Three seconds
+     is `SosViewModel.COUNTDOWN_SECONDS` and it is this component's number, not a spec's — argued in
+     that constant's KDoc. A deliberate tap sends immediately, so the window only costs a driver who
+     did not tap.
+  3. **There is no *"list my notifications"* operation on the app-facing surface.**
+     `notification.yaml` mints, registers a token, sets preferences and acknowledges;
+     `mobile_db_schema.md` §1.6 is the read model the schema document supplies instead. SCR-DA-034
+     is therefore **this handset's** history — a reinstall starts it empty, and a second device shows
+     a different list. That is a real product limit, not a client shortcut.
+  4. **`TicketEventKind.ASSIGNED` is in the enum and is never renderable.** The contract says who is
+     handling a complaint is not returned to the user, so `SupportLabels.event` answers `null` for it
+     and the thread skips the row rather than printing an empty one.
+  5. **The wireframe's `#TK-9012` does not exist.** A ticket id is a ULID and there is no `TK-`
+     series — the same finding C073/C074 recorded about `DRV-22011`. The row leads with the
+     **category** instead, which is what a driver recognises; a twenty-six-character identifier in a
+     list row is noise nobody reads out. Same for SCR-DA-033a's *"DRV-22011-0617"* trip label, which
+     is the trip's **Colombo date and route**.
+  6. **`category` is free text and cannot be an exhaustive table.** `support.tickets.category`
+     carries no CHECK and the FAQ surface publishes the list. Two keys are the app's own with proper
+     trilingual copy; anything else is rendered from the key (`daily_fee_refund` → *"Daily fee
+     refund"*) rather than collapsed into one label, because a driver looking at their own ticket
+     list has to tell two of them apart.
+
+  ### Decisions worth knowing
+
+  **The alarm and the call are screens, so SCR-DA-015's buttons navigate rather than act.** `SOS`
+  used to be a one-tap `POST` from the ride sheet and from the delivery sheet; D2' §SCR-DA-032 is a
+  screen with a confirmation, a cancel window, the contact it will reach and the dispatched state, so
+  both buttons now open it. One irrevocable `POST /v1/sos` deserves one door. `Free call` likewise
+  opens SCR-DA-031, which is where `POST /v1/calls/start` is made — leaving it on the sheet as well
+  would have written two `comms.call_log` rows for one tap. Two parameterised routes were added
+  (`VoipCall`, `Sos`); both carry the ride id, because both are *about* a trip and neither has a
+  process-wide holder to read.
+
+  **The daily-fee refund is a `category`, not an endpoint, and that is the one thing on this surface
+  that is expensive to get wrong.** `daily_fee_refund` is what derives `TicketQueue.FINANCE`
+  (US-9.23 / US-14.11); anything else lands in Support's pile, which cannot reverse a fee. So the
+  quick action and *"Raise a ticket"* are **one** sheet — SCR-DA-033a — posting the same operation
+  with a different key, and `SupportViewModelTest` asserts both keys on the wire. The screenshot is a
+  separate upload whose `docs.uploads` id the ticket links (the contract's own shape), uploaded by
+  **Submit** rather than by the picker, and a failed upload never costs the driver their ticket.
+
+  **`DriverDatabase` is the app's deferred answer to C018's deliberately un-bound database.** Opening
+  it is `suspend` — the SQLCipher key comes out of the Keystore — so it is opened by the first caller
+  behind a `Mutex` and shared. Three things read that file now (the position service's GPS ring,
+  SCR-DA-034's inbox, SCR-DA-035's backlog count) and three `openDriver()` calls would have been
+  three connections to one encrypted file, each with its own write lock. `PositionForegroundService`
+  was moved onto it — the only edit C075 made to C067's service.
+
+  **`NotificationInbox` is an interface for the reason `TrackerBindingStore` is.** The real one opens
+  an encrypted SQLite file through an Android driver whose local-unit-test stub answers a default for
+  every member, so a screen tested against it would report an empty inbox whatever had arrived —
+  the one answer that makes a list look like it works when it does not.
+
+  **SCR-DA-035 was half-built by C067 and is now whole.** The banner and the `426` gate existed; this
+  component added the wireframe's buffered-samples card (`BufferedSamplesCard` reads connectivity and
+  `gps_buffer` itself, so each home sheet adds one line and it draws nothing while online) and the
+  **cold-start** `GET /v1/version/check`. That check is public and unattested by contract precisely
+  so a build too old to authenticate can learn it is too old, and it publishes on the **same**
+  `upgradeRequired` signal a mid-session `426` does — one wall, one subscriber, either way in. A
+  mandatory gate swallows `onDismissRequest`, which is the only hook the scrim tap and the back
+  button have; a soft one keeps its *"Later"*.
+
+  ### Two tests outside this component's screens were fixed
+
+  `SharingViewModelTest` (C074) was flaky and fails **on a pristine checkout** — verified by
+  stashing this component's work and re-running it. Two of its cases await a condition that is
+  weaker than the one they assert, and a conflated `StateFlow` makes which state they land on a coin
+  toss: `accepting_a_request_…` awaits the empty queue while `decide` clears `busyRequestId` in a
+  *second* update, and `granting_sends_the_id_…` awaits `!loading` — which goes false **before**
+  `readListsFor` folds in the roster it then asserts on. Both now await the condition they check.
+  **The view model is unchanged; only the awaits were wrong.** The suite was run five times from a
+  cold task graph afterwards, all green.
+
+  **For C076 (and the passenger cluster) —** `comms/VoipEngine` is the shape SCR-PA-028 should reuse
+  rather than re-derive; its Absent binding and the JitPack finding apply to that app identically.
+  `notifications/NotificationInbox` + `AlertKind` are §1.6's read model and the catalogue's name
+  table, and neither is driver-specific — the passenger's alerts screen is the same table with a
+  different icon row. `support/SupportRepository` is the whole of support-svc as an app uses it, and
+  `SupportCategories` is where the Finance-versus-Support key lives. `shell/BufferedSamplesCard` is
+  driver-only (the passenger app runs no publisher), but `DriverDatabase`'s shape — deferred open,
+  one handle, `Mutex` — is what C076's shell should copy rather than opening the database in
+  `Application.onCreate`.

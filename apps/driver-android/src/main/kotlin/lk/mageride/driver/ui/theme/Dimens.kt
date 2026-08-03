@@ -188,4 +188,32 @@ internal object ControlTokens {
 
     /** SCR-DA-020's trend chart (`.bars`, `height:90px`), rounded onto the 4 px grid. */
     val EarningsChart: Dp = 88.dp
+
+    // ---- C075 · the call, the SOS, the support list and the alerts ---------------------
+
+    /** SCR-DA-031's mute and speaker controls — the wireframe's `.fab`, `44 x 44`. */
+    val CallAction: Dp = 44.dp
+
+    /** Its red hang-up disc (`width:64px;height:64px;border-radius:50%`). */
+    val CallEnd: Dp = 64.dp
+
+    /**
+     * SCR-DA-032's SOS disc (`128px`) and the translucent ring around it (`box-shadow: … 14px`).
+     *
+     * Rounded onto the 4 px grid the same way C068 rounded the wireframe's `1.5px` outline. It is
+     * the largest control in the app on purpose: it is pressed by someone who is not looking.
+     */
+    val SosButton: Dp = 128.dp
+    val SosHalo: Dp = 16.dp
+
+    /** SCR-DA-033's `🔍 Search help` field (`.searchbar`, `height:48px`). */
+    val SearchBar: Dp = 48.dp
+
+    /**
+     * The leading glyph square on a list row (`.listrow .ic`, `30 x 30`, `radius 8`).
+     *
+     * SCR-DA-034 draws one per alert and colours it by kind; SCR-DA-036's drawer rows use the same
+     * square. Distinct from [RowIcon], which is the *icon* inside it.
+     */
+    val ListRowIcon: Dp = 32.dp
 }
