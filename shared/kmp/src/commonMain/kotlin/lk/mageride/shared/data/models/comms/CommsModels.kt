@@ -212,3 +212,53 @@ public data class SendNotificationResponse(
     val suppressed: Int,
     val undeliverable: Int,
 )
+
+/**
+ * `POST /v1/notify/ack` (Δ C051, E-01).
+ *
+ * The driver app calls this from the silent data message's handler with the id the push carried.
+ * **It races a three-second deadline** (D6' §7.4): an offer push not acknowledged in time falls
+ * back to SMS, which is why the operation is `x-idempotency-exempt` — answering
+ * `400 idempotency-key-required` to a handset that woke up in time would fire the fallback for a
+ * driver who was there.
+ *
+ * @property notificationId The notification being acknowledged.
+ */
+@Serializable
+public data class AcknowledgeNotificationRequest(val notificationId: Ulid)
+
+/**
+ * `POST /v1/calls/{callId}/outcome` (Δ C055).
+ *
+ * @property outcome How the call ended.
+ */
+@Serializable
+public data class RecordCallOutcomeRequest(val outcome: CallOutcome)
+
+/**
+ * How a call ended (`comms.call_log.outcome`, `ck_call_log_outcome`, migration 1311).
+ *
+ * **No spec names these** — 1302 left the column free text with no writer, and the set is C055's.
+ * [VOIP_FAILED] is the value AL-48's fallback hangs on: it is what the client sends when it puts
+ * up "Call normally instead?", and a `direct_dial` row after one on the same ride is the fallback
+ * being taken rather than a user who simply preferred to dial.
+ *
+ * @property wire The value as it appears on the wire.
+ */
+@Serializable
+public enum class CallOutcome(public val wire: String) {
+    @SerialName("completed")
+    COMPLETED("completed"),
+
+    @SerialName("missed")
+    MISSED("missed"),
+
+    @SerialName("declined")
+    DECLINED("declined"),
+
+    @SerialName("cancelled")
+    CANCELLED("cancelled"),
+
+    @SerialName("voip_failed")
+    VOIP_FAILED("voip_failed"),
+}

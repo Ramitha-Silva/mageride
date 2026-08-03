@@ -12,12 +12,18 @@ import lk.mageride.shared.data.models.dispatch.DriverStatsResponse
 import lk.mageride.shared.data.models.dispatch.GoOnlineRequest
 import lk.mageride.shared.data.models.dispatch.JobBoardIntentResponse
 import lk.mageride.shared.data.models.dispatch.LevelConfig
+import lk.mageride.shared.data.models.dispatch.OutstandingPenalties
+import lk.mageride.shared.data.models.dispatch.OutstandingPenalty
+import lk.mageride.shared.data.models.dispatch.PenaltyBasis
+import lk.mageride.shared.data.models.dispatch.PenaltyStatus
 import lk.mageride.shared.data.models.dispatch.PresenceResponse
 import lk.mageride.shared.data.models.dispatch.PresenceState
 import lk.mageride.shared.data.models.dispatch.ScheduleRideRequest
 import lk.mageride.shared.data.models.dispatch.ScheduledRide
 import lk.mageride.shared.data.models.dispatch.ScheduledRideStatus
 import lk.mageride.shared.data.models.dispatch.SetDirectionalFilterRequest
+import lk.mageride.shared.data.models.dispatch.SettlePenaltiesRequest
+import lk.mageride.shared.data.models.dispatch.SettledPenalties
 import lk.mageride.shared.data.models.fare.CalculateFinalFareRequest
 import lk.mageride.shared.data.models.fare.ClaimDriverQrRequest
 import lk.mageride.shared.data.models.fare.ConfirmDriverQrRequest
@@ -51,6 +57,7 @@ import lk.mageride.shared.data.models.ride.DisputeRideRequest
 import lk.mageride.shared.data.models.ride.FareEstimate
 import lk.mageride.shared.data.models.ride.LocationRequest
 import lk.mageride.shared.data.models.ride.LocationRequestState
+import lk.mageride.shared.data.models.ride.MaterialiseScheduledRideRequest
 import lk.mageride.shared.data.models.ride.NotifyPaymentSettledRequest
 import lk.mageride.shared.data.models.ride.OtpAttempt
 import lk.mageride.shared.data.models.ride.PackageStatus
@@ -187,6 +194,34 @@ class DtoRoundTripRideTest {
         )
         assertRoundTrips(DisputeRideRequest("Charged twice for the same trip"))
         assertRoundTrips(SystemCancelRideRequest(SystemCancelReason.DRIVER_OFFLINE_GRACE_EXPIRED))
+
+        // Δ MCS-03 — D5' §7.1's debt ledger, read and settled on the internal plane. `dispatch`
+        // declares its OWN CancellationPenalty, a different shape from ride.yaml's — see
+        // `OutstandingPenalty`'s KDoc and the MCS-03 handoff.
+        val debt = OutstandingPenalty(
+            penaltyId = Sample.ULID_A,
+            passengerId = Sample.ULID_B,
+            originalRideId = Sample.ULID_C,
+            affectedDriverId = Sample.ULID_A,
+            amountMinor = 5_000,
+            currency = Currency.LKR,
+            basis = PenaltyBasis.CANCELLATION_FEE,
+            status = PenaltyStatus.OUTSTANDING,
+        )
+        assertRoundTrips(debt)
+        assertRoundTrips(OutstandingPenalties(listOf(debt), totalMinor = 5_000, currency = Currency.LKR))
+        assertRoundTrips(SettlePenaltiesRequest(rideId = Sample.ULID_B))
+        assertRoundTrips(SettledPenalties(listOf(debt), settledMinor = 5_000, currency = Currency.LKR))
+        assertRoundTrips(
+            MaterialiseScheduledRideRequest(
+                scheduledRideId = Sample.ULID_A,
+                passengerId = Sample.ULID_B,
+                pickup = Sample.PLACE,
+                dropoff = Sample.PLACE,
+                vehicleType = RideVehicleType.SEDAN,
+                paymentMethod = RidePaymentMethod.CASH,
+            ),
+        )
     }
 
     @Test

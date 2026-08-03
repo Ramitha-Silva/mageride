@@ -189,3 +189,63 @@ public data class DriverRatingInput(val stars: Int, val text: String? = null, va
  */
 @Serializable
 public data class Rating(val ratingId: Ulid, val stars: Int, val text: String? = null, val createdAt: Timestamp)
+
+/**
+ * `POST /v1/internal/sessions/ignition` (Δ C031, AL-32, US-3.22/3.23).
+ *
+ * **Service-to-service (mTLS).** The tracker plane decodes ACC on/off out of a GT06/JT808 frame
+ * and reports it here; D6' §I-25.3 routes the ingest and no endpoint carried it.
+ *
+ * @property vehicleId The vehicle whose ignition changed.
+ * @property state `on` opens a session, `off` closes one **the device started** — never one the
+ *   driver started from the dashboard, which AL-32 makes authoritative in both directions.
+ * @property at When it changed, as the device saw it.
+ */
+@Serializable
+public data class ReportIgnitionRequest(val vehicleId: Ulid, val state: IgnitionState, val at: Timestamp? = null)
+
+/** ACC on or off (`trip-state.yaml`). @property wire The value as it appears on the wire. */
+@Serializable
+public enum class IgnitionState(public val wire: String) {
+    @SerialName("on")
+    ON("on"),
+
+    @SerialName("off")
+    OFF("off"),
+}
+
+/**
+ * `POST /v1/internal/sessions/ignition` — 202.
+ *
+ * **The outcome is informational.** Whether the report opens a session, closes one or does
+ * nothing is trip-state-svc's decision; the adapter has no use for the answer and must not treat
+ * [IgnitionOutcome.DECLINED] as a failure to retry.
+ *
+ * @property outcome What the report did.
+ */
+@Serializable
+public data class ReportIgnitionResponse(val outcome: IgnitionOutcome)
+
+/**
+ * What an ignition report did (`trip-state.yaml`, Δ C031).
+ *
+ * [NOCHANGE] — the vehicle was already in the state the ignition implies, or the session is the
+ * dashboard's. [DECLINED] — not a Mode A/B vehicle, not eligible, or its owner is live elsewhere
+ * and D-03 gives them one session at a time.
+ *
+ * @property wire The value as it appears on the wire.
+ */
+@Serializable
+public enum class IgnitionOutcome(public val wire: String) {
+    @SerialName("started")
+    STARTED("started"),
+
+    @SerialName("ended")
+    ENDED("ended"),
+
+    @SerialName("nochange")
+    NOCHANGE("nochange"),
+
+    @SerialName("declined")
+    DECLINED("declined"),
+}

@@ -1,7 +1,11 @@
 package lk.mageride.shared.data.models.dispatch
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import lk.mageride.shared.data.models.Currency
 import lk.mageride.shared.data.models.GeoPoint
+import lk.mageride.shared.data.models.Money
+import lk.mageride.shared.data.models.MoneyHolder
 import lk.mageride.shared.data.models.Place
 import lk.mageride.shared.data.models.RideVehicleType
 import lk.mageride.shared.data.models.Timestamp
@@ -294,3 +298,104 @@ public data class LevelConfig(
     val cancellationPenaltyPoints: Int? = null,
     val jobBoardMinLevel: Int? = null,
 )
+
+/**
+ * `GET /v1/internal/passengers/{passengerId}/penalties` — 200 (Δ C035, D5' §7.1).
+ *
+ * **Service-to-service (mTLS).** fare-svc reads a passenger's unsettled cross-trip debt before it
+ * prices their next completed trip, and US-6A.10b evaluates re-enablement against the same total.
+ *
+ * @property items Outstanding penalties, oldest first.
+ * @property totalMinor What they add up to, in minor units.
+ * @property currency Always LKR.
+ */
+@Serializable
+public data class OutstandingPenalties(
+    val items: List<OutstandingPenalty> = emptyList(),
+    val totalMinor: Long,
+    val currency: Currency,
+) : MoneyHolder {
+    override val money: Money get() = Money(amountMinor = totalMinor, currency = currency)
+}
+
+/**
+ * `POST /v1/internal/passengers/{passengerId}/penalties/settle` (Δ C035).
+ *
+ * @property rideId The completed ride the debt is collected on.
+ */
+@Serializable
+public data class SettlePenaltiesRequest(val rideId: Ulid)
+
+/**
+ * `POST /v1/internal/passengers/{passengerId}/penalties/settle` — 200.
+ *
+ * Empty when there was nothing outstanding, which is also what a replay of the first call answers.
+ *
+ * @property items What this call settled.
+ * @property settledMinor Their total, in minor units.
+ * @property currency Always LKR.
+ */
+@Serializable
+public data class SettledPenalties(
+    val items: List<OutstandingPenalty> = emptyList(),
+    val settledMinor: Long,
+    val currency: Currency,
+) : MoneyHolder {
+    override val money: Money get() = Money(amountMinor = settledMinor, currency = currency)
+}
+
+/**
+ * One row of `dispatch.cancellation_penalties` (Δ C035, D5' §7.1, D-05, AL-16).
+ *
+ * **Not `ride.CancellationPenalty`, and the two must not be merged.** `ride.yaml` and
+ * `dispatch.yaml` both declare a schema by that name and they are different things: the ride one
+ * is *what a cancellation will cost you*, quoted back on the cancel response with a
+ * `settledOn` hint; this one is *a debt on the books*, with the passenger, the ride that accrued
+ * it, the driver it is owed to and whether it has been collected. C012's one-package-per-contract
+ * rule is what keeps them apart, and this name says which is which. Recorded in the MCS-03 handoff.
+ *
+ * @property penaltyId The debt.
+ * @property passengerId Who owes it.
+ * @property originalRideId The ride whose cancellation accrued it.
+ * @property affectedDriverId Who the money is owed to. The next trip's driver is a pass-through
+ *   (AL-16) — they are paid, and this names who it was for.
+ * @property amountMinor What is owed, minor units.
+ * @property currency Always LKR.
+ * @property basis Which §11.12 rule accrued it. [PenaltyBasis.FULL_FARE] means [amountMinor] is the
+ *   **quoted** fare and fare-svc settles the metered one instead.
+ * @property status Whether it is still outstanding.
+ */
+@Serializable
+public data class OutstandingPenalty(
+    val penaltyId: Ulid,
+    val passengerId: Ulid,
+    val originalRideId: Ulid,
+    val affectedDriverId: Ulid,
+    val amountMinor: Long,
+    val currency: Currency,
+    val basis: PenaltyBasis,
+    val status: PenaltyStatus,
+) : MoneyHolder {
+    override val money: Money get() = Money(amountMinor = amountMinor, currency = currency)
+}
+
+/** Which D5' §11.12 rule accrued a penalty. @property wire The value as it appears on the wire. */
+@Serializable
+public enum class PenaltyBasis(public val wire: String) {
+    @SerialName("cancellation_fee")
+    CANCELLATION_FEE("cancellation_fee"),
+
+    @SerialName("no_show_fee")
+    NO_SHOW_FEE("no_show_fee"),
+
+    /** [OutstandingPenalty.amountMinor] is the **quoted** fare; fare-svc settles the metered one. */
+    @SerialName("full_fare")
+    FULL_FARE("full_fare"),
+}
+
+/** Whether a penalty has been collected (`dispatch.cancellation_penalties.status`). */
+@Serializable
+public enum class PenaltyStatus {
+    OUTSTANDING,
+    SETTLED,
+}

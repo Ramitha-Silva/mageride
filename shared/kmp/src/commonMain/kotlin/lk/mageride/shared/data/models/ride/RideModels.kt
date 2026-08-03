@@ -746,3 +746,36 @@ public data class RideSagaState(
     val transitions: List<RideTransition> = emptyList(),
     val pendingOutbox: Int? = null,
 )
+
+/**
+ * `POST /v1/internal/rides/scheduled` (Δ C035).
+ *
+ * **Service-to-service (mTLS).** At T-30 min dispatch-svc turns a `dispatch.scheduled_rides` row
+ * into a real ride: `POST /v1/rides/request` cannot serve, because it is Bearer-authenticated as
+ * the passenger and demands a `fareEstimateToken` signed by fare-svc, neither of which a
+ * scheduler has thirty minutes later. **ride-svc stays the sole writer of `rides.state`** (R-01) —
+ * this is a command, not a foreign write.
+ *
+ * Idempotent by `(passengerId, scheduledRideId)` through `ux_rides_idem` (R-18): the scheduled-ride
+ * id **is** the `clientRequestId`, so a retried materialisation returns the ride the first call
+ * created and books nothing twice.
+ *
+ * There is deliberately **no `fareEstimateToken` and no quote** — the price of a ride thirty
+ * minutes from now is not the price quoted when it was booked (D5' §1.4), so fare-svc meters it.
+ *
+ * @property scheduledRideId Becomes the ride's `clientRequestId`.
+ * @property passengerId Who the ride is for.
+ * @property pickup Where it starts.
+ * @property dropoff Where it ends.
+ * @property vehicleType What was booked.
+ * @property paymentMethod How it will be paid, when the booking named one.
+ */
+@Serializable
+public data class MaterialiseScheduledRideRequest(
+    val scheduledRideId: Ulid,
+    val passengerId: Ulid,
+    val pickup: Place,
+    val dropoff: Place,
+    val vehicleType: RideVehicleType,
+    val paymentMethod: RidePaymentMethod? = null,
+)

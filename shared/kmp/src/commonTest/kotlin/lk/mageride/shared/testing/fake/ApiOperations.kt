@@ -29,11 +29,14 @@ import lk.mageride.shared.data.models.dispatch.DriverStatsResponse
 import lk.mageride.shared.data.models.dispatch.GoOnlineRequest
 import lk.mageride.shared.data.models.dispatch.JobBoardIntentResponse
 import lk.mageride.shared.data.models.dispatch.LevelConfig
+import lk.mageride.shared.data.models.dispatch.OutstandingPenalties
 import lk.mageride.shared.data.models.dispatch.PresenceResponse
 import lk.mageride.shared.data.models.dispatch.ReportDriverNoShowRequest
 import lk.mageride.shared.data.models.dispatch.ScheduleRideRequest
 import lk.mageride.shared.data.models.dispatch.ScheduledRide
 import lk.mageride.shared.data.models.dispatch.SetDirectionalFilterRequest
+import lk.mageride.shared.data.models.dispatch.SettlePenaltiesRequest
+import lk.mageride.shared.data.models.dispatch.SettledPenalties
 import lk.mageride.shared.data.models.fare.CalculateFinalFareRequest
 import lk.mageride.shared.data.models.fare.ClaimDriverQrRequest
 import lk.mageride.shared.data.models.fare.ConfirmDriverQrRequest
@@ -1187,6 +1190,21 @@ internal object ApiOperations {
         ),
 
         // version-check — the D-31 cold-start gate (1)
+        op<OutstandingPenalties>(
+            "listOutstandingPenalties",
+            ApiService.DISPATCH,
+            "GET",
+            "/v1/internal/passengers/{passengerId}/penalties",
+            200,
+        ),
+        op<SettledPenalties>(
+            "settleOutstandingPenalties",
+            ApiService.DISPATCH,
+            "POST",
+            "/v1/internal/passengers/{passengerId}/penalties/settle",
+            200,
+            sends<SettlePenaltiesRequest>(),
+        ),
         op<AppVersionCheck>("checkAppVersion", ApiService.VERSION, "GET", "/v1/version/check", 200),
     )
 

@@ -23,11 +23,14 @@ import lk.mageride.shared.data.models.dispatch.DriverStatsResponse
 import lk.mageride.shared.data.models.dispatch.GoOnlineRequest
 import lk.mageride.shared.data.models.dispatch.JobBoardIntentResponse
 import lk.mageride.shared.data.models.dispatch.LevelConfig
+import lk.mageride.shared.data.models.dispatch.OutstandingPenalties
 import lk.mageride.shared.data.models.dispatch.PresenceResponse
 import lk.mageride.shared.data.models.dispatch.ReportDriverNoShowRequest
 import lk.mageride.shared.data.models.dispatch.ScheduleRideRequest
 import lk.mageride.shared.data.models.dispatch.ScheduledRide
 import lk.mageride.shared.data.models.dispatch.SetDirectionalFilterRequest
+import lk.mageride.shared.data.models.dispatch.SettlePenaltiesRequest
+import lk.mageride.shared.data.models.dispatch.SettledPenalties
 
 /**
  * dispatch-svc — driver presence, Directional Travel, the Job Board and the Driver Level System
@@ -117,6 +120,28 @@ public interface DispatchApi {
 
     /** `PUT /v1/admin/drivers/level-config` — Admin Portal tuning of the Driver Level System. */
     public suspend fun updateDriverLevelConfig(request: LevelConfig): LevelConfig
+
+    /**
+     * `GET /v1/internal/passengers/{passengerId}/penalties` — unsettled cross-trip debt (D5' §7.1).
+     *
+     * **Service-to-service (mTLS).** fare-svc reads this before pricing a passenger's next
+     * completed trip; US-6A.10b's re-enablement is evaluated against the same total. Not reachable
+     * from an app.
+     */
+    public suspend fun listOutstandingPenalties(passengerId: Ulid): OutstandingPenalties
+
+    /**
+     * `POST /v1/internal/passengers/{passengerId}/penalties/settle` — record the debt collected.
+     *
+     * **Service-to-service (mTLS).** The write half of D5' §7.1, called by fare-svc **after** it
+     * has posted the ledger entries: the money is fare-svc's (D-09) and this row is only the
+     * debt's record. A second call with the same ride settles nothing.
+     */
+    public suspend fun settleOutstandingPenalties(
+        passengerId: Ulid,
+        request: SettlePenaltiesRequest,
+        idempotencyKey: String? = null,
+    ): SettledPenalties
 }
 
 @Suppress("TooManyFunctions")
@@ -205,6 +230,20 @@ internal class KtorDispatchApi(private val transport: ApiTransport) : DispatchAp
         transport.apiPut(SERVICE, "updateDriverLevelConfig", "/v1/admin/drivers/level-config") {
             jsonBody(request)
         }.decode()
+
+    override suspend fun listOutstandingPenalties(passengerId: Ulid): OutstandingPenalties =
+        transport.apiGet(SERVICE, "listOutstandingPenalties", "/v1/internal/passengers/$passengerId/penalties").decode()
+
+    override suspend fun settleOutstandingPenalties(
+        passengerId: Ulid,
+        request: SettlePenaltiesRequest,
+        idempotencyKey: String?,
+    ): SettledPenalties = transport.apiPost(
+        service = SERVICE,
+        operationId = "settleOutstandingPenalties",
+        path = "/v1/internal/passengers/$passengerId/penalties/settle",
+        idempotencyKey = idempotencyKey,
+    ) { jsonBody(request) }.decode()
 
     private companion object {
         val SERVICE = ApiService.DISPATCH
