@@ -474,4 +474,124 @@
     <string name="earnings_net">Net</string>
     <string name="earnings_trips">Trip by trip</string>
     <string name="earnings_empty">No completed trips in this period.</string>
+
+    <!-- ============================================================================
+         C073 · wallet · daily fee · credit transfer
+         SCR-DA-021 / 022 / 023 / 024 / 025.
+         ============================================================================ -->
+
+    <!-- The failures this cluster adds to the D-26 code -> copy table. -->
+    <string name="error_invalid_amount">That amount cannot be paid. Check it and try again.</string>
+    <string name="error_gateway_error">The payment service did not answer. Nothing was charged.</string>
+    <string name="error_gateway_unreachable">No app on this phone could open the payment page.</string>
+    <string name="error_already_done">That has already been done, or it changed while you were looking at it.</string>
+    <string name="error_not_found">We could not find that. Check what you entered.</string>
+    <string name="action_save">Save</string>
+
+    <!-- SCR-DA-021 . wallet and daily-fee status (US-9.7, US-9.1, US-9.9). -->
+    <string name="wallet_title">Wallet</string>
+    <string name="wallet_balance_label">Balance (read-only)</string>
+    <string name="wallet_available_after_debt">%1$s of this is owed and cannot be spent.</string>
+    <string name="wallet_daily_fee">Daily fee</string>
+    <string name="wallet_fee_vehicle">Vehicle</string>
+    <string name="wallet_fee_rate">Rate</string>
+    <string name="wallet_fee_rate_value">%1$s / day</string>
+    <string name="wallet_fee_today">Today</string>
+    <string name="wallet_fee_paid">PAID ✓</string>
+    <string name="wallet_fee_unpaid">UNPAID</string>
+    <string name="wallet_fee_status_first_free">%1$s (first trip free)</string>
+    <string name="wallet_fee_unavailable">We could not read today\'s fee. Open this screen again in a moment.</string>
+    <string name="wallet_action_top_up">Top Up / Buy credit</string>
+    <string name="wallet_action_request">Request credit</string>
+    <string name="wallet_action_transfer">Transfer credit</string>
+    <string name="wallet_action_history">Payment history</string>
+    <string name="wallet_low_balance">Low balance. You asked to be warned below %1$s.</string>
+    <string name="wallet_top_up_required">Top Up Required. Your wallet is %1$s below zero.</string>
+    <string name="wallet_below_day_fee">Top Up Required. You are short of one day\'s fee of %1$s, so your next request will be missed.</string>
+    <string name="wallet_threshold_row">Warn me below %1$s</string>
+    <string name="wallet_threshold_title">Low-balance warning</string>
+    <string name="wallet_threshold_body">This is the line we draw on your own screen. The text message MageRide sends is set by the office and does not change with it.</string>
+    <string name="wallet_threshold_reset">Use the default</string>
+    <string name="wallet_amount_label">Amount</string>
+
+    <!-- SCR-DA-022 . top up (US-9.18, US-9.19, AL-05, AL-15). -->
+    <string name="wallet_top_up_title">Top Up</string>
+    <string name="wallet_method">Method</string>
+    <string name="wallet_method_card">Card</string>
+    <string name="wallet_method_onepay">OnePay wallet</string>
+    <string name="wallet_method_lankaqr">LankaQR bank app</string>
+    <string name="wallet_voucher_label">Bulk credit voucher — discount set by the office</string>
+    <string name="wallet_voucher_tile">%1$s · %2$s off</string>
+    <string name="wallet_voucher_empty">No credit vouchers are on sale right now.</string>
+    <string name="wallet_voucher_note">The discount applies only when you buy. A voucher costs less than its face value and puts the full amount in your wallet. Credit you pass to another driver later moves at its exact value.</string>
+    <string name="wallet_pay">Pay</string>
+    <string name="wallet_pay_amount">Pay %1$s</string>
+    <string name="wallet_pay_and_get">Pay %1$s · get %2$s</string>
+    <string name="wallet_topup_pending">Waiting for the payment to be confirmed.</string>
+    <string name="wallet_topup_slow">The payment is taking longer than usual. Your credit will appear once it clears.</string>
+    <string name="wallet_topup_failed">That payment did not go through. Nothing was charged.</string>
+    <string name="wallet_lankaqr_title">Scan to pay</string>
+    <string name="wallet_lankaqr_body">No bank app on this phone could open the payment link. Scan this code with your bank app instead.</string>
+    <string name="wallet_receipt_title">Payment started</string>
+    <string name="wallet_receipt_paid">You pay %1$s</string>
+    <string name="wallet_receipt_credited">Your wallet gets %1$s</string>
+    <string name="wallet_receipt_pending">The credit appears as soon as the payment clears.</string>
+
+    <!-- SCR-DA-023 . request credit by Driver ID (US-9.10, AL-34). -->
+    <string name="wallet_request_title">Request credit</string>
+    <string name="wallet_request_intro">Enter the Driver ID of a driver who holds wallet credit and ask them for a transfer. There is no code to scan and no special reseller number.</string>
+    <string name="wallet_driver_id_label">Driver ID</string>
+    <string name="wallet_driver_id_help">The other driver can read this off their own profile screen.</string>
+    <string name="wallet_driver_id_invalid">That is not a Driver ID. Ask them to read theirs out again.</string>
+    <string name="wallet_request_action">Request transfer</string>
+    <string name="wallet_request_awaiting">Asked for %1$s. Waiting for that driver to approve it.</string>
+    <string name="wallet_request_outstanding">Waiting for approval</string>
+
+    <!-- SCR-DA-024 . credit transfer and the approval inbox (US-9.11, US-9.12, US-9.20, US-9.21). -->
+    <string name="wallet_transfer_title">Credit transfer</string>
+    <string name="wallet_transfer_incoming">Drivers asking you for credit</string>
+    <string name="wallet_transfer_incoming_empty">Nobody has asked you for credit.</string>
+    <string name="wallet_transfer_requested">Asked for %1$s</string>
+    <string name="wallet_transfer_approve">Approve</string>
+    <string name="wallet_transfer_decline">Decline</string>
+    <string name="wallet_transfer_send_directly">Or send credit directly</string>
+    <string name="wallet_transfer_you_send">You send</string>
+    <string name="wallet_transfer_recipient_gets">They receive</string>
+    <string name="wallet_transfer_exact_value">The exact amount, with nothing taken off.</string>
+    <string name="wallet_transfer_action">Send credit</string>
+    <string name="wallet_transfer_sent_notice">Sent %1$s.</string>
+    <string name="wallet_transfer_history">Past transfers</string>
+    <string name="wallet_transfer_sent">Sent</string>
+    <string name="wallet_transfer_received">Received</string>
+    <string name="wallet_transfer_pending">Waiting</string>
+    <string name="wallet_transfer_approved">Done</string>
+    <string name="wallet_transfer_rejected">Declined</string>
+    <string name="wallet_self_transfer">You cannot send credit to yourself.</string>
+    <string name="wallet_amount_required">Enter how much to send.</string>
+
+    <!-- SCR-DA-025 . payment and fee history (US-9A.6, US-9A.19, D-13). -->
+    <string name="wallet_history_title">History</string>
+    <string name="wallet_history_range">Choose dates</string>
+    <string name="wallet_history_range_clear">Show everything</string>
+    <string name="wallet_history_empty">Nothing here yet.</string>
+    <string name="wallet_filter_all">All</string>
+    <string name="wallet_filter_fees">Fees</string>
+    <string name="wallet_filter_topups">Top-ups</string>
+    <string name="wallet_filter_transfers">Transfers</string>
+    <string name="wallet_kind_topup">Top-up</string>
+    <string name="wallet_kind_daily_fee">Daily fee</string>
+    <string name="wallet_kind_trip_payment">Trip fare</string>
+    <string name="wallet_kind_penalty">Penalty</string>
+    <string name="wallet_kind_adjustment">Adjustment by the office</string>
+    <string name="wallet_kind_tip">Tip</string>
+    <string name="wallet_kind_refund">Refund</string>
+    <string name="wallet_kind_reversal">Overpayment returned</string>
+    <string name="wallet_kind_voucher">Credit voucher</string>
+    <string name="wallet_kind_transfer">Credit transfer</string>
+    <string name="wallet_kind_payout">Paid out to your bank</string>
+    <string name="wallet_kind_other">Wallet entry</string>
+    <string name="wallet_statement_download">Download statement</string>
+    <string name="wallet_statement_ready">Your %1$s statement is ready.</string>
+    <string name="wallet_statement_failed">We could not save that statement. Try again.</string>
+
 </resources>

@@ -1,5 +1,7 @@
 package lk.mageride.driver.onboarding
 
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
@@ -51,11 +53,37 @@ internal fun testImage(name: String, capturedVia: CaptureSource = CaptureSource.
  */
 internal class MainDispatcher {
 
+    /**
+     * The view models this test class made, so [uninstall] can end them.
+     *
+     * `ViewModel.clear()` is `internal` to androidx and `onCleared()` is `protected`, so a
+     * `ViewModelStore` is the only public door onto "this model is finished" — `put` and `clear`
+     * are both public, and `clear` is what cancels `viewModelScope`.
+     */
+    private val store = ViewModelStore()
+    private var owned = 0
+
     fun install() {
         Dispatchers.setMain(Dispatchers.Unconfined)
     }
 
+    /**
+     * Hands [model]'s lifetime to this dispatcher. Returns it, so a factory can wrap its result.
+     *
+     * **A view model with a loop in it outlives the test that made it unless something ends it**,
+     * and `viewModelScope` is `Dispatchers.Main.immediate`. SCR-DA-003's resend countdown and
+     * SCR-DA-022's gateway poll are both `while (…) { delay(…) }`, so one left running wakes up
+     * inside the *next* class's `Dispatchers.resetMain()` and kotlinx reports
+     * *"Dispatchers.Main is used concurrently with setting it"* against a test that did nothing
+     * wrong. Δ C073, after exactly that failure.
+     */
+    fun <T : ViewModel> own(model: T): T {
+        store.put("owned-${owned++}", model)
+        return model
+    }
+
     fun uninstall() {
+        store.clear()
         Dispatchers.resetMain()
     }
 }

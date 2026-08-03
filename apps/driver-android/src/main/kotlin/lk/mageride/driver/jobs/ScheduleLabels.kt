@@ -62,6 +62,15 @@ internal object ScheduleLabels {
     fun time(at: Timestamp): String = TIME.format(zoned(at))
 
     /**
+     * `17 Jun` — the Colombo calendar date [at] falls on, always rendered (Δ C073).
+     *
+     * [day] is for a list where *"Today"* and *"Tomorrow"* carry information; a ledger is not one —
+     * every line is in the past, and a wallet history that said *"Today"* on six rows would have
+     * hidden which of them came first.
+     */
+    fun date(at: Timestamp, locale: Locale): String = DateTimeFormatter.ofPattern(DAY_PATTERN, locale).format(zoned(at))
+
+    /**
      * Which day [at] falls on, seen from [now].
      *
      * Compared as **Colombo dates** rather than as a duration: a pickup nine hours away is

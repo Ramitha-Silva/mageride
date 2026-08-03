@@ -33,6 +33,11 @@ import lk.mageride.driver.ui.theme.MageRideTheme
 import lk.mageride.driver.vehicle.VehicleOnboardingScreen
 import lk.mageride.driver.vehicle.VehicleOnboardingStatusScreen
 import lk.mageride.driver.vehicle.VehiclesScreen
+import lk.mageride.driver.wallet.CreditTransferScreen
+import lk.mageride.driver.wallet.RequestCreditScreen
+import lk.mageride.driver.wallet.TopUpScreen
+import lk.mageride.driver.wallet.WalletHistoryScreen
+import lk.mageride.driver.wallet.WalletScreen
 
 /**
  * The app's single `NavHost`, with one entry per [DriverRoute].
@@ -40,7 +45,7 @@ import lk.mageride.driver.vehicle.VehiclesScreen
  * **Every destination is registered here, and a screen group replaces the body of its own routes
  * without touching the graph.** That is the shape C067 left behind and the shape it keeps: a
  * component that added a destination of its own would put the app's navigation in eight files.
- * C068–C072 have taken their routes; the rest are still standing placeholders.
+ * C068–C073 have taken their routes; the rest are still standing placeholders.
  *
  * The start destination is [DriverRoute.Splash] — SCR-DA-001 is the driver-info router, and its
  * states ("no token → Login · registered/not approved → RegistrationHub · approved+perms →
@@ -184,8 +189,31 @@ internal fun DriverNavHost(controller: NavHostController, modifier: Modifier = M
             EarningsScreen(onBack = { controller.popBackStack() })
         }
 
-        // ---- C073–C075 · wallet, profile, documents, support ---------------------------
-        placeholder(DriverRoute.Wallet, "SCR-DA-021 wallet")
+        // ---- C073 · wallet, daily fee, credit transfer ---------------------------------
+        composable(DriverRoute.Wallet.path) {
+            WalletScreen(
+                // SCR-DA-021's two button rows are the only entry points to the other four; each
+                // is pushed, because each wireframe draws a `‹` app bar over a full screen.
+                onTopUp = { controller.navigate(DriverRoute.WalletTopUp.path) },
+                onRequestCredit = { controller.navigate(DriverRoute.WalletRequestCredit.path) },
+                onTransferCredit = { controller.navigate(DriverRoute.WalletTransfer.path) },
+                onHistory = { controller.navigate(DriverRoute.WalletHistory.path) },
+            )
+        }
+        composable(DriverRoute.WalletTopUp.path) {
+            TopUpScreen(onBack = { controller.popBackStack() })
+        }
+        composable(DriverRoute.WalletRequestCredit.path) {
+            RequestCreditScreen(onBack = { controller.popBackStack() })
+        }
+        composable(DriverRoute.WalletTransfer.path) {
+            CreditTransferScreen(onBack = { controller.popBackStack() })
+        }
+        composable(DriverRoute.WalletHistory.path) {
+            WalletHistoryScreen(onBack = { controller.popBackStack() })
+        }
+
+        // ---- C074–C075 · profile, documents, support -----------------------------------
         placeholder(DriverRoute.Documents, "SCR-DA-029a documents")
         placeholder(DriverRoute.Profile, "SCR-DA-029 profile")
         placeholder(DriverRoute.Support, "SCR-DA-033 support")

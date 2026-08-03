@@ -45,7 +45,8 @@ internal object OnboardingErrors {
      * contract, which is the only way this table stays true.
      */
     @StringRes
-    private fun forCode(code: ErrorCode?): Int = onboardingCode(code) ?: dashboardCode(code) ?: R.string.error_generic
+    private fun forCode(code: ErrorCode?): Int =
+        onboardingCode(code) ?: dashboardCode(code) ?: walletCode(code) ?: R.string.error_generic
 
     @StringRes
     @Suppress("ReturnCount")
@@ -113,6 +114,32 @@ internal object OnboardingErrors {
 
         // AL-47: this ride has already settled another way, so there is nothing to attest to.
         ErrorCode.PAYMENT_ALREADY_SETTLED -> R.string.error_payment_settled
+
+        else -> null
+    }
+
+    /**
+     * C073 · the wallet cluster (SCR-DA-021…025).
+     *
+     * The four codes `wallet.yaml` declares that nothing else in this app can meet. Each is written
+     * to be true wherever it lands rather than to name a screen: `not-found` on a credit transfer
+     * is a Driver ID nobody has, and the copy says *"check what you entered"*, which is the right
+     * advice in both readings.
+     */
+    @StringRes
+    private fun walletCode(code: ErrorCode?): Int? = when (code) {
+        // Below a gateway's floor, above the field's ceiling, or a voucher denomination that is not
+        // a tier — `POST /v1/wallet/voucher/purchase` refuses an amount between tiers rather than
+        // rounding it, because interpolating one would invent a rate no admin set.
+        ErrorCode.INVALID_AMOUNT -> R.string.error_invalid_amount
+
+        // OnePay or the bank IPG did not answer. Nothing was charged and nothing was credited.
+        ErrorCode.GATEWAY_ERROR -> R.string.error_gateway_error
+
+        // Approving a request somebody already answered, or a top-up session that has moved on.
+        ErrorCode.CONFLICT -> R.string.error_already_done
+
+        ErrorCode.NOT_FOUND -> R.string.error_not_found
 
         else -> null
     }

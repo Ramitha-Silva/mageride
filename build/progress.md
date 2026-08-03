@@ -99,7 +99,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C070 | driver-android-dashboard-dispatch | 4a | DONE | 2026-08-03 | **138 tests green** (was 107; 28 new + 3 suites) and `assembleDebug` clean, plus `detekt`/`ktlintCheck`; all six owned screens built to the wireframe — **SCR-DA-010** Mode C standby (US-9.6 go-online gating, own-vehicle-only map per AL-31, live reg-no chip, daily-fee/low-balance/2nd-trip banners, offline scrim, no hamburger), **SCR-DA-011** Mode A/B Start/End Journey as *home* with the AL-32 ignition banner the dashboard can override and the US-5.10 restart grace, **SCR-DA-013** Directional Travel (DT-01..08, and turning it off still spends the use), **SCR-DA-014** the 15 s takeover with the ring, the three badges, audio + haptic and the Taken/Expired split kept apart, **SCR-DA-015** arrive/start-OTP/complete with SOS, the AL-48 call-type chooser and the **AL-47 QR confirm**, and **SCR-DA-036**'s eight-row drawer. ~95 new trilingual strings; two device seams added (`DriverLocationSource`, `PositionPublisher`) so a view model holds no `Context`. **Five routes added to the shell's table** — SCR-DA-013 plus the four SCR-DA-036 named that had none. Four spec gaps recorded: no driver-rating read, no `GET` for `DirectionalConfig`, no presence read, no Mode A route list; plus **no SignalR client in `:shared`**, so SCR-DA-015 polls the documented fallback |
 | C071 | driver-android-delivery | 4a | DONE | 2026-08-03 | **151 tests green** (was 138; 13 new across 2 suites), `assembleDebug` + `detekt` + `ktlintCheck` clean; SCR-DA-016a/b/c built as three sequential sheets over the package ride machine — review with both parties' call buttons, pickup OTP against `:shared`'s `PackageHandoff` budget, and a *"Delivery completed"* that takes the recipient's OTP **or** P-10's photograph. `RideDetail` gained Δ C037's `recipientName`/`senderPhone`/`recipientPhone` in `:shared`, which the DTO was missing. Four spec gaps: AL-33's re-dispatch on Cancel has no server path, `cod-collected` now has no caller, no `senderName`, no ETA for sheet 2's banner |
 | C072 | driver-android-jobs-level-earnings | 4a | DONE | 2026-08-03 | **183 tests green** (was 151; 32 new across 6 suites), `assembleDebug` + `detekt` + `ktlintCheck` clean; SCR-DA-017/018/019/020 built to the wireframes. The board is post-intent only and the fence is asserted (no operation containing "accept" is reachable); US-6A.8 is **three**-valued so an unread level never renders as the L1 gate; T-30 is `JobBoard.GO_LIVE_LEAD` on both job screens; earnings print query-svc's own summary and never a second total; every date is Asia/Colombo through `BusinessCalendar`. Three routes added (`ScheduledRides`, `DriverLevel`, `Earnings`) — the Menu stays at eight rows. Five spec gaps: `ScheduledRide` carries no fare and no address, dispatch-svc sends `hasIntent`/`paymentMethod` the contract does not declare, driver-side cancellation of a scheduled ride has no route, `SCHEDULED_REMINDER` has no deep link and no read carries the report count. Two wireframe deviations: there is no Level 4 (D5' §4.2 caps at 3) and no payment-method split (no read answers one) |
-| C073 | driver-android-wallet-credit | 4a | PENDING | | |
+| C073 | driver-android-wallet-credit | 4a | DONE | 2026-08-03 | **237 tests green** (was 183; 54 new — 7 new wallet suites plus one case each in `ScheduleLabelsTest` and `NavigationShellTest`), `assembleDebug` + `detekt` + `ktlintCheck` clean; SCR-DA-021/022/023/024/025 built to the wireframes. Three fences are asserted rather than remembered (`WalletFenceTest`): `TopupMethod` has exactly three entries and no source or copy in the package names a bank transfer in any of the three languages, nothing here opens a camera (AL-34), and a transfer's two legs are equal at every amount with no commission in any string. A Rs 1,000 voucher at 10 % prices at Rs 900 and credits Rs 1,000 — and goes to `POST /v1/vouchers/purchase`, **not** to a top-up of the discounted price, which would credit Rs 1,900. Four routes added; the balance is read, never computed. Five spec gaps: the wireframe's `DRV-22011` does not exist (the Driver ID is the platform ULID and no route resolves one form into the other), no notification type carries a credit-transfer request, no per-driver low-balance threshold is stored anywhere, `TransferRow` carries no vehicle, and `VoucherPurchase` carries no LankaQR deep link. One dependency added (`com.google.zxing:core`, encoder only) for AL-15's fallback
 | C074 | driver-android-tracker-sharing-profile | 4a | PENDING | | |
 | C075 | driver-android-comms-safety-support | 4a | PENDING | | |
 | C076 | passenger-android-shell | 4a | PENDING | | |
@@ -11633,3 +11633,139 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   `DriverRoute.Wallet` is still the standing placeholder and is C073's. `StatusTone.INFO` and
   `MoneyFormat.radius` are new and shared; `ui/theme/ControlTokens` gained `LevelBadge`,
   `LevelProgress`, `ProgressGap` and `EarningsChart`.
+
+---
+
+- **Component:** C073 driver-android-wallet-credit — 2026-08-03
+- **Status:** DONE — `:apps:driver-android:testDebugUnitTest` **237 passed, 0 failed** (was 183),
+  `assembleDebug` clean, `detekt` and `ktlintCheck` green. All five screens under `## Screens` are
+  built to `specs/wireframes/driver_android.html`, and every DoD line is covered by a test.
+  `:shared`'s own gate is unchanged at **819 tests / 5 failed** — the same pre-existing
+  `ContractCoverageTest` (4) + `ApiOperationTableTest` (1) drift C071 measured and MCS-02 was raised
+  for; the only thing this component put in `gradle/libs.versions.toml` is a driver-app dependency,
+  and `:shared` resolves none of it.
+- **Notes:**
+
+  **The wireframe's `DRV-22011` is not a thing that exists, and this is the finding that matters
+  most.** Both credit screens draw a *"Driver ID"* field and print a nine-character code into it.
+  Every driver-facing transfer route takes a `Ulid` — `_shared.yaml#/components/schemas/Ulid`,
+  26–36 characters of Crockford base32 plus a hyphen — `registry.driver_profiles` carries no
+  human-readable code column anywhere in `db/migrations`, and **no route on the platform resolves
+  one form into the other**: the only driver directory is `GET /admin/directories/drivers`, which is
+  an internal-role read. So the field takes the platform id, checked at the keyboard against the
+  contract's own pattern (`WalletInput.isDriverId`) so a mistyped one is answered before an attested
+  POST rather than by a `404` after it. The id is **trimmed and never rewritten** — `Primitives.kt`
+  is explicit that a client which reshapes a server identifier is the worse failure, and a ULID is
+  upper-case while a UUID is lower-case, so case-folding either breaks the other. SCR-DA-029 (C074)
+  is the screen that shows a driver their own id, which is how one gets into another driver's hands;
+  **if that screen does not print it verbatim and copyably, this feature has no way to be used.**
+
+  **Buying a voucher is a purchase, not a discounted top-up, and getting that wrong pays twice.**
+  wallet-svc's `POST /v1/wallet/voucher/purchase` takes an **already-settled** `gatewayRef` and
+  initiates nothing — it is the reconciliation entry point, not a buy button. subscription-svc's
+  `POST /v1/vouchers/purchase` takes `{denominationMinor, method}`, starts the gateway session and
+  posts the credit on its confirmation, and that is the one a screen calls. The tempting shape —
+  `topupWithOnepay(90000)` then a purchase — credits Rs 900 on the webhook **and** Rs 1,000 on the
+  purchase: Rs 1,900 for a Rs 1,000 voucher. `TopUpRepository`'s KDoc says so at the declaration and
+  `TopUpViewModelTest` asserts `topupWithOnepay` is never called on the voucher path.
+
+  **The balance is read and never computed** (D-09). `WalletStanding` holds the server's figure;
+  nothing in this cluster adds up a history page, because a second total disagrees with the first the
+  moment a posting lands between two reads — the same rule C072's earnings screen follows. Every
+  affordability question asks `available` (net of D-05 debt) and not `balance`: a driver holding
+  Rs 300 who owes Rs 200 can send Rs 100, and offering them Rs 250 would describe money they do not
+  have. The headline figure stays `balance`, because US-9.7 calls it that and D2' marks it read-only.
+
+  **D2' and D5' draw "Top Up Required" at two different lines, and both are right.** D5' §9.4 puts it
+  at a **negative** balance and `:shared`'s `WalletRules` implements that; D2' §SCR-DA-021 puts it at
+  **below one day's fee**, which is US-9.1's real consequence — a driver short of the rate has their
+  next request refused with `402 insufficient-wallet` fifteen seconds after an offer arrives. Neither
+  subsumes the other, so `WalletState` carries both and the screen ranks them (overdrawn, then below
+  the day's fee, then the low-balance nudge). Read `WalletState.belowDayFee` before merging them.
+
+  **AL-15's fallback is tried, not asked.** The natural shape is to query the package manager for a
+  bank app and show the QR when there is none. On `targetSdk` 30+ that query answers nothing useful:
+  package-visibility filtering hides every app this one has not declared a `<queries>` entry for, and
+  a LankaQR *"Pay"* link's scheme is the **issuing bank's** — there is no finite list to declare.
+  Launching is never filtered, only asking is, so `PaymentHandoff.open` reports whether the launch
+  happened and the screen falls back on `false`. That is also why the encoder is here: `zxing:core`
+  (encoder only, no camera, no scanning Activity) renders the payload, always black on white in both
+  themes because a scanner reads contrast and not a design system.
+
+  ### Spec gaps found
+
+  1. **No notification type carries a credit-transfer request.** D2' §SCR-DA-024 says the incoming
+     requests *"arrive via push (US-9.11/9.12)"*. `NotificationCatalogue` declares twenty-six types
+     and none of them is one, so nothing raises it and no template is seeded. The inbox is therefore
+     **read** on open and after every decision (`GET /v1/wallet/credit-transfer/pending`); a list that
+     only filled on a push would be permanently empty. If the type is ever minted it should carry
+     `mageride://wallet`, which `PushRouter` already resolves — `NavigationShellTest` pins that the
+     host names the **group** and that a trailing segment is not a second host, so such a push lands
+     on SCR-DA-021 rather than dropping a driver onto a payment form they did not ask for.
+  2. **Nothing stores a per-driver low-balance threshold.** D2' §SCR-DA-021 says *"driver-set
+     threshold (default Rs 200)"* and the deliverable asks for the setting; D5' §9.4 fixes the same
+     Rs 200 and calls it **admin**-configurable. `iam.yaml`'s profile has no such field and wallet-svc
+     has no preferences surface. The two are kept apart rather than reconciled: the **push** is the
+     admin's threshold and this app never sees it, and the **on-screen nudge** is the driver's, stored
+     in `WalletPreferences` on the handset and defaulting to `WalletRules.DEFAULT_LOW_BALANCE_THRESHOLD`.
+     The dialog says so to the driver. Nullable rather than pre-seeded, so *"never chose one"* stays
+     distinguishable from *"chose Rs 200"* for the day a per-driver setting arrives to migrate into.
+  3. **`TransferRow` carries no vehicle.** SCR-DA-024's request card reads *"Requested Rs 1,000 ·
+     Three-wheeler"*. `wallet.yaml` gives the row a counterparty id, an optional name, an amount, a
+     direction, a status and a timestamp — nothing else. The vehicle is dropped rather than filled
+     from a read that would be a guess about which of the requester's vehicles they meant.
+  4. **`VoucherPurchase` (subscription) carries no LankaQR deep link.** It declares `redirectUrl` and
+     `qrPayload` and no `paymentLink`, while wallet-svc's `Topup` declares all three. So the LankaQR
+     arm of a **voucher** purchase is AL-15's fallback by construction — the code, never the bank-app
+     hand-off — where a plain top-up on the same rail gets the deep link. `paymentLink` on
+     `subscription.yaml#/components/schemas/VoucherPurchase` would close it.
+  5. **wallet-svc has no per-transaction receipt route.** The deliverable asks for *"receipt download
+     and PDF/CSV export"*. `GET /v1/wallet/{userId}/transactions` with an `Accept` of `text/csv` or
+     `application/pdf` is the only download `wallet.yaml` declares, and US-9A.19 calls it a statement.
+     The download therefore covers the **range on screen** in either format, and a row is not
+     separately downloadable. The chip is deliberately **not** applied to it: a statement is evidence
+     of what the ledger did, and one that quietly omitted the filtered-out rows would not reconcile
+     with the balance printed on it.
+
+  ### Wireframe deviations, and why
+
+  - **SCR-DA-021 gained one row: *"Warn me below Rs 200"*.** D2' §SCR-DA-021's own states line calls
+    the threshold *"driver-set"* and there is nowhere else in this group it could live. With the
+    default in force the row simply reads the default; see spec gap 2 for what it does and does not
+    change.
+  - **SCR-DA-023 gained a *"Waiting for approval"* list under the fields.** D2' names *"Requested →
+    Awaiting driver approval"* as a state of this screen and the deliverable asks for the pending
+    outgoing state. **It is not drawn when nothing is pending**, which is the state the sketch shows.
+  - **SCR-DA-025's app bar carries two actions where the sketch draws one.** Its 🔍 is D2' §SCR-DA-025's
+    *"date-range filter"*, which is a calendar here; the download beside it is the same section's
+    *"Statement download (US-9A.19)"*, which the sketch's icon row has no room for. Both are in the
+    spec text; only the icon count differs.
+  - **The history's *"Reseller transfer"* row is *"Credit transfer"*.** AL-01 removed the reseller as
+    a role, an account and a capability; a ledger line naming one would be the concept coming back
+    through the copy. `WalletFenceTest` fails the build if any `wallet_*` string names a commission.
+
+  ### One test-harness defect fixed on the way through
+
+  `MainDispatcher.uninstall()` used to call `Dispatchers.resetMain()` with view models still alive.
+  A view model with a loop in it — SCR-DA-003's D-32 resend countdown, and now SCR-DA-022's gateway
+  poll — keeps `viewModelScope` running after its test ends, and `viewModelScope` is
+  `Dispatchers.Main.immediate`; one left ticking wakes up inside the **next** class's `resetMain()`
+  and kotlinx reports *"Dispatchers.Main is used concurrently with setting it"* against a test that
+  did nothing wrong. It surfaced here as an intermittent `VehiclesViewModelTest` failure the moment
+  four new test classes changed the ordering, and it would have kept flaking the wave-4a gate.
+  `MainDispatcher.own(model)` now hands a model's lifetime to the dispatcher through a
+  `ViewModelStore` — `put` and `clear` are the only public door onto androidx's `internal clear()` —
+  and `uninstall()` clears them before resetting. `LoginViewModelTest` and all four wallet view-model
+  suites use it; **C074 and C075 should wrap any view model with a loop in it the same way.**
+
+  **For C074–C075 —** `wallet/WalletInput` is the one door onto a Driver ID and a rupee amount, and
+  `WalletInput.isDriverId` is the pattern SCR-DA-029 must print an id compatible with.
+  `wallet/PaymentHandoff` and `wallet/StatementExporter` are the two new device seams (leaving the
+  app to pay, and getting a file out through the manifest's new `FileProvider` — `res/xml/file_paths.xml`
+  is scoped to one cache directory and nothing else may be added to it). `wallet/LankaQrCode` renders
+  any EMVCo payload and is reusable by the passenger side's AL-22 screens. `LedgerKinds` is the
+  `billing.journal_entries.kind` label table with a fallback, because that CHECK constraint has grown
+  twice already. `OnboardingErrors` gained a fourth half (`walletCode`) for `invalid-amount`,
+  `gateway-error`, `conflict` and `not-found`; `LabelledTextField` gained a `prefix` slot and
+  `MoneyFormat` gained `EMPTY` (`—`, for an amount not yet read) and `percentOfBps`.
+  `ScheduleLabels.date` is the Colombo calendar date any later list of past events should print.

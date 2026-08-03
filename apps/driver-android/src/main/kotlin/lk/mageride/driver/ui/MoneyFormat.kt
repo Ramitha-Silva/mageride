@@ -24,6 +24,15 @@ internal object MoneyFormat {
     /** The currency prefix D2' §A prints on every driver-facing amount. */
     const val PREFIX: String = "Rs"
 
+    /**
+     * What is drawn where an amount is not known yet — a read in flight, or one that failed.
+     *
+     * An em dash rather than `Rs 0`: zero is a balance a driver can have and being told they have
+     * it when nothing was read is worse than being told nothing. A symbol, so it is not translated
+     * (C073) — the same rule `ScheduleLabels.UNKNOWN` follows.
+     */
+    const val EMPTY: String = "—"
+
     /** `48000` → `Rs 480`; `48050` → `Rs 480.50`. Whole rupees lose their `.00`. */
     fun rupees(money: Money): String = rupees(money.amountMinor)
 
@@ -37,6 +46,19 @@ internal object MoneyFormat {
         val grouped = String.format(Locale.ROOT, "%,d", whole)
         val text = if (cents == 0L) grouped else String.format(Locale.ROOT, "%s.%02d", grouped, cents)
         return if (negative) "$PREFIX -$text" else "$PREFIX $text"
+    }
+
+    /**
+     * `1000` basis points → `10%`, `1250` → `12.5%`.
+     *
+     * The voucher ladder's discounts are stored in basis points because a percentage of money has
+     * to survive `FareRounding` as an exact rational (C016); a driver reads a percentage. The
+     * trailing `.0` is dropped so the common whole-percent tier prints as the wireframe draws it.
+     */
+    fun percentOfBps(basisPoints: Int): String {
+        val whole = basisPoints / BPS_IN_PERCENT
+        val fraction = (basisPoints % BPS_IN_PERCENT).toString().padStart(2, '0').trimEnd('0')
+        return if (fraction.isEmpty()) "$whole%" else "$whole.$fraction%"
     }
 
     /** `1240.0` metres → `1.2 km`, and anything under a kilometre → `240 m`. */
@@ -79,6 +101,7 @@ internal object MoneyFormat {
     }
 
     private const val MINOR_UNITS = 100L
+    private const val BPS_IN_PERCENT = 100
     private const val METRES_IN_KM = 1_000.0
     private const val SECONDS_IN_HOUR = 3_600L
     private const val SECONDS_IN_MINUTE = 60L

@@ -186,6 +186,11 @@ dependencies {
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.messaging)
 
+    // AL-15's LankaQR fallback on SCR-DA-022 (C073). The ENCODER half of ZXing only — the driver
+    // app scans no QR code at all (AL-34 removed the one path it had), so nothing here needs a
+    // camera. See the catalogue note before swapping it for an `-android-embedded` artifact.
+    implementation(libs.zxing.core)
+
     testImplementation(libs.kotlin.testjunit)
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

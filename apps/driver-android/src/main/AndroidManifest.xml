@@ -102,6 +102,23 @@
             </intent-filter>
         </service>
 
+        <!-- US-9A.19's statement download (SCR-DA-025, C073). A wallet statement is written to
+             the app's own cache and handed out through a per-file read grant rather than saved
+             into shared storage: that needs no permission on any API level this app supports
+             (WRITE_EXTERNAL_STORAGE is API ≤ 28 only and MediaStore is API 29+, so the shared-
+             storage route would be two code paths and one more permission for the same file),
+             and the grant dies with the chooser. `grantUriPermissions` is what makes the grant
+             possible at all; the paths are in res/xml/file_paths.xml. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
             android:value="ride_offers" />

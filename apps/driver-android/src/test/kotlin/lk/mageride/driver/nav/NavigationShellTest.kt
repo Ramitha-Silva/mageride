@@ -132,4 +132,16 @@ class NavigationShellTest {
         assertTrue(!isTabRoute(DriverRoute.Earnings.path))
         assertTrue(isTabRoute(DriverRoute.Jobs.path), "the Job Board IS tab 2")
     }
+
+    @Test
+    fun the_wallet_deep_link_lands_on_the_tab_and_not_on_one_of_its_four_children() {
+        // `mageride://wallet` is one of the four URIs `DeepLinks` mints and it names the *screen
+        // group*, not a screen in it. LOW_BALANCE and TOP_UP_REQUIRED both carry it, and both mean
+        // "look at your wallet" rather than "top up right now" — a link that opened SCR-DA-022
+        // would put a driver on a payment form they did not ask for (Δ C073).
+        assertEquals(DriverRoute.Wallet, PushRouter.resolve("mageride://wallet"))
+        // The host names the group and a trailing segment is not a second host, so even a link
+        // that looked like one still lands on SCR-DA-021.
+        assertEquals(DriverRoute.Wallet, PushRouter.resolve("mageride://wallet/top-up"))
+    }
 }

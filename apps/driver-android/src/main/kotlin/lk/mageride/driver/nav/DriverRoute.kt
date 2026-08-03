@@ -134,10 +134,35 @@ internal sealed interface DriverRoute {
     }
 
     // ---- C073 · wallet / daily fee -----------------------------------------------------
+    //
+    // Δ C073: the shell's table had `Wallet` alone and this group is five screens. SCR-DA-021 is
+    // the tab; the other four are pushed destinations — every one of their wireframes draws a `‹`
+    // app bar — so they are registered here rather than invented at a call site, the same way
+    // C072 added its three.
 
-    /** Wallet, daily fee and credit transfer. Bottom-nav tab 3, and `mageride://wallet`. */
+    /** SCR-DA-021 — wallet, daily fee and where the other four open from. Bottom-nav tab 3, and `mageride://wallet`. */
     data object Wallet : DriverRoute {
         override val path: String = "wallet"
+    }
+
+    /** SCR-DA-022 — top up by card / OnePay wallet / LankaQR, and the bulk-voucher ladder (US-9.18/9.19). */
+    data object WalletTopUp : DriverRoute {
+        override val path: String = "wallet/top-up"
+    }
+
+    /** SCR-DA-023 — ask another driver for credit **by Driver ID** (US-9.10, AL-34: no QR scan). */
+    data object WalletRequestCredit : DriverRoute {
+        override val path: String = "wallet/request-credit"
+    }
+
+    /** SCR-DA-024 — the approval inbox and the direct send (US-9.11/9.12, US-9.20/9.21). */
+    data object WalletTransfer : DriverRoute {
+        override val path: String = "wallet/transfer"
+    }
+
+    /** SCR-DA-025 — the ledger, filtered, with US-9A.19's statement download. */
+    data object WalletHistory : DriverRoute {
+        override val path: String = "wallet/history"
     }
 
     // ---- C073–C075 · menu, profile, documents, support ---------------------------------
@@ -218,6 +243,10 @@ internal sealed interface DriverRoute {
             DriverLevel,
             Earnings,
             Wallet,
+            WalletTopUp,
+            WalletRequestCredit,
+            WalletTransfer,
+            WalletHistory,
             Menu,
             Documents,
             Profile,

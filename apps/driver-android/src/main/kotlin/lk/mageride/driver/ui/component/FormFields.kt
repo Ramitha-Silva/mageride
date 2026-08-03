@@ -30,7 +30,11 @@ import lk.mageride.driver.ui.theme.MageRideTheme
  *
  * @param supporting Helper or error copy under the field. Always a string resource.
  * @param isError Draws the field in `error`; pair it with [supporting].
+ * @param prefix A fixed leader inside the field — `Rs` on every amount C073 asks for. **Data, not
+ *   copy** (`MoneyFormat.PREFIX`), for the same reason `+94` is on [PhoneNumberField].
  */
+// Nine parameters is an M3 slot API's shape, not a design smell — see `MageRideCta`'s own note.
+@Suppress("LongParameterList")
 @Composable
 internal fun LabelledTextField(
     label: String,
@@ -39,6 +43,7 @@ internal fun LabelledTextField(
     modifier: Modifier = Modifier,
     placeholder: String? = null,
     supporting: String? = null,
+    prefix: String? = null,
     isError: Boolean = false,
     singleLine: Boolean = true,
     keyboardOptions: KeyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
@@ -50,6 +55,7 @@ internal fun LabelledTextField(
         label = { Text(text = label, style = MaterialTheme.typography.labelSmall) },
         placeholder = placeholder?.let { { Text(text = it) } },
         supportingText = supporting?.let { { Text(text = it, style = MaterialTheme.typography.labelSmall) } },
+        prefix = prefix?.let { { Text(text = it, style = MaterialTheme.typography.titleMedium) } },
         isError = isError,
         singleLine = singleLine,
         shape = RoundedCornerShape(MageRideTheme.radius.md),

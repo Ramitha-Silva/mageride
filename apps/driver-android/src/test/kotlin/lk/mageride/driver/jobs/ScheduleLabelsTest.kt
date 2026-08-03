@@ -54,6 +54,15 @@ class ScheduleLabelsTest {
     }
 
     @Test
+    fun a_ledger_date_is_always_rendered_and_is_still_a_colombo_one() {
+        // Δ C073. SCR-DA-025's rows are all in the past, so "Today" on six of them would hide which
+        // came first — and the day it prints is Colombo's: `MIDNIGHT_EDGE` is 19:00Z on the 27th,
+        // which is already the 28th in Colombo.
+        assertEquals("27 Jul", ScheduleLabels.date(Fixtures.NOW, english))
+        assertEquals("28 Jul", ScheduleLabels.date(Fixtures.MIDNIGHT_EDGE, english))
+    }
+
+    @Test
     fun a_route_falls_back_to_a_dash_rather_than_to_coordinates() {
         // `POST /v1/rides/schedule` takes bare coordinates, so dispatch-svc has no address to echo
         // and every scheduled ride comes back with `address = null`. Decimal degrees on a card

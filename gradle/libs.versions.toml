@@ -79,6 +79,15 @@ firebaseBom = "34.17.0"
 # `org.maplibre.android` API. Do not swap it back without a micro-change-set.
 maplibre = "13.4.1"
 
+# ---- LankaQR fallback rendering (C073) -----------------------------------------------
+# AL-15 makes the bank-app "Pay" deep link the primary path and a rendered EMVCo code the
+# fallback for a handset no bank app can open it on. `com.google.zxing:core` is the ENCODER
+# only — pure Java, no Android dependency, no camera, ~500 KB — and the driver app never
+# *scans* a LankaQR code (AL-34 removed the one scan path this app had). Do not pull in
+# `zxing:android-core` or `journeyapps:zxing-android-embedded`: both add a scanning Activity
+# this platform has no use for.
+zxing = "3.5.3"
+
 # ---- Realtime clients (C025) ---------------------------------------------------------
 # D6' §5: "Client = SignalR Java client (Android) / SignalR Swift client (iOS)". Microsoft
 # versions this artifact with ASP.NET Core, so 10.0.x is the line that matches the .NET 10
@@ -211,6 +220,10 @@ androidx-camera-view      = { module = "androidx.camera:camera-view",      versi
 # ---- Map (C067) ---------------------------------------------------------------------------
 # The OpenGL ES flavour — see the `maplibre` version note on why not the default artifact.
 maplibre-android    = { module = "org.maplibre.gl:android-sdk-opengl", version.ref = "maplibre" }
+
+# ---- LankaQR fallback (C073) ---------------------------------------------------------------
+# Encoder only — see the `zxing` version note.
+zxing-core          = { module = "com.google.zxing:core",              version.ref = "zxing" }
 
 # ---- Realtime clients (C025) -------------------------------------------------------------
 # JVM/Android only. See the version comments: the iOS halves are C094's Swift clients.

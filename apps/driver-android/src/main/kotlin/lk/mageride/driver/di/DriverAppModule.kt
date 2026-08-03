@@ -48,6 +48,20 @@ import lk.mageride.driver.vehicle.VehicleOnboardingSession
 import lk.mageride.driver.vehicle.VehicleOnboardingStatusViewModel
 import lk.mageride.driver.vehicle.VehicleOnboardingViewModel
 import lk.mageride.driver.vehicle.VehiclesViewModel
+import lk.mageride.driver.wallet.AndroidPaymentHandoff
+import lk.mageride.driver.wallet.AndroidStatementExporter
+import lk.mageride.driver.wallet.AndroidWalletPreferences
+import lk.mageride.driver.wallet.CreditTransferRepository
+import lk.mageride.driver.wallet.CreditTransferViewModel
+import lk.mageride.driver.wallet.PaymentHandoff
+import lk.mageride.driver.wallet.RequestCreditViewModel
+import lk.mageride.driver.wallet.StatementExporter
+import lk.mageride.driver.wallet.TopUpRepository
+import lk.mageride.driver.wallet.TopUpViewModel
+import lk.mageride.driver.wallet.WalletHistoryViewModel
+import lk.mageride.driver.wallet.WalletPreferences
+import lk.mageride.driver.wallet.WalletRepository
+import lk.mageride.driver.wallet.WalletViewModel
 import lk.mageride.shared.data.api.ApiConfig
 import lk.mageride.shared.data.api.AttestationProvider
 import lk.mageride.shared.data.models.AppSurface
@@ -261,4 +275,38 @@ private fun Module.jobsBindings() {
     viewModel { ScheduledRidesViewModel(identity = get(), jobs = get()) }
     viewModel { DriverLevelViewModel(identity = get(), jobs = get()) }
     viewModel { EarningsViewModel(identity = get(), earnings = get()) }
+
+    walletBindings()
+}
+
+/**
+ * The C073 slice — SCR-DA-021…025.
+ *
+ * **Three repositories rather than one**, split by the service pair each screen talks to: the
+ * balance and the ledger are wallet-svc plus subscription-svc's fee reads, the top-up rails are
+ * wallet-svc plus subscription-svc's voucher purchase, and the transfers are wallet-svc alone. One
+ * class would have been eighteen methods and would have put the voucher-versus-top-up distinction
+ * — which is the easiest thing on this screen group to get wrong — inside a `when`.
+ *
+ * [PaymentHandoff] and [StatementExporter] are singles for the reason `PositionPublisher` is: both
+ * need a `Context` to leave the app, and a view model that held one could not be run on this host.
+ * `TopupMethod`, `VoucherCatalogue` and `DailyFeeSchedule` are deliberately **not** bound — every
+ * one is built from admin-tunable config that has just been read, which is the rule `fareWalletModule`
+ * states in `:shared` and the reason it binds nothing at all.
+ */
+private fun Module.walletBindings() {
+    // US-9.9's "driver-set threshold". Local because no route stores one — see WalletPreferences.
+    single<WalletPreferences> { AndroidWalletPreferences(androidContext()) }
+    single<PaymentHandoff> { AndroidPaymentHandoff(androidContext()) }
+    single<StatementExporter> { AndroidStatementExporter(androidContext()) }
+
+    single { WalletRepository(wallet = get(), subscription = get()) }
+    single { TopUpRepository(wallet = get(), subscription = get()) }
+    single { CreditTransferRepository(wallet = get()) }
+
+    viewModel { WalletViewModel(identity = get(), wallet = get(), preferences = get()) }
+    viewModel { TopUpViewModel(topUps = get(), handoff = get()) }
+    viewModel { RequestCreditViewModel(identity = get(), transfers = get()) }
+    viewModel { CreditTransferViewModel(identity = get(), transfers = get(), wallet = get()) }
+    viewModel { WalletHistoryViewModel(identity = get(), wallet = get(), exporter = get()) }
 }

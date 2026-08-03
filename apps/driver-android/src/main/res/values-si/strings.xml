@@ -419,4 +419,124 @@
     <string name="earnings_net">ශුද්ධ මුදල</string>
     <string name="earnings_trips">ගමනින් ගමන</string>
     <string name="earnings_empty">මෙම කාලය තුළ සම්පූර්ණ කළ ගමන් නැත.</string>
+
+    <!-- ============================================================================
+         C073 · පසුම්බිය · දෛනික ගාස්තුව · ණය මාරුව
+         SCR-DA-021 / 022 / 023 / 024 / 025.
+         ============================================================================ -->
+
+    <!-- D-26 කේත -> පිටපත් වගුවට මෙම කාණ්ඩය එක් කරන දෝෂ. -->
+    <string name="error_invalid_amount">එම මුදල ගෙවිය නොහැක. එය පරීක්ෂා කර නැවත උත්සාහ කරන්න.</string>
+    <string name="error_gateway_error">ගෙවීම් සේවාව පිළිතුරු දුන්නේ නැත. කිසිවක් අය කළේ නැත.</string>
+    <string name="error_gateway_unreachable">ගෙවීම් පිටුව විවෘත කළ හැකි යෙදුමක් මෙම දුරකථනයේ නැත.</string>
+    <string name="error_already_done">එය දැනටමත් සිදු වී ඇත, නැතහොත් ඔබ බලා සිටියදී එය වෙනස් වී ඇත.</string>
+    <string name="error_not_found">එය සොයා ගත නොහැකි විය. ඔබ ඇතුළත් කළ දේ පරීක්ෂා කරන්න.</string>
+    <string name="action_save">සුරකින්න</string>
+
+    <!-- SCR-DA-021 . පසුම්බිය සහ දෛනික ගාස්තු තත්ත්වය (US-9.7, US-9.1, US-9.9). -->
+    <string name="wallet_title">පසුම්බිය</string>
+    <string name="wallet_balance_label">ශේෂය (කියවීම පමණි)</string>
+    <string name="wallet_available_after_debt">මින් %1$s ක් ණයට යටත් වන අතර වියදම් කළ නොහැක.</string>
+    <string name="wallet_daily_fee">දෛනික ගාස්තුව</string>
+    <string name="wallet_fee_vehicle">වාහනය</string>
+    <string name="wallet_fee_rate">අනුපාතය</string>
+    <string name="wallet_fee_rate_value">දිනකට %1$s</string>
+    <string name="wallet_fee_today">අද</string>
+    <string name="wallet_fee_paid">ගෙවා ඇත ✓</string>
+    <string name="wallet_fee_unpaid">ගෙවා නැත</string>
+    <string name="wallet_fee_status_first_free">%1$s (පළමු ගමන නොමිලේ)</string>
+    <string name="wallet_fee_unavailable">අද දින ගාස්තුව කියවිය නොහැකි විය. මොහොතකින් මෙම තිරය නැවත විවෘත කරන්න.</string>
+    <string name="wallet_action_top_up">ණය පිරවීම / මිලදී ගැනීම</string>
+    <string name="wallet_action_request">ණය ඉල්ලන්න</string>
+    <string name="wallet_action_transfer">ණය මාරු කරන්න</string>
+    <string name="wallet_action_history">ගෙවීම් ඉතිහාසය</string>
+    <string name="wallet_low_balance">ශේෂය අඩුයි. %1$s ට වඩා අඩු වූ විට දැනුම් දෙන ලෙස ඔබ ඉල්ලා තිබුණි.</string>
+    <string name="wallet_top_up_required">ණය පිරවීම අවශ්‍යයි. ඔබේ පසුම්බිය බිංදුවට වඩා %1$s ක් අඩුයි.</string>
+    <string name="wallet_below_day_fee">ණය පිරවීම අවශ්‍යයි. දිනක ගාස්තුව වන %1$s ට ඔබේ ශේෂය මදි, එබැවින් ඊළඟ ඉල්ලීම මඟ හැරෙනු ඇත.</string>
+    <string name="wallet_threshold_row">%1$s ට වඩා අඩු වූ විට දැනුම් දෙන්න</string>
+    <string name="wallet_threshold_title">ශේෂය අඩු බවට අනතුරු ඇඟවීම</string>
+    <string name="wallet_threshold_body">මෙය ඔබේම තිරයේ අප අඳින සීමාවයි. MageRide එවන කෙටි පණිවුඩය කාර්යාලය විසින් තීරණය කරන අතර මෙය සමඟ වෙනස් නොවේ.</string>
+    <string name="wallet_threshold_reset">පෙරනිමිය භාවිත කරන්න</string>
+    <string name="wallet_amount_label">මුදල</string>
+
+    <!-- SCR-DA-022 . ණය පිරවීම (US-9.18, US-9.19, AL-05, AL-15). -->
+    <string name="wallet_top_up_title">ණය පිරවීම</string>
+    <string name="wallet_method">ක්‍රමය</string>
+    <string name="wallet_method_card">කාඩ්පත</string>
+    <string name="wallet_method_onepay">OnePay පසුම්බිය</string>
+    <string name="wallet_method_lankaqr">LankaQR බැංකු යෙදුම</string>
+    <string name="wallet_voucher_label">තොග ණය වවුචරය — වට්ටම කාර්යාලය විසින් තීරණය කෙරේ</string>
+    <string name="wallet_voucher_tile">%1$s · %2$s ක වට්ටමක්</string>
+    <string name="wallet_voucher_empty">දැනට විකිණීමට ණය වවුචර නැත.</string>
+    <string name="wallet_voucher_note">වට්ටම අදාළ වන්නේ ඔබ මිලදී ගන්නා විට පමණි. වවුචරයක් එහි මුහුණත වටිනාකමට වඩා අඩුවෙන් ලැබෙන අතර සම්පූර්ණ මුදල ඔබේ පසුම්බියට එක් වේ. පසුව වෙනත් රියදුරෙකුට දෙන ණය එහි නියම වටිනාකමින්ම යයි.</string>
+    <string name="wallet_pay">ගෙවන්න</string>
+    <string name="wallet_pay_amount">%1$s ගෙවන්න</string>
+    <string name="wallet_pay_and_get">%1$s ගෙවා %2$s ලබා ගන්න</string>
+    <string name="wallet_topup_pending">ගෙවීම තහවුරු වන තෙක් බලා සිටියි.</string>
+    <string name="wallet_topup_slow">ගෙවීමට සුපුරුදුට වඩා කාලයක් ගතවේ. එය සම්පූර්ණ වූ පසු ඔබේ ණය පෙන්වයි.</string>
+    <string name="wallet_topup_failed">එම ගෙවීම සාර්ථක වූයේ නැත. කිසිවක් අය කළේ නැත.</string>
+    <string name="wallet_lankaqr_title">ගෙවීමට ස්කෑන් කරන්න</string>
+    <string name="wallet_lankaqr_body">ගෙවීම් සබැඳිය විවෘත කළ හැකි බැංකු යෙදුමක් මෙම දුරකථනයේ නැත. ඒ වෙනුවට ඔබේ බැංකු යෙදුමෙන් මෙම කේතය ස්කෑන් කරන්න.</string>
+    <string name="wallet_receipt_title">ගෙවීම ආරම්භ විය</string>
+    <string name="wallet_receipt_paid">ඔබ ගෙවන්නේ %1$s</string>
+    <string name="wallet_receipt_credited">ඔබේ පසුම්බියට %1$s එකතු වේ</string>
+    <string name="wallet_receipt_pending">ගෙවීම සම්පූර්ණ වූ විගස ණය පෙන්වයි.</string>
+
+    <!-- SCR-DA-023 . රියදුරු අංකයෙන් ණය ඉල්ලීම (US-9.10, AL-34). -->
+    <string name="wallet_request_title">ණය ඉල්ලන්න</string>
+    <string name="wallet_request_intro">පසුම්බියේ ණය ඇති රියදුරෙකුගේ රියදුරු අංකය ඇතුළත් කර ඔහුගෙන් මාරුවක් ඉල්ලන්න. ස්කෑන් කිරීමට කේතයක් හෝ විශේෂ අලෙවි අංකයක් නැත.</string>
+    <string name="wallet_driver_id_label">රියදුරු අංකය</string>
+    <string name="wallet_driver_id_help">අනෙක් රියදුරාට එය තම පැතිකඩ තිරයෙන් කියවිය හැක.</string>
+    <string name="wallet_driver_id_invalid">එය රියදුරු අංකයක් නොවේ. ඔහුගෙන් නැවත එය කියන ලෙස ඉල්ලන්න.</string>
+    <string name="wallet_request_action">මාරුව ඉල්ලන්න</string>
+    <string name="wallet_request_awaiting">%1$s ක් ඉල්ලා ඇත. එම රියදුරාගේ අනුමැතිය එනතුරු බලා සිටියි.</string>
+    <string name="wallet_request_outstanding">අනුමැතිය එනතුරු</string>
+
+    <!-- SCR-DA-024 . ණය මාරුව සහ අනුමත කිරීමේ ලැයිස්තුව (US-9.11, US-9.12, US-9.20, US-9.21). -->
+    <string name="wallet_transfer_title">ණය මාරුව</string>
+    <string name="wallet_transfer_incoming">ඔබෙන් ණය ඉල්ලන රියදුරන්</string>
+    <string name="wallet_transfer_incoming_empty">ඔබෙන් කිසිවෙකු ණය ඉල්ලා නැත.</string>
+    <string name="wallet_transfer_requested">%1$s ක් ඉල්ලා ඇත</string>
+    <string name="wallet_transfer_approve">අනුමත කරන්න</string>
+    <string name="wallet_transfer_decline">ප්‍රතික්ෂේප කරන්න</string>
+    <string name="wallet_transfer_send_directly">නැතහොත් ණය කෙලින්ම යවන්න</string>
+    <string name="wallet_transfer_you_send">ඔබ යවන්නේ</string>
+    <string name="wallet_transfer_recipient_gets">ඔහුට ලැබෙන්නේ</string>
+    <string name="wallet_transfer_exact_value">කිසිවක් අඩු නොකර, නියම මුදලම.</string>
+    <string name="wallet_transfer_action">ණය යවන්න</string>
+    <string name="wallet_transfer_sent_notice">%1$s ක් යවන ලදී.</string>
+    <string name="wallet_transfer_history">පෙර මාරු</string>
+    <string name="wallet_transfer_sent">යවන ලදී</string>
+    <string name="wallet_transfer_received">ලැබුණි</string>
+    <string name="wallet_transfer_pending">බලා සිටියි</string>
+    <string name="wallet_transfer_approved">අවසන්</string>
+    <string name="wallet_transfer_rejected">ප්‍රතික්ෂේප විය</string>
+    <string name="wallet_self_transfer">ඔබටම ණය යැවිය නොහැක.</string>
+    <string name="wallet_amount_required">යවන මුදල ඇතුළත් කරන්න.</string>
+
+    <!-- SCR-DA-025 . ගෙවීම් සහ ගාස්තු ඉතිහාසය (US-9A.6, US-9A.19, D-13). -->
+    <string name="wallet_history_title">ඉතිහාසය</string>
+    <string name="wallet_history_range">දින තෝරන්න</string>
+    <string name="wallet_history_range_clear">සියල්ල පෙන්වන්න</string>
+    <string name="wallet_history_empty">තවම මෙහි කිසිවක් නැත.</string>
+    <string name="wallet_filter_all">සියල්ල</string>
+    <string name="wallet_filter_fees">ගාස්තු</string>
+    <string name="wallet_filter_topups">ණය පිරවීම්</string>
+    <string name="wallet_filter_transfers">මාරු</string>
+    <string name="wallet_kind_topup">ණය පිරවීම</string>
+    <string name="wallet_kind_daily_fee">දෛනික ගාස්තුව</string>
+    <string name="wallet_kind_trip_payment">ගමන් ගාස්තුව</string>
+    <string name="wallet_kind_penalty">දඩය</string>
+    <string name="wallet_kind_adjustment">කාර්යාලයේ සකස් කිරීමක්</string>
+    <string name="wallet_kind_tip">තෑගි මුදල</string>
+    <string name="wallet_kind_refund">ආපසු ගෙවීම</string>
+    <string name="wallet_kind_reversal">වැඩිපුර ගෙවීම ආපසු</string>
+    <string name="wallet_kind_voucher">ණය වවුචරය</string>
+    <string name="wallet_kind_transfer">ණය මාරුව</string>
+    <string name="wallet_kind_payout">ඔබේ බැංකුවට ගෙවන ලදී</string>
+    <string name="wallet_kind_other">පසුම්බි සටහන</string>
+    <string name="wallet_statement_download">ප්‍රකාශය බාගන්න</string>
+    <string name="wallet_statement_ready">ඔබේ %1$s ප්‍රකාශය සූදානම්.</string>
+    <string name="wallet_statement_failed">එම ප්‍රකාශය සුරැකිය නොහැකි විය. නැවත උත්සාහ කරන්න.</string>
+
 </resources>

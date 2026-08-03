@@ -418,4 +418,124 @@
     <string name="earnings_net">நிகரத் தொகை</string>
     <string name="earnings_trips">பயணம் வாரியாக</string>
     <string name="earnings_empty">இந்தக் காலப்பகுதியில் முடிக்கப்பட்ட பயணங்கள் இல்லை.</string>
+
+    <!-- ============================================================================
+         C073 · பணப்பை · தினசரி கட்டணம் · கடன் பரிமாற்றம்
+         SCR-DA-021 / 022 / 023 / 024 / 025.
+         ============================================================================ -->
+
+    <!-- D-26 குறியீடு -> வாசகம் அட்டவணையில் இந்தக் கொத்து சேர்க்கும் பிழைகள். -->
+    <string name="error_invalid_amount">அந்தத் தொகையைச் செலுத்த முடியாது. சரிபார்த்து மீண்டும் முயலவும்.</string>
+    <string name="error_gateway_error">கட்டணச் சேவை பதிலளிக்கவில்லை. எதுவும் வசூலிக்கப்படவில்லை.</string>
+    <string name="error_gateway_unreachable">கட்டணப் பக்கத்தைத் திறக்கக்கூடிய செயலி இந்தத் தொலைபேசியில் இல்லை.</string>
+    <string name="error_already_done">அது ஏற்கெனவே முடிந்துவிட்டது, அல்லது நீங்கள் பார்த்துக்கொண்டிருக்கும்போது மாறிவிட்டது.</string>
+    <string name="error_not_found">அதைக் கண்டுபிடிக்க முடியவில்லை. நீங்கள் உள்ளிட்டதைச் சரிபார்க்கவும்.</string>
+    <string name="action_save">சேமி</string>
+
+    <!-- SCR-DA-021 . பணப்பை மற்றும் தினசரிக் கட்டண நிலை (US-9.7, US-9.1, US-9.9). -->
+    <string name="wallet_title">பணப்பை</string>
+    <string name="wallet_balance_label">இருப்பு (பார்வைக்கு மட்டும்)</string>
+    <string name="wallet_available_after_debt">இதில் %1$s கடனாக உள்ளது, செலவழிக்க முடியாது.</string>
+    <string name="wallet_daily_fee">தினசரிக் கட்டணம்</string>
+    <string name="wallet_fee_vehicle">வாகனம்</string>
+    <string name="wallet_fee_rate">விகிதம்</string>
+    <string name="wallet_fee_rate_value">நாளொன்றுக்கு %1$s</string>
+    <string name="wallet_fee_today">இன்று</string>
+    <string name="wallet_fee_paid">செலுத்தப்பட்டது ✓</string>
+    <string name="wallet_fee_unpaid">செலுத்தப்படவில்லை</string>
+    <string name="wallet_fee_status_first_free">%1$s (முதல் பயணம் இலவசம்)</string>
+    <string name="wallet_fee_unavailable">இன்றைய கட்டணத்தைப் படிக்க முடியவில்லை. சிறிது நேரத்தில் இந்தத் திரையை மீண்டும் திறக்கவும்.</string>
+    <string name="wallet_action_top_up">கடன் நிரப்பு / வாங்கு</string>
+    <string name="wallet_action_request">கடன் கேட்கவும்</string>
+    <string name="wallet_action_transfer">கடன் அனுப்பவும்</string>
+    <string name="wallet_action_history">கட்டண வரலாறு</string>
+    <string name="wallet_low_balance">இருப்பு குறைவு. %1$s க்குக் கீழே எச்சரிக்கச் சொல்லியிருந்தீர்கள்.</string>
+    <string name="wallet_top_up_required">நிரப்ப வேண்டும். உங்கள் பணப்பை பூஜ்ஜியத்தை விட %1$s குறைவு.</string>
+    <string name="wallet_below_day_fee">நிரப்ப வேண்டும். ஒரு நாளின் கட்டணமான %1$s க்கு இருப்பு போதவில்லை, எனவே அடுத்த கோரிக்கை தவறிவிடும்.</string>
+    <string name="wallet_threshold_row">%1$s க்குக் கீழே எச்சரிக்கவும்</string>
+    <string name="wallet_threshold_title">இருப்பு குறைவு எச்சரிக்கை</string>
+    <string name="wallet_threshold_body">இது உங்கள் திரையில் மட்டும் நாம் வரையும் எல்லை. MageRide அனுப்பும் குறுஞ்செய்தியை அலுவலகம் தீர்மானிக்கிறது, அது இதனுடன் மாறாது.</string>
+    <string name="wallet_threshold_reset">இயல்பை பயன்படுத்து</string>
+    <string name="wallet_amount_label">தொகை</string>
+
+    <!-- SCR-DA-022 . கடன் நிரப்புதல் (US-9.18, US-9.19, AL-05, AL-15). -->
+    <string name="wallet_top_up_title">கடன் நிரப்புதல்</string>
+    <string name="wallet_method">முறை</string>
+    <string name="wallet_method_card">அட்டை</string>
+    <string name="wallet_method_onepay">OnePay பணப்பை</string>
+    <string name="wallet_method_lankaqr">LankaQR வங்கிச் செயலி</string>
+    <string name="wallet_voucher_label">மொத்தக் கடன் சான்றிதழ் — தள்ளுபடியை அலுவலகம் நிர்ணயிக்கிறது</string>
+    <string name="wallet_voucher_tile">%1$s · %2$s தள்ளுபடி</string>
+    <string name="wallet_voucher_empty">இப்போது விற்பனையில் கடன் சான்றிதழ்கள் இல்லை.</string>
+    <string name="wallet_voucher_note">தள்ளுபடி வாங்கும் போது மட்டுமே பொருந்தும். சான்றிதழ் அதன் முகமதிப்பை விடக் குறைந்த விலையில் கிடைத்து முழுத் தொகையும் உங்கள் பணப்பையில் சேரும். பின்னர் மற்றொரு ஓட்டுநருக்கு அனுப்பும் கடன் அதன் சரியான மதிப்பிலேயே செல்லும்.</string>
+    <string name="wallet_pay">செலுத்து</string>
+    <string name="wallet_pay_amount">%1$s செலுத்து</string>
+    <string name="wallet_pay_and_get">%1$s செலுத்தி %2$s பெறவும்</string>
+    <string name="wallet_topup_pending">கட்டணம் உறுதியாகும் வரை காத்திருக்கிறது.</string>
+    <string name="wallet_topup_slow">கட்டணத்திற்கு வழக்கத்தை விட நேரம் ஆகிறது. அது முடிந்ததும் உங்கள் கடன் தெரியும்.</string>
+    <string name="wallet_topup_failed">அந்தக் கட்டணம் நிறைவேறவில்லை. எதுவும் வசூலிக்கப்படவில்லை.</string>
+    <string name="wallet_lankaqr_title">செலுத்த ஸ்கேன் செய்யவும்</string>
+    <string name="wallet_lankaqr_body">கட்டண இணைப்பைத் திறக்கக்கூடிய வங்கிச் செயலி இந்தத் தொலைபேசியில் இல்லை. அதற்குப் பதிலாக உங்கள் வங்கிச் செயலியில் இந்தக் குறியீட்டை ஸ்கேன் செய்யவும்.</string>
+    <string name="wallet_receipt_title">கட்டணம் தொடங்கியது</string>
+    <string name="wallet_receipt_paid">நீங்கள் செலுத்துவது %1$s</string>
+    <string name="wallet_receipt_credited">உங்கள் பணப்பைக்கு %1$s சேரும்</string>
+    <string name="wallet_receipt_pending">கட்டணம் முடிந்தவுடன் கடன் தெரியும்.</string>
+
+    <!-- SCR-DA-023 . ஓட்டுநர் எண் மூலம் கடன் கோருதல் (US-9.10, AL-34). -->
+    <string name="wallet_request_title">கடன் கேட்கவும்</string>
+    <string name="wallet_request_intro">பணப்பையில் கடன் வைத்திருக்கும் ஓட்டுநரின் ஓட்டுநர் எண்ணை உள்ளிட்டு அவரிடம் பரிமாற்றம் கேட்கவும். ஸ்கேன் செய்ய குறியீடோ சிறப்பு விற்பனையாளர் எண்ணோ இல்லை.</string>
+    <string name="wallet_driver_id_label">ஓட்டுநர் எண்</string>
+    <string name="wallet_driver_id_help">மற்ற ஓட்டுநர் அதைத் தன் சுயவிவரத் திரையில் பார்க்கலாம்.</string>
+    <string name="wallet_driver_id_invalid">அது ஓட்டுநர் எண் அல்ல. அவரிடம் மீண்டும் சொல்லச் சொல்லுங்கள்.</string>
+    <string name="wallet_request_action">பரிமாற்றம் கோரவும்</string>
+    <string name="wallet_request_awaiting">%1$s கேட்கப்பட்டது. அந்த ஓட்டுநரின் ஒப்புதலுக்குக் காத்திருக்கிறது.</string>
+    <string name="wallet_request_outstanding">ஒப்புதலுக்குக் காத்திருப்பவை</string>
+
+    <!-- SCR-DA-024 . கடன் பரிமாற்றமும் ஒப்புதல் பட்டியலும் (US-9.11, US-9.12, US-9.20, US-9.21). -->
+    <string name="wallet_transfer_title">கடன் பரிமாற்றம்</string>
+    <string name="wallet_transfer_incoming">உங்களிடம் கடன் கேட்கும் ஓட்டுநர்கள்</string>
+    <string name="wallet_transfer_incoming_empty">உங்களிடம் யாரும் கடன் கேட்கவில்லை.</string>
+    <string name="wallet_transfer_requested">%1$s கேட்கப்பட்டது</string>
+    <string name="wallet_transfer_approve">ஒப்புக</string>
+    <string name="wallet_transfer_decline">மறுக்க</string>
+    <string name="wallet_transfer_send_directly">அல்லது கடனை நேரடியாக அனுப்பவும்</string>
+    <string name="wallet_transfer_you_send">நீங்கள் அனுப்புவது</string>
+    <string name="wallet_transfer_recipient_gets">அவர் பெறுவது</string>
+    <string name="wallet_transfer_exact_value">எதுவும் பிடிக்காமல், சரியான தொகையே.</string>
+    <string name="wallet_transfer_action">கடன் அனுப்பு</string>
+    <string name="wallet_transfer_sent_notice">%1$s அனுப்பப்பட்டது.</string>
+    <string name="wallet_transfer_history">முந்தைய பரிமாற்றங்கள்</string>
+    <string name="wallet_transfer_sent">அனுப்பியது</string>
+    <string name="wallet_transfer_received">பெற்றது</string>
+    <string name="wallet_transfer_pending">காத்திருக்கிறது</string>
+    <string name="wallet_transfer_approved">முடிந்தது</string>
+    <string name="wallet_transfer_rejected">மறுக்கப்பட்டது</string>
+    <string name="wallet_self_transfer">உங்களுக்கே கடன் அனுப்ப முடியாது.</string>
+    <string name="wallet_amount_required">எவ்வளவு அனுப்ப வேண்டும் என உள்ளிடவும்.</string>
+
+    <!-- SCR-DA-025 . கட்டண மற்றும் கட்டண வரலாறு (US-9A.6, US-9A.19, D-13). -->
+    <string name="wallet_history_title">வரலாறு</string>
+    <string name="wallet_history_range">தேதிகளைத் தேர்வு செய்</string>
+    <string name="wallet_history_range_clear">அனைத்தையும் காட்டு</string>
+    <string name="wallet_history_empty">இங்கே இன்னும் எதுவும் இல்லை.</string>
+    <string name="wallet_filter_all">அனைத்தும்</string>
+    <string name="wallet_filter_fees">கட்டணங்கள்</string>
+    <string name="wallet_filter_topups">நிரப்பியவை</string>
+    <string name="wallet_filter_transfers">பரிமாற்றங்கள்</string>
+    <string name="wallet_kind_topup">கடன் நிரப்புதல்</string>
+    <string name="wallet_kind_daily_fee">தினசரிக் கட்டணம்</string>
+    <string name="wallet_kind_trip_payment">பயணக் கட்டணம்</string>
+    <string name="wallet_kind_penalty">அபராதம்</string>
+    <string name="wallet_kind_adjustment">அலுவலகத்தின் திருத்தம்</string>
+    <string name="wallet_kind_tip">உபகாரத் தொகை</string>
+    <string name="wallet_kind_refund">திரும்பச் செலுத்தியது</string>
+    <string name="wallet_kind_reversal">அதிகக் கட்டணம் திரும்பியது</string>
+    <string name="wallet_kind_voucher">கடன் சான்றிதழ்</string>
+    <string name="wallet_kind_transfer">கடன் பரிமாற்றம்</string>
+    <string name="wallet_kind_payout">உங்கள் வங்கிக்குச் செலுத்தியது</string>
+    <string name="wallet_kind_other">பணப்பைப் பதிவு</string>
+    <string name="wallet_statement_download">அறிக்கையைப் பதிவிறக்கு</string>
+    <string name="wallet_statement_ready">உங்கள் %1$s அறிக்கை தயார்.</string>
+    <string name="wallet_statement_failed">அந்த அறிக்கையைச் சேமிக்க முடியவில்லை. மீண்டும் முயலவும்.</string>
+
 </resources>

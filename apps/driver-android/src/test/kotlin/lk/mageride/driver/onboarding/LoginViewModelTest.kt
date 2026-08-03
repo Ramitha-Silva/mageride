@@ -217,12 +217,16 @@ class LoginViewModelTest {
             store = AuthSessionStore(InMemorySecureStore(), config),
             config = config,
         )
-        return LoginViewModel(
-            sessions = sessions,
-            onboarding = OnboardingRepository(content = api.content, iam = api.iam, preferences = preferences),
-            profiles = DriverProfileRepository(registry = api.registry, iam = api.iam),
-            preferences = preferences,
-            pushTokens = PushTokenProvider(),
+        // Owned, because D-32's resend countdown is a `while (true) { delay(1.seconds) }` on
+        // `viewModelScope` and nothing else can end one — see `MainDispatcher.own`.
+        return main.own(
+            LoginViewModel(
+                sessions = sessions,
+                onboarding = OnboardingRepository(content = api.content, iam = api.iam, preferences = preferences),
+                profiles = DriverProfileRepository(registry = api.registry, iam = api.iam),
+                preferences = preferences,
+                pushTokens = PushTokenProvider(),
+            ),
         )
     }
 

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  What the FileProvider declared in AndroidManifest.xml is allowed to hand out.
+
+  ONE directory, inside the app's own cache. `StatementExporter` writes the CSV or PDF that
+  SCR-DA-025's download produces into `cacheDir/statements/` and shares that single file; nothing
+  else in this app is ever exposed through the provider, and a path outside this subtree throws
+  rather than leaking. Cache rather than files/ because a statement is a copy of a server-side
+  ledger — the driver keeps the one they saved from the chooser, and the app's copy is disposable.
+-->
+<paths>
+    <cache-path name="statements" path="statements/" />
+</paths>
