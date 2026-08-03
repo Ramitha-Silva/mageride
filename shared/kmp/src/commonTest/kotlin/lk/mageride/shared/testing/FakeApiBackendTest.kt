@@ -26,7 +26,7 @@ import kotlin.test.assertTrue
  * The reading taken here is the strong one. There is no second implementation of `RideApi` to keep
  * in step with the first — the clients under test are the production ones, and what is faked is
  * the *backend*. So "the same surface" is not a property somebody has to maintain; it is the same
- * sixteen interfaces, and the sweep below proves every one of their 180 operations answers with
+ * sixteen interfaces, and the sweep below proves every one of their 183 operations answers with
  * something its own return type accepts.
  */
 class FakeApiBackendTest {
@@ -168,14 +168,23 @@ class FakeApiBackendTest {
 
     private companion object {
         /**
-         * `ContractCoverageTest` (C013) counts the same number from the YAML.
+         * How many rows the table carries. **Not** the contract's operation count — see below.
          *
-         * **Δ C068: 179 → 180.** `setOperatingCity` (`PUT /v1/me/prefs/operating-city`) has been
-         * in `iam.yaml` since C027 and had no typed client; AL-27's first-run city screen is the
-         * caller, so C068 added the client function and this row. The two contract-scanning tests
-         * next door still disagree with the YAML for reasons that predate both — see the C067
-         * handoff, which raised that drift as a micro-change-set.
+         * **Δ C068: 179 → 180.** `setOperatingCity` had been in `iam.yaml` since C027 with no
+         * typed client; AL-27's first-run city screen is the caller.
+         *
+         * **Δ MCS-02: 180 → 176.** Four operations retired by AL-57/AL-47 were deleted.
+         *
+         * **Δ MCS-03: 176 → 183**, as the 65 missing operations land a slice at a time. The
+         * in-scope contracts declare **241**, so this number is still climbing and
+         * `ContractCoverageTest` stays red until it arrives.
+         *
+         * One of the 65 is deliberately **not** here: `getSupportScreenshot` answers `200` with
+         * `image/jpeg`, and [lk.mageride.shared.testing.fake.FakeOperation] can express a JSON
+         * body or no body and nothing else. Its client function exists; the row waits on a table
+         * that can say "binary". `downloadSignedGtfsObject` is the same shape. See the MCS-03
+         * handoff.
          */
-        const val EXPECTED_OPERATIONS = 180
+        const val EXPECTED_OPERATIONS = 183
     }
 }

@@ -14,9 +14,12 @@ import lk.mageride.shared.data.api.apiPut
 import lk.mageride.shared.data.api.decode
 import lk.mageride.shared.data.api.jsonBody
 import lk.mageride.shared.data.models.Language
+import lk.mageride.shared.data.models.content.AuthoredFaqListResponse
 import lk.mageride.shared.data.models.content.BroadcastListResponse
 import lk.mageride.shared.data.models.content.NotificationTemplate
 import lk.mageride.shared.data.models.content.NotificationTemplateVersion
+import lk.mageride.shared.data.models.content.OnboardingAudience
+import lk.mageride.shared.data.models.content.OnboardingSlidesResponse
 import lk.mageride.shared.data.models.content.OperatingCityListResponse
 import lk.mageride.shared.data.models.content.UpdateNotificationTemplateRequest
 
@@ -52,6 +55,27 @@ public interface ContentApi {
     /** `GET /v1/content/broadcasts` — in-app banners that are live right now. */
     public suspend fun listActiveBroadcasts(lang: Language? = null): BroadcastListResponse
 
+    /**
+     * `GET /v1/content/faq` — the **authored** FAQ rows (Δ C045, renamed by MCS-02).
+     *
+     * C053's fence: FAQ content is content-svc's and support-svc serves and filters it. An app
+     * reads `SupportApi.listFaqArticles`; this is the source those rows are authored in, and the
+     * two carried one `operationId` until MCS-02 separated them.
+     */
+    public suspend fun listAuthoredFaqArticles(
+        lang: Language? = null,
+        category: String? = null,
+    ): AuthoredFaqListResponse
+
+    /**
+     * `GET /v1/content/onboarding/{audience}` — AL-28's three feature slides (BR-25.1).
+     *
+     * Public and unauthenticated, like `/v1/config/cities`: it is drawn on the same pre-sign-in
+     * screen. **All three languages come back in one answer** — the language picker is on that
+     * screen, so the client re-renders from the response rather than re-fetching.
+     */
+    public suspend fun listOnboardingSlides(audience: OnboardingAudience): OnboardingSlidesResponse
+
     /** `PUT /v1/admin/content/{key}` — Admin Portal edits a template in all three languages. */
     public suspend fun updateNotificationTemplate(
         key: String,
@@ -60,6 +84,19 @@ public interface ContentApi {
 }
 
 internal class KtorContentApi(private val transport: ApiTransport) : ContentApi {
+
+    override suspend fun listAuthoredFaqArticles(lang: Language?, category: String?): AuthoredFaqListResponse =
+        transport.apiGet(ApiService.CONTENT, "listAuthoredFaqArticles", "/v1/content/faq") {
+            lang?.let { parameter("lang", it.wire) }
+            category?.let { parameter("category", it) }
+        }.decode()
+
+    override suspend fun listOnboardingSlides(audience: OnboardingAudience): OnboardingSlidesResponse =
+        transport.apiGet(
+            ApiService.CONTENT,
+            "listOnboardingSlides",
+            "/v1/content/onboarding/${audience.wire}",
+        ).decode()
 
     override suspend fun getOperatingCities(ifNoneMatch: String?): Conditional<OperatingCityListResponse> {
         val response = transport.apiGet(

@@ -196,3 +196,24 @@ public data class TicketDetail(
     val adminResponse: String? = null,
     val thread: List<TicketEvent> = emptyList(),
 )
+
+/**
+ * `POST /v1/support/screenshots` — 201 (Δ C053).
+ *
+ * The `docs.uploads` row the upload created. **No public URL is ever minted** — the user reads
+ * their own screenshot back through the short-lived signed link on the ticket detail, which is
+ * what `getSupportScreenshot` serves.
+ *
+ * @property fileId What `POST /v1/support/tickets` links. Attachable to at most one ticket, and
+ *   only by the user who uploaded it.
+ * @property sizeBytes The bytes as written.
+ * @property sha256 Lower-case hex digest of those bytes.
+ * @property autoDeleteAt NFR-28's 90-day raw delete.
+ */
+@Serializable
+public data class UploadedScreenshot(
+    val fileId: Ulid,
+    val sizeBytes: Long,
+    val sha256: String? = null,
+    val autoDeleteAt: Timestamp? = null,
+)

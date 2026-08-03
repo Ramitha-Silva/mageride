@@ -170,3 +170,86 @@ public data class Broadcast(
  */
 @Serializable
 public data class BroadcastListResponse(val items: List<Broadcast> = emptyList())
+
+/**
+ * `GET /v1/content/faq` — 200 (Δ C045, renamed by MCS-02).
+ *
+ * **The authoring surface.** C053's fence gives FAQ content to content-svc and the app-facing
+ * read to support-svc's `GET /v1/support/faq`; the two carried one `operationId` until MCS-02
+ * renamed this one, which is why an app read was silently checked against the wrong schema.
+ *
+ * @property language The language actually served.
+ * @property items Articles, ordered by `sortOrder` then category.
+ */
+@Serializable
+public data class AuthoredFaqListResponse(val language: Language, val items: List<AuthoredFaqArticle> = emptyList())
+
+/**
+ * One authored FAQ article (`content.yaml#/components/schemas/FaqArticle`).
+ *
+ * **Not support-svc's `FaqSummary`.** Articles are stored one row per language
+ * (`content.faq_articles`) and this is the authored row with its body; the app-facing list
+ * carries a summary and fetches the body per article.
+ *
+ * @property articleId The article.
+ * @property category e.g. `wallet`, `daily_fee`, `booking`.
+ * @property title Heading in the resolved language.
+ * @property body The article itself.
+ * @property sortOrder Position within its category.
+ */
+@Serializable
+public data class AuthoredFaqArticle(
+    val articleId: Ulid,
+    val category: String,
+    val title: String,
+    val body: String,
+    val sortOrder: Int,
+)
+
+/**
+ * `GET /v1/content/onboarding/{audience}` — 200 (Δ C045, AL-28 / BR-25.1).
+ *
+ * The 3-slide feature carousel above SCR-DA/DI-002's language and city selectors. Public and
+ * cacheable, because it is drawn on the same pre-sign-in screen as `/v1/config/cities`.
+ *
+ * @property slides In pager order.
+ */
+@Serializable
+public data class OnboardingSlidesResponse(val slides: List<OnboardingSlide> = emptyList())
+
+/**
+ * One carousel slide (`content.yaml#/components/schemas/OnboardingSlide`, AL-28).
+ *
+ * **All three languages arrive at once, and there is no `lang` parameter.** The language picker is
+ * on this very screen, so the client re-renders from the response when the reader switches
+ * instead of re-fetching — which is also why a slide carries [TrilingualText] rather than a
+ * resolved string.
+ *
+ * @property slot 1-based position in the pager.
+ * @property illustrationRef An **app-bundled asset key** (`onboarding/driver-wallet`), or an
+ *   absolute https URL when the deployment sets an asset base. content-svc serves the reference
+ *   and never image bytes.
+ * @property title Heading, in Si/Ta/En.
+ * @property body Copy, in Si/Ta/En.
+ */
+@Serializable
+public data class OnboardingSlide(
+    val slot: Int,
+    val illustrationRef: String,
+    val title: TrilingualText,
+    val body: TrilingualText,
+)
+
+/**
+ * Which app's first-run carousel is being asked for (`content.yaml`, AL-28).
+ *
+ * @property wire The value as it appears in the `{audience}` path segment.
+ */
+@Serializable
+public enum class OnboardingAudience(public val wire: String) {
+    @SerialName("driver")
+    DRIVER("driver"),
+
+    @SerialName("passenger")
+    PASSENGER("passenger"),
+}

@@ -16,9 +16,11 @@ import lk.mageride.shared.data.models.comms.SendNotificationResponse
 import lk.mageride.shared.data.models.comms.StartCallRequest
 import lk.mageride.shared.data.models.comms.StartCallResponse
 import lk.mageride.shared.data.models.comms.VoipTokenResponse
+import lk.mageride.shared.data.models.content.AuthoredFaqListResponse
 import lk.mageride.shared.data.models.content.BroadcastListResponse
 import lk.mageride.shared.data.models.content.NotificationTemplate
 import lk.mageride.shared.data.models.content.NotificationTemplateVersion
+import lk.mageride.shared.data.models.content.OnboardingSlidesResponse
 import lk.mageride.shared.data.models.content.OperatingCityListResponse
 import lk.mageride.shared.data.models.content.UpdateNotificationTemplateRequest
 import lk.mageride.shared.data.models.dispatch.DirectionalConfig
@@ -164,6 +166,7 @@ import lk.mageride.shared.data.models.support.FaqListResponse
 import lk.mageride.shared.data.models.support.Ticket
 import lk.mageride.shared.data.models.support.TicketDetail
 import lk.mageride.shared.data.models.support.TicketRef
+import lk.mageride.shared.data.models.support.UploadedScreenshot
 import lk.mageride.shared.data.models.transit.FeedUploadStatus
 import lk.mageride.shared.data.models.transit.FeedVersion
 import lk.mageride.shared.data.models.transit.GtfsUploadAccepted
@@ -1222,6 +1225,27 @@ internal object ApiOperations {
             "/v1/notify/ack",
             204,
             sends<AcknowledgeNotificationRequest>(),
+        ),
+        op<AuthoredFaqListResponse>(
+            "listAuthoredFaqArticles",
+            ApiService.CONTENT,
+            "GET",
+            "/v1/content/faq",
+            200,
+        ),
+        op<OnboardingSlidesResponse>(
+            "listOnboardingSlides",
+            ApiService.CONTENT,
+            "GET",
+            "/v1/content/onboarding/{audience}",
+            200,
+        ),
+        op<UploadedScreenshot>(
+            "uploadSupportScreenshot",
+            ApiService.SUPPORT,
+            "POST",
+            "/v1/support/screenshots",
+            201,
         ),
         op<AppVersionCheck>("checkAppVersion", ApiService.VERSION, "GET", "/v1/version/check", 200),
     )

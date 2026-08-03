@@ -17,10 +17,14 @@ import lk.mageride.shared.data.models.comms.StartCallRequest
 import lk.mageride.shared.data.models.comms.StartCallResponse
 import lk.mageride.shared.data.models.comms.VoipSession
 import lk.mageride.shared.data.models.comms.VoipTokenResponse
+import lk.mageride.shared.data.models.content.AuthoredFaqArticle
+import lk.mageride.shared.data.models.content.AuthoredFaqListResponse
 import lk.mageride.shared.data.models.content.Broadcast
 import lk.mageride.shared.data.models.content.BroadcastListResponse
 import lk.mageride.shared.data.models.content.NotificationTemplate
 import lk.mageride.shared.data.models.content.NotificationTemplateVersion
+import lk.mageride.shared.data.models.content.OnboardingSlide
+import lk.mageride.shared.data.models.content.OnboardingSlidesResponse
 import lk.mageride.shared.data.models.content.OperatingCity
 import lk.mageride.shared.data.models.content.OperatingCityListResponse
 import lk.mageride.shared.data.models.content.TemplateVersionStatus
@@ -66,6 +70,7 @@ import lk.mageride.shared.data.models.support.TicketEventKind
 import lk.mageride.shared.data.models.support.TicketQueue
 import lk.mageride.shared.data.models.support.TicketRef
 import lk.mageride.shared.data.models.support.TicketStatus
+import lk.mageride.shared.data.models.support.UploadedScreenshot
 import lk.mageride.shared.data.models.transit.FeedIssue
 import lk.mageride.shared.data.models.transit.FeedStatus
 import lk.mageride.shared.data.models.transit.FeedUploadStatus
@@ -406,6 +411,17 @@ class DtoRoundTripReadTest {
             NotificationTemplate("ride_offer", Language.EN, 3, "New ride", "Pickup {{pickup}}", listOf("pickup")),
         )
         assertRoundTrips(UpdateNotificationTemplateRequest(text, text))
+
+        // Δ MCS-03 — the authored FAQ rows and AL-28's carousel.
+        val article = AuthoredFaqArticle(Sample.ULID_A, "wallet", "Topping up", "Open Wallet…", sortOrder = 1)
+        assertRoundTrips(article)
+        assertRoundTrips(AuthoredFaqListResponse(Language.EN, listOf(article)))
+        val slide = OnboardingSlide(slot = 1, illustrationRef = "onboarding/driver-wallet", title = text, body = text)
+        assertRoundTrips(slide)
+        assertRoundTrips(OnboardingSlidesResponse(listOf(slide)))
+        assertRoundTrips(
+            UploadedScreenshot(Sample.ULID_A, sizeBytes = 82_140, sha256 = "a".repeat(64), autoDeleteAt = Sample.LATER),
+        )
         assertRoundTrips(NotificationTemplateVersion("ride_offer", 4, TemplateVersionStatus.DRAFT))
         val broadcast = Broadcast(Sample.ULID_A, "Service update", Sample.AT, Sample.LATER)
         assertRoundTrips(broadcast)
