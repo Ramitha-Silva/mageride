@@ -36,6 +36,11 @@ lk.mageride.driver
 ├── jobs/                     C072 · SCR-DA-017, 018 + the dispatch reads and the Colombo labels
 ├── level/                    C072 · SCR-DA-019
 ├── earnings/                 C072 · SCR-DA-020 + its buckets and its chart
+├── wallet/                   C073 · SCR-DA-021…025 + the top-up rails and the ledger
+├── tracker/                  C074 · SCR-DA-027 + the device-QR scanner and the publisher gate
+├── sharing/                  C074 · SCR-DA-028 — Mode B grants, per vehicle
+├── profile/                  C074 · SCR-DA-029 + its three editors and the contact picker
+├── history/                  C074 · SCR-DA-030 + the rate-passenger sheet
 └── menu/                     C070 · SCR-DA-036 — AL-31's drawer, as a tab
 ```
 
@@ -204,6 +209,69 @@ lk.mageride.driver
   table had only `Jobs`, and their entry points are SCR-DA-017's app bar, SCR-DA-010's `L3` badge
   and SCR-DA-010's *"Today: 4 trips · Rs 3,180"* line. The Menu stays at SCR-DA-036's **eight**
   rows — `MenuDestinationTest` pins that, and none of these three belongs there.
+
+## Cluster 6 (C074) — the tracker, the sharing, the profile and the history
+
+- **Pairing a tracker stops this phone publishing for that vehicle, and the rule lives at the
+  publisher seam.** `TrackerPositionPublisher` decorates `AndroidPositionPublisher` and refuses
+  `start(vehicleId)` for a vehicle in `TrackerBindingStore` (US-3.6, *"exactly one publisher at a
+  time"*). It is a decorator rather than a check in a screen because **three** doors reach the
+  position service — SCR-DA-010's go-online toggle, SCR-DA-011's Start Journey and US-5.10's
+  Restart — and a rule written at one of them would be missing from the other two. `stop()` is
+  never gated. The interface has exactly one binding, in `trackerAndProfileBindings`; C070's
+  `dashboardBindings` no longer declares it.
+- **`TrackerBindingStore` is local because nothing on the app-facing surface answers the question.**
+  Not a preference the way `ActiveVehicleStore` is: `POST /v1/vehicles/{id}/device` returns a
+  `bindingId` and **nothing reads one back** — no registry read carries a device, and
+  `GET /v1/trackers/{imei}` is provisioning-svc's, which `:shared` has no client for. Pair on one
+  handset and the other still publishes; that is the honest limit of a device-local answer and the
+  reason the gap is worth closing server-side.
+- **SCR-DA-027's device-QR scanner is a `Dialog`, and its decoder is ZXing.** A QR read is a short
+  string that comes straight back to the view model underneath, so it needs neither a route nor a
+  `DocumentCaptureCoordinator`. `com.google.zxing:core` was already a dependency (C073's LankaQR
+  writer); its **reader** half decodes the `YUV_420_888` luminance plane straight off an
+  `ImageAnalysis` frame, so there is no `Bitmap` per frame and no ML Kit model to download.
+  `TrackerImei.imeiIn` is where "which fifteen digits in this payload" is decided, and it refuses a
+  payload with two candidates rather than picking one.
+- **SCR-DA-028 is scoped by its selector and re-reads on every change.** Both list endpoints take
+  the vehicle in the path, so `SharingViewModel.selectVehicle` **empties** the queue and the roster
+  before fetching that vehicle's own — AL-35's *"never mixed across vehicles"* is a re-read, not a
+  filter. Only Mode A/B vehicles are offered; a Mode C tuk has no subscribers.
+- **Sharing is two services on purpose.** registry-svc owns the entitlement (`…/share`,
+  `…/subscribers`) and subscription-svc owns the request queue (`/v1/mode-b/…`), because accepting a
+  request creates the grant **and** starts the subscription in one transaction. registry's
+  `…/share/{grantId}/accept` is the *invited user's* half of an invitation and is the other
+  direction. Revoking is by **user**, since `Subscriber` carries no `grantId`.
+- **A new grant does not join the grantee list** (US-4.3b): visibility begins when the passenger
+  accepts. The screen acknowledges the offer and leaves the roster alone.
+- **`ShareExpiry` is two time-zone hops and both are easy to get wrong.** M3's date picker answers
+  **UTC midnight** of the tapped day, and a grant should lapse at the **end** of that day in
+  Colombo. Read its KDoc before touching it.
+- **SCR-DA-029 is where a driver reads their own platform id** — C073's handoff named this screen,
+  and `ui/PlatformId` is now the one place the `Ulid` pattern lives (`WalletInput` delegates to it).
+  There is no `DRV-22011` and no `PAX-90431`.
+- **The emergency contact is replaced, never accumulated.** `EmergencyContact.isPrimary` is *"exactly
+  one per account that has any"* because D-33's SOS is p99 ≤ 5 s off a denormalised column, so
+  `ProfileRepository.saveEmergencyContact` updates in place and only a driver with none creates one.
+  The picker is `ACTION_PICK` over `Phone.CONTENT_URI`, which needs **no `READ_CONTACTS`** — the
+  returned row carries its own read grant.
+- **Notification switches are grouped, and nothing safety-critical is offered.** `SOS_TRIGGERED`,
+  `SOS_RESOLVED`, `RIDE_CANCELLED` and `SCHEDULE_NOT_STARTED` cannot be muted; a switch the platform
+  ignores is worse than no switch. An **absent** key reads as **on** — US-10.7 is opt-out. The whole
+  map is sent back on a save, unknown keys included, because the event list grows without a contract
+  change.
+- **SCR-DA-030's list is query-svc's `GET /v1/trips/{driverId}`, not `GET /v1/rides/history`.** The
+  first spans both planes and is driver-scoped in its own SQL; the second is Mode C only, carries a
+  passenger-facing `driver` block (AL-36) and is unmapped (C048). `TripSummary` has neither distance
+  nor rating, so the screen reads one **detail per row, concurrently** — and `TripDetail.rating` is
+  joined on `rater_id = @UserId`, which makes it *"the stars I already left"* and is what stops a
+  re-opened screen offering to rate a trip twice.
+- Reusable UI added here: `ui/Symbols` (`·`, `—`, `★`, `☆` — `MoneyFormat.EMPTY` and
+  `ScheduleLabels.UNKNOWN` now point at it), `ui/PlatformId`, `ui/vehicleLabel`, and `VehicleChip`
+  gained `selected` / `onClick` / `badge` so the same chip is also SCR-DA-028's selector.
+  `capture/cameraProvider` went `internal` so the QR viewfinder binds an `ImageAnalysis` through the
+  same helper; `Language.endonym` / `.englishName` went `internal` so the profile's language sheet
+  and SCR-DA-002 share one endonym table.
 
 ## Rules this module is built on
 

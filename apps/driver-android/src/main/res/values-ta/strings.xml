@@ -538,4 +538,93 @@
     <string name="wallet_statement_ready">உங்கள் %1$s அறிக்கை தயார்.</string>
     <string name="wallet_statement_failed">அந்த அறிக்கையைச் சேமிக்க முடியவில்லை. மீண்டும் முயலவும்.</string>
 
+    <!-- C074 . பொதுவான செயல்கள். -->
+    <string name="action_cancel">ரத்து செய்</string>
+    <string name="action_done">முடிந்தது</string>
+
+    <!-- SCR-DA-027 . GPS கண்காணிப்பான் இணைப்பு. -->
+    <string name="tracker_title">GPS கண்காணிப்பானை இணை</string>
+    <string name="tracker_vehicle_label">வாகனம்</string>
+    <string name="tracker_no_vehicles">உங்களிடம் இன்னும் வாகனம் இல்லை. கண்காணிப்பானை இணைப்பதற்கு முன் ஒன்றைச் சேர்க்கவும்.</string>
+    <string name="tracker_imei_label">IMEI எண்</string>
+    <string name="tracker_imei_help">கண்காணிப்பானிலோ அதன் பெட்டியிலோ அச்சிடப்பட்ட பதினைந்து இலக்கங்கள்.</string>
+    <string name="tracker_imei_invalid">IMEI எண் பதினைந்து இலக்கங்கள் கொண்டது. ஸ்டிக்கரை மீண்டும் பாருங்கள்.</string>
+    <string name="tracker_scan_action">சாதன QR ஐப் படி</string>
+    <string name="tracker_bind_code_action">இணைப்புக் குறியீடு</string>
+    <string name="tracker_bind_code_help">இணைப்புக் குறியீட்டை நிர்வாக இணையதளத்தில் மட்டுமே உள்ளிட முடியும்.</string>
+    <string name="tracker_pair_action">சாதனத்தை இணை</string>
+    <string name="tracker_paired_title">இணைக்கப்பட்டது</string>
+    <string name="tracker_paired_body">சாதனம் %1$s இந்த வாகனத்துடன் பிணைக்கப்பட்டு அதன் சான்றிதழ் வழங்கப்பட்டுள்ளது.</string>
+    <string name="tracker_behaviour_title">வன்பொருள் கண்காணிப்பான் செயல்பாடு</string>
+    <string name="tracker_behaviour_publisher">கண்காணிப்பான் இணைக்கப்பட்ட பிறகு இந்தத் தொலைபேசி அந்த வாகனத்திற்கான GPS ஐ அனுப்புவதை நிறுத்தும். சாதனமே ஒரே வெளியீட்டாளராக மாறும்.</string>
+    <string name="tracker_behaviour_ignition">A அல்லது B முறை வாகனத்தில் பயணம் இக்னிஷனுடன் தொடங்கி முடிகிறது; செயலி தேவையில்லை. செயலியைத் திறந்தால் பயணம் ஏற்கெனவே இயங்குவதை முகப்புத் திரை காட்டும்.</string>
+    <string name="tracker_behaviour_mode_c">C முறை வாகனத்தில் கண்காணிப்பான் இருப்பிடம் நீங்கள் ஆன்லைனில் இருக்கும்போது மட்டுமே ஏற்கப்படும்.</string>
+    <string name="tracker_fleet_csv">ஐயாயிரம் அல்லது அதற்கு மேற்பட்ட கண்காணிப்பான்களா? அவற்றை நிர்வாக இணையதளத்தில் CSV ஆகப் பதிவேற்றவும்.</string>
+    <string name="tracker_quarantined">அந்த IMEI எண் ஏற்கெனவே வேறு வாகனத்தில் செயலில் உள்ளதால் தடுத்து வைக்கப்பட்டுள்ளது. மீண்டும் முயல்வதற்கு முன் அலுவலகத்தைத் தொடர்பு கொள்ளவும்.</string>
+    <string name="tracker_scan_hint">குறியீட்டைச் சதுரத்திற்குள் வைக்கவும்.</string>
+    <string name="tracker_scan_no_camera">கேமராவுக்கு இன்னும் அனுமதி இல்லை. மாறாக IMEI எண்ணை உள்ளிடவும், அல்லது அமைப்புகளில் கேமராவை இயக்கவும்.</string>
+    <string name="tracker_scan_unreadable">அந்தக் குறியீட்டில் IMEI எண் கிடைக்கவில்லை. மாறாக எண்ணை உள்ளிடவும்.</string>
+
+    <!-- SCR-DA-028 . வாகனவாரி பகிர்வு மேலாண்மை. -->
+    <string name="sharing_title">பகிர்வு (B முறை)</string>
+    <string name="sharing_vehicle_label">வாகனம்</string>
+    <string name="sharing_no_vehicles">பகிர்வு A மற்றும் B முறை வாகனங்களுக்கானது. உங்களுக்கு அத்தகைய வாகனம் பதிவு செய்யப்படவோ ஒதுக்கப்படவோ இல்லை.</string>
+    <string name="sharing_fleet_badge">குழு</string>
+    <string name="sharing_user_id_label">பயனர் அடையாளத்துடன் பகிர்</string>
+    <string name="sharing_user_id_help">பயணி தனது சுயவிவரத் திரையில் உள்ள அடையாளத்தைப் படிக்கச் சொல்லுங்கள்.</string>
+    <string name="sharing_user_id_invalid">அது பயனர் அடையாளம் அல்ல. மீண்டும் படிக்கச் சொல்லுங்கள்.</string>
+    <string name="sharing_expiry_label">காலாவதி</string>
+    <string name="sharing_expiry_none">காலாவதி இல்லை</string>
+    <string name="sharing_expiry_clear">அழி</string>
+    <string name="sharing_grant_action">அணுகலை வழங்கு</string>
+    <string name="sharing_granted">அணுகல் வழங்கப்பட்டது. அவர்கள் ஏற்றுக்கொண்ட பிறகு கீழே தோன்றுவார்கள்.</string>
+    <string name="sharing_requests_heading">இந்த வாகனத்திற்கு வரும் கோரிக்கைகள்</string>
+    <string name="sharing_requests_empty">இந்த வாகனத்தைப் பின்தொடர யாரும் கேட்கவில்லை.</string>
+    <string name="sharing_grantees_heading">இந்த வாகனத்தை யார் கண்காணிக்கலாம்</string>
+    <string name="sharing_grantees_empty">இந்த வாகனத்தை இன்னும் யாரும் பின்தொடரவில்லை.</string>
+    <string name="sharing_accept">ஏற்கவும்</string>
+    <string name="sharing_reject">நிராகரிக்கவும்</string>
+    <string name="sharing_status_active">செயலில்</string>
+    <string name="sharing_passenger_unnamed">பயணி</string>
+
+    <!-- SCR-DA-029 . ஓட்டுநர் சுயவிவரம். -->
+    <string name="profile_title">சுயவிவரம்</string>
+    <string name="profile_unnamed">உங்கள் பெயர்</string>
+    <string name="profile_id_and_rating">%1$s . %2$s ஒட்டுமொத்தம்</string>
+    <string name="profile_vehicle_details">வாகன விவரங்கள்</string>
+    <string name="profile_trip_ratings">பயணவாரி மதிப்பீடுகள்</string>
+    <string name="profile_emergency_row">அவசரத் தொடர்பு</string>
+    <string name="profile_emergency_none">அமைக்கப்படவில்லை. SOS யாரையும் அடைய முடியாது.</string>
+    <string name="profile_driver_level">ஓட்டுநர் நிலை</string>
+    <string name="profile_level_value">நிலை %1$d</string>
+    <string name="profile_language_row">மொழி</string>
+    <string name="profile_notify_heading">எச்சரிக்கைகள்</string>
+    <string name="profile_notify_dispatch">பயண வாய்ப்புகளும் நினைவூட்டல்களும்</string>
+    <string name="profile_notify_money">பணப்பையும் தினசரிக் கட்டணமும்</string>
+    <string name="profile_notify_registration">பதிவும் ஆவணங்களும்</string>
+    <string name="profile_notify_directional">சேருமிட வடிகட்டி</string>
+    <string name="profile_notify_announcements">பொது அறிவிப்புகள்</string>
+    <string name="profile_notify_safety_note">பாதுகாப்பு எச்சரிக்கைகளும் பயண ரத்துகளும் எப்போதும் வழங்கப்படும்; அவற்றை நிறுத்த முடியாது.</string>
+    <string name="profile_log_out">வெளியேறு</string>
+    <string name="profile_name_title">உங்கள் பெயர்</string>
+    <string name="profile_name_label">பயணிகளுக்குக் காட்டப்படும் பெயர்</string>
+    <string name="profile_emergency_title">அவசரத் தொடர்பு</string>
+    <string name="profile_emergency_why">SOS உங்கள் இருப்பிடத்தையும் பயணத்தையும் இந்த நபருக்கு SMS மூலம் அனுப்பும்.</string>
+    <string name="profile_emergency_pick">தொடர்புகளிலிருந்து தேர்ந்தெடு</string>
+    <string name="profile_emergency_name_label">தொடர்பின் பெயர்</string>
+    <string name="profile_emergency_phone_invalid">7 இல் தொடங்கும் ஒன்பது இலக்க கைபேசி எண்ணை உள்ளிடவும்.</string>
+    <string name="profile_language_title">செயலி மொழி</string>
+
+    <!-- SCR-DA-030 . பயண வரலாறும் பயணி மதிப்பீடும். -->
+    <string name="history_title">பயண வரலாறு</string>
+    <string name="history_empty">நீங்கள் இன்னும் ஒரு பயணத்தை முடிக்கவில்லை.</string>
+    <string name="history_rate_action">மதிப்பிடு</string>
+    <string name="history_fare_to_you">உங்களுக்கான கட்டணம் %1$s</string>
+    <string name="history_rate_title">பயணியை மதிப்பிடு</string>
+    <string name="history_passenger_unnamed">பயணி</string>
+    <string name="history_rate_comment_label">கருத்து சேர்க்கவும் (விருப்பம்)</string>
+    <string name="history_rate_comment_hint">பயணி எப்படி இருந்தார்?</string>
+    <string name="history_rate_no_passenger">இந்தப் பயணம் கணக்கு இல்லாத ஒருவருக்காக முன்பதிவு செய்யப்பட்டது, எனவே மதிப்பிட யாரும் இல்லை.</string>
+    <string name="history_rate_submit">மதிப்பீட்டை அனுப்பு</string>
+
 </resources>

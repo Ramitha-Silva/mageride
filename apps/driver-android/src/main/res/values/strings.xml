@@ -594,4 +594,93 @@
     <string name="wallet_statement_ready">Your %1$s statement is ready.</string>
     <string name="wallet_statement_failed">We could not save that statement. Try again.</string>
 
+    <!-- Shared actions added by C074. -->
+    <string name="action_cancel">Cancel</string>
+    <string name="action_done">Done</string>
+
+    <!-- SCR-DA-027 . GPS tracker pairing (US-3.1, US-3.21-3.23, T-02/T-09). -->
+    <string name="tracker_title">Pair GPS tracker</string>
+    <string name="tracker_vehicle_label">Vehicle</string>
+    <string name="tracker_no_vehicles">You have no vehicle yet. Add one before pairing a tracker.</string>
+    <string name="tracker_imei_label">IMEI</string>
+    <string name="tracker_imei_help">Fifteen digits, printed on the tracker or on its box.</string>
+    <string name="tracker_imei_invalid">An IMEI is fifteen digits. Check the sticker again.</string>
+    <string name="tracker_scan_action">Scan device QR</string>
+    <string name="tracker_bind_code_action">Bind code</string>
+    <string name="tracker_bind_code_help">A bind code can only be entered in the Admin Portal.</string>
+    <string name="tracker_pair_action">Pair device</string>
+    <string name="tracker_paired_title">Paired</string>
+    <string name="tracker_paired_body">Device %1$s is bound to this vehicle and its certificate has been issued.</string>
+    <string name="tracker_behaviour_title">Hardware tracker behaviour</string>
+    <string name="tracker_behaviour_publisher">Once a tracker is paired, this phone stops sending GPS for the vehicle. The device becomes the only publisher.</string>
+    <string name="tracker_behaviour_ignition">On a Mode A or Mode B vehicle the journey starts and ends with the ignition, with no app needed. Open the app and the dashboard already shows the journey running.</string>
+    <string name="tracker_behaviour_mode_c">On a Mode C vehicle the tracker position is accepted only while you are Online.</string>
+    <string name="tracker_fleet_csv">Five thousand trackers or more? Upload them as a CSV in the Admin Portal.</string>
+    <string name="tracker_quarantined">That IMEI is already active on another vehicle, so it has been held back. Contact the office before trying again.</string>
+    <string name="tracker_scan_hint">Hold the code inside the square.</string>
+    <string name="tracker_scan_no_camera">The camera is not allowed yet. Enter the IMEI instead, or turn the camera on in Settings.</string>
+    <string name="tracker_scan_unreadable">No IMEI was found in that code. Enter the number instead.</string>
+
+    <!-- SCR-DA-028 . sharing management, Mode B, per vehicle (US-4.1-4.4, US-4.7, AL-35). -->
+    <string name="sharing_title">Sharing (Mode B)</string>
+    <string name="sharing_vehicle_label">Vehicle</string>
+    <string name="sharing_no_vehicles">Sharing is for Mode A and Mode B vehicles. None is registered to you or assigned to you.</string>
+    <string name="sharing_fleet_badge">FLEET</string>
+    <string name="sharing_user_id_label">Share with User ID</string>
+    <string name="sharing_user_id_help">Ask the passenger to read their ID off their own profile screen.</string>
+    <string name="sharing_user_id_invalid">That is not a User ID. Ask them to read theirs out again.</string>
+    <string name="sharing_expiry_label">Expiry</string>
+    <string name="sharing_expiry_none">No expiry</string>
+    <string name="sharing_expiry_clear">Clear</string>
+    <string name="sharing_grant_action">Grant access</string>
+    <string name="sharing_granted">Access offered. They appear below once they accept it.</string>
+    <string name="sharing_requests_heading">Incoming requests for this vehicle</string>
+    <string name="sharing_requests_empty">Nobody has asked to follow this vehicle.</string>
+    <string name="sharing_grantees_heading">Who can track this vehicle</string>
+    <string name="sharing_grantees_empty">Nobody is following this vehicle yet.</string>
+    <string name="sharing_accept">Accept</string>
+    <string name="sharing_reject">Reject</string>
+    <string name="sharing_status_active">Active</string>
+    <string name="sharing_passenger_unnamed">Passenger</string>
+
+    <!-- SCR-DA-029 . driver profile (US-18.3, AL-13, US-10.7). -->
+    <string name="profile_title">Profile</string>
+    <string name="profile_unnamed">Your name</string>
+    <string name="profile_id_and_rating">%1$s . %2$s overall</string>
+    <string name="profile_vehicle_details">Vehicle details</string>
+    <string name="profile_trip_ratings">Per-trip ratings</string>
+    <string name="profile_emergency_row">Emergency contact</string>
+    <string name="profile_emergency_none">Not set. SOS cannot reach anyone.</string>
+    <string name="profile_driver_level">Driver Level</string>
+    <string name="profile_level_value">Level %1$d</string>
+    <string name="profile_language_row">Language</string>
+    <string name="profile_notify_heading">Alerts</string>
+    <string name="profile_notify_dispatch">Ride offers and reminders</string>
+    <string name="profile_notify_money">Wallet and daily fee</string>
+    <string name="profile_notify_registration">Registration and documents</string>
+    <string name="profile_notify_directional">Destination filter</string>
+    <string name="profile_notify_announcements">Announcements</string>
+    <string name="profile_notify_safety_note">Safety alerts and ride cancellations are always delivered and cannot be switched off.</string>
+    <string name="profile_log_out">Log out</string>
+    <string name="profile_name_title">Your name</string>
+    <string name="profile_name_label">Name shown to passengers</string>
+    <string name="profile_emergency_title">Emergency contact</string>
+    <string name="profile_emergency_why">SOS sends your position and your trip to this person by SMS.</string>
+    <string name="profile_emergency_pick">Choose from contacts</string>
+    <string name="profile_emergency_name_label">Contact name</string>
+    <string name="profile_emergency_phone_invalid">Enter a nine-digit mobile number starting with 7.</string>
+    <string name="profile_language_title">App language</string>
+
+    <!-- SCR-DA-030 . ride history, trip details and rate passenger (US-8.8, US-18.2, AL-35). -->
+    <string name="history_title">Ride history</string>
+    <string name="history_empty">You have not finished a trip yet.</string>
+    <string name="history_rate_action">Rate</string>
+    <string name="history_fare_to_you">fare to you %1$s</string>
+    <string name="history_rate_title">Rate passenger</string>
+    <string name="history_passenger_unnamed">Passenger</string>
+    <string name="history_rate_comment_label">Add a comment (optional)</string>
+    <string name="history_rate_comment_hint">How was the passenger?</string>
+    <string name="history_rate_no_passenger">This trip was booked for somebody without an account, so there is nobody to rate.</string>
+    <string name="history_rate_submit">Submit rating</string>
+
 </resources>

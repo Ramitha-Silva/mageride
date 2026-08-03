@@ -200,8 +200,11 @@ private fun CityPicker(
  * correctly rejects as "a key copied into si and ta and never translated". It is the same
  * argument `OperatingCity`'s own KDoc makes about city names: a proper noun is **data**, not
  * copy. Whoever is looking for their language is looking for the script they read.
+ *
+ * `internal` since C074: SCR-DA-029's language row offers the same three choices, and a second
+ * copy of the table is how `සිංහල` ends up spelled two ways.
  */
-private val Language.endonym: String
+internal val Language.endonym: String
     get() = when (this) {
         Language.SI -> "සිංහල"
         Language.TA -> "தமிழ்"
@@ -214,7 +217,7 @@ private val Language.endonym: String
  * `null` for English, where the gloss would repeat the endonym — which is exactly what the
  * wireframe draws: `සිංහල Sinhala`, `தமிழ் Tamil`, and a bare `English`.
  */
-private val Language.englishName: String?
+internal val Language.englishName: String?
     get() = when (this) {
         Language.SI -> "Sinhala"
         Language.TA -> "Tamil"

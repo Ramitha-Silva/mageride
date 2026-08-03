@@ -32,21 +32,21 @@ internal enum class MenuDestination(val route: DriverRoute, @param:StringRes val
     /** SCR-DA-004 — the Mode-C wizard, which AL-30 resumes or restarts (C069). */
     VehicleOnboarding(DriverRoute.VehicleOnboarding, R.string.menu_vehicle_onboarding, Icons.Outlined.AddCircleOutline),
 
-    /** SCR-DA-027 (C071). */
+    /** SCR-DA-027 (C074). */
     TrackerPairing(DriverRoute.TrackerPairing, R.string.menu_tracker_pairing, Icons.Outlined.Wifi),
 
-    /** SCR-DA-028 — Mode B sharing (C073). */
+    /** SCR-DA-028 — Mode B sharing (C074). */
     Sharing(DriverRoute.Sharing, R.string.menu_sharing, Icons.Outlined.DirectionsBus),
 
-    /** SCR-DA-029 (C073). */
+    /** SCR-DA-029 (C074). */
     Profile(DriverRoute.Profile, R.string.menu_profile, Icons.Outlined.Person),
 
-    /** SCR-DA-030 — ride history and the rate-passenger sheet (C071). */
+    /** SCR-DA-030 — ride history and the rate-passenger sheet (C074). */
     RideHistory(DriverRoute.RideHistory, R.string.menu_ride_history, Icons.AutoMirrored.Outlined.ReceiptLong),
 
     /** SCR-DA-033 — support and the daily-fee refund request (C075). */
     Support(DriverRoute.Support, R.string.menu_support, Icons.Outlined.SupportAgent),
 
-    /** SCR-DA-034 (C074). */
+    /** SCR-DA-034 (C075). */
     Notifications(DriverRoute.Notifications, R.string.menu_notifications, Icons.Outlined.Notifications),
 }

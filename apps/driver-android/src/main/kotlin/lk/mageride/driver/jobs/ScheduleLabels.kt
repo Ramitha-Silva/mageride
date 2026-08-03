@@ -1,5 +1,6 @@
 package lk.mageride.driver.jobs
 
+import lk.mageride.driver.ui.Symbols
 import lk.mageride.shared.data.models.Place
 import lk.mageride.shared.data.models.Timestamp
 import lk.mageride.shared.util.BusinessCalendar
@@ -55,8 +56,8 @@ internal object ScheduleLabels {
     /** What separates a pickup from its drop on a card. A symbol, so it is not translated. */
     const val ROUTE_ARROW: String = "→"
 
-    /** What a card prints where the server sent no address. */
-    const val UNKNOWN: String = "—"
+    /** What a card prints where the server sent no address. See [Symbols.UNKNOWN]. */
+    const val UNKNOWN: String = Symbols.UNKNOWN
 
     /** `08:30` — the pickup's Colombo wall-clock time. */
     fun time(at: Timestamp): String = TIME.format(zoned(at))

@@ -2,6 +2,7 @@ package lk.mageride.driver.ui.component
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -29,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import lk.mageride.driver.ui.theme.ControlTokens
 import lk.mageride.driver.ui.theme.CtaTokens
@@ -264,15 +267,56 @@ internal fun SolidBadge(label: String, accent: Color, modifier: Modifier = Modif
  *
  * The dot is MAP-03's per-type colour, so the chip on the dashboard is the colour that vehicle is
  * on the map. Same table as My Vehicles' row (`VehicleColors.forType`), on purpose.
+ *
+ * **Δ C074 — the same chip is also a control.** SCR-DA-028's full-device-width vehicle selector is
+ * the wireframe's `chip on sm`: the same shape, with a `primaryContainer` fill and a primary border
+ * when it is the selected one. Passing [onClick] is what makes it selectable; a chip that is only
+ * reporting state (SCR-DA-010's) leaves it null and stays unfocusable.
+ *
+ * @param selected Draws the `chip on` state. Ignored while [onClick] is null.
+ * @param badge The wireframe's trailing `FLEET` marker on a temporarily-assigned vehicle (US-13.9).
  */
 @Composable
-internal fun VehicleChip(label: String, dot: Color, modifier: Modifier = Modifier) {
+internal fun VehicleChip(
+    label: String,
+    dot: Color,
+    modifier: Modifier = Modifier,
+    selected: Boolean = false,
+    onClick: (() -> Unit)? = null,
+    badge: (@Composable () -> Unit)? = null,
+) {
+    val shape = RoundedCornerShape(MageRideTheme.radius.lg)
+    val chosen = selected && onClick != null
+
     Row(
         modifier = modifier
-            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(MageRideTheme.radius.lg))
-            .padding(horizontal = MageRideTheme.spacing.xs, vertical = MageRideTheme.spacing.xxs),
+            .background(
+                color = if (chosen) {
+                    MaterialTheme.colorScheme.primaryContainer
+                } else {
+                    MaterialTheme.colorScheme.surfaceVariant
+                },
+                shape = shape,
+            )
+            .then(
+                if (chosen) {
+                    Modifier.border(ControlTokens.BorderSelected, MaterialTheme.colorScheme.primary, shape)
+                } else {
+                    Modifier
+                },
+            )
+            .then(
+                // `role = RadioButton`: the selector is a one-of-many choice, and TalkBack should
+                // say so rather than announce a row of buttons.
+                if (onClick == null) {
+                    Modifier
+                } else {
+                    Modifier.selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
+                },
+            )
+            .padding(horizontal = MageRideTheme.spacing.xs, vertical = MageRideTheme.spacing.xs),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(MageRideTheme.spacing.xxs),
+        horizontalArrangement = Arrangement.spacedBy(MageRideTheme.spacing.xxs, Alignment.CenterHorizontally),
     ) {
         Box(modifier = Modifier.size(ControlTokens.StatusDot).background(dot, CircleShape))
         Text(
@@ -280,6 +324,7 @@ internal fun VehicleChip(label: String, dot: Color, modifier: Modifier = Modifie
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.onSurface,
         )
+        badge?.invoke()
     }
 }
 

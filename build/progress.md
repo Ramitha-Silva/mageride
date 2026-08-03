@@ -100,7 +100,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C071 | driver-android-delivery | 4a | DONE | 2026-08-03 | **151 tests green** (was 138; 13 new across 2 suites), `assembleDebug` + `detekt` + `ktlintCheck` clean; SCR-DA-016a/b/c built as three sequential sheets over the package ride machine — review with both parties' call buttons, pickup OTP against `:shared`'s `PackageHandoff` budget, and a *"Delivery completed"* that takes the recipient's OTP **or** P-10's photograph. `RideDetail` gained Δ C037's `recipientName`/`senderPhone`/`recipientPhone` in `:shared`, which the DTO was missing. Four spec gaps: AL-33's re-dispatch on Cancel has no server path, `cod-collected` now has no caller, no `senderName`, no ETA for sheet 2's banner |
 | C072 | driver-android-jobs-level-earnings | 4a | DONE | 2026-08-03 | **183 tests green** (was 151; 32 new across 6 suites), `assembleDebug` + `detekt` + `ktlintCheck` clean; SCR-DA-017/018/019/020 built to the wireframes. The board is post-intent only and the fence is asserted (no operation containing "accept" is reachable); US-6A.8 is **three**-valued so an unread level never renders as the L1 gate; T-30 is `JobBoard.GO_LIVE_LEAD` on both job screens; earnings print query-svc's own summary and never a second total; every date is Asia/Colombo through `BusinessCalendar`. Three routes added (`ScheduledRides`, `DriverLevel`, `Earnings`) — the Menu stays at eight rows. Five spec gaps: `ScheduledRide` carries no fare and no address, dispatch-svc sends `hasIntent`/`paymentMethod` the contract does not declare, driver-side cancellation of a scheduled ride has no route, `SCHEDULED_REMINDER` has no deep link and no read carries the report count. Two wireframe deviations: there is no Level 4 (D5' §4.2 caps at 3) and no payment-method split (no read answers one) |
 | C073 | driver-android-wallet-credit | 4a | DONE | 2026-08-03 | **237 tests green** (was 183; 54 new — 7 new wallet suites plus one case each in `ScheduleLabelsTest` and `NavigationShellTest`), `assembleDebug` + `detekt` + `ktlintCheck` clean; SCR-DA-021/022/023/024/025 built to the wireframes. Three fences are asserted rather than remembered (`WalletFenceTest`): `TopupMethod` has exactly three entries and no source or copy in the package names a bank transfer in any of the three languages, nothing here opens a camera (AL-34), and a transfer's two legs are equal at every amount with no commission in any string. A Rs 1,000 voucher at 10 % prices at Rs 900 and credits Rs 1,000 — and goes to `POST /v1/vouchers/purchase`, **not** to a top-up of the discounted price, which would credit Rs 1,900. Four routes added; the balance is read, never computed. Five spec gaps: the wireframe's `DRV-22011` does not exist (the Driver ID is the platform ULID and no route resolves one form into the other), no notification type carries a credit-transfer request, no per-driver low-balance threshold is stored anywhere, `TransferRow` carries no vehicle, and `VoucherPurchase` carries no LankaQR deep link. One dependency added (`com.google.zxing:core`, encoder only) for AL-15's fallback
-| C074 | driver-android-tracker-sharing-profile | 4a | PENDING | | |
+| C074 | driver-android-tracker-sharing-profile | 4a | DONE | 2026-08-03 | **283 tests green** (was 237; 46 new across 6 suites), `assembleDebug` + `detekt` + `ktlintCheck` clean; SCR-DA-027/028/029/030 built to the wireframes. The C074 fence is a decorator on the publisher seam, not a check in a screen: `TrackerPositionPublisher` refuses `start(vehicleId)` for a paired vehicle, which closes all three doors onto the position service at once, and pairing stops a stream that is already running. SCR-DA-028 **re-reads** on every selector change rather than filtering — both endpoints take the vehicle in the path, so AL-35's "never mixed across vehicles" is enforced by emptying the lists on the tap. The rate-passenger sheet is a `ModalBottomSheet` (AL-35) and its list source is query-svc's `GET /v1/trips/{driverId}`, whose `rating` is joined on `rater_id` and therefore means "the stars I already left". Six spec gaps: **no route writes a `subject_kind='ride'` rating** although the column, query-svc's read and D3' §Part 3 all expect one; no owner-facing unbind; the bind wrapper drops `method`/`bindCode`; nothing reads a tracker binding back; no read serves a driver their own star average; and no notification type exists for a Mode B access request. Zero new dependencies — the QR reader is the half of `zxing:core` C073 already added |
 | C075 | driver-android-comms-safety-support | 4a | PENDING | | |
 | C076 | passenger-android-shell | 4a | PENDING | | |
 | C077 | passenger-android-auth-onboarding | 4a | PENDING | | |
@@ -11769,3 +11769,171 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   `gateway-error`, `conflict` and `not-found`; `LabelledTextField` gained a `prefix` slot and
   `MoneyFormat` gained `EMPTY` (`—`, for an amount not yet read) and `percentOfBps`.
   `ScheduleLabels.date` is the Colombo calendar date any later list of past events should print.
+
+---
+
+- **Component:** C074 driver-android-tracker-sharing-profile — 2026-08-03
+- **Status:** DONE — `:apps:driver-android:testDebugUnitTest` **283 passed, 0 failed** (was 237),
+  `assembleDebug` clean, `detekt` and `ktlintCheck` green, and the suite was re-run three times from
+  a cold task graph to be sure none of the new cases is order-dependent. All four screens under
+  `## Screens` are built to `specs/wireframes/driver_android.html` and every DoD line is covered by a
+  test. **No new dependency**: SCR-DA-027's QR reader is the decoder half of `com.google.zxing:core`,
+  which C073 added for AL-15's writer and left unused.
+- **Notes:**
+
+  **The fence is a decorator, because there are three doors and not one.** *"Once a tracker is paired
+  the phone stops ingesting GPS for that vehicle"* is one rule with three call sites — SCR-DA-010's
+  go-online toggle, SCR-DA-011's Start Journey and US-5.10's Restart all call
+  `PositionPublisher.start`. Written into any of them it would be missing from the other two, so it
+  lives in `TrackerPositionPublisher`, which wraps `AndroidPositionPublisher` and refuses a start for
+  a vehicle in `TrackerBindingStore`. `stop()` is never gated: swallowing one would leave a handset
+  publishing for a vehicle it had just been paired away from, which is the state the gate exists to
+  prevent. The interface now has **exactly one** binding — C070's `dashboardBindings` declared it and
+  that line moved rather than being overridden, so nothing rests on which of two same-type
+  definitions Koin keeps. Pairing while online also calls `stop()` directly: a gate that only refused
+  the *next* start would leave a live stream running until the driver went offline.
+
+  **Nothing on the app-facing surface can answer "does this vehicle have a tracker?"** and that is
+  what makes `TrackerBindingStore` local. It is not local the way `ActiveVehicleStore` is — that one
+  is a property of the *device* and deliberately has no server field. This one is a property of the
+  *vehicle*: `POST /v1/vehicles/{id}/device` answers a `bindingId`, no registry read carries a
+  device, and `GET /v1/trackers/{imei}` belongs to provisioning-svc, which `:shared` has no client
+  for (C019's service list is deliberate — everything a driver may do to a tracker is meant to come
+  through registry's wrapper). So a driver who pairs on one handset and drives with another still
+  publishes from the second. That is the honest limit of a device-local answer and the reason gap 3
+  below is worth closing server-side rather than working around here.
+
+  **SCR-DA-028's selector is a scope, not a filter** (AL-35). The caption box the wireframe used to
+  carry is gone and the full-device-width chips took its job, and both list endpoints take the
+  vehicle in the path — so `selectVehicle` **empties** the queue and the roster and re-reads. There
+  is no combined read to filter, and a queue seen under the wrong chip is the one thing the rule
+  forbids. A late answer for a vehicle that is no longer selected is discarded by id.
+
+  **Sharing is two services and the direction matters.** registry-svc owns the entitlement and
+  subscription-svc owns the request queue, because accepting a request creates the grant **and**
+  starts the subscription in one transaction (AL-24). registry's `…/share/{grantId}/accept` looks
+  like the owner's accept and is not — it is the *invited user's* half of an invitation the owner
+  started. Revoking is `DELETE …/subscribers/{userId}`, because `Subscriber` carries a `userId` and
+  no `grantId`, so the other revoke route has no id this screen could pass it. And a fresh grant
+  does **not** join the grantee list: US-4.3b begins visibility at the passenger's acceptance, so
+  the screen acknowledges an offer rather than claiming a subscriber.
+
+  **`ShareExpiry` is where a share grant lapses on the wrong day.** M3's date picker answers **UTC
+  midnight** of the day that was tapped, and a grant should lapse at the **end** of that day in
+  Colombo. Read the picked instant in any other zone and it is a different date; send it unchanged
+  and the passenger loses the vehicle before the chosen day begins. Both hops are unit-tested
+  against `BusinessCalendar.ZONE` (D-38).
+
+  **The emergency contact is replaced, never accumulated.** `EmergencyContact.isPrimary` is *"exactly
+  one per account that has any"* because D-33's SOS budget is p99 ≤ 5 s off
+  `iam.users.emergency_contact_name/phone`; adding a second would leave that fast path pointing at
+  whichever the server had already denormalised. The address-book picker is `ACTION_PICK` over
+  `ContactsContract.CommonDataKinds.Phone.CONTENT_URI`, which hands back one row with its own read
+  grant and needs **no `READ_CONTACTS`** — `ActivityResultContracts.PickContact` would have, because
+  it answers a *contact* URI whose number cannot be resolved without the permission.
+
+  **Notification switches are grouped five ways and nothing safety-critical is offered.** Fifteen
+  switches is a settings screen nobody reads. `NotificationCatalogue.SafetyCritical`
+  (`SOS_TRIGGERED`, `SOS_RESOLVED`, `RIDE_CANCELLED`) plus `SCHEDULE_NOT_STARTED` are absent from
+  the table, because iam-svc drops a mute for one on the way in and notification-svc ignores it on
+  the way out — a switch that appears to work and does not is worse than none. An **absent** key
+  reads as **on** (US-10.7 is opt-out), and the whole map is written back on a save so a key this
+  build has never heard of survives untouched.
+
+  **SCR-DA-030's list is query-svc's, and the choice is load-bearing.** `GET /v1/trips/{driverId}`
+  spans both planes (its SQL selects rides on `accepted_driver_id` and sessions on `driver_id`) and
+  is implemented; `GET /v1/rides/history` is Mode C only, carries a `driver` block that exists so a
+  *passenger* can call back (AL-36), and ride-svc leaves it unmapped for C048. The wireframe's row
+  also prints a distance and *"rated ★5"*, and `TripSummary` carries neither — so the screen reads
+  **one detail per row, concurrently**, bounded to the page. That is a fan-out and it is deliberate:
+  query-svc joins `trips.ratings` on `rater_id = @UserId`, which makes `TripDetail.rating` mean *"the
+  stars I already left"*, and without it a re-opened screen would offer to rate a trip twice and
+  write a second row. A detail that fails is dropped, not fatal — the row keeps its summary.
+
+  ### Spec gaps found
+
+  1. **No route writes a driver-to-passenger rating for a Mode C ride, and this is the finding that
+     matters most.** `trips.ratings.subject_kind` is `CHECK (… IN ('session','ride'))`, query-svc's
+     trip-detail SQL reads ride-subject ratings back, D5' §4.1 says ratings run *"passenger↔driver
+     both directions"* and D3' §Part 3's traceability row files US-18.2 against *"trip-state
+     `/sessions/{id}/rating`, `/driver-rating`; **ride**"* — but `ride.yaml` declares **no rating
+     route at all**, in either direction. The only operation on the platform that writes one is
+     trip-state-svc's `POST /v1/sessions/{sessionId}/driver-rating`, whose path is session-scoped. So
+     `RideHistoryRepository.ratePassenger` sends the subject id to that route: correct for a Mode A/B
+     session, and refused for a ride until ride-svc gains `POST /v1/rides/{rideId}/driver-rating` (or
+     the trip-state path is widened). Wired rather than omitted, on C072's `cancelScheduled`
+     reasoning — the refusal is the honest answer and a screen that dropped the tap would hide it.
+     `RideHistoryViewModelTest.the_only_rating_route_on_the_platform_is_the_session_one` pins the
+     path so this cannot be quietly "fixed" by inventing one. **A micro-change-set adding the ride
+     route is the single highest-value follow-up in this cluster.**
+  2. **There is no owner-facing unbind, so the screen offers none.** `provisioning.yaml` has
+     `POST /v1/trackers/unbind` — added by C030 for exactly this case, an owner moving a tracker
+     between vehicles — and `registry.yaml` has no wrapper for it, while `DELETE /v1/trackers/{imei}`
+     is admin decommission. The deliverable asks for *"bind/unbind"*; forgetting the binding locally
+     would let the phone start publishing again while the device is still bound and publishing, and
+     two publishers on one vehicle is precisely what US-3.6 exists to prevent. A dangerous button is
+     worse than an absent one. **The wrapper `registry.yaml` needs is a `DELETE
+     /v1/vehicles/{vehicleId}/device`.**
+  3. **Nothing reads a tracker binding back.** `BindVehicleDeviceResponse` carries a `bindingId` and
+     that is all; `VehicleSummary` and `VehicleDetail` have no device field, and
+     `GET /v1/trackers/{imei}` (binding plus `lastSeen`/`battery`/`signal`, US-3.12) is
+     provisioning-svc's with no client in `:shared`. So the paired state and the publisher gate both
+     hang off `TrackerBindingStore`, which is this handset's memory, and the wireframe's live device
+     health cannot be drawn at all.
+  4. **registry's bind wrapper drops `method` and `bindCode`.** provisioning-svc's
+     `POST /v1/trackers/bind` takes `method: [manual, qr, admin_code]`, an optional `bindCode` and a
+     `credentialType`; `POST /v1/vehicles/{vehicleId}/device` takes `{ imei }`. Two consequences on
+     the screen: a **scanned** IMEI is indistinguishable from a typed one, which is the same
+     provenance argument AL-43 makes about a document scan and which the T-08 quarantine queue would
+     want; and **Bind code** — a control the wireframe draws — has nothing to send, so it is drawn
+     disabled with the reason under it.
+  5. **No read serves a driver their own star average.** The wireframe prints *"DRV-22011 · ★4.8
+     overall"* and US-18.3 asks for it. `GET /v1/drivers/{id}/level` answers a level and points,
+     `GET /v1/drivers/{id}/stats` answers acceptance rate, no-shows and points, `trips.ratings` has
+     no aggregate read, and the only `rating` on the whole app-facing surface is
+     `RideDetail.driver.rating` — the number a *passenger* is shown about the driver of *their* ride.
+     C070's menu header reached the same conclusion and drew nothing. SCR-DA-029 prints the level,
+     which is real, and `—` where the average would be.
+  6. **No notification type carries a Mode B access request.** D2' §SCR-DA-028's states name
+     *"request notification (US-10.2)"* and §SCR-DA-034 lists *"sharing"* among the alert kinds
+     SCR-DA-034 draws; `NotificationCatalogue` declares no such type, so nothing raises one. The
+     queue is therefore **read** on open and after every decision, and the profile's notification
+     table has no *"sharing"* row — a switch that silenced nothing would be worse than its absence.
+     The same shape C073 found for the credit-transfer request.
+
+  ### Two wireframe deviations, both forced and both minimal
+
+  - **D2' §SCR-DA-027's component table says *"CameraX + ML Kit"* for the device QR; the decoder is
+    ZXing.** The CameraX half is exactly as specified. `com.google.zxing:core` is **already** on this
+    module's classpath — C073 added it for AL-15's LankaQR writer and used only the writer — and its
+    `QRCodeReader` decodes the `YUV_420_888` luminance plane straight off an `ImageAnalysis` frame,
+    with no `Bitmap` per frame. ML Kit would have added a Play-services-backed dependency and a
+    downloaded model to read fifteen digits off a sticker. If the platform standardises on ML Kit
+    later, `DeviceQrScanner.decodeOrNull` is the one function to replace.
+  - **The fleet-CSV line is a note, not a link.** The wireframe styles *"Admin Portal CSV upload ›"*
+    as a text link; the bulk route is `POST /v1/fleets/{fleetId}/trackers/bulk` on provisioning-svc
+    and it is the **Admin Portal's**, and this app has no portal origin to open — `DriverEnvironment`
+    carries the gateway and the MQTT host, and D7' puts the portal on a different one. A `›` that
+    opened nothing would be worse than a sentence saying where to go.
+
+  ### One thing that is not a deviation, though it looks like one
+
+  **SCR-DA-030's two amounts are the same number.** The wireframe prints *"Rs 480"* on the first line
+  and *"fare to you Rs 480"* on the second, and that is correct rather than a sketch error: D5' has
+  no commission and AL-01 removed the last thing that could have taken one, so what the passenger
+  paid is what the driver keeps — less the flat daily fee, which SCR-DA-021 accounts for separately.
+
+  **For C075 —** `profile/ProfileRepository` is the one door onto `GET`/`PUT /v1/users/me`, the
+  emergency contacts and `AuthSessionManager.logout()`; SCR-DA-032's driver SOS reads the contact
+  this screen writes, and safety-svc answers `400 no-emergency-contact` to an account without one.
+  `profile/rememberContactPicker` is the permission-free address-book seam and is reusable by any
+  screen that needs a number. `history/RideHistoryRepository` is the trips read model and the only
+  rating door — see gap 1 before wiring anything to it. `ui/Symbols` is now where `·`, `—` and the
+  two stars are spelled (`MoneyFormat.EMPTY` and `ScheduleLabels.UNKNOWN` point at it), `ui/PlatformId`
+  is the one `Ulid` validator (`WalletInput` delegates to it), and `ui/vehicleLabel` is
+  `Three-wheeler · ABC-1234`. `VehicleChip` gained `selected`/`onClick`/`badge`, so a per-vehicle
+  selector is that control rather than a new one. `capture/cameraProvider` and `Language.endonym` /
+  `.englishName` went `internal` for the same reason: one helper, not two spellings of it.
+  **SCR-DA-034 (C075) is the screen the six gap-6 notifications would land on**, and
+  `DriverNotificationGroup` is the table its preferences already switch — add a row there if a
+  sharing type is ever minted.

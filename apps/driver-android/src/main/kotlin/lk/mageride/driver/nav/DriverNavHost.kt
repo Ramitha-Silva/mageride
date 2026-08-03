@@ -17,6 +17,7 @@ import androidx.navigation.compose.composable
 import lk.mageride.driver.R
 import lk.mageride.driver.capture.DocumentScannerScreen
 import lk.mageride.driver.earnings.EarningsScreen
+import lk.mageride.driver.history.RideHistoryScreen
 import lk.mageride.driver.home.DirectionalScreen
 import lk.mageride.driver.home.HomeScreen
 import lk.mageride.driver.jobs.JobBoardScreen
@@ -28,7 +29,10 @@ import lk.mageride.driver.onboarding.LoginScreen
 import lk.mageride.driver.onboarding.PermissionsScreen
 import lk.mageride.driver.onboarding.ProfileSetupScreen
 import lk.mageride.driver.onboarding.SplashScreen
+import lk.mageride.driver.profile.DriverProfileScreen
 import lk.mageride.driver.ride.ActiveRideScreen
+import lk.mageride.driver.sharing.SharingScreen
+import lk.mageride.driver.tracker.TrackerPairingScreen
 import lk.mageride.driver.ui.theme.MageRideTheme
 import lk.mageride.driver.vehicle.VehicleOnboardingScreen
 import lk.mageride.driver.vehicle.VehicleOnboardingStatusScreen
@@ -45,7 +49,7 @@ import lk.mageride.driver.wallet.WalletScreen
  * **Every destination is registered here, and a screen group replaces the body of its own routes
  * without touching the graph.** That is the shape C067 left behind and the shape it keeps: a
  * component that added a destination of its own would put the app's navigation in eight files.
- * C068–C073 have taken their routes; the rest are still standing placeholders.
+ * C068–C074 have taken their routes; the three C075 owns are still standing placeholders.
  *
  * The start destination is [DriverRoute.Splash] — SCR-DA-001 is the driver-info router, and its
  * states ("no token → Login · registered/not approved → RegistrationHub · approved+perms →
@@ -213,16 +217,35 @@ internal fun DriverNavHost(controller: NavHostController, modifier: Modifier = M
             WalletHistoryScreen(onBack = { controller.popBackStack() })
         }
 
-        // ---- C074–C075 · profile, documents, support -----------------------------------
-        placeholder(DriverRoute.Documents, "SCR-DA-029a documents")
-        placeholder(DriverRoute.Profile, "SCR-DA-029 profile")
-        placeholder(DriverRoute.Support, "SCR-DA-033 support")
+        // ---- C074 · tracker, sharing, profile, history ----------------------------------
+        composable(DriverRoute.TrackerPairing.path) {
+            TrackerPairingScreen(onBack = { controller.popBackStack() })
+        }
+        composable(DriverRoute.Sharing.path) {
+            SharingScreen(onBack = { controller.popBackStack() })
+        }
+        composable(DriverRoute.RideHistory.path) {
+            RideHistoryScreen(onBack = { controller.popBackStack() })
+        }
+        composable(DriverRoute.Profile.path) {
+            DriverProfileScreen(
+                onBack = { controller.popBackStack() },
+                // The wireframe's four rows. "Per-trip ratings" is SCR-DA-030 rather than a screen
+                // of its own — US-18.3's per-trip stars live on the trips, and there is no read
+                // that returns ratings apart from them.
+                onOpenVehicles = { controller.navigate(DriverRoute.Vehicles.path) },
+                onOpenRatings = { controller.navigate(DriverRoute.RideHistory.path) },
+                onOpenLevel = { controller.navigate(DriverRoute.DriverLevel.path) },
+                // Log out is a one-way door out of the whole graph, exactly like the onboarding
+                // steps that lead in: the splash re-routes on the session it can no longer find,
+                // and nothing signed-in is left on the back stack to swipe back to.
+                onSignedOut = { controller.replaceOnboarding(DriverRoute.Splash) },
+            )
+        }
 
-        // The four destinations SCR-DA-036's drawer names and the shell's table was missing;
-        // C070 added the routes so no drawer row is dead, and their groups replace these lines.
-        placeholder(DriverRoute.TrackerPairing, "SCR-DA-027 tracker pairing")
-        placeholder(DriverRoute.Sharing, "SCR-DA-028 sharing management")
-        placeholder(DriverRoute.RideHistory, "SCR-DA-030 ride history")
+        // ---- C075 · documents, support, alerts ------------------------------------------
+        placeholder(DriverRoute.Documents, "SCR-DA-029a documents")
+        placeholder(DriverRoute.Support, "SCR-DA-033 support")
         placeholder(DriverRoute.Notifications, "SCR-DA-034 notifications")
     }
 }

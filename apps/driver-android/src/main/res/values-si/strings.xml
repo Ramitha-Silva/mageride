@@ -539,4 +539,93 @@
     <string name="wallet_statement_ready">ඔබේ %1$s ප්‍රකාශය සූදානම්.</string>
     <string name="wallet_statement_failed">එම ප්‍රකාශය සුරැකිය නොහැකි විය. නැවත උත්සාහ කරන්න.</string>
 
+    <!-- C074 . හවුල් ක්‍රියා. -->
+    <string name="action_cancel">අවලංගු කරන්න</string>
+    <string name="action_done">හරි</string>
+
+    <!-- SCR-DA-027 . GPS ට්‍රැකර සම්බන්ධ කිරීම. -->
+    <string name="tracker_title">GPS ට්‍රැකරය සම්බන්ධ කරන්න</string>
+    <string name="tracker_vehicle_label">වාහනය</string>
+    <string name="tracker_no_vehicles">ඔබට තවම වාහනයක් නැත. ට්‍රැකරයක් සම්බන්ධ කිරීමට පෙර වාහනයක් එක් කරන්න.</string>
+    <string name="tracker_imei_label">IMEI අංකය</string>
+    <string name="tracker_imei_help">ට්‍රැකරයේ හෝ එහි පෙට්ටියේ මුද්‍රණය කර ඇති අංක පහළොවකි.</string>
+    <string name="tracker_imei_invalid">IMEI අංකයක් අංක පහළොවකි. ස්ටිකරය නැවත බලන්න.</string>
+    <string name="tracker_scan_action">උපකරණයේ QR කේතය කියවන්න</string>
+    <string name="tracker_bind_code_action">බන්ධන කේතය</string>
+    <string name="tracker_bind_code_help">බන්ධන කේතයක් ඇතුළත් කළ හැක්කේ පරිපාලක ද්වාරයේ පමණි.</string>
+    <string name="tracker_pair_action">උපකරණය සම්බන්ධ කරන්න</string>
+    <string name="tracker_paired_title">සම්බන්ධ විය</string>
+    <string name="tracker_paired_body">උපකරණය %1$s මෙම වාහනයට බැඳී ඇති අතර එහි සහතිකය නිකුත් කර ඇත.</string>
+    <string name="tracker_behaviour_title">දෘඪාංග ට්‍රැකරයේ හැසිරීම</string>
+    <string name="tracker_behaviour_publisher">ට්‍රැකරයක් සම්බන්ධ වූ පසු මෙම දුරකථනය එම වාහනය සඳහා GPS යැවීම නවත්වයි. උපකරණය එකම ප්‍රකාශකයා බවට පත් වේ.</string>
+    <string name="tracker_behaviour_ignition">A හෝ B ක්‍රමයේ වාහනයක ගමන ආරම්භ වන්නේත් අවසන් වන්නේත් ඉග්නිෂන් සමඟ ය; යෙදුම අවශ්‍ය නොවේ. යෙදුම විවෘත කළ විට උපකරණ පුවරුව දැනටමත් ගමන ක්‍රියාත්මක බව පෙන්වයි.</string>
+    <string name="tracker_behaviour_mode_c">C ක්‍රමයේ වාහනයක ට්‍රැකර ස්ථානය පිළිගනු ලබන්නේ ඔබ සබැඳිව සිටින විට පමණි.</string>
+    <string name="tracker_fleet_csv">ට්‍රැකර පන්දහසක් හෝ ඊට වැඩිද? ඒවා පරිපාලක ද්වාරයේ CSV ලෙස උඩුගත කරන්න.</string>
+    <string name="tracker_quarantined">එම IMEI අංකය දැනටමත් වෙනත් වාහනයක ක්‍රියාත්මක බැවින් එය රඳවා ගෙන ඇත. නැවත උත්සාහ කිරීමට පෙර කාර්යාලය අමතන්න.</string>
+    <string name="tracker_scan_hint">කේතය හතරැස්ය තුළ තබා ගන්න.</string>
+    <string name="tracker_scan_no_camera">කැමරාවට තවම අවසර නැත. ඒ වෙනුවට IMEI අංකය ඇතුළත් කරන්න, නැතහොත් සැකසුම් තුළ කැමරාව සක්‍රීය කරන්න.</string>
+    <string name="tracker_scan_unreadable">එම කේතයේ IMEI අංකයක් හමු නොවීය. ඒ වෙනුවට අංකය ඇතුළත් කරන්න.</string>
+
+    <!-- SCR-DA-028 . වාහනය අනුව බෙදාගැනීම කළමනාකරණය. -->
+    <string name="sharing_title">බෙදාගැනීම (B ක්‍රමය)</string>
+    <string name="sharing_vehicle_label">වාහනය</string>
+    <string name="sharing_no_vehicles">බෙදාගැනීම A සහ B ක්‍රමයේ වාහන සඳහා ය. ඔබට එවැන්නක් ලියාපදිංචි වී හෝ පවරා නැත.</string>
+    <string name="sharing_fleet_badge">සමූහය</string>
+    <string name="sharing_user_id_label">පරිශීලක හැඳුනුම සමඟ බෙදාගන්න</string>
+    <string name="sharing_user_id_help">මගියාගෙන් ඔවුන්ගේ පැතිකඩ තිරයේ ඇති හැඳුනුම කියවන ලෙස ඉල්ලන්න.</string>
+    <string name="sharing_user_id_invalid">එය පරිශීලක හැඳුනුමක් නොවේ. ඔවුන්ගෙන් නැවත කියවන ලෙස ඉල්ලන්න.</string>
+    <string name="sharing_expiry_label">කල් ඉකුත් වීම</string>
+    <string name="sharing_expiry_none">කල් ඉකුත් වීමක් නැත</string>
+    <string name="sharing_expiry_clear">ඉවත් කරන්න</string>
+    <string name="sharing_grant_action">ප්‍රවේශය ලබා දෙන්න</string>
+    <string name="sharing_granted">ප්‍රවේශය පිරිනමන ලදී. ඔවුන් එය පිළිගත් පසු පහත දිස් වේ.</string>
+    <string name="sharing_requests_heading">මෙම වාහනය සඳහා ලැබෙන ඉල්ලීම්</string>
+    <string name="sharing_requests_empty">මෙම වාහනය අනුගමනය කිරීමට කිසිවෙකු ඉල්ලා නැත.</string>
+    <string name="sharing_grantees_heading">මෙම වාහනය නිරීක්ෂණය කළ හැක්කේ කාටද</string>
+    <string name="sharing_grantees_empty">තවම කිසිවෙකු මෙම වාහනය අනුගමනය නොකරයි.</string>
+    <string name="sharing_accept">පිළිගන්න</string>
+    <string name="sharing_reject">ප්‍රතික්ෂේප කරන්න</string>
+    <string name="sharing_status_active">ක්‍රියාත්මකයි</string>
+    <string name="sharing_passenger_unnamed">මගියා</string>
+
+    <!-- SCR-DA-029 . රියදුරු පැතිකඩ. -->
+    <string name="profile_title">පැතිකඩ</string>
+    <string name="profile_unnamed">ඔබේ නම</string>
+    <string name="profile_id_and_rating">%1$s . %2$s සමස්තය</string>
+    <string name="profile_vehicle_details">වාහන විස්තර</string>
+    <string name="profile_trip_ratings">ගමන් අනුව ශ්‍රේණිගත කිරීම්</string>
+    <string name="profile_emergency_row">හදිසි සම්බන්ධතාව</string>
+    <string name="profile_emergency_none">සකසා නැත. SOS කිසිවෙකු වෙත ළඟා විය නොහැක.</string>
+    <string name="profile_driver_level">රියදුරු මට්ටම</string>
+    <string name="profile_level_value">මට්ටම %1$d</string>
+    <string name="profile_language_row">භාෂාව</string>
+    <string name="profile_notify_heading">දැනුම්දීම්</string>
+    <string name="profile_notify_dispatch">ගමන් පිරිනැමීම් සහ මතක් කිරීම්</string>
+    <string name="profile_notify_money">පසුම්බිය සහ දෛනික ගාස්තුව</string>
+    <string name="profile_notify_registration">ලියාපදිංචිය සහ ලේඛන</string>
+    <string name="profile_notify_directional">ගමනාන්ත පෙරහන</string>
+    <string name="profile_notify_announcements">නිවේදන</string>
+    <string name="profile_notify_safety_note">ආරක්ෂක දැනුම්දීම් සහ ගමන් අවලංගු කිරීම් සැමවිටම ලැබෙන අතර ඒවා නැවැත්විය නොහැක.</string>
+    <string name="profile_log_out">ඉවත් වන්න</string>
+    <string name="profile_name_title">ඔබේ නම</string>
+    <string name="profile_name_label">මගීන්ට පෙන්වන නම</string>
+    <string name="profile_emergency_title">හදිසි සම්බන්ධතාව</string>
+    <string name="profile_emergency_why">SOS මගින් ඔබේ ස්ථානය සහ ඔබේ ගමන කෙටි පණිවිඩයකින් මෙම පුද්ගලයාට යවයි.</string>
+    <string name="profile_emergency_pick">සම්බන්ධතා අතරින් තෝරන්න</string>
+    <string name="profile_emergency_name_label">සම්බන්ධතාවේ නම</string>
+    <string name="profile_emergency_phone_invalid">7 න් පටන් ගන්නා අංක නවයක ජංගම දුරකථන අංකයක් ඇතුළත් කරන්න.</string>
+    <string name="profile_language_title">යෙදුම් භාෂාව</string>
+
+    <!-- SCR-DA-030 . ගමන් ඉතිහාසය සහ මගියා ශ්‍රේණිගත කිරීම. -->
+    <string name="history_title">ගමන් ඉතිහාසය</string>
+    <string name="history_empty">ඔබ තවම ගමනක් අවසන් කර නැත.</string>
+    <string name="history_rate_action">ශ්‍රේණිගත කරන්න</string>
+    <string name="history_fare_to_you">ඔබට ගාස්තුව %1$s</string>
+    <string name="history_rate_title">මගියා ශ්‍රේණිගත කරන්න</string>
+    <string name="history_passenger_unnamed">මගියා</string>
+    <string name="history_rate_comment_label">අදහසක් එක් කරන්න (අත්‍යවශ්‍ය නොවේ)</string>
+    <string name="history_rate_comment_hint">මගියා කෙසේද?</string>
+    <string name="history_rate_no_passenger">මෙම ගමන ගිණුමක් නොමැති අයෙකු වෙනුවෙන් වෙන් කරන ලද බැවින් ශ්‍රේණිගත කිරීමට කිසිවෙකු නැත.</string>
+    <string name="history_rate_submit">ශ්‍රේණිගත කිරීම යවන්න</string>
+
 </resources>

@@ -9,6 +9,8 @@ import lk.mageride.driver.delivery.DeliveryViewModel
 import lk.mageride.driver.delivery.ProofUploadQueue
 import lk.mageride.driver.earnings.EarningsRepository
 import lk.mageride.driver.earnings.EarningsViewModel
+import lk.mageride.driver.history.RideHistoryRepository
+import lk.mageride.driver.history.RideHistoryViewModel
 import lk.mageride.driver.home.AndroidJourneyPreferences
 import lk.mageride.driver.home.DirectionalViewModel
 import lk.mageride.driver.home.DriverIdentity
@@ -35,12 +37,21 @@ import lk.mageride.driver.onboarding.OnboardingPreferences
 import lk.mageride.driver.onboarding.OnboardingRepository
 import lk.mageride.driver.onboarding.ProfileSetupViewModel
 import lk.mageride.driver.onboarding.SplashViewModel
+import lk.mageride.driver.profile.DriverProfileViewModel
+import lk.mageride.driver.profile.ProfileRepository
 import lk.mageride.driver.push.PushRouter
 import lk.mageride.driver.push.PushTokenProvider
 import lk.mageride.driver.ride.ActiveRideRepository
 import lk.mageride.driver.ride.ActiveRideViewModel
 import lk.mageride.driver.ride.RideContact
+import lk.mageride.driver.sharing.SharingRepository
+import lk.mageride.driver.sharing.SharingViewModel
 import lk.mageride.driver.shell.ConnectivityMonitor
+import lk.mageride.driver.tracker.AndroidTrackerBindingStore
+import lk.mageride.driver.tracker.TrackerBindingStore
+import lk.mageride.driver.tracker.TrackerPairingViewModel
+import lk.mageride.driver.tracker.TrackerPositionPublisher
+import lk.mageride.driver.tracker.TrackerRepository
 import lk.mageride.driver.vehicle.ActiveVehicleStore
 import lk.mageride.driver.vehicle.AndroidActiveVehicleStore
 import lk.mageride.driver.vehicle.VehicleOnboardingRepository
@@ -198,8 +209,10 @@ private fun Module.dashboardBindings() {
     // The handset's own GNSS, for a screen. Distinct from `PositionForegroundService`, which owns
     // the fixes that reach the broker and outlives every composition — see DriverLocationSource.
     single<DriverLocationSource> { AndroidDriverLocationSource(androidContext()) }
-    single<PositionPublisher> { AndroidPositionPublisher(androidContext()) }
     single<JourneyPreferences> { AndroidJourneyPreferences(androidContext()) }
+    // `PositionPublisher` is bound in `trackerAndProfileBindings`, not here (Δ C074): the interface
+    // has one definition and it is the tracker-aware decorator, so nothing depends on which of two
+    // declarations of the same type Koin happens to keep.
 
     // E-01's offer arrives on a background thread with no composition anywhere, so the slot it
     // lands in has to outlive the screen that draws it. `OfferSession` is `:shared`'s single-offer
@@ -309,4 +322,40 @@ private fun Module.walletBindings() {
     viewModel { RequestCreditViewModel(identity = get(), transfers = get()) }
     viewModel { CreditTransferViewModel(identity = get(), transfers = get(), wallet = get()) }
     viewModel { WalletHistoryViewModel(identity = get(), wallet = get(), exporter = get()) }
+
+    trackerAndProfileBindings()
+}
+
+/**
+ * The C074 slice — SCR-DA-027/028/029/030.
+ *
+ * **The one binding here that is not a screen's is `PositionPublisher`.** [TrackerPositionPublisher]
+ * wraps the Android one and refuses to start the phone's stream for a vehicle that has a hardware
+ * tracker bound to it (US-3.6, and the C074 fence). C070's `dashboardBindings` used to declare the
+ * interface; that line moved here rather than being *overridden* here, so the graph has exactly one
+ * definition of the type and nothing rests on which of two Koin would have kept. The decorator asks
+ * for `AndroidPositionPublisher` **by class**, which is what makes it a decorator rather than a
+ * recursion into itself.
+ *
+ * [TrackerBindingStore] is a `single` because it is what that decorator reads on every go-online,
+ * and `SharingRepository` is one class over two services for the reason its KDoc gives: the
+ * entitlement is registry-svc's and the request queue is subscription-svc's, and the screen is
+ * about one vehicle's sharing rather than about either service.
+ */
+private fun Module.trackerAndProfileBindings() {
+    single<TrackerBindingStore> { AndroidTrackerBindingStore(androidContext()) }
+    single { AndroidPositionPublisher(androidContext()) }
+    single<PositionPublisher> {
+        TrackerPositionPublisher(delegate = get<AndroidPositionPublisher>(), bindings = get())
+    }
+
+    single { TrackerRepository(registry = get(), bindings = get()) }
+    single { SharingRepository(registry = get(), subscription = get()) }
+    single { ProfileRepository(iam = get(), jobs = get(), sessions = get(), preferences = get()) }
+    single { RideHistoryRepository(query = get(), ride = get(), tripState = get()) }
+
+    viewModel { TrackerPairingViewModel(identity = get(), trackers = get(), publisher = get()) }
+    viewModel { SharingViewModel(identity = get(), sharing = get()) }
+    viewModel { DriverProfileViewModel(identity = get(), profiles = get()) }
+    viewModel { RideHistoryViewModel(identity = get(), history = get()) }
 }

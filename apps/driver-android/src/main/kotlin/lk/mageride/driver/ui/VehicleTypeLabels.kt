@@ -1,11 +1,25 @@
 package lk.mageride.driver.ui
 
 import androidx.annotation.StringRes
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import lk.mageride.driver.R
 import lk.mageride.driver.ui.theme.VehicleColors
 import lk.mageride.shared.data.models.RideVehicleType
 import lk.mageride.shared.data.models.VehicleType
+import lk.mageride.shared.data.models.registry.VehicleSummary
+
+/**
+ * `Three-wheeler · ABC-1234` — how every per-vehicle control in the app names a vehicle.
+ *
+ * One function since C074, because three screens now draw it: SCR-DA-010's dashboard chip,
+ * SCR-DA-027's pairing selector and SCR-DA-028's sharing selector. The type is trilingual and the
+ * plate is not — a registration number is a proper noun (C068's rule).
+ */
+@Composable
+internal fun vehicleLabel(vehicle: VehicleSummary): String =
+    "${stringResource(vehicle.vehicleType.labelRes())} ${Symbols.DOT} ${vehicle.registrationNumber}"
 
 /**
  * The trilingual display name for a canonical vehicle type (AL-09).

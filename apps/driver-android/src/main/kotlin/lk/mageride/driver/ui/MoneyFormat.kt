@@ -29,9 +29,10 @@ internal object MoneyFormat {
      *
      * An em dash rather than `Rs 0`: zero is a balance a driver can have and being told they have
      * it when nothing was read is worse than being told nothing. A symbol, so it is not translated
-     * (C073) — the same rule `ScheduleLabels.UNKNOWN` follows.
+     * (C073); the character itself is [Symbols.UNKNOWN], which C074 made the one place it is
+     * spelled.
      */
-    const val EMPTY: String = "—"
+    const val EMPTY: String = Symbols.UNKNOWN
 
     /** `48000` → `Rs 480`; `48050` → `Rs 480.50`. Whole rupees lose their `.00`. */
     fun rupees(money: Money): String = rupees(money.amountMinor)

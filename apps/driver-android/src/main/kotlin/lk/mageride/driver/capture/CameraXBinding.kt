@@ -136,8 +136,14 @@ private suspend fun ImageCapture.takePicture(): ImageProxy? = suspendCancellable
     )
 }
 
-/** `ProcessCameraProvider.getInstance` is a `ListenableFuture`; this is it as a suspend call. */
-private suspend fun Context.cameraProvider(): ProcessCameraProvider {
+/**
+ * `ProcessCameraProvider.getInstance` is a `ListenableFuture`; this is it as a suspend call.
+ *
+ * `internal` rather than private since C074: SCR-DA-027's device-QR viewfinder binds an
+ * `ImageAnalysis` instead of an `ImageCapture`, and two copies of "turn this future into a suspend
+ * call" is one more than the number of ways there are to get it wrong.
+ */
+internal suspend fun Context.cameraProvider(): ProcessCameraProvider {
     val future = ProcessCameraProvider.getInstance(this)
     return suspendCancellableCoroutine { continuation ->
         future.addListener({ continuation.resume(future.get()) }, ContextCompat.getMainExecutor(this))

@@ -1,5 +1,6 @@
 package lk.mageride.driver.wallet
 
+import lk.mageride.driver.ui.PlatformId
 import lk.mageride.shared.data.models.Money
 import lk.mageride.shared.data.models.Ulid
 
@@ -28,10 +29,10 @@ import lk.mageride.shared.data.models.Ulid
 internal object WalletInput {
 
     /** `_shared.yaml#/components/schemas/Ulid` — `minLength`. */
-    const val DRIVER_ID_MIN_LENGTH: Int = 26
+    const val DRIVER_ID_MIN_LENGTH: Int = PlatformId.MIN_LENGTH
 
     /** The same schema's `maxLength`; a UUID with its hyphens is 36. */
-    const val DRIVER_ID_MAX_LENGTH: Int = 36
+    const val DRIVER_ID_MAX_LENGTH: Int = PlatformId.MAX_LENGTH
 
     /**
      * The most rupees a field accepts, as a digit count.
@@ -42,19 +43,21 @@ internal object WalletInput {
      */
     const val MAX_RUPEE_DIGITS: Int = 9
 
-    /** The contract's charset, anchored. Crockford base32 plus the hyphen a canonical UUID carries. */
-    private val DRIVER_ID = Regex("^[0-9A-HJKMNP-TV-Za-hjkmnp-tv-z-]{$DRIVER_ID_MIN_LENGTH,$DRIVER_ID_MAX_LENGTH}$")
-
     /**
      * The id as it will be sent — surrounding whitespace removed, nothing else touched.
      *
      * Whitespace only: a paste out of a chat app carries a trailing space and a newline, and
      * neither is part of anybody's identity.
      */
-    fun driverId(raw: String): Ulid = raw.trim()
+    fun driverId(raw: String): Ulid = PlatformId.of(raw)
 
-    /** Whether [raw] is a well-formed platform id, once trimmed. */
-    fun isDriverId(raw: String): Boolean = DRIVER_ID.matches(driverId(raw))
+    /**
+     * Whether [raw] is a well-formed platform id, once trimmed.
+     *
+     * The pattern moved to [PlatformId] in C074, when SCR-DA-028 needed the same question asked of
+     * a *passenger* id. This is still the wallet cluster's door onto it.
+     */
+    fun isDriverId(raw: String): Boolean = PlatformId.isValid(raw)
 
     /**
      * What a rupee field keeps of a keystroke — digits, capped at [MAX_RUPEE_DIGITS].

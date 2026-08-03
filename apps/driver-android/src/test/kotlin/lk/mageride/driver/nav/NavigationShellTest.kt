@@ -134,6 +134,22 @@ class NavigationShellTest {
     }
 
     @Test
+    fun the_four_drawer_destinations_c074_owns_are_registered_and_are_not_tabs() {
+        // SCR-DA-027/028/029/030. C070 added three of these routes so no drawer row was dead and
+        // registered them against the standing placeholder; C074 replaced the placeholders. Every
+        // one draws a `‹` app bar in the wireframe, so none of them shows the bottom bar.
+        listOf(
+            DriverRoute.TrackerPairing,
+            DriverRoute.Sharing,
+            DriverRoute.Profile,
+            DriverRoute.RideHistory,
+        ).forEach {
+            assertTrue(it in DriverRoute.Static, "${it.path} is not registered")
+            assertTrue(!isTabRoute(it.path), "${it.path} must not show the bottom bar")
+        }
+    }
+
+    @Test
     fun the_wallet_deep_link_lands_on_the_tab_and_not_on_one_of_its_four_children() {
         // `mageride://wallet` is one of the four URIs `DeepLinks` mints and it names the *screen
         // group*, not a screen in it. LOW_BALANCE and TOP_UP_REQUIRED both carry it, and both mean

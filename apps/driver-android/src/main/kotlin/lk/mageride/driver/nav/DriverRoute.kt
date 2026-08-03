@@ -181,7 +181,7 @@ internal sealed interface DriverRoute {
         override val path: String = "documents"
     }
 
-    /** Driver profile — the edit surface behind Menu. */
+    /** SCR-DA-029 — the driver profile, its emergency contact and log out (C074). */
     data object Profile : DriverRoute {
         override val path: String = "profile"
     }
@@ -197,24 +197,24 @@ internal sealed interface DriverRoute {
     // destinations it routes to. Four of them had no entry here, so C070 added them rather than
     // pointing four drawer rows at the nearest existing screen — a row that opens the wrong
     // screen is worse than one that says which prompt owns it. Their composables belong to
-    // C071–C074; until then the NavHost registers each against the standing placeholder.
+    // C074–C075; the NavHost registers the one C075 still owns against the standing placeholder.
 
-    /** SCR-DA-027 — GPS tracker pairing (C071). */
+    /** SCR-DA-027 — GPS tracker pairing (C074). */
     data object TrackerPairing : DriverRoute {
         override val path: String = "vehicle/tracker"
     }
 
-    /** SCR-DA-028 — Mode B sharing management (C073). */
+    /** SCR-DA-028 — Mode B sharing management (C074). */
     data object Sharing : DriverRoute {
         override val path: String = "sharing"
     }
 
-    /** SCR-DA-030 — ride history, and the rate-passenger sheet on it (C071). */
+    /** SCR-DA-030 — ride history, and the rate-passenger sheet on it (C074). */
     data object RideHistory : DriverRoute {
         override val path: String = "history"
     }
 
-    /** SCR-DA-034 — the alerts list (C074). `mageride://` has no host for it; it is menu-reached. */
+    /** SCR-DA-034 — the alerts list (C075). `mageride://` has no host for it; it is menu-reached. */
     data object Notifications : DriverRoute {
         override val path: String = "notifications"
     }
