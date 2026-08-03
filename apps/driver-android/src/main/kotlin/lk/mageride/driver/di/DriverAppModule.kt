@@ -4,6 +4,19 @@ import io.ktor.client.engine.HttpClientEngine
 import io.ktor.client.engine.okhttp.OkHttp
 import lk.mageride.driver.capture.DocumentCaptureCoordinator
 import lk.mageride.driver.capture.DocumentScannerViewModel
+import lk.mageride.driver.home.AndroidJourneyPreferences
+import lk.mageride.driver.home.DirectionalViewModel
+import lk.mageride.driver.home.DriverIdentity
+import lk.mageride.driver.home.HomeViewModel
+import lk.mageride.driver.home.JourneyPreferences
+import lk.mageride.driver.home.JourneyRepository
+import lk.mageride.driver.home.OfferInbox
+import lk.mageride.driver.home.OfferViewModel
+import lk.mageride.driver.home.StandbyRepository
+import lk.mageride.driver.location.AndroidDriverLocationSource
+import lk.mageride.driver.location.AndroidPositionPublisher
+import lk.mageride.driver.location.DriverLocationSource
+import lk.mageride.driver.location.PositionPublisher
 import lk.mageride.driver.onboarding.AndroidOnboardingPreferences
 import lk.mageride.driver.onboarding.DriverPermissions
 import lk.mageride.driver.onboarding.DriverProfileRepository
@@ -15,6 +28,9 @@ import lk.mageride.driver.onboarding.ProfileSetupViewModel
 import lk.mageride.driver.onboarding.SplashViewModel
 import lk.mageride.driver.push.PushRouter
 import lk.mageride.driver.push.PushTokenProvider
+import lk.mageride.driver.ride.ActiveRideRepository
+import lk.mageride.driver.ride.ActiveRideViewModel
+import lk.mageride.driver.ride.RideContact
 import lk.mageride.driver.shell.ConnectivityMonitor
 import lk.mageride.driver.vehicle.ActiveVehicleStore
 import lk.mageride.driver.vehicle.AndroidActiveVehicleStore
@@ -26,6 +42,7 @@ import lk.mageride.driver.vehicle.VehiclesViewModel
 import lk.mageride.shared.data.api.ApiConfig
 import lk.mageride.shared.data.api.AttestationProvider
 import lk.mageride.shared.data.models.AppSurface
+import lk.mageride.shared.data.models.Ulid
 import lk.mageride.shared.db.DatabaseDriverFactory
 import lk.mageride.shared.db.MageRideApp
 import lk.mageride.shared.db.PlatformDatabaseDriverFactory
@@ -143,4 +160,49 @@ internal fun driverAppModule(environment: DriverEnvironment = DriverEnvironment.
     viewModel { VehicleOnboardingViewModel(vehicles = get(), captures = get(), session = get()) }
     viewModel { VehicleOnboardingStatusViewModel(vehicles = get(), session = get()) }
     viewModel { VehiclesViewModel(vehicles = get(), session = get(), activeVehicle = get()) }
+
+    dashboardBindings()
+}
+
+/**
+ * The C070 slice — SCR-DA-010/011/013/014/015 and the Menu drawer.
+ *
+ * A function on [Module] rather than a second module for the same reason the rest of this file is
+ * one module: `initKoin(appModules = …)` takes the app's graph as one unit, and a second entry
+ * would be a second thing every future app-side edit has to remember to append to.
+ */
+private fun Module.dashboardBindings() {
+    // The handset's own GNSS, for a screen. Distinct from `PositionForegroundService`, which owns
+    // the fixes that reach the broker and outlives every composition — see DriverLocationSource.
+    single<DriverLocationSource> { AndroidDriverLocationSource(androidContext()) }
+    single<PositionPublisher> { AndroidPositionPublisher(androidContext()) }
+    single<JourneyPreferences> { AndroidJourneyPreferences(androidContext()) }
+
+    // E-01's offer arrives on a background thread with no composition anywhere, so the slot it
+    // lands in has to outlive the screen that draws it. `OfferSession` is `:shared`'s single-offer
+    // slot (ADD Appendix B.2 invariant 3) and is already a process singleton; this is the seam
+    // from `DriverMessagingService` into it.
+    single { OfferInbox(offers = get(), sessions = get()) }
+
+    single { DriverIdentity(registry = get(), sessions = get(), activeVehicle = get()) }
+    single { StandbyRepository(dispatch = get(), wallet = get(), subscription = get(), query = get()) }
+    single { JourneyRepository(tripState = get(), transit = get(), preferences = get()) }
+    single { ActiveRideRepository(ride = get(), fare = get()) }
+    single { RideContact(voip = get(), safety = get()) }
+
+    viewModel {
+        HomeViewModel(
+            identity = get(),
+            standby = get(),
+            journeys = get(),
+            rides = get(),
+            location = get(),
+            publisher = get(),
+        )
+    }
+    viewModel { OfferViewModel(offers = get(), rides = get()) }
+    viewModel { DirectionalViewModel(standby = get(), query = get(), iam = get(), location = get()) }
+    viewModel { (rideId: Ulid) ->
+        ActiveRideViewModel(rideId = rideId, rides = get(), contact = get(), location = get())
+    }
 }

@@ -1,0 +1,21 @@
+<!--
+  MAP-06's heading marker — the arrow every live vehicle is drawn as.
+
+  White-filled with a dark rim so it reads on both PMTiles styles; the SymbolLayer tints the fill
+  through `icon-color` from `VehicleColors.Legend` (MAP-03), which is why the path is a flat solid
+  rather than a shaded illustration. Points up: `icon-rotate` supplies the bearing and
+  `icon-rotation-alignment: map` keeps it pointing where the vehicle is going rather than where the
+  screen is turned.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="36dp"
+    android:height="36dp"
+    android:viewportWidth="36"
+    android:viewportHeight="36">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M18,3 L30,30 L18,24 L6,30 Z" />
+    <path
+        android:fillColor="#FF6D00"
+        android:pathData="M18,7 L26.5,26.4 L18,22.2 L9.5,26.4 Z" />
+</vector>

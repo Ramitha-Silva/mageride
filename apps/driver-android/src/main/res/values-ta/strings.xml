@@ -245,4 +245,107 @@
     <string name="action_edit">திருத்து</string>
     <string name="vehicle_onboard_correction_supporting">ஆவணத்தில் உள்ளதை அப்படியே தட்டச்சு செய்யவும். ஓர் அதிகாரி அதைச் சரிபார்ப்பார்.</string>
     <string name="vehicles_assigned_until">%1$s · %2$s வரை</string>
+
+    <!-- C070 · கட்டுப்பாட்டுத் திரை · பயண ஒதுக்கீடு · நடப்புப் பயணம் -->
+
+    <string name="error_vehicle_not_approved">அந்த வாகனம் இன்னும் அங்கீகரிக்கப்படவில்லை. “எனது வாகனங்கள்” பகுதியில் ஆவணங்களை முடிக்கவும்.</string>
+    <string name="error_driver_already_live">நீங்கள் ஏற்கனவே வேறு வாகனத்திலோ பயணத்திலோ இயங்குகிறீர்கள்.</string>
+    <string name="error_not_online">திசையை அமைப்பதற்கு முன் இணைப்பில் வாருங்கள்.</string>
+    <string name="error_directional_limit">இன்று திசைப் பயன்பாடுகள் மீதமில்லை.</string>
+    <string name="error_version_conflict">நீங்கள் பார்த்துக்கொண்டிருக்கும்போது இந்தப் பயணம் மாறியது. மீண்டும் பாருங்கள்.</string>
+    <string name="error_illegal_transition">இந்தப் பயணம் இப்போது உள்ள நிலையிலிருந்து அதைச் செய்ய முடியாது.</string>
+    <string name="error_insufficient_wallet">தினக் கட்டணத்திற்கு உங்கள் பணப்பையில் போதுமான தொகை இல்லை. நிரப்பி மீண்டும் முயலவும்.</string>
+    <string name="error_payment_settled">இந்தப் பயணத்திற்கு ஏற்கனவே வேறு வழியில் பணம் செலுத்தப்பட்டுள்ளது.</string>
+
+    <string name="home_online">இணைப்பில் · முறை C</string>
+    <string name="home_offline">இணைப்பில் இல்லை · இணைய தட்டவும்</string>
+    <string name="home_offline_hint">பயணங்களைப் பெற இணைப்பில் வாருங்கள்</string>
+    <string name="home_live_vehicle">இயங்கும் வாகனம்</string>
+    <string name="home_directional">திசைப் பயணம்</string>
+    <string name="home_today_stats">இன்று: %1$d பயணங்கள் · %2$s</string>
+    <string name="home_today_pending">இன்றைய வருமானம் ஏற்றப்படுகிறது</string>
+    <string name="home_needs_vehicle">இணைப்பில் வர ஒரு வாகனத்தைச் சேர்க்கவும் அல்லது ஒதுக்கப் பெறவும்.</string>
+    <string name="home_add_vehicle">எனது வாகனங்களுக்குச் செல்</string>
+    <string name="home_waiting_for_gps">GPS-க்காகக் காத்திருக்கிறது. உங்கள் இருப்பிடம் இன்னும் வரவில்லை.</string>
+    <string name="home_daily_fee_paid">தினக் கட்டணம் செலுத்தப்பட்டது · %1$s</string>
+    <string name="home_daily_fee_first_free">இன்று முதல் பயணம் இலவசம் · பின்னர் %1$s</string>
+    <string name="home_daily_fee_due">தினக் கட்டணம் செலுத்த வேண்டும் · %1$s</string>
+    <string name="home_low_balance">இருப்பு குறைவு. அடுத்த பயணத்திற்கு முன் நிரப்பவும் — வரம்பு %1$s.</string>
+    <string name="home_second_trip_fee">உங்கள் அடுத்த பயணத்தில் %1$s தினக் கட்டணம் பிடிக்கப்படும், பணப்பையில் தொகை போதவில்லை.</string>
+
+    <string name="journey_no_fee">கட்டணம் இல்லை</string>
+    <string name="journey_ignition_banner">GPS கருவி பயணத்தைத் தானாகத் தொடங்கியது · இயந்திரம் இயக்கத்தில்</string>
+    <string name="journey_auto_ended">தானாக முடிவடைந்தது. ஐந்து நிமிடங்களுக்குள் மீண்டும் தொடங்கலாம்.</string>
+    <string name="journey_route">வழித்தடம்</string>
+    <string name="journey_change">மாற்று</string>
+    <string name="journey_duration">கால அளவு</string>
+    <string name="journey_distance">தூரம்</string>
+    <string name="journey_vehicle">வாகனம்</string>
+    <string name="journey_start">பயணத்தைத் தொடங்கு</string>
+    <string name="journey_end">பயணத்தை முடி</string>
+    <string name="journey_restart">மீண்டும் தொடங்கு</string>
+    <string name="journey_auto_end_at_destination">சேருமிடத்தில் பயணத்தைத் தானாக முடிக்கவும்</string>
+    <string name="journey_route_dialog_title">நீங்கள் எந்த வழித்தடத்தில் ஓட்டுகிறீர்கள்?</string>
+    <string name="journey_route_hint">வழித்தட எண்</string>
+    <string name="journey_no_route">வழித்தடம் தேர்வு செய்யப்படவில்லை</string>
+
+    <string name="directional_title">திசைப் பயணம்</string>
+    <string name="directional_destination">சேருமிடம்</string>
+    <string name="directional_search_hint">தேடுங்கள், அல்லது உங்கள் வீட்டைத் தேர்வு செய்யுங்கள்</string>
+    <string name="directional_uses_left">இன்று மீதமுள்ள பயன்பாடுகள்</string>
+    <string name="directional_max_duration">அதிகபட்சக் கால அளவு</string>
+    <string name="directional_set">திசையை அமை (ஒன்று செலவாகும்)</string>
+    <string name="directional_turn_off">நிறுத்து</string>
+    <string name="directional_when_active">இயங்கும்போது</string>
+    <string name="directional_active_to">%1$s நோக்கி · %2$s மீதம்</string>
+    <string name="directional_active_note">நீங்கள் செல்லும் திசையில் உள்ள வாடகைகள் மட்டுமே உங்களை அடையும்.</string>
+    <string name="directional_uses_remaining">மீதமுள்ள பயன்பாடுகள்: %1$d</string>
+
+    <string name="offer_badge_proxy">மூன்றாம் தரப்பு முன்பதிவு</string>
+    <string name="offer_badge_package">பொதி · %1$s</string>
+    <string name="offer_badge_directional">திசைக்கு ஏற்றது</string>
+    <string name="offer_pickup">ஏறுமிடம்</string>
+    <string name="offer_drop">இறங்குமிடம்</string>
+    <string name="offer_fee_note">இன்று இரண்டாவது பயணம் — ஏற்கும்போது %1$s தினக் கட்டணம் பிடிக்கப்படும்.</string>
+    <string name="offer_accept">ஏற்கிறேன்</string>
+    <string name="offer_reject">நிராகரி</string>
+    <string name="offer_taken">அந்தப் பயணத்தை வேறொரு ஓட்டுநர் எடுத்துவிட்டார்.</string>
+    <string name="offer_wallet_blocked">பணப்பையை நிரப்பவும் — தினக் கட்டணத்தைப் பிடிக்க முடியவில்லை.</string>
+    <string name="package_size_small">சிறியது</string>
+    <string name="package_size_medium">நடுத்தரம்</string>
+    <string name="package_size_large">பெரியது</string>
+    <string name="payment_cash">பணம்</string>
+    <string name="payment_lankaqr">உங்கள் வங்கி QR</string>
+    <string name="payment_onepay">அட்டை</string>
+    <string name="payment_cod">பொதி ஒப்படைக்கும்போது பணம்</string>
+
+    <string name="ride_navigate_pickup">ஏறுமிடத்திற்குச் செல்லுங்கள்</string>
+    <string name="ride_navigate_drop">இறங்குமிடத்திற்குச் செல்லுங்கள்</string>
+    <string name="ride_finished">இந்தப் பயணம் முடிந்தது</string>
+    <string name="ride_rider">பயணி</string>
+    <string name="ride_call">பயணியை அழை</string>
+    <string name="ride_call_sender">அனுப்புநரை அழை</string>
+    <string name="ride_sos">அவசர அழைப்பு</string>
+    <string name="ride_arrived">நான் வந்துவிட்டேன்</string>
+    <string name="ride_start">பயணத்தைத் தொடங்கு — OTP உள்ளிடவும்</string>
+    <string name="ride_complete">பயணத்தை முடி</string>
+    <string name="ride_otp_title">பயணத்தைத் தொடங்கு</string>
+    <string name="ride_otp_body">பயணி உங்களிடம் சொல்லும் நான்கு இலக்கங்களை உள்ளிடவும்.</string>
+    <string name="ride_otp_verify">சரிபார்</string>
+    <string name="ride_call_title">எப்படி அழைக்க விரும்புகிறீர்கள்?</string>
+    <string name="ride_call_free">செயலிக்குள் இலவச அழைப்பு</string>
+    <string name="ride_call_normal">சாதாரண அழைப்பு</string>
+    <string name="ride_qr_title">QR பணம் வந்ததா?</string>
+    <string name="ride_qr_body">உங்கள் வங்கிச் செயலியைப் பாருங்கள். உறுதிப்படுத்தினால் இந்தப் பயணம் தீர்ந்து உங்கள் வருமானம் பதிவாகும்.</string>
+    <string name="ride_qr_received">ஆம், வந்தது</string>
+    <string name="ride_qr_not_received">இன்னும் வரவில்லை</string>
+
+    <string name="menu_my_vehicles">எனது வாகனங்கள்</string>
+    <string name="menu_vehicle_onboarding">காத்திருப்பு வாகனத்தைப் பதிவு செய்</string>
+    <string name="menu_tracker_pairing">GPS கண்காணிப்பானை இணைத்தல்</string>
+    <string name="menu_sharing">பகிர்வு மேலாண்மை</string>
+    <string name="menu_profile">ஓட்டுநர் சுயவிவரம்</string>
+    <string name="menu_ride_history">பயண வரலாறும் மதிப்பீடுகளும்</string>
+    <string name="menu_support">உதவியும் கட்டணத் திருப்பிச் செலுத்தலும்</string>
+    <string name="menu_notifications">அறிவிப்புகள்</string>
 </resources>

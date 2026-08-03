@@ -96,7 +96,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C067 | driver-android-shell | 4a | DONE | 2026-08-01 | **34 tests green** in a new `apps/driver-android` unit-test source set and `assembleDebug` clean, plus `detekt`/`ktlintCheck`; C025's walking skeleton **deleted** (4 files) and replaced by the real shell — Koin graph binding the five things `:shared` leaves to an app, `MageRideTheme` transcribed from D2' §0.2 with **Outfit + Inter shipped as real OFL fonts**, trilingual `values`/`values-si`/`values-ta` with a test that fails on a key present in one file and not the others, a `NavHost` registering **every** C068–C075 destination as a placeholder so no screen group invents a path, the AL-31 four-tab bottom bar with **no hamburger**, a MapLibre **OpenGL-flavour** host over `pmtiles://` with light/dark styles, and the D6' §3 foreground service (FusedLocation + HiveMQ + wake lock + `PositionPipeline`, whose R-17 replay and D5' §5.2 cadence are asserted on the JVM with no radio); **FCM registered but inert** — no `google-services.json` (C124); **Play Integrity wired but not verified on a device**; **the wave-1 `:shared` gate is red on arrival** and not from anything here — see the handoff |
 | C068 | driver-android-auth-onboarding | 4a | DONE | 2026-08-02 | **72 tests green** (was 34) and `assembleDebug` clean, plus `detekt`/`ktlintCheck`; all five cluster-1 screens built to the wireframe — SCR-DA-001 boot router, SCR-DA-002 with the AL-28 `HorizontalPager` carousel, AL-26 Sinhala-first vertical language boxes and the AL-27 city list from `GET /config/cities`, SCR-DA-003 `+94` phone + six-digit OTP with the D-32 resend cooldown, SCR-DA-003a Profile Setup with the AI-extract card and the AL-29 manual-entry ⚑ path, and SCR-DA-007's five permission rows with the Settings deep link — plus ~60 new trilingual strings and `setOperatingCity` added to `:shared`'s `IamApi`. It shipped PARTIAL because **no route on the platform created a `docs.uploads` row for a driver photo or licence**, which left `PUT /v1/drivers/profile` uncallable on a real gateway; **MCS-01 closed that** (multipart arms on both onboarding routes) and the app's upload seam was deleted in the same pass. Now DONE on all five DoD items |
 | C069 | driver-android-vehicle-onboarding | 4a | DONE | 2026-08-02 | **107 tests green** (was 72; 35 new) and `assembleDebug` clean, plus `detekt`/`ktlintCheck`; all eight owned screens built to the wireframe — the Mode-C four-step wizard (SCR-DA-004…004c) with per-step save, AL-30 resume-at-next-incomplete and the ⚑ Pending card, the **SCR-DA-005 CameraX scanner** with a draggable four-corner quad, an auto edge-detect proposal and a `setPolyToPoly` perspective correction on confirm (AL-43), the SCR-DA-006 four-document verdict list with the automatic APPROVED read, and SCR-DA-026/026a My Vehicles with the two groups, the US-9.6 go-live gate, deactivate-confirm and the empty-state popup — plus ~85 new trilingual strings, CameraX 1.6.1 and the `CAMERA` permission. Three `:shared` registry DTOs were **corrected against the C029 contract** (`VehicleRegistration`'s four file ids optional, `RegisterVehicleResponse.nextStep`, `SaveOnboardingStepResponse.status`) — without the last one the app cannot see its own auto-approval. Three spec gaps recorded: no `fields` part on the step's multipart arm, no fleet name/expiry on `VehicleSummary`, and no active-vehicle operation. The `:shared` gate is **13 red on arrival** and none of it is C069's — see the handoff |
-| C070 | driver-android-dashboard-dispatch | 4a | PENDING | | |
+| C070 | driver-android-dashboard-dispatch | 4a | DONE | 2026-08-03 | **138 tests green** (was 107; 28 new + 3 suites) and `assembleDebug` clean, plus `detekt`/`ktlintCheck`; all six owned screens built to the wireframe — **SCR-DA-010** Mode C standby (US-9.6 go-online gating, own-vehicle-only map per AL-31, live reg-no chip, daily-fee/low-balance/2nd-trip banners, offline scrim, no hamburger), **SCR-DA-011** Mode A/B Start/End Journey as *home* with the AL-32 ignition banner the dashboard can override and the US-5.10 restart grace, **SCR-DA-013** Directional Travel (DT-01..08, and turning it off still spends the use), **SCR-DA-014** the 15 s takeover with the ring, the three badges, audio + haptic and the Taken/Expired split kept apart, **SCR-DA-015** arrive/start-OTP/complete with SOS, the AL-48 call-type chooser and the **AL-47 QR confirm**, and **SCR-DA-036**'s eight-row drawer. ~95 new trilingual strings; two device seams added (`DriverLocationSource`, `PositionPublisher`) so a view model holds no `Context`. **Five routes added to the shell's table** — SCR-DA-013 plus the four SCR-DA-036 named that had none. Four spec gaps recorded: no driver-rating read, no `GET` for `DirectionalConfig`, no presence read, no Mode A route list; plus **no SignalR client in `:shared`**, so SCR-DA-015 polls the documented fallback |
 | C071 | driver-android-delivery | 4a | PENDING | | |
 | C072 | driver-android-jobs-level-earnings | 4a | PENDING | | |
 | C073 | driver-android-wallet-credit | 4a | PENDING | | |
@@ -11281,3 +11281,101 @@ _Append 3 lines per completed component (Component / Status / Notes)._
 
   **For C070 —** nothing here blocks you. Dispatch and ride were already fully covered.
 
+
+---
+
+- **Component:** C070 driver-android-dashboard-dispatch — 2026-08-03
+- **Status:** DONE — `:apps:driver-android:testDebugUnitTest` **138 passed, 0 failed** (was 107),
+  `assembleDebug` clean, `detekt` and `ktlintCheck` green. All six screens under `## Screens` are
+  built to `specs/wireframes/driver_android.html`, and every DoD line is covered by a test.
+- **Notes:**
+
+  **Home is one destination, not two.** D2' re-tagged SCR-DA-012 `[MERGED → SCR-DA-010]` and says
+  SCR-DA-011 *"IS the driver's home dashboard"* whenever the active vehicle is Mode A or Mode B, so
+  `HomeScreen` draws one map, one header, one banner stack and one offer takeover, and swaps only
+  the sheet on `LiveVehicle.isScheduledMode`. Two destinations with a chooser in front would have
+  needed a rule to keep all four of those in step. The DoD's *"selecting a Mode A/B vehicle routes
+  Home to SCR-DA-011"* is therefore a property of the live vehicle, and is tested as one.
+
+  **Going online is two things or it is neither.** `POST /v1/standby/online` puts the driver in the
+  candidate pool and `PositionForegroundService` starts publishing on `veh/{id}/pos/live`; a driver
+  in the pool who is not publishing is offered rides that cannot find them. The publisher therefore
+  starts **after** the call is accepted and stops **before** the offline call is made, and the test
+  asserts the order rather than the calls. Going offline also clears the Directional filter locally
+  (DT-04) with `usesRemaining` carried through unchanged (US-6A.19).
+
+  **Two device seams were added, and neither is the publisher.** `PositionForegroundService` owns
+  the fixes that reach the broker — its cadence is D5' §5.2's, it holds a wake lock, it outlives
+  every composition. A *screen* needs the driver's own marker (AL-31 leaves no other source: the
+  home map joins no geocell group by construction), a position for `GoOnlineRequest`'s body and a
+  distance to accumulate on SCR-DA-011, so `DriverLocationSource` is a second, cold subscription
+  that lives and dies with a composition. `PositionPublisher` is the other seam: it is what lets a
+  view model start and stop the service without holding a `Context`.
+
+  **The offer arrives on a background thread, so the slot it lands in cannot be a screen's.**
+  `OfferInbox` is a process singleton that turns a `RIDE_OFFER` push into `:shared`'s `OfferSession`
+  — `DriverMessagingService` gained one line. That matters for a real reason: notification-svc's
+  envelope carries `offerId`, `rideId`, `expiresAt` and a **rendered** `fare` (it is the same
+  dictionary the SMS fallback interpolates) and nothing else, so the fifteen seconds start from the
+  push and the badges arrive from one `GET /v1/rides/{rideId}` inside the window. That read also
+  supplies the version, which is handed to `OfferSession.onVersionKnown` so the accept does not
+  spend a second round trip on `GET …/state` (R-14).
+
+  **A defect this component found in its own first cut, worth recording.** After AL-47's confirm the
+  screen re-read the ride, saw it still at `PaymentPending` — `DriverConfirmedQR` is terminal on the
+  *payment* machine, and the ride only reaches `CashSettled` once fare-svc's settlement travels the
+  outbox — and **put the QR sheet back up on a driver who had just answered it**. Fixed with an
+  `qrAttested` flag on the screen's own state, and `finished` made sticky (terminal is terminal, so
+  a late poll cannot un-finish a ride). Both have regression tests.
+
+  ### Spec gaps found (four reads that do not exist, plus one client)
+
+  1. **No app-facing read for a driver's own rating.** SCR-DA-010 and SCR-DA-036 both print `★4.8`.
+     `dispatch.yaml` answers a *level* and a points total; `ride.RideDriver.rating` is the
+     **passenger's** view of a driver on a ride; the reputation contract is portal-only (C012). The
+     star is absent rather than showing points wearing a star's meaning. A micro-change-set adding
+     `rating` to `GET /v1/drivers/{driverId}/stats` would close it.
+  2. **`DirectionalConfig` has a `PUT` and no `GET`.** SCR-DA-013's wireframe prints *"Uses left
+     today: 1 of 2"* and *"Max duration: 2h"*; an app can learn `maxDurationSec` only from a
+     `DirectionalFilterCreated` it has just received, and `maxUsesPerDay` never. Baking D5' §12.1's
+     defaults is exactly what `DirectionalPredicate`'s KDoc warns against, so the screen renders the
+     count the server sent and the ceiling only once told one.
+  3. **No presence read on `dispatch.yaml`.** `POST /v1/standby/online` answers a `PresenceState`
+     and nothing reads one back, so a Directional screen reached after a process death cannot know
+     whether the driver is online. **Set Direction** is therefore not gated on it locally — the tap
+     is sent and `403 not-online` is rendered as trilingual copy (D-26), which is tested.
+  4. **No "routes I drive" read.** SCR-DA-011's route card needs a Mode A bus route;
+     `GET /v1/transit/routes/{routeId}` resolves one by id and nothing lists them for a driver. The
+     number is typed once, resolved against the active GTFS feed for its long name, and remembered
+     on the handset.
+  5. **`trip-state.yaml`'s `Session` has an `endReason` and no start reason**, so nothing on the
+     wire says whether a session was opened by the driver or by a tracker's ignition-ON. AL-32 needs
+     that difference for its banner, so the dashboard records the session id it started itself
+     (`JourneyPreferences`) and treats a live session it did not open as the device's.
+
+  **And one that is a client, not a contract: `:shared` has `LiveHub`'s contract and no SignalR
+  client.** D3' §3.1 puts ride transitions on the hub with `GET /v1/rides/{rideId}/state` as the
+  backplane-down fallback (D6' §8.3). On this surface the fallback is the only path there is, so
+  SCR-DA-015 polls it every five seconds. Whoever adds the hub client should delete that loop.
+
+  **Five routes added to `nav/DriverRoute.kt`.** SCR-DA-013 is a full screen with a `‹` bar in the
+  wireframe, so it is a destination (`standby/directional`); SCR-DA-014 deliberately is **not** —
+  the fifteen-second offer is a window-sized `Dialog` with back disabled, which is what `PushRouter`
+  already meant by routing a `ride_offer` to Home. The other four are the SCR-DA-036 destinations
+  the shell's table was missing — **GPS Tracker Pairing (027), Sharing Management (028), Ride
+  History (030), Notifications (034)** — added so no drawer row points at the wrong screen. Each is
+  registered against the standing placeholder naming the prompt that owns it, and
+  `MenuDestinationTest` fails the build if a row ever points somewhere the NavHost does not
+  register.
+
+  **For C071 —** `RideSheet.START_OTP`'s entry already routes a package ride's sender OTP to
+  `POST …/package/pickup-otp` (`ActiveRideRepository.start` picks by `RideKind`), so SCR-DA-016a/b/c
+  plug into an active ride that is already in the right state. `MenuDestination.TrackerPairing` and
+  `.RideHistory` are waiting for you at `DriverRoute.TrackerPairing` / `.RideHistory`.
+
+  **Reusable UI this component leaves behind** (`ui/component/HomeControls.kt`): `DashboardSheet`
+  (the wireframe's `.sheet` with its handle), `OnlineToggle`, `DashboardBanner` (four tones, used on
+  three screens), `CountdownRing`, `SolidBadge`, `VehicleChip`, `StatusCta` (D2's success/error
+  CTA, distinct from §0.2's one primary `MageRideCta`); plus `ui/MoneyFormat.kt` — `Rs 1,240`,
+  `1.2 km`, `01:12:40` and `1:42`, all integer arithmetic, because `Money` deliberately does not
+  format itself and a `Double` for money is a C012 fence violation.

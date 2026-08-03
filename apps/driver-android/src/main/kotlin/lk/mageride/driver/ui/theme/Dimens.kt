@@ -135,4 +135,26 @@ internal object ControlTokens {
     val SplashMark: Dp = 84.dp
     val SplashMarkRadius: Dp = 22.dp
     val SplashSpinner: Dp = 28.dp
+
+    // ---- C070 · dashboard, dispatch, active ride --------------------------------------
+
+    /** The grab handle on every bottom sheet the wireframe draws (`.handle`, `34 x 4`). */
+    val SheetHandleWidth: Dp = 32.dp
+    val SheetHandleHeight: Dp = 4.dp
+
+    /** SCR-DA-010's `.bigtoggle` — the ONLINE / OFFLINE bar, taller than a CTA on purpose. */
+    val BigToggle: Dp = 64.dp
+
+    /** SCR-DA-014's 15-second countdown ring (`.ring`, `90px`) and its stroke. */
+    val CountdownRing: Dp = 96.dp
+    val CountdownStroke: Dp = 8.dp
+
+    /** SCR-DA-013's inline map preview (`.map` at `flex:0 0 120px`). */
+    val MapPreview: Dp = 120.dp
+
+    /** SCR-DA-015's rider avatar (`.avatar`, `40px`) — the large one is Profile Setup's. */
+    val AvatarSmall: Dp = 40.dp
+
+    /** SCR-DA-036's modal navigation drawer (`width:250px`, on M3's 280 dp standard sheet). */
+    val DrawerWidth: Dp = 280.dp
 }

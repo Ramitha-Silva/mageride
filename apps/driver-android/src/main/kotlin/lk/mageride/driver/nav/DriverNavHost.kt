@@ -16,11 +16,15 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import lk.mageride.driver.R
 import lk.mageride.driver.capture.DocumentScannerScreen
+import lk.mageride.driver.home.DirectionalScreen
+import lk.mageride.driver.home.HomeScreen
+import lk.mageride.driver.menu.MenuScreen
 import lk.mageride.driver.onboarding.LanguageCityScreen
 import lk.mageride.driver.onboarding.LoginScreen
 import lk.mageride.driver.onboarding.PermissionsScreen
 import lk.mageride.driver.onboarding.ProfileSetupScreen
 import lk.mageride.driver.onboarding.SplashScreen
+import lk.mageride.driver.ride.ActiveRideScreen
 import lk.mageride.driver.ui.theme.MageRideTheme
 import lk.mageride.driver.vehicle.VehicleOnboardingScreen
 import lk.mageride.driver.vehicle.VehicleOnboardingStatusScreen
@@ -116,19 +120,59 @@ internal fun DriverNavHost(controller: NavHostController, modifier: Modifier = M
             )
         }
 
-        // ---- C070 · dashboard / dispatch -----------------------------------------------
-        placeholder(DriverRoute.Home, "SCR-DA-010 dashboard")
-        composable(DriverRoute.ActiveRide.PATTERN) {
-            RoutePlaceholder("SCR-DA-011 active ride")
+        // ---- C070 · dashboard / dispatch / active ride ---------------------------------
+        composable(DriverRoute.Home.path) {
+            HomeScreen(
+                onOpenDirectional = { controller.navigate(DriverRoute.Directional.path) },
+                // US-9.6's empty state. My Vehicles raises SCR-DA-026a for itself when the list
+                // comes back empty, so there is one screen for "no vehicle" rather than two.
+                onOpenVehicles = { controller.navigate(DriverRoute.Vehicles.path) },
+                // Winning an offer replaces Home rather than stacking on it: a driver on a ride has
+                // no standby map to go Back to, and SCR-DA-015 is where the app should be restored
+                // to if it is killed mid-trip.
+                onOpenRide = { rideId ->
+                    controller.navigate(DriverRoute.ActiveRide(rideId).path) { launchSingleTop = true }
+                },
+            )
+        }
+        composable(DriverRoute.Directional.path) {
+            DirectionalScreen(onBack = { controller.popBackStack() })
+        }
+        composable(DriverRoute.ActiveRide.PATTERN) { entry ->
+            ActiveRideScreen(
+                rideId = entry.arguments?.getString(DriverRoute.ActiveRide.ARG_RIDE_ID).orEmpty(),
+                // The ride reached a terminal state. Back to Home, and nothing of the ride left on
+                // the stack — a completed trip must not be reachable with a swipe.
+                onFinished = {
+                    controller.navigate(DriverRoute.Home.path) {
+                        popUpTo(DriverRoute.Home.path) { inclusive = true }
+                        launchSingleTop = true
+                    }
+                },
+            )
         }
 
-        // ---- C071–C075 · jobs, wallet, menu, profile, documents, support ---------------
-        placeholder(DriverRoute.Jobs, "SCR-DA-014 jobs")
-        placeholder(DriverRoute.Wallet, "SCR-DA-020 wallet")
-        placeholder(DriverRoute.Menu, "SCR-DA-030 menu")
-        placeholder(DriverRoute.Documents, "SCR-DA-028 documents")
-        placeholder(DriverRoute.Profile, "SCR-DA-027 profile")
-        placeholder(DriverRoute.Support, "SCR-DA-031 support")
+        // ---- C070 · the Menu tab (AL-31's drawer) --------------------------------------
+        composable(DriverRoute.Menu.path) {
+            MenuScreen(
+                onOpen = { route -> controller.navigate(route.path) },
+                onClose = { controller.popBackStack() },
+            )
+        }
+
+        // ---- C071–C075 · jobs, wallet, profile, documents, support ---------------------
+        placeholder(DriverRoute.Jobs, "SCR-DA-017 job board")
+        placeholder(DriverRoute.Wallet, "SCR-DA-021 wallet")
+        placeholder(DriverRoute.Documents, "SCR-DA-029a documents")
+        placeholder(DriverRoute.Profile, "SCR-DA-029 profile")
+        placeholder(DriverRoute.Support, "SCR-DA-033 support")
+
+        // The four destinations SCR-DA-036's drawer names and the shell's table was missing;
+        // C070 added the routes so no drawer row is dead, and their groups replace these lines.
+        placeholder(DriverRoute.TrackerPairing, "SCR-DA-027 tracker pairing")
+        placeholder(DriverRoute.Sharing, "SCR-DA-028 sharing management")
+        placeholder(DriverRoute.RideHistory, "SCR-DA-030 ride history")
+        placeholder(DriverRoute.Notifications, "SCR-DA-034 notifications")
     }
 }
 

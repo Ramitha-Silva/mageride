@@ -290,4 +290,117 @@
     <string name="action_edit">Edit</string>
     <string name="vehicle_onboard_correction_supporting">Type what the document actually says. An officer will check it.</string>
     <string name="vehicles_assigned_until">%1$s · until %2$s</string>
+
+    <!-- ============================================================================
+         C070 · dashboard · dispatch · active ride
+         SCR-DA-010 / 011 / 013 / 014 / 015 / 036.
+         ============================================================================ -->
+
+    <!-- The failures this cluster adds to the D-26 code → copy table. -->
+    <string name="error_vehicle_not_approved">That vehicle is not approved yet. Finish its documents under My Vehicles.</string>
+    <string name="error_driver_already_live">You are already live on another vehicle or trip.</string>
+    <string name="error_not_online">Go online before you set a direction.</string>
+    <string name="error_directional_limit">No Directional activations left today.</string>
+    <string name="error_version_conflict">This trip changed while you were looking at it. Check it again.</string>
+    <string name="error_illegal_transition">That cannot be done from where this trip is now.</string>
+    <string name="error_insufficient_wallet">Your wallet is short of the daily fee. Top up and try again.</string>
+    <string name="error_payment_settled">This trip has already been paid another way.</string>
+
+    <!-- SCR-DA-010 · Mode C standby dashboard. -->
+    <string name="home_online">ONLINE · Mode C</string>
+    <string name="home_offline">OFFLINE · tap to go online</string>
+    <string name="home_offline_hint">Go online to receive rides</string>
+    <string name="home_live_vehicle">Live vehicle</string>
+    <string name="home_directional">Directional</string>
+    <string name="home_today_stats">Today: %1$d trips · %2$s</string>
+    <string name="home_today_pending">Today\'s earnings are loading</string>
+    <string name="home_needs_vehicle">Add or get assigned a vehicle to go online.</string>
+    <string name="home_add_vehicle">Go to My Vehicles</string>
+    <string name="home_waiting_for_gps">Waiting for GPS. Your position has not arrived yet.</string>
+    <string name="home_daily_fee_paid">Daily fee paid · %1$s</string>
+    <string name="home_daily_fee_first_free">First trip free today · then %1$s</string>
+    <string name="home_daily_fee_due">Daily fee due · %1$s</string>
+    <string name="home_low_balance">Low balance. Top up before your next trip — the limit is %1$s.</string>
+    <string name="home_second_trip_fee">Your next trip deducts the %1$s daily fee, and your wallet is short.</string>
+
+    <!-- SCR-DA-011 · Mode A/B dashboard — Start / End Journey. -->
+    <string name="journey_no_fee">No fee</string>
+    <string name="journey_ignition_banner">Journey started automatically by the GPS device · ignition on</string>
+    <string name="journey_auto_ended">Ended automatically. You can restart it for five minutes.</string>
+    <string name="journey_route">Route</string>
+    <string name="journey_change">Change</string>
+    <string name="journey_duration">Duration</string>
+    <string name="journey_distance">Distance</string>
+    <string name="journey_vehicle">Vehicle</string>
+    <string name="journey_start">Start Journey</string>
+    <string name="journey_end">End Journey</string>
+    <string name="journey_restart">Restart</string>
+    <string name="journey_auto_end_at_destination">End the journey automatically at the destination</string>
+    <string name="journey_route_dialog_title">Which route are you running?</string>
+    <string name="journey_route_hint">Route number</string>
+    <string name="journey_no_route">No route chosen</string>
+
+    <!-- SCR-DA-013 · Directional Travel. -->
+    <string name="directional_title">Directional Travel</string>
+    <string name="directional_destination">Destination</string>
+    <string name="directional_search_hint">Search, or choose your home</string>
+    <string name="directional_uses_left">Uses left today</string>
+    <string name="directional_max_duration">Max duration</string>
+    <string name="directional_set">Set direction (uses one)</string>
+    <string name="directional_turn_off">Turn off</string>
+    <string name="directional_when_active">When it is running</string>
+    <string name="directional_active_to">To %1$s · %2$s left</string>
+    <string name="directional_active_note">Only hires going your way will reach you.</string>
+    <string name="directional_uses_remaining">Uses left: %1$d</string>
+
+    <!-- SCR-DA-014 · the fifteen-second offer. -->
+    <string name="offer_badge_proxy">Third-party booking</string>
+    <string name="offer_badge_package">Package · %1$s</string>
+    <string name="offer_badge_directional">Directional</string>
+    <string name="offer_pickup">Pickup</string>
+    <string name="offer_drop">Drop</string>
+    <string name="offer_fee_note">Second trip today — the %1$s daily fee is deducted when you accept.</string>
+    <string name="offer_accept">Accept</string>
+    <string name="offer_reject">Reject</string>
+    <string name="offer_taken">Another driver took that ride.</string>
+    <string name="offer_wallet_blocked">Top up your wallet — the daily fee could not be taken.</string>
+    <string name="package_size_small">Small</string>
+    <string name="package_size_medium">Medium</string>
+    <string name="package_size_large">Large</string>
+    <string name="payment_cash">Cash</string>
+    <string name="payment_lankaqr">Your bank QR</string>
+    <string name="payment_onepay">Card</string>
+    <string name="payment_cod">Cash on delivery</string>
+
+    <!-- SCR-DA-015 · the active ride. -->
+    <string name="ride_navigate_pickup">Navigate to the pickup</string>
+    <string name="ride_navigate_drop">Navigate to the drop</string>
+    <string name="ride_finished">This trip is over</string>
+    <string name="ride_rider">Rider</string>
+    <string name="ride_call">Call rider</string>
+    <string name="ride_call_sender">Call sender</string>
+    <string name="ride_sos">SOS</string>
+    <string name="ride_arrived">I have arrived</string>
+    <string name="ride_start">Start ride — enter OTP</string>
+    <string name="ride_complete">Complete ride</string>
+    <string name="ride_otp_title">Start the ride</string>
+    <string name="ride_otp_body">Enter the four digits the rider reads out to you.</string>
+    <string name="ride_otp_verify">Verify</string>
+    <string name="ride_call_title">How would you like to call?</string>
+    <string name="ride_call_free">Free call, inside the app</string>
+    <string name="ride_call_normal">Normal call</string>
+    <string name="ride_qr_title">QR payment received?</string>
+    <string name="ride_qr_body">Check your bank app. Confirming settles this trip and posts your earning.</string>
+    <string name="ride_qr_received">Yes, it arrived</string>
+    <string name="ride_qr_not_received">It has not arrived</string>
+
+    <!-- SCR-DA-036 · the menu drawer (AL-31). -->
+    <string name="menu_my_vehicles">My vehicles</string>
+    <string name="menu_vehicle_onboarding">Onboard a standby vehicle</string>
+    <string name="menu_tracker_pairing">GPS tracker pairing</string>
+    <string name="menu_sharing">Sharing management</string>
+    <string name="menu_profile">Driver profile</string>
+    <string name="menu_ride_history">Trip history and ratings</string>
+    <string name="menu_support">Support and fee refunds</string>
+    <string name="menu_notifications">Alerts</string>
 </resources>

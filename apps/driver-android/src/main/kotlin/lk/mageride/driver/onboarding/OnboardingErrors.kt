@@ -36,8 +36,20 @@ internal object OnboardingErrors {
         else -> R.string.error_generic
     }
 
+    /**
+     * The code table, in two halves.
+     *
+     * Split by *screen group* rather than by kind: cluster 1 and the Mode-C wizard are C068/C069's,
+     * the dashboard and the ride lifecycle are C070's, and each half is the set of codes its own
+     * contracts declare. One `when` over both would be a function nobody can read against a
+     * contract, which is the only way this table stays true.
+     */
     @StringRes
-    private fun forCode(code: ErrorCode?): Int = when (code) {
+    private fun forCode(code: ErrorCode?): Int = onboardingCode(code) ?: dashboardCode(code) ?: R.string.error_generic
+
+    @StringRes
+    @Suppress("ReturnCount")
+    private fun onboardingCode(code: ErrorCode?): Int? = when (code) {
         ErrorCode.INVALID_OTP -> R.string.error_otp_invalid
 
         ErrorCode.OTP_EXPIRED -> R.string.error_otp_expired
@@ -67,6 +79,41 @@ internal object OnboardingErrors {
 
         ErrorCode.VEHICLE_NOT_FOUND -> R.string.error_vehicle_not_found
 
-        else -> R.string.error_generic
+        else -> null
+    }
+
+    /** C070 · standby, Directional Travel and the ride lifecycle. */
+    @StringRes
+    private fun dashboardCode(code: ErrorCode?): Int? = when (code) {
+        // D5' §14.1a's gate seen from the dashboard: the toggle moved, and the vehicle behind it
+        // has not cleared onboarding.
+        ErrorCode.VEHICLE_NOT_APPROVED -> R.string.error_vehicle_not_approved
+
+        // D-03's active-session mutex. A driver holds one live session or one ride, never both,
+        // so this is nearly always a session left open on another handset.
+        ErrorCode.DRIVER_ALREADY_LIVE -> R.string.error_driver_already_live
+
+        // DT-01's `403` — a Directional filter is a standby filter, and there is no standby to
+        // filter while the driver is offline.
+        ErrorCode.NOT_ONLINE -> R.string.error_not_online
+
+        // DT-03's daily budget. Turning a filter off still spends its use (US-6A.19), which is
+        // why a driver can reach this having "only used one".
+        ErrorCode.DIRECTIONAL_LIMIT_REACHED -> R.string.error_directional_limit
+
+        // R-14. Somebody else moved the ride — the passenger cancelled, or a timer fired. The
+        // answer is to look again, never to resend with a bumped version.
+        ErrorCode.VERSION_CONFLICT -> R.string.error_version_conflict
+
+        // The command is not legal from where the ride actually is (ADD Appendix B.2).
+        ErrorCode.ILLEGAL_TRANSITION -> R.string.error_illegal_transition
+
+        // D-08's daily-fee gate on the second trip of the day, not a dispatch failure (US-9.1).
+        ErrorCode.INSUFFICIENT_WALLET -> R.string.error_insufficient_wallet
+
+        // AL-47: this ride has already settled another way, so there is nothing to attest to.
+        ErrorCode.PAYMENT_ALREADY_SETTLED -> R.string.error_payment_settled
+
+        else -> null
     }
 }

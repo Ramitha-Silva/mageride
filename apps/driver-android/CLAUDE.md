@@ -29,7 +29,10 @@ lk.mageride.driver
 ├── push/                     FCM service, PushRouter (deep links), channels, PushTokenProvider
 ├── capture/                  C069 · SCR-DA-005 — the scanner, its geometry and its coordinator
 ├── onboarding/               C068 · SCR-DA-001, 002, 003, 003a, 007 + their data layer
-└── vehicle/                  C069 · SCR-DA-004…004c, 006, 026/026a + their data layer
+├── vehicle/                  C069 · SCR-DA-004…004c, 006, 026/026a + their data layer
+├── home/                     C070 · SCR-DA-010, 011, 013, 014 + the map and the offer inbox
+├── ride/                     C070 · SCR-DA-015 + its three sheets and its data layer
+└── menu/                     C070 · SCR-DA-036 — AL-31's drawer, as a tab
 ```
 
 **To add a screen (C070–C075):**
@@ -99,6 +102,37 @@ lk.mageride.driver
   holder instead.
 - Reusable UI added here: `StatusPill` + `StatusTone`, `ModeCBadge`, `CaptureTile(height = …)`,
   `VehicleColors.forType`, and `ScannerColors` in `ui/theme`.
+
+## Cluster 3 (C070) — the dashboard, the offer and the ride
+
+- **Home is ONE destination.** D2' merged SCR-DA-012 into SCR-DA-010 and makes SCR-DA-011 *the*
+  home dashboard for a Mode A/B vehicle, so `HomeScreen` swaps only its sheet on
+  `LiveVehicle.isScheduledMode`. The map, the header, the banners and the offer takeover are shared.
+- **SCR-DA-014 is a window-sized `Dialog`, not a route** — back is disabled and fifteen seconds is
+  not long enough to navigate. That is what `PushRouter` already meant by routing a `ride_offer`
+  push to Home.
+- **`OfferInbox` is the seam from FCM into `:shared`'s `OfferSession`**, and it is a process
+  singleton because an offer arrives with no composition anywhere. The push carries `offerId`,
+  `rideId`, `expiresAt` and a *rendered* fare and nothing else; everything the badges need comes
+  from one `GET /v1/rides/{rideId}` inside the window, which also supplies the version the accept
+  needs (R-14).
+- **`DriverLocationSource` is not `PositionForegroundService`.** The service owns the fixes that
+  reach the broker and outlives every composition; the source is a cold subscription for a *screen*
+  — the AL-31 own-vehicle marker, `GoOnlineRequest`'s position, SCR-DA-011's distance.
+  `PositionPublisher` is the matching seam that keeps a `Context` out of a view model.
+- **Going online is two calls in one order**: `POST /v1/standby/online` then start publishing; going
+  offline is stop publishing then `POST /v1/standby/offline`. A driver in the candidate pool who is
+  not publishing is offered rides that cannot find them.
+- **A driver-QR ride is not over at `PaymentPending`.** AL-47's confirm settles the *payment*; the
+  ride reaches `CashSettled` only once fare-svc's settlement travels the outbox. `ActiveRideState`
+  carries `qrAttested` and `finished` is sticky, because re-reading into that window used to put the
+  confirm sheet back up on a driver who had just answered it.
+- **`:shared` has `LiveHub`'s contract and no SignalR client**, so SCR-DA-015 polls
+  `GET /v1/rides/{rideId}/state` — D3' §3.1's documented fallback. Delete that loop when a hub
+  client lands.
+- Reusable UI added here: `DashboardSheet`, `OnlineToggle`, `DashboardBanner`, `CountdownRing`,
+  `SolidBadge`, `VehicleChip`, `StatusCta`, and `ui/MoneyFormat.kt` (`Rs 1,240`, `1.2 km`,
+  `01:12:40`) — all integer arithmetic, because `Money` deliberately does not format itself.
 
 ## Rules this module is built on
 

@@ -246,4 +246,107 @@
     <string name="action_edit">සංස්කරණය</string>
     <string name="vehicle_onboard_correction_supporting">ලේඛනයේ ඇත්ත වශයෙන්ම ඇති දේ ටයිප් කරන්න. නිලධාරියෙක් එය පරීක්ෂා කරයි.</string>
     <string name="vehicles_assigned_until">%1$s · %2$s දක්වා</string>
+
+    <!-- C070 · උපකරණ පුවරුව · ගමන් බෙදාහැරීම · ක්‍රියාකාරී ගමන -->
+
+    <string name="error_vehicle_not_approved">එම වාහනය තවම අනුමත නැත. “මගේ වාහන” යටතේ එහි ලේඛන සම්පූර්ණ කරන්න.</string>
+    <string name="error_driver_already_live">ඔබ දැනටමත් වෙනත් වාහනයක හෝ ගමනක සක්‍රියයි.</string>
+    <string name="error_not_online">දිශාව සකසන්නට පෙර සබැඳි වන්න.</string>
+    <string name="error_directional_limit">අද දිශානුගත භාවිත ඉතිරි නැත.</string>
+    <string name="error_version_conflict">ඔබ බලා සිටියදී මෙම ගමන වෙනස් විය. නැවත පරීක්ෂා කරන්න.</string>
+    <string name="error_illegal_transition">මෙම ගමන දැන් ඇති තැනින් එය කළ නොහැක.</string>
+    <string name="error_insufficient_wallet">දෛනික ගාස්තුවට ඔබේ පසුම්බියේ මුදල් මදි. ඉහළ නංවා නැවත උත්සාහ කරන්න.</string>
+    <string name="error_payment_settled">මෙම ගමන දැනටමත් වෙනත් ආකාරයකින් ගෙවා ඇත.</string>
+
+    <string name="home_online">සබැඳියි · මාදිලි C</string>
+    <string name="home_offline">නොබැඳියි · සබැඳි වීමට තට්ටු කරන්න</string>
+    <string name="home_offline_hint">ගමන් ලබා ගැනීමට සබැඳි වන්න</string>
+    <string name="home_live_vehicle">සක්‍රිය වාහනය</string>
+    <string name="home_directional">දිශානුගත</string>
+    <string name="home_today_stats">අද: ගමන් %1$d · %2$s</string>
+    <string name="home_today_pending">අද ඉපැයීම් පූරණය වෙමින්</string>
+    <string name="home_needs_vehicle">සබැඳි වීමට වාහනයක් එක් කරන්න හෝ පවරා ගන්න.</string>
+    <string name="home_add_vehicle">මගේ වාහන වෙත යන්න</string>
+    <string name="home_waiting_for_gps">GPS එනතුරු බලා සිටී. ඔබේ ස්ථානය තවම ලැබී නැත.</string>
+    <string name="home_daily_fee_paid">දෛනික ගාස්තුව ගෙවා ඇත · %1$s</string>
+    <string name="home_daily_fee_first_free">අද පළමු ගමන නොමිලේ · පසුව %1$s</string>
+    <string name="home_daily_fee_due">දෛනික ගාස්තුව ගෙවිය යුතුයි · %1$s</string>
+    <string name="home_low_balance">ශේෂය අඩුයි. ඊළඟ ගමනට පෙර ඉහළ නංවන්න — සීමාව %1$s කි.</string>
+    <string name="home_second_trip_fee">ඔබේ ඊළඟ ගමනෙන් %1$s දෛනික ගාස්තුව අඩු වේ, නමුත් පසුම්බියේ මුදල් මදි.</string>
+
+    <string name="journey_no_fee">ගාස්තුවක් නැත</string>
+    <string name="journey_ignition_banner">GPS උපාංගය මගින් ගමන ස්වයංක්‍රීයව ආරම්භ විය · ඉග්නිෂන් ක්‍රියාත්මකයි</string>
+    <string name="journey_auto_ended">ස්වයංක්‍රීයව අවසන් විය. මිනිත්තු පහක් ඇතුළත නැවත ආරම්භ කළ හැක.</string>
+    <string name="journey_route">මාර්ගය</string>
+    <string name="journey_change">වෙනස් කරන්න</string>
+    <string name="journey_duration">කාලය</string>
+    <string name="journey_distance">දුර</string>
+    <string name="journey_vehicle">වාහනය</string>
+    <string name="journey_start">ගමන ආරම්භ කරන්න</string>
+    <string name="journey_end">ගමන අවසන් කරන්න</string>
+    <string name="journey_restart">නැවත ආරම්භ කරන්න</string>
+    <string name="journey_auto_end_at_destination">ගමනාන්තයේදී ගමන ස්වයංක්‍රීයව අවසන් කරන්න</string>
+    <string name="journey_route_dialog_title">ඔබ ධාවනය කරන්නේ කුමන මාර්ගයද?</string>
+    <string name="journey_route_hint">මාර්ග අංකය</string>
+    <string name="journey_no_route">මාර්ගයක් තෝරා නැත</string>
+
+    <string name="directional_title">දිශානුගත ගමන</string>
+    <string name="directional_destination">ගමනාන්තය</string>
+    <string name="directional_search_hint">සොයන්න, නැතහොත් ඔබේ නිවස තෝරන්න</string>
+    <string name="directional_uses_left">අද ඉතිරි භාවිත</string>
+    <string name="directional_max_duration">උපරිම කාලය</string>
+    <string name="directional_set">දිශාව සකසන්න (එකක් වැය වේ)</string>
+    <string name="directional_turn_off">නවත්වන්න</string>
+    <string name="directional_when_active">ක්‍රියාත්මක වන විට</string>
+    <string name="directional_active_to">%1$s වෙත · %2$s ඉතිරියි</string>
+    <string name="directional_active_note">ඔබ යන දිශාවට යන කුලී පමණක් ඔබ වෙත එයි.</string>
+    <string name="directional_uses_remaining">ඉතිරි භාවිත: %1$d</string>
+
+    <string name="offer_badge_proxy">තෙවන පාර්ශ්ව වෙන්කිරීමකි</string>
+    <string name="offer_badge_package">පාර්සලය · %1$s</string>
+    <string name="offer_badge_directional">දිශානුගතයි</string>
+    <string name="offer_pickup">නැගීම</string>
+    <string name="offer_drop">බැසීම</string>
+    <string name="offer_fee_note">අද දෙවන ගමන — පිළිගත් විට %1$s දෛනික ගාස්තුව අඩු වේ.</string>
+    <string name="offer_accept">පිළිගන්න</string>
+    <string name="offer_reject">ප්‍රතික්ෂේප කරන්න</string>
+    <string name="offer_taken">වෙනත් රියදුරෙක් එම ගමන ගෙන ඇත.</string>
+    <string name="offer_wallet_blocked">පසුම්බිය ඉහළ නංවන්න — දෛනික ගාස්තුව අඩු කළ නොහැකි විය.</string>
+    <string name="package_size_small">කුඩා</string>
+    <string name="package_size_medium">මධ්‍යම</string>
+    <string name="package_size_large">විශාල</string>
+    <string name="payment_cash">මුදල්</string>
+    <string name="payment_lankaqr">ඔබේ බැංකු QR</string>
+    <string name="payment_onepay">කාඩ්පත</string>
+    <string name="payment_cod">බෙදාහැරීමේදී මුදල්</string>
+
+    <string name="ride_navigate_pickup">නැගීමේ ස්ථානයට යන්න</string>
+    <string name="ride_navigate_drop">බැසීමේ ස්ථානයට යන්න</string>
+    <string name="ride_finished">මෙම ගමන අවසන්</string>
+    <string name="ride_rider">මගියා</string>
+    <string name="ride_call">මගියාට අමතන්න</string>
+    <string name="ride_call_sender">යවන්නාට අමතන්න</string>
+    <string name="ride_sos">හදිසි ඇමතුම</string>
+    <string name="ride_arrived">මම පැමිණ ඇත</string>
+    <string name="ride_start">ගමන අරඹන්න — OTP ඇතුළු කරන්න</string>
+    <string name="ride_complete">ගමන සම්පූර්ණ කරන්න</string>
+    <string name="ride_otp_title">ගමන අරඹන්න</string>
+    <string name="ride_otp_body">මගියා ඔබට කියන ඉලක්කම් හතර ඇතුළු කරන්න.</string>
+    <string name="ride_otp_verify">තහවුරු කරන්න</string>
+    <string name="ride_call_title">ඔබට අමතන්නේ කෙසේද?</string>
+    <string name="ride_call_free">යෙදුම තුළ නොමිලේ ඇමතුම</string>
+    <string name="ride_call_normal">සාමාන්‍ය ඇමතුම</string>
+    <string name="ride_qr_title">QR ගෙවීම ලැබුණාද?</string>
+    <string name="ride_qr_body">ඔබේ බැංකු යෙදුම පරීක්ෂා කරන්න. තහවුරු කිරීමෙන් මෙම ගමන නිරවුල් වී ඔබේ ඉපැයීම එකතු වේ.</string>
+    <string name="ride_qr_received">ඔව්, ලැබුණා</string>
+    <string name="ride_qr_not_received">තවම ලැබී නැත</string>
+
+    <string name="menu_my_vehicles">මගේ වාහන</string>
+    <string name="menu_vehicle_onboarding">සූදානම් වාහනයක් ලියාපදිංචි කරන්න</string>
+    <string name="menu_tracker_pairing">GPS ට්‍රැකර් සම්බන්ධ කිරීම</string>
+    <string name="menu_sharing">බෙදාගැනීම් කළමනාකරණය</string>
+    <string name="menu_profile">රියදුරු පැතිකඩ</string>
+    <string name="menu_ride_history">ගමන් ඉතිහාසය සහ ශ්‍රේණිගත කිරීම්</string>
+    <string name="menu_support">සහාය සහ ගාස්තු ආපසු ගෙවීම්</string>
+    <string name="menu_notifications">දැනුම්දීම්</string>
 </resources>

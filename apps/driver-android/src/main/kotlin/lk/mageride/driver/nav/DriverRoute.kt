@@ -73,6 +73,18 @@ internal sealed interface DriverRoute {
     }
 
     /**
+     * SCR-DA-013 — the Directional Travel filter (DT-01..DT-08).
+     *
+     * Added by C070. The wireframe draws it with a `‹` app bar over a full screen, so it is a
+     * destination rather than a sheet on Home; SCR-DA-014 is the opposite and is deliberately
+     * **not** here — a fifteen-second offer is a takeover the dashboard owns, which is why
+     * `PushRouter` routes a `ride_offer` to [Home].
+     */
+    data object Directional : DriverRoute {
+        override val path: String = "standby/directional"
+    }
+
+    /**
      * The ride in progress — accepted through to payment.
      *
      * @property rideId The ride. `mageride://ride/{id}` and `mageride://package/{id}` both
@@ -129,6 +141,34 @@ internal sealed interface DriverRoute {
         override val path: String = "support"
     }
 
+    // ---- The four SCR-DA-036 destinations the shell's table was missing (Δ C070) ---------
+    //
+    // AL-31 makes the Menu tab the whole navigation drawer, and D2' §SCR-DA-036 names EIGHT
+    // destinations it routes to. Four of them had no entry here, so C070 added them rather than
+    // pointing four drawer rows at the nearest existing screen — a row that opens the wrong
+    // screen is worse than one that says which prompt owns it. Their composables belong to
+    // C071–C074; until then the NavHost registers each against the standing placeholder.
+
+    /** SCR-DA-027 — GPS tracker pairing (C071). */
+    data object TrackerPairing : DriverRoute {
+        override val path: String = "vehicle/tracker"
+    }
+
+    /** SCR-DA-028 — Mode B sharing management (C073). */
+    data object Sharing : DriverRoute {
+        override val path: String = "sharing"
+    }
+
+    /** SCR-DA-030 — ride history, and the rate-passenger sheet on it (C071). */
+    data object RideHistory : DriverRoute {
+        override val path: String = "history"
+    }
+
+    /** SCR-DA-034 — the alerts list (C074). `mageride://` has no host for it; it is menu-reached. */
+    data object Notifications : DriverRoute {
+        override val path: String = "notifications"
+    }
+
     companion object {
 
         /**
@@ -147,12 +187,17 @@ internal sealed interface DriverRoute {
             VehicleOnboardingStatus,
             Vehicles,
             Home,
+            Directional,
             Jobs,
             Wallet,
             Menu,
             Documents,
             Profile,
             Support,
+            TrackerPairing,
+            Sharing,
+            RideHistory,
+            Notifications,
         )
     }
 }
