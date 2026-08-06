@@ -22,7 +22,8 @@ import lk.mageride.shared.realtime.VehicleRemoved
  *    about the vehicle, decided once per frame by fanout-svc, and all three mean *drop it now*.
  * 2. **`ShareRevoked`** — a Mode B entitlement was withdrawn (D-22). The platform sends a directed
  *    `RemoveFromGroupAsync` in under 200 ms so no further frames arrive; this drops the marker
- *    that is already drawn, which is the half only the client can do.
+ *    that is already drawn, which is the half only the client can do. [drop] is the same erasure
+ *    performed locally when the passenger themselves unsubscribed (AL-25, C082).
  * 3. **A cell the client left.** fanout-svc emits no removal for a group the client is no longer
  *    in — it has nothing to say to a group it cannot reach — so a passenger who travelled 3 km
  *    would otherwise accumulate every vehicle they had ever seen. [retainCells] is the answer, and
@@ -53,6 +54,20 @@ internal class LiveVehicleStore {
 
     /** A `ShareRevoked` — D-22's directed revocation. */
     fun onShareRevoked(event: ShareRevoked): Boolean = visible.remove(event.vehicleId) != null
+
+    /**
+     * Drops one vehicle because **this passenger** withdrew their own entitlement (AL-25).
+     *
+     * The same erasure `onShareRevoked` performs, reached without the socket. An unsubscribe is
+     * the one revocation the client learns about *first* — it made it — and `share.revoked` comes
+     * back through fanout-svc as confirmation rather than as news. Waiting for it would leave a
+     * marker the passenger no longer has a grant for on screen for as long as the round trip
+     * takes, and forever if the socket happens to be down at that moment.
+     *
+     * It cannot resurrect: the grant is gone, so neither a later batch nor a `GET /v1/nearby`
+     * resync will carry the vehicle again.
+     */
+    fun drop(vehicleId: Ulid): Boolean = visible.remove(vehicleId) != null
 
     /**
      * Replaces the contents with a `GET /v1/nearby` snapshot (D6' §5.4's resync).

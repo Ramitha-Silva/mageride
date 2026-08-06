@@ -40,6 +40,8 @@ import lk.mageride.passenger.ride.RideRepository
 import lk.mageride.passenger.shell.AndroidAppPreferences
 import lk.mageride.passenger.shell.AppPreferences
 import lk.mageride.passenger.shell.ConnectivityMonitor
+import lk.mageride.passenger.subscription.ApiSubscriptionRepository
+import lk.mageride.passenger.subscription.SubscriptionRepository
 import lk.mageride.shared.data.api.ApiConfig
 import lk.mageride.shared.data.api.AttestationProvider
 import lk.mageride.shared.data.models.AppSurface
@@ -123,6 +125,7 @@ internal fun passengerAppModule(environment: PassengerEnvironment = PassengerEnv
         bookingBindings()
         activeRideBindings()
         historyBindings()
+        subscriptionBindings()
     }
 
 /**
@@ -238,6 +241,24 @@ private fun Module.activeRideBindings() {
 private fun Module.historyBindings() {
     single<HistoryRepository> { ApiHistoryRepository(rides = get(), query = get(), dispatch = get()) }
     single { PackageOtps() }
+}
+
+/**
+ * The C082 slice — SCR-PA-024/025/025a/025b.
+ *
+ * **One seam over one contract**, which is unusual for this app and is the point:
+ * `subscription-svc` owns Mode B end to end — the access request, the grant, the subscription, the
+ * monthly payment and the owner's `payTo`. Nothing here reaches wallet-svc, because the money is a
+ * **pass-through to the fleet owner** and MageRide holds none of it (AL-24, §18b).
+ *
+ * **Three of the four view models take an id from a navigation argument**, so they are built by
+ * the NavHost rather than resolved here — the same call C080 made and for the same reason: Koin's
+ * `parametersOf` would put a runtime cast between the route and the screen. Only SCR-PA-025 has no
+ * argument, and even it is built there, because its unsubscribe needs [PassengerLiveMap] and the
+ * graph already resolves that once for the whole NavHost.
+ */
+private fun Module.subscriptionBindings() {
+    single<SubscriptionRepository> { ApiSubscriptionRepository(subscriptions = get()) }
 }
 
 /**

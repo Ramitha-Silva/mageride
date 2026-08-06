@@ -108,7 +108,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C079 | passenger-android-booking | 4a | DONE | 2026-08-06 | **181 tests green** (was 125; 56 new across 7 suites), `assembleDebug` + `detekt` + `ktlintCheck` clean. SCR-PA-009/010b/011/012/012a/013 built to `specs/wireframes/passenger_android.html`. **AL-19 is a type, not a rendering**: `TierQuote` has three fields and a pinning test fails if a fourth appears, so a pre-match card cannot show an ETA. **AL-18/AL-55**: transit-svc down or feed-less degrades to one muted row while the Mode C tiers quote normally. **AL-20 parsed on the device** — `MapsLink` reads `!3d!4d`/`q=`/`ll=`/`@`, preferring the place pin over the viewport, and only `maps.app.goo.gl` reaches the server (3 s, one retry). **P-02 is structural**: `declineLocationRequest` takes an id and nothing else, asserted by what the repository was handed. **AL-36**: Confirm needs a destination *and* a time ≥ T-30, because the Job Board opens then. Built two things `:shared` lacks — an encoded-polyline decoder (GTFS shapes) and a Google-Maps URL parser. Five gaps recorded, including **no SCR-PA id for a map picker anywhere in the wireframe** and **no headway/frequency field** for the wireframe's *"every ~10 min"*. Also fixed a wall-clock flake in C077's `LoginViewModelTest` |
 | C080 | passenger-android-ride-payment | 4a | DONE | 2026-08-06 | **201 tests green** (was 181; 20 new across 3 suites), `assembleDebug` + `detekt` + `ktlintCheck` clean. SCR-PA-014/015/015a/016/017/018/019 built. **AL-57/AL-59 are the story**: `onepay` and platform-`lankaqr` are dead as ride rails, so SCR-PA-016 offers **Cash / Wallet / Driver QR** and *nothing on any screen can render a surcharge* — `PaymentRails` is the only rail list and a test pins it. **This corrects C079's booking chip**, which still offered the two retired rails. **AL-47 attestation**: claim → poll → `DriverConfirmedQR`, with Support offered past five unconfirmed minutes; `QrClaimedByPassenger` is explicitly *not* settled. **AL-48**: no masking anywhere — a Normal call is `ACTION_DIAL` on the real `counterpartyPhone`, the choice is remembered, and US-26.5's number notice is shown once and only before a direct dial. Cancel-after-accept names the Rs 50 **before** the tap (D-05 settles it on the next trip, so that is the only moment to say it). Added CameraX + `zxing:core` and the CAMERA permission for AL-22's scan. **Three gaps**: no contract POSTs a Mode C ride rating (confirming C074's finding from the other side — SCR-PA-019 queues locally), `ride.yaml`'s booking-time payment enum never caught up with AL-57/AL-59, and the SCR-PA-016/017 wireframes still draw OnePay +5% |
 | C081 | passenger-android-package-history | 4a | DONE | 2026-08-06 | **208 tests green** (was 201; 7 new), `assembleDebug` + `detekt` + `ktlintCheck` clean. SCR-PA-020/021/022/023 built. **One view model for both package screens**, because it is one ride — which of SCR-PA-020 and SCR-PA-021 to draw is a fact about the ride (booker vs recipient), not about the URI, exactly as `PassengerRoute.PackageTracking`'s KDoc anticipated. **AL-48 on the history card**: the row's `mobileMasked` is rendered and never dialled (`PhoneMasked` forbids parsing one back), so **Call** costs one `GET /v1/rides/{id}` for the clear `counterpartyPhone` — and a **cancelled-before-assignment** trip offers neither, checked in the card *and* the view model. **Four gaps**: neither package OTP can be read back from the platform (pickup is returned once at booking, delivery arrives only on a push — both now captured into a process-lifetime `PackageOtps`), there is **no passenger-facing read of their own scheduled rides**, `RideHistoryRow` carries no `kind` so the Packages tab splits on a terminal state, and `ride.yaml`'s post-AL-48 note still claims the Call needs no second round trip |
-| C082 | passenger-android-mode-b-subscriptions | 4a | PENDING | | |
+| C082 | passenger-android-mode-b-subscriptions | 4a | DONE | 2026-08-06 | **235 tests green** (was 208; 27 new), `assembleDebug` + `detekt` + `ktlintCheck` clean. SCR-PA-024/025/025a/025b built. **AL-59 applied over the wireframe**: the pay sheet has no OnePay row and no `+5 %` anywhere — a subscription is paid to the *fleet owner* and OnePay has one merchant account per merchant, so **Cash** takes the vacant row (D2' §16e); the wireframe needs a micro-change-set. **AL-49's `payTo` only exists after `POST …/pay`**, which is why SCR-PA-025a is two stages — a chooser cannot print an account number it has not been given. **Unsubscribing drops the marker locally** through the new `PassengerLiveMap.dropVehicle`, so AL-25 is true on the tap rather than on `share.revoked`'s round trip. **Five gaps**: no passenger-readable vehicle name (`GET /v1/vehicles/{id}` is 403 `not-owner` here, so the card's title is the Vehicle ID), no passenger-facing read of one's own access requests and **no Mode B push kind** (so *accepted* is inferred from the subscription and *rejected* is unobservable), no `GET …/subscriptions/{subscriptionId}` (the screens filter the list), `GET …/payments` fixes no ordering, and **the passenger app has no wallet top-up screen at all** |
 | C083 | passenger-android-settings-addresses | 4a | PENDING | | |
 | C084 | passenger-android-comms-safety-support | 4a | PENDING | | |
 | C085 | driver-ios-shell | 4b | PENDING | | |
@@ -12818,3 +12818,128 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   - **`CallChooserSheet` is now used by three clusters** (C080's active ride, C081's history and
     package tracking). It takes the number as a parameter, which is what makes that possible.
   - **`rideScoped(...)`** in the NavHost registers a ride-scoped destination; SCR-PA-020/021 uses it.
+
+- **Component:** C082 passenger-android-mode-b-subscriptions — 2026-08-06
+- **Status:** DONE — `./gradlew :apps:passenger-android:testDebugUnitTest :apps:passenger-android:assembleDebug`
+  exits 0: **235 tests, 0 failures** (208 → 235). `detekt` and `ktlintCheck` clean. All four screens built.
+- **Notes:**
+  **The wireframe for SCR-PA-025a is pre-AL-59 and was not followed on one point.** It draws four
+  rails — LankaQR deep link, LankaQR scan, **OnePay (+5 %)** and online transfer. A Mode B
+  subscription is paid **to the fleet owner** (AL-24, §18b: pass-through, not platform revenue), and
+  OnePay has one merchant account per merchant, so that rail could only ever land a passenger's
+  money in *MageRide's* account and turn a pass-through into revenue with a manual payout behind it.
+  AL-59 removed it and deleted `POST /v1/mode-b/pay/onepay/webhook` from `subscription.yaml`
+  altogether. The built sheet therefore offers **LankaQR deep link / LankaQR scan / online transfer /
+  cash**, which is what D2' §16e and US-23.6 ask for, and **no rail carries a surcharge** —
+  `SubscriptionRailsTest` pins the list. The same wireframe needs the micro-change-set C080 already
+  raised for SCR-PA-016/017.
+
+  **`payTo` does not exist until the payment does, so SCR-PA-025a is two stages.** AL-49 puts the
+  owner's bank block and their bank-app LankaQR image on the response to
+  `POST /v1/mode-b/subscriptions/{id}/pay`, served **only from a `verified` payout profile** (and
+  from the last verified snapshot when the profile has fallen back to `pending_verification`). No
+  read hands a client those details beforehand, and inventing them would be this app making claims
+  about somebody else's bank. So the chooser is stage one and the collection details — bank block,
+  owner's QR, cash instructions — are stage two. An org with no verified profile answers
+  `409 payout-profile-not-verified`, which `ModeBErrors` renders as *"this fleet has not finished
+  setting up its bank details"* rather than as "something went wrong".
+
+  **The attach control stays live in both orders.** US-23.4 requires a screenshot of the transfer
+  slip, and a passenger who already has one attaches it first (one tap does pay + upload); one who
+  needs the account number first gets it from stage two and attaches then. Either way the payment
+  lands at `pending_verification` and stays there until the **owner** confirms it — `POST
+  …/payments/{id}/confirm` and `POST …/mark-cash` are both the owner's and answer `403` here.
+
+  **Unsubscribing drops the marker locally, and that is the client's half of D-22.**
+  `PassengerLiveMap.dropVehicle` (new, alongside `LiveVehicleStore.drop`) erases the vehicle on the
+  unsubscribe response instead of waiting for the directed `ShareRevoked` to come back. It sends
+  **nothing** to the hub: `signalr-hub.md` §2 has four client → server methods and none of them
+  leaves a `vehicle:{vehicleId}` group — membership is granted by the server from the
+  `share:{userId}` entitlement (D-23) — so this is a local erasure, and the revocation that follows
+  finds nothing left to remove. `SubscriptionsViewModelTest` asserts both halves against a real
+  `PassengerLiveMap` over the fake socket.
+
+  **The ✕ raises a confirm, and so does the swipe.** AL-25 makes an unsubscribe irreversible in
+  place — visibility is lost immediately and re-joining is a fresh request the owner must accept —
+  so the tap is the last moment a passenger can be told. The wireframe's *"Δ Android:
+  swipe-to-unsubscribe also supported"* is built and lands on the **same** dialog rather than acting
+  directly; the dialog also carries US-23.12's *"your name stays on the fleet's list, muted, until
+  the owner removes it"*, which is the part of leaving that leaving does not do.
+
+  ### Five gaps found
+
+  1. **No passenger can read a vehicle's name.** The wireframe's card says *"Office Van ·
+     MR-VEH-48213"*. `Subscription` carries `vehicleId` and nothing else, and `registry.yaml`'s
+     `GET /v1/vehicles/{vehicleId}` is *"visible to the owner, an assigned driver, and internal
+     roles"* — a passenger bearer gets `403 not-owner`. `NearbyVehicle` has a `registrationNumber`
+     but only while the vehicle is inside the 19 cells, and a card title that appears when the van
+     is nearby and vanishes when it is not is worse than a stable one. **SCR-PA-025 and SCR-PA-025b
+     therefore render the Vehicle ID.** A `displayName`/`registrationNumber` on `Subscription`, or a
+     passenger-scoped vehicle read, closes it.
+  2. **A Mode B decision cannot be observed by the passenger who asked.**
+     `GET /v1/mode-b/{vehicleId}/access-requests` is the **owner's** list, there is no
+     "my access requests" read, and `notification.yaml` declares **no Mode B push kind at all** — so
+     nothing tells this app that a request was accepted or rejected. *Accepted* is inferred instead
+     from `GET /v1/mode-b/subscriptions/{passengerId}`, because an accept creates the grant and the
+     subscription in one transaction; **rejected has no signal whatsoever** and reaches a passenger
+     through the owner, not the platform. Either a `GET /v1/mode-b/access-requests/mine` or a
+     `mode_b_access_decided` notification kind would fix it.
+  3. **There is no `GET /v1/mode-b/subscriptions/{subscriptionId}`.** The contract has the
+     passenger's *list* and the payment history, so SCR-PA-025a and SCR-PA-025b both read the list
+     and filter by id to fill their headers. Harmless at three subscriptions; a by-id read is one
+     line when it exists.
+  4. **`GET /v1/mode-b/subscriptions/{id}/payments` fixes no ordering.** The wireframe prints June
+     above May above April. The screen sorts by `periodMonth` descending and the card's pill takes
+     the **maximum** period rather than the first row, because trusting position would print April's
+     status over June's against a server that sorted the other way.
+  5. **The passenger app has no wallet top-up screen** — no SCR-PA id, no wireframe, no D2' section
+     — even though AL-57 made the wallet the card-acceptance rail and SCR-PA-016 offers **Top up**
+     when the balance is short. C080 parked that action on `PassengerRoute.Subscriptions` while the
+     route was a placeholder; now that it is SCR-PA-025, sending a passenger who is Rs 40 short of a
+     fare to their Mode B subscriptions would be actively wrong, so **`onTopUp` is now a no-op** with
+     the reason at the call site. It becomes one line when the screen exists.
+
+  ### Also worth knowing
+
+  - **`SignedFileLink` re-derives the call rather than handing the URL to a loader.** AL-49's
+    `lankaqrImageUrl` is `GET /v1/mode-b/files/lankaqr/{id}?expires=&signature=` with `security: []`
+    — the contract's own words are *"the URL goes to an image loader, which carries no bearer"*. This
+    app has none, and adding Coil to render one QR is the wrong trade, so the link is split back
+    into the four values `SubscriptionApi.getModeBFile` takes and fetched through C013's stack. **The
+    origin in the link is discarded**: the call is re-issued against `PassengerEnvironment`'s
+    gateway, so a signed URL minted with an internal or stale host cannot redirect this app. The
+    bytes are decoded with `BitmapFactory` inside the composable, which keeps every Android graphics
+    type out of a class that has to run on this Linux host.
+  - **`ui/DateFormat` is new and month names come from CLDR, not from `strings.xml`.** Thirteen keys
+    across three files would be thirty-nine values to keep in step with data every Android 8.0
+    handset already ships. It is the mirror of `MoneyFormat`'s argument: `Rs` is a printed symbol so
+    it is a Kotlin constant, a month is a translated word so it comes from the locale. Every date it
+    formats is already Asia/Colombo (D-38) and nothing in it converts a zone.
+  - **The card's pill costs one statement read per Paid subscription, and there is no cheaper honest
+    answer.** `SubscriberMonthStatus` lives on `SubscriberRow`, which is the owner's roster;
+    `Subscription` has `nextDue` but the server advances that on *payment*, so deriving the pill from
+    it would call an unpaid first month "Paid". The pill therefore comes from
+    `ModeBPaymentRules.monthStatus` over the latest payment — which is also what makes *"an
+    online-transfer payment shows Pending verification"* true on SCR-PA-025 and not only on
+    SCR-PA-025b. A failed statement leaves the pill absent rather than guessing.
+  - **`LoginViewModelTest.resend_is_refused_locally_inside_the_cooldown` was flaky and is fixed
+    (Δ C082).** Not a clock problem this time: `MainDispatcher` installs `Dispatchers.Unconfined`, so
+    an `await` continuation resumes **inline** inside the `update` that satisfied it — which can be
+    the one setting `phase = OTP` a beat before `onChallenge` launches the countdown job. The test
+    read `resendInSeconds == 0` and failed against a view model that was about to be correct. It now
+    awaits the countdown it is actually asserting on. Worth knowing for any cluster whose view model
+    starts a job after the state that unblocks a test.
+
+  ### For C083–C084
+
+  - **`SubscriptionRepository` is the only door onto Mode B**, and it deliberately carries none of
+    the roster operations (`listModeBSubscribers`, `setSubscriberFare`, `markSubscriberCashPaid`,
+    `deleteModeBSubscriber`, `confirmTransferSlip`). All five answer `403 not-owner` to a passenger
+    bearer and belong to the Fleet Portal and the Driver App's SCR-DA-028.
+  - **`subscriptionScoped(...)`** in the NavHost registers a subscription-scoped destination, beside
+    C080's `rideScoped`. The two are deliberately not one helper — the argument names are what a
+    mistyped route collides on.
+  - **`ui/DateFormat`** is there for any screen that has to print a `BusinessDate`; do not reach for
+    `java.time` at a call site.
+  - **`PassengerLiveMap.dropVehicle`** is the local half of a revocation. Nothing else should remove
+    a marker by hand — the other four reasons a vehicle leaves the map are all the server's.

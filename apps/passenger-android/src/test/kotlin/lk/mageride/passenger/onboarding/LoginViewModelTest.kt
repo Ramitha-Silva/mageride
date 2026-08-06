@@ -96,7 +96,13 @@ class LoginViewModelTest {
         )
         val model = signedOutWithNumber()
         model.submit()
-        model.state.await { it.phase == LoginPhase.OTP && !it.busy }
+        // Waits for the COUNTDOWN, not merely for the phase (Δ C082). `MainDispatcher` installs
+        // `Dispatchers.Unconfined`, so the `await` continuation resumes *inline* inside the
+        // `update` that satisfied it — which can be the one that sets `phase = OTP` a beat before
+        // `onChallenge` launches the countdown job. The test then read `resendInSeconds == 0` and
+        // failed against a view model that was about to be correct. Asserting on the state this
+        // test is actually about removes the race.
+        model.state.await { it.phase == LoginPhase.OTP && !it.busy && it.resendInSeconds > 0 }
 
         model.resend()
 

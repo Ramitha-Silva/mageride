@@ -166,6 +166,20 @@ internal class PassengerLiveMap(
         }
     }
 
+    /**
+     * Drops a vehicle the passenger has just unsubscribed from (AL-25, US-4.11).
+     *
+     * **Not a hub call.** `signalr-hub.md` §2 has four client → server methods and none of them
+     * leaves a `vehicle:{vehicleId}` group — membership is the server's, granted at join from the
+     * `share:{userId}` entitlement (D-23). What this does is erase the marker already drawn, so
+     * *"unsubscribing removes the vehicle from the live map within seconds"* is true on the tap
+     * rather than on the round trip. fanout-svc's `share.revoked` arrives behind it and finds
+     * nothing left to remove, which is the correct no-op. See [LiveVehicleStore.drop].
+     */
+    fun dropVehicle(vehicleId: Ulid) {
+        scope.launch { inbox.drop(vehicleId) }
+    }
+
     /** `SubscribeRide` — the caller's own ride (US-6A.12). Rejoined on every reconnect. */
     fun watchRide(rideId: Ulid) {
         scope.launch { subscriptions.watchRide(rideId) }

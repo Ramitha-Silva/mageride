@@ -360,4 +360,88 @@
     <string name="trip_details_approximate">தூரம் அவ்வப்போது பெறப்பட்ட இடங்களிலிருந்து கணக்கிடப்படுகிறது, சற்று குறைவாக இருக்கலாம்.</string>
     <string name="trip_details_report">சிக்கலைத் தெரிவி</string>
 
+    <!-- ==== C082 · Mode B subscriptions (SCR-PA-024/025/025a/025b) ==================== -->
+
+    <string name="action_done">முடிந்தது</string>
+
+    <string name="mode_b_request_title">தனியார் போக்குவரத்து</string>
+    <string name="mode_b_explainer">தனியார் வாகனத்தைக் கண்காணிக்க அனுமதி கேளுங்கள். உரிமையாளர் ஓட்டுநர் செயலியில் அதை ஏற்கிறார்.</string>
+    <string name="mode_b_vehicle_id">வாகன அடையாள எண்</string>
+    <string name="mode_b_from_marker">வரைபடத்தில் நீங்கள் தேர்ந்தெடுத்த வாகனத்திலிருந்து தானாக நிரப்பப்பட்டது.</string>
+    <string name="mode_b_type_id">வாகனத்தின் அடையாள எண்ணை ஓட்டுநரிடமோ அலுவலகத்திடமோ கேளுங்கள்.</string>
+    <string name="mode_b_send_request">கோரிக்கையை அனுப்பு</string>
+    <string name="mode_b_status_pending">ஒப்புதலுக்குக் காத்திருக்கிறது</string>
+    <string name="mode_b_pending_note">கோரிக்கை அனுப்பப்பட்டது. உங்கள் முதல் மாதம் இலவசம்.</string>
+    <string name="mode_b_status_accepted">அனுமதி வழங்கப்பட்டது</string>
+    <string name="mode_b_accepted_note">இப்போது இந்த வாகனத்தை வரைபடத்தில் பார்க்கலாம்.</string>
+    <string name="mode_b_status_rejected">கோரிக்கை நிராகரிக்கப்பட்டது</string>
+    <string name="mode_b_rejected_note">உரிமையாளர் இந்தக் கோரிக்கையை ஏற்கவில்லை.</string>
+    <string name="mode_b_open_subscriptions">என் சந்தாக்களைத் திற</string>
+
+    <string name="subscriptions_title">என் சந்தாக்கள்</string>
+    <string name="subscriptions_empty">இதுவரை தனியார் வாகனங்கள் இல்லை. அனுமதி கேட்க வரைபடத்தில் ஒரு தனியார் வாகனத்தைத் தேர்ந்தெடுக்கவும்.</string>
+    <string name="subscriptions_pay">செலுத்து</string>
+    <string name="subscriptions_history">கட்டண வரலாறு</string>
+    <string name="subscriptions_unsubscribe">சந்தாவை நிறுத்து</string>
+    <string name="subscriptions_unsubscribe_title">இந்த வாகனத்தின் சந்தாவை நிறுத்தவா?</string>
+    <string name="subscriptions_unsubscribe_body">உடனடியாக அது வரைபடத்தில் தெரியாமல் போகும். மீண்டும் சேர புதிய கோரிக்கை அனுப்பி உரிமையாளரின் ஒப்புதலுக்குக் காத்திருக்க வேண்டும்.</string>
+    <string name="subscriptions_muted_note">உரிமையாளர் நீக்கும் வரை உங்கள் பெயர் வாகனக் குழுவின் சந்தாதாரர் பட்டியலில் அமைதியாக இருக்கும்.</string>
+    <string name="subscriptions_billing_paid">கட்டணமுள்ளது</string>
+    <string name="subscriptions_free">இலவசம்</string>
+    <string name="subscriptions_free_caption">இலவசம் — அலுவலகப் போக்குவரத்து</string>
+    <string name="subscriptions_per_month">மாதம் %1$s</string>
+    <string name="subscriptions_next_due">அடுத்த கட்டணம் %1$s</string>
+    <string name="subscriptions_status_paid">செலுத்தப்பட்டது</string>
+    <string name="subscriptions_status_pending">சரிபார்ப்புக்குக் காத்திருக்கிறது</string>
+    <string name="subscriptions_status_due">கட்டணம் செலுத்த வேண்டும்</string>
+    <string name="subscriptions_status_unknown">சரிபார்க்கிறது…</string>
+
+    <string name="subscription_pay_title">சந்தாவைச் செலுத்து</string>
+    <string name="subscription_pay_choose">கட்டண முறையைத் தேர்ந்தெடுக்கவும்</string>
+    <string name="subscription_pay_lankaqr_deeplink">LankaQR — நேரடி இணைப்பு</string>
+    <string name="subscription_pay_lankaqr_deeplink_caption">உங்கள் வங்கிச் செயலி திறக்கும். கூடுதல் கட்டணம் இல்லை.</string>
+    <string name="subscription_pay_lankaqr_scan">LankaQR — குறியீட்டை ஸ்கேன் செய்</string>
+    <string name="subscription_pay_lankaqr_scan_caption">உங்கள் வங்கிச் செயலியில் வாகனக் குழுவின் குறியீட்டை ஸ்கேன் செய்யுங்கள்.</string>
+    <string name="subscription_pay_transfer">இணையவழிப் பணப் பரிமாற்றம்</string>
+    <string name="subscription_pay_transfer_caption">வாகனக் குழுவின் வங்கிக் கணக்குக்கு. ரசீதின் திரைப்படம் தேவை.</string>
+    <string name="subscription_pay_cash">பணம்</string>
+    <string name="subscription_pay_cash_caption">வசூலிப்பவரிடம் கொடுங்கள். உரிமையாளர் அதைப் பெற்றதாகப் பதிவு செய்வார்.</string>
+    <string name="subscription_pay_retired">இனி கிடைக்காது</string>
+    <string name="subscription_pay_confirm">உறுதிசெய்து %1$s செலுத்து</string>
+    <string name="subscription_pay_confirm_unknown">உறுதிசெய்து செலுத்து</string>
+    <string name="subscription_pay_to">%1$s க்கு</string>
+    <string name="subscription_attach_slip">பரிமாற்றத் திரைப்படத்தை இணைக்கவும்</string>
+    <string name="subscription_slip_attached">இணைக்கப்பட்டது: %1$s</string>
+    <string name="subscription_open_bank_app">என் வங்கிச் செயலியைத் திற</string>
+    <string name="subscription_lankaqr_payload">LankaQR குறியீடு</string>
+    <string name="subscription_transfer_to">பணம் அனுப்ப வேண்டிய கணக்கு</string>
+    <string name="subscription_bank">வங்கி</string>
+    <string name="subscription_branch">கிளை</string>
+    <string name="subscription_account_no">கணக்கு எண்</string>
+    <string name="subscription_account_holder">கணக்கு உரிமையாளர்</string>
+    <string name="subscription_owner_qr">வாகனக் குழுவின் LankaQR குறியீடு</string>
+    <string name="subscription_owner_qr_hint">வாகனக் குழுவுக்குச் செலுத்த உங்கள் வங்கிச் செயலியில் இதை ஸ்கேன் செய்யுங்கள்.</string>
+    <string name="subscription_owner_qr_missing">வாகனக் குழுவின் குறியீட்டை ஏற்ற முடியவில்லை. வேறு கட்டண முறையைத் தேர்ந்தெடுக்கவும்.</string>
+    <string name="subscription_cash_title">பணத்தை வசூலிப்பவரிடம் கொடுங்கள்</string>
+    <string name="subscription_cash_body">பணத்தைப் பெற்றதாகப் பதிவு செய்ய வாகனக் குழு உரிமையாளரால் மட்டுமே முடியும். அதன் பிறகு இந்த மாதம் செலுத்தப்பட்டதாகக் காட்டும்.</string>
+    <string name="subscription_transfer_pending_title">உரிமையாளரின் உறுதிப்படுத்தலுக்குக் காத்திருக்கிறது</string>
+    <string name="subscription_pending_body">உரிமையாளர் உங்கள் பரிமாற்ற ரசீதைச் சரிபார்ப்பார். அதுவரை இந்த மாதம் செலுத்தப்படவில்லை.</string>
+    <string name="subscription_unavailable">கட்டணம் செலுத்த முடியாது</string>
+    <string name="subscription_unavailable_body">இந்த வாகனக் குழு தன் வங்கி விவரங்களை முடிக்கவில்லை. வசூலிப்பவரிடம் செலுத்துங்கள், அல்லது பிறகு முயலுங்கள்.</string>
+
+    <string name="subscription_payments_title">கட்டண வரலாறு</string>
+    <string name="subscription_payments_empty">இதுவரை கட்டணங்கள் இல்லை.</string>
+    <string name="subscription_status_paid">செலுத்தப்பட்டது</string>
+    <string name="subscription_status_paid_cash">செலுத்தப்பட்டது · பணம்</string>
+    <string name="subscription_status_pending">சரிபார்ப்புக்குக் காத்திருக்கிறது</string>
+    <string name="subscription_status_unpaid">செலுத்தப்படவில்லை</string>
+    <string name="subscription_cash_marked">வாகனக் குழு உரிமையாளரால் பெறப்பட்டதாகப் பதிவு செய்யப்பட்டது</string>
+
+    <string name="error_payout_not_verified">இந்த வாகனக் குழு தன் வங்கி விவரங்களை முடிக்காததால் இப்போது கட்டணம் பெற முடியாது.</string>
+    <string name="error_vehicle_not_found">அந்த அடையாள எண்ணுக்கு வாகனம் இல்லை. சரிபார்த்து மீண்டும் முயலுங்கள்.</string>
+    <string name="error_request_already_open">இந்த வாகனம் குறித்து நீங்கள் ஏற்கெனவே கேட்டுள்ளீர்கள்.</string>
+    <string name="error_subscription_not_found">அந்தச் சந்தாவைக் கண்டறிய முடியவில்லை.</string>
+    <string name="error_not_your_subscription">இது உங்கள் சந்தா அல்ல.</string>
+    <string name="error_slip_too_large">அந்தத் திரைப்படம் மிகப் பெரியது. சிறிய படத்தை முயலுங்கள்.</string>
+
 </resources>

@@ -60,7 +60,17 @@ import lk.mageride.passenger.ride.RateDriverViewModel
 import lk.mageride.passenger.ride.RideRepository
 import lk.mageride.passenger.ride.TripSummaryScreen
 import lk.mageride.passenger.ride.TripSummaryViewModel
+import lk.mageride.passenger.subscription.ModeBRequestScreen
+import lk.mageride.passenger.subscription.ModeBRequestViewModel
+import lk.mageride.passenger.subscription.SubscriptionPayScreen
+import lk.mageride.passenger.subscription.SubscriptionPayViewModel
+import lk.mageride.passenger.subscription.SubscriptionPaymentsScreen
+import lk.mageride.passenger.subscription.SubscriptionPaymentsViewModel
+import lk.mageride.passenger.subscription.SubscriptionRepository
+import lk.mageride.passenger.subscription.SubscriptionsScreen
+import lk.mageride.passenger.subscription.SubscriptionsViewModel
 import lk.mageride.passenger.ui.theme.MageRideTheme
+import lk.mageride.shared.data.api.IdempotencyKeyGenerator
 import lk.mageride.shared.data.models.Place
 import lk.mageride.shared.domain.auth.AuthSessionManager
 import lk.mageride.shared.domain.auth.SessionState
@@ -100,6 +110,11 @@ internal fun PassengerNavHost(controller: NavHostController, modifier: Modifier 
     // C081's cluster.
     val historyRepository = koinInject<HistoryRepository>()
     val packageOtps = koinInject<PackageOtps>()
+
+    // C082's cluster. Its four view models take a vehicle or a subscription id from the route, so
+    // they are built here for the reason C080's are.
+    val subscriptionRepository = koinInject<SubscriptionRepository>()
+    val idempotencyKeys = koinInject<IdempotencyKeyGenerator>()
     val signedInUserId = (sessions.state.collectAsStateWithLifecycle().value as? SessionState.SignedIn)?.userId
 
     NavHost(
@@ -300,9 +315,14 @@ internal fun PassengerNavHost(controller: NavHostController, modifier: Modifier 
         rideScoped(PassengerRoute.PaymentMethod.PATTERN, PassengerRoute.PaymentMethod.ARG_RIDE_ID) { rideId ->
             PaymentMethodScreen(
                 onConfirmed = { controller.navigate(PassengerRoute.PayFare(rideId).path) },
-                // C083's SCR-PA-025-adjacent wallet screens are not this component's; the drawer's
-                // wallet row is where a top-up lives.
-                onTopUp = { controller.navigate(PassengerRoute.Subscriptions.path) },
+                // **There is no passenger wallet screen, anywhere** (Δ C082). C080 parked this on
+                // `Subscriptions` while that route was a placeholder; it is now SCR-PA-025 and
+                // sending a passenger who is Rs 40 short of a fare to their Mode B subscriptions
+                // would be worse than doing nothing. No SCR-PA id, no wireframe and no D2' section
+                // draws a top-up, even though AL-57 made the wallet the card-acceptance rail — the
+                // gap is recorded in the C082 handoff, and this is the one line that changes when
+                // the screen exists.
+                onTopUp = { },
                 model = viewModel(key = rideId) { PaymentMethodViewModel(rideId, rideRepository, sessions) },
             )
         }
@@ -392,11 +412,76 @@ internal fun PassengerNavHost(controller: NavHostController, modifier: Modifier 
                     defaultValue = null
                 },
             ),
-        ) { RoutePlaceholder("SCR-PA-024 Mode B access request") }
+        ) { entry ->
+            val vehicleId = entry.arguments?.getString(PassengerRoute.ModeBRequest.ARG_VEHICLE_ID)
+            ModeBRequestScreen(
+                onBack = { controller.popBackStack() },
+                onOpenSubscriptions = { controller.navigate(PassengerRoute.Subscriptions.path) },
+                // Keyed on the id so the drawer's argument-less entry and a marker tap do not
+                // share one model — the second would otherwise open pre-filled with the first's
+                // vehicle, which is the one mistake this screen must not make.
+                model = viewModel(key = vehicleId.orEmpty()) {
+                    ModeBRequestViewModel(
+                        vehicleId = vehicleId,
+                        subscriptions = subscriptionRepository,
+                        sessions = sessions,
+                        keys = idempotencyKeys,
+                    )
+                },
+            )
+        }
 
-        placeholder(PassengerRoute.Subscriptions, "SCR-PA-025 my subscriptions")
-        placeholder(PassengerRoute.SubscriptionPayment.PATTERN, "SCR-PA-025a subscription payment")
-        placeholder(PassengerRoute.SubscriptionPayments.PATTERN, "SCR-PA-025b payment history")
+        composable(PassengerRoute.Subscriptions.path) {
+            SubscriptionsScreen(
+                onBack = { controller.popBackStack() },
+                onPay = { id -> controller.navigate(PassengerRoute.SubscriptionPayment(id).path) },
+                onHistory = { id -> controller.navigate(PassengerRoute.SubscriptionPayments(id).path) },
+                model = viewModel {
+                    SubscriptionsViewModel(
+                        subscriptions = subscriptionRepository,
+                        sessions = sessions,
+                        // AL-25's other half: the grant is gone, so the marker goes with it
+                        // rather than waiting for `ShareRevoked` to come back.
+                        live = live,
+                        keys = idempotencyKeys,
+                    )
+                },
+            )
+        }
+
+        subscriptionScoped(
+            PassengerRoute.SubscriptionPayment.PATTERN,
+            PassengerRoute.SubscriptionPayment.ARG_SUBSCRIPTION_ID,
+        ) { subscriptionId ->
+            SubscriptionPayScreen(
+                onBack = { controller.popBackStack() },
+                onDone = { controller.popBackStack() },
+                model = viewModel(key = subscriptionId) {
+                    SubscriptionPayViewModel(
+                        subscriptionId = subscriptionId,
+                        subscriptions = subscriptionRepository,
+                        sessions = sessions,
+                        keys = idempotencyKeys,
+                    )
+                },
+            )
+        }
+
+        subscriptionScoped(
+            PassengerRoute.SubscriptionPayments.PATTERN,
+            PassengerRoute.SubscriptionPayments.ARG_SUBSCRIPTION_ID,
+        ) { subscriptionId ->
+            SubscriptionPaymentsScreen(
+                onBack = { controller.popBackStack() },
+                model = viewModel(key = subscriptionId) {
+                    SubscriptionPaymentsViewModel(
+                        subscriptionId = subscriptionId,
+                        subscriptions = subscriptionRepository,
+                        sessions = sessions,
+                    )
+                },
+            )
+        }
 
         // ---- C083 · addresses and settings ------------------------------------------------
         placeholder(PassengerRoute.SavedAddresses, "SCR-PA-026 saved addresses")
@@ -433,6 +518,24 @@ private fun NavHostController.replaceOnboarding(route: PassengerRoute) {
  * receives the id already extracted.
  */
 private fun NavGraphBuilder.rideScoped(pattern: String, argument: String, content: @Composable (String) -> Unit) {
+    composable(route = pattern, arguments = listOf(navArgument(argument) { type = NavType.StringType })) { entry ->
+        content(entry.arguments?.getString(argument).orEmpty())
+    }
+}
+
+/**
+ * A destination scoped to one Mode B subscription (C082).
+ *
+ * The same shape as [rideScoped] with a different argument name, kept separate rather than
+ * generalised: the two argument constants are what a mistyped route would collide on, and a single
+ * helper taking both would make `ride/{rideId}` and `subscriptions/{subscriptionId}` look
+ * interchangeable at the call site.
+ */
+private fun NavGraphBuilder.subscriptionScoped(
+    pattern: String,
+    argument: String,
+    content: @Composable (String) -> Unit,
+) {
     composable(route = pattern, arguments = listOf(navArgument(argument) { type = NavType.StringType })) { entry ->
         content(entry.arguments?.getString(argument).orEmpty())
     }

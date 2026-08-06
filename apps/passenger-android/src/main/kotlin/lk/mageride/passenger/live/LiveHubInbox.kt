@@ -10,6 +10,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import lk.mageride.shared.data.api.query.QueryApi
 import lk.mageride.shared.data.models.GeoPoint
+import lk.mageride.shared.data.models.Ulid
 import lk.mageride.shared.domain.geo.H3Cell
 import lk.mageride.shared.domain.geo.H3Grid
 import lk.mageride.shared.realtime.LiveHub
@@ -81,6 +82,11 @@ internal class LiveHubInbox(private val query: QueryApi, private val grid: H3Gri
     /** Drops every vehicle whose own res-7 cell is no longer subscribed. See [LiveVehicleStore]. */
     suspend fun retainCells(cells: Set<H3Cell>) {
         if (mutex.withLock { store.retainCells(cells, grid) }) publish()
+    }
+
+    /** Drops one vehicle the passenger just unsubscribed from (AL-25). See [LiveVehicleStore.drop]. */
+    suspend fun drop(vehicleId: Ulid) {
+        if (mutex.withLock { store.drop(vehicleId) }) publish()
     }
 
     /** Forgets the map. The passenger signed out, or the app is going. */

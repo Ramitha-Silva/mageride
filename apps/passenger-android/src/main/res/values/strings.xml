@@ -420,4 +420,93 @@
     <string name="trip_details_approximate">The distance is measured from periodic samples and may be slightly low.</string>
     <string name="trip_details_report">Report an issue</string>
 
+    <!-- ==== C082 · Mode B subscriptions (SCR-PA-024/025/025a/025b) ==================== -->
+
+    <string name="action_done">Done</string>
+
+    <!-- SCR-PA-024 · Mode B access request. The Vehicle ID example is a Kotlin constant. -->
+    <string name="mode_b_request_title">Private transport</string>
+    <string name="mode_b_explainer">Ask to track a private vehicle. The owner approves it in the Driver App.</string>
+    <string name="mode_b_vehicle_id">Vehicle ID</string>
+    <string name="mode_b_from_marker">Filled in from the vehicle you tapped on the map.</string>
+    <string name="mode_b_type_id">Ask the driver or the office for the vehicle\'s ID.</string>
+    <string name="mode_b_send_request">Send request</string>
+    <string name="mode_b_status_pending">Pending approval</string>
+    <string name="mode_b_pending_note">Request sent. Your first month is free.</string>
+    <string name="mode_b_status_accepted">Access granted</string>
+    <string name="mode_b_accepted_note">You can now see this vehicle on the map.</string>
+    <string name="mode_b_status_rejected">Request declined</string>
+    <string name="mode_b_rejected_note">The owner did not approve this request.</string>
+    <string name="mode_b_open_subscriptions">Open my subscriptions</string>
+
+    <!-- SCR-PA-025 · my private subscriptions. -->
+    <string name="subscriptions_title">My subscriptions</string>
+    <string name="subscriptions_empty">No private vehicles yet. Tap a private vehicle on the map to ask for access.</string>
+    <string name="subscriptions_pay">Pay</string>
+    <string name="subscriptions_history">Payment history</string>
+    <string name="subscriptions_unsubscribe">Unsubscribe</string>
+    <string name="subscriptions_unsubscribe_title">Unsubscribe from this vehicle?</string>
+    <string name="subscriptions_unsubscribe_body">You will stop seeing it on the map straight away. To join again you must send a new request and wait for the owner to accept it.</string>
+    <string name="subscriptions_muted_note">Your name stays on the fleet’s subscriber list, muted, until the owner removes it.</string>
+    <string name="subscriptions_billing_paid">Paid</string>
+    <string name="subscriptions_free">Free</string>
+    <string name="subscriptions_free_caption">Free — office transport</string>
+    <string name="subscriptions_per_month">%1$s / month</string>
+    <string name="subscriptions_next_due">next due %1$s</string>
+    <string name="subscriptions_status_paid">Paid</string>
+    <string name="subscriptions_status_pending">Pending verification</string>
+    <string name="subscriptions_status_due">Payment due</string>
+    <string name="subscriptions_status_unknown">Checking…</string>
+
+    <!-- SCR-PA-025a · subscription payment. No OnePay and no surcharge on any rail (AL-59). -->
+    <string name="subscription_pay_title">Pay subscription</string>
+    <string name="subscription_pay_choose">Choose payment mode</string>
+    <string name="subscription_pay_lankaqr_deeplink">LankaQR — deep link</string>
+    <string name="subscription_pay_lankaqr_deeplink_caption">Opens your bank app. No extra charge.</string>
+    <string name="subscription_pay_lankaqr_scan">LankaQR — scan QR code</string>
+    <string name="subscription_pay_lankaqr_scan_caption">Scan the fleet\'s code with your own bank app.</string>
+    <string name="subscription_pay_transfer">Online transfer</string>
+    <string name="subscription_pay_transfer_caption">To the fleet\'s bank account. A screenshot of the slip is required.</string>
+    <string name="subscription_pay_cash">Cash</string>
+    <string name="subscription_pay_cash_caption">Hand it to your collector. The owner marks it received.</string>
+    <string name="subscription_pay_retired">No longer available</string>
+    <string name="subscription_pay_confirm">Confirm &amp; pay %1$s</string>
+    <string name="subscription_pay_confirm_unknown">Confirm &amp; pay</string>
+    <string name="subscription_pay_to">to %1$s</string>
+    <string name="subscription_attach_slip">Attach transfer screenshot</string>
+    <string name="subscription_slip_attached">Attached: %1$s</string>
+    <string name="subscription_open_bank_app">Open my bank app</string>
+    <string name="subscription_lankaqr_payload">LankaQR code</string>
+    <string name="subscription_transfer_to">Transfer to</string>
+    <string name="subscription_bank">Bank</string>
+    <string name="subscription_branch">Branch</string>
+    <string name="subscription_account_no">Account number</string>
+    <string name="subscription_account_holder">Account holder</string>
+    <string name="subscription_owner_qr">The fleet\'s LankaQR code</string>
+    <string name="subscription_owner_qr_hint">Scan this with your bank app to pay the fleet.</string>
+    <string name="subscription_owner_qr_missing">The fleet\'s code could not be loaded. Choose another payment mode.</string>
+    <string name="subscription_cash_title">Hand the cash to your collector</string>
+    <string name="subscription_cash_body">Only the fleet owner can record cash. This month shows as paid once they do.</string>
+    <string name="subscription_transfer_pending_title">Waiting for the fleet owner</string>
+    <string name="subscription_pending_body">The owner will check your transfer slip. Until they do, this month is not yet paid.</string>
+    <string name="subscription_unavailable">Payment unavailable</string>
+    <string name="subscription_unavailable_body">This fleet has not finished setting up its bank details. Pay your collector, or try again later.</string>
+
+    <!-- SCR-PA-025b · payment history. -->
+    <string name="subscription_payments_title">Payment history</string>
+    <string name="subscription_payments_empty">No payments yet.</string>
+    <string name="subscription_status_paid">Paid</string>
+    <string name="subscription_status_paid_cash">Paid · cash</string>
+    <string name="subscription_status_pending">Pending verification</string>
+    <string name="subscription_status_unpaid">Not paid</string>
+    <string name="subscription_cash_marked">Marked received by the fleet owner</string>
+
+    <!-- Failures subscription-svc declares on this cluster\'s six operations. -->
+    <string name="error_payout_not_verified">This fleet has not finished setting up its bank details, so it cannot take payments yet.</string>
+    <string name="error_vehicle_not_found">No vehicle has that ID. Check it and try again.</string>
+    <string name="error_request_already_open">You have already asked about this vehicle.</string>
+    <string name="error_subscription_not_found">That subscription could not be found.</string>
+    <string name="error_not_your_subscription">This is not your subscription.</string>
+    <string name="error_slip_too_large">That screenshot is too large. Try a smaller image.</string>
+
 </resources>

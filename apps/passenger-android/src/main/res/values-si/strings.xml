@@ -360,4 +360,88 @@
     <string name="trip_details_approximate">දුර ගණනය කර ඇත්තේ වරින් වර ලබාගත් ස්ථාන අනුව බැවින් තරමක් අඩු විය හැක.</string>
     <string name="trip_details_report">ගැටලුවක් වාර්තා කරන්න</string>
 
+    <!-- ==== C082 · Mode B subscriptions (SCR-PA-024/025/025a/025b) ==================== -->
+
+    <string name="action_done">අවසන්</string>
+
+    <string name="mode_b_request_title">පෞද්ගලික ප්‍රවාහනය</string>
+    <string name="mode_b_explainer">පෞද්ගලික වාහනයක් නිරීක්ෂණය කිරීමට අවසර ඉල්ලන්න. හිමිකරු රියදුරු යෙදුමෙන් එය අනුමත කරයි.</string>
+    <string name="mode_b_vehicle_id">වාහන අංකය</string>
+    <string name="mode_b_from_marker">සිතියමේ ඔබ තේරූ වාහනයෙන් ස්වයංක්‍රීයව පුරවා ඇත.</string>
+    <string name="mode_b_type_id">වාහනයේ අංකය රියදුරාගෙන් හෝ කාර්යාලයෙන් විමසන්න.</string>
+    <string name="mode_b_send_request">ඉල්ලීම යවන්න</string>
+    <string name="mode_b_status_pending">අනුමැතිය බලාපොරොත්තුවෙන්</string>
+    <string name="mode_b_pending_note">ඉල්ලීම යවා ඇත. ඔබේ පළමු මාසය නොමිලේ.</string>
+    <string name="mode_b_status_accepted">අවසර ලැබී ඇත</string>
+    <string name="mode_b_accepted_note">දැන් ඔබට මෙම වාහනය සිතියමේ දැකිය හැක.</string>
+    <string name="mode_b_status_rejected">ඉල්ලීම ප්‍රතික්ෂේප විය</string>
+    <string name="mode_b_rejected_note">හිමිකරු මෙම ඉල්ලීම අනුමත කළේ නැත.</string>
+    <string name="mode_b_open_subscriptions">මගේ දායකත්ව බලන්න</string>
+
+    <string name="subscriptions_title">මගේ දායකත්ව</string>
+    <string name="subscriptions_empty">තවම පෞද්ගලික වාහන නැත. අවසර ඉල්ලීමට සිතියමේ පෞද්ගලික වාහනයක් තෝරන්න.</string>
+    <string name="subscriptions_pay">ගෙවන්න</string>
+    <string name="subscriptions_history">ගෙවීම් ඉතිහාසය</string>
+    <string name="subscriptions_unsubscribe">දායකත්වය අවසන් කරන්න</string>
+    <string name="subscriptions_unsubscribe_title">මෙම වාහනයේ දායකත්වය අවසන් කරන්නද?</string>
+    <string name="subscriptions_unsubscribe_body">ඔබට වහාම එය සිතියමේ නොපෙනී යයි. නැවත එක්වීමට නව ඉල්ලීමක් යවා හිමිකරුගේ අනුමැතිය ලැබෙන තෙක් රැඳී සිටිය යුතුය.</string>
+    <string name="subscriptions_muted_note">හිමිකරු එය ඉවත් කරන තෙක් ඔබේ නම වාහන සමූහයේ දායක ලැයිස්තුවේ නිශ්ශබ්දව රැඳී පවතී.</string>
+    <string name="subscriptions_billing_paid">ගෙවිය යුතුයි</string>
+    <string name="subscriptions_free">නොමිලේ</string>
+    <string name="subscriptions_free_caption">නොමිලේ — කාර්යාල ප්‍රවාහනය</string>
+    <string name="subscriptions_per_month">මසකට %1$s</string>
+    <string name="subscriptions_next_due">ඊළඟ ගෙවීම %1$s</string>
+    <string name="subscriptions_status_paid">ගෙවා ඇත</string>
+    <string name="subscriptions_status_pending">තහවුරු කිරීම බලාපොරොත්තුවෙන්</string>
+    <string name="subscriptions_status_due">ගෙවීම ගෙවිය යුතුය</string>
+    <string name="subscriptions_status_unknown">පරීක්ෂා කරමින්…</string>
+
+    <string name="subscription_pay_title">දායකත්වය ගෙවන්න</string>
+    <string name="subscription_pay_choose">ගෙවීමේ ක්‍රමය තෝරන්න</string>
+    <string name="subscription_pay_lankaqr_deeplink">LankaQR — සෘජු සබැඳිය</string>
+    <string name="subscription_pay_lankaqr_deeplink_caption">ඔබේ බැංකු යෙදුම විවෘත වේ. අමතර ගාස්තුවක් නැත.</string>
+    <string name="subscription_pay_lankaqr_scan">LankaQR — කේතය පරිලෝකනය</string>
+    <string name="subscription_pay_lankaqr_scan_caption">ඔබේම බැංකු යෙදුමෙන් වාහන සමූහයේ කේතය පරිලෝකනය කරන්න.</string>
+    <string name="subscription_pay_transfer">මාර්ගගත මුදල් හුවමාරුව</string>
+    <string name="subscription_pay_transfer_caption">වාහන සමූහයේ බැංකු ගිණුමට. ලදුපතේ තිර රුවක් අවශ්‍යයි.</string>
+    <string name="subscription_pay_cash">මුදල්</string>
+    <string name="subscription_pay_cash_caption">එකතු කරන්නාට භාර දෙන්න. හිමිකරු එය ලැබුණු බව සටහන් කරයි.</string>
+    <string name="subscription_pay_retired">තවදුරටත් නොමැත</string>
+    <string name="subscription_pay_confirm">තහවුරු කර %1$s ගෙවන්න</string>
+    <string name="subscription_pay_confirm_unknown">තහවුරු කර ගෙවන්න</string>
+    <string name="subscription_pay_to">%1$s වෙත</string>
+    <string name="subscription_attach_slip">හුවමාරුවේ තිර රුව අමුණන්න</string>
+    <string name="subscription_slip_attached">අමුණා ඇත: %1$s</string>
+    <string name="subscription_open_bank_app">මගේ බැංකු යෙදුම විවෘත කරන්න</string>
+    <string name="subscription_lankaqr_payload">LankaQR කේතය</string>
+    <string name="subscription_transfer_to">මුදල් යවන ගිණුම</string>
+    <string name="subscription_bank">බැංකුව</string>
+    <string name="subscription_branch">ශාඛාව</string>
+    <string name="subscription_account_no">ගිණුම් අංකය</string>
+    <string name="subscription_account_holder">ගිණුම් හිමියා</string>
+    <string name="subscription_owner_qr">වාහන සමූහයේ LankaQR කේතය</string>
+    <string name="subscription_owner_qr_hint">වාහන සමූහයට ගෙවීමට ඔබේ බැංකු යෙදුමෙන් මෙය පරිලෝකනය කරන්න.</string>
+    <string name="subscription_owner_qr_missing">වාහන සමූහයේ කේතය පූරණය කළ නොහැකි විය. වෙනත් ගෙවීමේ ක්‍රමයක් තෝරන්න.</string>
+    <string name="subscription_cash_title">මුදල් එකතු කරන්නාට භාර දෙන්න</string>
+    <string name="subscription_cash_body">මුදල් ලැබුණු බව සටහන් කළ හැක්කේ වාහන සමූහයේ හිමිකරුට පමණි. එවිට මෙම මාසය ගෙවා ඇති බව පෙන්වයි.</string>
+    <string name="subscription_transfer_pending_title">හිමිකරුගේ තහවුරු කිරීම බලාපොරොත්තුවෙන්</string>
+    <string name="subscription_pending_body">හිමිකරු ඔබේ හුවමාරු ලදුපත පරීක්ෂා කරයි. එතෙක් මෙම මාසය ගෙවා නොමැත.</string>
+    <string name="subscription_unavailable">ගෙවීම කළ නොහැක</string>
+    <string name="subscription_unavailable_body">මෙම වාහන සමූහය තම බැංකු විස්තර සම්පූර්ණ කර නොමැත. එකතු කරන්නාට ගෙවන්න, නැතිනම් පසුව උත්සාහ කරන්න.</string>
+
+    <string name="subscription_payments_title">ගෙවීම් වාර්තාව</string>
+    <string name="subscription_payments_empty">තවම ගෙවීම් නැත.</string>
+    <string name="subscription_status_paid">ගෙවා ඇත</string>
+    <string name="subscription_status_paid_cash">ගෙවා ඇත · මුදල්</string>
+    <string name="subscription_status_pending">තහවුරු කිරීම බලාපොරොත්තුවෙන්</string>
+    <string name="subscription_status_unpaid">ගෙවා නැත</string>
+    <string name="subscription_cash_marked">වාහන සමූහයේ හිමිකරු විසින් ලැබුණු බව සටහන් කර ඇත</string>
+
+    <string name="error_payout_not_verified">මෙම වාහන සමූහය තම බැංකු විස්තර සම්පූර්ණ කර නොමැති නිසා තවම ගෙවීම් භාරගත නොහැක.</string>
+    <string name="error_vehicle_not_found">එම අංකයට වාහනයක් නැත. එය පරීක්ෂා කර නැවත උත්සාහ කරන්න.</string>
+    <string name="error_request_already_open">ඔබ දැනටමත් මෙම වාහනය ගැන විමසා ඇත.</string>
+    <string name="error_subscription_not_found">එම දායකත්වය සොයාගත නොහැකි විය.</string>
+    <string name="error_not_your_subscription">මෙය ඔබේ දායකත්වය නොවේ.</string>
+    <string name="error_slip_too_large">එම තිර රුව විශාල වැඩියි. කුඩා පින්තූරයක් උත්සාහ කරන්න.</string>
+
 </resources>
