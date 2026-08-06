@@ -7,7 +7,11 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		21E489F7B5C430C5435597B5 /* CameraAuthorisation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 726F65135E87D7F9FF816292 /* CameraAuthorisation.swift */; };
 		0F8A7C04C2B3BF3395AD43C8 /* DocumentCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6ED0DE8E1336FC38114BB37 /* DocumentCapture.swift */; };
+		55644072A55FA37D11AF5EE2 /* DocumentImaging.swift in Sources */ = {isa = PBXBuildFile; fileRef = 569E4FEDD603F874555E6F6E /* DocumentImaging.swift */; };
+		EBAF3D9EB4BBA1F195E315F7 /* DocumentScannerModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B60897F997DE4B88FD099299 /* DocumentScannerModel.swift */; };
+		09F639B06D85B625C3A9F993 /* DocumentScannerScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06CE534043E01F2C2D9D2EFD /* DocumentScannerScreen.swift */; };
 		B7A393E253A163E613E6508C /* DriverEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = A38199F79E09320D80DD55E5 /* DriverEnvironment.swift */; };
 		163CFB25666B22BED1EEC593 /* DriverGraph.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE7E2E26A773931E0ABC82D1 /* DriverGraph.swift */; };
 		4F128007D6E4C1DEE8463FCB /* DriverApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84ECFFBEA04E665A4A91B394 /* DriverApp.swift */; };
@@ -58,6 +62,19 @@
 		DD2BC65A8D1ABDF7BCA3CECC /* FormControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = F98D462C67E17D73304A396D /* FormControls.swift */; };
 		4B73B13F55F3A03A218479F3 /* Localisation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CB0DA5A8F2C7753C9CA14D4 /* Localisation.swift */; };
 		CCAC00824DC736346AC16487 /* OnboardingControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 386245D1C07D23FF659FA353 /* OnboardingControls.swift */; };
+		F54D603516C0EF98814B96B1 /* VehicleControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6595D289D8F8244DE03BC4DF /* VehicleControls.swift */; };
+		2277C914CD631E70C099FF3B /* ActiveVehicleStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 640CC9BE709AFDB3BEBC57CF /* ActiveVehicleStore.swift */; };
+		F2C248B17E8F752C94B62507 /* VehicleDestinationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20218F4C756485D90D4868D6 /* VehicleDestinationView.swift */; };
+		914A8FB5A884BB223209188F /* VehicleLabels.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE862E617C6DA71E7F51E4C4 /* VehicleLabels.swift */; };
+		0FD348213F7106DA31801970 /* VehicleOnboardingModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6C2A5F4BB76C22170CDB9C5 /* VehicleOnboardingModel.swift */; };
+		E3E90A279F17AB9A54235420 /* VehicleOnboardingRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7274F4E08ACB6EE3A8810FCA /* VehicleOnboardingRepository.swift */; };
+		5F2989EC4DA753D022368E5B /* VehicleOnboardingScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F0CF3ACBBA92FE70D4FF6F5 /* VehicleOnboardingScreen.swift */; };
+		051B5BBD13657FEC46F0E8CF /* VehicleOnboardingSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC63BD88B49DD41E027A90E7 /* VehicleOnboardingSession.swift */; };
+		E5D0268F02F2C93D8DD53EB2 /* VehicleOnboardingStatusModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7EE22B157BEBD48D2575DC9 /* VehicleOnboardingStatusModel.swift */; };
+		787E0356C0F32DACCB4D8B31 /* VehicleOnboardingStatusScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 154DF3DF8925A94D392EAB07 /* VehicleOnboardingStatusScreen.swift */; };
+		EA0B1BA95691D306905FD6E9 /* VehiclesModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4F3AD1CFC08CA574047244E /* VehiclesModel.swift */; };
+		BEEDFC8D7A86192CA25E8DAC /* VehiclesScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36E667488B8830E71C99994E /* VehiclesScreen.swift */; };
+		48133B8D3B1556E8A7054F2C /* DocumentScannerModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9B12724F0FF8F2A7551A3F0 /* DocumentScannerModelTests.swift */; };
 		C2C30F86AB7DCFFD8BAA7FAB /* DriverEnvironmentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 613BE313CC4BD8303D3A8370 /* DriverEnvironmentTests.swift */; };
 		315FDD94FCB416C248E3EE70 /* LanguageCityModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 898485DEC1B14DBE9CF33201 /* LanguageCityModelTests.swift */; };
 		998F368FEB919F48A7B6F42E /* LocalizationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1A7352879A3C3EDE135A4F3 /* LocalizationTests.swift */; };
@@ -71,6 +88,12 @@
 		7B6323648A9CD95CE851DFC0 /* ProfileSetupModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8A57AD017BD058976F01619 /* ProfileSetupModelTests.swift */; };
 		23FD7F044415A4AC029EBEA3 /* PushRouterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCBB0FA4D9DEB4B1814C95A8 /* PushRouterTests.swift */; };
 		10262BD32DE9AF51BE826EBD /* ThemeTokenTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D526434D4088A6B7B5B16B5 /* ThemeTokenTests.swift */; };
+		91BE4A2678D7962B0F86F238 /* VehicleLabelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AE38ADAF67B25231D699E77 /* VehicleLabelTests.swift */; };
+		465DD0CCD34A1A8616BAD5AB /* VehicleNavigationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95BABF81674CD9A06EDD8836 /* VehicleNavigationTests.swift */; };
+		3D9EADCC01C321E123FA5D81 /* VehicleOnboardingModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39828EF43E1BBAEB99A69DDA /* VehicleOnboardingModelTests.swift */; };
+		CA41D97C48D6D7FC1FA8BE79 /* VehicleOnboardingStatusModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 790EF5746DE65D68741817FF /* VehicleOnboardingStatusModelTests.swift */; };
+		8D46049658586069677A5703 /* VehicleTestKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DFF5375B672D052387BB558 /* VehicleTestKit.swift */; };
+		F497D6290159F0B0BC0FCE8E /* VehiclesModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10E714F616C58490454CB4F0 /* VehiclesModelTests.swift */; };
 		5261C276A98D8E78E1A67A46 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 62BD7C65D57D32EAA37B2D30 /* Assets.xcassets */; };
 		D3969C409DE3B4D94950A2A7 /* MapStyleDark.json in Resources */ = {isa = PBXBuildFile; fileRef = 4A96604D6400D373AD4669A7 /* MapStyleDark.json */; };
 		79AE007E768CA7211BE98822 /* MapStyleLight.json in Resources */ = {isa = PBXBuildFile; fileRef = 9D87EA9453EDBB1DA991C047 /* MapStyleLight.json */; };
@@ -83,7 +106,11 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		726F65135E87D7F9FF816292 /* CameraAuthorisation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "CameraAuthorisation.swift"; path = "CameraAuthorisation.swift"; sourceTree = "<group>"; };
 		C6ED0DE8E1336FC38114BB37 /* DocumentCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DocumentCapture.swift"; path = "DocumentCapture.swift"; sourceTree = "<group>"; };
+		569E4FEDD603F874555E6F6E /* DocumentImaging.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DocumentImaging.swift"; path = "DocumentImaging.swift"; sourceTree = "<group>"; };
+		B60897F997DE4B88FD099299 /* DocumentScannerModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DocumentScannerModel.swift"; path = "DocumentScannerModel.swift"; sourceTree = "<group>"; };
+		06CE534043E01F2C2D9D2EFD /* DocumentScannerScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DocumentScannerScreen.swift"; path = "DocumentScannerScreen.swift"; sourceTree = "<group>"; };
 		A38199F79E09320D80DD55E5 /* DriverEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DriverEnvironment.swift"; path = "DriverEnvironment.swift"; sourceTree = "<group>"; };
 		AE7E2E26A773931E0ABC82D1 /* DriverGraph.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DriverGraph.swift"; path = "DriverGraph.swift"; sourceTree = "<group>"; };
 		84ECFFBEA04E665A4A91B394 /* DriverApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DriverApp.swift"; path = "DriverApp.swift"; sourceTree = "<group>"; };
@@ -137,6 +164,19 @@
 		F98D462C67E17D73304A396D /* FormControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "FormControls.swift"; path = "FormControls.swift"; sourceTree = "<group>"; };
 		7CB0DA5A8F2C7753C9CA14D4 /* Localisation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "Localisation.swift"; path = "Localisation.swift"; sourceTree = "<group>"; };
 		386245D1C07D23FF659FA353 /* OnboardingControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "OnboardingControls.swift"; path = "OnboardingControls.swift"; sourceTree = "<group>"; };
+		6595D289D8F8244DE03BC4DF /* VehicleControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "VehicleControls.swift"; path = "VehicleControls.swift"; sourceTree = "<group>"; };
+		640CC9BE709AFDB3BEBC57CF /* ActiveVehicleStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ActiveVehicleStore.swift"; path = "ActiveVehicleStore.swift"; sourceTree = "<group>"; };
+		20218F4C756485D90D4868D6 /* VehicleDestinationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "VehicleDestinationView.swift"; path = "VehicleDestinationView.swift"; sourceTree = "<group>"; };
+		CE862E617C6DA71E7F51E4C4 /* VehicleLabels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "VehicleLabels.swift"; path = "VehicleLabels.swift"; sourceTree = "<group>"; };
+		C6C2A5F4BB76C22170CDB9C5 /* VehicleOnboardingModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "VehicleOnboardingModel.swift"; path = "VehicleOnboardingModel.swift"; sourceTree = "<group>"; };
+		7274F4E08ACB6EE3A8810FCA /* VehicleOnboardingRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "VehicleOnboardingRepository.swift"; path = "VehicleOnboardingRepository.swift"; sourceTree = "<group>"; };
+		3F0CF3ACBBA92FE70D4FF6F5 /* VehicleOnboardingScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "VehicleOnboardingScreen.swift"; path = "VehicleOnboardingScreen.swift"; sourceTree = "<group>"; };
+		CC63BD88B49DD41E027A90E7 /* VehicleOnboardingSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "VehicleOnboardingSession.swift"; path = "VehicleOnboardingSession.swift"; sourceTree = "<group>"; };
+		B7EE22B157BEBD48D2575DC9 /* VehicleOnboardingStatusModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "VehicleOnboardingStatusModel.swift"; path = "VehicleOnboardingStatusModel.swift"; sourceTree = "<group>"; };
+		154DF3DF8925A94D392EAB07 /* VehicleOnboardingStatusScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "VehicleOnboardingStatusScreen.swift"; path = "VehicleOnboardingStatusScreen.swift"; sourceTree = "<group>"; };
+		E4F3AD1CFC08CA574047244E /* VehiclesModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "VehiclesModel.swift"; path = "VehiclesModel.swift"; sourceTree = "<group>"; };
+		36E667488B8830E71C99994E /* VehiclesScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "VehiclesScreen.swift"; path = "VehiclesScreen.swift"; sourceTree = "<group>"; };
+		F9B12724F0FF8F2A7551A3F0 /* DocumentScannerModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DocumentScannerModelTests.swift"; path = "DocumentScannerModelTests.swift"; sourceTree = "<group>"; };
 		613BE313CC4BD8303D3A8370 /* DriverEnvironmentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DriverEnvironmentTests.swift"; path = "DriverEnvironmentTests.swift"; sourceTree = "<group>"; };
 		898485DEC1B14DBE9CF33201 /* LanguageCityModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "LanguageCityModelTests.swift"; path = "LanguageCityModelTests.swift"; sourceTree = "<group>"; };
 		B1A7352879A3C3EDE135A4F3 /* LocalizationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "LocalizationTests.swift"; path = "LocalizationTests.swift"; sourceTree = "<group>"; };
@@ -150,6 +190,12 @@
 		C8A57AD017BD058976F01619 /* ProfileSetupModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ProfileSetupModelTests.swift"; path = "ProfileSetupModelTests.swift"; sourceTree = "<group>"; };
 		CCBB0FA4D9DEB4B1814C95A8 /* PushRouterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PushRouterTests.swift"; path = "PushRouterTests.swift"; sourceTree = "<group>"; };
 		2D526434D4088A6B7B5B16B5 /* ThemeTokenTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ThemeTokenTests.swift"; path = "ThemeTokenTests.swift"; sourceTree = "<group>"; };
+		2AE38ADAF67B25231D699E77 /* VehicleLabelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "VehicleLabelTests.swift"; path = "VehicleLabelTests.swift"; sourceTree = "<group>"; };
+		95BABF81674CD9A06EDD8836 /* VehicleNavigationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "VehicleNavigationTests.swift"; path = "VehicleNavigationTests.swift"; sourceTree = "<group>"; };
+		39828EF43E1BBAEB99A69DDA /* VehicleOnboardingModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "VehicleOnboardingModelTests.swift"; path = "VehicleOnboardingModelTests.swift"; sourceTree = "<group>"; };
+		790EF5746DE65D68741817FF /* VehicleOnboardingStatusModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "VehicleOnboardingStatusModelTests.swift"; path = "VehicleOnboardingStatusModelTests.swift"; sourceTree = "<group>"; };
+		3DFF5375B672D052387BB558 /* VehicleTestKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "VehicleTestKit.swift"; path = "VehicleTestKit.swift"; sourceTree = "<group>"; };
+		10E714F616C58490454CB4F0 /* VehiclesModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "VehiclesModelTests.swift"; path = "VehiclesModelTests.swift"; sourceTree = "<group>"; };
 		D459395A137E69E3408BA69B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = "Info.plist"; path = "Info.plist"; sourceTree = "<group>"; };
 		CB0D066169D3247984513AB9 /* DriverApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; name = "DriverApp.entitlements"; path = "DriverApp.entitlements"; sourceTree = "<group>"; };
 		D2C67D3364DB41C3BB90B99C /* Shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = "Shared.xcconfig"; path = "Shared.xcconfig"; sourceTree = "<group>"; };
@@ -225,6 +271,7 @@
 				0EC869F91FE1586BE15C8677 /* Shell */,
 				4300180A9966B3D5DF19AB26 /* Theme */,
 				E7030148D39C574FFE66C0D5 /* UI */,
+				50583F9877C6F75EBE171FAF /* Vehicle */,
 				CB0D066169D3247984513AB9 /* DriverApp.entitlements */,
 				84ECFFBEA04E665A4A91B394 /* DriverApp.swift */,
 				89C110EC442B67250E0FBBD9 /* DriverAppDelegate.swift */,
@@ -236,7 +283,11 @@
 		EEE0C83EC7B2A8AD340676DE /* Capture */ = {
 			isa = PBXGroup;
 			children = (
+				726F65135E87D7F9FF816292 /* CameraAuthorisation.swift */,
 				C6ED0DE8E1336FC38114BB37 /* DocumentCapture.swift */,
+				569E4FEDD603F874555E6F6E /* DocumentImaging.swift */,
+				B60897F997DE4B88FD099299 /* DocumentScannerModel.swift */,
+				06CE534043E01F2C2D9D2EFD /* DocumentScannerScreen.swift */,
 			);
 			path = "Capture";
 			sourceTree = "<group>";
@@ -367,13 +418,33 @@
 				F98D462C67E17D73304A396D /* FormControls.swift */,
 				7CB0DA5A8F2C7753C9CA14D4 /* Localisation.swift */,
 				386245D1C07D23FF659FA353 /* OnboardingControls.swift */,
+				6595D289D8F8244DE03BC4DF /* VehicleControls.swift */,
 			);
 			path = "UI";
+			sourceTree = "<group>";
+		};
+		50583F9877C6F75EBE171FAF /* Vehicle */ = {
+			isa = PBXGroup;
+			children = (
+				640CC9BE709AFDB3BEBC57CF /* ActiveVehicleStore.swift */,
+				20218F4C756485D90D4868D6 /* VehicleDestinationView.swift */,
+				CE862E617C6DA71E7F51E4C4 /* VehicleLabels.swift */,
+				C6C2A5F4BB76C22170CDB9C5 /* VehicleOnboardingModel.swift */,
+				7274F4E08ACB6EE3A8810FCA /* VehicleOnboardingRepository.swift */,
+				3F0CF3ACBBA92FE70D4FF6F5 /* VehicleOnboardingScreen.swift */,
+				CC63BD88B49DD41E027A90E7 /* VehicleOnboardingSession.swift */,
+				B7EE22B157BEBD48D2575DC9 /* VehicleOnboardingStatusModel.swift */,
+				154DF3DF8925A94D392EAB07 /* VehicleOnboardingStatusScreen.swift */,
+				E4F3AD1CFC08CA574047244E /* VehiclesModel.swift */,
+				36E667488B8830E71C99994E /* VehiclesScreen.swift */,
+			);
+			path = "Vehicle";
 			sourceTree = "<group>";
 		};
 		8A4505F112D2FBD27635E508 /* DriverAppTests */ = {
 			isa = PBXGroup;
 			children = (
+				F9B12724F0FF8F2A7551A3F0 /* DocumentScannerModelTests.swift */,
 				613BE313CC4BD8303D3A8370 /* DriverEnvironmentTests.swift */,
 				898485DEC1B14DBE9CF33201 /* LanguageCityModelTests.swift */,
 				B1A7352879A3C3EDE135A4F3 /* LocalizationTests.swift */,
@@ -387,6 +458,12 @@
 				C8A57AD017BD058976F01619 /* ProfileSetupModelTests.swift */,
 				CCBB0FA4D9DEB4B1814C95A8 /* PushRouterTests.swift */,
 				2D526434D4088A6B7B5B16B5 /* ThemeTokenTests.swift */,
+				2AE38ADAF67B25231D699E77 /* VehicleLabelTests.swift */,
+				95BABF81674CD9A06EDD8836 /* VehicleNavigationTests.swift */,
+				39828EF43E1BBAEB99A69DDA /* VehicleOnboardingModelTests.swift */,
+				790EF5746DE65D68741817FF /* VehicleOnboardingStatusModelTests.swift */,
+				3DFF5375B672D052387BB558 /* VehicleTestKit.swift */,
+				10E714F616C58490454CB4F0 /* VehiclesModelTests.swift */,
 			);
 			path = "DriverAppTests";
 			sourceTree = "<group>";
@@ -521,7 +598,11 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				21E489F7B5C430C5435597B5 /* CameraAuthorisation.swift in Sources */,
 				0F8A7C04C2B3BF3395AD43C8 /* DocumentCapture.swift in Sources */,
+				55644072A55FA37D11AF5EE2 /* DocumentImaging.swift in Sources */,
+				EBAF3D9EB4BBA1F195E315F7 /* DocumentScannerModel.swift in Sources */,
+				09F639B06D85B625C3A9F993 /* DocumentScannerScreen.swift in Sources */,
 				B7A393E253A163E613E6508C /* DriverEnvironment.swift in Sources */,
 				163CFB25666B22BED1EEC593 /* DriverGraph.swift in Sources */,
 				4F128007D6E4C1DEE8463FCB /* DriverApp.swift in Sources */,
@@ -572,6 +653,18 @@
 				DD2BC65A8D1ABDF7BCA3CECC /* FormControls.swift in Sources */,
 				4B73B13F55F3A03A218479F3 /* Localisation.swift in Sources */,
 				CCAC00824DC736346AC16487 /* OnboardingControls.swift in Sources */,
+				F54D603516C0EF98814B96B1 /* VehicleControls.swift in Sources */,
+				2277C914CD631E70C099FF3B /* ActiveVehicleStore.swift in Sources */,
+				F2C248B17E8F752C94B62507 /* VehicleDestinationView.swift in Sources */,
+				914A8FB5A884BB223209188F /* VehicleLabels.swift in Sources */,
+				0FD348213F7106DA31801970 /* VehicleOnboardingModel.swift in Sources */,
+				E3E90A279F17AB9A54235420 /* VehicleOnboardingRepository.swift in Sources */,
+				5F2989EC4DA753D022368E5B /* VehicleOnboardingScreen.swift in Sources */,
+				051B5BBD13657FEC46F0E8CF /* VehicleOnboardingSession.swift in Sources */,
+				E5D0268F02F2C93D8DD53EB2 /* VehicleOnboardingStatusModel.swift in Sources */,
+				787E0356C0F32DACCB4D8B31 /* VehicleOnboardingStatusScreen.swift in Sources */,
+				EA0B1BA95691D306905FD6E9 /* VehiclesModel.swift in Sources */,
+				BEEDFC8D7A86192CA25E8DAC /* VehiclesScreen.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -579,6 +672,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				48133B8D3B1556E8A7054F2C /* DocumentScannerModelTests.swift in Sources */,
 				C2C30F86AB7DCFFD8BAA7FAB /* DriverEnvironmentTests.swift in Sources */,
 				315FDD94FCB416C248E3EE70 /* LanguageCityModelTests.swift in Sources */,
 				998F368FEB919F48A7B6F42E /* LocalizationTests.swift in Sources */,
@@ -592,6 +686,12 @@
 				7B6323648A9CD95CE851DFC0 /* ProfileSetupModelTests.swift in Sources */,
 				23FD7F044415A4AC029EBEA3 /* PushRouterTests.swift in Sources */,
 				10262BD32DE9AF51BE826EBD /* ThemeTokenTests.swift in Sources */,
+				91BE4A2678D7962B0F86F238 /* VehicleLabelTests.swift in Sources */,
+				465DD0CCD34A1A8616BAD5AB /* VehicleNavigationTests.swift in Sources */,
+				3D9EADCC01C321E123FA5D81 /* VehicleOnboardingModelTests.swift in Sources */,
+				CA41D97C48D6D7FC1FA8BE79 /* VehicleOnboardingStatusModelTests.swift in Sources */,
+				8D46049658586069677A5703 /* VehicleTestKit.swift in Sources */,
+				F497D6290159F0B0BC0FCE8E /* VehiclesModelTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

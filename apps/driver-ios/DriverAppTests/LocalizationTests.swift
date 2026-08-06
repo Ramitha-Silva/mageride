@@ -70,6 +70,9 @@ final class LocalizationTests: XCTestCase {
             "CFBundleDisplayName",
             "NSLocationWhenInUseUsageDescription",
             "NSLocationAlwaysAndWhenInUseUsageDescription",
+            // C087 · SCR-DI-005. Presenting `VNDocumentCameraViewController` without this key
+            // terminates the app, so it is checked alongside the location pair rather than trusted.
+            "NSCameraUsageDescription",
         ]
         let en = strings(in: "en", table: "InfoPlist")
         let si = strings(in: "si", table: "InfoPlist")

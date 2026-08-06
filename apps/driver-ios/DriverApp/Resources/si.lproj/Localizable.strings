@@ -123,3 +123,124 @@
 "error_user_blocked" = "මෙම අංකයෙන් පිවිසිය නොහැක. සහාය අමතන්න.";
 "error_validation_failed" = "ඔබ ඇතුළත් කළ තොරතුරු පරීක්ෂා කර නැවත උත්සාහ කරන්න.";
 "error_image_too_large" = "එම පින්තූරය විශාල වැඩියි. තව ටිකක් ඈතට වී නැවත ගන්න.";
+
+/*
+  MageRide Driver — iOS · C087 driver-ios-vehicle-onboarding. සිංහල.
+
+  Same keys and the same translations as `apps/driver-android/src/main/res/values-si/strings.xml`.
+  See the English file for what this block covers, which four Android keys are deliberately absent,
+  and why `%1$s` is written `%1$@` on this platform.
+*/
+
+"action_cancel" = "අවලංගු කරන්න";
+
+"vehicle_type_bus" = "බස් රථය";
+"vehicle_type_train" = "දුම්රිය";
+
+"status_not_captured" = "ගෙන නැත";
+"mode_c_badge" = "මාදිලි C";
+
+"capture_title" = "ගන්න: %1$@";
+"capture_title_generic" = "ලේඛනය ගන්න";
+"capture_hint" = "මුළු ලේඛනයම රාමුවට පිරෙන ලෙස කොන් ඇදගෙන යන්න";
+"capture_failed" = "එම ඡායාරූපය භාවිතා කළ නොහැකි විය. නැවත ගන්න.";
+"capture_permission_title" = "කැමරාවට අවසර දෙන්න";
+"capture_permission_body" = "ස්කෑනරය ඔබේ ලේඛනය කෙළින් කරන නිසා විස්තර පළමු වරටම කියවා ගත හැකිය.";
+"capture_permission_allow" = "කැමරාවට අවසර දෙන්න";
+"capture_from_gallery" = "ඒ වෙනුවට ගැලරියෙන් තෝරන්න";
+"capture_target_licence_front" = "බලපත්‍රයේ ඉදිරිපස";
+"capture_target_licence_back" = "බලපත්‍රයේ පිටුපස";
+"capture_target_insurance" = "රක්ෂණය";
+"capture_target_revenue_licence" = "ආදායම් බලපත්‍රය";
+"capture_target_vehicle_front" = "වාහනයේ ඉදිරිපස";
+"capture_target_vehicle_back" = "වාහනයේ පිටුපස";
+
+"vehicle_onboard_step_of" = "පියවර %1$d න් %2$d · %3$@";
+"vehicle_onboard_title" = "රියදුරු වාහනය එක් කරන්න";
+"vehicle_onboard_insurance_title" = "රක්ෂණය";
+"vehicle_onboard_revenue_title" = "ආදායම් බලපත්‍රය";
+"vehicle_onboard_photos_title" = "වාහනයේ ඡායාරූප";
+"vehicle_onboard_details_caption" = "වාහන විස්තර";
+"vehicle_onboard_insurance_caption" = "රක්ෂණ කාඩ්පත හෝ ලේඛනය";
+"vehicle_onboard_revenue_caption" = "වාහනයේ ආදායම් බලපත්‍රය";
+"vehicle_onboard_photos_caption" = "ඉදිරිපස සහ පිටුපස, අංක තහඩුව පෙනෙන සේ";
+"vehicle_onboard_cta_details" = "ඉදිරියට · රක්ෂණය";
+"vehicle_onboard_cta_insurance" = "සුරකින්න · ආදායම් බලපත්‍රය";
+"vehicle_onboard_cta_revenue" = "සුරකින්න · වාහන ඡායාරූප";
+"vehicle_onboard_cta_submit" = "සුරකා සමාලෝචනයට යොමු කරන්න";
+"vehicle_onboard_type_label" = "වාහන වර්ගය";
+"vehicle_onboard_registration_label" = "ලියාපදිංචි අංකය";
+"vehicle_onboard_mode_c_title" = "රියදුරු වාහනය";
+"vehicle_onboard_mode_c_body" = "මාදිලි C යනු ඔබේම රියදුරු වාහනයයි, එය මෙම යෙදුමෙන්ම එක් කරයි. බස්, පාසල් හා කාර්ය මණ්ඩල වෑන් සහ ඒවායේ මාර්ග බලපත්‍ර හසුරුවනු ලබන්නේ Fleet Portal එකෙනි — මෙහි බලපත්‍ර හෝ ට්‍රැකර් ක්ෂේත්‍රයක් නැත.";
+"vehicle_onboard_insurance_slot" = "රක්ෂණ ලේඛනය";
+"vehicle_onboard_revenue_slot" = "ආදායම් බලපත්‍රය";
+"vehicle_onboard_photos_slot" = "ඉදිරිපස හා පිටුපස ඡායාරූප";
+"vehicle_onboard_photo_front" = "ඉදිරිපස හා තහඩුව";
+"vehicle_onboard_photo_back" = "පිටුපස හා තහඩුව";
+"vehicle_onboard_plate_match" = "මෙම ඡායාරූපවලින් කියවන අංක තහඩුව %1$@ සමඟ ගැළපේදැයි පරීක්ෂා කරයි. නොගැළපේ නම්, මෙම පියවර නිලධාරියෙකුගේ පරීක්ෂාවට යොමු වේ.";
+"vehicle_onboard_extract_title" = "ඔබේ ලේඛනයෙන් කියවා ගත් දේ";
+"vehicle_onboard_correction_supporting" = "ලේඛනයේ ඇත්ත වශයෙන්ම ඇති දේ ටයිප් කරන්න. නිලධාරියෙක් එය පරීක්ෂා කරයි.";
+"vehicle_onboard_pending_title" = "පරීක්ෂාව සඳහා රඳවා ඇත";
+"vehicle_onboard_pending_body" = "මෙම ලේඛනයේ යමක් පැහැදිලිව කියවා ගත නොහැකි වූ නිසා නිලධාරියෙක් එය පරීක්ෂා කරයි. ඒ අතරතුර ඔබට ඉදිරියට යා හැකිය.";
+
+"vehicle_field_policy_no" = "ඔප්පු අංකය";
+"vehicle_field_insurer" = "රක්ෂණ සමාගම";
+"vehicle_field_revenue_no" = "බලපත්‍ර අංකය";
+"vehicle_field_plate_text" = "කියවූ තහඩුව";
+"vehicle_field_plate_match" = "තහඩු පරීක්ෂාව";
+"vehicle_field_confidence" = "නිරවද්‍යතාව";
+"vehicle_confidence_doubtful" = "%1$@ — සැක සහිතයි";
+"vehicle_plate_matched" = "ගැළපේ";
+"vehicle_plate_mismatch" = "නොගැළපේ";
+
+"vehicle_status_title" = "වාහනය සමාලෝචනයේ";
+"vehicle_status_approved_title" = "වාහනය අනුමතයි";
+"vehicle_status_verifying" = "ඔබේ ලේඛන පරීක්ෂා කරමින්…";
+"vehicle_status_approved_caption" = "සේවයට සූදානම්";
+"vehicle_status_documents" = "ලේඛන සත්‍යාපනය (%1$d)";
+"vehicle_status_pending_banner" = "නිලධාරියෙකුගේ පරීක්ෂාවට රඳවා ඇත: %1$d. ඔබට දැනුම් දෙනු ලැබේ.";
+"vehicle_status_auto_approve" = "හතරම සත්‍යාපනය වූ විට වාහනය රැඳී සිටීමකින් තොරව තනිවම අනුමත වී “මගේ වාහන” තුළ දිස් වේ.";
+"vehicle_status_rejected_title" = "ආපසු එවා ඇත";
+"vehicle_status_resume" = "ඉතිරි පියවර සම්පූර්ණ කරන්න";
+"vehicle_status_my_vehicles" = "මගේ වාහන වෙත යන්න";
+"vehicle_status_unknown" = "ලේඛනවල තත්ත්වය බැලීමට “මගේ වාහන” වෙතින් වාහනයක් විවෘත කරන්න.";
+"vehicle_document_details" = "වාහන විස්තර (වර්ගය හා අංකය)";
+"vehicle_document_insurance" = "රක්ෂණය";
+"vehicle_document_revenue" = "ආදායම් බලපත්‍රය";
+"vehicle_document_photos" = "ඉදිරිපස හා පිටුපස ඡායාරූප";
+"verdict_verified" = "සත්‍යාපිතයි";
+"verdict_pending_review" = "නිලධාරියෙකු ළඟ";
+"verdict_pending_input" = "උඩුගත කර නැත";
+
+"vehicles_title" = "මගේ වාහන";
+"vehicles_add" = "වාහනයක් එක් කරන්න";
+"vehicles_one_live" = "එකවර ක්‍රියාත්මක විය හැක්කේ එක් වාහනයකට පමණි";
+"vehicles_mine_label" = "මගේ වාහන";
+"vehicles_assigned_label" = "තාවකාලිකව මට පවරා ඇති";
+"vehicles_assigned_until" = "%1$@ · %2$@ දක්වා";
+"vehicles_fleet_badge" = "වාහන සමූහය";
+"vehicles_select" = "තෝරන්න";
+"vehicles_resume" = "ඉදිරියට";
+"vehicles_view_status" = "ලේඛන";
+"vehicles_deactivate" = "ඉවත් කරන්න";
+"vehicles_deactivate_title" = "මෙම වාහනය ඉවත් කරන්නද?";
+"vehicles_deactivate_body" = "%1$@ සිතියමෙන් සහ ඔබේ ලැයිස්තුවෙන් ඉවත් වේ. ලියාපදිංචි අංකය නැවත භාවිතයට නිදහස් වේ.";
+"vehicles_swipe_hint" = "ඉවත් කිරීමට හෝ ලේඛන බැලීමට පේළියක් තිරස්ව අදින්න.";
+"vehicles_active_now" = "දැන් ක්‍රියාත්මකයි";
+"vehicles_incomplete" = "අසම්පූර්ණයි";
+"vehicles_incomplete_step" = "අසම්පූර්ණයි · පියවර %1$d න් %2$d";
+"vehicles_empty_title" = "තවම වාහන නැත";
+"vehicles_empty_body" = "ඔබේම රියදුරු වාහනය එක් කරන්න, නැතහොත් එකක් පවරන තෙක් හෝ බෙදාගන්නා තෙක් රැඳී සිටින්න.";
+"vehicles_onboard_prompt_title" = "රියදුරු වාහනයක් එක් කරන්නද?";
+"vehicles_onboard_prompt_body" = "ඔබට වාහන නොමැත. දැන් ඔබේම රියදුරු වාහනය එක් කිරීමට කැමතිද?";
+"vehicles_onboard_prompt_yes" = "ඔව්, එක් කරන්න";
+"vehicles_onboard_prompt_not_now" = "දැන් නොවේ";
+"vehicle_registration_pending" = "පරීක්ෂා වෙමින්";
+"vehicle_registration_approved" = "අනුමතයි";
+"vehicle_registration_rejected" = "ආපසු එවා ඇත";
+"vehicle_registration_deactivated" = "ඉවත් කර ඇත";
+
+"error_registration_exists" = "එම ලියාපදිංචි අංකය දැනටමත් ක්‍රියාකාරී වාහනයකට තිබේ.";
+"error_mode_not_allowed" = "මෙහිදී ලියාපදිංචි කළ හැක්කේ ඔබේම රියදුරු (මාදිලි C) වාහනය පමණි. බස්, පාසල් වෑන් සහ මාර්ග බලපත්‍ර හසුරුවනු ලබන්නේ Fleet Portal එකෙනි.";
+"error_not_owner" = "මෙම වාහනය වෙනස් කිරීමට ඔබට අයිතියක් නැත.";
+"error_vehicle_not_found" = "එම වාහනය තවදුරටත් ලේඛනගත කර නැත.";

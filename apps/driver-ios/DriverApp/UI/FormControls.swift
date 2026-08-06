@@ -213,9 +213,14 @@ struct CaptureTile: View {
 
 /// The wireframe's `.card.fill` with a coloured title — the "✦ AI-extracted" and "⚑ needs
 /// checking" panels.
+///
+/// **`titleKey` is optional (Δ C087) and the header row disappears with it.** Several of the same
+/// `.card.fill` panels carry no title in the wireframe — SCR-DI-004's Mode-C explainer, SCR-DI-004c's
+/// plate-match note, SCR-DI-006's two banners — and an untitled card drawn as a second shape would
+/// be two card styles for one CSS class. Existing callers pass a `String` and are unaffected.
 struct NoticeCard<Content: View>: View {
 
-    let titleKey: String
+    var titleKey: String?
     let symbolName: String
     let accent: Color
     var fill: Color = MageRideColor.surfaceVariant
@@ -226,8 +231,10 @@ struct NoticeCard<Content: View>: View {
             HStack(spacing: MageRideSpacing.xxs) {
                 Image(systemName: symbolName)
                     .font(.caption)
-                Text(key: titleKey)
-                    .mageFont(.label)
+                if let titleKey {
+                    Text(key: titleKey)
+                        .mageFont(.label)
+                }
             }
             .foregroundStyle(accent)
 

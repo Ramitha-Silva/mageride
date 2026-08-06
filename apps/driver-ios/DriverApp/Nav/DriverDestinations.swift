@@ -29,10 +29,11 @@ struct DriverDestinationView: View {
             OnboardingDestinationView(route: route)
 
         // ---- C087 · vehicle onboarding -----------------------------------------------
-        case .vehicleOnboarding: placeholder("SCR-DI-004…004c · vehicle onboarding")
-        case .documentCapture: placeholder("SCR-DI-005 · document capture")
-        case .vehicleOnboardingStatus: placeholder("SCR-DI-006 · onboarding status")
-        case .vehicles: placeholder("SCR-DI-026 · my vehicles")
+        //
+        // One arm for all four, and a sub-view rather than four inline screens — the same reason
+        // cluster 1 takes one arm above.
+        case .vehicleOnboarding, .documentCapture, .vehicleOnboardingStatus, .vehicles:
+            VehicleDestinationView(route: route)
 
         // ---- C088 · dashboard / dispatch ---------------------------------------------
         case .home: placeholder("SCR-DI-010 · dashboard")

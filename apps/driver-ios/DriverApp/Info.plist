@@ -79,6 +79,19 @@
     </dict>
 
     <!--
+      C087 · SCR-DI-005. `VNDocumentCameraViewController` opens an `AVCaptureSession` of its own, and
+      an app that presents one without this key is terminated by the system rather than refused — so
+      this is the difference between a driver being asked for the camera and the app disappearing on
+      the first capture tile they tap.
+
+      There is deliberately NO `NSPhotoLibraryUsageDescription`: the gallery fallback is `PhotosPicker`
+      (PHPicker), which runs out of process and grants access to the one image the driver chose. A
+      purpose string with no API behind it asks for a permission this app does not want.
+    -->
+    <key>NSCameraUsageDescription</key>
+    <string>The document scanner uses the camera to photograph your licence, insurance, revenue licence and vehicle. Nothing is captured until you tap the shutter.</string>
+
+    <!--
       Every build-time value the app reads, in one dictionary, interpolated from the xcconfig.
       `DriverApp/DI/DriverEnvironment.swift` is the only file allowed to read it — a build flag read
       at two call sites is a flag that gets overridden at one of them.

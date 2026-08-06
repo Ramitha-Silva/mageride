@@ -103,3 +103,33 @@ enum MageRideVehicleColor {
         Color(name, bundle: MageRideColor.bundle)
     }
 }
+
+/// SCR-DI-005's viewfinder palette (C087).
+///
+/// **The one screen in this app that is not on the semantic scheme**, and the wireframe is explicit
+/// about it: `driver_ios.html` draws the capture cell on `#0f1115` with a `#FFB68A` accent and a grey
+/// hint, and a scanner that turned white in daylight would be a different screen twice a day. A
+/// viewfinder has one appearance, exactly as the vehicle legend does.
+///
+/// Still colour *assets* and not hexes in Swift, which is this target's rule without an exception:
+/// the catalogue is where a colour is declared, and `ThemeTokenTests` is what reads one back. The
+/// same four values are `apps/driver-android/.../ui/theme/Color.kt`'s `ScannerColors`, plus the white
+/// that file spells inline.
+enum MageRideScannerColor {
+
+    /// The screen the viewfinder sits on.
+    static let background = named("scannerBackground")
+
+    /// The crop quad, the flash and `Use photo ›`.
+    static let accent = named("scannerAccent")
+
+    /// The hint line and any control that is not yet live.
+    static let hint = named("scannerHint")
+
+    /// Titles and `Retake`, at full contrast on the dark screen.
+    static let onScanner = named("scannerOnScanner")
+
+    private static func named(_ name: String) -> Color {
+        Color(name, bundle: MageRideColor.bundle)
+    }
+}

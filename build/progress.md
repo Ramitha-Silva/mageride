@@ -113,7 +113,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C084 | passenger-android-comms-safety-support | 4a | DONE | 2026-08-06 | **291 tests green** (was 265; 26 new across 3 suites), `assembleDebug` + `detekt` + `ktlintCheck` clean. SCR-PA-028/029/030/030a built and SCR-PA-031 finished to its frame; **the last three placeholders are gone, so every route in `PassengerNavHost` now draws a real screen** and `RoutePlaceholder` was deleted with them. **AL-48 end to end**: the VoIP screen's signalling half is real and its media half reports `NO_MEDIA_CLIENT`, so *"Call normally instead?"* is the only outcome this build reaches — a **dependency wall**, not a decision (`io.livekit:livekit-android` needs JitPack and `settings.gradle.kts` is C001's), exactly as C075 found on the driver side; the fallback writes a `direct_dial` row after a `voip_failed` one so the platform can tell a fallback from a preference. **SCR-PA-015's `⛨ SOS` navigates now rather than raising the alarm inline** — one caller of `POST /v1/sos` is what keeps one emergency to one row on the operator's live feed — and D-34's share link is minted **after** the alarm, best-effort, because the five-second budget is not for a URL. **This app passes `?lang=` on the FAQ where the driver app deliberately does not**: AL-26 makes the passenger's language device-first and the server write is allowed to lag, so the FAQ is asked for in the language the app is *drawing* in. **Three gaps**: `POST /v1/sos` has no positionless form (BR-29.4 contemplates one for the web surface only), no contract mints the wireframe's `#TK-4521` ticket number or `PAX-90431-0617` trip number, and no passenger-facing category routes to the Finance queue so SCR-PA-030 has no quick action. Also fixed a pre-existing flake in C083's `SettingsViewModelTest` |
 | C085 | driver-ios-shell | 4b | PARTIAL | 2026-08-06 | **Written in full; NOT compiled — this host cannot build iOS** (root CLAUDE.md), so no DoD line is verified and the status stays PARTIAL until the first `xcodebuild` on macOS. What *is* verified here: `:shared:testDebugUnitTest detekt ktlintCheck` green and `:shared:compileKotlinIosArm64` type-checking every Kotlin line added. **`:shared:assemble`'s three-year-old metadata defect is fixed** — C025 recorded it as blocking `assembleXCFramework`, and it is C085 that hits it: the three `expect class`es that inherit an interface now re-declare its members and the nine actuals are `actual override`. **`shared/kmp/src/iosMain/di` is new and is the seam `Koin.kt` anticipated**: Swift cannot build a Koin module or resolve one (`module`/`single`/`get` are all inline+reified and are not exported at all), so `startIosGraph(IosAppConfig)` takes primitives and answers typed properties, and `IosFlowWatcher<T>` is how Swift collects a `Flow`. **The position pipeline is Kotlin in `iosMain`, not Swift** — every collaborator is on the Kotlin side of the bridge and `Duration`/nullable-`Int`/`copy` all cross it lossily; Swift owns the fix source and the socket. 26 Swift files + 6 XCTest suites, an `.xcodeproj` **generated from the tree** by a committed script, the §0.2 palette as an asset catalogue the test reads back, and si/ta/en `Localizable.strings` + `InfoPlist.strings`. **iOS 16.0** chosen as the deployment target (C000 recorded that no spec states one). Two wireframe/spec conflicts and three gaps recorded — see the handoff |
 | C086 | driver-ios-auth-onboarding | 4b | PARTIAL | 2026-08-06 | **Written in full; NOT compiled — this host cannot build iOS** (root CLAUDE.md), so the DoD is unverified and the status stays PARTIAL until `xcodebuild … test` on macOS. What *is* verified here: `:shared:testDebugUnitTest detekt ktlintCheck` green (822 tests, unchanged) and `:shared:compileKotlinIosArm64` type-checking both Kotlin additions. SCR-DI-001/002/003/003a/007 built — 25 Swift files, **8 XCTest suites** across 7 test files, **91 keys × si/ta/en** (Android's key names and Android's translations, so the two apps' string tables diff). **Every seam a model depends on is a Swift protocol**, because a Kotlin *class* cannot be stood in for from Swift and `AuthSessionManager` is one — `SharedDriverSessions` / `ApiOnboardingRepository` / `ApiDriverProfileRepository` convert and forward and decide nothing. **A Kotlin exception does not cross the bridge as itself** (`NSError.userInfo["KotlinException"]`), which every later screen group needs — the unwrap is `OnboardingErrors.kotlinCause`. **Two shared-module additions, both because Swift cannot express the operation**: `capturedDocument(…)` in `iosMain` (a `KotlinByteArray` has one Objective-C message per byte and a licence photo is three million of them) and `Conditional.etagOrNull` (a generic Kotlin interface exports with its type parameter erased, so `as? Conditional.Value<T>` has no spelling in Swift). **`DriverLocale` is the Section-C answer to `Activity.recreate()`** — iOS has no per-app locale API on the 16.0 floor, so the app bundle's string lookups are redirected now and `AppleLanguages` is written for the next launch. **SCR-DI-007 has two rows, not Android's five**, which is D2' SCR-DI-007's own iOS clause. One fence deliberately held: the AL-28 carousel stays on bundled copy to match C068 even though MCS-03 has since shipped `GET /v1/content/onboarding/driver` — **both driver apps should move together**, see the handoff
-| C087 | driver-ios-vehicle-onboarding | 4b | PENDING | | |
+| C087 | driver-ios-vehicle-onboarding | 4b | PARTIAL | 2026-08-06 | **Written in full; NOT compiled — this host cannot build iOS** (root CLAUDE.md), so the DoD is unverified and the status stays PARTIAL until `xcodebuild … test` on macOS. What *is* verified here: `:shared:testDebugUnitTest detekt ktlintCheck` green (822 tests, unchanged) and `:shared:compileKotlinIosArm64` type-checking the one Kotlin addition. SCR-DI-004/004a/004b/004c/005/006/026/026a built — **16 Swift files, 6 XCTest suites, 104 keys × si/ta/en** (C069's key names and C069's translations). **The crop quadrilateral is VisionKit's**: `VNDocumentCameraViewController` is what the cell's own `Δ iOS` clause names, and it supplies the auto-proposed quad, the four draggable corners, the flash, the Retake/Use-photo bar and the perspective transform — so C069's `CropQuad` + `DocumentEdgeDetector` + the warp (≈550 lines) have **no counterpart here**, and three of its capture strings have no renderer because iOS draws and localises those buttons itself. **What is not free is AL-43's provenance stamp**, which is written in `DocumentScannerModel.onScanned` and nowhere else. **`NSCameraUsageDescription` was missing from `Info.plist`** and presenting the scanner without it terminates the app rather than refusing — added, with its three translations, and `LocalizationTests` now checks it. **SCR-DI-026 is a `List`** (its `Δ iOS` clause is `.swipeActions`), the only one in either cluster. One shared-module addition, in `iosMain`, because Kotlin default arguments do not survive the export: `colomboBusinessDate(at:)`, so D-38's zone is not copied into Swift. Three wireframe deviations and one C085 defect recorded — see the handoff |
 | C088 | driver-ios-dashboard-dispatch | 4b | PENDING | | |
 | C089 | driver-ios-delivery | 4b | PENDING | | |
 | C090 | driver-ios-jobs-level-earnings | 4b | PENDING | | |
@@ -13568,3 +13568,151 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   *types* rather than `@MainActor` initialisers, because every member reads a main-actor model and a
   helper added later would otherwise be the one non-isolated member that stops compiling. C103 turns
   the setting up; the annotations are written for it.
+
+---
+
+- **Component:** C087 driver-ios-vehicle-onboarding — 2026-08-06
+- **Status:** PARTIAL — **written in full and not compiled.** The Verify line is
+  `xcodebuild -project apps/driver-ios/DriverApp.xcodeproj -scheme DriverApp -destination
+  'platform=iOS Simulator,name=iPhone 15' test`, which needs macOS; this repo is built on the
+  Contabo Linux VPS (root CLAUDE.md), so **no DoD line is verified** and the status stays PARTIAL
+  until the first `xcodebuild` on a Mac — exactly as C085 and C086 stand. What *is* verified on this
+  host: `./gradlew :shared:testDebugUnitTest detekt ktlintCheck` green (**822 tests, unchanged**) and
+  `:shared:compileKotlinIosArm64` type-checking the one Kotlin line added; the `.pbxproj` regenerated
+  from the tree (**67 app sources, 20 test sources**); the three `Localizable.strings` tables checked
+  against each other key-for-key, specifier-for-specifier (**195 keys × 3**, none blank, none left in
+  English); and every string key literal in every Swift file resolved against the table.
+- **Notes:**
+  **The crop quadrilateral is VisionKit's, and that is the largest single fact about this
+  component.** `specs/wireframes/driver_ios.html`'s SCR-DI-005 cell carries its own `Δ iOS` clause —
+  *"VisionKit `VNDocumentCameraViewController` (native drag-corner crop); perspective transform
+  applied on confirm"* — and the C069 handoff said the same thing forward ("the iOS half of the
+  scanner is smaller"). D2' §SCR-DI-005's sequence is that controller's own behaviour, step for step:
+  a live camera, an auto-proposed quad, four draggable corner handles, `Retake` / `Use photo`, and a
+  de-skewed page on confirm. So **`capture/CropQuad.kt`, `capture/DocumentEdgeDetector.kt`,
+  `capture/CameraXBinding.kt` and the perspective warp in `capture/DocumentImaging.kt` — about 550
+  lines of C069 — have no counterpart in this target**, and neither do the strings that name
+  Apple's own buttons (see below). `DocumentScannerScreen` is the wireframe's dark chrome *around*
+  the platform's scanner, because the one thing `VNDocumentCameraViewController` cannot say is
+  **which** document it is scanning, and *"Capture: Insurance"* is the whole reason the cell has a
+  title bar. What did not come free is the AL-43 provenance stamp, and it is written in exactly one
+  place: `DocumentScannerModel.onScanned` stamps `CaptureSource.cameraDragCrop`, `onPicked` stamps
+  `.gallery`, and no screen chooses either.
+
+  **`NSCameraUsageDescription` was absent from `Info.plist`, and that is a crash rather than a
+  refusal.** An app that presents an `AVCaptureSession` without the key is terminated by the system;
+  a driver would have watched the app disappear the first time they tapped a capture tile — including
+  on C086's Profile Setup, which has been shipping capture tiles into a route that had no scanner.
+  Added with its si/ta/en translations, and `LocalizationTests` now checks it beside the two location
+  strings rather than trusting it. **No `NSPhotoLibraryUsageDescription` was added**, deliberately:
+  the gallery fallback is `PhotosPicker`, which runs out of process and grants access to the one
+  image the driver chose, so a purpose string there would ask for a permission this app does not
+  want.
+
+  **Three wireframe deviations, each recorded rather than filed, and none of them a behaviour
+  change.**
+  1. **SCR-DI-004's caption listing ten vehicle types is not rendered.** The wireframe prints
+     *"motorbike · three-wheeler · flex · sedan · mini van · van · truck · mini truck · bus · train
+     (AL-09)"* under the type row, and `bus` / `train` are Mode A — `POST /v1/vehicles` answers
+     `403 mode-not-allowed` for either (AL-27). Drawing that line would advertise two options the
+     picker cannot offer. The picker holds the eight `RideVehicleType`s, which is what C069 offers
+     too; the line reads as the wireframe telling a *reader* where the list comes from, the same way
+     SCR-DI-002's *"· from config.operating_cities"* does and C086 also left unrendered.
+  2. **SCR-DI-006 gains a refresh control and two CTAs the cell does not draw.** They are C069's,
+     for C069's reasons: a Pending document is confirmed by an officer minutes or days later and
+     US-2.14's push is what brings the driver back, so there has to be a way to look again; and the
+     screen needs a way onward to My Vehicles and, when a step is still `pending_input`, back into
+     the wizard. Behaviour parity with the Android screen is the DoD line that decided it.
+  3. **SCR-DI-026's `Remove` and `Documents` are swipe actions, not buttons.** That one is the
+     wireframe's own instruction — its `Δ iOS` clause is *"`.swipeActions` deactivate"* and its
+     footnote is *"Swipe a row to deactivate (US-2.16)"* — which is why this screen is the only
+     `List` in either cluster: `.swipeActions` exists nowhere else. Two keys are therefore new here
+     rather than ported (`vehicles_select`, `vehicles_swipe_hint`); both are the wireframe's own iOS
+     copy.
+
+  **Four Android string keys are deliberately absent, and all four are controls another party
+  draws.** `capture_flash`, `capture_retake` and `capture_use_photo` are
+  `VNDocumentCameraViewController`'s own buttons — iOS renders and localises them, including into
+  Sinhala and Tamil — and `capture_target_delivery_proof` belongs to the delivery cluster, which is
+  C089's on this platform and adds its own `DocumentCaptureTarget` case with it. C086 set the rule
+  this follows: a key with no renderer is a translation nobody can check.
+
+  **One shared-module addition, and it is there because Kotlin default arguments do not survive the
+  Objective-C export.** `shared/kmp/src/iosMain/…/util/IosBusinessDate.kt` adds
+  `colomboBusinessDate(at:)`. SCR-DI-026's *"Lanka Fleet (Pvt) Ltd · until 2026-06-30"* caption is a
+  business date, which D-38 fixes in **Asia/Colombo** and nowhere else; `BusinessCalendar.businessDate`
+  takes its zone as a defaulted parameter, so a Swift caller has to supply a
+  `Kotlinx_datetimeTimeZone` — and the only two ways to produce one on that side are to spell
+  `"Asia/Colombo"` in Swift (a second copy of the one thing D-38 fixes once) or to read
+  `BusinessCalendar.ZONE` back across the bridge to hand it straight back. One function is better
+  than either. It is type-checked by `:shared:compileKotlinIosArm64` on this host, which is the same
+  argument `IosCapturedDocument.kt` and `IosReconnectBackoff.kt` make.
+
+  **A C085 defect found and NOT fixed here, because it is C088's screen that renders it.**
+  `VehicleToken.wire` answers camel case (`ThreeWheeler`, `MiniVan`) and `:shared`'s
+  `VehicleType.wire` is snake case (`three_wheeler`, `mini_van`). Two things read that property:
+  `VehicleToken.forWire(_:)`, which therefore answers `nil` for three of the ten types, and
+  `VehicleLayers.markerColourExpression()`, which builds its MAP-03 match stops from
+  `token.wire.lowercased()` — `"threewheeler"` — against a GeoJSON attribute its own comment says
+  carries `VehicleType.name.lowercase()`, i.e. `"three_wheeler"`. **On the map that is a
+  three-wheeler, a mini van and a mini truck all drawn in the fallback grey.** `MapAndVehicleTokenTests`
+  pins the current spelling, so changing it is a C085 test edit as well as a code one, and the
+  screen that draws vehicle markers is C088's. C087 sidestepped it rather than papering over it:
+  `VehicleToken.forVehicleType(_:)` maps the ten `VehicleType` cases explicitly, which is the same
+  shape `VehicleColors.forType` has on Android. **C088 should fix `forWire` (or delete it in favour
+  of `forVehicleType`) before it renders a marker.**
+
+  **What C088 inherits, and what it must not re-invent.**
+  - **`ActiveVehicleStore.activeVehicleId` is D-03's single active publisher** and the registration
+    for the *"Live: 3W · ABC-1234"* chip. `VehiclesState.canGoOnline` is US-9.6's gate expressed
+    once and `VehicleSummary.canGoLive` is the per-vehicle rule behind it — **do not re-derive
+    either**. `DriverRoute.vehicles` is where the disabled toggle's prompt sends a driver with no
+    vehicle; SCR-DI-026a raises itself on an empty list, so there is one screen for "no vehicle"
+    rather than two.
+  - **The Menu tab (C093's SCR-DI-036) needs two rows the wireframe already names**: *My Vehicles →
+    `DriverRoute.vehicles`* and *Vehicle Onboarding (Mode C) → `DriverRoute.vehicleOnboarding`*. The
+    second is safe to point straight at the wizard, because `resume()` decides between resuming and
+    starting a new vehicle.
+  - **`DriverNavigator` gained three members** — `pop()`, `replaceTop(with:)` and `closeTakeover()`.
+    `replaceTop` is `popUpTo(x) { inclusive = true }` on a `NavigationPath`, and C088 wants it for
+    the same reason C087 did: winning an offer replaces Home rather than stacking on it.
+  - **`UI/VehicleControls.swift`** carries `StatusPill` + `StatusTone` (including `.info`, the
+    wireframe's `pill-status.info` resolved to §0.2's `secondary`), `ModeCBadge`, `StepProgress` and
+    `VehicleTypeDot`. `NoticeCard.titleKey` is now optional, so the untitled `.card.fill` the
+    wireframes draw everywhere is the same control rather than a second one.
+  - **`Vehicle/VehicleLabels.swift` is a table, not a layout**, and holds every step title, caption,
+    CTA, document name, verdict label, registration-status label and extracted-field label. A
+    `VehicleType`'s trilingual name is `"vehicle_type_" + wire`, which is now true for all **ten**
+    canonical types — C086 shipped only the eight ride-bookable ones, and a fleet vehicle assigned
+    to a driver (US-13.9) can be a bus or a train.
+
+  **Things a Mac will decide, and where to look first.** `SWIFT_STRICT_CONCURRENCY` is still
+  `minimal`, and the five new screen types are `@MainActor` *types* for C085's reason. Three bridge
+  spellings are the ones to check if a build fails: `RideVehicleType.companion.from(vehicleType:)`
+  (a Kotlin companion function), `IosBusinessDateKt.colomboBusinessDate(at:)` (a top-level function
+  in a new file facade), and `field.confidence?.doubleValue` (a nullable Kotlin `Double` boxes to
+  `KotlinDouble?`; the unbox is `ExtractedField.confidenceValue`, written once so no call site
+  forgets it). One runtime behaviour cannot be proven off a device either: `DocumentScannerScreen`
+  presents VisionKit as a `fullScreenCover` **inside** the SCR-DI-005 takeover, and a delivered scan
+  dismisses both in the same state change — worth watching on the first device run. And **App Attest
+  does not exist on the simulator**, which `POST /v1/vehicles` is attested by (D-30); it fails soft,
+  so the wizard's Step 1/4 still saves.
+
+  **Files —** shared: `src/iosMain/kotlin/lk/mageride/shared/util/IosBusinessDate.kt` (new). App,
+  new: `Capture/CameraAuthorisation.swift`, `Capture/DocumentImaging.swift`,
+  `Capture/DocumentScannerModel.swift`, `Capture/DocumentScannerScreen.swift`,
+  `UI/VehicleControls.swift`, `Vehicle/ActiveVehicleStore.swift`,
+  `Vehicle/VehicleDestinationView.swift`, `Vehicle/VehicleLabels.swift`,
+  `Vehicle/VehicleOnboardingModel.swift`, `Vehicle/VehicleOnboardingRepository.swift`,
+  `Vehicle/VehicleOnboardingScreen.swift`, `Vehicle/VehicleOnboardingSession.swift`,
+  `Vehicle/VehicleOnboardingStatusModel.swift`, `Vehicle/VehicleOnboardingStatusScreen.swift`,
+  `Vehicle/VehiclesModel.swift`, `Vehicle/VehiclesScreen.swift`, plus four `Scanner/*.colorset` in
+  `Resources/Assets.xcassets`. App, edited: `DI/DriverGraph.swift`, `Nav/DriverDestinations.swift`,
+  `Nav/DriverNavigator.swift`, `Onboarding/OnboardingErrors.swift`, `Theme/MageRideColor.swift`,
+  `Theme/MageRideSpacing.swift`, `UI/FormControls.swift`, `Info.plist`, the three
+  `Localizable.strings` and the three `InfoPlist.strings`. Tests, new:
+  `DriverAppTests/VehicleTestKit.swift`, `VehicleOnboardingModelTests.swift`,
+  `VehicleOnboardingStatusModelTests.swift`, `VehiclesModelTests.swift`, `VehicleLabelTests.swift`,
+  `DocumentScannerModelTests.swift`, `VehicleNavigationTests.swift`; edited:
+  `LocalizationTests.swift`. Plus `DriverApp.xcodeproj/project.pbxproj` (regenerated) and
+  `apps/driver-ios/CLAUDE.md`.

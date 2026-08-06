@@ -16,3 +16,7 @@
 "NSLocationWhenInUseUsageDescription" = "Your location puts you on the map and lets us send you nearby hires.";
 "NSLocationAlwaysAndWhenInUseUsageDescription" = "MageRide shares your location while you are online or on a trip so passengers can see you coming and the platform can pay you for the distance driven. It stops the moment you go offline.";
 "NSLocationTemporaryUsageDescriptionDictionary.PreciseForDispatch" = "Precise location is what lets a passenger find your vehicle at the pickup point.";
+
+/* C087 · SCR-DI-005. VisionKit's scanner opens a camera session; without this key the system
+   terminates the app instead of asking. The gallery fallback is PHPicker and needs no key. */
+"NSCameraUsageDescription" = "The document scanner uses the camera to photograph your licence, insurance, revenue licence and vehicle. Nothing is captured until you tap the shutter.";

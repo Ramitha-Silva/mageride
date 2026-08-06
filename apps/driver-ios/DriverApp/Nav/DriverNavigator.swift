@@ -67,6 +67,40 @@ final class DriverNavigator: ObservableObject {
         paths[tab] = NavigationPath()
     }
 
+    /// Pops the destination on top of the selected tab's stack.
+    ///
+    /// For a screen whose Back is its **own** — the Mode-C wizard's, which steps between four bodies
+    /// before it leaves at all (D2' §SCR-DI-004) — and which therefore hides the system's.
+    func pop() {
+        guard var path = paths[tab], !path.isEmpty else { return }
+        path.removeLast()
+        paths[tab] = path
+    }
+
+    /// Replaces the destination on top of the selected tab's stack with [route].
+    ///
+    /// The SwiftUI equivalent of `navigate(x) { popUpTo(current) { inclusive = true } }`, which is
+    /// what `DriverNavHost.kt` writes for the same three moves: the wizard handing over to
+    /// SCR-DI-006, and SCR-DI-006 handing on to either My Vehicles or the wizard. Replacing rather
+    /// than stacking is what stops a swipe back from SCR-DI-006 re-opening a step the driver has
+    /// already submitted.
+    ///
+    /// A cross-tab [route] cannot replace anything on this tab, so it is opened normally.
+    func replaceTop(with route: DriverRoute) {
+        guard route.tab == tab, !route.isPreSession, !route.isFullScreenTakeover else {
+            open(route)
+            return
+        }
+        pop()
+        open(route)
+    }
+
+    /// Dismisses whatever is presented over the whole app — SCR-DI-005 once it has delivered, and
+    /// the two C093 takeovers when they end.
+    func closeTakeover() {
+        takeover = nil
+    }
+
     /// Drops everything and returns to [route].
     ///
     /// C014 raises `RouteToLogin` for every way a session can end — logout, refresh failure,

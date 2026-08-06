@@ -58,11 +58,29 @@ final class DriverGraph: ObservableObject {
     /// SCR-DI-003a's upload, and the splash's "has this driver a profile?".
     let profiles: DriverProfileRepository
 
-    /// The seam between a capture slot and SCR-DI-005 (AL-43; the scanner itself is C087's).
+    /// The seam between a capture slot and SCR-DI-005 (AL-43).
     let captures = DocumentCaptureCoordinator()
 
     /// SCR-DI-007's two rows.
     let permissions: DriverPermissions
+
+    // MARK: - C087 · cluster 2
+    //
+    // The Mode-C wizard's data layer and the two holders its screens read across a navigation. Both
+    // holders are **process** singletons for `DocumentCaptureCoordinator`'s reason: the screen that
+    // set the value is not on screen while the screen that reads it is on top.
+
+    /// SCR-DI-004…004c, SCR-DI-006 and SCR-DI-026's reads and writes (AL-27, AL-30).
+    let vehicles: VehicleOnboardingRepository
+
+    /// Which vehicle SCR-DI-006 is about — the route carries no argument.
+    let vehicleSession = VehicleOnboardingSession()
+
+    /// D-03's single active publisher, chosen on SCR-DI-026 and read by C088's dashboard.
+    let activeVehicle: ActiveVehicleStore
+
+    /// SCR-DI-005's camera grant and whether VisionKit can run on this device at all.
+    let camera: CameraAuthoriser
 
     init(environment: DriverEnvironment = .current) {
         self.environment = environment
@@ -98,6 +116,9 @@ final class DriverGraph: ObservableObject {
         )
         self.profiles = ApiDriverProfileRepository(registry: shared.api.registry, iam: shared.api.iam)
         self.permissions = SystemDriverPermissions(pushTokens: pushTokens)
+        self.vehicles = ApiVehicleOnboardingRepository(registry: shared.api.registry)
+        self.activeVehicle = UserDefaultsActiveVehicleStore()
+        self.camera = SystemCameraAuthoriser()
 
         // Before the first frame, so a driver who chose සිංහල never sees an English one. This is
         // the earliest point at which it can happen — `DriverLocale` redirects the bundle every

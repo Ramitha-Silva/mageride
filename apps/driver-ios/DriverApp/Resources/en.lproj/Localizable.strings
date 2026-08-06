@@ -155,3 +155,151 @@
 "error_user_blocked" = "This number cannot sign in. Contact support.";
 "error_validation_failed" = "Check what you entered and try again.";
 "error_image_too_large" = "That image is too large. Take it again from a little further back.";
+
+/*
+  MageRide Driver — iOS · C087 driver-ios-vehicle-onboarding. English, the development region.
+
+  SCOPE. Cluster 2 only: SCR-DI-004…004c the Mode-C wizard, SCR-DI-005 the document scanner,
+  SCR-DI-006 the verdict list, SCR-DI-026/026a My Vehicles.
+
+  KEYS ARE C069'S. Same key names and the same translations as
+  `apps/driver-android/src/main/res/values*/strings.xml`, so a divergence between the two driver
+  apps is a diff rather than an archaeology exercise.
+
+  FORMAT SPECIFIERS ARE NOT. Android writes `%1$s` for a string argument; `String(format:)` reads
+  `%s` as a C string and would print rubbish, so every one of them is `%1$@` here. `%1$d` is the
+  same on both. `LocalizationTests` asserts each specifier survives into si and ta.
+
+  FOUR ANDROID KEYS ARE ABSENT, and each one is a control iOS draws for us. `capture_flash`,
+  `capture_retake` and `capture_use_photo` are VNDocumentCameraViewController's own buttons — it
+  localises them itself, in the driver's language — and `capture_target_delivery_proof` belongs to
+  the delivery cluster, which is C089's on this platform. A key with no renderer is a translation
+  nobody can check.
+
+  TWO KEYS ARE NEW HERE. `vehicles_select` and `vehicles_swipe_hint` are the wireframe's own iOS
+  copy: `driver_ios.html` labels an eligible row `Select ›` and puts deactivate on `.swipeActions`,
+  where Android draws a `Remove` text button that needs no announcing.
+*/
+
+/* Shared actions this cluster adds. */
+"action_cancel" = "Cancel";
+
+/* AL-09's two Mode-A vehicle types. The other eight are in the C086 block above; a fleet vehicle
+   temporarily assigned to a driver (US-13.9) can be either of these, and My Vehicles names it. */
+"vehicle_type_bus" = "Bus";
+"vehicle_type_train" = "Train";
+
+/* Shared status copy. */
+"status_not_captured" = "Not captured";
+"mode_c_badge" = "MODE C";
+
+/* SCR-DI-005 · the document scanner (AL-43). */
+"capture_title" = "Capture: %1$@";
+"capture_title_generic" = "Capture document";
+"capture_hint" = "Drag the corners so the whole document fills the frame";
+"capture_failed" = "That photo could not be used. Take it again.";
+"capture_permission_title" = "Allow camera";
+"capture_permission_body" = "The scanner straightens your document so the details can be read the first time.";
+"capture_permission_allow" = "Allow camera";
+"capture_from_gallery" = "Choose from gallery instead";
+"capture_target_licence_front" = "Licence front";
+"capture_target_licence_back" = "Licence back";
+"capture_target_insurance" = "Insurance";
+"capture_target_revenue_licence" = "Revenue licence";
+"capture_target_vehicle_front" = "Vehicle front";
+"capture_target_vehicle_back" = "Vehicle back";
+
+/* SCR-DI-004…004c · the Mode-C wizard. Mode C only (AL-27); no permit and no tracker field. */
+"vehicle_onboard_step_of" = "Step %1$d of %2$d · %3$@";
+"vehicle_onboard_title" = "Onboard standby vehicle";
+"vehicle_onboard_insurance_title" = "Insurance";
+"vehicle_onboard_revenue_title" = "Revenue licence";
+"vehicle_onboard_photos_title" = "Vehicle photos";
+"vehicle_onboard_details_caption" = "Vehicle details";
+"vehicle_onboard_insurance_caption" = "Insurance card or paper";
+"vehicle_onboard_revenue_caption" = "Vehicle revenue licence";
+"vehicle_onboard_photos_caption" = "Front and back, number plate visible";
+"vehicle_onboard_cta_details" = "Continue · Insurance";
+"vehicle_onboard_cta_insurance" = "Save and continue · Revenue licence";
+"vehicle_onboard_cta_revenue" = "Save and continue · Vehicle photos";
+"vehicle_onboard_cta_submit" = "Save and submit for review";
+"vehicle_onboard_type_label" = "Vehicle type";
+"vehicle_onboard_registration_label" = "Registration No";
+"vehicle_onboard_mode_c_title" = "Standby vehicle";
+"vehicle_onboard_mode_c_body" = "Mode C is your own standby vehicle, onboarded here in the app. Buses, school and staff vans and their route permits are handled in the Fleet Portal — there is no permit or tracker field here.";
+"vehicle_onboard_insurance_slot" = "Insurance document";
+"vehicle_onboard_revenue_slot" = "Revenue licence";
+"vehicle_onboard_photos_slot" = "Front and back photos";
+"vehicle_onboard_photo_front" = "Front and plate";
+"vehicle_onboard_photo_back" = "Back and plate";
+"vehicle_onboard_plate_match" = "The plate read from these photos is matched against %1$@. If it does not match, this step is held for an officer to check.";
+"vehicle_onboard_extract_title" = "Read from your document";
+"vehicle_onboard_correction_supporting" = "Type what the document actually says. An officer will check it.";
+"vehicle_onboard_pending_title" = "Held for checking";
+"vehicle_onboard_pending_body" = "Something on this document could not be read clearly, so an officer will check it. You can carry on in the meantime.";
+
+/* The `registry.document_fields` rows the extract cards draw (AL-29). */
+"vehicle_field_policy_no" = "Policy no";
+"vehicle_field_insurer" = "Insurer";
+"vehicle_field_revenue_no" = "Licence no";
+"vehicle_field_plate_text" = "Plate read";
+"vehicle_field_plate_match" = "Plate check";
+"vehicle_field_confidence" = "Confidence";
+"vehicle_confidence_doubtful" = "%1$@ — doubtful";
+"vehicle_plate_matched" = "Matches";
+"vehicle_plate_mismatch" = "Does not match";
+
+/* SCR-DI-006 · the four-document verdict list (Change 6/22). */
+"vehicle_status_title" = "Vehicle under review";
+"vehicle_status_approved_title" = "Vehicle approved";
+"vehicle_status_verifying" = "Checking your documents…";
+"vehicle_status_approved_caption" = "Ready to go online";
+"vehicle_status_documents" = "Document verification (%1$d)";
+"vehicle_status_pending_banner" = "Held for an officer to check: %1$d. You will be notified.";
+"vehicle_status_auto_approve" = "When all four are verified the vehicle is approved on its own, with no waiting, and appears in My Vehicles.";
+"vehicle_status_rejected_title" = "Sent back";
+"vehicle_status_resume" = "Finish the remaining steps";
+"vehicle_status_my_vehicles" = "Go to My Vehicles";
+"vehicle_status_unknown" = "Open a vehicle from My Vehicles to see how its documents are going.";
+"vehicle_document_details" = "Vehicle details (type and reg)";
+"vehicle_document_insurance" = "Insurance";
+"vehicle_document_revenue" = "Revenue licence";
+"vehicle_document_photos" = "Front and back photos";
+"verdict_verified" = "Verified";
+"verdict_pending_review" = "With an officer";
+"verdict_pending_input" = "Not uploaded";
+
+/* SCR-DI-026 / 026a · My Vehicles. */
+"vehicles_title" = "My vehicles";
+"vehicles_add" = "Add a vehicle";
+"vehicles_one_live" = "Only one vehicle can be live at a time";
+"vehicles_mine_label" = "My vehicles";
+"vehicles_assigned_label" = "Temporarily assigned to me";
+"vehicles_assigned_until" = "%1$@ · until %2$@";
+"vehicles_fleet_badge" = "FLEET";
+"vehicles_select" = "Select";
+"vehicles_resume" = "Resume";
+"vehicles_view_status" = "Documents";
+"vehicles_deactivate" = "Remove";
+"vehicles_deactivate_title" = "Remove this vehicle?";
+"vehicles_deactivate_body" = "%1$@ will be taken off the map and out of your list. The registration number becomes free to use again.";
+"vehicles_swipe_hint" = "Swipe a row to remove it, or to see its documents.";
+"vehicles_active_now" = "Active now";
+"vehicles_incomplete" = "Incomplete";
+"vehicles_incomplete_step" = "Incomplete · Step %1$d of %2$d";
+"vehicles_empty_title" = "No vehicles yet";
+"vehicles_empty_body" = "Add your own standby vehicle, or wait to be assigned or shared one.";
+"vehicles_onboard_prompt_title" = "Onboard a standby vehicle?";
+"vehicles_onboard_prompt_body" = "You have no vehicles. Would you like to onboard your own standby vehicle now?";
+"vehicles_onboard_prompt_yes" = "Yes, onboard";
+"vehicles_onboard_prompt_not_now" = "Not now";
+"vehicle_registration_pending" = "Being checked";
+"vehicle_registration_approved" = "Approved";
+"vehicle_registration_rejected" = "Sent back";
+"vehicle_registration_deactivated" = "Removed";
+
+/* Failures cluster 2 can meet — the four vehicle codes `OnboardingErrors` now resolves (D-26). */
+"error_registration_exists" = "That registration number is already on a live vehicle.";
+"error_mode_not_allowed" = "Only your own standby (Mode C) vehicle is onboarded here. Buses, school vans and route permits are handled in the Fleet Portal.";
+"error_not_owner" = "This vehicle is not yours to change.";
+"error_vehicle_not_found" = "That vehicle is no longer on file.";

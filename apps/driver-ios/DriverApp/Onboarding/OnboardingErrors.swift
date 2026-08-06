@@ -8,11 +8,11 @@ import MageRideShared
 /// app becomes an English one at exactly the moment it matters. The kebab `code` is the key; the
 /// copy is `Localizable.strings`', in all three languages.
 ///
-/// **Cluster 1's codes only.** The Android twin carries the whole app's table because C068 shipped
-/// after every other Android screen group had named its codes; here the dashboard, the wallet and
-/// the safety clusters have not landed, and a key with no renderer is a translation nobody can
-/// check. C087–C093 extend this the way they extend the strings files — one `case` and three
-/// values, together.
+/// **Clusters 1 and 2's codes only.** The Android twin carries the whole app's table because C068
+/// shipped after every other Android screen group had named its codes; here the dashboard, the wallet
+/// and the safety clusters have not landed, and a key with no renderer is a translation nobody can
+/// check. C088–C093 extend this the way they extend the strings files — one `case` and three values,
+/// together.
 enum OnboardingErrors {
 
     /// The string key for [error], falling back to the shell's generic message.
@@ -47,7 +47,7 @@ enum OnboardingErrors {
         (error as NSError).userInfo["KotlinException"] ?? error
     }
 
-    /// The code table for the five cluster-1 screens.
+    /// The code table for the five cluster-1 screens and cluster 2's four.
     private static func key(for code: ErrorCode?) -> String {
         guard let code else { return "error_generic" }
 
@@ -67,6 +67,23 @@ enum OnboardingErrors {
         case ErrorCode.userBlocked: return "error_user_blocked"
 
         case ErrorCode.validationFailed: return "error_validation_failed"
+
+        // ---- C087 · the Mode-C wizard (AL-27, D-37) ----------------------------------
+        //
+        // `registration-exists` is resolved here as well as inline on Step 1/4's plate field: the
+        // wizard renders it beside the one field that has to change, and anything else reaching this
+        // code — a resume that races another handset's registration — still gets copy rather than
+        // the generic message.
+
+        case ErrorCode.registrationExists: return "error_registration_exists"
+
+        // AL-27's fence, seen from the server: a bus, a school van or a route permit is the Fleet
+        // Portal's, and this app cannot register one.
+        case ErrorCode.modeNotAllowed: return "error_mode_not_allowed"
+
+        case ErrorCode.notOwner: return "error_not_owner"
+
+        case ErrorCode.vehicleNotFound: return "error_vehicle_not_found"
 
         default: return "error_generic"
         }

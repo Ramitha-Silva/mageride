@@ -34,6 +34,10 @@ apps/driver-ios/
 ├── Tools/generate_xcodeproj.py  writes DriverApp.xcodeproj from the tree (see below)
 ├── DriverApp.xcodeproj/         the committed project — CI runs xcodebuild against it
 ├── DriverApp/
+│   ├── Capture/                 C087 · SCR-DI-005 — the VisionKit scanner and the capture seam
+│   ├── Vehicle/                 C087 · SCR-DI-004…004c, 006, 026/026a + their data layer
+│   ├── Onboarding/              C086 · SCR-DI-001, 002, 003, 003a, 007 + their data layer
+│   ├── UI/                      the wireframe's shapes as views — fields, tiles, cards, pills
 │   ├── DriverApp.swift          @main. One App, one shell.
 │   ├── DriverAppDelegate.swift  the three callbacks SwiftUI has no equivalent for
 │   ├── Info.plist               background modes, purpose strings, the MageRide config dict
@@ -52,7 +56,55 @@ apps/driver-ios/
 └── DriverAppTests/              theme, localisation, navigation, push, map, environment
 ```
 
-**To add a screen (C086–C093):**
+## Cluster 2 (C087) — the Mode-C wizard, the scanner and My Vehicles
+
+```
+DriverApp/
+├── Capture/     SCR-DI-005 — the VisionKit scanner, its camera grant and its imaging
+└── Vehicle/     SCR-DI-004…004c, 006, 026/026a + their data layer and copy tables
+```
+
+- **The crop quadrilateral is VisionKit's, and that is what the wireframe asks for.**
+  `driver_ios.html`'s own iOS clause on SCR-DI-005 is *"`VNDocumentCameraViewController` (native
+  drag-corner crop); perspective transform applied on confirm"*, and D2' §SCR-DI-005's sequence —
+  live camera → auto-proposed quad → drag four corners → Retake / Use photo → de-skewed image — is
+  that controller's own. So `apps/driver-android`'s `CropQuad`, `DocumentEdgeDetector` and the warp
+  in `DocumentImaging` (≈ 550 lines) have **no counterpart in this target**, and neither do the
+  `capture_flash` / `capture_retake` / `capture_use_photo` strings: iOS draws those three buttons and
+  localises them itself. `DocumentScannerScreen` is the wireframe's dark chrome around it, because
+  the one thing VisionKit cannot say is **which** document it is scanning.
+- **`CaptureSource.cameraDragCrop` is stamped in `DocumentScannerModel.onScanned` and nowhere
+  else** (AL-43); `onPicked` stamps `.gallery`. A screen never chooses a provenance — it is what the
+  Verification-Officer queue sorts on, and the only thing allowed to claim a scan happened is the
+  code that performed one.
+- **AL-30 lives in `ApiVehicleOnboardingRepository.resume()`, as a `ResumePoint`.** Re-opening the
+  wizard opens the first non-verified step and never Step 1; when the current vehicle is approved the
+  same call answers `.fresh` and the wizard starts a **new** vehicle. No screen decides this.
+- **`POST /v1/vehicles` IS Step 1/4** (Δ C029). It carries the type and plate the `details` step
+  stores, so a fresh vehicle comes back with one saved step and `nextStep = insurance`. Do not add a
+  second call to save details on a vehicle that was just created.
+- **`ActiveVehicleStore` is local, on purpose.** No operation on the platform sets a driver's active
+  vehicle, and none is needed: the MQTT username **is** the vehicle id, so the broker learns the
+  choice at CONNECT. C088 reads this store for the dashboard chip and the US-9.6 go-online gate;
+  `VehiclesState.canGoOnline` and `VehicleSummary.canGoLive` are that rule written once.
+- **`VehicleOnboardingSession` is to SCR-DI-006 what `DocumentCaptureCoordinator` is to
+  SCR-DI-005** — the route carries no arguments, so the vehicle id goes through a process-wide
+  holder instead.
+- **`DriverNavigator.replaceTop(with:)` is `popUpTo(x) { inclusive = true }`.** Three moves use it —
+  the wizard handing over to SCR-DI-006, and SCR-DI-006 handing on to My Vehicles or back into the
+  wizard — and it is what stops a swipe back re-opening a step the driver has submitted.
+- **SCR-DI-026 is a `List`, unlike every other screen in cluster 1 or 2.** Its cell's `Δ iOS` clause
+  is *"`.swipeActions` deactivate"*, and that modifier exists only inside one. Android's `Remove` and
+  `Documents` text buttons are the swipe here, and the wireframe's footnote announces it.
+- **Swift has no key paths into tuples**, which is why `StepVerdictRow` is a named type where the
+  Android twin uses a `Pair`: a `ForEach` needs a stable id, and indexing by position reorders a list
+  the moment the data changes.
+- Reusable UI added here: `StatusPill` + `StatusTone` (+ `.captured(_:)`), `ModeCBadge`,
+  `StepProgress`, `VehicleTypeDot`, `MageRideScannerColor`, `MageRideControl.capturePanel` /
+  `.statusAvatar` / `.statusDot` / `.illustrationIcon` / `.chipIcon` / `.shutter`, and `NoticeCard`'s
+  `titleKey` went optional so an untitled `.card.fill` is the same control rather than a second one.
+
+**To add a screen (C088–C093):**
 
 1. Its route is already in `Nav/DriverRoute.swift`. Use it; do not invent a case.
 2. Replace its `placeholder(...)` line in `Nav/DriverDestinations.swift` with the real view. That

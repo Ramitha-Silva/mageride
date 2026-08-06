@@ -77,6 +77,29 @@ enum MageRideControl {
 
     /// The recentre control on the map (`.fab`, `42 x 42`), rounded up to the tap-target floor.
     static let mapControl: CGFloat = MageRideControl.minimumTapTarget
+
+    // MARK: - C087 · the Mode-C wizard, the scanner and My Vehicles
+    //
+    // The same numbers as `apps/driver-android/.../ui/theme/Dimens.kt`'s `ControlTokens`, because
+    // the two apps draw the same wireframe cell at the same size.
+
+    /// The `📷 Tap to capture` panel on SCR-DI-004a/b/c (`.illus`, `height:120px`).
+    static let capturePanel: CGFloat = 120
+
+    /// The ⏳ / ✓ disc on SCR-DI-006's header (`60 x 60`).
+    static let statusAvatar: CGFloat = 60
+
+    /// The coloured vehicle-type dot on a My Vehicles row (`.cdot`).
+    static let statusDot: CGFloat = 12
+
+    /// The glyph inside ``statusAvatar`` and ``IllustrationPanel``.
+    static let illustrationIcon: CGFloat = 40
+
+    /// A glyph sitting inside a chip or a text button.
+    static let chipIcon: CGFloat = 14
+
+    /// SCR-DI-005's shutter (`.shutter`, `64 x 64`).
+    static let shutter: CGFloat = 64
 }
 
 extension View {

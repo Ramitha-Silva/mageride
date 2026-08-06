@@ -122,3 +122,124 @@
 "error_user_blocked" = "இந்த எண்ணில் உள்நுழைய முடியாது. ஆதரவைத் தொடர்பு கொள்ளவும்.";
 "error_validation_failed" = "நீங்கள் உள்ளிட்ட தகவலைச் சரிபார்த்து மீண்டும் முயற்சிக்கவும்.";
 "error_image_too_large" = "அந்தப் படம் மிகப் பெரியது. சற்று பின்னால் நகர்ந்து மீண்டும் எடுக்கவும்.";
+
+/*
+  MageRide Driver — iOS · C087 driver-ios-vehicle-onboarding. தமிழ்.
+
+  Same keys and the same translations as `apps/driver-android/src/main/res/values-ta/strings.xml`.
+  See the English file for what this block covers, which four Android keys are deliberately absent,
+  and why `%1$s` is written `%1$@` on this platform.
+*/
+
+"action_cancel" = "ரத்து செய்";
+
+"vehicle_type_bus" = "பேருந்து";
+"vehicle_type_train" = "ரயில்";
+
+"status_not_captured" = "எடுக்கப்படவில்லை";
+"mode_c_badge" = "முறை C";
+
+"capture_title" = "எடுக்கவும்: %1$@";
+"capture_title_generic" = "ஆவணத்தைப் படமெடுக்கவும்";
+"capture_hint" = "ஆவணம் முழுவதும் சட்டத்தில் அடங்கும்படி மூலைகளை இழுக்கவும்";
+"capture_failed" = "அந்தப் படத்தைப் பயன்படுத்த முடியவில்லை. மீண்டும் எடுக்கவும்.";
+"capture_permission_title" = "கேமராவை அனுமதிக்கவும்";
+"capture_permission_body" = "ஸ்கேனர் உங்கள் ஆவணத்தை நேராக்குவதால் விவரங்கள் முதல் முறையிலேயே படிக்கப்படும்.";
+"capture_permission_allow" = "கேமராவை அனுமதிக்கவும்";
+"capture_from_gallery" = "அதற்குப் பதிலாக கேலரியில் இருந்து தேர்வு செய்யவும்";
+"capture_target_licence_front" = "உரிமத்தின் முன்பக்கம்";
+"capture_target_licence_back" = "உரிமத்தின் பின்பக்கம்";
+"capture_target_insurance" = "காப்பீடு";
+"capture_target_revenue_licence" = "வருவாய் உரிமம்";
+"capture_target_vehicle_front" = "வாகனத்தின் முன்பக்கம்";
+"capture_target_vehicle_back" = "வாகனத்தின் பின்பக்கம்";
+
+"vehicle_onboard_step_of" = "படி %1$d / %2$d · %3$@";
+"vehicle_onboard_title" = "தயார்நிலை வாகனத்தைச் சேர்க்கவும்";
+"vehicle_onboard_insurance_title" = "காப்பீடு";
+"vehicle_onboard_revenue_title" = "வருவாய் உரிமம்";
+"vehicle_onboard_photos_title" = "வாகனப் படங்கள்";
+"vehicle_onboard_details_caption" = "வாகன விவரங்கள்";
+"vehicle_onboard_insurance_caption" = "காப்பீட்டு அட்டை அல்லது ஆவணம்";
+"vehicle_onboard_revenue_caption" = "வாகனத்தின் வருவாய் உரிமம்";
+"vehicle_onboard_photos_caption" = "முன்பக்கமும் பின்பக்கமும், எண் தகடு தெரியும்படி";
+"vehicle_onboard_cta_details" = "தொடரவும் · காப்பீடு";
+"vehicle_onboard_cta_insurance" = "சேமித்துத் தொடரவும் · வருவாய் உரிமம்";
+"vehicle_onboard_cta_revenue" = "சேமித்துத் தொடரவும் · வாகனப் படங்கள்";
+"vehicle_onboard_cta_submit" = "சேமித்து ஆய்வுக்கு அனுப்பவும்";
+"vehicle_onboard_type_label" = "வாகன வகை";
+"vehicle_onboard_registration_label" = "பதிவு எண்";
+"vehicle_onboard_mode_c_title" = "தயார்நிலை வாகனம்";
+"vehicle_onboard_mode_c_body" = "முறை C என்பது உங்கள் சொந்த தயார்நிலை வாகனம்; அது இந்தச் செயலியிலேயே பதிவு செய்யப்படுகிறது. பேருந்துகள், பள்ளி மற்றும் பணியாளர் வேன்கள், அவற்றின் வழிப் பயண அனுமதிகள் Fleet Portal இல் கையாளப்படுகின்றன — இங்கே அனுமதி அல்லது கண்காணிப்புச் சாதனப் புலம் இல்லை.";
+"vehicle_onboard_insurance_slot" = "காப்பீட்டு ஆவணம்";
+"vehicle_onboard_revenue_slot" = "வருவாய் உரிமம்";
+"vehicle_onboard_photos_slot" = "முன் மற்றும் பின் படங்கள்";
+"vehicle_onboard_photo_front" = "முன்பக்கமும் தகடும்";
+"vehicle_onboard_photo_back" = "பின்பக்கமும் தகடும்";
+"vehicle_onboard_plate_match" = "இந்தப் படங்களில் இருந்து படிக்கப்படும் எண் தகடு %1$@ உடன் ஒப்பிடப்படும். பொருந்தவில்லை என்றால், இந்தப் படி அதிகாரி சரிபார்ப்புக்கு வைக்கப்படும்.";
+"vehicle_onboard_extract_title" = "உங்கள் ஆவணத்தில் இருந்து படித்தவை";
+"vehicle_onboard_correction_supporting" = "ஆவணத்தில் உள்ளதை அப்படியே தட்டச்சு செய்யவும். ஓர் அதிகாரி அதைச் சரிபார்ப்பார்.";
+"vehicle_onboard_pending_title" = "சரிபார்ப்புக்காக வைக்கப்பட்டுள்ளது";
+"vehicle_onboard_pending_body" = "இந்த ஆவணத்தில் ஏதோ ஒன்று தெளிவாகப் படிக்கப்படவில்லை, எனவே ஓர் அதிகாரி அதைச் சரிபார்ப்பார். அதற்குள் நீங்கள் தொடரலாம்.";
+
+"vehicle_field_policy_no" = "பாலிசி எண்";
+"vehicle_field_insurer" = "காப்பீட்டு நிறுவனம்";
+"vehicle_field_revenue_no" = "உரிம எண்";
+"vehicle_field_plate_text" = "படித்த தகடு";
+"vehicle_field_plate_match" = "தகடு சரிபார்ப்பு";
+"vehicle_field_confidence" = "நம்பகத்தன்மை";
+"vehicle_confidence_doubtful" = "%1$@ — ஐயத்திற்குரியது";
+"vehicle_plate_matched" = "பொருந்துகிறது";
+"vehicle_plate_mismatch" = "பொருந்தவில்லை";
+
+"vehicle_status_title" = "வாகனம் ஆய்வில் உள்ளது";
+"vehicle_status_approved_title" = "வாகனம் அங்கீகரிக்கப்பட்டது";
+"vehicle_status_verifying" = "உங்கள் ஆவணங்கள் சரிபார்க்கப்படுகின்றன…";
+"vehicle_status_approved_caption" = "சேவைக்குத் தயார்";
+"vehicle_status_documents" = "ஆவணச் சரிபார்ப்பு (%1$d)";
+"vehicle_status_pending_banner" = "அதிகாரி சரிபார்ப்புக்கு வைக்கப்பட்டவை: %1$d. உங்களுக்குத் தெரிவிக்கப்படும்.";
+"vehicle_status_auto_approve" = "நான்கும் சரிபார்க்கப்பட்டதும் வாகனம் காத்திருப்பின்றித் தானாகவே அங்கீகரிக்கப்பட்டு “எனது வாகனங்கள்” பட்டியலில் தோன்றும்.";
+"vehicle_status_rejected_title" = "திருப்பி அனுப்பப்பட்டது";
+"vehicle_status_resume" = "மீதமுள்ள படிகளை முடிக்கவும்";
+"vehicle_status_my_vehicles" = "எனது வாகனங்களுக்குச் செல்லவும்";
+"vehicle_status_unknown" = "ஆவணங்களின் நிலையைப் பார்க்க “எனது வாகனங்கள்” இல் இருந்து ஒரு வாகனத்தைத் திறக்கவும்.";
+"vehicle_document_details" = "வாகன விவரங்கள் (வகை மற்றும் எண்)";
+"vehicle_document_insurance" = "காப்பீடு";
+"vehicle_document_revenue" = "வருவாய் உரிமம்";
+"vehicle_document_photos" = "முன் மற்றும் பின் படங்கள்";
+"verdict_verified" = "சரிபார்க்கப்பட்டது";
+"verdict_pending_review" = "அதிகாரியிடம்";
+"verdict_pending_input" = "பதிவேற்றப்படவில்லை";
+
+"vehicles_title" = "எனது வாகனங்கள்";
+"vehicles_add" = "வாகனத்தைச் சேர்க்கவும்";
+"vehicles_one_live" = "ஒரே நேரத்தில் ஒரு வாகனம் மட்டுமே இயங்க முடியும்";
+"vehicles_mine_label" = "எனது வாகனங்கள்";
+"vehicles_assigned_label" = "தற்காலிகமாக எனக்கு ஒதுக்கப்பட்டவை";
+"vehicles_assigned_until" = "%1$@ · %2$@ வரை";
+"vehicles_fleet_badge" = "வாகனத் தொகுப்பு";
+"vehicles_select" = "தேர்வு செய்";
+"vehicles_resume" = "தொடரவும்";
+"vehicles_view_status" = "ஆவணங்கள்";
+"vehicles_deactivate" = "நீக்கவும்";
+"vehicles_deactivate_title" = "இந்த வாகனத்தை நீக்கவா?";
+"vehicles_deactivate_body" = "%1$@ வரைபடத்திலிருந்தும் உங்கள் பட்டியலிலிருந்தும் நீக்கப்படும். பதிவு எண் மீண்டும் பயன்படுத்தத் தயாராகும்.";
+"vehicles_swipe_hint" = "நீக்க அல்லது ஆவணங்களைப் பார்க்க வரிசையை இழுக்கவும்.";
+"vehicles_active_now" = "இப்போது இயக்கத்தில்";
+"vehicles_incomplete" = "முழுமையடையவில்லை";
+"vehicles_incomplete_step" = "முழுமையடையவில்லை · படி %1$d / %2$d";
+"vehicles_empty_title" = "இன்னும் வாகனங்கள் இல்லை";
+"vehicles_empty_body" = "உங்கள் சொந்த தயார்நிலை வாகனத்தைச் சேர்க்கவும், அல்லது ஒன்று ஒதுக்கப்படும் வரை காத்திருக்கவும்.";
+"vehicles_onboard_prompt_title" = "தயார்நிலை வாகனத்தைச் சேர்க்கவா?";
+"vehicles_onboard_prompt_body" = "உங்களிடம் வாகனங்கள் இல்லை. இப்போது உங்கள் சொந்த தயார்நிலை வாகனத்தைச் சேர்க்க விரும்புகிறீர்களா?";
+"vehicles_onboard_prompt_yes" = "ஆம், சேர்க்கவும்";
+"vehicles_onboard_prompt_not_now" = "இப்போது வேண்டாம்";
+"vehicle_registration_pending" = "சரிபார்க்கப்படுகிறது";
+"vehicle_registration_approved" = "அங்கீகரிக்கப்பட்டது";
+"vehicle_registration_rejected" = "திருப்பி அனுப்பப்பட்டது";
+"vehicle_registration_deactivated" = "நீக்கப்பட்டது";
+
+"error_registration_exists" = "அந்தப் பதிவு எண் ஏற்கெனவே இயங்கும் வாகனம் ஒன்றில் உள்ளது.";
+"error_mode_not_allowed" = "இங்கே உங்கள் சொந்த தயார்நிலை (முறை C) வாகனம் மட்டுமே பதிவு செய்யப்படும். பேருந்துகள், பள்ளி வேன்கள், வழிப் பயண அனுமதிகள் Fleet Portal இல் கையாளப்படுகின்றன.";
+"error_not_owner" = "இந்த வாகனத்தை மாற்ற உங்களுக்கு உரிமை இல்லை.";
+"error_vehicle_not_found" = "அந்த வாகனம் இனி பதிவேட்டில் இல்லை.";
