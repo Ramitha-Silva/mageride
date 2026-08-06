@@ -1,12 +1,68 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Walking-skeleton strings only.
+  MageRide Passenger — English (the fallback locale, not the primary one).
 
-  NOT trilingual, and that is this component's fence rather than an oversight: the platform rule
-  is Si/Ta/En from resource files with no hard-coded literals (CLAUDE.md), and C078 owns the
-  passenger app's real string catalogue. Three half-written translations of screens Wave 4a will
-  delete would be worse than none.
+  CLAUDE.md: "All user-facing strings must support Si (Sinhala), Ta (Tamil), En (English). Use
+  resource files, never hardcode strings." AL-26 makes **Sinhala** the default a first-run
+  passenger sees; English is what Android falls back to when neither of the other two resolves.
+
+  `StringResourceTest` reads all three files off disk and fails the build on a key that exists in
+  one and not the others, on a translation left byte-identical to its English, and on a format
+  placeholder dropped in translation. C077-C084 add their copy to all three files at once.
+
+  These are the shell's strings only: navigation, the drawer's six rows, the two system states and
+  the map's accessibility labels. No screen's copy is here, because the shell owns no screen.
 -->
 <resources>
-    <string name="app_name">MageRide (skeleton)</string>
+
+    <!-- The launcher label, and the app bar's own title.
+
+         Transliterated in si/ta rather than left as the Latin brand. `StringResourceTest` refuses
+         a translation identical to its English, and its own comment says a component that needs an
+         untranslatable value should argue for it rather than have the test quietly allow it - so
+         here is the argument: this is the CONSUMER app, its icon sits on a home screen beside apps
+         labelled in Sinhala, and AL-26's whole point is that a Sinhala-first passenger is not
+         handed an English product. The driver app needed no such decision because its name carries
+         a translatable noun ("MageRide riyaduru") and this one does not. -->
+    <string name="app_name">MageRide</string>
+
+    <!-- Bottom navigation - the wireframe's [Map][Trips][Support][Menu]. -->
+    <string name="nav_map">Map</string>
+    <string name="nav_trips">Trips</string>
+    <string name="nav_support">Support</string>
+    <string name="nav_menu">Menu</string>
+
+    <!-- SCR-PA-033's drawer rows, in the order the wireframe prints them. -->
+    <string name="drawer_private_transport">Private transport</string>
+    <string name="drawer_subscriptions">My subscriptions</string>
+    <string name="drawer_saved_addresses">Saved addresses</string>
+    <string name="drawer_settings">Profile &amp; settings</string>
+    <string name="drawer_support">Help &amp; support</string>
+    <string name="drawer_log_out">Log out</string>
+
+    <!-- What a registered-but-unbuilt destination shows. The placeholder names the screen id so
+         whoever opens it during wave 4a knows which prompt owns it. -->
+    <string name="route_placeholder_title">Coming in this wave</string>
+    <string name="route_placeholder_body">%1$s arrives with its screen group.</string>
+
+    <!-- SCR-PA-032. "Banner only, not a full takeover"; auto-clears on reconnect. -->
+    <string name="offline_banner_message">Connection lost — showing last known positions</string>
+
+    <!-- SCR-PA-031. Mandatory is a wall; soft is a dismissible snackbar. -->
+    <string name="update_required_title">Update required</string>
+    <string name="update_mandatory_message">A new version is required to keep riding. This update can\'t be skipped.</string>
+    <string name="update_optional_message">A new version of MageRide is available</string>
+    <string name="update_action_now">Update</string>
+
+    <!-- The map. `map_content_description` is what TalkBack reads for a surface that is otherwise
+         an unlabelled rectangle; `map_recentre` is §0.3's recentre FAB. -->
+    <string name="map_content_description">Live map of nearby vehicles</string>
+    <string name="map_recentre">Recentre on my location</string>
+
+    <!-- The two notification channels, as they appear in Android's own settings. -->
+    <string name="push_channel_rides_name">Rides</string>
+    <string name="push_channel_rides_description">Your driver, your trip, and pickup requests sent to you.</string>
+    <string name="push_channel_general_name">Updates</string>
+    <string name="push_channel_general_description">Packages, subscriptions, support replies and announcements.</string>
+
 </resources>

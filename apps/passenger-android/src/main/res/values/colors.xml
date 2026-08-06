@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The only colours that exist as Android resources. Everything else is `ui/theme/Color.kt`.
+
+  A window background cannot be a Compose value — the system draws it before any composition runs —
+  so D2' §0.2's `background` role is transcribed here as well. The two must stay equal; a
+  disagreement shows as a flash of the wrong colour on every cold start.
+-->
+<resources>
+    <color name="window_background">#FFFFFF</color>
+
+    <!-- D2' §0.2 `primary`. The launcher tile is brand, not appearance, so there is no
+         values-night override: an app icon that changed colour with the system theme would stop
+         being findable on the home screen. -->
+    <color name="launcher_background">#FF6D00</color>
+</resources>

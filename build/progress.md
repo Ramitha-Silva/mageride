@@ -102,7 +102,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C073 | driver-android-wallet-credit | 4a | DONE | 2026-08-03 | **237 tests green** (was 183; 54 new — 7 new wallet suites plus one case each in `ScheduleLabelsTest` and `NavigationShellTest`), `assembleDebug` + `detekt` + `ktlintCheck` clean; SCR-DA-021/022/023/024/025 built to the wireframes. Three fences are asserted rather than remembered (`WalletFenceTest`): `TopupMethod` has exactly three entries and no source or copy in the package names a bank transfer in any of the three languages, nothing here opens a camera (AL-34), and a transfer's two legs are equal at every amount with no commission in any string. A Rs 1,000 voucher at 10 % prices at Rs 900 and credits Rs 1,000 — and goes to `POST /v1/vouchers/purchase`, **not** to a top-up of the discounted price, which would credit Rs 1,900. Four routes added; the balance is read, never computed. Five spec gaps: the wireframe's `DRV-22011` does not exist (the Driver ID is the platform ULID and no route resolves one form into the other), no notification type carries a credit-transfer request, no per-driver low-balance threshold is stored anywhere, `TransferRow` carries no vehicle, and `VoucherPurchase` carries no LankaQR deep link. One dependency added (`com.google.zxing:core`, encoder only) for AL-15's fallback
 | C074 | driver-android-tracker-sharing-profile | 4a | DONE | 2026-08-03 | **283 tests green** (was 237; 46 new across 6 suites), `assembleDebug` + `detekt` + `ktlintCheck` clean; SCR-DA-027/028/029/030 built to the wireframes. The C074 fence is a decorator on the publisher seam, not a check in a screen: `TrackerPositionPublisher` refuses `start(vehicleId)` for a paired vehicle, which closes all three doors onto the position service at once, and pairing stops a stream that is already running. SCR-DA-028 **re-reads** on every selector change rather than filtering — both endpoints take the vehicle in the path, so AL-35's "never mixed across vehicles" is enforced by emptying the lists on the tap. The rate-passenger sheet is a `ModalBottomSheet` (AL-35) and its list source is query-svc's `GET /v1/trips/{driverId}`, whose `rating` is joined on `rater_id` and therefore means "the stars I already left". Six spec gaps: **no route writes a `subject_kind='ride'` rating** although the column, query-svc's read and D3' §Part 3 all expect one; no owner-facing unbind; the bind wrapper drops `method`/`bindCode`; nothing reads a tracker binding back; no read serves a driver their own star average; and no notification type exists for a Mode B access request. Zero new dependencies — the QR reader is the half of `zxing:core` C073 already added |
 | C075 | driver-android-comms-safety-support | 4a | DONE | 2026-08-03 | **322 tests green** (was 283; 39 new across 5 suites), `assembleDebug` + `detekt` + `ktlintCheck` clean; SCR-DA-031/032/033/033a/034/035 built to the wireframes. **The LiveKit Android SDK cannot be resolved in this repo** — it depends on `audioswitch`, published only on JitPack, and the repository set is `google()` + `mavenCentral()` under `FAIL_ON_PROJECT_REPOS` — so the signalling half of SCR-DA-031 is real and the media half reports `NO_MEDIA_CLIENT`, which is exactly AL-48's condition: the screen offers *"Call normally instead?"* and logs `voip_failed`. Landing a real engine is one binding (`VoipEngine`). SCR-DA-015's Call and SOS buttons now **navigate**: two parameterised routes added (`VoipCall`, `Sos`), and `POST /v1/calls/start` is made by one screen so one tap writes one `comms.call_log` row. The daily-fee refund is a **category** (`daily_fee_refund` → Finance), not an endpoint, and shares SCR-DA-033a with *"Raise a ticket"*. SCR-DA-034 reads `mobile_db_schema.md` §1.6 because no operation lists notifications, which is also why it works offline; `DriverDatabase` is the app's deferred one-handle open of the local DB. Six spec gaps: no positionless `POST /v1/sos`, no spec number for the SOS confirmation window, no server-side notification list, `TicketEventKind.ASSIGNED` is unrenderable, no `TK-` ticket series exists, and `category` is free text. Zero new dependencies |
-| C076 | passenger-android-shell | 4a | PENDING | | |
+| C076 | passenger-android-shell | 4a | DONE | 2026-08-03 | **59 tests green** in a new `apps/passenger-android` unit-test source set, `assembleDebug` + `detekt` + `ktlintCheck` clean; C025's walking skeleton **deleted** (3 files) and replaced by the real shell — Koin graph, `MageRideTheme` from D2' §0.2, trilingual `values`/`values-si`/`values-ta`, a `NavHost` registering **every** C077–C084 destination as a placeholder, SCR-PA-033's modal drawer (the passenger app HAS a hamburger; AL-31 is the driver's rule), the whole D2' §0.3 map stack (MAP-01..08 + MAP-10, with MAP-04 as pure-Kotlin interpolation), and the SignalR plane: 19 res-7 cells with 30 s hysteresis, D6' §5.4's rejoin-then-resync recovery, and a reconnect loop of our own because **the SignalR Java client has no `withAutomaticReconnect()`**. Hub payloads are decoded by `MageRideJson` and not by Gson — Gson binds enums by Kotlin name and C012's are `@SerialName`d — which is why `com.google.code.gson` is now an explicit dependency (signalr declares it at runtime scope). **MAP-09 is not built**: no app-facing contract exists for signed offline bundles. **FCM registered but inert** (no `google-services.json`, C124); **Play Integrity wired but not verified on a device**; **the wave-1 `:shared` gate is red on arrival** and not from anything here — see the handoff |
 | C077 | passenger-android-auth-onboarding | 4a | PENDING | | |
 | C078 | passenger-android-live-map-search | 4a | PENDING | | |
 | C079 | passenger-android-booking | 4a | PENDING | | |
@@ -12074,3 +12074,184 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   driver-only (the passenger app runs no publisher), but `DriverDatabase`'s shape — deferred open,
   one handle, `Mutex` — is what C076's shell should copy rather than opening the database in
   `Application.onCreate`.
+
+- **Component:** C076 passenger-android-shell — 2026-08-03
+- **Status:** DONE — `./gradlew :apps:passenger-android:testDebugUnitTest :apps:passenger-android:assembleDebug`
+  exits 0 with **59 tests green** across seven suites, and `detekt` + `ktlintCheck` are clean.
+  All four DoD lines are met: the app builds and renders the themed shell with a working drawer,
+  the map joins exactly nineteen cells at open and re-subscribes on a boundary crossing with the
+  30 s hysteresis, a killed connection recovers inside five seconds and back-fills the `/v1/nearby`
+  snapshot, and every string resolves in si/ta/en. C025's walking skeleton (`MainViewModel`,
+  `PassengerLiveMap`, `SkeletonClient`) is **deleted** — that slice declared itself throwaway.
+- **Notes:**
+
+  ### What is here
+
+  ```
+  lk.mageride.passenger
+  ├── PassengerApplication / MainActivity   Koin, two notification channels, attestation warm-up
+  ├── di/         PassengerEnvironment (the only BuildConfig reader), the app module, PassengerDatabase
+  ├── nav/        PassengerRoute (31 destinations), PassengerTab, the bottom bar, SCR-PA-033's
+  │               drawer table + sheet, the one NavHost
+  ├── shell/      PassengerShell (ModalNavigationDrawer + Scaffold), offline banner, update gate,
+  │               connectivity, AppPreferences + PassengerLocale
+  ├── ui/theme/   D2' §0.2 — colour, type, spacing/radius/elevation/controls
+  ├── map/        MageRideMap (the whole §0.3 layer stack), MapStyles, VehicleLayers, MapPalette,
+  │               MarkerInterpolator
+  ├── live/       LiveHubTransport + the SignalR one, HubSubscriptions, LiveHubInbox, LiveVehicleStore
+  ├── location/   PassengerLocationSource — the fix the nineteen cells are computed from
+  └── push/       FCM service, PushRouter, channels, token provider
+  ```
+
+  ### Findings that cost real time, in order of how much
+
+  1. **The SignalR Java client has no automatic reconnect.** D6' §5.4 and `signalr-hub.md` §1.2
+     both say "automatic reconnect, jittered backoff" as though it were a client setting; it is one
+     in the JavaScript and .NET clients and **not** in the Java one. `HttpHubConnectionBuilder`
+     offers `withServerTimeout`, `withKeepAliveInterval`, `withAccessTokenProvider` and `onClosed`,
+     and that is the whole surface. So R-09's curve is implemented here —
+     `PassengerLiveMap.supervise` over `:shared`'s `ReconnectBackoff`, 1–60 s ±25 %, the same one
+     the driver's MQTT client uses. The first retry lands inside 1.25 s, which is what makes
+     SCR-PA-032's *"auto-clears on reconnect < 5 s"* an achievable promise rather than a hope.
+     **C094's Swift client needs the same audit** — do not assume the Swift SDK reconnects either.
+
+  2. **Gson cannot bind the C012 models, and the fix is not a second set of DTOs.** The hub
+     protocol is Gson, which binds an enum by its Kotlin `name()`; every C012 enum carries an
+     `@SerialName` wire spelling that differs (`three_wheeler`, not `THREE_WHEELER`; `stale`, not
+     `STALE`). A Gson-bound `VehicleFrame` throws on the first three-wheeler in Colombo. The
+     tempting fix — app-local DTOs with `@SerializedName` — is what C025's skeleton did and is
+     exactly what `signalr-hub.md` §3 forbids (*"a client can share one set of models between the
+     socket and the API"*); it would also mean spelling all eighteen `RideState` values twice. So
+     the transport binds each argument as a `com.google.gson.JsonElement` — Gson's identity
+     binding, which cannot be wrong — and `LiveHubInbox` decodes the text with `MageRideJson`.
+     **That is why `com.google.code.gson` is a new catalogue entry**: signalr's POM declares Gson
+     at *runtime* scope, so the type is on the runtime classpath and not the compile one. No new
+     artifact reaches the APK.
+
+  3. **`TestScope.backgroundScope` does not run under `advanceUntilIdle()`.** The obvious way to
+     host a supervision loop in `runTest` is `backgroundScope`, and kotlinx-coroutines deliberately
+     stopped draining background work from `advanceUntilIdle()` — so every assertion sees a
+     connection that was never opened, silently. `PassengerLiveMapTest` builds its own
+     `CoroutineScope(StandardTestDispatcher(testScheduler) + Job())` and cancels it in `@AfterTest`.
+     Recorded here because the next component to test a long-running coroutine will hit it.
+
+  4. **`Channel(CONFLATED)` refuses an explicit `onBufferOverflow`.** Conflation already implies
+     `DROP_OLDEST` and passing both throws at construction — from a field initialiser, so every
+     test in the class fails with one stack trace pointing at the constructor.
+
+  5. **A reconnect fires the *old* connection's `onClosed`.** Opening a new hub connection stops
+     the previous one, whose callback then signals "dropped" into the conflated channel the
+     supervisor is about to await — so a healthy connection is torn down one frame after it comes
+     up, forever. The loop drains the channel after every successful connect.
+
+  ### Spec gaps and decisions worth knowing
+
+  **MAP-09 (offline tile caching) is the one item of MAP-01..10 not built, and it is blocked
+  rather than skipped.** D3' §580 says the tile surface is *"not an app-facing API"*, so there is
+  no operation that mints a signed bundle URL; `mobile_db_schema.md` §1.9's `offline_map_bundles`
+  has no writer anywhere on the platform. Building it would mean inventing a download contract.
+  Everything else on that list is here: MAP-01 (light/dark PMTiles styles), MAP-02 (accuracy
+  circle), MAP-03 (the eleven-colour legend as a MapLibre `match` — the driver's map tints one
+  vehicle with `icon-color`, this one draws every mode in a cell at once), MAP-04 (interpolation),
+  MAP-05 (clustering), MAP-06 (heading arrow), MAP-07 (the tap seam), MAP-08 (the trip polyline)
+  and MAP-10 (the 100 m geofence).
+
+  **The passenger app has a hamburger, and that is not an AL-31 violation.** AL-31 is a rule about
+  the *driver* dashboard, for a driver tapping with one thumb in a moving vehicle. SCR-PA-033 says
+  the drawer opens *"from the ≡ menu / 'Menu' tab"* and the wireframe draws the `≡` in every
+  cluster-2 app bar. `PassengerTab.MenuTab` therefore carries **no route** — the wireframe shows
+  the map still underneath with the scrim over it, so a route would put a back-stack entry behind
+  a sheet the passenger dismisses by tapping the scrim. The shell owns the `ModalNavigationDrawer`
+  and its five destination rows; **C083 owns SCR-PA-033's identity header**, which is a slot with a
+  brand-only default (no placeholder name — a greyed-out *"Your name"* is how a half-built screen
+  ships looking finished).
+
+  **P-02's location request carries no deeplink at all**, and this is the one push on this surface
+  that needs a per-kind branch. `LocationRequestAsync` in notification-svc writes
+  `{kind:'location_request', requestId, ttl}` — a *silent* data message the app renders itself —
+  so `PushRouter` builds SCR-PA-011's route from `data.requestId`. Inventing a
+  `mageride://pickup-confirm/{id}` host would be a client claiming a link the server does not mint.
+  Same shape as the driver's `SCHEDULED_REMINDER` finding, which applies here too (US-10.9's
+  passenger reminder routes to SCR-PA-022's Scheduled tab on the type name).
+
+  **`mageride://wallet` and `mageride://documents` resolve to nothing here, deliberately.** Two of
+  the four URIs `DeepLinks` mints are the driver's — a passenger has no wallet screen and no
+  documents to expire — and resolving them to "the nearest passenger screen" would open something
+  arbitrary the first time an operator mis-targeted a broadcast. Asserted.
+
+  **`mageride://package/{rideId}` is ONE destination for SCR-PA-020 and SCR-PA-021.**
+  notification-svc sends the same URI to the sender (on `package_delivered`) and to the recipient
+  (on `package_picked_up`); which screen to draw is a fact about the ride (`passengerId` versus
+  `recipientPhone`), not about the link. C081 reads the ride and picks — the same shape the driver
+  side uses to hand `ActiveRideScreen` over to `DeliveryScreen`.
+
+  **SCR-PA-031 is two controls, not one.** The wireframe is explicit — *"mandatory =
+  non-dismissible dialog → Store; soft = dismissible banner/snackbar"* — so `UpdateGate` draws
+  nothing for a soft `426` and the shell shows a snackbar with an `Update` action instead. The
+  driver app answers both with one dialog because D2' §SCR-DA-035 does not draw the split.
+
+  **`app_name` is transliterated in si/ta rather than exempted from the trilingual test.**
+  `StringResourceTest` refuses a translation identical to its English, and its own comment (C067's)
+  says a component needing an untranslatable value should argue for it rather than have the test
+  quietly allow it. The argument: this is the *consumer* app, its icon sits on a home screen beside
+  apps labelled in Sinhala, and AL-26's whole point is that a Sinhala-first passenger is not handed
+  an English product. The driver app needed no such decision because its name carries a
+  translatable noun.
+
+  **The offline banner uses M3's `errorContainer` pair, a deliberate small deviation.** The
+  wireframe's `.banner.err` is `#FBE2E2` on `#8A1B1B`, and D2' §0.2 defines `error` but **no
+  container role for it** — so rather than transcribe two hexes the token table does not contain,
+  the banner uses M3's baseline error container, which resolves within a shade in light and tracks
+  the appearance in dark. The alternative, a solid §0.2 red bar, is louder than a banner whose own
+  requirement is "not a full takeover".
+
+  **SCR-PA-029's route is parameterised by the ride even though the contract does not require it.**
+  `safety.yaml`'s `POST /v1/sos` marks `rideId` optional (`required: [lat, lng, role]`), but the
+  wireframe's only door to the passenger SOS is SCR-PA-015's `⛨ SOS` button and the screen's own
+  copy is *"Sending GPS + trip to emergency contacts"*. A trip-less passenger alarm would need an
+  entry point no wireframe draws; the contract already permits it if one is ever added.
+
+  ### What is bound but not yet used, and why it is here anyway
+
+  `PassengerLocationSource`, `PassengerDatabase`, `AppPreferences` and `LocalDrawerControl` have no
+  caller in the shell, because the shell owns no screen. Each is here because it is the thing a
+  screen group must **not** invent for itself: six §2 tables and eight screen groups opening
+  `openPassenger()` independently would be six SQLite connections to one encrypted file (the bug
+  C075 fixed on the driver side), and a second `FusedLocationProviderClient` subscription per
+  screen is how a passenger's battery disappears. `refreshCells()` likewise has no caller until
+  C078's map tick — it exists because a passenger who crosses a cell edge and then *stops moving*
+  is exactly when the fused provider stops producing fixes, and the held crossing would never land.
+
+  ### The wave-1 gate is red on arrival, and not from anything here
+
+  `./gradlew :shared:testDebugUnitTest` fails **5 of 819** tests on a pristine checkout — verified
+  by stashing this component's work and re-running. All five are C019's contract tables against
+  `backend/contracts`: the scan now finds **241 operations where the table expects 179** (the wave-2
+  and wave-3 backend components added routes, including the whole `admin/rbac` surface), plus one
+  drifted idempotency-exemption (`chargeDailyFeeBeforeTrip` is `apiPost`, the contract wants
+  `apiPostExempt`). Nothing in `apps/passenger-android` is on that path. The same red was recorded
+  by C067 and is still unactioned; it needs a component that regenerates `ApiOperations` and the
+  `ContractCoverageTest` expectations from the current YAML.
+
+  ### For C077–C084
+
+  - **Your route already exists** in `nav/PassengerRoute.kt` — use it, do not invent a path. Every
+    one is registered in `nav/PassengerNavHost.kt` against a placeholder that names your screen id.
+    Eight wireframe ids are deliberately **not** routes because they are sheets, popups or overlays
+    (006, 007, 012a, 015a, 026a, 030a, 031, 032); each belongs to the screen that opens it.
+  - **The map is a widget, not a seam.** `MageRideMap(vehicles = …, userPosition = …, pins = …,
+    routePolyline = …, geofence = …, onVehicleTap = …)` already does MAP-01..08 and MAP-10; a
+    screen passes frames and never a rendering position. This is the opposite of the driver app,
+    where `MageRideMap` hands out a bare `Style` — AL-31 means that map only ever draws one marker,
+    and this one draws every mode in a cell at once, so letting four screens install their own
+    layers would be four screens deciding independently what a three-wheeler looks like.
+  - **`PassengerLiveMap` is a singleton and is already connected.** Feed it `onPosition(point)` from
+    `PassengerLocationSource` (C078) and read `vehicles` / `cells` / `status`; call
+    `watchRide(rideId)` on SCR-PA-014/015/020 and `watchLocationRequest(requestId)` on SCR-PA-010b.
+    Do not open a second connection, and do not add a `SubscribeVehicle` — there is no such method.
+  - **`LiveEvent`** carries the four directed payloads (`RideStateChanged`, `DriverPosition`,
+    `LocationRequestResolved`, `PackageStatusChanged`). `VehiclePositions`, `VehicleRemoved` and
+    `ShareRevoked` are absent on purpose: all three are "what is on the map", which `vehicles`
+    already answers.
+  - **`ControlTokens` is small on purpose** — the shell's own controls only. Append yours, as
+    C068–C075 did on the driver side, rather than putting a `dp` at a call site.

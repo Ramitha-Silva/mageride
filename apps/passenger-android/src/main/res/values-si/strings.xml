@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  MageRide Passenger — Sinhala (AL-26: the DEFAULT a first-run passenger sees, not a translation
+  of English). Keys must match `values/strings.xml` exactly; `StringResourceTest` enforces it.
+-->
+<resources>
+
+    <string name="app_name">මේජ්‍රයිඩ්</string>
+
+    <string name="nav_map">සිතියම</string>
+    <string name="nav_trips">ගමන්</string>
+    <string name="nav_support">සහාය</string>
+    <string name="nav_menu">මෙනුව</string>
+
+    <string name="drawer_private_transport">පෞද්ගලික ප්‍රවාහනය</string>
+    <string name="drawer_subscriptions">මගේ දායකත්ව</string>
+    <string name="drawer_saved_addresses">සුරැකි ලිපින</string>
+    <string name="drawer_settings">පැතිකඩ සහ සැකසුම්</string>
+    <string name="drawer_support">උදව් සහ සහාය</string>
+    <string name="drawer_log_out">ඉවත් වන්න</string>
+
+    <string name="route_placeholder_title">මෙම අදියරේදී පැමිණේ</string>
+    <string name="route_placeholder_body">%1$s එහි තිර කාණ්ඩය සමඟ පැමිණේ.</string>
+
+    <string name="offline_banner_message">සම්බන්ධතාවය නැති විය — අවසන් දන්නා ස්ථාන පෙන්වයි</string>
+
+    <string name="update_required_title">යාවත්කාලීන කිරීම අවශ්‍යයි</string>
+    <string name="update_mandatory_message">දිගටම ගමන් කිරීමට නව අනුවාදයක් අවශ්‍යයි. මෙය මඟ හැරිය නොහැක.</string>
+    <string name="update_optional_message">මේජ්‍රයිඩ් හි නව අනුවාදයක් තිබේ</string>
+    <string name="update_action_now">යාවත්කාලීන කරන්න</string>
+
+    <string name="map_content_description">අවට වාහනවල සජීවී සිතියම</string>
+    <string name="map_recentre">මගේ ස්ථානය මධ්‍යයට ගන්න</string>
+
+    <string name="push_channel_rides_name">ගමන්</string>
+    <string name="push_channel_rides_description">ඔබේ රියදුරු, ඔබේ ගමන සහ ඔබට එවන ලද පිකප් ඉල්ලීම්.</string>
+    <string name="push_channel_general_name">යාවත්කාලීන</string>
+    <string name="push_channel_general_description">පාර්සල්, දායකත්ව, සහාය පිළිතුරු සහ නිවේදන.</string>
+
+</resources>

@@ -1,35 +1,92 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Passenger Android — walking-skeleton shell (C025).
+  MageRide Passenger — application shell (C076).
 
-  INTERNET is the only permission. The real app needs location (C077's map centres on the
-  passenger) and notifications (E-01's ride pushes), and both belong with the screens that
-  justify them: a permission asked for by a shell nobody ships is a permission nobody reviews.
+  PERMISSIONS ARE A SCREEN'S JUSTIFICATION, NOT A SHELL'S CONVENIENCE. Every one below exists
+  because something in this component needs it, and SCR-PA-005 (C077) is where the passenger is
+  asked for the runtime ones with a rationale. Nothing is declared "in case a later screen wants
+  it" — which is why there is no CAMERA here even though SCR-PA-017 scans the driver's QR code
+  (C080 declares it with the screen that asks for it), and no CALL_PHONE even though SCR-PA-015a
+  dials the driver (`ACTION_DIAL` needs none, and `ACTION_CALL` is C084's decision to argue).
 
-  `usesCleartextTraffic` is on for the debug build alone, because the dev gateway is
-  `http://10.0.2.2:5000` — plain HTTP inside the emulator's loopback. Production is HTTPS at
-  HAProxy (ADD §12.2) and the release manifest must not carry this.
+  **NO BACKGROUND LOCATION, NO FOREGROUND SERVICE.** The driver app publishes positions from a
+  native foreground service with the screen off; a passenger publishes nothing at all (D3' §3.3 —
+  ingest is MQTT and is the driver's, realtime-out is SignalR and is this app's). Foreground
+  location, for the R-06 geocell anchor and §0.3's user dot, is the whole of what this app needs.
+
+  `usesCleartextTraffic` is NOT here — it belongs to the debug variant alone and lives in
+  src/debug/AndroidManifest.xml. Production is HTTPS at HAProxy (ADD §12.2).
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- The offline banner (US-15.6, SCR-PA-032) reads a validated network, not merely a
+         connected one; `ConnectivityMonitor` needs this to register its callback. -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!-- SCR-PA-005. The map's 19 res-7 cells are computed from the passenger's own position
+         (R-06), and MAP-02's accuracy circle is drawn from the fix's accuracy. COARSE is
+         declared as well as FINE because Android 12+ lets the user grant only the approximate
+         one, and a ~3 km view still works at that precision. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+    <!-- DRIVER_ASSIGNED, DRIVER_ARRIVED, RIDE_CANCELLED, PAYMENT_CONFIRMED, the package pushes
+         and P-02's location request. A backgrounded app has no socket (`signalr-hub.md` §6), so
+         a passenger who cannot be notified learns nothing until they next open the app. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- GPS is not `required`: a handset without it can still hold an account, read its trip
+         history, manage subscriptions and pay. What it cannot do is centre the live map, and the
+         map says so rather than the app refusing to install. -->
+    <uses-feature android:name="android.hardware.location.gps" android:required="false" />
+
     <application
+        android:name=".PassengerApplication"
         android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
-        android:supportsRtl="true"
-        android:usesCleartextTraffic="true"
-        android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        android:supportsRtl="false"
+        android:theme="@style/Theme.MageRidePassenger">
 
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:label="@string/app_name">
+            android:label="@string/app_name"
+            android:launchMode="singleTop"
+            android:windowSoftInputMode="adjustResize">
+
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <!-- notification-svc's deep links (`DeepLinks` in its EventHandlers.cs; D6' I-23.3
+                 prints `mageride://package/{rideId}` and names SCR-PA-021 as its target).
+                 `PushRouter` resolves the URI against the known route table rather than
+                 navigating to it directly. -->
+            <intent-filter android:autoVerify="false">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="mageride" />
+            </intent-filter>
         </activity>
+
+        <!-- The FCM receiver. P-02's location request is a SILENT data message with a 300 s TTL
+             and no deeplink at all, so this callback is the only thing that can put SCR-PA-011 in
+             front of the rider inside the window. -->
+        <service
+            android:name=".push.PassengerMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="rides" />
+
     </application>
 </manifest>

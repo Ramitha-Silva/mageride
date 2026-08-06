@@ -98,6 +98,15 @@ signalr = "10.0.9"
 # what the driver app publishes.
 hivemqMqtt = "1.3.17"
 
+# C076. The SignalR Java client's hub protocol is Gson, and its POM declares Gson at RUNTIME
+# scope — so `com.google.gson.JsonElement` is on the runtime classpath and not the compile one.
+# The passenger app needs that type by name: it takes each hub argument as a raw `JsonElement`
+# and decodes it with `:shared`'s `MageRideJson`, because the C012 enums carry `@SerialName`
+# wire spellings (`three_wheeler`, not `THREE_WHEELER`) that Gson's default binding gets wrong.
+# Declaring it adds no artifact to the APK — signalr already drags it in — it only makes the
+# compile-time use honest. 2.11.0 is what the Android dependency graph already resolves.
+gson = "2.11.0"
+
 # C025, e2e harness only — NOT an app dependency and never will be. `offer.created` carries the
 # `offerId` a driver needs to accept, and it exists on `dispatch.events` and nowhere else: no REST
 # response returns it (see the C025 handoff, contract gap (a)). Until notification-svc (C051) and
@@ -229,6 +238,8 @@ zxing-core          = { module = "com.google.zxing:core",              version.r
 # JVM/Android only. See the version comments: the iOS halves are C094's Swift clients.
 signalr     = { module = "com.microsoft.signalr:signalr",       version.ref = "signalr" }
 hivemq-mqtt = { module = "com.hivemq:hivemq-mqtt-client",       version.ref = "hivemqMqtt" }
+# C076 — the hub protocol's own JSON tree type. See the `gson` version note.
+gson        = { module = "com.google.code.gson:gson",           version.ref = "gson" }
 # e2e harness only — see the `kafkaClients` version comment.
 kafka-clients = { module = "org.apache.kafka:kafka-clients",    version.ref = "kafkaClients" }
 

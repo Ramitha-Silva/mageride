@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The launcher mark: the white "M" the splash shows on MageRide orange (SCR-DA-001, and the
+  `driver_android.html` wireframe's rounded white tile). Drawn as a vector rather than shipped as
+  five PNG densities — there is no PNG fallback set because minSdk is 26, which is exactly where
+  adaptive icons start.
+
+  The 108x108 viewport with the mark inside the central 72x72 is the adaptive-icon safe zone; a
+  glyph drawn to the edges is cropped to a circle on most launchers.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M34,72 L34,36 L43,36 L54,54 L65,36 L74,36 L74,72 L66,72 L66,50 L56,66 L52,66 L42,50 L42,72 Z" />
+</vector>

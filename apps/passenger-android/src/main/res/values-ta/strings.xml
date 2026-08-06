@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  MageRide Passenger — Tamil. Keys must match `values/strings.xml` exactly;
+  `StringResourceTest` enforces it.
+-->
+<resources>
+
+    <string name="app_name">மேஜ்ரைட்</string>
+
+    <string name="nav_map">வரைபடம்</string>
+    <string name="nav_trips">பயணங்கள்</string>
+    <string name="nav_support">உதவி</string>
+    <string name="nav_menu">மெனு</string>
+
+    <string name="drawer_private_transport">தனியார் போக்குவரத்து</string>
+    <string name="drawer_subscriptions">எனது சந்தாக்கள்</string>
+    <string name="drawer_saved_addresses">சேமித்த முகவரிகள்</string>
+    <string name="drawer_settings">சுயவிவரம் மற்றும் அமைப்புகள்</string>
+    <string name="drawer_support">உதவி மற்றும் ஆதரவு</string>
+    <string name="drawer_log_out">வெளியேறு</string>
+
+    <string name="route_placeholder_title">இந்தக் கட்டத்தில் வரவுள்ளது</string>
+    <string name="route_placeholder_body">%1$s அதன் திரைக் குழுவுடன் வரும்.</string>
+
+    <string name="offline_banner_message">இணைப்பு துண்டிக்கப்பட்டது — கடைசியாக அறிந்த இடங்கள் காட்டப்படுகின்றன</string>
+
+    <string name="update_required_title">புதுப்பிப்பு தேவை</string>
+    <string name="update_mandatory_message">தொடர்ந்து பயணிக்க புதிய பதிப்பு தேவை. இதைத் தவிர்க்க முடியாது.</string>
+    <string name="update_optional_message">மேஜ்ரைட்டின் புதிய பதிப்பு கிடைக்கிறது</string>
+    <string name="update_action_now">புதுப்பி</string>
+
+    <string name="map_content_description">அருகிலுள்ள வாகனங்களின் நேரடி வரைபடம்</string>
+    <string name="map_recentre">எனது இடத்தை மையப்படுத்து</string>
+
+    <string name="push_channel_rides_name">பயணங்கள்</string>
+    <string name="push_channel_rides_description">உங்கள் ஓட்டுநர், உங்கள் பயணம், மற்றும் உங்களுக்கு அனுப்பப்படும் பிக்கப் கோரிக்கைகள்.</string>
+    <string name="push_channel_general_name">புதுப்பிப்புகள்</string>
+    <string name="push_channel_general_description">பார்சல்கள், சந்தாக்கள், உதவிப் பதில்கள் மற்றும் அறிவிப்புகள்.</string>
+
+</resources>

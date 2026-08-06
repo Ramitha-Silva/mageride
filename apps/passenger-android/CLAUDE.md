@@ -1,38 +1,138 @@
 # Passenger Android Conventions
+
 - Kotlin, Jetpack Compose, Material 3; minSdk 26 — Android 8.0 (URD NFR-22)
-- Depends on shared/kmp — import DTOs, API client and domain logic from there
-- Screen groups map to D2' §B + the passenger_android.html wireframe (41 SCR-PA ids)
+- Depends on shared/kmp — import DTOs, the API client, the domain state machines and the SignalR
+  contract from there. Nothing that exists in `:shared` may be reimplemented here.
+- Screen groups map to D2' §A + the `specs/wireframes/passenger_android.html` wireframe (41 SCR-PA ids)
 - MapLibre GL Native over PMTiles; live vehicles arrive over SignalR by geocell —
   H3 res-7 + ring(2) = 19 cells with 30 s hysteresis, never a per-vehicle subscription (R-06)
-- Trilingual: every user-facing string comes from values/, values-si/, values-ta/ — no literals
-- Gradle project path is `:apps:passenger-android`; versions come from gradle/libs.versions.toml
-- Verify: `./gradlew :apps:passenger-android:assembleDebug` (needs the Android SDK on the host)
+- Trilingual: every user-facing string comes from `values/`, `values-si/`, `values-ta/` — no literals
+- Gradle project path is `:apps:passenger-android`; versions come from `gradle/libs.versions.toml`
+- Verify: `./gradlew :apps:passenger-android:testDebugUnitTest :apps:passenger-android:assembleDebug`
+  (the Android SDK is installed on this build host at `/opt/android-sdk`; `local.properties` points
+  AGP at it)
 
-## Walking-skeleton shell (C025) — throwaway, and it claims no screen id
+## The shell (C076) — what exists, and where a screen plugs in
 
-What is here today is the thinnest passenger book flow that proves `:shared` composes into an app:
-phone OTP sign-in, a live map that is a **list**, one booking, and a ride state read back over REST.
-It owns **no SCR-PA id** — C077–C080 own the real screens and Wave 4a replaces every composable.
+C025's walking skeleton is **gone**. Its three files (`MainViewModel`, `PassengerLiveMap`,
+`SkeletonClient`) were declared throwaway by their own component and were deleted here; nothing in
+this module is throwaway any more.
 
-Deliberately absent, so nothing here reads as finished:
-- **MapLibre / PMTiles.** C077's. The 19 res-7 cells are joined for real and the `VehiclePositions`
-  frames arrive for real; they are rendered as rows.
-- **Trilingual resources.** The platform rule is Si/Ta/En from `values*/` with no literals; C078
-  owns the catalogue, and three half-written translations of doomed screens would be worse than one.
-- **Koin, navigation, theming and the on-device database.** `SkeletonClient` binds the two things
-  C013 leaves to an app (an `HttpClientEngine` and an `ApiConfig`) by hand and holds its token in
-  memory rather than in `PlatformSecureStore`.
+```
+lk.mageride.passenger
+├── PassengerApplication.kt   Koin start, notification channels, Play Integrity warm-up
+├── MainActivity.kt           the ONE Activity. Do not add a second.
+├── di/                       PassengerEnvironment (the only BuildConfig reader), the app module,
+│                             PassengerDatabase (C018's deferred open)
+├── nav/                      PassengerRoute (every destination), PassengerTab, the bottom bar,
+│                             SCR-PA-033's drawer table + sheet, PassengerNavHost
+├── shell/                    PassengerShell (drawer + Scaffold host), offline banner, update gate,
+│                             connectivity, AppPreferences + PassengerLocale
+├── ui/theme/                 D2' §0.2 tokens — colour, type, spacing/radius/elevation/controls
+├── map/                      MageRideMap (the whole §0.3 layer stack), MapStyles, VehicleLayers,
+│                             MapPalette, MarkerInterpolator (MAP-04)
+├── live/                     the SignalR plane — transport, subscriptions, inbox, vehicle store
+├── location/                 PassengerLocationSource — the fix the 19 cells are computed from
+└── push/                     FCM service, PushRouter (deep links), channels, token provider
+```
 
-Load-bearing even so:
-- the cells come from `:shared`'s `GeoCells` over the platform H3 grid, so they are the ids
-  position-processor-svc writes its streams under — computing them any other way joins groups
-  nothing publishes to, and the symptom is an empty map with no error anywhere;
-- `LiveHub`'s method and event names are taken from `:shared`, never typed as literals: SignalR
-  resolves both by string;
-- the hub credential is the 30-minute API access token in `access_token` (D-29), **never** the MQTT
-  session JWT (E-02);
-- `versionName` must match `ApiConfig.appVersion` — the gateway reads it as `X-App-Version` and
-  answers `426` below D-31's floor on every route.
+**To add a screen (every SCR-PA id is a standing placeholder today):**
 
-**No `org.jetbrains.kotlin.android` plugin.** AGP 9 has built-in Kotlin support and refuses it, the
-same way it refuses `com.android.library` in a KMP project.
+1. Its route is already in `nav/PassengerRoute.kt`. Use it; do not invent a path.
+2. Replace its `placeholder(...)` line in `nav/PassengerNavHost.kt` with the real composable. That
+   file is the only `NavHost` in the app.
+3. Put every user-facing string in **all three** `res/values*/strings.xml` files at once.
+   `StringResourceTest` fails the build on a key that exists in one and not the others, on a
+   translation left equal to its English, and on a format placeholder dropped in translation.
+4. Reach for `MageRideTheme.spacing` / `.radius` / `.elevation` / `.status` / `.vehicle` / `.mode`
+   and `MaterialTheme.colorScheme` — never a raw `dp` or hex. `ThemeTokensTest` holds §0.2.
+5. A screen with a `≡` in its app bar calls `LocalDrawerControl.current()`. The drawer itself is
+   the shell's; a screen never hosts one.
+
+## The live plane — read this before touching `live/`
+
+- **The passenger view is 19 cells and the client never subscribes to a vehicle.** R-06 is res-7 +
+  `ring(2)`; `HubSubscriptions` is the only place group membership changes, and `signalr-hub.md`
+  §2.1 says `vehicle:{vehicleId}` groups are *"joined by the server, never asked for"* — a Mode B
+  vehicle is visible because fanout-svc checked the `share:{userId}` entitlement at join (D-23).
+  There is no `SubscribeVehicle` method to call. `PassengerLiveMapTest` pins the four methods.
+- **The SignalR Java client has NO `withAutomaticReconnect()`.** Unlike the JavaScript and .NET
+  clients, `HttpHubConnectionBuilder` offers only `withServerTimeout`, `withKeepAliveInterval` and
+  `onClosed`. R-09's jittered exponential reconnect is therefore ours: `PassengerLiveMap.supervise`
+  runs it over `:shared`'s `ReconnectBackoff`, and the first retry lands inside 1.25 s, which is
+  what makes SCR-PA-032's *"auto-clears on reconnect < 5 s"* true.
+- **Recovery is an ORDER, not a set** (D6' §5.4): rejoin the groups, *then* `GET /v1/nearby`. A
+  client that snapshots first loses every frame published between the two calls — exactly the ones
+  that moved while it was away. `LiveHubRecovery.plan` is C017's and is followed verbatim.
+- **Payloads are decoded by `MageRideJson`, never by Gson.** The hub protocol is Gson and Gson
+  binds an enum by its Kotlin `name()`; C012's enums carry `@SerialName` wire spellings that differ
+  (`three_wheeler`, not `THREE_WHEELER`). The transport binds each argument as a
+  `com.google.gson.JsonElement` — the identity binding, which cannot be wrong — and hands the text
+  up. That is why `com.google.code.gson` is an explicit dependency: signalr declares it at
+  **runtime** scope, so the type is not otherwise on the compile classpath.
+- **A vehicle leaves the map for exactly four reasons** — `VehicleRemoved` (stale/offline/engaged),
+  `ShareRevoked` (D-22), a cell the client left, or a resync that replaced the set. See
+  `LiveVehicleStore`. Batches carry only what moved, so absence never means removal.
+- **`LiveHubTransport` is the seam.** Every rule above is asserted on the JVM against
+  `FakeLiveHubTransport`, with no server and no network — the same split C067 made between
+  `PositionPipeline` and the MQTT client.
+
+## Rules this module is built on
+
+- **The passenger app HAS a hamburger, and that is not an AL-31 violation.** AL-31 is a rule about
+  the *driver* dashboard. SCR-PA-033 says the drawer opens *"from the ≡ menu / 'Menu' tab"*, and
+  the wireframe draws the `≡` in every cluster-2 app bar. `PassengerTab.MenuTab` therefore carries
+  **no route** — it opens the drawer over whatever is on screen.
+- **This app has no MQTT client and never will.** D3' §3.3: device position *ingest* is MQTT and is
+  the driver's; passenger realtime-*out* is SignalR. There is no broker host in `BuildConfig`, no
+  foreground service, and no background-location permission — `ManifestTest` asserts their absence.
+- **No dynamic colour.** D2' §0.2 is the single source of truth shared with Figma, SwiftUI and the
+  Tailwind preset. It would also break MAP-03: the vehicle legend is a fixed eleven-colour identity,
+  and a wallpaper-derived scheme could put the app's own accent inside it.
+- **`PassengerEnvironment` is the only file that reads `BuildConfig`.** The gateway origin is the
+  one value a release build cannot afford to have wrong in two places — and the hub rides it, so
+  there is one origin rather than two.
+- **A deep link is resolved, not trusted.** `PushRouter` maps a `mageride://…` URI onto a known
+  `PassengerRoute`; an unrecognised one opens nothing. `mageride://wallet` and
+  `mageride://documents` are the **driver's** links and deliberately resolve to nothing here.
+- **P-02's location request carries no deeplink at all.** It is a silent data message —
+  `{kind:'location_request', requestId, bookerName, ttl:300}` — so `PushRouter` builds
+  SCR-PA-011's route from `data.requestId`. Do not invent a `mageride://pickup-confirm` host.
+- **`PassengerDatabase` is the app's deferred answer to C018's un-bound database.** Opening it is
+  `suspend` (the SQLCipher key comes out of the Keystore), so it is opened by the first caller
+  behind a `Mutex` and shared. Six §2 tables and eight screen groups: do not call `openPassenger()`
+  anywhere else.
+
+## Things that will bite
+
+- **`org.jetbrains.kotlin.android` is not applied.** AGP 9 has built-in Kotlin support and refuses
+  the plugin outright.
+- **The `google-services` plugin is not applied either**, and there is no `google-services.json`.
+  firebase-messaging compiles and `PassengerMessagingService` is registered, but **FCM does not
+  deliver until C124 lands the Firebase project**. Nothing else about push is blocked by it.
+- **MapLibre is the `-opengl` flavour** (`org.maplibre.gl:android-sdk-opengl`). The default
+  `android-sdk` artifact requires Vulkan 1.0 in its manifest, which Play uses to filter devices —
+  on the Android 8.0 floor that cuts off exactly the budget handsets this platform is for. Do not
+  add `android-sdk-ktx`: it depends on the default artifact and fails `checkDuplicateClasses`.
+- **MAP-02 and MAP-10 are metres and MapLibre's `circleRadius` is pixels.** `MageRideMap` rescales
+  both circle layers on `addOnCameraIdleListener` through
+  `Projection.getMetersPerPixelAtLatitude`. A radius set once is wrong at every other zoom.
+- **`TestScope.backgroundScope` does NOT run under `advanceUntilIdle()`.** kotlinx-coroutines
+  deliberately stopped draining background work there, so a test that drives a supervision loop
+  must build its own `CoroutineScope(StandardTestDispatcher(testScheduler) + Job())` and cancel it.
+  `PassengerLiveMapTest` does, and says why.
+- **`Channel(CONFLATED)` refuses an explicit `onBufferOverflow`** — conflation already implies
+  `DROP_OLDEST`, and passing both throws `IllegalArgumentException` at construction.
+- **Kotlin block comments nest.** A KDoc containing `values*/strings.xml` closes itself on the `*/`
+  and the file stops parsing several declarations later. Same trap C014 and C067 hit.
+- **detekt's `LongMethod` and `LongParameterList` carry `ignoreAnnotated: ['Composable']`** (in
+  `config/detekt/detekt.yml`), but `TooManyFunctions` has **no** exemption and the ceiling is 11
+  per class. `LongParameterList` triggers at **7** parameters, not 8 — that is what split
+  `PassengerLiveMap` into `HubSubscriptions` + `LiveHubInbox` and produced `MapPalette`.
+- **`MagicNumber` excludes `ui/theme` and nothing else.** A hex or a `dp` anywhere else is a build
+  failure, which is the same rule as "never a raw dp or hex" above, enforced.
+- **`kotlin-test` resolves to no variant under AGP's built-in Kotlin.** Use `libs.kotlin.testjunit`.
+- **Unit tests run with `isReturnDefaultValues = true`** and the working directory is the module
+  directory, which is what lets `ManifestTest` and `StringResourceTest` read the real files.
+- **iOS does not compile on this host** (root CLAUDE.md). C094's SwiftUI shell mirrors these tokens
+  and route names — keep them in step.

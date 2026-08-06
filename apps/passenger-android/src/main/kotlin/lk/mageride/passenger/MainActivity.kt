@@ -1,140 +1,82 @@
 package lk.mageride.passenger
 
+import android.content.ActivityNotFoundException
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.activity.enableEdgeToEdge
+import lk.mageride.passenger.push.PushRouter
+import lk.mageride.passenger.shell.PassengerLocale
+import lk.mageride.passenger.shell.PassengerShell
+import lk.mageride.passenger.ui.theme.MageRideTheme
+import org.koin.android.ext.android.inject
 
 /**
- * The whole passenger shell: one activity, five throwaway screens (C025).
+ * The app's single Activity.
  *
- * It claims no SCR-PA id. C077–C080 own the real passenger screens and Wave 4a replaces every
- * composable here; what this proves is that `:shared` composes into an app at all — the api-client
- * signs in and books, the `LiveHub` contract delivers positions, and the geocell maths joins the
- * right 19 groups.
+ * One Activity, one `NavHost` — D2' §0.1: *"a screen = a Compose `@Composable` route inside a
+ * `NavHost`/`Scaffold`"*. Nothing else in this app may add an Activity; a second one would have
+ * its own back stack and its own theme root, and the two would disagree the first time a push
+ * deep-linked into a screen the other was already showing.
  */
 internal class MainActivity : ComponentActivity() {
 
+    private val pushes: PushRouter by inject()
+
+    /**
+     * Applies the language SCR-PA-002 chose (D-26, AL-26).
+     *
+     * `Resources` are resolved once per configuration and the first resolution happens before
+     * `onCreate`, so this is the only hook early enough. Android's per-app locale API is API 33+
+     * and the URD NFR-22 floor is 26; wrapping the base context works on every level and needs no
+     * `appcompat`. A language change calls `recreate()`, which comes back through here.
+     */
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(PassengerLocale.wrap(newBase))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
+
+        // A cold start from a notification tap: the deep link is on the launching intent and
+        // nowhere else. Offering it to the router before `setContent` means the shell's collector
+        // finds it already replayed rather than missing it by a frame.
+        routeFromIntent(intent)
 
         setContent {
-            MaterialTheme {
-                Surface(modifier = Modifier.fillMaxSize()) {
-                    PassengerApp()
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun PassengerApp(model: MainViewModel = viewModel()) {
-    val state by model.state.collectAsStateWithLifecycle()
-
-    Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Text("MageRide passenger — walking skeleton", style = MaterialTheme.typography.titleMedium)
-
-        if (state.busy) {
-            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-        }
-
-        state.error?.let { message ->
-            // The kebab error code is what a real screen resolves Si/Ta/En copy from (D-26); a
-            // skeleton shows the raw message because there is nothing to resolve it against yet.
-            Text("error: $message", color = MaterialTheme.colorScheme.error)
-        }
-
-        when (state.screen) {
-            Screen.SignIn -> SignIn(state, model)
-            Screen.Otp -> Otp(state, model)
-            Screen.Map -> LiveMap(state, model)
-            Screen.Booking, Screen.InRide -> Ride(state, model)
-        }
-    }
-}
-
-@Composable
-private fun SignIn(state: UiState, model: MainViewModel) {
-    // Phone OTP is the only way into either app (AL-07). Google and Apple sign-in exist on the
-    // portals and nowhere else.
-    OutlinedTextField(
-        value = state.phone,
-        onValueChange = model::onPhoneChanged,
-        label = { Text("Phone") },
-        modifier = Modifier.fillMaxWidth(),
-    )
-    Button(onClick = model::requestOtp, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) {
-        Text("Send code")
-    }
-}
-
-@Composable
-private fun Otp(state: UiState, model: MainViewModel) {
-    OutlinedTextField(
-        value = state.otp,
-        onValueChange = model::onOtpChanged,
-        label = { Text("Code from the SMS") },
-        modifier = Modifier.fillMaxWidth(),
-    )
-    Button(onClick = model::verifyOtp, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) {
-        Text("Verify")
-    }
-}
-
-@Composable
-private fun LiveMap(state: UiState, model: MainViewModel) {
-    // A list, not a map. C077 owns MapLibre over PMTiles; what matters here is that the frames
-    // arrive at all, over a real socket, from the 19 cells this client joined.
-    Text("Joined ${state.cells.size} geocells (res-7 + ring 2)")
-    Text("${state.vehicles.size} vehicles nearby", style = MaterialTheme.typography.bodySmall)
-
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-        items(state.vehicles) { vehicle ->
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Text(vehicle.type ?: "vehicle")
-                    Text("${vehicle.lat}, ${vehicle.lng}", style = MaterialTheme.typography.bodySmall)
-                }
+            MageRideTheme {
+                PassengerShell(onOpenUrl = ::openExternally)
             }
         }
     }
 
-    Button(onClick = model::book, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) {
-        Text("Book Colombo Fort -> Dehiwala")
+    /** A tap while the app is already running: `singleTop` delivers the intent here, not to onCreate. */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        routeFromIntent(intent)
     }
-}
 
-@Composable
-private fun Ride(state: UiState, model: MainViewModel) {
-    Text("Ride ${state.rideId}", style = MaterialTheme.typography.bodySmall)
-    Text("State: ${state.rideState}", style = MaterialTheme.typography.titleLarge)
+    private fun routeFromIntent(intent: Intent?) {
+        pushes.offer(intent?.data?.toString())
+    }
 
-    // Manual, because `RideStateChanged` on the hub is C041's. `signalr-hub.md` §1 already names
-    // this REST read as the fallback; a button makes the polling visible instead of hiding it.
-    Button(onClick = model::refreshRide, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) {
-        Text("Refresh")
+    /**
+     * Opens the Play Store link from D-31's `426` payload (SCR-PA-031).
+     *
+     * A null or unopenable URL is not an error worth surfacing: the gate itself already tells the
+     * passenger what is wrong, and a missing store link is the platform's misconfiguration rather
+     * than something they can act on.
+     */
+    private fun openExternally(url: String?) {
+        val target = url?.takeIf(String::isNotBlank) ?: return
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(target)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (_: ActivityNotFoundException) {
+            // No browser and no store on the handset. Nothing useful to fall back to.
+        }
     }
 }
