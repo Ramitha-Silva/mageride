@@ -110,4 +110,27 @@ internal object ControlTokens {
     /** `1.5px` outline in the wireframe's fields and outlined buttons, rounded to the grid. */
     val Border: Dp = 1.dp
     val BorderSelected: Dp = 2.dp
+
+    // ---- C077 · the first-run cluster (SCR-PA-001…005) ---------------------------------
+
+    /** SCR-PA-001's white app mark on the orange screen, its corner, and the loader under it. */
+    val SplashMark: Dp = 84.dp
+    val SplashMarkRadius: Dp = 22.dp
+    val SplashSpinner: Dp = 32.dp
+
+    /** SCR-PA-002/005's `illus` panel and the icon inside it. */
+    val IllustrationPanel: Dp = 96.dp
+    val IllustrationIcon: Dp = 40.dp
+
+    /** The carousel's paging dot, and its current-slide form (`.dots i`, `7px` → the 4 px grid). */
+    val Dot: Dp = 8.dp
+    val DotActive: Dp = 20.dp
+
+    /** One cell of SCR-PA-003's six-digit OTP entry (`.otp .b`, `38 x 46`). */
+    val OtpCellWidth: Dp = 40.dp
+    val OtpCellHeight: Dp = 48.dp
+
+    /** SCR-PA-004's `avatar lg` and the `＋` camera badge on it. */
+    val AvatarLarge: Dp = 96.dp
+    val AvatarBadge: Dp = 32.dp
 }

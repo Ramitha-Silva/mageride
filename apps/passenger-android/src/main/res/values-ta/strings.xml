@@ -37,4 +37,53 @@
     <string name="push_channel_general_name">புதுப்பிப்புகள்</string>
     <string name="push_channel_general_description">பார்சல்கள், சந்தாக்கள், உதவிப் பதில்கள் மற்றும் அறிவிப்புகள்.</string>
 
+    <string name="action_back">பின்</string>
+    <string name="action_continue">தொடரவும்</string>
+
+    <string name="onboarding_skip">தவிர்</string>
+    <string name="onboarding_get_started">தொடங்குக</string>
+    <string name="onboarding_language_label">மொழி</string>
+    <string name="onboarding_slide_map_title">ஒவ்வொரு பயணத்தையும் நேரலையில் பாருங்கள்</string>
+    <string name="onboarding_slide_map_body">உங்கள் அருகில் உள்ள பேருந்துகள், ரயில்கள், முச்சக்கர வண்டிகள், கார்கள் ஒரே வரைபடத்தில் — நொடிகளில் முன்பதிவு.</string>
+    <string name="onboarding_slide_map_caption">நேரலை வரைபடம்</string>
+    <string name="onboarding_slide_transit_title">பேருந்துகளும் ரயில்களும்</string>
+    <string name="onboarding_slide_transit_body">பொதுப் பாதைகள் தனியார் பயணங்களுக்கு அருகிலேயே — புறப்படும் முன் ஒப்பிடுங்கள்.</string>
+    <string name="onboarding_slide_transit_caption">பொதுப் போக்குவரத்து</string>
+    <string name="onboarding_slide_pay_title">உங்கள் விருப்பப்படி செலுத்துங்கள்</string>
+    <string name="onboarding_slide_pay_body">பணம், பணப்பை அல்லது ஓட்டுநரின் QR குறியீடு — அட்டை தேவையில்லை.</string>
+    <string name="onboarding_slide_pay_caption">கட்டணங்கள்</string>
+
+    <string name="login_title">கைபேசி எண்ணை உள்ளிடவும்</string>
+    <string name="login_subtitle">6 இலக்கக் குறியீட்டை SMS மூலம் அனுப்புவோம்.</string>
+    <string name="login_enter_code">குறியீட்டை உள்ளிடவும்</string>
+    <string name="login_didnt_get_it">கிடைக்கவில்லையா?</string>
+    <string name="login_resend">மீண்டும் அனுப்பு</string>
+    <string name="login_resend_in">மீண்டும் அனுப்பு (%1$dவி)</string>
+    <string name="login_attempts_remaining">இன்னும் %1$d முயற்சிகள்</string>
+
+    <string name="profile_title">சுயவிவரத்தை அமைக்கவும்</string>
+    <string name="profile_name_label">முழுப் பெயர்</string>
+    <string name="profile_language_label">மொழி</string>
+    <string name="profile_notifications">அறிவிப்புகள் மற்றும் சலுகைகள்</string>
+    <string name="profile_save">சேமித்துத் தொடரவும்</string>
+
+    <string name="permission_location_title">இருப்பிட அணுகலை அனுமதிக்கவும்</string>
+    <string name="permission_location_body">அருகிலுள்ள வாகனங்களைக் காட்டவும் உங்கள் பிக்கப் இடத்தை அமைக்கவும் MageRide-க்கு உங்கள் இருப்பிடம் தேவை.</string>
+    <string name="permission_location_caption">இருப்பிடம்</string>
+    <string name="permission_location_denied">இருப்பிடம் அணைக்கப்பட்டுள்ளது. அருகிலுள்ள வாகனங்களைக் காண அமைப்புகளில் இயக்கவும்.</string>
+    <string name="permission_allow_location">இருப்பிடத்தை அனுமதி</string>
+    <string name="permission_open_settings">அமைப்புகளைத் திற</string>
+    <string name="permission_not_now">இப்போது வேண்டாம்</string>
+
+    <string name="error_generic">ஏதோ தவறு நடந்தது. மீண்டும் முயலவும்.</string>
+    <string name="error_offline">இணைப்பு இல்லை. உங்கள் நெட்வொர்க்கைச் சரிபார்த்து மீண்டும் முயலவும்.</string>
+    <string name="error_validation_failed">நீங்கள் உள்ளிட்டதைச் சரிபார்க்கவும்.</string>
+    <string name="error_phone_invalid">சரியான இலங்கை கைபேசி எண்ணை உள்ளிடவும்.</string>
+    <string name="error_otp_invalid">அந்தக் குறியீடு சரியில்லை. மீண்டும் முயலவும்.</string>
+    <string name="error_otp_expired">அந்தக் குறியீடு காலாவதியானது. புதியது ஒன்றைக் கோரவும்.</string>
+    <string name="error_otp_locked">முயற்சிகள் அதிகம். புதிய குறியீட்டைக் கோரவும்.</string>
+    <string name="error_otp_rate_limited">கோரிக்கைகள் அதிகம். பிறகு முயலவும்.</string>
+    <string name="error_device_mismatch">இந்தக் குறியீடு வேறு சாதனத்தில் கோரப்பட்டது. மீண்டும் தொடங்கவும்.</string>
+    <string name="error_user_blocked">இந்தக் கணக்கால் உள்நுழைய முடியாது. உதவியைத் தொடர்பு கொள்ளவும்.</string>
+
 </resources>

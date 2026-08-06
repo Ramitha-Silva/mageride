@@ -28,6 +28,8 @@ lk.mageride.passenger
 │                             SCR-PA-033's drawer table + sheet, PassengerNavHost
 ├── shell/                    PassengerShell (drawer + Scaffold host), offline banner, update gate,
 │                             connectivity, AppPreferences + PassengerLocale
+├── onboarding/               C077 · SCR-PA-001…005 + the router, the OTP rules and the error table
+├── ui/component/             MageRideCta + the cluster-1 controls (C077)
 ├── ui/theme/                 D2' §0.2 tokens — colour, type, spacing/radius/elevation/controls
 ├── map/                      MageRideMap (the whole §0.3 layer stack), MapStyles, VehicleLayers,
 │                             MapPalette, MarkerInterpolator (MAP-04)
@@ -36,7 +38,29 @@ lk.mageride.passenger
 └── push/                     FCM service, PushRouter (deep links), channels, token provider
 ```
 
-**To add a screen (every SCR-PA id is a standing placeholder today):**
+## Cluster 1 (C077) — what the next screen group can reuse
+
+- **`OnboardingRouter.next(...)` is the only place that decides where a passenger belongs.** The
+  splash, the login screen after a verify and Profile Setup after a save all call it. If a new gate
+  is ever added before the map it goes in that function, not in a screen.
+- **`ui/component/` is now populated**, and a screen uses it rather than raw M3: `MageRideCta` (the
+  §0.2 CTA token — every full-width orange bar in the wireframes), `MageRideTextLink` (the
+  `textlink`), `SelectionBox`, `PagerDots`, `IllustrationPanel`, `SectionLabel`, `InlineError`,
+  `LabelledTextField`, `PhoneNumberField` and `OtpEntry`.
+- **`PassengerProfileRepository` is `iam.users` as an app uses it** — `GET`/`PUT /v1/users/me`.
+  C083's SCR-PA-027 reads the same pair; reuse it rather than opening a second seam.
+- **`OnboardingErrors` is the FIRST-RUN code table only.** Every arm is a code `iam.yaml` declares
+  on the three operations SCR-PA-003 and SCR-PA-004 reach. Add your own table for your contracts;
+  one `when` over the platform is a function nobody can check.
+- **A proper noun is data, not copy.** The language endonyms (`සිංහල`), the `+94` prefix and the
+  `7X XXX XXXX` mask are Kotlin constants (`LanguageNames.kt`, `PhoneNumber.kt`), because three
+  identical values in the three `strings.xml` files is exactly what `StringResourceTest` fails on.
+- **Language is applied by `MainActivity.attachBaseContext`** through `PassengerLocale.wrap`, and a
+  change calls `recreate()`. Per-app locale (`LocaleManager`) is API 33+; the floor here is 26.
+  A first run counts as a change — there is no stored language, so the app is drawing in the
+  *handset's* locale, which is usually not the Sinhala default AL-26 pre-selects.
+
+**To add a screen (every remaining SCR-PA id is a standing placeholder):**
 
 1. Its route is already in `nav/PassengerRoute.kt`. Use it; do not invent a path.
 2. Replace its `placeholder(...)` line in `nav/PassengerNavHost.kt` with the real composable. That

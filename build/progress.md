@@ -103,7 +103,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C074 | driver-android-tracker-sharing-profile | 4a | DONE | 2026-08-03 | **283 tests green** (was 237; 46 new across 6 suites), `assembleDebug` + `detekt` + `ktlintCheck` clean; SCR-DA-027/028/029/030 built to the wireframes. The C074 fence is a decorator on the publisher seam, not a check in a screen: `TrackerPositionPublisher` refuses `start(vehicleId)` for a paired vehicle, which closes all three doors onto the position service at once, and pairing stops a stream that is already running. SCR-DA-028 **re-reads** on every selector change rather than filtering — both endpoints take the vehicle in the path, so AL-35's "never mixed across vehicles" is enforced by emptying the lists on the tap. The rate-passenger sheet is a `ModalBottomSheet` (AL-35) and its list source is query-svc's `GET /v1/trips/{driverId}`, whose `rating` is joined on `rater_id` and therefore means "the stars I already left". Six spec gaps: **no route writes a `subject_kind='ride'` rating** although the column, query-svc's read and D3' §Part 3 all expect one; no owner-facing unbind; the bind wrapper drops `method`/`bindCode`; nothing reads a tracker binding back; no read serves a driver their own star average; and no notification type exists for a Mode B access request. Zero new dependencies — the QR reader is the half of `zxing:core` C073 already added |
 | C075 | driver-android-comms-safety-support | 4a | DONE | 2026-08-03 | **322 tests green** (was 283; 39 new across 5 suites), `assembleDebug` + `detekt` + `ktlintCheck` clean; SCR-DA-031/032/033/033a/034/035 built to the wireframes. **The LiveKit Android SDK cannot be resolved in this repo** — it depends on `audioswitch`, published only on JitPack, and the repository set is `google()` + `mavenCentral()` under `FAIL_ON_PROJECT_REPOS` — so the signalling half of SCR-DA-031 is real and the media half reports `NO_MEDIA_CLIENT`, which is exactly AL-48's condition: the screen offers *"Call normally instead?"* and logs `voip_failed`. Landing a real engine is one binding (`VoipEngine`). SCR-DA-015's Call and SOS buttons now **navigate**: two parameterised routes added (`VoipCall`, `Sos`), and `POST /v1/calls/start` is made by one screen so one tap writes one `comms.call_log` row. The daily-fee refund is a **category** (`daily_fee_refund` → Finance), not an endpoint, and shares SCR-DA-033a with *"Raise a ticket"*. SCR-DA-034 reads `mobile_db_schema.md` §1.6 because no operation lists notifications, which is also why it works offline; `DriverDatabase` is the app's deferred one-handle open of the local DB. Six spec gaps: no positionless `POST /v1/sos`, no spec number for the SOS confirmation window, no server-side notification list, `TicketEventKind.ASSIGNED` is unrenderable, no `TK-` ticket series exists, and `category` is free text. Zero new dependencies |
 | C076 | passenger-android-shell | 4a | DONE | 2026-08-03 | **59 tests green** in a new `apps/passenger-android` unit-test source set, `assembleDebug` + `detekt` + `ktlintCheck` clean; C025's walking skeleton **deleted** (3 files) and replaced by the real shell — Koin graph, `MageRideTheme` from D2' §0.2, trilingual `values`/`values-si`/`values-ta`, a `NavHost` registering **every** C077–C084 destination as a placeholder, SCR-PA-033's modal drawer (the passenger app HAS a hamburger; AL-31 is the driver's rule), the whole D2' §0.3 map stack (MAP-01..08 + MAP-10, with MAP-04 as pure-Kotlin interpolation), and the SignalR plane: 19 res-7 cells with 30 s hysteresis, D6' §5.4's rejoin-then-resync recovery, and a reconnect loop of our own because **the SignalR Java client has no `withAutomaticReconnect()`**. Hub payloads are decoded by `MageRideJson` and not by Gson — Gson binds enums by Kotlin name and C012's are `@SerialName`d — which is why `com.google.code.gson` is now an explicit dependency (signalr declares it at runtime scope). **MAP-09 is not built**: no app-facing contract exists for signed offline bundles. **FCM registered but inert** (no `google-services.json`, C124); **Play Integrity wired but not verified on a device**; **the wave-1 `:shared` gate was red on arrival** and not from anything here — closed straight afterwards by MCS-04, whose handoff is below |
-| C077 | passenger-android-auth-onboarding | 4a | PENDING | | |
+| C077 | passenger-android-auth-onboarding | 4a | DONE | 2026-08-06 | **96 tests green** (was 59; 37 new across 5 suites), `assembleDebug` + `detekt` + `ktlintCheck` clean. SCR-PA-001…005 built to `specs/wireframes/passenger_android.html`. **Get Started is pinned below the language list** (AL-36/US-1.3) — D2' §SCR-PA-002's own sketch still draws the CTA above a `SegmentedButton`, and the wireframe supersedes it. **Phone-OTP only** (AL-07): no Google button exists in this app. The carousel is content-svc's (`GET /v1/content/onboarding/passenger`), which **closes C068's recorded gap** — that route did not exist when the driver app shipped bundled slides — with a trilingual bundled fallback for a first launch on a bad connection. Resend is refused **locally** inside US-1.10's 60 s window so a tap cannot spend one of D-32's five. Three gaps recorded: no photo upload route exists for a passenger avatar, SMS Retriever needs a signing hash C103 owns, and US-1.3a's operating city has no passenger screen in any spec |
 | C078 | passenger-android-live-map-search | 4a | PENDING | | |
 | C079 | passenger-android-booking | 4a | PENDING | | |
 | C080 | passenger-android-ride-payment | 4a | PENDING | | |
@@ -12344,3 +12344,114 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   **Where the numbers stand:** contracts declare **241** in-scope operations · **177** app-facing,
   all covered · **64** internal/admin, **26** covered and pinned, **38** out of scope ·
   `ApiOperations` holds **203** · **23** attested · **822** tests green.
+
+
+---
+
+- **Component:** C077 passenger-android-auth-onboarding — 2026-08-06
+- **Status:** DONE — `./gradlew :apps:passenger-android:testDebugUnitTest :apps:passenger-android:assembleDebug`
+  exits 0 with **96 tests green** (was 59 at C076; 37 new across five suites), and `detekt` +
+  `ktlintCheck` are clean. All five screens under `## Screens` are built to
+  `specs/wireframes/passenger_android.html`, and every DoD line is covered by a test.
+- **Notes:**
+
+  ### The two fences, and the spec that disagrees with one of them
+
+  **Get Started is pinned to the bottom, below the language list.** US-1.3 and the wireframe both
+  say so, and the prompt makes it a fence. **D2' §SCR-PA-002 still disagrees on two counts** — its
+  ASCII sketch draws the CTA *above* the language row, and its component table names a
+  `SegmentedButton` for the picker where US-1.3 asks for *"vertical selectable boxes, one per row"*.
+  The wireframe is the team-approved baseline and wins; D2' §SCR-PA-002 needs a micro-change-set to
+  match. A `Box(weight = 1f)` above the CTA is what makes "pinned" true at every supported height
+  rather than only at the one the wireframe was drawn at.
+
+  **Phone-OTP only** (AL-07). `IamApi` carries `signInWithGoogle`, `signInWithApple` and
+  `signInWithPassword` for the Fleet and Admin portals; `AuthSessionManager` is the only door
+  `LoginViewModel` has, and it has no other. There is no Google button in this app.
+
+  ### Decisions worth knowing
+
+  **The carousel is content-svc's, and that closes a gap C068 recorded.** The driver app ships its
+  three slides as bundled string resources with a KDoc explaining that `content.yaml` declared no
+  route for them. **That route exists now** — `GET /v1/content/onboarding/passenger` (AL-28,
+  BR-25.1), public and unauthenticated because it is drawn before sign-in — so SCR-PA-002 fetches
+  them, and all three languages arrive in one answer precisely because the language picker is on the
+  same screen. **`FeatureSlides.Fallback` is still bundled and still trilingual**: first launch is
+  exactly when a passenger is most likely to be on a bad connection, and a blank carousel above the
+  language boxes reads as broken. Whoever next touches `apps/driver-android` could migrate
+  SCR-DA-002 onto the same route.
+
+  **The illustration is an icon, and that is a dependency wall rather than a shortcut.**
+  `OnboardingSlide.illustrationRef` is *"an app-bundled asset key, or an absolute https URL"* —
+  content-svc serves a reference and never bytes — and this module ships no image loader (no Coil,
+  no Glide). A remote reference has nothing to render it, so the panel draws a per-slot icon and
+  captions it with the ref, which is more use to whoever wires the real assets than a blank box.
+
+  **Resend is refused locally, not just by the server.** US-1.10 is a 60-second cooldown and D-32
+  caps OTP requests at five an hour — so a tap inside the cooldown does not merely fail, it *spends*
+  one of the five. `LoginState.canResend` gates the button and the countdown is shown rather than
+  hidden, because a bare disabled "Resend" tells a passenger nothing and they tap it until they are
+  locked out. The countdown reads `OtpChallenge.resendAllowedAt` on every tick rather than counting
+  down from a number, so a screen backgrounded for thirty seconds comes back with thirty seconds
+  gone.
+
+  **The destination after a verify comes from the profile the server holds, never from `isNewUser`.**
+  A passenger who installed, signed in and killed the app before Profile Setup is not a new user and
+  still has no name. The splash and the login screen therefore answer a failed `GET /v1/users/me`
+  **differently, on purpose**: the splash says "has a profile" (the session was restored, so they
+  have been through it before, and a flat tunnel must not push a working passenger back onto a
+  form), the login screen says "has none" (they signed in a second ago, so the network was fine, and
+  `PUT /v1/users/me` is idempotent). Both are commented where they are written.
+
+  **SCR-PA-004 keeps its Language row and that is not an AL-26 violation.** AL-26 removes the
+  language selector from **Edit Profile** (SCR-PA-027b) and leaves it on onboarding and Profile &
+  settings. SCR-PA-004 is neither — it is the *first* profile, drawn once — and its own wireframe
+  draws a Language field. It is pre-filled from what SCR-PA-002 stored, so leaving it alone is the
+  common path; it exists so a passenger who tapped the wrong box two screens ago can fix it without
+  hunting through settings. The save is **one** `PUT` with everything the screen owns, because three
+  partial calls would leave someone who lost signal halfway with a name and no language.
+
+  **The location rationale gates nothing.** Both *"Allow location"* and *"Not now"* continue to the
+  map, and what is remembered is that the screen was **shown** — never the grant, which is the OS's
+  and can be revoked from Settings at any time. Android stops showing the system dialog after two
+  refusals, so a gate here would be a screen with no way out; after those refusals the CTA becomes
+  *"Open Settings"*. COARSE counts as granted: Android 12+ lets a user pick approximate, and a ~3 km
+  live map works at that precision.
+
+  ### Three gaps found
+
+  1. **No photo-upload route exists for a passenger avatar.** D2' §SCR-PA-004 names `PhotosPicker`,
+     `AsyncImage` and an avatar crop sheet, and `UpdateProfileRequest.photoUrl` is a **URL** — but
+     nothing on the app-facing surface mints one for a passenger. `POST /v1/support/screenshots` and
+     the driver's document routes are the only uploads in the sixteen contracts, and neither is
+     this. The avatar is drawn and the field is left unsent; the name is what the wireframe's own
+     state line calls required. Landing it needs an upload route first.
+  2. **SMS Retriever cannot be wired in any build produced today.** D2' §SCR-PA-003 asks for
+     auto-read. The Retriever API matches an SMS against a hash of the app's **signing certificate**,
+     and this repo has no release signing config — C103 owns it — so the hash cannot be computed.
+     `OtpEntry` uses `KeyboardType.NumberPassword`, which still gets the OS's own one-time-code
+     suggestion on the keyboard strip, and is one text field behind six boxes rather than six
+     fields precisely so a six-character autofill lands in one go.
+  3. **US-1.3a's operating city has no passenger screen anywhere.** The story is phrased for "a
+     user" and the driver's SCR-DA-002 draws a city picker, but the passenger wireframe's SCR-PA-002
+     has a language picker and nothing else, and D2' §SCR-PA-002 lists only *"3-slide tutorial
+     (US-1.2) + Si/Ta/En picker (US-1.3)"*. `OnboardingRouter` therefore has no city gate. If a
+     passenger is meant to choose one, it is a missing screen rather than a missing field.
+
+  ### For C078–C084
+
+  - **Your route already exists** in `nav/PassengerRoute.kt` and is registered in
+    `nav/PassengerNavHost.kt`. Cluster 1's five placeholders are now real screens; the rest are
+    unchanged.
+  - **`ui/component/` is populated** — `MageRideCta` is the §0.2 CTA token and is what every
+    full-width orange bar in the wireframes is. Do not reach for a bare `Button`.
+  - **`OnboardingRouter.next(...)` is the only place that decides where a passenger belongs.** If a
+    new gate is ever needed before the map, it goes in that function.
+  - **`PassengerProfileRepository` is `GET`/`PUT /v1/users/me`.** C083's SCR-PA-027 wants the same
+    pair — reuse it rather than opening a second seam onto `iam.users`.
+  - **`MainDispatcher` in the test kit owns a view model's lifetime.** Any view model with a
+    `while (…) { delay(…) }` in it must be `own`ed, or it wakes up inside the next test class's
+    `Dispatchers.resetMain()` and fails a test that did nothing wrong.
+  - The splash already resumes an active ride (`GET /v1/rides/passenger/{id}/active` →
+    `PassengerRoute.ActiveRide`), so **C080 does not need to add that**; it needs the screen the
+    route points at.

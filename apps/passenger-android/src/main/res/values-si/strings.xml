@@ -37,4 +37,53 @@
     <string name="push_channel_general_name">යාවත්කාලීන</string>
     <string name="push_channel_general_description">පාර්සල්, දායකත්ව, සහාය පිළිතුරු සහ නිවේදන.</string>
 
+    <string name="action_back">ආපසු</string>
+    <string name="action_continue">ඉදිරියට</string>
+
+    <string name="onboarding_skip">මඟ හරින්න</string>
+    <string name="onboarding_get_started">ආරම්භ කරන්න</string>
+    <string name="onboarding_language_label">භාෂාව</string>
+    <string name="onboarding_slide_map_title">සෑම ගමනක්ම සජීවීව බලන්න</string>
+    <string name="onboarding_slide_map_body">ඔබ අවට බස්, දුම්රිය, ත්‍රීරෝද සහ කාර් එක් සිතියමක — තත්පර කිහිපයකින් වෙන් කරන්න.</string>
+    <string name="onboarding_slide_map_caption">සජීවී සිතියම</string>
+    <string name="onboarding_slide_transit_title">බස් සහ දුම්රියද</string>
+    <string name="onboarding_slide_transit_body">පොදු මාර්ග පෞද්ගලික ගමන් අසලම — යාමට පෙර සසඳා බලන්න.</string>
+    <string name="onboarding_slide_transit_caption">පොදු ප්‍රවාහනය</string>
+    <string name="onboarding_slide_pay_title">ඔබ කැමති ලෙස ගෙවන්න</string>
+    <string name="onboarding_slide_pay_body">මුදල්, පසුම්බිය හෝ රියදුරුගේ QR කේතය — කාඩ්පතක් අවශ්‍ය නැත.</string>
+    <string name="onboarding_slide_pay_caption">ගෙවීම්</string>
+
+    <string name="login_title">ජංගම දුරකථන අංකය ඇතුළත් කරන්න</string>
+    <string name="login_subtitle">අපි ඔබට SMS මගින් අංක 6ක කේතයක් එවන්නෙමු.</string>
+    <string name="login_enter_code">කේතය ඇතුළත් කරන්න</string>
+    <string name="login_didnt_get_it">ලැබුණේ නැද්ද?</string>
+    <string name="login_resend">නැවත එවන්න</string>
+    <string name="login_resend_in">නැවත එවන්න (තත් %1$d)</string>
+    <string name="login_attempts_remaining">තව උත්සාහ %1$dක් ඉතිරියි</string>
+
+    <string name="profile_title">පැතිකඩ සකසන්න</string>
+    <string name="profile_name_label">සම්පූර්ණ නම</string>
+    <string name="profile_language_label">භාෂාව</string>
+    <string name="profile_notifications">දැනුම්දීම් සහ දීමනා</string>
+    <string name="profile_save">සුරකින්න සහ ඉදිරියට</string>
+
+    <string name="permission_location_title">ස්ථානයට ප්‍රවේශය ලබා දෙන්න</string>
+    <string name="permission_location_body">අවට වාහන පෙන්වීමට සහ ඔබේ පිකප් ස්ථානය සැකසීමට MageRide හට ඔබේ ස්ථානය අවශ්‍යයි.</string>
+    <string name="permission_location_caption">ස්ථානය</string>
+    <string name="permission_location_denied">ස්ථානය ක්‍රියා විරහිතයි. අවට වාහන දැකීමට සැකසුම් තුළ එය ක්‍රියාත්මක කරන්න.</string>
+    <string name="permission_allow_location">ස්ථානය ලබා දෙන්න</string>
+    <string name="permission_open_settings">සැකසුම් විවෘත කරන්න</string>
+    <string name="permission_not_now">දැන් නොවේ</string>
+
+    <string name="error_generic">යම් දෝෂයක් ඇති විය. නැවත උත්සාහ කරන්න.</string>
+    <string name="error_offline">සම්බන්ධතාවයක් නැත. ඔබේ ජාලය පරීක්ෂා කර නැවත උත්සාහ කරන්න.</string>
+    <string name="error_validation_failed">ඔබ ඇතුළත් කළ දේ පරීක්ෂා කරන්න.</string>
+    <string name="error_phone_invalid">වලංගු ශ්‍රී ලාංකික ජංගම අංකයක් ඇතුළත් කරන්න.</string>
+    <string name="error_otp_invalid">එම කේතය නිවැරදි නැත. නැවත උත්සාහ කරන්න.</string>
+    <string name="error_otp_expired">එම කේතයේ කාලය අවසන්. නව එකක් ඉල්ලන්න.</string>
+    <string name="error_otp_locked">උත්සාහ ගණන වැඩියි. නව කේතයක් ඉල්ලන්න.</string>
+    <string name="error_otp_rate_limited">ඉල්ලීම් ගණන වැඩියි. පසුව උත්සාහ කරන්න.</string>
+    <string name="error_device_mismatch">මෙම කේතය ඉල්ලා ඇත්තේ වෙනත් උපාංගයකිනි. නැවත ආරම්භ කරන්න.</string>
+    <string name="error_user_blocked">මෙම ගිණුමට පිවිසිය නොහැක. සහායට සම්බන්ධ වන්න.</string>
+
 </resources>

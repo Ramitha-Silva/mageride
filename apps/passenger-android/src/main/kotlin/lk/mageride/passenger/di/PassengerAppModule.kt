@@ -10,6 +10,13 @@ import lk.mageride.passenger.live.PassengerLiveMap
 import lk.mageride.passenger.live.SignalRLiveHubTransport
 import lk.mageride.passenger.location.AndroidPassengerLocationSource
 import lk.mageride.passenger.location.PassengerLocationSource
+import lk.mageride.passenger.onboarding.LocationPermission
+import lk.mageride.passenger.onboarding.LoginViewModel
+import lk.mageride.passenger.onboarding.OnboardingRepository
+import lk.mageride.passenger.onboarding.OnboardingViewModel
+import lk.mageride.passenger.onboarding.PassengerProfileRepository
+import lk.mageride.passenger.onboarding.ProfileSetupViewModel
+import lk.mageride.passenger.onboarding.SplashViewModel
 import lk.mageride.passenger.push.PushRouter
 import lk.mageride.passenger.push.PushTokenProvider
 import lk.mageride.passenger.shell.AndroidAppPreferences
@@ -26,6 +33,7 @@ import lk.mageride.shared.platform.PlatformAttestationProvider
 import lk.mageride.shared.platform.PlatformSecureStore
 import lk.mageride.shared.platform.SecureStore
 import org.koin.android.ext.koin.androidContext
+import org.koin.androidx.viewmodel.dsl.viewModel
 import org.koin.core.module.Module
 import org.koin.dsl.module
 
@@ -92,7 +100,41 @@ internal fun passengerAppModule(environment: PassengerEnvironment = PassengerEnv
         single<PassengerLocationSource> { AndroidPassengerLocationSource(androidContext()) }
 
         liveMapBindings(environment)
+        onboardingBindings()
     }
+
+/**
+ * The C077 slice — SCR-PA-001…005.
+ *
+ * Two repositories over three services, split by what each screen actually needs rather than by
+ * service: [OnboardingRepository] is the carousel plus the language answer that cannot be sent
+ * until there is a session, and [PassengerProfileRepository] is `iam.users` as the first-run
+ * cluster reads and writes it. [LocationPermission] is a `single` because it needs a `Context`
+ * and a view model that held one could not be run on this host.
+ *
+ * `OnboardingViewModel` is passed to its screen explicitly rather than resolved inside it, so it
+ * is scoped to the NavHost's destination entry: half of what it does is compare the chosen
+ * language against the one the screen was **entered** in, and an instance rebuilt mid-screen would
+ * read back the value it had just written.
+ */
+private fun Module.onboardingBindings() {
+    single { LocationPermission(androidContext()) }
+    single { OnboardingRepository(content = get(), iam = get(), preferences = get()) }
+    single { PassengerProfileRepository(iam = get()) }
+
+    viewModel { SplashViewModel(sessions = get(), profiles = get(), rides = get(), preferences = get()) }
+    viewModel { OnboardingViewModel(onboarding = get()) }
+    viewModel {
+        LoginViewModel(
+            sessions = get(),
+            onboarding = get(),
+            profiles = get(),
+            preferences = get(),
+            pushTokens = get(),
+        )
+    }
+    viewModel { ProfileSetupViewModel(profiles = get(), preferences = get()) }
+}
 
 /**
  * The real-time plane — D6' §5.

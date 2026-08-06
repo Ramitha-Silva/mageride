@@ -17,6 +17,11 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import lk.mageride.passenger.R
+import lk.mageride.passenger.onboarding.LocationPermissionScreen
+import lk.mageride.passenger.onboarding.LoginScreen
+import lk.mageride.passenger.onboarding.OnboardingScreen
+import lk.mageride.passenger.onboarding.ProfileSetupScreen
+import lk.mageride.passenger.onboarding.SplashScreen
 import lk.mageride.passenger.ui.theme.MageRideTheme
 
 /**
@@ -40,11 +45,33 @@ internal fun PassengerNavHost(controller: NavHostController, modifier: Modifier 
         modifier = modifier,
     ) {
         // ---- C077 · auth / onboarding --------------------------------------------------
-        placeholder(PassengerRoute.Splash, "SCR-PA-001 splash")
-        placeholder(PassengerRoute.Onboarding, "SCR-PA-002 onboarding + language")
-        placeholder(PassengerRoute.Login, "SCR-PA-003 phone + OTP")
-        placeholder(PassengerRoute.ProfileSetup, "SCR-PA-004 profile setup")
-        placeholder(PassengerRoute.LocationPermission, "SCR-PA-005 location permission")
+        composable(PassengerRoute.Splash.path) {
+            SplashScreen(onResolved = { controller.replaceOnboarding(it) })
+        }
+        composable(PassengerRoute.Onboarding.path) {
+            // The view model is scoped to this entry rather than injected fresh per composition:
+            // `finish()` compares against the language the screen was ENTERED in, and a new
+            // instance mid-screen would read the value it had just written. See its KDoc.
+            OnboardingScreen(
+                onContinue = { controller.replaceOnboarding(PassengerRoute.Login) },
+                model = org.koin.androidx.compose.koinViewModel(),
+            )
+        }
+        composable(PassengerRoute.Login.path) {
+            LoginScreen(
+                onSignedIn = { controller.replaceOnboarding(it.route) },
+                onBack = { controller.popBackStack() },
+            )
+        }
+        composable(PassengerRoute.ProfileSetup.path) {
+            ProfileSetupScreen(
+                onSaved = { controller.replaceOnboarding(PassengerRoute.LocationPermission) },
+                onBack = { controller.popBackStack() },
+            )
+        }
+        composable(PassengerRoute.LocationPermission.path) {
+            LocationPermissionScreen(onContinue = { controller.replaceOnboarding(PassengerRoute.LiveMap) })
+        }
 
         // ---- C078 · the live map and search ---------------------------------------------
         placeholder(PassengerRoute.LiveMap, "SCR-PA-010 live map")
@@ -99,6 +126,21 @@ internal fun PassengerNavHost(controller: NavHostController, modifier: Modifier 
         placeholder(PassengerRoute.VoipCall.PATTERN, "SCR-PA-028 VoIP call")
         placeholder(PassengerRoute.Sos.PATTERN, "SCR-PA-029 SOS")
         placeholder(PassengerRoute.Support, "SCR-PA-030 support + ticket")
+    }
+}
+
+/**
+ * Moves forward through onboarding, leaving nothing behind.
+ *
+ * Every step of cluster 1 is a one-way door: Back from Login must leave the app rather than return
+ * to the splash, Back from Profile Setup must not return to the OTP screen of a session that
+ * already exists, and Back from the map must never re-enter onboarding at all. Popping the whole
+ * graph on each step is what makes all three true with one rule.
+ */
+private fun NavHostController.replaceOnboarding(route: PassengerRoute) {
+    navigate(route.path) {
+        popUpTo(graph.id) { inclusive = true }
+        launchSingleTop = true
     }
 }
 
