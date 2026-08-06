@@ -55,6 +55,18 @@ internal data class PushMessage(
 
         /** US-6A.15's reminder before a scheduled pickup (D5' §14.4). SCREAMING, per the catalogue. */
         const val KIND_SCHEDULED_REMINDER: String = "SCHEDULED_REMINDER"
+
+        /** `data.rideId` on a package push — the ride both tracking screens are scoped to. */
+        const val KEY_RIDE_ID: String = "rideId"
+
+        /**
+         * `data.deliveryOtp` on `package_picked_up` (US-20.5).
+         *
+         * **The only place this value ever appears.** `RideDetail` has no field for it and no read
+         * returns it, so SCR-PA-021 can show it exactly when the push that carried it was seen by
+         * this process. Recorded in the C081 handoff.
+         */
+        const val KEY_DELIVERY_OTP: String = "deliveryOtp"
     }
 }
 

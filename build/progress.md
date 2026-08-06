@@ -107,7 +107,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C078 | passenger-android-live-map-search | 4a | DONE | 2026-08-06 | **125 tests green** (was 96; 29 new across 3 suites), `assembleDebug` + `detekt` + `ktlintCheck` clean. SCR-PA-006/007/008/010/032 built to `specs/wireframes/passenger_android.html`. The filter is a pure value type re-applied to every batch **client-side** — a toggle costs no query, asserted by call count. AL-23 routing is in the view model, not the sheet: Mode A opens SCR-PA-007, Mode B returns the vehicle id for SCR-PA-024, Mode C does nothing (US-7.4). **AL-17 held against D2'**: SCR-PA-008 is geo-only and `getBusesOnRoute` is never reached from it — D2' §SCR-PA-008 says the opposite and needs a micro-change-set, which leaves **US-7.9 with no screen anywhere**. SCR-PA-007's ETA/driver/plate come from `GET /v1/nearby` on tap (the socket frame carries none of them) centred on the **passenger**, because `etaSeconds` is defined as seconds to the querying passenger; **the route number exists in no contract at all**. §2.2's `place_recents` now has its writer — choosing a prediction on SCR-PA-008 — which is what fills SCR-PA-010's *Recent* rows. Fixed a C076 latent: the recentre FAB called back but nothing outside `MageRideMap` holds the `MapLibreMap`, so it moved nothing |
 | C079 | passenger-android-booking | 4a | DONE | 2026-08-06 | **181 tests green** (was 125; 56 new across 7 suites), `assembleDebug` + `detekt` + `ktlintCheck` clean. SCR-PA-009/010b/011/012/012a/013 built to `specs/wireframes/passenger_android.html`. **AL-19 is a type, not a rendering**: `TierQuote` has three fields and a pinning test fails if a fourth appears, so a pre-match card cannot show an ETA. **AL-18/AL-55**: transit-svc down or feed-less degrades to one muted row while the Mode C tiers quote normally. **AL-20 parsed on the device** — `MapsLink` reads `!3d!4d`/`q=`/`ll=`/`@`, preferring the place pin over the viewport, and only `maps.app.goo.gl` reaches the server (3 s, one retry). **P-02 is structural**: `declineLocationRequest` takes an id and nothing else, asserted by what the repository was handed. **AL-36**: Confirm needs a destination *and* a time ≥ T-30, because the Job Board opens then. Built two things `:shared` lacks — an encoded-polyline decoder (GTFS shapes) and a Google-Maps URL parser. Five gaps recorded, including **no SCR-PA id for a map picker anywhere in the wireframe** and **no headway/frequency field** for the wireframe's *"every ~10 min"*. Also fixed a wall-clock flake in C077's `LoginViewModelTest` |
 | C080 | passenger-android-ride-payment | 4a | DONE | 2026-08-06 | **201 tests green** (was 181; 20 new across 3 suites), `assembleDebug` + `detekt` + `ktlintCheck` clean. SCR-PA-014/015/015a/016/017/018/019 built. **AL-57/AL-59 are the story**: `onepay` and platform-`lankaqr` are dead as ride rails, so SCR-PA-016 offers **Cash / Wallet / Driver QR** and *nothing on any screen can render a surcharge* — `PaymentRails` is the only rail list and a test pins it. **This corrects C079's booking chip**, which still offered the two retired rails. **AL-47 attestation**: claim → poll → `DriverConfirmedQR`, with Support offered past five unconfirmed minutes; `QrClaimedByPassenger` is explicitly *not* settled. **AL-48**: no masking anywhere — a Normal call is `ACTION_DIAL` on the real `counterpartyPhone`, the choice is remembered, and US-26.5's number notice is shown once and only before a direct dial. Cancel-after-accept names the Rs 50 **before** the tap (D-05 settles it on the next trip, so that is the only moment to say it). Added CameraX + `zxing:core` and the CAMERA permission for AL-22's scan. **Three gaps**: no contract POSTs a Mode C ride rating (confirming C074's finding from the other side — SCR-PA-019 queues locally), `ride.yaml`'s booking-time payment enum never caught up with AL-57/AL-59, and the SCR-PA-016/017 wireframes still draw OnePay +5% |
-| C081 | passenger-android-package-history | 4a | PENDING | | |
+| C081 | passenger-android-package-history | 4a | DONE | 2026-08-06 | **208 tests green** (was 201; 7 new), `assembleDebug` + `detekt` + `ktlintCheck` clean. SCR-PA-020/021/022/023 built. **One view model for both package screens**, because it is one ride — which of SCR-PA-020 and SCR-PA-021 to draw is a fact about the ride (booker vs recipient), not about the URI, exactly as `PassengerRoute.PackageTracking`'s KDoc anticipated. **AL-48 on the history card**: the row's `mobileMasked` is rendered and never dialled (`PhoneMasked` forbids parsing one back), so **Call** costs one `GET /v1/rides/{id}` for the clear `counterpartyPhone` — and a **cancelled-before-assignment** trip offers neither, checked in the card *and* the view model. **Four gaps**: neither package OTP can be read back from the platform (pickup is returned once at booking, delivery arrives only on a push — both now captured into a process-lifetime `PackageOtps`), there is **no passenger-facing read of their own scheduled rides**, `RideHistoryRow` carries no `kind` so the Packages tab splits on a terminal state, and `ride.yaml`'s post-AL-48 note still claims the Call needs no second round trip |
 | C082 | passenger-android-mode-b-subscriptions | 4a | PENDING | | |
 | C083 | passenger-android-settings-addresses | 4a | PENDING | | |
 | C084 | passenger-android-comms-safety-support | 4a | PENDING | | |
@@ -12746,3 +12746,75 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   - **C084 owns SCR-PA-028.** `ActiveRideScreen.onFreeCall` already routes to `PassengerRoute.VoipCall`,
     so the VoIP screen only has to exist. On VoIP failure, US-26.4 asks for a *"Call normally
     instead?"* prompt — that belongs to whoever builds the call, not to the chooser.
+
+- **Component:** C081 passenger-android-package-history — 2026-08-06
+- **Status:** DONE — `./gradlew :apps:passenger-android:testDebugUnitTest :apps:passenger-android:assembleDebug`
+  exits 0: **208 tests, 0 failures** (201 → 208). `detekt` and `ktlintCheck` clean. All four screens built.
+- **Notes:**
+  **SCR-PA-020 and SCR-PA-021 are one view model, because they are one ride.** The sender and the
+  recipient watch the same `rides.rides` row through the same `ride:{rideId}` SignalR group; what
+  differs is which OTP is theirs and what the header says. `mageride://package/{rideId}` is the
+  **same URI for both** — the recipient gets it on `package_picked_up`, the sender on
+  `package_delivered` — so the party is decided from the ride, which is what
+  `PassengerRoute.PackageTracking`'s own KDoc said C081 would do.
+
+  **The history card renders a masked number and the Call resolves the real one.**
+  `RideHistoryRow.driver.mobileMasked` is a `PhoneMasked`, and `:shared`'s KDoc says in as many
+  words *"never parse this back into a dialable number"*. AL-48 put the clear number on
+  `RideDetail.counterpartyPhone`, which only `GET /v1/rides/{rideId}` carries — so **Call** costs
+  one read. A **cancelled-before-assignment** trip offers neither the number nor the action, and
+  that is checked twice on purpose: the card hides it (what a passenger sees) and the view model
+  refuses it (what a stale list or a mis-wired callback cannot get around).
+
+  ### Four gaps found
+
+  1. **Neither package OTP can be read back from the platform**, and both screens draw one.
+     - The **pickup** code (P-07, US-20.4) comes back on `POST /v1/rides/request` and is *"shown
+       once to the sender and never returned again; only its hash is stored"*. `RideDetail` has no
+       field for it and `mobile_db_schema.md` §2.3's `rides` projection has no column.
+     - The **delivery** code (US-20.5) appears only in the FCM `package_picked_up` payload
+       (`data.deliveryOtp`, which C076 documented) and has no read either.
+
+     Both are now captured into `PackageOtps` — a **process-lifetime** store written by C079's
+     booking and by `PassengerMessagingService` on arrival. That satisfies the Definition-of-Done
+     line *"the OTPs shown match the ones the driver must enter"* **for the session that saw
+     them**, and no further: a cold start, a reinstall or a handset that never received the push
+     has nothing, and the screen says so rather than drawing four empty boxes. Persisting a
+     handover code needs a `mobile_db_schema.md` change; inventing one would be worse than the gap,
+     because a code the driver's app rejects is the one failure a handover cannot survive.
+  2. **There is no passenger-facing read of their own scheduled rides.** `dispatch.yaml` offers
+     `GET /v1/rides/scheduled/{driverId}` (*"what this **driver** has already claimed"*) and
+     `DELETE /v1/rides/schedule/{scheduledRideId}`. A passenger can **create** a scheduled ride
+     (C079) and **cancel one by id**, and cannot **list** their own — so SCR-PA-022's **Scheduled**
+     tab renders its empty state. `ApiHistoryRepository.scheduled` answers empty rather than
+     inventing a call; it becomes one line when the route exists.
+  3. **`RideHistoryRow` carries no `kind`**, so the **Packages** tab cannot be filtered properly.
+     The only signal is the terminal state a parcel reaches — `CashOnDeliveryCollected`, which is
+     P-08's and nothing but a package gets there — so a package paid by any other rail is
+     indistinguishable from a passenger ride in this row. Adding `kind` to `RideHistoryRow` fixes it.
+  4. **`ride.yaml`'s `listRideHistory` note is stale post-AL-48.** It says each row carries the
+     driver's `name`, `mobileMasked` and `callTypesAvailable[]` *"so the post-trip Call action can
+     be rendered without a second round-trip"* — true while calls were brokered, and not true now
+     that a Normal call is a client-side `tel:` on the clear number. Either the row should carry a
+     `PhoneE164` or the note should stop promising one round trip.
+
+  ### Also worth knowing
+
+  - **`mobile_db_schema.md` §2.3's `rides.payment_method` CHECK is `('cash','lankaqr','onepay','cod')`**
+    — the same AL-57/AL-59 staleness C080 recorded in `ride.yaml`, now confirmed in the mobile
+    schema too. Whoever writes that micro-change-set should take both.
+  - **SCR-PA-023 shows the distance the fare was computed from** (`TripDetail.distanceKm`, the
+    Kalman-filtered figure) and never a sum over the decoded polyline — two numbers on one receipt
+    is an argument waiting to happen. When `geometrySource` is `operational` the contract calls the
+    distance a lower bound and the screen says so.
+
+  ### For C082–C084
+
+  - **`HistoryRepository` is the seam for anything already done.** Note that the **Past** tab is
+    ride-svc's history (it needs the state and the driver) while SCR-PA-023's detail is query-svc's
+    (it needs the polyline) — they are different reads for good reasons, not duplication.
+  - **`PackageOtps` is a `single`.** If a screen needs a handover code, take it from there; do not
+    re-read the ride hoping for one.
+  - **`CallChooserSheet` is now used by three clusters** (C080's active ride, C081's history and
+    package tracking). It takes the number as a parameter, which is what makes that possible.
+  - **`rideScoped(...)`** in the NavHost registers a ride-scoped destination; SCR-PA-020/021 uses it.

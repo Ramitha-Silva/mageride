@@ -332,4 +332,32 @@
     <string name="error_gateway">ගෙවීම් සැපයුම්කරු වෙත සම්බන්ධ විය නොහැකි විය. නැවත උත්සාහ කරන්න හෝ මුදලින් ගෙවන්න.</string>
     <string name="error_ride_not_found">එම ගමන සොයාගත නොහැකි විය.</string>
 
+    <!-- ==== C081 · package tracking and history (SCR-PA-020…023) ====================== -->
+
+    <string name="package_track_sending">පාර්සලය · යවමින්</string>
+    <string name="package_track_incoming">එන පාර්සලය</string>
+    <string name="package_step_pending">බාරගැනීම බලාපොරොත්තුවෙන්</string>
+    <string name="package_step_picked_up">බාරගෙන ඇත</string>
+    <string name="package_step_in_transit">ගමන් මාර්ගයේ</string>
+    <string name="package_step_delivered">බාරදී ඇත</string>
+    <string name="package_pickup_otp_label">බාරගැනීමේ කේතය — රියදුරාට දෙන්න</string>
+    <string name="package_delivery_otp_label">බාරදීමේ කේතය — භාරදෙන විට රියදුරාට දෙන්න</string>
+    <string name="package_otp_unavailable">මෙම කේතය පාර්සලය වෙන් කළ විට එක් වරක් පෙන්වා ඇති අතර නැවත පෙන්විය නොහැක.</string>
+
+    <string name="history_title">ඔබේ ගමන්</string>
+    <string name="history_tab_past">පසුගිය</string>
+    <string name="history_tab_scheduled">කාලසටහන්ගත</string>
+    <string name="history_tab_packages">පාර්සල</string>
+    <string name="history_empty_past">තවම ගමන් නැත. ඔබ අවසන් කළ ගමන් මෙහි පෙන්වයි.</string>
+    <string name="history_empty_scheduled">කාලසටහන්ගත කර කිසිවක් නැත.</string>
+    <string name="history_empty_packages">තවම පාර්සල නැත.</string>
+
+    <string name="trip_details_title">ගමනේ විස්තර</string>
+    <string name="trip_details_receipt">රිසිට්පත</string>
+    <string name="trip_details_driver">රියදුරු</string>
+    <string name="trip_details_vehicle">වාහනය</string>
+    <string name="trip_details_distance">දුර</string>
+    <string name="trip_details_approximate">දුර ගණනය කර ඇත්තේ වරින් වර ලබාගත් ස්ථාන අනුව බැවින් තරමක් අඩු විය හැක.</string>
+    <string name="trip_details_report">ගැටලුවක් වාර්තා කරන්න</string>
+
 </resources>

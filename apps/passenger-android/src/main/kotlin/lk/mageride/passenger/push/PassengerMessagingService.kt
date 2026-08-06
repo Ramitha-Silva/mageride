@@ -14,6 +14,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import lk.mageride.passenger.MainActivity
 import lk.mageride.passenger.R
+import lk.mageride.passenger.history.PackageOtps
 import lk.mageride.shared.data.api.comms.NotificationApi
 import lk.mageride.shared.data.models.ClientPlatform
 import lk.mageride.shared.data.models.comms.RegisterPushTokenRequest
@@ -43,6 +44,7 @@ internal class PassengerMessagingService : FirebaseMessagingService() {
     private val router: PushRouter by inject()
     private val sessions: AuthSessionManager by inject()
     private val notifications: NotificationApi by inject()
+    private val packageOtps: PackageOtps by inject()
 
     // FirebaseMessagingService's callbacks run on a background thread with a ~20 s budget and no
     // lifecycle of their own. A service-owned scope cancelled in onDestroy is what keeps a token
@@ -83,6 +85,13 @@ internal class PassengerMessagingService : FirebaseMessagingService() {
         // Two things happen, in this order and independently: the destination is offered to the
         // shell (which acts on it only if the app is in the foreground), and a notification is
         // posted (which is what reaches a passenger who is not looking at the screen).
+        // US-20.5's delivery code arrives HERE and nowhere else — there is no read for it, so a
+        // push that is not captured on arrival is a code SCR-PA-021 can never show. Kept before
+        // the routing so a foreground tap finds it already there. Δ C081.
+        push.data[PushMessage.KEY_RIDE_ID]?.let { rideId ->
+            packageOtps.rememberDelivery(rideId, push.data[PushMessage.KEY_DELIVERY_OTP])
+        }
+
         router.offer(push)
         post(push, message)
     }

@@ -36,6 +36,8 @@ lk.mageride.passenger
 │                             BookingDraft (the one booking six screens edit)
 ├── ride/                     C080 · SCR-PA-014…019 — finding, the active ride, the call chooser,
 │                             the payment rails, AL-47's attestation, the receipt and the rating
+├── history/                  C081 · SCR-PA-020…023 — package tracking for both parties, the
+│                             three-tab history, trip details, and PackageOtps
 ├── ui/component/             MageRideCta + the cluster-1 controls (C077)
 ├── ui/theme/                 D2' §0.2 tokens — colour, type, spacing/radius/elevation/controls
 ├── map/                      MageRideMap (the whole §0.3 layer stack), MapStyles, VehicleLayers,
@@ -145,6 +147,22 @@ lk.mageride.passenger
 - **`rideScoped(pattern, arg) { rideId -> … }`** registers a ride-scoped destination; every C080
   view model takes its id from the route, which is why none of them is a Koin `viewModel { }`.
 
+## Cluster 5 (C081) — packages and history
+
+- **SCR-PA-020 and SCR-PA-021 are one view model**, because they are one ride. The party is decided
+  from the ride (booker vs recipient), never from the URI — `mageride://package/{rideId}` is the
+  same link for both.
+- **A recipient never signed in.** They arrive from an FCM deep link, or with no app from an SMS
+  onto the SCR-WT web page (P-09, AL-45). Nothing on that screen is reachable by logging in.
+- **`PackageOtps` is a `single` and is process-lifetime.** Neither handover code can be read back
+  from the platform, so it is written by C079's booking and by `PassengerMessagingService` on
+  arrival. A cold start has nothing, and the screen says so.
+- **A history card renders `mobileMasked` and never dials it.** `PhoneMasked`'s KDoc forbids parsing
+  one back; the Call fetches `RideDetail.counterpartyPhone` (AL-48). A cancelled-before-assignment
+  trip offers neither, checked in the card and again in the view model.
+- **`HistoryRepository` deliberately reads two services.** The Past tab is ride-svc's history (state
+  + driver); SCR-PA-023's detail is query-svc's (polyline + filtered distance, spanning all modes).
+
 ## The live plane — read this before touching `live/`
 
 - **The passenger view is 19 cells and the client never subscribes to a vehicle.** R-06 is res-7 +
@@ -210,6 +228,15 @@ lk.mageride.passenger
 - **There is no `GET /v1/vehicles/{id}`.** The popup's ETA, driver and plate come from
   `GET /v1/nearby` matched by id, centred on the **passenger** — `etaSeconds` is defined as seconds
   to the querying passenger, so a lookup centred on the vehicle would answer roughly zero.
+- **Neither package OTP has a read.** The pickup code is returned once on
+  `POST /v1/rides/request`; the delivery code arrives only in the `package_picked_up` FCM payload.
+  `RideDetail` has fields for neither and §2.3's `rides` projection has no columns.
+- **No passenger-facing read lists their own scheduled rides.** `dispatch.yaml` has the driver's
+  list and a cancel-by-id; SCR-PA-022's Scheduled tab renders empty until one exists.
+- **`RideHistoryRow` carries no `kind`**, so the Packages tab splits on `CashOnDeliveryCollected` —
+  a package paid another way looks like a passenger ride.
+- **§2.3's `rides.payment_method` CHECK still lists `lankaqr`/`onepay`**, the same AL-57/AL-59
+  staleness as `ride.yaml`'s booking enum.
 - **No contract POSTs a Mode C ride rating.** `ride.yaml` declares no rating operation; trip-state's
   is scoped to a *session*, and using it for a ride would cross R-01. SCR-PA-019 queues to
   `ratings_pending` — which has no columns for the stars or the comment. C074 found the same gap

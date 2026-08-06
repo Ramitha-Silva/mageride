@@ -13,6 +13,9 @@ import lk.mageride.passenger.booking.PasteLinkViewModel
 import lk.mageride.passenger.booking.ProxyRiderViewModel
 import lk.mageride.passenger.booking.RideBookingViewModel
 import lk.mageride.passenger.booking.ScheduleRideViewModel
+import lk.mageride.passenger.history.ApiHistoryRepository
+import lk.mageride.passenger.history.HistoryRepository
+import lk.mageride.passenger.history.PackageOtps
 import lk.mageride.passenger.home.LiveMapViewModel
 import lk.mageride.passenger.home.LocalRecentPlaces
 import lk.mageride.passenger.home.RecentPlaces
@@ -119,6 +122,7 @@ internal fun passengerAppModule(environment: PassengerEnvironment = PassengerEnv
         liveMapScreenBindings()
         bookingBindings()
         activeRideBindings()
+        historyBindings()
     }
 
 /**
@@ -203,7 +207,7 @@ private fun Module.bookingBindings() {
 
     viewModel { RideBookingViewModel(draft = get(), bookings = get(), keys = get()) }
     viewModel { ProxyRiderViewModel(draft = get(), bookings = get(), live = get()) }
-    viewModel { PackageBookingViewModel(draft = get(), bookings = get(), keys = get()) }
+    viewModel { PackageBookingViewModel(draft = get(), bookings = get(), keys = get(), otps = get()) }
     viewModel { ScheduleRideViewModel(draft = get(), bookings = get()) }
     viewModel { PasteLinkViewModel(bookings = get()) }
 }
@@ -221,6 +225,19 @@ private fun Module.activeRideBindings() {
         ApiRideRepository(rides = get(), fares = get(), wallets = get(), safety = get(), comms = get())
     }
     single { CallChoice(preferences = get()) }
+}
+
+/**
+ * The C081 slice — SCR-PA-020…023.
+ *
+ * [PackageOtps] is a `single` and holds the two handover codes for the life of the process, because
+ * **neither can be read back from the platform** — the pickup code is returned once at booking and
+ * the delivery code arrives only on a push. Its own KDoc argues the case; the C081 handoff records
+ * it as two contract gaps.
+ */
+private fun Module.historyBindings() {
+    single<HistoryRepository> { ApiHistoryRepository(rides = get(), query = get(), dispatch = get()) }
+    single { PackageOtps() }
 }
 
 /**

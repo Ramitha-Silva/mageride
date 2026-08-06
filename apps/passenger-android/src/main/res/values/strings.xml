@@ -392,4 +392,32 @@
     <string name="error_gateway">The payment provider could not be reached. Try again or pay cash.</string>
     <string name="error_ride_not_found">That ride could not be found.</string>
 
+    <!-- ==== C081 · package tracking and history (SCR-PA-020…023) ====================== -->
+
+    <string name="package_track_sending">Package · sending</string>
+    <string name="package_track_incoming">Incoming package</string>
+    <string name="package_step_pending">Pickup pending</string>
+    <string name="package_step_picked_up">Picked up</string>
+    <string name="package_step_in_transit">In transit</string>
+    <string name="package_step_delivered">Delivered</string>
+    <string name="package_pickup_otp_label">Pickup code — give it to the driver</string>
+    <string name="package_delivery_otp_label">Delivery code — give it to the driver on handover</string>
+    <string name="package_otp_unavailable">This code was shown once when the package was booked and cannot be shown again.</string>
+
+    <string name="history_title">Your trips</string>
+    <string name="history_tab_past">Past</string>
+    <string name="history_tab_scheduled">Scheduled</string>
+    <string name="history_tab_packages">Packages</string>
+    <string name="history_empty_past">No trips yet. Your completed rides will appear here.</string>
+    <string name="history_empty_scheduled">Nothing scheduled.</string>
+    <string name="history_empty_packages">No packages yet.</string>
+
+    <string name="trip_details_title">Trip details</string>
+    <string name="trip_details_receipt">Receipt</string>
+    <string name="trip_details_driver">Driver</string>
+    <string name="trip_details_vehicle">Vehicle</string>
+    <string name="trip_details_distance">Distance</string>
+    <string name="trip_details_approximate">The distance is measured from periodic samples and may be slightly low.</string>
+    <string name="trip_details_report">Report an issue</string>
+
 </resources>

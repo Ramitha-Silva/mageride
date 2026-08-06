@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import lk.mageride.passenger.R
+import lk.mageride.passenger.history.PackageOtps
 import lk.mageride.passenger.onboarding.PhoneNumber
 import lk.mageride.passenger.ride.PaymentRails
 import lk.mageride.shared.data.api.IdempotencyKeyGenerator
@@ -102,6 +103,14 @@ internal class PackageBookingViewModel(
     private val draft: BookingDraft,
     private val bookings: BookingRepository,
     private val keys: IdempotencyKeyGenerator,
+    /**
+     * Where the pickup OTP goes so SCR-PA-020 can still show it (Δ C081).
+     *
+     * `RequestRideResponse.pickupOtp` is the only time this code exists — the server keeps a hash
+     * and no read returns it — so a sender who leaves this screen and comes back to track the
+     * parcel would otherwise have nothing to read out to the driver. See `PackageOtps`.
+     */
+    private val otps: PackageOtps,
 ) : ViewModel() {
 
     private val mutableState = MutableStateFlow(
@@ -239,6 +248,7 @@ internal class PackageBookingViewModel(
                         recipientPhone = PhoneNumber.toE164(current.recipientPhone),
                     ),
                 )
+                otps.rememberPickup(response.rideId, response.pickupOtp)
                 draft.clear()
                 mutableState.update {
                     it.copy(booking = false, booked = response.rideId, pickupOtp = response.pickupOtp)

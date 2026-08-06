@@ -332,4 +332,32 @@
     <string name="error_gateway">கட்டண வழங்குநரைத் தொடர்பு கொள்ள முடியவில்லை. மீண்டும் முயற்சிக்கவும் அல்லது பணமாகச் செலுத்தவும்.</string>
     <string name="error_ride_not_found">அந்தப் பயணத்தைக் கண்டுபிடிக்க முடியவில்லை.</string>
 
+    <!-- ==== C081 · package tracking and history (SCR-PA-020…023) ====================== -->
+
+    <string name="package_track_sending">பொருள் · அனுப்புகிறது</string>
+    <string name="package_track_incoming">வரும் பொருள்</string>
+    <string name="package_step_pending">எடுப்பதற்குக் காத்திருக்கிறது</string>
+    <string name="package_step_picked_up">எடுக்கப்பட்டது</string>
+    <string name="package_step_in_transit">வழியில்</string>
+    <string name="package_step_delivered">சேர்க்கப்பட்டது</string>
+    <string name="package_pickup_otp_label">எடுக்கும் குறியீடு — ஓட்டுநரிடம் கொடுங்கள்</string>
+    <string name="package_delivery_otp_label">சேர்க்கும் குறியீடு — ஒப்படைக்கும்போது ஓட்டுநரிடம் கொடுங்கள்</string>
+    <string name="package_otp_unavailable">இந்தக் குறியீடு பொருள் முன்பதிவு செய்யப்பட்டபோது ஒரு முறை மட்டுமே காட்டப்பட்டது, மீண்டும் காட்ட முடியாது.</string>
+
+    <string name="history_title">உங்கள் பயணங்கள்</string>
+    <string name="history_tab_past">முந்தையவை</string>
+    <string name="history_tab_scheduled">திட்டமிட்டவை</string>
+    <string name="history_tab_packages">பொருட்கள்</string>
+    <string name="history_empty_past">இதுவரை பயணங்கள் இல்லை. முடிந்த பயணங்கள் இங்கே தோன்றும்.</string>
+    <string name="history_empty_scheduled">எதுவும் திட்டமிடப்படவில்லை.</string>
+    <string name="history_empty_packages">இதுவரை பொருட்கள் இல்லை.</string>
+
+    <string name="trip_details_title">பயண விவரங்கள்</string>
+    <string name="trip_details_receipt">ரசீது</string>
+    <string name="trip_details_driver">ஓட்டுநர்</string>
+    <string name="trip_details_vehicle">வாகனம்</string>
+    <string name="trip_details_distance">தூரம்</string>
+    <string name="trip_details_approximate">தூரம் அவ்வப்போது பெறப்பட்ட இடங்களிலிருந்து கணக்கிடப்படுகிறது, சற்று குறைவாக இருக்கலாம்.</string>
+    <string name="trip_details_report">சிக்கலைத் தெரிவி</string>
+
 </resources>

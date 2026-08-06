@@ -10,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
@@ -29,6 +30,14 @@ import lk.mageride.passenger.booking.ProxyRiderScreen
 import lk.mageride.passenger.booking.RideBookingScreen
 import lk.mageride.passenger.booking.ScheduleRideScreen
 import lk.mageride.passenger.di.PassengerDatabase
+import lk.mageride.passenger.history.HistoryRepository
+import lk.mageride.passenger.history.PackageOtps
+import lk.mageride.passenger.history.PackageTrackScreen
+import lk.mageride.passenger.history.PackageTrackViewModel
+import lk.mageride.passenger.history.TripDetailsScreen
+import lk.mageride.passenger.history.TripDetailsViewModel
+import lk.mageride.passenger.history.TripHistoryScreen
+import lk.mageride.passenger.history.TripHistoryViewModel
 import lk.mageride.passenger.home.LiveMapScreen
 import lk.mageride.passenger.home.SearchLocationScreen
 import lk.mageride.passenger.live.PassengerLiveMap
@@ -54,6 +63,7 @@ import lk.mageride.passenger.ride.TripSummaryViewModel
 import lk.mageride.passenger.ui.theme.MageRideTheme
 import lk.mageride.shared.data.models.Place
 import lk.mageride.shared.domain.auth.AuthSessionManager
+import lk.mageride.shared.domain.auth.SessionState
 import org.koin.compose.koinInject
 
 /**
@@ -86,6 +96,11 @@ internal fun PassengerNavHost(controller: NavHostController, modifier: Modifier 
     val sessions = koinInject<AuthSessionManager>()
     val live = koinInject<PassengerLiveMap>()
     val databases = koinInject<PassengerDatabase>()
+
+    // C081's cluster.
+    val historyRepository = koinInject<HistoryRepository>()
+    val packageOtps = koinInject<PackageOtps>()
+    val signedInUserId = (sessions.state.collectAsStateWithLifecycle().value as? SessionState.SignedIn)?.userId
 
     NavHost(
         navController = controller,
@@ -322,9 +337,46 @@ internal fun PassengerNavHost(controller: NavHostController, modifier: Modifier 
         }
 
         // ---- C081 · packages and history -------------------------------------------------
-        placeholder(PassengerRoute.PackageTracking.PATTERN, "SCR-PA-020/021 package tracking")
-        placeholder(PassengerRoute.Trips, "SCR-PA-022 trip & schedule history")
-        placeholder(PassengerRoute.TripDetails.PATTERN, "SCR-PA-023 trip details")
+        rideScoped(PassengerRoute.PackageTracking.PATTERN, PassengerRoute.PackageTracking.ARG_RIDE_ID) { rideId ->
+            PackageTrackScreen(
+                onBack = { controller.popBackStack() },
+                onFreeCall = { controller.navigate(PassengerRoute.VoipCall(rideId).path) },
+                choice = callChoice,
+                model = viewModel(key = rideId) {
+                    PackageTrackViewModel(
+                        rideId = rideId,
+                        history = historyRepository,
+                        live = live,
+                        otps = packageOtps,
+                        // SCR-PA-020 or SCR-PA-021: the sender is the ride's booker. A recipient
+                        // arrived from an FCM deep link and has no booking of their own, so the
+                        // absence of a match is the answer rather than a missing case.
+                        isSender = { ride -> ride.bookerId != null && ride.bookerId == signedInUserId },
+                    )
+                },
+            )
+        }
+
+        composable(PassengerRoute.Trips.path) {
+            TripHistoryScreen(
+                onOpenTrip = { tripId -> controller.navigate(PassengerRoute.TripDetails(tripId).path) },
+                onFreeCall = { },
+                choice = callChoice,
+                model = viewModel { TripHistoryViewModel(historyRepository, sessions) },
+            )
+        }
+
+        composable(
+            route = PassengerRoute.TripDetails.PATTERN,
+            arguments = listOf(navArgument(PassengerRoute.TripDetails.ARG_TRIP_ID) { type = NavType.StringType }),
+        ) { entry ->
+            val tripId = entry.arguments?.getString(PassengerRoute.TripDetails.ARG_TRIP_ID).orEmpty()
+            TripDetailsScreen(
+                onBack = { controller.popBackStack() },
+                onReportIssue = { controller.navigate(PassengerRoute.Support.path) },
+                model = viewModel(key = tripId) { TripDetailsViewModel(tripId, historyRepository, sessions) },
+            )
+        }
 
         // ---- C082 · Mode B ----------------------------------------------------------------
         // The one destination with an OPTIONAL argument. Declaring it `nullable` with a `null`

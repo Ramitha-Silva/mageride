@@ -4,6 +4,7 @@ import kotlinx.coroutines.runBlocking
 import lk.mageride.passenger.MainDispatcher
 import lk.mageride.passenger.R
 import lk.mageride.passenger.await
+import lk.mageride.passenger.history.PackageOtps
 import lk.mageride.shared.data.api.IdempotencyKeyGenerator
 import lk.mageride.shared.data.models.PackageSize
 import lk.mageride.shared.data.models.Place
@@ -34,6 +35,9 @@ class PackageBookingViewModelTest {
     private val bookings = FakeBookingRepository()
     private val draft = BookingDraft()
     private val keys = IdempotencyKeyGenerator { CLIENT_REQUEST_ID }
+
+    /** Where the pickup OTP lands so SCR-PA-020 can still show it — see `PackageOtps`. Δ C081. */
+    private val otps = PackageOtps()
 
     @BeforeTest
     fun setUp() {
@@ -146,6 +150,10 @@ class PackageBookingViewModelTest {
 
         model.onBookingConsumed()
         assertNull(model.state.value.pickupOtp, "and it is gone once the screen has shown it")
+
+        // But SCR-PA-020 can still read it out, because the booking handed it to the store on the
+        // way past — the server keeps only a hash and no read returns it. Δ C081.
+        assertEquals("4829", otps.pickupFor(FakeBookingRepository.RIDE_ID))
     }
 
     @Test
@@ -170,7 +178,7 @@ class PackageBookingViewModelTest {
     // ------------------------------------------------------------------------------------------
 
     private fun viewModel() = main.own(
-        PackageBookingViewModel(draft = draft, bookings = bookings, keys = keys),
+        PackageBookingViewModel(draft = draft, bookings = bookings, keys = keys, otps = otps),
     )
 
     /** Everything the wireframe's form asks for, so a test can get to the estimate in one line. */
