@@ -13,13 +13,14 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import lk.mageride.passenger.map.EncodedPolyline
+import lk.mageride.passenger.ride.PaymentRails
 import lk.mageride.shared.data.api.IdempotencyKeyGenerator
 import lk.mageride.shared.data.models.GeoPoint
 import lk.mageride.shared.data.models.PackageSize
 import lk.mageride.shared.data.models.RideVehicleType
 import lk.mageride.shared.data.models.fare.FareEstimateKind
+import lk.mageride.shared.data.models.fare.PaymentMethod
 import lk.mageride.shared.data.models.ride.RideKind
-import lk.mageride.shared.data.models.ride.RidePaymentMethod
 import lk.mageride.shared.data.models.ride.RideRequest
 import lk.mageride.shared.data.models.transit.TransitCoverage
 import lk.mageride.shared.data.models.transit.TransitOption
@@ -161,7 +162,7 @@ internal class RideBookingViewModel(
     }
 
     /** The payment chip. Private tiers only — a bus is not paid for in this app. */
-    fun setPaymentMethod(method: RidePaymentMethod) {
+    fun setPaymentMethod(method: PaymentMethod) {
         draft.update { it.copy(paymentMethod = method) }
     }
 
@@ -223,7 +224,7 @@ internal class RideBookingViewModel(
                         dropoff = dropoff,
                         vehicleType = quote.vehicleType,
                         fareEstimateToken = quote.token,
-                        paymentMethod = current.draft.paymentMethod,
+                        paymentMethod = PaymentRails.bookingValueOf(current.draft.paymentMethod),
                         isProxy = current.draft.kind == RideKind.PROXY,
                         riderName = current.draft.riderName.takeIf { it.isNotBlank() },
                         riderPhone = current.draft.riderPhone.takeIf { it.isNotBlank() },

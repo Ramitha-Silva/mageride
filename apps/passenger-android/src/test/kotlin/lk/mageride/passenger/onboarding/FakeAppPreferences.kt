@@ -14,4 +14,6 @@ internal class FakeAppPreferences(
     override var language: Language? = null,
     override var languagePendingSync: Boolean = false,
     override var locationRationaleAcknowledged: Boolean = false,
+    override var lastCallType: String? = null,
+    override var callNumberNoticeShown: Boolean = false,
 ) : AppPreferences

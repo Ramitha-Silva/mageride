@@ -36,6 +36,15 @@
          a passenger who cannot be notified learns nothing until they next open the app. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!--
+        SCR-PA-017 — the passenger SCANS the driver's LankaQR (AL-22). This app renders no QR of
+        its own and has no other camera use; SCR-PA-004's avatar is a photo *picker*, which needs
+        no permission at all. Declared `required="false"` so a handset with no camera still
+        installs and simply pays in cash.
+    -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+
     <!-- GPS is not `required`: a handset without it can still hold an account, read its trip
          history, manage subscriptions and pay. What it cannot do is centre the live map, and the
          map says so rather than the app refusing to install. -->

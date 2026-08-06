@@ -11,13 +11,14 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import lk.mageride.passenger.R
 import lk.mageride.passenger.onboarding.PhoneNumber
+import lk.mageride.passenger.ride.PaymentRails
 import lk.mageride.shared.data.api.IdempotencyKeyGenerator
 import lk.mageride.shared.data.models.PackageSize
 import lk.mageride.shared.data.models.Place
 import lk.mageride.shared.data.models.RideVehicleType
 import lk.mageride.shared.data.models.fare.FareEstimateKind
+import lk.mageride.shared.data.models.fare.PaymentMethod
 import lk.mageride.shared.data.models.ride.RideKind
-import lk.mageride.shared.data.models.ride.RidePaymentMethod
 import lk.mageride.shared.data.models.ride.RideRequest
 
 /**
@@ -48,7 +49,7 @@ internal data class PackageBookingState(
     val dropoff: Place? = null,
     val pickupMethod: PickupMethod = PickupMethod.SEARCH,
     val dropoffMethod: PickupMethod = PickupMethod.SEARCH,
-    val paymentMethod: RidePaymentMethod = RidePaymentMethod.CASH,
+    val paymentMethod: PaymentMethod = PaymentMethod.CASH,
     val estimating: Boolean = false,
     val estimateMinor: Long? = null,
     val quoteToken: String? = null,
@@ -162,7 +163,7 @@ internal class PackageBookingViewModel(
     }
 
     /** Cash / LankaQR / OnePay / **COD** — the last of which exists only here (US-20.8). */
-    fun setPaymentMethod(method: RidePaymentMethod) {
+    fun setPaymentMethod(method: PaymentMethod) {
         mutableState.update { it.copy(paymentMethod = method) }
         draft.update { it.copy(paymentMethod = method) }
     }
@@ -231,7 +232,7 @@ internal class PackageBookingViewModel(
                         dropoff = dropoff,
                         vehicleType = vehicleFor(current.size),
                         fareEstimateToken = token,
-                        paymentMethod = current.paymentMethod,
+                        paymentMethod = PaymentRails.bookingValueOf(current.paymentMethod),
                         packageSize = current.size,
                         packageDescription = current.description,
                         recipientName = current.recipientName,

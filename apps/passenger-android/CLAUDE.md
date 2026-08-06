@@ -34,6 +34,8 @@ lk.mageride.passenger
 ├── booking/                  C079 · SCR-PA-009/010b/011/012/012a/013 — the multimodal list, the
 │                             proxy round trip, the parcel, the paste sheet, the schedule, and
 │                             BookingDraft (the one booking six screens edit)
+├── ride/                     C080 · SCR-PA-014…019 — finding, the active ride, the call chooser,
+│                             the payment rails, AL-47's attestation, the receipt and the rating
 ├── ui/component/             MageRideCta + the cluster-1 controls (C077)
 ├── ui/theme/                 D2' §0.2 tokens — colour, type, spacing/radius/elevation/controls
 ├── map/                      MageRideMap (the whole §0.3 layer stack), MapStyles, VehicleLayers,
@@ -123,6 +125,26 @@ lk.mageride.passenger
 - **A decline sends no coordinates** (P-02). `declineLocationRequest` takes an id and has no
   parameter for a point; the assertion is on what the repository was handed.
 
+## Cluster 4 (C080) — the active ride and its money
+
+- **`PaymentRails` is the only place a payment method becomes a control**, and it contains neither
+  `onepay` nor platform-`lankaqr` — AL-57 and AL-59 retired both as ride rails. **No surviving rail
+  carries a surcharge**, so nothing in this app can render one; `PaymentRailsTest` pins the lists.
+- **`BookingDraft.paymentMethod` is the SETTLEMENT-time `PaymentMethod`**, not `ride.yaml`'s
+  booking-time enum. `PaymentRails.bookingValueOf` maps it at `POST /v1/rides/request` — see the
+  contract-gaps section below for what that mapping loses.
+- **AL-47 is a conversation, not a callback.** The passenger pays into the driver's own bank, so no
+  webhook reaches fare-svc: `claimPaid()` → poll → `DriverConfirmedQR`. `QrClaimedByPassenger` is
+  **not** settled and must never be shown as Confirmed.
+- **There is no masked call path and no masking copy** (AL-48). A "Normal call" is `ACTION_DIAL` on
+  `RideDetail.counterpartyPhone`, which the contract only carries from `Accepted` onward.
+  `ACTION_CALL` is deliberately not used — it needs `CALL_PHONE` and dials without showing the
+  number. US-26.5's notice is shown once, and only before a direct dial.
+- **The Rs 50 cancellation fee is stated before the tap.** D-05 settles it on the *next* trip, so
+  the confirm dialog is the only moment a passenger can be told.
+- **`rideScoped(pattern, arg) { rideId -> … }`** registers a ride-scoped destination; every C080
+  view model takes its id from the route, which is why none of them is a Koin `viewModel { }`.
+
 ## The live plane — read this before touching `live/`
 
 - **The passenger view is 19 cells and the client never subscribes to a vehicle.** R-06 is res-7 +
@@ -188,6 +210,15 @@ lk.mageride.passenger
 - **There is no `GET /v1/vehicles/{id}`.** The popup's ETA, driver and plate come from
   `GET /v1/nearby` matched by id, centred on the **passenger** — `etaSeconds` is defined as seconds
   to the querying passenger, so a lookup centred on the vehicle would answer roughly zero.
+- **No contract POSTs a Mode C ride rating.** `ride.yaml` declares no rating operation; trip-state's
+  is scoped to a *session*, and using it for a ride would cross R-01. SCR-PA-019 queues to
+  `ratings_pending` — which has no columns for the stars or the comment. C074 found the same gap
+  from the driver side.
+- **`ride.yaml`'s booking-time payment enum predates AL-57/AL-59** and still carries `lankaqr` and
+  `onepay`. There is no booking-time value for "wallet", so a booking says `cash` and SCR-PA-016
+  asks again.
+- **The SCR-PA-016/017 wireframes predate the payment-custody change set** and still draw OnePay
+  +5 %. The built screens follow AL-57/AL-59; both wireframes need a micro-change-set.
 - **AL-17 beats D2' §SCR-PA-008.** That section still says the drop field accepts a route number and
   that predictions blend routes with places. The wireframe and AL-17 say geo-only, and geo-only is
   what is built. **US-7.9 therefore has no screen in this app**, though `getBusesOnRoute()` exists.

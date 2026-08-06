@@ -170,6 +170,16 @@ dependencies {
     // R-06 geocell anchor, MAP-02's accuracy circle and §0.3's blue user dot.
     implementation(libs.play.services.location)
 
+    // SCR-PA-017's "Scan driver's QR" (AL-22). CameraX for the viewfinder, `zxing:core` for the
+    // decode — the same pair the driver app uses for SCR-DA-027, and for the same reason: the
+    // `-android-embedded` artifacts ship a scanning Activity and a theme this app would have to
+    // fight. `zxing:core` is pure Java with no camera and no Android dependency.
+    implementation(libs.androidx.camera.core)
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.view)
+    implementation(libs.zxing.core)
+
     // Ride, package and location-request pushes. Inert until a `google-services.json` exists —
     // see the plugins block.
     implementation(platform(libs.firebase.bom))

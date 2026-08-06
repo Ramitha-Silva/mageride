@@ -31,6 +31,9 @@ import lk.mageride.passenger.onboarding.ProfileSetupViewModel
 import lk.mageride.passenger.onboarding.SplashViewModel
 import lk.mageride.passenger.push.PushRouter
 import lk.mageride.passenger.push.PushTokenProvider
+import lk.mageride.passenger.ride.ApiRideRepository
+import lk.mageride.passenger.ride.CallChoice
+import lk.mageride.passenger.ride.RideRepository
 import lk.mageride.passenger.shell.AndroidAppPreferences
 import lk.mageride.passenger.shell.AppPreferences
 import lk.mageride.passenger.shell.ConnectivityMonitor
@@ -115,6 +118,7 @@ internal fun passengerAppModule(environment: PassengerEnvironment = PassengerEnv
         onboardingBindings()
         liveMapScreenBindings()
         bookingBindings()
+        activeRideBindings()
     }
 
 /**
@@ -202,6 +206,21 @@ private fun Module.bookingBindings() {
     viewModel { PackageBookingViewModel(draft = get(), bookings = get(), keys = get()) }
     viewModel { ScheduleRideViewModel(draft = get(), bookings = get()) }
     viewModel { PasteLinkViewModel(bookings = get()) }
+}
+
+/**
+ * The C080 slice — SCR-PA-014…019.
+ *
+ * **Every view model here takes a `rideId` from a navigation argument, so none of them is a
+ * `viewModel { }`.** Koin's `parametersOf` would put a runtime cast between the route and the
+ * screen for nothing; the NavHost builds them directly from these two singles. [CallChoice] is a
+ * `single` because the remembered call type outlives every ride.
+ */
+private fun Module.activeRideBindings() {
+    single<RideRepository> {
+        ApiRideRepository(rides = get(), fares = get(), wallets = get(), safety = get(), comms = get())
+    }
+    single { CallChoice(preferences = get()) }
 }
 
 /**

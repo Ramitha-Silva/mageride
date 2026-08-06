@@ -106,7 +106,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C077 | passenger-android-auth-onboarding | 4a | DONE | 2026-08-06 | **96 tests green** (was 59; 37 new across 5 suites), `assembleDebug` + `detekt` + `ktlintCheck` clean. SCR-PA-001…005 built to `specs/wireframes/passenger_android.html`. **Get Started is pinned below the language list** (AL-36/US-1.3) — D2' §SCR-PA-002's own sketch still draws the CTA above a `SegmentedButton`, and the wireframe supersedes it. **Phone-OTP only** (AL-07): no Google button exists in this app. The carousel is content-svc's (`GET /v1/content/onboarding/passenger`), which **closes C068's recorded gap** — that route did not exist when the driver app shipped bundled slides — with a trilingual bundled fallback for a first launch on a bad connection. Resend is refused **locally** inside US-1.10's 60 s window so a tap cannot spend one of D-32's five. Three gaps recorded: no photo upload route exists for a passenger avatar, SMS Retriever needs a signing hash C103 owns, and US-1.3a's operating city has no passenger screen in any spec |
 | C078 | passenger-android-live-map-search | 4a | DONE | 2026-08-06 | **125 tests green** (was 96; 29 new across 3 suites), `assembleDebug` + `detekt` + `ktlintCheck` clean. SCR-PA-006/007/008/010/032 built to `specs/wireframes/passenger_android.html`. The filter is a pure value type re-applied to every batch **client-side** — a toggle costs no query, asserted by call count. AL-23 routing is in the view model, not the sheet: Mode A opens SCR-PA-007, Mode B returns the vehicle id for SCR-PA-024, Mode C does nothing (US-7.4). **AL-17 held against D2'**: SCR-PA-008 is geo-only and `getBusesOnRoute` is never reached from it — D2' §SCR-PA-008 says the opposite and needs a micro-change-set, which leaves **US-7.9 with no screen anywhere**. SCR-PA-007's ETA/driver/plate come from `GET /v1/nearby` on tap (the socket frame carries none of them) centred on the **passenger**, because `etaSeconds` is defined as seconds to the querying passenger; **the route number exists in no contract at all**. §2.2's `place_recents` now has its writer — choosing a prediction on SCR-PA-008 — which is what fills SCR-PA-010's *Recent* rows. Fixed a C076 latent: the recentre FAB called back but nothing outside `MageRideMap` holds the `MapLibreMap`, so it moved nothing |
 | C079 | passenger-android-booking | 4a | DONE | 2026-08-06 | **181 tests green** (was 125; 56 new across 7 suites), `assembleDebug` + `detekt` + `ktlintCheck` clean. SCR-PA-009/010b/011/012/012a/013 built to `specs/wireframes/passenger_android.html`. **AL-19 is a type, not a rendering**: `TierQuote` has three fields and a pinning test fails if a fourth appears, so a pre-match card cannot show an ETA. **AL-18/AL-55**: transit-svc down or feed-less degrades to one muted row while the Mode C tiers quote normally. **AL-20 parsed on the device** — `MapsLink` reads `!3d!4d`/`q=`/`ll=`/`@`, preferring the place pin over the viewport, and only `maps.app.goo.gl` reaches the server (3 s, one retry). **P-02 is structural**: `declineLocationRequest` takes an id and nothing else, asserted by what the repository was handed. **AL-36**: Confirm needs a destination *and* a time ≥ T-30, because the Job Board opens then. Built two things `:shared` lacks — an encoded-polyline decoder (GTFS shapes) and a Google-Maps URL parser. Five gaps recorded, including **no SCR-PA id for a map picker anywhere in the wireframe** and **no headway/frequency field** for the wireframe's *"every ~10 min"*. Also fixed a wall-clock flake in C077's `LoginViewModelTest` |
-| C080 | passenger-android-ride-payment | 4a | PENDING | | |
+| C080 | passenger-android-ride-payment | 4a | DONE | 2026-08-06 | **201 tests green** (was 181; 20 new across 3 suites), `assembleDebug` + `detekt` + `ktlintCheck` clean. SCR-PA-014/015/015a/016/017/018/019 built. **AL-57/AL-59 are the story**: `onepay` and platform-`lankaqr` are dead as ride rails, so SCR-PA-016 offers **Cash / Wallet / Driver QR** and *nothing on any screen can render a surcharge* — `PaymentRails` is the only rail list and a test pins it. **This corrects C079's booking chip**, which still offered the two retired rails. **AL-47 attestation**: claim → poll → `DriverConfirmedQR`, with Support offered past five unconfirmed minutes; `QrClaimedByPassenger` is explicitly *not* settled. **AL-48**: no masking anywhere — a Normal call is `ACTION_DIAL` on the real `counterpartyPhone`, the choice is remembered, and US-26.5's number notice is shown once and only before a direct dial. Cancel-after-accept names the Rs 50 **before** the tap (D-05 settles it on the next trip, so that is the only moment to say it). Added CameraX + `zxing:core` and the CAMERA permission for AL-22's scan. **Three gaps**: no contract POSTs a Mode C ride rating (confirming C074's finding from the other side — SCR-PA-019 queues locally), `ride.yaml`'s booking-time payment enum never caught up with AL-57/AL-59, and the SCR-PA-016/017 wireframes still draw OnePay +5% |
 | C081 | passenger-android-package-history | 4a | PENDING | | |
 | C082 | passenger-android-mode-b-subscriptions | 4a | PENDING | | |
 | C083 | passenger-android-settings-addresses | 4a | PENDING | | |
@@ -12649,3 +12649,100 @@ _Append 3 lines per completed component (Component / Status / Notes)._
     cannot take, so SCR-PA-011's *"drag to adjust"* moves the map under a fixed marker.
   - **A package booking's `pickupOtp` is shown once and never returned again** (P-07). C081's
     SCR-PA-020/021 cannot re-read it — if a sender loses it, the handoff needs support.
+
+- **Component:** C080 passenger-android-ride-payment — 2026-08-06
+- **Status:** DONE — `./gradlew :apps:passenger-android:testDebugUnitTest :apps:passenger-android:assembleDebug`
+  exits 0: **201 tests, 0 failures** (181 → 201; +20 across `PaymentRailsTest`, `PayFareViewModelTest`
+  and `ActiveRideViewModelTest`). `detekt` and `ktlintCheck` clean. All seven screens built.
+- **Notes:**
+  **The 2026-08-01 payment-custody change set (AL-57…AL-59) is what this component is really about**,
+  and it lands harder than the prompt's one-line fence suggests.
+
+  - **AL-57 retired `onepay` as a ride method.** OnePay supports one merchant account per merchant,
+    so a card fare could only ever land in *MageRide's* own account. Card acceptance survives one
+    step earlier — top up the **wallet**, where MageRide legitimately is the payee — and the fare is
+    paid with `wallet`: one balanced `trip_payment` journal entry, passenger wallet to driver
+    wallet, **`Succeeded` on the spot with no `Pending` and no callback**.
+  - **AL-59 retired platform-merchant `lankaqr`**, which pointed at `LankaQr__MerchantId` and
+    collected into the platform account while crediting the driver a read-model row. It collapses
+    into `scan_driver_qr` — the **driver's own** bank QR.
+  - **Therefore no surcharge exists on any surviving rail.** The +5 % was OnePay's recovery of its
+    ~3 %. `PaymentRails` is the single list every payment control renders from, it contains no
+    retired rail, and `PaymentRailsTest` pins that — which is the Definition-of-Done line
+    *"no surcharge is ever displayed on a ride"* asserted where a surcharge could only come from.
+
+  **This corrected C079's booking chip**, which was still offering LankaQR and OnePay: `BookingDraft`
+  now carries the **settlement-time** `PaymentMethod` and `PaymentRails.bookingValueOf` maps it onto
+  the booking-time enum. See gap 2 for why that mapping is lossy.
+
+  **AL-47 in full.** The passenger pays into the driver's own bank, so **no callback ever reaches
+  fare-svc** — there is no gateway to ask, and the only oracle is the two parties. `claimPaid()` is
+  the passenger's half, the poll waits for `DriverConfirmedQR`, and `QrClaimedByPassenger` is
+  deliberately **not** treated as settled: telling a passenger their driver had confirmed before the
+  driver was asked is the one thing this screen must never do. Past five unconfirmed minutes it
+  offers Support, which routes to the Finance dispute queue — no money moves either way.
+
+  **AL-48 in full, which mostly means what is absent.** There is no masked path anywhere in the call
+  UI, because the requirement was *withdrawn*: no proxy-DID product exists with +94 numbers. A
+  "Normal call" is `Intent.ACTION_DIAL` (not `ACTION_CALL` — that needs `CALL_PHONE` and places the
+  call without the passenger seeing the number) on `RideDetail.counterpartyPhone`, which the
+  contract only carries from `Accepted` onward. The one privacy claim on the sheet is on the VoIP
+  row and is true. US-26.5's notice is shown **once**, and only before a direct dial — disclosing
+  number visibility before a call that involves no number teaches people to dismiss disclosures.
+
+  **The Rs 50 is named before the tap.** D-05 carries the debt to the *next* trip, so nothing appears
+  on a statement today — which is exactly why the confirm dialog has to state it. The figure is a
+  local constant for the dialog (the server's `CancellationPenalty` arrives *after* the cancel, which
+  is too late to be a warning) and the server's number is what the screen reports afterwards.
+
+  ### Three gaps found
+
+  1. **No contract POSTs a Mode C ride rating — SCR-PA-019 has nowhere to send its stars.**
+     `ride.yaml` declares no rating operation at all; its only `rating` is `RideDriver.rating`, a
+     read. The platform's only rating routes are trip-state-svc's `/v1/sessions/{sessionId}/rating`
+     and `/driver-rating`, and calling either with a ride id would **cross the R-01 boundary the root
+     CLAUDE.md forbids in as many words**. **C074 recorded the same gap from the driver's side**
+     (*"no route writes a `subject_kind='ride'` rating although the column, query-svc's read and
+     D3' §Part 3 all expect one"*) — two components have now hit it from opposite directions, which
+     should settle whether it is real. The screen is built in full and **queues to
+     `mobile_db_schema.md` §1.11's `ratings_pending`** (whose `subject_kind` column already
+     distinguishes `'ride'` from `'session'` — the schema anticipating the route nobody wrote), and
+     the copy says *"Save rating"* rather than claiming a submission that did not happen.
+     ⚠ **The stars and the comment themselves cannot be persisted**: `ratings_pending` was designed
+     as a prompt queue and has no columns for them. Adding the route should add the columns.
+  2. **`ride.yaml`'s booking-time payment enum never caught up with AL-57/AL-59.** It still declares
+     `[cash, lankaqr, onepay, cod]` while `fare.yaml`'s settlement-time `PaymentMethod` is
+     `[cash, wallet, scan_driver_qr, cod]`. There is therefore **no booking-time value meaning "I
+     intend to pay by wallet"**: a booking records `cod` for a parcel and `cash` for everything else,
+     and the rail is chosen again on SCR-PA-016, which is where D-10 starts anyway. Nothing about the
+     ride depends on the booking-time value and fare-svc takes the method from `POST /v1/fare/pay` —
+     what is lost is the *intent*, so dispatch cannot know. **Needs a micro-change-set.**
+  3. **The SCR-PA-016 and SCR-PA-017 wireframes predate the change set.** SCR-PA-016 still draws
+     `💵 Cash | 🏦 LankaQR | 💳 OnePay +5% Rs 43` and its state line still describes the recomputed
+     total; SCR-PA-017 still mentions an "OnePay sheet". The prompt's own fence and Definition of
+     Done name AL-57/AL-59 explicitly, so the change set wins and **both wireframes need a
+     micro-change-set**. This is the one place in cluster 4 where the built screen deliberately does
+     not match the drawing.
+
+  ### What this component added to the module
+
+  - **CameraX + `zxing:core` and the `CAMERA` permission**, for AL-22's scan of the driver's QR.
+    `required="false"` on the feature so a camera-less handset still installs and pays cash. The
+    scanner is a `Dialog` (`DriverQrScanner`), latched so one QR in frame is one payment.
+  - **`AppPreferences` gained `lastCallType` and `callNumberNoticeShown`** — the sheet's memory
+    outlives every ride, which is the point.
+  - **`ControlTokens` gained `RadarSize`, `Viewfinder` and `Star`.**
+
+  ### For C081–C084
+
+  - **`RideRepository` reaches five services** (ride, fare, wallet, safety, comms). Add a sixth
+    operation there rather than injecting another client beside it.
+  - **`PaymentRails` is the only place a payment method becomes a control.** If a screen needs a
+    rail list, take it from there — that is what keeps the retired two off every screen at once.
+  - **`CallChoice` is a `single`** and is what SCR-PA-022/023's call buttons should use; the sheet
+    itself (`CallChooserSheet`) takes the driver's number as a parameter and is reusable as-is.
+  - **`rideScoped(pattern, arg) { rideId -> … }`** in the NavHost is how a ride-scoped destination
+    is registered; six of C080's screens use it.
+  - **C084 owns SCR-PA-028.** `ActiveRideScreen.onFreeCall` already routes to `PassengerRoute.VoipCall`,
+    so the VoIP screen only has to exist. On VoIP failure, US-26.4 asks for a *"Call normally
+    instead?"* prompt — that belongs to whoever builds the call, not to the chooser.

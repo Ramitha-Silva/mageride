@@ -33,6 +33,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import lk.mageride.passenger.R
 import lk.mageride.passenger.onboarding.PhoneNumber
+import lk.mageride.passenger.ride.PaymentRails
 import lk.mageride.passenger.ui.MoneyFormat
 import lk.mageride.passenger.ui.component.InlineError
 import lk.mageride.passenger.ui.component.LabelledTextField
@@ -42,7 +43,7 @@ import lk.mageride.passenger.ui.component.SectionLabel
 import lk.mageride.passenger.ui.theme.ControlTokens
 import lk.mageride.passenger.ui.theme.MageRideTheme
 import lk.mageride.shared.data.models.PackageSize
-import lk.mageride.shared.data.models.ride.RidePaymentMethod
+import lk.mageride.shared.data.models.fare.PaymentMethod
 import org.koin.androidx.compose.koinViewModel
 
 /**
@@ -308,15 +309,17 @@ private fun EndCapture(
 
 /** Cash / LankaQR / OnePay / **COD** — the last of which exists only on this screen (US-20.8). */
 @Composable
-private fun PaymentRow(method: RidePaymentMethod, onChange: (RidePaymentMethod) -> Unit) {
+private fun PaymentRow(method: PaymentMethod, onChange: (PaymentMethod) -> Unit) {
     SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-        RidePaymentMethod.entries.forEachIndexed { index, option ->
+        // Cash / wallet / driver QR / COD — the four rails AL-57 and AL-59 left standing, and the
+        // only screen in the app where COD appears (US-20.8).
+        PaymentRails.PACKAGE.forEachIndexed { index, option ->
             SegmentedButton(
                 selected = option == method,
                 onClick = { onChange(option) },
-                shape = SegmentedButtonDefaults.itemShape(index = index, count = RidePaymentMethod.entries.size),
+                shape = SegmentedButtonDefaults.itemShape(index = index, count = PaymentRails.PACKAGE.size),
             ) {
-                Text(stringResource(paymentLabel(option)))
+                Text(stringResource(PaymentRails.label(option)))
             }
         }
     }

@@ -148,6 +148,13 @@ internal object ControlTokens {
      */
     val SheetMap: Dp = 320.dp
 
+    /** SCR-PA-014's radar sweep — the widening ring while dispatch looks for a driver (C080). */
+    val RadarSize: Dp = 120.dp
+
+    /** SCR-PA-017's viewfinder, and SCR-PA-019's tappable star (C080). */
+    val Viewfinder: Dp = 280.dp
+    val Star: Dp = 40.dp
+
     /** SCR-PA-004's `avatar lg` and the `＋` camera badge on it. */
     val AvatarLarge: Dp = 96.dp
     val AvatarBadge: Dp = 32.dp

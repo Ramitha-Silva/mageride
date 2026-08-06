@@ -9,6 +9,7 @@ import lk.mageride.shared.data.models.PackageSize
 import lk.mageride.shared.data.models.Place
 import lk.mageride.shared.data.models.RideVehicleType
 import lk.mageride.shared.data.models.fare.FareEstimateKind
+import lk.mageride.shared.data.models.fare.PaymentMethod
 import lk.mageride.shared.data.models.ride.RideKind
 import lk.mageride.shared.data.models.ride.RidePaymentMethod
 import kotlin.test.AfterTest
@@ -108,7 +109,7 @@ class PackageBookingViewModelTest {
     @Test
     fun booking_carries_the_parcel_the_recipient_and_the_package_kind() = runBlocking {
         val model = fullyFilled()
-        model.setPaymentMethod(RidePaymentMethod.COD)
+        model.setPaymentMethod(PaymentMethod.COD)
         model.estimate()
         model.state.await { it.estimateMinor != null }
 
@@ -122,7 +123,9 @@ class PackageBookingViewModelTest {
         assertEquals("Sunethra", sent.recipientName)
         // E.164 on the wire, whatever the sender typed — the recipient is called on this number.
         assertEquals("+94712223344", sent.recipientPhone)
-        // US-20.8: COD is a booking-time method and a package-only one (AL-22).
+        // US-20.8: COD is the one settlement rail that also exists booking-time, so it survives
+        // `PaymentRails.bookingValueOf` intact. Everything else books as `cash` and is chosen
+        // again on SCR-PA-016 — `ride.yaml`'s enum has not caught up with AL-57/AL-59. Δ C080.
         assertEquals(RidePaymentMethod.COD, sent.paymentMethod)
         assertEquals(CLIENT_REQUEST_ID, sent.clientRequestId)
     }

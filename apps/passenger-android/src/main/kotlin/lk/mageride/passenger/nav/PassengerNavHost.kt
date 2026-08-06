@@ -28,16 +28,32 @@ import lk.mageride.passenger.booking.PackageEnd
 import lk.mageride.passenger.booking.ProxyRiderScreen
 import lk.mageride.passenger.booking.RideBookingScreen
 import lk.mageride.passenger.booking.ScheduleRideScreen
+import lk.mageride.passenger.di.PassengerDatabase
 import lk.mageride.passenger.home.LiveMapScreen
 import lk.mageride.passenger.home.SearchLocationScreen
+import lk.mageride.passenger.live.PassengerLiveMap
 import lk.mageride.passenger.location.PassengerLocationSource
 import lk.mageride.passenger.onboarding.LocationPermissionScreen
 import lk.mageride.passenger.onboarding.LoginScreen
 import lk.mageride.passenger.onboarding.OnboardingScreen
 import lk.mageride.passenger.onboarding.ProfileSetupScreen
 import lk.mageride.passenger.onboarding.SplashScreen
+import lk.mageride.passenger.ride.ActiveRideScreen
+import lk.mageride.passenger.ride.ActiveRideViewModel
+import lk.mageride.passenger.ride.CallChoice
+import lk.mageride.passenger.ride.FindingDriverScreen
+import lk.mageride.passenger.ride.PayFareScreen
+import lk.mageride.passenger.ride.PayFareViewModel
+import lk.mageride.passenger.ride.PaymentMethodScreen
+import lk.mageride.passenger.ride.PaymentMethodViewModel
+import lk.mageride.passenger.ride.RateDriverScreen
+import lk.mageride.passenger.ride.RateDriverViewModel
+import lk.mageride.passenger.ride.RideRepository
+import lk.mageride.passenger.ride.TripSummaryScreen
+import lk.mageride.passenger.ride.TripSummaryViewModel
 import lk.mageride.passenger.ui.theme.MageRideTheme
 import lk.mageride.shared.data.models.Place
+import lk.mageride.shared.domain.auth.AuthSessionManager
 import org.koin.compose.koinInject
 
 /**
@@ -62,6 +78,14 @@ internal fun PassengerNavHost(controller: NavHostController, modifier: Modifier 
     val draft = koinInject<BookingDraft>()
     val bookings = koinInject<BookingRepository>()
     val locations = koinInject<PassengerLocationSource>()
+
+    // C080's cluster. Every screen below is scoped to one ride and takes its id from the route,
+    // so the view models are built here rather than resolved with `parametersOf`.
+    val rideRepository = koinInject<RideRepository>()
+    val callChoice = koinInject<CallChoice>()
+    val sessions = koinInject<AuthSessionManager>()
+    val live = koinInject<PassengerLiveMap>()
+    val databases = koinInject<PassengerDatabase>()
 
     NavHost(
         navController = controller,
@@ -232,12 +256,70 @@ internal fun PassengerNavHost(controller: NavHostController, modifier: Modifier 
         }
 
         // ---- C080 · the ride and its payment ---------------------------------------------
-        placeholder(PassengerRoute.FindingDriver.PATTERN, "SCR-PA-014 finding driver")
-        placeholder(PassengerRoute.ActiveRide.PATTERN, "SCR-PA-015 ride in progress")
-        placeholder(PassengerRoute.PaymentMethod.PATTERN, "SCR-PA-016 payment method")
-        placeholder(PassengerRoute.PayFare.PATTERN, "SCR-PA-017 pay fare")
-        placeholder(PassengerRoute.TripSummary.PATTERN, "SCR-PA-018 trip summary")
-        placeholder(PassengerRoute.RateDriver.PATTERN, "SCR-PA-019 rate driver")
+        rideScoped(PassengerRoute.FindingDriver.PATTERN, PassengerRoute.FindingDriver.ARG_RIDE_ID) { rideId ->
+            FindingDriverScreen(
+                // Accepted — SCR-PA-015 REPLACES this screen rather than stacking over it, so a
+                // back gesture from an active ride cannot land on a search that already ended.
+                onAssigned = {
+                    controller.navigate(PassengerRoute.ActiveRide(rideId).path) {
+                        popUpTo(PassengerRoute.FindingDriver.PATTERN) { inclusive = true }
+                    }
+                },
+                onCancelled = { controller.popBackStack(PassengerRoute.LiveMap.path, inclusive = false) },
+                onRetry = { controller.popBackStack(PassengerRoute.LiveMap.path, inclusive = false) },
+                model = viewModel(key = rideId) { ActiveRideViewModel(rideId, rideRepository, live) },
+            )
+        }
+
+        rideScoped(PassengerRoute.ActiveRide.PATTERN, PassengerRoute.ActiveRide.ARG_RIDE_ID) { rideId ->
+            ActiveRideScreen(
+                onFinished = { controller.popBackStack(PassengerRoute.LiveMap.path, inclusive = false) },
+                // SCR-PA-028 is C084's. Until it lands, a free call has nowhere to go — the sheet
+                // still records the choice, and the direct-dial row works today.
+                onFreeCall = { controller.navigate(PassengerRoute.VoipCall(rideId).path) },
+                choice = callChoice,
+                model = viewModel(key = rideId) { ActiveRideViewModel(rideId, rideRepository, live) },
+            )
+        }
+
+        rideScoped(PassengerRoute.PaymentMethod.PATTERN, PassengerRoute.PaymentMethod.ARG_RIDE_ID) { rideId ->
+            PaymentMethodScreen(
+                onConfirmed = { controller.navigate(PassengerRoute.PayFare(rideId).path) },
+                // C083's SCR-PA-025-adjacent wallet screens are not this component's; the drawer's
+                // wallet row is where a top-up lives.
+                onTopUp = { controller.navigate(PassengerRoute.Subscriptions.path) },
+                model = viewModel(key = rideId) { PaymentMethodViewModel(rideId, rideRepository, sessions) },
+            )
+        }
+
+        rideScoped(PassengerRoute.PayFare.PATTERN, PassengerRoute.PayFare.ARG_RIDE_ID) { rideId ->
+            PayFareScreen(
+                onBack = { controller.popBackStack() },
+                onSupport = { controller.navigate(PassengerRoute.Support.path) },
+                onSettled = {
+                    controller.navigate(PassengerRoute.TripSummary(rideId).path) {
+                        popUpTo(PassengerRoute.ActiveRide.PATTERN) { inclusive = true }
+                    }
+                },
+                model = viewModel(key = rideId) { PayFareViewModel(rideId, rideRepository) },
+            )
+        }
+
+        rideScoped(PassengerRoute.TripSummary.PATTERN, PassengerRoute.TripSummary.ARG_RIDE_ID) { rideId ->
+            TripSummaryScreen(
+                onClose = { controller.popBackStack(PassengerRoute.LiveMap.path, inclusive = false) },
+                onPay = { controller.navigate(PassengerRoute.PaymentMethod(rideId).path) },
+                onRate = { controller.navigate(PassengerRoute.RateDriver(rideId).path) },
+                model = viewModel(key = rideId) { TripSummaryViewModel(rideId, rideRepository) },
+            )
+        }
+
+        rideScoped(PassengerRoute.RateDriver.PATTERN, PassengerRoute.RateDriver.ARG_RIDE_ID) { rideId ->
+            RateDriverScreen(
+                onDone = { controller.popBackStack(PassengerRoute.LiveMap.path, inclusive = false) },
+                model = viewModel(key = rideId) { RateDriverViewModel(rideId, rideRepository, databases) },
+            )
+        }
 
         // ---- C081 · packages and history -------------------------------------------------
         placeholder(PassengerRoute.PackageTracking.PATTERN, "SCR-PA-020/021 package tracking")
@@ -288,6 +370,19 @@ private fun NavHostController.replaceOnboarding(route: PassengerRoute) {
     navigate(route.path) {
         popUpTo(graph.id) { inclusive = true }
         launchSingleTop = true
+    }
+}
+
+/**
+ * A destination scoped to one ride.
+ *
+ * Six of C080's screens take a `rideId` from the path and nothing else, and writing the
+ * `navArgument` block six times would be six chances to type the wrong argument name. The lambda
+ * receives the id already extracted.
+ */
+private fun NavGraphBuilder.rideScoped(pattern: String, argument: String, content: @Composable (String) -> Unit) {
+    composable(route = pattern, arguments = listOf(navArgument(argument) { type = NavType.StringType })) { entry ->
+        content(entry.arguments?.getString(argument).orEmpty())
     }
 }
 

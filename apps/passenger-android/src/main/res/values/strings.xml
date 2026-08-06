@@ -272,8 +272,6 @@
 
     <!-- Booking-time payment methods (AL-22). COD is package-only (US-20.8). -->
     <string name="payment_cash">Cash</string>
-    <string name="payment_lankaqr">LankaQR</string>
-    <string name="payment_onepay">OnePay</string>
     <string name="payment_cod">Cash on delivery</string>
 
     <!-- SCR-PA-013 · schedule ride. AL-36: a destination is mandatory. -->
@@ -296,5 +294,102 @@
     <string name="error_loc_request_rate_limited">Too many location requests. Try again later.</string>
     <string name="error_request_expired">This request has expired.</string>
     <string name="error_dependency_unavailable">A service is temporarily unavailable. Try again shortly.</string>
+
+    <!-- ==== C080 · finding, active ride, pay, rate (SCR-PA-014…019) ==================== -->
+
+    <string name="action_cancel">Cancel</string>
+    <string name="action_close">Close</string>
+
+    <!-- SCR-PA-014 · finding a driver. Cancelling before acceptance is free (US-6A.9). -->
+    <string name="finding_title">Finding a driver…</string>
+    <string name="finding_caption">Usually under 2 minutes · %1$s left</string>
+    <string name="finding_none">No drivers available</string>
+    <string name="finding_none_caption">Nobody nearby accepted. Try again in a moment.</string>
+    <string name="finding_retry">Try again</string>
+    <string name="finding_cancel_free">Cancel (free)</string>
+
+    <!-- SCR-PA-015 · the ride in progress. -->
+    <string name="ride_arriving">Driver arriving · %1$d min</string>
+    <string name="ride_rating">%1$.1f stars</string>
+    <string name="ride_start_otp">Start code — read it out to your driver</string>
+    <string name="ride_call">Call</string>
+    <string name="ride_sos">SOS</string>
+    <string name="ride_sos_sent">Help has been alerted.</string>
+    <string name="ride_share">Share this trip</string>
+    <string name="ride_cancel">Cancel ride</string>
+    <string name="ride_cancel_title">Cancel this ride?</string>
+    <string name="ride_cancel_free">Your driver has not accepted yet, so cancelling costs nothing.</string>
+    <string name="ride_cancel_penalty">Your driver has already accepted. Cancelling now adds %1$s to your next trip.</string>
+    <string name="ride_cancel_yes">Cancel ride</string>
+    <string name="ride_cancel_no">Keep it</string>
+
+    <!-- SCR-PA-015a · call type. AL-48 withdrew number masking: a normal call is a direct dial. -->
+    <string name="call_driver">Your driver</string>
+    <string name="call_how">How do you want to call?</string>
+    <string name="call_free">Free call</string>
+    <string name="call_free_caption">In the app · no charge · no number involved</string>
+    <string name="call_normal">Normal call</string>
+    <string name="call_normal_caption">Uses your minutes · calls the driver directly</string>
+    <string name="call_number_notice">Your number is visible to the other party on a normal call.</string>
+
+    <!-- SCR-PA-016 · payment method. AL-57/AL-59: no surcharge on any surviving rail. -->
+    <string name="payment_title">Payment method</string>
+    <string name="payment_wallet">MageRide wallet</string>
+    <string name="payment_driver_qr">Driver QR</string>
+    <string name="payment_cash_caption">Pay the driver in the vehicle</string>
+    <string name="payment_wallet_caption">Paid from your balance straight away</string>
+    <string name="payment_driver_qr_caption">Scan the driver QR with your bank app</string>
+    <string name="payment_cod_caption">The recipient pays on delivery</string>
+    <string name="payment_wallet_balance">Balance %1$s</string>
+    <string name="payment_top_up">Top up</string>
+    <string name="payment_confirm">Confirm</string>
+    <string name="payment_retired">No longer available</string>
+
+    <!-- SCR-PA-017 · pay fare. The app renders no QR of its own (AL-22). -->
+    <string name="pay_title">Pay fare</string>
+    <string name="pay_amount_due">Amount due</string>
+    <string name="pay_scan">Scan driver QR</string>
+    <string name="pay_scan_explainer">Point your camera at the printed or on-screen QR your driver shows you.</string>
+    <string name="pay_scan_no_camera">Camera access is off. Turn it on in Settings, or pay with your bank app.</string>
+    <string name="pay_bank_app">Pay with my bank app</string>
+    <string name="pay_ive_paid">I have paid</string>
+    <string name="pay_waiting">Waiting for the driver to confirm… %1$s</string>
+    <string name="pay_get_help">Get help</string>
+    <string name="pay_confirmed">Confirmed</string>
+    <string name="pay_settling">Settling…</string>
+    <string name="pay_switch_to_cash">Pay cash instead</string>
+
+    <!-- SCR-PA-018 · trip summary. -->
+    <string name="summary_title">Trip complete</string>
+    <string name="summary_settled">Paid</string>
+    <string name="summary_unpaid">Not paid yet</string>
+    <string name="summary_breakdown">How this was worked out</string>
+    <string name="summary_first_km">First kilometre</string>
+    <string name="summary_per_km">Per kilometre</string>
+    <string name="summary_distance">Distance</string>
+    <string name="summary_km">%1$.1f km</string>
+    <string name="summary_total">Total</string>
+    <string name="summary_pay_now">Pay now</string>
+    <string name="summary_rate">Rate your driver</string>
+
+    <!-- SCR-PA-019 · rate driver. -->
+    <string name="rate_title">How was your ride with %1$s?</string>
+    <string name="rate_title_unknown">How was your ride?</string>
+    <string name="rate_stars">%1$d stars</string>
+    <string name="rate_tag_clean">Clean</string>
+    <string name="rate_tag_on_time">On time</string>
+    <string name="rate_tag_polite">Polite</string>
+    <string name="rate_tag_safe">Safe driving</string>
+    <string name="rate_comment">Add a comment</string>
+    <string name="rate_comment_hint">Optional</string>
+    <string name="rate_submit">Save rating</string>
+
+    <!-- Failures this cluster's five contracts declare. -->
+    <string name="error_insufficient_wallet">Your wallet balance is short. Top up, or pay another way.</string>
+    <string name="error_already_settled">This ride has already been paid.</string>
+    <string name="error_ride_moved_on">This ride has changed. Reloading it now.</string>
+    <string name="error_not_your_ride">This is not your ride.</string>
+    <string name="error_gateway">The payment provider could not be reached. Try again or pay cash.</string>
+    <string name="error_ride_not_found">That ride could not be found.</string>
 
 </resources>

@@ -7,8 +7,8 @@ import kotlinx.coroutines.flow.update
 import lk.mageride.shared.data.models.PackageSize
 import lk.mageride.shared.data.models.Place
 import lk.mageride.shared.data.models.RideVehicleType
+import lk.mageride.shared.data.models.fare.PaymentMethod
 import lk.mageride.shared.data.models.ride.RideKind
-import lk.mageride.shared.data.models.ride.RidePaymentMethod
 
 /** SCR-PA-009's *"For Me / Someone else"* toggle (US-8.16). */
 internal enum class BookingFor { ME, SOMEONE_ELSE }
@@ -48,6 +48,10 @@ internal enum class CaptureTarget {
  * @property riderPhone Proxy only, E.164 with no `+`. Hashed at rest server-side (P-03).
  * @property packageDropoff SCR-PA-012 captures a drop-off of its own: a parcel's destination is
  *   the recipient's, not the sender's, and the recipient can be asked for it (Request).
+ * @property paymentMethod The **settlement-time** rail (`fare.yaml`'s `PaymentMethod`), because
+ *   that is what a passenger actually chooses and what SCR-PA-016 confirms. `ride.yaml`'s
+ *   booking-time enum is narrower and has not caught up with AL-57/AL-59 — see
+ *   `PaymentRails.bookingValueOf`. Δ C080.
  */
 internal data class BookingDraftState(
     val pickup: Place? = null,
@@ -55,7 +59,7 @@ internal data class BookingDraftState(
     val bookingFor: BookingFor = BookingFor.ME,
     val subject: BookingSubject = BookingSubject.PERSON,
     val vehicleType: RideVehicleType? = null,
-    val paymentMethod: RidePaymentMethod = RidePaymentMethod.CASH,
+    val paymentMethod: PaymentMethod = PaymentMethod.CASH,
     val riderName: String = "",
     val riderPhone: String = "",
     val packageSize: PackageSize = PackageSize.S,

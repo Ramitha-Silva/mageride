@@ -39,6 +39,8 @@ class ManifestTest {
             "android.permission.ACCESS_COARSE_LOCATION",
             // Ride state, package handoff, and P-02's 300 s location request.
             "android.permission.POST_NOTIFICATIONS",
+            // SCR-PA-017 scans the DRIVER's QR (AL-22); this app renders none of its own. Δ C080.
+            "android.permission.CAMERA",
         ).forEach { permission ->
             assertTrue(main.contains(permission), "$permission is not declared")
         }

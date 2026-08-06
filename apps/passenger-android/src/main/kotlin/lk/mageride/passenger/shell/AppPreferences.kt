@@ -34,6 +34,23 @@ internal interface AppPreferences {
     /** Whether SCR-PA-005 has been shown and dismissed. Grants themselves are asked of the OS. */
     var locationRationaleAcknowledged: Boolean
 
+    /**
+     * SCR-PA-015a's *"remembers last choice"* — the wire value of the last [CallType] used, or
+     * `null` before the first call.
+     *
+     * Held here rather than in the ride's state because it outlives every ride: a passenger who
+     * always calls normally should not be asked again on their next trip. Δ C079/C080.
+     */
+    var lastCallType: String?
+
+    /**
+     * Whether the *"your number is visible to the other party"* tooltip has been shown (US-26.5).
+     *
+     * Once, on the **first** call. AL-48 withdrew number masking, so this is the PDPA transparency
+     * that replaced it — and a disclosure shown on every call is a disclosure nobody reads.
+     */
+    var callNumberNoticeShown: Boolean
+
     /** Whether SCR-PA-002 has been answered — "first-launch only" (D2' §A). */
     val firstRunComplete: Boolean get() = language != null
 }
@@ -56,7 +73,18 @@ internal class AndroidAppPreferences(context: Context) : AppPreferences {
         get() = store.getBoolean(KEY_LOCATION_RATIONALE, false)
         set(value) = store.edit { putBoolean(KEY_LOCATION_RATIONALE, value) }
 
+    override var lastCallType: String?
+        get() = store.getString(KEY_LAST_CALL_TYPE, null)
+        set(value) = store.edit { putString(KEY_LAST_CALL_TYPE, value) }
+
+    override var callNumberNoticeShown: Boolean
+        get() = store.getBoolean(KEY_CALL_NUMBER_NOTICE, false)
+        set(value) = store.edit { putBoolean(KEY_CALL_NUMBER_NOTICE, value) }
+
     private companion object {
+        const val KEY_LAST_CALL_TYPE = "last_call_type"
+        const val KEY_CALL_NUMBER_NOTICE = "call_number_notice_shown"
+
         // Not the C018 database: `mobile_db_schema.md` §0.4 keeps that file encrypted and opening
         // it is `suspend`, and `attachBaseContext` cannot wait for a Keystore round trip to know
         // which locale to inflate resources in. Nothing here is a secret.

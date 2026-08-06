@@ -24,13 +24,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import lk.mageride.passenger.R
 import lk.mageride.passenger.home.VehicleLabels
+import lk.mageride.passenger.ride.PaymentRails
 import lk.mageride.passenger.ui.MoneyFormat
 import lk.mageride.passenger.ui.component.SectionLabel
 import lk.mageride.passenger.ui.theme.ControlTokens
 import lk.mageride.passenger.ui.theme.MageRideTheme
 import lk.mageride.shared.data.models.RideVehicleType
 import lk.mageride.shared.data.models.VehicleType
-import lk.mageride.shared.data.models.ride.RidePaymentMethod
+import lk.mageride.shared.data.models.fare.PaymentMethod
 import lk.mageride.shared.data.models.transit.TransitOptionKind
 
 // SCR-PA-009's two lists, split out of `RideBookingScreen.kt` so neither file is a wall.
@@ -184,18 +185,18 @@ internal fun TierRow(quote: TierQuote, selected: Boolean, onSelect: () -> Unit) 
 
 /** The wireframe's `Payment: Cash ▾` chip. C080's SCR-PA-016 is the full picker. */
 @Composable
-internal fun PaymentChip(method: RidePaymentMethod, onChange: (RidePaymentMethod) -> Unit) {
+internal fun PaymentChip(method: PaymentMethod, onChange: (PaymentMethod) -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(MageRideTheme.spacing.xs),
     ) {
-        // COD is deliberately absent: it is a package-only booking-time method (AL-22, US-20.8),
-        // and offering it on a passenger ride would be `400 payment-method-invalid`.
-        listOf(RidePaymentMethod.CASH, RidePaymentMethod.LANKAQR, RidePaymentMethod.ONEPAY).forEach { option ->
+        // The three rails that survive AL-57/AL-59, and no surcharge on any of them. COD is
+        // absent because it is package-only (AL-22, US-20.8) — SCR-PA-012 has its own row.
+        PaymentRails.RIDE.forEach { option ->
             ToggleChip(
-                label = stringResource(paymentLabel(option)),
+                label = stringResource(PaymentRails.label(option)),
                 selected = option == method,
                 onClick = { onChange(option) },
             )
@@ -240,14 +241,6 @@ internal fun MutedRow(text: String) {
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
-}
-
-/** The booking-time payment methods, as copy. */
-internal fun paymentLabel(method: RidePaymentMethod): Int = when (method) {
-    RidePaymentMethod.CASH -> R.string.payment_cash
-    RidePaymentMethod.LANKAQR -> R.string.payment_lankaqr
-    RidePaymentMethod.ONEPAY -> R.string.payment_onepay
-    RidePaymentMethod.COD -> R.string.payment_cod
 }
 
 /**

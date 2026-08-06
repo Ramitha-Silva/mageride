@@ -222,8 +222,6 @@
     <string name="paste_unreadable">එම සබැඳිය කියවිය නොහැකි විය. ඒ වෙනුවට සිතියමෙන් තෝරන්න.</string>
 
     <string name="payment_cash">මුදල්</string>
-    <string name="payment_lankaqr">ලංකා QR</string>
-    <string name="payment_onepay">වන්පේ</string>
     <string name="payment_cod">බාරදීමේදී මුදල්</string>
 
     <string name="schedule_title">ගමන කාලසටහන්ගත කරන්න</string>
@@ -244,5 +242,94 @@
     <string name="error_loc_request_rate_limited">ස්ථාන ඉල්ලීම් ඉතා වැඩියි. පසුව උත්සාහ කරන්න.</string>
     <string name="error_request_expired">මෙම ඉල්ලීම කල් ඉකුත් වී ඇත.</string>
     <string name="error_dependency_unavailable">සේවාවක් තාවකාලිකව නොමැත. මොහොතකින් උත්සාහ කරන්න.</string>
+
+    <!-- ==== C080 · finding, active ride, pay, rate (SCR-PA-014…019) ==================== -->
+
+    <string name="action_cancel">අවලංගු කරන්න</string>
+    <string name="action_close">වසන්න</string>
+
+    <string name="finding_title">රියදුරෙකු සොයමින්…</string>
+    <string name="finding_caption">සාමාන්‍යයෙන් මිනිත්තු 2 ට අඩුයි · %1$s ක් ඉතිරියි</string>
+    <string name="finding_none">රියදුරන් නොමැත</string>
+    <string name="finding_none_caption">අවට කිසිවෙකු පිළිගත්තේ නැත. මොහොතකින් නැවත උත්සාහ කරන්න.</string>
+    <string name="finding_retry">නැවත උත්සාහ කරන්න</string>
+    <string name="finding_cancel_free">අවලංගු කරන්න (නොමිලේ)</string>
+
+    <string name="ride_arriving">රියදුරු පැමිණෙමින් · මිනිත්තු %1$d</string>
+    <string name="ride_rating">තරු %1$.1f</string>
+    <string name="ride_start_otp">ආරම්භක කේතය — රියදුරාට කියවා දෙන්න</string>
+    <string name="ride_call">ඇමතුම</string>
+    <string name="ride_sos">හදිසි උදව්</string>
+    <string name="ride_sos_sent">උදව් සඳහා දැනුම් දී ඇත.</string>
+    <string name="ride_share">මෙම ගමන බෙදාගන්න</string>
+    <string name="ride_cancel">ගමන අවලංගු කරන්න</string>
+    <string name="ride_cancel_title">මෙම ගමන අවලංගු කරන්නද?</string>
+    <string name="ride_cancel_free">ඔබේ රියදුරු තවම පිළිගෙන නැත, එබැවින් අවලංගු කිරීම නොමිලේ.</string>
+    <string name="ride_cancel_penalty">ඔබේ රියදුරු දැනටමත් පිළිගෙන ඇත. දැන් අවලංගු කිරීමෙන් ඔබේ ඊළඟ ගමනට %1$s ක් එකතු වේ.</string>
+    <string name="ride_cancel_yes">ගමන අවලංගු කරන්න</string>
+    <string name="ride_cancel_no">තබාගන්න</string>
+
+    <string name="call_driver">ඔබේ රියදුරු</string>
+    <string name="call_how">ඔබට කෙසේ ඇමතීමට අවශ්‍යද?</string>
+    <string name="call_free">නොමිලේ ඇමතුම</string>
+    <string name="call_free_caption">යෙදුම තුළ · ගාස්තු නැත · දුරකථන අංකයක් නොමැත</string>
+    <string name="call_normal">සාමාන්‍ය ඇමතුම</string>
+    <string name="call_normal_caption">ඔබේ මිනිත්තු භාවිතා වේ · රියදුරාට කෙලින්ම අමතයි</string>
+    <string name="call_number_notice">සාමාන්‍ය ඇමතුමකදී ඔබේ අංකය අනෙක් පාර්ශ්වයට පෙනේ.</string>
+
+    <string name="payment_title">ගෙවීම් ක්‍රමය</string>
+    <string name="payment_wallet">MageRide පසුම්බිය</string>
+    <string name="payment_driver_qr">රියදුරුගේ QR</string>
+    <string name="payment_cash_caption">වාහනයේදී රියදුරාට ගෙවන්න</string>
+    <string name="payment_wallet_caption">ඔබේ ශේෂයෙන් වහාම ගෙවේ</string>
+    <string name="payment_driver_qr_caption">රියදුරුගේ QR ඔබේ බැංකු යෙදුමෙන් පරිලෝකනය කරන්න</string>
+    <string name="payment_cod_caption">බාරදීමේදී ලබන්නා ගෙවයි</string>
+    <string name="payment_wallet_balance">ශේෂය %1$s</string>
+    <string name="payment_top_up">මුදල් එක් කරන්න</string>
+    <string name="payment_confirm">තහවුරු කරන්න</string>
+    <string name="payment_retired">තවදුරටත් නොමැත</string>
+
+    <string name="pay_title">ගාස්තුව ගෙවන්න</string>
+    <string name="pay_amount_due">ගෙවිය යුතු මුදල</string>
+    <string name="pay_scan">රියදුරුගේ QR පරිලෝකනය</string>
+    <string name="pay_scan_explainer">රියදුරු ඔබට පෙන්වන මුද්‍රිත හෝ තිරයේ ඇති QR වෙත කැමරාව යොමු කරන්න.</string>
+    <string name="pay_scan_no_camera">කැමරා අවසරය අක්‍රීයයි. සැකසුම් තුළ සක්‍රීය කරන්න, නැතහොත් බැංකු යෙදුමෙන් ගෙවන්න.</string>
+    <string name="pay_bank_app">මගේ බැංකු යෙදුමෙන් ගෙවන්න</string>
+    <string name="pay_ive_paid">මම ගෙවා ඇත</string>
+    <string name="pay_waiting">රියදුරු තහවුරු කරන තෙක් රැඳී සිටිමින්… %1$s</string>
+    <string name="pay_get_help">උදව් ලබාගන්න</string>
+    <string name="pay_confirmed">තහවුරු විය</string>
+    <string name="pay_settling">ගෙවීම සිදුවෙමින්…</string>
+    <string name="pay_switch_to_cash">ඒ වෙනුවට මුදලින් ගෙවන්න</string>
+
+    <string name="summary_title">ගමන අවසන්</string>
+    <string name="summary_settled">ගෙවා ඇත</string>
+    <string name="summary_unpaid">තවම ගෙවා නැත</string>
+    <string name="summary_breakdown">මෙය ගණනය කළ ආකාරය</string>
+    <string name="summary_first_km">පළමු කිලෝමීටරය</string>
+    <string name="summary_per_km">කිලෝමීටරයකට</string>
+    <string name="summary_distance">දුර</string>
+    <string name="summary_km">කි.මී. %1$.1f</string>
+    <string name="summary_total">එකතුව</string>
+    <string name="summary_pay_now">දැන් ගෙවන්න</string>
+    <string name="summary_rate">රියදුරාට ශ්‍රේණිගත කරන්න</string>
+
+    <string name="rate_title">%1$s සමඟ ඔබේ ගමන කෙසේද?</string>
+    <string name="rate_title_unknown">ඔබේ ගමන කෙසේද?</string>
+    <string name="rate_stars">තරු %1$d</string>
+    <string name="rate_tag_clean">පිරිසිදුයි</string>
+    <string name="rate_tag_on_time">වේලාවට</string>
+    <string name="rate_tag_polite">ආචාරශීලීයි</string>
+    <string name="rate_tag_safe">ආරක්ෂිත රිය පැදවීම</string>
+    <string name="rate_comment">අදහසක් එක් කරන්න</string>
+    <string name="rate_comment_hint">අත්‍යවශ්‍ය නොවේ</string>
+    <string name="rate_submit">ශ්‍රේණිගත කිරීම සුරකින්න</string>
+
+    <string name="error_insufficient_wallet">ඔබේ පසුම්බියේ ශේෂය මදියි. මුදල් එක් කරන්න, නැතහොත් වෙනත් ආකාරයකින් ගෙවන්න.</string>
+    <string name="error_already_settled">මෙම ගමන දැනටමත් ගෙවා ඇත.</string>
+    <string name="error_ride_moved_on">මෙම ගමන වෙනස් වී ඇත. නැවත පූරණය වෙමින්.</string>
+    <string name="error_not_your_ride">මෙය ඔබේ ගමන නොවේ.</string>
+    <string name="error_gateway">ගෙවීම් සැපයුම්කරු වෙත සම්බන්ධ විය නොහැකි විය. නැවත උත්සාහ කරන්න හෝ මුදලින් ගෙවන්න.</string>
+    <string name="error_ride_not_found">එම ගමන සොයාගත නොහැකි විය.</string>
 
 </resources>
