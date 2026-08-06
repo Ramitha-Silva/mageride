@@ -36,6 +36,8 @@ import lk.mageride.passenger.nav.PassengerNavHost
 import lk.mageride.passenger.nav.PassengerRoute
 import lk.mageride.passenger.nav.isTabRoute
 import lk.mageride.passenger.push.PushRouter
+import lk.mageride.passenger.settings.PassengerDrawerHeader
+import lk.mageride.passenger.settings.PassengerIdentity
 import lk.mageride.shared.data.api.MageRideApiSignals
 import lk.mageride.shared.data.api.UpgradeRequiredSignal
 import lk.mageride.shared.data.api.version.VersionApi
@@ -88,6 +90,7 @@ internal fun PassengerShell(
     val sessions = koinInject<AuthSessionManager>()
     val versions = koinInject<VersionApi>()
     val live = koinInject<PassengerLiveMap>()
+    val identity = koinInject<PassengerIdentity>()
 
     val online by connectivity.isOnline.collectAsStateWithLifecycle(initialValue = true)
     val backStackEntry by controller.currentBackStackEntryAsState()
@@ -154,6 +157,9 @@ internal fun PassengerShell(
         sessions.events.collect { event ->
             if (event is SessionEvent.RouteToLogin) {
                 live.disconnect()
+                // The drawer header belongs to the session that just ended (Δ C083); leaving it
+                // would show the previous passenger's name behind the next one's login.
+                identity.clear()
                 drawerState.close()
                 controller.navigate(PassengerRoute.Login.path) {
                     popUpTo(controller.graph.id) { inclusive = true }
@@ -187,11 +193,16 @@ internal fun PassengerShell(
                 // what clears the back stack — one subscriber for every way a session can end, so
                 // a logout and a revocation take exactly the same path out of the app.
                 onLogOut = {
+                    identity.clear()
                     uiScope.launch {
                         drawerState.close()
                         runCatching { sessions.logout() }
                     }
                 },
+                // SCR-PA-033's identity block (Δ C083). The shell owns the drawer and its rows; the
+                // name, id and phone in the header come from `GET /v1/users/me`, which is a screen's
+                // data layer — so it arrives as the slot `PassengerDrawerSheet` left for it.
+                header = { PassengerDrawerHeader() },
             )
         },
     ) {

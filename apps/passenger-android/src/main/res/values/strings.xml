@@ -509,4 +509,67 @@
     <string name="error_not_your_subscription">This is not your subscription.</string>
     <string name="error_slip_too_large">That screenshot is too large. Try a smaller image.</string>
 
+    <!-- ===========================================================================================
+         C083 · SCR-PA-026/026a/027/027b — saved addresses, settings and the profile editor.
+
+         The screen titles and three of the rows reuse the drawer's keys (`drawer_saved_addresses`,
+         `drawer_settings`, `drawer_support`, `drawer_log_out`): they are the same destination named
+         the same way, and a second key would be the same sentence translated twice.
+         =========================================================================================== -->
+
+    <string name="action_save">Save</string>
+
+    <!-- SCR-PA-026 · saved addresses. Home and Work are drawn whether or not they are set. -->
+    <string name="addresses_home">Home</string>
+    <string name="addresses_work">Work</string>
+    <string name="addresses_not_set">Not set</string>
+    <string name="addresses_pin_hint">Move the map to place the pin — the address is filled in for you</string>
+    <string name="addresses_add">Add address</string>
+    <string name="addresses_edit">Edit address</string>
+
+    <!-- SCR-PA-026a · the add-address sheet. AL-26's four fields and nothing else. -->
+    <string name="address_sheet_add_title">Add address</string>
+    <string name="address_sheet_edit_title">Edit address</string>
+    <string name="address_sheet_pinned">Pinned at %1$s · address looked up from the map</string>
+    <string name="address_line1">Address Line 1</string>
+    <string name="address_line2">Address Line 2</string>
+    <string name="address_line3">Address Line 3</string>
+    <string name="address_label">Label</string>
+    <string name="address_label_hint">Gym, Mum\'s House, Office</string>
+    <string name="address_save">Save address</string>
+    <string name="address_delete">Delete address</string>
+
+    <!-- SCR-PA-027 · profile &amp; settings. `settings_identity` is the ULID and the phone number:
+         no contract carries a human-readable passenger number, so the account id is what is shown. -->
+    <string name="settings_identity">ID: %1$s · %2$s</string>
+    <string name="settings_unnamed_passenger">Your profile</string>
+    <string name="settings_edit_profile">Edit profile</string>
+    <string name="settings_language">Language</string>
+    <string name="settings_save_home_work">Save Home &amp; Work</string>
+    <string name="settings_default_payment">Default payment</string>
+    <string name="settings_notifications">Notifications</string>
+    <string name="settings_delete_account">Delete account</string>
+    <string name="settings_delete_title">Delete your account?</string>
+    <string name="settings_delete_body">We will start deleting your account and your data. Some records must be kept for a period the law sets, so this is a request rather than an instant erase.</string>
+    <string name="settings_delete_confirm">Request deletion</string>
+    <string name="settings_delete_requested">Your deletion request has been received. We will let you know when it is done.</string>
+    <string name="settings_delete_already_requested">A deletion request is already being handled.</string>
+
+    <!-- SCR-PA-027b · edit profile. No language row — AL-26 keeps it on onboarding and Settings. -->
+    <string name="edit_profile_title">Edit profile</string>
+    <string name="edit_profile_name">Full name</string>
+    <string name="edit_profile_notifications">Notifications &amp; offers</string>
+    <string name="edit_profile_photo">Take photo or upload</string>
+    <string name="edit_profile_sos_contacts">SOS / emergency contacts</string>
+    <string name="edit_profile_sos_empty">Add someone here and MageRide can alert them if you ever use SOS.</string>
+    <string name="edit_profile_add_sos">Add SOS contact</string>
+    <string name="edit_profile_edit_sos">Edit SOS contact</string>
+    <string name="edit_profile_remove_sos">Remove SOS contact</string>
+    <string name="edit_profile_sos_name">Name</string>
+    <string name="edit_profile_sos_phone">Mobile number</string>
+
+    <!-- Failures iam-svc declares on this cluster\'s operations. -->
+    <string name="error_address_shortcut_taken">You already have an address saved there. Edit that one instead.</string>
+    <string name="error_address_not_found">That was already removed on another device.</string>
+
 </resources>

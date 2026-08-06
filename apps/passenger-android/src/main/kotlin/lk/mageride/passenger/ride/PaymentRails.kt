@@ -3,6 +3,7 @@ package lk.mageride.passenger.ride
 import androidx.annotation.StringRes
 import lk.mageride.passenger.R
 import lk.mageride.shared.data.models.fare.PaymentMethod
+import lk.mageride.shared.data.models.iam.DefaultPaymentMethod
 import lk.mageride.shared.data.models.ride.RidePaymentMethod
 
 /**
@@ -43,6 +44,54 @@ internal object PaymentRails {
 
     /** The rails this app will never offer again. Named so a reader knows the omission is a decision. */
     val RETIRED: Set<PaymentMethod> = setOf(PaymentMethod.ONEPAY, PaymentMethod.LANKAQR)
+
+    /**
+     * What SCR-PA-027's **Default payment** row offers (US-22.4, AL-14) — Δ C083.
+     *
+     * **Two of [RIDE]'s three, and the missing one is the contract's own exclusion.**
+     * `iam.yaml#/components/schemas/DefaultPaymentMethod` says in as many words that *"the
+     * driver-QR method is a **settlement** choice made during a ride, not a stored preference"* —
+     * it needs a driver, a QR image and an amount, none of which exist when a passenger is sitting
+     * in Settings. So a *preference* is cash or the wallet, and the third rail is chosen on
+     * SCR-PA-016 with the fare on screen.
+     *
+     * The wireframe draws **Cash / LankaQR / OnePay** here, which predates the 2026-08-01
+     * payment-custody change set exactly as SCR-PA-016's does; AL-57 and AL-59 retired both of
+     * those rails and [RETIRED] is where they went. Recorded in the C083 handoff.
+     */
+    val PREFERABLE: List<PaymentMethod> = listOf(PaymentMethod.CASH, PaymentMethod.WALLET)
+
+    /** A stored wire value back to its rail, or `null` when this build has never heard of it. */
+    fun fromWire(wire: String): PaymentMethod? = PaymentMethod.entries.firstOrNull { it.wire == wire }
+
+    /**
+     * The `iam.users.default_payment_method` value for a chosen rail, or `null` when the column
+     * cannot express it.
+     *
+     * **`wallet` is the `null`, and it is the AL-57 gap.** The contract's enum is still
+     * `[cash, lankaqr, onepay]` and the `CHECK` behind it likewise, so the rail that *replaced*
+     * `onepay` has no value to be stored as. A wallet default is therefore held on the device and
+     * does not follow the passenger to a second handset until `iam.yaml` and C003's constraint
+     * gain `wallet`. Recorded in the C083 handoff as the micro-change-set this needs.
+     */
+    fun storedValueOf(method: PaymentMethod): DefaultPaymentMethod? =
+        if (method == PaymentMethod.CASH) DefaultPaymentMethod.CASH else null
+
+    /**
+     * What a profile's stored default means **today**.
+     *
+     * A row still carrying `lankaqr` or `onepay` was written before AL-57/AL-59 and names a rail
+     * this app can no longer offer, so it reads as Cash — the platform default and the one that
+     * always works. Pre-selecting a retired rail would put a booking on a method SCR-PA-016 does
+     * not even draw.
+     */
+    fun fromStored(stored: DefaultPaymentMethod?): PaymentMethod = when (stored) {
+        DefaultPaymentMethod.CASH, null -> PaymentMethod.CASH
+
+        // Both retired. Every arm answers Cash today, and the exhaustive `when` is the point: when
+        // `wallet` is added to the enum this function is where it lands, and the compiler says so.
+        DefaultPaymentMethod.LANKAQR, DefaultPaymentMethod.ONEPAY -> PaymentMethod.CASH
+    }
 
     @StringRes
     fun label(method: PaymentMethod): Int = when (method) {

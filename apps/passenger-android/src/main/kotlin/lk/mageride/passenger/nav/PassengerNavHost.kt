@@ -45,6 +45,7 @@ import lk.mageride.passenger.location.PassengerLocationSource
 import lk.mageride.passenger.onboarding.LocationPermissionScreen
 import lk.mageride.passenger.onboarding.LoginScreen
 import lk.mageride.passenger.onboarding.OnboardingScreen
+import lk.mageride.passenger.onboarding.PassengerProfileRepository
 import lk.mageride.passenger.onboarding.ProfileSetupScreen
 import lk.mageride.passenger.onboarding.SplashScreen
 import lk.mageride.passenger.ride.ActiveRideScreen
@@ -60,6 +61,17 @@ import lk.mageride.passenger.ride.RateDriverViewModel
 import lk.mageride.passenger.ride.RideRepository
 import lk.mageride.passenger.ride.TripSummaryScreen
 import lk.mageride.passenger.ride.TripSummaryViewModel
+import lk.mageride.passenger.settings.AddressBook
+import lk.mageride.passenger.settings.EditProfileScreen
+import lk.mageride.passenger.settings.EditProfileViewModel
+import lk.mageride.passenger.settings.PassengerIdentity
+import lk.mageride.passenger.settings.PaymentPreference
+import lk.mageride.passenger.settings.SavedAddressesScreen
+import lk.mageride.passenger.settings.SavedAddressesViewModel
+import lk.mageride.passenger.settings.SettingsScreen
+import lk.mageride.passenger.settings.SettingsViewModel
+import lk.mageride.passenger.settings.SosContacts
+import lk.mageride.passenger.shell.AppPreferences
 import lk.mageride.passenger.subscription.ModeBRequestScreen
 import lk.mageride.passenger.subscription.ModeBRequestViewModel
 import lk.mageride.passenger.subscription.SubscriptionPayScreen
@@ -115,6 +127,17 @@ internal fun PassengerNavHost(controller: NavHostController, modifier: Modifier 
     // they are built here for the reason C080's are.
     val subscriptionRepository = koinInject<SubscriptionRepository>()
     val idempotencyKeys = koinInject<IdempotencyKeyGenerator>()
+
+    // C083's cluster. None of its three screens takes a navigation argument, so these could have
+    // been `viewModel { }` bindings — they are resolved here for the same reason C082's SCR-PA-025
+    // is: the graph already resolves each of these singles once, and building the models beside
+    // the destinations keeps every screen group's wiring in one readable place.
+    val addressBook = koinInject<AddressBook>()
+    val sosContacts = koinInject<SosContacts>()
+    val identity = koinInject<PassengerIdentity>()
+    val paymentPreference = koinInject<PaymentPreference>()
+    val profiles = koinInject<PassengerProfileRepository>()
+    val preferences = koinInject<AppPreferences>()
     val signedInUserId = (sessions.state.collectAsStateWithLifecycle().value as? SessionState.SignedIn)?.userId
 
     NavHost(
@@ -323,7 +346,9 @@ internal fun PassengerNavHost(controller: NavHostController, modifier: Modifier 
                 // gap is recorded in the C082 handoff, and this is the one line that changes when
                 // the screen exists.
                 onTopUp = { },
-                model = viewModel(key = rideId) { PaymentMethodViewModel(rideId, rideRepository, sessions) },
+                model = viewModel(key = rideId) {
+                    PaymentMethodViewModel(rideId, rideRepository, sessions, paymentPreference)
+                },
             )
         }
 
@@ -484,9 +509,40 @@ internal fun PassengerNavHost(controller: NavHostController, modifier: Modifier 
         }
 
         // ---- C083 · addresses and settings ------------------------------------------------
-        placeholder(PassengerRoute.SavedAddresses, "SCR-PA-026 saved addresses")
-        placeholder(PassengerRoute.Settings, "SCR-PA-027 profile & settings")
-        placeholder(PassengerRoute.EditProfile, "SCR-PA-027b edit profile")
+        composable(PassengerRoute.SavedAddresses.path) {
+            SavedAddressesScreen(
+                onBack = { controller.popBackStack() },
+                model = viewModel { SavedAddressesViewModel(addressBook, locations, idempotencyKeys) },
+            )
+        }
+
+        composable(PassengerRoute.Settings.path) {
+            SettingsScreen(
+                onBack = { controller.popBackStack() },
+                onEditProfile = { controller.navigate(PassengerRoute.EditProfile.path) },
+                // Both of the wireframe's address rows land here — "Save Home & Work" and "Saved
+                // addresses" are two intentions onto one screen, which is why SCR-PA-026 draws the
+                // two shortcut rows above everything else.
+                onSavedAddresses = { controller.navigate(PassengerRoute.SavedAddresses.path) },
+                onSupport = { controller.navigate(PassengerRoute.Support.path) },
+                model = viewModel {
+                    SettingsViewModel(
+                        profiles = profiles,
+                        identity = identity,
+                        payments = paymentPreference,
+                        preferences = preferences,
+                        sessions = sessions,
+                    )
+                },
+            )
+        }
+
+        composable(PassengerRoute.EditProfile.path) {
+            EditProfileScreen(
+                onBack = { controller.popBackStack() },
+                model = viewModel { EditProfileViewModel(profiles, sosContacts, identity, idempotencyKeys) },
+            )
+        }
 
         // ---- C084 · comms, safety, support -------------------------------------------------
         placeholder(PassengerRoute.VoipCall.PATTERN, "SCR-PA-028 VoIP call")

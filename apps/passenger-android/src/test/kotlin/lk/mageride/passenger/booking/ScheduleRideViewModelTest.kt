@@ -3,6 +3,8 @@ package lk.mageride.passenger.booking
 import kotlinx.coroutines.runBlocking
 import lk.mageride.passenger.MainDispatcher
 import lk.mageride.passenger.await
+import lk.mageride.passenger.onboarding.FakeAppPreferences
+import lk.mageride.passenger.settings.PaymentPreference
 import lk.mageride.shared.data.models.Place
 import lk.mageride.shared.data.models.RideVehicleType
 import lk.mageride.shared.testing.fixture.Fixtures
@@ -29,7 +31,7 @@ class ScheduleRideViewModelTest {
 
     private val main = MainDispatcher()
     private val bookings = FakeBookingRepository()
-    private val draft = BookingDraft()
+    private val draft = BookingDraft(PaymentPreference(FakeAppPreferences()))
 
     @BeforeTest
     fun setUp() {

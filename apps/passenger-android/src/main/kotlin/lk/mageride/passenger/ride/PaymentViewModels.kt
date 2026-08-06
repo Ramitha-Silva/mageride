@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import lk.mageride.passenger.settings.PaymentPreference
 import lk.mageride.shared.data.models.PaymentState
 import lk.mageride.shared.data.models.Timestamp
 import lk.mageride.shared.data.models.fare.PaymentMethod
@@ -75,9 +76,12 @@ internal class PaymentMethodViewModel(
     private val rideId: String,
     private val rides: RideRepository,
     private val sessions: AuthSessionManager,
+    private val payments: PaymentPreference,
 ) : ViewModel() {
 
-    private val mutableState = MutableStateFlow(PaymentMethodState())
+    // US-22.4's *"pre-selected at booking/checkout (and still changeable per trip)"* — this is the
+    // checkout half, and SCR-PA-027's row is what set it (Δ C083). Cash when nothing was chosen.
+    private val mutableState = MutableStateFlow(PaymentMethodState(chosen = payments.current))
 
     val state: StateFlow<PaymentMethodState> = mutableState.asStateFlow()
 

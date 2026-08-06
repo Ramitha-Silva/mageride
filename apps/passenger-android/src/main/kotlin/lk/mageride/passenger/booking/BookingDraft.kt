@@ -4,6 +4,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import lk.mageride.passenger.settings.PaymentPreference
 import lk.mageride.shared.data.models.PackageSize
 import lk.mageride.shared.data.models.Place
 import lk.mageride.shared.data.models.RideVehicleType
@@ -122,10 +123,19 @@ internal data class BookingDraftState(
  *
  * Its lifetime is the process's, which is why [clear] exists and is called the moment a booking
  * becomes a ride. A draft left behind is the next booking's stale rider name.
+ *
+ * **Every booking starts on the passenger's default payment method** (US-22.4, Δ C083). SCR-PA-027
+ * stores the rail and this is what *"pre-selected at booking/checkout"* means in code: a fresh
+ * draft — a new one, a [begin] and a [clear] alike — opens on [PaymentPreference.current], and the
+ * chip on SCR-PA-009 is drawing that. Changing it there still changes only this booking, because a
+ * preference is not a command.
+ *
+ * @property payments The stored default. Read on every fresh draft rather than captured once, so a
+ *   change made in Settings applies to the **next** booking without anything having to be told.
  */
-internal class BookingDraft {
+internal class BookingDraft(private val payments: PaymentPreference) {
 
-    private val mutableState = MutableStateFlow(BookingDraftState())
+    private val mutableState = MutableStateFlow(BookingDraftState(paymentMethod = payments.current))
 
     val state: StateFlow<BookingDraftState> = mutableState.asStateFlow()
 
@@ -181,12 +191,16 @@ internal class BookingDraft {
      */
     fun begin(dropoff: Place, pickup: Place? = null) {
         pendingCapture = null
-        mutableState.value = BookingDraftState(dropoff = dropoff, pickup = pickup)
+        mutableState.value = BookingDraftState(
+            dropoff = dropoff,
+            pickup = pickup,
+            paymentMethod = payments.current,
+        )
     }
 
     /** Throws the draft away — after a ride is requested, or when the passenger leaves the flow. */
     fun clear() {
         pendingCapture = null
-        mutableState.value = BookingDraftState()
+        mutableState.value = BookingDraftState(paymentMethod = payments.current)
     }
 }

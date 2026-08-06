@@ -158,4 +158,17 @@ internal object ControlTokens {
     /** SCR-PA-004's `avatar lg` and the `＋` camera badge on it. */
     val AvatarLarge: Dp = 96.dp
     val AvatarBadge: Dp = 32.dp
+
+    // ---- C083 · settings, addresses and the drawer header ------------------------------
+
+    /**
+     * SCR-PA-026's pin map, between the address rows and the CTA.
+     *
+     * The wireframe gives it `flex:0 0 100px` inside a 560 px phone — about a fifth of the screen.
+     * Rounded **up** to 180 dp rather than transcribed: this map is a control, not an illustration,
+     * and 100 px of a 640 dp handset leaves a pin-drop target a thumb covers entirely. It is still
+     * a strip under the list rather than the full-bleed map SCR-PA-010 draws, which is the
+     * proportion the wireframe is actually fixing.
+     */
+    val InlineMap: Dp = 180.dp
 }

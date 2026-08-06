@@ -444,4 +444,55 @@
     <string name="error_not_your_subscription">இது உங்கள் சந்தா அல்ல.</string>
     <string name="error_slip_too_large">அந்தத் திரைப்படம் மிகப் பெரியது. சிறிய படத்தை முயலுங்கள்.</string>
 
+    <!-- C083 · SCR-PA-026/026a/027/027b -->
+
+    <string name="action_save">சேமி</string>
+
+    <string name="addresses_home">வீடு</string>
+    <string name="addresses_work">பணியிடம்</string>
+    <string name="addresses_not_set">அமைக்கப்படவில்லை</string>
+    <string name="addresses_pin_hint">குறியை வைக்க வரைபடத்தை நகர்த்துங்கள் — முகவரி தானாக நிரப்பப்படும்</string>
+    <string name="addresses_add">முகவரியைச் சேர்</string>
+    <string name="addresses_edit">முகவரியைத் திருத்து</string>
+
+    <string name="address_sheet_add_title">முகவரியைச் சேர்</string>
+    <string name="address_sheet_edit_title">முகவரியைத் திருத்து</string>
+    <string name="address_sheet_pinned">%1$s இல் குறிக்கப்பட்டது · முகவரி வரைபடத்திலிருந்து எடுக்கப்பட்டது</string>
+    <string name="address_line1">முகவரி வரி 1</string>
+    <string name="address_line2">முகவரி வரி 2</string>
+    <string name="address_line3">முகவரி வரி 3</string>
+    <string name="address_label">பெயர்</string>
+    <string name="address_label_hint">உடற்பயிற்சி கூடம், அம்மா வீடு, அலுவலகம்</string>
+    <string name="address_save">முகவரியைச் சேமி</string>
+    <string name="address_delete">முகவரியை நீக்கு</string>
+
+    <string name="settings_identity">அடையாளம்: %1$s · %2$s</string>
+    <string name="settings_unnamed_passenger">உங்கள் சுயவிவரம்</string>
+    <string name="settings_edit_profile">சுயவிவரத்தைத் திருத்து</string>
+    <string name="settings_language">மொழி</string>
+    <string name="settings_save_home_work">வீடு &amp; பணியிடத்தைச் சேமி</string>
+    <string name="settings_default_payment">இயல்பு கட்டண முறை</string>
+    <string name="settings_notifications">அறிவிப்புகள்</string>
+    <string name="settings_delete_account">கணக்கை நீக்கு</string>
+    <string name="settings_delete_title">உங்கள் கணக்கை நீக்கவா?</string>
+    <string name="settings_delete_body">உங்கள் கணக்கையும் தரவையும் நீக்கத் தொடங்குவோம். சட்டம் குறிப்பிடும் காலத்திற்குச் சில பதிவுகளை வைத்திருக்க வேண்டும், எனவே இது உடனடி நீக்கம் அல்ல, ஒரு கோரிக்கை.</string>
+    <string name="settings_delete_confirm">நீக்கக் கோரு</string>
+    <string name="settings_delete_requested">உங்கள் நீக்கக் கோரிக்கை பெறப்பட்டது. முடிந்ததும் உங்களுக்குத் தெரிவிப்போம்.</string>
+    <string name="settings_delete_already_requested">ஒரு நீக்கக் கோரிக்கை ஏற்கெனவே கையாளப்படுகிறது.</string>
+
+    <string name="edit_profile_title">சுயவிவரத்தைத் திருத்து</string>
+    <string name="edit_profile_name">முழுப் பெயர்</string>
+    <string name="edit_profile_notifications">அறிவிப்புகள் &amp; சலுகைகள்</string>
+    <string name="edit_profile_photo">படம் எடுக்க அல்லது பதிவேற்ற</string>
+    <string name="edit_profile_sos_contacts">SOS / அவசரத் தொடர்புகள்</string>
+    <string name="edit_profile_sos_empty">இங்கே ஒருவரைச் சேர்த்தால், நீங்கள் SOS பயன்படுத்தும்போது MageRide அவர்களுக்கு அறிவிக்க முடியும்.</string>
+    <string name="edit_profile_add_sos">SOS தொடர்பைச் சேர்</string>
+    <string name="edit_profile_edit_sos">SOS தொடர்பைத் திருத்து</string>
+    <string name="edit_profile_remove_sos">SOS தொடர்பை நீக்கு</string>
+    <string name="edit_profile_sos_name">பெயர்</string>
+    <string name="edit_profile_sos_phone">கைபேசி எண்</string>
+
+    <string name="error_address_shortcut_taken">அங்கே ஏற்கெனவே ஒரு முகவரி சேமிக்கப்பட்டுள்ளது. அதைத் திருத்துங்கள்.</string>
+    <string name="error_address_not_found">அது ஏற்கெனவே வேறு சாதனத்தில் நீக்கப்பட்டது.</string>
+
 </resources>

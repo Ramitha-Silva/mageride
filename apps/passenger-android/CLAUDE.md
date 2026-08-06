@@ -163,6 +163,42 @@ lk.mageride.passenger
 - **`HistoryRepository` deliberately reads two services.** The Past tab is ride-svc's history (state
   + driver); SCR-PA-023's detail is query-svc's (polyline + filtered distance, spanning all modes).
 
+## Cluster 7 (C083) — settings, addresses and the drawer's header
+
+- **SCR-PA-026's Home and Work are the `isHome`/`isWork` flags, never a label convention.** The
+  label is free text a passenger types in their own language, so matching `"Home"` against it would
+  make a Sinhala *"නිවස"* not a Home. The two rows are drawn **always**, set or not, and the ✎ on
+  either is the wireframe's only *"save Home & Work by pin"* control — which is why SCR-PA-026a can
+  keep to AL-26's four fields and ask nothing about shortcuts.
+- **`AddressBook` is the only door onto `iam.saved_addresses`, and the one seam in this app that
+  spans two services on purpose.** AL-14's *"OSM-pin + reverse-geocode"* is one gesture.
+  `describe()` answers `null` rather than throwing: a geocoder that cannot name a coordinate has not
+  stopped a passenger saving it, so the lookup is a **pre-fill and never a gate**.
+- **`PassengerProfileRepository.update` has no `language` parameter, and that is AL-26 made
+  structural.** Everything Settings and Edit Profile save goes through it; the language has its own
+  route (`saveLanguage`) reached only from SCR-PA-027. A screen cannot send a language it has no
+  parameter for, however it is later edited.
+- **A language change writes the device first and re-creates the Activity.** `PassengerLocale.wrap`
+  runs in `attachBaseContext`, so nothing else can change what is on screen; `SettingsState.relaunch`
+  is the ask. The server write is second and is allowed to fail — `languagePendingSync` is left set
+  for C077's next authenticated pass.
+- **`PaymentPreference` is where *"pre-selected at booking/checkout"* lives** (US-22.4).
+  `BookingDraft` re-reads it on **every fresh draft**, which is what makes the DoD's *"the next
+  booking"* true rather than *"every booking after a restart"*; SCR-PA-016 seeds `chosen` from the
+  same value. It is device-local because `DefaultPaymentMethod` is still `[cash, lankaqr, onepay]`
+  and AL-57's replacement rail (`wallet`) has no value in it — see the contract gaps below.
+- **`PassengerIdentity` is a `single` because the *shell* reads it.** SCR-PA-033's header is drawn
+  above every screen; SCR-PA-027 and SCR-PA-027b hand their profile over rather than leaving the
+  drawer to fetch one each time it opens, and `PassengerShell` clears it on every `RouteToLogin`.
+- **Nothing in this app sets `EmergencyContact.isPrimary`.** iam-svc promotes the first contact onto
+  `iam.users.emergency_contact_name/phone` for D-33's five-second SOS budget and re-promotes on a
+  delete — which is why a removal **re-reads** the list rather than dropping the row locally.
+  C084's SCR-PA-029 reads the same `SosContacts` seam; an empty list is what makes `POST /v1/sos`
+  answer `400 no-emergency-contact`, and SCR-PA-027b says so where the list is empty.
+- **`settings/SettingsRows.kt` is this cluster's row vocabulary** — `SettingsTopBar` (the `‹ Title`
+  with an optional trailing slot) and `SettingsRow` (the wireframe's `.listrow`, with the right-hand
+  side as a slot: a chevron, a value, a switch or an ✎). Three screens draw the same row.
+
 ## The live plane — read this before touching `live/`
 
 - **The passenger view is 19 cells and the client never subscribes to a vehicle.** R-06 is res-7 +
@@ -258,6 +294,22 @@ lk.mageride.passenger
   *methods* and draws no screen for any; `booking/MapPickSheet` is a modal for that reason.
 - **D2' §SCR-PA-010b and §SCR-PA-012 predate AL-20** and still list three capture methods. The
   wireframe's four (and the pickup/drop-off asymmetry) win; both tables need a micro-change-set.
+- **`iam.yaml`'s `DefaultPaymentMethod` predates AL-57/AL-59** — still `[cash, lankaqr, onepay]`,
+  and C003's `CHECK` with it. Both surviving preference-shaped rails cannot be expressed: `wallet`
+  has no value at all, and the contract's own text excludes the driver QR from a *stored* preference.
+  So SCR-PA-027 offers Cash and Wallet, writes the account only for Cash, and a **wallet default is
+  device-local** until the enum gains it (Δ C083).
+- **No contract carries a human-readable passenger number.** SCR-PA-027's card and SCR-PA-033's
+  header both print `PAX-90431` in the wireframe; `UserProfile` has `userId` and nothing else, so
+  the ULID is what is drawn. Inventing a `PAX-` prefix would be the client minting an identifier.
+- **There is no avatar upload route anywhere in the contract set.** `photoUrl` is a *URL* and the
+  whole upload surface is `POST /v1/support/screenshots`, the Mode B transfer slip and the driver's
+  documents. SCR-PA-027b draws the 📷 badge and *"Take photo or upload"* **disabled**, the same call
+  C077 made on SCR-PA-004.
+- **`mobile_db_schema.md` §2.1's on-device `saved_addresses` has no writer**, here or on the driver
+  side (§1.3's `emergency_contacts` likewise). Both screens read the server, which is where US-22.6
+  puts the list anyway (the eager-fetch set is a `GET /v1/me/bootstrap` concern). A mirror with no
+  outbox between it and the API would be two writers for one list.
 
 ## Things that will bite
 

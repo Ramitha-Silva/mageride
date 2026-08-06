@@ -109,7 +109,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C080 | passenger-android-ride-payment | 4a | DONE | 2026-08-06 | **201 tests green** (was 181; 20 new across 3 suites), `assembleDebug` + `detekt` + `ktlintCheck` clean. SCR-PA-014/015/015a/016/017/018/019 built. **AL-57/AL-59 are the story**: `onepay` and platform-`lankaqr` are dead as ride rails, so SCR-PA-016 offers **Cash / Wallet / Driver QR** and *nothing on any screen can render a surcharge* — `PaymentRails` is the only rail list and a test pins it. **This corrects C079's booking chip**, which still offered the two retired rails. **AL-47 attestation**: claim → poll → `DriverConfirmedQR`, with Support offered past five unconfirmed minutes; `QrClaimedByPassenger` is explicitly *not* settled. **AL-48**: no masking anywhere — a Normal call is `ACTION_DIAL` on the real `counterpartyPhone`, the choice is remembered, and US-26.5's number notice is shown once and only before a direct dial. Cancel-after-accept names the Rs 50 **before** the tap (D-05 settles it on the next trip, so that is the only moment to say it). Added CameraX + `zxing:core` and the CAMERA permission for AL-22's scan. **Three gaps**: no contract POSTs a Mode C ride rating (confirming C074's finding from the other side — SCR-PA-019 queues locally), `ride.yaml`'s booking-time payment enum never caught up with AL-57/AL-59, and the SCR-PA-016/017 wireframes still draw OnePay +5% |
 | C081 | passenger-android-package-history | 4a | DONE | 2026-08-06 | **208 tests green** (was 201; 7 new), `assembleDebug` + `detekt` + `ktlintCheck` clean. SCR-PA-020/021/022/023 built. **One view model for both package screens**, because it is one ride — which of SCR-PA-020 and SCR-PA-021 to draw is a fact about the ride (booker vs recipient), not about the URI, exactly as `PassengerRoute.PackageTracking`'s KDoc anticipated. **AL-48 on the history card**: the row's `mobileMasked` is rendered and never dialled (`PhoneMasked` forbids parsing one back), so **Call** costs one `GET /v1/rides/{id}` for the clear `counterpartyPhone` — and a **cancelled-before-assignment** trip offers neither, checked in the card *and* the view model. **Four gaps**: neither package OTP can be read back from the platform (pickup is returned once at booking, delivery arrives only on a push — both now captured into a process-lifetime `PackageOtps`), there is **no passenger-facing read of their own scheduled rides**, `RideHistoryRow` carries no `kind` so the Packages tab splits on a terminal state, and `ride.yaml`'s post-AL-48 note still claims the Call needs no second round trip |
 | C082 | passenger-android-mode-b-subscriptions | 4a | DONE | 2026-08-06 | **235 tests green** (was 208; 27 new), `assembleDebug` + `detekt` + `ktlintCheck` clean. SCR-PA-024/025/025a/025b built. **AL-59 applied over the wireframe**: the pay sheet has no OnePay row and no `+5 %` anywhere — a subscription is paid to the *fleet owner* and OnePay has one merchant account per merchant, so **Cash** takes the vacant row (D2' §16e); the wireframe needs a micro-change-set. **AL-49's `payTo` only exists after `POST …/pay`**, which is why SCR-PA-025a is two stages — a chooser cannot print an account number it has not been given. **Unsubscribing drops the marker locally** through the new `PassengerLiveMap.dropVehicle`, so AL-25 is true on the tap rather than on `share.revoked`'s round trip. **Five gaps**: no passenger-readable vehicle name (`GET /v1/vehicles/{id}` is 403 `not-owner` here, so the card's title is the Vehicle ID), no passenger-facing read of one's own access requests and **no Mode B push kind** (so *accepted* is inferred from the subscription and *rejected* is unobservable), no `GET …/subscriptions/{subscriptionId}` (the screens filter the list), `GET …/payments` fixes no ordering, and **the passenger app has no wallet top-up screen at all** |
-| C083 | passenger-android-settings-addresses | 4a | PENDING | | |
+| C083 | passenger-android-settings-addresses | 4a | DONE | 2026-08-06 | **265 tests green** (was 236; 29 new), `assembleDebug` + `detekt` + `ktlintCheck` clean. SCR-PA-026/026a/027/027b built and SCR-PA-033's identity header filled in. **Home and Work are the `isHome`/`isWork` flags, drawn as two always-present rows whose ✎ is the wireframe's only "save Home & Work by pin" control** — which is what lets SCR-PA-026a keep to AL-26's four fields and ask nothing about shortcuts. **AL-26 is structural on Edit Profile**: `PassengerProfileRepository.update` has no `language` parameter, so no screen reached from Settings can send one. **The reverse geocode is a pre-fill and never a gate** (AL-14) — a 404/503 leaves an address that can still be saved. **Four gaps**: `iam.yaml`'s `DefaultPaymentMethod` predates AL-57/AL-59 so a **wallet** default is device-local (the wireframe's Cash/LankaQR/OnePay row needs a micro-change-set), no contract carries a human-readable passenger id (the ULID is drawn where the wireframe prints `PAX-90431`), no avatar upload route exists anywhere (the 📷 control is drawn disabled, as C077 did), and `mobile_db_schema.md` §2.1's on-device `saved_addresses` still has no writer |
 | C084 | passenger-android-comms-safety-support | 4a | PENDING | | |
 | C085 | driver-ios-shell | 4b | PENDING | | |
 | C086 | driver-ios-auth-onboarding | 4b | PENDING | | |
@@ -12943,3 +12943,124 @@ _Append 3 lines per completed component (Component / Status / Notes)._
     `java.time` at a call site.
   - **`PassengerLiveMap.dropVehicle`** is the local half of a revocation. Nothing else should remove
     a marker by hand — the other four reasons a vehicle leaves the map are all the server's.
+
+- **Component:** C083 passenger-android-settings-addresses — 2026-08-06
+- **Status:** DONE — `./gradlew :apps:passenger-android:testDebugUnitTest :apps:passenger-android:assembleDebug`
+  exits 0: **265 tests, 0 failures** (236 → 265). `detekt` and `ktlintCheck` clean. All four screens
+  built, plus SCR-PA-033's identity header, which the shell had left as a slot for this component.
+- **Notes:**
+
+  **How SCR-PA-026 saves Home and Work, since the wireframe draws no control for it.** Its states
+  line asks for two things — *"Save Home & Work by pin on OSM map"* and *"tapping ＋ Add address
+  opens a ModalBottomSheet (SCR-PA-026a) to capture the address"* — and draws exactly one CTA. The
+  reading built here is that the **Home and Work rows are the control**: they are printed first and
+  always, set or not, and the ✎ on either opens the same sheet with the shortcut already decided and
+  the label pre-filled. That is what lets SCR-PA-026a keep to AL-26's fence of four fields (Address
+  Line 1/2/3 + free-text Label) and ask nothing about shortcuts, and it is why an unset row shows
+  *"Not set"* rather than being hidden. The alternative — deriving the flag from a label matching
+  `"Home"` — was rejected outright: the label is free text a passenger types in their own language,
+  so a Sinhala *"නිවස"* would not be a Home. `isHome`/`isWork` are the flags, and
+  `SavedAddressesViewModelTest` pins that from both ends.
+
+  **An existing shortcut is edited where it is; an unset one takes the pin.** The ✎ on a row that
+  already has an address is a request to *correct that address*, and moving it to wherever the map
+  happened to be centred would be a different action behind the same icon.
+
+  **Delete lives inside the sheet** (US-22.3). SCR-PA-026 draws a ✎ per row and no ✕, and its own
+  states line says *"edit/delete supported"* without drawing the control — reaching delete through
+  edit also means the passenger has just been shown which address it is.
+
+  **AL-26's other half is structural rather than remembered.** `PassengerProfileRepository` now has
+  two `PUT /v1/users/me` methods: `save(...)` is C077's first-run call and carries a language
+  because SCR-PA-004 draws a Language row; **`update(...)` is Settings' and has no `language`
+  parameter at all**. Nothing reached from SCR-PA-027b can send one however the screen is later
+  edited, and `EditProfileViewModelTest` asserts the absence from the wire.
+
+  **A language change writes the device first and re-creates the Activity.** `PassengerLocale.wrap`
+  is applied in `attachBaseContext`, which has already run by the time a composable exists, and the
+  per-app locale API is API 33+ against a floor of 26 — so `SettingsState.relaunch` asks the screen
+  for a `recreate()`. The server write is second and is *allowed to fail*: a passenger on a train
+  with no signal still gets the app they asked for, and `languagePendingSync` is left set for
+  C077's next authenticated pass.
+
+  ### Contract gaps found
+
+  1. **`iam.yaml`'s `DefaultPaymentMethod` predates the 2026-08-01 payment-custody change set.** It
+     is still `[cash, lankaqr, onepay]`, as is C003's `CHECK` on `iam.users.default_payment_method`
+     and `server_db_schema.md` §1. AL-57 dropped `onepay` as a ride method and replaced it with
+     **`wallet`**; AL-59 retired the platform `lankaqr` rail into `scan_driver_qr`. So of the three
+     rails this app still has, the enum can express exactly one: `cash`. The contract's own text
+     also excludes the driver QR from a *stored* preference (*"a settlement choice made during a
+     ride"*), which leaves **Cash and Wallet** as the preference-shaped set — and no wire value for
+     the second. SCR-PA-027 therefore offers both, writes the account only for Cash, and holds the
+     answer on the device (`PaymentPreference`). **A wallet default does not follow the passenger to
+     a second handset until the enum gains it.** The micro-change-set is one value in three places
+     (`iam.yaml`, `db/migrations/0101`, `server_db_schema.md`); `PaymentRails.fromStored` is an
+     exhaustive `when` so the compiler names the site when it lands. The **wireframe** needs the same
+     change-set C080 already raised for SCR-PA-016/017 — it still draws Cash / LankaQR / OnePay here.
+  2. **No contract carries a human-readable passenger number.** SCR-PA-027's profile card and
+     SCR-PA-033's header both print `ID: PAX-90431` in the wireframe; `UserProfile` has `userId` (a
+     ULID) and nothing else that identifies the account to its owner. The ULID is what is drawn — it
+     is what support would ask for — because a client synthesising a `PAX-` prefix would be minting
+     an identifier no other surface could resolve.
+  3. **There is no avatar upload route anywhere in the contract set.** `UpdateProfileRequest.photoUrl`
+     is a *URL*, and the whole app-facing upload surface is `POST /v1/support/screenshots`, the Mode
+     B transfer slip and the driver's documents. SCR-PA-027b draws the 📷 badge and *"Take photo or
+     upload"* **disabled** — C077 hit the same wall on SCR-PA-004 and made the same call. A control
+     that looks live and does nothing is worse than one that says it is not ready. The photo is not
+     *rendered* either: this app ships no image loader (C082 argued the same point about the owner's
+     LankaQR image and decoded bytes by hand rather than adding one).
+  4. **`mobile_db_schema.md` §2.1's on-device `saved_addresses` has no writer**, here or anywhere —
+     and §1.3's `emergency_contacts` likewise, on both apps. Both screens read the server, which is
+     where US-22.6 puts the list anyway (*"part of the eager-fetch set"* is a `GET /v1/me/bootstrap`
+     concern, not a table a settings screen owns). A local mirror with no outbox between it and the
+     API would be two writers for one list; the driver app's SCR-DA-029 made the same call. Either
+     the tables get an owner in a later component or the schema drops them.
+
+  ### Also worth knowing
+
+  - **`PaymentPreference` is where US-22.4's *"pre-selected at booking/checkout"* lives**, and
+    `BookingDraft` now takes it. It is re-read on **every fresh draft** (`begin`, `clear` and
+    construction) rather than captured once, which is what makes the Definition of Done's *"the next
+    booking"* literally true: a booking already on screen keeps the rail it was given, because a
+    preference is not a command. SCR-PA-016 seeds its own `chosen` from the same value — that is the
+    *checkout* half of the same sentence. Both are asserted in `SettingsViewModelTest`.
+  - **`PassengerIdentity` is a `single` because the shell reads it.** SCR-PA-033's header sits above
+    every screen, so a profile fetched per drawer-open would be a request each time somebody looked
+    for the menu. SCR-PA-027 and SCR-PA-027b hand their profile over (`adopt`), so a rename changes
+    the header with no second round trip, and `PassengerShell` clears it on **every** `RouteToLogin`
+    — a logout and a revocation take the same path out, so the next passenger never sees the
+    previous one's name behind their login.
+  - **Removing an SOS contact re-reads the list; nothing else in this cluster does.** Deleting the
+    primary **promotes** the next contact into `iam.users.emergency_contact_name/phone` (D-33's
+    five-second fast path), and which one that is is the server's answer — a client that just dropped
+    the row would keep showing an `isPrimary` that is a lie about where the SOS SMS goes. Nothing
+    here *sets* `isPrimary`: `EmergencyContactInput` has no field for it.
+  - **`SettingsErrors` has a second entry point, and the reason is one code with two meanings.** A
+    `409` on a saved address is *"you already have a Home"*; a `409` on `DELETE /v1/users/me` is
+    *"an erasure request is already open"* (E-06). One arm would have to pick a sentence and be
+    wrong on the other screen, so `deletionMessageFor` names its own and delegates the rest.
+  - **Delete account reports a request, not a deletion, and does not sign the passenger out.** The
+    `202` hands the job to pdpa-svc where a statutory hold can delay it; ending the session would
+    claim an erasure that has not happened and take away the surface that can report when it has.
+  - **`LiveMapViewModelTest.toggling_a_mode_redraws_from_what_is_already_in_hand` was flaky and is
+    fixed (Δ C083).** It snapshots `backend.calls.size` to prove a filter toggle issues no query,
+    but `LiveMapViewModel.loadShortcuts` is a background call of its own — on a loaded host it lands
+    *between* the two counts and fails a test the toggle did nothing to. It now waits for the
+    shortcuts (this component's own chips) before snapshotting. Worth knowing for any test that
+    counts calls against a view model with more than one background read.
+
+  ### For C084
+
+  - **`SosContacts` is the seam SCR-PA-029 wants.** `POST /v1/sos` answers `400
+    no-emergency-contact` when the list is empty, and SCR-PA-027b is where it is filled in; do not
+    open a second door onto `iam.emergency_contacts`.
+  - **`settings/SettingsRows.kt`** is the row vocabulary — `SettingsTopBar` (the `‹ Title` bar with
+    an optional trailing slot, which is how SCR-PA-027b gets its `Save` textlink) and `SettingsRow`
+    (the wireframe's `.listrow`, with its right-hand side as a slot). SCR-PA-030's FAQ list is the
+    same row.
+  - **`PassengerRoute.Support` is reached from three places now** — the bottom bar, the drawer and
+    SCR-PA-027's Help & support row. It is one destination; do not add a second.
+  - **The drawer header is `PassengerDrawerHeader()` and the shell passes it in.** If SCR-PA-030
+    needs the signed-in profile, take it from `PassengerIdentity` rather than reading
+    `GET /v1/users/me` again.

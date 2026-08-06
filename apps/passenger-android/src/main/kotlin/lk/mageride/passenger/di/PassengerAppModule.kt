@@ -37,6 +37,12 @@ import lk.mageride.passenger.push.PushTokenProvider
 import lk.mageride.passenger.ride.ApiRideRepository
 import lk.mageride.passenger.ride.CallChoice
 import lk.mageride.passenger.ride.RideRepository
+import lk.mageride.passenger.settings.AddressBook
+import lk.mageride.passenger.settings.ApiAddressBook
+import lk.mageride.passenger.settings.ApiSosContacts
+import lk.mageride.passenger.settings.PassengerIdentity
+import lk.mageride.passenger.settings.PaymentPreference
+import lk.mageride.passenger.settings.SosContacts
 import lk.mageride.passenger.shell.AndroidAppPreferences
 import lk.mageride.passenger.shell.AppPreferences
 import lk.mageride.passenger.shell.ConnectivityMonitor
@@ -126,6 +132,7 @@ internal fun passengerAppModule(environment: PassengerEnvironment = PassengerEnv
         activeRideBindings()
         historyBindings()
         subscriptionBindings()
+        settingsBindings()
     }
 
 /**
@@ -196,7 +203,9 @@ private fun Module.liveMapScreenBindings() {
  * and the screen. The NavHost builds it directly — see `PassengerNavHost`.
  */
 private fun Module.bookingBindings() {
-    single { BookingDraft() }
+    // The draft takes C083's stored default so every fresh booking opens on the rail SCR-PA-027
+    // chose (US-22.4). See `BookingDraft` — it re-reads on each new draft rather than capturing.
+    single { BookingDraft(payments = get()) }
     single<BookingRepository> {
         ApiBookingRepository(
             transit = get(),
@@ -259,6 +268,34 @@ private fun Module.historyBindings() {
  */
 private fun Module.subscriptionBindings() {
     single<SubscriptionRepository> { ApiSubscriptionRepository(subscriptions = get()) }
+}
+
+/**
+ * The C083 slice — SCR-PA-026/026a/027/027b, and SCR-PA-033's identity block.
+ *
+ * **Four singles and no view models**, which is the shape C080 and C082 settled on: the three
+ * screens' models are built beside their destinations in `PassengerNavHost`, where the rest of the
+ * app's wiring already is.
+ *
+ * - [AddressBook] is the only door onto `iam.saved_addresses`, and the one seam in this app that
+ *   spans two services on purpose — AL-14's *"OSM-pin + reverse-geocode"* is one gesture, and
+ *   `GET /v1/geo/reverse` is query-svc's.
+ * - [SosContacts] is `iam.emergency_contacts`. C084's SCR-PA-029 is its other reader; the list is
+ *   what makes `POST /v1/sos` answer anything but `400 no-emergency-contact`.
+ * - [PassengerIdentity] is a `single` because the **shell** reads it: SCR-PA-033's header is drawn
+ *   above every screen, and a profile fetched per drawer-open would be a request each time somebody
+ *   looked for the menu.
+ * - [PaymentPreference] is a `single` for the reason `CallChoice` is — the answer outlives every
+ *   ride, and [BookingDraft] reads it on every new booking.
+ *
+ * `PassengerProfileRepository` is deliberately **not** rebound here: C077 already binds it, and
+ * `/v1/users/me` having one owner is what stops two clusters disagreeing about `notif_prefs`.
+ */
+private fun Module.settingsBindings() {
+    single<AddressBook> { ApiAddressBook(iam = get(), query = get()) }
+    single<SosContacts> { ApiSosContacts(iam = get()) }
+    single { PassengerIdentity(profiles = get()) }
+    single { PaymentPreference(preferences = get()) }
 }
 
 /**

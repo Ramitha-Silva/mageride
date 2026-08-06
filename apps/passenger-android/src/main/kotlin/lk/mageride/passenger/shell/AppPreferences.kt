@@ -51,6 +51,16 @@ internal interface AppPreferences {
      */
     var callNumberNoticeShown: Boolean
 
+    /**
+     * SCR-PA-027's *"Default payment"* — the wire value of the chosen `PaymentMethod`, or `null`
+     * before the passenger has chosen one (US-22.4, AL-14).
+     *
+     * Here rather than only on `iam.users` because the column cannot hold every rail this app
+     * offers: `DefaultPaymentMethod` is still `[cash, lankaqr, onepay]` and AL-57 replaced `onepay`
+     * with the **wallet**, which has no value in that enum. See `PaymentPreference`. Δ C083.
+     */
+    var defaultPaymentMethod: String?
+
     /** Whether SCR-PA-002 has been answered — "first-launch only" (D2' §A). */
     val firstRunComplete: Boolean get() = language != null
 }
@@ -81,9 +91,14 @@ internal class AndroidAppPreferences(context: Context) : AppPreferences {
         get() = store.getBoolean(KEY_CALL_NUMBER_NOTICE, false)
         set(value) = store.edit { putBoolean(KEY_CALL_NUMBER_NOTICE, value) }
 
+    override var defaultPaymentMethod: String?
+        get() = store.getString(KEY_DEFAULT_PAYMENT, null)
+        set(value) = store.edit { putString(KEY_DEFAULT_PAYMENT, value) }
+
     private companion object {
         const val KEY_LAST_CALL_TYPE = "last_call_type"
         const val KEY_CALL_NUMBER_NOTICE = "call_number_notice_shown"
+        const val KEY_DEFAULT_PAYMENT = "default_payment_method"
 
         // Not the C018 database: `mobile_db_schema.md` §0.4 keeps that file encrypted and opening
         // it is `suspend`, and `attachBaseContext` cannot wait for a Keystore round trip to know

@@ -202,5 +202,6 @@ class ActiveRideViewModelTest {
         override var locationRationaleAcknowledged: Boolean = false,
         override var lastCallType: String? = null,
         override var callNumberNoticeShown: Boolean = false,
+        override var defaultPaymentMethod: String? = null,
     ) : AppPreferences
 }

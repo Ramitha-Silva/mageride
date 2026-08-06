@@ -125,6 +125,10 @@ class LiveMapViewModelTest {
         val model = viewModel(live)
         transport.emit(LiveHub.Event.VEHICLE_POSITIONS, THREE_VEHICLES)
         model.state.await { it.vehicles.size == 3 }
+        // The shortcut read is a background call of its own (`loadShortcuts`), so the snapshot has
+        // to wait for it — otherwise it lands *between* the two counts on a loaded host and this
+        // test fails for a call the toggle did not make. Δ C083, which is what makes those chips.
+        model.state.await { it.shortcuts.isNotEmpty() }
         val callsBefore = backend.calls.size
 
         model.setMode(ServiceMode.C, enabled = false)
