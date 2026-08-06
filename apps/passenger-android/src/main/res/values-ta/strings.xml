@@ -19,9 +19,6 @@
     <string name="drawer_support">உதவி மற்றும் ஆதரவு</string>
     <string name="drawer_log_out">வெளியேறு</string>
 
-    <string name="route_placeholder_title">இந்தக் கட்டத்தில் வரவுள்ளது</string>
-    <string name="route_placeholder_body">%1$s அதன் திரைக் குழுவுடன் வரும்.</string>
-
     <string name="offline_banner_message">இணைப்பு துண்டிக்கப்பட்டது — கடைசியாக அறிந்த இடங்கள் காட்டப்படுகின்றன</string>
 
     <string name="update_required_title">புதுப்பிப்பு தேவை</string>
@@ -260,7 +257,6 @@
     <string name="ride_start_otp">தொடக்கக் குறியீடு — ஓட்டுநரிடம் சொல்லுங்கள்</string>
     <string name="ride_call">அழை</string>
     <string name="ride_sos">அவசர உதவி</string>
-    <string name="ride_sos_sent">உதவிக்கு அறிவிக்கப்பட்டது.</string>
     <string name="ride_share">இந்தப் பயணத்தைப் பகிர்</string>
     <string name="ride_cancel">பயணத்தை ரத்து செய்</string>
     <string name="ride_cancel_title">இந்தப் பயணத்தை ரத்து செய்யவா?</string>
@@ -494,5 +490,69 @@
 
     <string name="error_address_shortcut_taken">அங்கே ஏற்கெனவே ஒரு முகவரி சேமிக்கப்பட்டுள்ளது. அதைத் திருத்துங்கள்.</string>
     <string name="error_address_not_found">அது ஏற்கெனவே வேறு சாதனத்தில் நீக்கப்பட்டது.</string>
+    <string name="action_retry">மீண்டும் முயலவும்</string>
+
+    <string name="call_in_app">செயலி அழைப்பு · எண் மறைக்கப்பட்டுள்ளது</string>
+    <string name="call_connecting">இணைக்கிறது…</string>
+    <string name="call_connected">இணைக்கப்பட்டது · %1$s</string>
+    <string name="call_mute">ஒலி நிறுத்து</string>
+    <string name="call_unmute">ஒலியை மீட்டு</string>
+    <string name="call_speaker">ஒலிபெருக்கி</string>
+    <string name="call_hang_up">அழைப்பை முடி</string>
+    <string name="call_failed_signalling">செயலி அழைப்பைத் தொடங்க முடியவில்லை.</string>
+    <string name="call_failed_media">செயலி அழைப்பை இணைக்க முடியவில்லை.</string>
+    <string name="call_failed_unavailable">இந்தப் பதிப்பில் செயலி அழைப்பு இன்னும் இல்லை.</string>
+    <string name="call_fallback_question">அதற்குப் பதிலாக சாதாரணமாக அழைக்கவா?</string>
+    <string name="call_fallback_action">சாதாரண அழைப்பு</string>
+
+    <string name="sos_title">அவசர SOS</string>
+    <string name="sos_armed">GPS மற்றும் பயணத்தை உங்கள் அவசரத் தொடர்புகளுக்கு SMS மூலம் அனுப்புகிறது…</string>
+    <string name="sos_waiting_position">உங்கள் இருப்பிடத்தைத் தேடுகிறது…</string>
+    <string name="sos_sending">அனுப்புகிறது…</string>
+    <string name="sos_sending_body">உங்கள் அவசரத் தொடர்புகளுக்கு அறிவிக்கிறது…</string>
+    <string name="sos_dispatched">உங்கள் அவசரத் தொடர்புகளுக்கு அறிவிக்கப்பட்டது.</string>
+    <string name="sos_failed">எச்சரிக்கை வெளியே செல்லவில்லை.</string>
+    <string name="sos_no_position">எச்சரிக்கை அனுப்ப MageRide-க்கு உங்கள் இருப்பிடம் தேவை.</string>
+    <string name="sos_contacts_loading">யாருக்கு அறிவிப்பது எனப் பார்க்கிறது…</string>
+    <string name="sos_no_contact">அவசரத் தொடர்பு எதுவும் சேமிக்கப்படவில்லை</string>
+    <string name="sos_no_contact_hint">சுயவிவரத்தைத் திருத்து பகுதியில் ஒன்றைச் சேருங்கள், அப்போது யாருக்கு அறிவிப்பது எனத் தெரியும்.</string>
+    <string name="sos_sms_sent">அனுப்பப்பட்டது</string>
+    <string name="sos_sms_failed">SMS செல்லவில்லை</string>
+    <string name="sos_sms_no_contact">அனுப்ப யாரும் இல்லை</string>
+    <string name="sos_share_hint">உங்கள் நேரடிப் பயண இணைப்பை யாருக்காவது அனுப்புங்கள். இந்தப் பயணம் முடியும் வரை இது வேலை செய்யும்.</string>
+    <string name="sos_share_action">நேரடிப் பயணத்தைப் பகிர்</string>
+
+    <string name="support_title">ஆதரவு</string>
+    <string name="support_search_hint">உதவியைத் தேடு</string>
+    <string name="support_faq">அடிக்கடி கேட்கும் கேள்விகள்</string>
+    <string name="support_loading">ஏற்றுகிறது…</string>
+    <string name="support_faq_empty">இன்னும் உதவிக் கட்டுரைகள் இல்லை.</string>
+    <string name="support_search_empty">உதவியில் அதற்குப் பொருந்தியது எதுவும் இல்லை.</string>
+    <string name="support_your_tickets">உங்கள் டிக்கெட்டுகள்</string>
+    <string name="support_tickets_empty">நீங்கள் இன்னும் டிக்கெட் எதுவும் பதிவிடவில்லை.</string>
+    <string name="support_raise_ticket">டிக்கெட் பதிவிடு</string>
+    <string name="support_ticket_raised">டிக்கெட் பதிவானது. எங்கள் பதில் இங்கே தோன்றும்.</string>
+    <string name="support_attached_trip">இந்த டிக்கெட்டுடன் ஒரு பயணம் இணைக்கப்பட்டுள்ளது</string>
+    <string name="support_issue_label">பிரச்சினை விவரம்</string>
+    <string name="support_issue_hint">என்ன தவறு நடந்தது எனச் சொல்லுங்கள்…</string>
+    <string name="support_related_trip">தொடர்புடைய பயணம்</string>
+    <string name="support_trip_none">பயணம் இல்லை</string>
+    <string name="support_trip_unnamed">பயணம்</string>
+    <string name="support_attach">திரைப்படத்தை இணை</string>
+    <string name="support_attached">திரைப்படம் இணைக்கப்பட்டது</string>
+    <string name="support_submit_ticket">டிக்கெட்டை அனுப்பு</string>
+    <string name="support_category_general">ஆதரவுக் கோரிக்கை</string>
+    <string name="support_status_open">திறந்துள்ளது</string>
+    <string name="support_status_in_progress">பார்க்கப்படுகிறது</string>
+    <string name="support_status_resolved">தீர்க்கப்பட்டது</string>
+    <string name="support_event_opened">இந்த டிக்கெட்டை நீங்கள் பதிவிட்டீர்கள்</string>
+    <string name="support_event_responded">MageRide பதிலளித்தது</string>
+    <string name="support_event_resolved">தீர்க்கப்பட்டதாகக் குறிக்கப்பட்டது</string>
+    <string name="support_event_reopened">மீண்டும் திறக்கப்பட்டது</string>
+
+    <string name="error_no_emergency_contact">முதலில் ஓர் அவசரத் தொடர்பைச் சேருங்கள், அப்போது யாருக்கு அறிவிப்பது எனத் தெரியும்.</string>
+    <string name="error_ride_ended">இந்தப் பயணம் ஏற்கெனவே முடிந்துவிட்டது.</string>
+    <string name="error_ticket_not_found">அதைத் திறக்க முடியவில்லை. அது ஏற்கெனவே நீக்கப்பட்டிருக்கலாம்.</string>
+    <string name="error_screenshot_too_large">அந்தத் திரைப்படம் மிகப் பெரியது. சிறியதொன்றை முயலுங்கள்.</string>
 
 </resources>

@@ -5,6 +5,7 @@ import kotlinx.coroutines.runBlocking
 import lk.mageride.passenger.MainDispatcher
 import lk.mageride.passenger.R
 import lk.mageride.passenger.await
+import lk.mageride.passenger.awaitCall
 import lk.mageride.passenger.booking.BookingDraft
 import lk.mageride.passenger.onboarding.FakeAppPreferences
 import lk.mageride.passenger.onboarding.PassengerProfileRepository
@@ -98,7 +99,11 @@ class SettingsViewModelTest {
         assertEquals(PaymentMethod.WALLET.wire, preferences.defaultPaymentMethod, "but the device remembers")
 
         model.chooseDefaultPayment(PaymentMethod.CASH)
-        model.state.await { it.defaultPayment == PaymentMethod.CASH }
+        // Awaited on the CALL, not on the state (Δ C084). `pushDefaultPayment` publishes nothing on
+        // success, and `defaultPayment` is set synchronously *before* the request is launched — so
+        // a state predicate here passes while the write is still in flight, which is what made this
+        // assertion flaky on a loaded build host.
+        backend.awaitCall("setDefaultPaymentMethod")
         assertTrue(backend.lastCall("setDefaultPaymentMethod").body.contains("cash"))
     }
 

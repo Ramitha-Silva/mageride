@@ -171,4 +171,28 @@ internal object ControlTokens {
      * proportion the wireframe is actually fixing.
      */
     val InlineMap: Dp = 180.dp
+
+    // ---- C084 · the call, the alarm and support -----------------------------------------
+
+    /**
+     * SCR-PA-028's `🔇` and `🔊` discs, and the red `📞` that ends the call.
+     *
+     * The wireframe gives the end button `width:64px;height:64px;border-radius:50%` and draws the
+     * two toggles as `.fab`s beside it. Both numbers are the driver app's for SCR-DA-031 as well —
+     * one call screen on two surfaces should not have two button sizes.
+     */
+    val CallAction: Dp = 44.dp
+    val CallEnd: Dp = 64.dp
+
+    /**
+     * SCR-PA-029's disc and the ring around it.
+     *
+     * `width:130px;height:130px;border-radius:50%` with `box-shadow: 0 0 0 14px rgba(211,47,47,.25)`
+     * — rounded onto the 4 px grid as 128 + 16, which is what the driver's SCR-DA-032 uses.
+     */
+    val SosButton: Dp = 128.dp
+    val SosHalo: Dp = 16.dp
+
+    /** SCR-PA-031's `⬆️` above *"Update required"*, and SCR-PA-028's avatar glyph. */
+    val DialogIcon: Dp = 32.dp
 }

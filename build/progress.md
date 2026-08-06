@@ -110,7 +110,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C081 | passenger-android-package-history | 4a | DONE | 2026-08-06 | **208 tests green** (was 201; 7 new), `assembleDebug` + `detekt` + `ktlintCheck` clean. SCR-PA-020/021/022/023 built. **One view model for both package screens**, because it is one ride — which of SCR-PA-020 and SCR-PA-021 to draw is a fact about the ride (booker vs recipient), not about the URI, exactly as `PassengerRoute.PackageTracking`'s KDoc anticipated. **AL-48 on the history card**: the row's `mobileMasked` is rendered and never dialled (`PhoneMasked` forbids parsing one back), so **Call** costs one `GET /v1/rides/{id}` for the clear `counterpartyPhone` — and a **cancelled-before-assignment** trip offers neither, checked in the card *and* the view model. **Four gaps**: neither package OTP can be read back from the platform (pickup is returned once at booking, delivery arrives only on a push — both now captured into a process-lifetime `PackageOtps`), there is **no passenger-facing read of their own scheduled rides**, `RideHistoryRow` carries no `kind` so the Packages tab splits on a terminal state, and `ride.yaml`'s post-AL-48 note still claims the Call needs no second round trip |
 | C082 | passenger-android-mode-b-subscriptions | 4a | DONE | 2026-08-06 | **235 tests green** (was 208; 27 new), `assembleDebug` + `detekt` + `ktlintCheck` clean. SCR-PA-024/025/025a/025b built. **AL-59 applied over the wireframe**: the pay sheet has no OnePay row and no `+5 %` anywhere — a subscription is paid to the *fleet owner* and OnePay has one merchant account per merchant, so **Cash** takes the vacant row (D2' §16e); the wireframe needs a micro-change-set. **AL-49's `payTo` only exists after `POST …/pay`**, which is why SCR-PA-025a is two stages — a chooser cannot print an account number it has not been given. **Unsubscribing drops the marker locally** through the new `PassengerLiveMap.dropVehicle`, so AL-25 is true on the tap rather than on `share.revoked`'s round trip. **Five gaps**: no passenger-readable vehicle name (`GET /v1/vehicles/{id}` is 403 `not-owner` here, so the card's title is the Vehicle ID), no passenger-facing read of one's own access requests and **no Mode B push kind** (so *accepted* is inferred from the subscription and *rejected* is unobservable), no `GET …/subscriptions/{subscriptionId}` (the screens filter the list), `GET …/payments` fixes no ordering, and **the passenger app has no wallet top-up screen at all** |
 | C083 | passenger-android-settings-addresses | 4a | DONE | 2026-08-06 | **265 tests green** (was 236; 29 new), `assembleDebug` + `detekt` + `ktlintCheck` clean. SCR-PA-026/026a/027/027b built and SCR-PA-033's identity header filled in. **Home and Work are the `isHome`/`isWork` flags, drawn as two always-present rows whose ✎ is the wireframe's only "save Home & Work by pin" control** — which is what lets SCR-PA-026a keep to AL-26's four fields and ask nothing about shortcuts. **AL-26 is structural on Edit Profile**: `PassengerProfileRepository.update` has no `language` parameter, so no screen reached from Settings can send one. **The reverse geocode is a pre-fill and never a gate** (AL-14) — a 404/503 leaves an address that can still be saved. **Four gaps**: `iam.yaml`'s `DefaultPaymentMethod` predates AL-57/AL-59 so a **wallet** default is device-local (the wireframe's Cash/LankaQR/OnePay row needs a micro-change-set), no contract carries a human-readable passenger id (the ULID is drawn where the wireframe prints `PAX-90431`), no avatar upload route exists anywhere (the 📷 control is drawn disabled, as C077 did), and `mobile_db_schema.md` §2.1's on-device `saved_addresses` still has no writer |
-| C084 | passenger-android-comms-safety-support | 4a | PENDING | | |
+| C084 | passenger-android-comms-safety-support | 4a | DONE | 2026-08-06 | **291 tests green** (was 265; 26 new across 3 suites), `assembleDebug` + `detekt` + `ktlintCheck` clean. SCR-PA-028/029/030/030a built and SCR-PA-031 finished to its frame; **the last three placeholders are gone, so every route in `PassengerNavHost` now draws a real screen** and `RoutePlaceholder` was deleted with them. **AL-48 end to end**: the VoIP screen's signalling half is real and its media half reports `NO_MEDIA_CLIENT`, so *"Call normally instead?"* is the only outcome this build reaches — a **dependency wall**, not a decision (`io.livekit:livekit-android` needs JitPack and `settings.gradle.kts` is C001's), exactly as C075 found on the driver side; the fallback writes a `direct_dial` row after a `voip_failed` one so the platform can tell a fallback from a preference. **SCR-PA-015's `⛨ SOS` navigates now rather than raising the alarm inline** — one caller of `POST /v1/sos` is what keeps one emergency to one row on the operator's live feed — and D-34's share link is minted **after** the alarm, best-effort, because the five-second budget is not for a URL. **This app passes `?lang=` on the FAQ where the driver app deliberately does not**: AL-26 makes the passenger's language device-first and the server write is allowed to lag, so the FAQ is asked for in the language the app is *drawing* in. **Three gaps**: `POST /v1/sos` has no positionless form (BR-29.4 contemplates one for the web surface only), no contract mints the wireframe's `#TK-4521` ticket number or `PAX-90431-0617` trip number, and no passenger-facing category routes to the Finance queue so SCR-PA-030 has no quick action. Also fixed a pre-existing flake in C083's `SettingsViewModelTest` |
 | C085 | driver-ios-shell | 4b | PENDING | | |
 | C086 | driver-ios-auth-onboarding | 4b | PENDING | | |
 | C087 | driver-ios-vehicle-onboarding | 4b | PENDING | | |
@@ -13064,3 +13064,160 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   - **The drawer header is `PassengerDrawerHeader()` and the shell passes it in.** If SCR-PA-030
     needs the signed-in profile, take it from `PassengerIdentity` rather than reading
     `GET /v1/users/me` again.
+
+- **Component:** C084 passenger-android-comms-safety-support — 2026-08-06
+- **Status:** DONE — `./gradlew :apps:passenger-android:testDebugUnitTest :apps:passenger-android:assembleDebug`
+  exits 0: **291 tests, 0 failures** (265 → 291). `detekt` and `ktlintCheck` clean. SCR-PA-028, 029,
+  030 and 030a built; SCR-PA-031 was the shell's and is finished to its frame.
+- **Notes:**
+
+  **The last placeholder in the app is gone.** `PassengerNavHost` was written by C076 with every
+  C077–C084 destination registered against a `RoutePlaceholder`; this component took the final three
+  (SCR-PA-028/029/030), so the two `NavGraphBuilder.placeholder(...)` helpers, the composable and the
+  `route_placeholder_*` strings were deleted rather than left behind. Every route in that file now
+  draws a real screen, and re-adding the helper would be a way to register a route with nothing
+  behind it.
+
+  **AL-48, in the two places it actually lands.** The masked PSTN bridge and D-25's masked-SMS relay
+  are both withdrawn, so a VoIP failure has exactly one fallback: a `tel:` dial of the driver's real
+  number, which `RideDetail.counterpartyPhone` carries from `Accepted` onward. SCR-PA-028 reports
+  `CallOutcome.VOIP_FAILED` when it puts the prompt up and logs a `direct_dial` call when the
+  passenger takes it — which is what makes a fallback distinguishable from somebody who simply
+  preferred to dial (Δ C055's whole reason for existing). A ride that has ended carries no number and
+  is offered no dial: there is nobody left to reach, and advice to call them would be worse than the
+  failure.
+
+  **The VoIP media client is not here, and it is the same wall C075 hit.** D6' §6 names LiveKit and
+  D2' §SCR-PA-028 says *"WebRTC + `ConnectionService`"*, but `io.livekit:livekit-android` depends on
+  `com.github.davidliu:audioswitch`, published **only on JitPack**, and this repo resolves from a
+  content-filtered `google()` plus `mavenCentral()` under `FAIL_ON_PROJECT_REPOS`. Widening the
+  resolution set is an edit to `settings.gradle.kts`, which is C001's file. So `VoipEngine` is the
+  seam, `AbsentVoipEngine` is what `passengerAppModule` binds, and **the signalling half is real**:
+  `POST /v1/calls/start` mints the room and writes `comms.call_log`, then the engine reports
+  `NO_MEDIA_CLIENT` — precisely the condition AL-48 legislates for. Nothing is faked; the outcome is
+  reported so the platform's own call log tells the truth about what this build can do. Landing the
+  real engine is one binding plus `RECORD_AUDIO`/`MODIFY_AUDIO_SETTINGS` in the manifest (absent on
+  purpose — `ManifestTest` holds the rule that a permission with no code behind it is not declared).
+
+  **SCR-PA-015's `⛨ SOS` navigates now; it does not act.** C080 raised the alarm inline from
+  `ActiveRideViewModel.triggerSos`, which is the C075 correction made in the other direction: with
+  SCR-PA-029 built, two doors onto `POST /v1/sos` would put one emergency on the operator's live feed
+  as two events. That method and `ActiveRideState.sosSent` are gone; `RideRepository.triggerSos` and
+  `.shareTrip` are unchanged and are `SosViewModel`'s callers now. `PassengerRoute.Sos`'s KDoc
+  already anticipated this — *"the wireframe's only door to this screen is SCR-PA-015's `⛨ SOS`"*.
+
+  **The three-second cancel window spends D-33's budget, and that is why it is three.** §14.3 fixes
+  p99 ≤ 5 s for the *dispatch* and says nothing about a confirmation; three seconds is what is left
+  of a five-second sense of urgency once a mis-tap on the largest control on the screen has to be
+  recoverable, and a deliberate tap sends immediately rather than waiting out the timer it
+  interrupted. The same number the driver's SCR-DA-032 chose — one platform should not have two
+  answers to *"how long do I have to cancel"*. `SosSmsStatus.FAILED` is **not** an error state and
+  does not colour like one: the alert is recorded and on the admin live feed either way, and telling
+  somebody in trouble that nothing happened would be worse than telling them the SMS leg did not
+  manage it.
+
+  **D-34's link is minted after the alarm and is allowed to fail.** `POST /v1/trip-share/{tripId}` is
+  a second round trip; in front of `POST /v1/sos` it would spend the budget the SLO is about on a
+  URL. It is issued once the state is already `DISPATCHED`, and a `409 ride-terminal` leaves the
+  alarm exactly where it is rather than putting an error over it. The share sheet is `ACTION_SEND`;
+  the public view is live-only with no replay, which is what makes handing the link to somebody a
+  reasonable thing to offer.
+
+  **Only the primary emergency contact wears the `Sent` pill.** D2' §SCR-PA-029 draws the contacts as
+  a list and this app keeps one (SCR-PA-027b), so every row is drawn — but iam-svc promotes exactly
+  one onto `iam.users.emergency_contact_name/phone` because a join does not fit p99 ≤ 5 s, so one
+  contact is texted. A `Sent` chip against three names would be a fan-out the platform does not do.
+
+  **This app sends `?lang=` on the FAQ and the driver app deliberately does not.** `SupportApi`'s own
+  KDoc argues for `null` — let support-svc fall back to the caller's profile, *"one fewer place for
+  the app's idea of the current language to disagree with the profile's"* — and C075 took that
+  advice. It is wrong here: AL-26 makes the passenger's language a **device-first** answer given on
+  SCR-PA-002 before there is a session, written to the device first on SCR-PA-027, and allowed to lag
+  on the server (`languagePendingSync`). A passenger reading a Sinhala app whose profile had not
+  caught up would get English articles inside it. So the FAQ and each opened article are asked for in
+  the language `PassengerLocale.wrap` is drawing in, and `null` still means *"use the profile's"*
+  before SCR-PA-002 has been answered. `SupportViewModelTest` pins all three cases — that is the
+  component's *"FAQ content renders in the user's selected language"* line.
+
+  **SCR-PA-030's FAQ is an accordion; its ticket thread is a sheet.** D2' says *"FAQ accordion"* and
+  the wireframe draws a `＋` per row, so a row expands in place and the body is held in state beside
+  the id that is open — one at a time, because two open bodies push *"Your tickets"* off a 640 dp
+  screen. The **thread** goes the other way: the baseline draws no frame for it, and adding a
+  destination the team-approved wireframes have no picture of would be a deviation, so it is a
+  `ModalBottomSheet` over the list that was tapped. C083's handoff suggested `SettingsRow` for the
+  FAQ list; it was not reused, because that row demands a leading glyph the wireframe's SCR-PA-030
+  `.listrow` does not draw and pins the label to one line, which truncates a question. Its
+  `SettingsTopBar` **is** reused, and is the `‹ Support` bar.
+
+  **One ticket category on this side.** `daily_fee_refund` is the *driver's* fee (US-9.23), so no
+  passenger-facing category derives `TicketQueue.FINANCE` and SCR-PA-030 therefore has no quick
+  action — every ticket it raises is `general` and Support's (US-14.13). A ticket another service
+  opened (fare-svc's AL-47 driver-QR dispute) still renders in the list, from its own key.
+
+  **The screenshot is read to bytes at the pick and uploaded by Submit.** The system photo picker's
+  grant dies with the pick and does not survive a process death, so a `Uri` parked in view-model
+  state would be a permission failure at the one moment it must not fail. Two calls are the
+  contract's shape (`POST /v1/support/tickets` takes an already-uploaded id), and a failed upload
+  never costs the passenger their ticket: what they wrote is the part support acts on, and the
+  attachment is simply absent.
+
+  **SCR-PA-031 was already built and is now drawn to its frame.** C076 shipped the split the
+  wireframe asks for — mandatory is a non-dismissible dialog, soft is a dismissible snackbar — and
+  what was missing was the frame's own `⬆️` mark and its full-width *"Update now"* bar. Both are
+  there; the gate still swallows `onDismissRequest`, because every subsequent call answers `426` and
+  a dismissible wall would put the passenger in an app where nothing works and nothing explains why.
+
+  ### Contract gaps found
+
+  1. **`POST /v1/sos` has no positionless form.** `TriggerSosRequest.lat`/`.lng` are required, so
+     SCR-PA-029 cannot arm until the handset has answered once — and a passenger who has denied
+     location has no way to raise an alarm from this app at all. BR-29.4 contemplates exactly this
+     case for the **web** surface (*"geolocation permission denied → SOS still fires with the last
+     known driver-reported position, marked `accuracy=unknown`"*) and the app-facing contract carries
+     no equivalent. In practice the wait is milliseconds, because `PassengerLocationSource` emits the
+     last known fix before it registers for updates; the gap is what happens on a handset that has
+     never had one. The fix is a nullable `lat`/`lng` pair plus the same `accuracy=unknown` marking
+     `safety.sos_events` already carries for the web path. C075 recorded the identical finding from
+     the driver side.
+  2. **No contract mints the wireframe's ticket or trip numbers.** SCR-PA-030 prints `#TK-4521` and
+     *"Attached trip PAX-90431-0617"*; a `support.tickets` id is a ULID, there is no `TK-` series, and
+     no contract carries a human-readable passenger or trip number — the third time this platform has
+     hit it (C074's `DRV-22011`, C083's `PAX-90431`). The ticket card leads with its **category**,
+     which is what a passenger recognises, and the attached-trip line is drawn without an invented
+     number. SCR-PA-030a's dropdown is the **day and the route** for the same reason. Either the
+     wireframes need a micro-change-set or the platform needs a display-id concern; the pattern is
+     now consistent enough across three components to be worth one decision rather than three.
+  3. **No passenger-facing support category routes to the Finance queue.** `TicketQueue` is derived
+     from `category` and `daily_fee_refund` is the driver's, so a passenger with a money complaint —
+     a fare they dispute, a wallet debit they do not recognise — opens a `general` ticket that lands
+     on the Support pile. AL-47's driver-QR dispute has its own fare-svc route which files a Finance
+     ticket on the passenger's behalf, so the hole is only for a complaint the passenger raises
+     themselves. A `fare_dispute` category in support-svc's published list would close it with no
+     client change: `SupportCategories` is one constant.
+
+  ### Fixed here, and not this component's
+
+  - **`SettingsViewModelTest.cash_is_written_to_the_account_and_wallet_cannot_be` was flaky and
+    failed on arrival** (C083's, and reproduced on a clean checkout of `HEAD`). It awaited
+    `state.defaultPayment == CASH` and then asserted on the `setDefaultPaymentMethod` call — but
+    `chooseDefaultPayment` sets that state **before** launching the request and
+    `pushDefaultPayment` publishes nothing on success, so the predicate held while the write was
+    still in flight. `MainDispatcher.kt` gained `FakeApiBackend.awaitCall(operationId)`, the
+    counterpart to `await` for a call with no state to watch, and the test waits on the call. This is
+    the same shape as C083's own note about `LiveMapViewModelTest` and C079's about the OTP cooldown:
+    a view-model assertion on a loaded host has to wait for the thing it is asserting, not for a
+    state that was already true.
+
+  ### For the iOS side (C094)
+
+  - **`SosLabels.SOS` and `FaqLabels.EXPAND`/`.COLLAPSE` are Kotlin constants, not strings.** `SOS`
+    is an international distress signal and `＋`/`−` are glyphs — the same value in all three
+    languages, which `StringResourceTest` (correctly) reads as a key nobody translated. Mirror that
+    on SwiftUI rather than adding three identical `Localizable.strings` entries.
+  - **`CallColors` and `SosColors` are dark in BOTH appearances** and are transcribed hexes rather
+    than aliases of the dark scheme, because these two screens are dark in the *light* theme too. An
+    asset catalogue that resolved them from the dark palette would change them the day D2' §0.2's
+    dark table does.
+  - **The call and the alarm are full-screen takeovers with no bottom bar and no drawer gesture** —
+    `isTabRoute` excludes them and `PassengerShell` disables the drawer swipe outside the three tabs
+    for exactly this reason.

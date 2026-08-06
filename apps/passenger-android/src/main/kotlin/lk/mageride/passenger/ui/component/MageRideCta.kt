@@ -96,6 +96,37 @@ internal fun MageRideCta(
 }
 
 /**
+ * The wireframe's `cta tonal` — the same bar in `primaryContainer` (Δ C084).
+ *
+ * `passenger_android.html` draws two weights of full-width bar and gives the second its own class:
+ * SCR-PA-030's *"Raise a ticket"* is `cta tonal`, because it sits under a list it is not the
+ * conclusion of. Same height and radius as [MageRideCta] — it is one token in two weights, not a
+ * second button.
+ */
+@Composable
+internal fun MageRideCtaTonal(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+) {
+    Button(
+        onClick = onClick,
+        modifier = modifier
+            .fillMaxWidth()
+            .height(CtaTokens.Height),
+        enabled = enabled,
+        shape = RoundedCornerShape(CtaTokens.Radius),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        ),
+    ) {
+        Text(text = label, style = MaterialTheme.typography.titleMedium)
+    }
+}
+
+/**
  * The wireframe's `textlink` — a bare primary-coloured action.
  *
  * SCR-PA-002's *"Skip"*, SCR-PA-003's *"Resend (54s)"* and SCR-PA-005's *"Not now"* are all this.

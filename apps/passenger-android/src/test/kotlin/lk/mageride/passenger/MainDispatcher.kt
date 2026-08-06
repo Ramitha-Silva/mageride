@@ -3,11 +3,14 @@ package lk.mageride.passenger
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelStore
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withTimeout
+import lk.mageride.shared.testing.fake.FakeApiBackend
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 // The view-model test harness, shared by every screen group.
@@ -71,4 +74,25 @@ internal class MainDispatcher {
 internal suspend fun <T> StateFlow<T>.await(predicate: (T) -> Boolean): T =
     withTimeout(AWAIT_TIMEOUT) { first(predicate) }
 
+/**
+ * Waits for [operationId] to have reached the fake backend (Δ C084).
+ *
+ * The counterpart to [await] for a write that publishes **nothing** on success.
+ * `SettingsViewModel.pushDefaultPayment` is the case: it touches state only when the call *fails*,
+ * so there is no `StateFlow` value that means "the request went" — and awaiting the value the
+ * screen set *before* launching it passes on the previous state, which is the trap
+ * `apps/passenger-android/CLAUDE.md` records for SCR-PA-008's prediction list.
+ *
+ * Polled rather than suspended on a signal because [lk.mageride.shared.testing.fake.FakeApiBackend]
+ * is a real Ktor client over MockEngine and resolves on its own engine dispatcher, which no virtual
+ * clock can advance past. The timeout is what turns "the call never went" into a named failure
+ * rather than a hung Gradle worker.
+ */
+internal suspend fun FakeApiBackend.awaitCall(operationId: String): Unit = withTimeout(AWAIT_TIMEOUT) {
+    while (!called(operationId)) delay(POLL_INTERVAL)
+}
+
 private val AWAIT_TIMEOUT = 5.seconds
+
+/** Short enough to add nothing measurable to a passing test, long enough not to spin a core. */
+private val POLL_INTERVAL = 5.milliseconds

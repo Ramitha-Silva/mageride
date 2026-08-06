@@ -1,12 +1,19 @@
 package lk.mageride.passenger.shell
 
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Upgrade
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import lk.mageride.passenger.R
+import lk.mageride.passenger.ui.component.MageRideCta
+import lk.mageride.passenger.ui.theme.ControlTokens
 import lk.mageride.shared.data.api.UpgradeRequiredSignal
 
 /**
@@ -27,6 +34,10 @@ import lk.mageride.shared.data.api.UpgradeRequiredSignal
  * anyway, so a dismissible wall would put the passenger in an app where nothing works and nothing
  * explains why.
  *
+ * The layout is the wireframe's `.dialog .box`: the `⬆️` mark, *"Update required"*, the sentence
+ * under it, and a **full-width** `Update now` bar — which is the §0.2 CTA token rather than M3's
+ * default text button, because that is what the frame draws.
+ *
  * @param signal The 426 payload, or `null` when no gate is in force.
  * @param onUpdate Opens [UpgradeRequiredSignal.updateUrl] in the store.
  */
@@ -38,17 +49,26 @@ internal fun UpdateGate(signal: UpgradeRequiredSignal?, onUpdate: (String?) -> U
         // A mandatory gate ignores the scrim tap and the back button; `onDismissRequest` is the
         // only hook either of those has, so swallowing it here is what makes it non-dismissible.
         onDismissRequest = { },
-        title = { Text(stringResource(R.string.update_required_title)) },
+        icon = {
+            Icon(
+                imageVector = Icons.Filled.Upgrade,
+                contentDescription = null,
+                modifier = Modifier.size(ControlTokens.DialogIcon),
+            )
+        },
+        title = { Text(text = stringResource(R.string.update_required_title), textAlign = TextAlign.Center) },
         text = {
             Text(
                 text = stringResource(R.string.update_mandatory_message),
                 style = MaterialTheme.typography.bodyMedium,
+                textAlign = TextAlign.Center,
             )
         },
         confirmButton = {
-            TextButton(onClick = { onUpdate(signal.updateUrl) }) {
-                Text(stringResource(R.string.update_action_now))
-            }
+            MageRideCta(
+                label = stringResource(R.string.update_action_now),
+                onClick = { onUpdate(signal.updateUrl) },
+            )
         },
     )
 }

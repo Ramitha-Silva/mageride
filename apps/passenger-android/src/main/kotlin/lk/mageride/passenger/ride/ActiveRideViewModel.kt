@@ -44,7 +44,6 @@ internal data class ActiveRideState(
     val penalty: CancellationPenalty? = null,
     val cancelled: Boolean = false,
     val shareLink: String? = null,
-    val sosSent: Boolean = false,
     @param:StringRes val error: Int? = null,
 ) {
     /** SCR-PA-014's `1:34`. */
@@ -170,21 +169,11 @@ internal class ActiveRideViewModel(
         }
     }
 
-    /** The `⛨ SOS` button — D-33's parallel SMS fan-out, with the last known position. */
-    @Suppress("TooGenericExceptionCaught")
-    fun triggerSos(at: GeoPoint?) {
-        val point = at ?: mutableState.value.driverPosition ?: mutableState.value.ride?.pickup?.point ?: return
-        viewModelScope.launch {
-            try {
-                rides.triggerSos(rideId, point.lat, point.lng)
-                mutableState.update { it.copy(sosSent = true, error = null) }
-            } catch (cause: CancellationException) {
-                throw cause
-            } catch (cause: Throwable) {
-                mutableState.update { it.copy(error = RideErrors.messageFor(cause)) }
-            }
-        }
-    }
+    // The `⛨ SOS` button used to raise the alarm from here (C080). It NAVIGATES now: C084's
+    // SCR-PA-029 owns the confirm, the countdown, the emergency-contact list, D-34's share link and
+    // the dispatched state, and `POST /v1/sos` having one caller is what stops one emergency
+    // reaching the operator's live feed as two events. `RideRepository.triggerSos` is unchanged and
+    // is now called from `SosViewModel`.
 
     /** Share trip — mints a `safety.trip_share_tokens` link for the passenger to send on. */
     @Suppress("TooGenericExceptionCaught")

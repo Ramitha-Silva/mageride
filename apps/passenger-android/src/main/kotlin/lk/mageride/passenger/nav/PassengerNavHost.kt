@@ -29,6 +29,9 @@ import lk.mageride.passenger.booking.PackageEnd
 import lk.mageride.passenger.booking.ProxyRiderScreen
 import lk.mageride.passenger.booking.RideBookingScreen
 import lk.mageride.passenger.booking.ScheduleRideScreen
+import lk.mageride.passenger.comms.VoipCallScreen
+import lk.mageride.passenger.comms.VoipCallViewModel
+import lk.mageride.passenger.comms.VoipEngine
 import lk.mageride.passenger.di.PassengerDatabase
 import lk.mageride.passenger.history.HistoryRepository
 import lk.mageride.passenger.history.PackageOtps
@@ -61,6 +64,8 @@ import lk.mageride.passenger.ride.RateDriverViewModel
 import lk.mageride.passenger.ride.RideRepository
 import lk.mageride.passenger.ride.TripSummaryScreen
 import lk.mageride.passenger.ride.TripSummaryViewModel
+import lk.mageride.passenger.safety.SosScreen
+import lk.mageride.passenger.safety.SosViewModel
 import lk.mageride.passenger.settings.AddressBook
 import lk.mageride.passenger.settings.EditProfileScreen
 import lk.mageride.passenger.settings.EditProfileViewModel
@@ -81,6 +86,9 @@ import lk.mageride.passenger.subscription.SubscriptionPaymentsViewModel
 import lk.mageride.passenger.subscription.SubscriptionRepository
 import lk.mageride.passenger.subscription.SubscriptionsScreen
 import lk.mageride.passenger.subscription.SubscriptionsViewModel
+import lk.mageride.passenger.support.SupportRepository
+import lk.mageride.passenger.support.SupportScreen
+import lk.mageride.passenger.support.SupportViewModel
 import lk.mageride.passenger.ui.theme.MageRideTheme
 import lk.mageride.shared.data.api.IdempotencyKeyGenerator
 import lk.mageride.shared.data.models.Place
@@ -93,9 +101,9 @@ import org.koin.compose.koinInject
  *
  * **Every destination is registered here, and a screen group replaces the body of its own routes
  * without touching the graph.** A component that added a destination of its own would put the
- * app's navigation in eight files. C077–C084 take their routes one cluster at a time; until then
- * every one of them is the standing placeholder below, which names the screen id so whoever opens
- * the tab knows which prompt owns it.
+ * app's navigation in eight files. C077–C084 took their routes one cluster at a time, and with
+ * C084's SCR-PA-028/029/030 the last of them landed: **there is no placeholder left in this file**,
+ * and every route below draws a real screen.
  *
  * The start destination is [PassengerRoute.Splash] — SCR-PA-001 is the session router, and its
  * states (*"KMP auth validates token → onboarding / login / live_map, resumes an active ride via
@@ -127,6 +135,11 @@ internal fun PassengerNavHost(controller: NavHostController, modifier: Modifier 
     // they are built here for the reason C080's are.
     val subscriptionRepository = koinInject<SubscriptionRepository>()
     val idempotencyKeys = koinInject<IdempotencyKeyGenerator>()
+
+    // C084's cluster. SCR-PA-028 and SCR-PA-029 are ride-scoped and take their id from the route;
+    // SCR-PA-030 is a tab and takes none, and is built here for the reason C083's three are.
+    val voipEngine = koinInject<VoipEngine>()
+    val supportRepository = koinInject<SupportRepository>()
 
     // C083's cluster. None of its three screens takes a navigation argument, so these could have
     // been `viewModel { }` bindings — they are resolved here for the same reason C082's SCR-PA-025
@@ -327,9 +340,11 @@ internal fun PassengerNavHost(controller: NavHostController, modifier: Modifier 
         rideScoped(PassengerRoute.ActiveRide.PATTERN, PassengerRoute.ActiveRide.ARG_RIDE_ID) { rideId ->
             ActiveRideScreen(
                 onFinished = { controller.popBackStack(PassengerRoute.LiveMap.path, inclusive = false) },
-                // SCR-PA-028 is C084's. Until it lands, a free call has nowhere to go — the sheet
-                // still records the choice, and the direct-dial row works today.
                 onFreeCall = { controller.navigate(PassengerRoute.VoipCall(rideId).path) },
+                // `⛨ SOS` NAVIGATES; it does not raise the alarm (Δ C084). SCR-PA-029 is where the
+                // confirm, the countdown and the dispatched state live, and one door to
+                // `POST /v1/sos` is what stops one emergency becoming two rows on the operator feed.
+                onSos = { controller.navigate(PassengerRoute.Sos(rideId).path) },
                 choice = callChoice,
                 model = viewModel(key = rideId) { ActiveRideViewModel(rideId, rideRepository, live) },
             )
@@ -545,9 +560,31 @@ internal fun PassengerNavHost(controller: NavHostController, modifier: Modifier 
         }
 
         // ---- C084 · comms, safety, support -------------------------------------------------
-        placeholder(PassengerRoute.VoipCall.PATTERN, "SCR-PA-028 VoIP call")
-        placeholder(PassengerRoute.Sos.PATTERN, "SCR-PA-029 SOS")
-        placeholder(PassengerRoute.Support, "SCR-PA-030 support + ticket")
+        rideScoped(PassengerRoute.VoipCall.PATTERN, PassengerRoute.VoipCall.ARG_RIDE_ID) { rideId ->
+            VoipCallScreen(
+                // Hung up, dialled normally, or dismissed — every exit is the same one, and it goes
+                // back to whatever opened the call rather than to a fixed screen: SCR-PA-015a is
+                // reachable from the active ride, from a package track and from trip history.
+                onFinished = { controller.popBackStack() },
+                model = viewModel(key = rideId) { VoipCallViewModel(rideId, rideRepository, voipEngine) },
+            )
+        }
+
+        rideScoped(PassengerRoute.Sos.PATTERN, PassengerRoute.Sos.ARG_RIDE_ID) { rideId ->
+            SosScreen(
+                onFinished = { controller.popBackStack() },
+                model = viewModel(key = rideId) {
+                    SosViewModel(rideId, rideRepository, sosContacts, locations)
+                },
+            )
+        }
+
+        composable(PassengerRoute.Support.path) {
+            SupportScreen(
+                onBack = { controller.popBackStack() },
+                model = viewModel { SupportViewModel(supportRepository, sessions, preferences) },
+            )
+        }
     }
 }
 
@@ -597,41 +634,9 @@ private fun NavGraphBuilder.subscriptionScoped(
     }
 }
 
-/** Registers [route] with the standing placeholder. One line per screen the shell is waiting for. */
-private fun NavGraphBuilder.placeholder(route: PassengerRoute, screen: String) {
-    composable(route.path) { RoutePlaceholder(screen) }
-}
-
-/** The same, for a parameterised destination — the pattern is registered, never an instance. */
-private fun NavGraphBuilder.placeholder(pattern: String, screen: String) {
-    composable(pattern) { RoutePlaceholder(screen) }
-}
-
-/**
- * What a registered-but-unbuilt destination shows.
- *
- * Naming the screen id is deliberate: during wave 4a someone will open a tab whose group has not
- * landed, and "SCR-PA-010 live map arrives with its screen group" tells them which prompt owns it.
- * The copy itself is trilingual like everything else — see the three `strings.xml` files.
- */
-@Composable
-private fun RoutePlaceholder(screen: String) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(MageRideTheme.spacing.lg),
-        verticalArrangement = Arrangement.spacedBy(MageRideTheme.spacing.xs, Alignment.CenterVertically),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(
-            text = stringResource(R.string.route_placeholder_title),
-            style = MaterialTheme.typography.titleLarge,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-        Text(
-            text = stringResource(R.string.route_placeholder_body, screen),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-}
+// The standing `RoutePlaceholder` the shell shipped is GONE (Δ C084), along with its two
+// `NavGraphBuilder.placeholder(…)` helpers and the `route_placeholder_*` strings. It existed so
+// that during wave 4a somebody opening a tab whose screen group had not landed was told which
+// prompt owned it; C084 took the last three (SCR-PA-028/029/030), so every destination in this
+// graph now registers a real composable and nothing is waiting. Re-adding it would be a way to
+// register a route with no screen behind it.

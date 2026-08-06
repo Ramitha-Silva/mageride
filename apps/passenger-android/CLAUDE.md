@@ -38,6 +38,13 @@ lk.mageride.passenger
 │                             the payment rails, AL-47's attestation, the receipt and the rating
 ├── history/                  C081 · SCR-PA-020…023 — package tracking for both parties, the
 │                             three-tab history, trip details, and PackageOtps
+├── subscription/             C082 · SCR-PA-024/025/025a/025b — Mode B access, the cards and the
+│                             owner-paid rails
+├── settings/                 C083 · SCR-PA-026/026a/027/027b — addresses, settings, the drawer
+│                             header, AddressBook, SosContacts, PaymentPreference
+├── comms/                    C084 · SCR-PA-028 + the WebRTC seam
+├── safety/                   C084 · SCR-PA-029 — the passenger SOS and D-34's share link
+├── support/                  C084 · SCR-PA-030/030a — the FAQ accordion, tickets and the sheet
 ├── ui/component/             MageRideCta + the cluster-1 controls (C077)
 ├── ui/theme/                 D2' §0.2 tokens — colour, type, spacing/radius/elevation/controls
 ├── map/                      MageRideMap (the whole §0.3 layer stack), MapStyles, VehicleLayers,
@@ -69,11 +76,12 @@ lk.mageride.passenger
   A first run counts as a change — there is no stored language, so the app is drawing in the
   *handset's* locale, which is usually not the Sinhala default AL-26 pre-selects.
 
-**To add a screen (every remaining SCR-PA id is a standing placeholder):**
+**To add or change a screen (every SCR-PA id now has one — C084 took the last three):**
 
 1. Its route is already in `nav/PassengerRoute.kt`. Use it; do not invent a path.
-2. Replace its `placeholder(...)` line in `nav/PassengerNavHost.kt` with the real composable. That
-   file is the only `NavHost` in the app.
+2. Register it in `nav/PassengerNavHost.kt`, the only `NavHost` in the app. There is no
+   `placeholder(...)` helper any more, and re-adding one would be a way to register a route with no
+   screen behind it.
 3. Put every user-facing string in **all three** `res/values*/strings.xml` files at once.
    `StringResourceTest` fails the build on a key that exists in one and not the others, on a
    translation left equal to its English, and on a format placeholder dropped in translation.
@@ -199,6 +207,62 @@ lk.mageride.passenger
   with an optional trailing slot) and `SettingsRow` (the wireframe's `.listrow`, with the right-hand
   side as a slot: a chevron, a value, a switch or an ✎). Three screens draw the same row.
 
+## Cluster 8 (C084) — the call, the alarm, support and the version gate
+
+- **`AbsentVoipEngine` is what the graph binds, and that is a dependency wall rather than a
+  decision.** D6' §6 names LiveKit and D2' §SCR-PA-028 says *"WebRTC + `ConnectionService`"*, but
+  `io.livekit:livekit-android` depends on `com.github.davidliu:audioswitch`, published **only on
+  JitPack** — and this repo resolves from a content-filtered `google()` plus `mavenCentral()` with
+  `FAIL_ON_PROJECT_REPOS`. Widening that is an edit to `settings.gradle.kts`, which is C001's. So
+  SCR-PA-028's **signalling half is real** (`POST /v1/calls/start` mints the room and writes
+  `comms.call_log`) while the media half reports `NO_MEDIA_CLIENT` — exactly the condition AL-48
+  legislates for, so the screen offers *"Call normally instead?"* and the passenger reaches the
+  driver. Landing the real engine is **one binding**, plus `RECORD_AUDIO` / `MODIFY_AUDIO_SETTINGS`
+  in the manifest (absent on purpose — `ManifestTest` asserts that a permission with no code behind
+  it is not declared). The driver app hit the same wall at C075.
+- **SCR-PA-015's `⛨ SOS` NAVIGATES now; it does not act** (Δ C084). `ActiveRideViewModel.triggerSos`
+  is gone: SCR-PA-029 owns the confirm, the countdown, the contact list, the dispatched state and
+  D-34's link, and `POST /v1/sos` having **one** caller is what stops one emergency arriving on the
+  operator's live feed as two events. `RideRepository.triggerSos`/`.shareTrip` are unchanged and are
+  now called from `SosViewModel`. The same rule holds for the call: `POST /v1/calls/start` for a free
+  call is made by SCR-PA-028 and by nothing else — SCR-PA-015a records the *choice*.
+- **The three-second cancel window is not a spec number**, and it spends the D-33 budget. §14.3
+  fixes p99 ≤ 5 s for the *dispatch* and says nothing about a confirmation; three is what is left of
+  that urgency once a mis-tap on the largest control on screen has to be recoverable. A deliberate
+  tap sends immediately. `SosSmsStatus.FAILED` is **not** an error state and does not colour like
+  one: the alert is recorded and on the admin live feed either way.
+- **D-34's share link is minted after the alarm and is allowed to fail.** Putting
+  `POST /v1/trip-share/{id}` in front of `POST /v1/sos` would spend the five-second budget on a URL;
+  an alarm that went out with no link to hand on is still an alarm that went out.
+- **Only the primary emergency contact wears the `Sent` pill.** iam-svc promotes exactly one onto
+  `iam.users.emergency_contact_name/phone` because a join does not fit the SLO, so one contact is
+  texted. The whole list is drawn (D2' §SCR-PA-029 says `LazyColumn`) and the rest carry no status —
+  showing `Sent` against three names when one was texted would be a fan-out the platform does not do.
+- **This app passes `?lang=` on the FAQ, and the driver app deliberately does not.** `SupportApi`'s
+  KDoc argues for `null` — let the server use the profile — and that is right where the profile *is*
+  the answer. Here AL-26 makes language a **device-first** choice that the server write is allowed to
+  lag (`languagePendingSync`), and `PassengerLocale.wrap` is what everything else on screen is drawn
+  in. So the FAQ is asked for in the language the app is *drawing* in; `null` still means "use the
+  profile's" before SCR-PA-002 has been answered.
+- **SCR-PA-030's FAQ is an accordion, one row open at a time.** D2' says *"FAQ accordion"* and the
+  wireframe draws a `＋` per row, so the body is fetched into state beside the id that is open — not
+  into a sheet. The ticket **thread** is a `ModalBottomSheet` for the opposite reason: the baseline
+  draws no frame for it, and a route the wireframes have no picture of would be a deviation.
+- **There is one ticket category on this side.** `daily_fee_refund` is the *driver's* fee (US-9.23),
+  so no passenger-facing category routes to the Finance queue and SCR-PA-030 has no quick action —
+  every ticket it raises is `general` and therefore Support's (US-14.13). A ticket another service
+  raised (fare-svc's AL-47 driver-QR dispute) still renders, from its own key.
+- **The screenshot is read to bytes at the pick and uploaded by Submit.** The system photo picker's
+  grant dies with the pick and does not survive a process death, so a `Uri` parked in state would be
+  a permission failure at the one moment it must not fail — and a failed upload never costs the
+  passenger their ticket, because what they wrote is the part support acts on.
+- **`RoutePlaceholder` is gone.** C084 took the last three destinations, so every route in
+  `PassengerNavHost` now registers a real screen; the two `placeholder(…)` helpers and the
+  `route_placeholder_*` strings went with it.
+- Reusable UI added here: `MageRideCtaTonal` (the wireframe's `cta tonal`), `DateFormat.timer`
+  (`01:24`), and `ControlTokens.CallAction`/`.CallEnd`/`.SosButton`/`.SosHalo`/`.DialogIcon`.
+  `support/SupportScreen.StatusPill` is internal so the sheets draw the same chip as the list.
+
 ## The live plane — read this before touching `live/`
 
 - **The passenger view is 19 cells and the client never subscribes to a vehicle.** R-06 is res-7 +
@@ -310,6 +374,15 @@ lk.mageride.passenger
   side (§1.3's `emergency_contacts` likewise). Both screens read the server, which is where US-22.6
   puts the list anyway (the eager-fetch set is a `GET /v1/me/bootstrap` concern). A mirror with no
   outbox between it and the API would be two writers for one list.
+- **`POST /v1/sos` has no positionless form.** `TriggerSosRequest.lat`/`.lng` are required, so
+  SCR-PA-029 cannot arm until the handset has answered once. BR-29.4 contemplates exactly this case
+  for the *web* surface — *"geolocation denied → SOS still fires with the last known driver-reported
+  position"* — and the app-facing contract carries no equivalent. In practice this is milliseconds:
+  `PassengerLocationSource` emits the last known fix before it registers for updates.
+- **No contract mints a ticket number.** SCR-PA-030's card prints `#TK-4521` and there is no `TK-`
+  series — a `support.tickets` id is a ULID — so the card leads with the category, the same call
+  C083 made about `PAX-90431` and C074 about `DRV-22011`. The wireframe's *"Attached trip
+  PAX-90431-0617"* line is drawn without the invented number.
 
 ## Things that will bite
 
@@ -350,6 +423,12 @@ lk.mageride.passenger
 - **A `StateFlow` predicate of "something is on screen" is usually wrong on SCR-PA-008.** The
   predictions list is never empty — the recents and saved addresses fill it before a lookup goes
   out — so `await { predictions.isNotEmpty() }` passes on the *previous* state.
+- **A write that publishes nothing on success cannot be awaited on state at all** (Δ C084). Several
+  view models set the new value **before** launching the request and touch state again only on
+  failure — `SettingsViewModel.chooseDefaultPayment` is the case — so `await { it.x == chosen }`
+  returns while the call is still in flight and the assertion after it fails on a loaded host.
+  `MainDispatcher.kt`'s `FakeApiBackend.awaitCall(operationId)` is the counterpart to `await` for
+  those; `SettingsViewModelTest` was fixed onto it.
 - **Unit tests run with `isReturnDefaultValues = true`** and the working directory is the module
   directory, which is what lets `ManifestTest` and `StringResourceTest` read the real files.
 - **iOS does not compile on this host** (root CLAUDE.md). C094's SwiftUI shell mirrors these tokens

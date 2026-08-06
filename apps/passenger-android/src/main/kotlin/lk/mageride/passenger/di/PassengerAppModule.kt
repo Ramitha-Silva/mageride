@@ -13,6 +13,8 @@ import lk.mageride.passenger.booking.PasteLinkViewModel
 import lk.mageride.passenger.booking.ProxyRiderViewModel
 import lk.mageride.passenger.booking.RideBookingViewModel
 import lk.mageride.passenger.booking.ScheduleRideViewModel
+import lk.mageride.passenger.comms.AbsentVoipEngine
+import lk.mageride.passenger.comms.VoipEngine
 import lk.mageride.passenger.history.ApiHistoryRepository
 import lk.mageride.passenger.history.HistoryRepository
 import lk.mageride.passenger.history.PackageOtps
@@ -48,6 +50,7 @@ import lk.mageride.passenger.shell.AppPreferences
 import lk.mageride.passenger.shell.ConnectivityMonitor
 import lk.mageride.passenger.subscription.ApiSubscriptionRepository
 import lk.mageride.passenger.subscription.SubscriptionRepository
+import lk.mageride.passenger.support.SupportRepository
 import lk.mageride.shared.data.api.ApiConfig
 import lk.mageride.shared.data.api.AttestationProvider
 import lk.mageride.shared.data.models.AppSurface
@@ -133,6 +136,7 @@ internal fun passengerAppModule(environment: PassengerEnvironment = PassengerEnv
         historyBindings()
         subscriptionBindings()
         settingsBindings()
+        commsSafetySupportBindings()
     }
 
 /**
@@ -296,6 +300,31 @@ private fun Module.settingsBindings() {
     single<SosContacts> { ApiSosContacts(iam = get()) }
     single { PassengerIdentity(profiles = get()) }
     single { PaymentPreference(preferences = get()) }
+}
+
+/**
+ * The C084 slice — SCR-PA-028/029/030/030a, and SCR-PA-031's other half.
+ *
+ * **Two singles, and neither of them is a screen's model.** SCR-PA-028 and SCR-PA-029 take a ride
+ * id from the route and SCR-PA-030 needs three things the graph already resolves, so all three view
+ * models are built beside their destinations in `PassengerNavHost` — the shape C080, C082 and C083
+ * settled on.
+ *
+ * - [VoipEngine] is the WebRTC seam, and **this build binds [AbsentVoipEngine]**. That is a
+ *   dependency wall rather than a decision — `io.livekit:livekit-android` resolves only through
+ *   JitPack — and it is argued at that class. Landing a real engine is this one line; the view
+ *   model, the screen, the timer and AL-48's fallback are already written against the interface.
+ * - [SupportRepository] is support-svc plus **C081's** history read, because D2' §SCR-PA-030a's
+ *   *"past Trip ID dropdown"* is the same `GET /v1/rides/history` SCR-PA-022's Past tab already
+ *   draws. A second door onto it would be two readers of one list.
+ *
+ * Nothing here binds a safety seam: `POST /v1/sos` and `POST /v1/trip-share/{id}` are already on
+ * C080's `RideRepository` (they are things a passenger reaches for *mid-trip*), and
+ * `SosContacts` — the other half of SCR-PA-029 — is C083's.
+ */
+private fun Module.commsSafetySupportBindings() {
+    single<VoipEngine> { AbsentVoipEngine() }
+    single { SupportRepository(support = get(), history = get()) }
 }
 
 /**

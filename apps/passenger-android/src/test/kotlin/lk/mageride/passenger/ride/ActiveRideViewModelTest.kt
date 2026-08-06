@@ -164,20 +164,10 @@ class ActiveRideViewModelTest {
         assertTrue(choice.owesNumberNotice(CallType.DIRECT_DIAL))
     }
 
-    @Test
-    fun sos_reports_a_position_and_says_so() = runBlocking {
-        // D-33's parallel SMS fan-out. The screen confirms it went, because a passenger pressing
-        // SOS needs to know something happened.
-        rides.rideAnswer = FakeRideRepository.accepted()
-        val model = viewModel()
-        model.state.await { it.ride != null }
-
-        model.triggerSos(null)
-        val state = model.state.await { it.sosSent }
-
-        assertEquals(listOf(FakeRideRepository.RIDE_ID), rides.soses)
-        assertTrue(state.sosSent)
-    }
+    // `sos_reports_a_position_and_says_so` lived here until C084. SCR-PA-015's `⛨ SOS` NAVIGATES
+    // now — the alarm, its countdown and its dispatched state are SCR-PA-029's, and one caller of
+    // `POST /v1/sos` is what keeps one emergency to one row on the operator's live feed. The
+    // assertion moved to `safety/SosViewModelTest`, which is where the behaviour is.
 
     // ------------------------------------------------------------------------------------------
 

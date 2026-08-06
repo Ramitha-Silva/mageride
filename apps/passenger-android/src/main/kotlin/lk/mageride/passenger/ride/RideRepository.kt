@@ -8,7 +8,9 @@ import lk.mageride.shared.data.api.wallet.WalletApi
 import lk.mageride.shared.data.models.CallType
 import lk.mageride.shared.data.models.RideVersion
 import lk.mageride.shared.data.models.Ulid
+import lk.mageride.shared.data.models.comms.CallOutcome
 import lk.mageride.shared.data.models.comms.CalleeRole
+import lk.mageride.shared.data.models.comms.RecordCallOutcomeRequest
 import lk.mageride.shared.data.models.comms.StartCallRequest
 import lk.mageride.shared.data.models.comms.StartCallResponse
 import lk.mageride.shared.data.models.fare.ClaimDriverQrRequest
@@ -77,6 +79,16 @@ internal interface RideRepository {
 
     /** `POST /v1/calls/start` — logs the tap; a VoIP call also gets a session back (AL-48). */
     suspend fun startCall(rideId: Ulid, type: CallType): StartCallResponse
+
+    /**
+     * `POST /v1/calls/{callId}/outcome` — how the call ended (Δ C055).
+     *
+     * The only way voip-svc learns about a call that never connected, and therefore the signal
+     * AL-48's *"Call normally instead?"* hangs on: SCR-PA-028 reports [CallOutcome.VOIP_FAILED]
+     * when it puts the prompt up, and a `direct_dial` row after one on the same ride is the
+     * fallback being taken rather than a passenger who simply preferred to dial.
+     */
+    suspend fun reportCallOutcome(callId: Ulid, outcome: CallOutcome)
 }
 
 /** [RideRepository] over the generated clients. */
@@ -126,4 +138,8 @@ internal class ApiRideRepository(
     override suspend fun startCall(rideId: Ulid, type: CallType): StartCallResponse = comms.startCall(
         StartCallRequest(rideId = rideId, calleeRole = CalleeRole.DRIVER, callType = type),
     )
+
+    override suspend fun reportCallOutcome(callId: Ulid, outcome: CallOutcome) {
+        comms.recordCallOutcome(callId, RecordCallOutcomeRequest(outcome))
+    }
 }

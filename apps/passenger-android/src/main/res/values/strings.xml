@@ -40,11 +40,6 @@
     <string name="drawer_support">Help &amp; support</string>
     <string name="drawer_log_out">Log out</string>
 
-    <!-- What a registered-but-unbuilt destination shows. The placeholder names the screen id so
-         whoever opens it during wave 4a knows which prompt owns it. -->
-    <string name="route_placeholder_title">Coming in this wave</string>
-    <string name="route_placeholder_body">%1$s arrives with its screen group.</string>
-
     <!-- SCR-PA-032. "Banner only, not a full takeover"; auto-clears on reconnect. -->
     <string name="offline_banner_message">Connection lost — showing last known positions</string>
 
@@ -314,7 +309,6 @@
     <string name="ride_start_otp">Start code — read it out to your driver</string>
     <string name="ride_call">Call</string>
     <string name="ride_sos">SOS</string>
-    <string name="ride_sos_sent">Help has been alerted.</string>
     <string name="ride_share">Share this trip</string>
     <string name="ride_cancel">Cancel ride</string>
     <string name="ride_cancel_title">Cancel this ride?</string>
@@ -571,5 +565,85 @@
     <!-- Failures iam-svc declares on this cluster\'s operations. -->
     <string name="error_address_shortcut_taken">You already have an address saved there. Edit that one instead.</string>
     <string name="error_address_not_found">That was already removed on another device.</string>
+    <!-- ===========================================================================================
+         C084 · comms, safety, support — SCR-PA-028/029/030/030a.
+
+         Two glyph-shaped values are deliberately NOT here and are Kotlin constants instead:
+         `SosLabels.SOS` (an international distress signal, the same three letters in all three
+         languages) and `FaqLabels.EXPAND`/`.COLLAPSE` (the accordion's ＋ / −). Three identical
+         values in the three files is exactly what StringResourceTest reads as a key nobody
+         translated — the same argument `Rs` and `+94` make.
+         =========================================================================================== -->
+
+    <string name="action_retry">Try again</string>
+
+    <!-- SCR-PA-028 · VoIP call. "number hidden" is TRUE of a VoIP call — no MSISDN is involved —
+         and it is deliberately absent from the failure state, where the next thing offered is a
+         dial of the driver's real number (AL-48). -->
+    <string name="call_in_app">In-app call · number hidden</string>
+    <string name="call_connecting">Connecting…</string>
+    <string name="call_connected">Connected · %1$s</string>
+    <string name="call_mute">Mute</string>
+    <string name="call_unmute">Unmute</string>
+    <string name="call_speaker">Speaker</string>
+    <string name="call_hang_up">End call</string>
+    <string name="call_failed_signalling">We could not start the in-app call.</string>
+    <string name="call_failed_media">The in-app call could not connect.</string>
+    <string name="call_failed_unavailable">In-app calling is not available on this version yet.</string>
+    <string name="call_fallback_question">Call normally instead?</string>
+    <string name="call_fallback_action">Call normally</string>
+
+    <!-- SCR-PA-029 · SOS. The disc counts down before it sends; "Cancel" and Back both stop it. -->
+    <string name="sos_title">Emergency SOS</string>
+    <string name="sos_armed">Sending GPS + trip to your emergency contacts by SMS…</string>
+    <string name="sos_waiting_position">Finding your location…</string>
+    <string name="sos_sending">Sending…</string>
+    <string name="sos_sending_body">Alerting your emergency contacts…</string>
+    <string name="sos_dispatched">Your emergency contacts have been alerted.</string>
+    <string name="sos_failed">The alert did not go out.</string>
+    <string name="sos_no_position">MageRide needs your location before it can send an alert.</string>
+    <string name="sos_contacts_loading">Checking who to alert…</string>
+    <string name="sos_no_contact">No emergency contact saved</string>
+    <string name="sos_no_contact_hint">Add one under Edit profile so we know who to alert.</string>
+    <string name="sos_sms_sent">Sent</string>
+    <string name="sos_sms_failed">SMS did not go</string>
+    <string name="sos_sms_no_contact">Nobody to text</string>
+    <string name="sos_share_hint">Send someone your live trip link. It works until this trip ends.</string>
+    <string name="sos_share_action">Share live trip</string>
+
+    <!-- SCR-PA-030 · support, and SCR-PA-030a's raise-ticket sheet. -->
+    <string name="support_title">Support</string>
+    <string name="support_search_hint">Search help</string>
+    <string name="support_faq">FAQ</string>
+    <string name="support_loading">Loading…</string>
+    <string name="support_faq_empty">No help articles yet.</string>
+    <string name="support_search_empty">Nothing in help matched that.</string>
+    <string name="support_your_tickets">Your tickets</string>
+    <string name="support_tickets_empty">You have not raised a ticket yet.</string>
+    <string name="support_raise_ticket">Raise a ticket</string>
+    <string name="support_ticket_raised">Ticket raised. Our reply appears here.</string>
+    <string name="support_attached_trip">A trip is attached to this ticket</string>
+    <string name="support_issue_label">Issue description</string>
+    <string name="support_issue_hint">Tell us what went wrong…</string>
+    <string name="support_related_trip">Related trip</string>
+    <string name="support_trip_none">No trip</string>
+    <string name="support_trip_unnamed">Trip</string>
+    <string name="support_attach">Attach a screenshot</string>
+    <string name="support_attached">Screenshot attached</string>
+    <string name="support_submit_ticket">Submit ticket</string>
+    <string name="support_category_general">Support request</string>
+    <string name="support_status_open">Open</string>
+    <string name="support_status_in_progress">Being looked at</string>
+    <string name="support_status_resolved">Resolved</string>
+    <string name="support_event_opened">You raised this ticket</string>
+    <string name="support_event_responded">MageRide replied</string>
+    <string name="support_event_resolved">Marked resolved</string>
+    <string name="support_event_reopened">Reopened</string>
+
+    <!-- Failures safety-svc, voip-svc and support-svc declare on this cluster\'s operations. -->
+    <string name="error_no_emergency_contact">Add an emergency contact first, so we know who to alert.</string>
+    <string name="error_ride_ended">This trip has already ended.</string>
+    <string name="error_ticket_not_found">We could not open that. It may already be gone.</string>
+    <string name="error_screenshot_too_large">That screenshot is too large. Try a smaller one.</string>
 
 </resources>

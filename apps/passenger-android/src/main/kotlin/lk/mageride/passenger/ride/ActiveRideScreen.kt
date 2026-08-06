@@ -60,12 +60,17 @@ import lk.mageride.passenger.ui.theme.MageRideTheme
  * **`📞 Call ▾` opens SCR-PA-015a rather than dialling.** Free VoIP and a direct cellular call are
  * genuinely different things — one costs the passenger minutes and shows their number — so the
  * choice is theirs and is remembered (AL-48).
+ *
+ * **`⛨ SOS` navigates to SCR-PA-029 rather than raising the alarm here** (Δ C084). The confirm, the
+ * countdown, the contact list and the dispatched state are that screen's, and `POST /v1/sos` having
+ * one caller is what stops one emergency arriving on the operator's live feed as two events.
  */
 @Composable
 @Suppress("LongMethod") // The wireframe's layout tree: map, driver card, OTP, three actions.
 internal fun ActiveRideScreen(
     onFinished: () -> Unit,
     onFreeCall: () -> Unit,
+    onSos: () -> Unit,
     choice: CallChoice,
     model: ActiveRideViewModel,
 ) {
@@ -145,7 +150,7 @@ internal fun ActiveRideScreen(
                         modifier = Modifier.padding(start = MageRideTheme.spacing.xxs),
                     )
                 }
-                OutlinedButton(onClick = { model.triggerSos(null) }, modifier = Modifier.weight(1f)) {
+                OutlinedButton(onClick = onSos, modifier = Modifier.weight(1f)) {
                     Icon(
                         imageVector = Icons.Filled.Shield,
                         contentDescription = null,
@@ -170,14 +175,6 @@ internal fun ActiveRideScreen(
                         modifier = Modifier.size(ControlTokens.ChipIcon),
                     )
                 }
-            }
-
-            if (state.sosSent) {
-                Text(
-                    text = stringResource(R.string.ride_sos_sent),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MageRideTheme.status.success,
-                )
             }
 
             state.error?.let { InlineError(message = stringResource(it)) }

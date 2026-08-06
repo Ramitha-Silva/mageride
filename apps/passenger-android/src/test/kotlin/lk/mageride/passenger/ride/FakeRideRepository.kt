@@ -8,7 +8,9 @@ import lk.mageride.shared.data.models.RideState
 import lk.mageride.shared.data.models.RideVehicleType
 import lk.mageride.shared.data.models.RideVersion
 import lk.mageride.shared.data.models.Ulid
+import lk.mageride.shared.data.models.comms.CallOutcome
 import lk.mageride.shared.data.models.comms.StartCallResponse
+import lk.mageride.shared.data.models.comms.VoipSession
 import lk.mageride.shared.data.models.fare.DriverQrInitiation
 import lk.mageride.shared.data.models.fare.PaymentInitiation
 import lk.mageride.shared.data.models.fare.PaymentMethod
@@ -51,8 +53,18 @@ internal class FakeRideRepository : RideRepository {
     val claims = mutableListOf<Pair<Ulid, Ulid?>>()
     val scans = mutableListOf<String>()
     val cashFallbacks = mutableListOf<Ulid>()
-    val soses = mutableListOf<Ulid>()
+    val soses = mutableListOf<Triple<Ulid, Double, Double>>()
     val calls = mutableListOf<CallType>()
+    val outcomes = mutableListOf<Pair<Ulid, CallOutcome>>()
+    val shares = mutableListOf<Ulid>()
+
+    /** What `POST /v1/calls/start` answers a free call with. `null` is voip-svc refusing a room. */
+    var callSession: VoipSession? = VoipSession(roomName = "ride_$RIDE_ID", token = "jwt", wsUrl = "wss://voip")
+    var callFails: Throwable? = null
+    var outcomeFails: Throwable? = null
+    var sosFails: Throwable? = null
+    var shareFails: Throwable? = null
+    var smsStatus: SosSmsStatus = SosSmsStatus.DISPATCHED
 
     override suspend fun ride(rideId: Ulid): RideDetail {
         rideFails?.let { throw it }
@@ -122,16 +134,32 @@ internal class FakeRideRepository : RideRepository {
     }
 
     override suspend fun triggerSos(rideId: Ulid, lat: Double, lng: Double): SosDispatched {
-        soses += rideId
-        return SosDispatched(sosId = SOS_ID, dispatchedAt = Fixtures.NOW, smsStatus = SosSmsStatus.DISPATCHED)
+        soses += Triple(rideId, lat, lng)
+        sosFails?.let { throw it }
+        return SosDispatched(sosId = SOS_ID, dispatchedAt = Fixtures.NOW, smsStatus = smsStatus)
     }
 
-    override suspend fun shareTrip(rideId: Ulid): TripShareLink =
-        TripShareLink(token = "tok", url = "https://passenger.mageride.lk/t/tok", expiresAt = Fixtures.NOW + 2.hours)
+    override suspend fun shareTrip(rideId: Ulid): TripShareLink {
+        shares += rideId
+        shareFails?.let { throw it }
+        return TripShareLink(token = "tok", url = SHARE_URL, expiresAt = Fixtures.NOW + 2.hours)
+    }
 
     override suspend fun startCall(rideId: Ulid, type: CallType): StartCallResponse {
         calls += type
-        return StartCallResponse(callId = CALL_ID, callType = type)
+        callFails?.let { throw it }
+        return StartCallResponse(
+            callId = CALL_ID,
+            callType = type,
+            // Only a free call gets a room back (AL-48); a direct dial records the tap and nothing
+            // else. `callSession` is what a test sets to make the media leg reachable at all.
+            session = callSession.takeIf { type == CallType.FREE_VOIP },
+        )
+    }
+
+    override suspend fun reportCallOutcome(callId: Ulid, outcome: CallOutcome) {
+        outcomes += callId to outcome
+        outcomeFails?.let { throw it }
     }
 
     private fun status(state: PaymentState) = PaymentStatus(
@@ -148,6 +176,9 @@ internal class FakeRideRepository : RideRepository {
         const val SOS_ID = "01JSOS00000000000000000001"
         const val CALL_ID = "01JCALL0000000000000000001"
         const val DRIVER_ID = "01JDRV00000000000000000001"
+
+        /** D-34's public link, as `POST /v1/trip-share/{tripId}` answers it. */
+        const val SHARE_URL = "https://passenger.mageride.lk/t/tok"
 
         /** D-05's Rs 50, in minor units. */
         const val PENALTY_MINOR = 5_000L
