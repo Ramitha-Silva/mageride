@@ -1,0 +1,18 @@
+/*
+  The copy iOS itself renders — the Home-screen name and the permission sheets.
+
+  These cannot live in `Localizable.strings`: the system reads them out of `InfoPlist.strings` when
+  it draws the authorisation alert, and an untranslated purpose string is the one piece of copy a
+  driver is guaranteed to read before they have used the app at all.
+
+  This is also the iOS half of C067's `location_channel_description`. Android explains background
+  location in a notification channel the driver can inspect afterwards; iOS explains it once, here,
+  in the alert that grants it — so the wording says what is shared and when it stops, not that a
+  service is running (D2' §C, "Background GPS").
+*/
+
+"CFBundleDisplayName" = "MageRide Driver";
+
+"NSLocationWhenInUseUsageDescription" = "Your location puts you on the map and lets us send you nearby hires.";
+"NSLocationAlwaysAndWhenInUseUsageDescription" = "MageRide shares your location while you are online or on a trip so passengers can see you coming and the platform can pay you for the distance driven. It stops the moment you go offline.";
+"NSLocationTemporaryUsageDescriptionDictionary.PreciseForDispatch" = "Precise location is what lets a passenger find your vehicle at the pickup point.";

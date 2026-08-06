@@ -20,7 +20,7 @@ import java.io.File
  */
 public actual class PlatformDatabaseDriverFactory(private val directory: File = File(".")) : DatabaseDriverFactory {
 
-    override fun create(request: DatabaseRequest): SqlDriver {
+    actual override fun create(request: DatabaseRequest): SqlDriver {
         require(request.passphrase == null) {
             "The JVM driver cannot encrypt: mobile_db_schema.md §0.4's SQLCipher key is wrapped by " +
                 "a hardware keystore this target does not have. Open it in memory or unencrypted, " +
@@ -46,5 +46,5 @@ public actual class PlatformDatabaseDriverFactory(private val directory: File = 
         return driver
     }
 
-    override fun delete(app: MageRideApp): Boolean = File(directory, app.databaseName).delete()
+    actual override fun delete(app: MageRideApp): Boolean = File(directory, app.databaseName).delete()
 }

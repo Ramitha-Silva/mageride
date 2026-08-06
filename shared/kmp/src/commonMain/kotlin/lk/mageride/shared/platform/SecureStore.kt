@@ -45,5 +45,21 @@ public interface SecureStore {
  *
  * Both actuals are namespaced, so the driver and passenger surfaces cannot read each other's
  * session even when the same handset runs both (AL-08).
+ *
+ * **The four members are re-declared below rather than only inherited** (Δ C085). An `expect class`
+ * that inherits an interface does not inherit its abstract members into the common metadata
+ * compilation, so `compileCommonMainKotlinMetadata` — and therefore `assembleXCFramework`, which is
+ * the only build that runs it — fails with *"is not abstract and does not implement abstract
+ * members"*. The Android and iOS compilations never hit it, which is why this survived from C014 to
+ * wave 4b. Every actual member is `actual override`.
  */
-public expect class PlatformSecureStore : SecureStore
+public expect class PlatformSecureStore : SecureStore {
+
+    override suspend fun read(key: String): String?
+
+    override suspend fun write(key: String, value: String)
+
+    override suspend fun delete(key: String)
+
+    override suspend fun clear()
+}

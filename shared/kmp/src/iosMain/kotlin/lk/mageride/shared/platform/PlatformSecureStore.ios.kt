@@ -71,7 +71,7 @@ import platform.posix.memcpy
 @OptIn(ExperimentalForeignApi::class)
 public actual class PlatformSecureStore(private val service: String) : SecureStore {
 
-    override suspend fun read(key: String): String? = withBridged(service, key) { cfService, cfAccount ->
+    actual override suspend fun read(key: String): String? = withBridged(service, key) { cfService, cfAccount ->
         withQuery(
             kSecClass to kSecClassGenericPassword,
             kSecAttrService to cfService,
@@ -90,7 +90,7 @@ public actual class PlatformSecureStore(private val service: String) : SecureSto
         }
     }
 
-    override suspend fun write(key: String, value: String) {
+    actual override suspend fun write(key: String, value: String) {
         val cfData = CFBridgingRetain(value.toNSData())
         try {
             withBridged(service, key) { cfService, cfAccount ->
@@ -101,7 +101,7 @@ public actual class PlatformSecureStore(private val service: String) : SecureSto
         }
     }
 
-    override suspend fun delete(key: String) {
+    actual override suspend fun delete(key: String) {
         withBridged(service, key) { cfService, cfAccount ->
             withQuery(
                 kSecClass to kSecClassGenericPassword,
@@ -112,7 +112,7 @@ public actual class PlatformSecureStore(private val service: String) : SecureSto
     }
 
     /** Deletes every item under this service — the whole namespace, in one call. */
-    override suspend fun clear() {
+    actual override suspend fun clear() {
         val cfService = CFBridgingRetain(service)
         try {
             withQuery(

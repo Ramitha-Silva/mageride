@@ -27,7 +27,7 @@ public actual class PlatformDatabaseDriverFactory(context: Context) : DatabaseDr
 
     private val app: Context = context.applicationContext
 
-    override fun create(request: DatabaseRequest): SqlDriver {
+    actual override fun create(request: DatabaseRequest): SqlDriver {
         // A null name is an in-memory database — the SQLDelight/AndroidX contract, and how an
         // `inMemory` request is expressed without a second code path.
         val name = if (request.inMemory) null else request.app.databaseName
@@ -45,7 +45,7 @@ public actual class PlatformDatabaseDriverFactory(context: Context) : DatabaseDr
         )
     }
 
-    override fun delete(app: MageRideApp): Boolean = this.app.deleteDatabase(app.databaseName)
+    actual override fun delete(app: MageRideApp): Boolean = this.app.deleteDatabase(app.databaseName)
 
     private companion object {
         /**

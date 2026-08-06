@@ -1,6 +1,7 @@
 package lk.mageride.shared.platform
 
 import lk.mageride.shared.data.api.AttestationProvider
+import lk.mageride.shared.data.api.AttestationRequest
 
 /**
  * The platform's D-30 attestation supplier: **Play Integrity** on Android, **App Attest** on iOS.
@@ -23,5 +24,11 @@ import lk.mageride.shared.data.api.AttestationProvider
  * (Play Services missing, App Attest unsupported, the device not yet registered). The request then
  * goes out without the header and the gateway answers `401 attestation-failed`, which is the
  * honest outcome — a client that invented a value would turn a hard control into a guess.
+ *
+ * [attestationToken] is re-declared rather than only inherited, for the reason
+ * [PlatformSecureStore]'s KDoc gives (Δ C085).
  */
-public expect class PlatformAttestationProvider : AttestationProvider
+public expect class PlatformAttestationProvider : AttestationProvider {
+
+    override suspend fun attestationToken(request: AttestationRequest): String?
+}

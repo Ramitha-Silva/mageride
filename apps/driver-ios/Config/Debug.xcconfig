@@ -1,0 +1,16 @@
+#include "Shared.xcconfig"
+
+// The dev compose stack (`infra/`), reachable from a simulator on the host.
+//
+// Plain MQTT on 1883 because the local broker has no certificate; `MqttTls` is the one setting in
+// this file that must never be copied into Release, which is why `DriverEnvironment` reads it as an
+// explicit `YES` rather than defaulting to on.
+MAGERIDE_API_BASE_URL = http:/$()/localhost:8080
+MAGERIDE_MQTT_HOST = localhost
+MAGERIDE_MQTT_PORT = 1883
+MAGERIDE_MQTT_TLS = NO
+MAGERIDE_PMTILES_URL = http:/$()/localhost:8090/sri-lanka.pmtiles
+
+SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG
+SWIFT_OPTIMIZATION_LEVEL = -Onone
+ONLY_ACTIVE_ARCH = YES

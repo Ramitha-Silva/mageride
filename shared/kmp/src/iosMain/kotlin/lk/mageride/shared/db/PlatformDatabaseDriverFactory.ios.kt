@@ -30,14 +30,14 @@ import platform.Foundation.NSFileProtectionKey
  */
 public actual class PlatformDatabaseDriverFactory : DatabaseDriverFactory {
 
-    override fun create(request: DatabaseRequest): SqlDriver {
+    actual override fun create(request: DatabaseRequest): SqlDriver {
         val name = request.app.databaseName
         val driver = NativeSqliteDriver(schema = request.schema, name = if (request.inMemory) ":memory:" else name)
         if (!request.inMemory) protect(name)
         return driver
     }
 
-    override fun delete(app: MageRideApp): Boolean {
+    actual override fun delete(app: MageRideApp): Boolean {
         val path = DatabaseFileContext.databasePath(app.databaseName, null)
         if (!NSFileManager.defaultManager.fileExistsAtPath(path)) return false
         DatabaseFileContext.deleteDatabase(app.databaseName, null)

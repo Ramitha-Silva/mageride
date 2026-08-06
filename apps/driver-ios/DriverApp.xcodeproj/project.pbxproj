@@ -1,0 +1,642 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		B7A393E253A163E613E6508C /* DriverEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = A38199F79E09320D80DD55E5 /* DriverEnvironment.swift */; };
+		163CFB25666B22BED1EEC593 /* DriverGraph.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE7E2E26A773931E0ABC82D1 /* DriverGraph.swift */; };
+		4F128007D6E4C1DEE8463FCB /* DriverApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84ECFFBEA04E665A4A91B394 /* DriverApp.swift */; };
+		3896FDB54E8A2DB24D296359 /* DriverAppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89C110EC442B67250E0FBBD9 /* DriverAppDelegate.swift */; };
+		3A3788343612C732F395CEB4 /* CocoaMqttTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA5BC4454002A0FE8123E166 /* CocoaMqttTransport.swift */; };
+		57D846EEEB1831F031A00244 /* PositionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30536AB1F15246434B984361 /* PositionService.swift */; };
+		7BBEB1ED5E0AFD7E600E6B01 /* MageRideMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77045AD64CFFB4863766F5DD /* MageRideMapView.swift */; };
+		F4E592A1B806B06382D8BC32 /* MapStyles.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7018C1DE441F0046FD67B8F2 /* MapStyles.swift */; };
+		5CA5A6CAD63FFF6A4CEF0BC4 /* VehicleLayers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B057039EE3B739DBCADEA6E /* VehicleLayers.swift */; };
+		01A40C3ABECA6DA312044B90 /* DriverDestinations.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4626A618D39943033337A0AB /* DriverDestinations.swift */; };
+		CA513CF15AA2C8C71C52275C /* DriverNavigator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57398F5A1A76C8553A256252 /* DriverNavigator.swift */; };
+		B4B87FEF21CD992CF870CF1A /* DriverRoute.swift in Sources */ = {isa = PBXBuildFile; fileRef = E373D25A28E2A02B12527A06 /* DriverRoute.swift */; };
+		AB0FBF32E7E8CFE9FEFD2FF9 /* DriverTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DCC34246A83DE35ECAB075D /* DriverTab.swift */; };
+		6E12E285FD7FEBBFA3280DDA /* PushRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C8A076FBDC74A305213FFE0 /* PushRouter.swift */; };
+		4BA323E92B24334ED7E52D67 /* PushTokenProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 186D3907E5F3C9FA0760500C /* PushTokenProvider.swift */; };
+		C17FFFC990403761DD32A6F7 /* DeviceBinding.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BBA2D3D7C334CA0EAAE9FB6 /* DeviceBinding.swift */; };
+		5B4538172BD986781485416D /* ConnectivityMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 311B2AA624B209ACAC14D7A6 /* ConnectivityMonitor.swift */; };
+		F55BE00BBBA4D7E76EEA682F /* DriverShell.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0DDBD41CC2F5F6E28461B45 /* DriverShell.swift */; };
+		105CE1B376286F533CF5760B /* DriverShellModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C093B4CFC4E6A592E592770 /* DriverShellModel.swift */; };
+		50D9CF766A40AB359C9A53CF /* OfflineBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5A51FF1F31E1B952750DE5B /* OfflineBanner.swift */; };
+		1371D5F9B5431C4F94FDBB70 /* UpdateGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58428A7617C28428EC37CC44 /* UpdateGate.swift */; };
+		824A24A4280C8D0F6573078D /* MageRideColor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 822A1D91911A4ECF4B7CBBD1 /* MageRideColor.swift */; };
+		603F8A0C05C774F9602D60BE /* MageRideCta.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A156431C7C3489E3E4F5DF2 /* MageRideCta.swift */; };
+		D9B3D904AAC5C3983C888E47 /* MageRideSpacing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DD805C6CCCC95FA2C3E0E03 /* MageRideSpacing.swift */; };
+		850A11AC7BAF965B77057982 /* MageRideTypography.swift in Sources */ = {isa = PBXBuildFile; fileRef = 076B871410BF991653E4DF51 /* MageRideTypography.swift */; };
+		CBFF2CB75BD3AEA5C450E1CC /* VehicleToken.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCF6CA12EEB038D63B140132 /* VehicleToken.swift */; };
+		C2C30F86AB7DCFFD8BAA7FAB /* DriverEnvironmentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 613BE313CC4BD8303D3A8370 /* DriverEnvironmentTests.swift */; };
+		998F368FEB919F48A7B6F42E /* LocalizationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1A7352879A3C3EDE135A4F3 /* LocalizationTests.swift */; };
+		68D2FCE4B53C5F65024DE90D /* MapAndVehicleTokenTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BE148B277472381A1CB023B /* MapAndVehicleTokenTests.swift */; };
+		CC93F201C968FBAEF450BDC2 /* NavigationShellTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12F8FD966A59CF0768AF4C56 /* NavigationShellTests.swift */; };
+		23FD7F044415A4AC029EBEA3 /* PushRouterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCBB0FA4D9DEB4B1814C95A8 /* PushRouterTests.swift */; };
+		10262BD32DE9AF51BE826EBD /* ThemeTokenTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D526434D4088A6B7B5B16B5 /* ThemeTokenTests.swift */; };
+		5261C276A98D8E78E1A67A46 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 62BD7C65D57D32EAA37B2D30 /* Assets.xcassets */; };
+		D3969C409DE3B4D94950A2A7 /* MapStyleDark.json in Resources */ = {isa = PBXBuildFile; fileRef = 4A96604D6400D373AD4669A7 /* MapStyleDark.json */; };
+		79AE007E768CA7211BE98822 /* MapStyleLight.json in Resources */ = {isa = PBXBuildFile; fileRef = 9D87EA9453EDBB1DA991C047 /* MapStyleLight.json */; };
+		3972C6A324034F3097825B18 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 935472707CCFE0C0D73A8435 /* InfoPlist.strings */; };
+		B07B63C901214B6CEE7CA2E8 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = D5AF54E5DA7A08CFA7C70124 /* Localizable.strings */; };
+		5E9D053F92B66B1582CF27CA /* MageRideShared in Frameworks */ = {isa = PBXBuildFile; productRef = FFB01CC612CD7B819C2C401B /* MageRideShared */; };
+		A976906608ED307E492B1FC2 /* MapLibre in Frameworks */ = {isa = PBXBuildFile; productRef = AD4E82A621D9DE21D0D61AD3 /* MapLibre */; };
+		B9576F95956526B63845C00F /* CocoaMQTT in Frameworks */ = {isa = PBXBuildFile; productRef = B497A8F6FB31A96E2264B57D /* CocoaMQTT */; };
+		4EE24989A2D61A678105D260 /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = 106922777A411F0E6D39AD07 /* FirebaseMessaging */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		A38199F79E09320D80DD55E5 /* DriverEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DriverEnvironment.swift"; path = "DriverEnvironment.swift"; sourceTree = "<group>"; };
+		AE7E2E26A773931E0ABC82D1 /* DriverGraph.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DriverGraph.swift"; path = "DriverGraph.swift"; sourceTree = "<group>"; };
+		84ECFFBEA04E665A4A91B394 /* DriverApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DriverApp.swift"; path = "DriverApp.swift"; sourceTree = "<group>"; };
+		89C110EC442B67250E0FBBD9 /* DriverAppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DriverAppDelegate.swift"; path = "DriverAppDelegate.swift"; sourceTree = "<group>"; };
+		DA5BC4454002A0FE8123E166 /* CocoaMqttTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "CocoaMqttTransport.swift"; path = "CocoaMqttTransport.swift"; sourceTree = "<group>"; };
+		30536AB1F15246434B984361 /* PositionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PositionService.swift"; path = "PositionService.swift"; sourceTree = "<group>"; };
+		77045AD64CFFB4863766F5DD /* MageRideMapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "MageRideMapView.swift"; path = "MageRideMapView.swift"; sourceTree = "<group>"; };
+		7018C1DE441F0046FD67B8F2 /* MapStyles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "MapStyles.swift"; path = "MapStyles.swift"; sourceTree = "<group>"; };
+		0B057039EE3B739DBCADEA6E /* VehicleLayers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "VehicleLayers.swift"; path = "VehicleLayers.swift"; sourceTree = "<group>"; };
+		4626A618D39943033337A0AB /* DriverDestinations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DriverDestinations.swift"; path = "DriverDestinations.swift"; sourceTree = "<group>"; };
+		57398F5A1A76C8553A256252 /* DriverNavigator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DriverNavigator.swift"; path = "DriverNavigator.swift"; sourceTree = "<group>"; };
+		E373D25A28E2A02B12527A06 /* DriverRoute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DriverRoute.swift"; path = "DriverRoute.swift"; sourceTree = "<group>"; };
+		0DCC34246A83DE35ECAB075D /* DriverTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DriverTab.swift"; path = "DriverTab.swift"; sourceTree = "<group>"; };
+		1C8A076FBDC74A305213FFE0 /* PushRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PushRouter.swift"; path = "PushRouter.swift"; sourceTree = "<group>"; };
+		186D3907E5F3C9FA0760500C /* PushTokenProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PushTokenProvider.swift"; path = "PushTokenProvider.swift"; sourceTree = "<group>"; };
+		62BD7C65D57D32EAA37B2D30 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = "Assets.xcassets"; path = "Assets.xcassets"; sourceTree = "<group>"; };
+		4A96604D6400D373AD4669A7 /* MapStyleDark.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; name = "MapStyleDark.json"; path = "MapStyleDark.json"; sourceTree = "<group>"; };
+		9D87EA9453EDBB1DA991C047 /* MapStyleLight.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; name = "MapStyleLight.json"; path = "MapStyleLight.json"; sourceTree = "<group>"; };
+		0BBA2D3D7C334CA0EAAE9FB6 /* DeviceBinding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DeviceBinding.swift"; path = "DeviceBinding.swift"; sourceTree = "<group>"; };
+		311B2AA624B209ACAC14D7A6 /* ConnectivityMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ConnectivityMonitor.swift"; path = "ConnectivityMonitor.swift"; sourceTree = "<group>"; };
+		D0DDBD41CC2F5F6E28461B45 /* DriverShell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DriverShell.swift"; path = "DriverShell.swift"; sourceTree = "<group>"; };
+		1C093B4CFC4E6A592E592770 /* DriverShellModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DriverShellModel.swift"; path = "DriverShellModel.swift"; sourceTree = "<group>"; };
+		E5A51FF1F31E1B952750DE5B /* OfflineBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "OfflineBanner.swift"; path = "OfflineBanner.swift"; sourceTree = "<group>"; };
+		58428A7617C28428EC37CC44 /* UpdateGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "UpdateGate.swift"; path = "UpdateGate.swift"; sourceTree = "<group>"; };
+		822A1D91911A4ECF4B7CBBD1 /* MageRideColor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "MageRideColor.swift"; path = "MageRideColor.swift"; sourceTree = "<group>"; };
+		2A156431C7C3489E3E4F5DF2 /* MageRideCta.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "MageRideCta.swift"; path = "MageRideCta.swift"; sourceTree = "<group>"; };
+		8DD805C6CCCC95FA2C3E0E03 /* MageRideSpacing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "MageRideSpacing.swift"; path = "MageRideSpacing.swift"; sourceTree = "<group>"; };
+		076B871410BF991653E4DF51 /* MageRideTypography.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "MageRideTypography.swift"; path = "MageRideTypography.swift"; sourceTree = "<group>"; };
+		BCF6CA12EEB038D63B140132 /* VehicleToken.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "VehicleToken.swift"; path = "VehicleToken.swift"; sourceTree = "<group>"; };
+		613BE313CC4BD8303D3A8370 /* DriverEnvironmentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DriverEnvironmentTests.swift"; path = "DriverEnvironmentTests.swift"; sourceTree = "<group>"; };
+		B1A7352879A3C3EDE135A4F3 /* LocalizationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "LocalizationTests.swift"; path = "LocalizationTests.swift"; sourceTree = "<group>"; };
+		8BE148B277472381A1CB023B /* MapAndVehicleTokenTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "MapAndVehicleTokenTests.swift"; path = "MapAndVehicleTokenTests.swift"; sourceTree = "<group>"; };
+		12F8FD966A59CF0768AF4C56 /* NavigationShellTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "NavigationShellTests.swift"; path = "NavigationShellTests.swift"; sourceTree = "<group>"; };
+		CCBB0FA4D9DEB4B1814C95A8 /* PushRouterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PushRouterTests.swift"; path = "PushRouterTests.swift"; sourceTree = "<group>"; };
+		2D526434D4088A6B7B5B16B5 /* ThemeTokenTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ThemeTokenTests.swift"; path = "ThemeTokenTests.swift"; sourceTree = "<group>"; };
+		D459395A137E69E3408BA69B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = "Info.plist"; path = "Info.plist"; sourceTree = "<group>"; };
+		CB0D066169D3247984513AB9 /* DriverApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; name = "DriverApp.entitlements"; path = "DriverApp.entitlements"; sourceTree = "<group>"; };
+		D2C67D3364DB41C3BB90B99C /* Shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = "Shared.xcconfig"; path = "Shared.xcconfig"; sourceTree = "<group>"; };
+		B77B88B69C2244A36219286E /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = "Debug.xcconfig"; path = "Debug.xcconfig"; sourceTree = "<group>"; };
+		3046F09A59C7E9407A2D0A5C /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = "Release.xcconfig"; path = "Release.xcconfig"; sourceTree = "<group>"; };
+		3F19EC1DD2EF73A5FF68281F /* DriverApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "DriverApp.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		40184C70F1DBF0E95B6478D5 /* DriverAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "DriverAppTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		5B9773D84493B3D713DB9AC0 = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5E9D053F92B66B1582CF27CA /* MageRideShared in Frameworks */,
+				A976906608ED307E492B1FC2 /* MapLibre in Frameworks */,
+				B9576F95956526B63845C00F /* CocoaMQTT in Frameworks */,
+				4EE24989A2D61A678105D260 /* FirebaseMessaging in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E51E325E2D7A6ADDC5C9CAB4 = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		DF891E785808226D241F246E = {
+			isa = PBXGroup;
+			children = (
+				5619E268CFFE28118C19FC6A /* Config */,
+				F3CCAF7FAF0DDD1EC071EAC1 /* DriverApp */,
+				8A4505F112D2FBD27635E508 /* DriverAppTests */,
+				5151B46607EBC8890D8DFCC2 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		5619E268CFFE28118C19FC6A /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				D2C67D3364DB41C3BB90B99C /* Shared.xcconfig */,
+				B77B88B69C2244A36219286E /* Debug.xcconfig */,
+				3046F09A59C7E9407A2D0A5C /* Release.xcconfig */,
+			);
+			path = Config;
+			sourceTree = "<group>";
+		};
+		5151B46607EBC8890D8DFCC2 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				3F19EC1DD2EF73A5FF68281F /* DriverApp.app */,
+				40184C70F1DBF0E95B6478D5 /* DriverAppTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		F3CCAF7FAF0DDD1EC071EAC1 /* DriverApp */ = {
+			isa = PBXGroup;
+			children = (
+				3BCC40221E847ADC67F8DDCA /* DI */,
+				0EC78E5EC56BE03BDD3FB8D6 /* Location */,
+				AC9AD4E1F91290A46789DFC8 /* Map */,
+				BD8F15ED7253BC5039F949C2 /* Nav */,
+				BE43BB8A93BAAFC6C6757D22 /* Push */,
+				44050D7D094356F0E0F50CC0 /* Resources */,
+				75E7277CAD07339927EC58E7 /* Security */,
+				0EC869F91FE1586BE15C8677 /* Shell */,
+				4300180A9966B3D5DF19AB26 /* Theme */,
+				CB0D066169D3247984513AB9 /* DriverApp.entitlements */,
+				84ECFFBEA04E665A4A91B394 /* DriverApp.swift */,
+				89C110EC442B67250E0FBBD9 /* DriverAppDelegate.swift */,
+				D459395A137E69E3408BA69B /* Info.plist */,
+			);
+			path = "DriverApp";
+			sourceTree = "<group>";
+		};
+		3BCC40221E847ADC67F8DDCA /* DI */ = {
+			isa = PBXGroup;
+			children = (
+				A38199F79E09320D80DD55E5 /* DriverEnvironment.swift */,
+				AE7E2E26A773931E0ABC82D1 /* DriverGraph.swift */,
+			);
+			path = "DI";
+			sourceTree = "<group>";
+		};
+		0EC78E5EC56BE03BDD3FB8D6 /* Location */ = {
+			isa = PBXGroup;
+			children = (
+				DA5BC4454002A0FE8123E166 /* CocoaMqttTransport.swift */,
+				30536AB1F15246434B984361 /* PositionService.swift */,
+			);
+			path = "Location";
+			sourceTree = "<group>";
+		};
+		AC9AD4E1F91290A46789DFC8 /* Map */ = {
+			isa = PBXGroup;
+			children = (
+				77045AD64CFFB4863766F5DD /* MageRideMapView.swift */,
+				7018C1DE441F0046FD67B8F2 /* MapStyles.swift */,
+				0B057039EE3B739DBCADEA6E /* VehicleLayers.swift */,
+			);
+			path = "Map";
+			sourceTree = "<group>";
+		};
+		BD8F15ED7253BC5039F949C2 /* Nav */ = {
+			isa = PBXGroup;
+			children = (
+				4626A618D39943033337A0AB /* DriverDestinations.swift */,
+				57398F5A1A76C8553A256252 /* DriverNavigator.swift */,
+				E373D25A28E2A02B12527A06 /* DriverRoute.swift */,
+				0DCC34246A83DE35ECAB075D /* DriverTab.swift */,
+			);
+			path = "Nav";
+			sourceTree = "<group>";
+		};
+		BE43BB8A93BAAFC6C6757D22 /* Push */ = {
+			isa = PBXGroup;
+			children = (
+				1C8A076FBDC74A305213FFE0 /* PushRouter.swift */,
+				186D3907E5F3C9FA0760500C /* PushTokenProvider.swift */,
+			);
+			path = "Push";
+			sourceTree = "<group>";
+		};
+		44050D7D094356F0E0F50CC0 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				62BD7C65D57D32EAA37B2D30 /* Assets.xcassets */,
+				4A96604D6400D373AD4669A7 /* MapStyleDark.json */,
+				9D87EA9453EDBB1DA991C047 /* MapStyleLight.json */,
+				935472707CCFE0C0D73A8435 /* InfoPlist.strings */,
+				D5AF54E5DA7A08CFA7C70124 /* Localizable.strings */,
+			);
+			path = "Resources";
+			sourceTree = "<group>";
+		};
+		75E7277CAD07339927EC58E7 /* Security */ = {
+			isa = PBXGroup;
+			children = (
+				0BBA2D3D7C334CA0EAAE9FB6 /* DeviceBinding.swift */,
+			);
+			path = "Security";
+			sourceTree = "<group>";
+		};
+		0EC869F91FE1586BE15C8677 /* Shell */ = {
+			isa = PBXGroup;
+			children = (
+				311B2AA624B209ACAC14D7A6 /* ConnectivityMonitor.swift */,
+				D0DDBD41CC2F5F6E28461B45 /* DriverShell.swift */,
+				1C093B4CFC4E6A592E592770 /* DriverShellModel.swift */,
+				E5A51FF1F31E1B952750DE5B /* OfflineBanner.swift */,
+				58428A7617C28428EC37CC44 /* UpdateGate.swift */,
+			);
+			path = "Shell";
+			sourceTree = "<group>";
+		};
+		4300180A9966B3D5DF19AB26 /* Theme */ = {
+			isa = PBXGroup;
+			children = (
+				822A1D91911A4ECF4B7CBBD1 /* MageRideColor.swift */,
+				2A156431C7C3489E3E4F5DF2 /* MageRideCta.swift */,
+				8DD805C6CCCC95FA2C3E0E03 /* MageRideSpacing.swift */,
+				076B871410BF991653E4DF51 /* MageRideTypography.swift */,
+				BCF6CA12EEB038D63B140132 /* VehicleToken.swift */,
+			);
+			path = "Theme";
+			sourceTree = "<group>";
+		};
+		8A4505F112D2FBD27635E508 /* DriverAppTests */ = {
+			isa = PBXGroup;
+			children = (
+				613BE313CC4BD8303D3A8370 /* DriverEnvironmentTests.swift */,
+				B1A7352879A3C3EDE135A4F3 /* LocalizationTests.swift */,
+				8BE148B277472381A1CB023B /* MapAndVehicleTokenTests.swift */,
+				12F8FD966A59CF0768AF4C56 /* NavigationShellTests.swift */,
+				CCBB0FA4D9DEB4B1814C95A8 /* PushRouterTests.swift */,
+				2D526434D4088A6B7B5B16B5 /* ThemeTokenTests.swift */,
+			);
+			path = "DriverAppTests";
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXVariantGroup section */
+		935472707CCFE0C0D73A8435 /* InfoPlist.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				31E736BB6E731E88D5BF2DF1 /* en */,
+				3373A20FA0BD3A452B41C9D5 /* si */,
+				8EC1AC1C232A66E6A0441C20 /* ta */,
+			);
+			name = "InfoPlist.strings";
+			sourceTree = "<group>";
+		};
+		D5AF54E5DA7A08CFA7C70124 /* Localizable.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				8916B46474F216A854A8A21D /* en */,
+				4E6C2E435BA132563F3A9573 /* si */,
+				717BA2D7A0627A5913A60DCD /* ta */,
+			);
+			name = "Localizable.strings";
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
+
+/* Begin PBXNativeTarget section */
+		5586D3E6332A7A737C3D4BEE /* DriverApp */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F6834D6FC4B93A7CA538D86C;
+			buildPhases = (
+				5FE1B3F82D64113ABB0EB771 /* Sources */,
+				5B9773D84493B3D713DB9AC0 /* Frameworks */,
+				4F7F18C320226E54A0ABB4D6 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = DriverApp;
+			packageProductDependencies = (
+				FFB01CC612CD7B819C2C401B /* MageRideShared */,
+				AD4E82A621D9DE21D0D61AD3 /* MapLibre */,
+				B497A8F6FB31A96E2264B57D /* CocoaMQTT */,
+				106922777A411F0E6D39AD07 /* FirebaseMessaging */,
+			);
+			productName = DriverApp;
+			productReference = 3F19EC1DD2EF73A5FF68281F /* DriverApp.app */;
+			productType = "com.apple.product-type.application";
+		};
+		9617EE1331006329DEEF526C /* DriverAppTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BB1E6D2AEA8AC36F278ABC28;
+			buildPhases = (
+				E6569098FA4B2AEA8F586BFA /* Sources */,
+				E51E325E2D7A6ADDC5C9CAB4 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				4D6589D38872F6722A78875E /* PBXTargetDependency */,
+			);
+			name = DriverAppTests;
+			packageProductDependencies = (
+			);
+			productName = DriverAppTests;
+			productReference = 40184C70F1DBF0E95B6478D5 /* DriverAppTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		BA3763C8117006BE958E5818 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					9617EE1331006329DEEF526C = {
+						TestTargetID = 5586D3E6332A7A737C3D4BEE;
+					};
+				};
+			};
+			buildConfigurationList = CD9B099C09BAFCEA918F1DA6;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				si,
+				ta,
+				Base,
+			);
+			mainGroup = DF891E785808226D241F246E;
+			packageReferences = (
+				0B71912143C05AB9EF9931CD /* XCLocalSwiftPackageReference */,
+				66F179D0F9D1DF6CA925A765 /* XCRemoteSwiftPackageReference */,
+				C1C9831DA8E66FE2CDD657B0 /* XCRemoteSwiftPackageReference */,
+				5A7C9A6B89F369C5883A420C /* XCRemoteSwiftPackageReference */,
+			);
+			productRefGroup = 5151B46607EBC8890D8DFCC2 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				5586D3E6332A7A737C3D4BEE /* DriverApp */,
+				9617EE1331006329DEEF526C /* DriverAppTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		4F7F18C320226E54A0ABB4D6 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5261C276A98D8E78E1A67A46 /* Assets.xcassets in Resources */,
+				D3969C409DE3B4D94950A2A7 /* MapStyleDark.json in Resources */,
+				79AE007E768CA7211BE98822 /* MapStyleLight.json in Resources */,
+				3972C6A324034F3097825B18 /* InfoPlist.strings in Resources */,
+				B07B63C901214B6CEE7CA2E8 /* Localizable.strings in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		5FE1B3F82D64113ABB0EB771 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B7A393E253A163E613E6508C /* DriverEnvironment.swift in Sources */,
+				163CFB25666B22BED1EEC593 /* DriverGraph.swift in Sources */,
+				4F128007D6E4C1DEE8463FCB /* DriverApp.swift in Sources */,
+				3896FDB54E8A2DB24D296359 /* DriverAppDelegate.swift in Sources */,
+				3A3788343612C732F395CEB4 /* CocoaMqttTransport.swift in Sources */,
+				57D846EEEB1831F031A00244 /* PositionService.swift in Sources */,
+				7BBEB1ED5E0AFD7E600E6B01 /* MageRideMapView.swift in Sources */,
+				F4E592A1B806B06382D8BC32 /* MapStyles.swift in Sources */,
+				5CA5A6CAD63FFF6A4CEF0BC4 /* VehicleLayers.swift in Sources */,
+				01A40C3ABECA6DA312044B90 /* DriverDestinations.swift in Sources */,
+				CA513CF15AA2C8C71C52275C /* DriverNavigator.swift in Sources */,
+				B4B87FEF21CD992CF870CF1A /* DriverRoute.swift in Sources */,
+				AB0FBF32E7E8CFE9FEFD2FF9 /* DriverTab.swift in Sources */,
+				6E12E285FD7FEBBFA3280DDA /* PushRouter.swift in Sources */,
+				4BA323E92B24334ED7E52D67 /* PushTokenProvider.swift in Sources */,
+				C17FFFC990403761DD32A6F7 /* DeviceBinding.swift in Sources */,
+				5B4538172BD986781485416D /* ConnectivityMonitor.swift in Sources */,
+				F55BE00BBBA4D7E76EEA682F /* DriverShell.swift in Sources */,
+				105CE1B376286F533CF5760B /* DriverShellModel.swift in Sources */,
+				50D9CF766A40AB359C9A53CF /* OfflineBanner.swift in Sources */,
+				1371D5F9B5431C4F94FDBB70 /* UpdateGate.swift in Sources */,
+				824A24A4280C8D0F6573078D /* MageRideColor.swift in Sources */,
+				603F8A0C05C774F9602D60BE /* MageRideCta.swift in Sources */,
+				D9B3D904AAC5C3983C888E47 /* MageRideSpacing.swift in Sources */,
+				850A11AC7BAF965B77057982 /* MageRideTypography.swift in Sources */,
+				CBFF2CB75BD3AEA5C450E1CC /* VehicleToken.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E6569098FA4B2AEA8F586BFA /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C2C30F86AB7DCFFD8BAA7FAB /* DriverEnvironmentTests.swift in Sources */,
+				998F368FEB919F48A7B6F42E /* LocalizationTests.swift in Sources */,
+				68D2FCE4B53C5F65024DE90D /* MapAndVehicleTokenTests.swift in Sources */,
+				CC93F201C968FBAEF450BDC2 /* NavigationShellTests.swift in Sources */,
+				23FD7F044415A4AC029EBEA3 /* PushRouterTests.swift in Sources */,
+				10262BD32DE9AF51BE826EBD /* ThemeTokenTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		4D6589D38872F6722A78875E /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 5586D3E6332A7A737C3D4BEE /* DriverApp */;
+			targetProxy = 7E977510074EE2E97CE3F14A /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin PBXContainerItemProxy section */
+		7E977510074EE2E97CE3F14A /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = BA3763C8117006BE958E5818 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5586D3E6332A7A737C3D4BEE;
+			remoteInfo = DriverApp;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin XCBuildConfiguration section */
+		877A6BA951A2EA0025A2ABE8 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = B77B88B69C2244A36219286E /* Debug.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = "NO";
+				CLANG_ENABLE_MODULES = "YES";
+				CLANG_ENABLE_OBJC_ARC = "YES";
+				ENABLE_STRICT_OBJC_MSGSEND = "YES";
+				ENABLE_TESTABILITY = "YES";
+				GCC_NO_COMMON_BLOCKS = "YES";
+				SDKROOT = "iphoneos";
+				SWIFT_EMIT_LOC_STRINGS = "YES";
+			};
+			name = Debug;
+		};
+		959134B361DD7E21ADEA3164 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 3046F09A59C7E9407A2D0A5C /* Release.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = "NO";
+				CLANG_ENABLE_MODULES = "YES";
+				CLANG_ENABLE_OBJC_ARC = "YES";
+				ENABLE_STRICT_OBJC_MSGSEND = "YES";
+				GCC_NO_COMMON_BLOCKS = "YES";
+				SDKROOT = "iphoneos";
+				SWIFT_EMIT_LOC_STRINGS = "YES";
+			};
+			name = Release;
+		};
+		76A27447120776B533275019 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GENERATE_INFOPLIST_FILE = "NO";
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				PRODUCT_BUNDLE_IDENTIFIER = "lk.mageride.driver";
+				SWIFT_EMIT_LOC_STRINGS = "YES";
+			};
+			name = Debug;
+		};
+		D99FA0ABACAF2ABB3B75CFC4 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GENERATE_INFOPLIST_FILE = "NO";
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				PRODUCT_BUNDLE_IDENTIFIER = "lk.mageride.driver";
+				SWIFT_EMIT_LOC_STRINGS = "YES";
+			};
+			name = Release;
+		};
+		CF034F29E5D1FDAC2D1F365C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_ENTITLEMENTS = "";
+				GENERATE_INFOPLIST_FILE = "YES";
+				INFOPLIST_FILE = "";
+				IPHONEOS_DEPLOYMENT_TARGET = "16.0";
+				PRODUCT_BUNDLE_IDENTIFIER = "lk.mageride.driver.tests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/DriverApp.app/DriverApp";
+			};
+			name = Debug;
+		};
+		4EA5229620FD3D8562460F16 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_ENTITLEMENTS = "";
+				GENERATE_INFOPLIST_FILE = "YES";
+				INFOPLIST_FILE = "";
+				IPHONEOS_DEPLOYMENT_TARGET = "16.0";
+				PRODUCT_BUNDLE_IDENTIFIER = "lk.mageride.driver.tests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/DriverApp.app/DriverApp";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		CD9B099C09BAFCEA918F1DA6 /* Build configuration list for PBXProject */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				877A6BA951A2EA0025A2ABE8 /* Debug */,
+				959134B361DD7E21ADEA3164 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		F6834D6FC4B93A7CA538D86C /* Build configuration list for PBXNativeTarget DriverApp */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				76A27447120776B533275019 /* Debug */,
+				D99FA0ABACAF2ABB3B75CFC4 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		BB1E6D2AEA8AC36F278ABC28 /* Build configuration list for PBXNativeTarget DriverAppTests */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CF034F29E5D1FDAC2D1F365C /* Debug */,
+				4EA5229620FD3D8562460F16 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		0B71912143C05AB9EF9931CD /* XCLocalSwiftPackageReference */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = "../../shared/swiftpm/MageRideShared";
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		66F179D0F9D1DF6CA925A765 /* XCRemoteSwiftPackageReference */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/maplibre/maplibre-gl-native-distribution";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = "6.0.0";
+			};
+		};
+		C1C9831DA8E66FE2CDD657B0 /* XCRemoteSwiftPackageReference */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/emqx/CocoaMQTT";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = "2.1.0";
+			};
+		};
+		5A7C9A6B89F369C5883A420C /* XCRemoteSwiftPackageReference */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = "11.0.0";
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		FFB01CC612CD7B819C2C401B /* MageRideShared */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MageRideShared;
+		};
+		AD4E82A621D9DE21D0D61AD3 /* MapLibre */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 66F179D0F9D1DF6CA925A765 /* XCRemoteSwiftPackageReference */;
+			productName = MapLibre;
+		};
+		B497A8F6FB31A96E2264B57D /* CocoaMQTT */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C1C9831DA8E66FE2CDD657B0 /* XCRemoteSwiftPackageReference */;
+			productName = CocoaMQTT;
+		};
+		106922777A411F0E6D39AD07 /* FirebaseMessaging */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 5A7C9A6B89F369C5883A420C /* XCRemoteSwiftPackageReference */;
+			productName = FirebaseMessaging;
+		};
+/* End XCSwiftPackageProductDependency section */
+
+/* Begin PBXFileReference section (localised) */
+		31E736BB6E731E88D5BF2DF1 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = "en.lproj/InfoPlist.strings"; sourceTree = "<group>"; };
+		3373A20FA0BD3A452B41C9D5 /* si */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = si; path = "si.lproj/InfoPlist.strings"; sourceTree = "<group>"; };
+		8EC1AC1C232A66E6A0441C20 /* ta */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ta; path = "ta.lproj/InfoPlist.strings"; sourceTree = "<group>"; };
+		8916B46474F216A854A8A21D /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = "en.lproj/Localizable.strings"; sourceTree = "<group>"; };
+		4E6C2E435BA132563F3A9573 /* si */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = si; path = "si.lproj/Localizable.strings"; sourceTree = "<group>"; };
+		717BA2D7A0627A5913A60DCD /* ta */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ta; path = "ta.lproj/Localizable.strings"; sourceTree = "<group>"; };
+/* End PBXFileReference section (localised) */
+	};
+	rootObject = BA3763C8117006BE958E5818 /* Project object */;
+}

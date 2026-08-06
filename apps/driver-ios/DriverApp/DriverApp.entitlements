@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!--
+      D-30. `appattest` is the production environment; `appattestdevelop` is what a development
+      build gets, and Xcode substitutes it automatically for a Debug signing configuration. Without
+      this entitlement `DCAppAttestService.isSupported` is true and `generateKey` fails at runtime,
+      which is the failure that looks like a device problem rather than a project one.
+    -->
+    <key>com.apple.developer.devicecheck.appattest-environment</key>
+    <string>appattest</string>
+
+    <!--
+      APNs. `production` is correct for both TestFlight and the App Store; a development build gets
+      the sandbox by way of its provisioning profile, not by way of this string.
+    -->
+    <key>aps-environment</key>
+    <string>production</string>
+
+    <!--
+      D2' §C's "Payment deep-link: Universal Links → portal". The OnePay return leg comes back to
+      the app through `pay.mageride.lk`, which is why the payment handoff can be a web checkout at
+      all — an `Intent` on Android and this here.
+
+      `mageride.lk` itself is deliberately absent: a wildcard over the marketing site would make
+      every page on it open the app, and the `apple-app-site-association` that authorises this one
+      is served from the payment host alone.
+    -->
+    <key>com.apple.developer.associated-domains</key>
+    <array>
+        <string>applinks:pay.mageride.lk</string>
+    </array>
+
+    <!--
+      Keychain sharing is NOT declared, and that is the AL-08 fence: the driver and passenger apps
+      must not be able to read each other's session on a handset that runs both. Namespacing by
+      `kSecAttrService` (C014) is the belt; the absence of a shared access group is the braces.
+    -->
+</dict>
+</plist>

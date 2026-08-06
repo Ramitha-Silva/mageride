@@ -111,7 +111,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C082 | passenger-android-mode-b-subscriptions | 4a | DONE | 2026-08-06 | **235 tests green** (was 208; 27 new), `assembleDebug` + `detekt` + `ktlintCheck` clean. SCR-PA-024/025/025a/025b built. **AL-59 applied over the wireframe**: the pay sheet has no OnePay row and no `+5 %` anywhere — a subscription is paid to the *fleet owner* and OnePay has one merchant account per merchant, so **Cash** takes the vacant row (D2' §16e); the wireframe needs a micro-change-set. **AL-49's `payTo` only exists after `POST …/pay`**, which is why SCR-PA-025a is two stages — a chooser cannot print an account number it has not been given. **Unsubscribing drops the marker locally** through the new `PassengerLiveMap.dropVehicle`, so AL-25 is true on the tap rather than on `share.revoked`'s round trip. **Five gaps**: no passenger-readable vehicle name (`GET /v1/vehicles/{id}` is 403 `not-owner` here, so the card's title is the Vehicle ID), no passenger-facing read of one's own access requests and **no Mode B push kind** (so *accepted* is inferred from the subscription and *rejected* is unobservable), no `GET …/subscriptions/{subscriptionId}` (the screens filter the list), `GET …/payments` fixes no ordering, and **the passenger app has no wallet top-up screen at all** |
 | C083 | passenger-android-settings-addresses | 4a | DONE | 2026-08-06 | **265 tests green** (was 236; 29 new), `assembleDebug` + `detekt` + `ktlintCheck` clean. SCR-PA-026/026a/027/027b built and SCR-PA-033's identity header filled in. **Home and Work are the `isHome`/`isWork` flags, drawn as two always-present rows whose ✎ is the wireframe's only "save Home & Work by pin" control** — which is what lets SCR-PA-026a keep to AL-26's four fields and ask nothing about shortcuts. **AL-26 is structural on Edit Profile**: `PassengerProfileRepository.update` has no `language` parameter, so no screen reached from Settings can send one. **The reverse geocode is a pre-fill and never a gate** (AL-14) — a 404/503 leaves an address that can still be saved. **Four gaps**: `iam.yaml`'s `DefaultPaymentMethod` predates AL-57/AL-59 so a **wallet** default is device-local (the wireframe's Cash/LankaQR/OnePay row needs a micro-change-set), no contract carries a human-readable passenger id (the ULID is drawn where the wireframe prints `PAX-90431`), no avatar upload route exists anywhere (the 📷 control is drawn disabled, as C077 did), and `mobile_db_schema.md` §2.1's on-device `saved_addresses` still has no writer |
 | C084 | passenger-android-comms-safety-support | 4a | DONE | 2026-08-06 | **291 tests green** (was 265; 26 new across 3 suites), `assembleDebug` + `detekt` + `ktlintCheck` clean. SCR-PA-028/029/030/030a built and SCR-PA-031 finished to its frame; **the last three placeholders are gone, so every route in `PassengerNavHost` now draws a real screen** and `RoutePlaceholder` was deleted with them. **AL-48 end to end**: the VoIP screen's signalling half is real and its media half reports `NO_MEDIA_CLIENT`, so *"Call normally instead?"* is the only outcome this build reaches — a **dependency wall**, not a decision (`io.livekit:livekit-android` needs JitPack and `settings.gradle.kts` is C001's), exactly as C075 found on the driver side; the fallback writes a `direct_dial` row after a `voip_failed` one so the platform can tell a fallback from a preference. **SCR-PA-015's `⛨ SOS` navigates now rather than raising the alarm inline** — one caller of `POST /v1/sos` is what keeps one emergency to one row on the operator's live feed — and D-34's share link is minted **after** the alarm, best-effort, because the five-second budget is not for a URL. **This app passes `?lang=` on the FAQ where the driver app deliberately does not**: AL-26 makes the passenger's language device-first and the server write is allowed to lag, so the FAQ is asked for in the language the app is *drawing* in. **Three gaps**: `POST /v1/sos` has no positionless form (BR-29.4 contemplates one for the web surface only), no contract mints the wireframe's `#TK-4521` ticket number or `PAX-90431-0617` trip number, and no passenger-facing category routes to the Finance queue so SCR-PA-030 has no quick action. Also fixed a pre-existing flake in C083's `SettingsViewModelTest` |
-| C085 | driver-ios-shell | 4b | PENDING | | |
+| C085 | driver-ios-shell | 4b | PARTIAL | 2026-08-06 | **Written in full; NOT compiled — this host cannot build iOS** (root CLAUDE.md), so no DoD line is verified and the status stays PARTIAL until the first `xcodebuild` on macOS. What *is* verified here: `:shared:testDebugUnitTest detekt ktlintCheck` green and `:shared:compileKotlinIosArm64` type-checking every Kotlin line added. **`:shared:assemble`'s three-year-old metadata defect is fixed** — C025 recorded it as blocking `assembleXCFramework`, and it is C085 that hits it: the three `expect class`es that inherit an interface now re-declare its members and the nine actuals are `actual override`. **`shared/kmp/src/iosMain/di` is new and is the seam `Koin.kt` anticipated**: Swift cannot build a Koin module or resolve one (`module`/`single`/`get` are all inline+reified and are not exported at all), so `startIosGraph(IosAppConfig)` takes primitives and answers typed properties, and `IosFlowWatcher<T>` is how Swift collects a `Flow`. **The position pipeline is Kotlin in `iosMain`, not Swift** — every collaborator is on the Kotlin side of the bridge and `Duration`/nullable-`Int`/`copy` all cross it lossily; Swift owns the fix source and the socket. 26 Swift files + 6 XCTest suites, an `.xcodeproj` **generated from the tree** by a committed script, the §0.2 palette as an asset catalogue the test reads back, and si/ta/en `Localizable.strings` + `InfoPlist.strings`. **iOS 16.0** chosen as the deployment target (C000 recorded that no spec states one). Two wireframe/spec conflicts and three gaps recorded — see the handoff |
 | C086 | driver-ios-auth-onboarding | 4b | PENDING | | |
 | C087 | driver-ios-vehicle-onboarding | 4b | PENDING | | |
 | C088 | driver-ios-dashboard-dispatch | 4b | PENDING | | |
@@ -13221,3 +13221,217 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   - **The call and the alarm are full-screen takeovers with no bottom bar and no drawer gesture** —
     `isTabRoute` excludes them and `PassengerShell` disables the drawer swipe outside the three tabs
     for exactly this reason.
+
+- **Component:** C085 driver-ios-shell — 2026-08-06
+- **Status:** PARTIAL — **the shell is written in full and none of it has been compiled.** This
+  Linux host cannot build iOS (root `CLAUDE.md`, "Build Host"), so every one of the four DoD lines
+  is unverified and the component stays PARTIAL until the first `xcodebuild` on macOS. Saying
+  anything else would be claiming a green build nobody has seen.
+
+  **What IS verified here, and it is more than the fence normally allows.**
+  `./gradlew :shared:testDebugUnitTest :shared:detekt :shared:ktlintCheck` — **822 tests green, 0
+  failed, 0 skipped** — and `:shared:compileCommonMainKotlinMetadata :shared:compileKotlinIosArm64`
+  clean, which type-checks **every line of Kotlin this component added**, including the position
+  pipeline (see decision (3)). The `.pbxproj` was checked structurally on this host: 132 objects, no
+  duplicate ids, no reference to an id that is not defined, balanced delimiters.
+  **The wave-1 gate was red when C067 ran and is green now** — `ApiOperationTableTest` and
+  `ContractCoverageTest` were closed by MCS-03/MCS-04, and nothing here re-opened them.
+
+  **What cannot be verified anywhere but a Mac, and what cannot be verified even there.** Every
+  third-party call site — MapLibre's `NSExpression` builders, CocoaMQTT's MQTT-5 delegate, Firebase
+  Messaging — is written against the documented API and compiled by nobody; the first `xcodebuild`
+  is where those three files get their real review, and they are the three to read first. Two DoD
+  lines need hardware even then: **App Attest does not exist on the simulator at all**
+  (`DCAppAttestService.isSupported` is `false`), and "background location + MQTT survive
+  backgrounding" is a claim about a handset in a pocket.
+- **Notes:**
+  **`:shared:assemble` is fixed, and it is this component that had to.** C025's handoff recorded
+  `compileCommonMainKotlinMetadata` failing with *"Class 'PlatformSecureStore' is not abstract and
+  does not implement abstract members"* for the three `expect class`es that inherit an interface
+  (`PlatformSecureStore`, `PlatformAttestationProvider`, `PlatformDatabaseDriverFactory`), noted that
+  it predated C025, and handed it to "whoever owns the module" because the fix touches iOS actuals.
+  **`assembleXCFramework` runs that compilation**, so C085 is where it stops being theoretical.
+  Reproduced, fixed as C025 described — the three expect classes re-declare their inherited members
+  and the nine actuals across `androidMain`/`iosMain`/`jvmMain` are `actual override` — and verified
+  both ways on this host. Nothing else in `:shared` changed shape.
+
+  **Decisions —**
+  (1) **The asset catalogue is D2' §0.2's hexes, not the wireframe's.** `driver_ios.html`'s `:root`
+  declares a different palette in six roles (`--surface:#F2F3F5` vs `#F7F8FA`, `--surfaceVariant`,
+  `--outline`, `--onSurfaceVariant`, and `--success`/`--warning`/`--error` as the iOS *system*
+  green/orange/red `#34C759`/`#FF9F0A`/`#FF3B30`). §0.2 is titled "AUTHORITATIVE — single source of
+  truth for Figma + Compose + SwiftUI" and spells out the iOS binding — *"SwiftUI = `Color` asset
+  catalog (**same hex**, light/dark appearances)"* — so the spec wins and the wireframe's numbers are
+  what an HTML mock does to approximate iOS in a browser. Recorded as gap (a) rather than silently
+  reconciled. Where the wireframe uses a genuine HIG system colour for a genuine system control (the
+  green `Toggle`, the blue `.alert` actions) the app uses SwiftUI's own, because those are the
+  platform's and not ours.
+  (2) **`shared/kmp/src/iosMain/kotlin/.../di/` is new, and it is the half `Koin.kt` already
+  anticipated.** That file's KDoc says iOS "passes only its extra modules" — but Swift cannot build
+  one: `module { }`, `Module.single` and `Koin.get` are **all `inline` + `reified`**, and an inline
+  reified function is not exported to Objective-C at all. So `startIosGraph(IosAppConfig)` takes
+  **primitives** and answers `IosAppGraph`, a typed view onto the same singletons. Primitives rather
+  than `ApiConfig`/`AuthConfig`/`MqttConfig` because those carry `kotlin.time.Duration` fields —
+  an inline value class the export flattens to an opaque `Long` — and Kotlin default arguments do
+  not survive the export either, so a Swift call site would be passing unlabelled nanosecond counts
+  for values the spec has already fixed. `IosFlowWatcher<T>` is the other half: a `Flow` cannot be
+  collected from Swift (`collect` takes a `FlowCollector`, a functional interface Swift cannot
+  implement), and it is a generic **class** rather than a function because a generic function's type
+  parameter erases to `Any` in the export. Not driver-specific: C094 calls the same function with
+  the passenger surface.
+  (3) **The position pipeline is Kotlin in `iosMain`, where Android keeps it in the app module.**
+  Every collaborator — `AdaptiveRateEngine`, `PositionReplayQueue`, `GpsBuffer`, `PositionSample`,
+  `Instant` — is on the Kotlin side of the bridge, and several cross it lossily: `Duration` as
+  above, a nullable `Int` as a boxed `KotlinInt?`, `data class copy` as a fifteen-argument `doCopy`.
+  A Swift port would marshal five of them on every GPS tick, and R-17's replay and D5' §5.2's
+  cadence — the two behaviours this component's DoD names — are exactly what a mis-typed marshalling
+  breaks silently. So the seam moved out one level: **Swift owns the fix source and the socket,
+  Kotlin owns the rules.** `IosPositionTransport` is a byte pipe (topic, `NSData`, QoS, retain) and
+  `IosMqttPlan` computes the whole CONNECT, so `CocoaMqttTransport.swift` spells no topic of its
+  own. The behaviour is a line-for-line port of C067's; only its address changed. A real bonus:
+  the file is type-checked on **this** host.
+  (4) **iOS 16.0 is the deployment target**, and choosing one was unavoidable — C000's planner
+  finding (b) records that "neither URD, ADD nor D2' states an iOS deployment target — C085/C094
+  will need one". Two reasons agree on 16: `NavigationStack` is iOS 16 and D2' §C names it as *the*
+  scaffolding primitive, so anything lower rewrites that whole row around the deprecated
+  `NavigationView`; and NFR-22's intent is reach on budget hardware — iOS 16 runs on the iPhone 8
+  and SE 2, 2017 hardware, the same year as the Android 8.0 floor, while iOS 17 drops both. Every
+  dependency clears it. Raised as gap (a).
+  (5) **The `.xcodeproj` is generated from the tree by `Tools/generate_xcodeproj.py`, and the
+  `.pbxproj` is still the committed artefact.** CI probes for it and Xcode opens it. It is also a
+  file where every source needs two 24-hex ids, a group membership and a build-phase entry, and the
+  classic failure is a file added to the group and forgotten in `Sources`: it compiles for whoever
+  added it and not in CI. Ids are `sha1(kind + path)[:24]`, so the output is byte-identical on any
+  machine and the diff shows only real changes. **`objectVersion = 56`, deliberately not 77**:
+  Xcode 16's file-system-synchronised groups would have removed the need for the script entirely,
+  but this project is authored on a host that cannot open it, so the format has to be the one every
+  Xcode from 14 onward reads. The generator buys back what 77 would have given.
+  (6) **One Swift package for both iOS apps**, at `shared/swiftpm/MageRideShared`, with a
+  `binaryTarget` pointing at `shared/kmp/build/XCFrameworks/release/`. C094 references the same
+  directory rather than carrying a copy — a second package is a second place the artefact path has
+  to be right, and the path is the one thing about that file that can be wrong. **SPM validates a
+  local binary target's path at load time**, so `xcodebuild` on a tree that has never run
+  `:shared:assembleXCFramework` fails with "artifact not found" rather than at link time. That is
+  the right failure and it is the order `ci.yml` already uses.
+  (7) **The `Localizable.strings` keys are C067's key names.** `nav_home`, `offline_banner_message`,
+  `update_mandatory_message` — same keys, same translations, so a screen group porting its Android
+  copy has a one-to-one mapping and a divergence between the two apps is a diff rather than an
+  archaeology exercise. Two of C067's key families are deliberately **absent**: `push_channel_*` and
+  `location_notification_*` have no renderer on this platform (see the Section C table in
+  `apps/driver-ios/CLAUDE.md`), and the location copy a driver actually reads on iOS is the purpose
+  strings, which are in `InfoPlist.strings` and are translated there.
+  (8) **Dynamic Type is `@ScaledMetric`, not a text style and not a fixed size.** §0.2's table fixes
+  both a point size and an iOS text style per role, and only one construct honours both:
+  `Font.largeTitle` ignores the spec's 32pt (the system default is 34), `Font.system(size: 32)`
+  ignores the driver's setting — and US-19.1/19.2 and §C's "VoiceOver + Dynamic Type" are the
+  requirement. `.mageFont(_:)` is the only way a view in this app sets a font.
+  (9) **The CTA is §0.2's 56pt / radius 8, not the wireframe's 50px / radius 13.** §0.2's CTA row
+  carries no platform delta and Section C lists none, so the token wins; 56 also clears the 44pt HIG
+  tap target with room for Dynamic Type. Recorded as gap (b) and asserted in `ThemeTokenTests`.
+  (10) **No `H3Grid` is bound, and for this app that is correct.** C017's handoff asks C085/C094 to
+  bind one, but C017 itself also records that *"the driver home map joins no geocell group at all
+  (AL-31)"* — `LiveMapScope.DriverHomeMap` has no cells by construction and the driver's own marker
+  comes from the device's GNSS. `geoRealtimeModule` throws only on **resolution**, and nothing in
+  this app resolves one. A binding here would be untested cinterop standing in for a decision.
+  **C094 must add it** — a passenger live map is R-06's 19-cell view and does resolve one.
+  (11) **`FirebaseMessaging` is linked and `FirebaseApp.configure()` is guarded on the plist being
+  present.** D2' §C's push row is "APNs via FCM", so the token notification-svc addresses has to be
+  an FCM registration token and not a raw APNs one. There is no `GoogleService-Info.plist` in this
+  repository (C124), and `configure()` without one raises an **Objective-C** exception, which Swift
+  cannot catch — the app would terminate rather than degrade. So the presence of the file is the
+  gate, and `PushTokenProvider.current()` answers `nil` on every build produced today, exactly as
+  its Android counterpart does.
+  (12) **`SWIFT_STRICT_CONCURRENCY = minimal`.** Every actor annotation the app needs is written
+  (`@MainActor` on the graph, the navigator, the shell model and the position service;
+  `nonisolated` on the CoreLocation delegate), but turning the checking up on code nobody has been
+  able to compile would put an unknown number of diagnostics between C086 and its first green
+  build. **C103's**, after the first `xcodebuild` is green.
+  (13) **The tests run hosted and read the real bundle.** `ThemeTokenTests` pulls every colour out
+  of the **compiled asset catalogue** and compares components against §0.2's table typed out by
+  hand — the same rule `ThemeTokensTest` states on Android, and the only way a test of a constant is
+  worth anything. `NavigationShellTests` types out `DriverRoute.kt`'s 28 paths and compares, which
+  is what turns the C067 handoff's "keep both in step" into a build failure. `LocalizationTests` is
+  `StringResourceTest` ported. `DriverEnvironmentTests` exists because the xcconfig → `Info.plist` →
+  Swift chain fails **silently**: a misspelled setting leaves an empty string where the gateway
+  origin should be, and on Android the same mistake is a compile error because `BuildConfig` is
+  generated.
+
+  **Gaps found —**
+  (a) ***No spec states an iOS deployment target.*** C000 recorded it and it is now decided rather
+  than resolved: `Config/Shared.xcconfig` sets 16.0 with the reasoning above. URD §5.5 NFR-22 should
+  gain the iOS half beside its Android one, or the two floors will drift the first time somebody
+  reads only the URD. **Micro-change-set.**
+  (b) ***`specs/wireframes/driver_ios.html` and D2' §0.2 disagree about six colours and the CTA.***
+  Detailed in decision (1) and (9). The wireframe is described in the manifest as "the team-approved
+  wireframe baseline", and §0.2 calls itself authoritative for SwiftUI in so many words; one of the
+  two has to be amended, and until it is, every iOS screen group will re-discover the same conflict.
+  **Micro-change-set** — and it is a *design* decision, not a build one: iOS system colours on a
+  MageRide surface is a defensible product choice, it just is not what §0.2 currently says.
+  (c) ***The iOS half of D-30 still cannot complete, and it is now the blocking item.*** C014's
+  handoff gap (b): `backend/contracts/iam.yaml` has no App Attest registration route and no
+  challenge endpoint, and the gateway's `IAttestedKeyStore` reads
+  `iam.devices.attestation_verified_at`, a column nothing writes. The client half is **finished** —
+  the key is generated in the Secure Enclave, the header is
+  `base64url(keyId) "." base64url(assertion)` over `SHA-256("<METHOD> <path>")`, and
+  `DeviceBinding.prepareRegistration` produces the attestation object — so this is one contract
+  addition wide. Until it lands, D-30's twenty operations answer `401 attestation-failed` on iOS
+  while the identical Android build passes. Restated here rather than left in C014's notes because
+  C085 is the first component for which it is a shipped-behaviour gap rather than a future one.
+  (d) ***`POST /v1/notify/ack` still has no KMP client function*** — C067's gap (a), unchanged.
+  `notification.yaml` declares `acknowledgeNotification` and `NotificationApi` does not carry it, so
+  the iOS delegate reads `notificationId` off every push and cannot ack it either. **C012/C013's.**
+  (e) ***Section C is missing three rows that turn out to matter, and all three are asymmetries
+  rather than omissions.*** They are tabulated in `apps/driver-ios/CLAUDE.md` and are worth a spec
+  line each: a notification **channel** is a user-controllable mute on Android and has no iOS
+  counterpart (categories buy interruption level, not a user control), so a driver who silences
+  wallet notices on Android cannot on iOS without silencing ride offers too; `NWPath` has no
+  equivalent of `NET_CAPABILITY_VALIDATED`, so a captive-portal Wi-Fi reads as **online** on iOS and
+  offline on Android; and `CLLocationManager` has no update interval, so the D5' §5.2 cadence is
+  enforced on receipt rather than on registration.
+
+  **For later components —**
+  **C086–C093 (the screen groups):** your route is already in `Nav/DriverRoute.swift` — use it, do
+  not add a case. Replace your `placeholder(...)` line in `Nav/DriverDestinations.swift`; that is
+  the only `navigationDestination` in the app and a second one would fork the back stack the way a
+  second `NavHost` does. Add strings to **all three** `.lproj` in the same commit. Use
+  `.buttonStyle(.mageCta)`, `.mageFont(_:)` and `MageRideSpacing`/`MageRideRadius`/`MageRideColor` —
+  never a raw number or hex. **Re-run `python3 apps/driver-ios/Tools/generate_xcodeproj.py`** and
+  commit the `.pbxproj` with your files. `MageRideMapView.onStyleLoaded` fires on **every** style
+  load, not just the first, because switching appearance drops every layer you added — install them
+  there, not in `onAppear`. The shell ships no marker image: `VehicleLayers.addVehicles` takes the
+  name of one you set on the style, because the icon is MAP-03's per-type symbol and that is a
+  screen's decision.
+  **C088 (dashboard):** `PositionService.start(vehicleId:mode:vehicleType:)` is the go-online
+  toggle's other half, and it opens the database itself. `positions.bufferedCount` and
+  `positions.isPublishing` are `@Published` for SCR-DI-035's card. C067's gap (b) — the service
+  cannot learn its own vehicle id after a process kill — **does not exist here**, because iOS never
+  recreates a service without its arguments; what does exist is that a driver who force-quits stops
+  publishing, which Android's `START_STICKY` survives. That is a Section C delta you own.
+  **C094 (passenger iOS):** `iosAppModule` is not driver-specific — call `startIosGraph` with
+  `AppSurface.passenger` / `MageRideApp.passenger` and your own Keychain namespace. **You must bind
+  an `H3Grid`** (decision 10); `iosAppModule` is where it goes, and it needs a cinterop or a Swift
+  H3 package that produces bit-identical cell ids. Reference the **same** `shared/swiftpm` package.
+  `Theme/`, `Nav/DriverNavigator.swift`, `Shell/ConnectivityMonitor.swift`, `Shell/OfflineBanner`,
+  `Shell/UpdateGate`, `Map/` and `Tools/generate_xcodeproj.py` contain nothing driver-specific
+  except the tab set — **do not copy them into a third place**: promote them to a shared Swift
+  package in that session and leave one implementation, which is the same instruction C067 gave C076
+  and C076 should have taken.
+  **C103 / C124 (release):** the app-icon artwork (the slot exists and is empty), a
+  `Package.resolved` once the SPM graph has resolved once on a Mac, `SWIFT_STRICT_CONCURRENCY`,
+  signing, and the `GoogleService-Info.plist` / APNs key pair. `Config/Release.xcconfig` already
+  fixes the production gateway, MQTT host and PMTiles URL so a release build cannot be pointed at a
+  laptop by omission.
+
+  **Build host —** no Docker, no compose stack; the replica stayed down throughout. Gradle only.
+  `:shared:compileKotlinIosArm64` is ~2 min warm and is the closest thing to a compiler this
+  component has: **run it after every Kotlin edit**, because it is the difference between finding a
+  Kotlin/Native mistake here and finding it on a Mac three components later. Four things worth
+  knowing next time: **ktlint's `iosMain` source set is checked by its own task**
+  (`ktlintIosMainSourceSetCheck`) and `ktlintFormat` fixes it; **detekt's `ReturnCount` has no
+  exemption in `iosMain` either**, so the pipeline's three-outcome `onFix` needs the same
+  `@Suppress` its Android twin carries; **an xcconfig treats `//` as a comment inside a value**, so
+  a URL is written `https:/$()/host` — the `$()` is the empty-substitution escape that breaks the
+  pair without changing the string, and getting it wrong yields a base URL of `https:` that fails at
+  the first request; and **`INFOPLIST_KEY_*` build settings are only read when
+  `GENERATE_INFOPLIST_FILE` is YES**, which this target's is not, so anything set that way silently
+  does nothing.

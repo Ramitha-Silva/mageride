@@ -1,0 +1,32 @@
+/*
+  MageRide Driver — iOS shell strings, Tamil (ta).
+
+  Keys are in the same order as `en.lproj/Localizable.strings`; `LocalizationTests` fails the build
+  if one is missing, is left equal to the English, or drops a format specifier.
+*/
+
+"nav_home" = "முகப்பு";
+"nav_jobs" = "வேலைகள்";
+"nav_wallet" = "பணப்பை";
+"nav_menu" = "மெனு";
+
+"offline_banner_message" = "இணைப்பு துண்டிக்கப்பட்டது — கடைசித் தகவல் காட்டப்படுகிறது";
+"offline_banner_restored" = "மீண்டும் இணைக்கப்பட்டது";
+
+"update_required_title" = "புதுப்பிப்பு தேவை";
+"update_mandatory_message" = "தொடர்வதற்கு MageRide ஓட்டுநர் புதிய பதிப்பு தேவை.";
+"update_optional_message" = "MageRide ஓட்டுநர் புதிய பதிப்பு கிடைக்கிறது.";
+"update_action_now" = "இப்போது புதுப்பிக்கவும்";
+"update_action_later" = "பின்னர்";
+
+"action_retry" = "மீண்டும் முயற்சி";
+"action_dismiss" = "நிராகரி";
+"action_close" = "மூடு";
+"error_generic" = "ஏதோ தவறு நடந்தது. மீண்டும் முயற்சிக்கவும்.";
+"session_expired" = "உங்கள் அமர்வு முடிந்தது. மீண்டும் உள்நுழையவும்.";
+
+"map_recentre" = "மையப்படுத்து";
+"map_content_description" = "வரைபடம்";
+
+"route_placeholder_title" = "இன்னும் உருவாக்கப்படவில்லை";
+"route_placeholder_body" = "%1$@ அதன் திரைக் குழுவுடன் வழங்கப்படும்.";

@@ -1,0 +1,7 @@
+/* The copy iOS itself renders — Tamil (ta). See `en.lproj/InfoPlist.strings`. */
+
+"CFBundleDisplayName" = "MageRide ஓட்டுநர்";
+
+"NSLocationWhenInUseUsageDescription" = "உங்கள் இருப்பிடம் உங்களை வரைபடத்தில் காட்டி, அருகிலுள்ள வாடகை வாய்ப்புகளை உங்களுக்கு அனுப்ப உதவுகிறது.";
+"NSLocationAlwaysAndWhenInUseUsageDescription" = "நீங்கள் ஆன்லைனில் அல்லது பயணத்தில் இருக்கும்போது MageRide உங்கள் இருப்பிடத்தைப் பகிர்கிறது — பயணிகள் நீங்கள் வருவதைப் பார்க்கவும், ஓட்டிய தூரத்திற்கு உங்களுக்குப் பணம் வழங்கவும். நீங்கள் ஆஃப்லைன் ஆனவுடன் அது நிற்கிறது.";
+"NSLocationTemporaryUsageDescriptionDictionary.PreciseForDispatch" = "துல்லியமான இருப்பிடம்தான் பயணி உங்கள் வாகனத்தை ஏறும் இடத்தில் கண்டுபிடிக்க உதவுகிறது.";

@@ -56,5 +56,13 @@ public interface DatabaseDriverFactory {
  * [lk.mageride.shared.platform.PlatformSecureStore] — Android needs a `Context` to find the app's
  * private database directory, iOS needs nothing. C067 / C076 construct it with a context, C085 /
  * C094 with no arguments, and `commonMain` only ever sees [DatabaseDriverFactory].
+ *
+ * Both members are re-declared rather than only inherited, for the reason
+ * [lk.mageride.shared.platform.PlatformSecureStore]'s KDoc gives (Δ C085).
  */
-public expect class PlatformDatabaseDriverFactory : DatabaseDriverFactory
+public expect class PlatformDatabaseDriverFactory : DatabaseDriverFactory {
+
+    override fun create(request: DatabaseRequest): SqlDriver
+
+    override fun delete(app: MageRideApp): Boolean
+}

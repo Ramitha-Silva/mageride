@@ -29,17 +29,17 @@ public actual class PlatformSecureStore(private val namespace: String) : SecureS
     /** Namespaced key, so two stores in one process cannot see each other's entries. */
     private fun scoped(key: String): String = "$namespace/$key"
 
-    override suspend fun read(key: String): String? = gate.withLock { values[scoped(key)] }
+    actual override suspend fun read(key: String): String? = gate.withLock { values[scoped(key)] }
 
-    override suspend fun write(key: String, value: String) {
+    actual override suspend fun write(key: String, value: String) {
         gate.withLock { values[scoped(key)] = value }
     }
 
-    override suspend fun delete(key: String) {
+    actual override suspend fun delete(key: String) {
         gate.withLock { values.remove(scoped(key)) }
     }
 
-    override suspend fun clear() {
+    actual override suspend fun clear() {
         gate.withLock { values.keys.removeAll { it.startsWith("$namespace/") } }
     }
 }

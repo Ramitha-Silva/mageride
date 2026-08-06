@@ -57,7 +57,7 @@ public actual class PlatformAttestationProvider(context: Context, private val cl
      */
     public suspend fun warmUp(): Boolean = tokenProvider() != null
 
-    override suspend fun attestationToken(request: AttestationRequest): String? {
+    actual override suspend fun attestationToken(request: AttestationRequest): String? {
         val provider = tokenProvider() ?: return null
         return try {
             provider

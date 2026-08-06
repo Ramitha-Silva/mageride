@@ -76,13 +76,13 @@ public actual class PlatformSecureStore(context: Context, namespace: String) : S
         cipher = AndroidKeystoreCipher("$namespace.aes"),
     )
 
-    override suspend fun read(key: String): String? = delegate.read(key)
+    actual override suspend fun read(key: String): String? = delegate.read(key)
 
-    override suspend fun write(key: String, value: String): Unit = delegate.write(key, value)
+    actual override suspend fun write(key: String, value: String): Unit = delegate.write(key, value)
 
-    override suspend fun delete(key: String): Unit = delegate.delete(key)
+    actual override suspend fun delete(key: String): Unit = delegate.delete(key)
 
-    override suspend fun clear(): Unit = delegate.clear()
+    actual override suspend fun clear(): Unit = delegate.clear()
 }
 
 /**

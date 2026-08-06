@@ -17,5 +17,5 @@ import lk.mageride.shared.data.api.AttestationRequest
  */
 public actual class PlatformAttestationProvider : lk.mageride.shared.data.api.AttestationProvider {
 
-    override suspend fun attestationToken(request: AttestationRequest): String? = null
+    actual override suspend fun attestationToken(request: AttestationRequest): String? = null
 }

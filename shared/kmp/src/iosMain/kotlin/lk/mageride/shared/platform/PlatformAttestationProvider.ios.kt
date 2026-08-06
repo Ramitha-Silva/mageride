@@ -64,7 +64,7 @@ public actual class PlatformAttestationProvider(
     private val service = DCAppAttestService.sharedService
     private val gate = Mutex()
 
-    override suspend fun attestationToken(request: AttestationRequest): String? = keyId()?.let { keyId ->
+    actual override suspend fun attestationToken(request: AttestationRequest): String? = keyId()?.let { keyId ->
         sha256(request.clientData)
             ?.let { hash -> assertion(keyId, hash) }
             ?.let { signed -> rawKeyId(keyId) + "." + signed.base64Url() }

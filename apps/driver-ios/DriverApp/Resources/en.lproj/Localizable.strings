@@ -1,0 +1,54 @@
+/*
+  MageRide Driver — iOS shell strings (C085 driver-ios-shell). English, the development region.
+
+  SCOPE. Only what the SHELL renders: the tab bar, the offline banner, the update gate, the map
+  affordances and the handful of actions and errors every screen group shares. A screen group's own
+  copy belongs to that component (C086-C093) and is added to all three files together.
+
+  KEYS ARE C067'S. The same key names as `apps/driver-android/src/main/res/values*/strings.xml`, so
+  a screen group porting its Android copy has a one-to-one mapping and a divergence between the two
+  apps is a diff rather than an archaeology exercise. The VALUES are the same translations.
+
+  THE RULE (CLAUDE.md). Every user-facing string is Si + Ta + En and nothing is hard-coded in a
+  View. `LocalizationTests` fails the build if a key exists here and not in si/ta, if a translation
+  is left equal to its English, or if a format specifier does not survive translation.
+
+  NOT HERE. iOS has no notification channel a user can silence one-by-one and no ongoing
+  foreground-service notification, so C067's `push_channel_*` and `location_notification_*` keys
+  have no renderer on this platform (D2' §C: the channel is Android's, the blue location indicator
+  is the system's and carries no app text). The location copy a driver DOES read on iOS is the
+  purpose strings, which live in `InfoPlist.strings` beside this file.
+*/
+
+/* Tab bar (AL-31). Four tabs; Menu is the entry point that replaces the hamburger. */
+"nav_home" = "Home";
+"nav_jobs" = "Jobs";
+"nav_wallet" = "Wallet";
+"nav_menu" = "Menu";
+
+/* Offline banner (US-15.6, SCR-DI-035): an inline banner, never a full takeover. */
+"offline_banner_message" = "Connection lost — showing last known";
+"offline_banner_restored" = "Back online";
+
+/* App-update gate (D-31). `mandatory` blocks; `optional` is dismissible. */
+"update_required_title" = "Update required";
+"update_mandatory_message" = "A newer version of MageRide Driver is needed to continue.";
+"update_optional_message" = "A newer version of MageRide Driver is available.";
+"update_action_now" = "Update now";
+"update_action_later" = "Later";
+
+/* Shared actions and errors. */
+"action_retry" = "Retry";
+"action_dismiss" = "Dismiss";
+"action_close" = "Close";
+"error_generic" = "Something went wrong. Please try again.";
+"session_expired" = "Your session ended. Please sign in again.";
+
+/* Map (D2' §0.3). The recentre control is on both apps. */
+"map_recentre" = "Recentre";
+"map_content_description" = "Map";
+
+/* A route the shell knows about whose screen group has not landed. Trilingual because it renders
+   on a real device during wave 4b, same as anything else. */
+"route_placeholder_title" = "Not built yet";
+"route_placeholder_body" = "%1$@ arrives with its screen group.";

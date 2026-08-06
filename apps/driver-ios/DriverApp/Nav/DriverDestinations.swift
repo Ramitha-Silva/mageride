@@ -1,0 +1,110 @@
+import SwiftUI
+
+/// The one place a ``DriverRoute`` becomes a view.
+///
+/// **This is the iOS counterpart of `DriverNavHost.kt`, and it has the same rule**: a screen group
+/// replaces the body of its own case and touches nothing else. There is exactly one of these in the
+/// app; a second `navigationDestination` for the same type would fork the back stack the way a
+/// second `NavHost` does on Android.
+///
+/// Every destination is registered from the day the shell lands, as a placeholder. That is what
+/// makes AL-27's `Profile Setup -> Permissions -> Home` a compile-time reference during wave 4b
+/// rather than a promise: a screen group can navigate to a screen that has not been written, and
+/// what it gets is a labelled placeholder rather than a dead end.
+struct DriverDestinationView: View {
+
+    let route: DriverRoute
+
+    var body: some View {
+        switch route {
+        // ---- C086 · auth / onboarding ------------------------------------------------
+        case .splash: placeholder("SCR-DI-001 · splash")
+        case .languageCity: placeholder("SCR-DI-002 · language / city")
+        case .login: placeholder("SCR-DI-003 · phone + OTP")
+        case .profileSetup: placeholder("SCR-DI-003a · profile setup")
+        case .permissions: placeholder("SCR-DI-007 · permissions")
+
+        // ---- C087 · vehicle onboarding -----------------------------------------------
+        case .vehicleOnboarding: placeholder("SCR-DI-004…004c · vehicle onboarding")
+        case .documentCapture: placeholder("SCR-DI-005 · document capture")
+        case .vehicleOnboardingStatus: placeholder("SCR-DI-006 · onboarding status")
+        case .vehicles: placeholder("SCR-DI-026 · my vehicles")
+
+        // ---- C088 · dashboard / dispatch ---------------------------------------------
+        case .home: placeholder("SCR-DI-010 · dashboard")
+        case .directional: placeholder("SCR-DI-013 · directional travel")
+        case .activeRide(let rideId): placeholder("SCR-DI-015 · active ride \(rideId)")
+
+        // ---- C090 · jobs / level / earnings ------------------------------------------
+        case .jobs: placeholder("SCR-DI-017 · job board")
+        case .scheduledRides: placeholder("SCR-DI-018 · scheduled rides")
+        case .driverLevel: placeholder("SCR-DI-019 · driver level")
+        case .earnings: placeholder("SCR-DI-020 · earnings")
+
+        // ---- C091 · wallet / daily fee -----------------------------------------------
+        case .wallet: placeholder("SCR-DI-021 · wallet & fee")
+        case .walletTopUp: placeholder("SCR-DI-022 · top up")
+        case .walletRequestCredit: placeholder("SCR-DI-023 · request credit")
+        case .walletTransfer: placeholder("SCR-DI-024 · credit transfer")
+        case .walletHistory: placeholder("SCR-DI-025 · payment history")
+
+        // ---- menu and what hangs off it ----------------------------------------------
+        case .menu: placeholder("SCR-DI-036 · menu")
+        case .documents: placeholder("driver documents")
+        case .profile: placeholder("SCR-DI-029 · driver profile")
+        case .support: placeholder("SCR-DI-033 · support")
+        case .trackerPairing: placeholder("SCR-DI-027 · tracker pairing")
+        case .sharing: placeholder("SCR-DI-028 · sharing management")
+        case .rideHistory: placeholder("SCR-DI-030 · ride history")
+        case .notifications: placeholder("SCR-DI-034 · alerts")
+
+        // ---- C093 · the two takeovers ------------------------------------------------
+        case .voipCall(let rideId): placeholder("SCR-DI-031 · call on ride \(rideId)")
+        case .sos(let rideId): placeholder("SCR-DI-032 · SOS on ride \(rideId)")
+        }
+    }
+
+    private func placeholder(_ screen: String) -> some View {
+        PlaceholderScreen(screen: screen, route: route)
+    }
+}
+
+/// What a registered-but-unwritten destination draws.
+///
+/// Trilingual, because it renders on a real device during wave 4b exactly like anything else. It
+/// names the screen id rather than the component, because the screen id is what
+/// `specs/wireframes/driver_ios.html` and D2' §B are indexed by.
+struct PlaceholderScreen: View {
+
+    let screen: String
+    let route: DriverRoute
+
+    var body: some View {
+        VStack(spacing: MageRideSpacing.sm) {
+            Image(systemName: "square.dashed")
+                .font(.largeTitle)
+                .foregroundStyle(MageRideColor.outlineVariant)
+            Text("route_placeholder_title", bundle: MageRideColor.bundle)
+                .mageFont(.title)
+                .foregroundStyle(MageRideColor.onSurface)
+            Text(
+                String(
+                    format: NSLocalizedString(
+                        "route_placeholder_body",
+                        bundle: MageRideColor.bundle,
+                        comment: "the screen a route will get"
+                    ),
+                    screen
+                )
+            )
+            .mageFont(.bodySmall)
+            .foregroundStyle(MageRideColor.onSurfaceVariant)
+            .multilineTextAlignment(.center)
+        }
+        .padding(MageRideSpacing.lg)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(MageRideColor.background)
+        .navigationTitle(route.path)
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}

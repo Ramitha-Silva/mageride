@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>$(DEVELOPMENT_LANGUAGE)</string>
+    <key>CFBundleExecutable</key>
+    <string>$(EXECUTABLE_NAME)</string>
+    <key>CFBundleIdentifier</key>
+    <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>$(PRODUCT_NAME)</string>
+    <!-- The Home-screen name is translated in `Resources/*.lproj/InfoPlist.strings`. -->
+    <key>CFBundleDisplayName</key>
+    <string>MageRide Driver</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>$(MARKETING_VERSION)</string>
+    <key>CFBundleVersion</key>
+    <string>$(CURRENT_PROJECT_VERSION)</string>
+
+    <!--
+      The three languages CLAUDE.md fixes. Listed so iOS negotiates against exactly this set: a
+      handset set to Hindi resolves to `en` (the development region) rather than to whichever
+      `.lproj` happened to sort first.
+    -->
+    <key>CFBundleLocalizations</key>
+    <array>
+        <string>si</string>
+        <string>ta</string>
+        <string>en</string>
+    </array>
+
+    <!-- Portrait only. Every frame in `specs/wireframes/driver_ios.html` is a portrait handset,
+         and a driver's phone is in a mount — a landscape dashboard is a layout nobody has drawn. -->
+    <key>UISupportedInterfaceOrientations</key>
+    <array>
+        <string>UIInterfaceOrientationPortrait</string>
+    </array>
+
+    <key>UILaunchScreen</key>
+    <dict>
+        <!-- §0.2's `primary`, resolved from the asset catalogue so the launch surface is the
+             brand's rather than the system's white. -->
+        <key>UIColorName</key>
+        <string>primary</string>
+    </dict>
+
+    <!--
+      D6' §3 and R-17. `location` is what keeps the process running with the screen off — see
+      `Location/PositionService.swift` for why the MQTT socket rides on it rather than on a
+      background task of its own. `remote-notification` is E-01's silent `content-available:1`
+      wake, which `driver_ios.html`'s HIG note names. `processing` is deliberately absent: a
+      `BGProcessingTask` runs when the system feels like it, which is not a schedule a fifteen-second
+      ride offer or a live position stream can be built on.
+    -->
+    <key>UIBackgroundModes</key>
+    <array>
+        <string>location</string>
+        <string>remote-notification</string>
+    </array>
+
+    <!--
+      Purpose strings. English here so the key exists at all; the translations iOS actually shows
+      are in `Resources/*.lproj/InfoPlist.strings`. A missing key is a hard crash the first time the
+      API is called, which is why they are declared even though every value is overridden.
+    -->
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>Your location puts you on the map and lets us send you nearby hires.</string>
+    <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+    <string>MageRide shares your location while you are online or on a trip so passengers can see you coming and the platform can pay you for the distance driven. It stops the moment you go offline.</string>
+    <key>NSLocationTemporaryUsageDescriptionDictionary</key>
+    <dict>
+        <key>PreciseForDispatch</key>
+        <string>Precise location is what lets a passenger find your vehicle at the pickup point.</string>
+    </dict>
+
+    <!--
+      Every build-time value the app reads, in one dictionary, interpolated from the xcconfig.
+      `DriverApp/DI/DriverEnvironment.swift` is the only file allowed to read it — a build flag read
+      at two call sites is a flag that gets overridden at one of them.
+    -->
+    <key>MageRide</key>
+    <dict>
+        <key>ApiBaseUrl</key>
+        <string>$(MAGERIDE_API_BASE_URL)</string>
+        <key>MqttHost</key>
+        <string>$(MAGERIDE_MQTT_HOST)</string>
+        <key>MqttPort</key>
+        <string>$(MAGERIDE_MQTT_PORT)</string>
+        <key>MqttTls</key>
+        <string>$(MAGERIDE_MQTT_TLS)</string>
+        <key>PMTilesUrl</key>
+        <string>$(MAGERIDE_PMTILES_URL)</string>
+    </dict>
+
+    <!--
+      ATS. No exception is declared, so every request is HTTPS — including the Debug configuration's
+      `http://localhost`, which ATS exempts for loopback without an entry. An
+      `NSAllowsArbitraryLoads` here would be a debug convenience that shipped.
+    -->
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsLocalNetworking</key>
+        <true/>
+    </dict>
+</dict>
+</plist>
