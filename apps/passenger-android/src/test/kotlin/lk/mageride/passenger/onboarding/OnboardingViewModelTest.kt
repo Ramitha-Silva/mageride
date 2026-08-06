@@ -2,6 +2,8 @@ package lk.mageride.passenger.onboarding
 
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.runBlocking
+import lk.mageride.passenger.MainDispatcher
+import lk.mageride.passenger.await
 import lk.mageride.shared.data.models.Language
 import lk.mageride.shared.data.models.content.OnboardingSlide
 import lk.mageride.shared.data.models.content.OnboardingSlidesResponse

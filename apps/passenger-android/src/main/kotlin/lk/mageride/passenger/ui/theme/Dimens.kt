@@ -130,6 +130,16 @@ internal object ControlTokens {
     val OtpCellWidth: Dp = 40.dp
     val OtpCellHeight: Dp = 48.dp
 
+    /** The ⚑ inside an inline chip, which sits on `labelSmall` rather than on a row (C078). */
+    val ChipIcon: Dp = 14.dp
+
+    /** SCR-PA-007's `avatar` and SCR-PA-010's sheet handle grip (C078). */
+    val AvatarSmall: Dp = 40.dp
+
+    /** SCR-PA-010's `searchbar` (`height:48px`) and its bottom-sheet grab handle (C078). */
+    val SearchBar: Dp = 48.dp
+    val SheetHandleWidthLarge: Dp = 34.dp
+
     /** SCR-PA-004's `avatar lg` and the `＋` camera badge on it. */
     val AvatarLarge: Dp = 96.dp
     val AvatarBadge: Dp = 32.dp

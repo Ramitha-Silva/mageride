@@ -5,6 +5,10 @@ import io.ktor.client.engine.okhttp.OkHttp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import lk.mageride.passenger.home.LiveMapViewModel
+import lk.mageride.passenger.home.LocalRecentPlaces
+import lk.mageride.passenger.home.RecentPlaces
+import lk.mageride.passenger.home.SearchLocationViewModel
 import lk.mageride.passenger.live.LiveHubTransport
 import lk.mageride.passenger.live.PassengerLiveMap
 import lk.mageride.passenger.live.SignalRLiveHubTransport
@@ -101,6 +105,7 @@ internal fun passengerAppModule(environment: PassengerEnvironment = PassengerEnv
 
         liveMapBindings(environment)
         onboardingBindings()
+        liveMapScreenBindings()
     }
 
 /**
@@ -134,6 +139,26 @@ private fun Module.onboardingBindings() {
         )
     }
     viewModel { ProfileSetupViewModel(profiles = get(), preferences = get()) }
+}
+
+/**
+ * The C078 slice — SCR-PA-006/007/008/010/032.
+ *
+ * One seam, and it is the local one: [RecentPlaces] is `mobile_db_schema.md` §2.2's
+ * `place_recents`, which is a table rather than a route because nothing about a passenger's recent
+ * searches is sent anywhere. Everything else this cluster needs — the live plane, the location
+ * source, two query-svc routes and one iam route — already has a binding.
+ *
+ * The filter is **not** bound. It is a value type held in view-model state, and a `single` would
+ * pin whatever a passenger had switched on when the app launched.
+ */
+private fun Module.liveMapScreenBindings() {
+    single<RecentPlaces> { LocalRecentPlaces(databases = get()) }
+
+    viewModel {
+        LiveMapViewModel(live = get(), locations = get(), iam = get(), query = get(), recents = get())
+    }
+    viewModel { SearchLocationViewModel(query = get(), iam = get(), recents = get()) }
 }
 
 /**

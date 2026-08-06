@@ -17,6 +17,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import lk.mageride.passenger.R
+import lk.mageride.passenger.home.LiveMapScreen
+import lk.mageride.passenger.home.SearchLocationScreen
 import lk.mageride.passenger.onboarding.LocationPermissionScreen
 import lk.mageride.passenger.onboarding.LoginScreen
 import lk.mageride.passenger.onboarding.OnboardingScreen
@@ -74,8 +76,33 @@ internal fun PassengerNavHost(controller: NavHostController, modifier: Modifier 
         }
 
         // ---- C078 · the live map and search ---------------------------------------------
-        placeholder(PassengerRoute.LiveMap, "SCR-PA-010 live map")
-        placeholder(PassengerRoute.SearchLocation, "SCR-PA-008 search location")
+        composable(PassengerRoute.LiveMap.path) {
+            LiveMapScreen(
+                onSearch = { controller.navigate(PassengerRoute.SearchLocation.path) },
+                // AL-23 / US-4.6 — a Mode B marker opens the access request with the vehicle
+                // already filled in. SCR-PA-007's popup is NOT what a private vehicle offers.
+                onRequestModeBAccess = { vehicleId ->
+                    controller.navigate(PassengerRoute.ModeBRequest(vehicleId).path)
+                },
+                // A shortcut and a recent are both destinations, so they go where a chosen place
+                // goes: C079's booking screen. Until that lands they open the search, which is
+                // where a passenger can still act on one.
+                onOpenSavedAddress = { controller.navigate(PassengerRoute.SearchLocation.path) },
+                onOpenRecent = { controller.navigate(PassengerRoute.SearchLocation.path) },
+                onAddAddress = { controller.navigate(PassengerRoute.SavedAddresses.path) },
+            )
+        }
+        composable(PassengerRoute.SearchLocation.path) {
+            SearchLocationScreen(
+                // C079 owns SCR-PA-009; until it lands, choosing a place returns to the map
+                // rather than opening a screen that does not exist yet.
+                around = null,
+                onBack = { controller.popBackStack() },
+                onPlaceChosen = { controller.popBackStack() },
+                onPickOnMap = { controller.popBackStack() },
+                onAddAddress = { controller.navigate(PassengerRoute.SavedAddresses.path) },
+            )
+        }
 
         // ---- C079 · booking --------------------------------------------------------------
         placeholder(PassengerRoute.RideBooking, "SCR-PA-009 ride booking")

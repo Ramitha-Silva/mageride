@@ -86,4 +86,53 @@
     <string name="error_device_mismatch">මෙම කේතය ඉල්ලා ඇත්තේ වෙනත් උපාංගයකිනි. නැවත ආරම්භ කරන්න.</string>
     <string name="error_user_blocked">මෙම ගිණුමට පිවිසිය නොහැක. සහායට සම්බන්ධ වන්න.</string>
 
+    <!-- ==== C078 · the live map cluster (SCR-PA-006/007/008/010/032) ================== -->
+
+    <string name="map_where_to">කොහෙද යන්නේ?</string>
+    <string name="map_reconnecting">නැවත සම්බන්ධ වෙමින්…</string>
+    <string name="map_empty_filtered">ඔබේ පෙරහනට ගැළපෙන වාහන නැත. තවත් දැකීමට ප්‍රකාරයක් හෝ වර්ගයක් නැවත සක්‍රීය කරන්න.</string>
+    <string name="map_empty_nearby">මේ මොහොතේ ඔබ අවට ක්‍රියාකාරී වාහන නැත.</string>
+    <string name="map_empty_offline">අවසන් වරට දැනගත් ස්ථාන පෙන්වයි. නැවත සම්බන්ධ වෙමින්…</string>
+
+    <string name="filter_title">පෙරහන</string>
+    <string name="filter_vehicle_types">වාහන වර්ග</string>
+    <string name="filter_apply">යොදන්න</string>
+    <string name="mode_a">A ප්‍රකාරය — බස් සහ දුම්රිය</string>
+    <string name="mode_b">B ප්‍රකාරය — පෞද්ගලික වාහන</string>
+    <string name="mode_c">C ප්‍රකාරය — ඉල්ලුම මත ගමන්</string>
+
+    <string name="vehicle_bus">බස් රථය</string>
+    <string name="vehicle_train">දුම්රිය</string>
+    <string name="vehicle_motorbike">යතුරුපැදිය</string>
+    <string name="vehicle_three_wheeler">ත්‍රිරෝද රථය</string>
+    <string name="vehicle_flex">ෆ්ලෙක්ස්</string>
+    <string name="vehicle_sedan">සෙඩාන් රථය</string>
+    <string name="vehicle_mini_van">කුඩා වෑන් රථය</string>
+    <string name="vehicle_van">වෑන් රථය</string>
+    <string name="vehicle_truck">ට්‍රක් රථය</string>
+    <string name="vehicle_mini_truck">කුඩා ට්‍රක් රථය</string>
+    <string name="vehicle_unknown">වාහනය</string>
+
+    <string name="map_add_address">එක් කරන්න</string>
+    <string name="map_recent">මෑත</string>
+    <string name="popup_driver">රියදුරු: %1$s</string>
+    <string name="popup_eta_now">පැමිණෙමින්</string>
+    <string name="popup_eta_minutes">මිනිත්තු %1$d</string>
+    <string name="popup_distance">දුර</string>
+    <string name="popup_distance_m">%1$d මී</string>
+    <string name="popup_distance_km">%1$d.%2$d කි.මී.</string>
+    <string name="popup_distance_unavailable">නොදනී</string>
+    <string name="popup_eta">පැමිණෙන්නේ</string>
+    <string name="popup_eta_unavailable">නොමැත</string>
+
+    <string name="search_title">මාර්ගය තෝරන්න</string>
+    <string name="search_current_location">වත්මන් ස්ථානය</string>
+    <string name="search_drop_label">බැසීමේ ස්ථානය</string>
+    <string name="search_drop_placeholder">ස්ථානයක් හෝ ලිපිනයක් සොයන්න</string>
+    <string name="search_predictions">යෝජනා</string>
+    <string name="search_saved">සුරැකි ස්ථාන</string>
+    <string name="search_geocoder_down">සෙවීම දැනට නොමැත. ඔබේ ගමනාන්තය සිතියමෙන් තෝරන්න.</string>
+    <string name="search_select_on_map">සිතියමෙන් තෝරන්න</string>
+    <string name="search_add_address">ලිපිනයක් එක් කරන්න</string>
+
 </resources>

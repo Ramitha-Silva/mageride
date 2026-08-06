@@ -86,4 +86,53 @@
     <string name="error_device_mismatch">இந்தக் குறியீடு வேறு சாதனத்தில் கோரப்பட்டது. மீண்டும் தொடங்கவும்.</string>
     <string name="error_user_blocked">இந்தக் கணக்கால் உள்நுழைய முடியாது. உதவியைத் தொடர்பு கொள்ளவும்.</string>
 
+    <!-- ==== C078 · the live map cluster (SCR-PA-006/007/008/010/032) ================== -->
+
+    <string name="map_where_to">எங்கே செல்ல வேண்டும்?</string>
+    <string name="map_reconnecting">மீண்டும் இணைக்கிறது…</string>
+    <string name="map_empty_filtered">உங்கள் வடிகட்டிக்குப் பொருந்தும் வாகனங்கள் இல்லை. மேலும் பார்க்க ஒரு பயன்முறையையோ வகையையோ மீண்டும் இயக்கவும்.</string>
+    <string name="map_empty_nearby">இப்போது உங்கள் அருகில் இயங்கும் வாகனங்கள் இல்லை.</string>
+    <string name="map_empty_offline">கடைசியாக அறிந்த இடங்கள் காட்டப்படுகின்றன. மீண்டும் இணைக்கிறது…</string>
+
+    <string name="filter_title">வடிகட்டி</string>
+    <string name="filter_vehicle_types">வாகன வகைகள்</string>
+    <string name="filter_apply">பயன்படுத்து</string>
+    <string name="mode_a">பயன்முறை A — பேருந்து மற்றும் ரயில்</string>
+    <string name="mode_b">பயன்முறை B — தனியார் வாகனங்கள்</string>
+    <string name="mode_c">பயன்முறை C — கோரிக்கைப் பயணங்கள்</string>
+
+    <string name="vehicle_bus">பேருந்து</string>
+    <string name="vehicle_train">ரயில்</string>
+    <string name="vehicle_motorbike">மோட்டார் சைக்கிள்</string>
+    <string name="vehicle_three_wheeler">முச்சக்கர வண்டி</string>
+    <string name="vehicle_flex">ஃபிளெக்ஸ்</string>
+    <string name="vehicle_sedan">சிடான்</string>
+    <string name="vehicle_mini_van">சிறிய வேன்</string>
+    <string name="vehicle_van">வேன்</string>
+    <string name="vehicle_truck">லாரி</string>
+    <string name="vehicle_mini_truck">சிறிய லாரி</string>
+    <string name="vehicle_unknown">வாகனம்</string>
+
+    <string name="map_add_address">சேர்</string>
+    <string name="map_recent">சமீபத்திய</string>
+    <string name="popup_driver">ஓட்டுநர்: %1$s</string>
+    <string name="popup_eta_now">வந்துகொண்டிருக்கிறது</string>
+    <string name="popup_eta_minutes">%1$d நிமிடம்</string>
+    <string name="popup_distance">தூரம்</string>
+    <string name="popup_distance_m">%1$d மீ</string>
+    <string name="popup_distance_km">%1$d.%2$d கி.மீ.</string>
+    <string name="popup_distance_unavailable">தெரியவில்லை</string>
+    <string name="popup_eta">வந்து சேரும்</string>
+    <string name="popup_eta_unavailable">கிடைக்கவில்லை</string>
+
+    <string name="search_title">வழியை அமைக்கவும்</string>
+    <string name="search_current_location">தற்போதைய இடம்</string>
+    <string name="search_drop_label">இறங்கும் இடம்</string>
+    <string name="search_drop_placeholder">ஒரு இடத்தையோ முகவரியையோ தேடுங்கள்</string>
+    <string name="search_predictions">பரிந்துரைகள்</string>
+    <string name="search_saved">சேமித்த இடங்கள்</string>
+    <string name="search_geocoder_down">தேடல் தற்போது கிடைக்கவில்லை. உங்கள் இலக்கை வரைபடத்தில் தேர்ந்தெடுக்கவும்.</string>
+    <string name="search_select_on_map">வரைபடத்தில் தேர்ந்தெடு</string>
+    <string name="search_add_address">முகவரி சேர்</string>
+
 </resources>

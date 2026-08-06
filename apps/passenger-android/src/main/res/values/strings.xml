@@ -124,4 +124,58 @@
     <string name="error_device_mismatch">This code was requested on another device. Start again.</string>
     <string name="error_user_blocked">This account cannot sign in. Contact support.</string>
 
+    <!-- ==== C078 · the live map cluster (SCR-PA-006/007/008/010/032) ================== -->
+
+    <!-- SCR-PA-010 · the map, and SCR-PA-032's states drawn over it. -->
+    <string name="map_where_to">Where to?</string>
+    <string name="map_reconnecting">Reconnecting…</string>
+    <string name="map_empty_filtered">No vehicles match your filter. Turn a mode or a type back on to see more.</string>
+    <string name="map_empty_nearby">No vehicles are active near you right now.</string>
+    <string name="map_empty_offline">Showing the last known positions. Reconnecting…</string>
+
+    <!-- SCR-PA-006 · the mode and vehicle-type filter. -->
+    <string name="filter_title">Filter</string>
+    <string name="filter_vehicle_types">Vehicle types</string>
+    <string name="filter_apply">Apply</string>
+    <string name="mode_a">Mode A — Bus &amp; Train</string>
+    <string name="mode_b">Mode B — Private vehicles</string>
+    <string name="mode_c">Mode C — On-demand rides</string>
+
+    <!-- AL-09's canonical types. The wire spellings are C012's; these are what a passenger reads. -->
+    <string name="vehicle_bus">Bus</string>
+    <string name="vehicle_train">Train</string>
+    <string name="vehicle_motorbike">Motorbike</string>
+    <string name="vehicle_three_wheeler">Three-wheeler</string>
+    <string name="vehicle_flex">Flex</string>
+    <string name="vehicle_sedan">Sedan</string>
+    <string name="vehicle_mini_van">Mini van</string>
+    <string name="vehicle_van">Van</string>
+    <string name="vehicle_truck">Truck</string>
+    <string name="vehicle_mini_truck">Mini truck</string>
+    <string name="vehicle_unknown">Vehicle</string>
+
+    <!-- SCR-PA-007 · the Mode A popup. The distance is measured here; the ETA is the server's. -->
+    <string name="map_add_address">Add</string>
+    <string name="map_recent">Recent</string>
+    <string name="popup_driver">Driver: %1$s</string>
+    <string name="popup_eta_now">Arriving</string>
+    <string name="popup_eta_minutes">%1$d min</string>
+    <string name="popup_distance">Distance</string>
+    <string name="popup_distance_m">%1$d m</string>
+    <string name="popup_distance_km">%1$d.%2$d km</string>
+    <string name="popup_distance_unavailable">Unknown</string>
+    <string name="popup_eta">Arrives in</string>
+    <string name="popup_eta_unavailable">Not available</string>
+
+    <!-- SCR-PA-008 · destination search. AL-17: places only, never a route number. -->
+    <string name="search_title">Set route</string>
+    <string name="search_current_location">Current location</string>
+    <string name="search_drop_label">Drop-off</string>
+    <string name="search_drop_placeholder">Search a place or an address</string>
+    <string name="search_predictions">Predictions</string>
+    <string name="search_saved">Saved places</string>
+    <string name="search_geocoder_down">Search is unavailable. Pick your destination on the map.</string>
+    <string name="search_select_on_map">Select on map</string>
+    <string name="search_add_address">Add address</string>
+
 </resources>

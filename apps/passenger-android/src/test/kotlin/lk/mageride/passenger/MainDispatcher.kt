@@ -1,4 +1,4 @@
-package lk.mageride.passenger.onboarding
+package lk.mageride.passenger
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelStore
@@ -8,22 +8,13 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withTimeout
-import lk.mageride.passenger.shell.AppPreferences
-import lk.mageride.shared.data.models.Language
 import kotlin.time.Duration.Companion.seconds
 
-/**
- * `AppPreferences` in memory.
- *
- * The production one is `SharedPreferences`, whose local-unit-test stub answers a default for
- * every member — a view model tested against it would report a first run that had already been
- * completed and vice versa.
- */
-internal class FakeAppPreferences(
-    override var language: Language? = null,
-    override var languagePendingSync: Boolean = false,
-    override var locationRationaleAcknowledged: Boolean = false,
-) : AppPreferences
+// The view-model test harness, shared by every screen group.
+//
+// It began as C077's `OnboardingTestKit`; C078 is the second cluster to need it, which is the point
+// at which "the onboarding tests' helper" becomes "the module's helper" and moves to the root test
+// package. `FakeAppPreferences` stayed behind — it is the onboarding cluster's own seam.
 
 /**
  * Puts `Dispatchers.Main` under test control for a `ViewModel`.

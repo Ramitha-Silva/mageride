@@ -45,6 +45,7 @@ import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
 import org.maplibre.android.style.layers.CircleLayer
 import org.maplibre.android.style.layers.PropertyFactory
+import org.maplibre.android.style.layers.SymbolLayer
 import org.maplibre.android.style.sources.GeoJsonSource
 import org.maplibre.geojson.Feature
 import org.maplibre.geojson.FeatureCollection
@@ -77,11 +78,15 @@ internal data class MapPin(val kind: String, val lat: Double, val lng: Double)
  * @param routePolyline MAP-08's trip line, in order. Empty draws nothing.
  * @param pins §0.3's pickup and dropoff markers.
  * @param geofence MAP-10's 100 m circle, at the point being arrived at. `null` everywhere else.
- * @param camera Where to open. A screen that tracks the passenger moves the camera itself after.
- * @param onRecentre §0.3's recentre FAB ("both apps"). `null` hides it.
+ * @param camera Where to open — read once, when the style loads.
+ * @param onRecentre §0.3's recentre FAB ("both apps"). `null` hides it; a non-null callback shows
+ *   it, and tapping it animates back to [userPosition] before calling back. Δ C078.
  * @param onVehicleTap MAP-07 — the vehicle id under the tap, or nothing when the tap missed. What
  *   a tap *opens* is the screen's: SCR-PA-007 for Mode A, SCR-PA-024 for Mode B, nothing at all
  *   for an engaged Mode C (AL-23, US-7.4).
+ * @param dimmed SCR-PA-032 — what is drawn is **last known**, not live (US-15.2). The markers fade
+ *   rather than disappear, because a passenger who has lost signal still wants to know where the
+ *   bus was; the offline banner above says why they are faded. Δ C078.
  */
 @Composable
 @Suppress("LongParameterList") // Every parameter is one row of D2' §0.3's layer list.
@@ -96,6 +101,7 @@ internal fun MageRideMap(
     darkTheme: Boolean = isSystemInDarkTheme(),
     onRecentre: (() -> Unit)? = null,
     onVehicleTap: ((String) -> Unit)? = null,
+    dimmed: Boolean = false,
 ) {
     val context = LocalContext.current
     val environment = koinInject<PassengerEnvironment>()
@@ -186,6 +192,12 @@ internal fun MageRideMap(
         style?.drawRoute(routePolyline)
     }
 
+    // SCR-PA-032. Opacity rather than removal: the markers are the last thing the platform said,
+    // and erasing them would answer "where was my bus?" with nothing at all.
+    LaunchedEffect(style, dimmed) {
+        style?.setVehicleOpacity(if (dimmed) STALE_OPACITY else 1f)
+    }
+
     LaunchedEffect(style, pins, userPosition) {
         style?.drawPins(pins, userPosition)
     }
@@ -200,7 +212,15 @@ internal fun MageRideMap(
 
         if (onRecentre != null) {
             FloatingActionButton(
-                onClick = onRecentre,
+                // The movement is done HERE, not by the screen. `camera` is read once when the
+                // style loads and the `MapLibreMap` never leaves this composable, so a caller has
+                // no handle to animate with — a FAB that only called back would be an icon that
+                // promises to recentre and does not. What the callback is for is whatever the
+                // screen does *besides* moving. Δ C078.
+                onClick = {
+                    userPosition?.let { map?.centreOn(LatLng(it.lat, it.lng)) }
+                    onRecentre()
+                },
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(MageRideTheme.spacing.sm),
@@ -316,6 +336,19 @@ private fun MapLibreMap.vehicleIdAt(point: LatLng): String? =
         ?.getStringProperty(VehicleLayers.PROP_VEHICLE_ID)
 
 private const val MIN_LINE_POINTS = 2
+
+/** How faded a last-known marker is. Legible, and unmistakably not live. */
+private const val STALE_OPACITY = 0.45f
+
+/** Fades the vehicle symbols and their clusters together, so a cluster cannot outshine its pins. */
+private fun Style.setVehicleOpacity(opacity: Float) {
+    getLayerAs<SymbolLayer>(VehicleLayers.LAYER_VEHICLES)
+        ?.setProperties(PropertyFactory.iconOpacity(opacity))
+    getLayerAs<CircleLayer>(VehicleLayers.LAYER_CLUSTERS)
+        ?.setProperties(PropertyFactory.circleOpacity(opacity))
+    getLayerAs<SymbolLayer>(VehicleLayers.LAYER_CLUSTER_COUNT)
+        ?.setProperties(PropertyFactory.textOpacity(opacity))
+}
 
 /**
  * Forwards the Android lifecycle into [MapView].

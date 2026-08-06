@@ -29,6 +29,8 @@ lk.mageride.passenger
 ├── shell/                    PassengerShell (drawer + Scaffold host), offline banner, update gate,
 │                             connectivity, AppPreferences + PassengerLocale
 ├── onboarding/               C077 · SCR-PA-001…005 + the router, the OTP rules and the error table
+├── home/                     C078 · SCR-PA-006/007/008/010/032 — the map, the filter, the popup,
+│                             the destination field, and RecentPlaces (§2.2's only writer)
 ├── ui/component/             MageRideCta + the cluster-1 controls (C077)
 ├── ui/theme/                 D2' §0.2 tokens — colour, type, spacing/radius/elevation/controls
 ├── map/                      MageRideMap (the whole §0.3 layer stack), MapStyles, VehicleLayers,
@@ -72,6 +74,30 @@ lk.mageride.passenger
    and `MaterialTheme.colorScheme` — never a raw `dp` or hex. `ThemeTokensTest` holds §0.2.
 5. A screen with a `≡` in its app bar calls `LocalDrawerControl.current()`. The drawer itself is
    the shell's; a screen never hosts one.
+
+## Cluster 2 (C078) — the map screen group
+
+- **`MapFilter` is a value, not a service.** SCR-PA-006's answer lives in view-model state and is
+  re-applied to *every* batch. The filter is deliberately **not** folded into the live plane: the
+  plane holds what the *platform* says is visible (entitlement, freshness, engagement) and the
+  filter holds what the *passenger* asked to see. Folding them would make a Mode B vehicle the
+  passenger has no grant for indistinguishable from one they simply switched off.
+- **A tap is routed by mode in the view model** (`LiveMapViewModel.onMarkerTapped` → `MarkerTap`),
+  not by the sheet. Mode A opens SCR-PA-007, Mode B hands SCR-PA-024 the vehicle id (AL-23/US-4.6),
+  Mode C and a tap on a departed marker do nothing (US-7.4). A Mode B vehicle cannot reach the
+  popup composable by any path.
+- **`VehicleLabels` is D2' §0.2's vehicle table as a screen needs it** — display name, Material
+  Symbol, and the **same** `VehicleColors.Legend` colour the map marker is tinted with. A second
+  table would be the second copy of §0.2 that MAP-03 exists to prevent.
+- **`RecentPlaces` is the only door onto `mobile_db_schema.md` §2.2's `place_recents`**, and
+  SCR-PA-008 is its **writer** — the table is "recent / searched locations", so choosing a
+  prediction records one, whether or not a ride follows. Local-only: no `dirty`, no `synced_at`, no
+  outbox. It has no change feed, so a screen showing recents re-reads on resume.
+- **SCR-PA-032 is a state of SCR-PA-010, not a screen.** `LiveMapState.stale` (anything but
+  `LiveStatus.Connected`) fades the marker layers through `MageRideMap(dimmed = …)`; nothing is
+  erased, because a passenger who has lost signal still wants to know where the bus was (US-15.2).
+  `EmptyReason` has three values rather than a boolean so US-7.14 can tell an outage from a filter
+  the passenger set from a genuinely quiet area.
 
 ## The live plane — read this before touching `live/`
 
@@ -127,6 +153,21 @@ lk.mageride.passenger
   behind a `Mutex` and shared. Six §2 tables and eight screen groups: do not call `openPassenger()`
   anywhere else.
 
+## Contract gaps this app is living with
+
+- **No route number exists for a vehicle anywhere.** Neither `VehicleFrame` (socket) nor
+  `NearbyVehicle` (snapshot) carries one, so SCR-PA-007 shows the vehicle type where the wireframe
+  shows *"Route 138 — Pettah → Maharagama"*. A `query.yaml` change, not an app change.
+- **`VehicleFrame` carries no timestamp**, so SCR-PA-007's *"last seen Ns ago"* cannot be drawn —
+  the client knows when it *received* a frame, not when the sample was taken, and the difference is
+  exactly the lag the label is for.
+- **There is no `GET /v1/vehicles/{id}`.** The popup's ETA, driver and plate come from
+  `GET /v1/nearby` matched by id, centred on the **passenger** — `etaSeconds` is defined as seconds
+  to the querying passenger, so a lookup centred on the vehicle would answer roughly zero.
+- **AL-17 beats D2' §SCR-PA-008.** That section still says the drop field accepts a route number and
+  that predictions blend routes with places. The wireframe and AL-17 say geo-only, and geo-only is
+  what is built. **US-7.9 therefore has no screen in this app**, though `getBusesOnRoute()` exists.
+
 ## Things that will bite
 
 - **`org.jetbrains.kotlin.android` is not applied.** AGP 9 has built-in Kotlin support and refuses
@@ -156,6 +197,12 @@ lk.mageride.passenger
 - **`MagicNumber` excludes `ui/theme` and nothing else.** A hex or a `dp` anywhere else is a build
   failure, which is the same rule as "never a raw dp or hex" above, enforced.
 - **`kotlin-test` resolves to no variant under AGP's built-in Kotlin.** Use `libs.kotlin.testjunit`.
+- **The view-model test harness is `lk.mageride.passenger.MainDispatcher`** (root test package, not
+  `onboarding`). `own(model)` gives a view model a lifetime; anything with a `while (…) { delay(…) }`
+  in it must be owned or it wakes inside the next class's `resetMain()`.
+- **A `StateFlow` predicate of "something is on screen" is usually wrong on SCR-PA-008.** The
+  predictions list is never empty — the recents and saved addresses fill it before a lookup goes
+  out — so `await { predictions.isNotEmpty() }` passes on the *previous* state.
 - **Unit tests run with `isReturnDefaultValues = true`** and the working directory is the module
   directory, which is what lets `ManifestTest` and `StringResourceTest` read the real files.
 - **iOS does not compile on this host** (root CLAUDE.md). C094's SwiftUI shell mirrors these tokens

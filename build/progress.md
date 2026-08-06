@@ -104,7 +104,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C075 | driver-android-comms-safety-support | 4a | DONE | 2026-08-03 | **322 tests green** (was 283; 39 new across 5 suites), `assembleDebug` + `detekt` + `ktlintCheck` clean; SCR-DA-031/032/033/033a/034/035 built to the wireframes. **The LiveKit Android SDK cannot be resolved in this repo** — it depends on `audioswitch`, published only on JitPack, and the repository set is `google()` + `mavenCentral()` under `FAIL_ON_PROJECT_REPOS` — so the signalling half of SCR-DA-031 is real and the media half reports `NO_MEDIA_CLIENT`, which is exactly AL-48's condition: the screen offers *"Call normally instead?"* and logs `voip_failed`. Landing a real engine is one binding (`VoipEngine`). SCR-DA-015's Call and SOS buttons now **navigate**: two parameterised routes added (`VoipCall`, `Sos`), and `POST /v1/calls/start` is made by one screen so one tap writes one `comms.call_log` row. The daily-fee refund is a **category** (`daily_fee_refund` → Finance), not an endpoint, and shares SCR-DA-033a with *"Raise a ticket"*. SCR-DA-034 reads `mobile_db_schema.md` §1.6 because no operation lists notifications, which is also why it works offline; `DriverDatabase` is the app's deferred one-handle open of the local DB. Six spec gaps: no positionless `POST /v1/sos`, no spec number for the SOS confirmation window, no server-side notification list, `TicketEventKind.ASSIGNED` is unrenderable, no `TK-` ticket series exists, and `category` is free text. Zero new dependencies |
 | C076 | passenger-android-shell | 4a | DONE | 2026-08-03 | **59 tests green** in a new `apps/passenger-android` unit-test source set, `assembleDebug` + `detekt` + `ktlintCheck` clean; C025's walking skeleton **deleted** (3 files) and replaced by the real shell — Koin graph, `MageRideTheme` from D2' §0.2, trilingual `values`/`values-si`/`values-ta`, a `NavHost` registering **every** C077–C084 destination as a placeholder, SCR-PA-033's modal drawer (the passenger app HAS a hamburger; AL-31 is the driver's rule), the whole D2' §0.3 map stack (MAP-01..08 + MAP-10, with MAP-04 as pure-Kotlin interpolation), and the SignalR plane: 19 res-7 cells with 30 s hysteresis, D6' §5.4's rejoin-then-resync recovery, and a reconnect loop of our own because **the SignalR Java client has no `withAutomaticReconnect()`**. Hub payloads are decoded by `MageRideJson` and not by Gson — Gson binds enums by Kotlin name and C012's are `@SerialName`d — which is why `com.google.code.gson` is now an explicit dependency (signalr declares it at runtime scope). **MAP-09 is not built**: no app-facing contract exists for signed offline bundles. **FCM registered but inert** (no `google-services.json`, C124); **Play Integrity wired but not verified on a device**; **the wave-1 `:shared` gate was red on arrival** and not from anything here — closed straight afterwards by MCS-04, whose handoff is below |
 | C077 | passenger-android-auth-onboarding | 4a | DONE | 2026-08-06 | **96 tests green** (was 59; 37 new across 5 suites), `assembleDebug` + `detekt` + `ktlintCheck` clean. SCR-PA-001…005 built to `specs/wireframes/passenger_android.html`. **Get Started is pinned below the language list** (AL-36/US-1.3) — D2' §SCR-PA-002's own sketch still draws the CTA above a `SegmentedButton`, and the wireframe supersedes it. **Phone-OTP only** (AL-07): no Google button exists in this app. The carousel is content-svc's (`GET /v1/content/onboarding/passenger`), which **closes C068's recorded gap** — that route did not exist when the driver app shipped bundled slides — with a trilingual bundled fallback for a first launch on a bad connection. Resend is refused **locally** inside US-1.10's 60 s window so a tap cannot spend one of D-32's five. Three gaps recorded: no photo upload route exists for a passenger avatar, SMS Retriever needs a signing hash C103 owns, and US-1.3a's operating city has no passenger screen in any spec |
-| C078 | passenger-android-live-map-search | 4a | PENDING | | |
+| C078 | passenger-android-live-map-search | 4a | DONE | 2026-08-06 | **125 tests green** (was 96; 29 new across 3 suites), `assembleDebug` + `detekt` + `ktlintCheck` clean. SCR-PA-006/007/008/010/032 built to `specs/wireframes/passenger_android.html`. The filter is a pure value type re-applied to every batch **client-side** — a toggle costs no query, asserted by call count. AL-23 routing is in the view model, not the sheet: Mode A opens SCR-PA-007, Mode B returns the vehicle id for SCR-PA-024, Mode C does nothing (US-7.4). **AL-17 held against D2'**: SCR-PA-008 is geo-only and `getBusesOnRoute` is never reached from it — D2' §SCR-PA-008 says the opposite and needs a micro-change-set, which leaves **US-7.9 with no screen anywhere**. SCR-PA-007's ETA/driver/plate come from `GET /v1/nearby` on tap (the socket frame carries none of them) centred on the **passenger**, because `etaSeconds` is defined as seconds to the querying passenger; **the route number exists in no contract at all**. §2.2's `place_recents` now has its writer — choosing a prediction on SCR-PA-008 — which is what fills SCR-PA-010's *Recent* rows. Fixed a C076 latent: the recentre FAB called back but nothing outside `MageRideMap` holds the `MapLibreMap`, so it moved nothing |
 | C079 | passenger-android-booking | 4a | PENDING | | |
 | C080 | passenger-android-ride-payment | 4a | PENDING | | |
 | C081 | passenger-android-package-history | 4a | PENDING | | |
@@ -12455,3 +12455,96 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   - The splash already resumes an active ride (`GET /v1/rides/passenger/{id}/active` →
     `PassengerRoute.ActiveRide`), so **C080 does not need to add that**; it needs the screen the
     route points at.
+
+- **Component:** C078 passenger-android-live-map-search — 2026-08-06
+- **Status:** DONE — `./gradlew :apps:passenger-android:testDebugUnitTest :apps:passenger-android:assembleDebug`
+  exits 0: **125 tests, 0 failures** (96 → 125; +29 across `MapFilterTest`, `LiveMapViewModelTest`,
+  `SearchLocationViewModelTest`). `detekt` and `ktlintCheck` clean. SCR-PA-006, 007, 008, 010 and 032
+  are built against `specs/wireframes/passenger_android.html`; all four Definition-of-Done lines have
+  a named test.
+- **Notes:**
+  **What this component actually owns.** C076 built the live plane — the socket, R-06's nineteen
+  res-7 cells, the 30 s hysteresis, D6' §5.4's rejoin-then-resync — and asserts all of it in
+  `PassengerLiveMapTest`. C078 is the layer above: *what a passenger sees and what a tap does.* The
+  split is why `LiveMapViewModelTest` runs the **real** `PassengerLiveMap` over
+  `FakeLiveHubTransport` rather than a stub: every rule under test lives on the boundary between the
+  two, and a stubbed plane would let the tests assert a shape production does not have.
+
+  **The filter is a value, and it is applied on the device.** `MapFilter` is a pure data class with
+  no Android in it, re-applied to *every* batch rather than to the first one — a screen that filtered
+  once and appended would show a type the passenger had switched off the moment that vehicle next
+  moved. SCR-PA-006's own state line calls it *"instant client-side"*, and that is asserted literally:
+  `toggling_a_mode_redraws_from_what_is_already_in_hand` pins the backend call count across a toggle,
+  so a re-query cannot creep in behind a switch. The unfiltered frames are kept in state
+  (`lastFrames`) precisely so switching back costs nothing. AL-09 has ten types and SCR-PA-006 draws
+  eight chips, so a type with **no** chip (truck, mini-truck) is never hidden by the chips — the
+  alternative silently erases every lorry the first time one chip is touched.
+
+  **AL-23 is decided in the view model, not in the sheet.** `onMarkerTapped` returns a `MarkerTap`:
+  `ShowPopup` for Mode A, `RequestModeBAccess(vehicleId)` for Mode B, `Ignored` for Mode C and for a
+  tap on a marker that has already left. A Mode B vehicle therefore cannot reach SCR-PA-007 by any
+  path — the popup composable is never entered — and US-7.4's *"standby on-demand vehicles do not
+  show info when tapped"* is a branch rather than a layout omission.
+
+  ### Four gaps found
+
+  1. **D2' §SCR-PA-008 directly contradicts AL-17 — the wireframe wins, and US-7.9 is left with no
+     screen.** D2' says the drop field *"accepts a destination place **or** a public route number
+     (e.g. `138`)"* and that predictions *"blend matched public routes (bus/train) with
+     Nominatim/Photon geocoded places"*, and sketches a route row. AL-17, the wireframe's own state
+     line (*"route numbers are **not** accepted here … no route rows"*) and this component's prompt
+     fence all say the opposite. The wireframe is the approved baseline and AL-17 is the later
+     decision, so **geo-only** is what is built and
+     `typing_a_route_number_returns_places_and_never_a_route` asserts both halves — the digits go to
+     the geocoder, and `getBusesOnRoute` is never called. **D2' §SCR-PA-008 needs a
+     micro-change-set.** The consequence is worth stating plainly: **US-7.9** (*"search for a bus
+     route number and see all active buses on that route"*) now has **no screen anywhere in the
+     passenger wireframe**, even though `QueryApi.getBusesOnRoute()` and `GET
+     /v1/routes/{routeNumber}/buses` both exist and work. Whoever resolves the D2' conflict has to
+     decide where that story lives; it is a missing screen, not a missing route.
+  2. **No contract carries a route number for a vehicle.** SCR-PA-007's wireframe headline is
+     *"Route 138 — Pettah → Maharagama"*. `VehicleFrame` (the socket) carries id, coordinate,
+     heading, speed, type and mode; `NearbyVehicle` (the snapshot) adds driver, ETA and plate — and
+     **neither has a route**. The popup shows the vehicle type as its headline rather than inventing
+     one. Fixing this is a `query.yaml` change, not an app change.
+  3. **`VehicleFrame` carries no timestamp, so SCR-PA-007's *"last seen 6s ago"* cannot be drawn.**
+     The wireframe puts it in the badge row and uses it again for the stale state. The client knows
+     when *it* received a frame but not when the sample was taken, and the two differ by exactly the
+     lag the label exists to communicate. Recorded rather than approximated.
+  4. **`GET /v1/nearby` is the only way to reach a single vehicle's detail.** There is no
+     `GET /v1/vehicles/{id}`, so the popup asks for a radius around the passenger and matches by id.
+     That is correct rather than merely expedient — `NearbyVehicle.etaSeconds` is defined as *"seconds
+     to the querying passenger"*, so the lookup **must** be centred on the passenger; centred on the
+     bus it would answer roughly zero and tell everyone their bus had arrived. With no fix there is
+     no reference point at all, and the popup says the ETA is unavailable instead of inventing one.
+
+  ### Two things fixed that were not this component's
+
+  - **C076's recentre FAB moved nothing.** `onRecentre` was a callback, `camera` is read once when
+    the style loads, and the `MapLibreMap` never leaves `MageRideMap` — so no caller could animate,
+    and the FAB was an icon promising to recentre that did not. The movement is now done inside
+    `MageRideMap` against `userPosition`; the callback remains for whatever a screen does *besides*
+    moving. C078 is the first component to draw the FAB, which is why it surfaced here.
+  - **§2.2's `place_recents` had no writer.** SCR-PA-010's sheet draws a *"Recent"* section and the
+    table existed with `selectRecent`/`insert`/`touch`/`deleteBeyondCap` unused. `RecentPlaces` is now
+    the seam and **SCR-PA-008 is the writer** — the table is *"recent / searched locations"* and
+    searching is what happens there, so a passenger who searched and then changed their mind still
+    gets the row. Local-only (no `dirty`, no `synced_at`, no outbox), coordinate-derived row id at
+    five decimals so choosing the same place twice bumps one row, `touch` before `insert` so a repeat
+    keeps its `use_count`. C079 reads the same seam.
+
+  ### For C079–C084
+
+  - **`RecentPlaces` is bound and is the only door onto §2.2's `place_recents`.** Read it; do not open
+    `PassengerDatabase` for places again. It has no change feed, so a screen that shows recents
+    re-reads on resume — `LiveMapScreen` does this with `repeatOnLifecycle(RESUMED)`.
+  - **`MapFilter`, `VehicleLabels` and `VehicleDetail` are reusable.** `VehicleLabels` is D2' §0.2's
+    vehicle table as a screen needs it (name, icon, and the **same** `VehicleColors.Legend` colour the
+    map marker uses). A second copy of that table is exactly what MAP-03 exists to prevent.
+  - **The test kit moved to `lk.mageride.passenger.MainDispatcher`** (out of the onboarding package,
+    since C078 is the second cluster to need it). `FakeAppPreferences` stayed in
+    `onboarding/FakeAppPreferences.kt` — it is that cluster's own seam.
+  - **`SearchLocationScreen`'s `onPlaceChosen` currently pops back to the map.** C079 owns SCR-PA-009
+    and should route it there; the recent row is already written by the time the callback fires.
+  - **A `GeocodedPlace` is what every destination hand-off in this app carries** — the shortcuts, the
+    recents and the predictions all resolve to one, and `toPlace()` turns it into a booking `Place`.
