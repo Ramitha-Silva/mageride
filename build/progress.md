@@ -112,7 +112,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C083 | passenger-android-settings-addresses | 4a | DONE | 2026-08-06 | **265 tests green** (was 236; 29 new), `assembleDebug` + `detekt` + `ktlintCheck` clean. SCR-PA-026/026a/027/027b built and SCR-PA-033's identity header filled in. **Home and Work are the `isHome`/`isWork` flags, drawn as two always-present rows whose ✎ is the wireframe's only "save Home & Work by pin" control** — which is what lets SCR-PA-026a keep to AL-26's four fields and ask nothing about shortcuts. **AL-26 is structural on Edit Profile**: `PassengerProfileRepository.update` has no `language` parameter, so no screen reached from Settings can send one. **The reverse geocode is a pre-fill and never a gate** (AL-14) — a 404/503 leaves an address that can still be saved. **Four gaps**: `iam.yaml`'s `DefaultPaymentMethod` predates AL-57/AL-59 so a **wallet** default is device-local (the wireframe's Cash/LankaQR/OnePay row needs a micro-change-set), no contract carries a human-readable passenger id (the ULID is drawn where the wireframe prints `PAX-90431`), no avatar upload route exists anywhere (the 📷 control is drawn disabled, as C077 did), and `mobile_db_schema.md` §2.1's on-device `saved_addresses` still has no writer |
 | C084 | passenger-android-comms-safety-support | 4a | DONE | 2026-08-06 | **291 tests green** (was 265; 26 new across 3 suites), `assembleDebug` + `detekt` + `ktlintCheck` clean. SCR-PA-028/029/030/030a built and SCR-PA-031 finished to its frame; **the last three placeholders are gone, so every route in `PassengerNavHost` now draws a real screen** and `RoutePlaceholder` was deleted with them. **AL-48 end to end**: the VoIP screen's signalling half is real and its media half reports `NO_MEDIA_CLIENT`, so *"Call normally instead?"* is the only outcome this build reaches — a **dependency wall**, not a decision (`io.livekit:livekit-android` needs JitPack and `settings.gradle.kts` is C001's), exactly as C075 found on the driver side; the fallback writes a `direct_dial` row after a `voip_failed` one so the platform can tell a fallback from a preference. **SCR-PA-015's `⛨ SOS` navigates now rather than raising the alarm inline** — one caller of `POST /v1/sos` is what keeps one emergency to one row on the operator's live feed — and D-34's share link is minted **after** the alarm, best-effort, because the five-second budget is not for a URL. **This app passes `?lang=` on the FAQ where the driver app deliberately does not**: AL-26 makes the passenger's language device-first and the server write is allowed to lag, so the FAQ is asked for in the language the app is *drawing* in. **Three gaps**: `POST /v1/sos` has no positionless form (BR-29.4 contemplates one for the web surface only), no contract mints the wireframe's `#TK-4521` ticket number or `PAX-90431-0617` trip number, and no passenger-facing category routes to the Finance queue so SCR-PA-030 has no quick action. Also fixed a pre-existing flake in C083's `SettingsViewModelTest` |
 | C085 | driver-ios-shell | 4b | PARTIAL | 2026-08-06 | **Written in full; NOT compiled — this host cannot build iOS** (root CLAUDE.md), so no DoD line is verified and the status stays PARTIAL until the first `xcodebuild` on macOS. What *is* verified here: `:shared:testDebugUnitTest detekt ktlintCheck` green and `:shared:compileKotlinIosArm64` type-checking every Kotlin line added. **`:shared:assemble`'s three-year-old metadata defect is fixed** — C025 recorded it as blocking `assembleXCFramework`, and it is C085 that hits it: the three `expect class`es that inherit an interface now re-declare its members and the nine actuals are `actual override`. **`shared/kmp/src/iosMain/di` is new and is the seam `Koin.kt` anticipated**: Swift cannot build a Koin module or resolve one (`module`/`single`/`get` are all inline+reified and are not exported at all), so `startIosGraph(IosAppConfig)` takes primitives and answers typed properties, and `IosFlowWatcher<T>` is how Swift collects a `Flow`. **The position pipeline is Kotlin in `iosMain`, not Swift** — every collaborator is on the Kotlin side of the bridge and `Duration`/nullable-`Int`/`copy` all cross it lossily; Swift owns the fix source and the socket. 26 Swift files + 6 XCTest suites, an `.xcodeproj` **generated from the tree** by a committed script, the §0.2 palette as an asset catalogue the test reads back, and si/ta/en `Localizable.strings` + `InfoPlist.strings`. **iOS 16.0** chosen as the deployment target (C000 recorded that no spec states one). Two wireframe/spec conflicts and three gaps recorded — see the handoff |
-| C086 | driver-ios-auth-onboarding | 4b | PENDING | | |
+| C086 | driver-ios-auth-onboarding | 4b | PARTIAL | 2026-08-06 | **Written in full; NOT compiled — this host cannot build iOS** (root CLAUDE.md), so the DoD is unverified and the status stays PARTIAL until `xcodebuild … test` on macOS. What *is* verified here: `:shared:testDebugUnitTest detekt ktlintCheck` green (822 tests, unchanged) and `:shared:compileKotlinIosArm64` type-checking both Kotlin additions. SCR-DI-001/002/003/003a/007 built — 25 Swift files, **8 XCTest suites** across 7 test files, **91 keys × si/ta/en** (Android's key names and Android's translations, so the two apps' string tables diff). **Every seam a model depends on is a Swift protocol**, because a Kotlin *class* cannot be stood in for from Swift and `AuthSessionManager` is one — `SharedDriverSessions` / `ApiOnboardingRepository` / `ApiDriverProfileRepository` convert and forward and decide nothing. **A Kotlin exception does not cross the bridge as itself** (`NSError.userInfo["KotlinException"]`), which every later screen group needs — the unwrap is `OnboardingErrors.kotlinCause`. **Two shared-module additions, both because Swift cannot express the operation**: `capturedDocument(…)` in `iosMain` (a `KotlinByteArray` has one Objective-C message per byte and a licence photo is three million of them) and `Conditional.etagOrNull` (a generic Kotlin interface exports with its type parameter erased, so `as? Conditional.Value<T>` has no spelling in Swift). **`DriverLocale` is the Section-C answer to `Activity.recreate()`** — iOS has no per-app locale API on the 16.0 floor, so the app bundle's string lookups are redirected now and `AppleLanguages` is written for the next launch. **SCR-DI-007 has two rows, not Android's five**, which is D2' SCR-DI-007's own iOS clause. One fence deliberately held: the AL-28 carousel stays on bundled copy to match C068 even though MCS-03 has since shipped `GET /v1/content/onboarding/driver` — **both driver apps should move together**, see the handoff
 | C087 | driver-ios-vehicle-onboarding | 4b | PENDING | | |
 | C088 | driver-ios-dashboard-dispatch | 4b | PENDING | | |
 | C089 | driver-ios-delivery | 4b | PENDING | | |
@@ -13435,3 +13435,136 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   the first request; and **`INFOPLIST_KEY_*` build settings are only read when
   `GENERATE_INFOPLIST_FILE` is YES**, which this target's is not, so anything set that way silently
   does nothing.
+
+
+- **Component:** C086 driver-ios-auth-onboarding — 2026-08-06
+- **Status:** PARTIAL — **cluster 1 is written in full and none of the Swift has been compiled.**
+  This Linux host cannot build iOS (root `CLAUDE.md`, "Build Host"), so the Verify line
+  (`xcodebuild -scheme DriverApp … test`) has never run and every DoD line about a screen matching
+  its wireframe is unverified by a build. It stays PARTIAL until the first `xcodebuild` on macOS.
+
+  **What IS verified here.** `./gradlew :shared:testDebugUnitTest :shared:detekt :shared:ktlintCheck`
+  — 822 tests green, 0 failed, unchanged from C085. `./gradlew :shared:compileKotlinIosArm64` —
+  type-checks both Kotlin files this component touched, which is the only compiler any of this
+  passed through. Plus two checks written against the tests that will run on the Mac: the three
+  `Localizable.strings` files were diffed the way `LocalizationTests` diffs them (91 keys, identical
+  key sets, no value left equal to its English, every `%1$d` surviving into si and ta), and every
+  string key referenced anywhere in `DriverApp/` was cross-checked against `en.lproj`.
+
+  **The five screens.** SCR-DI-001 splash (the boot router), SCR-DI-002 language/city, SCR-DI-003
+  phone + OTP, SCR-DI-003a profile setup, SCR-DI-007 permissions — each behind a `Model` that holds
+  a plain state struct, which is what makes them testable at all. `Nav/DriverDestinations.swift`
+  routes all five to **one** `OnboardingDestinationView` arm rather than five inline screens: `body`
+  is an implicit `@ViewBuilder`, so every arm of that switch wraps every other arm's type in another
+  `_ConditionalContent`, and thirty placeholders is already a type the compiler works at. **C087–C093
+  should do the same** — one arm per screen group, expanded in the group's own file.
+
+  **Every seam a model depends on is a Swift protocol, and that is not a style choice.**
+  `AuthSessionManager` is a Kotlin *class*, and Swift cannot stand in for one; `ContentApi` and
+  `RegistryApi` are exported interfaces but their suspend members reach Swift as completion-handler
+  methods a fake has to re-declare exactly. So `DriverSessions`, `OnboardingRepository`,
+  `DriverProfileRepository`, `OnboardingPreferences` and `DriverPermissions` are protocols, and the
+  Kotlin-backed implementations beside them (`SharedDriverSessions`, `ApiOnboardingRepository`,
+  `ApiDriverProfileRepository`, `UserDefaultsOnboardingPreferences`, `SystemDriverPermissions`)
+  convert and forward and **decide nothing**. Everything that decides is on the Swift side of the
+  line and has a test. Take the same shape rather than injecting `IosAppGraph` into a view model.
+
+  **A Kotlin exception does not cross the bridge as itself, and this will bite every screen group.**
+  Kotlin/Native wraps whatever a suspend function threw in an `NSError` and puts the original under
+  `userInfo["KotlinException"]`. A `catch let error as MageRideError` therefore **never matches**,
+  and every failure in the app would quietly resolve to the generic message. `OnboardingErrors
+  .kotlinCause(of:)` is the unwrap, written once — call it before you test an error for anything.
+
+  **Two additions to `:shared`, both because Swift cannot express the operation honestly.**
+  (1) `iosMain/.../data/api/IosCapturedDocument.kt` — `FileUpload` takes a `ByteArray`, which exports
+  as `KotlinByteArray`, whose only Swift-facing mutator is `set(index:value:)`: one Objective-C
+  message per byte, and a three-megabyte licence photograph is three million of them. Kotlin does the
+  copy with one `memcpy`, so Swift passes the `NSData` it already holds. (2) `Conditional.etagOrNull`
+  beside the existing `valueOrNull` — Kotlin/Native exports a **generic interface with its type
+  parameter erased**, so what reaches Swift from `getOperatingCities` is an unparameterised
+  existential and `as? Conditional.Value<OperatingCityListResponse>` has no spelling at all. The two
+  properties together are the whole of what an app needs from a conditional GET, and neither casts.
+  Both are the same argument `IosAppConfig` and `IosMqttPlan` already make: the bridge carries values,
+  and whichever side can express the operation owns it.
+
+  **`DriverLocale` is this platform's answer to `Activity.recreate()`, and it is the one place C086
+  had to invent something.** D-26 makes the language a *user* preference; Android wraps
+  `attachBaseContext` and rebuilds the Activity. iOS has **no per-app locale API on the 16.0 floor**
+  and no `recreate()` — and an app may not relaunch itself to change a radio button. So the switch is
+  two halves: the app bundle's `localizedString(forKey:value:table:)` is redirected to the chosen
+  `.lproj` (via `object_setClass`, which is why `MageRideColor.bundle`, `Bundle.main` and every
+  `Text(_:bundle:)` C085 wrote all follow it without a call-site change), and `AppleLanguages` is
+  written so the **next** launch moves everything the app does not render itself — the system
+  permission sheets, the share sheet, `Locale.current`. Both halves are needed and neither is
+  sufficient. Applied from `DriverGraph.init`, before the first frame. **C092's SCR-DI-029 language
+  row calls the same `DriverLocale.apply`**; views already on screen do not re-render, which is
+  invisible in cluster 1 (it navigates immediately) and is that screen's problem to solve.
+
+  **Section C deltas taken here, each called out at its call site.**
+
+  | Concern | Android (C068) | iOS, here |
+  |---|---|---|
+  | Permissions | five rows: location, background location, notifications, battery, overlay | **two** — D2' SCR-DI-007's own iOS clause. Foreground/background is one grant; iOS has no battery-optimisation exemption and no draw-over-other-apps at all |
+  | Carousel | `HorizontalPager` | paged `TabView` + the wireframe's own dots (`.page(indexDisplayMode: .never)`; the system indicator is a circle in a colour a `TabView` picks) |
+  | Language change | `Activity.recreate()` | bundle redirect now + `AppleLanguages` next launch — see above |
+  | `‹ Back` on SCR-DI-003 | pops the graph; from the number half that leaves the app | drawn **only on the code half**. The pre-session flow is a replaced root, not a stack, and iOS has no "leave the app" — which is also the state the wireframe draws the control in |
+  | Profile photo | `PickVisualMedia` | `PhotosPicker` (the wireframe's own Δ iOS note), `capturedVia: gallery` |
+  | Denied permission | asked twice, then Settings | Settings on the **first** refusal — iOS shows no sheet at all for a permission it has already refused, so asking again is a tap that does nothing visible |
+
+  **One fence deliberately held, and it needs a paired follow-up.** AL-28/BR-25.1 says the three
+  carousel slides come from content-svc, and **MCS-03 has since shipped
+  `GET /v1/content/onboarding/{audience}`** — C076's passenger app already consumes it. C068 shipped
+  bundled trilingual copy because the route did not exist yet, and this component's fence is
+  *"parity-fenced to C068; only D2 Section C platform deltas differ"*. Moving one driver app onto the
+  route and not the other would make the two carousels differ on a first run, so **C086 stayed on
+  bundled copy** (`FeatureSlides.swift`, same three keys and the same three sentences as Android's).
+  **This is a micro-change-set for C068 + C086 together**, not for either alone: one change, both
+  apps, server copy with the bundled set as the offline fallback (which is exactly the shape C076
+  already built and is worth copying rather than redesigning). Note the dependency wall C076 also
+  hit: `illustrationRef` is an asset key, this target ships no artwork and no remote image loader, so
+  the slide illustration is an SF Symbol either way until C103 supplies six assets.
+
+  **Gaps found, none blocking.**
+  1. **The wireframe's SCR-DI-002 prints `· from config.operating_cities` beside the city label.**
+     It is the wireframe telling a reader where the list comes from, not copy for a driver — rendering
+     a database table name in three scripts would be nonsense — so it is not drawn. C068 did not draw
+     it either. Recorded rather than filed, because the two apps agree.
+  2. **`app_name` had no `Localizable.strings` key on iOS.** C085 put the Home-screen name in
+     `InfoPlist.strings` (`CFBundleDisplayName`), which the splash cannot read as body text. Added as
+     `app_name` with Android's three values; the two are the same words and must not drift.
+  3. **The splash mark is an SF Symbol.** `Assets.xcassets`' app-icon slot is empty (C103 owns the
+     artwork) and the wireframe's white "M" square would be a hard-coded letter on a screen that
+     exists in three scripts. Swap it when the icon lands.
+  4. **`DocumentCaptureTarget` carries no title mapping**, matching Android exactly — `labelRes()`
+     lives in C069 there, so the six `capture_target_*` keys are **C087's** to add with the scanner.
+
+  **What C087 inherits, and what it must not re-invent.**
+  - `Capture/DocumentCapture.swift` is the seam and it is already wired: `CapturedImage` (bytes +
+    AL-43 provenance, `asDocument()` bridges to `CapturedDocument`), `DocumentCaptureTarget` (six
+    slots; **`DELIVERY_PROOF` is absent** — the delivery cluster is C089's and adds its own case) and
+    `DocumentCaptureCoordinator`, a `@MainActor` `ObservableObject` held by `DriverGraph`. SCR-DI-005
+    reads `pending`, shows the right title, and calls `deliver(_:)`; the requesting screen observes
+    `result` and calls `consume()`. **The route is already a full-screen takeover** presented over
+    the pre-session root, so Profile Setup is still there when the image comes back.
+  - `UI/OnboardingControls.swift` and `UI/FormControls.swift` are the wireframe's shapes as views —
+    `SectionLabel`, `GroupedList`/`GroupedRow`, `SelectionRow`, `IllustrationPanel`, `PageDots`,
+    `LabelledTextField`, `PhoneNumberField`, `OtpField`, `CaptureTile`, `ExtractedFieldRow`,
+    `NoticeCard`, `AdminVerifyChip`, `FormErrorText`. **C087's four document steps draw the same
+    tiles and the same extract card**; take them from here rather than redrawing one. `String
+    .localised` / `.localisedFormat(_:)` and `Text(key:)` are the only three ways this target looks a
+    string up, and they are the reason `DriverLocale`'s redirect reaches everything.
+  - `OnboardingErrors` covers cluster 1's codes only. C087's four vehicle codes
+    (`registration-exists`, `mode-not-allowed`, `not-owner`, `vehicle-not-found`) are already
+    translated on the Android side — copy the keys and the values, and extend the `switch`.
+
+  **Build host —** no Docker, no compose stack; the replica stayed down throughout. Gradle only.
+  Three things worth knowing next time. **`:shared:compileKotlinIosArm64` is still the only compiler
+  this side of the Mac** — it caught nothing this session, which is what a two-file Kotlin change
+  should do, but running it is a minute against an hour of guessing. **The `.pbxproj` generator picks
+  up a new directory as a new group with no argument** (`python3 apps/driver-ios/Tools/
+  generate_xcodeproj.py` → 51 app sources, 13 test sources); re-run it and commit the diff, and note
+  it also re-scans `.lproj`, so the strings files need no separate step. And **`SWIFT_STRICT_
+  CONCURRENCY` is `minimal` for a reason that is now load-bearing**: the five screens are `@MainActor`
+  *types* rather than `@MainActor` initialisers, because every member reads a main-actor model and a
+  helper added later would otherwise be the one non-isolated member that stops compiling. C103 turns
+  the setting up; the annotations are written for it.

@@ -31,3 +31,95 @@
 
 "route_placeholder_title" = "තවම සාදා නැත";
 "route_placeholder_body" = "%1$@ එහි තිර කාණ්ඩය සමඟ ලැබේ.";
+
+/*
+  MageRide Driver — iOS · C086 driver-ios-auth-onboarding. Sinhala.
+  Same keys and the same translations as `values-si/strings.xml`.
+*/
+
+/* app */
+"app_name" = "MageRide රියදුරු";
+
+/* action */
+"action_continue" = "ඉදිරියට";
+"action_back" = "ආපසු";
+"action_edit" = "සංස්කරණය";
+"action_tap_to_capture" = "ඡායාරූපය ගැනීමට තට්ටු කරන්න";
+"status_done" = "සම්පූර්ණයි";
+
+/* onboarding */
+"onboarding_welcome_title" = "සාදරයෙන් පිළිගනිමු";
+"onboarding_language_label" = "භාෂාව";
+"onboarding_city_label" = "ක්‍රියාකාරී නගරය";
+"onboarding_city_load_failed" = "නගර ලැයිස්තුව ලබා ගත නොහැකි විය.";
+"onboarding_slide_earn_title" = "තත්පර කිහිපයකින් සබැඳි වී ඉපයීම අරඹන්න";
+"onboarding_slide_earn_body" = "ඔබේ වාහනය ලියාපදිංචි කරන්න, තත්පර 15කින් කුලී භාර ගන්න, දිශානුගත ගමන් සකසන්න, පසුම්බිය සහ දෛනික ගාස්තුව එකම යෙදුමකින් බලන්න.";
+"onboarding_slide_earn_caption" = "ආරම්භය";
+"onboarding_slide_dispatch_title" = "තත්පර 15කින් කුලියක්";
+"onboarding_slide_dispatch_body" = "පිකප් ස්ථානය, ගමනාන්තය සහ ගාස්තුව සමඟ ඉල්ලීම් ඔබ වෙත එයි — තත්පර 15ක කාලයක් සමඟ. භාර ගෙන පිටත් වන්න.";
+"onboarding_slide_dispatch_caption" = "කුලී බෙදාහැරීම";
+"onboarding_slide_wallet_title" = "පසුම්බිය සහ දෛනික ගාස්තුව එකම තැනක";
+"onboarding_slide_wallet_body" = "සෑම ඉපැයීමක්ම බලන්න, යෙදුම තුළදීම මුදල් එකතු කරන්න, දෛනික ගාස්තුව ගෙවන්න. දිනකට පළමු ගමන නොමිලේ.";
+"onboarding_slide_wallet_caption" = "පසුම්බිය";
+
+/* login */
+"login_title" = "රියදුරු ජංගම දුරකථන අංකය";
+"login_phone_otp_only" = "දුරකථන OTP පමණයි — Google පිවිසුමක් නැත.";
+"login_enter_code" = "කේතය ඇතුළත් කරන්න";
+"login_resend_code" = "තවම කේතයක් ලැබුණේ නැද්ද?";
+"login_resend_action" = "නැවත එවන්න";
+"login_resend_in" = "තත්පර %1$d කින්";
+"login_attempts_remaining" = "උත්සාහ %1$d ක් ඉතිරියි";
+
+/* profile */
+"profile_setup_title" = "ඔබේ පැතිකඩ සකසන්න";
+"profile_setup_photo_caption" = "පැතිකඩ ඡායාරූපය — මගීන්ට පෙන්වයි";
+"profile_setup_photo_required" = "අවශ්‍යයි";
+"profile_setup_photo_action" = "පැතිකඩ ඡායාරූපයක් තෝරන්න";
+"profile_setup_name_label" = "රියදුරුගේ නම";
+"profile_setup_licence_label" = "රියදුරු බලපත්‍රය (ඉදිරිපස සහ පිටුපස)";
+"profile_setup_licence_front" = "ඉදිරිපස";
+"profile_setup_licence_back" = "පිටුපස";
+"profile_setup_extract_title" = "බලපත්‍රයෙන් කියවා ගන්නා ලදී · පෞද්ගලික තොරතුරු ආවරණය කර ඇත";
+"profile_setup_field_licence_no" = "බලපත්‍ර අංකය";
+"profile_setup_field_expiry" = "කල් ඉකුත් වන දිනය";
+"profile_setup_field_nic" = "ජා. හැ. අංකය";
+"profile_setup_field_allowed_types" = "අනුමත වාහන වර්ග";
+"profile_setup_field_unread" = "කියවා ගත නොහැකි විය";
+"profile_setup_nic_label" = "ජාතික හැඳුනුම්පත් අංකය";
+"profile_setup_allowed_types_label" = "ඔබේ බලපත්‍රයට අනුමත වාහන වර්ග";
+"profile_setup_manual_supporting" = "ස්කෑන් කිරීමෙන් කියවා ගත නොහැකි නම් ඔබම ටයිප් කරන්න.";
+"profile_setup_manual_title" = "පරීක්ෂා කිරීම අවශ්‍යයි";
+"profile_setup_manual_body" = "ඔබ විසින්ම ටයිප් කළ ඕනෑම තොරතුරක් සත්‍යාපන නිලධාරියෙකු වෙත යවනු ලැබේ. එතෙක් ඔබට ඉදිරියට යා හැක.";
+"profile_setup_save" = "සුරකිමින් ඉදිරියට";
+"flag_admin_verify" = "පරිපාලක සත්‍යාපනය";
+
+/* vehicle */
+"vehicle_type_motorbike" = "යතුරුපැදිය";
+"vehicle_type_three_wheeler" = "ත්‍රීරෝද රථය";
+"vehicle_type_flex" = "ෆ්ලෙක්ස්";
+"vehicle_type_sedan" = "සෙඩාන් රථය";
+"vehicle_type_mini_van" = "මිනි වෑන් රථය";
+"vehicle_type_van" = "වෑන් රථය";
+"vehicle_type_truck" = "ට්‍රක් රථය";
+"vehicle_type_mini_truck" = "මිනි ට්‍රක් රථය";
+
+/* permissions */
+"permissions_title" = "අවසර ලබා දෙන්න";
+"permissions_intro" = "ගමන් ලබා ගැනීමට සහ ඔබේ ස්ථානය බෙදා ගැනීමට රියදුරු ප්‍රකාරයට මේවා අවශ්‍යයි.";
+"permissions_continue" = "උපකරණ පුවරුවට යන්න";
+"permission_location_always_title" = "ස්ථානය — සැමවිටම";
+"permission_location_always_rationale" = "තිරය වසා ඇති විටත් ඔබේ ස්ථානය බෙදා ගනී";
+"permission_notifications_title" = "දැනුම්දීම්";
+"permission_notifications_rationale" = "කුලී ඉල්ලීම් නියමිත වේලාවට ලැබේ";
+
+/* error */
+"error_offline" = "සම්බන්ධතාවයක් නැත. ජාලය පරීක්ෂා කර නැවත උත්සාහ කරන්න.";
+"error_otp_invalid" = "එම කේතය වැරදියි. නැවත උත්සාහ කරන්න.";
+"error_otp_expired" = "එම කේතයේ කාලය ඉකුත් වී ඇත. නව එකක් ඉල්ලන්න.";
+"error_otp_locked" = "වැරදි කේත ගණනාවක් ඇතුළත් කර ඇත. පසුව උත්සාහ කරන්න.";
+"error_otp_rate_limited" = "උත්සාහ ගණනාවක් කර ඇත. නැවත ඉල්ලීමට පෙර මොහොතක් රැඳී සිටින්න.";
+"error_device_mismatch" = "මෙම කේතය යවා ඇත්තේ වෙනත් උපාංගයකට ය.";
+"error_user_blocked" = "මෙම අංකයෙන් පිවිසිය නොහැක. සහාය අමතන්න.";
+"error_validation_failed" = "ඔබ ඇතුළත් කළ තොරතුරු පරීක්ෂා කර නැවත උත්සාහ කරන්න.";
+"error_image_too_large" = "එම පින්තූරය විශාල වැඩියි. තව ටිකක් ඈතට වී නැවත ගන්න.";

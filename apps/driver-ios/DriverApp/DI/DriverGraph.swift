@@ -39,6 +39,31 @@ final class DriverGraph: ObservableObject {
     /// The position plane: CLLocationManager in, CocoaMQTT out (R-17, D6' §3).
     let positions: PositionService
 
+    // MARK: - C086 · cluster 1
+    //
+    // The first-run answers, the capture seam and the two repositories cluster 1 reads. They are
+    // here rather than constructed per screen because each is a **process** singleton: the
+    // preferences are read at launch to pick the interface language, and the capture coordinator is
+    // the only thing that survives the trip to SCR-DI-005 and back.
+
+    /// The three first-run answers, before there is a session to write them against.
+    let preferences: OnboardingPreferences
+
+    /// C014's session manager, as the five calls SCR-DI-003 makes.
+    let sessions: DriverSessions
+
+    /// SCR-DI-002's cities, and where its two answers end up.
+    let onboarding: OnboardingRepository
+
+    /// SCR-DI-003a's upload, and the splash's "has this driver a profile?".
+    let profiles: DriverProfileRepository
+
+    /// The seam between a capture slot and SCR-DI-005 (AL-43; the scanner itself is C087's).
+    let captures = DocumentCaptureCoordinator()
+
+    /// SCR-DI-007's two rows.
+    let permissions: DriverPermissions
+
     init(environment: DriverEnvironment = .current) {
         self.environment = environment
 
@@ -62,6 +87,22 @@ final class DriverGraph: ObservableObject {
         let shared = IosAppGraphKt.startIosGraph(config: config)
         self.shared = shared
         self.positions = PositionService(graph: shared, connectivity: connectivity)
+
+        let preferences = UserDefaultsOnboardingPreferences()
+        self.preferences = preferences
+        self.sessions = SharedDriverSessions(sessions: shared.sessions)
+        self.onboarding = ApiOnboardingRepository(
+            content: shared.api.content,
+            iam: shared.api.iam,
+            preferences: preferences
+        )
+        self.profiles = ApiDriverProfileRepository(registry: shared.api.registry, iam: shared.api.iam)
+        self.permissions = SystemDriverPermissions(pushTokens: pushTokens)
+
+        // Before the first frame, so a driver who chose සිංහල never sees an English one. This is
+        // the earliest point at which it can happen — `DriverLocale` redirects the bundle every
+        // lookup goes through, and a view built before it would have resolved its strings already.
+        DriverLocale.applyStored(preferences)
     }
 
     /// Start-up work that outlives any view.

@@ -52,3 +52,106 @@
    on a real device during wave 4b, same as anything else. */
 "route_placeholder_title" = "Not built yet";
 "route_placeholder_body" = "%1$@ arrives with its screen group.";
+
+/*
+  MageRide Driver — iOS · C086 driver-ios-auth-onboarding. English, the development region.
+
+  SCOPE. Cluster 1 only: SCR-DI-001 splash, SCR-DI-002 language/city, SCR-DI-003 phone + OTP,
+  SCR-DI-003a profile setup, SCR-DI-007 permissions. The shell's own copy is in the block above.
+
+  KEYS ARE C068'S. Same key names and the same translations as
+  `apps/driver-android/src/main/res/values*/strings.xml`, so a divergence between the two driver
+  apps is a diff rather than an archaeology exercise. Where a key exists only here, it is because
+  the platform differs and the comment on it says how.
+*/
+
+/* The app's own name. `InfoPlist.strings` carries the Home-screen label; this is the one the
+   splash draws under the mark, and they are the same words in each language. */
+"app_name" = "MageRide Driver";
+
+/* Shared actions this cluster adds to the shell's set. */
+"action_continue" = "Continue";
+"action_back" = "Back";
+"action_edit" = "Edit";
+"action_tap_to_capture" = "Tap to capture";
+"status_done" = "Done";
+
+/* SCR-DI-002 · language / city. The three slide triples are AL-28's carousel (BR-25.1). */
+"onboarding_welcome_title" = "Welcome";
+"onboarding_language_label" = "Language";
+"onboarding_city_label" = "Operating city";
+"onboarding_city_load_failed" = "Could not load the city list.";
+"onboarding_slide_earn_title" = "Go online and earn in seconds";
+"onboarding_slide_earn_body" = "Onboard your vehicle, accept hires in 15 seconds, set Directional Travel, and track your wallet and daily fee — all in one app.";
+"onboarding_slide_earn_caption" = "Getting started";
+"onboarding_slide_dispatch_title" = "A hire in 15 seconds";
+"onboarding_slide_dispatch_body" = "Offers reach you with the pickup, the drop-off and the fare, and a 15-second timer. Accept and go.";
+"onboarding_slide_dispatch_caption" = "Dispatch";
+"onboarding_slide_wallet_title" = "Wallet and daily fee in one place";
+"onboarding_slide_wallet_body" = "See every earning, top up inside the app, and pay your daily fee without leaving it. Your first trip each day is free.";
+"onboarding_slide_wallet_caption" = "Wallet";
+
+/* SCR-DI-003 · phone + OTP. Phone-OTP only (AL-07 / US-11.5). */
+"login_title" = "Driver mobile number";
+"login_phone_otp_only" = "Phone and OTP only — there is no Google sign-in.";
+"login_enter_code" = "enter code";
+"login_resend_code" = "No code yet?";
+"login_resend_action" = "Resend";
+"login_resend_in" = "in %1$d s";
+"login_attempts_remaining" = "%1$d attempts left";
+
+/* SCR-DI-003a · profile setup. Driver identity, no vehicle (AL-27). */
+"profile_setup_title" = "Set up your profile";
+"profile_setup_photo_caption" = "Profile photo — shown to passengers";
+"profile_setup_photo_required" = "required";
+"profile_setup_photo_action" = "Choose a profile photo";
+"profile_setup_name_label" = "Driver name";
+"profile_setup_licence_label" = "Driving licence (front and back)";
+"profile_setup_licence_front" = "Front";
+"profile_setup_licence_back" = "Back";
+"profile_setup_extract_title" = "Read from your licence · personal details redacted";
+"profile_setup_field_licence_no" = "Licence no";
+"profile_setup_field_expiry" = "Expiry";
+"profile_setup_field_nic" = "NIC no";
+"profile_setup_field_allowed_types" = "Allowed vehicle types";
+"profile_setup_field_unread" = "Not read";
+"profile_setup_nic_label" = "National identity card no";
+"profile_setup_allowed_types_label" = "Vehicle types your licence allows";
+"profile_setup_manual_supporting" = "Type it in if the scan could not read it.";
+"profile_setup_manual_title" = "Needs checking";
+"profile_setup_manual_body" = "Anything you typed in yourself goes to a verification officer. You can carry on in the meantime.";
+"profile_setup_save" = "Save and continue";
+"flag_admin_verify" = "Admin verify";
+
+/* AL-09's eight ride-bookable vehicle types — the licence classes on SCR-DI-003a's chip set.
+   `bus` and `train` are absent: they are Mode A, and Mode A vehicles are the Fleet Portal's. */
+"vehicle_type_motorbike" = "Motorbike";
+"vehicle_type_three_wheeler" = "Three-wheeler";
+"vehicle_type_flex" = "Flex";
+"vehicle_type_sedan" = "Sedan";
+"vehicle_type_mini_van" = "Mini van";
+"vehicle_type_van" = "Van";
+"vehicle_type_truck" = "Truck";
+"vehicle_type_mini_truck" = "Mini truck";
+
+/* SCR-DI-007 · permissions. TWO rows on this platform, not Android's five — D2' SCR-DI-007's
+   own iOS clause (`requestAlwaysAuthorization` + notification auth). See `DriverPermission.swift`. */
+"permissions_title" = "Allow permissions";
+"permissions_intro" = "Driver mode needs these to receive trips and share your location.";
+"permissions_continue" = "Continue to dashboard";
+"permission_location_always_title" = "Location — Always";
+"permission_location_always_rationale" = "Share your position with the screen off";
+"permission_notifications_title" = "Notifications";
+"permission_notifications_rationale" = "Hire offers reach you in time";
+
+/* Failures cluster 1 can meet. D-26: the kebab `code` is the key and the copy is here, never a
+   `ProblemDetails` string. C087-C093 extend the table in `OnboardingErrors.swift` with their own. */
+"error_offline" = "No connection. Check your network and try again.";
+"error_otp_invalid" = "That code is wrong. Try again.";
+"error_otp_expired" = "That code has expired. Ask for a new one.";
+"error_otp_locked" = "Too many wrong codes. Try again later.";
+"error_otp_rate_limited" = "Too many attempts. Wait a while before asking again.";
+"error_device_mismatch" = "This code was sent to another device.";
+"error_user_blocked" = "This number cannot sign in. Contact support.";
+"error_validation_failed" = "Check what you entered and try again.";
+"error_image_too_large" = "That image is too large. Take it again from a little further back.";

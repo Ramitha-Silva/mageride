@@ -18,11 +18,15 @@ struct DriverDestinationView: View {
     var body: some View {
         switch route {
         // ---- C086 · auth / onboarding ------------------------------------------------
-        case .splash: placeholder("SCR-DI-001 · splash")
-        case .languageCity: placeholder("SCR-DI-002 · language / city")
-        case .login: placeholder("SCR-DI-003 · phone + OTP")
-        case .profileSetup: placeholder("SCR-DI-003a · profile setup")
-        case .permissions: placeholder("SCR-DI-007 · permissions")
+        //
+        // One arm for all five, and a sub-view rather than five inline screens. `body` is an
+        // implicit `@ViewBuilder`, so every arm of this switch becomes another layer of
+        // `_ConditionalContent` around every other arm's type — thirty placeholders is a type the
+        // compiler already works to infer, and five real screens inlined here would be several
+        // orders of magnitude worse. A screen group that owns more than one destination should do
+        // the same.
+        case .splash, .languageCity, .login, .profileSetup, .permissions:
+            OnboardingDestinationView(route: route)
 
         // ---- C087 · vehicle onboarding -----------------------------------------------
         case .vehicleOnboarding: placeholder("SCR-DI-004…004c · vehicle onboarding")

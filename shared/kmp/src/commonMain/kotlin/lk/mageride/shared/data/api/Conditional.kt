@@ -22,4 +22,20 @@ public sealed interface Conditional<out T> {
             is Value -> value
             NotModified -> null
         }
+
+    /**
+     * The `ETag` to quote on the next request, or `null` on a `304` (keep the one you have).
+     *
+     * The sibling of [valueOrNull], and it exists for the same reason: a caller that only wants
+     * "the body, if there is one, and the tag that came with it" should not have to smart-cast to
+     * [Value] to get the second half. **Swift in particular cannot** — Kotlin/Native exports a
+     * generic interface with its type parameter erased, so a `Conditional` reaching an iOS app is
+     * an unparameterised existential and `as? Conditional.Value<T>` has no spelling. The two
+     * properties together are the whole of what an app needs, and neither casts.
+     */
+    public val etagOrNull: String?
+        get() = when (this) {
+            is Value -> etag
+            NotModified -> null
+        }
 }

@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0F8A7C04C2B3BF3395AD43C8 /* DocumentCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6ED0DE8E1336FC38114BB37 /* DocumentCapture.swift */; };
 		B7A393E253A163E613E6508C /* DriverEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = A38199F79E09320D80DD55E5 /* DriverEnvironment.swift */; };
 		163CFB25666B22BED1EEC593 /* DriverGraph.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE7E2E26A773931E0ABC82D1 /* DriverGraph.swift */; };
 		4F128007D6E4C1DEE8463FCB /* DriverApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84ECFFBEA04E665A4A91B394 /* DriverApp.swift */; };
@@ -20,6 +21,27 @@
 		CA513CF15AA2C8C71C52275C /* DriverNavigator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57398F5A1A76C8553A256252 /* DriverNavigator.swift */; };
 		B4B87FEF21CD992CF870CF1A /* DriverRoute.swift in Sources */ = {isa = PBXBuildFile; fileRef = E373D25A28E2A02B12527A06 /* DriverRoute.swift */; };
 		AB0FBF32E7E8CFE9FEFD2FF9 /* DriverTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DCC34246A83DE35ECAB075D /* DriverTab.swift */; };
+		70E5F37C7A5AA93354D878C1 /* DriverLocale.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA42C93FE86A433CEE0DE662 /* DriverLocale.swift */; };
+		DA5F6F5D2B4AD19E885C306D /* DriverPermission.swift in Sources */ = {isa = PBXBuildFile; fileRef = 985B411C53271C4DC8C17821 /* DriverPermission.swift */; };
+		F9BDD42C7870B563C00C933F /* DriverProfileRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4C65263F6D96A419FE53DA4 /* DriverProfileRepository.swift */; };
+		BBE73E9CAC56B1B3AD8EF3A9 /* DriverSessions.swift in Sources */ = {isa = PBXBuildFile; fileRef = E50C4C8E4575675DEA3425CD /* DriverSessions.swift */; };
+		41B9F7E3B004429552B05D1B /* FeatureSlides.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DC6CD5B3FBE331CB7A1B8A5 /* FeatureSlides.swift */; };
+		14F413847DA931DEC7FC332E /* LanguageCityModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 613CF527E6542561FC1C1071 /* LanguageCityModel.swift */; };
+		DBBFB2E57201E3FE74BF7097 /* LanguageCityScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CCF1E0EC0B4275EB055E946 /* LanguageCityScreen.swift */; };
+		6F2B20B3F407FFBBC20489E7 /* LoginModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F902C00AC2A00378CD0A0E8 /* LoginModel.swift */; };
+		F2FF80EC37A2751A7B6EBFF3 /* LoginScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = F22D5930E9C7919E227199A3 /* LoginScreen.swift */; };
+		C855738C9385321E3B787631 /* OnboardingDestinationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7569CBAFADFA038852089BFD /* OnboardingDestinationView.swift */; };
+		7019740FF252BEDDF6939EAD /* OnboardingErrors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0208C3CDA65F817D6A350BE4 /* OnboardingErrors.swift */; };
+		0B083325F67C4781B131E551 /* OnboardingPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA593EE997C456270DA74B6A /* OnboardingPreferences.swift */; };
+		76A2E0BFA10D946432283332 /* OnboardingRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB46C74956892682593830A0 /* OnboardingRepository.swift */; };
+		73AF4D4407A0F9B6D3EF346D /* OnboardingRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25694F236D7BF06E59756D66 /* OnboardingRouter.swift */; };
+		AD9D17C25D7511B550511912 /* PermissionsModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92C5876246A65486D149E5E2 /* PermissionsModel.swift */; };
+		DE6B8729C5C6352DBD8DD5A1 /* PermissionsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = C685D5EA06D599221E74E4C3 /* PermissionsScreen.swift */; };
+		A374D6569E19F53C14AE00EB /* PhoneNumber.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2061B8A859BA5FF87F7E7F7C /* PhoneNumber.swift */; };
+		80DFBF1D0A68ECA806966A31 /* ProfileSetupModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7290449620C4BF4EE7087531 /* ProfileSetupModel.swift */; };
+		36C4FF476039D09C1216B499 /* ProfileSetupScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18A826999151CC176A6D942F /* ProfileSetupScreen.swift */; };
+		B0D2D826B81C1905AA526E3B /* SplashModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B11FB8426A2178ECA019BB1E /* SplashModel.swift */; };
+		18BA696784A46F00CD7B87E9 /* SplashScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E9AEA0FFCA8E7A37BF104B5 /* SplashScreen.swift */; };
 		6E12E285FD7FEBBFA3280DDA /* PushRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C8A076FBDC74A305213FFE0 /* PushRouter.swift */; };
 		4BA323E92B24334ED7E52D67 /* PushTokenProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 186D3907E5F3C9FA0760500C /* PushTokenProvider.swift */; };
 		C17FFFC990403761DD32A6F7 /* DeviceBinding.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BBA2D3D7C334CA0EAAE9FB6 /* DeviceBinding.swift */; };
@@ -33,10 +55,20 @@
 		D9B3D904AAC5C3983C888E47 /* MageRideSpacing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DD805C6CCCC95FA2C3E0E03 /* MageRideSpacing.swift */; };
 		850A11AC7BAF965B77057982 /* MageRideTypography.swift in Sources */ = {isa = PBXBuildFile; fileRef = 076B871410BF991653E4DF51 /* MageRideTypography.swift */; };
 		CBFF2CB75BD3AEA5C450E1CC /* VehicleToken.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCF6CA12EEB038D63B140132 /* VehicleToken.swift */; };
+		DD2BC65A8D1ABDF7BCA3CECC /* FormControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = F98D462C67E17D73304A396D /* FormControls.swift */; };
+		4B73B13F55F3A03A218479F3 /* Localisation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CB0DA5A8F2C7753C9CA14D4 /* Localisation.swift */; };
+		CCAC00824DC736346AC16487 /* OnboardingControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 386245D1C07D23FF659FA353 /* OnboardingControls.swift */; };
 		C2C30F86AB7DCFFD8BAA7FAB /* DriverEnvironmentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 613BE313CC4BD8303D3A8370 /* DriverEnvironmentTests.swift */; };
+		315FDD94FCB416C248E3EE70 /* LanguageCityModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 898485DEC1B14DBE9CF33201 /* LanguageCityModelTests.swift */; };
 		998F368FEB919F48A7B6F42E /* LocalizationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1A7352879A3C3EDE135A4F3 /* LocalizationTests.swift */; };
+		95E150E3ED354A7FA22FC610 /* LoginModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12298A58741E4C76D083CD00 /* LoginModelTests.swift */; };
 		68D2FCE4B53C5F65024DE90D /* MapAndVehicleTokenTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BE148B277472381A1CB023B /* MapAndVehicleTokenTests.swift */; };
 		CC93F201C968FBAEF450BDC2 /* NavigationShellTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12F8FD966A59CF0768AF4C56 /* NavigationShellTests.swift */; };
+		B371348E9483FFBB2EE5F962 /* OnboardingRouterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 112B1D7267B04B978B2AD772 /* OnboardingRouterTests.swift */; };
+		B456898B1D74A8C98739FA1F /* OnboardingTestKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6694A03C0B1E6D419D810357 /* OnboardingTestKit.swift */; };
+		4DA9E0FFE895066B64C62BEE /* PermissionsAndSplashTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3860C099910C7592F8A9266 /* PermissionsAndSplashTests.swift */; };
+		0672F2D5C538EB21AA425924 /* PhoneNumberTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B765924D88EB61B89E02DD0 /* PhoneNumberTests.swift */; };
+		7B6323648A9CD95CE851DFC0 /* ProfileSetupModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8A57AD017BD058976F01619 /* ProfileSetupModelTests.swift */; };
 		23FD7F044415A4AC029EBEA3 /* PushRouterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCBB0FA4D9DEB4B1814C95A8 /* PushRouterTests.swift */; };
 		10262BD32DE9AF51BE826EBD /* ThemeTokenTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D526434D4088A6B7B5B16B5 /* ThemeTokenTests.swift */; };
 		5261C276A98D8E78E1A67A46 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 62BD7C65D57D32EAA37B2D30 /* Assets.xcassets */; };
@@ -51,6 +83,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		C6ED0DE8E1336FC38114BB37 /* DocumentCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DocumentCapture.swift"; path = "DocumentCapture.swift"; sourceTree = "<group>"; };
 		A38199F79E09320D80DD55E5 /* DriverEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DriverEnvironment.swift"; path = "DriverEnvironment.swift"; sourceTree = "<group>"; };
 		AE7E2E26A773931E0ABC82D1 /* DriverGraph.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DriverGraph.swift"; path = "DriverGraph.swift"; sourceTree = "<group>"; };
 		84ECFFBEA04E665A4A91B394 /* DriverApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DriverApp.swift"; path = "DriverApp.swift"; sourceTree = "<group>"; };
@@ -64,6 +97,27 @@
 		57398F5A1A76C8553A256252 /* DriverNavigator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DriverNavigator.swift"; path = "DriverNavigator.swift"; sourceTree = "<group>"; };
 		E373D25A28E2A02B12527A06 /* DriverRoute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DriverRoute.swift"; path = "DriverRoute.swift"; sourceTree = "<group>"; };
 		0DCC34246A83DE35ECAB075D /* DriverTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DriverTab.swift"; path = "DriverTab.swift"; sourceTree = "<group>"; };
+		CA42C93FE86A433CEE0DE662 /* DriverLocale.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DriverLocale.swift"; path = "DriverLocale.swift"; sourceTree = "<group>"; };
+		985B411C53271C4DC8C17821 /* DriverPermission.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DriverPermission.swift"; path = "DriverPermission.swift"; sourceTree = "<group>"; };
+		F4C65263F6D96A419FE53DA4 /* DriverProfileRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DriverProfileRepository.swift"; path = "DriverProfileRepository.swift"; sourceTree = "<group>"; };
+		E50C4C8E4575675DEA3425CD /* DriverSessions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DriverSessions.swift"; path = "DriverSessions.swift"; sourceTree = "<group>"; };
+		5DC6CD5B3FBE331CB7A1B8A5 /* FeatureSlides.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "FeatureSlides.swift"; path = "FeatureSlides.swift"; sourceTree = "<group>"; };
+		613CF527E6542561FC1C1071 /* LanguageCityModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "LanguageCityModel.swift"; path = "LanguageCityModel.swift"; sourceTree = "<group>"; };
+		8CCF1E0EC0B4275EB055E946 /* LanguageCityScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "LanguageCityScreen.swift"; path = "LanguageCityScreen.swift"; sourceTree = "<group>"; };
+		5F902C00AC2A00378CD0A0E8 /* LoginModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "LoginModel.swift"; path = "LoginModel.swift"; sourceTree = "<group>"; };
+		F22D5930E9C7919E227199A3 /* LoginScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "LoginScreen.swift"; path = "LoginScreen.swift"; sourceTree = "<group>"; };
+		7569CBAFADFA038852089BFD /* OnboardingDestinationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "OnboardingDestinationView.swift"; path = "OnboardingDestinationView.swift"; sourceTree = "<group>"; };
+		0208C3CDA65F817D6A350BE4 /* OnboardingErrors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "OnboardingErrors.swift"; path = "OnboardingErrors.swift"; sourceTree = "<group>"; };
+		DA593EE997C456270DA74B6A /* OnboardingPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "OnboardingPreferences.swift"; path = "OnboardingPreferences.swift"; sourceTree = "<group>"; };
+		AB46C74956892682593830A0 /* OnboardingRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "OnboardingRepository.swift"; path = "OnboardingRepository.swift"; sourceTree = "<group>"; };
+		25694F236D7BF06E59756D66 /* OnboardingRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "OnboardingRouter.swift"; path = "OnboardingRouter.swift"; sourceTree = "<group>"; };
+		92C5876246A65486D149E5E2 /* PermissionsModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PermissionsModel.swift"; path = "PermissionsModel.swift"; sourceTree = "<group>"; };
+		C685D5EA06D599221E74E4C3 /* PermissionsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PermissionsScreen.swift"; path = "PermissionsScreen.swift"; sourceTree = "<group>"; };
+		2061B8A859BA5FF87F7E7F7C /* PhoneNumber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PhoneNumber.swift"; path = "PhoneNumber.swift"; sourceTree = "<group>"; };
+		7290449620C4BF4EE7087531 /* ProfileSetupModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ProfileSetupModel.swift"; path = "ProfileSetupModel.swift"; sourceTree = "<group>"; };
+		18A826999151CC176A6D942F /* ProfileSetupScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ProfileSetupScreen.swift"; path = "ProfileSetupScreen.swift"; sourceTree = "<group>"; };
+		B11FB8426A2178ECA019BB1E /* SplashModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "SplashModel.swift"; path = "SplashModel.swift"; sourceTree = "<group>"; };
+		8E9AEA0FFCA8E7A37BF104B5 /* SplashScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "SplashScreen.swift"; path = "SplashScreen.swift"; sourceTree = "<group>"; };
 		1C8A076FBDC74A305213FFE0 /* PushRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PushRouter.swift"; path = "PushRouter.swift"; sourceTree = "<group>"; };
 		186D3907E5F3C9FA0760500C /* PushTokenProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PushTokenProvider.swift"; path = "PushTokenProvider.swift"; sourceTree = "<group>"; };
 		62BD7C65D57D32EAA37B2D30 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = "Assets.xcassets"; path = "Assets.xcassets"; sourceTree = "<group>"; };
@@ -80,10 +134,20 @@
 		8DD805C6CCCC95FA2C3E0E03 /* MageRideSpacing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "MageRideSpacing.swift"; path = "MageRideSpacing.swift"; sourceTree = "<group>"; };
 		076B871410BF991653E4DF51 /* MageRideTypography.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "MageRideTypography.swift"; path = "MageRideTypography.swift"; sourceTree = "<group>"; };
 		BCF6CA12EEB038D63B140132 /* VehicleToken.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "VehicleToken.swift"; path = "VehicleToken.swift"; sourceTree = "<group>"; };
+		F98D462C67E17D73304A396D /* FormControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "FormControls.swift"; path = "FormControls.swift"; sourceTree = "<group>"; };
+		7CB0DA5A8F2C7753C9CA14D4 /* Localisation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "Localisation.swift"; path = "Localisation.swift"; sourceTree = "<group>"; };
+		386245D1C07D23FF659FA353 /* OnboardingControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "OnboardingControls.swift"; path = "OnboardingControls.swift"; sourceTree = "<group>"; };
 		613BE313CC4BD8303D3A8370 /* DriverEnvironmentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DriverEnvironmentTests.swift"; path = "DriverEnvironmentTests.swift"; sourceTree = "<group>"; };
+		898485DEC1B14DBE9CF33201 /* LanguageCityModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "LanguageCityModelTests.swift"; path = "LanguageCityModelTests.swift"; sourceTree = "<group>"; };
 		B1A7352879A3C3EDE135A4F3 /* LocalizationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "LocalizationTests.swift"; path = "LocalizationTests.swift"; sourceTree = "<group>"; };
+		12298A58741E4C76D083CD00 /* LoginModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "LoginModelTests.swift"; path = "LoginModelTests.swift"; sourceTree = "<group>"; };
 		8BE148B277472381A1CB023B /* MapAndVehicleTokenTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "MapAndVehicleTokenTests.swift"; path = "MapAndVehicleTokenTests.swift"; sourceTree = "<group>"; };
 		12F8FD966A59CF0768AF4C56 /* NavigationShellTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "NavigationShellTests.swift"; path = "NavigationShellTests.swift"; sourceTree = "<group>"; };
+		112B1D7267B04B978B2AD772 /* OnboardingRouterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "OnboardingRouterTests.swift"; path = "OnboardingRouterTests.swift"; sourceTree = "<group>"; };
+		6694A03C0B1E6D419D810357 /* OnboardingTestKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "OnboardingTestKit.swift"; path = "OnboardingTestKit.swift"; sourceTree = "<group>"; };
+		D3860C099910C7592F8A9266 /* PermissionsAndSplashTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PermissionsAndSplashTests.swift"; path = "PermissionsAndSplashTests.swift"; sourceTree = "<group>"; };
+		8B765924D88EB61B89E02DD0 /* PhoneNumberTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PhoneNumberTests.swift"; path = "PhoneNumberTests.swift"; sourceTree = "<group>"; };
+		C8A57AD017BD058976F01619 /* ProfileSetupModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ProfileSetupModelTests.swift"; path = "ProfileSetupModelTests.swift"; sourceTree = "<group>"; };
 		CCBB0FA4D9DEB4B1814C95A8 /* PushRouterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PushRouterTests.swift"; path = "PushRouterTests.swift"; sourceTree = "<group>"; };
 		2D526434D4088A6B7B5B16B5 /* ThemeTokenTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ThemeTokenTests.swift"; path = "ThemeTokenTests.swift"; sourceTree = "<group>"; };
 		D459395A137E69E3408BA69B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = "Info.plist"; path = "Info.plist"; sourceTree = "<group>"; };
@@ -149,21 +213,32 @@
 		F3CCAF7FAF0DDD1EC071EAC1 /* DriverApp */ = {
 			isa = PBXGroup;
 			children = (
+				EEE0C83EC7B2A8AD340676DE /* Capture */,
 				3BCC40221E847ADC67F8DDCA /* DI */,
 				0EC78E5EC56BE03BDD3FB8D6 /* Location */,
 				AC9AD4E1F91290A46789DFC8 /* Map */,
 				BD8F15ED7253BC5039F949C2 /* Nav */,
+				F6A5F52DEA436A1161DF06F5 /* Onboarding */,
 				BE43BB8A93BAAFC6C6757D22 /* Push */,
 				44050D7D094356F0E0F50CC0 /* Resources */,
 				75E7277CAD07339927EC58E7 /* Security */,
 				0EC869F91FE1586BE15C8677 /* Shell */,
 				4300180A9966B3D5DF19AB26 /* Theme */,
+				E7030148D39C574FFE66C0D5 /* UI */,
 				CB0D066169D3247984513AB9 /* DriverApp.entitlements */,
 				84ECFFBEA04E665A4A91B394 /* DriverApp.swift */,
 				89C110EC442B67250E0FBBD9 /* DriverAppDelegate.swift */,
 				D459395A137E69E3408BA69B /* Info.plist */,
 			);
 			path = "DriverApp";
+			sourceTree = "<group>";
+		};
+		EEE0C83EC7B2A8AD340676DE /* Capture */ = {
+			isa = PBXGroup;
+			children = (
+				C6ED0DE8E1336FC38114BB37 /* DocumentCapture.swift */,
+			);
+			path = "Capture";
 			sourceTree = "<group>";
 		};
 		3BCC40221E847ADC67F8DDCA /* DI */ = {
@@ -203,6 +278,34 @@
 				0DCC34246A83DE35ECAB075D /* DriverTab.swift */,
 			);
 			path = "Nav";
+			sourceTree = "<group>";
+		};
+		F6A5F52DEA436A1161DF06F5 /* Onboarding */ = {
+			isa = PBXGroup;
+			children = (
+				CA42C93FE86A433CEE0DE662 /* DriverLocale.swift */,
+				985B411C53271C4DC8C17821 /* DriverPermission.swift */,
+				F4C65263F6D96A419FE53DA4 /* DriverProfileRepository.swift */,
+				E50C4C8E4575675DEA3425CD /* DriverSessions.swift */,
+				5DC6CD5B3FBE331CB7A1B8A5 /* FeatureSlides.swift */,
+				613CF527E6542561FC1C1071 /* LanguageCityModel.swift */,
+				8CCF1E0EC0B4275EB055E946 /* LanguageCityScreen.swift */,
+				5F902C00AC2A00378CD0A0E8 /* LoginModel.swift */,
+				F22D5930E9C7919E227199A3 /* LoginScreen.swift */,
+				7569CBAFADFA038852089BFD /* OnboardingDestinationView.swift */,
+				0208C3CDA65F817D6A350BE4 /* OnboardingErrors.swift */,
+				DA593EE997C456270DA74B6A /* OnboardingPreferences.swift */,
+				AB46C74956892682593830A0 /* OnboardingRepository.swift */,
+				25694F236D7BF06E59756D66 /* OnboardingRouter.swift */,
+				92C5876246A65486D149E5E2 /* PermissionsModel.swift */,
+				C685D5EA06D599221E74E4C3 /* PermissionsScreen.swift */,
+				2061B8A859BA5FF87F7E7F7C /* PhoneNumber.swift */,
+				7290449620C4BF4EE7087531 /* ProfileSetupModel.swift */,
+				18A826999151CC176A6D942F /* ProfileSetupScreen.swift */,
+				B11FB8426A2178ECA019BB1E /* SplashModel.swift */,
+				8E9AEA0FFCA8E7A37BF104B5 /* SplashScreen.swift */,
+			);
+			path = "Onboarding";
 			sourceTree = "<group>";
 		};
 		BE43BB8A93BAAFC6C6757D22 /* Push */ = {
@@ -258,13 +361,30 @@
 			path = "Theme";
 			sourceTree = "<group>";
 		};
+		E7030148D39C574FFE66C0D5 /* UI */ = {
+			isa = PBXGroup;
+			children = (
+				F98D462C67E17D73304A396D /* FormControls.swift */,
+				7CB0DA5A8F2C7753C9CA14D4 /* Localisation.swift */,
+				386245D1C07D23FF659FA353 /* OnboardingControls.swift */,
+			);
+			path = "UI";
+			sourceTree = "<group>";
+		};
 		8A4505F112D2FBD27635E508 /* DriverAppTests */ = {
 			isa = PBXGroup;
 			children = (
 				613BE313CC4BD8303D3A8370 /* DriverEnvironmentTests.swift */,
+				898485DEC1B14DBE9CF33201 /* LanguageCityModelTests.swift */,
 				B1A7352879A3C3EDE135A4F3 /* LocalizationTests.swift */,
+				12298A58741E4C76D083CD00 /* LoginModelTests.swift */,
 				8BE148B277472381A1CB023B /* MapAndVehicleTokenTests.swift */,
 				12F8FD966A59CF0768AF4C56 /* NavigationShellTests.swift */,
+				112B1D7267B04B978B2AD772 /* OnboardingRouterTests.swift */,
+				6694A03C0B1E6D419D810357 /* OnboardingTestKit.swift */,
+				D3860C099910C7592F8A9266 /* PermissionsAndSplashTests.swift */,
+				8B765924D88EB61B89E02DD0 /* PhoneNumberTests.swift */,
+				C8A57AD017BD058976F01619 /* ProfileSetupModelTests.swift */,
 				CCBB0FA4D9DEB4B1814C95A8 /* PushRouterTests.swift */,
 				2D526434D4088A6B7B5B16B5 /* ThemeTokenTests.swift */,
 			);
@@ -401,6 +521,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				0F8A7C04C2B3BF3395AD43C8 /* DocumentCapture.swift in Sources */,
 				B7A393E253A163E613E6508C /* DriverEnvironment.swift in Sources */,
 				163CFB25666B22BED1EEC593 /* DriverGraph.swift in Sources */,
 				4F128007D6E4C1DEE8463FCB /* DriverApp.swift in Sources */,
@@ -414,6 +535,27 @@
 				CA513CF15AA2C8C71C52275C /* DriverNavigator.swift in Sources */,
 				B4B87FEF21CD992CF870CF1A /* DriverRoute.swift in Sources */,
 				AB0FBF32E7E8CFE9FEFD2FF9 /* DriverTab.swift in Sources */,
+				70E5F37C7A5AA93354D878C1 /* DriverLocale.swift in Sources */,
+				DA5F6F5D2B4AD19E885C306D /* DriverPermission.swift in Sources */,
+				F9BDD42C7870B563C00C933F /* DriverProfileRepository.swift in Sources */,
+				BBE73E9CAC56B1B3AD8EF3A9 /* DriverSessions.swift in Sources */,
+				41B9F7E3B004429552B05D1B /* FeatureSlides.swift in Sources */,
+				14F413847DA931DEC7FC332E /* LanguageCityModel.swift in Sources */,
+				DBBFB2E57201E3FE74BF7097 /* LanguageCityScreen.swift in Sources */,
+				6F2B20B3F407FFBBC20489E7 /* LoginModel.swift in Sources */,
+				F2FF80EC37A2751A7B6EBFF3 /* LoginScreen.swift in Sources */,
+				C855738C9385321E3B787631 /* OnboardingDestinationView.swift in Sources */,
+				7019740FF252BEDDF6939EAD /* OnboardingErrors.swift in Sources */,
+				0B083325F67C4781B131E551 /* OnboardingPreferences.swift in Sources */,
+				76A2E0BFA10D946432283332 /* OnboardingRepository.swift in Sources */,
+				73AF4D4407A0F9B6D3EF346D /* OnboardingRouter.swift in Sources */,
+				AD9D17C25D7511B550511912 /* PermissionsModel.swift in Sources */,
+				DE6B8729C5C6352DBD8DD5A1 /* PermissionsScreen.swift in Sources */,
+				A374D6569E19F53C14AE00EB /* PhoneNumber.swift in Sources */,
+				80DFBF1D0A68ECA806966A31 /* ProfileSetupModel.swift in Sources */,
+				36C4FF476039D09C1216B499 /* ProfileSetupScreen.swift in Sources */,
+				B0D2D826B81C1905AA526E3B /* SplashModel.swift in Sources */,
+				18BA696784A46F00CD7B87E9 /* SplashScreen.swift in Sources */,
 				6E12E285FD7FEBBFA3280DDA /* PushRouter.swift in Sources */,
 				4BA323E92B24334ED7E52D67 /* PushTokenProvider.swift in Sources */,
 				C17FFFC990403761DD32A6F7 /* DeviceBinding.swift in Sources */,
@@ -427,6 +569,9 @@
 				D9B3D904AAC5C3983C888E47 /* MageRideSpacing.swift in Sources */,
 				850A11AC7BAF965B77057982 /* MageRideTypography.swift in Sources */,
 				CBFF2CB75BD3AEA5C450E1CC /* VehicleToken.swift in Sources */,
+				DD2BC65A8D1ABDF7BCA3CECC /* FormControls.swift in Sources */,
+				4B73B13F55F3A03A218479F3 /* Localisation.swift in Sources */,
+				CCAC00824DC736346AC16487 /* OnboardingControls.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -435,9 +580,16 @@
 			buildActionMask = 2147483647;
 			files = (
 				C2C30F86AB7DCFFD8BAA7FAB /* DriverEnvironmentTests.swift in Sources */,
+				315FDD94FCB416C248E3EE70 /* LanguageCityModelTests.swift in Sources */,
 				998F368FEB919F48A7B6F42E /* LocalizationTests.swift in Sources */,
+				95E150E3ED354A7FA22FC610 /* LoginModelTests.swift in Sources */,
 				68D2FCE4B53C5F65024DE90D /* MapAndVehicleTokenTests.swift in Sources */,
 				CC93F201C968FBAEF450BDC2 /* NavigationShellTests.swift in Sources */,
+				B371348E9483FFBB2EE5F962 /* OnboardingRouterTests.swift in Sources */,
+				B456898B1D74A8C98739FA1F /* OnboardingTestKit.swift in Sources */,
+				4DA9E0FFE895066B64C62BEE /* PermissionsAndSplashTests.swift in Sources */,
+				0672F2D5C538EB21AA425924 /* PhoneNumberTests.swift in Sources */,
+				7B6323648A9CD95CE851DFC0 /* ProfileSetupModelTests.swift in Sources */,
 				23FD7F044415A4AC029EBEA3 /* PushRouterTests.swift in Sources */,
 				10262BD32DE9AF51BE826EBD /* ThemeTokenTests.swift in Sources */,
 			);
