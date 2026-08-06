@@ -30,6 +30,10 @@ public class FakeReply private constructor(
 
         private const val JSON = "application/json"
         private const val PROBLEM_JSON = "application/problem+json"
+        private const val IMAGE_JPEG = "image/jpeg"
+
+        /** Deliberately not valid JSON: decoding it as a DTO must fail loudly, not half-work. */
+        private const val BINARY_FIXTURE = "PNG\r\n\n mageride-test-fixture"
 
         /** A JSON body at [status]. */
         public fun json(body: JsonElement, status: HttpStatusCode = HttpStatusCode.OK): FakeReply =
@@ -48,6 +52,24 @@ public class FakeReply private constructor(
             status: HttpStatusCode = HttpStatusCode.NoContent,
             headers: Headers = Headers.Empty,
         ): FakeReply = FakeReply(status, body = null, headers = headers)
+
+        /**
+         * A reply whose body is **bytes**, not JSON (Δ C076a).
+         *
+         * The three reads that serve an object rather than a document — `getModeBFile`,
+         * `getSupportScreenshot`, `downloadSignedGtfsObject` — declare `image/jpeg`, `image/png` or
+         * `application/pdf`, and their clients return a `ByteArray`. What matters to a test is
+         * that the bytes arrive and are *not* parseable as a DTO; the content is a fixture, so it
+         * is short and recognisable rather than a real JPEG.
+         *
+         * @param content The payload. The default is enough to assert a non-empty read.
+         * @param contentType What the platform would serve it as.
+         */
+        public fun binary(
+            content: String = BINARY_FIXTURE,
+            status: HttpStatusCode = HttpStatusCode.OK,
+            contentType: String = IMAGE_JPEG,
+        ): FakeReply = FakeReply(status, content, headersOf("Content-Type", contentType))
 
         /**
          * An RFC 7807 problem, as the gateway serves them (D3' §0).

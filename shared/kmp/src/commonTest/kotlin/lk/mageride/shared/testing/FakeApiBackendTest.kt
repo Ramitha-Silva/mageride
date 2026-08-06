@@ -59,11 +59,25 @@ class FakeApiBackendTest {
     @Test
     fun the_bodiless_operations_are_exactly_the_ones_the_contracts_declare_bodiless() {
         val bodiless = ApiOperations.ALL.filterNot { it.hasBody }
-        assertTrue(bodiless.all { it.status == 204 || it.status == 302 }, "$bodiless")
+
+        // Three shapes answer with no JSON, and they are not the same thing (Δ C076a):
+        //   204 — the bodiless mutations, which carry no payload at all;
+        //   302 — the GTFS download, whose payload is its `Location` header;
+        //   200 — a BINARY read, which has a payload that simply is not a document.
+        assertTrue(bodiless.all { it.status in NON_JSON_STATUSES }, "$bodiless")
         assertEquals(
             listOf(302),
             bodiless.filter { it.operationId == "downloadGtfsFeed" }.map { it.status },
             "the GTFS download is a redirect whose payload is its Location header",
+        )
+        assertEquals(
+            BINARY_OPERATIONS,
+            bodiless.filter { it.binary }.map { it.operationId }.sorted(),
+            "a bodiless 200 is a binary read and must say so — see FakeOperation.hasBody",
+        )
+        assertTrue(
+            bodiless.none { it.status == 200 && !it.binary },
+            "a 200 with neither a JSON body nor `binary = true` is a row that lost its response type",
         )
     }
 
@@ -175,16 +189,29 @@ class FakeApiBackendTest {
          *
          * **Δ MCS-02: 180 → 176.** Four operations retired by AL-57/AL-47 were deleted.
          *
-         * **Δ MCS-03: 176 → 201**, as the 65 missing operations land a slice at a time. The
-         * in-scope contracts declare **241**, so this number is still climbing and
-         * `ContractCoverageTest` stays red until it arrives.
+         * **Δ MCS-03: 176 → 201**, as the 65 missing operations land a slice at a time — all 25
+         * app-facing ones did.
          *
-         * One of the 65 is deliberately **not** here: `getSupportScreenshot` and `getModeBFile` answer `200` with
-         * `image/jpeg`, and [lk.mageride.shared.testing.fake.FakeOperation] can express a JSON
-         * body or no body and nothing else. Its client function exists; the row waits on a table
-         * that can say "binary". `downloadSignedGtfsObject` is the same shape. See the MCS-03
-         * handoff.
+         * **Δ C076a: 201 → 203.** `FakeOperation` learned to say "binary", which was the
+         * prerequisite MCS-03 recorded and could not close inside its own slices, so
+         * `getModeBFile` and `getSupportScreenshot` finally have rows. The table is now the whole
+         * of what `ContractSurface` asks for: the 177 app-facing operations plus the 26
+         * `/v1/internal` and `/v1/admin` ones that have clients. The in-scope contracts declare
+         * 241; the remaining 38 are behind the app surface and are out of scope by that rule
+         * rather than missing — see `ContractSurface` and the C076a handoff.
+         *
+         * `downloadSignedGtfsObject` is the third binary read. It stays out because it is
+         * `/v1/internal` and has no client, not because the table cannot hold it any more.
          */
-        const val EXPECTED_OPERATIONS = 201
+        const val EXPECTED_OPERATIONS = 203
+
+        /**
+         * The reads that answer with bytes, sorted — a `List` rather than a sorted `Set` because
+         * `sortedSetOf` is a JVM-only extension and this file is `commonTest`.
+         */
+        val BINARY_OPERATIONS = listOf("getModeBFile", "getSupportScreenshot")
+
+        /** 204 (no payload), 302 (payload is a header), 200 (payload is bytes). */
+        val NON_JSON_STATUSES = setOf(200, 204, 302)
     }
 }

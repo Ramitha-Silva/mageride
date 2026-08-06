@@ -153,8 +153,15 @@ public class FakeApiBackend {
                 "the id is misspelled.",
         )
 
+    // One return per shape a success response can take, and the three are genuinely different
+    // answers: bytes, nothing, or a document synthesised from a schema. Collapsing them into one
+    // expression would hide which of the three a row resolved to.
+    @Suppress("ReturnCount")
     private fun synthesise(operation: FakeOperation): FakeReply {
         val status = HttpStatusCode.fromValue(operation.status)
+        // Bytes, not a document: the client returns a `ByteArray` and there is no schema to build
+        // a fixture from. Checked before `response`, which is null for both this and a real 204.
+        if (operation.binary) return FakeReply.binary(status = status)
         val serializer = operation.response
             ?: return FakeReply.empty(status, headers = bodilessHeaders(operation))
         return FakeReply.json(singlePage(DtoFixtures.jsonOf(serializer.descriptor)), status)
@@ -183,9 +190,17 @@ public class FakeApiBackend {
         return JsonObject(obj + mapOf("cursor" to JsonNull, "hasMore" to JsonPrimitive(false)))
     }
 
-    /** The body this fake would serve for [operationId], without making the call. */
-    public fun defaultBodyOf(operationId: String): JsonObject? =
-        synthesise(known(operationId)).body?.let { MageRideJson.parseToJsonElement(it).jsonObject }
+    /**
+     * The **JSON** body this fake would serve for [operationId], without making the call.
+     *
+     * `null` for an operation that answers with nothing, and for one that answers with bytes — a
+     * binary reply has no `JsonObject` form and parsing one would throw rather than answer.
+     */
+    public fun defaultBodyOf(operationId: String): JsonObject? {
+        val operation = known(operationId)
+        if (operation.binary) return null
+        return synthesise(operation).body?.let { MageRideJson.parseToJsonElement(it).jsonObject }
+    }
 
     private companion object {
         const val FOUND = 302

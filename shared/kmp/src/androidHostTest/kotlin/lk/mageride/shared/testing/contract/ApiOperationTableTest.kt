@@ -1,5 +1,6 @@
 package lk.mageride.shared.testing.contract
 
+import lk.mageride.shared.data.api.ContractSurface
 import lk.mageride.shared.testing.fake.ApiOperations
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -15,6 +16,11 @@ import kotlin.test.assertEquals
  * It is the same argument C013's `ContractCoverageTest` makes about the clients, one layer up: an
  * operation added to a contract and not to this table is an operation the fake cannot answer, and
  * the first thing to notice would otherwise be a screen that mysteriously gets a `404`.
+ *
+ * **Scoped to the same surface that test is** (Δ C076a): the fake exists to answer the calls the
+ * apps make, so a `/v1/internal` posting no Kotlin client calls has nothing to fake. See
+ * [ContractSurface] — the internal and admin operations that *do* have clients are in the table
+ * exactly because they have them.
  */
 class ApiOperationTableTest {
 
@@ -23,10 +29,18 @@ class ApiOperationTableTest {
         .flatMap { api.operations(it).values }
         .associateBy { it.operationId }
 
+    /** What the table must hold: the app-facing surface, plus the clients that reach behind it. */
+    private val expected = declared
+        .filterValues {
+            ContractSurface.isAppFacing(it.path) ||
+                it.operationId in ContractSurface.COVERED_BEYOND_APP_SURFACE
+        }
+        .keys
+
     @Test
     fun the_table_lists_exactly_the_operations_the_in_scope_contracts_declare() {
         val tabled = ApiOperations.ALL.map { it.operationId }.toSortedSet()
-        assertEquals(declared.keys.toSortedSet(), tabled)
+        assertEquals(expected.toSortedSet(), tabled)
     }
 
     @Test

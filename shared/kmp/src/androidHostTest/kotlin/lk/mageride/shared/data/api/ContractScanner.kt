@@ -17,12 +17,87 @@ internal class ContractOperation(
 ) {
     fun describe(): String = "$contract ${method.uppercase()} $path ($operationId)"
 
+    /** Whether an app can reach this operation at all — see [ContractSurface]. */
+    val appFacing: Boolean get() = ContractSurface.isAppFacing(path)
+
     /** The `ApiTransport` helper this operation must be called through. */
     fun expectedVerb(): String = when {
         method == "post" && idempotencyExempt -> "apiPostExempt"
         method == "post" -> "apiPost"
         else -> "api" + method.replaceFirstChar { it.uppercase() }
     }
+}
+
+/**
+ * Which half of a contract this module is answerable for (Δ C076a).
+ *
+ * **C013's rule was "every operation in the sixteen in-scope contracts has a typed client", and it
+ * has been quietly wrong since wave 2.** The sixteen contracts are *services*, not surfaces: each
+ * one carries the app-facing routes plus the `/v1/internal` commands its siblings call over mTLS
+ * and the `/v1/admin` routes the portals call. C027, C046, C053 and C060 added 38 of the latter,
+ * none of which a Kotlin mobile client will ever invoke, and the wave-1 gate has been red ever
+ * since — see the C076 handoff for the full accounting.
+ *
+ * The rule this replaces it with keeps the failure that matters and drops the one that does not:
+ *
+ * - **`/v1/…`** — the app-facing surface. Every operation must have a typed client, called through
+ *   the right `ApiTransport` helper, with attestation exactly where the contract declares it. An
+ *   operation added here and not implemented is a screen that will `404`, which is the whole point
+ *   of the check.
+ * - **`/v1/internal/…`** — service-to-service, mTLS at the edge. The caller is a .NET service.
+ * - **`/v1/admin/…`** — the Next.js portals, whose DTOs C012 deliberately does not model
+ *   (`admin-bff`, `fleet`, `provisioning`, `public-bff` and `reputation` are excluded outright for
+ *   the same reason). This extends that existing exclusion from whole *files* to the admin routes
+ *   that live inside app-facing ones.
+ *
+ * **The internal and admin operations C013 already covers stay covered**, pinned by
+ * [COVERED_BEYOND_APP_SURFACE]: dropping the rule entirely would let twenty-six working clients be
+ * deleted with nothing to notice. Adding to that list is allowed and deliberate; it is a decision,
+ * not a default.
+ */
+internal object ContractSurface {
+
+    private const val INTERNAL_PREFIX = "/v1/internal"
+    private const val ADMIN_PREFIX = "/v1/admin"
+
+    /** Whether [path] is reachable from a passenger or driver app. */
+    fun isAppFacing(path: String): Boolean = !path.startsWith(INTERNAL_PREFIX) && !path.startsWith(ADMIN_PREFIX)
+
+    /**
+     * The `/v1/internal` and `/v1/admin` operations that DO have a typed client, as of C013–C066.
+     *
+     * A ratchet, not a wish list. Every one of these is reachable from `MageRideApi` today and
+     * removing one is a silent capability loss; adding one means a component decided a client
+     * needed it and said so here.
+     */
+    val COVERED_BEYOND_APP_SURFACE: Set<String> = setOf(
+        "activateGtfsFeed",
+        "adminLogin",
+        "autoEndSession",
+        "chargeDailyFeeBeforeTrip",
+        "downloadGtfsFeed",
+        "expireRideOffer",
+        "getGtfsUpload",
+        "getGtfsValidationReport",
+        "getRideSagaState",
+        "importGtfsFeed",
+        "listGtfsVersions",
+        "listOutstandingPenalties",
+        "markRideMatching",
+        "notifyPaymentSettled",
+        "placeRideOffer",
+        "refundFare",
+        "reportDriverNoShow",
+        "sendNotification",
+        "settleOutstandingPenalties",
+        "systemCancelRide",
+        "updateDailyFeeRates",
+        "updateDirectionalConfig",
+        "updateDriverLevelConfig",
+        "updateNotificationTemplate",
+        "updateVoucherDiscountTiers",
+        "uploadGtfsFeed",
+    )
 }
 
 /**

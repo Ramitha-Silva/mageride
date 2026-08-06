@@ -928,6 +928,8 @@ internal object ApiOperations {
             200,
             sends<SubscriptionProviderCallback>(),
         ),
+        // AL-49's signed document link, minted by `…/pay` and `…/transfer-slip` (Δ C048). Bytes.
+        binary("getModeBFile", ApiService.SUBSCRIPTION, "GET", "/v1/mode-b/files/{kind}/{id}", 200),
         op<Page<SubscriberRow>>(
             "listModeBSubscribers",
             ApiService.SUBSCRIPTION,
@@ -1150,6 +1152,8 @@ internal object ApiOperations {
             201,
             sends<CreateSupportTicketRequest>(),
         ),
+        // The image behind `TicketDetail.screenshotUrl` (Δ C053). Bytes, for the same reason.
+        binary("getSupportScreenshot", ApiService.SUPPORT, "GET", "/v1/support/screenshots/{uploadId}", 200),
         op<Page<Ticket>>("listSupportTickets", ApiService.SUPPORT, "GET", "/v1/support/tickets/{userId}", 200),
         op<TicketDetail>("getSupportTicket", ApiService.SUPPORT, "GET", "/v1/support/tickets/{userId}/{ticketId}", 200),
 
@@ -1405,6 +1409,21 @@ private fun noBody(
     status: Int,
     request: KSerializer<*>? = null,
 ): FakeOperation = FakeOperation(operationId, service, method, path, status, null, request)
+
+/**
+ * A row whose success response is **bytes** — `image/jpeg`, `image/png` or `application/pdf` (Δ C076a).
+ *
+ * Distinct from [noBody]: there IS a payload, it is simply not a document the fake can synthesise
+ * from a schema, because the contract declares no `application/json` content for it. The client
+ * returns a `ByteArray`. See [FakeOperation.hasBody].
+ */
+private fun binary(
+    operationId: String,
+    service: ApiService,
+    method: String,
+    path: String,
+    status: Int,
+): FakeOperation = FakeOperation(operationId, service, method, path, status, null, binary = true)
 
 /** The request body’s serializer, for the operations that carry one. */
 private inline fun <reified T> sends(): KSerializer<*> = serializer<T>()

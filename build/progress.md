@@ -102,7 +102,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C073 | driver-android-wallet-credit | 4a | DONE | 2026-08-03 | **237 tests green** (was 183; 54 new — 7 new wallet suites plus one case each in `ScheduleLabelsTest` and `NavigationShellTest`), `assembleDebug` + `detekt` + `ktlintCheck` clean; SCR-DA-021/022/023/024/025 built to the wireframes. Three fences are asserted rather than remembered (`WalletFenceTest`): `TopupMethod` has exactly three entries and no source or copy in the package names a bank transfer in any of the three languages, nothing here opens a camera (AL-34), and a transfer's two legs are equal at every amount with no commission in any string. A Rs 1,000 voucher at 10 % prices at Rs 900 and credits Rs 1,000 — and goes to `POST /v1/vouchers/purchase`, **not** to a top-up of the discounted price, which would credit Rs 1,900. Four routes added; the balance is read, never computed. Five spec gaps: the wireframe's `DRV-22011` does not exist (the Driver ID is the platform ULID and no route resolves one form into the other), no notification type carries a credit-transfer request, no per-driver low-balance threshold is stored anywhere, `TransferRow` carries no vehicle, and `VoucherPurchase` carries no LankaQR deep link. One dependency added (`com.google.zxing:core`, encoder only) for AL-15's fallback
 | C074 | driver-android-tracker-sharing-profile | 4a | DONE | 2026-08-03 | **283 tests green** (was 237; 46 new across 6 suites), `assembleDebug` + `detekt` + `ktlintCheck` clean; SCR-DA-027/028/029/030 built to the wireframes. The C074 fence is a decorator on the publisher seam, not a check in a screen: `TrackerPositionPublisher` refuses `start(vehicleId)` for a paired vehicle, which closes all three doors onto the position service at once, and pairing stops a stream that is already running. SCR-DA-028 **re-reads** on every selector change rather than filtering — both endpoints take the vehicle in the path, so AL-35's "never mixed across vehicles" is enforced by emptying the lists on the tap. The rate-passenger sheet is a `ModalBottomSheet` (AL-35) and its list source is query-svc's `GET /v1/trips/{driverId}`, whose `rating` is joined on `rater_id` and therefore means "the stars I already left". Six spec gaps: **no route writes a `subject_kind='ride'` rating** although the column, query-svc's read and D3' §Part 3 all expect one; no owner-facing unbind; the bind wrapper drops `method`/`bindCode`; nothing reads a tracker binding back; no read serves a driver their own star average; and no notification type exists for a Mode B access request. Zero new dependencies — the QR reader is the half of `zxing:core` C073 already added |
 | C075 | driver-android-comms-safety-support | 4a | DONE | 2026-08-03 | **322 tests green** (was 283; 39 new across 5 suites), `assembleDebug` + `detekt` + `ktlintCheck` clean; SCR-DA-031/032/033/033a/034/035 built to the wireframes. **The LiveKit Android SDK cannot be resolved in this repo** — it depends on `audioswitch`, published only on JitPack, and the repository set is `google()` + `mavenCentral()` under `FAIL_ON_PROJECT_REPOS` — so the signalling half of SCR-DA-031 is real and the media half reports `NO_MEDIA_CLIENT`, which is exactly AL-48's condition: the screen offers *"Call normally instead?"* and logs `voip_failed`. Landing a real engine is one binding (`VoipEngine`). SCR-DA-015's Call and SOS buttons now **navigate**: two parameterised routes added (`VoipCall`, `Sos`), and `POST /v1/calls/start` is made by one screen so one tap writes one `comms.call_log` row. The daily-fee refund is a **category** (`daily_fee_refund` → Finance), not an endpoint, and shares SCR-DA-033a with *"Raise a ticket"*. SCR-DA-034 reads `mobile_db_schema.md` §1.6 because no operation lists notifications, which is also why it works offline; `DriverDatabase` is the app's deferred one-handle open of the local DB. Six spec gaps: no positionless `POST /v1/sos`, no spec number for the SOS confirmation window, no server-side notification list, `TicketEventKind.ASSIGNED` is unrenderable, no `TK-` ticket series exists, and `category` is free text. Zero new dependencies |
-| C076 | passenger-android-shell | 4a | DONE | 2026-08-03 | **59 tests green** in a new `apps/passenger-android` unit-test source set, `assembleDebug` + `detekt` + `ktlintCheck` clean; C025's walking skeleton **deleted** (3 files) and replaced by the real shell — Koin graph, `MageRideTheme` from D2' §0.2, trilingual `values`/`values-si`/`values-ta`, a `NavHost` registering **every** C077–C084 destination as a placeholder, SCR-PA-033's modal drawer (the passenger app HAS a hamburger; AL-31 is the driver's rule), the whole D2' §0.3 map stack (MAP-01..08 + MAP-10, with MAP-04 as pure-Kotlin interpolation), and the SignalR plane: 19 res-7 cells with 30 s hysteresis, D6' §5.4's rejoin-then-resync recovery, and a reconnect loop of our own because **the SignalR Java client has no `withAutomaticReconnect()`**. Hub payloads are decoded by `MageRideJson` and not by Gson — Gson binds enums by Kotlin name and C012's are `@SerialName`d — which is why `com.google.code.gson` is now an explicit dependency (signalr declares it at runtime scope). **MAP-09 is not built**: no app-facing contract exists for signed offline bundles. **FCM registered but inert** (no `google-services.json`, C124); **Play Integrity wired but not verified on a device**; **the wave-1 `:shared` gate is red on arrival** and not from anything here — see the handoff |
+| C076 | passenger-android-shell | 4a | DONE | 2026-08-03 | **59 tests green** in a new `apps/passenger-android` unit-test source set, `assembleDebug` + `detekt` + `ktlintCheck` clean; C025's walking skeleton **deleted** (3 files) and replaced by the real shell — Koin graph, `MageRideTheme` from D2' §0.2, trilingual `values`/`values-si`/`values-ta`, a `NavHost` registering **every** C077–C084 destination as a placeholder, SCR-PA-033's modal drawer (the passenger app HAS a hamburger; AL-31 is the driver's rule), the whole D2' §0.3 map stack (MAP-01..08 + MAP-10, with MAP-04 as pure-Kotlin interpolation), and the SignalR plane: 19 res-7 cells with 30 s hysteresis, D6' §5.4's rejoin-then-resync recovery, and a reconnect loop of our own because **the SignalR Java client has no `withAutomaticReconnect()`**. Hub payloads are decoded by `MageRideJson` and not by Gson — Gson binds enums by Kotlin name and C012's are `@SerialName`d — which is why `com.google.code.gson` is now an explicit dependency (signalr declares it at runtime scope). **MAP-09 is not built**: no app-facing contract exists for signed offline bundles. **FCM registered but inert** (no `google-services.json`, C124); **Play Integrity wired but not verified on a device**; **the wave-1 `:shared` gate was red on arrival** and not from anything here — closed straight afterwards by MCS-04, whose handoff is below |
 | C077 | passenger-android-auth-onboarding | 4a | PENDING | | |
 | C078 | passenger-android-live-map-search | 4a | PENDING | | |
 | C079 | passenger-android-booking | 4a | PENDING | | |
@@ -12255,3 +12255,92 @@ _Append 3 lines per completed component (Component / Status / Notes)._
     already answers.
   - **`ControlTokens` is small on purpose** — the shell's own controls only. Append yours, as
     C068–C075 did on the driver side, rather than putting a `dp` at a call site.
+
+
+---
+
+- **Component:** MCS-04 KMP contract gate — **surface scoping + the binary-response row**
+  (micro-change-set, not a manifest entry) — 2026-08-06
+- **Status:** DONE — `./gradlew :shared:testDebugUnitTest detekt ktlintCheck` (the wave-1 gate, and
+  the exact android job in `.github/workflows/ci.yml`) **exits 0 for the first time since wave 2**.
+  822 tests, 0 failed — was 819/5 at MCS-03. `:apps:driver-android` 322 green + `assembleDebug`;
+  `:apps:passenger-android` 59 green + `assembleDebug`. **No production code changed** — every edit
+  is in `androidHostTest`, `commonTest` or the test kit.
+- **Notes:**
+
+  **What was actually red.** Five tests, three causes, and only the first was what it looked like:
+
+  1. **38 operations had no typed client** — 27 `/v1/internal/**` (mTLS, called by a .NET service)
+     and 11 `/v1/admin/**` (the portals'). **Every app-facing operation was already covered**:
+     MCS-03 landed all 25 of those, which is why 177/177 is green and the gap is entirely behind
+     the app surface. None of the 38 has DTOs in `data/models` either, so "just write the clients"
+     was a session, not a patch.
+  2. **Two stale pins.** `EXPECTED_OPERATIONS` 179 → **241**; `EXPECTED_ATTESTED` 20 → **23**.
+  3. **One contract/client disagreement**, `chargeDailyFeeBeforeTrip` — raised, not fixed. See below.
+
+  **The rule changed, and this is the argument.** C013's DoD said *every* operation in the sixteen
+  in-scope contracts has a typed client. That was right when the contracts were app-facing
+  documents and has been quietly wrong since wave 2: **the sixteen are services, not surfaces.**
+  Each carries the routes an app calls plus the internal commands its siblings call and the admin
+  routes a portal calls, and C027, C046, C053 and C060 filled in the back half. `ContractSurface`
+  now draws the line at the path prefix:
+
+  - `/v1/…` — **the rule, unchanged.** All 177 must have a typed client, called through the right
+    `ApiTransport` helper, attested exactly where the contract says. An operation added here and
+    not implemented is a screen that will `404`, which is the whole point of the check.
+  - `/v1/internal/…` and `/v1/admin/…` — out of scope. **C012 already excludes the five portal-only
+    contracts outright for this reason**; this extends the same exclusion from whole files to the
+    admin and internal routes that live inside app-facing ones.
+
+  **It is a scoping change, not a deletion.** `COVERED_BEYOND_APP_SURFACE` pins the **26**
+  internal/admin operations that DO have clients, and a new test asserts that set exactly — so one
+  cannot be quietly deleted (`expireRideOffer` and `markRideMatching` are what the e2e harness
+  drives the ride machine with), and adding one is a deliberate edit rather than a default. A
+  second new test asserts nothing behind the app surface declares `XAttestation`, since D-30 is a
+  *device* verdict and an mTLS caller has no handset to produce one.
+
+  **MCS-03's follow-up is now optional rather than blocking.** Its remaining 40 operations were
+  scheduled as "the follow-up session" and the gate was tracking them by staying red. Under this
+  rule they are out of scope; anyone who does land one adds it to the ratchet. **That was a
+  deliberate call** — the alternative (finish all 40 with their DTOs) is still open and is strictly
+  more work, not different work.
+
+  **The binary-response gap MCS-03 recorded is closed.** That handoff named the prerequisite
+  precisely: `getModeBFile` and `getSupportScreenshot` answer `200` with bytes, and `FakeOperation`
+  could express *a JSON body or no body and nothing else* — a `noBody` row breaks the bodiless
+  invariant (it did, on the first attempt here), and an `op<ByteArray>` row makes the fake
+  synthesise JSON for a schema that declares none. `FakeOperation` now carries `binary`, `FakeReply`
+  has a `binary()` factory serving bytes under an image content type, and `ApiOperations` has a
+  `binary(...)` row helper. Both rows are in; the table is **203**. `hasBody` stays *false* for
+  them on purpose — `OpenApi.responseSchema` reads `application/json`, so a binary operation has no
+  schema to check a body against. **`downloadSignedGtfsObject` is the third of these** and stays
+  out only because it is `/v1/internal` with no client, not because the table cannot hold it.
+
+  **A finding raised and NOT fixed — for whoever owns `subscription.yaml`.**
+  `chargeDailyFeeBeforeTrip` (`POST /v1/internal/fees/{driverId}/charge-before-trip`) is marked
+  `x-idempotency-exempt`, but `apiPostExempt`'s own KDoc says that flag means *"exactly the six
+  HMAC-signed payment-provider callbacks"* and the helper sends `Credential.PROVIDED` — **no bearer
+  and no idempotency key**. This is an mTLS internal route, not a provider callback. There are now
+  **15** exempt operations, **10** of them `/v1/internal/**`, so C046/C060 have been using the flag
+  with a meaning C013 never gave it. Flipping the client to `apiPostExempt` would silently change
+  its credential, so it was left alone: either the contracts are over-applying the flag or the
+  helper needs a second flavour, and that is a contract decision. The verb check no longer runs on
+  internal routes, so this is recorded rather than enforced — **when it is settled, the internal
+  operations can be brought back under the verb rule.**
+
+  **On editing a pinned number.** MCS-03's handoff warns *"check which side is wrong before editing
+  the number"* — `EXPECTED_ATTESTED = 20` had looked stale and wasn't; the client was three short.
+  That warning was heeded and the conclusion is different this time:
+  `every_attested_operation_passes_attested_true` is green, so all 23 attested operations *do* have
+  clients sending the header. The pin counts **contract declarations**, and the three extra are
+  C046's passenger-wallet rails (AL-57/AL-58) — payments and wallet, squarely inside D3' §0's own
+  list. 23 is the contract's number, not a papered-over failure.
+
+  **A trap worth re-recording.** `image/` followed by an asterisk inside a KDoc opens a nested block
+  comment and the file stops parsing several declarations later — exactly what
+  `shared/kmp/CLAUDE.md` warns about for `contracts/*.yaml`, hit here while documenting media types.
+  Also: `sortedSetOf` and `toSortedSet` are **JVM-only** and do not exist in `commonTest`.
+
+  **Where the numbers stand:** contracts declare **241** in-scope operations · **177** app-facing,
+  all covered · **64** internal/admin, **26** covered and pinned, **38** out of scope ·
+  `ApiOperations` holds **203** · **23** attested · **822** tests green.
