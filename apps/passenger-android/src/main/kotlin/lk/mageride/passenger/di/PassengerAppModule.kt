@@ -5,6 +5,14 @@ import io.ktor.client.engine.okhttp.OkHttp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import lk.mageride.passenger.booking.ApiBookingRepository
+import lk.mageride.passenger.booking.BookingDraft
+import lk.mageride.passenger.booking.BookingRepository
+import lk.mageride.passenger.booking.PackageBookingViewModel
+import lk.mageride.passenger.booking.PasteLinkViewModel
+import lk.mageride.passenger.booking.ProxyRiderViewModel
+import lk.mageride.passenger.booking.RideBookingViewModel
+import lk.mageride.passenger.booking.ScheduleRideViewModel
 import lk.mageride.passenger.home.LiveMapViewModel
 import lk.mageride.passenger.home.LocalRecentPlaces
 import lk.mageride.passenger.home.RecentPlaces
@@ -106,6 +114,7 @@ internal fun passengerAppModule(environment: PassengerEnvironment = PassengerEnv
         liveMapBindings(environment)
         onboardingBindings()
         liveMapScreenBindings()
+        bookingBindings()
     }
 
 /**
@@ -159,6 +168,40 @@ private fun Module.liveMapScreenBindings() {
         LiveMapViewModel(live = get(), locations = get(), iam = get(), query = get(), recents = get())
     }
     viewModel { SearchLocationViewModel(query = get(), iam = get(), recents = get()) }
+}
+
+/**
+ * The C079 slice — SCR-PA-009/010b/011/012/012a/013.
+ *
+ * **[BookingDraft] is a `single` and that is the design.** Six screens edit one booking — a
+ * destination on SCR-PA-008, a tier on SCR-PA-009, a rider on SCR-PA-010b, a parcel on SCR-PA-012,
+ * a time on SCR-PA-013 and a payment method on C080's SCR-PA-016 — and the alternatives are worse:
+ * nav arguments would put a rider's phone number in a back-stack URL, and a view model per screen
+ * with no shared home would lose everything downstream the moment somebody went back to change the
+ * pickup. Its own KDoc argues the case; [BookingDraft.clear] is what stops it outliving a booking.
+ *
+ * **[ConfirmPickupViewModel] is deliberately absent.** It takes a `requestId` from the navigation
+ * argument, and Koin's `parametersOf` for a view model would put a runtime cast between the route
+ * and the screen. The NavHost builds it directly — see `PassengerNavHost`.
+ */
+private fun Module.bookingBindings() {
+    single { BookingDraft() }
+    single<BookingRepository> {
+        ApiBookingRepository(
+            transit = get(),
+            fare = get(),
+            rides = get(),
+            dispatch = get(),
+            query = get(),
+            iam = get(),
+        )
+    }
+
+    viewModel { RideBookingViewModel(draft = get(), bookings = get(), keys = get()) }
+    viewModel { ProxyRiderViewModel(draft = get(), bookings = get(), live = get()) }
+    viewModel { PackageBookingViewModel(draft = get(), bookings = get(), keys = get()) }
+    viewModel { ScheduleRideViewModel(draft = get(), bookings = get()) }
+    viewModel { PasteLinkViewModel(bookings = get()) }
 }
 
 /**

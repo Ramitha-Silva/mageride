@@ -140,6 +140,14 @@ internal object ControlTokens {
     val SearchBar: Dp = 48.dp
     val SheetHandleWidthLarge: Dp = 34.dp
 
+    /**
+     * The map inside a modal picker (C079's `MapPickSheet`).
+     *
+     * Tall enough to orient by, short enough to leave the form behind the sheet visible — a picker
+     * that filled the screen would be a screen, and the wireframe assigns no id to one.
+     */
+    val SheetMap: Dp = 320.dp
+
     /** SCR-PA-004's `avatar lg` and the `＋` camera badge on it. */
     val AvatarLarge: Dp = 96.dp
     val AvatarBadge: Dp = 32.dp

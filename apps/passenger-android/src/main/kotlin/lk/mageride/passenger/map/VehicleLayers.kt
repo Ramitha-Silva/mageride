@@ -51,6 +51,10 @@ internal object VehicleLayers {
     const val LAYER_GEOFENCE: String = "mageride-geofence"
     const val LAYER_ROUTE_CASING: String = "mageride-route-casing"
     const val LAYER_ROUTE: String = "mageride-route-line"
+
+    /** SCR-PA-009's walk-to-halt line — its own source, because it is drawn with the route. Δ C079. */
+    const val SOURCE_WALK: String = "mageride-walk"
+    const val LAYER_WALK: String = "mageride-walk-line"
     const val LAYER_PINS: String = "mageride-pins-circles"
 
     /** Feature property carrying the canonical vehicle type (AL-09), so MAP-03 can colour it. */
@@ -95,6 +99,7 @@ internal object VehicleLayers {
     fun install(style: Style, markerImage: String, palette: MapPalette) {
         addCircles(style, palette.circles)
         addRoute(style, palette.route)
+        addWalk(style, palette.route.walk)
         addVehicles(style, markerImage, palette.vehicles)
         addPins(style, palette.pins)
     }
@@ -233,6 +238,28 @@ internal object VehicleLayers {
     }
 
     /**
+     * SCR-PA-009's *"blue walking polyline … to the closest halt"* (change619 #1).
+     *
+     * **Blue and dashed, and both matter.** The route line is the vehicle's colour and solid; this
+     * one is the passenger's own leg of the journey and is not a road the bus takes. D2' §SCR-PA-009
+     * spells the treatment out — `MapLibre LineLayer **blue, dashed**` — and drawing it in the same
+     * style as the route would say the bus goes to your front door. Δ C079.
+     */
+    private fun addWalk(style: Style, colour: Int) {
+        style.addSource(GeoJsonSource(SOURCE_WALK))
+        style.addLayer(
+            LineLayer(LAYER_WALK, SOURCE_WALK).withProperties(
+                PropertyFactory.lineColor(colour),
+                PropertyFactory.lineWidth(WALK_WIDTH_PX),
+                PropertyFactory.lineCap("round"),
+                // Dash lengths are in line widths, not pixels, so the pattern scales with the
+                // stroke and stays legible at every zoom.
+                PropertyFactory.lineDasharray(arrayOf(WALK_DASH, WALK_GAP)),
+            ),
+        )
+    }
+
+    /**
      * §0.3's *"`pickup` green, `dropoff` red, `user` blue dot"*.
      *
      * Circles rather than teardrop symbols, because a circle needs no asset and the spec's own
@@ -304,6 +331,11 @@ internal object VehicleLayers {
     private const val GEOFENCE_STROKE_PX = 2f
     private const val ROUTE_WIDTH_PX = 5f
     private const val ROUTE_CASING_WIDTH_PX = 9f
+
+    /** Narrower than the route: a walking leg is a hint, not the journey. Δ C079. */
+    private const val WALK_WIDTH_PX = 4f
+    private const val WALK_DASH = 2f
+    private const val WALK_GAP = 2f
     private const val PIN_RADIUS_PX = 7f
     private const val PIN_STROKE_PX = 2f
 }

@@ -178,4 +178,123 @@
     <string name="search_select_on_map">Select on map</string>
     <string name="search_add_address">Add address</string>
 
+    <!-- ==== C079 · booking, proxy, package, schedule (SCR-PA-009/010b/011/012/012a/013) ==== -->
+
+    <string name="action_ok">OK</string>
+
+    <!-- SCR-PA-009 · the multimodal list. -->
+    <string name="booking_public_section">Public buses · direct routes (GTFS)</string>
+    <string name="booking_private_section">Private (Mode C · standby)</string>
+    <string name="booking_for_me">For me</string>
+    <string name="booking_for_someone">Someone else</string>
+    <string name="booking_person">Person</string>
+    <string name="booking_package">Package</string>
+    <string name="booking_tag_direct">Direct</string>
+    <string name="booking_tag_transit">Transit</string>
+    <string name="booking_tag_public">PUBLIC</string>
+    <string name="booking_transfers">%1$d transfer on the way</string>
+    <string name="booking_walk_hint">Walk %1$d m to %2$s</string>
+    <string name="booking_standby">Standby · upfront fare</string>
+    <string name="booking_track_route">Track route</string>
+    <string name="booking_book_now">Book now</string>
+    <string name="booking_schedule">Schedule</string>
+    <string name="booking_estimating">Estimating fare…</string>
+    <string name="booking_loading_routes">Loading routes…</string>
+    <string name="booking_no_gtfs">Bus route info coming soon for this area.</string>
+    <string name="booking_no_routes">No public route reaches this destination directly.</string>
+    <string name="booking_no_tiers">No vehicles are available for this journey.</string>
+    <string name="booking_no_destination">Choose a destination</string>
+    <string name="booking_edit_route">Edit route</string>
+
+    <!-- The four ways a location is captured. -->
+    <string name="capture_search">Search</string>
+    <string name="capture_map">Map</string>
+    <string name="capture_paste">Paste link</string>
+    <string name="capture_request">Request</string>
+    <string name="capture_pinned">Pinned at %1$.5f, %2$.5f</string>
+
+    <!-- SCR-PA-010b · proxy rider details. -->
+    <string name="proxy_title">Book for someone else</string>
+    <string name="proxy_rider_name">Rider name</string>
+    <string name="proxy_rider_name_hint">Who is travelling</string>
+    <string name="proxy_rider_phone">Rider mobile</string>
+    <string name="proxy_not_registered">Not a MageRide user — enter the pickup manually.</string>
+    <string name="proxy_pickup_method">Pickup method</string>
+    <string name="proxy_no_pickup">No pickup set yet</string>
+    <string name="proxy_waiting">Waiting for the rider to share their location… %1$s</string>
+    <string name="proxy_confirmed">The rider shared their pickup point.</string>
+    <string name="proxy_no_answer">No answer. Set the pickup another way.</string>
+    <string name="proxy_request_location">Request rider location</string>
+    <string name="proxy_continue">Continue</string>
+
+    <!-- SCR-PA-011 · the RIDER side. P-02: declining sends no coordinates at all. -->
+    <string name="confirm_pickup_banner">Expires in %1$s · declining never sends your GPS</string>
+    <string name="confirm_pickup_drag">Drag the map to adjust</string>
+    <string name="confirm_pickup_who">%1$s wants your pickup location</string>
+    <string name="confirm_pickup_who_unknown">Someone wants your pickup location</string>
+    <string name="confirm_pickup_why">Share your current spot so the driver can find you.</string>
+    <string name="confirm_pickup_decline">Decline</string>
+    <string name="confirm_pickup_share">Share location</string>
+
+    <!-- SCR-PA-012 · package booking. -->
+    <string name="package_title">Send a package</string>
+    <string name="package_size">Size</string>
+    <string name="package_hint_s">Up to 5 kg · fits in a backpack or motorbike box</string>
+    <string name="package_hint_m">Up to 20 kg · fits in a three-wheeler or car boot</string>
+    <string name="package_hint_l">Over 20 kg · needs a van or truck</string>
+    <string name="package_description">Description</string>
+    <string name="package_description_hint">What is inside</string>
+    <string name="package_recipient_name">Recipient name</string>
+    <string name="package_recipient_name_hint">Who is receiving it</string>
+    <string name="package_recipient_phone">Recipient mobile</string>
+    <string name="package_pickup">Pickup location</string>
+    <string name="package_dropoff">Drop-off location</string>
+    <string name="package_not_set">Not set yet</string>
+    <string name="package_payment">Payment</string>
+    <string name="package_estimate">Estimated fare %1$s</string>
+    <string name="package_get_estimate">Get estimate</string>
+    <string name="package_book">Book</string>
+    <string name="package_pickup_otp">Pickup code %1$s — give it to the driver. It is shown only once.</string>
+    <string name="package_otp_noted">I have noted the code</string>
+
+    <!-- SCR-PA-012a · paste link. -->
+    <string name="map_pick_move">Move the map to place the pin</string>
+    <string name="paste_title">Paste a link</string>
+    <string name="paste_label_pickup">PICKUP</string>
+    <string name="paste_label_dropoff">DROP-OFF</string>
+    <string name="paste_explainer">Got a location link on WhatsApp? Copy it, then paste it here.</string>
+    <string name="paste_action">Paste</string>
+    <string name="paste_reading">Reading link…</string>
+    <string name="paste_resolved">Found this place</string>
+    <string name="paste_naming">Looking up the address…</string>
+    <string name="paste_use">Use this location</string>
+    <string name="paste_unreadable">Could not read that link. Pick the spot on the map instead.</string>
+
+    <!-- Booking-time payment methods (AL-22). COD is package-only (US-20.8). -->
+    <string name="payment_cash">Cash</string>
+    <string name="payment_lankaqr">LankaQR</string>
+    <string name="payment_onepay">OnePay</string>
+    <string name="payment_cod">Cash on delivery</string>
+
+    <!-- SCR-PA-013 · schedule ride. AL-36: a destination is mandatory. -->
+    <string name="schedule_title">Schedule ride</string>
+    <string name="schedule_where_to">Where to?</string>
+    <string name="schedule_select_destination">Select destination…</string>
+    <string name="schedule_when">When</string>
+    <string name="schedule_pick_date">Pick a date</string>
+    <string name="schedule_reminders">Reminders set: 1 hour and 15 minutes before.</string>
+    <string name="schedule_confirm">Confirm schedule</string>
+    <string name="schedule_time_past">Choose a time at least 30 minutes from now.</string>
+
+    <!-- Failures this cluster's six contracts declare. D-26: resolved from the kebab code. -->
+    <string name="error_booking_disabled">Booking is paused after repeated cancellations. Try again later.</string>
+    <string name="error_active_ride_exists">You already have a ride in progress.</string>
+    <string name="error_fare_expired">That price has expired. Please try again.</string>
+    <string name="error_payment_method_invalid">That payment method cannot be used for this booking.</string>
+    <string name="error_unserviceable_area">MageRide does not operate in that area yet.</string>
+    <string name="error_route_unavailable">No route could be found between those two points.</string>
+    <string name="error_loc_request_rate_limited">Too many location requests. Try again later.</string>
+    <string name="error_request_expired">This request has expired.</string>
+    <string name="error_dependency_unavailable">A service is temporarily unavailable. Try again shortly.</string>
+
 </resources>

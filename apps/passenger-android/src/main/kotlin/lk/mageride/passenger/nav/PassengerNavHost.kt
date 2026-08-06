@@ -10,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -17,14 +18,27 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import lk.mageride.passenger.R
+import lk.mageride.passenger.booking.BookingDraft
+import lk.mageride.passenger.booking.BookingRepository
+import lk.mageride.passenger.booking.CaptureTarget
+import lk.mageride.passenger.booking.ConfirmPickupScreen
+import lk.mageride.passenger.booking.ConfirmPickupViewModel
+import lk.mageride.passenger.booking.PackageBookingScreen
+import lk.mageride.passenger.booking.PackageEnd
+import lk.mageride.passenger.booking.ProxyRiderScreen
+import lk.mageride.passenger.booking.RideBookingScreen
+import lk.mageride.passenger.booking.ScheduleRideScreen
 import lk.mageride.passenger.home.LiveMapScreen
 import lk.mageride.passenger.home.SearchLocationScreen
+import lk.mageride.passenger.location.PassengerLocationSource
 import lk.mageride.passenger.onboarding.LocationPermissionScreen
 import lk.mageride.passenger.onboarding.LoginScreen
 import lk.mageride.passenger.onboarding.OnboardingScreen
 import lk.mageride.passenger.onboarding.ProfileSetupScreen
 import lk.mageride.passenger.onboarding.SplashScreen
 import lk.mageride.passenger.ui.theme.MageRideTheme
+import lk.mageride.shared.data.models.Place
+import org.koin.compose.koinInject
 
 /**
  * The app's single `NavHost`, with one entry per [PassengerRoute].
@@ -41,6 +55,14 @@ import lk.mageride.passenger.ui.theme.MageRideTheme
  */
 @Composable
 internal fun PassengerNavHost(controller: NavHostController, modifier: Modifier = Modifier) {
+    // Resolved once for the graph rather than per destination. These three are what the booking
+    // cluster needs *at the navigation seam* — the draft, because SCR-PA-008 is one picker serving
+    // five callers (see `CaptureTarget`), and the repository and location source, because
+    // SCR-PA-011's view model takes a navigation argument and is built here.
+    val draft = koinInject<BookingDraft>()
+    val bookings = koinInject<BookingRepository>()
+    val locations = koinInject<PassengerLocationSource>()
+
     NavHost(
         navController = controller,
         startDestination = PassengerRoute.Splash.path,
@@ -85,31 +107,129 @@ internal fun PassengerNavHost(controller: NavHostController, modifier: Modifier 
                     controller.navigate(PassengerRoute.ModeBRequest(vehicleId).path)
                 },
                 // A shortcut and a recent are both destinations, so they go where a chosen place
-                // goes: C079's booking screen. Until that lands they open the search, which is
-                // where a passenger can still act on one.
-                onOpenSavedAddress = { controller.navigate(PassengerRoute.SearchLocation.path) },
-                onOpenRecent = { controller.navigate(PassengerRoute.SearchLocation.path) },
+                // goes: straight into a booking. Tapping ★ Home IS choosing where to go.
+                onOpenSavedAddress = { address ->
+                    draft.begin(Place(lat = address.lat, lng = address.lng, address = address.label))
+                    controller.navigate(PassengerRoute.RideBooking.path)
+                },
+                onOpenRecent = { place ->
+                    draft.begin(place.toPlace())
+                    controller.navigate(PassengerRoute.RideBooking.path)
+                },
                 onAddAddress = { controller.navigate(PassengerRoute.SavedAddresses.path) },
             )
         }
         composable(PassengerRoute.SearchLocation.path) {
             SearchLocationScreen(
-                // C079 owns SCR-PA-009; until it lands, choosing a place returns to the map
-                // rather than opening a screen that does not exist yet.
                 around = null,
                 onBack = { controller.popBackStack() },
-                onPlaceChosen = { controller.popBackStack() },
+                // ONE picker, five callers. Whoever opened it parked a `CaptureTarget` on the
+                // draft; if nobody did, this is the home sheet's "Where to?" and the chosen place
+                // begins a booking rather than editing one. See `CaptureTarget`.
+                onPlaceChosen = { place ->
+                    if (draft.capture(place.toPlace())) {
+                        controller.popBackStack()
+                    } else {
+                        draft.begin(place.toPlace())
+                        controller.navigate(PassengerRoute.RideBooking.path) {
+                            popUpTo(PassengerRoute.SearchLocation.path) { inclusive = true }
+                        }
+                    }
+                },
                 onPickOnMap = { controller.popBackStack() },
                 onAddAddress = { controller.navigate(PassengerRoute.SavedAddresses.path) },
             )
         }
 
         // ---- C079 · booking --------------------------------------------------------------
-        placeholder(PassengerRoute.RideBooking, "SCR-PA-009 ride booking")
-        placeholder(PassengerRoute.ProxyRider, "SCR-PA-010b proxy rider details")
-        placeholder(PassengerRoute.PackageBooking, "SCR-PA-012 package booking")
-        placeholder(PassengerRoute.ScheduleRide, "SCR-PA-013 schedule ride")
-        placeholder(PassengerRoute.ConfirmPickup.PATTERN, "SCR-PA-011 confirm pickup")
+        composable(PassengerRoute.RideBooking.path) {
+            RideBookingScreen(
+                onBack = { controller.popBackStack() },
+                onEditRoute = {
+                    draft.expect(CaptureTarget.BOOKING_DROPOFF)
+                    controller.navigate(PassengerRoute.SearchLocation.path)
+                },
+                onProxyDetails = { controller.navigate(PassengerRoute.ProxyRider.path) },
+                onPackageBooking = { controller.navigate(PassengerRoute.PackageBooking.path) },
+                onSchedule = { controller.navigate(PassengerRoute.ScheduleRide.path) },
+                // C080 owns SCR-PA-014; the ride exists from `POST /v1/rides/request` on, so the
+                // route is parameterised and correct even though the screen is still a placeholder.
+                onBooked = { rideId ->
+                    controller.navigate(PassengerRoute.FindingDriver(rideId).path) {
+                        popUpTo(PassengerRoute.LiveMap.path)
+                    }
+                },
+                // "Track Route" — the map follows the GTFS polyline. SCR-PA-010 is where a route
+                // is watched, and the line is already drawn on the booking map behind this sheet.
+                onTrackRoute = {
+                    controller.navigate(PassengerRoute.LiveMap.path) {
+                        popUpTo(PassengerRoute.LiveMap.path) { inclusive = true }
+                    }
+                },
+            )
+        }
+
+        composable(PassengerRoute.ProxyRider.path) {
+            ProxyRiderScreen(
+                onBack = { controller.popBackStack() },
+                onSearch = {
+                    draft.expect(CaptureTarget.PROXY_PICKUP)
+                    controller.navigate(PassengerRoute.SearchLocation.path)
+                },
+                onDone = { controller.popBackStack() },
+            )
+        }
+
+        composable(PassengerRoute.PackageBooking.path) {
+            PackageBookingScreen(
+                onBack = { controller.popBackStack() },
+                onSearch = { end ->
+                    draft.expect(
+                        if (end == PackageEnd.PICKUP) CaptureTarget.PACKAGE_PICKUP else CaptureTarget.PACKAGE_DROPOFF,
+                    )
+                    controller.navigate(PassengerRoute.SearchLocation.path)
+                },
+                onBooked = { rideId ->
+                    controller.navigate(PassengerRoute.PackageTracking(rideId).path) {
+                        popUpTo(PassengerRoute.LiveMap.path)
+                    }
+                },
+            )
+        }
+
+        composable(PassengerRoute.ScheduleRide.path) {
+            ScheduleRideScreen(
+                onBack = { controller.popBackStack() },
+                onPickDestination = {
+                    draft.expect(CaptureTarget.SCHEDULE_DROPOFF)
+                    controller.navigate(PassengerRoute.SearchLocation.path)
+                },
+                // A scheduled ride is not a ride yet — it is a `dispatch.scheduled_rides` row that
+                // materialises at T-30. C081's SCR-PA-022 is where it is seen; until then the
+                // passenger returns to the map, which is where they started.
+                onScheduled = {
+                    controller.navigate(PassengerRoute.LiveMap.path) {
+                        popUpTo(PassengerRoute.LiveMap.path) { inclusive = true }
+                    }
+                },
+            )
+        }
+
+        composable(
+            route = PassengerRoute.ConfirmPickup.PATTERN,
+            arguments = listOf(navArgument(PassengerRoute.ConfirmPickup.ARG_REQUEST_ID) { type = NavType.StringType }),
+        ) { entry ->
+            val requestId = entry.arguments?.getString(PassengerRoute.ConfirmPickup.ARG_REQUEST_ID).orEmpty()
+            ConfirmPickupScreen(
+                onFinished = { controller.popBackStack() },
+                // Built here rather than resolved from Koin: the request id is a navigation
+                // argument, and `parametersOf` would put a runtime cast between the route and the
+                // screen for no gain. Keyed on the id so a second push replaces the model.
+                model = viewModel(key = requestId) {
+                    ConfirmPickupViewModel(requestId = requestId, bookings = bookings, locations = locations)
+                },
+            )
+        }
 
         // ---- C080 · the ride and its payment ---------------------------------------------
         placeholder(PassengerRoute.FindingDriver.PATTERN, "SCR-PA-014 finding driver")

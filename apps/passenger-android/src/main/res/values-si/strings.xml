@@ -135,4 +135,114 @@
     <string name="search_select_on_map">සිතියමෙන් තෝරන්න</string>
     <string name="search_add_address">ලිපිනයක් එක් කරන්න</string>
 
+    <!-- ==== C079 · booking, proxy, package, schedule (SCR-PA-009/010b/011/012/012a/013) ==== -->
+
+    <string name="action_ok">හරි</string>
+
+    <string name="booking_public_section">පොදු බස් · සෘජු මාර්ග (GTFS)</string>
+    <string name="booking_private_section">පෞද්ගලික (C ප්‍රකාරය · පොරොත්තුවෙන්)</string>
+    <string name="booking_for_me">මට</string>
+    <string name="booking_for_someone">වෙනත් අයෙකුට</string>
+    <string name="booking_person">පුද්ගලයෙක්</string>
+    <string name="booking_package">පාර්සලයක්</string>
+    <string name="booking_tag_direct">සෘජු</string>
+    <string name="booking_tag_transit">මාරුවක්</string>
+    <string name="booking_tag_public">පොදු</string>
+    <string name="booking_transfers">මගදී මාරුවීම් %1$d ක්</string>
+    <string name="booking_walk_hint">%2$s වෙත මීටර් %1$d ක් ඇවිදින්න</string>
+    <string name="booking_standby">පොරොත්තුවෙන් · කලින් දන්වන ගාස්තුව</string>
+    <string name="booking_track_route">මාර්ගය නිරීක්ෂණය</string>
+    <string name="booking_book_now">දැන් වෙන් කරන්න</string>
+    <string name="booking_schedule">කාලසටහන</string>
+    <string name="booking_estimating">ගාස්තුව ගණනය වෙමින්…</string>
+    <string name="booking_loading_routes">මාර්ග පූරණය වෙමින්…</string>
+    <string name="booking_no_gtfs">මෙම ප්‍රදේශයේ බස් මාර්ග තොරතුරු ඉක්මනින්.</string>
+    <string name="booking_no_routes">මෙම ගමනාන්තයට සෘජු පොදු මාර්ගයක් නැත.</string>
+    <string name="booking_no_tiers">මෙම ගමනට වාහන නොමැත.</string>
+    <string name="booking_no_destination">ගමනාන්තයක් තෝරන්න</string>
+    <string name="booking_edit_route">මාර්ගය වෙනස් කරන්න</string>
+
+    <string name="capture_search">සොයන්න</string>
+    <string name="capture_map">සිතියම</string>
+    <string name="capture_paste">සබැඳිය අලවන්න</string>
+    <string name="capture_request">ඉල්ලන්න</string>
+    <string name="capture_pinned">%1$.5f, %2$.5f හි සලකුණු කර ඇත</string>
+
+    <string name="proxy_title">වෙනත් අයෙකු වෙනුවෙන් වෙන් කරන්න</string>
+    <string name="proxy_rider_name">මගියාගේ නම</string>
+    <string name="proxy_rider_name_hint">ගමන් කරන්නේ කවුද</string>
+    <string name="proxy_rider_phone">මගියාගේ දුරකථනය</string>
+    <string name="proxy_not_registered">MageRide භාවිතා කරන්නෙක් නොවේ — නැගීමේ ස්ථානය අතින් ඇතුළත් කරන්න.</string>
+    <string name="proxy_pickup_method">නැගීමේ ක්‍රමය</string>
+    <string name="proxy_no_pickup">තවම නැගීමේ ස්ථානයක් නැත</string>
+    <string name="proxy_waiting">මගියා ස්ථානය බෙදාගන්නා තෙක් රැඳී සිටිමින්… %1$s</string>
+    <string name="proxy_confirmed">මගියා නැගීමේ ස්ථානය බෙදාගත්තා.</string>
+    <string name="proxy_no_answer">පිළිතුරක් නැත. වෙනත් ක්‍රමයකින් ස්ථානය දෙන්න.</string>
+    <string name="proxy_request_location">මගියාගේ ස්ථානය ඉල්ලන්න</string>
+    <string name="proxy_continue">ඉදිරියට</string>
+
+    <string name="confirm_pickup_banner">%1$s කින් කල් ඉකුත් වේ · ප්‍රතික්ෂේප කිරීමෙන් ඔබේ GPS කිසිවිටෙක නොයවයි</string>
+    <string name="confirm_pickup_drag">සකස් කිරීමට සිතියම අදින්න</string>
+    <string name="confirm_pickup_who">%1$s ඔබේ නැගීමේ ස්ථානය ඉල්ලයි</string>
+    <string name="confirm_pickup_who_unknown">යමෙක් ඔබේ නැගීමේ ස්ථානය ඉල්ලයි</string>
+    <string name="confirm_pickup_why">රියදුරාට ඔබව සොයාගත හැකි වන පරිදි ඔබේ ස්ථානය බෙදාගන්න.</string>
+    <string name="confirm_pickup_decline">ප්‍රතික්ෂේප කරන්න</string>
+    <string name="confirm_pickup_share">ස්ථානය බෙදාගන්න</string>
+
+    <string name="package_title">පාර්සලයක් යවන්න</string>
+    <string name="package_size">ප්‍රමාණය</string>
+    <string name="package_hint_s">කිලෝ 5 දක්වා · පිටු බෑගයකට හෝ යතුරුපැදි පෙට්ටියකට</string>
+    <string name="package_hint_m">කිලෝ 20 දක්වා · ත්‍රිරෝද රථයකට හෝ මෝටර් රථ ඩිකියකට</string>
+    <string name="package_hint_l">කිලෝ 20 ට වැඩි · වෑන් හෝ ට්‍රක් රථයක් අවශ්‍යයි</string>
+    <string name="package_description">විස්තරය</string>
+    <string name="package_description_hint">ඇතුළත ඇත්තේ කුමක්ද</string>
+    <string name="package_recipient_name">ලබන්නාගේ නම</string>
+    <string name="package_recipient_name_hint">ලබාගන්නේ කවුද</string>
+    <string name="package_recipient_phone">ලබන්නාගේ දුරකථනය</string>
+    <string name="package_pickup">බාරදෙන ස්ථානය</string>
+    <string name="package_dropoff">ලබාදෙන ස්ථානය</string>
+    <string name="package_not_set">තවම දී නැත</string>
+    <string name="package_payment">ගෙවීම</string>
+    <string name="package_estimate">ඇස්තමේන්තුගත ගාස්තුව %1$s</string>
+    <string name="package_get_estimate">ඇස්තමේන්තුව ලබාගන්න</string>
+    <string name="package_book">වෙන් කරන්න</string>
+    <string name="package_pickup_otp">බාරදීමේ කේතය %1$s — රියදුරාට දෙන්න. එය පෙන්වන්නේ එක් වරක් පමණි.</string>
+    <string name="package_otp_noted">කේතය සටහන් කරගත්තා</string>
+
+    <string name="map_pick_move">සලකුණ තැබීමට සිතියම ගෙන යන්න</string>
+    <string name="paste_title">සබැඳියක් අලවන්න</string>
+    <string name="paste_label_pickup">බාරදෙන</string>
+    <string name="paste_label_dropoff">ලබාදෙන</string>
+    <string name="paste_explainer">WhatsApp හි ස්ථාන සබැඳියක් තිබේද? එය පිටපත් කර මෙහි අලවන්න.</string>
+    <string name="paste_action">අලවන්න</string>
+    <string name="paste_reading">සබැඳිය කියවමින්…</string>
+    <string name="paste_resolved">මෙම ස්ථානය හමුවිය</string>
+    <string name="paste_naming">ලිපිනය සොයමින්…</string>
+    <string name="paste_use">මෙම ස්ථානය භාවිතා කරන්න</string>
+    <string name="paste_unreadable">එම සබැඳිය කියවිය නොහැකි විය. ඒ වෙනුවට සිතියමෙන් තෝරන්න.</string>
+
+    <string name="payment_cash">මුදල්</string>
+    <string name="payment_lankaqr">ලංකා QR</string>
+    <string name="payment_onepay">වන්පේ</string>
+    <string name="payment_cod">බාරදීමේදී මුදල්</string>
+
+    <string name="schedule_title">ගමන කාලසටහන්ගත කරන්න</string>
+    <string name="schedule_where_to">කොහෙද යන්නේ?</string>
+    <string name="schedule_select_destination">ගමනාන්තය තෝරන්න…</string>
+    <string name="schedule_when">කවදාද</string>
+    <string name="schedule_pick_date">දිනය තෝරන්න</string>
+    <string name="schedule_reminders">මතක් කිරීම්: පැයකට සහ මිනිත්තු 15 කට පෙර.</string>
+    <string name="schedule_confirm">කාලසටහන තහවුරු කරන්න</string>
+    <string name="schedule_time_past">අඩුම තරමින් මිනිත්තු 30 කට පසු වේලාවක් තෝරන්න.</string>
+
+    <string name="error_booking_disabled">නැවත නැවත අවලංගු කිරීම් නිසා වෙන් කිරීම තාවකාලිකව නවතා ඇත. පසුව උත්සාහ කරන්න.</string>
+    <string name="error_active_ride_exists">ඔබට දැනටමත් ගමනක් ක්‍රියාත්මක වේ.</string>
+    <string name="error_fare_expired">එම මිල කල් ඉකුත් වී ඇත. නැවත උත්සාහ කරන්න.</string>
+    <string name="error_payment_method_invalid">මෙම වෙන් කිරීමට එම ගෙවීම් ක්‍රමය භාවිතා කළ නොහැක.</string>
+    <string name="error_unserviceable_area">MageRide තවම එම ප්‍රදේශයේ ක්‍රියාත්මක නොවේ.</string>
+    <string name="error_route_unavailable">එම ස්ථාන දෙක අතර මාර්ගයක් සොයාගත නොහැකි විය.</string>
+    <string name="error_loc_request_rate_limited">ස්ථාන ඉල්ලීම් ඉතා වැඩියි. පසුව උත්සාහ කරන්න.</string>
+    <string name="error_request_expired">මෙම ඉල්ලීම කල් ඉකුත් වී ඇත.</string>
+    <string name="error_dependency_unavailable">සේවාවක් තාවකාලිකව නොමැත. මොහොතකින් උත්සාහ කරන්න.</string>
+
 </resources>

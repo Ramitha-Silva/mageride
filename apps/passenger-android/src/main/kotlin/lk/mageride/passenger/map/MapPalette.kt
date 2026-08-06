@@ -57,8 +57,10 @@ internal data class CirclePalette(val accuracy: Int, val geofence: Int)
  * @property casing The wider, darker stroke underneath. The light basemap draws roads white on
  *   grey, so a single orange line reads as a road in sunlight; a casing is how every navigation
  *   map keeps a route legible over both styles.
+ * @property walk SCR-PA-009's **blue, dashed** walk-to-halt leg. Deliberately the §0.3 user-dot
+ *   blue rather than the route colour: that leg is the passenger's, not the bus's. Δ C079.
  */
-internal data class RoutePalette(val line: Int, val casing: Int)
+internal data class RoutePalette(val line: Int, val casing: Int, val walk: Int)
 
 /**
  * @property byKind `VehicleLayers.PIN_PICKUP` / `PIN_DROPOFF` / `PIN_USER` → ARGB.
@@ -96,6 +98,7 @@ internal val mapPalette: MapPalette
             route = RoutePalette(
                 line = MaterialTheme.colorScheme.primary.toArgb(),
                 casing = MaterialTheme.colorScheme.onSurface.toArgb(),
+                walk = PinColors.User.toArgb(),
             ),
             pins = PinPalette(
                 byKind = mapOf(

@@ -135,4 +135,114 @@
     <string name="search_select_on_map">வரைபடத்தில் தேர்ந்தெடு</string>
     <string name="search_add_address">முகவரி சேர்</string>
 
+    <!-- ==== C079 · booking, proxy, package, schedule (SCR-PA-009/010b/011/012/012a/013) ==== -->
+
+    <string name="action_ok">சரி</string>
+
+    <string name="booking_public_section">பொது பேருந்துகள் · நேரடி வழிகள் (GTFS)</string>
+    <string name="booking_private_section">தனியார் (பயன்முறை C · காத்திருப்பு)</string>
+    <string name="booking_for_me">எனக்கு</string>
+    <string name="booking_for_someone">வேறு ஒருவருக்கு</string>
+    <string name="booking_person">நபர்</string>
+    <string name="booking_package">பொருள்</string>
+    <string name="booking_tag_direct">நேரடி</string>
+    <string name="booking_tag_transit">மாற்றம்</string>
+    <string name="booking_tag_public">பொது</string>
+    <string name="booking_transfers">வழியில் %1$d மாற்றம்</string>
+    <string name="booking_walk_hint">%2$s வரை %1$d மீ நடக்கவும்</string>
+    <string name="booking_standby">காத்திருப்பு · முன்கூட்டிய கட்டணம்</string>
+    <string name="booking_track_route">வழியைக் கண்காணி</string>
+    <string name="booking_book_now">இப்போது முன்பதிவு</string>
+    <string name="booking_schedule">திட்டமிடு</string>
+    <string name="booking_estimating">கட்டணம் கணக்கிடப்படுகிறது…</string>
+    <string name="booking_loading_routes">வழிகள் ஏற்றப்படுகின்றன…</string>
+    <string name="booking_no_gtfs">இந்தப் பகுதிக்கான பேருந்து வழித் தகவல் விரைவில்.</string>
+    <string name="booking_no_routes">இந்த இலக்கை நேரடியாக அடையும் பொது வழி இல்லை.</string>
+    <string name="booking_no_tiers">இந்தப் பயணத்திற்கு வாகனங்கள் இல்லை.</string>
+    <string name="booking_no_destination">ஒரு இலக்கைத் தேர்ந்தெடுக்கவும்</string>
+    <string name="booking_edit_route">வழியை மாற்று</string>
+
+    <string name="capture_search">தேடு</string>
+    <string name="capture_map">வரைபடம்</string>
+    <string name="capture_paste">இணைப்பை ஒட்டு</string>
+    <string name="capture_request">கோரு</string>
+    <string name="capture_pinned">%1$.5f, %2$.5f இல் குறிக்கப்பட்டது</string>
+
+    <string name="proxy_title">வேறு ஒருவருக்காக முன்பதிவு</string>
+    <string name="proxy_rider_name">பயணியின் பெயர்</string>
+    <string name="proxy_rider_name_hint">பயணிப்பவர் யார்</string>
+    <string name="proxy_rider_phone">பயணியின் கைபேசி</string>
+    <string name="proxy_not_registered">MageRide பயனர் அல்ல — ஏறும் இடத்தைக் கைமுறையாக உள்ளிடவும்.</string>
+    <string name="proxy_pickup_method">ஏறும் இட முறை</string>
+    <string name="proxy_no_pickup">இன்னும் ஏறும் இடம் இல்லை</string>
+    <string name="proxy_waiting">பயணி இடத்தைப் பகிரக் காத்திருக்கிறது… %1$s</string>
+    <string name="proxy_confirmed">பயணி ஏறும் இடத்தைப் பகிர்ந்தார்.</string>
+    <string name="proxy_no_answer">பதில் இல்லை. வேறு வழியில் இடத்தைக் குறிக்கவும்.</string>
+    <string name="proxy_request_location">பயணியின் இடத்தைக் கோரு</string>
+    <string name="proxy_continue">தொடரவும்</string>
+
+    <string name="confirm_pickup_banner">%1$s இல் காலாவதியாகும் · மறுத்தால் உங்கள் GPS ஒருபோதும் அனுப்பப்படாது</string>
+    <string name="confirm_pickup_drag">சரிசெய்ய வரைபடத்தை இழுக்கவும்</string>
+    <string name="confirm_pickup_who">%1$s உங்கள் ஏறும் இடத்தைக் கேட்கிறார்</string>
+    <string name="confirm_pickup_who_unknown">ஒருவர் உங்கள் ஏறும் இடத்தைக் கேட்கிறார்</string>
+    <string name="confirm_pickup_why">ஓட்டுநர் உங்களைக் கண்டுபிடிக்க உங்கள் இடத்தைப் பகிரவும்.</string>
+    <string name="confirm_pickup_decline">மறு</string>
+    <string name="confirm_pickup_share">இடத்தைப் பகிர்</string>
+
+    <string name="package_title">ஒரு பொருளை அனுப்பு</string>
+    <string name="package_size">அளவு</string>
+    <string name="package_hint_s">5 கிலோ வரை · முதுகுப்பை அல்லது மோட்டார் சைக்கிள் பெட்டியில்</string>
+    <string name="package_hint_m">20 கிலோ வரை · முச்சக்கர வண்டி அல்லது கார் பின்பெட்டியில்</string>
+    <string name="package_hint_l">20 கிலோவுக்கு மேல் · வேன் அல்லது லாரி தேவை</string>
+    <string name="package_description">விவரம்</string>
+    <string name="package_description_hint">உள்ளே என்ன இருக்கிறது</string>
+    <string name="package_recipient_name">பெறுநரின் பெயர்</string>
+    <string name="package_recipient_name_hint">பெறுபவர் யார்</string>
+    <string name="package_recipient_phone">பெறுநரின் கைபேசி</string>
+    <string name="package_pickup">எடுக்கும் இடம்</string>
+    <string name="package_dropoff">சேர்க்கும் இடம்</string>
+    <string name="package_not_set">இன்னும் அமைக்கப்படவில்லை</string>
+    <string name="package_payment">கட்டணம்</string>
+    <string name="package_estimate">மதிப்பிடப்பட்ட கட்டணம் %1$s</string>
+    <string name="package_get_estimate">மதிப்பீட்டைப் பெறு</string>
+    <string name="package_book">முன்பதிவு</string>
+    <string name="package_pickup_otp">எடுக்கும் குறியீடு %1$s — ஓட்டுநரிடம் கொடுக்கவும். இது ஒரு முறை மட்டுமே காட்டப்படும்.</string>
+    <string name="package_otp_noted">குறியீட்டைக் குறித்துக்கொண்டேன்</string>
+
+    <string name="map_pick_move">குறியை வைக்க வரைபடத்தை நகர்த்தவும்</string>
+    <string name="paste_title">ஒரு இணைப்பை ஒட்டு</string>
+    <string name="paste_label_pickup">எடுக்கும்</string>
+    <string name="paste_label_dropoff">சேர்க்கும்</string>
+    <string name="paste_explainer">WhatsApp இல் இட இணைப்பு உள்ளதா? அதை நகலெடுத்து இங்கே ஒட்டவும்.</string>
+    <string name="paste_action">ஒட்டு</string>
+    <string name="paste_reading">இணைப்பு படிக்கப்படுகிறது…</string>
+    <string name="paste_resolved">இந்த இடம் கிடைத்தது</string>
+    <string name="paste_naming">முகவரி தேடப்படுகிறது…</string>
+    <string name="paste_use">இந்த இடத்தைப் பயன்படுத்து</string>
+    <string name="paste_unreadable">அந்த இணைப்பைப் படிக்க முடியவில்லை. வரைபடத்தில் தேர்ந்தெடுக்கவும்.</string>
+
+    <string name="payment_cash">பணம்</string>
+    <string name="payment_lankaqr">லங்கா QR</string>
+    <string name="payment_onepay">ஒன்பே</string>
+    <string name="payment_cod">சேர்க்கும்போது பணம்</string>
+
+    <string name="schedule_title">பயணத்தைத் திட்டமிடு</string>
+    <string name="schedule_where_to">எங்கே செல்ல வேண்டும்?</string>
+    <string name="schedule_select_destination">இலக்கைத் தேர்ந்தெடு…</string>
+    <string name="schedule_when">எப்போது</string>
+    <string name="schedule_pick_date">தேதியைத் தேர்ந்தெடு</string>
+    <string name="schedule_reminders">நினைவூட்டல்கள்: 1 மணி நேரம் மற்றும் 15 நிமிடங்களுக்கு முன்.</string>
+    <string name="schedule_confirm">திட்டத்தை உறுதிசெய்</string>
+    <string name="schedule_time_past">இப்போதிலிருந்து குறைந்தது 30 நிமிடங்களுக்குப் பிந்தைய நேரத்தைத் தேர்ந்தெடுக்கவும்.</string>
+
+    <string name="error_booking_disabled">மீண்டும் மீண்டும் ரத்து செய்ததால் முன்பதிவு தற்காலிகமாக நிறுத்தப்பட்டுள்ளது. பிறகு முயற்சிக்கவும்.</string>
+    <string name="error_active_ride_exists">உங்களுக்கு ஏற்கனவே ஒரு பயணம் நடந்துகொண்டிருக்கிறது.</string>
+    <string name="error_fare_expired">அந்த விலை காலாவதியாகிவிட்டது. மீண்டும் முயற்சிக்கவும்.</string>
+    <string name="error_payment_method_invalid">இந்த முன்பதிவுக்கு அந்தக் கட்டண முறையைப் பயன்படுத்த முடியாது.</string>
+    <string name="error_unserviceable_area">MageRide அந்தப் பகுதியில் இன்னும் இயங்கவில்லை.</string>
+    <string name="error_route_unavailable">அந்த இரு இடங்களுக்கு இடையே வழி கிடைக்கவில்லை.</string>
+    <string name="error_loc_request_rate_limited">அதிக இட கோரிக்கைகள். பிறகு முயற்சிக்கவும்.</string>
+    <string name="error_request_expired">இந்தக் கோரிக்கை காலாவதியாகிவிட்டது.</string>
+    <string name="error_dependency_unavailable">ஒரு சேவை தற்காலிகமாகக் கிடைக்கவில்லை. சிறிது நேரத்தில் முயற்சிக்கவும்.</string>
+
 </resources>

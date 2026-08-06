@@ -105,7 +105,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C076 | passenger-android-shell | 4a | DONE | 2026-08-03 | **59 tests green** in a new `apps/passenger-android` unit-test source set, `assembleDebug` + `detekt` + `ktlintCheck` clean; C025's walking skeleton **deleted** (3 files) and replaced by the real shell — Koin graph, `MageRideTheme` from D2' §0.2, trilingual `values`/`values-si`/`values-ta`, a `NavHost` registering **every** C077–C084 destination as a placeholder, SCR-PA-033's modal drawer (the passenger app HAS a hamburger; AL-31 is the driver's rule), the whole D2' §0.3 map stack (MAP-01..08 + MAP-10, with MAP-04 as pure-Kotlin interpolation), and the SignalR plane: 19 res-7 cells with 30 s hysteresis, D6' §5.4's rejoin-then-resync recovery, and a reconnect loop of our own because **the SignalR Java client has no `withAutomaticReconnect()`**. Hub payloads are decoded by `MageRideJson` and not by Gson — Gson binds enums by Kotlin name and C012's are `@SerialName`d — which is why `com.google.code.gson` is now an explicit dependency (signalr declares it at runtime scope). **MAP-09 is not built**: no app-facing contract exists for signed offline bundles. **FCM registered but inert** (no `google-services.json`, C124); **Play Integrity wired but not verified on a device**; **the wave-1 `:shared` gate was red on arrival** and not from anything here — closed straight afterwards by MCS-04, whose handoff is below |
 | C077 | passenger-android-auth-onboarding | 4a | DONE | 2026-08-06 | **96 tests green** (was 59; 37 new across 5 suites), `assembleDebug` + `detekt` + `ktlintCheck` clean. SCR-PA-001…005 built to `specs/wireframes/passenger_android.html`. **Get Started is pinned below the language list** (AL-36/US-1.3) — D2' §SCR-PA-002's own sketch still draws the CTA above a `SegmentedButton`, and the wireframe supersedes it. **Phone-OTP only** (AL-07): no Google button exists in this app. The carousel is content-svc's (`GET /v1/content/onboarding/passenger`), which **closes C068's recorded gap** — that route did not exist when the driver app shipped bundled slides — with a trilingual bundled fallback for a first launch on a bad connection. Resend is refused **locally** inside US-1.10's 60 s window so a tap cannot spend one of D-32's five. Three gaps recorded: no photo upload route exists for a passenger avatar, SMS Retriever needs a signing hash C103 owns, and US-1.3a's operating city has no passenger screen in any spec |
 | C078 | passenger-android-live-map-search | 4a | DONE | 2026-08-06 | **125 tests green** (was 96; 29 new across 3 suites), `assembleDebug` + `detekt` + `ktlintCheck` clean. SCR-PA-006/007/008/010/032 built to `specs/wireframes/passenger_android.html`. The filter is a pure value type re-applied to every batch **client-side** — a toggle costs no query, asserted by call count. AL-23 routing is in the view model, not the sheet: Mode A opens SCR-PA-007, Mode B returns the vehicle id for SCR-PA-024, Mode C does nothing (US-7.4). **AL-17 held against D2'**: SCR-PA-008 is geo-only and `getBusesOnRoute` is never reached from it — D2' §SCR-PA-008 says the opposite and needs a micro-change-set, which leaves **US-7.9 with no screen anywhere**. SCR-PA-007's ETA/driver/plate come from `GET /v1/nearby` on tap (the socket frame carries none of them) centred on the **passenger**, because `etaSeconds` is defined as seconds to the querying passenger; **the route number exists in no contract at all**. §2.2's `place_recents` now has its writer — choosing a prediction on SCR-PA-008 — which is what fills SCR-PA-010's *Recent* rows. Fixed a C076 latent: the recentre FAB called back but nothing outside `MageRideMap` holds the `MapLibreMap`, so it moved nothing |
-| C079 | passenger-android-booking | 4a | PENDING | | |
+| C079 | passenger-android-booking | 4a | DONE | 2026-08-06 | **181 tests green** (was 125; 56 new across 7 suites), `assembleDebug` + `detekt` + `ktlintCheck` clean. SCR-PA-009/010b/011/012/012a/013 built to `specs/wireframes/passenger_android.html`. **AL-19 is a type, not a rendering**: `TierQuote` has three fields and a pinning test fails if a fourth appears, so a pre-match card cannot show an ETA. **AL-18/AL-55**: transit-svc down or feed-less degrades to one muted row while the Mode C tiers quote normally. **AL-20 parsed on the device** — `MapsLink` reads `!3d!4d`/`q=`/`ll=`/`@`, preferring the place pin over the viewport, and only `maps.app.goo.gl` reaches the server (3 s, one retry). **P-02 is structural**: `declineLocationRequest` takes an id and nothing else, asserted by what the repository was handed. **AL-36**: Confirm needs a destination *and* a time ≥ T-30, because the Job Board opens then. Built two things `:shared` lacks — an encoded-polyline decoder (GTFS shapes) and a Google-Maps URL parser. Five gaps recorded, including **no SCR-PA id for a map picker anywhere in the wireframe** and **no headway/frequency field** for the wireframe's *"every ~10 min"*. Also fixed a wall-clock flake in C077's `LoginViewModelTest` |
 | C080 | passenger-android-ride-payment | 4a | PENDING | | |
 | C081 | passenger-android-package-history | 4a | PENDING | | |
 | C082 | passenger-android-mode-b-subscriptions | 4a | PENDING | | |
@@ -12548,3 +12548,104 @@ _Append 3 lines per completed component (Component / Status / Notes)._
     and should route it there; the recent row is already written by the time the callback fires.
   - **A `GeocodedPlace` is what every destination hand-off in this app carries** — the shortcuts, the
     recents and the predictions all resolve to one, and `toPlace()` turns it into a booking `Place`.
+
+- **Component:** C079 passenger-android-booking — 2026-08-06
+- **Status:** DONE — `./gradlew :apps:passenger-android:testDebugUnitTest :apps:passenger-android:assembleDebug`
+  exits 0 from clean, twice: **181 tests, 0 failures** (125 → 181; +56 across `MapsLinkTest`,
+  `EncodedPolylineTest`, `RideBookingViewModelTest`, `PackageBookingViewModelTest`,
+  `ProxyRider`-adjacent `ConfirmPickupViewModelTest`, `PasteLinkViewModelTest` and
+  `ScheduleRideViewModelTest`). `detekt` and `ktlintCheck` clean. All six screens built against
+  `specs/wireframes/passenger_android.html`; every Definition-of-Done line has a named test.
+- **Notes:**
+  **Four fences, and each is enforced by something stronger than a layout choice.**
+
+  1. **AL-19 / BR-23.3 — price only, pre-match.** `TierQuote` has exactly three fields: the type,
+     the amount, and the token the amount is bound to. A card cannot render an ETA it was never
+     given, and `a_mode_c_tier_carries_a_price_and_nothing_else` pins the field list so that adding
+     one fails here rather than appearing on screen before a driver has been matched.
+  2. **AL-18 / BR-23.2 / AL-55 — GTFS routes are tracked, not booked.** Selecting a public route
+     drops the tier from the draft, removes the payment chip entirely (there is no fare on a bus)
+     and changes the CTA to *"Track route"*. transit-svc being unreachable and having no active
+     feed are the **same** muted row — *"nothing blocks on GTFS coverage"* — and neither touches
+     the private tiers, which is what a passenger can actually book right now.
+  3. **AL-20 — the device parses, the server only follows redirects.** `MapsLink` reads the four
+     full-URL forms and prefers `!3d!4d` (the place) over `@lat,lng` (the viewport), because a
+     `/maps/place/…` URL carries both and they are routinely a hundred metres apart. Only
+     `maps.app.goo.gl` / `goo.gl/maps` reach `GET /v1/geo/parse-maps-link`, on D5' §BR-23.4's own
+     budget of 3 s and one retry.
+  4. **P-02 — a decline sends nothing.** `BookingRepository.declineLocationRequest` takes a request
+     id and has no parameter to put a coordinate in, which is `ride.yaml`'s own shape. The test
+     asserts it by looking at what the repository was handed, so a future change that started
+     sending an "approximate" position would have to change the contract to compile.
+
+  **The draft is a `single`, and that was the design decision worth arguing.** Six screens edit one
+  booking — SCR-PA-008's destination, SCR-PA-009's tier, SCR-PA-010b's rider, SCR-PA-012's parcel,
+  SCR-PA-013's time and C080's SCR-PA-016 payment method. Nav arguments would have put a rider's
+  phone number and a package description in a back-stack URL; a view model per screen with no shared
+  home would lose everything downstream the moment somebody went back to change the pickup.
+  `CaptureTarget` is the other half: SCR-PA-008 is **one** picker reached from five places, and the
+  intent going *out* is what nav arguments cannot carry.
+
+  ### Five gaps found
+
+  1. **No SCR-PA id exists for a map picker.** The wireframe offers *"Map pin"* / *"Map"* as a
+     capture method on SCR-PA-010b and SCR-PA-012 and *"📌 Select on map"* on SCR-PA-008, but draws
+     no screen for any of them. Built as `MapPickSheet`, a modal — the conservative reading, since
+     it is what SCR-PA-012a is for its own method, needs no back-stack entry and leaves the form
+     underneath untouched. If a full screen was intended, it needs an id and a wireframe.
+  2. **No contract carries a headway or frequency**, so the wireframe's *"every ~10 min"* on a
+     public-route row cannot be drawn. `TransitOption` has `totalDurationSec` and
+     `walkingDistanceM`; `TransitLeg` has the route number, headsign, description and shape. The row
+     shows what exists. Separately, **D2' §SCR-PA-009 asks a public card for an "ETA 15 mins"** that
+     is equally underivable — a duration is not an arrival time — and the wireframe's own row
+     (number + description + Direct/Transit + PUBLIC) is what was built.
+  3. **D2' §SCR-PA-010b says three pickup methods; the wireframe and the prompt fence say four.**
+     D2' predates AL-20, and D2' §SCR-PA-012a already names *"010b proxy pickup"* as a paste-link
+     entry point — so D2' disagrees with itself and the wireframe settles it. Same for
+     §SCR-PA-012's sketch (*"Pickup: search/map/req"*), where the fence removes Request from the
+     pickup and adds it to the drop-off. **D2' needs a micro-change-set for both tables.**
+  4. **There is no walking-routing service.** D2' §SCR-PA-009 sources the blue walk-to-halt line
+     from *"routing"*, and no contract offers one. It is drawn as a straight line from the passenger
+     to the nearest halt, which is honest about the distance and not about the path.
+  5. **`SCR-PA-012`'s drop-off "Request" method has no wired round trip yet.** The chip selects and
+     the fence holds, but asking a *recipient* to share a drop-off reuses P-02's machinery, which
+     currently lives in `ProxyRiderViewModel` against `riderPhone`. Wiring it needs either that
+     view model generalised or `POST /v1/location-requests` called with the recipient's number and
+     the answer routed to the package draft — a small piece of work, deliberately not smuggled in.
+
+  ### Two things built here that arguably belong in `:shared`
+
+  - **`map/EncodedPolyline`** — `transit.yaml` types every shape as an encoded polyline and nothing
+    in the repo decoded one. Twenty lines of pure Kotlin, tested against the algorithm's own
+    published fixture and a reference encoder written in the test so the decoder is not checked
+    against itself. **C094 will need the same on iOS**; at that point it should move.
+  - **`ui/MoneyFormat`** — a second copy of the driver app's. `:shared` is `commonMain` and has
+    neither `java.util.Locale` nor `String.format`, so a shared version would have to be
+    hand-rolled anyway; the two apps' groupings are also free to diverge.
+
+  ### One fix that was not this component's
+
+  **C077's `LoginViewModelTest.resend_is_refused_locally_inside_the_cooldown` was racing a real
+  clock.** `AuthSessionManager` computes `resendAllowedAt = Clock.System.now() + cooldownSeconds`,
+  and the fixture generator answers **15** for any field whose name contains "second" — so a
+  fifteen-second stall on a loaded build host made the cooldown legitimately expire and failed a
+  test that was asserting exactly the right thing. It failed once in a full-suite run here and then
+  passed 8 consecutive runs, which is what a wall-clock race looks like. The test now pins
+  `cooldownSeconds` explicitly. **Worth knowing generally: any assertion against
+  `AuthSessionManager`'s cooldown has to stub the response rather than take the synthesised one.**
+
+  ### For C080–C084
+
+  - **`BookingDraft` is bound and is where a booking lives.** C080's SCR-PA-016 changes
+    `paymentMethod` on it; do not thread a payment method through nav arguments.
+  - **`BookingRepository` already reaches six services.** If your screen needs a seventh operation
+    from one of them, add it there rather than injecting a second client alongside it.
+  - **`BookingErrors` is cluster 3's code table only** — every arm is a code one of those six
+    contracts declares. Add your own; one `when` over the platform is a function nobody can check.
+  - **`PasteLinkSheet` and `MapPickSheet` are reusable capture modals**, and `LocationMethodRow`
+    takes the method list as a parameter precisely so a caller can express its own fence.
+  - **`MageRideMap` gained `walkPolyline` and `onCameraIdle`.** The second is how a centre-pin
+    picker works — MapLibre's draggable-annotation API lives in a plugin artifact this module
+    cannot take, so SCR-PA-011's *"drag to adjust"* moves the map under a fixed marker.
+  - **A package booking's `pickupOtp` is shown once and never returned again** (P-07). C081's
+    SCR-PA-020/021 cannot re-read it — if a sender loses it, the handoff needs support.

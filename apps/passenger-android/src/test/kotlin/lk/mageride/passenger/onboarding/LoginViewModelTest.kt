@@ -9,6 +9,7 @@ import lk.mageride.passenger.push.PushTokenProvider
 import lk.mageride.shared.data.models.AppSurface
 import lk.mageride.shared.data.models.Language
 import lk.mageride.shared.data.models.Role
+import lk.mageride.shared.data.models.iam.RequestOtpResponse
 import lk.mageride.shared.data.models.iam.UserProfile
 import lk.mageride.shared.data.models.iam.VerifyOtpResponse
 import lk.mageride.shared.domain.auth.AuthConfig
@@ -78,6 +79,21 @@ class LoginViewModelTest {
         // US-1.10 is a 60-second wait and D-32 caps requests at five an hour, so a tap inside the
         // cooldown does not merely fail — it SPENDS one of the five. Gating the button is what
         // keeps a passenger who taps four times from locking themselves out for an hour.
+        //
+        // The cooldown is pinned rather than synthesised (Δ C079). `AuthSessionManager` computes
+        // `resendAllowedAt = Clock.System.now() + cooldownSeconds` off the REAL clock, and the
+        // fixture generator answers 15 for any field whose name contains "second" — so on a loaded
+        // build host a fifteen-second stall between the request and this assertion made the
+        // countdown legitimately expire and failed a test that was asserting the right thing.
+        backend.returns(
+            "requestOtp",
+            RequestOtpResponse(
+                authId = AUTH_ID,
+                attemptsRemaining = 3,
+                cooldownSeconds = LONG_COOLDOWN_SECONDS,
+                isBlocked = false,
+            ),
+        )
         val model = signedOutWithNumber()
         model.submit()
         model.state.await { it.phase == LoginPhase.OTP && !it.busy }
@@ -235,5 +251,10 @@ class LoginViewModelTest {
 
     private companion object {
         const val EXPIRES_IN_SECONDS = 1800
+
+        /** Longer than any plausible build-host stall, so the assertion cannot race a real clock. */
+        const val LONG_COOLDOWN_SECONDS = 3600
+
+        const val AUTH_ID = "01JAUTH0000000000000000001"
     }
 }

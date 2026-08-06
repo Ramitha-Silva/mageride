@@ -76,11 +76,18 @@ internal data class MapPin(val kind: String, val lat: Double, val lng: Double)
  *   MAP-04 — so a caller passes raw frames and never a rendering position.
  * @param userPosition MAP-02's accuracy circle and §0.3's blue dot. `null` before the first fix.
  * @param routePolyline MAP-08's trip line, in order. Empty draws nothing.
+ * @param walkPolyline SCR-PA-009's blue dashed leg from the passenger to the nearest halt. Empty
+ *   when they are already on the route, which is the common case. Δ C079.
  * @param pins §0.3's pickup and dropoff markers.
  * @param geofence MAP-10's 100 m circle, at the point being arrived at. `null` everywhere else.
  * @param camera Where to open — read once, when the style loads.
  * @param onRecentre §0.3's recentre FAB ("both apps"). `null` hides it; a non-null callback shows
  *   it, and tapping it animates back to [userPosition] before calling back. Δ C078.
+ * @param onCameraIdle Where the map settled, after a pan or a zoom. This is how a centre-pin
+ *   picker works — SCR-PA-011's *"drag to adjust"* and SCR-PA-009/012's *"Map"* capture method both
+ *   move the **map** under a fixed marker, because MapLibre's draggable-annotation API lives in a
+ *   plugin artifact this module cannot take (see the module CLAUDE.md on `checkDuplicateClasses`).
+ *   Δ C079.
  * @param onVehicleTap MAP-07 — the vehicle id under the tap, or nothing when the tap missed. What
  *   a tap *opens* is the screen's: SCR-PA-007 for Mode A, SCR-PA-024 for Mode B, nothing at all
  *   for an engaged Mode C (AL-23, US-7.4).
@@ -89,17 +96,19 @@ internal data class MapPin(val kind: String, val lat: Double, val lng: Double)
  *   bus was; the offline banner above says why they are faded. Δ C078.
  */
 @Composable
-@Suppress("LongParameterList") // Every parameter is one row of D2' §0.3's layer list.
+@Suppress("LongParameterList", "CyclomaticComplexMethod") // One parameter per §0.3 layer-list row.
 internal fun MageRideMap(
     modifier: Modifier = Modifier,
     vehicles: List<MapVehicle> = emptyList(),
     userPosition: MapFix? = null,
     routePolyline: List<GeoPoint> = emptyList(),
+    walkPolyline: List<GeoPoint> = emptyList(),
     pins: List<MapPin> = emptyList(),
     geofence: GeoPoint? = null,
     camera: MapCamera = MapCamera.Default,
     darkTheme: Boolean = isSystemInDarkTheme(),
     onRecentre: (() -> Unit)? = null,
+    onCameraIdle: ((GeoPoint) -> Unit)? = null,
     onVehicleTap: ((String) -> Unit)? = null,
     dimmed: Boolean = false,
 ) {
@@ -119,8 +128,9 @@ internal fun MageRideMap(
     val interpolator = remember { MarkerInterpolator() }
     val accuracyMetres = remember { mutableStateOf(0.0) }
 
-    // Read inside the MapLibre click callback, which outlives the composition that installed it.
+    // Read inside the MapLibre callbacks, which outlive the composition that installed them.
     val currentOnVehicleTap by rememberUpdatedState(onVehicleTap)
+    val currentOnCameraIdle by rememberUpdatedState(onCameraIdle)
 
     // MapLibre.getInstance loads the native library and sets up the file source. Idempotent, and
     // called here rather than in Application.onCreate so a passenger who never opens a map never
@@ -156,7 +166,15 @@ internal fun MageRideMap(
                     // SCREEN measurement, so the two layers are re-scaled whenever the camera
                     // settles. Doing it on idle rather than on every frame is deliberate: the
                     // conversion needs a latitude and a zoom, and both are stable between gestures.
-                    ready.addOnCameraIdleListener { readyStyle.rescaleCircles(ready, accuracyMetres.value) }
+                    ready.addOnCameraIdleListener {
+                        readyStyle.rescaleCircles(ready, accuracyMetres.value)
+                        // The same listener serves the centre-pin pickers: settling IS the gesture
+                        // ending, and reporting every intermediate frame would fire a reverse
+                        // geocode per pixel of pan.
+                        ready.cameraPosition.target?.let { centre ->
+                            currentOnCameraIdle?.invoke(GeoPoint(lat = centre.latitude, lng = centre.longitude))
+                        }
+                    }
 
                     map = ready
                     style = readyStyle
@@ -189,7 +207,11 @@ internal fun MageRideMap(
     }
 
     LaunchedEffect(style, routePolyline) {
-        style?.drawRoute(routePolyline)
+        style?.drawLine(VehicleLayers.SOURCE_ROUTE, routePolyline)
+    }
+
+    LaunchedEffect(style, walkPolyline) {
+        style?.drawLine(VehicleLayers.SOURCE_WALK, walkPolyline)
     }
 
     // SCR-PA-032. Opacity rather than removal: the markers are the last thing the platform said,
@@ -273,8 +295,14 @@ private fun Style.drawCircles(fix: MapFix?, geofence: GeoPoint?) {
     source.setGeoJson(FeatureCollection.fromFeatures(features))
 }
 
-private fun Style.drawRoute(polyline: List<GeoPoint>) {
-    val source = getSourceAs<GeoJsonSource>(VehicleLayers.SOURCE_ROUTE) ?: return
+/**
+ * Sets one `GeoJsonSource` to a single `LineString`, or to nothing.
+ *
+ * MAP-08's trip line and C079's walk-to-halt leg are the same operation on two sources — the
+ * difference between them is entirely in how `VehicleLayers` styles each. Δ C079.
+ */
+private fun Style.drawLine(sourceId: String, polyline: List<GeoPoint>) {
+    val source = getSourceAs<GeoJsonSource>(sourceId) ?: return
     // Two points is the minimum a LineString accepts; anything less is "no route yet", which is
     // an empty collection rather than a degenerate line the renderer would silently drop.
     val features = if (polyline.size < MIN_LINE_POINTS) {

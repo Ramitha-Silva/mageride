@@ -31,6 +31,9 @@ lk.mageride.passenger
 ├── onboarding/               C077 · SCR-PA-001…005 + the router, the OTP rules and the error table
 ├── home/                     C078 · SCR-PA-006/007/008/010/032 — the map, the filter, the popup,
 │                             the destination field, and RecentPlaces (§2.2's only writer)
+├── booking/                  C079 · SCR-PA-009/010b/011/012/012a/013 — the multimodal list, the
+│                             proxy round trip, the parcel, the paste sheet, the schedule, and
+│                             BookingDraft (the one booking six screens edit)
 ├── ui/component/             MageRideCta + the cluster-1 controls (C077)
 ├── ui/theme/                 D2' §0.2 tokens — colour, type, spacing/radius/elevation/controls
 ├── map/                      MageRideMap (the whole §0.3 layer stack), MapStyles, VehicleLayers,
@@ -98,6 +101,27 @@ lk.mageride.passenger
   erased, because a passenger who has lost signal still wants to know where the bus was (US-15.2).
   `EmptyReason` has three values rather than a boolean so US-7.14 can tell an outage from a filter
   the passenger set from a genuinely quiet area.
+
+## Cluster 3 (C079) — the booking flow
+
+- **`BookingDraft` is a `single` and it is where a booking lives.** Six screens edit one — a
+  destination on SCR-PA-008, a tier on SCR-PA-009, a rider on SCR-PA-010b, a parcel on SCR-PA-012,
+  a time on SCR-PA-013 and a payment method on C080's SCR-PA-016. Do not thread booking fields
+  through nav arguments; `BookingDraft.clear()` is what stops one outliving its ride.
+- **`CaptureTarget` is how one picker serves five callers.** SCR-PA-008 is reached from the home
+  sheet, the booking screen's edit row, the proxy pickup, both package ends and the schedule
+  destination, and it cannot tell which. Whoever opens it calls `draft.expect(…)`; the NavHost's
+  `onPlaceChosen` calls `draft.capture(place)`, and a `false` return means *"nobody was waiting —
+  this is a new booking"*.
+- **`BookingRepository` is one door onto six services** (transit, fare, ride, dispatch, query, iam).
+  A seventh operation from one of them goes there, not into a second client beside it.
+- **`MapsLink` parses on the device and only short links reach the server** (AL-20). Precedence is
+  `!3d!4d` → `q=` → `ll=` → `@`, because a `/maps/place/…` URL carries both a place pin and a
+  viewport centre and they are routinely a hundred metres apart.
+- **`TierQuote` has three fields and a test pins that** — AL-19/BR-23.3 says a Mode C tier shows the
+  upfront price and nothing else before a driver is matched, and the type is the enforcement.
+- **A decline sends no coordinates** (P-02). `declineLocationRequest` takes an id and has no
+  parameter for a point; the assertion is on what the repository was handed.
 
 ## The live plane — read this before touching `live/`
 
@@ -167,6 +191,15 @@ lk.mageride.passenger
 - **AL-17 beats D2' §SCR-PA-008.** That section still says the drop field accepts a route number and
   that predictions blend routes with places. The wireframe and AL-17 say geo-only, and geo-only is
   what is built. **US-7.9 therefore has no screen in this app**, though `getBusesOnRoute()` exists.
+- **No headway or frequency exists on any transit shape**, so SCR-PA-009's *"every ~10 min"* cannot
+  be drawn — and D2' §SCR-PA-009's *"ETA 15 mins"* for a public card is equally underivable, since
+  `TransitOption.totalDurationSec` is a duration and not an arrival time.
+- **There is no walking-routing service.** The blue walk-to-halt line is a straight line from the
+  passenger to the nearest halt: honest about the distance, not about the path.
+- **No SCR-PA id exists for a map picker.** The wireframe offers Map / Map pin / "Select on map" as
+  *methods* and draws no screen for any; `booking/MapPickSheet` is a modal for that reason.
+- **D2' §SCR-PA-010b and §SCR-PA-012 predate AL-20** and still list three capture methods. The
+  wireframe's four (and the pickup/drop-off asymmetry) win; both tables need a micro-change-set.
 
 ## Things that will bite
 
@@ -197,6 +230,10 @@ lk.mageride.passenger
 - **`MagicNumber` excludes `ui/theme` and nothing else.** A hex or a `dp` anywhere else is a build
   failure, which is the same rule as "never a raw dp or hex" above, enforced.
 - **`kotlin-test` resolves to no variant under AGP's built-in Kotlin.** Use `libs.kotlin.testjunit`.
+- **Any test that asserts the OTP resend cooldown must stub `requestOtp`.** `AuthSessionManager`
+  computes `resendAllowedAt` off the **real** clock, and the fixture generator answers `15` for any
+  field whose name contains "second" — so a fifteen-second stall on a loaded host expires the
+  cooldown and fails the assertion. `LoginViewModelTest` pins it explicitly (Δ C079).
 - **The view-model test harness is `lk.mageride.passenger.MainDispatcher`** (root test package, not
   `onboarding`). `own(model)` gives a view model a lifetime; anything with a `while (…) { delay(…) }`
   in it must be owned or it wakes inside the next class's `resetMain()`.
