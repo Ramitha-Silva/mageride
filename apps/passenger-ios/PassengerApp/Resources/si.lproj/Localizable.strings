@@ -86,3 +86,54 @@
 "error_device_mismatch" = "මෙම කේතය ඉල්ලා ඇත්තේ වෙනත් උපාංගයකිනි. නැවත ආරම්භ කරන්න.";
 "error_user_blocked" = "මෙම ගිණුමට පිවිසිය නොහැක. සහායට සම්බන්ධ වන්න.";
 "error_validation_failed" = "ඔබ ඇතුළත් කළ දේ පරීක්ෂා කරන්න.";
+
+/* ---- C096 · the live map and search (SCR-PI-006/007/008/010/032) ---------------- */
+
+"map_where_to" = "කොහෙද යන්නේ?";
+"map_add_address" = "එක් කරන්න";
+"map_recent" = "මෑත";
+
+"map_reconnecting" = "නැවත සම්බන්ධ වෙමින්…";
+"map_empty_filtered" = "ඔබේ පෙරහනට ගැළපෙන වාහන නැත. තවත් දැකීමට ප්‍රකාරයක් හෝ වර්ගයක් නැවත සක්‍රීය කරන්න.";
+"map_empty_nearby" = "මේ මොහොතේ ඔබ අවට ක්‍රියාකාරී වාහන නැත.";
+"map_empty_offline" = "අවසන් වරට දැනගත් ස්ථාන පෙන්වයි. නැවත සම්බන්ධ වෙමින්…";
+
+"filter_title" = "පෙරහන";
+"filter_vehicle_types" = "වාහන වර්ග";
+"filter_apply" = "යොදන්න";
+"mode_a" = "A ප්‍රකාරය — බස් සහ දුම්රිය";
+"mode_b" = "B ප්‍රකාරය — පෞද්ගලික වාහන";
+"mode_c" = "C ප්‍රකාරය — ඉල්ලුම මත ගමන්";
+
+"vehicle_bus" = "බස් රථය";
+"vehicle_train" = "දුම්රිය";
+"vehicle_motorbike" = "යතුරුපැදිය";
+"vehicle_three_wheeler" = "ත්‍රිරෝද රථය";
+"vehicle_flex" = "ෆ්ලෙක්ස්";
+"vehicle_sedan" = "සෙඩාන් රථය";
+"vehicle_mini_van" = "කුඩා වෑන් රථය";
+"vehicle_van" = "වෑන් රථය";
+"vehicle_truck" = "ට්‍රක් රථය";
+"vehicle_mini_truck" = "කුඩා ට්‍රක් රථය";
+"vehicle_unknown" = "වාහනය";
+
+"popup_mode_badge" = "%1$@ ප්‍රකාරය · %2$@";
+"popup_driver" = "රියදුරු: %1$@";
+"popup_distance" = "දුර";
+"popup_distance_m" = "%1$d මී";
+"popup_distance_km" = "%1$d.%2$d කි.මී.";
+"popup_distance_unavailable" = "නොදනී";
+"popup_eta" = "පැමිණෙන්නේ";
+"popup_eta_now" = "පැමිණෙමින්";
+"popup_eta_minutes" = "මිනිත්තු %1$d";
+"popup_eta_unavailable" = "නොමැත";
+
+"search_title" = "මාර්ගය තෝරන්න";
+"search_current_location" = "වත්මන් ස්ථානය";
+"search_drop_label" = "බැසීමේ ස්ථානය";
+"search_drop_placeholder" = "ස්ථානයක් හෝ ලිපිනයක් සොයන්න";
+"search_predictions" = "යෝජනා";
+"search_saved" = "සුරැකි ස්ථාන";
+"search_geocoder_down" = "සෙවීම දැනට නොමැත. ඔබේ ගමනාන්තය සිතියමෙන් තෝරන්න.";
+"search_select_on_map" = "සිතියමෙන් තෝරන්න";
+"search_add_address" = "ලිපිනයක් එක් කරන්න";

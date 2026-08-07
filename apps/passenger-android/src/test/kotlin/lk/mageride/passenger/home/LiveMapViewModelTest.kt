@@ -4,9 +4,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import lk.mageride.passenger.MainDispatcher
 import lk.mageride.passenger.await
 import lk.mageride.passenger.live.FakeLiveHubTransport
@@ -40,6 +42,9 @@ import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * SCR-PA-010 and the two sheets over it, with no map and no server.
@@ -363,28 +368,99 @@ class LiveMapViewModelTest {
         assertEquals(MAHARAGAMA.displayName, resumed.recents.first().displayName, "newest first")
     }
 
+    @Test
+    fun a_held_boundary_crossing_lands_on_this_screens_tick_and_not_on_a_fix() = runBlocking {
+        // **The bug this test exists for.** ADD §7.4 step 6 applies the first crossing immediately
+        // and then HOLDS the next for thirty seconds, so a passenger standing on a cell edge does
+        // not join and leave the same six groups every few seconds. A held crossing is applied by
+        // the next call into `GeoCellSubscription` — and on a fix-driven path that is the next fix.
+        // A passenger who steps over the edge and then STOPS WALKING produces none, so the crossing
+        // never lands and they keep the nineteen cells around where they were until they move.
+        //
+        // C076's handoff asked C078 for this loop and C078 did not write it; Δ C096 found the same
+        // hole from the iOS side. `refreshCells()` had no caller anywhere in this module.
+        assertEquals(
+            GeoCells.BOUNDARY_HYSTERESIS / 2,
+            CELL_TICK,
+            "the tick has to land a held crossing inside one window, not at the end of a second",
+        )
+
+        val tick = 20.milliseconds
+        val clock = MutableClock(Fixtures.NOW)
+        val live = connectedPlane(clock)
+        val model = viewModel(live, cellTick = tick)
+
+        locations.emit(PassengerFix(lat = COLOMBO_LAT, lng = COLOMBO_LNG))
+        model.state.await { it.fix != null }
+        awaitTransport("the opening join") { transport.joins().isNotEmpty() }
+        val opening = live.cells.value
+        transport.clearCalls()
+
+        // Ten seconds later, nine kilometres away: a genuine crossing, inside the window.
+        clock.advance(10.seconds)
+        locations.emit(PassengerFix(lat = NUGEGODA.lat, lng = NUGEGODA.lng))
+        delay(tick * TICKS_TO_OBSERVE)
+
+        assertTrue(transport.calls.isEmpty(), "a crossing inside the window sends nothing")
+        assertEquals(opening, live.cells.value, "and membership does not move")
+
+        // Past the window — and with **no further fix at all**, which is the whole point. Only the
+        // tick can land it now.
+        clock.advance(25.seconds)
+        awaitTransport("the held crossing lands") { transport.joins().isNotEmpty() }
+
+        assertTrue(transport.leaves().isNotEmpty(), "a crossing is a delta: it leaves as well as joins")
+        assertTrue(live.cells.value != opening, "and the subscription has actually moved")
+        assertEquals(GeoCells.PASSENGER_VIEW_CELL_COUNT, live.cells.value.size)
+    }
+
     // ------------------------------------------------------------------------------------------
 
-    private suspend fun connectedPlane(): PassengerLiveMap {
+    /**
+     * The plane, on a clock a test can wind.
+     *
+     * Frozen rather than real even where a test does not touch it: the only thing `now` feeds is
+     * ADD §7.4 step 6's thirty-second hysteresis, and a frozen reading is what stops a slow host
+     * lapsing a window a test did not mean to lapse.
+     */
+    private suspend fun connectedPlane(clock: MutableClock = MutableClock(Fixtures.NOW)): PassengerLiveMap {
         val live = PassengerLiveMap(
             transport = transport,
             query = backend.mageRideApi().query,
             grid = grid,
             scope = planeScope,
+            now = clock::now,
         )
         live.connect()
         return live
     }
 
-    private fun viewModel(live: PassengerLiveMap) = main.own(
+    private fun viewModel(live: PassengerLiveMap, cellTick: Duration = CELL_TICK) = main.own(
         LiveMapViewModel(
             live = live,
             locations = locations,
             iam = backend.mageRideApi().iam,
             query = backend.mageRideApi().query,
             recents = recents,
+            cellTick = cellTick,
         ),
     )
+
+    /** Waits for [predicate] to hold against the transport's recording. */
+    private suspend fun awaitTransport(what: String, predicate: () -> Boolean) {
+        withTimeout(5.seconds) {
+            while (!predicate()) delay(5.milliseconds)
+        }
+        assertTrue(predicate(), what)
+    }
+
+    /** The wall clock, wound by hand — the hysteresis is a comparison against it. */
+    private class MutableClock(private var value: Timestamp) {
+        fun now(): Timestamp = value
+        fun advance(by: Duration) {
+            value += by
+        }
+    }
 
     /** §2.2's table, in memory — the real one is SQLCipher through a driver that throws here. */
     private class FakeRecentPlaces(private val rows: MutableList<GeocodedPlace>) : RecentPlaces {
@@ -403,6 +479,14 @@ class LiveMapViewModelTest {
 
     private companion object {
         val NOW: Timestamp = Fixtures.NOW
+
+        /**
+         * How many tick periods to watch before concluding that a held crossing is *staying* held.
+         *
+         * More than one, deliberately: a single period would pass if the loop had died after its
+         * first iteration, which is one of the two ways this can regress.
+         */
+        const val TICKS_TO_OBSERVE = 5
 
         const val COLOMBO_LAT = 6.9344
         const val COLOMBO_LNG = 79.8428

@@ -53,6 +53,13 @@ final class PassengerGraph: ObservableObject {
     /// rejoin of all nineteen groups and a `/v1/nearby` read.
     let live: PassengerLiveMap
 
+    /// `GET /v1/nearby`, as the **one** thing in this app that reads it.
+    ///
+    /// Held here as well as handed to ``live`` because SCR-PI-007 needs the same read: D6' §5.4's
+    /// resync and the popup's ETA/driver/plate are one operation asked twice, and a second seam onto
+    /// it would be a second place the radius and the failure behaviour have to agree.
+    let nearby: NearbySnapshots
+
     /// Where the passenger is. The R-06 anchor, MAP-02's halo and every *"current location"*.
     let locations: PassengerLocationSource
 
@@ -83,6 +90,19 @@ final class PassengerGraph: ObservableObject {
 
     /// US-1.14's *"resume the ride you were on"*, which the splash asks and nothing else does.
     let activeRides: ActiveRideLookup
+
+    // MARK: - C096 · cluster 2
+    //
+    // Both are process singletons for the same reason cluster 1's are: one is a **database
+    // connection** and the other is the seam two screens read the same two operations through.
+
+    /// `GET /v1/geo/search` and `GET /v1/me/saved-addresses` — SCR-PI-008's predictions and
+    /// SCR-PI-010's ★ chips.
+    let places: PassengerPlaces
+
+    /// `mobile_db_schema.md` §2.2's `place_recents`. SCR-PI-008 writes it and SCR-PI-010 reads it,
+    /// so it is one object over one connection — see ``PassengerDatabase``.
+    let recents: RecentPlaces
 
     init(environment: PassengerEnvironment = .current) {
         self.environment = environment
@@ -119,7 +139,8 @@ final class PassengerGraph: ObservableObject {
         let shared = IosAppGraphKt.startIosGraphWithH3(config: config, h3Grid: h3)
         self.shared = shared
 
-        self.databases = PassengerDatabase(factory: shared.databases)
+        let databases = PassengerDatabase(factory: shared.databases)
+        self.databases = databases
         let preferences = UserDefaultsAppPreferences()
         self.preferences = preferences
         self.locations = CoreLocationPassengerSource()
@@ -138,12 +159,20 @@ final class PassengerGraph: ObservableObject {
         self.locationPermission = SystemLocationPermission()
         self.activeRides = ApiActiveRideLookup(rides: shared.api.ride)
 
+        // C096. The two screens of cluster 2 read three things between them, and each is shared
+        // rather than per-screen: the snapshot seam is also the live plane's recovery read, the
+        // places seam is read by both screens, and the recents table is one connection.
+        let nearby = ApiNearbySnapshots(query: shared.api.query)
+        self.nearby = nearby
+        self.places = ApiPassengerPlaces(query: shared.api.query, iam: shared.api.iam)
+        self.recents = LocalRecentPlaces(databases: databases)
+
         self.live = PassengerLiveMap(
             transport: SignalRLiveHubTransport(
                 baseUrl: environment.apiBaseUrl,
                 tokens: shared.tokens
             ),
-            snapshots: ApiNearbySnapshots(query: shared.api.query),
+            snapshots: nearby,
             grid: h3
         )
 

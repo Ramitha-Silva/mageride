@@ -3,6 +3,7 @@ package lk.mageride.passenger.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -23,6 +24,8 @@ import lk.mageride.shared.data.models.iam.SavedAddress
 import lk.mageride.shared.data.models.query.GeocodedPlace
 import lk.mageride.shared.domain.geo.distanceMetres
 import lk.mageride.shared.realtime.VehicleFrame
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * What tapping a marker did (AL-23, US-7.4).
@@ -143,6 +146,12 @@ internal data class LiveMapState(
  * is visible — entitlement, freshness, engagement — and the filter holds what the *passenger* asked
  * to see. Folding the two would make a Mode B vehicle the passenger has no grant for
  * indistinguishable from one they simply switched off.
+ *
+ * **This screen also owns the cell tick** — see [CELL_TICK]. It is the only caller of
+ * [PassengerLiveMap.refreshCells], and without it a held boundary crossing never lands.
+ *
+ * @param cellTick How often a held boundary crossing is re-evaluated. A parameter only so a test
+ *   can assert the tick without sleeping through it; nothing in the app passes one.
  */
 internal class LiveMapViewModel(
     private val live: PassengerLiveMap,
@@ -150,6 +159,7 @@ internal class LiveMapViewModel(
     private val iam: IamApi,
     private val query: QueryApi,
     private val recents: RecentPlaces,
+    private val cellTick: Duration = CELL_TICK,
 ) : ViewModel() {
 
     private val mutableState = MutableStateFlow(LiveMapState())
@@ -175,6 +185,32 @@ internal class LiveMapViewModel(
         }
         viewModelScope.launch { loadShortcuts() }
         viewModelScope.launch { loadRecents() }
+        viewModelScope.launch { tickCells() }
+    }
+
+    /**
+     * Re-evaluates a **held** boundary crossing, for as long as the map is on screen.
+     *
+     * ADD §7.4 step 6 applies the first crossing immediately and then *holds* the next one for
+     * thirty seconds, so that a passenger standing on a cell edge does not join and leave the same
+     * six groups every few seconds. A held crossing is applied by the next call into
+     * `GeoCellSubscription` — and on a fix-driven path, the only thing that calls in is a **new
+     * fix**. A passenger who steps over the edge and then stops walking produces no more fixes at
+     * all, so without this loop the crossing never lands and they stay subscribed to the nineteen
+     * cells around where they *were* until they move again.
+     *
+     * That is exactly what [PassengerLiveMap.refreshCells] exists for — C076's handoff asked C078
+     * for this loop and C078 did not write it, which left the function with no caller anywhere in
+     * the module (Δ C096, which found the same hole from the iOS side and wired the same tick
+     * there). The call is arithmetic against a clock and costs nothing when nothing has moved.
+     *
+     * `viewModelScope` ends it, which is why a test must `own` this model — see `MainDispatcher`.
+     */
+    private suspend fun tickCells() {
+        while (true) {
+            delay(cellTick)
+            live.refreshCells()
+        }
     }
 
     /**
@@ -316,6 +352,16 @@ internal class LiveMapViewModel(
         }
     }
 }
+
+/**
+ * How often a held boundary crossing is re-evaluated — see [LiveMapViewModel.tickCells].
+ *
+ * Half of `GeoCells.BOUNDARY_HYSTERESIS`, which ADD §7.4 step 6 fixes at thirty seconds, so a held
+ * crossing lands inside one window rather than at the end of a second one. The same number the iOS
+ * twin uses. `internal` so `LiveMapViewModelTest` can assert that relationship rather than a
+ * literal — a number that drifted past the window would still look right in a diff.
+ */
+internal val CELL_TICK = 15.seconds
 
 /** The contract's radius band, and enough margin that the vehicle is inside it. */
 private const val RADIUS_MARGIN = 200

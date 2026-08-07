@@ -121,3 +121,66 @@
 "error_device_mismatch" = "This code was requested on another device. Start again.";
 "error_user_blocked" = "This account cannot sign in. Contact support.";
 "error_validation_failed" = "Please check what you entered.";
+
+/* ---- C096 · the live map and search (SCR-PI-006/007/008/010/032) -----------------
+ *
+ * The keys are `apps/passenger-android/src/main/res/values…/strings.xml`'s and carry the Android
+ * translations unchanged, except for two: `popup_driver`'s specifier is `%1$@` here where Android
+ * writes `%1$s` (Objective-C string formats, not Java ones), and `popup_mode_badge` is new to this
+ * platform — the iOS cell draws `MODE A · BUS` as one pill where the Android popup draws `A · Bus`.
+ */
+
+/* SCR-PI-010 — the home sheet */
+"map_where_to" = "Where to?";
+"map_add_address" = "Add";
+"map_recent" = "Recent";
+
+/* SCR-PI-032 — a state of the live map, not a screen */
+"map_reconnecting" = "Reconnecting…";
+"map_empty_filtered" = "No vehicles match your filter. Turn a mode or a type back on to see more.";
+"map_empty_nearby" = "No vehicles are active near you right now.";
+"map_empty_offline" = "Showing the last known positions. Reconnecting…";
+
+/* SCR-PI-006 — the mode / type filter */
+"filter_title" = "Filter";
+"filter_vehicle_types" = "Vehicle types";
+"filter_apply" = "Apply";
+"mode_a" = "Mode A — Bus & Train";
+"mode_b" = "Mode B — Private vehicles";
+"mode_c" = "Mode C — On-demand rides";
+
+/* AL-09's vehicle types, as a passenger reads them */
+"vehicle_bus" = "Bus";
+"vehicle_train" = "Train";
+"vehicle_motorbike" = "Motorbike";
+"vehicle_three_wheeler" = "Three-wheeler";
+"vehicle_flex" = "Flex";
+"vehicle_sedan" = "Sedan";
+"vehicle_mini_van" = "Mini van";
+"vehicle_van" = "Van";
+"vehicle_truck" = "Truck";
+"vehicle_mini_truck" = "Mini truck";
+"vehicle_unknown" = "Vehicle";
+
+/* SCR-PI-007 — the Mode A popup */
+"popup_mode_badge" = "Mode %1$@ · %2$@";
+"popup_driver" = "Driver: %1$@";
+"popup_distance" = "Distance";
+"popup_distance_m" = "%1$d m";
+"popup_distance_km" = "%1$d.%2$d km";
+"popup_distance_unavailable" = "Unknown";
+"popup_eta" = "Arrives in";
+"popup_eta_now" = "Arriving";
+"popup_eta_minutes" = "%1$d min";
+"popup_eta_unavailable" = "Not available";
+
+/* SCR-PI-008 — the destination field. Geo only (AL-17) — the placeholder says so. */
+"search_title" = "Set route";
+"search_current_location" = "Current location";
+"search_drop_label" = "Drop-off";
+"search_drop_placeholder" = "Search a place or an address";
+"search_predictions" = "Predictions";
+"search_saved" = "Saved places";
+"search_geocoder_down" = "Search is unavailable. Pick your destination on the map.";
+"search_select_on_map" = "Select on map";
+"search_add_address" = "Add address";

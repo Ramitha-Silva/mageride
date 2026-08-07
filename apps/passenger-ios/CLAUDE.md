@@ -44,6 +44,8 @@ apps/passenger-ios/
 │   │                PassengerDatabase (C018's deferred open)
 │   ├── Geo/         SharedH3Grid — R-06's engine, the binding C017 and C085 left to C094
 │   ├── Onboarding/  C095 · SCR-PI-001…005 + the router, the OTP rules and the error table
+│   ├── Home/        C096 · SCR-PI-006/007/008/010/032 — the map, the filter, the popup, the
+│   │                destination field, MapFilter, VehicleLabels, RecentPlaces (§2.2's only door)
 │   ├── Nav/         PassengerRoute (32 destinations), PassengerTab, the navigator,
 │   │                PassengerMenuDestination (SCR-PI-033's rows),
 │   │                PassengerDestinations (the ONE route→view switch)
@@ -105,6 +107,65 @@ apps/passenger-ios/
 - **Implement a Swift protocol, never a Kotlin one with `suspend` methods.** `PassengerSessions`,
   `OnboardingRepository`, `PassengerProfileRepository`, `ActiveRideLookup` and `LocationPermission`
   all exist for that reason, and each is why its screen is assertable with no gateway.
+
+## Cluster 2 (C096) — the live map, the filter, the popup and the search
+
+- **`MapFilter` is a value, not a service, and it holds ``ModeToken``/``VehicleToken`` rather than
+  the wire enums.** SCR-PI-006's answer lives in model state and is re-applied to *every* batch. It
+  is deliberately **not** folded into the live plane: the plane holds what the *platform* says is
+  visible (entitlement, freshness, engagement) and the filter holds what the *passenger* asked to
+  see. Folding them would make a Mode B vehicle with no grant indistinguishable from one that was
+  simply switched off.
+- **A tap is routed by mode in the model** (`LiveMapModel.onMarkerTapped` → `MarkerTap`), not by a
+  sheet. Mode A opens SCR-PI-007, Mode B hands SCR-PI-024 the vehicle id (AL-23/US-4.6), Mode C, a
+  marker with no mode and a marker the filter has hidden all do nothing (US-7.4). A Mode B vehicle
+  cannot reach `VehiclePopup` by any path.
+- **`VehicleLabels` is the bridge, not a second legend.** `VehicleToken` (Theme) already owns §0.2's
+  colour and SF Symbol and stays free of `MageRideShared`; this file adds the trilingual name key,
+  the `VehicleType`/`ServiceMode` → token mapping and the eight chip types. A second colour table
+  here would be the copy MAP-03 exists to prevent.
+- **`RecentPlaces` is the only door onto §2.2's `place_recents`, and SCR-PI-008 is its writer** —
+  the table is *"recent / searched locations"*, so choosing a prediction records one whether or not
+  a ride follows. Local-only: no `dirty`, no `synced_at`, no outbox. It has no change feed, so the
+  map re-reads on `.onAppear`.
+- **The SQL is `:shared`'s, not this app's.** `IosPlaceRecentsKt` reads and writes §2.2 in
+  `GeocodedPlace`, for the reason `IosNotificationInbox.kt` gives on the driver side: a
+  `Query<Place_recents>` comes from a dependency the framework does not `export`, `last_used_at` is
+  a `kotlin.time.Instant`, and the row id is a *derived* value whose rule belongs beside the insert.
+- **`GET /v1/nearby` has ONE seam in this app.** `graph.nearby` is the same `NearbySnapshots` the
+  live plane's D6' §5.4 resync uses, and SCR-PI-007's ETA/driver/plate go through it too — the popup
+  asks for a radius around the **passenger**, because `etaSeconds` is *"seconds to the querying
+  passenger"* and a lookup centred on the bus answers roughly zero.
+- **SCR-PI-032 is a state of SCR-PI-010, not a screen.** `LiveMapState.stale` (anything but
+  `.connected`) fades the marker layers through `MageRideMap(dimmed:)`; nothing is erased, because a
+  passenger who has lost signal still wants to know where the bus was (US-15.2). `EmptyReason` has
+  four values rather than a boolean so US-7.14 can tell an outage from a filter from a quiet area.
+- **The map runs a 15 s tick, and the Android twin does not.** ADD §7.4 step 6 *holds* a boundary
+  crossing for thirty seconds, and this platform's `CLLocationManager` has a 250 m `distanceFilter`
+  — so a passenger who crosses a cell edge and then stands still produces no further fixes and the
+  held crossing never lands. `PassengerLiveMap.refreshCells()` exists for exactly that and its own
+  KDoc says *"SCR-PI-010's own tick calls this"*. C078 never wired one either — **both apps tick
+  now**, `LiveMapViewModel.tickCells()` on the Android side at the same 15 s (Δ C096).
+- **Never construct a boxed Kotlin primitive from Swift in this cluster.** `KotlinInt(int:)` and
+  `KotlinInt(value:)` are both in this repository, in two apps neither host has compiled, and only
+  one of them is right. Reading one is settled (`int32Value`); *building* one is avoided —
+  `IosGeoSearchKt.searchPlacesNear` takes a `GeoPoint?` so the three optional primitives on
+  `searchPlaces` never cross, and every fixture passes `nil`.
+- **Three contract gaps this cluster draws around**, all restated from C078 and none of them an app
+  change: **no route number exists for a vehicle** anywhere (`VehicleFrame` and `NearbyVehicle` both
+  lack one), so SCR-PI-007's headline is the vehicle *type* where the cell writes *"Route 138"*;
+  **`VehicleFrame` carries no sample timestamp**, so the cell's `seen 6s ago` pill is not drawn;
+  and **there is no `GET /v1/vehicles/{id}`**, so the popup matches `GET /v1/nearby` by id.
+- **AL-17 beats D2' §SCR-*-008, and the fence is structural.** That section still says the drop field
+  accepts a route number and that predictions blend routes with places; the cell, AL-17 and this
+  component's prompt say geo-only. `PassengerPlaces` has **no route lookup on it at all**, so
+  `getBusesOnRoute` is unreachable from SCR-PI-008 without adding a protocol method. **US-7.9 has no
+  screen on either platform** as a result.
+- Reusable UI added here (`UI/MapControls.swift`): `SheetGrabber`, `TopRoundedRectangle`,
+  `SearchBarButton`, `PlaceChip`, `MetricTile`, `MapNotice`, `MapOverlayButton`, `OutlinedAction`,
+  plus `MageRideSymbols.separator` and `MapFormat` (`350 m`, `2.4 km`, `2 min`). Tokens added:
+  `grabberWidth/Height`, `searchBar`, `outlinedAction`, `chipSwatch`, `chipIcon`,
+  `filterChipMinimum`, `routeDot`, `vehiclePopupHeight`.
 
 ## The Xcode project is generated, and the generator is shared
 
@@ -208,6 +269,12 @@ constraint, and each is called out at its call site.
 | Filing a push | `onMessageReceived` fires for every data message | three doors only: foreground, tapped, or `content-available` and the system woke us |
 | Hub payload binding | Gson's `JsonElement` — the identity binding | `AnyJSON`, hand-written, because `Decodable` has no equivalent |
 | Polyline decode | none in the SDK without the `-ktx` artifact | none in the SDK without Turf — the same twenty lines, ported |
+| Mode filter entry (010) | the app bar's trailing `⦿` icon | a FAB on the map — this cell draws no app bar at all |
+| Home sheet (010) | a drag-handle `BottomSheetScaffold` | a **drawn** panel above the tab bar, not a `.sheet` — see `LiveMapScreen` |
+| Mode / type filter (006) | `ModalBottomSheet` + `Switch` + `FilterChip` | `.sheet(.medium/.large)` + `Toggle` + `Toggle(.button)`, with the cell's `.impact(.light)` |
+| Vehicle popup (007) | `ModalBottomSheet` | `.sheet(.height(220))` — the cell's own clause |
+| Held cell crossing (010) | a 15 s tick, added by Δ C096 — C078 shipped without one | a 15 s tick; it matters more here, because `distanceFilter` means a stationary passenger emits nothing at all |
+| Recent row subtitle (010) | the address line | the **distance**, which is what both wireframes draw |
 
 ## Things that will bite
 

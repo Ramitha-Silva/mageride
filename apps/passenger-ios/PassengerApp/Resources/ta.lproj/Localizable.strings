@@ -86,3 +86,54 @@
 "error_device_mismatch" = "இந்தக் குறியீடு வேறு சாதனத்தில் கோரப்பட்டது. மீண்டும் தொடங்கவும்.";
 "error_user_blocked" = "இந்தக் கணக்கால் உள்நுழைய முடியாது. உதவியைத் தொடர்பு கொள்ளவும்.";
 "error_validation_failed" = "நீங்கள் உள்ளிட்டதைச் சரிபார்க்கவும்.";
+
+/* ---- C096 · the live map and search (SCR-PI-006/007/008/010/032) ---------------- */
+
+"map_where_to" = "எங்கே செல்ல வேண்டும்?";
+"map_add_address" = "சேர்";
+"map_recent" = "சமீபத்திய";
+
+"map_reconnecting" = "மீண்டும் இணைக்கிறது…";
+"map_empty_filtered" = "உங்கள் வடிகட்டிக்குப் பொருந்தும் வாகனங்கள் இல்லை. மேலும் பார்க்க ஒரு பயன்முறையையோ வகையையோ மீண்டும் இயக்கவும்.";
+"map_empty_nearby" = "இப்போது உங்கள் அருகில் இயங்கும் வாகனங்கள் இல்லை.";
+"map_empty_offline" = "கடைசியாக அறிந்த இடங்கள் காட்டப்படுகின்றன. மீண்டும் இணைக்கிறது…";
+
+"filter_title" = "வடிகட்டி";
+"filter_vehicle_types" = "வாகன வகைகள்";
+"filter_apply" = "பயன்படுத்து";
+"mode_a" = "பயன்முறை A — பேருந்து மற்றும் ரயில்";
+"mode_b" = "பயன்முறை B — தனியார் வாகனங்கள்";
+"mode_c" = "பயன்முறை C — கோரிக்கைப் பயணங்கள்";
+
+"vehicle_bus" = "பேருந்து";
+"vehicle_train" = "ரயில்";
+"vehicle_motorbike" = "மோட்டார் சைக்கிள்";
+"vehicle_three_wheeler" = "முச்சக்கர வண்டி";
+"vehicle_flex" = "ஃபிளெக்ஸ்";
+"vehicle_sedan" = "சிடான்";
+"vehicle_mini_van" = "சிறிய வேன்";
+"vehicle_van" = "வேன்";
+"vehicle_truck" = "லாரி";
+"vehicle_mini_truck" = "சிறிய லாரி";
+"vehicle_unknown" = "வாகனம்";
+
+"popup_mode_badge" = "பயன்முறை %1$@ · %2$@";
+"popup_driver" = "ஓட்டுநர்: %1$@";
+"popup_distance" = "தூரம்";
+"popup_distance_m" = "%1$d மீ";
+"popup_distance_km" = "%1$d.%2$d கி.மீ.";
+"popup_distance_unavailable" = "தெரியவில்லை";
+"popup_eta" = "வந்து சேரும்";
+"popup_eta_now" = "வந்துகொண்டிருக்கிறது";
+"popup_eta_minutes" = "%1$d நிமிடம்";
+"popup_eta_unavailable" = "கிடைக்கவில்லை";
+
+"search_title" = "வழியை அமைக்கவும்";
+"search_current_location" = "தற்போதைய இடம்";
+"search_drop_label" = "இறங்கும் இடம்";
+"search_drop_placeholder" = "ஒரு இடத்தையோ முகவரியையோ தேடுங்கள்";
+"search_predictions" = "பரிந்துரைகள்";
+"search_saved" = "சேமித்த இடங்கள்";
+"search_geocoder_down" = "தேடல் தற்போது கிடைக்கவில்லை. உங்கள் இலக்கை வரைபடத்தில் தேர்ந்தெடுக்கவும்.";
+"search_select_on_map" = "வரைபடத்தில் தேர்ந்தெடு";
+"search_add_address" = "முகவரி சேர்";

@@ -108,6 +108,14 @@ lk.mageride.passenger
   SCR-PA-008 is its **writer** — the table is "recent / searched locations", so choosing a
   prediction records one, whether or not a ride follows. Local-only: no `dirty`, no `synced_at`, no
   outbox. It has no change feed, so a screen showing recents re-reads on resume.
+- **SCR-PA-010 owns the cell tick, and it is the only caller of `PassengerLiveMap.refreshCells()`**
+  (Δ C096). ADD §7.4 step 6 applies the first boundary crossing immediately and then **holds** the
+  next for thirty seconds; a held crossing is applied by the next call into `GeoCellSubscription`,
+  which on a fix-driven path is the next fix. A passenger who steps over a cell edge and then stops
+  walking produces none, so the crossing never lands and they keep the nineteen cells around where
+  they *were*. `LiveMapViewModel.tickCells()` re-evaluates every `CELL_TICK` (15 s — half the
+  window). C076's handoff asked C078 for this loop and C078 did not write it; C096 found the same
+  hole from the iOS side and both apps now tick.
 - **SCR-PA-032 is a state of SCR-PA-010, not a screen.** `LiveMapState.stale` (anything but
   `LiveStatus.Connected`) fades the marker layers through `MageRideMap(dimmed = …)`; nothing is
   erased, because a passenger who has lost signal still wants to know where the bus was (US-15.2).

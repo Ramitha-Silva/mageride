@@ -114,6 +114,51 @@ enum MageRideControl {
 
     /// The glyph inside an avatar or an empty illustration panel.
     static let illustrationIcon: CGFloat = 40
+
+    // MARK: - C096 · the live map, the filter and the search
+    //
+    // `passenger_ios.html`'s own pixels for the cluster-2 cells, rounded onto the 4pt grid — or up to
+    // the tap-target floor, where the mock's CSS pixel is below it.
+
+    /// The sheet grabber (`.grabber`, `36 x 5`).
+    ///
+    /// Drawn rather than left to the system: SCR-PI-010's sheet is **not** a presented `.sheet` (see
+    /// ``LiveMapScreen``), so there is no `.presentationDragIndicator` to ask for. SCR-PI-006's and
+    /// SCR-PI-007's are, and they take the system's.
+    static let grabberWidth: CGFloat = 36
+    static let grabberHeight: CGFloat = 5
+
+    /// SCR-PI-010's *"🔍 Where to?"* bar (`.searchbar`, `38` high).
+    ///
+    /// Raised to the tap-target floor for ``mapControl``'s reason: 38pt is a CSS mock's number and
+    /// this one is a button.
+    static let searchBar: CGFloat = MageRideControl.minimumTapTarget
+
+    /// SCR-PI-008's `📌 Select on map` / `＋ Add address` pair (`.btn-out`, `46` high).
+    ///
+    /// Left at the wireframe's 46 rather than rounded to 48: it already clears 44, and the pair sits
+    /// directly under the CTA-shaped `.cta` in other cells, where 46 is what distinguishes them.
+    static let outlinedAction: CGFloat = 46
+
+    /// The coloured disc on a filter chip (`.vico`, `18 x 18`) — MAP-03's legend colour, so the chip
+    /// and the marker it controls are recognisably the same thing.
+    static let chipSwatch: CGFloat = 18
+
+    /// A glyph inside a chip, or inside ``chipSwatch``.
+    static let chipIcon: CGFloat = 12
+
+    /// The narrowest a SCR-PI-006 type chip may be before the grid wraps.
+    ///
+    /// The widest of the eight labels (*"Three-wheeler"*, and its Sinhala and Tamil counterparts)
+    /// beside a ``chipSwatch``, at the Large content size. An adaptive grid needs a floor, not a
+    /// width — a longer label grows the chip rather than truncating it.
+    static let filterChipMinimum: CGFloat = 108
+
+    /// SCR-PI-008's `.cdot` — the green pickup / red drop-off dot beside a field.
+    static let routeDot: CGFloat = 10
+
+    /// SCR-PI-007's sheet height. The cell's own `Δ iOS` clause is `.sheet(.height(220))`.
+    static let vehiclePopupHeight: CGFloat = 220
 }
 
 extension View {

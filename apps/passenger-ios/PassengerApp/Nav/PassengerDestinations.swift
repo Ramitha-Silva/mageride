@@ -33,11 +33,11 @@ struct PassengerDestinationView: View {
 
         // ---- C096 · the live map and search --------------------------------------------
         //
-        // SCR-PI-010 is the app's home and the one screen that owns the R-06 subscription; the
-        // shell's ``PassengerLiveMap`` is already connected and already has a position source. See
-        // the "For C096" note in the C094 handoff before writing it.
-        case .liveMap: placeholder("SCR-PI-010 live map")
-        case .searchLocation: placeholder("SCR-PI-008 search")
+        // SCR-PI-010 is the app's home and the one screen that owns the R-06 subscription; SCR-PI-006
+        // (the mode filter), SCR-PI-007 (the Mode A popup) and SCR-PI-032 (the offline state) are
+        // states and sheets of it rather than destinations of their own.
+        case .liveMap, .searchLocation:
+            HomeDestinationView(route: route)
 
         // ---- C097 · booking ------------------------------------------------------------
         case .rideBooking: placeholder("SCR-PI-009 ride booking")
