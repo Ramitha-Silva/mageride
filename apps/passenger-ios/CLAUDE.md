@@ -51,6 +51,8 @@ apps/passenger-ios/
 │   │                (the one booking six screens edit)
 │   ├── Ride/        C098 · SCR-PI-014/015/015a/016/017/018/019 — finding, the active ride, the
 │   │                call chooser, the rails, AL-47's attestation, the receipt and the rating
+│   ├── History/     C099 · SCR-PI-020/021/022/023 — the parcel from both ends, the three-tab
+│   │                history, the trip receipt, and TripLabels (this app's Colombo clock)
 │   ├── Nav/         PassengerRoute (32 destinations), PassengerTab, the navigator,
 │   │                PassengerMenuDestination (SCR-PI-033's rows),
 │   │                PassengerDestinations (the ONE route→view switch)
@@ -274,6 +276,45 @@ apps/passenger-ios/
   reason: `created_at` is a `kotlin.time.Instant`, and §1.11's two CHECK spellings belong beside the
   schema that has to accept them.
 
+## Cluster 5 (C099) — the parcel, the history and the receipt
+
+- **SCR-PI-020 and SCR-PI-021 are one model, because they are one ride.** The party is read off the
+  ride (`bookerId == signedInUserId`) and **never off the URI** — `mageride://package/{rideId}` is the
+  same link for both ends. A recipient has **no session at all** (P-09, AL-45), so `nil` is a
+  recipient rather than a missing case.
+- **`PassengerAppDelegate.deliver` writes `PackageOtps` before it routes** (Δ C099). US-20.5's
+  delivery code exists in exactly one place — the `package_picked_up` payload — and C097 built the
+  holder without a caller, so SCR-PI-021 could never have drawn one. Writing it first is what lets a
+  *tapped* notification find the code already there.
+- **`HistoryRepository` reads two services on purpose.** The Past tab is ride-svc's history (terminal
+  state + driver); SCR-PI-023's detail is query-svc's (polyline + filtered distance, spanning all
+  three modes). It also carries its **own** `ride(rideId:)` beside `RideRepository`'s: C098's door is
+  the *active* ride's and this is a finished one being asked for AL-48's number.
+- **A history card renders `mobileMasked` and never dials it.** `PhoneMasked`'s KDoc forbids parsing
+  one back; the Call fetches `RideDetail.counterpartyPhone`, which costs one read. A
+  **cancelled-before-assignment** trip offers neither, checked in the card *and* in the model.
+- **`TripLabels` is this app's Colombo clock** (D-38) and is `apps/driver-ios`'s `ScheduleLabels` with
+  the locale seam changed. Render a date or a time through it; a `DateFormatter` on the handset's zone
+  is the trap C090 recorded on the driver side.
+- **`RideStateLabel.pill(for:)` is the only place a `RideState` becomes copy** — five keys over nine
+  terminal states. `HistoryLabelTests` fails on a terminal state that reaches the default arm.
+- **The distance on a receipt is the contract's and is never re-measured** from the decoded polyline;
+  `geometrySource == operational` makes it a lower bound and the screen says so.
+- Reusable UI added here (`UI/HistoryControls.swift`): `StepperBar` and `HandoverCodeCard` — the
+  latter deliberately **not** `StartCodeCard`, which draws a *rider* start OTP the platform never
+  issues. Tokens: `stepperDot`, `stepperLine`, `packageMapHeight`, `tripDetailMapHeight`; symbols:
+  `MageRideSymbols.routeArrow` / `.unknown` / `.dateTimeSeparator`.
+- **Four places `passenger_ios.html` and C081 disagree**, resolved by the C099 prompt's own split —
+  *layout, controls, states and navigation* follow the wireframe, *behaviour* follows Android — and
+  all four are micro-change-set candidates recorded in the C099 handoff: SCR-PI-021 draws **no Call**
+  (the cell puts an ETA there); SCR-PI-023 draws `⬇ Receipt` **disabled**, because no operation on
+  the app surface produces one; the status pill is translated copy rather than `RideState.name`; and
+  the history chooser's *Free call* routes to SCR-PI-028, which the Android NavHost discards.
+- **Six contract gaps this cluster draws around**, all in the handoff: no passenger read of their own
+  **scheduled** rides, no `kind` on `RideHistoryRow`, no **distance or vehicle type** on a history
+  row, no vehicle type and no driver **rating** on `TripDriver`, no trip-**receipt** operation
+  anywhere, and `counterpartyPhone` meaning two different things on a package ride.
+
 ## The Xcode project is generated, and the generator is shared
 
 `.pbxproj` is the committed artefact — CI probes for it and `xcodebuild` reads it. It is also a file
@@ -397,6 +438,12 @@ constraint, and each is called out at its call site.
 | Bank-app link (017) | `ACTION_VIEW`; `canOpenURL`'s answer is hidden by package visibility | `open(_:options:)`; `canOpenURL` is hidden by `LSApplicationQueriesSchemes` — so it opens and reports |
 | Fare breakdown (018) | four rows, from a field nothing assigns | a `DisclosureGroup` — the cell's own clause — with the total and an honest note |
 | Share trip (015) | a fourth outlined button neither wireframe draws | absent; D-34's link is SCR-PI-029's |
+| History tabs (022) | a `TabRow` of three | a segmented `Picker` — `.tabbar2` is `UISegmentedControl` in the cell's own CSS |
+| History list (022) | a `LazyColumn` with no refresh | a `List` + `.refreshable` — the cell's own clause |
+| History empty state (022) | a centred paragraph | the cell's *"empty → illustration"* — `IllustrationPanel`, labelled for VoiceOver |
+| Recipient's Call (021) | drawn, same as the sender's | **absent** — the cell puts the ETA there instead (Δ C099) |
+| Receipt download (023) | not drawn at all | drawn **disabled** with a caption; no operation produces one (Δ C099) |
+| Trip status pill (022) | `RideState.name`, untranslated | `RideStateLabel` — five keys in three languages (Δ C099) |
 
 ## Things that will bite
 

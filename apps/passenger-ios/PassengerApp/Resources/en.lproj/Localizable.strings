@@ -417,3 +417,52 @@
 "ride_start_otp_unavailable" = "No code is needed on this version — your driver can start the trip.";
 "summary_breakdown_unavailable" = "The itemised fare is not available for this trip.";
 "summary_total_paid" = "Total paid";
+
+/* ---- C099 · packages and history -------------------------------------------------
+ *
+ * SCR-PI-020/021/022/023. The keys are `apps/passenger-android/src/main/res/values…/strings.xml`'s
+ * and carry the Android translations unchanged. Nine keys are new to this platform and are marked
+ * at the foot of this section.
+ */
+
+/* SCR-PI-020 / SCR-PI-021 — the parcel, from both ends */
+"package_track_sending" = "Package · sending";
+"package_track_incoming" = "Incoming package";
+"package_step_pending" = "Pickup pending";
+"package_step_picked_up" = "Picked up";
+"package_step_in_transit" = "In transit";
+"package_step_delivered" = "Delivered";
+"package_pickup_otp_label" = "Pickup code — give it to the driver";
+"package_delivery_otp_label" = "Delivery code — give it to the driver on handover";
+"package_otp_unavailable" = "This code was shown once when the package was booked and cannot be shown again.";
+
+/* SCR-PI-022 — Past / Scheduled / Packages */
+"history_title" = "Your trips";
+"history_tab_past" = "Past";
+"history_tab_scheduled" = "Scheduled";
+"history_tab_packages" = "Packages";
+"history_empty_past" = "No trips yet. Your completed rides will appear here.";
+"history_empty_scheduled" = "Nothing scheduled.";
+"history_empty_packages" = "No packages yet.";
+
+/* SCR-PI-023 — one trip, its route and its receipt */
+"trip_details_title" = "Trip details";
+"trip_details_receipt" = "Receipt";
+"trip_details_driver" = "Driver";
+"trip_details_vehicle" = "Vehicle";
+"trip_details_distance" = "Distance";
+"trip_details_approximate" = "The distance is measured from periodic samples and may be slightly low.";
+"trip_details_report" = "Report an issue";
+
+/* NEW on iOS: the step bar's VoiceOver value, the list's loading row, the five terminal-state pills
+ * the wireframe draws as `pill-status`, SCR-PI-023's Date row, and the sentence under a Receipt
+ * button no operation on the platform can fill. */
+"package_step_of" = "Step %1$d of %2$d";
+"history_loading" = "Loading your trips…";
+"history_state_paid" = "Paid";
+"history_state_cash" = "Cash";
+"history_state_cod" = "Cash on delivery";
+"history_state_cancelled" = "Cancelled";
+"history_state_no_show" = "No-show";
+"trip_details_date" = "Date";
+"trip_details_receipt_unavailable" = "Receipt downloads are not available yet.";

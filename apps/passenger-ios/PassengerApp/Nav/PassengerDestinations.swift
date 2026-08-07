@@ -57,9 +57,12 @@ struct PassengerDestinationView: View {
             RideDestinationView(route: route)
 
         // ---- C099 · packages and history ------------------------------------------------
-        case .packageTracking: placeholder("SCR-PI-020/021 package tracking")
-        case .trips: placeholder("SCR-PI-022 trips")
-        case .tripDetails: placeholder("SCR-PI-023 trip details")
+        //
+        // Three destinations and two screens for one of them: `.packageTracking` draws SCR-PI-020 or
+        // SCR-PI-021 depending on which end of the parcel is holding the phone, because
+        // `mageride://package/{rideId}` is the same link for both parties (see the route's own note).
+        case .packageTracking, .trips, .tripDetails:
+            HistoryDestinationView(route: route)
 
         // ---- C100 · Mode B ---------------------------------------------------------------
         case .modeBRequest: placeholder("SCR-PI-024 private transport")

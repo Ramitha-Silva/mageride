@@ -54,4 +54,14 @@ enum MapFormat {
 /// same constant for the same reason.
 enum MageRideSymbols {
     static let separator = " · "
+
+    /// The wireframe's `Nugegoda → Galle Face` (Δ C099). Same value as `apps/driver-ios`'s.
+    static let routeArrow = " → "
+
+    /// *"we have not been told"* — a read in flight, or a value the contract has no operation for.
+    /// The same character ``MoneyFormat/pending`` uses, and for the same reason.
+    static let unknown = "—"
+
+    /// What SCR-PI-023's Date row puts between `17 Jun` and `08:32`.
+    static let dateTimeSeparator = ", "
 }

@@ -204,6 +204,23 @@ enum MageRideControl {
 
     /// SCR-PI-018's receipt map (`flex:0 0 100px`).
     static let receiptMapHeight: CGFloat = 100
+
+    // MARK: - C099 · packages and history
+    //
+    // `passenger_ios.html`'s cluster-5 pixels.
+
+    /// One dot of SCR-PI-020/021's `.stepper` (`.s` — `10 x 10`).
+    static let stepperDot: CGFloat = 10
+
+    /// The rule between two of them (`.ln` — `height:2`).
+    static let stepperLine: CGFloat = 2
+
+    /// SCR-PI-020/021's map (`.map` at `flex:0 0 140px`). Shorter than a booking map: the parcel's
+    /// own progress is the screen, and the driver's marker is context.
+    static let packageMapHeight: CGFloat = 140
+
+    /// SCR-PI-023's route map (`.map` at `flex:0 0 110px`, `border-radius:13px`).
+    static let tripDetailMapHeight: CGFloat = 110
 }
 
 extension View {

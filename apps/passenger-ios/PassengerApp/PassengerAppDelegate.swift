@@ -142,15 +142,26 @@ extension PassengerAppDelegate {
         }
     }
 
-    /// Hands one push to the router.
+    /// Hands one push to the router, and keeps the one value a push is the only carrier of.
     ///
-    /// **One subscriber, unlike the driver app's three.** There is no offer inbox on this surface
+    /// **Two subscribers, not the driver app's three.** There is no offer inbox on this surface
     /// (E-01's fifteen-second takeover is the driver's) and no local notification inbox — there is
     /// no SCR-PI-034, and `mobile_db_schema.md` §2 gives this app no `notifications` table. So a
-    /// push either names a screen or it does not, and ``PushRouter`` is the only thing that has to
-    /// decide.
+    /// push either names a screen or it does not, and ``PushRouter`` is what decides.
+    ///
+    /// **US-20.5's delivery code arrives here and nowhere else** (Δ C099). No read returns it —
+    /// `RideDetail` has no field and §2.3's `rides` projection has no column — so a push that is not
+    /// captured on arrival is a code SCR-PI-021 can never show. Kept **before** the routing, so that
+    /// a tapped notification finds it already there by the time the screen reads it. The Android twin
+    /// does the same in `PassengerMessagingService.onMessageReceived`; see ``PackageOtps``.
     @MainActor
     func deliver(_ message: PushMessage) {
+        if let rideId = message.data[PushMessage.Keys.rideId] {
+            graph?.packageOtps.rememberDelivery(
+                rideId: rideId,
+                otp: message.data[PushMessage.Keys.deliveryOtp]
+            )
+        }
         graph?.pushes.offer(message)
     }
 }

@@ -32,6 +32,16 @@
 		8CDB50DCB0034921F415D470 /* PassengerEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24DA004F925603B84EF220CB /* PassengerEnvironment.swift */; };
 		346D6137FC046C51897AD94B /* PassengerGraph.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EE066024FBCF6E5C5D3F799 /* PassengerGraph.swift */; };
 		22099F210C0A2244C1C4CD4C /* SharedH3Grid.swift in Sources */ = {isa = PBXBuildFile; fileRef = F034848E4D15168E84E1FB0A /* SharedH3Grid.swift */; };
+		E66CCD73FA343C4DD4097DF2 /* HistoryDestinationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23872877268AE56419F9B7B0 /* HistoryDestinationView.swift */; };
+		09381528EF1E3BB904DF6FEF /* HistoryRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49841BE3D727E940E0236609 /* HistoryRepository.swift */; };
+		15B2AB8A222EC899517FD49C /* HistoryRows.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8675404E19CFA94C308BDBE6 /* HistoryRows.swift */; };
+		714A92EED36BD1DCD0C1B86C /* PackageTrackModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0375DC2EDC14AAB4701703B6 /* PackageTrackModel.swift */; };
+		CC9C31DF886DE95B0CFEE456 /* PackageTrackScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BF9ECA363308E2C0865A328 /* PackageTrackScreen.swift */; };
+		EA77A1E9B5F4E0622D9D9F9B /* TripDetailsModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 511EA7D82A8FC50F07CBCE5C /* TripDetailsModel.swift */; };
+		316D58F830FBB01B495BC293 /* TripDetailsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = C694503ACB008C2F2D989190 /* TripDetailsScreen.swift */; };
+		70861556BEBA22E91CAE4F3F /* TripHistoryModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BB5BB1D80A4C709BF1B8CDB /* TripHistoryModel.swift */; };
+		1D94ABED69BEDDDA4605FFC4 /* TripHistoryScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29B143B1B4BBCAF9458E552E /* TripHistoryScreen.swift */; };
+		B48A30DA5CEFCCA328CC07CE /* TripLabels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53BA5A13145C0D021FB2887D /* TripLabels.swift */; };
 		993EC7D65B9DD10E3407D90F /* HomeDestinationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8700DC4E39C68E03804C043F /* HomeDestinationView.swift */; };
 		383203BDD534577637B942CF /* LiveMapModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E69CE3ED44E53A021DE6CFE8 /* LiveMapModel.swift */; };
 		EA2460046D75D9239C8D9D22 /* LiveMapScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = D241D6D2BE7866B092596038 /* LiveMapScreen.swift */; };
@@ -123,6 +133,7 @@
 		5906F55CA4D52CA023C69D0E /* VehicleToken.swift in Sources */ = {isa = PBXBuildFile; fileRef = E910A9FCCA116E44D2D1D56D /* VehicleToken.swift */; };
 		9E3C6681E600CEB31E539874 /* BookingControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 476D14AD5C6DB73EDF47418D /* BookingControls.swift */; };
 		34D76627316F579648A86D3F /* FormControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3E3FA3705F72A6BA40D970A /* FormControls.swift */; };
+		CFE07F7583F2785CCE7BE555 /* HistoryControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D41F86BD218783B678F5B56 /* HistoryControls.swift */; };
 		D0F18D6E25242D2C76A6F457 /* Localisation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41BFF6164F190FAD72DB4A78 /* Localisation.swift */; };
 		C670C9CF1D6AB120277AEBA3 /* MapControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3EB485B6BDD5A3D2FC80928B /* MapControls.swift */; };
 		555E59E9CBA567374C6623D6 /* MoneyFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55C349B59365D53A8445B6D5 /* MoneyFormat.swift */; };
@@ -132,6 +143,8 @@
 		A7BB60AE5CC5A09415F47599 /* BookingFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 803908678D9F811FD039E65F /* BookingFlowTests.swift */; };
 		4141610BAA03639B6C8E984C /* BookingTestKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83CD391A76B9B5D522817667 /* BookingTestKit.swift */; };
 		C765998EC557607BE16BFD6C /* H3GridTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AF0C3655D8873301EFAEFA1 /* H3GridTests.swift */; };
+		1E36B5A5A4D9A40CD3B58192 /* HistoryFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0774FF6236E2DA25B5E6DCAB /* HistoryFlowTests.swift */; };
+		E8A7C1A14D322D4E358978FE /* HistoryTestKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5819EDA3A99DDCB0BF9A9EE /* HistoryTestKit.swift */; };
 		35C51B5FD3546039892CAF0B /* HomeTestKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28A09FCDFBB923589A4F2D6F /* HomeTestKit.swift */; };
 		E320861E92501C3C5AA6277A /* LiveMapModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C487BC82B51597FA05C4664D /* LiveMapModelTests.swift */; };
 		DC21B643B0C54AA0A079E542 /* LiveTestKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3AE71BA58788F582435B58D0 /* LiveTestKit.swift */; };
@@ -190,6 +203,16 @@
 		24DA004F925603B84EF220CB /* PassengerEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PassengerEnvironment.swift"; path = "PassengerEnvironment.swift"; sourceTree = "<group>"; };
 		5EE066024FBCF6E5C5D3F799 /* PassengerGraph.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PassengerGraph.swift"; path = "PassengerGraph.swift"; sourceTree = "<group>"; };
 		F034848E4D15168E84E1FB0A /* SharedH3Grid.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "SharedH3Grid.swift"; path = "SharedH3Grid.swift"; sourceTree = "<group>"; };
+		23872877268AE56419F9B7B0 /* HistoryDestinationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "HistoryDestinationView.swift"; path = "HistoryDestinationView.swift"; sourceTree = "<group>"; };
+		49841BE3D727E940E0236609 /* HistoryRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "HistoryRepository.swift"; path = "HistoryRepository.swift"; sourceTree = "<group>"; };
+		8675404E19CFA94C308BDBE6 /* HistoryRows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "HistoryRows.swift"; path = "HistoryRows.swift"; sourceTree = "<group>"; };
+		0375DC2EDC14AAB4701703B6 /* PackageTrackModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PackageTrackModel.swift"; path = "PackageTrackModel.swift"; sourceTree = "<group>"; };
+		1BF9ECA363308E2C0865A328 /* PackageTrackScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PackageTrackScreen.swift"; path = "PackageTrackScreen.swift"; sourceTree = "<group>"; };
+		511EA7D82A8FC50F07CBCE5C /* TripDetailsModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "TripDetailsModel.swift"; path = "TripDetailsModel.swift"; sourceTree = "<group>"; };
+		C694503ACB008C2F2D989190 /* TripDetailsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "TripDetailsScreen.swift"; path = "TripDetailsScreen.swift"; sourceTree = "<group>"; };
+		9BB5BB1D80A4C709BF1B8CDB /* TripHistoryModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "TripHistoryModel.swift"; path = "TripHistoryModel.swift"; sourceTree = "<group>"; };
+		29B143B1B4BBCAF9458E552E /* TripHistoryScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "TripHistoryScreen.swift"; path = "TripHistoryScreen.swift"; sourceTree = "<group>"; };
+		53BA5A13145C0D021FB2887D /* TripLabels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "TripLabels.swift"; path = "TripLabels.swift"; sourceTree = "<group>"; };
 		8700DC4E39C68E03804C043F /* HomeDestinationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "HomeDestinationView.swift"; path = "HomeDestinationView.swift"; sourceTree = "<group>"; };
 		E69CE3ED44E53A021DE6CFE8 /* LiveMapModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "LiveMapModel.swift"; path = "LiveMapModel.swift"; sourceTree = "<group>"; };
 		D241D6D2BE7866B092596038 /* LiveMapScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "LiveMapScreen.swift"; path = "LiveMapScreen.swift"; sourceTree = "<group>"; };
@@ -284,6 +307,7 @@
 		E910A9FCCA116E44D2D1D56D /* VehicleToken.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "VehicleToken.swift"; path = "VehicleToken.swift"; sourceTree = "<group>"; };
 		476D14AD5C6DB73EDF47418D /* BookingControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "BookingControls.swift"; path = "BookingControls.swift"; sourceTree = "<group>"; };
 		F3E3FA3705F72A6BA40D970A /* FormControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "FormControls.swift"; path = "FormControls.swift"; sourceTree = "<group>"; };
+		5D41F86BD218783B678F5B56 /* HistoryControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "HistoryControls.swift"; path = "HistoryControls.swift"; sourceTree = "<group>"; };
 		41BFF6164F190FAD72DB4A78 /* Localisation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "Localisation.swift"; path = "Localisation.swift"; sourceTree = "<group>"; };
 		3EB485B6BDD5A3D2FC80928B /* MapControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "MapControls.swift"; path = "MapControls.swift"; sourceTree = "<group>"; };
 		55C349B59365D53A8445B6D5 /* MoneyFormat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "MoneyFormat.swift"; path = "MoneyFormat.swift"; sourceTree = "<group>"; };
@@ -293,6 +317,8 @@
 		803908678D9F811FD039E65F /* BookingFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "BookingFlowTests.swift"; path = "BookingFlowTests.swift"; sourceTree = "<group>"; };
 		83CD391A76B9B5D522817667 /* BookingTestKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "BookingTestKit.swift"; path = "BookingTestKit.swift"; sourceTree = "<group>"; };
 		0AF0C3655D8873301EFAEFA1 /* H3GridTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "H3GridTests.swift"; path = "H3GridTests.swift"; sourceTree = "<group>"; };
+		0774FF6236E2DA25B5E6DCAB /* HistoryFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "HistoryFlowTests.swift"; path = "HistoryFlowTests.swift"; sourceTree = "<group>"; };
+		C5819EDA3A99DDCB0BF9A9EE /* HistoryTestKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "HistoryTestKit.swift"; path = "HistoryTestKit.swift"; sourceTree = "<group>"; };
 		28A09FCDFBB923589A4F2D6F /* HomeTestKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "HomeTestKit.swift"; path = "HomeTestKit.swift"; sourceTree = "<group>"; };
 		C487BC82B51597FA05C4664D /* LiveMapModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "LiveMapModelTests.swift"; path = "LiveMapModelTests.swift"; sourceTree = "<group>"; };
 		3AE71BA58788F582435B58D0 /* LiveTestKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "LiveTestKit.swift"; path = "LiveTestKit.swift"; sourceTree = "<group>"; };
@@ -380,6 +406,7 @@
 				A32072629C1D86F029ED03C5 /* Booking */,
 				2A11969776E43613EBD7F910 /* DI */,
 				CAAF82951F66016F59D360EF /* Geo */,
+				3593FDB09203433B9759E599 /* History */,
 				F71ECEB00AD9D5A2D1D67808 /* Home */,
 				6EBDD09D536EB9D7B5AD5CAC /* Live */,
 				A39BDC2208D9FAB5D78E26D0 /* Location */,
@@ -445,6 +472,23 @@
 				F034848E4D15168E84E1FB0A /* SharedH3Grid.swift */,
 			);
 			path = "Geo";
+			sourceTree = "<group>";
+		};
+		3593FDB09203433B9759E599 /* History */ = {
+			isa = PBXGroup;
+			children = (
+				23872877268AE56419F9B7B0 /* HistoryDestinationView.swift */,
+				49841BE3D727E940E0236609 /* HistoryRepository.swift */,
+				8675404E19CFA94C308BDBE6 /* HistoryRows.swift */,
+				0375DC2EDC14AAB4701703B6 /* PackageTrackModel.swift */,
+				1BF9ECA363308E2C0865A328 /* PackageTrackScreen.swift */,
+				511EA7D82A8FC50F07CBCE5C /* TripDetailsModel.swift */,
+				C694503ACB008C2F2D989190 /* TripDetailsScreen.swift */,
+				9BB5BB1D80A4C709BF1B8CDB /* TripHistoryModel.swift */,
+				29B143B1B4BBCAF9458E552E /* TripHistoryScreen.swift */,
+				53BA5A13145C0D021FB2887D /* TripLabels.swift */,
+			);
+			path = "History";
 			sourceTree = "<group>";
 		};
 		F71ECEB00AD9D5A2D1D67808 /* Home */ = {
@@ -628,6 +672,7 @@
 			children = (
 				476D14AD5C6DB73EDF47418D /* BookingControls.swift */,
 				F3E3FA3705F72A6BA40D970A /* FormControls.swift */,
+				5D41F86BD218783B678F5B56 /* HistoryControls.swift */,
 				41BFF6164F190FAD72DB4A78 /* Localisation.swift */,
 				3EB485B6BDD5A3D2FC80928B /* MapControls.swift */,
 				55C349B59365D53A8445B6D5 /* MoneyFormat.swift */,
@@ -644,6 +689,8 @@
 				803908678D9F811FD039E65F /* BookingFlowTests.swift */,
 				83CD391A76B9B5D522817667 /* BookingTestKit.swift */,
 				0AF0C3655D8873301EFAEFA1 /* H3GridTests.swift */,
+				0774FF6236E2DA25B5E6DCAB /* HistoryFlowTests.swift */,
+				C5819EDA3A99DDCB0BF9A9EE /* HistoryTestKit.swift */,
 				28A09FCDFBB923589A4F2D6F /* HomeTestKit.swift */,
 				C487BC82B51597FA05C4664D /* LiveMapModelTests.swift */,
 				3AE71BA58788F582435B58D0 /* LiveTestKit.swift */,
@@ -825,6 +872,16 @@
 				8CDB50DCB0034921F415D470 /* PassengerEnvironment.swift in Sources */,
 				346D6137FC046C51897AD94B /* PassengerGraph.swift in Sources */,
 				22099F210C0A2244C1C4CD4C /* SharedH3Grid.swift in Sources */,
+				E66CCD73FA343C4DD4097DF2 /* HistoryDestinationView.swift in Sources */,
+				09381528EF1E3BB904DF6FEF /* HistoryRepository.swift in Sources */,
+				15B2AB8A222EC899517FD49C /* HistoryRows.swift in Sources */,
+				714A92EED36BD1DCD0C1B86C /* PackageTrackModel.swift in Sources */,
+				CC9C31DF886DE95B0CFEE456 /* PackageTrackScreen.swift in Sources */,
+				EA77A1E9B5F4E0622D9D9F9B /* TripDetailsModel.swift in Sources */,
+				316D58F830FBB01B495BC293 /* TripDetailsScreen.swift in Sources */,
+				70861556BEBA22E91CAE4F3F /* TripHistoryModel.swift in Sources */,
+				1D94ABED69BEDDDA4605FFC4 /* TripHistoryScreen.swift in Sources */,
+				B48A30DA5CEFCCA328CC07CE /* TripLabels.swift in Sources */,
 				993EC7D65B9DD10E3407D90F /* HomeDestinationView.swift in Sources */,
 				383203BDD534577637B942CF /* LiveMapModel.swift in Sources */,
 				EA2460046D75D9239C8D9D22 /* LiveMapScreen.swift in Sources */,
@@ -916,6 +973,7 @@
 				5906F55CA4D52CA023C69D0E /* VehicleToken.swift in Sources */,
 				9E3C6681E600CEB31E539874 /* BookingControls.swift in Sources */,
 				34D76627316F579648A86D3F /* FormControls.swift in Sources */,
+				CFE07F7583F2785CCE7BE555 /* HistoryControls.swift in Sources */,
 				D0F18D6E25242D2C76A6F457 /* Localisation.swift in Sources */,
 				C670C9CF1D6AB120277AEBA3 /* MapControls.swift in Sources */,
 				555E59E9CBA567374C6623D6 /* MoneyFormat.swift in Sources */,
@@ -932,6 +990,8 @@
 				A7BB60AE5CC5A09415F47599 /* BookingFlowTests.swift in Sources */,
 				4141610BAA03639B6C8E984C /* BookingTestKit.swift in Sources */,
 				C765998EC557607BE16BFD6C /* H3GridTests.swift in Sources */,
+				1E36B5A5A4D9A40CD3B58192 /* HistoryFlowTests.swift in Sources */,
+				E8A7C1A14D322D4E358978FE /* HistoryTestKit.swift in Sources */,
 				35C51B5FD3546039892CAF0B /* HomeTestKit.swift in Sources */,
 				E320861E92501C3C5AA6277A /* LiveMapModelTests.swift in Sources */,
 				DC21B643B0C54AA0A079E542 /* LiveTestKit.swift in Sources */,

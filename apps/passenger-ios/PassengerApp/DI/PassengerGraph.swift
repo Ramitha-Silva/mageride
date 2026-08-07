@@ -156,6 +156,16 @@ final class PassengerGraph: ObservableObject {
     /// `mobile_db_schema.md` §1.11, as SCR-PI-019 writes it and SCR-PI-018 reads it.
     let ratings: RideRatings
 
+    // MARK: - C099 · cluster 5
+    //
+    // One seam, and it is a process singleton for the reason every other repository here is: three
+    // screens read it and two of them can be on screen in the same session — a parcel being tracked
+    // from a push while the Trips tab already has a list on it.
+
+    /// ride-svc's history and one ride, query-svc's trip detail, and the scheduled list that does not
+    /// exist yet — behind one door. See ``HistoryRepository``.
+    let history: HistoryRepository
+
     init(environment: PassengerEnvironment = .current) {
         self.environment = environment
 
@@ -249,6 +259,14 @@ final class PassengerGraph: ObservableObject {
         )
         self.callChoice = CallChoice(preferences: preferences)
         self.ratings = LocalRideRatings(databases: databases)
+
+        // C099. Two clients it reads and one it holds for a route that does not exist — see
+        // `ApiHistoryRepository.scheduled`.
+        self.history = ApiHistoryRepository(
+            rides: shared.api.ride,
+            query: shared.api.query,
+            dispatch: shared.api.dispatch
+        )
 
         self.live = PassengerLiveMap(
             transport: SignalRLiveHubTransport(
