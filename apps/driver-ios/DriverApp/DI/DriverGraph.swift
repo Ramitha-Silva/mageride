@@ -124,6 +124,18 @@ final class DriverGraph: ObservableObject {
     /// The delivery photograph, held until the server has it (P-10, §3.6).
     let proofs = ProofUploadQueue()
 
+    // MARK: - C090 · the board, the level and the money
+    //
+    // Two repositories and no holder: every screen in this cluster is a read, and the one piece of
+    // state that outlives a view — which board rows this driver has posted intent on — deliberately
+    // does not (see ``JobBoardModel``, and the C072 handoff's spec gap 3).
+
+    /// dispatch-svc's board, upcoming list, level and stats, as SCR-DI-017/018/019 use them.
+    let jobs: JobsRepository
+
+    /// query-svc's earnings read model, as SCR-DI-020 uses it (R-05).
+    let earnings: EarningsRepository
+
     init(environment: DriverEnvironment = .current) {
         self.environment = environment
 
@@ -189,6 +201,13 @@ final class DriverGraph: ObservableObject {
         self.publisher = ServicePositionPublisher(positions: positions)
         self.deliveries = ApiDeliveryRepository(ride: shared.api.ride)
 
+        // C090. dispatch-svc's board and reputation reads are one repository because the US-6A.8
+        // gate joins them — see ``JobsRepository``. The dashboard's own level badge still comes
+        // through ``StandbyRepository``: that is one field of a five-field status header, and asking
+        // for the stats read as well to draw a badge would be a round trip a dashboard never uses.
+        self.jobs = ApiJobsRepository(dispatch: shared.api.dispatch)
+        self.earnings = ApiEarningsRepository(query: shared.api.query)
+
         // Before the first frame, so a driver who chose සිංහල never sees an English one. This is
         // the earliest point at which it can happen — `DriverLocale` redirects the bundle every
         // lookup goes through, and a view built before it would have resolved its strings already.
@@ -247,6 +266,32 @@ final class DriverGraph: ObservableObject {
             proofs: proofs,
             captures: captures
         )
+    }
+
+    // MARK: - C090 · the per-screen models
+    //
+    // Factories for the reason C088's are: each is a `@StateObject` owned by the screen that shows
+    // it, and a model held here would outlive the view and keep its ticker — and, on the board, its
+    // GNSS subscription — running for the life of the process.
+
+    /// SCR-DI-017.
+    func makeJobBoardModel() -> JobBoardModel {
+        JobBoardModel(identity: identity, jobs: jobs, location: CoreLocationDriverLocationSource())
+    }
+
+    /// SCR-DI-018.
+    func makeScheduledRidesModel() -> ScheduledRidesModel {
+        ScheduledRidesModel(identity: identity, jobs: jobs)
+    }
+
+    /// SCR-DI-019.
+    func makeDriverLevelModel() -> DriverLevelModel {
+        DriverLevelModel(identity: identity, jobs: jobs)
+    }
+
+    /// SCR-DI-020.
+    func makeEarningsModel() -> EarningsModel {
+        EarningsModel(identity: identity, earnings: earnings)
     }
 
     /// Start-up work that outlives any view.

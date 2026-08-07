@@ -44,10 +44,11 @@ struct DriverDestinationView: View {
             HomeDestinationView(route: route)
 
         // ---- C090 · jobs / level / earnings ------------------------------------------
-        case .jobs: placeholder("SCR-DI-017 · job board")
-        case .scheduledRides: placeholder("SCR-DI-018 · scheduled rides")
-        case .driverLevel: placeholder("SCR-DI-019 · driver level")
-        case .earnings: placeholder("SCR-DI-020 · earnings")
+        //
+        // One arm for all four, and a sub-view rather than four inline screens — the same reason
+        // clusters 1, 2 and 3 take one arm each above.
+        case .jobs, .scheduledRides, .driverLevel, .earnings:
+            JobsDestinationView(route: route)
 
         // ---- C091 · wallet / daily fee -----------------------------------------------
         case .wallet: placeholder("SCR-DI-021 · wallet & fee")

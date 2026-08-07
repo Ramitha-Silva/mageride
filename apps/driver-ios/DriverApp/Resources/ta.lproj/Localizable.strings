@@ -412,3 +412,60 @@
 "delivery_otp_wrong" = "அந்தக் குறியீடு தவறு. மீண்டும் படித்துச் சொல்லக் கேளுங்கள்.";
 "delivery_otp_attempts_left" = "இந்த ஒப்படைப்பு உதவிக் குழுவுக்குச் செல்வதற்கு முன் %1$d முயற்சிகள் மீதம்.";
 "delivery_otp_locked" = "ஐந்து தவறான குறியீடுகள். இந்த ஒப்படைப்பு இப்போது எமது உதவிக் குழுவிடம் உள்ளது — அவர்கள் உங்களை அழைப்பார்கள்.";
+
+/* ---------------------------------------------------------------------------------------------
+  MageRide Driver — iOS · C090 driver-ios-jobs-level-earnings. Tamil (தமிழ்).
+
+  Same keys, same order and the same translations as
+  `apps/driver-android/src/main/res/values-ta/strings.xml`. `%1$s` becomes `%1$@`; every other
+  specifier keeps its position, which `LocalizationTests` asserts.
+--------------------------------------------------------------------------------------------- */
+
+/* SCR-DI-017 · வேலைப் பலகை */
+"job_board_title" = "வேலைப் பலகை";
+"job_board_radius" = "%1$@ உள்ளே";
+"job_board_loading" = "உங்கள் அருகிலுள்ள வேலைகளைத் தேடுகிறோம்";
+"job_board_empty" = "%1$@ உள்ளே வேலைகள் இல்லை";
+"job_board_level_gate" = "வேலைப் பலகையைப் பயன்படுத்த நிலை %1$d ஐ அடையுங்கள். அதுவரை வழக்கமான பயணங்கள் உங்களுக்குக் கிடைக்கும்.";
+"job_board_post_intent" = "விருப்பம் தெரிவிக்க";
+"job_board_intent_posted" = "விருப்பம் தெரிவிக்கப்பட்டது ✓";
+"job_board_expired" = "மூடப்பட்டது";
+"job_board_no_position" = "உங்கள் அருகில் வேலைகளைக் கண்டறிய இருப்பிடத்தை இயக்கவும்.";
+"job_board_unavailable" = "உங்கள் ஓட்டுநர் நிலையைப் படிக்க முடியவில்லை. சிறிது நேரத்தில் மீண்டும் முயலுங்கள்.";
+
+/* நாள் லேபிள்கள் */
+"schedule_today" = "இன்று";
+"schedule_tomorrow" = "நாளை";
+
+/* SCR-DI-018 · திட்டமிட்ட பயணங்கள் */
+"scheduled_title" = "திட்டமிட்ட பயணங்கள்";
+"scheduled_empty" = "இன்னும் எதுவும் பதிவாகவில்லை. திட்டமிட்ட பயணங்களைப் பெற வேலைப் பலகையில் விருப்பம் தெரிவியுங்கள்.";
+"scheduled_accepted" = "ஏற்கப்பட்டது";
+"scheduled_in_minutes" = "%1$d நிமிடத்தில்";
+"scheduled_reminder_fired" = "நினைவூட்டல் அனுப்பப்பட்டது";
+"scheduled_cancel" = "இந்தப் பயணத்தை விட்டுவிடுங்கள்";
+
+/* SCR-DI-019 · ஓட்டுநர் நிலை */
+"level_title" = "ஓட்டுநர் நிலை";
+"level_loading" = "உங்கள் நிலையைப் படிக்கிறோம்";
+"level_points_to_next" = "நிலை %3$d க்கு %1$d / %2$d புள்ளிகள்";
+"level_top" = "நிலை %1$d தான் மிக உயர்ந்த நிலை";
+"level_acceptance" = "ஏற்பு விகிதம்";
+"level_no_shows" = "வராத பயணங்கள்";
+"level_reports_warning" = "%1$d பயணிகள் புகார்கள் ஒரு நிலையையும் தற்காலிக நீக்கத்தையும் ஏற்படுத்தும்.";
+
+/* SCR-DI-020 · வருமானம் */
+"earnings_title" = "வருமானம்";
+"earnings_period_today" = "இன்று";
+"earnings_period_week" = "வாரம்";
+"earnings_period_month" = "மாதம்";
+"earnings_net_for" = "%1$@ — உங்களுக்கு மிஞ்சுவது";
+"earnings_fares_received" = "%1$d பயணங்கள் · பெற்ற கட்டணம்";
+"earnings_tips" = "உபகாரத் தொகை";
+"earnings_daily_fee" = "தினசரி கட்டணம் கழிக்கப்பட்டது";
+"earnings_penalties" = "அபராதம் கழிக்கப்பட்டது";
+"earnings_net" = "நிகரத் தொகை";
+"earnings_trips" = "பயணம் வாரியாக";
+"earnings_empty" = "இந்தக் காலப்பகுதியில் முடிக்கப்பட்ட பயணங்கள் இல்லை.";
+"earnings_chart_bucket" = "காலப்பகுதி";
+"earnings_chart_label" = "வருமானப் போக்கு";

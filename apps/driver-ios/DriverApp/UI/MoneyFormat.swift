@@ -62,6 +62,14 @@ enum MoneyFormat {
         return "\(km).\(tenths) km"
     }
 
+    /// `30000` → `30 km`. A **radius**, not a measured distance (Δ C090).
+    ///
+    /// Distinct from ``distance(metres:)`` because the two are different kinds of number: a distance
+    /// is measured and its tenth of a kilometre is information, while the Job Board's catchment is a
+    /// round figure a spec fixed (D-06's 30 km), and `Within 30.0 km` reads as a measurement of
+    /// something. Same function as `apps/driver-android/.../ui/MoneyFormat.kt`'s.
+    static func radius(metres: Int) -> String { "\(Int64(metres) / metresInKm) km" }
+
     /// `01:12:40` — SCR-DI-011's live session timer (US-5.6).
     static func clock(seconds: Int64) -> String {
         let safe = max(seconds, 0)

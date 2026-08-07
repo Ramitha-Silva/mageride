@@ -413,3 +413,60 @@
 "delivery_otp_wrong" = "එම කේතය වැරදියි. නැවත කියවා දෙන ලෙස ඉල්ලන්න.";
 "delivery_otp_attempts_left" = "මෙම භාරදීම සහාය කණ්ඩායමට යාමට පෙර උත්සාහ %1$d ක් ඉතිරිය.";
 "delivery_otp_locked" = "වැරදි කේත පහක්. මෙම භාරදීම දැන් අපගේ සහාය කණ්ඩායම සතුය — ඔවුන් ඔබට කතා කරයි.";
+
+/* ---------------------------------------------------------------------------------------------
+  MageRide Driver — iOS · C090 driver-ios-jobs-level-earnings. Sinhala (සිංහල), AL-26's default.
+
+  Same keys, same order and the same translations as
+  `apps/driver-android/src/main/res/values-si/strings.xml`. `%1$s` becomes `%1$@`; every other
+  specifier keeps its position, which `LocalizationTests` asserts.
+--------------------------------------------------------------------------------------------- */
+
+/* SCR-DI-017 · රැකියා පුවරුව */
+"job_board_title" = "රැකියා පුවරුව";
+"job_board_radius" = "%1$@ ඇතුළත";
+"job_board_loading" = "ඔබ අසල රැකියා සොයමින්";
+"job_board_empty" = "%1$@ ඇතුළත රැකියා නැත";
+"job_board_level_gate" = "රැකියා පුවරුව භාවිතයට මට්ටම %1$d ට පැමිණෙන්න. එතෙක් සාමාන්‍ය ගමන් ඔබට ලැබේ.";
+"job_board_post_intent" = "කැමැත්ත දන්වන්න";
+"job_board_intent_posted" = "කැමැත්ත දන්වා ඇත ✓";
+"job_board_expired" = "වැසී ඇත";
+"job_board_no_position" = "ඔබ අසල රැකියා සොයාගැනීමට ස්ථානය සක්‍රිය කරන්න.";
+"job_board_unavailable" = "ඔබේ රියදුරු මට්ටම කියවිය නොහැකි විය. මොහොතකින් නැවත උත්සාහ කරන්න.";
+
+/* දින ලේබල */
+"schedule_today" = "අද";
+"schedule_tomorrow" = "හෙට";
+
+/* SCR-DI-018 · නියමිත ගමන් */
+"scheduled_title" = "නියමිත ගමන්";
+"scheduled_empty" = "තවම කිසිවක් වෙන් කර නැත. නියමිත ගමන් ලබාගැනීමට රැකියා පුවරුවේ කැමැත්ත දන්වන්න.";
+"scheduled_accepted" = "පිළිගෙන ඇත";
+"scheduled_in_minutes" = "මිනිත්තු %1$d කින්";
+"scheduled_reminder_fired" = "මතක් කිරීම යවා ඇත";
+"scheduled_cancel" = "මෙම ගමන අත්හරින්න";
+
+/* SCR-DI-019 · රියදුරු මට්ටම */
+"level_title" = "රියදුරු මට්ටම";
+"level_loading" = "ඔබේ මට්ටම කියවමින්";
+"level_points_to_next" = "මට්ටම %3$d ට ලකුණු %1$d / %2$d";
+"level_top" = "මට්ටම %1$d උසම මට්ටමයි";
+"level_acceptance" = "පිළිගැනීම";
+"level_no_shows" = "නොපැමිණීම්";
+"level_reports_warning" = "මගී පැමිණිලි %1$d ක් නිසා මට්ටමක් සහ තාවකාලික ඉවත් කිරීමක් සිදුවේ.";
+
+/* SCR-DI-020 · ඉපැයීම් */
+"earnings_title" = "ඉපැයීම්";
+"earnings_period_today" = "අද";
+"earnings_period_week" = "සතිය";
+"earnings_period_month" = "මාසය";
+"earnings_net_for" = "%1$@ — ඔබට ඉතිරි වන මුදල";
+"earnings_fares_received" = "ගමන් %1$d ක් · ලැබුණු ගාස්තු";
+"earnings_tips" = "තෑගි මුදල්";
+"earnings_daily_fee" = "දෛනික ගාස්තුව අඩු කෙරිණි";
+"earnings_penalties" = "දඩ අඩු කෙරිණි";
+"earnings_net" = "ශුද්ධ මුදල";
+"earnings_trips" = "ගමනින් ගමන";
+"earnings_empty" = "මෙම කාලය තුළ සම්පූර්ණ කළ ගමන් නැත.";
+"earnings_chart_bucket" = "කාල පරාසය";
+"earnings_chart_label" = "ඉපැයීම් ප්‍රවණතාව";

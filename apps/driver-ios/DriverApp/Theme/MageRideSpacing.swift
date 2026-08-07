@@ -121,6 +121,20 @@ enum MageRideControl {
 
     /// A glyph sitting inside a row or a chip-sized control.
     static let rowIcon: CGFloat = 20
+
+    // MARK: - C090 · the board, the level and the money
+    //
+    // The same numbers as `apps/driver-android/.../ui/theme/Dimens.kt`'s `ControlTokens`, because
+    // the two apps draw the same wireframe cell at the same size.
+
+    /// SCR-DI-019's big `L3` square (`94 x 94` in the HTML, rounded onto the 4pt grid).
+    static let levelBadge: CGFloat = 96
+
+    /// SCR-DI-019's points bar (`.progress`, `height:8px`).
+    static let levelProgress: CGFloat = 8
+
+    /// SCR-DI-020's trend (`.bars`, `height:90px`, rounded onto the grid).
+    static let earningsChart: CGFloat = 88
 }
 
 extension View {

@@ -41,3 +41,41 @@ public fun colomboBusinessDate(at: Timestamp): String = BusinessCalendar.busines
  */
 @OptIn(ExperimentalTime::class)
 public fun colomboBusinessDateNow(): BusinessDate = BusinessCalendar.businessDate(Clock.System.now())
+
+/**
+ * The Asia/Colombo business date [at] falls on, as a [BusinessDate] (C090).
+ *
+ * The typed counterpart of [colomboBusinessDate] for an **arbitrary** instant, completing the trio
+ * with [colomboBusinessDateNow]. Same reason all three exist: [BusinessCalendar.businessDate] takes
+ * its zone as a defaulted parameter and a default argument does not survive the export, so a Swift
+ * caller would otherwise have to hold a `kotlinx.datetime.TimeZone` — or name `"Asia/Colombo"` a
+ * second time — to ask which Colombo day a server timestamp fell on.
+ */
+public fun colomboBusinessDateOf(at: Timestamp): BusinessDate = BusinessCalendar.businessDate(at)
+
+/**
+ * `Asia/Colombo` — the tz-database identifier D-38 fixes, for a Foundation `TimeZone` (C090).
+ *
+ * SCR-DI-017's *"Today · 11.2 km · Sedan"*, SCR-DI-018's countdown and SCR-DI-020's chart buckets
+ * are all read on a **Colombo** calendar and none of them is a business *date* — an hour of the
+ * day, a wall-clock reading and "is this the same day as that" are `Calendar` and `DateFormatter`
+ * questions, which on this platform take a `Foundation.TimeZone` rather than a `BusinessDate`.
+ *
+ * A string rather than [BusinessCalendar.ZONE] itself, so nothing on the Swift side has to hold a
+ * `kotlinx.datetime.TimeZone` to build a Foundation one out of it — and, more to the point, so the
+ * zone is still written **once**, here in `:shared`, rather than as an `"Asia/Colombo"` literal in
+ * an app. A driver whose handset came back from a trip abroad still on its old zone otherwise reads
+ * a board sorted correctly and labelled five and a half hours wrong.
+ */
+public fun colomboZoneId(): String = BusinessCalendar.ZONE.id
+
+/**
+ * Midnight at the start of [date] in Colombo, as epoch milliseconds (C090).
+ *
+ * [BusinessCalendar.startOfDay] takes its zone as a **defaulted** parameter, and a default argument
+ * does not survive the export — see [colomboBusinessDate]. The result is milliseconds rather than a
+ * `Timestamp` because its one caller turns it into a `Date` immediately: SCR-DI-020's chart walks
+ * the days of the window `EarningsSummary.rangeFrom`/`rangeTo` describe, and the window's ends are
+ * `BusinessDate`s the server chose.
+ */
+public fun colomboStartOfDayMillis(date: BusinessDate): Long = BusinessCalendar.startOfDay(date).toEpochMilliseconds()

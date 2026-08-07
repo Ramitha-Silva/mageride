@@ -40,6 +40,9 @@ apps/driver-ios/
 │   │                            the screen-level GNSS source
 │   ├── Ride/                    C088 · SCR-DI-015 + its three sheets and its data layer
 │   ├── Delivery/                C089 · SCR-DI-016a/b/c + the proof queue and its data layer
+│   ├── Jobs/                    C090 · SCR-DI-017, 018 + the dispatch reads and the Colombo clock
+│   ├── Level/                   C090 · SCR-DI-019
+│   ├── Earnings/                C090 · SCR-DI-020 + its buckets and its chart
 │   ├── Menu/                    C088 · SCR-DI-036 — AL-31's drawer, as a tab
 │   ├── Onboarding/              C086 · SCR-DI-001, 002, 003, 003a, 007 + their data layer
 │   ├── UI/                      the wireframe's shapes as views — fields, tiles, cards, pills
@@ -217,7 +220,60 @@ DriverApp/
   are C086's `GroupedList`, the boxes are C086's `OtpField`, and the sheets themselves are C088's
   `DashboardSheet` — which is the point of those five controls existing.
 
-**To add a screen (C090–C093):**
+## Cluster 5 (C090) — the board, the level and the money
+
+```
+DriverApp/
+├── Jobs/        SCR-DI-017, 018 + the dispatch reads and the Colombo clock
+├── Level/       SCR-DI-019
+└── Earnings/    SCR-DI-020 + its buckets and its Swift Charts trend
+```
+
+- **The Job Board is POST-INTENT ONLY, and dispatch-svc has no route that would let it be
+  otherwise.** `GET /v1/rides/job-board` and `POST …/{id}/intent` are the whole surface; at T-30 min
+  the booking becomes a ride and reaches the driver as an ordinary offer on SCR-DI-014. Anything on
+  this screen that looked like an accept would be a second way to win a ride, racing the first.
+- **T-30 is `jobBoardGoesLiveAtMillis(ride)` and both job screens read it.** `JobBoard.timeToGoLive`
+  answers a `Duration` — an inline value class the export flattens to an opaque `Long` whose
+  encoding is a packed nanos/millis pair with a tag bit, not a nanosecond count — so the *instant*
+  crosses as epoch milliseconds and each screen does an ordinary comparison. SCR-DI-017's expiry and
+  SCR-DI-018's *"reminder sent"* are the same moment (D5' §3.7 dispatches, §14.4 pushes), and
+  `JobBoardModel.expiryFadeSeconds` is the only local number — it is the animation, not the rule.
+- **`JobStanding.hasJobBoardAccess` is three-valued and the third value matters.** `true` opens the
+  board, `false` is US-6A.8's gate, and **`nil` is "reputation did not answer"** — which must never
+  render as the gate, because that tells a Level-3 driver they are Level 1. `JobBoardState` carries
+  `isUnavailable` for exactly that.
+- **`MageRideShared.DriverStanding` is NOT this app's `DriverStanding`.** C088 named the dashboard's
+  whole status header `DriverStanding` (`Home/StandbyRepository.swift`); `:shared`'s is the level
+  standing. Swift resolves an unqualified name to the local module and **nothing warns**, so every
+  reference to the Kotlin type is spelled `MageRideShared.DriverStanding`.
+- **Every clock on this cluster is Asia/Colombo, and Foundation's** — `ScheduleLabels.calendar` is a
+  **Gregorian** `Calendar` (a non-Gregorian handset calendar answers a different day-of-month) on the
+  zone `colomboZoneId()` supplies, the 24-hour clock is `en_US_POSIX` + a fixed `HH:mm` (a
+  `.timeStyle = .short` follows the system's 12/24-hour switch, which is a setting), and only the
+  `18 Jun` month name is locale data. Both suites are asserted at 19:00 UTC, already the next day in
+  Colombo.
+- **`now` and `positionWait` are injected separately on `JobBoardModel`, on purpose.** `now` is the
+  T-30 rule and a test freezes it; `positionWait` is a GNSS timeout counted in **polls**. A budget
+  measured off a frozen clock spins for the life of the process — a defect this component wrote and
+  caught. Copy the split, not the first version.
+- **Levels stop at 3.** The wireframe draws *"510 / 500 pts → Level 4"*; D5' §4.2 caps at
+  `min(level + 1, 3)`. Layout is the wireframe's, the number is D5''s.
+- **`DriverLevelState` carries no error field, and that is deliberate (Δ C090).** The Android twin's
+  is unreachable — `JobsRepository.standing` swallows both failures by design, so nothing that calls
+  it can throw. A failed read on SCR-DI-019 is an em-dash badge and *"Reading your level"*.
+- **The earnings summary is query-svc's arithmetic and is printed as sent.** The per-trip rows feed
+  the breakdown list and the chart and are never re-summed into a second total (R-05).
+- Reusable UI added here: `MoneyFormat.radius(metres:)` (`30 km`, not `30.0 km` — a radius is a
+  figure a spec fixed, not a measurement), `MageRideControl.levelBadge` / `.levelProgress` /
+  `.earningsChart`, `LevelLabels`, and `Jobs/ScheduleLabels.swift` — **the Colombo clock and calendar
+  every later screen that prints a time should use** rather than building a `DateFormatter` on the
+  handset's zone.
+- Three `:shared` `iosMain` helpers were added, each for the reason C088's four were — a defaulted
+  Kotlin parameter does not survive the export: `jobBoardGoesLiveAtMillis` / `driverLevelRulesFor`,
+  and `colomboZoneId` / `colomboStartOfDayMillis` / `colomboBusinessDateOf`.
+
+**To add a screen (C091–C093):**
 
 1. Its route is already in `Nav/DriverRoute.swift`. Use it; do not invent a case.
 2. Replace its `placeholder(...)` line in `Nav/DriverDestinations.swift` with the real view. That
@@ -308,6 +364,8 @@ Every one of these is D2' §C or a platform constraint, and each is called out a
 | Direct dial | `ACTION_DIAL` opens the dialler | `tel:` **places** the call, so `CXCallObserver` gates it |
 | Menu (SCR-DI-036) | a `ModalDrawerSheet` behind a scrim | a `List` on the Menu tab's own stack |
 | Delivery call button (SCR-DI-016a/c) | a 46×38 outlined `📞` icon button | the wireframe's own `textlink` — a green `📞 Call` in a grouped-list row |
+| Earnings trend (SCR-DI-020) | bars hand-drawn from Compose primitives | **Swift Charts** — the cell's own `Δ iOS` clause; same spec, first-party axis and VoiceOver rotor |
+| Earnings periods (SCR-DI-020) | a `TabRow` | a segmented `Picker` — `.tabbar2` is `UISegmentedControl` in the wireframe's own CSS |
 
 ## Things that will bite
 

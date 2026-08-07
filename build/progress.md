@@ -116,7 +116,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C087 | driver-ios-vehicle-onboarding | 4b | PARTIAL | 2026-08-06 | **Written in full; NOT compiled — this host cannot build iOS** (root CLAUDE.md), so the DoD is unverified and the status stays PARTIAL until `xcodebuild … test` on macOS. What *is* verified here: `:shared:testDebugUnitTest detekt ktlintCheck` green (822 tests, unchanged) and `:shared:compileKotlinIosArm64` type-checking the one Kotlin addition. SCR-DI-004/004a/004b/004c/005/006/026/026a built — **16 Swift files, 6 XCTest suites, 104 keys × si/ta/en** (C069's key names and C069's translations). **The crop quadrilateral is VisionKit's**: `VNDocumentCameraViewController` is what the cell's own `Δ iOS` clause names, and it supplies the auto-proposed quad, the four draggable corners, the flash, the Retake/Use-photo bar and the perspective transform — so C069's `CropQuad` + `DocumentEdgeDetector` + the warp (≈550 lines) have **no counterpart here**, and three of its capture strings have no renderer because iOS draws and localises those buttons itself. **What is not free is AL-43's provenance stamp**, which is written in `DocumentScannerModel.onScanned` and nowhere else. **`NSCameraUsageDescription` was missing from `Info.plist`** and presenting the scanner without it terminates the app rather than refusing — added, with its three translations, and `LocalizationTests` now checks it. **SCR-DI-026 is a `List`** (its `Δ iOS` clause is `.swipeActions`), the only one in either cluster. One shared-module addition, in `iosMain`, because Kotlin default arguments do not survive the export: `colomboBusinessDate(at:)`, so D-38's zone is not copied into Swift. Three wireframe deviations and one C085 defect recorded — see the handoff |
 | C088 | driver-ios-dashboard-dispatch | 4b | PARTIAL | 2026-08-06 | **Written in full; NOT compiled — this host cannot build iOS** (root CLAUDE.md), so the DoD is unverified and the status stays PARTIAL until `xcodebuild … test` on macOS. Verified here: `:shared:testDebugUnitTest detekt ktlintCheck` green (822 tests, unchanged) and `:shared:compileKotlinIosArm64` type-checking the four Kotlin additions. SCR-DI-010/011/013/014/015/036 built — **26 Swift files, 8 XCTest suites across 7 test files, 97 keys × si/ta/en** (C070's key names and C070's translations). **Home is one destination**, its sheet chosen by `LiveVehicle.isScheduledMode`; **SCR-DI-014 is a `fullScreenCover` with the interactive dismiss disabled**, not a route. **`OfferSlot` is the seam that makes the fifteen seconds testable** — `OfferSession.state` is a `StateFlow` and `IosFlowWatcher`'s constructor is `internal`, so a test cannot build one. **The countdown is local arithmetic** off `expiresAt`, not `OfferSession.countdown()` (a `Flow<Duration>` Swift cannot collect); the *decision* rule stays in `OfferSession.accept()`. **CallKit-aware means the direct dial**: a `tel:` URL places the call on iOS, so `CXCallObserver` gates it — Android's `ACTION_DIAL` has nothing to check. **The C087-recorded `VehicleToken.wire` defect is fixed** (camel case → `:shared`'s snake case; three of ten types were drawing grey). Four `iosMain` helpers added, each because a Kotlin default argument does not survive the export. Six spec gaps carried forward from C070 and two new iOS ones — see the handoff |
 | C089 | driver-ios-delivery | 4b | PARTIAL | 2026-08-07 | **Written in full; NOT compiled — this host cannot build iOS** (root CLAUDE.md), so the DoD is unverified and the status stays PARTIAL until `xcodebuild … test` on macOS. Verified here: `:shared:testDebugUnitTest detekt ktlintCheck` green (**822 tests, 0 failed** — unchanged, because this component adds **no Kotlin at all**), the `.pbxproj` regenerated from the tree (**99 app sources, 32 test sources**), a brace/paren sweep over all 131 Swift files, and the three `Localizable.strings` parsed with a real old-style-plist parser (**314 keys × 3**, key sets identical, none blank, none left in English, no specifier drift). SCR-DI-016a/b/c built — **6 Swift files, 3 XCTest suites / 30 tests, 22 keys × si/ta/en** (C071's key names and C071's translations). **The three `Localizable.strings` files did not parse before this component and now do** — a `.strings` comment is a C comment and does not nest, so `values*/strings.xml` inside one closed it on the `*/` and `NSDictionary(contentsOf:)` answered `nil`: **every key in the driver app resolved to its own name**, from C085 onward, and `LocalizationTests` would have failed at its first line on a Mac. Seven occurrences fixed. **`ActiveRideScreen` now hands a package over to `DeliveryScreen`** — the one `if` C088 left for this component; no route added, no deep link changed, and SCR-DI-015's poll and GNSS subscription stay off for a parcel so only one loop folds server states onto the ride. **`PackageHandoff` is the five-attempt rule** and the projection is seated once and kept, because re-seating throws the attempt count away. **The photograph completes the delivery** (Δ C037) so it uploads on the *"Delivery completed"* tap, not the shutter; `DocumentCaptureTarget.deliveryProof` is the first non-document use of SCR-DI-005. **One C071 defect found and not replicated**: the Android twin empties the four OTP boxes on every fold, and its five-second poll is a fold. Four C071 spec gaps carried forward, one new iOS delta — see the handoff |
-| C090 | driver-ios-jobs-level-earnings | 4b | PENDING | | |
+| C090 | driver-ios-jobs-level-earnings | 4b | PARTIAL | 2026-08-07 | **Written in full; NOT compiled — this host cannot build iOS** (root CLAUDE.md), so the DoD is unverified and the status stays PARTIAL until `xcodebuild … test` on macOS. Verified here: `:shared:compileKotlinIosArm64 detekt ktlintCheck` green with the **three new `iosMain` helpers** type-checked, the `.pbxproj` regenerated from the tree (**113 app sources, 40 test sources**), a brace/paren/string sweep over all 153 Swift files, an import and string-key audit, and the three `Localizable.strings` parsed with a real old-style-plist parser (**353 keys × 3**, key sets identical, none blank, none left in English, no specifier drift, no Android `%n$s` left behind). SCR-DI-017/018/019/020 built — **14 Swift files, 6 XCTest suites across 7 test files, 39 keys × si/ta/en** (C072's key names and C072's translations). **The board is post-intent only and the fence is asserted**; **US-6A.8 is three-valued** so an unread level renders as *"we could not read your Driver Level"* and never as the L1 gate; **T-30 is one instant read by two screens** through `jobBoardGoesLiveAtMillis` — SCR-DI-017's expiry and SCR-DI-018's *"reminder sent"* are the same comparison; earnings print query-svc's own summary and never a second total; every clock and bucket is Asia/Colombo through `:shared`'s zone. **Δ iOS: the trend is Swift Charts**, which is `driver_ios.html`'s own clause for the cell, and the period strip is a segmented `Picker`, which is what `.tabbar2` draws on this platform. One C072 defect found and not replicated (`DriverLevelState.error` is unreachable). Five C072 spec gaps carried forward, one new iOS delta — see the handoff |
 | C091 | driver-ios-wallet-credit | 4b | PENDING | | |
 | C092 | driver-ios-tracker-sharing-profile | 4b | PENDING | | |
 | C093 | driver-ios-comms-safety-support | 4b | PENDING | | |
@@ -14091,4 +14091,173 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   `Ride/RideContact.swift` and the three `Localizable.strings`. Tests, new:
   `DriverAppTests/DeliveryTestKit.swift`, `DeliveryModelTests.swift`, `DeliveryLabelTests.swift`,
   `ProofUploadQueueTests.swift`; edited: `DashboardTestKit.swift`. Plus
+  `DriverApp.xcodeproj/project.pbxproj` (regenerated) and `apps/driver-ios/CLAUDE.md`.
+
+---
+
+- **Component:** C090 driver-ios-jobs-level-earnings — 2026-08-07
+- **Status:** PARTIAL — **written in full and not compiled.** `apps/driver-ios` is an Xcode project
+  and this build host is Linux (root CLAUDE.md, `apps/driver-ios/CLAUDE.md`), so the DoD's
+  `xcodebuild … test` has not run and cannot run here; the status stays PARTIAL until the first Mac
+  build, exactly as C085–C089 stand. What *is* verified on this host is below, and it is more than
+  "it was typed": the Kotlin half is compiled, the project file is derived from the tree, and the
+  copy is parsed with the same kind of parser `NSDictionary(contentsOf:)` uses.
+- **Notes:**
+
+  ### Verified here
+
+  * `./gradlew :shared:compileKotlinIosArm64 :shared:detekt :shared:ktlintCheck` — **BUILD
+    SUCCESSFUL**, with the three new `iosMain` functions type-checked by the Kotlin/Native front end
+    on this Linux host (`gradle.properties` enables klib cross-compilation; that is a compile check,
+    not a link).
+  * `python3 apps/driver-ios/Tools/generate_xcodeproj.py` — **113 app sources, 40 test sources**,
+    3 resources, 2 localised tables. The `.pbxproj` is committed with the files, so nothing compiles
+    for one machine and not in CI.
+  * A structural sweep over **all 153 Swift files** in the target: braces, parentheses, brackets,
+    string literals (including `\(…)` interpolation) and block comments balanced; every file that
+    names a `:shared` symbol imports `MageRideShared`; and every `"key".localised` /
+    `Text(key:)` literal in the tree — 162 of them — has an entry in `en.lproj`.
+  * The three `Localizable.strings` parsed as old-style property lists: **353 keys each**, key sets
+    identical, none blank, none left equal to its English, every `%n$…` specifier surviving into si
+    and ta, and no Android `%n$s` left behind (which `String(format:)` would print as rubbish).
+
+  **Not verified, and it is the whole DoD:** `xcodebuild -project apps/driver-ios/DriverApp.xcodeproj
+  -scheme DriverApp -destination 'platform=iOS Simulator,name=iPhone 15' test`, after
+  `./gradlew :shared:assembleXCFramework`. Nothing here has ever been through a Swift compiler.
+
+  ### The board is post-intent only, and dispatch-svc has no route that would let it be otherwise
+
+  `GET /v1/rides/job-board` and `POST …/{id}/intent` are the whole surface. At T-30 min the booking
+  becomes a ride and reaches the driver as an ordinary offer on SCR-DI-014, which is where accepting
+  happens. `JobBoardModelTests` asserts the fence the same blunt way its Android twin does: the only
+  write the screen can be made to produce is `postIntent`, and nothing on it reaches a cancel either.
+
+  ### T-30 is ONE instant, and it is now one function call on both screens
+
+  D5' §3.7 dispatches at T-30 and §14.4 pushes `SCHEDULED_REMINDER` at 30 min for a driver — the same
+  moment. On Android both screens read `JobBoard.GO_LIVE_LEAD`; here neither can, because
+  `JobBoard.timeToGoLive` answers a **`Duration`**, an inline value class the Objective-C export
+  flattens to an opaque `Long` whose encoding is a packed nanos/millis pair with a tag bit rather
+  than a nanosecond count. So `jobBoardGoesLiveAtMillis(ride)` crosses the bridge as epoch
+  milliseconds and both screens do an ordinary comparison against it: SCR-DI-017's row is expired
+  when `now >= goesLiveAt`, and SCR-DI-018's reminder has fired when `at >= goesLiveAt`. The thirty
+  minutes is still written exactly once, in `:shared`.
+
+  `EXPIRY_FADE` (3 s) is the only local number and it is the **animation**, not the rule — a row that
+  vanished under the driver's thumb would look like a tap that lost them a job. A row already past
+  its window when the read lands is filtered before it is ever drawn.
+
+  ### US-6A.8 is three-valued here too, and the third value is the one that could do harm
+
+  `true` opens the board, `false` is the gate, and **`null` is "reputation did not answer"**.
+  `JobBoardState` carries `isUnavailable` beside `isGated` and `isEmpty`, three states with three
+  sentences, because rendering the gate on `null` would tell a Level-3 driver whose level read timed
+  out that they are Level 1. The gated path also never spends the board read.
+
+  ### Three `iosMain` helpers were added, each for a defaulted argument that does not survive
+
+  Same rule as C088's four and `colomboBusinessDate` before them. `IosJobBoard.kt`:
+  `jobBoardGoesLiveAtMillis` (above) and `driverLevelRulesFor(level)` — which is
+  `JobStanding.rules` on the Android side, and exists because `DriverLevelRules(config = D5_DEFAULTS)`
+  from Swift is a four-argument `doCopy` on a companion constant, three of whose arguments have to be
+  read back off that constant to hand straight in again, or else D5' §4.2's 500 and its
+  `jobBoardMinLevel` 2 typed into a Swift file. `IosBusinessDate.kt` gained `colomboZoneId()`,
+  `colomboStartOfDayMillis(date)` and `colomboBusinessDateOf(at)` — the first because every clock and
+  bucket on this cluster is a **Foundation** `Calendar`/`DateFormatter` question and `"Asia/Colombo"`
+  must not be spelled a second time in an app; the other two because `BusinessCalendar.startOfDay`
+  and `.businessDate` both take their zone as a defaulted parameter.
+
+  **The Colombo half is otherwise Foundation's**, not `java.time`'s: `ScheduleLabels.calendar` is a
+  Gregorian `Calendar` pinned to `:shared`'s zone (explicitly Gregorian — a non-Gregorian handset
+  calendar answers a different day-of-month), the 24-hour clock is `en_US_POSIX` with a fixed
+  `HH:mm` format (a `.timeStyle = .short` would follow the system's 12/24-hour switch, which is a
+  setting, not a format), and the `18 Jun` month name is ICU's through `DriverLocale.locale`.
+  `ScheduleLabelTests` and `EarningsBucketsTests` are written against a fixture at **19:00 UTC**,
+  which is already the next day in Colombo — the mirror of Android's `Fixtures.MIDNIGHT_EDGE`.
+
+  ### A C072 defect found and not replicated
+
+  **`DriverLevelState.error` on Android is unreachable.** `JobsRepository.standing` swallows both
+  failures by design (a dead stats read must not close the Job Board), so nothing
+  `DriverLevelViewModel.refresh` calls can throw and the banner it renders can never appear. The iOS
+  state carries no error field: what a failed read actually looks like on SCR-DI-019 is already
+  specified — an em-dash badge and *"Reading your level"* — which is the honest rendering of "we have
+  not been told". Recorded rather than mirrored; the Android field can be deleted in a micro-change.
+
+  ### Section C deltas that are real, and both are the wireframe's own
+
+  * **The trend is Swift Charts** (`Chart` + `BarMark`), which is `driver_ios.html`'s literal `Δ iOS`
+    clause for SCR-DI-020 (*"Swift Charts trend"*). The Android twin hand-draws its bars out of
+    Compose primitives because D2' §SCR-DA-020 offers `Canvas`/Vico and neither is first-party; here
+    the first-party control exists on the 16.0 floor and brings the axis, the Dynamic Type layout and
+    the VoiceOver chart rotor with it. The *specification* is unchanged — height ∝ value, relative to
+    the biggest bucket, one bucket highlighted — and an empty bucket keeps its place on the axis,
+    which is what the Android twin spends a `MIN_BAR` sliver on. The axis tick label is the one place
+    `.mageFont(_:)` cannot be used (`AxisValueLabel` takes a `Font`, not a modifier), so §0.2's
+    caption row is applied through the same `@ScaledMetric` the modifier is built on.
+  * **The period strip is a segmented `Picker`.** D2' §SCR-DA-020 gives Android a `TabRow`;
+    `driver_ios.html` draws `.tabbar2` as a `surfaceVariant` track with a white shadowed pill on the
+    selected entry, which is `UISegmentedControl`. Its selected-pill colour is the platform's, for
+    the reason §0.2 gives about the green `Toggle` and the blue `.alert` actions.
+
+  ### Spec gaps — the five C072 raised, all still open, plus what this component confirms
+
+  1. **`ScheduledRide` carries no fare**, and both wireframes print one (`Rs 980`). The card's fare
+     slot is left empty rather than filled with an estimate the passenger was never quoted.
+  2. **`Place.address` is null on every scheduled ride**, so the route line is two em dashes.
+     `ScheduleLabelTests` pins that no decimal degrees ever reach a card.
+  3. **dispatch-svc answers `hasIntent` and `paymentMethod` and `dispatch.yaml` declares neither**,
+     so *"Intent posted ✓"* is backed by an in-memory set and does not survive a restart. The one gap
+     whose fix is already written on the server.
+  4. **`DELETE /v1/rides/schedule/{id}` is a passenger route**, so a driver's *"Give up this ride"* is
+     a `403`. Wired anyway, refused locally once the row is `DISPATCHED`, and the server's refusal
+     rendered as copy with the booking left in the list.
+  5. **`SCHEDULED_REMINDER` has no deep link and no read carries the passenger-report count.**
+     SCR-DI-019's *"3 reports"* warning is therefore always the rule and never a tally. `PushRouter`
+     is unchanged and still invents no `mageride://scheduled` host.
+
+  Nothing new was raised: every read this cluster needs exists, and every figure it cannot print is
+  one of the five above.
+
+  ### What C091–C093 inherit, and what they must not re-invent
+
+  * **`Jobs/ScheduleLabels.swift` is the Colombo clock and calendar for this whole target.** Any
+    later screen that prints a pickup time, a trip time or a day boundary takes `time`, `date`,
+    `day` or `calendar` from there rather than building a `DateFormatter` on the handset's zone —
+    C073's wallet ledger is the next one that needs it, and its Android twin already delegates.
+  * `MoneyFormat.radius(metres:)` is new and shared (`30 km`, not `30.0 km` — a radius is a figure a
+    spec fixed, not a measurement). `MageRideControl` gained `levelBadge`, `levelProgress` and
+    `earningsChart`.
+  * **`MageRideShared.DriverStanding` and this app's own `DriverStanding` are different types with
+    the same name**, and Swift resolves the unqualified one to the app's. C088 named the dashboard's
+    whole status header `DriverStanding`; `:shared`'s is the level standing. Every reference to the
+    Kotlin one in this cluster is spelled `MageRideShared.DriverStanding`, and a later component
+    that needs it must do the same — nothing warns.
+  * `Jobs/JobsRepository.swift` is the one seam onto dispatch-svc's board, level and stats reads and
+    is already three-valued about "we do not know"; `Earnings/EarningsRepository.swift` is the
+    query-svc one. The dashboard's own `L3` badge still comes through `StandbyRepository`, which is
+    correct: that is one field of a five-field header, and asking for the stats read to draw a badge
+    would be a round trip a dashboard never uses.
+  * **Two models take an injected clock and one takes an injected timeout as well.** `JobBoardModel`
+    separates the two on purpose: `now` is the T-30 *rule* and a test freezes it, while
+    `positionWait` is a GNSS *timeout* counted in polls — a budget read off a frozen clock would spin
+    for the life of the process. That is a defect this component wrote and caught before it shipped;
+    a later model that waits for anything should copy the split rather than the first version.
+  * `DriverRoute.jobs` is the Jobs tab's **root**, so `navigator.open(.jobs)` pops the tab rather
+    than stacking a second Job Board. The two dashboard entry points C088 wired — the `L3` badge and
+    the *"Today: 4 trips"* line — cross tabs, and `DriverNavigator.open` switching first is what makes
+    the back button say `‹ Job Board`. `JobsNavigationTests` pins all of it.
+
+  **Files —** shared, edited: `shared/kmp/src/iosMain/kotlin/lk/mageride/shared/util/IosBusinessDate.kt`;
+  new: `shared/kmp/src/iosMain/kotlin/lk/mageride/shared/domain/dispatch/IosJobBoard.kt`. App, new:
+  `Jobs/ScheduleLabels.swift`, `Jobs/JobsRepository.swift`, `Jobs/JobBoardModel.swift`,
+  `Jobs/JobBoardScreen.swift`, `Jobs/ScheduledRidesModel.swift`, `Jobs/ScheduledRidesScreen.swift`,
+  `Jobs/JobsDestinationView.swift`, `Level/DriverLevelModel.swift`, `Level/DriverLevelScreen.swift`,
+  `Earnings/EarningsRepository.swift`, `Earnings/EarningsBuckets.swift`, `Earnings/EarningsModel.swift`,
+  `Earnings/EarningsChart.swift`, `Earnings/EarningsScreen.swift`. App, edited:
+  `DI/DriverGraph.swift`, `Nav/DriverDestinations.swift`, `Theme/MageRideSpacing.swift`,
+  `UI/MoneyFormat.swift` and the three `Localizable.strings`. Tests, new:
+  `DriverAppTests/JobsTestKit.swift`, `JobBoardModelTests.swift`, `ScheduledRidesModelTests.swift`,
+  `ScheduleLabelTests.swift`, `DriverLevelModelTests.swift`, `EarningsModelTests.swift`,
+  `EarningsBucketsTests.swift`, `JobsNavigationTests.swift`. Plus
   `DriverApp.xcodeproj/project.pbxproj` (regenerated) and `apps/driver-ios/CLAUDE.md`.

@@ -492,3 +492,75 @@
 "delivery_otp_wrong" = "That code is wrong. Ask them to read it out again.";
 "delivery_otp_attempts_left" = "%1$d tries left before this handover goes to support.";
 "delivery_otp_locked" = "Five wrong codes. This handover is with our support team now — they will call you.";
+
+/* ---------------------------------------------------------------------------------------------
+  MageRide Driver — iOS · C090 driver-ios-jobs-level-earnings. English, the development region.
+
+  SCOPE. Cluster 3's first half: SCR-DI-017 the Job Board, SCR-DI-018 the driver's own scheduled
+  rides, SCR-DI-019 Driver Level & stats and SCR-DI-020 the earnings dashboard.
+
+  KEYS ARE C072'S. Same key names and the same translations as
+  `apps/driver-android/src/main/res/values…/strings.xml`, so a divergence between the two driver
+  apps is a diff rather than an archaeology exercise. `%1$s` becomes `%1$@`, which is the only
+  systematic difference — see cluster 2's note above.
+
+  TWO KEYS ARE NEW HERE, and both are something Swift Charts draws and Compose does not.
+  `earnings_chart_bucket` names the categorical axis and `earnings_chart_label` is the chart's
+  VoiceOver label; the Android twin's bars are hand-drawn `Box`es with a sibling `Text` under each,
+  which a screen reader already reads. See `EarningsChart.swift` on why the control is the
+  first-party one on this platform — it is `driver_ios.html`'s own `Δ iOS` clause for the cell.
+
+  NOT HERE. `Rs`, `L3`, `—`, `92%`, `→` and `·` are all data rather than copy (`MoneyFormat`,
+  `DashboardLabels.level`, `MageRideSymbols`, `LevelLabels.percent`), and three identical values in
+  the three files is exactly what `LocalizationTests` fails on. `30 km` is formatted from
+  `JobBoard.CATCHMENT_METRES`, so `job_board_radius` and `job_board_empty` take it as an argument.
+--------------------------------------------------------------------------------------------- */
+
+/* SCR-DI-017 · the Job Board (US-6A.5, US-6A.8, D-06). Post intent only — there is no accept. */
+"job_board_title" = "Job Board";
+"job_board_radius" = "Within %1$@";
+"job_board_loading" = "Looking for jobs near you";
+"job_board_empty" = "No jobs within %1$@";
+"job_board_level_gate" = "Reach Level %1$d to use the Job Board. You still get ordinary rides in the meantime.";
+"job_board_post_intent" = "Post intent";
+"job_board_intent_posted" = "Intent posted ✓";
+"job_board_expired" = "Closed";
+"job_board_no_position" = "Turn location on so we can find jobs near you.";
+"job_board_unavailable" = "We could not read your Driver Level. Try again in a moment.";
+
+/* The two relative days a pickup can fall on. Anything else is a rendered date (ICU's month name). */
+"schedule_today" = "Today";
+"schedule_tomorrow" = "Tomorrow";
+
+/* SCR-DI-018 · scheduled rides (US-6A.15). A no-show here costs a level (US-6A.7). */
+"scheduled_title" = "Scheduled rides";
+"scheduled_empty" = "Nothing booked yet. Post intent on the Job Board to get scheduled rides.";
+"scheduled_accepted" = "Accepted";
+"scheduled_in_minutes" = "in %1$d min";
+"scheduled_reminder_fired" = "reminder sent";
+"scheduled_cancel" = "Give up this ride";
+
+/* SCR-DI-019 · Driver Level & stats (US-6A.6, US-6A.14). Levels run 1-3; there is no Level 4. */
+"level_title" = "Driver Level";
+"level_loading" = "Reading your level";
+"level_points_to_next" = "%1$d / %2$d points to Level %3$d";
+"level_top" = "Level %1$d is the highest level";
+"level_acceptance" = "Acceptance";
+"level_no_shows" = "No-shows";
+"level_reports_warning" = "%1$d passenger reports cost you a level and a temporary delisting.";
+
+/* SCR-DI-020 · earnings (US-9.22, US-8.8). query-svc's own totals, printed as sent. */
+"earnings_title" = "Earnings";
+"earnings_period_today" = "Today";
+"earnings_period_week" = "Week";
+"earnings_period_month" = "Month";
+"earnings_net_for" = "%1$@ — what you keep";
+"earnings_fares_received" = "%1$d trips · fares received";
+"earnings_tips" = "Tips";
+"earnings_daily_fee" = "Daily fee deducted";
+"earnings_penalties" = "Penalties deducted";
+"earnings_net" = "Net";
+"earnings_trips" = "Trip by trip";
+"earnings_empty" = "No completed trips in this period.";
+"earnings_chart_bucket" = "Period";
+"earnings_chart_label" = "Earnings trend";
