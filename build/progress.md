@@ -121,7 +121,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C092 | driver-ios-tracker-sharing-profile | 4b | PARTIAL | 2026-08-07 | **Written in full; NOT compiled — this host cannot build iOS** (root CLAUDE.md), so the DoD is unverified and the status stays PARTIAL until `xcodebuild … test` on macOS. Verified here: the `.pbxproj` regenerated from the tree (**156 app sources, 54 test sources**), a brace/paren/string sweep over all 210 Swift files, a string-key audit (every key the four screens reference resolves, and every key declared is referenced), an import audit over the new files, and the three `Localizable.strings` re-parsed with a real old-style-plist parser (**544 keys × 3**, identical key sets, none blank, none left in English, no specifier drift). `:shared` is untouched — this cluster crosses the bridge for DTOs only. SCR-DI-027/028/029/030 built — **22 Swift files, 5 XCTest suites across 6 test files, 84 keys × si/ta/en** (C074's key names and C074's translations). **The C074 fence is the same decorator here**: `TrackerPositionPublisher` wraps the service publisher in `DriverGraph`, which closes all three doors onto the position plane at once, and pairing also stops a stream already running. **Δ iOS: the device QR is `DataScannerViewController`** — D2' §SCR-DI-027's own SwiftUI column, first-party, and **the first decoder linked into this target** (`WalletFenceTests` still pins AL-34 for the wallet). SCR-DI-028's chip row is a segmented `Picker` and its accept/reject are `.swipeActions` with no full swipe on the admitting edge; `ShareExpiry` needs one time-zone hop where Android needs two. SCR-DI-029's contact picker is `CNContactPickerViewController`, which needs **no contacts permission and no usage-description key**, and the driver's platform id is copyable (C091's handoff asked for it). Six C074 spec gaps carried forward unchanged; nine Δ iOS rows added to the target's Section C table |
 | C093 | driver-ios-comms-safety-support | 4b | PARTIAL | 2026-08-07 | written in full; iOS cannot compile on this Linux host — `:shared`'s new iosMain half verified here |
 | C094 | passenger-ios-shell | 4b | PARTIAL | 2026-08-07 | shell written in full, **none of it compiled** (Linux host); wave-1 gate green (822), `compileKotlinIosArm64` clean, vendored H3 verified at **19 cells**, driver `.pbxproj` byte-identical after the generator promotion |
-| C095 | passenger-ios-auth-onboarding | 4b | PENDING | | |
+| C095 | passenger-ios-auth-onboarding | 4b | PARTIAL | 2026-08-07 | five screens written, **none compiled** (Linux host); wave-1 gate green (822), `compileKotlinIosArm64` clean, 62 app + 14 test sources audited; 2 wireframe/D2' conflicts and a `LocalizationTests` regex bug found |
 | C096 | passenger-ios-live-map-search | 4b | PENDING | | |
 | C097 | passenger-ios-booking | 4b | PENDING | | |
 | C098 | passenger-ios-ride-payment | 4b | PENDING | | |
@@ -15052,3 +15052,191 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   files across `DI`, `Geo`, `Live`, `Location`, `Map`, `Nav`, `Push`, `Security`, `Shell`, `Theme`,
   `UI`, plus `Info.plist`, the entitlements, 35 colour sets, two map styles and three `.lproj`),
   `PassengerAppTests/` (10 files), `PassengerApp.xcodeproj/` (generated) and `CLAUDE.md`.
+
+
+---
+
+- **Component:** C095 passenger-ios-auth-onboarding — 2026-08-07
+- **Status:** PARTIAL — **all five screens are written and none of the Swift has been compiled.**
+  This Linux host cannot build iOS (root `CLAUDE.md`, "Build Host"), so the DoD's *"every screen
+  matches its wireframe"* is unverified and stays that way until the first `xcodebuild` on macOS.
+  C094 and C085–C093 all stand in the same place. What *is* checked here is below, and it is more
+  than a shell component could offer because this cluster is almost entirely rules rather than
+  rendering.
+
+  **What IS verified on this host.** `./gradlew :shared:testDebugUnitTest :shared:detekt
+  :shared:ktlintCheck` — the wave-1 gate — **822 tests, BUILD SUCCESSFUL**, and
+  `:shared:compileKotlinIosArm64` clean (this component added no Kotlin, so that is a no-regression
+  check rather than a new one). Beyond that: the `.pbxproj` structurally (227 objects, no duplicate
+  or dangling ids, all 62 app sources and all 14 test sources in exactly one `Sources` phase each);
+  the strings (**66 `Localizable` keys × 3 languages** plus 2 `InfoPlist` keys × 3 — key sets equal,
+  no translation left equal to its English, no specifier drift, no unbalanced comment, no duplicate
+  key, and every declared key referenced by the Swift); and a source audit over the 62 files with
+  comments stripped — no hex or `Color(red:)` in code, no MQTT or drawer symbol, **no
+  `signInWithGoogle`/`Apple`/`Password` anywhere (AL-07)**, exactly one `navigationDestination`,
+  `Info.plist` read in exactly one file, all 32 routes still covered by the one destination switch,
+  cluster 1's five arms exactly the five pre-session routes, and none of its five placeholders left.
+
+  ### Two conflicts between the wireframe and D2', and the wireframe wins both
+
+  **Get Started is pinned to the bottom, below the language rows.** US-1.3, the `passenger_ios.html`
+  cell (*"pinned to the bottom of the screen (safe-area inset, below the language rows after the
+  spacer)"*) and this component's own fence all say so. **D2' §SCR-PA-002 still disagrees on two
+  counts** — its ASCII sketch draws the CTA *above* the language row, and its component table names
+  a `SegmentedButton` where US-1.3 asks for *"vertical selectable boxes, one per row"*. C077 recorded
+  exactly this and asked for a micro-change-set; it is still open, and it is now open against two
+  implementations rather than one. A `Spacer()` above the CTA is what makes "pinned" true at every
+  supported height rather than only at the one the frame was drawn at.
+
+  **The selected language row is an outlined box, not a checkmark.** `passenger_ios.html` draws
+  `border:1.5px solid var(--primary)` over a tinted fill with the label centred; `driver_ios.html`
+  draws a trailing `✓`/`○` pair on SCR-DI-002. The two wireframes genuinely differ, so `SelectionRow`
+  differs between the two apps and `MageRideControl.selectedBorder` is a passenger-only token. Not
+  raised as a gap — two apps are allowed to draw one control differently when their own baselines do.
+
+  ### Decisions worth knowing
+
+  **A language change is immediate here and needs an Activity recreation there.** `OnboardingModel`
+  has no `renderingLanguage` where `OnboardingViewModel.kt` does, and the absence is the Section C
+  delta: Android has to know whether the choice *changed*, because applying it means
+  `Activity.recreate()` and recreating for nothing flashes the screen. `PassengerLocale.apply(_:)`
+  re-points the bundle and the next view built resolves against it, so applying the same language
+  twice costs a dictionary write — which is why `select(_:)` applies unconditionally and the carousel,
+  the CTA and the rows underneath all change before the finger leaves the screen.
+
+  **`FeatureSlides.fallback` is computed, not a `static let`, and that was a real bug.** A stored one
+  is resolved once on first access, so a passenger tapping සිංහල would have watched everything on
+  SCR-PI-002 change *except* the carousel. Three string lookups per redraw is not a cost worth
+  caching, and the Android twin does not have the problem because its fallback is `@StringRes` ids
+  resolved at draw time.
+
+  **iOS closes C077's SMS-Retriever gap for free.** That handoff records that Android's auto-read
+  cannot be wired in any build produced today — the Retriever API matches an SMS against a hash of
+  the app's **signing certificate** and this repo has no release signing config. `.oneTimeCode`
+  needs no hash and no signing: the OS matches the message to the field by content type. `OtpField`
+  is therefore **one** `TextField` behind six drawn boxes rather than six fields, because QuickType
+  offers the code to a single field.
+
+  **The splash and the login screen answer a failed `GET /v1/users/me` differently, on purpose.** The
+  splash says *"has a profile"* (the session was restored from the Keychain, so this passenger has
+  been through Profile Setup, and a flat tunnel must not push a working passenger back onto a form);
+  the login screen says *"has none"* (they signed in a second ago, so the network was fine, and
+  `PUT /v1/users/me` is idempotent). Both are commented where they are written and both have a test.
+  The active-ride lookup beside them takes the *opposite* default to the splash's profile read — a
+  ride screen with no ride is not recoverable, where landing on the map instead of on the ride is
+  recovered the moment SCR-PI-010's socket connects.
+
+  **Resend is refused locally, not just by the server.** US-1.10 is a 60-second wait and D-32 caps
+  requests at five an hour, so a tap inside the cooldown does not merely fail — it *spends* one of
+  the five. `LoginState.canResend` gates the button and the countdown is **shown** rather than the
+  button merely disabled, because a bare inert "Resend" tells a passenger nothing and they tap it
+  until they are locked out. The countdown reads `resendAllowedAt` on every tick rather than counting
+  down from a number, so a screen backgrounded for thirty seconds comes back with thirty seconds gone.
+
+  **The location rationale gates nothing and stores the rationale, never the grant.** Both *"Allow
+  location"* and *"Not now"* continue to the map; what `OnboardingRouter` reads is that SCR-PI-005 was
+  **shown**. Storing the grant would send a passenger who later revoked it in Settings back through
+  onboarding on the next cold start. The CTA becomes *"Open Settings"* once a refusal has made asking
+  a no-op — **after one refusal on iOS where Android takes two**, which is the only substantive
+  difference between the two screens. Reduced accuracy counts as granted (iOS 14+ approximate, as
+  Android 12+ COARSE does): the nineteen cells are res-7 hexagons ~1.2 km across.
+
+  **`ActiveRideLookup` is a new seam and it is the third of its kind.** `RideApi` is a Kotlin
+  interface with dozens of `suspend` methods; implementing one from Swift means matching whatever
+  completion-handler selector Kotlin/Native generated for it. C094 made the same call for
+  `NearbySnapshots`; this is the rule now, and `apps/passenger-ios/CLAUDE.md` states it: **implement a
+  Swift protocol, never a Kotlin one with `suspend` methods**.
+
+  **`OnboardingErrors.kotlinCause(of:)` is not optional and is easy to leave out.** A Kotlin exception
+  does not cross the bridge as itself — Kotlin/Native wraps it in an `NSError` with the original under
+  `userInfo["KotlinException"]` — so `catch let error as MageRideError` never matches and every
+  failure in the app resolves to the generic message. C086 found it on the driver side; this component
+  inherited the unwrap rather than rediscovering it, and the app's CLAUDE.md now says so under
+  "Things that will bite".
+
+  **SCR-PI-004's Save is in the nav row where the Android twin has a bottom CTA.** The cell draws
+  `‹ Back · Set up profile · **Save**` and a `Δ iOS` clause of *"`PhotosPicker` + `Form`"* — a
+  settings-shaped screen rather than a wizard step. Same action, same one `PUT`. Its `‹ Back` is drawn
+  and inert, because cluster 1 is a one-way flow: `PassengerNavigator.open` *replaces* the pre-session
+  root rather than stacking, so there is no OTP screen behind it to return to.
+
+  **`AppPreferences.firstRunComplete` is derived, not stored** (`language != nil`), which is the call
+  `AppPreferences.kt` makes. A separate flag would be a second fact that can disagree with the first.
+  It is also why `OnboardingModel.finish()` writes the language **unconditionally** — a passenger who
+  accepted the Sinhala default without touching a box has answered the screen, and without that write
+  the router sends them straight back to it on the next cold start.
+
+  ### A defect found in C094's own test, and fixed
+
+  **`LocalizationTests`'s specifier regex was `%\d+\$[@a-zA-Z]+`, which is greedy past the conversion
+  character.** The English *"Resend (%1$ds)"* is a `%1$d` followed by a literal `s` for *seconds*;
+  the pattern reads it as a specifier called `%1$ds` that no translation can contain, so a correct
+  Sinhala string failed the assertion. It is now
+  `%\d+\$(?:ll|l|hh|h|z|t|j|q)?[@diufFeEgGxXoscpaA]` — what `String(format:)` itself parses. **The
+  same pattern is in `apps/driver-ios/DriverAppTests/LocalizationTests.swift` and has the same latent
+  hole**; it has not bitten there yet only because no driver string puts a letter immediately after a
+  specifier. Worth porting the fix in the next driver session; it is not raised as a micro-change-set
+  because it is a test bug rather than a spec one.
+
+  ### Gaps found
+
+  (a) ***No photo-upload route exists for a passenger avatar*** — C077's gap 1, unchanged and now
+  confirmed from this side. D2' §SCR-PI-004 names `PhotosPicker` and `UpdateProfileRequest.photoUrl`
+  is a **URL**, but nothing on the app-facing surface mints one for a passenger:
+  `POST /v1/support/screenshots`, the Mode B transfer slip and the driver's documents are the whole
+  upload surface. `ProfileAvatar` therefore draws the `＋` badge **disabled and not announced as a
+  button** — a VoiceOver user told "add photo, button" would tap something that does nothing — and
+  `PassengerProfileRepository.save` has no `photoUrl` parameter at all, so no screen can send `nil`
+  over a value the server holds. Landing it needs an upload route first. **Micro-change-set**, and it
+  is `iam.yaml`'s rather than this app's.
+
+  (b) ***US-1.3a's operating city still has no passenger screen anywhere*** — C077's gap 3, unchanged.
+  The story is phrased for "a user" and only SCR-DA/DI-002 draws a city picker; `passenger_ios.html`'s
+  SCR-PI-002 has a language picker and nothing else, and D2' §SCR-PA-002 lists only *"3-slide tutorial
+  (US-1.2) + Si/Ta/En picker (US-1.3)"*. `OnboardingRouter` therefore has no city gate. If a passenger
+  is meant to choose one it is a **missing screen** rather than a missing field.
+
+  (c) ***D2' §SCR-PA-002 contradicts the wireframe on the CTA's position and the picker's control***
+  — restated above; C077 raised it and it is unactioned. **Micro-change-set.**
+
+  (d) ***`specs/wireframes/passenger_ios.html` predates AL-57/AL-59*** — C094's gap (a), unchanged and
+  not this cluster's to fix. Named again only because SCR-PI-002's third slide says *"Cash, wallet or
+  the driver's QR code"*, which is the **post**-AL-57 rail set: the slide copy is correct and the two
+  payment cells are not.
+
+  ### For C096 onwards
+
+  - **Cluster 1's five placeholders are gone**; the rest are unchanged. Your route is already in
+    `Nav/PassengerRoute.swift` — replace your `placeholder(...)` line and give your cluster **one arm
+    and one `…DestinationView`**, as `OnboardingDestinationView` does.
+  - **`UI/` is populated now.** Fourteen controls, listed in `apps/passenger-ios/CLAUDE.md`. Take one
+    rather than redrawing it, and append yours there.
+  - **`OnboardingRouter.next(...)` is the only place that decides where a passenger belongs.** A new
+    gate before the map goes in that function.
+  - **`OnboardingErrors` is the first-run table only** — add your own for your contracts, and reach
+    for `kotlinCause(of:)` in it.
+  - **C096:** the splash already resumes an active ride (`GET /v1/rides/passenger/{id}/active` →
+    `PassengerRoute.activeRide`), so **you do not need to add that** — you need the screen the route
+    points at. `PassengerLiveMap` is already connected by the shell and `graph.locations` is already
+    the fix source; see the "For C096" note in the C094 handoff.
+  - **C101:** `PassengerProfileRepository` is the seam SCR-PI-027/027b want, and its `update` has no
+    language parameter by construction (AL-26). `saveLanguage(_:)` is the language's own route, and a
+    screen that calls it must also call `PassengerLocale.apply(_:)` — the repository writes the
+    server's copy and nothing else.
+  - **Any test that calls `PassengerLocale.apply(_:)` must reset it in `tearDown`.** It re-points a
+    process-wide bundle, and leaving it set draws the next test class's strings in whichever language
+    the last one chose. `OnboardingModelTests` and `ProfileSetupModelTests` both do.
+
+  **Files —** New: `apps/passenger-ios/PassengerApp/Onboarding/` (18 files — `PhoneNumber`,
+  `LanguageDisplay`, `FeatureSlides`, `OnboardingErrors`, `OnboardingRouter`, `PassengerSessions`,
+  `OnboardingRepository`, `PassengerProfileRepository`, `LocationPermission`, five model/screen pairs
+  and `OnboardingDestinationView`), `PassengerApp/UI/OnboardingControls.swift`,
+  `PassengerApp/UI/FormControls.swift`, and four test files (`OnboardingTestKit`,
+  `OnboardingFlowTests`, `LoginModelTests`, `ProfileAndPermissionTests`). Edited:
+  `PassengerApp/Nav/PassengerDestinations.swift` (cluster 1's five placeholders → one arm),
+  `PassengerApp/DI/PassengerGraph.swift` (five cluster-1 singletons),
+  `PassengerApp/Shell/AppPreferences.swift` (`firstRunComplete`),
+  `PassengerApp/Theme/MageRideSpacing.swift` (five C095 control tokens; the `avatarSmall` comment's
+  SCR-PA-033/C102 corrected to SCR-PI-033/C101), the three `Localizable.strings` (+47 keys each),
+  `PassengerAppTests/LocalizationTests.swift` (the specifier regex), `PassengerApp.xcodeproj`
+  (regenerated) and `apps/passenger-ios/CLAUDE.md`.

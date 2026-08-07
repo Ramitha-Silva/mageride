@@ -84,12 +84,36 @@ enum MageRideControl {
     /// D2' §0.3: *"Recentre FAB both apps"*.
     static let mapControl: CGFloat = MageRideControl.minimumTapTarget
 
-    /// SCR-PA-033's identity disc in the drawer header (`.avatar`, `40 x 40`).
+    /// SCR-PI-033's identity disc on the Menu tab (`.avatar`, `40 x 40`).
     ///
-    /// The header itself is **C102's** — the shell leaves it as a slot with a brand-only default,
+    /// The card itself is **C101's** — the shell leaves it as a slot with a brand-only default,
     /// which is the call C076 made: a greyed-out *"Your name"* is how a half-built screen ships
     /// looking finished.
     static let avatarSmall: CGFloat = 40
+
+    // MARK: - C095 · the first run
+    //
+    // `passenger_ios.html`'s own pixels for the cluster-1 cells, rounded onto the 4pt grid where the
+    // HTML uses one that is not on it.
+
+    /// The outline on a selected row — SCR-PI-002's `border:1.5px solid var(--primary)`.
+    ///
+    /// Not on the 4pt grid and not meant to be: it is the wireframe's own hairline-plus, and it is
+    /// what makes the chosen language legible without a glyph. The driver wireframe uses a trailing
+    /// `✓` instead, which is why this token exists here and not there.
+    static let selectedBorder: CGFloat = 1.5
+
+    /// SCR-PI-004's `.avatar.lg` — the profile disc.
+    static let avatarLarge: CGFloat = 84
+
+    /// The `＋` camera badge on it (`.cam`).
+    static let avatarBadge: CGFloat = 28
+
+    /// SCR-PI-002's and SCR-PI-005's illustration panel (`.illus`).
+    static let illustrationPanel: CGFloat = 96
+
+    /// The glyph inside an avatar or an empty illustration panel.
+    static let illustrationIcon: CGFloat = 40
 }
 
 extension View {

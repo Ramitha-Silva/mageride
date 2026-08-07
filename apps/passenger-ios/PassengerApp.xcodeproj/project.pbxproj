@@ -29,6 +29,26 @@
 		6980434123B2A8FB1A1A2AF3 /* PassengerNavigator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3549D08959111FBC45A5C368 /* PassengerNavigator.swift */; };
 		0BF692F60CF8FB6756F644CD /* PassengerRoute.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FE70B86D67979A07B3EA055 /* PassengerRoute.swift */; };
 		789DDACCCAD6BDC71FC697AD /* PassengerTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75F9CA4A7CE3B9C4F990214B /* PassengerTab.swift */; };
+		2C37F8830BA30CD7248E1ED8 /* FeatureSlides.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE62F43BD5E2E9EF6F390A12 /* FeatureSlides.swift */; };
+		07151034F97E4FB4FD258812 /* LanguageDisplay.swift in Sources */ = {isa = PBXBuildFile; fileRef = C98C7A16BF44C9AF8B37A08D /* LanguageDisplay.swift */; };
+		268564FC438776D64BC4260F /* LocationPermission.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20B66FAAF5A306222338DA0 /* LocationPermission.swift */; };
+		6E80787669517FFB8F16B0C9 /* LoginModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4E3B1F242EF4A99078BBCCA /* LoginModel.swift */; };
+		A0CE898B96546FEE14925DEB /* LoginScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57991FBE0818DA2EEA53065D /* LoginScreen.swift */; };
+		EC124392F84EBAA2DEF80152 /* OnboardingDestinationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 842A83699F95ECB7A79A3DCA /* OnboardingDestinationView.swift */; };
+		E6500076568C7D130654AE5E /* OnboardingErrors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BCAECCD96B74C7A1D8C902F /* OnboardingErrors.swift */; };
+		0144EC34EB4B11E21B3F2F8C /* OnboardingModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3C40E35A57F19D75501FE6E /* OnboardingModel.swift */; };
+		09CED1C3962EC296127D7E41 /* OnboardingRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 173438A518E3916B39BE57A6 /* OnboardingRepository.swift */; };
+		E62B2D747D9859F3F53E122A /* OnboardingRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C74BE9DC04861B2EE1ABDED7 /* OnboardingRouter.swift */; };
+		1C0E3DECCA093C5A79880726 /* OnboardingScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9479B4FE3357C99EBE1892A /* OnboardingScreen.swift */; };
+		505B99FC0A4AA42B14B0305F /* PassengerProfileRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 771E1AC89E5FA73D13660948 /* PassengerProfileRepository.swift */; };
+		DC47A6A7D2638E75531D1052 /* PassengerSessions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31195107F10A955C61CB757A /* PassengerSessions.swift */; };
+		B72DAAB49E0A344CF2FED123 /* PermissionsModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2C0767211C528C36104E5E2 /* PermissionsModel.swift */; };
+		FFD5419088AEC7F9F2F398EE /* PermissionsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57A394FA24805B771DB619A5 /* PermissionsScreen.swift */; };
+		8CA3351FE466121D3A337FAF /* PhoneNumber.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65DDE3D547934802749E0DB5 /* PhoneNumber.swift */; };
+		C9CA07711706B1EBD77E0969 /* ProfileSetupModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F79A71CC06B847F86DED2EF /* ProfileSetupModel.swift */; };
+		DB498E1733631EB645ABF824 /* ProfileSetupScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0175161FD470A1DBB0D95E0 /* ProfileSetupScreen.swift */; };
+		0D7AAE67B1D95DFA6CCC1596 /* SplashModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B27D7311F639817F0A8E529 /* SplashModel.swift */; };
+		DEC34EE743FC4C47E46B27A9 /* SplashScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BB5A7CA82B556178624C5FB /* SplashScreen.swift */; };
 		F8913A6094CB1AF570808E5D /* PassengerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF74974EEDB8B21C1C0D5965 /* PassengerApp.swift */; };
 		1D5DA0DBA6EADE8FC4CD430B /* PassengerAppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 382EED1EF16B9DD13C300904 /* PassengerAppDelegate.swift */; };
 		696D6A84612158CDBC01BCC1 /* PushRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3200D1C097744B58D988E2A3 /* PushRouter.swift */; };
@@ -46,15 +66,21 @@
 		518B1E6CA267120BBA13B6C8 /* MageRideSpacing.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5BD2BC376FDF25822B419F1 /* MageRideSpacing.swift */; };
 		6F8A8EED1D1056487BFAF659 /* MageRideTypography.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6764C5CA45F60065C3D82617 /* MageRideTypography.swift */; };
 		5906F55CA4D52CA023C69D0E /* VehicleToken.swift in Sources */ = {isa = PBXBuildFile; fileRef = E910A9FCCA116E44D2D1D56D /* VehicleToken.swift */; };
+		34D76627316F579648A86D3F /* FormControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3E3FA3705F72A6BA40D970A /* FormControls.swift */; };
 		D0F18D6E25242D2C76A6F457 /* Localisation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41BFF6164F190FAD72DB4A78 /* Localisation.swift */; };
+		0E81997BA284C668CF4714E7 /* OnboardingControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C1054C289748A1946D9FF59 /* OnboardingControls.swift */; };
 		C6BE56F891657926BE9AA958 /* AnyJSONTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F47AB13334989925EC1BFCE8 /* AnyJSONTests.swift */; };
 		C765998EC557607BE16BFD6C /* H3GridTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AF0C3655D8873301EFAEFA1 /* H3GridTests.swift */; };
 		DC21B643B0C54AA0A079E542 /* LiveTestKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3AE71BA58788F582435B58D0 /* LiveTestKit.swift */; };
 		4C709FFBCBE31EB6E5746506 /* LocalizationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 377ECBDDE4B1F1BEE1891F5B /* LocalizationTests.swift */; };
+		54E7641A466031DDEA14F646 /* LoginModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73C3AF8141A93E4118ABE2FC /* LoginModelTests.swift */; };
 		50A4B202C1F8F93F5DD1B0E8 /* MapTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3791772D75BF5692DED24D2 /* MapTests.swift */; };
 		47630B5298A8E819A68A53A6 /* NavigationShellTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6122688CB40E17316622309 /* NavigationShellTests.swift */; };
+		DADE13BF6C41E54754040641 /* OnboardingFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D845B62B72B97BED49383568 /* OnboardingFlowTests.swift */; };
+		7E1D2C479A15FD8080F8152F /* OnboardingTestKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4437C0689118C6010DBBB772 /* OnboardingTestKit.swift */; };
 		F12713746D96576A23B34C0C /* PassengerEnvironmentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAE6B4C2145D664BA40FFF8B /* PassengerEnvironmentTests.swift */; };
 		C6E8266BFBF842B0A51EB517 /* PassengerLiveMapTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F23A45AF2B4A5B772B516AF /* PassengerLiveMapTests.swift */; };
+		F10D8E02B962685209BF6A42 /* ProfileAndPermissionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEABF9B009EC8586B1AEEE37 /* ProfileAndPermissionTests.swift */; };
 		3B23D16A765BE20FE507DA76 /* PushRouterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6C90E80EAE6E80DAF3A894C /* PushRouterTests.swift */; };
 		6CC2566BFAC64E6A55513820 /* ThemeTokenTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1C5080D5E19CF6E9F0AB3A0 /* ThemeTokenTests.swift */; };
 		4F40927C2435B92808CF21DA /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13AED341F97194F9FD6FAE90 /* Assets.xcassets */; };
@@ -92,6 +118,26 @@
 		3549D08959111FBC45A5C368 /* PassengerNavigator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PassengerNavigator.swift"; path = "PassengerNavigator.swift"; sourceTree = "<group>"; };
 		9FE70B86D67979A07B3EA055 /* PassengerRoute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PassengerRoute.swift"; path = "PassengerRoute.swift"; sourceTree = "<group>"; };
 		75F9CA4A7CE3B9C4F990214B /* PassengerTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PassengerTab.swift"; path = "PassengerTab.swift"; sourceTree = "<group>"; };
+		CE62F43BD5E2E9EF6F390A12 /* FeatureSlides.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "FeatureSlides.swift"; path = "FeatureSlides.swift"; sourceTree = "<group>"; };
+		C98C7A16BF44C9AF8B37A08D /* LanguageDisplay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "LanguageDisplay.swift"; path = "LanguageDisplay.swift"; sourceTree = "<group>"; };
+		F20B66FAAF5A306222338DA0 /* LocationPermission.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "LocationPermission.swift"; path = "LocationPermission.swift"; sourceTree = "<group>"; };
+		A4E3B1F242EF4A99078BBCCA /* LoginModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "LoginModel.swift"; path = "LoginModel.swift"; sourceTree = "<group>"; };
+		57991FBE0818DA2EEA53065D /* LoginScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "LoginScreen.swift"; path = "LoginScreen.swift"; sourceTree = "<group>"; };
+		842A83699F95ECB7A79A3DCA /* OnboardingDestinationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "OnboardingDestinationView.swift"; path = "OnboardingDestinationView.swift"; sourceTree = "<group>"; };
+		9BCAECCD96B74C7A1D8C902F /* OnboardingErrors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "OnboardingErrors.swift"; path = "OnboardingErrors.swift"; sourceTree = "<group>"; };
+		B3C40E35A57F19D75501FE6E /* OnboardingModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "OnboardingModel.swift"; path = "OnboardingModel.swift"; sourceTree = "<group>"; };
+		173438A518E3916B39BE57A6 /* OnboardingRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "OnboardingRepository.swift"; path = "OnboardingRepository.swift"; sourceTree = "<group>"; };
+		C74BE9DC04861B2EE1ABDED7 /* OnboardingRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "OnboardingRouter.swift"; path = "OnboardingRouter.swift"; sourceTree = "<group>"; };
+		D9479B4FE3357C99EBE1892A /* OnboardingScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "OnboardingScreen.swift"; path = "OnboardingScreen.swift"; sourceTree = "<group>"; };
+		771E1AC89E5FA73D13660948 /* PassengerProfileRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PassengerProfileRepository.swift"; path = "PassengerProfileRepository.swift"; sourceTree = "<group>"; };
+		31195107F10A955C61CB757A /* PassengerSessions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PassengerSessions.swift"; path = "PassengerSessions.swift"; sourceTree = "<group>"; };
+		F2C0767211C528C36104E5E2 /* PermissionsModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PermissionsModel.swift"; path = "PermissionsModel.swift"; sourceTree = "<group>"; };
+		57A394FA24805B771DB619A5 /* PermissionsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PermissionsScreen.swift"; path = "PermissionsScreen.swift"; sourceTree = "<group>"; };
+		65DDE3D547934802749E0DB5 /* PhoneNumber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PhoneNumber.swift"; path = "PhoneNumber.swift"; sourceTree = "<group>"; };
+		4F79A71CC06B847F86DED2EF /* ProfileSetupModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ProfileSetupModel.swift"; path = "ProfileSetupModel.swift"; sourceTree = "<group>"; };
+		F0175161FD470A1DBB0D95E0 /* ProfileSetupScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ProfileSetupScreen.swift"; path = "ProfileSetupScreen.swift"; sourceTree = "<group>"; };
+		5B27D7311F639817F0A8E529 /* SplashModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "SplashModel.swift"; path = "SplashModel.swift"; sourceTree = "<group>"; };
+		7BB5A7CA82B556178624C5FB /* SplashScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "SplashScreen.swift"; path = "SplashScreen.swift"; sourceTree = "<group>"; };
 		FF74974EEDB8B21C1C0D5965 /* PassengerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PassengerApp.swift"; path = "PassengerApp.swift"; sourceTree = "<group>"; };
 		382EED1EF16B9DD13C300904 /* PassengerAppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PassengerAppDelegate.swift"; path = "PassengerAppDelegate.swift"; sourceTree = "<group>"; };
 		3200D1C097744B58D988E2A3 /* PushRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PushRouter.swift"; path = "PushRouter.swift"; sourceTree = "<group>"; };
@@ -112,15 +158,21 @@
 		F5BD2BC376FDF25822B419F1 /* MageRideSpacing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "MageRideSpacing.swift"; path = "MageRideSpacing.swift"; sourceTree = "<group>"; };
 		6764C5CA45F60065C3D82617 /* MageRideTypography.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "MageRideTypography.swift"; path = "MageRideTypography.swift"; sourceTree = "<group>"; };
 		E910A9FCCA116E44D2D1D56D /* VehicleToken.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "VehicleToken.swift"; path = "VehicleToken.swift"; sourceTree = "<group>"; };
+		F3E3FA3705F72A6BA40D970A /* FormControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "FormControls.swift"; path = "FormControls.swift"; sourceTree = "<group>"; };
 		41BFF6164F190FAD72DB4A78 /* Localisation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "Localisation.swift"; path = "Localisation.swift"; sourceTree = "<group>"; };
+		4C1054C289748A1946D9FF59 /* OnboardingControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "OnboardingControls.swift"; path = "OnboardingControls.swift"; sourceTree = "<group>"; };
 		F47AB13334989925EC1BFCE8 /* AnyJSONTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "AnyJSONTests.swift"; path = "AnyJSONTests.swift"; sourceTree = "<group>"; };
 		0AF0C3655D8873301EFAEFA1 /* H3GridTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "H3GridTests.swift"; path = "H3GridTests.swift"; sourceTree = "<group>"; };
 		3AE71BA58788F582435B58D0 /* LiveTestKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "LiveTestKit.swift"; path = "LiveTestKit.swift"; sourceTree = "<group>"; };
 		377ECBDDE4B1F1BEE1891F5B /* LocalizationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "LocalizationTests.swift"; path = "LocalizationTests.swift"; sourceTree = "<group>"; };
+		73C3AF8141A93E4118ABE2FC /* LoginModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "LoginModelTests.swift"; path = "LoginModelTests.swift"; sourceTree = "<group>"; };
 		B3791772D75BF5692DED24D2 /* MapTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "MapTests.swift"; path = "MapTests.swift"; sourceTree = "<group>"; };
 		F6122688CB40E17316622309 /* NavigationShellTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "NavigationShellTests.swift"; path = "NavigationShellTests.swift"; sourceTree = "<group>"; };
+		D845B62B72B97BED49383568 /* OnboardingFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "OnboardingFlowTests.swift"; path = "OnboardingFlowTests.swift"; sourceTree = "<group>"; };
+		4437C0689118C6010DBBB772 /* OnboardingTestKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "OnboardingTestKit.swift"; path = "OnboardingTestKit.swift"; sourceTree = "<group>"; };
 		BAE6B4C2145D664BA40FFF8B /* PassengerEnvironmentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PassengerEnvironmentTests.swift"; path = "PassengerEnvironmentTests.swift"; sourceTree = "<group>"; };
 		5F23A45AF2B4A5B772B516AF /* PassengerLiveMapTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PassengerLiveMapTests.swift"; path = "PassengerLiveMapTests.swift"; sourceTree = "<group>"; };
+		DEABF9B009EC8586B1AEEE37 /* ProfileAndPermissionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ProfileAndPermissionTests.swift"; path = "ProfileAndPermissionTests.swift"; sourceTree = "<group>"; };
 		B6C90E80EAE6E80DAF3A894C /* PushRouterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PushRouterTests.swift"; path = "PushRouterTests.swift"; sourceTree = "<group>"; };
 		E1C5080D5E19CF6E9F0AB3A0 /* ThemeTokenTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ThemeTokenTests.swift"; path = "ThemeTokenTests.swift"; sourceTree = "<group>"; };
 		3695FAF1DA83B1EFE5807B57 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = "Info.plist"; path = "Info.plist"; sourceTree = "<group>"; };
@@ -193,6 +245,7 @@
 				A39BDC2208D9FAB5D78E26D0 /* Location */,
 				49E028E97067D34D09099AF5 /* Map */,
 				A0F7755456F64B0210E83752 /* Nav */,
+				D250A889B8997B61414FA66B /* Onboarding */,
 				C0417FB2C3422415E4F9E8E4 /* Push */,
 				A433AD60302FBC3FB1CAF746 /* Resources */,
 				692F3ECAFFAFBA971B2FA647 /* Security */,
@@ -271,6 +324,33 @@
 			path = "Nav";
 			sourceTree = "<group>";
 		};
+		D250A889B8997B61414FA66B /* Onboarding */ = {
+			isa = PBXGroup;
+			children = (
+				CE62F43BD5E2E9EF6F390A12 /* FeatureSlides.swift */,
+				C98C7A16BF44C9AF8B37A08D /* LanguageDisplay.swift */,
+				F20B66FAAF5A306222338DA0 /* LocationPermission.swift */,
+				A4E3B1F242EF4A99078BBCCA /* LoginModel.swift */,
+				57991FBE0818DA2EEA53065D /* LoginScreen.swift */,
+				842A83699F95ECB7A79A3DCA /* OnboardingDestinationView.swift */,
+				9BCAECCD96B74C7A1D8C902F /* OnboardingErrors.swift */,
+				B3C40E35A57F19D75501FE6E /* OnboardingModel.swift */,
+				173438A518E3916B39BE57A6 /* OnboardingRepository.swift */,
+				C74BE9DC04861B2EE1ABDED7 /* OnboardingRouter.swift */,
+				D9479B4FE3357C99EBE1892A /* OnboardingScreen.swift */,
+				771E1AC89E5FA73D13660948 /* PassengerProfileRepository.swift */,
+				31195107F10A955C61CB757A /* PassengerSessions.swift */,
+				F2C0767211C528C36104E5E2 /* PermissionsModel.swift */,
+				57A394FA24805B771DB619A5 /* PermissionsScreen.swift */,
+				65DDE3D547934802749E0DB5 /* PhoneNumber.swift */,
+				4F79A71CC06B847F86DED2EF /* ProfileSetupModel.swift */,
+				F0175161FD470A1DBB0D95E0 /* ProfileSetupScreen.swift */,
+				5B27D7311F639817F0A8E529 /* SplashModel.swift */,
+				7BB5A7CA82B556178624C5FB /* SplashScreen.swift */,
+			);
+			path = "Onboarding";
+			sourceTree = "<group>";
+		};
 		C0417FB2C3422415E4F9E8E4 /* Push */ = {
 			isa = PBXGroup;
 			children = (
@@ -329,7 +409,9 @@
 		292E027D10D622D4C8304A17 /* UI */ = {
 			isa = PBXGroup;
 			children = (
+				F3E3FA3705F72A6BA40D970A /* FormControls.swift */,
 				41BFF6164F190FAD72DB4A78 /* Localisation.swift */,
+				4C1054C289748A1946D9FF59 /* OnboardingControls.swift */,
 			);
 			path = "UI";
 			sourceTree = "<group>";
@@ -341,10 +423,14 @@
 				0AF0C3655D8873301EFAEFA1 /* H3GridTests.swift */,
 				3AE71BA58788F582435B58D0 /* LiveTestKit.swift */,
 				377ECBDDE4B1F1BEE1891F5B /* LocalizationTests.swift */,
+				73C3AF8141A93E4118ABE2FC /* LoginModelTests.swift */,
 				B3791772D75BF5692DED24D2 /* MapTests.swift */,
 				F6122688CB40E17316622309 /* NavigationShellTests.swift */,
+				D845B62B72B97BED49383568 /* OnboardingFlowTests.swift */,
+				4437C0689118C6010DBBB772 /* OnboardingTestKit.swift */,
 				BAE6B4C2145D664BA40FFF8B /* PassengerEnvironmentTests.swift */,
 				5F23A45AF2B4A5B772B516AF /* PassengerLiveMapTests.swift */,
+				DEABF9B009EC8586B1AEEE37 /* ProfileAndPermissionTests.swift */,
 				B6C90E80EAE6E80DAF3A894C /* PushRouterTests.swift */,
 				E1C5080D5E19CF6E9F0AB3A0 /* ThemeTokenTests.swift */,
 			);
@@ -505,6 +591,26 @@
 				6980434123B2A8FB1A1A2AF3 /* PassengerNavigator.swift in Sources */,
 				0BF692F60CF8FB6756F644CD /* PassengerRoute.swift in Sources */,
 				789DDACCCAD6BDC71FC697AD /* PassengerTab.swift in Sources */,
+				2C37F8830BA30CD7248E1ED8 /* FeatureSlides.swift in Sources */,
+				07151034F97E4FB4FD258812 /* LanguageDisplay.swift in Sources */,
+				268564FC438776D64BC4260F /* LocationPermission.swift in Sources */,
+				6E80787669517FFB8F16B0C9 /* LoginModel.swift in Sources */,
+				A0CE898B96546FEE14925DEB /* LoginScreen.swift in Sources */,
+				EC124392F84EBAA2DEF80152 /* OnboardingDestinationView.swift in Sources */,
+				E6500076568C7D130654AE5E /* OnboardingErrors.swift in Sources */,
+				0144EC34EB4B11E21B3F2F8C /* OnboardingModel.swift in Sources */,
+				09CED1C3962EC296127D7E41 /* OnboardingRepository.swift in Sources */,
+				E62B2D747D9859F3F53E122A /* OnboardingRouter.swift in Sources */,
+				1C0E3DECCA093C5A79880726 /* OnboardingScreen.swift in Sources */,
+				505B99FC0A4AA42B14B0305F /* PassengerProfileRepository.swift in Sources */,
+				DC47A6A7D2638E75531D1052 /* PassengerSessions.swift in Sources */,
+				B72DAAB49E0A344CF2FED123 /* PermissionsModel.swift in Sources */,
+				FFD5419088AEC7F9F2F398EE /* PermissionsScreen.swift in Sources */,
+				8CA3351FE466121D3A337FAF /* PhoneNumber.swift in Sources */,
+				C9CA07711706B1EBD77E0969 /* ProfileSetupModel.swift in Sources */,
+				DB498E1733631EB645ABF824 /* ProfileSetupScreen.swift in Sources */,
+				0D7AAE67B1D95DFA6CCC1596 /* SplashModel.swift in Sources */,
+				DEC34EE743FC4C47E46B27A9 /* SplashScreen.swift in Sources */,
 				F8913A6094CB1AF570808E5D /* PassengerApp.swift in Sources */,
 				1D5DA0DBA6EADE8FC4CD430B /* PassengerAppDelegate.swift in Sources */,
 				696D6A84612158CDBC01BCC1 /* PushRouter.swift in Sources */,
@@ -522,7 +628,9 @@
 				518B1E6CA267120BBA13B6C8 /* MageRideSpacing.swift in Sources */,
 				6F8A8EED1D1056487BFAF659 /* MageRideTypography.swift in Sources */,
 				5906F55CA4D52CA023C69D0E /* VehicleToken.swift in Sources */,
+				34D76627316F579648A86D3F /* FormControls.swift in Sources */,
 				D0F18D6E25242D2C76A6F457 /* Localisation.swift in Sources */,
+				0E81997BA284C668CF4714E7 /* OnboardingControls.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -534,10 +642,14 @@
 				C765998EC557607BE16BFD6C /* H3GridTests.swift in Sources */,
 				DC21B643B0C54AA0A079E542 /* LiveTestKit.swift in Sources */,
 				4C709FFBCBE31EB6E5746506 /* LocalizationTests.swift in Sources */,
+				54E7641A466031DDEA14F646 /* LoginModelTests.swift in Sources */,
 				50A4B202C1F8F93F5DD1B0E8 /* MapTests.swift in Sources */,
 				47630B5298A8E819A68A53A6 /* NavigationShellTests.swift in Sources */,
+				DADE13BF6C41E54754040641 /* OnboardingFlowTests.swift in Sources */,
+				7E1D2C479A15FD8080F8152F /* OnboardingTestKit.swift in Sources */,
 				F12713746D96576A23B34C0C /* PassengerEnvironmentTests.swift in Sources */,
 				C6E8266BFBF842B0A51EB517 /* PassengerLiveMapTests.swift in Sources */,
+				F10D8E02B962685209BF6A42 /* ProfileAndPermissionTests.swift in Sources */,
 				3B23D16A765BE20FE507DA76 /* PushRouterTests.swift in Sources */,
 				6CC2566BFAC64E6A55513820 /* ThemeTokenTests.swift in Sources */,
 			);

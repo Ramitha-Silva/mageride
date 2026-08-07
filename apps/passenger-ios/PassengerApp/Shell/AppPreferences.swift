@@ -41,6 +41,22 @@ protocol AppPreferences: AnyObject {
     var defaultPaymentMethod: String? { get set }
 }
 
+extension AppPreferences {
+
+    /// Whether SCR-PI-002 has been answered — *"first-launch only"* (D2' §A). Δ C095.
+    ///
+    /// **Derived rather than stored**, which is the same call `AppPreferences.kt` makes. A separate
+    /// flag would be a second fact that can disagree with the first: a passenger with a stored
+    /// language and a `false` flag would be sent back to a screen that has nothing left to ask them,
+    /// and one with no language and a `true` flag would meet the login screen in whatever locale the
+    /// handset happens to be set to — which for most users here is not one of the three (AL-26).
+    ///
+    /// This is why ``OnboardingModel/finish()`` writes the language **unconditionally**, including
+    /// when the passenger accepted the Sinhala default without touching a box: accepting it *is*
+    /// answering the screen.
+    var firstRunComplete: Bool { language != nil }
+}
+
 /// ``AppPreferences`` over `UserDefaults`.
 ///
 /// The standard suite rather than a named one: this app has no extension and no app group, and a

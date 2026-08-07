@@ -145,8 +145,15 @@ final class LocalizationTests: XCTestCase {
     }
 
     /// `%1$@`, `%2$lld` … — the positional forms `String(format:)` fills in.
+    ///
+    /// **The conversion character is exactly one letter, after an optional length modifier** — which
+    /// is what `String(format:)` itself parses, and what a looser `[a-zA-Z]+` gets wrong: the English
+    /// `"Resend (%1$ds)"` is a `%1$d` followed by a literal `s` for *seconds*, and a greedy pattern
+    /// reads it as a specifier called `%1$ds` that no translation can possibly contain. That was a
+    /// real false failure here (Δ C095); the same pattern is in `apps/driver-ios` and has the same
+    /// latent hole.
     private func specifiers(_ value: String) -> Set<String> {
-        let pattern = try? NSRegularExpression(pattern: #"%\d+\$[@a-zA-Z]+"#)
+        let pattern = try? NSRegularExpression(pattern: #"%\d+\$(?:ll|l|hh|h|z|t|j|q)?[@diufFeEgGxXoscpaA]"#)
         let range = NSRange(value.startIndex..<value.endIndex, in: value)
         let matches = pattern?.matches(in: value, range: range) ?? []
         return Set(matches.compactMap { Range($0.range, in: value).map { String(value[$0]) } })

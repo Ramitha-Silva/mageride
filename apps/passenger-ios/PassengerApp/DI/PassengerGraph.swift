@@ -60,6 +60,30 @@ final class PassengerGraph: ObservableObject {
     /// ``PassengerDatabase``.
     let databases: PassengerDatabase
 
+    // MARK: - C095 · cluster 1
+    //
+    // The first-run seams. Each is here rather than constructed per screen because each is a
+    // **process** singleton: the preferences are read at launch to pick the interface language, the
+    // session manager is C014's one door onto a token, and the carousel's response is cached across
+    // a language change on the screen that fetched it.
+
+    /// C014's session manager, as the five calls SCR-PI-003 makes.
+    let sessions: PassengerSessions
+
+    /// SCR-PI-002's carousel, and where its language answer ends up.
+    let onboarding: OnboardingRepository
+
+    /// `GET`/`PUT /v1/users/me` — SCR-PI-004's save, and the profile check the splash and the login
+    /// screen each make. C101's SCR-PI-027 reads the same pair; reuse it rather than opening a
+    /// second seam.
+    let profiles: PassengerProfileRepository
+
+    /// SCR-PI-005's one grant.
+    let locationPermission: LocationPermission
+
+    /// US-1.14's *"resume the ride you were on"*, which the splash asks and nothing else does.
+    let activeRides: ActiveRideLookup
+
     init(environment: PassengerEnvironment = .current) {
         self.environment = environment
 
@@ -96,8 +120,23 @@ final class PassengerGraph: ObservableObject {
         self.shared = shared
 
         self.databases = PassengerDatabase(factory: shared.databases)
-        self.preferences = UserDefaultsAppPreferences()
+        let preferences = UserDefaultsAppPreferences()
+        self.preferences = preferences
         self.locations = CoreLocationPassengerSource()
+
+        // C095. Two seams over three services, split by what a screen asks rather than by which
+        // client answers: SCR-PI-002 reads content-svc and writes a language preference to iam-svc,
+        // and everything else about `iam.users` is one repository because C101 edits the same row
+        // from the other end of the app's life.
+        self.sessions = SharedPassengerSessions(sessions: shared.sessions)
+        self.onboarding = ApiOnboardingRepository(
+            content: shared.api.content,
+            iam: shared.api.iam,
+            preferences: preferences
+        )
+        self.profiles = ApiPassengerProfileRepository(iam: shared.api.iam)
+        self.locationPermission = SystemLocationPermission()
+        self.activeRides = ApiActiveRideLookup(rides: shared.api.ride)
 
         self.live = PassengerLiveMap(
             transport: SignalRLiveHubTransport(

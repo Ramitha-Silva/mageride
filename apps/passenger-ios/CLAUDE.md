@@ -43,6 +43,7 @@ apps/passenger-ios/
 │   ├── DI/          PassengerEnvironment (the only Info.plist reader), PassengerGraph,
 │   │                PassengerDatabase (C018's deferred open)
 │   ├── Geo/         SharedH3Grid — R-06's engine, the binding C017 and C085 left to C094
+│   ├── Onboarding/  C095 · SCR-PI-001…005 + the router, the OTP rules and the error table
 │   ├── Nav/         PassengerRoute (32 destinations), PassengerTab, the navigator,
 │   │                PassengerMenuDestination (SCR-PI-033's rows),
 │   │                PassengerDestinations (the ONE route→view switch)
@@ -55,7 +56,8 @@ apps/passenger-ios/
 │   ├── Push/        PushRouter (deep links), PushTokenProvider (APNs via FCM)
 │   ├── Security/    DeviceBinding — App Attest and the Keychain, documented
 │   ├── Theme/       D2' §0.2 — colour, type, spacing/radius/elevation, the CTA, the legend
-│   ├── UI/          Localisation — the one door a string is resolved through
+│   ├── UI/          Localisation (the one door a string is resolved through) + the wireframe's
+│   │                shapes as views — fields, rows, the carousel's panel and dots
 │   └── Resources/   Assets.xcassets, en/si/ta .lproj, the two map styles
 └── PassengerAppTests/           theme, localisation, navigation, push, environment, H3, live, map
 ```
@@ -76,6 +78,33 @@ apps/passenger-ios/
    fails a build rather than a night shift.
 5. The full-width orange bar in the wireframes is `.buttonStyle(.mageCta)`, not `.borderedProminent`.
 6. **Re-run `python3 apps/passenger-ios/Tools/generate_xcodeproj.py`** and commit the `.pbxproj`.
+
+## Cluster 1 (C095) — what the next screen group can reuse
+
+- **`OnboardingRouter.next(...)` is the only place that decides where a passenger belongs.** The
+  splash, the login screen after a verify and Profile Setup after a save all call it. If a new gate
+  is ever added before the map it goes in that function, not in a screen.
+- **`UI/` is now populated**, and a screen uses it rather than raw SwiftUI: `LabelledTextField`,
+  `PhoneNumberField`, `OtpField`, `TextLink`, `CountdownLink`, `FormErrorText`, `LabelledDivider`,
+  `ProfileAvatar`, `SectionLabel`, `GroupedList`, `GroupedRow`, `SelectionRow`, `IllustrationPanel`
+  and `PageDots`. Append yours rather than putting a number or a shape at a call site.
+- **`PassengerProfileRepository` is `iam.users` as an app uses it** — `GET`/`PUT /v1/users/me`.
+  C101's SCR-PI-027 reads the same pair; reuse it rather than opening a second seam. Its `update`
+  has **no language parameter**, which is AL-26 made structural.
+- **`OnboardingErrors` is the FIRST-RUN code table only.** Every arm is a code `iam.yaml` declares on
+  the operations SCR-PI-003 and SCR-PI-004 reach. Add your own table for your contracts; one `switch`
+  over the platform is a function nobody can check. **Use `OnboardingErrors.kotlinCause(of:)`** — a
+  Kotlin exception does not cross the bridge as itself, and a `catch let error as MageRideError`
+  never matches without it.
+- **A proper noun is data, not copy.** The language endonyms (`සිංහල`), the `+94` prefix and the
+  `7X XXX XXXX` mask are Swift constants (`LanguageDisplay`, `PhoneNumber`), because three identical
+  values in the three `.strings` files is exactly what `LocalizationTests` fails on.
+- **Language is applied by `PassengerLocale.apply(_:)` and takes effect immediately.** There is no
+  `recreate()` on this platform and none is needed — the bundle is re-pointed and the next view
+  resolves against it. A test that calls it must reset it in `tearDown`; it is process-wide.
+- **Implement a Swift protocol, never a Kotlin one with `suspend` methods.** `PassengerSessions`,
+  `OnboardingRepository`, `PassengerProfileRepository`, `ActiveRideLookup` and `LocationPermission`
+  all exist for that reason, and each is why its screen is assertable with no gateway.
 
 ## The Xcode project is generated, and the generator is shared
 
@@ -164,6 +193,11 @@ constraint, and each is called out at its call site.
 | Concern | Android | iOS, here |
 |---|---|---|
 | SCR-PA/PI-033 | `ModalNavigationDrawer` behind a scrim, opened from a `≡` | a **Menu tab** over a `List` — the cell's own clause |
+| Language change (002/004) | `Activity.recreate()`, so the model tracks whether it *changed* | the bundle is re-pointed and the next view resolves; applying the same one twice is free |
+| Login errors (003) | inline under the field | an `.alert` — the cell's own clause; the attempts counter stays inline |
+| OTP auto-fill (003) | SMS Retriever, unwireable without a signing certificate | `.oneTimeCode` QuickType — no hash, no signing config |
+| Location re-prompt (005) | the dialog stops after **two** refusals | it stops after **one**; the CTA becomes *Open Settings* either way |
+| Reduced-accuracy grant (005) | Android 12+ COARSE counts as granted | iOS 14+ approximate counts as granted — same reasoning, ~3 km map |
 | Offline banner (032) | a `Snackbar`-adjacent inline banner in the `Scaffold` | `.safeAreaInset` — the cell's own clause; an overlay would cover a full-bleed map |
 | Update gate (031) | mandatory `AlertDialog` · soft `Snackbar` | mandatory `.alert` with one action · soft inline banner with ✕ |
 | Language change | `Activity.recreate()` re-inflates every resource | no `recreate()`; `PassengerLocale` redirects the bundle and views rebuild |
@@ -191,6 +225,9 @@ constraint, and each is called out at its call site.
   produced today, exactly as it does on Android.
 - **App Attest does not exist on the simulator.** `DCAppAttestService.isSupported` is `false` there,
   and there is no registration endpoint yet either (C014's gap (b), restated by C085 as gap (c)).
+- **A Kotlin exception is not a Swift `Error` you can pattern-match.** Kotlin/Native wraps it in an
+  `NSError` under `userInfo["KotlinException"]`. `OnboardingErrors.kotlinCause(of:)` is the unwrap;
+  without it every failure in the app resolves to the generic message.
 - **A localised `.strings` file is a variant group**, not three files. The generator builds them.
 - **A `.strings` comment is a C comment and does NOT nest.** Writing `values*` followed by a slash
   inside one closes it early, `NSDictionary(contentsOf:)` answers `nil`, and every key in the app

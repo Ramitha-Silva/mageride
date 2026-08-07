@@ -47,3 +47,77 @@
 /* The map */
 "map_content_description" = "Live map of nearby vehicles";
 "map_recentre" = "Recentre on my location";
+
+/* ---- C095 · the first run (SCR-PI-001…005) --------------------------------------
+ *
+ * The keys are `apps/passenger-android/src/main/res/values…/strings.xml`'s, so a screen ported from
+ * Android is a diff rather than an archaeology exercise. Four are new to this platform and are
+ * marked; the rest carry the Android translations unchanged.
+ */
+
+/* The name on the Home screen and under the splash mark. Transliterated rather than translated —
+ * see en.lproj/InfoPlist.strings for the argument. */
+"app_name" = "MageRide";
+
+/* Actions shared across cluster 1 */
+"action_ok" = "OK";
+"action_back" = "Back";
+"action_save" = "Save";
+"action_continue" = "Continue";
+
+/* SCR-PI-002 — carousel and language */
+"onboarding_skip" = "Skip";
+"onboarding_get_started" = "Get Started";
+"onboarding_language_label" = "Language";
+"onboarding_slide_map_title" = "Track every ride, live";
+"onboarding_slide_map_body" = "See buses, trains, tuks and cars near you on one map — book in seconds.";
+"onboarding_slide_map_caption" = "Live map";
+"onboarding_slide_transit_title" = "Buses and trains too";
+"onboarding_slide_transit_body" = "Public routes sit beside private hires, so you can compare before you go.";
+"onboarding_slide_transit_caption" = "Public transport";
+"onboarding_slide_pay_title" = "Pay the way you like";
+"onboarding_slide_pay_body" = "Cash, wallet or the driver's QR code — no card required.";
+"onboarding_slide_pay_caption" = "Payments";
+
+/* SCR-PI-003 — phone and OTP */
+"login_title" = "Enter mobile number";
+"login_subtitle" = "We'll send a 6-digit code via SMS.";
+"login_enter_code" = "enter code";
+"login_didnt_get_it" = "Didn't get it?";
+"login_resend" = "Resend";
+"login_resend_in" = "Resend (%1$ds)";
+"login_attempts_remaining" = "%1$d attempts left";
+/* NEW on iOS: the number field's VoiceOver label, and the title of the `.alert` this platform's
+ * wireframe puts errors in where the Android one renders them inline. */
+"login_phone_label" = "Mobile number";
+"login_error_title" = "Sign-in failed";
+
+/* SCR-PI-004 — profile setup */
+"profile_title" = "Set up profile";
+"profile_name_label" = "Full name";
+"profile_notifications" = "Notifications & offers";
+/* NEW on iOS: the field's own placeholder — the row draws its label on the left and the value on
+ * the right, so an empty value needs something in it. And the alert's title, for `login_error_title`'s
+ * reason. */
+"profile_name_hint" = "Your name";
+"profile_error_title" = "Couldn't save";
+
+/* SCR-PI-005 — location */
+"permission_location_title" = "Allow location access";
+"permission_location_body" = "MageRide needs your location to show nearby vehicles and set your pickup.";
+"permission_location_caption" = "Location";
+"permission_allow_location" = "Allow location";
+"permission_open_settings" = "Open Settings";
+"permission_not_now" = "Not now";
+
+/* The first-run error table — see OnboardingErrors. Never a ProblemDetails string (D-26). */
+"error_offline" = "No connection. Check your network and try again.";
+"error_generic" = "Something went wrong. Please try again.";
+"error_otp_invalid" = "That code is not right. Try again.";
+"error_otp_expired" = "That code has expired. Request a new one.";
+"error_otp_locked" = "Too many attempts. Request a new code.";
+"error_otp_rate_limited" = "Too many requests. Try again later.";
+"error_phone_invalid" = "Enter a valid Sri Lankan mobile number.";
+"error_device_mismatch" = "This code was requested on another device. Start again.";
+"error_user_blocked" = "This account cannot sign in. Contact support.";
+"error_validation_failed" = "Please check what you entered.";

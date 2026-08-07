@@ -25,11 +25,11 @@ struct PassengerDestinationView: View {
     var body: some View {
         switch route {
         // ---- C095 · auth / onboarding -------------------------------------------------
-        case .splash: placeholder("SCR-PI-001 splash")
-        case .onboarding: placeholder("SCR-PI-002 onboarding")
-        case .login: placeholder("SCR-PI-003 login")
-        case .profileSetup: placeholder("SCR-PI-004 profile setup")
-        case .locationPermission: placeholder("SCR-PI-005 location permission")
+        //
+        // One arm for all five, and a sub-view rather than five inline screens — see
+        // ``OnboardingDestinationView`` for why, and do the same for your own cluster.
+        case .splash, .onboarding, .login, .profileSetup, .locationPermission:
+            OnboardingDestinationView(route: route)
 
         // ---- C096 · the live map and search --------------------------------------------
         //
