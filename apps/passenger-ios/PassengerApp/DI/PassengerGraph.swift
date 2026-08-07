@@ -166,6 +166,16 @@ final class PassengerGraph: ObservableObject {
     /// exist yet — behind one door. See ``HistoryRepository``.
     let history: HistoryRepository
 
+    // MARK: - C100 · cluster 6
+    //
+    // One seam again, and a process singleton for the same reason: all four screens read it, and two
+    // of them can be on screen in one session — a pay sheet opened from a card list that is still
+    // filling in the other cards' pills.
+
+    /// subscription-svc's Mode B half — the access request, the cards, the money and the statement.
+    /// **Never wallet-svc**: this money is a pass-through to the fleet owner (AL-24, §18b).
+    let subscriptions: SubscriptionRepository
+
     init(environment: PassengerEnvironment = .current) {
         self.environment = environment
 
@@ -267,6 +277,11 @@ final class PassengerGraph: ObservableObject {
             query: shared.api.query,
             dispatch: shared.api.dispatch
         )
+
+        // C100. One client, and deliberately only its Mode B half — the driver daily fee, the voucher
+        // ladder and the credit transfers share `subscription.yaml` and answer `403` to a passenger
+        // bearer. See ``SubscriptionRepository``.
+        self.subscriptions = ApiSubscriptionRepository(subscriptions: shared.api.subscription)
 
         self.live = PassengerLiveMap(
             transport: SignalRLiveHubTransport(

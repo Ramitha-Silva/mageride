@@ -126,6 +126,20 @@
 		384237CA241077907328B94E /* PassengerShell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B380B5D9FA317E5A493EB92 /* PassengerShell.swift */; };
 		1F52E051BB37739380A5F509 /* PassengerShellModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C4CF2B7D2FFF94E4153D54A /* PassengerShellModel.swift */; };
 		BA262FB0B994D08076E0C30A /* UpdateGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A793F6958EACC180E11FF1D7 /* UpdateGate.swift */; };
+		C03CF18ACA754BDA9130716F /* ModeBErrors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FF065EF0351416865B857D5 /* ModeBErrors.swift */; };
+		1D581DE73193AB2D4BE692A1 /* ModeBRequestModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2A49F0F1A2D16601A351516 /* ModeBRequestModel.swift */; };
+		268E3586D892D87F46262815 /* ModeBRequestScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4050609906733147F6B9446D /* ModeBRequestScreen.swift */; };
+		D711B24E65AA1CA3A0422F69 /* SignedFileLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = C91F369B68415D83141D0C5B /* SignedFileLink.swift */; };
+		C706413BA08982FC41F87266 /* SubscriptionDestinationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A376EA3C2D776DD2204E0908 /* SubscriptionDestinationView.swift */; };
+		7004A208AFB40B57CFE62197 /* SubscriptionLabels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FCCC98B2E363C5C0F102D72 /* SubscriptionLabels.swift */; };
+		B0683E1D89E40BF698AA9F1B /* SubscriptionPayModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B32ABC053473A9A2385BE1C /* SubscriptionPayModel.swift */; };
+		D5F22BCB6FD5D977163A37AF /* SubscriptionPayScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63854C6897194AEAD3B43A2A /* SubscriptionPayScreen.swift */; };
+		C8E158A0C4EF180A13426621 /* SubscriptionPaymentsModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBB1AB86A15CE374E5F6EC08 /* SubscriptionPaymentsModel.swift */; };
+		1F801B83C32EF4C43F51C899 /* SubscriptionPaymentsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE700A1101E5EE4B4110A413 /* SubscriptionPaymentsScreen.swift */; };
+		4088670CACB2D64518ADEBA1 /* SubscriptionRails.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C5D6622F9FC68EFD1BC1A39 /* SubscriptionRails.swift */; };
+		C3DDB86A9B1526C3308F0696 /* SubscriptionRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14089253A3826D6EBE5F143B /* SubscriptionRepository.swift */; };
+		0D97D7444BD21396DC9F7656 /* SubscriptionsModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35D5E56B3E385EE8252DF8FB /* SubscriptionsModel.swift */; };
+		C61938E9AFAD57B5AFCF4C55 /* SubscriptionsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EC2D424A2E4D42CA26C326B /* SubscriptionsScreen.swift */; };
 		40BE9AB2E124650EB30CF9D2 /* MageRideColor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DC740756DE0304276231937 /* MageRideColor.swift */; };
 		447DF25E476C41C7BB13E6E1 /* MageRideCta.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95FD7813ABFF4E6B8DC48C4E /* MageRideCta.swift */; };
 		518B1E6CA267120BBA13B6C8 /* MageRideSpacing.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5BD2BC376FDF25822B419F1 /* MageRideSpacing.swift */; };
@@ -164,6 +178,8 @@
 		68D65751FFC6B3E4D5BA012B /* RideFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 250021016A18AD25C49D2362 /* RideFlowTests.swift */; };
 		BFB763223960315EB75C46B9 /* RideTestKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = D432E2A12D92A2B752DE0E60 /* RideTestKit.swift */; };
 		EFE12234A8891AD732D8B9F6 /* SearchLocationModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D84F662D44E94A1042CC5430 /* SearchLocationModelTests.swift */; };
+		61CF6E66445DC106240C1D63 /* SubscriptionFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE3565965A30D2CDA030A985 /* SubscriptionFlowTests.swift */; };
+		F6947316A9E31E900BF65002 /* SubscriptionTestKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = C21EA97C9FE9D7E40F4CB179 /* SubscriptionTestKit.swift */; };
 		6CC2566BFAC64E6A55513820 /* ThemeTokenTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1C5080D5E19CF6E9F0AB3A0 /* ThemeTokenTests.swift */; };
 		4F40927C2435B92808CF21DA /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13AED341F97194F9FD6FAE90 /* Assets.xcassets */; };
 		6D3DF9427939F64C6DB49CD9 /* MapStyleDark.json in Resources */ = {isa = PBXBuildFile; fileRef = 1F4C5125873B8B0157A88FDA /* MapStyleDark.json */; };
@@ -300,6 +316,20 @@
 		0B380B5D9FA317E5A493EB92 /* PassengerShell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PassengerShell.swift"; path = "PassengerShell.swift"; sourceTree = "<group>"; };
 		5C4CF2B7D2FFF94E4153D54A /* PassengerShellModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PassengerShellModel.swift"; path = "PassengerShellModel.swift"; sourceTree = "<group>"; };
 		A793F6958EACC180E11FF1D7 /* UpdateGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "UpdateGate.swift"; path = "UpdateGate.swift"; sourceTree = "<group>"; };
+		3FF065EF0351416865B857D5 /* ModeBErrors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ModeBErrors.swift"; path = "ModeBErrors.swift"; sourceTree = "<group>"; };
+		F2A49F0F1A2D16601A351516 /* ModeBRequestModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ModeBRequestModel.swift"; path = "ModeBRequestModel.swift"; sourceTree = "<group>"; };
+		4050609906733147F6B9446D /* ModeBRequestScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ModeBRequestScreen.swift"; path = "ModeBRequestScreen.swift"; sourceTree = "<group>"; };
+		C91F369B68415D83141D0C5B /* SignedFileLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "SignedFileLink.swift"; path = "SignedFileLink.swift"; sourceTree = "<group>"; };
+		A376EA3C2D776DD2204E0908 /* SubscriptionDestinationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "SubscriptionDestinationView.swift"; path = "SubscriptionDestinationView.swift"; sourceTree = "<group>"; };
+		9FCCC98B2E363C5C0F102D72 /* SubscriptionLabels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "SubscriptionLabels.swift"; path = "SubscriptionLabels.swift"; sourceTree = "<group>"; };
+		9B32ABC053473A9A2385BE1C /* SubscriptionPayModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "SubscriptionPayModel.swift"; path = "SubscriptionPayModel.swift"; sourceTree = "<group>"; };
+		63854C6897194AEAD3B43A2A /* SubscriptionPayScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "SubscriptionPayScreen.swift"; path = "SubscriptionPayScreen.swift"; sourceTree = "<group>"; };
+		EBB1AB86A15CE374E5F6EC08 /* SubscriptionPaymentsModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "SubscriptionPaymentsModel.swift"; path = "SubscriptionPaymentsModel.swift"; sourceTree = "<group>"; };
+		AE700A1101E5EE4B4110A413 /* SubscriptionPaymentsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "SubscriptionPaymentsScreen.swift"; path = "SubscriptionPaymentsScreen.swift"; sourceTree = "<group>"; };
+		4C5D6622F9FC68EFD1BC1A39 /* SubscriptionRails.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "SubscriptionRails.swift"; path = "SubscriptionRails.swift"; sourceTree = "<group>"; };
+		14089253A3826D6EBE5F143B /* SubscriptionRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "SubscriptionRepository.swift"; path = "SubscriptionRepository.swift"; sourceTree = "<group>"; };
+		35D5E56B3E385EE8252DF8FB /* SubscriptionsModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "SubscriptionsModel.swift"; path = "SubscriptionsModel.swift"; sourceTree = "<group>"; };
+		8EC2D424A2E4D42CA26C326B /* SubscriptionsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "SubscriptionsScreen.swift"; path = "SubscriptionsScreen.swift"; sourceTree = "<group>"; };
 		3DC740756DE0304276231937 /* MageRideColor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "MageRideColor.swift"; path = "MageRideColor.swift"; sourceTree = "<group>"; };
 		95FD7813ABFF4E6B8DC48C4E /* MageRideCta.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "MageRideCta.swift"; path = "MageRideCta.swift"; sourceTree = "<group>"; };
 		F5BD2BC376FDF25822B419F1 /* MageRideSpacing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "MageRideSpacing.swift"; path = "MageRideSpacing.swift"; sourceTree = "<group>"; };
@@ -338,6 +368,8 @@
 		250021016A18AD25C49D2362 /* RideFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "RideFlowTests.swift"; path = "RideFlowTests.swift"; sourceTree = "<group>"; };
 		D432E2A12D92A2B752DE0E60 /* RideTestKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "RideTestKit.swift"; path = "RideTestKit.swift"; sourceTree = "<group>"; };
 		D84F662D44E94A1042CC5430 /* SearchLocationModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "SearchLocationModelTests.swift"; path = "SearchLocationModelTests.swift"; sourceTree = "<group>"; };
+		DE3565965A30D2CDA030A985 /* SubscriptionFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "SubscriptionFlowTests.swift"; path = "SubscriptionFlowTests.swift"; sourceTree = "<group>"; };
+		C21EA97C9FE9D7E40F4CB179 /* SubscriptionTestKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "SubscriptionTestKit.swift"; path = "SubscriptionTestKit.swift"; sourceTree = "<group>"; };
 		E1C5080D5E19CF6E9F0AB3A0 /* ThemeTokenTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ThemeTokenTests.swift"; path = "ThemeTokenTests.swift"; sourceTree = "<group>"; };
 		3695FAF1DA83B1EFE5807B57 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = "Info.plist"; path = "Info.plist"; sourceTree = "<group>"; };
 		FE9111528950BE782FD8FDF7 /* PassengerApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; name = "PassengerApp.entitlements"; path = "PassengerApp.entitlements"; sourceTree = "<group>"; };
@@ -418,6 +450,7 @@
 				8B7C957D188EA4E5C741C4D1 /* Ride */,
 				692F3ECAFFAFBA971B2FA647 /* Security */,
 				9060FDF9BA94D3C1C24C17FA /* Shell */,
+				ACE0D57192CBD54837D9FB1F /* Subscription */,
 				3CDFB53FAD65DA9C99742698 /* Theme */,
 				292E027D10D622D4C8304A17 /* UI */,
 				3695FAF1DA83B1EFE5807B57 /* Info.plist */,
@@ -655,6 +688,27 @@
 			path = "Shell";
 			sourceTree = "<group>";
 		};
+		ACE0D57192CBD54837D9FB1F /* Subscription */ = {
+			isa = PBXGroup;
+			children = (
+				3FF065EF0351416865B857D5 /* ModeBErrors.swift */,
+				F2A49F0F1A2D16601A351516 /* ModeBRequestModel.swift */,
+				4050609906733147F6B9446D /* ModeBRequestScreen.swift */,
+				C91F369B68415D83141D0C5B /* SignedFileLink.swift */,
+				A376EA3C2D776DD2204E0908 /* SubscriptionDestinationView.swift */,
+				9FCCC98B2E363C5C0F102D72 /* SubscriptionLabels.swift */,
+				9B32ABC053473A9A2385BE1C /* SubscriptionPayModel.swift */,
+				63854C6897194AEAD3B43A2A /* SubscriptionPayScreen.swift */,
+				EBB1AB86A15CE374E5F6EC08 /* SubscriptionPaymentsModel.swift */,
+				AE700A1101E5EE4B4110A413 /* SubscriptionPaymentsScreen.swift */,
+				4C5D6622F9FC68EFD1BC1A39 /* SubscriptionRails.swift */,
+				14089253A3826D6EBE5F143B /* SubscriptionRepository.swift */,
+				35D5E56B3E385EE8252DF8FB /* SubscriptionsModel.swift */,
+				8EC2D424A2E4D42CA26C326B /* SubscriptionsScreen.swift */,
+			);
+			path = "Subscription";
+			sourceTree = "<group>";
+		};
 		3CDFB53FAD65DA9C99742698 /* Theme */ = {
 			isa = PBXGroup;
 			children = (
@@ -710,6 +764,8 @@
 				250021016A18AD25C49D2362 /* RideFlowTests.swift */,
 				D432E2A12D92A2B752DE0E60 /* RideTestKit.swift */,
 				D84F662D44E94A1042CC5430 /* SearchLocationModelTests.swift */,
+				DE3565965A30D2CDA030A985 /* SubscriptionFlowTests.swift */,
+				C21EA97C9FE9D7E40F4CB179 /* SubscriptionTestKit.swift */,
 				E1C5080D5E19CF6E9F0AB3A0 /* ThemeTokenTests.swift */,
 			);
 			path = "PassengerAppTests";
@@ -966,6 +1022,20 @@
 				384237CA241077907328B94E /* PassengerShell.swift in Sources */,
 				1F52E051BB37739380A5F509 /* PassengerShellModel.swift in Sources */,
 				BA262FB0B994D08076E0C30A /* UpdateGate.swift in Sources */,
+				C03CF18ACA754BDA9130716F /* ModeBErrors.swift in Sources */,
+				1D581DE73193AB2D4BE692A1 /* ModeBRequestModel.swift in Sources */,
+				268E3586D892D87F46262815 /* ModeBRequestScreen.swift in Sources */,
+				D711B24E65AA1CA3A0422F69 /* SignedFileLink.swift in Sources */,
+				C706413BA08982FC41F87266 /* SubscriptionDestinationView.swift in Sources */,
+				7004A208AFB40B57CFE62197 /* SubscriptionLabels.swift in Sources */,
+				B0683E1D89E40BF698AA9F1B /* SubscriptionPayModel.swift in Sources */,
+				D5F22BCB6FD5D977163A37AF /* SubscriptionPayScreen.swift in Sources */,
+				C8E158A0C4EF180A13426621 /* SubscriptionPaymentsModel.swift in Sources */,
+				1F801B83C32EF4C43F51C899 /* SubscriptionPaymentsScreen.swift in Sources */,
+				4088670CACB2D64518ADEBA1 /* SubscriptionRails.swift in Sources */,
+				C3DDB86A9B1526C3308F0696 /* SubscriptionRepository.swift in Sources */,
+				0D97D7444BD21396DC9F7656 /* SubscriptionsModel.swift in Sources */,
+				C61938E9AFAD57B5AFCF4C55 /* SubscriptionsScreen.swift in Sources */,
 				40BE9AB2E124650EB30CF9D2 /* MageRideColor.swift in Sources */,
 				447DF25E476C41C7BB13E6E1 /* MageRideCta.swift in Sources */,
 				518B1E6CA267120BBA13B6C8 /* MageRideSpacing.swift in Sources */,
@@ -1011,6 +1081,8 @@
 				68D65751FFC6B3E4D5BA012B /* RideFlowTests.swift in Sources */,
 				BFB763223960315EB75C46B9 /* RideTestKit.swift in Sources */,
 				EFE12234A8891AD732D8B9F6 /* SearchLocationModelTests.swift in Sources */,
+				61CF6E66445DC106240C1D63 /* SubscriptionFlowTests.swift in Sources */,
+				F6947316A9E31E900BF65002 /* SubscriptionTestKit.swift in Sources */,
 				6CC2566BFAC64E6A55513820 /* ThemeTokenTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

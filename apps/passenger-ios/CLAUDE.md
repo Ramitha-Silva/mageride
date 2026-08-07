@@ -53,6 +53,8 @@ apps/passenger-ios/
 │   │                call chooser, the rails, AL-47's attestation, the receipt and the rating
 │   ├── History/     C099 · SCR-PI-020/021/022/023 — the parcel from both ends, the three-tab
 │   │                history, the trip receipt, and TripLabels (this app's Colombo clock)
+│   ├── Subscription/ C100 · SCR-PI-024/025/025a/025b — the Mode B access request, the cards, the
+│   │                owner-paid rails and the statement
 │   ├── Nav/         PassengerRoute (32 destinations), PassengerTab, the navigator,
 │   │                PassengerMenuDestination (SCR-PI-033's rows),
 │   │                PassengerDestinations (the ONE route→view switch)
@@ -315,6 +317,64 @@ apps/passenger-ios/
   row, no vehicle type and no driver **rating** on `TripDriver`, no trip-**receipt** operation
   anywhere, and `counterpartyPhone` meaning two different things on a package ride.
 
+## Cluster 6 (C100) — Mode B: the request, the cards, the money and the statement
+
+- **`SubscriptionRepository` is subscription-svc's Mode B half and deliberately not its other half.**
+  One contract carries two unrelated money flows — the driver's daily fee, reseller credit and
+  vouchers on one side, a passenger subscribing to a private vehicle on the other — and only the
+  second is behind this seam. The roster operations (`listModeBSubscribers`, `setSubscriberFare`,
+  `markSubscriberCashPaid`, `deleteModeBSubscriber`, `confirmTransferSlip`) and both halves of the
+  accept/reject are the **owner's** and answer `403 not-owner` to a passenger bearer.
+- **This money never touches wallet-svc, and that is the fence** (AL-24, §18b). A subscription payment
+  is a pass-through to the fleet owner's own account; MageRide holds none of it and takes no
+  commission, which is why nothing in `Subscription/` reaches a wallet or a ledger.
+- **`payTo` exists only after `POST …/pay`, so the pay sheet is two stages** (AL-49). The owner's bank
+  block and the signed link to their bank-app LankaQR are served **only from a `verified` payout
+  profile**; the chooser cannot print an account number it has not been given, and no client may
+  invent one. `409 payout-profile-not-verified` has its own copy — it is the fleet's failure, and the
+  useful answer is *"pay your collector"*.
+- **There is no OnePay rail and no surcharge anywhere on SCR-PI-025a** (AL-59). The wireframe still
+  draws `💳 OnePay · cards / wallets · +5%`; OnePay has one merchant account per merchant, so that
+  row would land a passenger's payment in MageRide's account. **Cash takes the vacant row**, which is
+  what D2' §16e and US-23.6 ask for. `SubscriptionRailsTests` pins the four, checks every declared
+  method has copy including the retired one, and reads all three languages for the two words that
+  would mean a surcharge came back.
+- **Two of the four rails settle on a human.** `online_transfer` sits at `pending_verification` until
+  the owner confirms the slip (US-23.4) and `cash` until they mark it received in the portal
+  (US-23.6). Neither can be finished from this handset, and the screen says so rather than showing a
+  spinner that never resolves.
+- **Accepted is inferred and Rejected cannot be observed at all.** There is no passenger-facing read
+  of one's own access requests and notification-svc mints no Mode B push kind — but an accept creates
+  the subscription in the same transaction, so a subscription for that vehicle *is* the accept.
+  SCR-PI-024 reads `GET …/subscriptions/{passengerId}` on entry for exactly that.
+- **The marker is dropped by the client, not by the socket.** `PassengerLiveMap.dropVehicle` erases it
+  on the unsubscribe's response; D-22's `share.revoked` arrives behind it and finds nothing to remove.
+  **Nothing is sent to the hub** — `signalr-hub.md` §2 has four client → server methods and none of
+  them leaves a `vehicle:{vehicleId}` group.
+- **`TripLabels` grew two `BusinessDate` functions** (`dayMonth`, `monthYear`) rather than this cluster
+  opening a second clock. A `BusinessDate` crosses the bridge as its ISO-8601 `description`; it is
+  parsed and re-formatted **both in Colombo**, so the round trip lands on the day the server meant.
+  `SubscriptionPeriod.isBefore` ranks two of them on that same text, because `YYYY-MM-DD` sorts
+  lexicographically in calendar order and Kotlin's `compareTo` is not something the bridge carries
+  into Swift's `Comparable`.
+- **`BankAppHandoff` gained `openBankApp(url:)`** rather than a second seam beside it (Δ C100).
+  SCR-PI-017 has no URL to open — AL-59 left the ride rail with no merchant reference — and
+  SCR-PI-025a does, because `POST …/pay` mints one. *"Nothing claimed the link"* now means the same
+  thing on both screens, and on this one it re-resolves the step to AL-15's payload fallback rather
+  than raising an error.
+- **The slip crosses the bridge in Kotlin.** `IosCapturedDocumentKt.fileUploadOf` is the same
+  `memcpy` helper `apps/driver-ios`'s support screenshot uses, and it is the **provenance-free** form
+  on purpose: a transfer slip is not a `docs.uploads` document and the contract declares no
+  `capturedVia` part beside it (AL-43).
+- **The card's title is the Vehicle ID, and so is the statement header's.** `Subscription` carries
+  `vehicleId` and nothing else, and `GET /v1/vehicles/{id}` answers `403 not-owner` to a passenger —
+  so the wireframe's *"Office Van · MR-VEH-48213"* is drawn as the id alone.
+- Reusable UI added here: none. The four screens are `GroupedList` + `GroupedRow` (C095),
+  `StatusPill` + `SolidBadge` (C097), `LoadingRow` (C097), `OutlinedAction` (C096),
+  `LabelledTextField` + `FormErrorText` + `TextLink` (C095) and one token,
+  `MageRideControl.ownerQr` — which is the point of those controls existing. `SubscriptionLabels` is
+  the cluster's copy table, the shape ``RideStateLabel`` established.
+
 ## The Xcode project is generated, and the generator is shared
 
 `.pbxproj` is the committed artefact — CI probes for it and `xcodebuild` reads it. It is also a file
@@ -444,6 +504,12 @@ constraint, and each is called out at its call site.
 | Recipient's Call (021) | drawn, same as the sender's | **absent** — the cell puts the ETA there instead (Δ C099) |
 | Receipt download (023) | not drawn at all | drawn **disabled** with a caption; no operation produces one (Δ C099) |
 | Trip status pill (022) | `RideState.name`, untranslated | `RideStateLabel` — five keys in three languages (Δ C099) |
+| Unsubscribe gesture (025) | `SwipeToDismissBox`, snapped back in a `LaunchedEffect` | `.swipeActions(allowsFullSwipe: false)` — the cell's own clause; both open the confirm rather than acting |
+| Unsubscribe confirm (025) | an `AlertDialog` with a body and a muted note | an `.alert` whose message is the two paragraphs — the note is US-23.12 and belongs in front of the tap |
+| Pay rails (025a) | four bordered `RadioButton` cards | a `glist` with a `✓` on the chosen row — the cell draws grouped rows, not cards |
+| Slip picker (025a) | `GetContent()`, so a PDF from a banking app works | `PhotosPicker`, so no photo-library purpose string is needed; images only |
+| Owner's LankaQR (025a) | `BitmapFactory` + `Image` | `UIImage(data:)` + `.interpolation(.none)` — a QR is a grid, and smoothing it stops it scanning |
+| List loading (025 / 025b) | a centred `CircularProgressIndicator` | a labelled `LoadingRow`, because a `List` row with no words in it reads as an empty list |
 
 ## Things that will bite
 

@@ -126,7 +126,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C097 | passenger-ios-booking | 4b | PARTIAL | 2026-08-07 | SCR-PI-009/010b/011/012/012a/013 built to `specs/wireframes/passenger_ios.html`; 53 new tests across 4 Swift files (7 suites). **PARTIAL only because the verify command is `xcodebuild` and this host cannot run it** — the shared half (`:shared:compileKotlinIosArm64 detekt ktlintCheck testDebugUnitTest`) is green here, and the three `.strings` tables check out at 207 keys × 3 locales. `BookingDraft` is the one booking six screens edit; `CaptureTarget` is parked at the navigation site. AL-19 is a three-field type, AL-18 removes the payment chip rather than disabling it, AL-55 is one muted row, AL-20 parses on the device, P-02's decline has no parameter to put a point in. One `:shared` `iosMain` helper added (`IosBookingRequests`, four factories + the `TransitLeg.description` collision) plus `IosAppGraph.idempotencyKeys`. **Found and fixed a C079 defect on both platforms: no production call site passed a pickup to `BookingDraft.begin`, so SCR-PA-009 quoted nothing at all** — `LastKnownFix` + a default inside the draft; `apps/passenger-android` 295 tests green |
 | C098 | passenger-ios-ride-payment | 4b | PARTIAL | 2026-08-07 | SCR-PI-014/015/015a/016/017/018/019 built to `specs/wireframes/passenger_ios.html`; 57 new tests across 6 suites (`RideFlowTests` + `RideTestKit`). **PARTIAL only because the verify command is `xcodebuild` and this host cannot run it** — `:shared` is green here and the three `.strings` check out at 283 keys × 3 locales. **Two C080 defects found and fixed on BOTH platforms**: nothing carried a `Completed` ride to SCR-PA/PI-016, so D-10 was unreachable (`RideHandOff`); and the rail confirmed on SCR-PA-016 was discarded before SCR-PA-017, so choosing Cash posted `scan_driver_qr` (`PaymentSelection`). `apps/passenger-android` **300 tests green** (was 295), detekt + ktlint + `assembleDebug` clean. The camera key and its three purpose strings arrived with the commit that opens a camera; VisionKit is the scanner (Δ iOS). **Three contract gaps restated**: no route POSTs a Mode C ride rating, no read returns a settled fare's breakdown, and no operation issues a rider start OTP |
 | C099 | passenger-ios-package-history | 4b | PARTIAL | 2026-08-07 | SCR-PI-020/021/022/023 built to `specs/wireframes/passenger_ios.html`; 20 new tests across 4 suites (`HistoryFlowTests` + `HistoryTestKit`), strings now 315 keys × 3 locales. **PARTIAL only because the verify command is `xcodebuild` and this host cannot run it.** **One model for SCR-PI-020 and SCR-PI-021**, because it is one ride — the party is read off `bookerId` and never off the URI, so `mageride://package/{rideId}` serves both ends. **US-20.5's delivery OTP is now captured on this platform**: `PassengerAppDelegate.deliver` writes `PackageOtps` before routing, which C097 built the holder for and nothing called. **AL-48 on the history card**: `mobileMasked` is rendered and never dialled, so **Call** costs one `GET /v1/rides/{id}`; a cancelled-before-assignment trip offers neither, refused in the card *and* the model. **Four wireframe/parity divergences recorded** (SCR-PI-021 draws no Call, SCR-PI-023 draws a disabled `⬇ Receipt` no operation can fill, the status pill is copy rather than `RideState.name`, the history Free call routes to SCR-PI-028) and **six contract gaps restated or found** — no passenger read of their own scheduled rides, no `kind` on `RideHistoryRow`, no distance/vehicle on a history row, no vehicle type or driver rating on `TripDriver`, no trip-receipt operation anywhere, and `counterpartyPhone` being ambiguous on a package |
-| C100 | passenger-ios-mode-b-subscriptions | 4b | PENDING | | |
+| C100 | passenger-ios-mode-b-subscriptions | 4b | PARTIAL | 2026-08-07 | SCR-PI-024/025/025a/025b built to `specs/wireframes/passenger_ios.html`; 27 new tests across 7 suites (`SubscriptionFlowTests` + `SubscriptionTestKit`), strings now 393 keys × 3 locales. **PARTIAL only because the verify command is `xcodebuild` and this host cannot run it** — the five `LocalizationTests` rules were run as a script and the generator regenerates cleanly at **146 app sources, 28 test sources**. **AL-49 is the shape of the pay sheet**: `payTo` is minted by `POST …/pay` from a *verified* payout profile and by nothing else, so the chooser is stage one and the owner's account is stage two. **AL-59's OnePay row is absent and Cash takes it** — the wireframe still draws `OnePay · +5 %`, which would route a fleet's money into MageRide's merchant account; `SubscriptionRailsTests` reads all three languages to keep it out. **AL-25's unsubscribe erases the marker on the response**, not on `share.revoked`, and sends nothing to the hub. **Accepted is inferred from the subscription and Rejected cannot be observed at all** — C082's gap, restated. `BankAppHandoff` gained a URL-taking hand-off (Δ C100) and `TripLabels` two `BusinessDate` formatters; **one wireframe divergence** (no OnePay rail) and **three contract gaps restated** — no passenger read of their own access requests, no `GET …/subscriptions/{subscriptionId}`, and no passenger-readable vehicle name |
 | C101 | passenger-ios-settings-addresses | 4b | PENDING | | |
 | C102 | passenger-ios-comms-safety-support | 4b | PENDING | | |
 | C103 | tailwind-preset | 4c | PENDING | | |
@@ -15862,3 +15862,122 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   `PassengerApp.xcodeproj/project.pbxproj`, and `apps/passenger-ios/CLAUDE.md`. **No Android file was
   touched** — the four divergences above are recorded for a micro-change-set rather than forked into
   a DONE component without its own verify.
+
+- **Component:** C100 passenger-ios-mode-b-subscriptions — 2026-08-07
+- **Status:** PARTIAL — all four screens built, 27 new tests written. **The verify command is
+  `xcodebuild` on a macOS simulator and this build host is Linux** (root CLAUDE.md's iOS fence), so
+  the same PARTIAL C094–C099 carry forward for the same reason. What *was* checked here: the three
+  `Localizable.strings` parse, carry identical key sets (**393 keys × 3 locales**, up from 315),
+  leave nothing in English, keep every `%n$` specifier through Sinhala and Tamil, and reference every
+  declared key from a Swift source — the five rules `LocalizationTests` enforces, run as a script.
+  `python3 apps/passenger-ios/Tools/generate_xcodeproj.py` regenerates cleanly at **146 app sources,
+  28 test sources**, with all twelve new files in both the group and the Sources phase.
+- **Notes:**
+  **The pay sheet is two stages because AL-49 makes it two stages.** `payTo` — the fleet owner's bank
+  block, or the signed link to their own bank-app LankaQR image — is minted by
+  `POST /v1/mode-b/subscriptions/{id}/pay` and served **only from a `verified` payout profile**,
+  falling back to the last verified snapshot rather than to an unverified edit. So the chooser
+  physically cannot print an account number before the payment exists, and no client may invent one.
+  A fleet whose profile was never verified answers `409 payout-profile-not-verified`, which
+  `ModeBErrors` turns into *"pay your collector"* rather than *"something went wrong"* — it is the
+  fleet's failure and the passenger can still act on it.
+
+  **The money never touches wallet-svc and never posts a ledger entry** (AL-24, §18b). A subscription
+  payment is a pass-through to the fleet owner. That is why `SubscriptionRepository` carries six
+  operations and not one of them is a wallet read, and why `PassengerGraph` binds it beside
+  `HistoryRepository` rather than beside `RideRepository`'s four clients.
+
+  ### The one wireframe divergence, and why it is the same one C082 recorded
+
+  `passenger_ios.html`'s SCR-PI-025a still draws **`💳 OnePay · cards / wallets · +5%`** as the third
+  of four rails. It is not built, for AL-59's reason: OnePay has **one merchant account per
+  merchant**, so a subscription paid through it would land in MageRide's account and turn a
+  pass-through into platform revenue with a manual payout behind it. AL-59 removed the rail from
+  `subscription.yaml` and deleted `POST /v1/mode-b/pay/onepay/webhook` with it. **Cash takes the
+  vacant row**, which is what D2' §16e and US-23.6 ask for, and **no surviving rail carries a
+  surcharge** — `SubscriptionRailsTests` pins the list, checks every declared method has copy
+  (including the retired one, because SCR-PI-025b renders rows written before AL-59), and reads all
+  three `.lproj` for the two strings that would mean a surcharge came back. **The wireframe needs a
+  micro-change-set**; C082 asked for it from the Android side and this restates it rather than
+  forking a DONE component.
+
+  ### Three contract gaps this cluster draws around
+
+  1. **There is no passenger-facing read of one's own access requests, and no Mode B push kind.**
+     `GET /v1/mode-b/{vehicleId}/access-requests` is the *owner's* and answers `403` here;
+     notification-svc mints nothing for an accept or a reject. So **Accepted is inferred** — an accept
+     creates the subscription in the same transaction, so a subscription for that vehicle *is* the
+     accept, and SCR-PI-024 reads `GET …/subscriptions/{passengerId}` on entry to find one.
+     **Rejected cannot be observed at all**; the arm exists because the enum carries it, and a
+     rejection reaches a passenger through the owner. C082's gap, unchanged.
+  2. **There is no `GET /v1/mode-b/subscriptions/{subscriptionId}`.** `listPassengerSubscriptions` is
+     a *list*, so SCR-PI-025a and SCR-PI-025b each read the passenger's own subscriptions and pick
+     the one they were opened for. Two screens paying one extra round trip for a read that should be
+     one path parameter.
+  3. **No passenger-readable vehicle name exists anywhere.** The wireframe prints *"Office Van ·
+     MR-VEH-48213"* on the card and the statement header; `Subscription` carries `vehicleId` and
+     nothing else, and `GET /v1/vehicles/{id}` is *"visible to the owner, an assigned driver and
+     internal roles"*. The id is what is drawn — the same call C082 made, and the same call C083/C099
+     made about `PAX-90431` and `#TK-4521`.
+
+  ### Also worth knowing
+
+  - **`PassengerLiveMap.dropVehicle` is the client's half of D-22**, and it is why *"unsubscribing
+    removes the vehicle from the live map within seconds"* is true on the response rather than on the
+    push. `signalr-hub.md` §2 has four client → server methods and **none of them leaves a
+    `vehicle:{vehicleId}` group** — membership is granted by fanout-svc at join from the
+    `share:{userId}` entitlement (D-23) — so the test asserts the marker is gone *and* that nothing
+    was sent.
+  - **The ✕ and the swipe land on the same confirm.** `.swipeActions(allowsFullSwipe: false)` is the
+    cell's own `Δ iOS` clause; losing sight of a school van because a thumb brushed a list is exactly
+    the accident AL-25 makes unrecoverable without the owner. The alert's second paragraph is
+    US-23.12 — the passenger's row survives on the fleet's roster, muted, until the owner deletes it,
+    and leaving the vehicle is not leaving the fleet's books.
+  - **The card's pill costs one statement read per Paid subscription, and there is no cheaper honest
+    answer.** `SubscriberMonthStatus` lives on `SubscriberRow`, which is the owner's roster; deriving
+    the month from `nextDue` instead would call an unpaid first month *Paid*, because the server
+    advances that date on payment and not on join. A read that fails leaves the pill at *Checking…*,
+    which is never *Paid* — the one error a passenger acts on.
+  - **`TripLabels` grew two `BusinessDate` functions** rather than this cluster opening a second
+    clock. A `BusinessDate` crosses the bridge as its ISO-8601 `description`; it is parsed **and**
+    re-formatted in Colombo, so the round trip lands on the day the server meant.
+    `SubscriptionPeriod.isBefore` ranks two of them on that same text — `YYYY-MM-DD` sorts
+    lexicographically in calendar order, and Kotlin's `compareTo` is not something the Objective-C
+    bridge carries into Swift's `Comparable`.
+  - **`BankAppHandoff` gained `openBankApp(url:)`** (Δ C100) rather than a second seam beside it.
+    SCR-PI-017 has no URL — AL-59 left the *ride* rail with no merchant reference — and SCR-PI-025a
+    does. A refusal is not an error: `isBankAppAvailable` going false re-resolves the step to AL-15's
+    payload fallback, which is the ordering AL-15 fixes (deep link first, code second).
+  - **The transfer slip crosses the bridge in Kotlin** (`IosCapturedDocumentKt.fileUploadOf`), and in
+    the **provenance-free** form: a slip is not a `docs.uploads` document and the contract declares no
+    `capturedVia` part beside it (AL-43). The picker is `PhotosPicker`, so this app still carries no
+    `NSPhotoLibraryUsageDescription` — where the Android twin uses `GetContent()` and can therefore
+    also take a PDF from a banking app.
+
+  ### For C101–C102
+
+  - **`SubscriptionRepository` is the seam for anything Mode B.** A seventh operation from
+    subscription-svc's passenger half goes there, not into a second client beside it.
+  - **`SubscriptionLabels` is this cluster's copy table**, the shape `RideStateLabel` established. A
+    screen that needs a Mode B status label takes it from there.
+  - **`TripLabels` now renders instants *and* business dates.** Do not build a `DateFormatter` on the
+    handset's zone; C090 wrote the same warning on the driver side and it is the same trap.
+  - **`MageRideControl.ownerQr` is the only token this cluster added**, which is the point of C095–C099's
+    controls existing: the four screens are `GroupedList`/`GroupedRow`, `StatusPill`, `SolidBadge`,
+    `LoadingRow`, `OutlinedAction`, `LabelledTextField`, `FormErrorText` and `TextLink`.
+  - **C101 owns SCR-PI-033**, whose *"Private transport"* and *"My subscriptions"* rows now open real
+    screens — `PassengerMenuDestination` already carries both routes and needs no change.
+
+  ### Files touched
+
+  `apps/passenger-ios/PassengerApp/Subscription/` (10 new files),
+  `PassengerApp/Nav/PassengerDestinations.swift`, `PassengerApp/DI/PassengerGraph.swift`,
+  `PassengerApp/Ride/RideContact.swift` (`BankAppHandoff.openBankApp(url:)`),
+  `PassengerApp/History/TripLabels.swift` (two `BusinessDate` formatters),
+  `PassengerApp/Theme/MageRideSpacing.swift` (one cluster-6 token), the three
+  `Resources/*.lproj/Localizable.strings`, `PassengerAppTests/SubscriptionTestKit.swift` and
+  `PassengerAppTests/SubscriptionFlowTests.swift` (both new),
+  `PassengerAppTests/RideTestKit.swift` (`FakeBankAppHandoff`'s new arm), the regenerated
+  `PassengerApp.xcodeproj/project.pbxproj`, and `apps/passenger-ios/CLAUDE.md`. **No Android file was
+  touched** — this component found no C082 defect, and the OnePay divergence is a wireframe
+  micro-change-set rather than a code change on either side.

@@ -466,3 +466,108 @@
 "history_state_no_show" = "No-show";
 "trip_details_date" = "Date";
 "trip_details_receipt_unavailable" = "Receipt downloads are not available yet.";
+
+/* ---- C100 · Mode B subscriptions --------------------------------------------------
+ *
+ * SCR-PI-024/025/025a/025b. The keys are
+ * `apps/passenger-android/src/main/res/values…/strings.xml`'s and carry the Android translations
+ * unchanged, except that every `%1$s` is a `%1$@` here — Objective-C string formats, not Java ones.
+ * Two keys are new to this platform and are marked at the foot of this section.
+ *
+ * The Vehicle ID example (`MR-VEH-48213`) is NOT here: a registration handle is the same characters
+ * in all three scripts, so it is a Swift constant on `ModeBRequestScreen` for the reason `Rs`, `+94`
+ * and the language endonyms are.
+ */
+
+"action_done" = "Done";
+
+/* SCR-PI-024 — the Mode B access request */
+"mode_b_request_title" = "Private transport";
+"mode_b_explainer" = "Ask to track a private vehicle. The owner approves it in the Driver App.";
+"mode_b_vehicle_id" = "Vehicle ID";
+"mode_b_from_marker" = "Filled in from the vehicle you tapped on the map.";
+"mode_b_type_id" = "Ask the driver or the office for the vehicle's ID.";
+"mode_b_send_request" = "Send request";
+"mode_b_status_pending" = "Pending approval";
+"mode_b_pending_note" = "Request sent. Your first month is free.";
+"mode_b_status_accepted" = "Access granted";
+"mode_b_accepted_note" = "You can now see this vehicle on the map.";
+"mode_b_status_rejected" = "Request declined";
+"mode_b_rejected_note" = "The owner did not approve this request.";
+"mode_b_open_subscriptions" = "Open my subscriptions";
+
+/* SCR-PI-025 — my private subscriptions */
+"subscriptions_title" = "My subscriptions";
+"subscriptions_empty" = "No private vehicles yet. Tap a private vehicle on the map to ask for access.";
+"subscriptions_pay" = "Pay";
+"subscriptions_history" = "Payment history";
+"subscriptions_unsubscribe" = "Unsubscribe";
+"subscriptions_unsubscribe_title" = "Unsubscribe from this vehicle?";
+"subscriptions_unsubscribe_body" = "You will stop seeing it on the map straight away. To join again you must send a new request and wait for the owner to accept it.";
+"subscriptions_muted_note" = "Your name stays on the fleet's subscriber list, muted, until the owner removes it.";
+"subscriptions_billing_paid" = "Paid";
+"subscriptions_free" = "Free";
+"subscriptions_free_caption" = "Free — office transport";
+"subscriptions_per_month" = "%1$@ / month";
+"subscriptions_next_due" = "next due %1$@";
+"subscriptions_status_paid" = "Paid";
+"subscriptions_status_pending" = "Pending verification";
+"subscriptions_status_due" = "Payment due";
+"subscriptions_status_unknown" = "Checking…";
+
+/* SCR-PI-025a — subscription payment. No OnePay and no surcharge on any rail (AL-59). */
+"subscription_pay_title" = "Pay subscription";
+"subscription_pay_choose" = "Choose payment mode";
+"subscription_pay_lankaqr_deeplink" = "LankaQR — deep link";
+"subscription_pay_lankaqr_deeplink_caption" = "Opens your bank app. No extra charge.";
+"subscription_pay_lankaqr_scan" = "LankaQR — scan QR code";
+"subscription_pay_lankaqr_scan_caption" = "Scan the fleet's code with your own bank app.";
+"subscription_pay_transfer" = "Online transfer";
+"subscription_pay_transfer_caption" = "To the fleet's bank account. A screenshot of the slip is required.";
+"subscription_pay_cash" = "Cash";
+"subscription_pay_cash_caption" = "Hand it to your collector. The owner marks it received.";
+"subscription_pay_retired" = "No longer available";
+"subscription_pay_confirm" = "Confirm & pay %1$@";
+"subscription_pay_confirm_unknown" = "Confirm & pay";
+"subscription_pay_to" = "to %1$@";
+"subscription_attach_slip" = "Attach transfer screenshot";
+"subscription_slip_attached" = "Attached: %1$@";
+"subscription_open_bank_app" = "Open my bank app";
+"subscription_lankaqr_payload" = "LankaQR code";
+"subscription_transfer_to" = "Transfer to";
+"subscription_bank" = "Bank";
+"subscription_branch" = "Branch";
+"subscription_account_no" = "Account number";
+"subscription_account_holder" = "Account holder";
+"subscription_owner_qr" = "The fleet's LankaQR code";
+"subscription_owner_qr_hint" = "Scan this with your bank app to pay the fleet.";
+"subscription_owner_qr_missing" = "The fleet's code could not be loaded. Choose another payment mode.";
+"subscription_cash_title" = "Hand the cash to your collector";
+"subscription_cash_body" = "Only the fleet owner can record cash. This month shows as paid once they do.";
+"subscription_transfer_pending_title" = "Waiting for the fleet owner";
+"subscription_pending_body" = "The owner will check your transfer slip. Until they do, this month is not yet paid.";
+"subscription_unavailable" = "Payment unavailable";
+"subscription_unavailable_body" = "This fleet has not finished setting up its bank details. Pay your collector, or try again later.";
+
+/* SCR-PI-025b — payment history */
+"subscription_payments_title" = "Payment history";
+"subscription_payments_empty" = "No payments yet.";
+"subscription_status_paid" = "Paid";
+"subscription_status_paid_cash" = "Paid · cash";
+"subscription_status_pending" = "Pending verification";
+"subscription_status_unpaid" = "Not paid";
+"subscription_cash_marked" = "Marked received by the fleet owner";
+
+/* Failures subscription-svc declares on this cluster's six operations */
+"error_payout_not_verified" = "This fleet has not finished setting up its bank details, so it cannot take payments yet.";
+"error_vehicle_not_found" = "No vehicle has that ID. Check it and try again.";
+"error_request_already_open" = "You have already asked about this vehicle.";
+"error_subscription_not_found" = "That subscription could not be found.";
+"error_not_your_subscription" = "This is not your subscription.";
+"error_slip_too_large" = "That screenshot is too large. Try a smaller image.";
+
+/* NEW on iOS: the two loading rows. Both lists are a `List` and a `ScrollView` on this platform
+ * rather than the centred spinner the Android screens draw, and a row with no words in it reads as
+ * an empty list. */
+"subscriptions_loading" = "Loading your subscriptions…";
+"subscription_payments_loading" = "Loading your payments…";

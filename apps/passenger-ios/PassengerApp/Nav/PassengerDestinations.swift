@@ -65,10 +65,12 @@ struct PassengerDestinationView: View {
             HistoryDestinationView(route: route)
 
         // ---- C100 · Mode B ---------------------------------------------------------------
-        case .modeBRequest: placeholder("SCR-PI-024 private transport")
-        case .subscriptions: placeholder("SCR-PI-025 my subscriptions")
-        case .subscriptionPayment: placeholder("SCR-PI-025a subscription payment")
-        case .subscriptionPayments: placeholder("SCR-PI-025b subscription payments")
+        //
+        // Four destinations and two doors onto the first of them: SCR-PI-024 is reached from a Mode B
+        // marker with the vehicle id pre-filled (AL-23) and from the Menu tab's *"Private transport"*
+        // row with nothing, which is why the route's associated value is optional.
+        case .modeBRequest, .subscriptions, .subscriptionPayment, .subscriptionPayments:
+            SubscriptionDestinationView(route: route)
 
         // ---- C101 · addresses, settings and the Menu tab ----------------------------------
         //

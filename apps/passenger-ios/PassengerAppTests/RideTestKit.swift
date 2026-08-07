@@ -140,8 +140,19 @@ final class FakeBankAppHandoff: BankAppHandoff {
 
     private(set) var attempts = 0
 
+    /// The links C100's SCR-PI-025a handed over, in order. SCR-PI-017 has none — see
+    /// ``SystemBankAppHandoff/lankaQrScheme`` and AL-59's reason for it — so this stays empty for
+    /// every cluster-4 suite.
+    private(set) var openedUrls: [String] = []
+
     func openBankApp() async -> Bool {
         attempts += 1
+        return opens
+    }
+
+    func openBankApp(url: String) async -> Bool {
+        attempts += 1
+        openedUrls.append(url)
         return opens
     }
 }

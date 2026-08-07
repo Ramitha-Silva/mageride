@@ -221,6 +221,19 @@ enum MageRideControl {
 
     /// SCR-PI-023's route map (`.map` at `flex:0 0 110px`, `border-radius:13px`).
     static let tripDetailMapHeight: CGFloat = 110
+
+    // MARK: - C100 · Mode B subscriptions
+    //
+    // `passenger_ios.html`'s cluster-6 cells add exactly one measurement: everything else on the four
+    // screens is a card, a `glist` row, a pill or a CTA, which is the point of the twenty tokens above.
+
+    /// The fleet owner's LankaQR image on SCR-PI-025a (AL-49).
+    ///
+    /// Not a wireframe number — the cell draws the OnePay row where this panel now sits — so it is
+    /// sized from what the control is *for*: a QR scanned off one phone screen by another camera needs
+    /// its smallest module to survive that round trip, and 200pt is about where a 33×33 EMVCo grid
+    /// stops being marginal on a 5.4" handset. Drawn without interpolation for the same reason.
+    static let ownerQr: CGFloat = 200
 }
 
 extension View {

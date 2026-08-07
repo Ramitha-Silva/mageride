@@ -76,6 +76,18 @@ protocol BankAppHandoff: AnyObject {
     /// - Returns: `false` when nothing on the handset did — the condition that sends the passenger
     ///   back to the camera.
     func openBankApp() async -> Bool
+
+    /// The same hand-off for a link the **server minted** (Δ C100).
+    ///
+    /// SCR-PI-017 has no URL to open — see ``SystemBankAppHandoff/lankaQrScheme``, and AL-59's reason
+    /// for it — but SCR-PI-025a does: `POST /v1/mode-b/subscriptions/{id}/pay` answers a
+    /// `redirectUrl`, which `:shared`'s `PaymentMethods.lankaQrAction` resolves to
+    /// `FarePaymentAction.OpenBankApp(url)`. Extending this seam rather than opening a second one is
+    /// the call `apps/passenger-ios/CLAUDE.md` records for ``PaymentRails``: one place in this app
+    /// leaves it for a bank, and *"nothing claimed the link"* means the same thing on both screens.
+    ///
+    /// - Returns: `false` when nothing on the handset claimed it, which is AL-15's fallback condition.
+    func openBankApp(url: String) async -> Bool
 }
 
 /// ``BankAppHandoff`` over `UIApplication.open`.
@@ -98,11 +110,15 @@ final class SystemBankAppHandoff: BankAppHandoff {
     }
 
     func openBankApp() async -> Bool {
-        guard let url = URL(string: SystemBankAppHandoff.lankaQrScheme) else { return false }
+        await openBankApp(url: SystemBankAppHandoff.lankaQrScheme)
+    }
+
+    func openBankApp(url: String) async -> Bool {
+        guard let target = URL(string: url) else { return false }
         // A custom scheme, opened plainly: the completion is `false` when no app is registered for
         // it, which is AL-15's fallback condition and the whole reason this returns a `Bool`.
         return await withCheckedContinuation { continuation in
-            application.open(url, options: [:]) { opened in
+            application.open(target, options: [:]) { opened in
                 continuation.resume(returning: opened)
             }
         }

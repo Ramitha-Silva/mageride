@@ -66,6 +66,21 @@ enum TripLabels {
         date(at) + MageRideSymbols.dateTimeSeparator + timeFormatter.string(from: at)
     }
 
+    /// `6 Jul` — a **`BusinessDate`**, which the server already derived in Colombo (Δ C100).
+    ///
+    /// SCR-PI-025's *"next due 6 Jul"* and SCR-PI-025b's `6 Jun · LankaQR`. Nothing here converts a
+    /// zone and nothing may: a `next_due`, a `period_month` and a `fee_date` are calendar dates
+    /// subscription-svc computed in Asia/Colombo (D-38), so re-deriving one from the handset's clock
+    /// would be wrong for five and a half hours a day. Formatting is all this does.
+    static func dayMonth(_ date: BusinessDate) -> String {
+        instant(of: date).map(dayFormatter.string(from:)) ?? String(describing: date)
+    }
+
+    /// `Jul 2026` — SCR-PI-025b's month column and SCR-PI-025a's period line (Δ C100).
+    static func monthYear(_ date: BusinessDate) -> String {
+        instant(of: date).map(monthFormatter.string(from:)) ?? String(describing: date)
+    }
+
     /// `Nugegoda → Galle Face`.
     ///
     /// `Place.address` is server-supplied display text and is absent on several reads — every
@@ -82,6 +97,41 @@ enum TripLabels {
     static func instant(_ at: Timestamp) -> Date {
         Date(timeIntervalSince1970: TimeInterval(IosInstantKt.timestampEpochMillis(instant: at)) / 1000)
     }
+
+    /// Colombo midnight on a business date, so a formatter can print it (Δ C100).
+    ///
+    /// **The bridge carries a `BusinessDate` as its ISO-8601 `description`** — it is a
+    /// `kotlinx.datetime.LocalDate`, whose `toString()` is already `YYYY-MM-DD` and whose
+    /// constructors reach Objective-C under compiler-generated names that are an implementation
+    /// detail rather than a contract. `apps/driver-ios`'s `WalletHistoryModel` reads one the same
+    /// way. Parsing the text back is what lets the day and the month be *localised* rather than
+    /// printed as the wire spelling.
+    ///
+    /// The instant is read **and** written in ``zone``, so the round trip lands on the same calendar
+    /// day it started on. `String(describing:)` answering something that is not a date — a `nil`
+    /// bridged badly, a contract that changed shape — falls back to the ISO text, which is a date a
+    /// passenger can still read.
+    private static func instant(of date: BusinessDate) -> Date? {
+        isoFormatter.date(from: String(describing: date))
+    }
+
+    /// Reads `2026-07-06` in the Colombo zone. Invariant locale, because an ISO date is not copy.
+    private static let isoFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = zone
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
+
+    /// `Jul 2026`. Localised for ``dayFormatter``'s reason — a month name is ICU's, not ours.
+    private static let monthFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = PassengerLocale.locale
+        formatter.timeZone = zone
+        formatter.setLocalizedDateFormatFromTemplate("MMM yyyy")
+        return formatter
+    }()
 
     /// Fixed 24-hour, in the invariant locale. See this type's own note.
     private static let timeFormatter: DateFormatter = {
