@@ -39,6 +39,7 @@ apps/driver-ios/
 │   ├── Home/                    C088 · SCR-DI-010, 011, 013, 014 + the map, the offer inbox and
 │   │                            the screen-level GNSS source
 │   ├── Ride/                    C088 · SCR-DI-015 + its three sheets and its data layer
+│   ├── Delivery/                C089 · SCR-DI-016a/b/c + the proof queue and its data layer
 │   ├── Menu/                    C088 · SCR-DI-036 — AL-31's drawer, as a tab
 │   ├── Onboarding/              C086 · SCR-DI-001, 002, 003, 003a, 007 + their data layer
 │   ├── UI/                      the wireframe's shapes as views — fields, tiles, cards, pills
@@ -168,7 +169,55 @@ DriverApp/
   `rideProjectionCanSend`, `parseTimestampOrNull` / `timestampFromEpochMillis` / `timestampEpochMillis`,
   `colomboBusinessDateNow`, and `walletAlertFor`.
 
-**To add a screen (C089–C093):**
+## Cluster 4 (C089) — the delivery
+
+```
+DriverApp/
+└── Delivery/    SCR-DI-016a/b/c + the proof queue and ride-svc's package surface
+```
+
+- **A package ride is the SAME destination as a passenger ride.** R-01 keeps one aggregate and
+  `PushRouter` resolves both `mageride://ride/{id}` and `mageride://package/{id}` to
+  `DriverRoute.activeRide`, so the kind is not known until the ride has been read: `ActiveRideScreen`
+  reads it and hands over to `DeliveryScreen` on `RideKind.package`. Both models are built by
+  `HomeDestinationView` because a `@StateObject` cannot be introduced half way through a view's life;
+  the delivery one costs nothing until its own screen calls `start()`. SCR-DI-015's poll and its GNSS
+  subscription are **not** started for a package, so only one loop folds server states onto the ride.
+- **Which of the three sheets is up is derived from the ride, never counted.** `package.picked_up` IS
+  the `→ InProgress` move (D5' §11 skips `DriverArrived` for a parcel), so a driver whose app died
+  between the two doors comes back to the right sheet from one read. Sheet 1's **Start delivery** is
+  the one local step and sends nothing.
+- **`PackageHandoff` (C015) is the five-attempt rule — do not count attempts in a screen.**
+  `DeliveryModel` holds its `RideProjection` for the screen's whole life rather than re-seating it per
+  read (which is what `ActiveRideModel` does), because re-seating throws the handoff away with it.
+  `canSubmit` refuses a malformed code without spending an attempt; the **fifth** wrong code locks the
+  gate, so there is no sixth request to make.
+- **The four boxes are cleared on a TRANSITION, not on every fold** (Δ C089). The Android twin clears
+  them in `DeliveryState.moved`, which its five-second poll also calls — so a courier typing the
+  recipient's code there watches it vanish. `DeliveryState.advance(to:gates:)` compares the state
+  first. Recorded as a defect found in C071.
+- **The proof photograph completes the delivery** (Δ C037), so it is uploaded by the *"Delivery
+  completed"* tap and not by the shutter. `ProofUploadQueue` is in memory and `mobile_db_schema.md`
+  §3.6's durable table is deliberately unused here — read that class's doc before changing it.
+- **`DocumentCaptureTarget.deliveryProof` is the first non-document use of SCR-DI-005.** A proof photo
+  goes to `rides.proof_artifacts` and the contract declares no `…CapturedVia` part beside it, so
+  AL-43's provenance stamp is dropped at the upload rather than filed against the
+  Verification-Officer queue.
+- **AL-33's fences:** *"Delivery completed"* replaces *"Cash received (COD)"* and nothing here calls
+  `POST …/cod-collected`; both call buttons are a **direct PSTN dial** with no AL-48 chooser, and each
+  names its own `CalleeRole` through `RideContact.startCall(rideId:calleeRole:type:)` — the kind-based
+  overload cannot answer for a screen that can ring either end. The dial is still `CXCallObserver`-gated.
+- **The three `Localizable.strings` files did not parse before this component, and now they do.**
+  A `.strings` comment is a C comment and **does not nest**: `values*/strings.xml` inside one closes
+  it on the `*/`, and everything after is garbage the parser refuses — so `NSDictionary(contentsOf:)`
+  answered `nil` and every key in the app resolved to its own name. Seven occurrences, from C085
+  onward. Write a path without the glob (`values…/strings.xml`). This is the mirror image of the trap
+  `apps/driver-android/CLAUDE.md` records for KDoc, where block comments *do* nest.
+- Reusable UI added here: none. Sheet 1's two distance tiles are C088's `MetricCard`, the party rows
+  are C086's `GroupedList`, the boxes are C086's `OtpField`, and the sheets themselves are C088's
+  `DashboardSheet` — which is the point of those five controls existing.
+
+**To add a screen (C090–C093):**
 
 1. Its route is already in `Nav/DriverRoute.swift`. Use it; do not invent a case.
 2. Replace its `placeholder(...)` line in `Nav/DriverDestinations.swift` with the real view. That
@@ -258,6 +307,7 @@ Every one of these is D2' §C or a platform constraint, and each is called out a
 | Offer tone | `RingtoneManager`'s default notification tone | no equivalent API — the sound is the APNs payload's, allowed through in the foreground; the app adds the haptic and `kSystemSoundID_Vibrate` |
 | Direct dial | `ACTION_DIAL` opens the dialler | `tel:` **places** the call, so `CXCallObserver` gates it |
 | Menu (SCR-DI-036) | a `ModalDrawerSheet` behind a scrim | a `List` on the Menu tab's own stack |
+| Delivery call button (SCR-DI-016a/c) | a 46×38 outlined `📞` icon button | the wireframe's own `textlink` — a green `📞 Call` in a grouped-list row |
 
 ## Things that will bite
 

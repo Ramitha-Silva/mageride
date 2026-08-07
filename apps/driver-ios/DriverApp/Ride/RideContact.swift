@@ -31,6 +31,14 @@ protocol RideContact: AnyObject {
     /// for the same reason — a failure here must never stop the dial.
     func startCall(rideId: String, kind: RideKind, type: CallType) async
 
+    /// The same call, with the role **named** rather than derived (AL-33, Δ C089).
+    ///
+    /// SCR-DI-016a/c put a button beside *both* ends of a delivery, so the ride's kind cannot decide who
+    /// is being rung — the driver's tap is what decides, and the log has to record which. The kind-based
+    /// form above is the passenger screen's and stays, because there the answer really is a property of
+    /// the ride.
+    func startCall(rideId: String, calleeRole: CalleeRole, type: CallType) async
+
     /// Hands [phone] to the platform dialler.
     ///
     /// - Returns: `false` when the handset has no telephony or a call is already up — the caller
@@ -50,10 +58,14 @@ final class SystemRideContact: RideContact {
     }
 
     func startCall(rideId: String, kind: RideKind, type: CallType) async {
+        await startCall(rideId: rideId, calleeRole: Self.calleeRole(kind), type: type)
+    }
+
+    func startCall(rideId: String, calleeRole: CalleeRole, type: CallType) async {
         // Best-effort, and silently. A driver reaching the rider must never depend on
         // `comms.call_log` being writable, which is the same rule the Android twin states.
         _ = try? await voip.startCall(
-            request: StartCallRequest(rideId: rideId, calleeRole: Self.calleeRole(kind), callType: type),
+            request: StartCallRequest(rideId: rideId, calleeRole: calleeRole, callType: type),
             idempotencyKey: nil
         )
     }
@@ -78,10 +90,11 @@ final class SystemRideContact: RideContact {
     /// it is created, so a fresh one always answers "no calls" and the check would never fire.
     private let callObserver = CallObserver()
 
-    /// Who the driver is calling.
+    /// Who the driver is calling, when only the ride's kind says so.
     ///
     /// A package has no rider — the person at the pickup is the **sender**, and the delivery sheets
-    /// (SCR-DI-016a/b/c, C089) are where the recipient is called from.
+    /// (SCR-DI-016a/b/c) name the role outright through the overload above, because they can reach the
+    /// recipient too.
     private static func calleeRole(_ kind: RideKind) -> CalleeRole {
         kind == RideKind.package ? CalleeRole.sender : CalleeRole.passenger
     }

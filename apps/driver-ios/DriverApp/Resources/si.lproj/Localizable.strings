@@ -254,7 +254,7 @@
   SCR-DI-015 the active ride and SCR-DI-036 the Menu tab.
 
   KEYS ARE C070'S. Same key names and the same translations as
-  `apps/driver-android/src/main/res/values*/strings.xml`, so a divergence between the two driver
+  `apps/driver-android/src/main/res/values…/strings.xml`, so a divergence between the two driver
   apps is a diff rather than an archaeology exercise. `%1$s` becomes `%1$@`, which is the only
   systematic difference — see cluster 2's note above.
 
@@ -381,3 +381,35 @@
 "error_version_conflict" = "ඔබ බලා සිටියදී මෙම ගමන වෙනස් විය. නැවත පරීක්ෂා කරන්න.";
 "error_illegal_transition" = "මෙම ගමන දැන් ඇති තැනින් එය කළ නොහැක.";
 "error_ride_terminal" = "මෙම ගමන අවසන් වී ඇති නිසා සම්බන්ධ වීමට කිසිවෙකු නැත.";
+
+/* ---------------------------------------------------------------------------------------------
+  C089 driver-ios-delivery — SCR-DI-016a/b/c, the three package-delivery sheets (AL-33).
+  Translations are C071's, from `apps/driver-android/src/main/res/values-si/strings.xml`.
+--------------------------------------------------------------------------------------------- */
+
+"capture_target_delivery_proof" = "බෙදාහැරීමේ සාක්ෂිය";
+
+"delivery_title" = "පාර්සල් බෙදාහැරීම";
+"delivery_leg_pickup" = "බාරගැනීම";
+"delivery_leg_drop" = "බාරදීම";
+"delivery_payment" = "ගෙවීම";
+"delivery_party_sender" = "යවන්නා";
+"delivery_party_recipient" = "ලබන්නා";
+"delivery_call" = "අමතන්න";
+"delivery_cancel" = "අත්හරින්න";
+"delivery_start" = "බෙදාහැරීම අරඹන්න";
+
+"delivery_navigate_pickup_distance" = "බාරගැනීමේ ස්ථානයට යන්න · %1$@";
+"delivery_pickup_at" = "බාරගැනීම: %1$@";
+"delivery_pickup_otp_label" = "යවන්නාගෙන් ලැබෙන බාරගැනීමේ OTP ඇතුළු කරන්න";
+"delivery_verify_pickup" = "බාරගැනීම තහවුරු කරන්න";
+
+"delivery_complete_title" = "බෙදාහැරීම සම්පූර්ණ කරන්න";
+"delivery_delivery_otp_label" = "ලබන්නාගෙන් ලැබෙන බෙදාහැරීමේ OTP ඇතුළු කරන්න";
+"delivery_photo_proof" = "ඡායාරූප සාක්ෂිය";
+"delivery_photo_retake" = "නැවත ඡායාරූපයක් ගන්න";
+"delivery_completed" = "බෙදාහැරීම සම්පූර්ණයි";
+
+"delivery_otp_wrong" = "එම කේතය වැරදියි. නැවත කියවා දෙන ලෙස ඉල්ලන්න.";
+"delivery_otp_attempts_left" = "මෙම භාරදීම සහාය කණ්ඩායමට යාමට පෙර උත්සාහ %1$d ක් ඉතිරිය.";
+"delivery_otp_locked" = "වැරදි කේත පහක්. මෙම භාරදීම දැන් අපගේ සහාය කණ්ඩායම සතුය — ඔවුන් ඔබට කතා කරයි.";

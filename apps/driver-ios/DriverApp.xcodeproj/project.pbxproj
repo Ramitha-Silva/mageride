@@ -14,6 +14,12 @@
 		09F639B06D85B625C3A9F993 /* DocumentScannerScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06CE534043E01F2C2D9D2EFD /* DocumentScannerScreen.swift */; };
 		B7A393E253A163E613E6508C /* DriverEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = A38199F79E09320D80DD55E5 /* DriverEnvironment.swift */; };
 		163CFB25666B22BED1EEC593 /* DriverGraph.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE7E2E26A773931E0ABC82D1 /* DriverGraph.swift */; };
+		191610780A40F2C5C7D92DE5 /* DeliveryModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7D2D20C6E02DA9FD826D910 /* DeliveryModel.swift */; };
+		BDB90031ED1CD14176A603B7 /* DeliveryRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = B598E5A51C35B56138F26CE2 /* DeliveryRepository.swift */; };
+		132A4CF48898337499E7DB0A /* DeliveryScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8DF52F03B27147038626C4B /* DeliveryScreen.swift */; };
+		F9E4DC41BA7EC79B84B7FA18 /* DeliverySheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38FD32EC5CE6F72736A57281 /* DeliverySheets.swift */; };
+		D51979F9413D1D631BEC3012 /* DeliveryState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 591BCE392F832B1FFB69D5AD /* DeliveryState.swift */; };
+		63FD08F5F1757C0AD5AC5857 /* ProofUploadQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F35F8F8F7D1BE19493F3F2D /* ProofUploadQueue.swift */; };
 		4F128007D6E4C1DEE8463FCB /* DriverApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84ECFFBEA04E665A4A91B394 /* DriverApp.swift */; };
 		3896FDB54E8A2DB24D296359 /* DriverAppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89C110EC442B67250E0FBBD9 /* DriverAppDelegate.swift */; };
 		F8CB7A3D29C23D6894327257 /* DirectionalModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7B85920FCACD600D8F43424 /* DirectionalModel.swift */; };
@@ -104,6 +110,9 @@
 		BD74C7A34051CC18A8B82D8F /* DashboardLabelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80C288BC1ECA54BA8906F1DD /* DashboardLabelTests.swift */; };
 		A8C04D084FD48741D2E24D4A /* DashboardNavigationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64217834F7FEC495CF8B0B5F /* DashboardNavigationTests.swift */; };
 		1107F2C7587114F9A4D47B6A /* DashboardTestKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = E09544A537378B97739BDD4B /* DashboardTestKit.swift */; };
+		B4CCDE39C3A81ECCACFBE8C8 /* DeliveryLabelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24A95126DBFC074958251D8C /* DeliveryLabelTests.swift */; };
+		B175FC1372341B6C8EFC0888 /* DeliveryModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0DB5F4F37833A4462D5F5C9 /* DeliveryModelTests.swift */; };
+		B74721A993C97FCAC1C64CE2 /* DeliveryTestKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = 776384AF48668681575A17B4 /* DeliveryTestKit.swift */; };
 		37578EC52D57EDD0D00DFA8B /* DirectionalModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 166C1A6FA456C2ACD54F91A5 /* DirectionalModelTests.swift */; };
 		48133B8D3B1556E8A7054F2C /* DocumentScannerModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9B12724F0FF8F2A7551A3F0 /* DocumentScannerModelTests.swift */; };
 		C2C30F86AB7DCFFD8BAA7FAB /* DriverEnvironmentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 613BE313CC4BD8303D3A8370 /* DriverEnvironmentTests.swift */; };
@@ -120,6 +129,7 @@
 		4DA9E0FFE895066B64C62BEE /* PermissionsAndSplashTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3860C099910C7592F8A9266 /* PermissionsAndSplashTests.swift */; };
 		0672F2D5C538EB21AA425924 /* PhoneNumberTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B765924D88EB61B89E02DD0 /* PhoneNumberTests.swift */; };
 		7B6323648A9CD95CE851DFC0 /* ProfileSetupModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8A57AD017BD058976F01619 /* ProfileSetupModelTests.swift */; };
+		ECBD433A7A370C47B1705196 /* ProofUploadQueueTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CB504C1C9355AF7E0448181 /* ProofUploadQueueTests.swift */; };
 		23FD7F044415A4AC029EBEA3 /* PushRouterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCBB0FA4D9DEB4B1814C95A8 /* PushRouterTests.swift */; };
 		10262BD32DE9AF51BE826EBD /* ThemeTokenTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D526434D4088A6B7B5B16B5 /* ThemeTokenTests.swift */; };
 		91BE4A2678D7962B0F86F238 /* VehicleLabelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AE38ADAF67B25231D699E77 /* VehicleLabelTests.swift */; };
@@ -147,6 +157,12 @@
 		06CE534043E01F2C2D9D2EFD /* DocumentScannerScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DocumentScannerScreen.swift"; path = "DocumentScannerScreen.swift"; sourceTree = "<group>"; };
 		A38199F79E09320D80DD55E5 /* DriverEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DriverEnvironment.swift"; path = "DriverEnvironment.swift"; sourceTree = "<group>"; };
 		AE7E2E26A773931E0ABC82D1 /* DriverGraph.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DriverGraph.swift"; path = "DriverGraph.swift"; sourceTree = "<group>"; };
+		B7D2D20C6E02DA9FD826D910 /* DeliveryModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DeliveryModel.swift"; path = "DeliveryModel.swift"; sourceTree = "<group>"; };
+		B598E5A51C35B56138F26CE2 /* DeliveryRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DeliveryRepository.swift"; path = "DeliveryRepository.swift"; sourceTree = "<group>"; };
+		C8DF52F03B27147038626C4B /* DeliveryScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DeliveryScreen.swift"; path = "DeliveryScreen.swift"; sourceTree = "<group>"; };
+		38FD32EC5CE6F72736A57281 /* DeliverySheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DeliverySheets.swift"; path = "DeliverySheets.swift"; sourceTree = "<group>"; };
+		591BCE392F832B1FFB69D5AD /* DeliveryState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DeliveryState.swift"; path = "DeliveryState.swift"; sourceTree = "<group>"; };
+		8F35F8F8F7D1BE19493F3F2D /* ProofUploadQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ProofUploadQueue.swift"; path = "ProofUploadQueue.swift"; sourceTree = "<group>"; };
 		84ECFFBEA04E665A4A91B394 /* DriverApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DriverApp.swift"; path = "DriverApp.swift"; sourceTree = "<group>"; };
 		89C110EC442B67250E0FBBD9 /* DriverAppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DriverAppDelegate.swift"; path = "DriverAppDelegate.swift"; sourceTree = "<group>"; };
 		F7B85920FCACD600D8F43424 /* DirectionalModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DirectionalModel.swift"; path = "DirectionalModel.swift"; sourceTree = "<group>"; };
@@ -240,6 +256,9 @@
 		80C288BC1ECA54BA8906F1DD /* DashboardLabelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DashboardLabelTests.swift"; path = "DashboardLabelTests.swift"; sourceTree = "<group>"; };
 		64217834F7FEC495CF8B0B5F /* DashboardNavigationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DashboardNavigationTests.swift"; path = "DashboardNavigationTests.swift"; sourceTree = "<group>"; };
 		E09544A537378B97739BDD4B /* DashboardTestKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DashboardTestKit.swift"; path = "DashboardTestKit.swift"; sourceTree = "<group>"; };
+		24A95126DBFC074958251D8C /* DeliveryLabelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DeliveryLabelTests.swift"; path = "DeliveryLabelTests.swift"; sourceTree = "<group>"; };
+		F0DB5F4F37833A4462D5F5C9 /* DeliveryModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DeliveryModelTests.swift"; path = "DeliveryModelTests.swift"; sourceTree = "<group>"; };
+		776384AF48668681575A17B4 /* DeliveryTestKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DeliveryTestKit.swift"; path = "DeliveryTestKit.swift"; sourceTree = "<group>"; };
 		166C1A6FA456C2ACD54F91A5 /* DirectionalModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DirectionalModelTests.swift"; path = "DirectionalModelTests.swift"; sourceTree = "<group>"; };
 		F9B12724F0FF8F2A7551A3F0 /* DocumentScannerModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DocumentScannerModelTests.swift"; path = "DocumentScannerModelTests.swift"; sourceTree = "<group>"; };
 		613BE313CC4BD8303D3A8370 /* DriverEnvironmentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DriverEnvironmentTests.swift"; path = "DriverEnvironmentTests.swift"; sourceTree = "<group>"; };
@@ -256,6 +275,7 @@
 		D3860C099910C7592F8A9266 /* PermissionsAndSplashTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PermissionsAndSplashTests.swift"; path = "PermissionsAndSplashTests.swift"; sourceTree = "<group>"; };
 		8B765924D88EB61B89E02DD0 /* PhoneNumberTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PhoneNumberTests.swift"; path = "PhoneNumberTests.swift"; sourceTree = "<group>"; };
 		C8A57AD017BD058976F01619 /* ProfileSetupModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ProfileSetupModelTests.swift"; path = "ProfileSetupModelTests.swift"; sourceTree = "<group>"; };
+		1CB504C1C9355AF7E0448181 /* ProofUploadQueueTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ProofUploadQueueTests.swift"; path = "ProofUploadQueueTests.swift"; sourceTree = "<group>"; };
 		CCBB0FA4D9DEB4B1814C95A8 /* PushRouterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PushRouterTests.swift"; path = "PushRouterTests.swift"; sourceTree = "<group>"; };
 		2D526434D4088A6B7B5B16B5 /* ThemeTokenTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ThemeTokenTests.swift"; path = "ThemeTokenTests.swift"; sourceTree = "<group>"; };
 		2AE38ADAF67B25231D699E77 /* VehicleLabelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "VehicleLabelTests.swift"; path = "VehicleLabelTests.swift"; sourceTree = "<group>"; };
@@ -329,6 +349,7 @@
 			children = (
 				EEE0C83EC7B2A8AD340676DE /* Capture */,
 				3BCC40221E847ADC67F8DDCA /* DI */,
+				558EBA4CC3B82BC78A2EDD42 /* Delivery */,
 				0B87FD1946B125D4464964C8 /* Home */,
 				0EC78E5EC56BE03BDD3FB8D6 /* Location */,
 				AC9AD4E1F91290A46789DFC8 /* Map */,
@@ -370,6 +391,19 @@
 				AE7E2E26A773931E0ABC82D1 /* DriverGraph.swift */,
 			);
 			path = "DI";
+			sourceTree = "<group>";
+		};
+		558EBA4CC3B82BC78A2EDD42 /* Delivery */ = {
+			isa = PBXGroup;
+			children = (
+				B7D2D20C6E02DA9FD826D910 /* DeliveryModel.swift */,
+				B598E5A51C35B56138F26CE2 /* DeliveryRepository.swift */,
+				C8DF52F03B27147038626C4B /* DeliveryScreen.swift */,
+				38FD32EC5CE6F72736A57281 /* DeliverySheets.swift */,
+				591BCE392F832B1FFB69D5AD /* DeliveryState.swift */,
+				8F35F8F8F7D1BE19493F3F2D /* ProofUploadQueue.swift */,
+			);
+			path = "Delivery";
 			sourceTree = "<group>";
 		};
 		0B87FD1946B125D4464964C8 /* Home */ = {
@@ -566,6 +600,9 @@
 				80C288BC1ECA54BA8906F1DD /* DashboardLabelTests.swift */,
 				64217834F7FEC495CF8B0B5F /* DashboardNavigationTests.swift */,
 				E09544A537378B97739BDD4B /* DashboardTestKit.swift */,
+				24A95126DBFC074958251D8C /* DeliveryLabelTests.swift */,
+				F0DB5F4F37833A4462D5F5C9 /* DeliveryModelTests.swift */,
+				776384AF48668681575A17B4 /* DeliveryTestKit.swift */,
 				166C1A6FA456C2ACD54F91A5 /* DirectionalModelTests.swift */,
 				F9B12724F0FF8F2A7551A3F0 /* DocumentScannerModelTests.swift */,
 				613BE313CC4BD8303D3A8370 /* DriverEnvironmentTests.swift */,
@@ -582,6 +619,7 @@
 				D3860C099910C7592F8A9266 /* PermissionsAndSplashTests.swift */,
 				8B765924D88EB61B89E02DD0 /* PhoneNumberTests.swift */,
 				C8A57AD017BD058976F01619 /* ProfileSetupModelTests.swift */,
+				1CB504C1C9355AF7E0448181 /* ProofUploadQueueTests.swift */,
 				CCBB0FA4D9DEB4B1814C95A8 /* PushRouterTests.swift */,
 				2D526434D4088A6B7B5B16B5 /* ThemeTokenTests.swift */,
 				2AE38ADAF67B25231D699E77 /* VehicleLabelTests.swift */,
@@ -731,6 +769,12 @@
 				09F639B06D85B625C3A9F993 /* DocumentScannerScreen.swift in Sources */,
 				B7A393E253A163E613E6508C /* DriverEnvironment.swift in Sources */,
 				163CFB25666B22BED1EEC593 /* DriverGraph.swift in Sources */,
+				191610780A40F2C5C7D92DE5 /* DeliveryModel.swift in Sources */,
+				BDB90031ED1CD14176A603B7 /* DeliveryRepository.swift in Sources */,
+				132A4CF48898337499E7DB0A /* DeliveryScreen.swift in Sources */,
+				F9E4DC41BA7EC79B84B7FA18 /* DeliverySheets.swift in Sources */,
+				D51979F9413D1D631BEC3012 /* DeliveryState.swift in Sources */,
+				63FD08F5F1757C0AD5AC5857 /* ProofUploadQueue.swift in Sources */,
 				4F128007D6E4C1DEE8463FCB /* DriverApp.swift in Sources */,
 				3896FDB54E8A2DB24D296359 /* DriverAppDelegate.swift in Sources */,
 				F8CB7A3D29C23D6894327257 /* DirectionalModel.swift in Sources */,
@@ -828,6 +872,9 @@
 				BD74C7A34051CC18A8B82D8F /* DashboardLabelTests.swift in Sources */,
 				A8C04D084FD48741D2E24D4A /* DashboardNavigationTests.swift in Sources */,
 				1107F2C7587114F9A4D47B6A /* DashboardTestKit.swift in Sources */,
+				B4CCDE39C3A81ECCACFBE8C8 /* DeliveryLabelTests.swift in Sources */,
+				B175FC1372341B6C8EFC0888 /* DeliveryModelTests.swift in Sources */,
+				B74721A993C97FCAC1C64CE2 /* DeliveryTestKit.swift in Sources */,
 				37578EC52D57EDD0D00DFA8B /* DirectionalModelTests.swift in Sources */,
 				48133B8D3B1556E8A7054F2C /* DocumentScannerModelTests.swift in Sources */,
 				C2C30F86AB7DCFFD8BAA7FAB /* DriverEnvironmentTests.swift in Sources */,
@@ -844,6 +891,7 @@
 				4DA9E0FFE895066B64C62BEE /* PermissionsAndSplashTests.swift in Sources */,
 				0672F2D5C538EB21AA425924 /* PhoneNumberTests.swift in Sources */,
 				7B6323648A9CD95CE851DFC0 /* ProfileSetupModelTests.swift in Sources */,
+				ECBD433A7A370C47B1705196 /* ProofUploadQueueTests.swift in Sources */,
 				23FD7F044415A4AC029EBEA3 /* PushRouterTests.swift in Sources */,
 				10262BD32DE9AF51BE826EBD /* ThemeTokenTests.swift in Sources */,
 				91BE4A2678D7962B0F86F238 /* VehicleLabelTests.swift in Sources */,

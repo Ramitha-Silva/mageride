@@ -115,7 +115,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C086 | driver-ios-auth-onboarding | 4b | PARTIAL | 2026-08-06 | **Written in full; NOT compiled — this host cannot build iOS** (root CLAUDE.md), so the DoD is unverified and the status stays PARTIAL until `xcodebuild … test` on macOS. What *is* verified here: `:shared:testDebugUnitTest detekt ktlintCheck` green (822 tests, unchanged) and `:shared:compileKotlinIosArm64` type-checking both Kotlin additions. SCR-DI-001/002/003/003a/007 built — 25 Swift files, **8 XCTest suites** across 7 test files, **91 keys × si/ta/en** (Android's key names and Android's translations, so the two apps' string tables diff). **Every seam a model depends on is a Swift protocol**, because a Kotlin *class* cannot be stood in for from Swift and `AuthSessionManager` is one — `SharedDriverSessions` / `ApiOnboardingRepository` / `ApiDriverProfileRepository` convert and forward and decide nothing. **A Kotlin exception does not cross the bridge as itself** (`NSError.userInfo["KotlinException"]`), which every later screen group needs — the unwrap is `OnboardingErrors.kotlinCause`. **Two shared-module additions, both because Swift cannot express the operation**: `capturedDocument(…)` in `iosMain` (a `KotlinByteArray` has one Objective-C message per byte and a licence photo is three million of them) and `Conditional.etagOrNull` (a generic Kotlin interface exports with its type parameter erased, so `as? Conditional.Value<T>` has no spelling in Swift). **`DriverLocale` is the Section-C answer to `Activity.recreate()`** — iOS has no per-app locale API on the 16.0 floor, so the app bundle's string lookups are redirected now and `AppleLanguages` is written for the next launch. **SCR-DI-007 has two rows, not Android's five**, which is D2' SCR-DI-007's own iOS clause. One fence deliberately held: the AL-28 carousel stays on bundled copy to match C068 even though MCS-03 has since shipped `GET /v1/content/onboarding/driver` — **both driver apps should move together**, see the handoff
 | C087 | driver-ios-vehicle-onboarding | 4b | PARTIAL | 2026-08-06 | **Written in full; NOT compiled — this host cannot build iOS** (root CLAUDE.md), so the DoD is unverified and the status stays PARTIAL until `xcodebuild … test` on macOS. What *is* verified here: `:shared:testDebugUnitTest detekt ktlintCheck` green (822 tests, unchanged) and `:shared:compileKotlinIosArm64` type-checking the one Kotlin addition. SCR-DI-004/004a/004b/004c/005/006/026/026a built — **16 Swift files, 6 XCTest suites, 104 keys × si/ta/en** (C069's key names and C069's translations). **The crop quadrilateral is VisionKit's**: `VNDocumentCameraViewController` is what the cell's own `Δ iOS` clause names, and it supplies the auto-proposed quad, the four draggable corners, the flash, the Retake/Use-photo bar and the perspective transform — so C069's `CropQuad` + `DocumentEdgeDetector` + the warp (≈550 lines) have **no counterpart here**, and three of its capture strings have no renderer because iOS draws and localises those buttons itself. **What is not free is AL-43's provenance stamp**, which is written in `DocumentScannerModel.onScanned` and nowhere else. **`NSCameraUsageDescription` was missing from `Info.plist`** and presenting the scanner without it terminates the app rather than refusing — added, with its three translations, and `LocalizationTests` now checks it. **SCR-DI-026 is a `List`** (its `Δ iOS` clause is `.swipeActions`), the only one in either cluster. One shared-module addition, in `iosMain`, because Kotlin default arguments do not survive the export: `colomboBusinessDate(at:)`, so D-38's zone is not copied into Swift. Three wireframe deviations and one C085 defect recorded — see the handoff |
 | C088 | driver-ios-dashboard-dispatch | 4b | PARTIAL | 2026-08-06 | **Written in full; NOT compiled — this host cannot build iOS** (root CLAUDE.md), so the DoD is unverified and the status stays PARTIAL until `xcodebuild … test` on macOS. Verified here: `:shared:testDebugUnitTest detekt ktlintCheck` green (822 tests, unchanged) and `:shared:compileKotlinIosArm64` type-checking the four Kotlin additions. SCR-DI-010/011/013/014/015/036 built — **26 Swift files, 8 XCTest suites across 7 test files, 97 keys × si/ta/en** (C070's key names and C070's translations). **Home is one destination**, its sheet chosen by `LiveVehicle.isScheduledMode`; **SCR-DI-014 is a `fullScreenCover` with the interactive dismiss disabled**, not a route. **`OfferSlot` is the seam that makes the fifteen seconds testable** — `OfferSession.state` is a `StateFlow` and `IosFlowWatcher`'s constructor is `internal`, so a test cannot build one. **The countdown is local arithmetic** off `expiresAt`, not `OfferSession.countdown()` (a `Flow<Duration>` Swift cannot collect); the *decision* rule stays in `OfferSession.accept()`. **CallKit-aware means the direct dial**: a `tel:` URL places the call on iOS, so `CXCallObserver` gates it — Android's `ACTION_DIAL` has nothing to check. **The C087-recorded `VehicleToken.wire` defect is fixed** (camel case → `:shared`'s snake case; three of ten types were drawing grey). Four `iosMain` helpers added, each because a Kotlin default argument does not survive the export. Six spec gaps carried forward from C070 and two new iOS ones — see the handoff |
-| C089 | driver-ios-delivery | 4b | PENDING | | |
+| C089 | driver-ios-delivery | 4b | PARTIAL | 2026-08-07 | **Written in full; NOT compiled — this host cannot build iOS** (root CLAUDE.md), so the DoD is unverified and the status stays PARTIAL until `xcodebuild … test` on macOS. Verified here: `:shared:testDebugUnitTest detekt ktlintCheck` green (**822 tests, 0 failed** — unchanged, because this component adds **no Kotlin at all**), the `.pbxproj` regenerated from the tree (**99 app sources, 32 test sources**), a brace/paren sweep over all 131 Swift files, and the three `Localizable.strings` parsed with a real old-style-plist parser (**314 keys × 3**, key sets identical, none blank, none left in English, no specifier drift). SCR-DI-016a/b/c built — **6 Swift files, 3 XCTest suites / 30 tests, 22 keys × si/ta/en** (C071's key names and C071's translations). **The three `Localizable.strings` files did not parse before this component and now do** — a `.strings` comment is a C comment and does not nest, so `values*/strings.xml` inside one closed it on the `*/` and `NSDictionary(contentsOf:)` answered `nil`: **every key in the driver app resolved to its own name**, from C085 onward, and `LocalizationTests` would have failed at its first line on a Mac. Seven occurrences fixed. **`ActiveRideScreen` now hands a package over to `DeliveryScreen`** — the one `if` C088 left for this component; no route added, no deep link changed, and SCR-DI-015's poll and GNSS subscription stay off for a parcel so only one loop folds server states onto the ride. **`PackageHandoff` is the five-attempt rule** and the projection is seated once and kept, because re-seating throws the attempt count away. **The photograph completes the delivery** (Δ C037) so it uploads on the *"Delivery completed"* tap, not the shutter; `DocumentCaptureTarget.deliveryProof` is the first non-document use of SCR-DI-005. **One C071 defect found and not replicated**: the Android twin empties the four OTP boxes on every fold, and its five-second poll is a fold. Four C071 spec gaps carried forward, one new iOS delta — see the handoff |
 | C090 | driver-ios-jobs-level-earnings | 4b | PENDING | | |
 | C091 | driver-ios-wallet-credit | 4b | PENDING | | |
 | C092 | driver-ios-tracker-sharing-profile | 4b | PENDING | | |
@@ -13922,4 +13922,173 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   `OfferInboxTests.swift`, `DirectionalModelTests.swift`, `ActiveRideModelTests.swift`,
   `DashboardLabelTests.swift`, `DashboardNavigationTests.swift`; edited:
   `MapAndVehicleTokenTests.swift`, `OnboardingTestKit.swift`, `ThemeTokenTests.swift`. Plus
+  `DriverApp.xcodeproj/project.pbxproj` (regenerated) and `apps/driver-ios/CLAUDE.md`.
+
+---
+
+- **Component:** C089 driver-ios-delivery — 2026-08-07
+- **Status:** PARTIAL — **written in full and not compiled.** The Verify line is
+  `xcodebuild -project apps/driver-ios/DriverApp.xcodeproj -scheme DriverApp -destination
+  'platform=iOS Simulator,name=iPhone 15' test`, which needs macOS; this repo is built on the Contabo
+  Linux VPS (root CLAUDE.md), so **no DoD line is verified on a simulator** and the status stays
+  PARTIAL until the first `xcodebuild` on a Mac — exactly as C085–C088 stand. What *is* verified on
+  this host: `./gradlew :shared:testDebugUnitTest detekt ktlintCheck` green (**822 tests, 0 failed**),
+  which is unchanged because **this component adds no Kotlin at all** — `:shared` and
+  `apps/driver-android` are untouched, and `git status` is the proof. Also verified: the `.pbxproj`
+  regenerated from the tree (**99 app sources, 32 test sources**, up from 93/28); a brace/paren
+  balance sweep over all **131** Swift files in the target; every localisation key named in Swift
+  resolved against `en.lproj`; and the three `Localizable.strings` files parsed with a **real
+  old-style-plist parser** (see the defect below) — 314 keys each, key sets identical, nothing blank,
+  nothing left in English, no format specifier dropped.
+- **Notes:**
+
+  ### The defect that mattered most is not in this cluster
+
+  **All three `Localizable.strings` files were unparseable, and had been since C085.** A `.strings`
+  file is an old-style property list and its `/* … */` comments are **C comments — they do not
+  nest**. Four header blocks (and one in each of si and ta) contain the sentence *"the same
+  translations as `apps/driver-android/src/main/res/values*/strings.xml`"*, and the `*/` in
+  `values*/` **closes the comment**. Everything after it is bare text the parser refuses, so
+  `NSDictionary(contentsOf:)` answers `nil` for the whole table and **every key in the driver app
+  resolves to its own name** — `nav_home`, `ride_sos`, `delivery_completed` — in all three languages.
+
+  `LocalizationTests` already catches it (`strings(in:table:)` XCTFails with *"cannot read
+  en.lproj/Localizable.strings"*), which is exactly why nobody saw it: that test has never run,
+  because this host cannot run it. Seven occurrences fixed by writing the path without the glob
+  (`values…/strings.xml`), and the checker that found it is a twenty-line parser rather than a
+  regular expression, because a regular expression is what would have said the file was fine.
+
+  This is the mirror image of the trap `apps/driver-android/CLAUDE.md` already records for KDoc,
+  where Kotlin block comments **do** nest and the same string opens a second comment. Same sentence,
+  opposite failure, two languages. Both are now written down in their targets' CLAUDE.md.
+
+  ### A parcel is a ride, and this is where the two part company
+
+  `DriverRoute.activeRide(rideId:)` is the destination for every live job — R-01 keeps one aggregate
+  and `PushRouter` resolves `mageride://package/{id}` to it — so the kind is not knowable until the
+  ride has been read. `ActiveRideScreen.content` now opens with `if model.state.isPackage`, which is
+  the single `if` the C088 handoff left for this component and the same shape `ActiveRideScreen.kt`
+  has on Android. No route was added, no deep link changed and the Menu did not move.
+
+  Both models are built by `HomeDestinationView` and handed in, because a `@StateObject` cannot be
+  introduced half way through a view's life; the delivery one costs nothing on a passenger ride,
+  since nothing in `DeliveryModel` runs until its own screen's `.task` calls `start()`. The other
+  half is that `ActiveRideModel.start()` is now **conditional**: a package gets SCR-DI-016's poll and
+  SCR-DI-016's `CLLocationManager` and not a second of each. `ActiveRideState.isPollable` was already
+  false for a package (C088); this closes the GNSS half of the same rule.
+
+  ### Which sheet is up is the ride's business, and the budget is `:shared`'s
+
+  `package.picked_up` **is** the `→ InProgress` move (D5' §11 skips `DriverArrived` for a parcel), so
+  `DeliveryState.sheet` is derived rather than counted and a driver whose app died between the two
+  doors comes back to the right sheet from one read. Sheet 1's **Start delivery** is the one local
+  step and sends nothing — `POST …/arrive` is the passenger flow's geofence marker, and inventing a
+  transition to make a button feel busy would put a state on the aggregate AL-33 never asked for.
+
+  `PackageHandoff` (C015) is P-07 as a type and `RideProjection` owns one per package ride, so
+  nothing here counts attempts. The projection is **seated once and kept** — unlike
+  `ActiveRideModel`'s, which re-seats on every read — because re-seating throws the handoff away and
+  with it the count of how many codes the driver has already got wrong. Two consequences worth
+  stating: `canSubmit` refuses a malformed code **without spending an attempt**, and the **fifth**
+  wrong code is what locks the gate (on the server and identically in `PackageHandoff`), so there is
+  no sixth request to make — the DoD's *"a 6th wrong OTP shows the locked state"* is two tests, the
+  fifth-code lockout and a server `423 otp-locked` for a driver whose local count is behind.
+
+  ### One C071 defect found, and deliberately not replicated
+
+  **The Android twin empties the four OTP boxes on every fold, and its five-second poll is a fold.**
+  `DeliveryState.moved(…)` sets `otp = ""` and `observeDevice`'s loop calls it on every tick that
+  returns a snapshot, so a courier at the recipient's door has about five seconds to type four digits
+  before they vanish. The rule it is *for* is real — the sender's code is spent and the recipient's
+  is a different one — so `DeliveryState.advance(to:gates:)` here clears the boxes **when the state
+  actually moves** and leaves them alone otherwise. C071's own assertion (*"the boxes are cleared for
+  the recipient's code"*) still passes, and `testOnlyATransitionClearsTheTypedCode` pins both halves.
+  **The Android fix is one line** in `DeliveryState.moved`: guard the `otp = ""` on
+  `snapshot.state != state`. Recorded here rather than made, because C071 is a shipped component and
+  this session owns the iOS one.
+
+  ### AL-33's fences, as built
+
+  *"Delivery completed"* replaces *"Cash received (COD)"* and nothing on these sheets can reach
+  `POST …/cod-collected` — `DeliveryRepository` does not declare it, which makes the fence structural
+  rather than a comment. Both call buttons are a **direct PSTN dial** with no AL-48 chooser, and each
+  names its own `CalleeRole`: `RideContact` gained `startCall(rideId:calleeRole:type:)` beside the
+  kind-based form, because a package's *kind* cannot say whether the sender or the recipient was
+  rung. The dial is still `CXCallObserver`-gated — that is this platform's own delta and not a second
+  rule — so a refused dial becomes `ride_call_unavailable` rather than a button that does nothing.
+
+  The photograph is P-10's fallback and **completes the delivery on its own** (Δ C037), so it is
+  uploaded by the *"Delivery completed"* tap and not by the shutter. `ProofUploadQueue` is in memory
+  and §3.6's durable `proof_upload_queue` is deliberately unused, for the two reasons the C071
+  handoff gives and which are both still true on this platform: a drain worker would defer a
+  *delivery*, and nothing in this target has opened a database. Its verbs are §3.6's own, so swapping
+  in the table later is a change to that one class. `DocumentCaptureTarget.deliveryProof` is the
+  first non-document use of SCR-DI-005 on iOS; the proof goes to `rides.proof_artifacts`, the
+  contract declares no `…CapturedVia` part beside it, and AL-43's provenance is therefore dropped at
+  the upload rather than filed against a queue it has nothing to do with.
+
+  ### What was reused, and the one thing that was not
+
+  Nothing new was added to `UI/`. Sheet 1's two distance tiles are C088's `MetricCard`, the sheets
+  themselves are C088's `DashboardSheet`, the boxes are C086's `OtpField`, the party rows sit in
+  C086's `GroupedList`, and the badges and banners are C088's `SolidBadge` / `DashboardBanner`. That
+  is five controls earning their keep rather than a sixth being written.
+
+  The exception is `DeliveryPartyRow`, which is **not** `GroupedRow`: that row takes localisation
+  *keys* for both of its lines and both of these are data off the wire — a role plus a name
+  (`Recipient · Sunethra`) and a phone number — and it puts a control on the right rather than a
+  status. It also carries a **Section C delta**: `driver_ios.html` draws the call affordance as a
+  green `📞 Call` **text link** where `driver_android.html` draws a 46×38 outlined `📞` icon button.
+  That is the wireframe's own iOS drawing and the grouped-list idiom, and it is in the CLAUDE.md
+  delta table. The tap target is still the 44pt floor.
+
+  ### Spec gaps — four carried forward from C071, none worked around
+
+  All four are the Android component's and all four are still open; nothing about this platform
+  changes any of them, and each is visible at its call site here as well.
+
+  1. **AL-33's *"Cancel releases the offer back to dispatch → next eligible driver"* has no server
+     path.** The only operation a driver holding a ride has is `POST /v1/rides/{rideId}/cancel`, and
+     §11.12's matrix makes `(Accepted, DriverCancel)` terminal `CancelledByDriver`. So Cancel does
+     the half a client owns — it releases the delivery from *this* driver and returns them to standby
+     — and the re-dispatch does not happen. `RideCancelReason` is the *rider's* list with nothing
+     that names a release, so `OTHER` is sent. Micro-change-set on ride-svc.
+  2. **`confirmCashOnDelivery` still has no caller on the driver surface.** AL-33 removed the button
+     and named no replacement; P-08 still makes `CashOnDeliveryCollected` the terminal that posts the
+     earning (R-05). Raised rather than smuggled back onto sheet 3.
+  3. **There is no sender *name* on the wire.** Δ C037 added `recipientName` and no counterpart, so
+     the wireframe's *"Sender · Nimal"* renders as **`Sender`** with the number underneath.
+     `senderName` on `RideDetail` would close it.
+  4. **Sheet 2's banner has a distance and no minutes.** The wireframe prints *"Navigate to pickup ·
+     1.2 km · 4 min"*; AL-19 keeps an arrival time off a tier and `RideDriver.etaSeconds` is
+     dispatch's estimate of the *driver*, for the passenger. The distance is rendered from the
+     device's own fix through `:shared`'s `distanceMetres`; the minutes are omitted rather than
+     fabricated. (3) and (4) are wireframe deviations blocked on a contract change.
+
+  ### Things a Mac will decide, and where to look first
+
+  **Three bridge spellings are the ones to check if the build fails**, and all three are the same
+  shape: `PackageHandoff.companion.MAX_OTP_ATTEMPTS`, `.OTP_LENGTH` and `.isWellFormed(otp:)`. The
+  two constants are companion `const val`s, which Kotlin/Native exports as properties on the
+  `Companion` **keeping their Kotlin SCREAMING_SNAKE names**; the function is an ordinary companion
+  method. `.companion` itself is already proven in this target (`RideVehicleType.companion.from`,
+  `WalletStanding.companion.of`). If a const spelling turns out not to survive, the fix is an
+  `iosMain` helper of the same shape as C088's four, not a number copied into Swift.
+
+  Two more worth naming: `PackageGateOutcomeAdminQueue` is a Kotlin `data object` behind a sealed
+  interface, reached with `is` exactly as C088 reaches `OfferSessionStateLive`; and
+  `projection.handoff.state.value as? PackageHandoffState` is the `StateFlow` read, erased to `Any?`
+  across the bridge, the same shape `SharedDriverSessions` uses for `SessionState`. Nothing on these
+  three sheets needs a simulator capability the earlier clusters did not — the one runtime behaviour
+  that cannot be proven off a device is the CallKit gate, which reports no calls on a simulator and
+  therefore always allows the dial there (C088 already recorded it).
+
+  **Files —** shared: **none**. App, new: `Delivery/DeliveryState.swift`,
+  `Delivery/DeliveryRepository.swift`, `Delivery/DeliveryModel.swift`,
+  `Delivery/ProofUploadQueue.swift`, `Delivery/DeliveryScreen.swift`, `Delivery/DeliverySheets.swift`.
+  App, edited: `Capture/DocumentCapture.swift`, `Capture/DocumentImaging.swift`,
+  `DI/DriverGraph.swift`, `Home/HomeDestinationView.swift`, `Ride/ActiveRideScreen.swift`,
+  `Ride/RideContact.swift` and the three `Localizable.strings`. Tests, new:
+  `DriverAppTests/DeliveryTestKit.swift`, `DeliveryModelTests.swift`, `DeliveryLabelTests.swift`,
+  `ProofUploadQueueTests.swift`; edited: `DashboardTestKit.swift`. Plus
   `DriverApp.xcodeproj/project.pbxproj` (regenerated) and `apps/driver-ios/CLAUDE.md`.

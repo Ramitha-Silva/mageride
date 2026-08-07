@@ -5,7 +5,7 @@
   affordances and the handful of actions and errors every screen group shares. A screen group's own
   copy belongs to that component (C086-C093) and is added to all three files together.
 
-  KEYS ARE C067'S. The same key names as `apps/driver-android/src/main/res/values*/strings.xml`, so
+  KEYS ARE C067'S. The same key names as `apps/driver-android/src/main/res/values…/strings.xml`, so
   a screen group porting its Android copy has a one-to-one mapping and a divergence between the two
   apps is a diff rather than an archaeology exercise. The VALUES are the same translations.
 
@@ -60,7 +60,7 @@
   SCR-DI-003a profile setup, SCR-DI-007 permissions. The shell's own copy is in the block above.
 
   KEYS ARE C068'S. Same key names and the same translations as
-  `apps/driver-android/src/main/res/values*/strings.xml`, so a divergence between the two driver
+  `apps/driver-android/src/main/res/values…/strings.xml`, so a divergence between the two driver
   apps is a diff rather than an archaeology exercise. Where a key exists only here, it is because
   the platform differs and the comment on it says how.
 */
@@ -163,18 +163,18 @@
   SCR-DI-006 the verdict list, SCR-DI-026/026a My Vehicles.
 
   KEYS ARE C069'S. Same key names and the same translations as
-  `apps/driver-android/src/main/res/values*/strings.xml`, so a divergence between the two driver
+  `apps/driver-android/src/main/res/values…/strings.xml`, so a divergence between the two driver
   apps is a diff rather than an archaeology exercise.
 
   FORMAT SPECIFIERS ARE NOT. Android writes `%1$s` for a string argument; `String(format:)` reads
   `%s` as a C string and would print rubbish, so every one of them is `%1$@` here. `%1$d` is the
   same on both. `LocalizationTests` asserts each specifier survives into si and ta.
 
-  FOUR ANDROID KEYS ARE ABSENT, and each one is a control iOS draws for us. `capture_flash`,
+  THREE ANDROID KEYS ARE ABSENT, and each one is a control iOS draws for us. `capture_flash`,
   `capture_retake` and `capture_use_photo` are VNDocumentCameraViewController's own buttons — it
-  localises them itself, in the driver's language — and `capture_target_delivery_proof` belongs to
-  the delivery cluster, which is C089's on this platform. A key with no renderer is a translation
-  nobody can check.
+  localises them itself, in the driver's language. A key with no renderer is a translation nobody
+  can check. (`capture_target_delivery_proof` was a fourth until C089 landed the slot that renders
+  it; it is in this file's C089 block, beside the rest of the delivery copy.)
 
   TWO KEYS ARE NEW HERE. `vehicles_select` and `vehicles_swipe_hint` are the wireframe's own iOS
   copy: `driver_ios.html` labels an eligible row `Select ›` and puts deactivate on `.swipeActions`,
@@ -313,7 +313,7 @@
   SCR-DI-015 the active ride and SCR-DI-036 the Menu tab.
 
   KEYS ARE C070'S. Same key names and the same translations as
-  `apps/driver-android/src/main/res/values*/strings.xml`, so a divergence between the two driver
+  `apps/driver-android/src/main/res/values…/strings.xml`, so a divergence between the two driver
   apps is a diff rather than an archaeology exercise. `%1$s` becomes `%1$@`, which is the only
   systematic difference — see cluster 2's note above.
 
@@ -440,3 +440,55 @@
 "error_version_conflict" = "This trip changed while you were looking at it. Check it again.";
 "error_illegal_transition" = "That cannot be done from where this trip is now.";
 "error_ride_terminal" = "This trip has ended, so there is nobody left to reach.";
+
+/* ---------------------------------------------------------------------------------------------
+  MageRide Driver — iOS · C089 driver-ios-delivery. English, the development region.
+
+  SCOPE. Cluster 2b only: SCR-DI-016a/b/c, the three package-delivery sheets (AL-33).
+
+  KEYS ARE C071'S. Same key names and the same translations as
+  `apps/driver-android/src/main/res/values…/strings.xml`, so a divergence between the two driver
+  apps is a diff rather than an archaeology exercise. `%1$s` becomes `%1$@`, which is the only
+  systematic difference — see cluster 2's note above.
+
+  `capture_target_delivery_proof` LANDS HERE, and cluster 2's note above said it would: it names a
+  slot in SCR-DI-005's title bar, but the slot is this cluster's and a key with no renderer is a
+  translation nobody can check.
+
+  ONE ANDROID KEY IS ABSENT. `delivery_call_party` ("Call this number") is the Android twin's
+  `contentDescription` for an icon-only 📞 button. `driver_ios.html` draws a labelled `📞 Call`
+  text link on the same two rows, which announces itself — so the visible label is `delivery_call`
+  and there is nothing left for a second string to say.
+--------------------------------------------------------------------------------------------- */
+
+/* SCR-DI-005's title for the one capture that is not a document (P-10). */
+"capture_target_delivery_proof" = "Delivery proof";
+
+/* SCR-DI-016a · review & start (US-20.3). */
+"delivery_title" = "Package delivery";
+"delivery_leg_pickup" = "Pickup";
+"delivery_leg_drop" = "Drop";
+"delivery_payment" = "Payment";
+"delivery_party_sender" = "Sender";
+"delivery_party_recipient" = "Recipient";
+"delivery_call" = "Call";
+"delivery_cancel" = "Cancel";
+"delivery_start" = "Start delivery";
+
+/* SCR-DI-016b · pickup & OTP (US-20.4, US-20.5, P-07). */
+"delivery_navigate_pickup_distance" = "Navigate to the pickup · %1$@";
+"delivery_pickup_at" = "Pickup: %1$@";
+"delivery_pickup_otp_label" = "Enter the pickup OTP, from the sender";
+"delivery_verify_pickup" = "Verify pickup";
+
+/* SCR-DI-016c · complete (US-20.6, US-20.13, P-10, P-14). */
+"delivery_complete_title" = "Complete delivery";
+"delivery_delivery_otp_label" = "Enter the delivery OTP, from the recipient";
+"delivery_photo_proof" = "Photo proof";
+"delivery_photo_retake" = "Retake photo";
+"delivery_completed" = "Delivery completed";
+
+/* The two gates' failures (P-07). Distinct from `error_otp_*`, which is a sign-in code. */
+"delivery_otp_wrong" = "That code is wrong. Ask them to read it out again.";
+"delivery_otp_attempts_left" = "%1$d tries left before this handover goes to support.";
+"delivery_otp_locked" = "Five wrong codes. This handover is with our support team now — they will call you.";

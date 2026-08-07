@@ -13,31 +13,45 @@ import SwiftUI
 /// settlement, and confirming is what posts the earning (R-05).
 ///
 /// - Parameters:
+///   - delivery: SCR-DI-016's model, for the case this job turns out to be a parcel (C089). Built here
+///     rather than inside the delivery screen because the kind is not known until the ride has been
+///     read, and a `@StateObject` cannot be introduced half way through a view's life. It costs nothing
+///     on a passenger ride: nothing in ``DeliveryModel`` runs until its own screen calls `start()`.
 ///   - onFinished: The ride reached a terminal state; the driver goes back to standby.
 ///   - onOpenVoipCall: SCR-DI-031 (C093) — AL-48's chooser answered **Free call**.
+///   - onOpenCapture: SCR-DI-005 — the delivery sheet's proof photograph (P-10).
 ///   - onOpenSos: SCR-DI-032 (C093) — the alarm is a screen with a confirmation, not a button that
 ///     fires.
 @MainActor
 struct ActiveRideScreen: View {
 
     @StateObject private var model: ActiveRideModel
+    @StateObject private var delivery: DeliveryModel
+    @ObservedObject private var captures: DocumentCaptureCoordinator
 
     private let rideId: String
     private let onFinished: () -> Void
     private let onOpenVoipCall: (String) -> Void
+    private let onOpenCapture: () -> Void
     private let onOpenSos: (String) -> Void
 
     init(
         rideId: String,
         model: @autoclosure @escaping () -> ActiveRideModel,
+        delivery: @autoclosure @escaping () -> DeliveryModel,
+        captures: DocumentCaptureCoordinator,
         onFinished: @escaping () -> Void,
         onOpenVoipCall: @escaping (String) -> Void,
+        onOpenCapture: @escaping () -> Void,
         onOpenSos: @escaping (String) -> Void
     ) {
         self.rideId = rideId
         _model = StateObject(wrappedValue: model())
+        _delivery = StateObject(wrappedValue: delivery())
+        self.captures = captures
         self.onFinished = onFinished
         self.onOpenVoipCall = onOpenVoipCall
+        self.onOpenCapture = onOpenCapture
         self.onOpenSos = onOpenSos
     }
 
@@ -45,8 +59,12 @@ struct ActiveRideScreen: View {
         content
             .navigationBarTitleDisplayMode(.inline)
             .task {
-                model.start()
                 await model.refresh()
+                // A parcel belongs to SCR-DI-016, which runs its own poll and its own screen-level GNSS
+                // subscription. Starting this one as well would put two loops on one ride racing each
+                // other's `advance(to:)` and two `CLLocationManager`s on one handset. The read has to
+                // happen first either way — the kind is not known until the ride has been read.
+                if !model.state.isPackage { model.start() }
             }
             .onDisappear(perform: model.stop)
             .sheet(item: Binding(get: { model.state.sheet }, set: { model.open($0) })) { sheet in
@@ -68,21 +86,33 @@ struct ActiveRideScreen: View {
             }
     }
 
-    /// A parcel is not a passenger, and **this screen does not yet know what to do about it.**
+    /// **A parcel is not a passenger, and this is where the two part company** (Δ C089).
     ///
     /// ``DriverRoute/activeRide(rideId:)`` is the destination for every live job — R-01 keeps one
     /// aggregate and ``PushRouter`` resolves `mageride://package/{id}` to it — so the kind is not known
-    /// until the ride has been read. On Android, `ActiveRideScreen` reads it and hands over to
-    /// `DeliveryScreen` on `RideKind.PACKAGE`; **SCR-DI-016a/b/c is C089's** and there is nothing to
-    /// hand over to yet.
+    /// until the ride has been read. One read later this hands over to ``DeliveryScreen``, which is the
+    /// same shape `ActiveRideScreen.kt` has on Android and the same shape Home uses to swap its sheet
+    /// for a Mode A/B vehicle. No route was added and no deep link changed.
     ///
-    /// Until it lands a package draws this screen, and the model is already honest about it:
-    /// ``ActiveRideState/isPackage`` switches the Call button to *"Call sender"* and switches the poll
-    /// **off** (``ActiveRideState/isPollable``), so C089's own loop will be the only one folding server
-    /// states onto the ride. The hand-over is one `if` at the top of this property — the same shape the
-    /// Android twin has — and it is C089's line to add.
+    /// ``ActiveRideState/isPollable`` is already `false` for a package, so SCR-DI-016's loop is the only
+    /// one folding server states onto the ride.
     @ViewBuilder
     private var content: some View {
+        if model.state.isPackage {
+            DeliveryScreen(
+                model: delivery,
+                captures: captures,
+                onFinished: onFinished,
+                onCaptureRequested: onOpenCapture,
+                onOpenSos: { onOpenSos(rideId) }
+            )
+        } else {
+            passengerRide
+        }
+    }
+
+    /// The wireframe's SCR-DI-015: a navigation banner, the map, and the rider's sheet.
+    private var passengerRide: some View {
         VStack(spacing: 0) {
             DashboardBanner(
                 text: model.state.navigationHintKey.localised,

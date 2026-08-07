@@ -400,10 +400,19 @@ final class FakeRideContact: RideContact {
     var dialSucceeds = true
 
     private(set) var calls: [(kind: RideKind, type: CallType)] = []
+
+    /// Calls made through the role-named overload (AL-33, Δ C089). Kept **apart** from ``calls`` on
+    /// purpose: a delivery sheet must never reach the kind-based form, because a package's kind cannot
+    /// say whether the sender or the recipient was the one rung.
+    private(set) var roleCalls: [(calleeRole: CalleeRole, type: CallType)] = []
     private(set) var dialled: [String] = []
 
     func startCall(rideId: String, kind: RideKind, type: CallType) async {
         calls.append((kind, type))
+    }
+
+    func startCall(rideId: String, calleeRole: CalleeRole, type: CallType) async {
+        roleCalls.append((calleeRole, type))
     }
 
     @discardableResult

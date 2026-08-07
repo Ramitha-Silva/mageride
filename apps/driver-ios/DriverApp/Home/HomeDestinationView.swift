@@ -45,10 +45,17 @@ struct HomeDestinationView: View {
             ActiveRideScreen(
                 rideId: rideId,
                 model: graph.makeActiveRideModel(rideId: rideId),
+                // C089. The kind is not known until the ride has been read, so both models are built
+                // and the screen keeps whichever the first read turns out to need.
+                delivery: graph.makeDeliveryModel(rideId: rideId),
+                captures: graph.captures,
                 // The ride is over; the driver goes back to the standby map rather than to a screen
                 // about a trip that has ended.
                 onFinished: navigator.pop,
                 onOpenVoipCall: { id in navigator.open(.voipCall(rideId: id)) },
+                // SCR-DI-005 is a takeover presented over the delivery sheet, which is what lets the
+                // sheet collect the photograph itself when the scanner closes.
+                onOpenCapture: { navigator.open(.documentCapture) },
                 onOpenSos: { id in navigator.open(.sos(rideId: id)) }
             )
 

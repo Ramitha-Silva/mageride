@@ -62,8 +62,8 @@ struct CapturedImage: Equatable {
 /// target rather than of whoever navigated — the mapping itself is the scanner's and arrives with
 /// C087, exactly as `labelRes()` does on the Android side.
 ///
-/// The set is `driver_ios.html`'s, which is `driver_android.html`'s minus `DELIVERY_PROOF` — the
-/// delivery cluster is C089's on this platform and adds its own case when it lands.
+/// The set is `driver_ios.html`'s, and it matches `driver_android.html`'s target for target since C089
+/// added ``deliveryProof``.
 enum DocumentCaptureTarget: String, CaseIterable {
 
     /// SCR-DI-003a — front of the driving licence.
@@ -83,6 +83,16 @@ enum DocumentCaptureTarget: String, CaseIterable {
 
     /// SCR-DI-004c — vehicle back, number plate visible (C087).
     case vehicleBack
+
+    /// SCR-DI-016c — proof that the parcel was left at the door (P-10, C089).
+    ///
+    /// **The first non-document use of SCR-DI-005**, and deliberately so: a proof photo goes to
+    /// `rides.proof_artifacts` rather than to `docs.uploads`, carries no `captured_via`, and never
+    /// reaches the Verification-Officer queue. What it wants from the scanner is the one thing the
+    /// scanner is for — a framed, de-skewed photograph the driver has confirmed — so AL-43's provenance
+    /// stamp is simply dropped at the upload instead of being filed against a queue it does not belong
+    /// to. The same case, for the same reason, as `apps/driver-android`'s `DELIVERY_PROOF`.
+    case deliveryProof
 }
 
 /// A finished capture, on its way back to the screen that asked for one.

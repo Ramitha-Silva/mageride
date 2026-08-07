@@ -253,7 +253,7 @@
   SCR-DI-015 the active ride and SCR-DI-036 the Menu tab.
 
   KEYS ARE C070'S. Same key names and the same translations as
-  `apps/driver-android/src/main/res/values*/strings.xml`, so a divergence between the two driver
+  `apps/driver-android/src/main/res/values…/strings.xml`, so a divergence between the two driver
   apps is a diff rather than an archaeology exercise. `%1$s` becomes `%1$@`, which is the only
   systematic difference — see cluster 2's note above.
 
@@ -380,3 +380,35 @@
 "error_version_conflict" = "நீங்கள் பார்த்துக்கொண்டிருக்கும்போது இந்தப் பயணம் மாறியது. மீண்டும் பாருங்கள்.";
 "error_illegal_transition" = "இந்தப் பயணம் இப்போது உள்ள நிலையிலிருந்து அதைச் செய்ய முடியாது.";
 "error_ride_terminal" = "இந்தப் பயணம் முடிந்துவிட்டது, எனவே தொடர்பு கொள்ள யாரும் இல்லை.";
+
+/* ---------------------------------------------------------------------------------------------
+  C089 driver-ios-delivery — SCR-DI-016a/b/c, the three package-delivery sheets (AL-33).
+  Translations are C071's, from `apps/driver-android/src/main/res/values-ta/strings.xml`.
+--------------------------------------------------------------------------------------------- */
+
+"capture_target_delivery_proof" = "விநியோகச் சான்று";
+
+"delivery_title" = "பொதி விநியோகம்";
+"delivery_leg_pickup" = "எடுப்பு";
+"delivery_leg_drop" = "சேர்ப்பு";
+"delivery_payment" = "கட்டணம்";
+"delivery_party_sender" = "அனுப்புநர்";
+"delivery_party_recipient" = "பெறுநர்";
+"delivery_call" = "அழை";
+"delivery_cancel" = "கைவிடு";
+"delivery_start" = "விநியோகத்தைத் தொடங்கு";
+
+"delivery_navigate_pickup_distance" = "எடுக்குமிடத்திற்குச் செல்லுங்கள் · %1$@";
+"delivery_pickup_at" = "எடுப்பு: %1$@";
+"delivery_pickup_otp_label" = "அனுப்புநர் தரும் எடுப்பு OTP ஐ உள்ளிடவும்";
+"delivery_verify_pickup" = "எடுப்பைச் சரிபார்";
+
+"delivery_complete_title" = "விநியோகத்தை முடி";
+"delivery_delivery_otp_label" = "பெறுநர் தரும் விநியோக OTP ஐ உள்ளிடவும்";
+"delivery_photo_proof" = "புகைப்படச் சான்று";
+"delivery_photo_retake" = "மீண்டும் புகைப்படம் எடு";
+"delivery_completed" = "விநியோகம் முடிந்தது";
+
+"delivery_otp_wrong" = "அந்தக் குறியீடு தவறு. மீண்டும் படித்துச் சொல்லக் கேளுங்கள்.";
+"delivery_otp_attempts_left" = "இந்த ஒப்படைப்பு உதவிக் குழுவுக்குச் செல்வதற்கு முன் %1$d முயற்சிகள் மீதம்.";
+"delivery_otp_locked" = "ஐந்து தவறான குறியீடுகள். இந்த ஒப்படைப்பு இப்போது எமது உதவிக் குழுவிடம் உள்ளது — அவர்கள் உங்களை அழைப்பார்கள்.";

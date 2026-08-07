@@ -112,6 +112,18 @@ final class DriverGraph: ObservableObject {
     /// Turning ``positions`` on and off without a screen holding the service.
     let publisher: PositionPublisher
 
+    // MARK: - C089 · the delivery
+    //
+    // ride-svc's package surface and P-10's photograph. The queue is a **process** singleton for
+    // ``DocumentCaptureCoordinator``'s reason: SCR-DI-005 is a full-screen takeover, so the delivery
+    // sheet is not on screen while the picture is being taken.
+
+    /// ride-svc's package commands, as SCR-DI-016a/b/c uses them (AL-33).
+    let deliveries: DeliveryRepository
+
+    /// The delivery photograph, held until the server has it (P-10, §3.6).
+    let proofs = ProofUploadQueue()
+
     init(environment: DriverEnvironment = .current) {
         self.environment = environment
 
@@ -175,6 +187,7 @@ final class DriverGraph: ObservableObject {
         self.offers = OfferInbox(offers: shared.offers, sessions: sessions)
         self.contact = SystemRideContact(voip: shared.api.voip)
         self.publisher = ServicePositionPublisher(positions: positions)
+        self.deliveries = ApiDeliveryRepository(ride: shared.api.ride)
 
         // Before the first frame, so a driver who chose සිංහල never sees an English one. This is
         // the earliest point at which it can happen — `DriverLocale` redirects the bundle every
@@ -221,6 +234,18 @@ final class DriverGraph: ObservableObject {
             rides: rides,
             contact: contact,
             location: CoreLocationDriverLocationSource()
+        )
+    }
+
+    /// SCR-DI-016a/b/c — the three sheets SCR-DI-015 hands a **package** ride over to (C089).
+    func makeDeliveryModel(rideId: String) -> DeliveryModel {
+        DeliveryModel(
+            rideId: rideId,
+            deliveries: deliveries,
+            contact: contact,
+            location: CoreLocationDriverLocationSource(),
+            proofs: proofs,
+            captures: captures
         )
     }
 

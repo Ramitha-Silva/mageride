@@ -66,7 +66,11 @@ extension DocumentCaptureTarget {
     ///
     /// `docs.uploads` keeps the original file name, and "insurance.jpg" in the Verification
     /// Officer's document viewer is the difference between a queue they can work and eight identical
-    /// rows called `IMG_0042`. The same six names the Android scanner sends.
+    /// rows called `IMG_0042`. The same seven names the Android scanner sends.
+    ///
+    /// ``deliveryProof`` is not a document and its file lands in `rides.proof_artifacts`, but it is
+    /// named on the same rule and for the same reader: a support agent settling a P-14 dispute is
+    /// looking at one photograph among many.
     var fileName: String {
         switch self {
         case .licenceFront: return "licence-front.jpg"
@@ -75,13 +79,14 @@ extension DocumentCaptureTarget {
         case .revenueLicence: return "revenue-licence.jpg"
         case .vehicleFront: return "vehicle-front.jpg"
         case .vehicleBack: return "vehicle-back.jpg"
+        case .deliveryProof: return "delivery-proof.jpg"
         }
     }
 
     /// The trilingual name of what is being captured — the wireframe's `Capture: Licence front`.
     ///
     /// C086 left this mapping to C087 deliberately: it is the scanner that renders it, and the
-    /// scanner is this component's. The six keys are `apps/driver-android`'s, with its translations.
+    /// scanner is this component's. The seven keys are `apps/driver-android`'s, with its translations.
     var titleKey: String {
         switch self {
         case .licenceFront: return "capture_target_licence_front"
@@ -90,6 +95,7 @@ extension DocumentCaptureTarget {
         case .revenueLicence: return "capture_target_revenue_licence"
         case .vehicleFront: return "capture_target_vehicle_front"
         case .vehicleBack: return "capture_target_vehicle_back"
+        case .deliveryProof: return "capture_target_delivery_proof"
         }
     }
 }
