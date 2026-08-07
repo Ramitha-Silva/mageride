@@ -34,6 +34,15 @@ protocol DriverSessions: AnyObject {
     /// Whether a session for this surface is in hand (AL-08).
     var isSignedIn: Bool { get }
 
+    /// The signed-in driver's id, or `nil` when the session has gone (Δ C088).
+    ///
+    /// **This is the driver id every driver-scoped read takes** —
+    /// `GET /v1/drivers/{driverId}/level`, `GET /v1/fees/{driverId}/today`,
+    /// `GET /v1/rides/driver/{driverId}/active` and `POST /v1/rides/{rideId}/offer/{driverId}/accept`
+    /// are all keyed on it. It is `SessionState.SignedIn.userId` and nothing mints or stores one of
+    /// its own; a second id in the app would be a second answer to who is driving.
+    var userId: String? { get }
+
     /// The attempt in flight, or `nil` when there is none. Read after a failed verify to tell a
     /// wrong digit from a dead attempt.
     var awaitingChallenge: LoginChallenge? { get }
@@ -70,6 +79,8 @@ final class SharedDriverSessions: DriverSessions {
     }
 
     var isSignedIn: Bool { sessions.state.value is SessionStateSignedIn }
+
+    var userId: String? { (sessions.state.value as? SessionStateSignedIn)?.userId }
 
     var awaitingChallenge: LoginChallenge? {
         (sessions.state.value as? SessionStateAwaitingOtp).map { Self.challenge($0.challenge) }

@@ -168,9 +168,12 @@ enum VehicleLayers {
     static func markerColourExpression() -> NSExpression {
         var stops: [NSExpression: NSExpression] = [:]
         for token in VehicleToken.allCases {
-            // Lower-cased, matching `VehicleType.name.lowercase()` on the Android side — the GeoJSON
-            // both apps build carries the wire enum, and the two have to agree on its case.
-            stops[NSExpression(forConstantValue: token.wire.lowercased())] =
+            // `VehicleToken.wire` **is** `:shared`'s `VehicleType.wire`, which is what the GeoJSON
+            // both apps build carries and what `VehicleType.name.lowercase()` produces on the
+            // Android side. It was camel case until C088 and three stops therefore matched nothing —
+            // see ``VehicleToken/wire``. Nothing here re-cases it, because a case fix applied at the
+            // read is a second spelling of the same value.
+            stops[NSExpression(forConstantValue: token.wire)] =
                 NSExpression(forConstantValue: UIColor(token.color))
         }
         return NSExpression(

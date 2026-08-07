@@ -8,11 +8,10 @@ import MageRideShared
 /// app becomes an English one at exactly the moment it matters. The kebab `code` is the key; the
 /// copy is `Localizable.strings`', in all three languages.
 ///
-/// **Clusters 1 and 2's codes only.** The Android twin carries the whole app's table because C068
-/// shipped after every other Android screen group had named its codes; here the dashboard, the wallet
-/// and the safety clusters have not landed, and a key with no renderer is a translation nobody can
-/// check. C088–C093 extend this the way they extend the strings files — one `case` and three values,
-/// together.
+/// **Clusters 1, 2 and 3's codes only.** The Android twin carries the whole app's table because C068
+/// shipped after every other Android screen group had named its codes; here the wallet and the safety
+/// clusters have not landed, and a key with no renderer is a translation nobody can check. C089–C093
+/// extend this the way they extend the strings files — one `case` and three values, together.
 enum OnboardingErrors {
 
     /// The string key for [error], falling back to the shell's generic message.
@@ -84,6 +83,38 @@ enum OnboardingErrors {
         case ErrorCode.notOwner: return "error_not_owner"
 
         case ErrorCode.vehicleNotFound: return "error_vehicle_not_found"
+
+        // ---- C088 · the dashboard, the offer and the ride ----------------------------
+        //
+        // `offer-already-accepted` and `offer-expired` are deliberately absent: `OfferSession` keeps
+        // them apart as `OfferOutcome.Taken` / `.Expired` all the way out, and SCR-DI-014 renders
+        // each with its own copy. Resolving them here as well would give one failure two messages
+        // and lose the distinction the server went to the trouble of making.
+
+        // US-9.6, seen from the server: the toggle was live and the vehicle was not.
+        case ErrorCode.vehicleNotApproved: return "error_vehicle_not_approved"
+
+        // D-03's single-publisher mutex. A ride or a Mode A/B session is already running — usually
+        // on another handset, which is exactly what the driver needs told.
+        case ErrorCode.driverAlreadyLive: return "error_driver_already_live"
+
+        // DT-01: a Directional filter is a standby filter, and there is no standby to filter.
+        case ErrorCode.notOnline: return "error_not_online"
+
+        case ErrorCode.directionalLimitReached: return "error_directional_limit"
+
+        // D-08's daily-fee gate, not a dispatch failure — the driver can act on it (US-9.1).
+        case ErrorCode.insufficientWallet: return "error_insufficient_wallet"
+
+        // R-14. Somebody else moved the ride; the answer is to re-read and decide again, never to
+        // bump the version and retry.
+        case ErrorCode.versionConflict: return "error_version_conflict"
+
+        // ADD Appendix B.2's table refused the move — a passenger who cancelled while the driver
+        // was tapping, most often.
+        case ErrorCode.illegalTransition: return "error_illegal_transition"
+
+        case ErrorCode.rideTerminal: return "error_ride_terminal"
 
         default: return "error_generic"
         }

@@ -69,19 +69,30 @@ enum VehicleToken: String, CaseIterable {
     ///
     /// Kept as a property rather than a `VehicleType` extension so this file compiles and is
     /// testable without the KMP framework — the presentation table is the thing under test.
+    ///
+    /// **Δ C088 — these were camel case and that was a defect**, recorded in the C087 handoff and
+    /// fixed here because this is the component that first draws a marker. `VehicleType.wire` in
+    /// `:shared` is `registry.vehicles.vehicle_type`'s own value and is **snake case**
+    /// (`three_wheeler`, `mini_van`, `mini_truck`), so `ThreeWheeler` made ``forWire(_:)`` answer
+    /// `nil` for three of the ten types and made ``VehicleLayers/markerColourExpression()`` build a
+    /// match stop on `"threewheeler"` against a GeoJSON attribute carrying `"three_wheeler"` — a
+    /// three-wheeler, a mini van and a mini truck all drawn in the fallback grey.
+    ///
+    /// `private` has no `VehicleType` counterpart: it is §0.2's eleventh legend row and the
+    /// fallback colour, not a type the platform stores.
     var wire: String {
         switch self {
-        case .bus: return "Bus"
-        case .train: return "Train"
-        case .motorbike: return "Motorbike"
-        case .threeWheeler: return "ThreeWheeler"
-        case .flex: return "Flex"
-        case .sedan: return "Sedan"
-        case .miniVan: return "MiniVan"
-        case .van: return "Van"
-        case .truck: return "Truck"
-        case .miniTruck: return "MiniTruck"
-        case .privateHire: return "Private"
+        case .bus: return "bus"
+        case .train: return "train"
+        case .motorbike: return "motorbike"
+        case .threeWheeler: return "three_wheeler"
+        case .flex: return "flex"
+        case .sedan: return "sedan"
+        case .miniVan: return "mini_van"
+        case .van: return "van"
+        case .truck: return "truck"
+        case .miniTruck: return "mini_truck"
+        case .privateHire: return "private"
         }
     }
 

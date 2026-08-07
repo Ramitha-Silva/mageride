@@ -21,6 +21,7 @@ import lk.mageride.shared.domain.auth.MqttSessionToken
 import lk.mageride.shared.domain.auth.MqttSessionTokenManager
 import lk.mageride.shared.domain.auth.SessionEvent
 import lk.mageride.shared.domain.dispatch.OfferSession
+import lk.mageride.shared.domain.dispatch.OfferSessionState
 import lk.mageride.shared.mqtt.MqttConfig
 import lk.mageride.shared.platform.PlatformAttestationProvider
 import lk.mageride.shared.platform.PlatformSecureStore
@@ -179,6 +180,17 @@ public class IosAppGraph internal constructor(public val koin: Koin) {
     public val upgrades: IosFlowWatcher<UpgradeRequiredSignal> = IosFlowWatcher(signals.upgradeRequired)
     public val sessionEvents: IosFlowWatcher<SessionEvent> = IosFlowWatcher(sessions.events)
     public val mqttTokens: IosFlowWatcher<MqttSessionToken> = IosFlowWatcher(mqttSessions.token.filterNotNull())
+
+    /**
+     * Where the driver's single offer slot is (C088).
+     *
+     * SCR-DI-014 is driven by [offers] the way its Android twin is — the slot decides, and the screen
+     * renders — and this is the half Swift cannot reach for itself: `OfferSession.state` is a
+     * `StateFlow`, [IosFlowWatcher]'s constructor is `internal`, and an app that observed the offer
+     * some other way would be a second answer to *"is an offer live"* racing the one that enforces
+     * ADD Appendix B.2 invariant 3.
+     */
+    public val offerStates: IosFlowWatcher<OfferSessionState> = IosFlowWatcher(offers.state)
 }
 
 /**

@@ -15,10 +15,20 @@ import SwiftUI
 struct MageRideCtaStyle: ButtonStyle {
 
     /// Which of §0.2's fills. `tonal` is the wireframe's `.cta.tonal`, `destructive` its `.cta.err`.
+    ///
+    /// **`status` is Δ C088**, and it is a fill rather than a fourth control. D2' §SCR-DI-011 gives
+    /// Start Journey `success` and End Journey `error`, and §SCR-DI-015's table gives *"Start ride"*
+    /// `success` and *"Complete ride"* `error` — the wireframe's `.cta.succ` / `.cta.err`. Those are
+    /// the **same** bar at the same height, radius and typography with a different colour, so a
+    /// separate `StatusCta` view (which is what the Android twin needed, because Compose has no
+    /// `ButtonStyle`) would be a second control to keep in step with §0.2's CTA row.
     enum Emphasis {
         case filled
         case tonal
         case destructive
+        /// A role colour the *consequence* fixes — `MageRideColor.success` for a Start, `.error`
+        /// for an End. The label is always `onStatus`, which meets contrast on either.
+        case status(Color)
     }
 
     var emphasis: Emphasis = .filled
@@ -68,6 +78,7 @@ struct MageRideCtaStyle: ButtonStyle {
         case .filled: return MageRideColor.primary
         case .tonal: return MageRideColor.primaryContainer
         case .destructive: return MageRideColor.error
+        case .status(let accent): return accent
         }
     }
 
@@ -75,6 +86,7 @@ struct MageRideCtaStyle: ButtonStyle {
         switch emphasis {
         case .filled, .destructive: return MageRideColor.onPrimary
         case .tonal: return MageRideColor.onPrimaryContainer
+        case .status: return MageRideColor.onStatus
         }
     }
 }
@@ -92,4 +104,10 @@ extension ButtonStyle where Self == MageRideCtaStyle {
 
     /// The bar with its label replaced by a spinner. Disable the button as well.
     static func mageCta(loading: Bool) -> MageRideCtaStyle { MageRideCtaStyle(isLoading: loading) }
+
+    /// The same bar in a role colour the consequence fixes — Δ C088. `MageRideColor.success` is
+    /// Start Journey and *"Start ride"*; `.error` is End Journey and *"Complete ride"*.
+    static func mageCtaStatus(_ accent: Color, loading: Bool = false) -> MageRideCtaStyle {
+        MageRideCtaStyle(emphasis: .status(accent), isLoading: loading)
+    }
 }

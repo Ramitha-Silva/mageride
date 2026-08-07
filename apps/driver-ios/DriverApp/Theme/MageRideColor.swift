@@ -133,3 +133,40 @@ enum MageRideScannerColor {
         Color(name, bundle: MageRideColor.bundle)
     }
 }
+
+/// SCR-DI-014's takeover palette (C088).
+///
+/// **The second screen in this app that is not on the semantic scheme**, after the scanner, and the
+/// wireframe is as explicit about it: `driver_ios.html` draws the dispatch cell on `#15171B` with
+/// `#1f2227` cards, `#AEB3BC` captions, a `#444` outline on **Reject** and the `#FFB68A` fee note.
+/// A fifteen-second offer that turned white in daylight would be a different screen twice a day, and
+/// unlike every other screen it has to be read through a windscreen in one glance.
+///
+/// One appearance each, exactly as the vehicle legend has: the takeover is dark in both. Still colour
+/// *assets* and not hexes in Swift, which is this target's rule without an exception — the catalogue
+/// is where a colour is declared and `ThemeTokenTests` is what reads one back.
+enum MageRideOfferColor {
+
+    /// The screen the takeover sits on (`#15171B`).
+    static let background = named("offerBackground")
+
+    /// The `● Pickup` / `◆ Drop` card on it (`#1f2227`).
+    static let surface = named("offerSurface")
+
+    /// The fare, the badges' labels and the countdown, at full contrast.
+    static let onOffer = named("offerOnOffer")
+
+    /// A caption on the dark screen — the two place labels (`#AEB3BC`).
+    static let muted = named("offerMuted")
+
+    /// **Reject**'s hairline (`#444`). Deliberately not `outline`: on this background §0.2's
+    /// `outline` is a light grey and would read as the primary action.
+    static let outline = named("offerOutline")
+
+    /// US-9.1's *"2nd trip — Rs 100 daily fee deducts on accept"* line (`#FFB68A`).
+    static let accent = named("offerAccent")
+
+    private static func named(_ name: String) -> Color {
+        Color(name, bundle: MageRideColor.bundle)
+    }
+}

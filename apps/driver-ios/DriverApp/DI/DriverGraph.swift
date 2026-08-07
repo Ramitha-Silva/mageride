@@ -82,6 +82,36 @@ final class DriverGraph: ObservableObject {
     /// SCR-DI-005's camera grant and whether VisionKit can run on this device at all.
     let camera: CameraAuthoriser
 
+    // MARK: - C088 · cluster 3
+    //
+    // The dashboard's data layer and the two things that outlive a screen. Everything else C088 owns
+    // is a per-screen model, built by the `make…` factories below.
+
+    /// Who the driver is and which vehicle is live (US-9.6, D-03).
+    let identity: DriverIdentity
+
+    /// dispatch-svc, wallet-svc, subscription-svc and query-svc, as SCR-DI-010 and SCR-DI-013 use them.
+    let standby: StandbyRepository
+
+    /// trip-state-svc's Mode A/B sessions, and **nothing else** (R-01).
+    let journeys: JourneyRepository
+
+    /// ride-svc's write surface as SCR-DI-015 uses it, plus AL-47's settlement pair.
+    let rides: ActiveRideRepository
+
+    /// The driver's single offer slot (ADD Appendix B.2 invariant 3).
+    let offerSlot: OfferSlot
+
+    /// **Where a `ride_offer` push becomes the live offer.** A process singleton, because an offer
+    /// arrives with no view anywhere — see its own KDoc.
+    let offers: OfferInbox
+
+    /// voip-svc's call log and the CallKit-aware dialler.
+    let contact: RideContact
+
+    /// Turning ``positions`` on and off without a screen holding the service.
+    let publisher: PositionPublisher
+
     init(environment: DriverEnvironment = .current) {
         self.environment = environment
 
@@ -104,11 +134,13 @@ final class DriverGraph: ObservableObject {
 
         let shared = IosAppGraphKt.startIosGraph(config: config)
         self.shared = shared
-        self.positions = PositionService(graph: shared, connectivity: connectivity)
+        let positions = PositionService(graph: shared, connectivity: connectivity)
+        self.positions = positions
 
         let preferences = UserDefaultsOnboardingPreferences()
         self.preferences = preferences
-        self.sessions = SharedDriverSessions(sessions: shared.sessions)
+        let sessions = SharedDriverSessions(sessions: shared.sessions)
+        self.sessions = sessions
         self.onboarding = ApiOnboardingRepository(
             content: shared.api.content,
             iam: shared.api.iam,
@@ -116,14 +148,80 @@ final class DriverGraph: ObservableObject {
         )
         self.profiles = ApiDriverProfileRepository(registry: shared.api.registry, iam: shared.api.iam)
         self.permissions = SystemDriverPermissions(pushTokens: pushTokens)
-        self.vehicles = ApiVehicleOnboardingRepository(registry: shared.api.registry)
-        self.activeVehicle = UserDefaultsActiveVehicleStore()
+        let vehicles = ApiVehicleOnboardingRepository(registry: shared.api.registry)
+        let activeVehicle = UserDefaultsActiveVehicleStore()
+        self.vehicles = vehicles
+        self.activeVehicle = activeVehicle
         self.camera = SystemCameraAuthoriser()
+
+        // C088. `GET /v1/vehicles/mine` is read through the repository C087 already owns rather than
+        // through a second `RegistryApi` here, so `VehicleSummary.canGoLive` — US-9.6's rule — has one
+        // home on this platform.
+        self.identity = ApiDriverIdentity(sessions: sessions, vehicles: vehicles, activeVehicle: activeVehicle)
+        self.standby = ApiStandbyRepository(
+            dispatch: shared.api.dispatch,
+            wallet: shared.api.wallet,
+            subscription: shared.api.subscription,
+            query: shared.api.query,
+            iam: shared.api.iam
+        )
+        self.journeys = ApiJourneyRepository(
+            tripState: shared.api.tripState,
+            transit: shared.api.transit,
+            preferences: UserDefaultsJourneyPreferences()
+        )
+        self.rides = ApiActiveRideRepository(ride: shared.api.ride, fare: shared.api.fare)
+        self.offerSlot = SharedOfferSlot(offers: shared.offers, states: shared.offerStates)
+        self.offers = OfferInbox(offers: shared.offers, sessions: sessions)
+        self.contact = SystemRideContact(voip: shared.api.voip)
+        self.publisher = ServicePositionPublisher(positions: positions)
 
         // Before the first frame, so a driver who chose සිංහල never sees an English one. This is
         // the earliest point at which it can happen — `DriverLocale` redirects the bundle every
         // lookup goes through, and a view built before it would have resolved its strings already.
         DriverLocale.applyStored(preferences)
+    }
+
+    // MARK: - C088 · the per-screen models
+    //
+    // A factory rather than a property: each of these is a `@StateObject` owned by the screen that
+    // shows it, and a model held here would outlive the view, keep its GNSS subscription open and hand
+    // the *next* driver the last one's dashboard. `DriverLocationSource` is constructed per model for
+    // the same reason — it is a screen's subscription, not a shift's.
+    //
+    // `OfferInbox`, `OfferSlot` and the repositories above are the opposite and are properties, because
+    // each genuinely outlives every view: an offer arrives with no composition anywhere.
+
+    /// SCR-DI-010 / SCR-DI-011.
+    func makeHomeModel() -> HomeModel {
+        HomeModel(
+            identity: identity,
+            standby: standby,
+            journeys: journeys,
+            rides: rides,
+            location: CoreLocationDriverLocationSource(),
+            publisher: publisher
+        )
+    }
+
+    /// SCR-DI-014 — the takeover Home hosts.
+    func makeOfferModel() -> OfferModel {
+        OfferModel(slot: offerSlot, rides: rides)
+    }
+
+    /// SCR-DI-013.
+    func makeDirectionalModel() -> DirectionalModel {
+        DirectionalModel(standby: standby, location: CoreLocationDriverLocationSource())
+    }
+
+    /// SCR-DI-015.
+    func makeActiveRideModel(rideId: String) -> ActiveRideModel {
+        ActiveRideModel(
+            rideId: rideId,
+            rides: rides,
+            contact: contact,
+            location: CoreLocationDriverLocationSource()
+        )
     }
 
     /// Start-up work that outlives any view.

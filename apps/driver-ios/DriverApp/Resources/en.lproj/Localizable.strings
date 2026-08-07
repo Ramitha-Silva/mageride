@@ -303,3 +303,140 @@
 "error_mode_not_allowed" = "Only your own standby (Mode C) vehicle is onboarded here. Buses, school vans and route permits are handled in the Fleet Portal.";
 "error_not_owner" = "This vehicle is not yours to change.";
 "error_vehicle_not_found" = "That vehicle is no longer on file.";
+
+
+/* ---------------------------------------------------------------------------------------------
+  MageRide Driver — iOS · C088 driver-ios-dashboard-dispatch. English, the development region.
+
+  SCOPE. Cluster 3 only: SCR-DI-010 the Mode C dashboard, SCR-DI-011 the Mode A/B Start/End Journey
+  dashboard, SCR-DI-013 Directional Travel, SCR-DI-014 the fifteen-second dispatch takeover,
+  SCR-DI-015 the active ride and SCR-DI-036 the Menu tab.
+
+  KEYS ARE C070'S. Same key names and the same translations as
+  `apps/driver-android/src/main/res/values*/strings.xml`, so a divergence between the two driver
+  apps is a diff rather than an archaeology exercise. `%1$s` becomes `%1$@`, which is the only
+  systematic difference — see cluster 2's note above.
+
+  THREE KEYS ARE NEW HERE, and each is something this platform draws and Android does not.
+  `offer_countdown` is the ring's VoiceOver label — the Android twin's ring is a
+  `CircularProgressIndicator` with the seconds as a sibling `Text`, which a screen reader already
+  reads, while this one is a drawn shape and announces itself. `ride_call_unavailable` is the CallKit
+  refusal: a `tel:` URL on iOS *places* the call, so dialling over an existing one hangs it up, where
+  Android's `ACTION_DIAL` only opens the dialler. `menu_driver` is SCR-DI-036's card label, which the
+  Android drawer takes from `app_name`.
+
+  NOT HERE. `home_daily_fee_*` carries no `Rs` of its own and `L3` is not a string at all — both are
+  data, not copy (`MoneyFormat.prefix`, `DashboardLabels.level`). SCR-DI-035's buffered-samples card
+  is C093's on this platform and its copy comes with it.
+--------------------------------------------------------------------------------------------- */
+
+/* SCR-DI-010 · the Mode C standby dashboard (US-6A.1, US-9.1/9.6/9.7/9.9). */
+"home_online" = "ONLINE · Mode C";
+"home_offline" = "OFFLINE · tap to go online";
+"home_offline_hint" = "Go online to receive rides";
+"home_live_vehicle" = "Live vehicle";
+"home_directional" = "Directional";
+"home_today_stats" = "Today: %1$d trips · %2$@";
+"home_today_pending" = "Today's earnings are loading";
+"home_needs_vehicle" = "Add or get assigned a vehicle to go online.";
+"home_add_vehicle" = "Go to My Vehicles";
+"home_waiting_for_gps" = "Waiting for GPS. Your position has not arrived yet.";
+"home_daily_fee_paid" = "Daily fee paid · %1$@";
+"home_daily_fee_first_free" = "First trip free today · then %1$@";
+"home_daily_fee_due" = "Daily fee due · %1$@";
+"home_low_balance" = "Low balance. Top up before your next trip — the limit is %1$@.";
+"home_second_trip_fee" = "Your next trip deducts the %1$@ daily fee, and your wallet is short.";
+
+/* SCR-DI-011 · the Mode A/B Start/End Journey dashboard (US-5.3/5.4/5.6/5.10, AL-32). */
+"journey_no_fee" = "No fee";
+"journey_ignition_banner" = "Journey started automatically by the GPS device · ignition on";
+"journey_auto_ended" = "Ended automatically. You can restart it for five minutes.";
+"journey_route" = "Route";
+"journey_change" = "Change";
+"journey_duration" = "Duration";
+"journey_distance" = "Distance";
+"journey_vehicle" = "Vehicle";
+"journey_start" = "Start Journey";
+"journey_end" = "End Journey";
+"journey_restart" = "Restart";
+"journey_auto_end_at_destination" = "End the journey automatically at the destination";
+"journey_route_dialog_title" = "Which route are you running?";
+"journey_route_hint" = "Route number";
+"journey_no_route" = "No route chosen";
+
+/* SCR-DI-013 · Directional Travel (US-6A.17–23, DT-01..DT-08). */
+"directional_title" = "Directional Travel";
+"directional_destination" = "Destination";
+"directional_search_hint" = "Search, or choose your home";
+"directional_uses_left" = "Uses left today";
+"directional_max_duration" = "Max duration";
+"directional_set" = "Set direction (uses one)";
+"directional_turn_off" = "Turn off";
+"directional_when_active" = "When it is running";
+"directional_active_to" = "To %1$@ · %2$@ left";
+"directional_active_note" = "Only hires going your way will reach you.";
+"directional_uses_remaining" = "Uses left: %1$d";
+
+/* SCR-DI-014 · the fifteen-second dispatch takeover (US-6A.2/6A.3, R-02, E-01). */
+"offer_badge_proxy" = "Third-party booking";
+"offer_badge_package" = "Package · %1$@";
+"offer_badge_directional" = "Directional";
+"offer_pickup" = "Pickup";
+"offer_drop" = "Drop";
+"offer_fee_note" = "Second trip today — the %1$@ daily fee is deducted when you accept.";
+"offer_accept" = "Accept";
+"offer_reject" = "Reject";
+"offer_taken" = "Another driver took that ride.";
+"offer_wallet_blocked" = "Top up your wallet — the daily fee could not be taken.";
+"offer_countdown" = "%1$d seconds left to answer";
+"package_size_small" = "Small";
+"package_size_medium" = "Medium";
+"package_size_large" = "Large";
+"payment_cash" = "Cash";
+"payment_lankaqr" = "Your bank QR";
+"payment_onepay" = "Card";
+"payment_cod" = "Cash on delivery";
+
+/* SCR-DI-015 · the active ride (AL-47, AL-48, P-05, P-07, US-26.1). */
+"ride_navigate_pickup" = "Navigate to the pickup";
+"ride_navigate_drop" = "Navigate to the drop";
+"ride_finished" = "This trip is over";
+"ride_rider" = "Rider";
+"ride_call" = "Call rider";
+"ride_call_sender" = "Call sender";
+"ride_call_unavailable" = "A call is already in progress on this phone.";
+"ride_sos" = "SOS";
+"ride_arrived" = "I have arrived";
+"ride_start" = "Start ride — enter OTP";
+"ride_complete" = "Complete ride";
+"ride_otp_title" = "Start the ride";
+"ride_otp_body" = "Enter the four digits the rider reads out to you.";
+"ride_otp_verify" = "Verify";
+"ride_call_title" = "How would you like to call?";
+"ride_call_free" = "Free call, inside the app";
+"ride_call_normal" = "Normal call";
+"ride_qr_title" = "QR payment received?";
+"ride_qr_body" = "Check your bank app. Confirming settles this trip and posts your earning.";
+"ride_qr_received" = "Yes, it arrived";
+"ride_qr_not_received" = "It has not arrived";
+
+/* SCR-DI-036 · the Menu tab (AL-31). Eight rows, in the wireframe's order. */
+"menu_driver" = "Driver";
+"menu_my_vehicles" = "My vehicles";
+"menu_vehicle_onboarding" = "Onboard a standby vehicle";
+"menu_tracker_pairing" = "GPS tracker pairing";
+"menu_sharing" = "Sharing management";
+"menu_profile" = "Driver profile";
+"menu_ride_history" = "Trip history and ratings";
+"menu_support" = "Support and fee refunds";
+"menu_notifications" = "Alerts";
+
+/* Failures cluster 3 can meet — the eight codes `OnboardingErrors` now resolves (D-26). */
+"error_vehicle_not_approved" = "That vehicle is not approved yet. Finish its documents under My Vehicles.";
+"error_driver_already_live" = "You are already live on another vehicle or trip.";
+"error_not_online" = "Go online before you set a direction.";
+"error_directional_limit" = "No Directional activations left today.";
+"error_insufficient_wallet" = "Your wallet is short of the daily fee. Top up and try again.";
+"error_version_conflict" = "This trip changed while you were looking at it. Check it again.";
+"error_illegal_transition" = "That cannot be done from where this trip is now.";
+"error_ride_terminal" = "This trip has ended, so there is nobody left to reach.";

@@ -171,14 +171,10 @@ extension ExtractedField {
 
 /// `0.62` — two decimals, built by arithmetic so the decimal separator is the same in all three
 /// locales and cannot follow the handset's region.
+///
+/// `leftPadded(to:)` moved to `UI/MoneyFormat.swift` with C088, which needs the same helper for a
+/// clock field and a cent pair. Two copies in one target is an ambiguous call, not two functions.
 func formattedConfidence(_ confidence: Double) -> String {
     let hundredths = Int((confidence * 100).rounded())
     return "\(hundredths / 100).\(String(hundredths % 100).leftPadded(to: 2))"
-}
-
-private extension String {
-
-    func leftPadded(to width: Int) -> String {
-        count >= width ? self : String(repeating: "0", count: width - count) + self
-    }
 }

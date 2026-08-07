@@ -244,3 +244,140 @@
 "error_mode_not_allowed" = "මෙහිදී ලියාපදිංචි කළ හැක්කේ ඔබේම රියදුරු (මාදිලි C) වාහනය පමණි. බස්, පාසල් වෑන් සහ මාර්ග බලපත්‍ර හසුරුවනු ලබන්නේ Fleet Portal එකෙනි.";
 "error_not_owner" = "මෙම වාහනය වෙනස් කිරීමට ඔබට අයිතියක් නැත.";
 "error_vehicle_not_found" = "එම වාහනය තවදුරටත් ලේඛනගත කර නැත.";
+
+
+/* ---------------------------------------------------------------------------------------------
+  MageRide Driver — iOS · C088 driver-ios-dashboard-dispatch. සිංහල.
+
+  SCOPE. Cluster 3 only: SCR-DI-010 the Mode C dashboard, SCR-DI-011 the Mode A/B Start/End Journey
+  dashboard, SCR-DI-013 Directional Travel, SCR-DI-014 the fifteen-second dispatch takeover,
+  SCR-DI-015 the active ride and SCR-DI-036 the Menu tab.
+
+  KEYS ARE C070'S. Same key names and the same translations as
+  `apps/driver-android/src/main/res/values*/strings.xml`, so a divergence between the two driver
+  apps is a diff rather than an archaeology exercise. `%1$s` becomes `%1$@`, which is the only
+  systematic difference — see cluster 2's note above.
+
+  THREE KEYS ARE NEW HERE, and each is something this platform draws and Android does not.
+  `offer_countdown` is the ring's VoiceOver label — the Android twin's ring is a
+  `CircularProgressIndicator` with the seconds as a sibling `Text`, which a screen reader already
+  reads, while this one is a drawn shape and announces itself. `ride_call_unavailable` is the CallKit
+  refusal: a `tel:` URL on iOS *places* the call, so dialling over an existing one hangs it up, where
+  Android's `ACTION_DIAL` only opens the dialler. `menu_driver` is SCR-DI-036's card label, which the
+  Android drawer takes from `app_name`.
+
+  NOT HERE. `home_daily_fee_*` carries no `Rs` of its own and `L3` is not a string at all — both are
+  data, not copy (`MoneyFormat.prefix`, `DashboardLabels.level`). SCR-DI-035's buffered-samples card
+  is C093's on this platform and its copy comes with it.
+--------------------------------------------------------------------------------------------- */
+
+/* SCR-DI-010 · the Mode C standby dashboard (US-6A.1, US-9.1/9.6/9.7/9.9). */
+"home_online" = "සබැඳියි · මාදිලි C";
+"home_offline" = "නොබැඳියි · සබැඳි වීමට තට්ටු කරන්න";
+"home_offline_hint" = "ගමන් ලබා ගැනීමට සබැඳි වන්න";
+"home_live_vehicle" = "සක්‍රිය වාහනය";
+"home_directional" = "දිශානුගත";
+"home_today_stats" = "අද: ගමන් %1$d · %2$@";
+"home_today_pending" = "අද ඉපැයීම් පූරණය වෙමින්";
+"home_needs_vehicle" = "සබැඳි වීමට වාහනයක් එක් කරන්න හෝ පවරා ගන්න.";
+"home_add_vehicle" = "මගේ වාහන වෙත යන්න";
+"home_waiting_for_gps" = "GPS එනතුරු බලා සිටී. ඔබේ ස්ථානය තවම ලැබී නැත.";
+"home_daily_fee_paid" = "දෛනික ගාස්තුව ගෙවා ඇත · %1$@";
+"home_daily_fee_first_free" = "අද පළමු ගමන නොමිලේ · පසුව %1$@";
+"home_daily_fee_due" = "දෛනික ගාස්තුව ගෙවිය යුතුයි · %1$@";
+"home_low_balance" = "ශේෂය අඩුයි. ඊළඟ ගමනට පෙර ඉහළ නංවන්න — සීමාව %1$@ කි.";
+"home_second_trip_fee" = "ඔබේ ඊළඟ ගමනෙන් %1$@ දෛනික ගාස්තුව අඩු වේ, නමුත් පසුම්බියේ මුදල් මදි.";
+
+/* SCR-DI-011 · the Mode A/B Start/End Journey dashboard (US-5.3/5.4/5.6/5.10, AL-32). */
+"journey_no_fee" = "ගාස්තුවක් නැත";
+"journey_ignition_banner" = "GPS උපාංගය මගින් ගමන ස්වයංක්‍රීයව ආරම්භ විය · ඉග්නිෂන් ක්‍රියාත්මකයි";
+"journey_auto_ended" = "ස්වයංක්‍රීයව අවසන් විය. මිනිත්තු පහක් ඇතුළත නැවත ආරම්භ කළ හැක.";
+"journey_route" = "මාර්ගය";
+"journey_change" = "වෙනස් කරන්න";
+"journey_duration" = "කාලය";
+"journey_distance" = "දුර";
+"journey_vehicle" = "වාහනය";
+"journey_start" = "ගමන ආරම්භ කරන්න";
+"journey_end" = "ගමන අවසන් කරන්න";
+"journey_restart" = "නැවත ආරම්භ කරන්න";
+"journey_auto_end_at_destination" = "ගමනාන්තයේදී ගමන ස්වයංක්‍රීයව අවසන් කරන්න";
+"journey_route_dialog_title" = "ඔබ ධාවනය කරන්නේ කුමන මාර්ගයද?";
+"journey_route_hint" = "මාර්ග අංකය";
+"journey_no_route" = "මාර්ගයක් තෝරා නැත";
+
+/* SCR-DI-013 · Directional Travel (US-6A.17–23, DT-01..DT-08). */
+"directional_title" = "දිශානුගත ගමන";
+"directional_destination" = "ගමනාන්තය";
+"directional_search_hint" = "සොයන්න, නැතහොත් ඔබේ නිවස තෝරන්න";
+"directional_uses_left" = "අද ඉතිරි භාවිත";
+"directional_max_duration" = "උපරිම කාලය";
+"directional_set" = "දිශාව සකසන්න (එකක් වැය වේ)";
+"directional_turn_off" = "නවත්වන්න";
+"directional_when_active" = "ක්‍රියාත්මක වන විට";
+"directional_active_to" = "%1$@ වෙත · %2$@ ඉතිරියි";
+"directional_active_note" = "ඔබ යන දිශාවට යන කුලී පමණක් ඔබ වෙත එයි.";
+"directional_uses_remaining" = "ඉතිරි භාවිත: %1$d";
+
+/* SCR-DI-014 · the fifteen-second dispatch takeover (US-6A.2/6A.3, R-02, E-01). */
+"offer_badge_proxy" = "තෙවන පාර්ශ්ව වෙන්කිරීමකි";
+"offer_badge_package" = "පාර්සලය · %1$@";
+"offer_badge_directional" = "දිශානුගතයි";
+"offer_pickup" = "නැගීම";
+"offer_drop" = "බැසීම";
+"offer_fee_note" = "අද දෙවන ගමන — පිළිගත් විට %1$@ දෛනික ගාස්තුව අඩු වේ.";
+"offer_accept" = "පිළිගන්න";
+"offer_reject" = "ප්‍රතික්ෂේප කරන්න";
+"offer_taken" = "වෙනත් රියදුරෙක් එම ගමන ගෙන ඇත.";
+"offer_wallet_blocked" = "පසුම්බිය ඉහළ නංවන්න — දෛනික ගාස්තුව අඩු කළ නොහැකි විය.";
+"offer_countdown" = "පිළිතුරු දීමට තත්පර %1$d ක් ඉතිරියි";
+"package_size_small" = "කුඩා";
+"package_size_medium" = "මධ්‍යම";
+"package_size_large" = "විශාල";
+"payment_cash" = "මුදල්";
+"payment_lankaqr" = "ඔබේ බැංකු QR";
+"payment_onepay" = "කාඩ්පත";
+"payment_cod" = "බෙදාහැරීමේදී මුදල්";
+
+/* SCR-DI-015 · the active ride (AL-47, AL-48, P-05, P-07, US-26.1). */
+"ride_navigate_pickup" = "නැගීමේ ස්ථානයට යන්න";
+"ride_navigate_drop" = "බැසීමේ ස්ථානයට යන්න";
+"ride_finished" = "මෙම ගමන අවසන්";
+"ride_rider" = "මගියා";
+"ride_call" = "මගියාට අමතන්න";
+"ride_call_sender" = "යවන්නාට අමතන්න";
+"ride_call_unavailable" = "මෙම දුරකථනයේ දැනටමත් ඇමතුමක් ක්‍රියාත්මකයි.";
+"ride_sos" = "හදිසි ඇමතුම";
+"ride_arrived" = "මම පැමිණ ඇත";
+"ride_start" = "ගමන අරඹන්න — OTP ඇතුළු කරන්න";
+"ride_complete" = "ගමන සම්පූර්ණ කරන්න";
+"ride_otp_title" = "ගමන අරඹන්න";
+"ride_otp_body" = "මගියා ඔබට කියන ඉලක්කම් හතර ඇතුළු කරන්න.";
+"ride_otp_verify" = "තහවුරු කරන්න";
+"ride_call_title" = "ඔබට අමතන්නේ කෙසේද?";
+"ride_call_free" = "යෙදුම තුළ නොමිලේ ඇමතුම";
+"ride_call_normal" = "සාමාන්‍ය ඇමතුම";
+"ride_qr_title" = "QR ගෙවීම ලැබුණාද?";
+"ride_qr_body" = "ඔබේ බැංකු යෙදුම පරීක්ෂා කරන්න. තහවුරු කිරීමෙන් මෙම ගමන නිරවුල් වී ඔබේ ඉපැයීම එකතු වේ.";
+"ride_qr_received" = "ඔව්, ලැබුණා";
+"ride_qr_not_received" = "තවම ලැබී නැත";
+
+/* SCR-DI-036 · the Menu tab (AL-31). Eight rows, in the wireframe's order. */
+"menu_driver" = "රියදුරු";
+"menu_my_vehicles" = "මගේ වාහන";
+"menu_vehicle_onboarding" = "සූදානම් වාහනයක් ලියාපදිංචි කරන්න";
+"menu_tracker_pairing" = "GPS ට්‍රැකර් සම්බන්ධ කිරීම";
+"menu_sharing" = "බෙදාගැනීම් කළමනාකරණය";
+"menu_profile" = "රියදුරු පැතිකඩ";
+"menu_ride_history" = "ගමන් ඉතිහාසය සහ ශ්‍රේණිගත කිරීම්";
+"menu_support" = "සහාය සහ ගාස්තු ආපසු ගෙවීම්";
+"menu_notifications" = "දැනුම්දීම්";
+
+/* Failures cluster 3 can meet — the eight codes `OnboardingErrors` now resolves (D-26). */
+"error_vehicle_not_approved" = "එම වාහනය තවම අනුමත නැත. “මගේ වාහන” යටතේ එහි ලේඛන සම්පූර්ණ කරන්න.";
+"error_driver_already_live" = "ඔබ දැනටමත් වෙනත් වාහනයක හෝ ගමනක සක්‍රියයි.";
+"error_not_online" = "දිශාව සකසන්නට පෙර සබැඳි වන්න.";
+"error_directional_limit" = "අද දිශානුගත භාවිත ඉතිරි නැත.";
+"error_insufficient_wallet" = "දෛනික ගාස්තුවට ඔබේ පසුම්බියේ මුදල් මදි. ඉහළ නංවා නැවත උත්සාහ කරන්න.";
+"error_version_conflict" = "ඔබ බලා සිටියදී මෙම ගමන වෙනස් විය. නැවත පරීක්ෂා කරන්න.";
+"error_illegal_transition" = "මෙම ගමන දැන් ඇති තැනින් එය කළ නොහැක.";
+"error_ride_terminal" = "මෙම ගමන අවසන් වී ඇති නිසා සම්බන්ධ වීමට කිසිවෙකු නැත.";

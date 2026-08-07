@@ -36,9 +36,12 @@ struct DriverDestinationView: View {
             VehicleDestinationView(route: route)
 
         // ---- C088 · dashboard / dispatch ---------------------------------------------
-        case .home: placeholder("SCR-DI-010 · dashboard")
-        case .directional: placeholder("SCR-DI-013 · directional travel")
-        case .activeRide(let rideId): placeholder("SCR-DI-015 · active ride \(rideId)")
+        //
+        // One arm for all four, and a sub-view rather than four inline screens — the same reason
+        // clusters 1 and 2 take one arm each above. SCR-DI-014 is deliberately absent: a
+        // fifteen-second offer is a takeover Home presents, not a destination.
+        case .home, .directional, .activeRide, .menu:
+            HomeDestinationView(route: route)
 
         // ---- C090 · jobs / level / earnings ------------------------------------------
         case .jobs: placeholder("SCR-DI-017 · job board")
@@ -54,7 +57,9 @@ struct DriverDestinationView: View {
         case .walletHistory: placeholder("SCR-DI-025 · payment history")
 
         // ---- menu and what hangs off it ----------------------------------------------
-        case .menu: placeholder("SCR-DI-036 · menu")
+        //
+        // `.menu` is SCR-DI-036 and is C088's — see the arm above; it is the Menu tab's root and the
+        // whole of AL-31's replacement for the hamburger.
         case .documents: placeholder("driver documents")
         case .profile: placeholder("SCR-DI-029 · driver profile")
         case .support: placeholder("SCR-DI-033 · support")

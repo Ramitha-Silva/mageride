@@ -100,6 +100,27 @@ enum MageRideControl {
 
     /// SCR-DI-005's shutter (`.shutter`, `64 x 64`).
     static let shutter: CGFloat = 64
+
+    // MARK: - C088 · the dashboard, the offer and the ride
+    //
+    // The same numbers as `apps/driver-android/.../ui/theme/Dimens.kt`'s `ControlTokens`, because
+    // the two apps draw the same wireframe cell at the same size.
+
+    /// SCR-DI-010's `◉ ONLINE — Mode C` bar (`.bigtoggle`). The most-tapped control in the app.
+    static let bigToggle: CGFloat = 64
+
+    /// SCR-DI-014's fifteen-second ring (`.ring`) and its stroke.
+    static let countdownRing: CGFloat = 96
+    static let countdownStroke: CGFloat = 8
+
+    /// SCR-DI-013's map preview (`.map` at `flex:0 0 110px`, rounded onto the 4pt grid).
+    static let mapPreview: CGFloat = 120
+
+    /// The 👤 disc on SCR-DI-015's and SCR-DI-036's rows (`.avatar`).
+    static let avatarSmall: CGFloat = 40
+
+    /// A glyph sitting inside a row or a chip-sized control.
+    static let rowIcon: CGFloat = 20
 }
 
 extension View {

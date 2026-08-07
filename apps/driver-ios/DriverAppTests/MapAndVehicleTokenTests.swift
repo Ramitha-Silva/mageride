@@ -64,12 +64,16 @@ final class MapAndVehicleTokenTests: XCTestCase {
     // MARK: - The legend
 
     /// AL-09's canonical set — eleven types, in the order §0.2 prints them.
+    ///
+    /// **Snake case, because that is what `:shared`'s `VehicleType.wire` is** (Δ C088). The GeoJSON
+    /// both driver apps feed `mageride-vehicles` carries the wire enum, so a camel-case table here
+    /// silently stops colouring three of the ten types — see ``VehicleToken/wire``.
     func testTheLegendIsTheElevenCanonicalTypes() {
         XCTAssertEqual(
             VehicleToken.allCases.map(\.wire),
             [
-                "Bus", "Train", "Motorbike", "ThreeWheeler", "Flex", "Sedan",
-                "MiniVan", "Van", "Truck", "MiniTruck", "Private",
+                "bus", "train", "motorbike", "three_wheeler", "flex", "sedan",
+                "mini_van", "van", "truck", "mini_truck", "private",
             ]
         )
     }
@@ -109,9 +113,17 @@ final class MapAndVehicleTokenTests: XCTestCase {
     /// An unknown wire value is `nil`, not a default. A vehicle type this build does not know drawn
     /// as a sedan is a map that lies.
     func testAnUnknownVehicleTypeHasNoToken() {
-        XCTAssertEqual(VehicleToken.forWire("sedan"), .sedan, "the lookup is case-insensitive")
-        XCTAssertEqual(VehicleToken.forWire("ThreeWheeler"), .threeWheeler)
+        XCTAssertEqual(VehicleToken.forWire("sedan"), .sedan)
+        XCTAssertEqual(VehicleToken.forWire("SEDAN"), .sedan, "the lookup is case-insensitive")
         XCTAssertNil(VehicleToken.forWire("Hovercraft"))
+    }
+
+    /// The three types whose wire spelling is not one word — the ones the camel-case table used to
+    /// answer `nil` for, and which therefore drew grey on the map (Δ C088).
+    func testTheMultiWordTypesResolveFromTheirSharedWireSpelling() {
+        XCTAssertEqual(VehicleToken.forWire("three_wheeler"), .threeWheeler)
+        XCTAssertEqual(VehicleToken.forWire("mini_van"), .miniVan)
+        XCTAssertEqual(VehicleToken.forWire("mini_truck"), .miniTruck)
     }
 
     // MARK: -

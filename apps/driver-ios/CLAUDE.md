@@ -36,6 +36,10 @@ apps/driver-ios/
 ├── DriverApp/
 │   ├── Capture/                 C087 · SCR-DI-005 — the VisionKit scanner and the capture seam
 │   ├── Vehicle/                 C087 · SCR-DI-004…004c, 006, 026/026a + their data layer
+│   ├── Home/                    C088 · SCR-DI-010, 011, 013, 014 + the map, the offer inbox and
+│   │                            the screen-level GNSS source
+│   ├── Ride/                    C088 · SCR-DI-015 + its three sheets and its data layer
+│   ├── Menu/                    C088 · SCR-DI-036 — AL-31's drawer, as a tab
 │   ├── Onboarding/              C086 · SCR-DI-001, 002, 003, 003a, 007 + their data layer
 │   ├── UI/                      the wireframe's shapes as views — fields, tiles, cards, pills
 │   ├── DriverApp.swift          @main. One App, one shell.
@@ -104,7 +108,67 @@ DriverApp/
   `.statusAvatar` / `.statusDot` / `.illustrationIcon` / `.chipIcon` / `.shutter`, and `NoticeCard`'s
   `titleKey` went optional so an untitled `.card.fill` is the same control rather than a second one.
 
-**To add a screen (C088–C093):**
+## Cluster 3 (C088) — the dashboard, the offer, the ride and the Menu tab
+
+- **Home is ONE destination.** D2' merged SCR-DI-012 into SCR-DI-010 and makes SCR-DI-011 *the* home
+  dashboard for a Mode A/B vehicle, so `HomeScreen` swaps only its sheet on
+  `LiveVehicle.isScheduledMode`. The map, the header, the banners and the offer takeover are shared.
+- **SCR-DI-014 is a `fullScreenCover` with `.interactiveDismissDisabled()`, not a route** — back is a
+  swipe on this platform and fifteen seconds is not long enough to navigate. That is what `PushRouter`
+  already meant by routing a `ride_offer` push to Home.
+- **`OfferInbox` is the seam from APNs into `:shared`'s `OfferSession`**, and it is a process singleton
+  because an offer arrives with no view anywhere. `DriverAppDelegate.deliver(_:)` hands **every** push
+  to both it and `PushRouter`; either alone is a dashboard with nothing on it. The push carries
+  `offerId`, `rideId`, `expiresAt` and a *rendered* fare and nothing else, so everything the badges
+  need comes from one `GET /v1/rides/{rideId}` inside the window (`OfferModel.enrich`).
+- **`OfferSlot` is why `OfferModel` is testable.** `OfferSession.state` is a `StateFlow` and
+  `IosFlowWatcher`'s constructor is `internal`, so a test literally cannot build one — the protocol is
+  the seam and `SharedOfferSlot` is the only thing that touches the watcher. `IosAppGraph.offerStates`
+  is the watcher, added by C088 the way that type's own KDoc invites.
+- **The countdown is local arithmetic, not `OfferSession.countdown()`** — a `Flow<Duration>` whose
+  element is an inline value class. It is not a second rule: both derive what is left from `expiresAt`
+  against the wall clock, and the *decision* rule (an offer past its deadline is never sent) stays in
+  `OfferSession.accept()`.
+- **`DriverLocationSource` is not `PositionService`.** The service owns the fixes that reach the broker
+  and outlives every view; the source is a **screen's** `CLLocationManager` at ten-metre / nearest-ten-
+  metres accuracy — the AL-31 own-vehicle marker, `GoOnlineRequest`'s position, SCR-DI-011's distance.
+  It asks for no permission of its own. `PositionPublisher` is the matching seam that keeps the service
+  out of a model.
+- **Going online is two calls in one order**: `POST /v1/standby/online` then start publishing; going
+  offline is stop publishing then `POST /v1/standby/offline`. A driver in the candidate pool who is not
+  publishing is offered rides that cannot find them. `FakePositionPublisher` records the order.
+- **A driver-QR ride is not over at `PaymentPending`.** AL-47's confirm settles the *payment*; the ride
+  reaches `CashSettled` only once fare-svc's settlement travels the outbox. `ActiveRideState` carries
+  `isQrAttested` and `isFinished` is sticky, because re-reading into that window would put the confirm
+  sheet back up on a driver who had just answered it.
+- **`ActiveRideState` holds `moved` beside `ride`, not folded into it.** `RideDetail` is a Kotlin data
+  class and its `copy` reaches Swift as a twenty-two-argument `doCopy`; the state and the version are
+  also the only two things that move between full reads.
+- **`:shared` has `LiveHub`'s contract and no SignalR client**, so SCR-DI-015 polls
+  `GET /v1/rides/{rideId}/state` — D3' §3.1's documented fallback. Delete that loop when a hub client
+  lands.
+- **CallKit is SCR-DI-031's (C093), and what is CallKit-aware *here* is the direct dial.** A `tel:` URL
+  on iOS **places** the call, so dialling over one already up hangs it up — `SystemRideContact.dial`
+  checks `CXCallObserver` and the refusal is copy. Android's `ACTION_DIAL` only opens the dialler, so
+  it has nothing to check; this is a real Section C delta.
+- **SCR-DI-036 is C088's** (`build/screen_coverage.md` is the authority; the C087 handoff says C093 and
+  is wrong). It is a `List` where the Android twin is a `ModalDrawerSheet` — the cell's own `Δ iOS`
+  clause — and its rows push onto the **Menu tab's** stack, which is what makes the system back button
+  say `‹ Menu` on every screen that hangs off it.
+- **`VehicleToken.wire` was camel case and is now `:shared`'s snake case** (the defect the C087 handoff
+  asked C088 to fix before rendering a marker). Three of the ten types were drawn in the fallback grey.
+- Reusable UI added here: `DashboardSheet`, `TopRoundedRectangle`, `OnlineToggle`, `DashboardBanner`,
+  `CountdownRing`, `SolidBadge`, `VehicleChip`, `MetricCard`, `FlowRow` (a `Layout`, because SwiftUI
+  has no wrapping stack), `MageRideOfferColor`, `MageRideCtaStyle.Emphasis.status(_:)` +
+  `.mageCtaStatus(_:loading:)`, `UI/MoneyFormat.swift` (`Rs 1,240`, `1.2 km`, `01:12:40`, `1:42`, and
+  `MageRideSymbols`), `UI/PackageLabels.swift`, and `MageRideControl.bigToggle` / `.countdownRing` /
+  `.countdownStroke` / `.mapPreview` / `.avatarSmall` / `.rowIcon`.
+- Four `:shared` `iosMain` helpers were added, each for the same reason `colomboBusinessDate` exists —
+  a **defaulted Kotlin parameter does not survive the export**: `rideProjectionOf` /
+  `rideProjectionCanSend`, `parseTimestampOrNull` / `timestampFromEpochMillis` / `timestampEpochMillis`,
+  `colomboBusinessDateNow`, and `walletAlertFor`.
+
+**To add a screen (C089–C093):**
 
 1. Its route is already in `Nav/DriverRoute.swift`. Use it; do not invent a case.
 2. Replace its `placeholder(...)` line in `Nav/DriverDestinations.swift` with the real view. That
@@ -190,6 +254,10 @@ Every one of these is D2' §C or a platform constraint, and each is called out a
 | Update gate | `AlertDialog` swallowing `onDismissRequest` | an `.alert` with no cancel button — there is nothing to swallow |
 | Elevation | M3's six tinted levels | one shadow, `radius 8 / y 2 / 0.12` (§0.2's own iOS row) |
 | Satellite count | `Location` carries one | no public API; the field is absent, not zero |
+| Offer takeover | a window-sized `Dialog` | `fullScreenCover` + `.interactiveDismissDisabled()` |
+| Offer tone | `RingtoneManager`'s default notification tone | no equivalent API — the sound is the APNs payload's, allowed through in the foreground; the app adds the haptic and `kSystemSoundID_Vibrate` |
+| Direct dial | `ACTION_DIAL` opens the dialler | `tel:` **places** the call, so `CXCallObserver` gates it |
+| Menu (SCR-DI-036) | a `ModalDrawerSheet` behind a scrim | a `List` on the Menu tab's own stack |
 
 ## Things that will bite
 

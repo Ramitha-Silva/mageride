@@ -162,6 +162,43 @@ final class ThemeTokenTests: XCTestCase {
         )
     }
 
+    /// SCR-DI-014's takeover palette (Δ C088).
+    ///
+    /// **Not §0.2's, and that is the point.** `driver_ios.html` draws the dispatch cell on a fixed dark
+    /// chrome, exactly as it draws the scanner on one, and a fifteen-second offer that turned white in
+    /// daylight would be a different screen twice a day. One appearance each, like the vehicle legend:
+    /// asserted in **both** so a dark variant added later fails here rather than at a junction.
+    func testTheOfferTakeoverPaletteIsTheWireframesAndHasOneAppearance() {
+        let takeover: [(String, UInt32)] = [
+            ("offerBackground", 0x15171B),
+            ("offerSurface", 0x1F2227),
+            ("offerOnOffer", 0xFFFFFF),
+            ("offerMuted", 0xAEB3BC),
+            ("offerOutline", 0x444444),
+            ("offerAccent", 0xFFB68A),
+        ]
+        for (name, hex) in takeover {
+            assertColour(name, style: .light, equals: hex)
+            assertColour(name, style: .dark, equals: hex)
+        }
+    }
+
+    /// C088's control sizes — the same numbers as `apps/driver-android/.../ui/theme/Dimens.kt`, because
+    /// the two apps draw the same wireframe cell at the same size.
+    func testTheDashboardControlSizesMatchTheAndroidTokens() {
+        XCTAssertEqual(MageRideControl.bigToggle, 64)
+        XCTAssertEqual(MageRideControl.countdownRing, 96)
+        XCTAssertEqual(MageRideControl.countdownStroke, 8)
+        XCTAssertEqual(MageRideControl.mapPreview, 120)
+        XCTAssertEqual(MageRideControl.avatarSmall, 40)
+        XCTAssertEqual(MageRideControl.rowIcon, 20)
+        XCTAssertGreaterThanOrEqual(
+            MageRideControl.bigToggle,
+            MageRideControl.minimumTapTarget,
+            "the most-tapped control in the app clears the HIG floor"
+        )
+    }
+
     // MARK: -
 
     private func assertColour(

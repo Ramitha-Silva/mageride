@@ -31,6 +31,9 @@ final class FakeDriverSessions: DriverSessions {
     var isSignedIn = false
     var awaitingChallenge: LoginChallenge?
 
+    /// The signed-in driver (Δ C088). Set alongside ``isSignedIn`` where a test needs a driver id.
+    var userId: String?
+
     /// What the next call throws, or `nil` to succeed.
     var nextFailure: Error?
 

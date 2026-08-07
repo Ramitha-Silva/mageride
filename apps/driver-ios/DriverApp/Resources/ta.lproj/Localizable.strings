@@ -243,3 +243,140 @@
 "error_mode_not_allowed" = "இங்கே உங்கள் சொந்த தயார்நிலை (முறை C) வாகனம் மட்டுமே பதிவு செய்யப்படும். பேருந்துகள், பள்ளி வேன்கள், வழிப் பயண அனுமதிகள் Fleet Portal இல் கையாளப்படுகின்றன.";
 "error_not_owner" = "இந்த வாகனத்தை மாற்ற உங்களுக்கு உரிமை இல்லை.";
 "error_vehicle_not_found" = "அந்த வாகனம் இனி பதிவேட்டில் இல்லை.";
+
+
+/* ---------------------------------------------------------------------------------------------
+  MageRide Driver — iOS · C088 driver-ios-dashboard-dispatch. தமிழ்.
+
+  SCOPE. Cluster 3 only: SCR-DI-010 the Mode C dashboard, SCR-DI-011 the Mode A/B Start/End Journey
+  dashboard, SCR-DI-013 Directional Travel, SCR-DI-014 the fifteen-second dispatch takeover,
+  SCR-DI-015 the active ride and SCR-DI-036 the Menu tab.
+
+  KEYS ARE C070'S. Same key names and the same translations as
+  `apps/driver-android/src/main/res/values*/strings.xml`, so a divergence between the two driver
+  apps is a diff rather than an archaeology exercise. `%1$s` becomes `%1$@`, which is the only
+  systematic difference — see cluster 2's note above.
+
+  THREE KEYS ARE NEW HERE, and each is something this platform draws and Android does not.
+  `offer_countdown` is the ring's VoiceOver label — the Android twin's ring is a
+  `CircularProgressIndicator` with the seconds as a sibling `Text`, which a screen reader already
+  reads, while this one is a drawn shape and announces itself. `ride_call_unavailable` is the CallKit
+  refusal: a `tel:` URL on iOS *places* the call, so dialling over an existing one hangs it up, where
+  Android's `ACTION_DIAL` only opens the dialler. `menu_driver` is SCR-DI-036's card label, which the
+  Android drawer takes from `app_name`.
+
+  NOT HERE. `home_daily_fee_*` carries no `Rs` of its own and `L3` is not a string at all — both are
+  data, not copy (`MoneyFormat.prefix`, `DashboardLabels.level`). SCR-DI-035's buffered-samples card
+  is C093's on this platform and its copy comes with it.
+--------------------------------------------------------------------------------------------- */
+
+/* SCR-DI-010 · the Mode C standby dashboard (US-6A.1, US-9.1/9.6/9.7/9.9). */
+"home_online" = "இணைப்பில் · முறை C";
+"home_offline" = "இணைப்பில் இல்லை · இணைய தட்டவும்";
+"home_offline_hint" = "பயணங்களைப் பெற இணைப்பில் வாருங்கள்";
+"home_live_vehicle" = "இயங்கும் வாகனம்";
+"home_directional" = "திசைப் பயணம்";
+"home_today_stats" = "இன்று: %1$d பயணங்கள் · %2$@";
+"home_today_pending" = "இன்றைய வருமானம் ஏற்றப்படுகிறது";
+"home_needs_vehicle" = "இணைப்பில் வர ஒரு வாகனத்தைச் சேர்க்கவும் அல்லது ஒதுக்கப் பெறவும்.";
+"home_add_vehicle" = "எனது வாகனங்களுக்குச் செல்";
+"home_waiting_for_gps" = "GPS-க்காகக் காத்திருக்கிறது. உங்கள் இருப்பிடம் இன்னும் வரவில்லை.";
+"home_daily_fee_paid" = "தினக் கட்டணம் செலுத்தப்பட்டது · %1$@";
+"home_daily_fee_first_free" = "இன்று முதல் பயணம் இலவசம் · பின்னர் %1$@";
+"home_daily_fee_due" = "தினக் கட்டணம் செலுத்த வேண்டும் · %1$@";
+"home_low_balance" = "இருப்பு குறைவு. அடுத்த பயணத்திற்கு முன் நிரப்பவும் — வரம்பு %1$@.";
+"home_second_trip_fee" = "உங்கள் அடுத்த பயணத்தில் %1$@ தினக் கட்டணம் பிடிக்கப்படும், பணப்பையில் தொகை போதவில்லை.";
+
+/* SCR-DI-011 · the Mode A/B Start/End Journey dashboard (US-5.3/5.4/5.6/5.10, AL-32). */
+"journey_no_fee" = "கட்டணம் இல்லை";
+"journey_ignition_banner" = "GPS கருவி பயணத்தைத் தானாகத் தொடங்கியது · இயந்திரம் இயக்கத்தில்";
+"journey_auto_ended" = "தானாக முடிவடைந்தது. ஐந்து நிமிடங்களுக்குள் மீண்டும் தொடங்கலாம்.";
+"journey_route" = "வழித்தடம்";
+"journey_change" = "மாற்று";
+"journey_duration" = "கால அளவு";
+"journey_distance" = "தூரம்";
+"journey_vehicle" = "வாகனம்";
+"journey_start" = "பயணத்தைத் தொடங்கு";
+"journey_end" = "பயணத்தை முடி";
+"journey_restart" = "மீண்டும் தொடங்கு";
+"journey_auto_end_at_destination" = "சேருமிடத்தில் பயணத்தைத் தானாக முடிக்கவும்";
+"journey_route_dialog_title" = "நீங்கள் எந்த வழித்தடத்தில் ஓட்டுகிறீர்கள்?";
+"journey_route_hint" = "வழித்தட எண்";
+"journey_no_route" = "வழித்தடம் தேர்வு செய்யப்படவில்லை";
+
+/* SCR-DI-013 · Directional Travel (US-6A.17–23, DT-01..DT-08). */
+"directional_title" = "திசைப் பயணம்";
+"directional_destination" = "சேருமிடம்";
+"directional_search_hint" = "தேடுங்கள், அல்லது உங்கள் வீட்டைத் தேர்வு செய்யுங்கள்";
+"directional_uses_left" = "இன்று மீதமுள்ள பயன்பாடுகள்";
+"directional_max_duration" = "அதிகபட்சக் கால அளவு";
+"directional_set" = "திசையை அமை (ஒன்று செலவாகும்)";
+"directional_turn_off" = "நிறுத்து";
+"directional_when_active" = "இயங்கும்போது";
+"directional_active_to" = "%1$@ நோக்கி · %2$@ மீதம்";
+"directional_active_note" = "நீங்கள் செல்லும் திசையில் உள்ள வாடகைகள் மட்டுமே உங்களை அடையும்.";
+"directional_uses_remaining" = "மீதமுள்ள பயன்பாடுகள்: %1$d";
+
+/* SCR-DI-014 · the fifteen-second dispatch takeover (US-6A.2/6A.3, R-02, E-01). */
+"offer_badge_proxy" = "மூன்றாம் தரப்பு முன்பதிவு";
+"offer_badge_package" = "பொதி · %1$@";
+"offer_badge_directional" = "திசைக்கு ஏற்றது";
+"offer_pickup" = "ஏறுமிடம்";
+"offer_drop" = "இறங்குமிடம்";
+"offer_fee_note" = "இன்று இரண்டாவது பயணம் — ஏற்கும்போது %1$@ தினக் கட்டணம் பிடிக்கப்படும்.";
+"offer_accept" = "ஏற்கிறேன்";
+"offer_reject" = "நிராகரி";
+"offer_taken" = "அந்தப் பயணத்தை வேறொரு ஓட்டுநர் எடுத்துவிட்டார்.";
+"offer_wallet_blocked" = "பணப்பையை நிரப்பவும் — தினக் கட்டணத்தைப் பிடிக்க முடியவில்லை.";
+"offer_countdown" = "பதிலளிக்க %1$d வினாடிகள் மீதம்";
+"package_size_small" = "சிறியது";
+"package_size_medium" = "நடுத்தரம்";
+"package_size_large" = "பெரியது";
+"payment_cash" = "பணம்";
+"payment_lankaqr" = "உங்கள் வங்கி QR";
+"payment_onepay" = "அட்டை";
+"payment_cod" = "பொதி ஒப்படைக்கும்போது பணம்";
+
+/* SCR-DI-015 · the active ride (AL-47, AL-48, P-05, P-07, US-26.1). */
+"ride_navigate_pickup" = "ஏறுமிடத்திற்குச் செல்லுங்கள்";
+"ride_navigate_drop" = "இறங்குமிடத்திற்குச் செல்லுங்கள்";
+"ride_finished" = "இந்தப் பயணம் முடிந்தது";
+"ride_rider" = "பயணி";
+"ride_call" = "பயணியை அழை";
+"ride_call_sender" = "அனுப்புநரை அழை";
+"ride_call_unavailable" = "இந்தத் தொலைபேசியில் ஏற்கெனவே ஓர் அழைப்பு நடந்துகொண்டிருக்கிறது.";
+"ride_sos" = "அவசர அழைப்பு";
+"ride_arrived" = "நான் வந்துவிட்டேன்";
+"ride_start" = "பயணத்தைத் தொடங்கு — OTP உள்ளிடவும்";
+"ride_complete" = "பயணத்தை முடி";
+"ride_otp_title" = "பயணத்தைத் தொடங்கு";
+"ride_otp_body" = "பயணி உங்களிடம் சொல்லும் நான்கு இலக்கங்களை உள்ளிடவும்.";
+"ride_otp_verify" = "சரிபார்";
+"ride_call_title" = "எப்படி அழைக்க விரும்புகிறீர்கள்?";
+"ride_call_free" = "செயலிக்குள் இலவச அழைப்பு";
+"ride_call_normal" = "சாதாரண அழைப்பு";
+"ride_qr_title" = "QR பணம் வந்ததா?";
+"ride_qr_body" = "உங்கள் வங்கிச் செயலியைப் பாருங்கள். உறுதிப்படுத்தினால் இந்தப் பயணம் தீர்ந்து உங்கள் வருமானம் பதிவாகும்.";
+"ride_qr_received" = "ஆம், வந்தது";
+"ride_qr_not_received" = "இன்னும் வரவில்லை";
+
+/* SCR-DI-036 · the Menu tab (AL-31). Eight rows, in the wireframe's order. */
+"menu_driver" = "ஓட்டுநர்";
+"menu_my_vehicles" = "எனது வாகனங்கள்";
+"menu_vehicle_onboarding" = "காத்திருப்பு வாகனத்தைப் பதிவு செய்";
+"menu_tracker_pairing" = "GPS கண்காணிப்பானை இணைத்தல்";
+"menu_sharing" = "பகிர்வு மேலாண்மை";
+"menu_profile" = "ஓட்டுநர் சுயவிவரம்";
+"menu_ride_history" = "பயண வரலாறும் மதிப்பீடுகளும்";
+"menu_support" = "உதவியும் கட்டணத் திருப்பிச் செலுத்தலும்";
+"menu_notifications" = "அறிவிப்புகள்";
+
+/* Failures cluster 3 can meet — the eight codes `OnboardingErrors` now resolves (D-26). */
+"error_vehicle_not_approved" = "அந்த வாகனம் இன்னும் அங்கீகரிக்கப்படவில்லை. “எனது வாகனங்கள்” பகுதியில் ஆவணங்களை முடிக்கவும்.";
+"error_driver_already_live" = "நீங்கள் ஏற்கனவே வேறு வாகனத்திலோ பயணத்திலோ இயங்குகிறீர்கள்.";
+"error_not_online" = "திசையை அமைப்பதற்கு முன் இணைப்பில் வாருங்கள்.";
+"error_directional_limit" = "இன்று திசைப் பயன்பாடுகள் மீதமில்லை.";
+"error_insufficient_wallet" = "தினக் கட்டணத்திற்கு உங்கள் பணப்பையில் போதுமான தொகை இல்லை. நிரப்பி மீண்டும் முயலவும்.";
+"error_version_conflict" = "நீங்கள் பார்த்துக்கொண்டிருக்கும்போது இந்தப் பயணம் மாறியது. மீண்டும் பாருங்கள்.";
+"error_illegal_transition" = "இந்தப் பயணம் இப்போது உள்ள நிலையிலிருந்து அதைச் செய்ய முடியாது.";
+"error_ride_terminal" = "இந்தப் பயணம் முடிந்துவிட்டது, எனவே தொடர்பு கொள்ள யாரும் இல்லை.";

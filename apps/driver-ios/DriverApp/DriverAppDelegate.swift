@@ -89,7 +89,7 @@ extension DriverAppDelegate: UNUserNotificationCenterDelegate {
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
         let message = PushMessage.from(userInfo: notification.request.content.userInfo)
-        Task { @MainActor in graph?.pushes.offer(message) }
+        Task { @MainActor in self.deliver(message) }
         completionHandler([.banner, .sound, .list])
     }
 
@@ -100,8 +100,21 @@ extension DriverAppDelegate: UNUserNotificationCenterDelegate {
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         let message = PushMessage.from(userInfo: response.notification.request.content.userInfo)
-        Task { @MainActor in graph?.pushes.offer(message) }
+        Task { @MainActor in self.deliver(message) }
         completionHandler()
+    }
+
+    /// Hands one push to **both** subscribers (Δ C088).
+    ///
+    /// ``PushRouter`` decides which screen to open — for a `ride_offer` that is Home, because the offer
+    /// is a takeover the dashboard presents rather than a destination. ``OfferInbox`` is what puts the
+    /// offer *in* `OfferSession`, which is the slot SCR-DI-014 is drawn from. Neither can do the
+    /// other's half: routing without the inbox opens an empty dashboard, and the inbox without routing
+    /// raises the takeover behind whatever screen the driver was on.
+    @MainActor
+    private func deliver(_ message: PushMessage) {
+        graph?.offers.receive(message)
+        graph?.pushes.offer(message)
     }
 }
 
