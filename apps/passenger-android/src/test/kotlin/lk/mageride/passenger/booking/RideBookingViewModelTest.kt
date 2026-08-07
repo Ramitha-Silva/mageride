@@ -3,6 +3,8 @@ package lk.mageride.passenger.booking
 import kotlinx.coroutines.runBlocking
 import lk.mageride.passenger.MainDispatcher
 import lk.mageride.passenger.await
+import lk.mageride.passenger.location.LastKnownFix
+import lk.mageride.passenger.location.PassengerFix
 import lk.mageride.passenger.onboarding.FakeAppPreferences
 import lk.mageride.passenger.settings.PaymentPreference
 import lk.mageride.shared.data.api.IdempotencyKeyGenerator
@@ -40,14 +42,57 @@ import kotlin.test.assertTrue
 class RideBookingViewModelTest {
 
     private val main = MainDispatcher()
+    private val lastFix = LastKnownFix()
     private val bookings = FakeBookingRepository()
-    private val draft = BookingDraft(PaymentPreference(FakeAppPreferences()))
+    private val draft = BookingDraft(PaymentPreference(FakeAppPreferences()), lastFix)
     private val keys = IdempotencyKeyGenerator { CLIENT_REQUEST_ID }
 
     @BeforeTest
     fun setUp() {
         main.install()
         draft.begin(dropoff = NUGEGODA, pickup = COLOMBO)
+    }
+
+    @Test
+    fun a_booking_begun_the_way_the_app_begins_one_has_a_pickup(): Unit = runBlocking {
+        // **The defect this test exists for** (Δ C097). `begin` takes an OPTIONAL pickup, and every
+        // production call site — the home sheet's two and SCR-PA-008's one — omitted it. `refresh()`
+        // returns early without one, so SCR-PA-009 loaded neither list: no bus routes, no tiers,
+        // nothing to book. The setup above hid it by passing a pickup nothing in the app passed.
+        //
+        // The fix is inside `BookingDraft` rather than at the three call sites, so a fourth cannot
+        // reintroduce it — which is why this asserts the draft rather than a navigation graph.
+        lastFix.record(PassengerFix(lat = COLOMBO.lat, lng = COLOMBO.lng))
+
+        draft.begin(dropoff = NUGEGODA)
+
+        assertEquals(COLOMBO.lat, draft.current.pickup?.lat, "a booking with no pickup cannot quote")
+        assertTrue(draft.current.isQuotable)
+
+        val model = viewModel()
+        val state = model.state.await { it.tiers.isNotEmpty() }
+        assertEquals(6, state.tiers.size, "AL-09's six bookable passenger types")
+    }
+
+    @Test
+    fun a_caller_with_a_better_pickup_than_the_last_fix_keeps_it() = runBlocking {
+        // A proxy rider's shared pin and a package's own end are both better answers than where the
+        // booker happens to be standing, so an explicit pickup always wins.
+        lastFix.record(PassengerFix(lat = COLOMBO.lat, lng = COLOMBO.lng))
+
+        draft.begin(dropoff = COLOMBO, pickup = NUGEGODA)
+
+        assertEquals(NUGEGODA.lat, draft.current.pickup?.lat)
+    }
+
+    @Test
+    fun a_booking_begun_before_the_map_has_a_fix_is_simply_not_quotable() = runBlocking {
+        // Honest rather than clever: on a cold start there is no position to default to, and
+        // inventing Colombo Fort would quote a journey from somewhere the passenger is not.
+        draft.begin(dropoff = NUGEGODA)
+
+        assertNull(draft.current.pickup)
+        assertFalse(draft.current.isQuotable)
     }
 
     @AfterTest

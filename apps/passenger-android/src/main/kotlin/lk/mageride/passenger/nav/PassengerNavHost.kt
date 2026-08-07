@@ -44,6 +44,7 @@ import lk.mageride.passenger.history.TripHistoryViewModel
 import lk.mageride.passenger.home.LiveMapScreen
 import lk.mageride.passenger.home.SearchLocationScreen
 import lk.mageride.passenger.live.PassengerLiveMap
+import lk.mageride.passenger.location.LastKnownFix
 import lk.mageride.passenger.location.PassengerLocationSource
 import lk.mageride.passenger.onboarding.LocationPermissionScreen
 import lk.mageride.passenger.onboarding.LoginScreen
@@ -118,6 +119,7 @@ internal fun PassengerNavHost(controller: NavHostController, modifier: Modifier 
     val draft = koinInject<BookingDraft>()
     val bookings = koinInject<BookingRepository>()
     val locations = koinInject<PassengerLocationSource>()
+    val lastFix = koinInject<LastKnownFix>()
 
     // C080's cluster. Every screen below is scoped to one ride and takes its id from the route,
     // so the view models are built here rather than resolved with `parametersOf`.
@@ -211,7 +213,10 @@ internal fun PassengerNavHost(controller: NavHostController, modifier: Modifier 
         }
         composable(PassengerRoute.SearchLocation.path) {
             SearchLocationScreen(
-                around = null,
+                // Biased toward the passenger (Δ C097). The map records what it already collects
+                // and this reads it — a second collector would hold the fused provider open behind
+                // a screen that only needs one reading. See `LastKnownFix`.
+                around = lastFix.point,
                 onBack = { controller.popBackStack() },
                 // ONE picker, five callers. Whoever opened it parked a `CaptureTarget` on the
                 // draft; if nobody did, this is the home sheet's "Where to?" and the chosen place

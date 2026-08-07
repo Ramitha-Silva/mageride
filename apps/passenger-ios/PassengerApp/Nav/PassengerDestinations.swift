@@ -40,11 +40,12 @@ struct PassengerDestinationView: View {
             HomeDestinationView(route: route)
 
         // ---- C097 · booking ------------------------------------------------------------
-        case .rideBooking: placeholder("SCR-PI-009 ride booking")
-        case .proxyRider: placeholder("SCR-PI-010b proxy rider")
-        case .packageBooking: placeholder("SCR-PI-012 package booking")
-        case .scheduleRide: placeholder("SCR-PI-013 schedule ride")
-        case .confirmPickup: placeholder("SCR-PI-011 confirm pickup")
+        //
+        // Five destinations and one draft. SCR-PI-012a (the paste sheet) and the map picker are
+        // sheets rather than destinations — the first because the wireframe presents it as one, the
+        // second because no SCR-PI id names a map picker at all.
+        case .rideBooking, .proxyRider, .packageBooking, .scheduleRide, .confirmPickup:
+            BookingDestinationView(route: route)
 
         // ---- C098 · the ride and its payment -------------------------------------------
         case .findingDriver: placeholder("SCR-PI-014 finding driver")

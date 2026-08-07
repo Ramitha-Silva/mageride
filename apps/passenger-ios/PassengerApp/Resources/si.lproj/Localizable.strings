@@ -137,3 +137,123 @@
 "search_geocoder_down" = "සෙවීම දැනට නොමැත. ඔබේ ගමනාන්තය සිතියමෙන් තෝරන්න.";
 "search_select_on_map" = "සිතියමෙන් තෝරන්න";
 "search_add_address" = "ලිපිනයක් එක් කරන්න";
+
+/* SCR-PI-009 — the multimodal list */
+"booking_public_section" = "පොදු බස් · සෘජු මාර්ග (GTFS)";
+"booking_private_section" = "පෞද්ගලික (C ප්‍රකාරය · පොරොත්තුවෙන්)";
+"booking_for_me" = "මට";
+"booking_for_someone" = "වෙනත් අයෙකුට";
+"booking_person" = "පුද්ගලයෙක්";
+"booking_package" = "පාර්සලයක්";
+"booking_tag_direct" = "සෘජු";
+"booking_tag_transit" = "මාරුවක්";
+"booking_tag_public" = "පොදු";
+"booking_transfers" = "මගදී මාරුවීම් %1$d ක්";
+"booking_walk_hint" = "%2$@ වෙත මීටර් %1$d ක් ඇවිදින්න";
+"booking_standby" = "පොරොත්තුවෙන් · කලින් දන්වන ගාස්තුව";
+"booking_track_route" = "මාර්ගය නිරීක්ෂණය";
+"booking_book_now" = "දැන් වෙන් කරන්න";
+"booking_schedule" = "කාලසටහන";
+"booking_estimating" = "ගාස්තුව ගණනය වෙමින්…";
+"booking_loading_routes" = "මාර්ග පූරණය වෙමින්…";
+"booking_no_gtfs" = "මෙම ප්‍රදේශයේ බස් මාර්ග තොරතුරු ඉක්මනින්.";
+"booking_no_routes" = "මෙම ගමනාන්තයට සෘජු පොදු මාර්ගයක් නැත.";
+"booking_no_tiers" = "මෙම ගමනට වාහන නොමැත.";
+"booking_no_destination" = "ගමනාන්තයක් තෝරන්න";
+"booking_edit_route" = "මාර්ගය වෙනස් කරන්න";
+
+/* The four capture methods, shared by SCR-PI-010b and SCR-PI-012 */
+"capture_search" = "සොයන්න";
+"capture_map" = "සිතියම";
+"capture_paste" = "සබැඳිය අලවන්න";
+"capture_request" = "ඉල්ලන්න";
+"capture_pinned" = "%1$.5f, %2$.5f හි සලකුණු කර ඇත";
+"map_pick_move" = "සලකුණ තැබීමට සිතියම ගෙන යන්න";
+
+/* SCR-PI-010b — the proxy rider */
+"proxy_title" = "වෙනත් අයෙකු වෙනුවෙන් වෙන් කරන්න";
+"proxy_rider_name" = "මගියාගේ නම";
+"proxy_rider_name_hint" = "ගමන් කරන්නේ කවුද";
+"proxy_rider_phone" = "මගියාගේ දුරකථනය";
+"proxy_not_registered" = "MageRide භාවිතා කරන්නෙක් නොවේ — නැගීමේ ස්ථානය අතින් ඇතුළත් කරන්න.";
+"proxy_pickup_method" = "නැගීමේ ක්‍රමය";
+"proxy_no_pickup" = "තවම නැගීමේ ස්ථානයක් නැත";
+"proxy_waiting" = "මගියා ස්ථානය බෙදාගන්නා තෙක් රැඳී සිටිමින්… %1$@";
+"proxy_confirmed" = "මගියා නැගීමේ ස්ථානය බෙදාගත්තා.";
+"proxy_no_answer" = "පිළිතුරක් නැත. වෙනත් ක්‍රමයකින් ස්ථානය දෙන්න.";
+"proxy_request_location" = "මගියාගේ ස්ථානය ඉල්ලන්න";
+"proxy_continue" = "ඉදිරියට";
+
+/* SCR-PI-011 — the rider's side. Declining sends nothing (P-02) */
+"confirm_pickup_banner" = "%1$@ කින් කල් ඉකුත් වේ · ප්‍රතික්ෂේප කිරීමෙන් ඔබේ GPS කිසිවිටෙක නොයවයි";
+"confirm_pickup_drag" = "සකස් කිරීමට සිතියම අදින්න";
+"confirm_pickup_who" = "%1$@ ඔබේ නැගීමේ ස්ථානය ඉල්ලයි";
+"confirm_pickup_who_unknown" = "යමෙක් ඔබේ නැගීමේ ස්ථානය ඉල්ලයි";
+"confirm_pickup_why" = "රියදුරාට ඔබව සොයාගත හැකි වන පරිදි ඔබේ ස්ථානය බෙදාගන්න.";
+"confirm_pickup_decline" = "ප්‍රතික්ෂේප කරන්න";
+"confirm_pickup_share" = "ස්ථානය බෙදාගන්න";
+
+/* SCR-PI-012 — the parcel */
+"package_title" = "පාර්සලයක් යවන්න";
+"package_size" = "ප්‍රමාණය";
+"package_hint_s" = "කිලෝ 5 දක්වා · පිටු බෑගයකට හෝ යතුරුපැදි පෙට්ටියකට";
+"package_hint_m" = "කිලෝ 20 දක්වා · ත්‍රිරෝද රථයකට හෝ මෝටර් රථ ඩිකියකට";
+"package_hint_l" = "කිලෝ 20 ට වැඩි · වෑන් හෝ ට්‍රක් රථයක් අවශ්‍යයි";
+"package_description" = "විස්තරය";
+"package_description_hint" = "ඇතුළත ඇත්තේ කුමක්ද";
+"package_recipient_name" = "ලබන්නාගේ නම";
+"package_recipient_name_hint" = "ලබාගන්නේ කවුද";
+"package_recipient_phone" = "ලබන්නාගේ දුරකථනය";
+"package_pickup" = "බාරදෙන ස්ථානය";
+"package_dropoff" = "ලබාදෙන ස්ථානය";
+"package_not_set" = "තවම දී නැත";
+"package_get_estimate" = "ඇස්තමේන්තුව ලබාගන්න";
+"package_book" = "වෙන් කරන්න";
+
+/* SCR-PI-012a — a Google Maps link becomes a pin (AL-20) */
+"paste_title" = "සබැඳියක් අලවන්න";
+"paste_label_pickup" = "බාරදෙන";
+"paste_label_dropoff" = "ලබාදෙන";
+"paste_explainer" = "WhatsApp හි ස්ථාන සබැඳියක් තිබේද? එය පිටපත් කර මෙහි අලවන්න.";
+"paste_reading" = "සබැඳිය කියවමින්…";
+"paste_resolved" = "මෙම ස්ථානය හමුවිය";
+"paste_use" = "මෙම ස්ථානය භාවිතා කරන්න";
+"paste_unreadable" = "එම සබැඳිය කියවිය නොහැකි විය. ඒ වෙනුවට සිතියමෙන් තෝරන්න.";
+
+/* SCR-PI-013 — a ride in the future */
+"schedule_title" = "ගමන කාලසටහන්ගත කරන්න";
+"schedule_where_to" = "කොහෙද යන්නේ?";
+"schedule_select_destination" = "ගමනාන්තය තෝරන්න…";
+"schedule_when" = "කවදාද";
+"schedule_reminders" = "මතක් කිරීම්: පැයකට සහ මිනිත්තු 15 කට පෙර.";
+"schedule_confirm" = "කාලසටහන තහවුරු කරන්න";
+"schedule_time_past" = "අඩුම තරමින් මිනිත්තු 30 කට පසු වේලාවක් තෝරන්න.";
+
+/* The payment rails that survive AL-57/AL-59 (C098 extends this list) */
+"payment_cash" = "මුදල්";
+"payment_wallet" = "MageRide පසුම්බිය";
+"payment_driver_qr" = "රියදුරුගේ QR";
+"payment_cod" = "බාරදීමේදී මුදල්";
+"payment_retired" = "තවදුරටත් නොමැත";
+
+/* Cluster 3's error table — every code one of its six contracts declares */
+"error_booking_disabled" = "නැවත නැවත අවලංගු කිරීම් නිසා වෙන් කිරීම තාවකාලිකව නවතා ඇත. පසුව උත්සාහ කරන්න.";
+"error_active_ride_exists" = "ඔබට දැනටමත් ගමනක් ක්‍රියාත්මක වේ.";
+"error_fare_expired" = "එම මිල කල් ඉකුත් වී ඇත. නැවත උත්සාහ කරන්න.";
+"error_payment_method_invalid" = "මෙම වෙන් කිරීමට එම ගෙවීම් ක්‍රමය භාවිතා කළ නොහැක.";
+"error_unserviceable_area" = "MageRide තවම එම ප්‍රදේශයේ ක්‍රියාත්මක නොවේ.";
+"error_route_unavailable" = "එම ස්ථාන දෙක අතර මාර්ගයක් සොයාගත නොහැකි විය.";
+"error_loc_request_rate_limited" = "ස්ථාන ඉල්ලීම් ඉතා වැඩියි. පසුව උත්සාහ කරන්න.";
+"error_request_expired" = "මෙම ඉල්ලීම කල් ඉකුත් වී ඇත.";
+"error_dependency_unavailable" = "සේවාවක් තාවකාලිකව නොමැත. මොහොතකින් උත්සාහ කරන්න.";
+
+/* NEW on iOS: the two segmented pickers' VoiceOver labels, the two capture notes the cells draw as
+ * `capnote`, the paste field's placeholder and its `UIPasteControl` hint, and the `same Mode C fare`
+ * line beside a parcel's estimate. */
+"booking_for_label" = "මෙම ගමන කා සඳහාද";
+"booking_subject_label" = "පුද්ගලයෙක් හෝ පාර්සලයක්";
+"capture_paste_note" = "සබැඳිය අලවන්න මඟින් අලවන පත්‍රය විවෘත වේ — Google Maps සබැඳියක් පිටපත් කරන්න, අපි සලකුණ තබන්නෙමු.";
+"package_capture_note" = "සබැඳිය අලවන්න Google Maps ලිපිනයක් කියවයි · ඉල්ලන්න මඟින් ලබන්නාගෙන් බැසීමේ ස්ථානය ඉල්ලයි.";
+"paste_placeholder" = "Google Maps සබැඳියක් අලවන්න";
+"paste_hint" = "පිටපත් කළ සබැඳිය පසුරු පුවරුවෙන් කියවීමට අලවන්න තට්ටු කරන්න.";
+"package_same_fare" = "එම C ප්‍රකාර ගාස්තුවම";

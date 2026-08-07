@@ -5,6 +5,7 @@ import lk.mageride.passenger.MainDispatcher
 import lk.mageride.passenger.R
 import lk.mageride.passenger.await
 import lk.mageride.passenger.history.PackageOtps
+import lk.mageride.passenger.location.LastKnownFix
 import lk.mageride.passenger.onboarding.FakeAppPreferences
 import lk.mageride.passenger.settings.PaymentPreference
 import lk.mageride.shared.data.api.IdempotencyKeyGenerator
@@ -34,8 +35,9 @@ import kotlin.test.assertTrue
 class PackageBookingViewModelTest {
 
     private val main = MainDispatcher()
+    private val lastFix = LastKnownFix()
     private val bookings = FakeBookingRepository()
-    private val draft = BookingDraft(PaymentPreference(FakeAppPreferences()))
+    private val draft = BookingDraft(PaymentPreference(FakeAppPreferences()), lastFix)
     private val keys = IdempotencyKeyGenerator { CLIENT_REQUEST_ID }
 
     /** Where the pickup OTP lands so SCR-PA-020 can still show it — see `PackageOtps`. Δ C081. */

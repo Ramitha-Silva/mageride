@@ -46,6 +46,9 @@ apps/passenger-ios/
 │   ├── Onboarding/  C095 · SCR-PI-001…005 + the router, the OTP rules and the error table
 │   ├── Home/        C096 · SCR-PI-006/007/008/010/032 — the map, the filter, the popup, the
 │   │                destination field, MapFilter, VehicleLabels, RecentPlaces (§2.2's only door)
+│   ├── Booking/     C097 · SCR-PI-009/010b/011/012/012a/013 — the multimodal list, the proxy
+│   │                round trip, the parcel, the paste sheet, the schedule, and BookingDraft
+│   │                (the one booking six screens edit)
 │   ├── Nav/         PassengerRoute (32 destinations), PassengerTab, the navigator,
 │   │                PassengerMenuDestination (SCR-PI-033's rows),
 │   │                PassengerDestinations (the ONE route→view switch)
@@ -167,6 +170,59 @@ apps/passenger-ios/
   `grabberWidth/Height`, `searchBar`, `outlinedAction`, `chipSwatch`, `chipIcon`,
   `filterChipMinimum`, `routeDot`, `vehiclePopupHeight`.
 
+## Cluster 3 (C097) — the booking flow
+
+- **`BookingDraft` is one object for the process and it is where a booking lives.** Six screens edit
+  one — a destination on SCR-PI-008, a tier on SCR-PI-009, a rider on SCR-PI-010b, a parcel on
+  SCR-PI-012, a time on SCR-PI-013 and a payment rail on C098's SCR-PI-016. Do not thread booking
+  fields through a `NavigationPath`; `BookingDraft.clear()` is what stops one outliving its ride.
+- **`CaptureTarget` is how one picker serves five callers.** SCR-PI-008 is reached from the home
+  sheet, the booking screen's edit row, the proxy pickup, both package ends and the schedule
+  destination, and it cannot tell which. Whoever opens it calls `draft.expect(…)` — **at the
+  navigation site, in `BookingDestinationView`**, so the call that opens the picker and the call
+  that says why are two adjacent lines. `capture(_:)` answering `false` means *"nobody was waiting —
+  this is a new booking"*.
+- **`BookingRepository` is one door onto six services** (transit, fare, ride, dispatch, query, iam).
+  A seventh operation from one of them goes there, not into a second client beside it.
+- **`TierQuote` has three fields and a test pins the list** — AL-19/BR-23.3 says a Mode C tier shows
+  the upfront price and nothing else before a driver is matched, and the type is the enforcement.
+- **AL-18: a public route is tracked, never booked.** Selecting one drops the tier from the draft,
+  **removes** the payment chip (not disables it) and changes the CTA to *"Track route"*.
+- **AL-55 degrades to one muted row.** transit-svc unreachable and transit-svc with no feed are the
+  same row, and neither touches the private tiers — *"nothing blocks on GTFS coverage"*.
+- **`MapsLink` parses on the device and only short links reach the server** (AL-20). Precedence is
+  `!3d!4d` → `q=` → `ll=` → `@`, because a `/maps/place/…` URL carries both a place pin and a
+  viewport and they are routinely a hundred metres apart.
+- **A decline sends no coordinates** (P-02). `declineLocationRequest` takes an id and has no
+  parameter for a point; `ConfirmPickupModelTests` asserts it on what the repository was handed.
+- **`PaymentRails` lives in `Booking/` because cluster 3 needs it first.** C098 owns SCR-PI-016 and
+  should **extend** it — `preferable`, `caption(_:)`, `storedValueOf(_:)`, `fromStored(_:)` — rather
+  than open a second one.
+- **`LastKnownFix` is how a screen gets a position without subscribing for one**, and
+  `RecordingLocationSource` — which the graph wraps `CoreLocationPassengerSource` in — is what writes
+  it. `PassengerLocationSource` is *cold* and the blue status-bar pill stays lit for as long as
+  anything is subscribed, so recording happens at the seam rather than in one of five subscribers.
+  Three readers: SCR-PI-008's geocoder bias, a booking's default pickup, and the map picker's opening
+  camera. **Do not add a second subscriber to get a position.**
+- **`BookingDraft.begin` defaults the pickup to that fix, and it is a defect fix rather than a
+  convenience** (Δ C097). `begin` takes an *optional* pickup and every production call site on the
+  Android side omitted it, so the draft had none — and `RideBookingViewModel.refresh()` returns early
+  on exactly that, which meant SCR-PA-009 loaded neither list. The default lives inside the draft on
+  both platforms so a fourth call site cannot reintroduce it.
+- **`PackageOtps` is written here and read by C099.** P-07's pickup code exists in exactly one
+  response and no read returns it; the type that catches it sits next to the screen that catches it.
+- Reusable UI added here (`UI/BookingControls.swift`): `StatusPill`, `SolidBadge`, `InfoBanner`,
+  `FormattedBanner`, `TierCard`, `RouteFieldRow`, plus `UI/MoneyFormat.swift` (`Rs 740`) and
+  `Booking/BookingRows.swift`'s `PublicSection`, `TierRow`, `PaymentChipRow`, `JourneySummaryCard`,
+  `LocationMethodPicker`, `CapturedPlaceRow`, `LoadingRow`, `MutedRow`. Tokens: `tierIcon`,
+  `selectionRing`, `pinPreview`, `pasteSheetHeight`, `bookingMapHeight`.
+- **Four contract gaps this cluster draws around**, all C079's and none an app change: **no headway
+  or frequency** on any transit shape, so the cell's *"every ~10 min"* cannot be drawn; **no
+  walking-routing service**, so the blue leg is a straight line — honest about the distance, not
+  about the path; **no SCR-PI id for a map picker**, so `MapPickSheet` is a sheet; and
+  **SCR-PI-012's drop-off *Request* has no wired round trip** — the chip selects and the fence
+  holds, but asking a *recipient* needs P-02's machinery generalised out of `ProxyRiderModel`.
+
 ## The Xcode project is generated, and the generator is shared
 
 `.pbxproj` is the committed artefact — CI probes for it and `xcodebuild` reads it. It is also a file
@@ -275,6 +331,13 @@ constraint, and each is called out at its call site.
 | Vehicle popup (007) | `ModalBottomSheet` | `.sheet(.height(220))` — the cell's own clause |
 | Held cell crossing (010) | a 15 s tick, added by Δ C096 — C078 shipped without one | a 15 s tick; it matters more here, because `distanceFilter` means a stationary passenger emits nothing at all |
 | Recent row subtitle (010) | the address line | the **distance**, which is what both wireframes draw |
+| Booking toggles (009) | four `AssistChip`s | two segmented `Picker`s — the cell's own `seg` |
+| Booking back button (009) | an `IconButton` over the map | the same, because the cell draws no navigation bar |
+| Capture methods (010b/012) | a scrolling row of `FilterChip`s | a segmented `Picker` — `UISegmentedControl` in the cell's CSS |
+| Paste affordance (012a) | a `ClipboardManager` read behind a button | `PasteButton`, so the app never touches the pasteboard until asked |
+| Short-link timeout (012a) | `withTimeout(3.seconds)` | a two-task race, because Swift has no `withTimeout` |
+| Date and time (013) | an M3 date picker **and** a time picker | one `DatePicker(.graphical)` — the cell's own clause |
+| Contacts row (010b) | not built | not built either, and deliberately: adding one on this side alone is a parity break |
 
 ## Things that will bite
 

@@ -159,6 +159,27 @@ enum MageRideControl {
 
     /// SCR-PI-007's sheet height. The cell's own `Δ iOS` clause is `.sheet(.height(220))`.
     static let vehiclePopupHeight: CGFloat = 220
+
+    // MARK: - C097 · booking, proxy, package and schedule
+    //
+    // `passenger_ios.html`'s cluster-3 pixels, on the 4pt grid or at the tap-target floor.
+
+    /// The coloured square on a `.tier` row (`.vi`, `36 x 36`) — MAP-03's legend colour again, so a
+    /// tier card and the marker for that type are recognisably the same vehicle.
+    static let tierIcon: CGFloat = 36
+
+    /// The ring the wireframe draws around a selected `.tier` (`box-shadow:0 0 0 2px`).
+    static let selectionRing: CGFloat = 2
+
+    /// SCR-PI-012a's pin preview (`.card > .map`, `90` high).
+    static let pinPreview: CGFloat = 90
+
+    /// SCR-PI-012a's own `.sheet` detent. Taller than SCR-PI-007's because it holds a field, a
+    /// preview card and two buttons — the cell's frame, measured.
+    static let pasteSheetHeight: CGFloat = 460
+
+    /// SCR-PI-009's map, which is a backdrop rather than the work (`flex:0 0 150px`).
+    static let bookingMapHeight: CGFloat = 150
 }
 
 extension View {

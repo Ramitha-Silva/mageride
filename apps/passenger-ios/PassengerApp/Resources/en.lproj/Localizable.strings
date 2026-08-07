@@ -184,3 +184,130 @@
 "search_geocoder_down" = "Search is unavailable. Pick your destination on the map.";
 "search_select_on_map" = "Select on map";
 "search_add_address" = "Add address";
+
+/* ---- C097 · booking, proxy, package, paste-link and schedule ----------------------
+ *
+ * The keys are `apps/passenger-android/src/main/res/values…/strings.xml`'s and carry the Android
+ * translations unchanged, except that every `%1$s` is a `%1$@` here — Objective-C string formats,
+ * not Java ones. Seven keys are new to this platform and are marked below.
+ */
+
+/* SCR-PI-009 — the multimodal list */
+"booking_public_section" = "Public buses · direct routes (GTFS)";
+"booking_private_section" = "Private (Mode C · standby)";
+"booking_for_me" = "For me";
+"booking_for_someone" = "Someone else";
+"booking_person" = "Person";
+"booking_package" = "Package";
+"booking_tag_direct" = "Direct";
+"booking_tag_transit" = "Transit";
+"booking_tag_public" = "PUBLIC";
+"booking_transfers" = "%1$d transfer on the way";
+"booking_walk_hint" = "Walk %1$d m to %2$@";
+"booking_standby" = "Standby · upfront fare";
+"booking_track_route" = "Track route";
+"booking_book_now" = "Book now";
+"booking_schedule" = "Schedule";
+"booking_estimating" = "Estimating fare…";
+"booking_loading_routes" = "Loading routes…";
+"booking_no_gtfs" = "Bus route info coming soon for this area.";
+"booking_no_routes" = "No public route reaches this destination directly.";
+"booking_no_tiers" = "No vehicles are available for this journey.";
+"booking_no_destination" = "Choose a destination";
+"booking_edit_route" = "Edit route";
+
+/* The four capture methods, shared by SCR-PI-010b and SCR-PI-012 */
+"capture_search" = "Search";
+"capture_map" = "Map";
+"capture_paste" = "Paste link";
+"capture_request" = "Request";
+"capture_pinned" = "Pinned at %1$.5f, %2$.5f";
+"map_pick_move" = "Move the map to place the pin";
+
+/* SCR-PI-010b — the proxy rider */
+"proxy_title" = "Book for someone else";
+"proxy_rider_name" = "Rider name";
+"proxy_rider_name_hint" = "Who is travelling";
+"proxy_rider_phone" = "Rider mobile";
+"proxy_not_registered" = "Not a MageRide user — enter the pickup manually.";
+"proxy_pickup_method" = "Pickup method";
+"proxy_no_pickup" = "No pickup set yet";
+"proxy_waiting" = "Waiting for the rider to share their location… %1$@";
+"proxy_confirmed" = "The rider shared their pickup point.";
+"proxy_no_answer" = "No answer. Set the pickup another way.";
+"proxy_request_location" = "Request rider location";
+"proxy_continue" = "Continue";
+
+/* SCR-PI-011 — the rider's side. Declining sends nothing (P-02) */
+"confirm_pickup_banner" = "Expires in %1$@ · declining never sends your GPS";
+"confirm_pickup_drag" = "Drag the map to adjust";
+"confirm_pickup_who" = "%1$@ wants your pickup location";
+"confirm_pickup_who_unknown" = "Someone wants your pickup location";
+"confirm_pickup_why" = "Share your current spot so the driver can find you.";
+"confirm_pickup_decline" = "Decline";
+"confirm_pickup_share" = "Share location";
+
+/* SCR-PI-012 — the parcel */
+"package_title" = "Send a package";
+"package_size" = "Size";
+"package_hint_s" = "Up to 5 kg · fits in a backpack or motorbike box";
+"package_hint_m" = "Up to 20 kg · fits in a three-wheeler or car boot";
+"package_hint_l" = "Over 20 kg · needs a van or truck";
+"package_description" = "Description";
+"package_description_hint" = "What is inside";
+"package_recipient_name" = "Recipient name";
+"package_recipient_name_hint" = "Who is receiving it";
+"package_recipient_phone" = "Recipient mobile";
+"package_pickup" = "Pickup location";
+"package_dropoff" = "Drop-off location";
+"package_not_set" = "Not set yet";
+"package_get_estimate" = "Get estimate";
+"package_book" = "Book";
+
+/* SCR-PI-012a — a Google Maps link becomes a pin (AL-20) */
+"paste_title" = "Paste a link";
+"paste_label_pickup" = "PICKUP";
+"paste_label_dropoff" = "DROP-OFF";
+"paste_explainer" = "Got a location link on WhatsApp? Copy it, then paste it here.";
+"paste_reading" = "Reading link…";
+"paste_resolved" = "Found this place";
+"paste_use" = "Use this location";
+"paste_unreadable" = "Could not read that link. Pick the spot on the map instead.";
+
+/* SCR-PI-013 — a ride in the future */
+"schedule_title" = "Schedule ride";
+"schedule_where_to" = "Where to?";
+"schedule_select_destination" = "Select destination…";
+"schedule_when" = "When";
+"schedule_reminders" = "Reminders set: 1 hour and 15 minutes before.";
+"schedule_confirm" = "Confirm schedule";
+"schedule_time_past" = "Choose a time at least 30 minutes from now.";
+
+/* The payment rails that survive AL-57/AL-59 (C098 extends this list) */
+"payment_cash" = "Cash";
+"payment_wallet" = "MageRide wallet";
+"payment_driver_qr" = "Driver QR";
+"payment_cod" = "Cash on delivery";
+"payment_retired" = "No longer available";
+
+/* Cluster 3's error table — every code one of its six contracts declares */
+"error_booking_disabled" = "Booking is paused after repeated cancellations. Try again later.";
+"error_active_ride_exists" = "You already have a ride in progress.";
+"error_fare_expired" = "That price has expired. Please try again.";
+"error_payment_method_invalid" = "That payment method cannot be used for this booking.";
+"error_unserviceable_area" = "MageRide does not operate in that area yet.";
+"error_route_unavailable" = "No route could be found between those two points.";
+"error_loc_request_rate_limited" = "Too many location requests. Try again later.";
+"error_request_expired" = "This request has expired.";
+"error_dependency_unavailable" = "A service is temporarily unavailable. Try again shortly.";
+
+/* NEW on iOS: the two segmented pickers' VoiceOver labels, the two capture notes the cells draw as
+ * `capnote`, the paste field's placeholder and its `UIPasteControl` hint, and the `same Mode C fare`
+ * line beside a parcel's estimate. */
+"booking_for_label" = "Who is this ride for";
+"booking_subject_label" = "Person or package";
+"capture_paste_note" = "Paste link opens the paste sheet — copy a Google Maps link and we drop the pin.";
+"package_capture_note" = "Paste link reads a Google Maps URL · Request asks the recipient to share their drop-off.";
+"paste_placeholder" = "Paste a Google Maps link";
+"paste_hint" = "Tap Paste to read the copied link from your clipboard.";
+"package_same_fare" = "Same Mode C fare";

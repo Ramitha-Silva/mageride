@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.filterNotNull
 import lk.mageride.shared.data.api.ApiConfig
 import lk.mageride.shared.data.api.ApiLogLevel
 import lk.mageride.shared.data.api.AttestationProvider
+import lk.mageride.shared.data.api.IdempotencyKeyGenerator
 import lk.mageride.shared.data.api.MageRideApi
 import lk.mageride.shared.data.api.MageRideApiSignals
 import lk.mageride.shared.data.api.UpgradeRequiredSignal
@@ -209,6 +210,21 @@ public class IosAppGraph internal constructor(public val koin: Koin) {
      * ADD Appendix B.2 invariant 3.
      */
     public val offerStates: IosFlowWatcher<OfferSessionState> = IosFlowWatcher(offers.state)
+
+    /**
+     * The idempotency-key generator the HTTP pipeline uses, for the one caller that has to supply
+     * its own key (Δ C097).
+     *
+     * `RideRequest.clientRequestId` **is** the idempotency key: R-18 dedupes a booking on
+     * `(passengerId, clientRequestId)`, so a retry after a timeout has to carry the same value or it
+     * books a second ride. The key therefore belongs to the screen rather than to the transport, and
+     * the screen needs a generator.
+     *
+     * It must be **this** one rather than a ULID minted in Swift: the contract's own pattern is
+     * `^[A-Za-z0-9_-]{16,128}$` and the platform's traces sort by mint time because the value is a
+     * ULID, and a second implementation is a second thing that can drift from both.
+     */
+    public val idempotencyKeys: IdempotencyKeyGenerator = koin.get()
 }
 
 /**

@@ -26,7 +26,9 @@ import lk.mageride.passenger.live.LiveHubTransport
 import lk.mageride.passenger.live.PassengerLiveMap
 import lk.mageride.passenger.live.SignalRLiveHubTransport
 import lk.mageride.passenger.location.AndroidPassengerLocationSource
+import lk.mageride.passenger.location.LastKnownFix
 import lk.mageride.passenger.location.PassengerLocationSource
+import lk.mageride.passenger.location.RecordingPassengerLocationSource
 import lk.mageride.passenger.onboarding.LocationPermission
 import lk.mageride.passenger.onboarding.LoginViewModel
 import lk.mageride.passenger.onboarding.OnboardingRepository
@@ -126,7 +128,13 @@ internal fun passengerAppModule(environment: PassengerEnvironment = PassengerEnv
         single { PushRouter() }
         single { PushTokenProvider() }
         single<AppPreferences> { AndroidAppPreferences(androidContext()) }
-        single<PassengerLocationSource> { AndroidPassengerLocationSource(androidContext()) }
+        // Δ C097. The source is wrapped so every fix that reaches a screen also reaches
+        // `LastKnownFix`, which is what a booking's default pickup and SCR-PA-008's geocoder bias
+        // read. A `single` because it is a handover between screens that never meet.
+        single { LastKnownFix() }
+        single<PassengerLocationSource> {
+            RecordingPassengerLocationSource(AndroidPassengerLocationSource(androidContext()), get())
+        }
 
         liveMapBindings(environment)
         onboardingBindings()
@@ -209,7 +217,7 @@ private fun Module.liveMapScreenBindings() {
 private fun Module.bookingBindings() {
     // The draft takes C083's stored default so every fresh booking opens on the rail SCR-PA-027
     // chose (US-22.4). See `BookingDraft` — it re-reads on each new draft rather than capturing.
-    single { BookingDraft(payments = get()) }
+    single { BookingDraft(payments = get(), lastFix = get()) }
     single<BookingRepository> {
         ApiBookingRepository(
             transit = get(),

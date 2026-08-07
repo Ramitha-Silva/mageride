@@ -105,7 +105,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C076 | passenger-android-shell | 4a | DONE | 2026-08-03 | **59 tests green** in a new `apps/passenger-android` unit-test source set, `assembleDebug` + `detekt` + `ktlintCheck` clean; C025's walking skeleton **deleted** (3 files) and replaced by the real shell — Koin graph, `MageRideTheme` from D2' §0.2, trilingual `values`/`values-si`/`values-ta`, a `NavHost` registering **every** C077–C084 destination as a placeholder, SCR-PA-033's modal drawer (the passenger app HAS a hamburger; AL-31 is the driver's rule), the whole D2' §0.3 map stack (MAP-01..08 + MAP-10, with MAP-04 as pure-Kotlin interpolation), and the SignalR plane: 19 res-7 cells with 30 s hysteresis, D6' §5.4's rejoin-then-resync recovery, and a reconnect loop of our own because **the SignalR Java client has no `withAutomaticReconnect()`**. Hub payloads are decoded by `MageRideJson` and not by Gson — Gson binds enums by Kotlin name and C012's are `@SerialName`d — which is why `com.google.code.gson` is now an explicit dependency (signalr declares it at runtime scope). **MAP-09 is not built**: no app-facing contract exists for signed offline bundles. **FCM registered but inert** (no `google-services.json`, C124); **Play Integrity wired but not verified on a device**; **the wave-1 `:shared` gate was red on arrival** and not from anything here — closed straight afterwards by MCS-04, whose handoff is below |
 | C077 | passenger-android-auth-onboarding | 4a | DONE | 2026-08-06 | **96 tests green** (was 59; 37 new across 5 suites), `assembleDebug` + `detekt` + `ktlintCheck` clean. SCR-PA-001…005 built to `specs/wireframes/passenger_android.html`. **Get Started is pinned below the language list** (AL-36/US-1.3) — D2' §SCR-PA-002's own sketch still draws the CTA above a `SegmentedButton`, and the wireframe supersedes it. **Phone-OTP only** (AL-07): no Google button exists in this app. The carousel is content-svc's (`GET /v1/content/onboarding/passenger`), which **closes C068's recorded gap** — that route did not exist when the driver app shipped bundled slides — with a trilingual bundled fallback for a first launch on a bad connection. Resend is refused **locally** inside US-1.10's 60 s window so a tap cannot spend one of D-32's five. Three gaps recorded: no photo upload route exists for a passenger avatar, SMS Retriever needs a signing hash C103 owns, and US-1.3a's operating city has no passenger screen in any spec |
 | C078 | passenger-android-live-map-search | 4a | DONE | 2026-08-06 | **125 tests green** (was 96; 29 new across 3 suites), `assembleDebug` + `detekt` + `ktlintCheck` clean. SCR-PA-006/007/008/010/032 built to `specs/wireframes/passenger_android.html`. The filter is a pure value type re-applied to every batch **client-side** — a toggle costs no query, asserted by call count. AL-23 routing is in the view model, not the sheet: Mode A opens SCR-PA-007, Mode B returns the vehicle id for SCR-PA-024, Mode C does nothing (US-7.4). **AL-17 held against D2'**: SCR-PA-008 is geo-only and `getBusesOnRoute` is never reached from it — D2' §SCR-PA-008 says the opposite and needs a micro-change-set, which leaves **US-7.9 with no screen anywhere**. SCR-PA-007's ETA/driver/plate come from `GET /v1/nearby` on tap (the socket frame carries none of them) centred on the **passenger**, because `etaSeconds` is defined as seconds to the querying passenger; **the route number exists in no contract at all**. §2.2's `place_recents` now has its writer — choosing a prediction on SCR-PA-008 — which is what fills SCR-PA-010's *Recent* rows. Fixed a C076 latent: the recentre FAB called back but nothing outside `MageRideMap` holds the `MapLibreMap`, so it moved nothing. **Δ 2026-08-07 (C096)**: the map tick C076's handoff asked for was missing — `refreshCells()` had no caller anywhere in the module, so a held boundary crossing never landed for a passenger who crossed a cell edge and then stopped walking. `LiveMapViewModel.tickCells()` at 15 s plus one test that fails without it — **292 tests green** |
-| C079 | passenger-android-booking | 4a | DONE | 2026-08-06 | **181 tests green** (was 125; 56 new across 7 suites), `assembleDebug` + `detekt` + `ktlintCheck` clean. SCR-PA-009/010b/011/012/012a/013 built to `specs/wireframes/passenger_android.html`. **AL-19 is a type, not a rendering**: `TierQuote` has three fields and a pinning test fails if a fourth appears, so a pre-match card cannot show an ETA. **AL-18/AL-55**: transit-svc down or feed-less degrades to one muted row while the Mode C tiers quote normally. **AL-20 parsed on the device** — `MapsLink` reads `!3d!4d`/`q=`/`ll=`/`@`, preferring the place pin over the viewport, and only `maps.app.goo.gl` reaches the server (3 s, one retry). **P-02 is structural**: `declineLocationRequest` takes an id and nothing else, asserted by what the repository was handed. **AL-36**: Confirm needs a destination *and* a time ≥ T-30, because the Job Board opens then. Built two things `:shared` lacks — an encoded-polyline decoder (GTFS shapes) and a Google-Maps URL parser. Five gaps recorded, including **no SCR-PA id for a map picker anywhere in the wireframe** and **no headway/frequency field** for the wireframe's *"every ~10 min"*. Also fixed a wall-clock flake in C077's `LoginViewModelTest` |
+| C079 | passenger-android-booking | 4a | DONE | 2026-08-06 | **181 tests green** (was 125; 56 new across 7 suites), `assembleDebug` + `detekt` + `ktlintCheck` clean. SCR-PA-009/010b/011/012/012a/013 built to `specs/wireframes/passenger_android.html`. **AL-19 is a type, not a rendering**: `TierQuote` has three fields and a pinning test fails if a fourth appears, so a pre-match card cannot show an ETA. **AL-18/AL-55**: transit-svc down or feed-less degrades to one muted row while the Mode C tiers quote normally. **AL-20 parsed on the device** — `MapsLink` reads `!3d!4d`/`q=`/`ll=`/`@`, preferring the place pin over the viewport, and only `maps.app.goo.gl` reaches the server (3 s, one retry). **P-02 is structural**: `declineLocationRequest` takes an id and nothing else, asserted by what the repository was handed. **AL-36**: Confirm needs a destination *and* a time ≥ T-30, because the Job Board opens then. Built two things `:shared` lacks — an encoded-polyline decoder (GTFS shapes) and a Google-Maps URL parser. Five gaps recorded, including **no SCR-PA id for a map picker anywhere in the wireframe** and **no headway/frequency field** for the wireframe's *"every ~10 min"*. Also fixed a wall-clock flake in C077's `LoginViewModelTest`. **Δ 2026-08-07 (C097)**: `BookingDraft.begin` takes an optional pickup and **no production call site passed one** — all three omitted it, so `refresh()` returned early and SCR-PA-009 loaded neither list: no bus routes, no tiers, nothing to book. `RideBookingViewModelTest` hid it by passing a pickup nothing in the app passed. `LastKnownFix` + `RecordingPassengerLocationSource` + the default inside `begin`, plus three tests that fail without it — **295 tests green** |
 | C080 | passenger-android-ride-payment | 4a | DONE | 2026-08-06 | **201 tests green** (was 181; 20 new across 3 suites), `assembleDebug` + `detekt` + `ktlintCheck` clean. SCR-PA-014/015/015a/016/017/018/019 built. **AL-57/AL-59 are the story**: `onepay` and platform-`lankaqr` are dead as ride rails, so SCR-PA-016 offers **Cash / Wallet / Driver QR** and *nothing on any screen can render a surcharge* — `PaymentRails` is the only rail list and a test pins it. **This corrects C079's booking chip**, which still offered the two retired rails. **AL-47 attestation**: claim → poll → `DriverConfirmedQR`, with Support offered past five unconfirmed minutes; `QrClaimedByPassenger` is explicitly *not* settled. **AL-48**: no masking anywhere — a Normal call is `ACTION_DIAL` on the real `counterpartyPhone`, the choice is remembered, and US-26.5's number notice is shown once and only before a direct dial. Cancel-after-accept names the Rs 50 **before** the tap (D-05 settles it on the next trip, so that is the only moment to say it). Added CameraX + `zxing:core` and the CAMERA permission for AL-22's scan. **Three gaps**: no contract POSTs a Mode C ride rating (confirming C074's finding from the other side — SCR-PA-019 queues locally), `ride.yaml`'s booking-time payment enum never caught up with AL-57/AL-59, and the SCR-PA-016/017 wireframes still draw OnePay +5% |
 | C081 | passenger-android-package-history | 4a | DONE | 2026-08-06 | **208 tests green** (was 201; 7 new), `assembleDebug` + `detekt` + `ktlintCheck` clean. SCR-PA-020/021/022/023 built. **One view model for both package screens**, because it is one ride — which of SCR-PA-020 and SCR-PA-021 to draw is a fact about the ride (booker vs recipient), not about the URI, exactly as `PassengerRoute.PackageTracking`'s KDoc anticipated. **AL-48 on the history card**: the row's `mobileMasked` is rendered and never dialled (`PhoneMasked` forbids parsing one back), so **Call** costs one `GET /v1/rides/{id}` for the clear `counterpartyPhone` — and a **cancelled-before-assignment** trip offers neither, checked in the card *and* the view model. **Four gaps**: neither package OTP can be read back from the platform (pickup is returned once at booking, delivery arrives only on a push — both now captured into a process-lifetime `PackageOtps`), there is **no passenger-facing read of their own scheduled rides**, `RideHistoryRow` carries no `kind` so the Packages tab splits on a terminal state, and `ride.yaml`'s post-AL-48 note still claims the Call needs no second round trip |
 | C082 | passenger-android-mode-b-subscriptions | 4a | DONE | 2026-08-06 | **235 tests green** (was 208; 27 new), `assembleDebug` + `detekt` + `ktlintCheck` clean. SCR-PA-024/025/025a/025b built. **AL-59 applied over the wireframe**: the pay sheet has no OnePay row and no `+5 %` anywhere — a subscription is paid to the *fleet owner* and OnePay has one merchant account per merchant, so **Cash** takes the vacant row (D2' §16e); the wireframe needs a micro-change-set. **AL-49's `payTo` only exists after `POST …/pay`**, which is why SCR-PA-025a is two stages — a chooser cannot print an account number it has not been given. **Unsubscribing drops the marker locally** through the new `PassengerLiveMap.dropVehicle`, so AL-25 is true on the tap rather than on `share.revoked`'s round trip. **Five gaps**: no passenger-readable vehicle name (`GET /v1/vehicles/{id}` is 403 `not-owner` here, so the card's title is the Vehicle ID), no passenger-facing read of one's own access requests and **no Mode B push kind** (so *accepted* is inferred from the subscription and *rejected* is unobservable), no `GET …/subscriptions/{subscriptionId}` (the screens filter the list), `GET …/payments` fixes no ordering, and **the passenger app has no wallet top-up screen at all** |
@@ -123,7 +123,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C094 | passenger-ios-shell | 4b | PARTIAL | 2026-08-07 | shell written in full, **none of it compiled** (Linux host); wave-1 gate green (822), `compileKotlinIosArm64` clean, vendored H3 verified at **19 cells**, driver `.pbxproj` byte-identical after the generator promotion |
 | C095 | passenger-ios-auth-onboarding | 4b | PARTIAL | 2026-08-07 | five screens written, **none compiled** (Linux host); wave-1 gate green (822), `compileKotlinIosArm64` clean, 62 app + 14 test sources audited; 2 wireframe/D2' conflicts and a `LocalizationTests` regex bug found |
 | C096 | passenger-ios-live-map-search | 4b | PARTIAL | 2026-08-07 | SCR-PI-006/007/008/010/032 built to `specs/wireframes/passenger_ios.html`; 41 new tests across 4 Swift suites. **PARTIAL only because the verify command is `xcodebuild` and this host cannot run it** — the shared half (`:shared:compileKotlinIosArm64 detekt ktlintCheck testDebugUnitTest`) is green here. The filter is a pure Swift value re-applied to every batch client-side; AL-23 routing is in the model (Mode A → popup, Mode B → SCR-PI-024, Mode C / no mode / filtered-out → nothing); AL-17 held **structurally** — `PassengerPlaces` has no route lookup to call. Two `:shared` `iosMain` helpers added (`IosPlaceRecents`, `IosGeoSearch`). Δ the home sheet is **drawn**, not a `.sheet`, because a modal one covers the tab bar the cell draws and makes every marker untappable below iOS 16.4 — micro-change-set raised. Δ a 15 s cell tick lands ADD §7.4's held boundary crossing; **C078 had none — fixed here too, `apps/passenger-android` green at 292 tests** |
-| C097 | passenger-ios-booking | 4b | PENDING | | |
+| C097 | passenger-ios-booking | 4b | PARTIAL | 2026-08-07 | SCR-PI-009/010b/011/012/012a/013 built to `specs/wireframes/passenger_ios.html`; 53 new tests across 4 Swift files (7 suites). **PARTIAL only because the verify command is `xcodebuild` and this host cannot run it** — the shared half (`:shared:compileKotlinIosArm64 detekt ktlintCheck testDebugUnitTest`) is green here, and the three `.strings` tables check out at 207 keys × 3 locales. `BookingDraft` is the one booking six screens edit; `CaptureTarget` is parked at the navigation site. AL-19 is a three-field type, AL-18 removes the payment chip rather than disabling it, AL-55 is one muted row, AL-20 parses on the device, P-02's decline has no parameter to put a point in. One `:shared` `iosMain` helper added (`IosBookingRequests`, four factories + the `TransitLeg.description` collision) plus `IosAppGraph.idempotencyKeys`. **Found and fixed a C079 defect on both platforms: no production call site passed a pickup to `BookingDraft.begin`, so SCR-PA-009 quoted nothing at all** — `LastKnownFix` + a default inside the draft; `apps/passenger-android` 295 tests green |
 | C098 | passenger-ios-ride-payment | 4b | PENDING | | |
 | C099 | passenger-ios-package-history | 4b | PENDING | | |
 | C100 | passenger-ios-mode-b-subscriptions | 4b | PENDING | | |
@@ -15413,3 +15413,169 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   `PassengerApp/Theme/MageRideSpacing.swift` (eight C096 control tokens), the three
   `Localizable.strings` (+43 keys each), `PassengerApp.xcodeproj` (regenerated) and
   `apps/passenger-ios/CLAUDE.md`.
+
+- **Component:** C097 passenger-ios-booking — 2026-08-07
+- **Status:** PARTIAL — every deliverable is written and every Definition-of-Done line has a named
+  test, but **the verify command is `xcodebuild` and this host cannot run it** (root CLAUDE.md).
+  What can be verified here is green and was: `./gradlew :shared:compileKotlinIosArm64
+  :shared:detekt :shared:ktlintCheck :shared:testDebugUnitTest` exits 0, which type-checks the new
+  `iosMain` helper on the Linux host; the three `Localizable.strings` were parsed and compared the
+  way `LocalizationTests` does (**207 keys × 3 locales**, every key referenced, every specifier
+  surviving translation); and `PassengerApp.xcodeproj` was regenerated (99 app sources, 22 test
+  sources). SCR-PI-009, 010b, 011, 012, 012a and 013 are built against
+  `specs/wireframes/passenger_ios.html`. **53 new tests across four files** (`MapsLinkTests`,
+  `RideBookingModelTests`, and `BookingFlowTests`' five suites plus `BookingTestKit`), none run yet.
+- **Notes:**
+  **The draft is the design decision, and it is the same one C079 argued.** Six screens edit one
+  booking; the alternatives are a `NavigationPath` carrying a rider's phone number and a package
+  description through the back stack, or a model per screen with no shared home, which makes *"go
+  back and change the pickup"* lose everything downstream. `CaptureTarget` is the other half —
+  SCR-PI-008 is **one** picker reached from five places and cannot tell which, so the intent is
+  parked on the draft. **Δ where `expect(…)` is called**: the Android twin calls it from
+  `PassengerNavHost`, and this one calls it from `BookingDestinationView` for the same reason — the
+  call that opens the picker and the call that says why should be two adjacent lines.
+
+  **Four fences, each enforced by something stronger than a layout choice.**
+
+  1. **AL-19 / BR-23.3 — price only, pre-match.** `TierQuote` has exactly three fields, and
+     `testAModeCTierCarriesAPriceAndNothingElse` pins the list by reflection, so adding an ETA fails
+     in a test rather than appearing on screen before a driver has been matched.
+  2. **AL-18 / BR-23.2 / AL-55 — GTFS routes are tracked, not booked.** Selecting a public route
+     drops the tier from the draft, **removes** the payment chip (a bus has no fare to choose a rail
+     for) and changes the CTA; `book()` is a no-op and the test asserts nothing was posted.
+     transit-svc unreachable and transit-svc with no feed are the *same* muted row.
+  3. **AL-20 — the device parses, the server only follows redirects.** `MapsLink` reads the four
+     full-URL forms and prefers `!3d!4d` over `@`; only `maps.app.goo.gl` / `goo.gl/maps` reach
+     transit-svc, on D5' §BR-23.4's own budget of 3 s and one retry.
+  4. **P-02 — a decline sends nothing.** `declineLocationRequest` takes an id and has no parameter
+     to put a coordinate in. `testDecliningSendsAnIdAndNothingElse` puts a pin on screen first and
+     then asserts the confirm log is empty, so a future change that started sending an
+     "approximate" position would have to change the contract to compile.
+
+  ### A defect found in C079, fixed here and still live on Android
+
+  **No production call site passes a pickup to `BookingDraft.begin`.** All three `draft.begin(...)`
+  calls in `apps/passenger-android/.../nav/PassengerNavHost.kt` omit the optional second argument,
+  so a booking begun from the home sheet or from SCR-PA-008 has `pickup == null` —
+  `RideBookingViewModel.refresh()` returns early on exactly that, and **SCR-PA-009 shows no bus
+  routes and no tiers at all**. `RideBookingViewModelTest` hides it because its setup calls
+  `draft.begin(dropoff = NUGEGODA, pickup = COLOMBO)` directly; nothing in the app does.
+
+  This side fixes it with ``LastKnownFix``, which C096's handoff had already asked C097 to
+  introduce: `PassengerLocationSource` is **cold** and the blue status-bar pill stays lit for as long
+  as anything is subscribed, so a screen that wants a position must not open a second subscription —
+  the fix source is **decorated** instead, and everybody else reads what passed through it. Three
+  readers, and the second is the fix: SCR-PI-008's geocoder bias (which C096 left `nil`), a booking's
+  default pickup, and the map picker's opening camera. **`apps/passenger-android` was fixed in the same session** —
+  `location/LastKnownFix.kt`, the same three readers, the same default inside `BookingDraft.begin`,
+  plus `a_booking_begun_the_way_the_app_begins_one_has_a_pickup` and two siblings. The test was
+  checked against a reverted default and fails without it.
+  `./gradlew :apps:passenger-android:testDebugUnitTest detekt ktlintCheck assembleDebug` exits 0:
+  **295 tests, 0 failures** (292 → 295).
+
+  **Δ where the recording happens, on both platforms.** The first cut had SCR-PA/PI-010's map write
+  the fix, because it is the one screen that collects for its whole life. detekt's constructor
+  ceiling caught it — seven parameters on `LiveMapViewModel` — and the fix was the better design:
+  `RecordingPassengerLocationSource` / `RecordingLocationSource` **decorates the fix source** and
+  records everything that passes, so the last known position is the last one *anybody* saw
+  (SCR-*-011's pin, C083/C101's address capture, C084/C102's alarm), it costs no extra collector,
+  and the rule stops living in one of five subscribers. Both apps are wired that way.
+
+  ### One `:shared` helper, and the reason it is not four Swift call sites
+
+  `data/api/IosBookingRequests.kt` carries four factories and one accessor, and both halves are the
+  bridge rather than taste:
+
+  - **Every request shape in this cluster has an optional primitive in it.** `RideRequest.isProxy` is
+    a `Boolean?`, `ScheduleRideRequest.pickupLat/pickupLng` are `Double?`, `GeoPointWithAccuracy`
+    `.accuracy` is a `Double?`, and `TransitApi.getTransitRoute` takes two more. Each crosses boxed,
+    and `KotlinInt(int:)` versus `KotlinInt(value:)` is a question this repository already answers
+    two different ways in two apps neither host has compiled (the C096 handoff records it). A
+    `GeoPoint?` or a `Place?` is a **class** — nothing to box, nothing to spell — so the factories
+    take those and Kotlin does the rest. `isProxy` is *derived* from the kind rather than taken,
+    because the two are one fact.
+  - **`TransitLeg.description` collides with `NSObject.description`.** That is C093's `IosTicket.kt`
+    trap exactly: the exporter mangles the Kotlin name and a Swift call site gets either nothing or
+    `TransitLeg(routeId=…)` printed under a bus route. `transitLegDescription(leg:)` is the unwrap.
+  - **`IosAppGraph` gained `idempotencyKeys`**, the way that type's own note invites. R-18 dedupes a
+    booking on `(passengerId, clientRequestId)` and the two values are the same string, so the key
+    belongs to the screen — and it must be the pipeline's own ULID generator rather than a second
+    implementation that can drift from the contract's pattern.
+
+  ### Two wireframe deviations, both argued
+
+  1. **SCR-PI-009 hides the navigation bar and draws its own back control**, because the cell draws
+     no bar at all and gives the map its full 150pt. A pushed SwiftUI screen keeps its edge swipe
+     either way; the drawn button is the target the frame has room for. `apps/passenger-android`
+     does the same thing for the same reason.
+  2. **SCR-PI-013 is one `DatePicker(.graphical)`** where the cell draws a calendar card and a time
+     card separately. That is the cell's own `Δ iOS` clause — `.dateAndTime` *is* those two cards,
+     drawn by the system, with the past-date bound the cell asks for and none of the time-zone traps
+     a hand-built pair carries.
+
+  ### Four contract gaps carried forward from C079, unchanged
+
+  1. **No headway or frequency exists on any transit shape**, so the cell's *"every ~10 min"* cannot
+     be drawn. `TransitOption` has `totalDurationSec` and `walkingDistanceM`; `TransitLeg` has the
+     route number, headsign, description and shape. The row shows what exists.
+  2. **There is no walking-routing service.** The blue walk-to-halt leg is a straight line from the
+     passenger to the nearest halt: honest about the distance, not about the path.
+  3. **No SCR-PI id exists for a map picker.** The frames offer *"Map pin"* / *"Map"* / *"Select on
+     map"* as a **method** on three cells and draw a screen for none of them, so `MapPickSheet` is a
+     `.sheet` — the conservative reading, and now the third caller is SCR-PI-008's own button.
+  4. **SCR-PI-012's drop-off *Request* has no wired round trip.** The chip selects and the fence
+     holds, but asking a *recipient* to share a drop-off reuses P-02's machinery, which lives in
+     `ProxyRiderModel` against `riderPhone`. Wiring it needs that model generalised or
+     `POST /v1/location-requests` called with the recipient's number and the answer routed to the
+     package draft — deliberately not smuggled in.
+
+  ### One more that is this component's own
+
+  **SCR-PI-011's booker name never reaches the screen, on either platform.** The cell prints
+  *"**Ramith** wants your pickup location"* and `notification-svc` does send `data.bookerName`, but
+  `PushRouter` builds the destination from `data.requestId` alone and `PassengerRoute` is diffed
+  against the Android table, so there is nowhere to carry it. The copy falls back to *"Someone wants
+  your pickup location"* — which is `confirm_pickup_who_unknown`, the key the Android twin already
+  has for the same reason. Closing it needs either a route argument on both platforms or a holder
+  like ``PackageOtps``.
+
+  ### For C098 onwards
+
+  - **Cluster 3's five placeholders are gone.** `.rideBooking`, `.proxyRider`, `.packageBooking`,
+    `.scheduleRide` and `.confirmPickup` all route to ``BookingDestinationView``.
+  - **`BookingDraft` is bound and is where a booking lives.** C098's SCR-PI-016 changes
+    `paymentMethod` on it; do not thread a rail through a navigation value.
+  - **`PaymentRails` is in `Booking/` and is half-built on purpose.** It has `ride`, `parcel`,
+    `retired`, `fromWire`, `labelKey` and `bookingValueOf`; C098 adds `preferable`, `caption(_:)`,
+    `storedValueOf(_:)` and `fromStored(_:)`, and `apps/passenger-android/.../ride/PaymentRails.kt`
+    is the reference for all four.
+  - **`BookingErrors` is cluster 3's code table only** — every arm is a code one of its six
+    contracts declares. Add your own; one `switch` over the platform is a function nobody can check.
+    Reach for `OnboardingErrors.kotlinCause(of:)` in it, as this one does.
+  - **`MoneyFormat` is `Rs 740` and integer arithmetic all the way down.** `Money` deliberately does
+    not format itself; C098's receipt and C099's history cards take it from here.
+  - **`PackageOtps` holds P-07's pickup code** and C099's SCR-PI-020 reads it. Nothing persists it —
+    a cold start has nothing, and the screen has to say so.
+  - **`LastKnownFix` is the answer to *"I need a position and must not subscribe"*.** Read it; do
+    not add a second `PassengerLocationSource` subscriber.
+  - **Never construct a boxed Kotlin primitive from Swift.** Reading one is settled (`int32Value`,
+    `doubleValue`, `boolValue`); *building* one is what `IosBookingRequests.kt` exists to avoid, and
+    the two apps still disagree about the spelling.
+
+  **Files —** New: `apps/passenger-ios/PassengerApp/Booking/` (21 files — `BookingDraft`,
+  `BookingRepository`, `BookingErrors`, `MapsLink`, `PickupMethod`, `PaymentRails`, `PackageOtps`,
+  `BookingRows`, `RideBookingModel`, `RideBookingScreen`, `ProxyRiderModel`, `ProxyRiderScreen`,
+  `ConfirmPickupModel`, `ConfirmPickupScreen`, `PackageBookingModel`, `PackageBookingScreen`,
+  `PasteLinkModel`, `ScheduleRideModel`, `ScheduleRideScreen`, `CaptureSheets`,
+  `BookingDestinationView`), `PassengerApp/UI/BookingControls.swift`,
+  `PassengerApp/UI/MoneyFormat.swift`, `PassengerApp/Location/LastKnownFix.swift`, four test files
+  (`BookingTestKit`, `MapsLinkTests`, `RideBookingModelTests`, `BookingFlowTests`) and one `:shared`
+  `iosMain` helper (`data/api/IosBookingRequests.kt`). Edited:
+  `PassengerApp/Nav/PassengerDestinations.swift` (cluster 3's five placeholders → one arm),
+  `PassengerApp/DI/PassengerGraph.swift` (`draft`, `bookings`, `idempotencyKeys`, `packageOtps`,
+  `lastFix`), `PassengerApp/Home/HomeDestinationView.swift` (the draft hand-off, the geocoder bias
+  and the map picker), `PassengerApp/Home/LiveMapModel.swift` + `LiveMapScreen.swift` (recording the
+  fix), `PassengerApp/UI/Localisation.swift` (an array `localisedFormat`),
+  `PassengerApp/Theme/MageRideSpacing.swift` (five C097 control tokens),
+  `shared/kmp/.../di/IosAppGraph.kt` (`idempotencyKeys`), the three `Localizable.strings` (+98 keys
+  each), `PassengerApp.xcodeproj` (regenerated) and `apps/passenger-ios/CLAUDE.md`.

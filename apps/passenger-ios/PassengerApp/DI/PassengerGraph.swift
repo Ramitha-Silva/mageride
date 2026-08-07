@@ -63,6 +63,10 @@ final class PassengerGraph: ObservableObject {
     /// Where the passenger is. The R-06 anchor, MAP-02's halo and every *"current location"*.
     let locations: PassengerLocationSource
 
+    /// The last fix any screen saw, for the ones that need one and must not subscribe for it
+    /// (Δ C097). Written by ``RecordingLocationSource``, which wraps ``locations``.
+    let lastFix: LastKnownFix
+
     /// C018's `mageride_passenger.db`, opened on first use. **Nothing is opened yet** — see
     /// ``PassengerDatabase``.
     let databases: PassengerDatabase
@@ -104,6 +108,24 @@ final class PassengerGraph: ObservableObject {
     /// so it is one object over one connection — see ``PassengerDatabase``.
     let recents: RecentPlaces
 
+    // MARK: - C097 · cluster 3
+    //
+    // A booking is assembled across six screens, so all four of these are process singletons: the
+    // draft *is* the booking, the repository is one door onto six services, the key generator has to
+    // answer the same value across a retry, and the OTP holder catches something that exists once.
+
+    /// The booking being assembled. **One for the process** — see ``BookingDraft``.
+    let draft: BookingDraft
+
+    /// transit-svc, fare-svc, ride-svc, dispatch-svc, query-svc and iam, behind one door.
+    let bookings: BookingRepository
+
+    /// Where a `clientRequestId` comes from (R-18).
+    let idempotencyKeys: IdempotencyKeys
+
+    /// P-07's pickup code, caught on its way past. C099's SCR-PI-020 reads it.
+    let packageOtps = PackageOtps()
+
     init(environment: PassengerEnvironment = .current) {
         self.environment = environment
 
@@ -143,7 +165,12 @@ final class PassengerGraph: ObservableObject {
         self.databases = databases
         let preferences = UserDefaultsAppPreferences()
         self.preferences = preferences
-        self.locations = CoreLocationPassengerSource()
+        // Δ C097. Wrapped so every fix that reaches a screen also reaches `lastFix`, which is what
+        // a booking's default pickup and SCR-PI-008's geocoder bias read. Built through a local so
+        // the initialiser never reads a property it is still filling in.
+        let lastFix = LastKnownFix()
+        self.lastFix = lastFix
+        self.locations = RecordingLocationSource(delegate: CoreLocationPassengerSource(), lastFix: lastFix)
 
         // C095. Two seams over three services, split by what a screen asks rather than by which
         // client answers: SCR-PI-002 reads content-svc and writes a language preference to iam-svc,
@@ -166,6 +193,20 @@ final class PassengerGraph: ObservableObject {
         self.nearby = nearby
         self.places = ApiPassengerPlaces(query: shared.api.query, iam: shared.api.iam)
         self.recents = LocalRecentPlaces(databases: databases)
+
+        // C097. The draft reads the stored rail on every fresh booking, which is what makes C101's
+        // *"pre-selected at booking/checkout"* true of the **next** one rather than of the next
+        // launch.
+        self.draft = BookingDraft(preferences: preferences, lastFix: lastFix)
+        self.bookings = ApiBookingRepository(
+            transit: shared.api.transit,
+            fare: shared.api.fare,
+            rides: shared.api.ride,
+            dispatch: shared.api.dispatch,
+            query: shared.api.query,
+            iam: shared.api.iam
+        )
+        self.idempotencyKeys = SharedIdempotencyKeys(generator: shared.idempotencyKeys)
 
         self.live = PassengerLiveMap(
             transport: SignalRLiveHubTransport(

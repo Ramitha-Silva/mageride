@@ -3,6 +3,7 @@ package lk.mageride.passenger.booking
 import kotlinx.coroutines.runBlocking
 import lk.mageride.passenger.MainDispatcher
 import lk.mageride.passenger.await
+import lk.mageride.passenger.location.LastKnownFix
 import lk.mageride.passenger.onboarding.FakeAppPreferences
 import lk.mageride.passenger.settings.PaymentPreference
 import lk.mageride.shared.data.models.Place
@@ -30,8 +31,9 @@ import kotlin.time.Duration.Companion.minutes
 class ScheduleRideViewModelTest {
 
     private val main = MainDispatcher()
+    private val lastFix = LastKnownFix()
     private val bookings = FakeBookingRepository()
-    private val draft = BookingDraft(PaymentPreference(FakeAppPreferences()))
+    private val draft = BookingDraft(PaymentPreference(FakeAppPreferences()), lastFix)
 
     @BeforeTest
     fun setUp() {

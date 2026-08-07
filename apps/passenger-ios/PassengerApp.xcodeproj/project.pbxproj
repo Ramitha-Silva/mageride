@@ -7,6 +7,27 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		6529315E8DD3957B56A4F895 /* BookingDestinationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E686CB4B04E44BA5D94FB88B /* BookingDestinationView.swift */; };
+		BEF46402914C527F3B63B133 /* BookingDraft.swift in Sources */ = {isa = PBXBuildFile; fileRef = 239F8D2C9F67689CCC3FD925 /* BookingDraft.swift */; };
+		4294843AB1984029322A17FE /* BookingErrors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85499C6B44749E9923F2650D /* BookingErrors.swift */; };
+		5A53E8E1591683C5316C3682 /* BookingRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 814431D73F9A2BC1DC550593 /* BookingRepository.swift */; };
+		B5578551ACBB38DCB06B1058 /* BookingRows.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11262B667BA5D23C4F1C4B06 /* BookingRows.swift */; };
+		115CBC54567FD869346BEC11 /* CaptureSheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2A0715BDF9EB8264DDE300E /* CaptureSheets.swift */; };
+		066CA781D2695EF24F06B1C5 /* ConfirmPickupModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8754F5A042954FF4FF3E84E6 /* ConfirmPickupModel.swift */; };
+		7660F6EDF26AA91203E77F60 /* ConfirmPickupScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2193B0879951926E215DB691 /* ConfirmPickupScreen.swift */; };
+		473802F2FBB827EAAD758D9D /* MapsLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61334186C1B206AD41047BB6 /* MapsLink.swift */; };
+		D05CB2059050F2E524745202 /* PackageBookingModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C28C582C84ED2980B5A16C7D /* PackageBookingModel.swift */; };
+		348256FF48F8430E653D575C /* PackageBookingScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = C74A89B3DB10D5186F5D7D86 /* PackageBookingScreen.swift */; };
+		344991210E1581232295E6AC /* PackageOtps.swift in Sources */ = {isa = PBXBuildFile; fileRef = C148AF518E4D8EDB6C0C7FC6 /* PackageOtps.swift */; };
+		C05C8F3105298E0E2F7381CE /* PasteLinkModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13793196F7DC92A7FBC3C992 /* PasteLinkModel.swift */; };
+		75DEDE72A26803AAFC49B6D5 /* PaymentRails.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6AACB8882B42FDCE3FE8CEE /* PaymentRails.swift */; };
+		B17C0699AD15A3FF43A6E526 /* PickupMethod.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49D16E777CAF1C870DE6F37F /* PickupMethod.swift */; };
+		C350DB74F646A4A504BB4085 /* ProxyRiderModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0A1D6E36295C29AD149A747 /* ProxyRiderModel.swift */; };
+		EBD0859D93DB9617348E4024 /* ProxyRiderScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CCB239E57DE4F5C456CA504 /* ProxyRiderScreen.swift */; };
+		C637A66E223C195B826FF010 /* RideBookingModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00F3827DB6CAC86FDAB5140 /* RideBookingModel.swift */; };
+		0717F5B3CB5079C83DC116B0 /* RideBookingScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 383F77F25573B35E7BEBF967 /* RideBookingScreen.swift */; };
+		FB4C92894FCB074B0B8B304D /* ScheduleRideModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBA4A4DE3255976FE4CFF294 /* ScheduleRideModel.swift */; };
+		45088CEC574E8641085EFF53 /* ScheduleRideScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19CF01EB1B075206A3141785 /* ScheduleRideScreen.swift */; };
 		918C5BF0F53795B848047E58 /* PassengerDatabase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A63DB6E3CFA1956995596FD /* PassengerDatabase.swift */; };
 		8CDB50DCB0034921F415D470 /* PassengerEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24DA004F925603B84EF220CB /* PassengerEnvironment.swift */; };
 		346D6137FC046C51897AD94B /* PassengerGraph.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EE066024FBCF6E5C5D3F799 /* PassengerGraph.swift */; };
@@ -29,6 +50,7 @@
 		33C9CC7ED2202C7953D175A1 /* LiveHubTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = F29EE011127D804A2D3DC88E /* LiveHubTransport.swift */; };
 		D3E3D65CF5BB2EB960A7A4B5 /* LiveVehicleStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F7B52A0F8AF6E8ADC049E2F /* LiveVehicleStore.swift */; };
 		B57637552FEB19F52929E3AD /* PassengerLiveMap.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F84420C12F6F2564A26F6CF /* PassengerLiveMap.swift */; };
+		3DCCEA56A1368C9267322675 /* LastKnownFix.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25348F5DCFE2229E31D2246B /* LastKnownFix.swift */; };
 		F7544712D56887564273B5EE /* PassengerLocationSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB83BEBE93D842A970B09A95 /* PassengerLocationSource.swift */; };
 		0B2B3A28EF914DB6DA291D88 /* EncodedPolyline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C2FDFB7361DBA90B7525376 /* EncodedPolyline.swift */; };
 		C605D9C11D91244FFCDD3537 /* MageRideMap.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4717494A182B502D148B590A /* MageRideMap.swift */; };
@@ -78,11 +100,15 @@
 		518B1E6CA267120BBA13B6C8 /* MageRideSpacing.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5BD2BC376FDF25822B419F1 /* MageRideSpacing.swift */; };
 		6F8A8EED1D1056487BFAF659 /* MageRideTypography.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6764C5CA45F60065C3D82617 /* MageRideTypography.swift */; };
 		5906F55CA4D52CA023C69D0E /* VehicleToken.swift in Sources */ = {isa = PBXBuildFile; fileRef = E910A9FCCA116E44D2D1D56D /* VehicleToken.swift */; };
+		9E3C6681E600CEB31E539874 /* BookingControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 476D14AD5C6DB73EDF47418D /* BookingControls.swift */; };
 		34D76627316F579648A86D3F /* FormControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3E3FA3705F72A6BA40D970A /* FormControls.swift */; };
 		D0F18D6E25242D2C76A6F457 /* Localisation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41BFF6164F190FAD72DB4A78 /* Localisation.swift */; };
 		C670C9CF1D6AB120277AEBA3 /* MapControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3EB485B6BDD5A3D2FC80928B /* MapControls.swift */; };
+		555E59E9CBA567374C6623D6 /* MoneyFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55C349B59365D53A8445B6D5 /* MoneyFormat.swift */; };
 		0E81997BA284C668CF4714E7 /* OnboardingControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C1054C289748A1946D9FF59 /* OnboardingControls.swift */; };
 		C6BE56F891657926BE9AA958 /* AnyJSONTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F47AB13334989925EC1BFCE8 /* AnyJSONTests.swift */; };
+		A7BB60AE5CC5A09415F47599 /* BookingFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 803908678D9F811FD039E65F /* BookingFlowTests.swift */; };
+		4141610BAA03639B6C8E984C /* BookingTestKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83CD391A76B9B5D522817667 /* BookingTestKit.swift */; };
 		C765998EC557607BE16BFD6C /* H3GridTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AF0C3655D8873301EFAEFA1 /* H3GridTests.swift */; };
 		35C51B5FD3546039892CAF0B /* HomeTestKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28A09FCDFBB923589A4F2D6F /* HomeTestKit.swift */; };
 		E320861E92501C3C5AA6277A /* LiveMapModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C487BC82B51597FA05C4664D /* LiveMapModelTests.swift */; };
@@ -91,6 +117,7 @@
 		54E7641A466031DDEA14F646 /* LoginModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73C3AF8141A93E4118ABE2FC /* LoginModelTests.swift */; };
 		61AB084EF2579311BE46D169 /* MapFilterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34B52D30C4329DABF6364568 /* MapFilterTests.swift */; };
 		50A4B202C1F8F93F5DD1B0E8 /* MapTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3791772D75BF5692DED24D2 /* MapTests.swift */; };
+		C07F100A0EE357575D2CAC44 /* MapsLinkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85BD8F9D08E5C36B2AABDF6F /* MapsLinkTests.swift */; };
 		47630B5298A8E819A68A53A6 /* NavigationShellTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6122688CB40E17316622309 /* NavigationShellTests.swift */; };
 		DADE13BF6C41E54754040641 /* OnboardingFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D845B62B72B97BED49383568 /* OnboardingFlowTests.swift */; };
 		7E1D2C479A15FD8080F8152F /* OnboardingTestKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4437C0689118C6010DBBB772 /* OnboardingTestKit.swift */; };
@@ -98,6 +125,7 @@
 		C6E8266BFBF842B0A51EB517 /* PassengerLiveMapTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F23A45AF2B4A5B772B516AF /* PassengerLiveMapTests.swift */; };
 		F10D8E02B962685209BF6A42 /* ProfileAndPermissionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEABF9B009EC8586B1AEEE37 /* ProfileAndPermissionTests.swift */; };
 		3B23D16A765BE20FE507DA76 /* PushRouterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6C90E80EAE6E80DAF3A894C /* PushRouterTests.swift */; };
+		3DF99A7B59C8CA3A98DDED2A /* RideBookingModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E51C5CD409F6C211654DF01 /* RideBookingModelTests.swift */; };
 		EFE12234A8891AD732D8B9F6 /* SearchLocationModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D84F662D44E94A1042CC5430 /* SearchLocationModelTests.swift */; };
 		6CC2566BFAC64E6A55513820 /* ThemeTokenTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1C5080D5E19CF6E9F0AB3A0 /* ThemeTokenTests.swift */; };
 		4F40927C2435B92808CF21DA /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13AED341F97194F9FD6FAE90 /* Assets.xcassets */; };
@@ -113,6 +141,27 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		E686CB4B04E44BA5D94FB88B /* BookingDestinationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "BookingDestinationView.swift"; path = "BookingDestinationView.swift"; sourceTree = "<group>"; };
+		239F8D2C9F67689CCC3FD925 /* BookingDraft.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "BookingDraft.swift"; path = "BookingDraft.swift"; sourceTree = "<group>"; };
+		85499C6B44749E9923F2650D /* BookingErrors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "BookingErrors.swift"; path = "BookingErrors.swift"; sourceTree = "<group>"; };
+		814431D73F9A2BC1DC550593 /* BookingRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "BookingRepository.swift"; path = "BookingRepository.swift"; sourceTree = "<group>"; };
+		11262B667BA5D23C4F1C4B06 /* BookingRows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "BookingRows.swift"; path = "BookingRows.swift"; sourceTree = "<group>"; };
+		C2A0715BDF9EB8264DDE300E /* CaptureSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "CaptureSheets.swift"; path = "CaptureSheets.swift"; sourceTree = "<group>"; };
+		8754F5A042954FF4FF3E84E6 /* ConfirmPickupModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ConfirmPickupModel.swift"; path = "ConfirmPickupModel.swift"; sourceTree = "<group>"; };
+		2193B0879951926E215DB691 /* ConfirmPickupScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ConfirmPickupScreen.swift"; path = "ConfirmPickupScreen.swift"; sourceTree = "<group>"; };
+		61334186C1B206AD41047BB6 /* MapsLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "MapsLink.swift"; path = "MapsLink.swift"; sourceTree = "<group>"; };
+		C28C582C84ED2980B5A16C7D /* PackageBookingModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PackageBookingModel.swift"; path = "PackageBookingModel.swift"; sourceTree = "<group>"; };
+		C74A89B3DB10D5186F5D7D86 /* PackageBookingScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PackageBookingScreen.swift"; path = "PackageBookingScreen.swift"; sourceTree = "<group>"; };
+		C148AF518E4D8EDB6C0C7FC6 /* PackageOtps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PackageOtps.swift"; path = "PackageOtps.swift"; sourceTree = "<group>"; };
+		13793196F7DC92A7FBC3C992 /* PasteLinkModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PasteLinkModel.swift"; path = "PasteLinkModel.swift"; sourceTree = "<group>"; };
+		E6AACB8882B42FDCE3FE8CEE /* PaymentRails.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PaymentRails.swift"; path = "PaymentRails.swift"; sourceTree = "<group>"; };
+		49D16E777CAF1C870DE6F37F /* PickupMethod.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PickupMethod.swift"; path = "PickupMethod.swift"; sourceTree = "<group>"; };
+		F0A1D6E36295C29AD149A747 /* ProxyRiderModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ProxyRiderModel.swift"; path = "ProxyRiderModel.swift"; sourceTree = "<group>"; };
+		4CCB239E57DE4F5C456CA504 /* ProxyRiderScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ProxyRiderScreen.swift"; path = "ProxyRiderScreen.swift"; sourceTree = "<group>"; };
+		C00F3827DB6CAC86FDAB5140 /* RideBookingModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "RideBookingModel.swift"; path = "RideBookingModel.swift"; sourceTree = "<group>"; };
+		383F77F25573B35E7BEBF967 /* RideBookingScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "RideBookingScreen.swift"; path = "RideBookingScreen.swift"; sourceTree = "<group>"; };
+		EBA4A4DE3255976FE4CFF294 /* ScheduleRideModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ScheduleRideModel.swift"; path = "ScheduleRideModel.swift"; sourceTree = "<group>"; };
+		19CF01EB1B075206A3141785 /* ScheduleRideScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ScheduleRideScreen.swift"; path = "ScheduleRideScreen.swift"; sourceTree = "<group>"; };
 		5A63DB6E3CFA1956995596FD /* PassengerDatabase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PassengerDatabase.swift"; path = "PassengerDatabase.swift"; sourceTree = "<group>"; };
 		24DA004F925603B84EF220CB /* PassengerEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PassengerEnvironment.swift"; path = "PassengerEnvironment.swift"; sourceTree = "<group>"; };
 		5EE066024FBCF6E5C5D3F799 /* PassengerGraph.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PassengerGraph.swift"; path = "PassengerGraph.swift"; sourceTree = "<group>"; };
@@ -135,6 +184,7 @@
 		F29EE011127D804A2D3DC88E /* LiveHubTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "LiveHubTransport.swift"; path = "LiveHubTransport.swift"; sourceTree = "<group>"; };
 		5F7B52A0F8AF6E8ADC049E2F /* LiveVehicleStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "LiveVehicleStore.swift"; path = "LiveVehicleStore.swift"; sourceTree = "<group>"; };
 		3F84420C12F6F2564A26F6CF /* PassengerLiveMap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PassengerLiveMap.swift"; path = "PassengerLiveMap.swift"; sourceTree = "<group>"; };
+		25348F5DCFE2229E31D2246B /* LastKnownFix.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "LastKnownFix.swift"; path = "LastKnownFix.swift"; sourceTree = "<group>"; };
 		BB83BEBE93D842A970B09A95 /* PassengerLocationSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PassengerLocationSource.swift"; path = "PassengerLocationSource.swift"; sourceTree = "<group>"; };
 		0C2FDFB7361DBA90B7525376 /* EncodedPolyline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "EncodedPolyline.swift"; path = "EncodedPolyline.swift"; sourceTree = "<group>"; };
 		4717494A182B502D148B590A /* MageRideMap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "MageRideMap.swift"; path = "MageRideMap.swift"; sourceTree = "<group>"; };
@@ -187,11 +237,15 @@
 		F5BD2BC376FDF25822B419F1 /* MageRideSpacing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "MageRideSpacing.swift"; path = "MageRideSpacing.swift"; sourceTree = "<group>"; };
 		6764C5CA45F60065C3D82617 /* MageRideTypography.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "MageRideTypography.swift"; path = "MageRideTypography.swift"; sourceTree = "<group>"; };
 		E910A9FCCA116E44D2D1D56D /* VehicleToken.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "VehicleToken.swift"; path = "VehicleToken.swift"; sourceTree = "<group>"; };
+		476D14AD5C6DB73EDF47418D /* BookingControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "BookingControls.swift"; path = "BookingControls.swift"; sourceTree = "<group>"; };
 		F3E3FA3705F72A6BA40D970A /* FormControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "FormControls.swift"; path = "FormControls.swift"; sourceTree = "<group>"; };
 		41BFF6164F190FAD72DB4A78 /* Localisation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "Localisation.swift"; path = "Localisation.swift"; sourceTree = "<group>"; };
 		3EB485B6BDD5A3D2FC80928B /* MapControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "MapControls.swift"; path = "MapControls.swift"; sourceTree = "<group>"; };
+		55C349B59365D53A8445B6D5 /* MoneyFormat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "MoneyFormat.swift"; path = "MoneyFormat.swift"; sourceTree = "<group>"; };
 		4C1054C289748A1946D9FF59 /* OnboardingControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "OnboardingControls.swift"; path = "OnboardingControls.swift"; sourceTree = "<group>"; };
 		F47AB13334989925EC1BFCE8 /* AnyJSONTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "AnyJSONTests.swift"; path = "AnyJSONTests.swift"; sourceTree = "<group>"; };
+		803908678D9F811FD039E65F /* BookingFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "BookingFlowTests.swift"; path = "BookingFlowTests.swift"; sourceTree = "<group>"; };
+		83CD391A76B9B5D522817667 /* BookingTestKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "BookingTestKit.swift"; path = "BookingTestKit.swift"; sourceTree = "<group>"; };
 		0AF0C3655D8873301EFAEFA1 /* H3GridTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "H3GridTests.swift"; path = "H3GridTests.swift"; sourceTree = "<group>"; };
 		28A09FCDFBB923589A4F2D6F /* HomeTestKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "HomeTestKit.swift"; path = "HomeTestKit.swift"; sourceTree = "<group>"; };
 		C487BC82B51597FA05C4664D /* LiveMapModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "LiveMapModelTests.swift"; path = "LiveMapModelTests.swift"; sourceTree = "<group>"; };
@@ -200,6 +254,7 @@
 		73C3AF8141A93E4118ABE2FC /* LoginModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "LoginModelTests.swift"; path = "LoginModelTests.swift"; sourceTree = "<group>"; };
 		34B52D30C4329DABF6364568 /* MapFilterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "MapFilterTests.swift"; path = "MapFilterTests.swift"; sourceTree = "<group>"; };
 		B3791772D75BF5692DED24D2 /* MapTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "MapTests.swift"; path = "MapTests.swift"; sourceTree = "<group>"; };
+		85BD8F9D08E5C36B2AABDF6F /* MapsLinkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "MapsLinkTests.swift"; path = "MapsLinkTests.swift"; sourceTree = "<group>"; };
 		F6122688CB40E17316622309 /* NavigationShellTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "NavigationShellTests.swift"; path = "NavigationShellTests.swift"; sourceTree = "<group>"; };
 		D845B62B72B97BED49383568 /* OnboardingFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "OnboardingFlowTests.swift"; path = "OnboardingFlowTests.swift"; sourceTree = "<group>"; };
 		4437C0689118C6010DBBB772 /* OnboardingTestKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "OnboardingTestKit.swift"; path = "OnboardingTestKit.swift"; sourceTree = "<group>"; };
@@ -207,6 +262,7 @@
 		5F23A45AF2B4A5B772B516AF /* PassengerLiveMapTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PassengerLiveMapTests.swift"; path = "PassengerLiveMapTests.swift"; sourceTree = "<group>"; };
 		DEABF9B009EC8586B1AEEE37 /* ProfileAndPermissionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ProfileAndPermissionTests.swift"; path = "ProfileAndPermissionTests.swift"; sourceTree = "<group>"; };
 		B6C90E80EAE6E80DAF3A894C /* PushRouterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PushRouterTests.swift"; path = "PushRouterTests.swift"; sourceTree = "<group>"; };
+		2E51C5CD409F6C211654DF01 /* RideBookingModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "RideBookingModelTests.swift"; path = "RideBookingModelTests.swift"; sourceTree = "<group>"; };
 		D84F662D44E94A1042CC5430 /* SearchLocationModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "SearchLocationModelTests.swift"; path = "SearchLocationModelTests.swift"; sourceTree = "<group>"; };
 		E1C5080D5E19CF6E9F0AB3A0 /* ThemeTokenTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ThemeTokenTests.swift"; path = "ThemeTokenTests.swift"; sourceTree = "<group>"; };
 		3695FAF1DA83B1EFE5807B57 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = "Info.plist"; path = "Info.plist"; sourceTree = "<group>"; };
@@ -273,6 +329,7 @@
 		90AE456F79935BD6C6F78AD2 /* PassengerApp */ = {
 			isa = PBXGroup;
 			children = (
+				A32072629C1D86F029ED03C5 /* Booking */,
 				2A11969776E43613EBD7F910 /* DI */,
 				CAAF82951F66016F59D360EF /* Geo */,
 				F71ECEB00AD9D5A2D1D67808 /* Home */,
@@ -293,6 +350,34 @@
 				382EED1EF16B9DD13C300904 /* PassengerAppDelegate.swift */,
 			);
 			path = "PassengerApp";
+			sourceTree = "<group>";
+		};
+		A32072629C1D86F029ED03C5 /* Booking */ = {
+			isa = PBXGroup;
+			children = (
+				E686CB4B04E44BA5D94FB88B /* BookingDestinationView.swift */,
+				239F8D2C9F67689CCC3FD925 /* BookingDraft.swift */,
+				85499C6B44749E9923F2650D /* BookingErrors.swift */,
+				814431D73F9A2BC1DC550593 /* BookingRepository.swift */,
+				11262B667BA5D23C4F1C4B06 /* BookingRows.swift */,
+				C2A0715BDF9EB8264DDE300E /* CaptureSheets.swift */,
+				8754F5A042954FF4FF3E84E6 /* ConfirmPickupModel.swift */,
+				2193B0879951926E215DB691 /* ConfirmPickupScreen.swift */,
+				61334186C1B206AD41047BB6 /* MapsLink.swift */,
+				C28C582C84ED2980B5A16C7D /* PackageBookingModel.swift */,
+				C74A89B3DB10D5186F5D7D86 /* PackageBookingScreen.swift */,
+				C148AF518E4D8EDB6C0C7FC6 /* PackageOtps.swift */,
+				13793196F7DC92A7FBC3C992 /* PasteLinkModel.swift */,
+				E6AACB8882B42FDCE3FE8CEE /* PaymentRails.swift */,
+				49D16E777CAF1C870DE6F37F /* PickupMethod.swift */,
+				F0A1D6E36295C29AD149A747 /* ProxyRiderModel.swift */,
+				4CCB239E57DE4F5C456CA504 /* ProxyRiderScreen.swift */,
+				C00F3827DB6CAC86FDAB5140 /* RideBookingModel.swift */,
+				383F77F25573B35E7BEBF967 /* RideBookingScreen.swift */,
+				EBA4A4DE3255976FE4CFF294 /* ScheduleRideModel.swift */,
+				19CF01EB1B075206A3141785 /* ScheduleRideScreen.swift */,
+			);
+			path = "Booking";
 			sourceTree = "<group>";
 		};
 		2A11969776E43613EBD7F910 /* DI */ = {
@@ -348,6 +433,7 @@
 		A39BDC2208D9FAB5D78E26D0 /* Location */ = {
 			isa = PBXGroup;
 			children = (
+				25348F5DCFE2229E31D2246B /* LastKnownFix.swift */,
 				BB83BEBE93D842A970B09A95 /* PassengerLocationSource.swift */,
 			);
 			path = "Location";
@@ -463,9 +549,11 @@
 		292E027D10D622D4C8304A17 /* UI */ = {
 			isa = PBXGroup;
 			children = (
+				476D14AD5C6DB73EDF47418D /* BookingControls.swift */,
 				F3E3FA3705F72A6BA40D970A /* FormControls.swift */,
 				41BFF6164F190FAD72DB4A78 /* Localisation.swift */,
 				3EB485B6BDD5A3D2FC80928B /* MapControls.swift */,
+				55C349B59365D53A8445B6D5 /* MoneyFormat.swift */,
 				4C1054C289748A1946D9FF59 /* OnboardingControls.swift */,
 			);
 			path = "UI";
@@ -475,6 +563,8 @@
 			isa = PBXGroup;
 			children = (
 				F47AB13334989925EC1BFCE8 /* AnyJSONTests.swift */,
+				803908678D9F811FD039E65F /* BookingFlowTests.swift */,
+				83CD391A76B9B5D522817667 /* BookingTestKit.swift */,
 				0AF0C3655D8873301EFAEFA1 /* H3GridTests.swift */,
 				28A09FCDFBB923589A4F2D6F /* HomeTestKit.swift */,
 				C487BC82B51597FA05C4664D /* LiveMapModelTests.swift */,
@@ -483,6 +573,7 @@
 				73C3AF8141A93E4118ABE2FC /* LoginModelTests.swift */,
 				34B52D30C4329DABF6364568 /* MapFilterTests.swift */,
 				B3791772D75BF5692DED24D2 /* MapTests.swift */,
+				85BD8F9D08E5C36B2AABDF6F /* MapsLinkTests.swift */,
 				F6122688CB40E17316622309 /* NavigationShellTests.swift */,
 				D845B62B72B97BED49383568 /* OnboardingFlowTests.swift */,
 				4437C0689118C6010DBBB772 /* OnboardingTestKit.swift */,
@@ -490,6 +581,7 @@
 				5F23A45AF2B4A5B772B516AF /* PassengerLiveMapTests.swift */,
 				DEABF9B009EC8586B1AEEE37 /* ProfileAndPermissionTests.swift */,
 				B6C90E80EAE6E80DAF3A894C /* PushRouterTests.swift */,
+				2E51C5CD409F6C211654DF01 /* RideBookingModelTests.swift */,
 				D84F662D44E94A1042CC5430 /* SearchLocationModelTests.swift */,
 				E1C5080D5E19CF6E9F0AB3A0 /* ThemeTokenTests.swift */,
 			);
@@ -628,6 +720,27 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				6529315E8DD3957B56A4F895 /* BookingDestinationView.swift in Sources */,
+				BEF46402914C527F3B63B133 /* BookingDraft.swift in Sources */,
+				4294843AB1984029322A17FE /* BookingErrors.swift in Sources */,
+				5A53E8E1591683C5316C3682 /* BookingRepository.swift in Sources */,
+				B5578551ACBB38DCB06B1058 /* BookingRows.swift in Sources */,
+				115CBC54567FD869346BEC11 /* CaptureSheets.swift in Sources */,
+				066CA781D2695EF24F06B1C5 /* ConfirmPickupModel.swift in Sources */,
+				7660F6EDF26AA91203E77F60 /* ConfirmPickupScreen.swift in Sources */,
+				473802F2FBB827EAAD758D9D /* MapsLink.swift in Sources */,
+				D05CB2059050F2E524745202 /* PackageBookingModel.swift in Sources */,
+				348256FF48F8430E653D575C /* PackageBookingScreen.swift in Sources */,
+				344991210E1581232295E6AC /* PackageOtps.swift in Sources */,
+				C05C8F3105298E0E2F7381CE /* PasteLinkModel.swift in Sources */,
+				75DEDE72A26803AAFC49B6D5 /* PaymentRails.swift in Sources */,
+				B17C0699AD15A3FF43A6E526 /* PickupMethod.swift in Sources */,
+				C350DB74F646A4A504BB4085 /* ProxyRiderModel.swift in Sources */,
+				EBD0859D93DB9617348E4024 /* ProxyRiderScreen.swift in Sources */,
+				C637A66E223C195B826FF010 /* RideBookingModel.swift in Sources */,
+				0717F5B3CB5079C83DC116B0 /* RideBookingScreen.swift in Sources */,
+				FB4C92894FCB074B0B8B304D /* ScheduleRideModel.swift in Sources */,
+				45088CEC574E8641085EFF53 /* ScheduleRideScreen.swift in Sources */,
 				918C5BF0F53795B848047E58 /* PassengerDatabase.swift in Sources */,
 				8CDB50DCB0034921F415D470 /* PassengerEnvironment.swift in Sources */,
 				346D6137FC046C51897AD94B /* PassengerGraph.swift in Sources */,
@@ -650,6 +763,7 @@
 				33C9CC7ED2202C7953D175A1 /* LiveHubTransport.swift in Sources */,
 				D3E3D65CF5BB2EB960A7A4B5 /* LiveVehicleStore.swift in Sources */,
 				B57637552FEB19F52929E3AD /* PassengerLiveMap.swift in Sources */,
+				3DCCEA56A1368C9267322675 /* LastKnownFix.swift in Sources */,
 				F7544712D56887564273B5EE /* PassengerLocationSource.swift in Sources */,
 				0B2B3A28EF914DB6DA291D88 /* EncodedPolyline.swift in Sources */,
 				C605D9C11D91244FFCDD3537 /* MageRideMap.swift in Sources */,
@@ -699,9 +813,11 @@
 				518B1E6CA267120BBA13B6C8 /* MageRideSpacing.swift in Sources */,
 				6F8A8EED1D1056487BFAF659 /* MageRideTypography.swift in Sources */,
 				5906F55CA4D52CA023C69D0E /* VehicleToken.swift in Sources */,
+				9E3C6681E600CEB31E539874 /* BookingControls.swift in Sources */,
 				34D76627316F579648A86D3F /* FormControls.swift in Sources */,
 				D0F18D6E25242D2C76A6F457 /* Localisation.swift in Sources */,
 				C670C9CF1D6AB120277AEBA3 /* MapControls.swift in Sources */,
+				555E59E9CBA567374C6623D6 /* MoneyFormat.swift in Sources */,
 				0E81997BA284C668CF4714E7 /* OnboardingControls.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -711,6 +827,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				C6BE56F891657926BE9AA958 /* AnyJSONTests.swift in Sources */,
+				A7BB60AE5CC5A09415F47599 /* BookingFlowTests.swift in Sources */,
+				4141610BAA03639B6C8E984C /* BookingTestKit.swift in Sources */,
 				C765998EC557607BE16BFD6C /* H3GridTests.swift in Sources */,
 				35C51B5FD3546039892CAF0B /* HomeTestKit.swift in Sources */,
 				E320861E92501C3C5AA6277A /* LiveMapModelTests.swift in Sources */,
@@ -719,6 +837,7 @@
 				54E7641A466031DDEA14F646 /* LoginModelTests.swift in Sources */,
 				61AB084EF2579311BE46D169 /* MapFilterTests.swift in Sources */,
 				50A4B202C1F8F93F5DD1B0E8 /* MapTests.swift in Sources */,
+				C07F100A0EE357575D2CAC44 /* MapsLinkTests.swift in Sources */,
 				47630B5298A8E819A68A53A6 /* NavigationShellTests.swift in Sources */,
 				DADE13BF6C41E54754040641 /* OnboardingFlowTests.swift in Sources */,
 				7E1D2C479A15FD8080F8152F /* OnboardingTestKit.swift in Sources */,
@@ -726,6 +845,7 @@
 				C6E8266BFBF842B0A51EB517 /* PassengerLiveMapTests.swift in Sources */,
 				F10D8E02B962685209BF6A42 /* ProfileAndPermissionTests.swift in Sources */,
 				3B23D16A765BE20FE507DA76 /* PushRouterTests.swift in Sources */,
+				3DF99A7B59C8CA3A98DDED2A /* RideBookingModelTests.swift in Sources */,
 				EFE12234A8891AD732D8B9F6 /* SearchLocationModelTests.swift in Sources */,
 				6CC2566BFAC64E6A55513820 /* ThemeTokenTests.swift in Sources */,
 			);

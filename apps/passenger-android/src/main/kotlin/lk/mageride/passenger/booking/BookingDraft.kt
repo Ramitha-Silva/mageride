@@ -4,6 +4,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import lk.mageride.passenger.location.LastKnownFix
 import lk.mageride.passenger.settings.PaymentPreference
 import lk.mageride.shared.data.models.PackageSize
 import lk.mageride.shared.data.models.Place
@@ -130,10 +131,19 @@ internal data class BookingDraftState(
  * chip on SCR-PA-009 is drawing that. Changing it there still changes only this booking, because a
  * preference is not a command.
  *
+ * **Every booking also starts from where the passenger is** (Δ C097). [begin] falls back to
+ * [lastFix] when it is given no pickup, and that is a **defect fix rather than a convenience**: all
+ * three production `begin(…)` call sites omitted the argument, so `pickup` was null, and
+ * `RideBookingViewModel.refresh()` returns early on exactly that — SCR-PA-009 showed no routes and
+ * no tiers at all. Defaulting here rather than at the call sites is what stops a fourth one
+ * reintroducing it. See [LastKnownFix].
+ *
  * @property payments The stored default. Read on every fresh draft rather than captured once, so a
  *   change made in Settings applies to the **next** booking without anything having to be told.
+ * @property lastFix Where the passenger was when the map last saw them. Read on every fresh draft
+ *   for the same reason [payments] is.
  */
-internal class BookingDraft(private val payments: PaymentPreference) {
+internal class BookingDraft(private val payments: PaymentPreference, private val lastFix: LastKnownFix) {
 
     private val mutableState = MutableStateFlow(BookingDraftState(paymentMethod = payments.current))
 
@@ -188,12 +198,16 @@ internal class BookingDraft(private val payments: PaymentPreference) {
      * Called by SCR-PA-008 rather than by SCR-PA-009, because choosing a destination is what
      * *begins* a booking — arriving at the booking screen with the previous attempt's rider still
      * attached is the bug this prevents.
+     *
+     * @param pickup Where it starts. **Defaults to the last known fix**, because a booking with no
+     *   pickup cannot be quoted at all — see the class KDoc and [LastKnownFix]. A caller with a
+     *   better answer (a proxy rider's shared pin, a package's own end) passes one.
      */
     fun begin(dropoff: Place, pickup: Place? = null) {
         pendingCapture = null
         mutableState.value = BookingDraftState(
             dropoff = dropoff,
-            pickup = pickup,
+            pickup = pickup ?: lastFix.asPlace(),
             paymentMethod = payments.current,
         )
     }

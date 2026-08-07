@@ -19,6 +19,10 @@ struct HomeDestinationView: View {
     @EnvironmentObject private var graph: PassengerGraph
     @EnvironmentObject private var navigator: PassengerNavigator
 
+    /// SCR-PI-008's *"Select on map"*. A sheet rather than a destination because no SCR-PI id names
+    /// a map picker — see ``MapPickSheet``.
+    @State private var isMapPickerOpen = false
+
     var body: some View {
         switch route {
         case .liveMap:
@@ -28,11 +32,20 @@ struct HomeDestinationView: View {
                 places: graph.places,
                 snapshots: graph.nearby,
                 recents: graph.recents,
-                onSearch: { navigator.open(.searchLocation) },
+                onSearch: {
+                    // The home sheet's *"Where to?"* is a **fresh** booking, so nothing is expected
+                    // — `capture` answers `false` and SCR-PI-008 calls `begin` instead (Δ C097).
+                    navigator.open(.searchLocation)
+                },
                 // AL-23 / US-4.6 — a Mode B marker opens the access request with the vehicle already
                 // filled in. SCR-PI-007's popup is not what a private vehicle offers.
                 onRequestModeBAccess: { navigator.open(.modeBRequest(vehicleId: $0)) },
-                onPlaceChosen: { _ in navigator.open(.rideBooking) },
+                // A shortcut and a recent are both destinations, so they go where a chosen place
+                // goes: straight into a booking. Tapping ★ Home **is** choosing where to go.
+                onPlaceChosen: { place in
+                    graph.draft.begin(dropoff: place.toPlace())
+                    navigator.open(.rideBooking)
+                },
                 onAddAddress: { navigator.open(.savedAddresses) }
             )
 
@@ -40,21 +53,45 @@ struct HomeDestinationView: View {
             SearchLocationScreen(
                 places: graph.places,
                 recents: graph.recents,
-                // **Not biased yet, and that is C078's gap carried across rather than a new one.**
-                // The geocoder takes a point to rank results around and the only screen holding one
-                // is the map, whose fix dies with its model. The place for a shared last-known fix
-                // is C097's — every one of its six booking screens wants *"current location"* — so
-                // it is left to the component that needs it rather than invented here. See the C096
-                // handoff.
-                around: nil,
-                onPlaceChosen: { _ in navigator.replaceTop(with: .rideBooking) },
+                // Biased now (Δ C097). The map records what it already subscribed for and this
+                // reads it — see ``LastKnownFix`` for why a second subscription would be the wrong
+                // way to get one.
+                around: graph.lastFix.point,
+                // **One picker, five callers.** Whoever opened it parked a `CaptureTarget` on the
+                // draft; if nobody did, this is the home sheet's *"Where to?"* and the chosen place
+                // begins a booking rather than editing one. See ``CaptureTarget``.
+                onPlaceChosen: { place in
+                    if graph.draft.capture(place.toPlace()) {
+                        navigator.pop()
+                    } else {
+                        graph.draft.begin(dropoff: place.toPlace())
+                        navigator.replaceTop(with: .rideBooking)
+                    }
+                },
                 // The wireframe's *"📌 Select on map"*. **No SCR-PI id exists for a map picker** —
                 // the frames offer it as a *method* on three cells and draw a screen for none of
-                // them (C078's first gap) — so this returns to the live map, which is the only map
-                // in the app today. C097 owns the picker and should route it there.
-                onPickOnMap: { navigator.pop() },
+                // them (C079's first gap) — so C097 built one as a `.sheet`, and this is the third
+                // caller of it.
+                onPickOnMap: { isMapPickerOpen = true },
                 onAddAddress: { navigator.open(.savedAddresses) }
             )
+            .sheet(isPresented: $isMapPickerOpen) {
+                MapPickSheet(
+                    titleKey: "search_select_on_map",
+                    around: graph.lastFix.point,
+                    onUse: { place in
+                        // The same two answers a prediction gets: fill in whoever is waiting, or
+                        // begin a booking when nobody is.
+                        if !graph.draft.capture(place) {
+                            graph.draft.begin(dropoff: place)
+                            navigator.replaceTop(with: .rideBooking)
+                        } else {
+                            navigator.pop()
+                        }
+                    },
+                    onDismiss: { isMapPickerOpen = false }
+                )
+            }
 
         default:
             // Unreachable: ``PassengerDestinationView`` routes exactly the two cases above here. The

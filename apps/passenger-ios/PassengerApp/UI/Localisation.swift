@@ -25,6 +25,14 @@ extension String {
     func localisedFormat(_ arguments: CVarArg...) -> String {
         String(format: localised, arguments: arguments)
     }
+
+    /// The same, for a caller holding the arguments as an array (Δ C097).
+    ///
+    /// A variadic parameter cannot be splatted in Swift, so a view that takes `[CVarArg]` — see
+    /// ``FormattedBanner`` — needs this overload rather than a call it cannot write.
+    func localisedFormat(arguments: [CVarArg]) -> String {
+        String(format: localised, arguments: arguments)
+    }
 }
 
 extension Text {

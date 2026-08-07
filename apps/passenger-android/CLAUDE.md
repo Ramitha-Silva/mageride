@@ -124,6 +124,18 @@ lk.mageride.passenger
 
 ## Cluster 3 (C079) — the booking flow
 
+- **`BookingDraft.begin` defaults the pickup to `LastKnownFix`, and that is a defect fix** (Δ C097).
+  `begin` takes an *optional* pickup and all three production call sites omitted it, so the draft had
+  none — and `RideBookingViewModel.refresh()` returns early on exactly that, which meant **SCR-PA-009
+  loaded neither list: no bus routes, no tiers, nothing to book.** `RideBookingViewModelTest` did not
+  catch it because its own setup passed a pickup nothing in the app passed. The default lives inside
+  the draft rather than at the call sites so a fourth one cannot reintroduce it, and
+  `a_booking_begun_the_way_the_app_begins_one_has_a_pickup` fails without it.
+- **`LastKnownFix` is written by the fix source, not by a screen.**
+  `RecordingPassengerLocationSource` decorates `PassengerLocationSource` and records every fix that
+  passes, so the last known position is the last one *anybody* saw and no screen holds a second
+  collector open on the fused provider. Read it for a default pickup, a geocoder bias or a picker's
+  opening camera; **do not add a second collector to get one**.
 - **`BookingDraft` is a `single` and it is where a booking lives.** Six screens edit one — a
   destination on SCR-PA-008, a tier on SCR-PA-009, a rider on SCR-PA-010b, a parcel on SCR-PA-012,
   a time on SCR-PA-013 and a payment method on C080's SCR-PA-016. Do not thread booking fields

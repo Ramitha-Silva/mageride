@@ -7,6 +7,7 @@ import lk.mageride.passenger.R
 import lk.mageride.passenger.await
 import lk.mageride.passenger.awaitCall
 import lk.mageride.passenger.booking.BookingDraft
+import lk.mageride.passenger.location.LastKnownFix
 import lk.mageride.passenger.onboarding.FakeAppPreferences
 import lk.mageride.passenger.onboarding.PassengerProfileRepository
 import lk.mageride.passenger.subscription.signedInSession
@@ -64,7 +65,7 @@ class SettingsViewModelTest {
 
         model.chooseDefaultPayment(PaymentMethod.WALLET)
 
-        val draft = BookingDraft(payments)
+        val draft = BookingDraft(payments, LastKnownFix())
         draft.begin(Place(lat = 6.9271, lng = 79.8612))
         assertEquals(PaymentMethod.WALLET, draft.current.paymentMethod)
     }
@@ -75,7 +76,7 @@ class SettingsViewModelTest {
         // afterwards must not reach into a booking the passenger is already filling in.
         backend.returns("getMyProfile", profile())
         val payments = PaymentPreference(preferences)
-        val draft = BookingDraft(payments)
+        val draft = BookingDraft(payments, LastKnownFix())
         draft.begin(Place(lat = 6.9271, lng = 79.8612))
 
         val model = viewModel(payments)
