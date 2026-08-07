@@ -124,7 +124,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C095 | passenger-ios-auth-onboarding | 4b | PARTIAL | 2026-08-07 | five screens written, **none compiled** (Linux host); wave-1 gate green (822), `compileKotlinIosArm64` clean, 62 app + 14 test sources audited; 2 wireframe/D2' conflicts and a `LocalizationTests` regex bug found |
 | C096 | passenger-ios-live-map-search | 4b | PARTIAL | 2026-08-07 | SCR-PI-006/007/008/010/032 built to `specs/wireframes/passenger_ios.html`; 41 new tests across 4 Swift suites. **PARTIAL only because the verify command is `xcodebuild` and this host cannot run it** — the shared half (`:shared:compileKotlinIosArm64 detekt ktlintCheck testDebugUnitTest`) is green here. The filter is a pure Swift value re-applied to every batch client-side; AL-23 routing is in the model (Mode A → popup, Mode B → SCR-PI-024, Mode C / no mode / filtered-out → nothing); AL-17 held **structurally** — `PassengerPlaces` has no route lookup to call. Two `:shared` `iosMain` helpers added (`IosPlaceRecents`, `IosGeoSearch`). Δ the home sheet is **drawn**, not a `.sheet`, because a modal one covers the tab bar the cell draws and makes every marker untappable below iOS 16.4 — micro-change-set raised. Δ a 15 s cell tick lands ADD §7.4's held boundary crossing; **C078 had none — fixed here too, `apps/passenger-android` green at 292 tests** |
 | C097 | passenger-ios-booking | 4b | PARTIAL | 2026-08-07 | SCR-PI-009/010b/011/012/012a/013 built to `specs/wireframes/passenger_ios.html`; 53 new tests across 4 Swift files (7 suites). **PARTIAL only because the verify command is `xcodebuild` and this host cannot run it** — the shared half (`:shared:compileKotlinIosArm64 detekt ktlintCheck testDebugUnitTest`) is green here, and the three `.strings` tables check out at 207 keys × 3 locales. `BookingDraft` is the one booking six screens edit; `CaptureTarget` is parked at the navigation site. AL-19 is a three-field type, AL-18 removes the payment chip rather than disabling it, AL-55 is one muted row, AL-20 parses on the device, P-02's decline has no parameter to put a point in. One `:shared` `iosMain` helper added (`IosBookingRequests`, four factories + the `TransitLeg.description` collision) plus `IosAppGraph.idempotencyKeys`. **Found and fixed a C079 defect on both platforms: no production call site passed a pickup to `BookingDraft.begin`, so SCR-PA-009 quoted nothing at all** — `LastKnownFix` + a default inside the draft; `apps/passenger-android` 295 tests green |
-| C098 | passenger-ios-ride-payment | 4b | PENDING | | |
+| C098 | passenger-ios-ride-payment | 4b | PARTIAL | 2026-08-07 | SCR-PI-014/015/015a/016/017/018/019 built to `specs/wireframes/passenger_ios.html`; 57 new tests across 6 suites (`RideFlowTests` + `RideTestKit`). **PARTIAL only because the verify command is `xcodebuild` and this host cannot run it** — `:shared` is green here and the three `.strings` check out at 283 keys × 3 locales. **Two C080 defects found and fixed on BOTH platforms**: nothing carried a `Completed` ride to SCR-PA/PI-016, so D-10 was unreachable (`RideHandOff`); and the rail confirmed on SCR-PA-016 was discarded before SCR-PA-017, so choosing Cash posted `scan_driver_qr` (`PaymentSelection`). `apps/passenger-android` **300 tests green** (was 295), detekt + ktlint + `assembleDebug` clean. The camera key and its three purpose strings arrived with the commit that opens a camera; VisionKit is the scanner (Δ iOS). **Three contract gaps restated**: no route POSTs a Mode C ride rating, no read returns a settled fare's breakdown, and no operation issues a rider start OTP |
 | C099 | passenger-ios-package-history | 4b | PENDING | | |
 | C100 | passenger-ios-mode-b-subscriptions | 4b | PENDING | | |
 | C101 | passenger-ios-settings-addresses | 4b | PENDING | | |
@@ -15579,3 +15579,153 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   `PassengerApp/Theme/MageRideSpacing.swift` (five C097 control tokens),
   `shared/kmp/.../di/IosAppGraph.kt` (`idempotencyKeys`), the three `Localizable.strings` (+98 keys
   each), `PassengerApp.xcodeproj` (regenerated) and `apps/passenger-ios/CLAUDE.md`.
+
+- **Component:** C098 passenger-ios-ride-payment — 2026-08-07
+- **Status:** PARTIAL — every deliverable is written and every Definition-of-Done line has a named
+  test, but **the verify command is `xcodebuild` and this host cannot run it** (root CLAUDE.md).
+  What can be verified here is green and was: `./gradlew :shared:compileKotlinIosArm64 :shared:detekt
+  :shared:ktlintCheck :shared:testDebugUnitTest` exits 0, which type-checks the new `iosMain` helper
+  on the Linux host; the three `Localizable.strings` were parsed and compared the way
+  `LocalizationTests` does (**283 keys × 3 locales**, every key referenced, every specifier surviving
+  translation, both `InfoPlist.strings` tables carrying the new camera key); and
+  `PassengerApp.xcodeproj` was regenerated (121 app sources, 24 test sources). SCR-PI-014, 015, 015a,
+  016, 017, 018 and 019 are built against `specs/wireframes/passenger_ios.html`. **57 new tests
+  across six suites** (`RideFlowTests` + `RideTestKit`), none run yet.
+  **`apps/passenger-android` is fully verified and green**: `testDebugUnitTest detekt ktlintCheck
+  assembleDebug` exits 0, **300 tests, 0 failures** (295 → 300).
+- **Notes:**
+  **Two defects in C080, found by building the twin, and both fixed on both platforms.** Neither is
+  cosmetic: between them they made the entire payment cluster either unreachable or wrong.
+
+  1. **Nothing carried a completed ride to its own payment screen.** `ActiveRideScreen`'s KDoc said
+     *"the ride moves to `Completed` server-side and the ride-state event carries the passenger to
+     SCR-PA-016"* — and no screen, no `NavHost` arm and no `PushRouter` host built that destination.
+     The four money screens reach **each other** (016 → 017 → 018 → 016) and nothing outside reaches
+     any of them, so D-10 was dead code in a shipped app: a passenger whose ride completed sat on a
+     finished trip. `RideHandOff` is the fix — three values (`Payment` / `Receipt` / `Finished`)
+     derived from the ride state, with `ExpiredNoDriver` deliberately **not** among them because
+     SCR-*-014 draws its own retry over the same screen (US-6A.11).
+  2. **The rail chosen on SCR-PA-016 never reached SCR-PA-017.** `PaymentMethodViewModel` recorded
+     `confirmed`, the screen called `onConfirmed(method)`, `PassengerNavHost`'s arm **dropped the
+     argument**, and `PayFareViewModel.method` defaulted to `SCAN_DRIVER_QR` with `setMethod` having
+     no production caller. **A passenger who chose Cash or Wallet landed on a screen that had already
+     posted `POST /v1/fare/pay {method: scan_driver_qr}` and was asking them to scan a QR.**
+     `PaymentSelection` is the fix on both sides — a process-lifetime holder, because
+     `PassengerRoute.PayFare` is `ride/{rideId}/pay` on both platforms and the two route tables are
+     diffed against each other, so a query parameter added on one alone fails a build on the other.
+     The rail became a **constructor** parameter rather than a setter, because the initiation happens
+     in `init` and a method arriving afterwards is a second `ride_payments` row for one fare.
+
+  **AL-57/AL-59 are still the story of this cluster, and the fence is a type.** `PaymentRails` is the
+  single list every payment control renders from, it contains no retired rail, and nothing in it can
+  carry a surcharge — which is the Definition-of-Done line *"no surcharge is ever displayed on a
+  ride"* asserted where a surcharge could only come from. C098 added the four members C097 reserved:
+  `preferable` (cash and the wallet — the driver QR is a *settlement* choice the contract's own text
+  excludes from a stored preference), `captionKey(_:)`, `storedValueOf(_:)` (only Cash has a value;
+  `wallet` has none, which is why a wallet default is device-local) and `fromStored(_:)` (a row
+  written before the change set reads as Cash).
+
+  **AL-47 in full.** The passenger pays into the driver's own bank, so **no callback ever reaches
+  fare-svc** — there is no gateway to ask, and the only oracle is the two parties. `claimPaid()` is
+  the passenger's half, the poll waits for `DriverConfirmedQR`, and `QrClaimedByPassenger` is
+  deliberately **not** treated as settled. Past five unconfirmed minutes the screen offers Support,
+  which routes to the Finance dispute queue; no money moves either way.
+
+  **AL-48 in full, which mostly means what is absent.** There is no masked path anywhere in the call
+  UI, because the requirement was *withdrawn*. Δ iOS: a `tel:` URL **places** the call where Android's
+  `ACTION_DIAL` only opens the dialler, so the dial goes through a `RideContact` seam — the same split
+  `apps/driver-ios` made in C088, and the reason C102's *"Call normally instead?"* will not be a
+  button that silently does nothing.
+
+  ### Three wireframe deviations, each argued
+
+  1. **SCR-PI-016 and SCR-PI-017 still draw OnePay at +5 %.** Both cells predate the 2026-08-01
+     payment-custody change set; the prompt's own fence and Definition of Done name AL-57/AL-59
+     explicitly, so the change set wins. **Both wireframes need a micro-change-set** — C080 recorded
+     the same thing from the Android side and it is still open.
+  2. **SCR-PI-015 has three buttons and `apps/passenger-android` draws four.** `📞 Call ▾ | ⛨ SOS | ✕`
+     is what **both** wireframes draw; C080 added a share-trip control that neither cell has, and
+     D-34's link belongs to SCR-*-029 — which C084 already moved the alarm to and which mints the
+     link beside it. The drawing is the baseline, so this side draws three. **The Android screen needs
+     either a micro-change-set on the wireframe or the button removed**; it was left alone because it
+     is a layout question rather than a defect, and removing a safety affordance is not a call this
+     component should make unilaterally.
+  3. **SCR-PI-018's breakdown card has one row.** The cell draws *Distance · First km · Per km × 7.2 ·
+     Total*, and `FareBreakdown` — which carries exactly those numbers — exists on
+     **`GET /v1/fare/estimate` only**. See gap 2. The `DisclosureGroup` the cell asks for is there,
+     with the total and an honest note; multiplying a per-km rate by a distance on the device would
+     produce a second, disagreeing number the moment a rounding rule changed server-side (R-05).
+
+  ### Three contract gaps, two of them restated and one new
+
+  1. **No contract POSTs a Mode C ride rating** (C074's, C080's, and now this side's third sighting).
+     `ride.yaml` declares no rating operation; trip-state-svc's is scoped to a *session*, and calling
+     it with a ride id would cross the R-01 boundary the root CLAUDE.md forbids in as many words.
+     SCR-PI-019 is built in full and queues to `mobile_db_schema.md` §1.11's `ratings_pending`, whose
+     `subject_kind` column already distinguishes `'ride'` from `'session'`. The copy says *"Save
+     rating"*. ⚠ **The stars, the chips and the comment are not stored** — §1.11 was designed as a
+     prompt queue and has no columns for them. Adding the route should add the columns.
+  2. **No read returns the breakdown of a *settled* fare.** `RideDetail.fare` is a `FareEstimate`
+     with `amountMinor`, `currency` and `surchargeMinor`; `FareBreakdown` is on the estimate;
+     query-svc's `TripDetail` has `fareMinor` and `distanceKm` and neither rate. `apps/passenger-
+     android`'s `TripSummaryState.breakdown` is a field **nothing ever assigns**, so its receipt draws
+     the same one row without saying why. Needs a micro-change-set on `ride.yaml`.
+  3. **No operation issues a rider start OTP, so SCR-PI-015's four boxes cannot be filled.**
+     `ride.yaml`'s `pickupOtp` is *"package bookings only"*, and ride-svc's own contracts say a start
+     OTP is *"accepted and ignored in this build: no endpoint issues one"* — the hole
+     `backend/src/PublicBff` recorded from the share-link side. C080 drew the label and silently
+     dropped the digits; this side draws the card the cell draws, leaves the boxes empty and says the
+     trip starts without one. **The driver's SCR-DI-015 asks for a code the passenger has no way to
+     know**, which makes this the widest of the three.
+
+  ### What this component added to the module
+
+  - **VisionKit is the scanner** (`DataScannerViewController`), which is the cell's own `Δ iOS`
+    clause and the **first decoder linked into this target**. The camera grant is asked for *before*
+    the sheet is presented, because `isAvailable` is `false` without it — the ordering
+    `apps/driver-ios` arrived at in C092. `NSCameraUsageDescription` and its Sinhala and Tamil
+    purpose strings arrived in the same commit, and `PassengerEnvironmentTests` now asserts **two**
+    declared purpose strings and four absent ones.
+  - **`AppPreferences` gained `lastCallType` and `callNumberNoticeShown`** — SCR-PI-015a's memory,
+    which outlives every ride. Same keys as the Android twin.
+  - **`UI/RideControls.swift`**: `ScrimmedSheet`, `RadarPulse` (a `TimelineView`, so nothing is left
+    running), `DriverIdentityRow`, `StartCodeCard`, `StarRating`, `KeyValueRow`, `AmountHeadline`.
+    Plus `MoneyFormat.pending`, a `tint` on `OutlinedAction`, and six control tokens.
+  - **One `:shared` `iosMain` helper** — `IosRatingsPending.kt` — for `IosPlaceRecents.kt`'s reason:
+    `created_at` is a `kotlin.time.Instant` Swift may only build through `IosInstant.kt`'s door, and
+    §1.11's two CHECK spellings belong beside the schema that has to accept them.
+
+  ### For C099 onwards
+
+  - **Cluster 4's six placeholders are gone.** `.findingDriver`, `.activeRide`, `.paymentMethod`,
+    `.payFare`, `.tripSummary` and `.rateDriver` all route to `RideDestinationView`.
+  - **`RideRepository` reaches four services** (ride, fare, wallet, comms). Add a fifth operation
+    there rather than injecting another client beside it. **safety-svc is deliberately absent** —
+    `POST /v1/sos` and the share link are C102's SCR-PI-029, and one caller is what stops one
+    emergency arriving on the operator's feed as two events.
+  - **`DriverIdentityRow` and `KeyValueRow` are C099's**, and `CallChoice` is what SCR-PI-022/023's
+    call buttons should use; `CallChooserSheet` takes the driver's number as a parameter and is
+    reusable as-is.
+  - **`RideRatings` is the only door onto §1.11**, and `TripSummaryModel` re-reads it on **every**
+    appear — which is what stops a rated trip being offered a rating again.
+  - **`PaymentSelection.forget(rideId:)` is called by SCR-PI-017's settlement.** A settled ride's
+    rail is not something a later screen should read.
+  - **There is still no passenger wallet screen anywhere**, so SCR-PI-016's *"Top up"* is a no-op
+    (C082's gap, restated). No SCR-PI id, no cell and no D2' section draws one, even though AL-57
+    made the wallet the card-acceptance rail.
+
+  ### Files touched
+
+  `apps/passenger-ios/PassengerApp/Ride/` (14 new files), `PassengerApp/UI/RideControls.swift`,
+  `PassengerApp/Booking/PaymentRails.swift` (the four members C097 reserved),
+  `PassengerApp/Shell/AppPreferences.swift`, `PassengerApp/DI/PassengerGraph.swift`,
+  `PassengerApp/Nav/PassengerDestinations.swift`, `PassengerApp/UI/MapControls.swift` +
+  `MoneyFormat.swift`, `PassengerApp/Theme/MageRideSpacing.swift`, `PassengerApp/Info.plist`, the
+  three `Localizable.strings` and the three `InfoPlist.strings`, `PassengerAppTests/RideTestKit.swift`
+  + `RideFlowTests.swift` + `OnboardingTestKit.swift` + `LocalizationTests.swift` +
+  `PassengerEnvironmentTests.swift`, `PassengerApp.xcodeproj` (regenerated),
+  `shared/kmp/src/iosMain/.../db/IosRatingsPending.kt`, `apps/passenger-ios/CLAUDE.md`; and on the
+  Android side `ride/PaymentSelection.kt` (new), `ride/PaymentViewModels.kt`,
+  `ride/ActiveRideViewModel.kt`, `ride/ActiveRideScreen.kt`, `ride/FindingDriverScreen.kt`,
+  `nav/PassengerNavHost.kt`, `di/PassengerAppModule.kt`, the two ride test suites and
+  `apps/passenger-android/CLAUDE.md`.

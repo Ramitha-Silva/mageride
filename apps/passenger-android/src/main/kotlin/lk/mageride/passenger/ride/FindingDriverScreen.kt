@@ -54,7 +54,16 @@ internal fun FindingDriverScreen(
     val state by model.state.collectAsStateWithLifecycle()
 
     LaunchedEffect(state.assigned) { if (state.assigned) onAssigned() }
-    LaunchedEffect(state.cancelled) { if (state.cancelled) onCancelled() }
+    // Δ C098. A ride that reached payment before this screen ever saw a driver — possible, because
+    // the poll can land after several transitions — is still the same journey, and SCR-PA-015 is
+    // what routes it on; handing it there keeps one screen responsible for the hand-off.
+    LaunchedEffect(state.handOff) {
+        when (state.handOff) {
+            RideHandOff.Finished -> onCancelled()
+            RideHandOff.Payment, RideHandOff.Receipt -> onAssigned()
+            null -> Unit
+        }
+    }
 
     Column(
         modifier = Modifier

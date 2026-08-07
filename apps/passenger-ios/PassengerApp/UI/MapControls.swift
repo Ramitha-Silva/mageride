@@ -191,11 +191,16 @@ struct MapOverlayButton: View {
     }
 }
 
-/// The wireframe's `.btn-out` — an outlined, `primary`-labelled action with an optional glyph.
+/// The wireframe's `.btn-out` — an outlined action with an optional glyph.
+///
+/// `tint` is `primary` almost everywhere and is a parameter for one reason: SCR-PI-015's `⛨ SOS`
+/// is drawn `color:var(--error)` in its own cell (Δ C098), and a screen colouring the label at the
+/// call site would be putting a hex where the token belongs.
 struct OutlinedAction: View {
 
     let titleKey: String
     var symbolName: String?
+    var tint: Color = MageRideColor.primary
     let action: () -> Void
 
     var body: some View {
@@ -208,7 +213,7 @@ struct OutlinedAction: View {
                 Text(key: titleKey)
                     .mageFont(.bodySmall)
             }
-            .foregroundStyle(MageRideColor.primary)
+            .foregroundStyle(tint)
             .frame(maxWidth: .infinity, minHeight: MageRideControl.outlinedAction)
             .background(
                 MageRideColor.background,

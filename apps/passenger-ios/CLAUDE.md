@@ -49,6 +49,8 @@ apps/passenger-ios/
 │   ├── Booking/     C097 · SCR-PI-009/010b/011/012/012a/013 — the multimodal list, the proxy
 │   │                round trip, the parcel, the paste sheet, the schedule, and BookingDraft
 │   │                (the one booking six screens edit)
+│   ├── Ride/        C098 · SCR-PI-014/015/015a/016/017/018/019 — finding, the active ride, the
+│   │                call chooser, the rails, AL-47's attestation, the receipt and the rating
 │   ├── Nav/         PassengerRoute (32 destinations), PassengerTab, the navigator,
 │   │                PassengerMenuDestination (SCR-PI-033's rows),
 │   │                PassengerDestinations (the ONE route→view switch)
@@ -223,6 +225,55 @@ apps/passenger-ios/
   **SCR-PI-012's drop-off *Request* has no wired round trip** — the chip selects and the fence
   holds, but asking a *recipient* needs P-02's machinery generalised out of `ProxyRiderModel`.
 
+## Cluster 4 (C098) — the ride, the call, the money and the rating
+
+- **A ride moves forwards, so four of its six moves are a `replaceTop`.** SCR-PI-014 is replaced by
+  SCR-PI-015 on acceptance, SCR-PI-015 by SCR-PI-016 on `Completed`, SCR-PI-017 by SCR-PI-018 on
+  settlement. Pushing would leave an edge-swipe back into *"finding a driver"* for a ride that has
+  one.
+- **`RideHandOff` is the defect this cluster closes.** Both apps *documented* the ride handing over
+  to the payment screen and **neither implemented it**: no screen, no `NavHost` arm and no push
+  built `PaymentMethod(rideId)`, so a `Completed` ride left the passenger on a finished trip and the
+  whole of D-10 (SCR-PI-016/017/018/019) was reachable only from the receipt it comes *after*.
+  `apps/passenger-android` was fixed in the same session.
+- **`PaymentSelection` is the second one.** `PassengerRoute.payFare(rideId:)` cannot carry a rail —
+  the table is diffed against Kotlin's — and the Android NavHost was *discarding* the confirmed
+  method, so choosing **Cash** landed on a driver-QR scan. A process-lifetime holder, like
+  ``PackageOtps``, written by SCR-PI-016 and read at the navigation site.
+- **`PaymentRails` is the only place a payment method becomes a control**, and it contains neither
+  `onepay` nor platform-`lankaqr` (AL-57/AL-59). **No surviving rail carries a surcharge**, so
+  nothing in this app can render one; `PaymentRailsTests` pins the lists, the labels and the
+  captions. C098 added `preferable`, `captionKey(_:)`, `storedValueOf(_:)` and `fromStored(_:)` to
+  it, which is what C101's SCR-PI-027 row reads.
+- **AL-47 is a conversation, not a callback.** The passenger pays into the driver's own bank, so no
+  webhook reaches fare-svc: `claimPaid()` → poll → `DriverConfirmedQR`. `QrClaimedByPassenger` is
+  **not** settled and must never be shown as Confirmed. `PayFareState.isConfirmed` reads
+  `PaymentState.isTerminal` rather than a hand-written list.
+- **There is no masked call path and no masking copy** (AL-48). *"Normal call"* is `RideContact.dial`
+  on `RideDetail.counterpartyPhone`, which the contract carries only from `Accepted` onward.
+  US-26.5's notice is shown **once**, and only before a direct dial.
+- **The Rs 50 is named before the tap.** D-05 settles it on the *next* trip, so the confirm is the
+  only moment a passenger can be told; `ActiveRideModel.cancellationPenaltyMinor` is a local
+  constant because `CancelRideResponse.penalty` arrives *after* the cancel.
+- **`⛨ SOS` navigates and does not act**, and there is **no share-trip control** — D-34's link is
+  SCR-PI-029's, and neither wireframe draws a fourth button on SCR-PI-015 (the Android screen has
+  one; see the C098 handoff).
+- **The QR scanner is VisionKit's `DataScannerViewController`** — the cell's own `Δ iOS` clause, and
+  the first decoder linked into this target. The **camera grant is asked for before the sheet is
+  presented**, because `isAvailable` is `false` without it. A refusal is not an error state: AL-15's
+  bank-app link and AL-47's claim both still work.
+- **Nothing renders a MageRide QR** (AL-22) and nothing shows a start OTP: `ride.yaml`'s `pickupOtp`
+  is *"package bookings only"* and ride-svc's own contracts say a rider start OTP is *"accepted and
+  ignored in this build"*. ``StartCodeCard`` draws the card and says so.
+- Reusable UI added here (`UI/RideControls.swift`): `ScrimmedSheet` (a destination the wireframe
+  draws as a sheet over a scrimmed map), `RadarPulse` (`TimelineView`, the cell's own clause),
+  `DriverIdentityRow`, `StartCodeCard`, `StarRating`, `KeyValueRow`, `AmountHeadline`; plus
+  `MoneyFormat.pending`, `OutlinedAction`'s `tint`, and `MageRideControl.radar` / `.otpBox` /
+  `.star` / `.scanPanel` / `.scanPanelDash` / `.receiptMapHeight`.
+- One `:shared` `iosMain` helper was added — `IosRatingsPending.kt` — for `IosPlaceRecents.kt`'s
+  reason: `created_at` is a `kotlin.time.Instant`, and §1.11's two CHECK spellings belong beside the
+  schema that has to accept them.
+
 ## The Xcode project is generated, and the generator is shared
 
 `.pbxproj` is the committed artefact — CI probes for it and `xcodebuild` reads it. It is also a file
@@ -338,6 +389,14 @@ constraint, and each is called out at its call site.
 | Short-link timeout (012a) | `withTimeout(3.seconds)` | a two-task race, because Swift has no `withTimeout` |
 | Date and time (013) | an M3 date picker **and** a time picker | one `DatePicker(.graphical)` — the cell's own clause |
 | Contacts row (010b) | not built | not built either, and deliberately: adding one on this side alone is a parity break |
+| Radar sweep (014) | an `InfiniteTransition` over a `Canvas` | `TimelineView(.animation)` — the cell's own clause; the ring is a function of the clock, so nothing is left running |
+| Cancel confirm (015) | an `AlertDialog` | `.confirmationDialog` — the cell's own clause; the Rs 50 is in the message either way |
+| Call chooser (015a) | a `ModalBottomSheet` | a `.sheet` at `.medium` |
+| Direct dial (015a) | `ACTION_DIAL` opens the dialler | a `tel:` URL **places** the call, so it goes through `RideContact` |
+| Driver QR (017) | CameraX + ZXing's reader half in a `Dialog` | **`DataScannerViewController`** in a `.sheet` — the cell's own `Δ iOS` clause; first-party, no dependency |
+| Bank-app link (017) | `ACTION_VIEW`; `canOpenURL`'s answer is hidden by package visibility | `open(_:options:)`; `canOpenURL` is hidden by `LSApplicationQueriesSchemes` — so it opens and reports |
+| Fare breakdown (018) | four rows, from a field nothing assigns | a `DisclosureGroup` — the cell's own clause — with the total and an honest note |
+| Share trip (015) | a fourth outlined button neither wireframe draws | absent; D-34's link is SCR-PI-029's |
 
 ## Things that will bite
 

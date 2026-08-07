@@ -28,6 +28,15 @@ enum MoneyFormat {
     /// rule `+94` and the language endonyms follow.
     static let prefix = "Rs"
 
+    /// What is drawn where an amount is not known **yet** — a quote in flight, or a fare that has not
+    /// been computed (Δ C098).
+    ///
+    /// An em dash rather than `Rs 0`: a zero is a price, and a ride whose fare has not landed does not
+    /// have one. `apps/passenger-android`'s `MoneyFormat.EMPTY` is the same character, and it is
+    /// punctuation rather than copy — three identical values in the three `.strings` files is exactly
+    /// what `LocalizationTests` reads as a translation nobody did.
+    static let pending = "—"
+
     /// `74000` → `Rs 740`; `48050` → `Rs 480.50`. Whole rupees lose their `.00`.
     static func rupees(_ amountMinor: Int64) -> String {
         let negative = amountMinor < 0

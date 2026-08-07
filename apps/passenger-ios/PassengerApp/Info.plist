@@ -78,13 +78,16 @@
       SCR-PA-005's rationale screen asks for exactly this grant and nothing in this app runs a fix
       with the screen off.
 
-      There is deliberately no `NSCameraUsageDescription` **yet**: SCR-PA-017's driver-QR scan
-      (AL-22, AL-47) is C080's and the key belongs in the commit that opens a camera. A purpose
-      string with no API behind it asks for a permission this app does not want — the same fence
-      `apps/driver-ios` kept until C087 needed the scanner.
+      `NSCameraUsageDescription` arrived with **C098**, which is the commit that opens a camera:
+      SCR-PI-017's driver-QR scan (AL-22, AL-47) is the only use, and the app renders no QR of its
+      own. The fence held until then, exactly as `apps/driver-ios` kept its own out until C087 needed
+      the document scanner — a purpose string with no API behind it asks for a permission the app
+      does not want, and App Review reads the list as a statement of intent.
     -->
     <key>NSLocationWhenInUseUsageDescription</key>
     <string>Your location centres the live map, shows the vehicles within about 3 km of you, and fills in your pickup point.</string>
+    <key>NSCameraUsageDescription</key>
+    <string>The camera reads your driver's payment QR code so you can pay the fare from your own bank app.</string>
 
     <!--
       Every build-time value the app reads, in one dictionary, interpolated from the xcconfig.

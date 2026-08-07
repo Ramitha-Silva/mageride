@@ -126,6 +126,36 @@ final class PassengerGraph: ObservableObject {
     /// P-07's pickup code, caught on its way past. C099's SCR-PI-020 reads it.
     let packageOtps = PackageOtps()
 
+    // MARK: - C098 · cluster 4
+    //
+    // The ride, its money, its call and its rating. Four of these are process singletons because
+    // they hold something that has to outlive a screen — a remembered call type, a rail chosen on one
+    // screen and read on the next, the database handle behind the rating queue — and the other three
+    // are seams over system APIs a model test cannot hold.
+
+    /// ride-svc, fare-svc, wallet-svc and comms-svc, behind one door.
+    let rides: RideRepository
+
+    /// SCR-PI-015a's memory (AL-48). A singleton because *"remembers last choice"* outlives the ride,
+    /// and because C102's SCR-PI-028 offers the same chooser after a failed VoIP call.
+    let callChoice: CallChoice
+
+    /// The `tel:` dial, which on this platform **places** the call — see ``RideContact``.
+    let rideContact: RideContact = SystemRideContact()
+
+    /// AL-15's LankaQR link into the passenger's own bank app.
+    let bankApp: BankAppHandoff = SystemBankAppHandoff()
+
+    /// The camera grant and whether this handset can scan at all (AL-22).
+    let camera: CameraAuthoriser = SystemCameraAuthoriser()
+
+    /// The rail SCR-PI-016 confirmed, on its way to SCR-PI-017 — see ``PaymentSelection`` for why it
+    /// cannot be a route argument.
+    let paymentSelection = PaymentSelection()
+
+    /// `mobile_db_schema.md` §1.11, as SCR-PI-019 writes it and SCR-PI-018 reads it.
+    let ratings: RideRatings
+
     init(environment: PassengerEnvironment = .current) {
         self.environment = environment
 
@@ -207,6 +237,18 @@ final class PassengerGraph: ObservableObject {
             iam: shared.api.iam
         )
         self.idempotencyKeys = SharedIdempotencyKeys(generator: shared.idempotencyKeys)
+
+        // C098. One repository over four clients, one memory for the call chooser, and one door onto
+        // §1.11 — which shares `databases` with C096's recents rather than opening a second
+        // connection to the same protected file.
+        self.rides = ApiRideRepository(
+            rides: shared.api.ride,
+            fares: shared.api.fare,
+            wallets: shared.api.wallet,
+            comms: shared.api.voip
+        )
+        self.callChoice = CallChoice(preferences: preferences)
+        self.ratings = LocalRideRatings(databases: databases)
 
         self.live = PassengerLiveMap(
             transport: SignalRLiveHubTransport(

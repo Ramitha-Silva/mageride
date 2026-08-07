@@ -24,6 +24,29 @@ import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
 /**
+ * Where a ride sends the passenger when it stops being a ride (Δ C098).
+ *
+ * **This exists because nothing carried them there.** [ActiveRideScreen]'s own KDoc said *"the
+ * ride-state event carries the passenger to SCR-PA-016"* and nothing did: no screen, no `NavHost`
+ * arm and no push built that destination, so a `Completed` ride left the passenger sitting on a
+ * finished trip and the whole of D-10 was reachable only from the receipt it comes *after*. Found
+ * while building the iOS twin (C098) and fixed on both platforms in the same session.
+ */
+internal enum class RideHandOff {
+    /** `Completed` / `PaymentPending` — D-10 starts. SCR-PA-016. */
+    Payment,
+
+    /**
+     * Already settled: cash taken in the vehicle, or a wallet fare that landed while the app was
+     * away. There is nothing to pay, so the passenger gets the receipt. SCR-PA-018.
+     */
+    Receipt,
+
+    /** Cancelled, or a no-show. Nothing left to watch and nothing to pay — back to the map. */
+    Finished,
+}
+
+/**
  * SCR-PA-014 and SCR-PA-015's shared state.
  *
  * @property ride The aggregate. `null` until the first read lands.
@@ -43,6 +66,8 @@ internal data class ActiveRideState(
     val pendingCancel: Boolean = false,
     val penalty: CancellationPenalty? = null,
     val cancelled: Boolean = false,
+    /** Where the ride is sending the passenger next, once it is going anywhere (Δ C098). */
+    val handOff: RideHandOff? = null,
     val shareLink: String? = null,
     @param:StringRes val error: Int? = null,
 ) {
@@ -124,7 +149,14 @@ internal class ActiveRideViewModel(
         viewModelScope.launch {
             try {
                 val detail = rides.ride(rideId)
-                mutableState.update { it.copy(ride = detail, error = null, noDriver = detail.noDriver()) }
+                mutableState.update {
+                    it.copy(
+                        ride = detail,
+                        error = null,
+                        noDriver = it.noDriver || detail.noDriver(),
+                        handOff = detail.state.handOff(),
+                    )
+                }
             } catch (cause: CancellationException) {
                 throw cause
             } catch (cause: Throwable) {
@@ -159,7 +191,12 @@ internal class ActiveRideViewModel(
             try {
                 val answer = rides.cancel(rideId, ride.version, RideCancelReason.RIDER_CHANGED_MIND)
                 mutableState.update {
-                    it.copy(cancelling = false, cancelled = true, penalty = answer.penalty)
+                    it.copy(
+                        cancelling = false,
+                        cancelled = true,
+                        penalty = answer.penalty,
+                        handOff = RideHandOff.Finished,
+                    )
                 }
             } catch (cause: CancellationException) {
                 throw cause
@@ -260,6 +297,28 @@ internal class ActiveRideViewModel(
 
 /** Whether dispatch has given up — the ride expired with nobody assigned. */
 private fun RideDetail.noDriver(): Boolean = state == RideState.ExpiredNoDriver
+
+/**
+ * Where a state sends the passenger, or `null` while the ride is still a ride (Δ C098).
+ *
+ * [RideState.ExpiredNoDriver] is deliberately **not** a hand-off: SCR-PA-014 draws its own *"No
+ * drivers available"* plus a retry over the same screen, which is US-6A.11's own wording, and
+ * navigating away would take the retry with it.
+ */
+private fun RideState.handOff(): RideHandOff? = when (this) {
+    RideState.Completed, RideState.PaymentPending -> RideHandOff.Payment
+
+    RideState.Paid, RideState.CashSettled, RideState.CashOnDeliveryCollected -> RideHandOff.Receipt
+
+    RideState.CancelledByRiderBeforeAccept,
+    RideState.CancelledByRiderAfterAccept,
+    RideState.CancelledByDriver,
+    RideState.NoShowRider,
+    RideState.NoShowDriver,
+    -> RideHandOff.Finished
+
+    else -> null
+}
 
 /**
  * Whether the passenger's active-ride screen has nothing left to watch.

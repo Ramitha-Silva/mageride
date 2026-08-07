@@ -14,10 +14,10 @@ import MageRideShared
 /// language rules assertable without a running app.
 ///
 /// The keys are `apps/passenger-android/.../shell/AppPreferences.kt`'s, so a passenger who moves
-/// between platforms is not the only thing the two apps disagree about. `lastCallType` and
-/// `callNumberNoticeShown` are deliberately **absent** until C102 needs them, for the reason the
-/// Info.plist keeps `NSCameraUsageDescription` out: a stored answer nothing asks for is state
-/// nobody maintains.
+/// between platforms is not the only thing the two apps disagree about. ``lastCallType`` and
+/// ``callNumberNoticeShown`` arrived with C098, which is the component that first asks them —
+/// SCR-PI-015a is the screen with the memory, exactly as the Info.plist's camera key arrived with the
+/// commit that opens a camera. A stored answer nothing asks for is state nobody maintains.
 protocol AppPreferences: AnyObject {
 
     /// SCR-PI-002's answer. `nil` on a first run, which is what makes AL-26's Sinhala default a
@@ -39,6 +39,22 @@ protocol AppPreferences: AnyObject {
     /// C101's default payment rail (US-22.4). A string rather than a typed enum because the
     /// contract's own enum cannot express what this app offers — see the class documentation.
     var defaultPaymentMethod: String? { get set }
+
+    /// SCR-PI-015a's remembered choice — `CallType.wire`, or `nil` before the first call (Δ C098).
+    ///
+    /// The cell says the sheet *"remembers last choice"*, and it has to **outlive the ride**: a
+    /// passenger who always calls normally should not be asked again on their next trip. A wire
+    /// string rather than a `CallType` for ``defaultPaymentMethod``'s reason — a value a later build
+    /// wrote and this one has never heard of reads as *no preference* rather than as a crash.
+    var lastCallType: String? { get set }
+
+    /// Whether US-26.5's *"your number is visible to the other party"* notice has been shown
+    /// (Δ C098).
+    ///
+    /// **Once, and only before a direct dial.** AL-48 withdrew masking outright, so this disclosure
+    /// is the transparency that replaced it; showing it before a *free* call would be warning about
+    /// something that is not happening, which is how people learn to dismiss disclosures.
+    var callNumberNoticeShown: Bool { get set }
 }
 
 extension AppPreferences {
@@ -93,10 +109,22 @@ final class UserDefaultsAppPreferences: AppPreferences {
         set { defaults.set(newValue, forKey: Keys.defaultPayment) }
     }
 
+    var lastCallType: String? {
+        get { defaults.string(forKey: Keys.lastCallType) }
+        set { defaults.set(newValue, forKey: Keys.lastCallType) }
+    }
+
+    var callNumberNoticeShown: Bool {
+        get { defaults.bool(forKey: Keys.callNumberNotice) }
+        set { defaults.set(newValue, forKey: Keys.callNumberNotice) }
+    }
+
     private enum Keys {
         static let language = "language"
         static let pendingSync = "language_pending_sync"
         static let locationRationale = "location_rationale_acknowledged"
         static let defaultPayment = "default_payment_method"
+        static let lastCallType = "last_call_type"
+        static let callNumberNotice = "call_number_notice_shown"
     }
 }

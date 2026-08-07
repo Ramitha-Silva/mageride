@@ -257,3 +257,101 @@
 "paste_placeholder" = "Google Maps සබැඳියක් අලවන්න";
 "paste_hint" = "පිටපත් කළ සබැඳිය පසුරු පුවරුවෙන් කියවීමට අලවන්න තට්ටු කරන්න.";
 "package_same_fare" = "එම C ප්‍රකාර ගාස්තුවම";
+
+/* ---- C098 · the ride, the call, the money and the rating (Sinhala) --------------- */
+
+/* SCR-PI-014 */
+"finding_title" = "රියදුරෙකු සොයමින්…";
+"finding_caption" = "සාමාන්‍යයෙන් මිනිත්තු 2 ට අඩුයි · %1$@ ක් ඉතිරියි";
+"finding_none" = "රියදුරන් නොමැත";
+"finding_none_caption" = "අවට කිසිවෙකු පිළිගත්තේ නැත. මොහොතකින් නැවත උත්සාහ කරන්න.";
+"finding_retry" = "නැවත උත්සාහ කරන්න";
+"finding_cancel_free" = "අවලංගු කරන්න (නොමිලේ)";
+
+/* SCR-PI-015 */
+"ride_arriving" = "රියදුරු පැමිණෙමින් · මිනිත්තු %1$d";
+"ride_rating" = "තරු %1$.1f";
+"ride_start_otp" = "ආරම්භක කේතය — රියදුරාට කියවා දෙන්න";
+"ride_call" = "ඇමතුම";
+"ride_sos" = "හදිසි උදව්";
+"ride_cancel" = "ගමන අවලංගු කරන්න";
+"ride_cancel_title" = "මෙම ගමන අවලංගු කරන්නද?";
+"ride_cancel_free" = "ඔබේ රියදුරු තවම පිළිගෙන නැත, එබැවින් අවලංගු කිරීම නොමිලේ.";
+"ride_cancel_penalty" = "ඔබේ රියදුරු දැනටමත් පිළිගෙන ඇත. දැන් අවලංගු කිරීමෙන් ඔබේ ඊළඟ ගමනට %1$@ ක් එකතු වේ.";
+"ride_cancel_yes" = "ගමන අවලංගු කරන්න";
+"ride_cancel_no" = "තබාගන්න";
+
+/* SCR-PI-015a */
+"call_driver" = "ඔබේ රියදුරු";
+"call_how" = "ඔබට කෙසේ ඇමතීමට අවශ්‍යද?";
+"call_free" = "නොමිලේ ඇමතුම";
+"call_free_caption" = "යෙදුම තුළ · ගාස්තු නැත · දුරකථන අංකයක් නොමැත";
+"call_normal" = "සාමාන්‍ය ඇමතුම";
+"call_normal_caption" = "ඔබේ මිනිත්තු භාවිතා වේ · රියදුරාට කෙලින්ම අමතයි";
+"call_number_notice" = "සාමාන්‍ය ඇමතුමකදී ඔබේ අංකය අනෙක් පාර්ශ්වයට පෙනේ.";
+
+/* SCR-PI-016 */
+"payment_title" = "ගෙවීම් ක්‍රමය";
+"payment_cash_caption" = "වාහනයේදී රියදුරාට ගෙවන්න";
+"payment_wallet_caption" = "ඔබේ ශේෂයෙන් වහාම ගෙවේ";
+"payment_driver_qr_caption" = "රියදුරුගේ QR ඔබේ බැංකු යෙදුමෙන් පරිලෝකනය කරන්න";
+"payment_cod_caption" = "බාරදීමේදී ලබන්නා ගෙවයි";
+"payment_wallet_balance" = "ශේෂය %1$@";
+"payment_top_up" = "මුදල් එක් කරන්න";
+"payment_confirm" = "තහවුරු කරන්න";
+
+/* SCR-PI-017 */
+"pay_title" = "ගාස්තුව ගෙවන්න";
+"pay_amount_due" = "ගෙවිය යුතු මුදල";
+"pay_scan" = "රියදුරුගේ QR පරිලෝකනය";
+"pay_scan_explainer" = "රියදුරු ඔබට පෙන්වන මුද්‍රිත හෝ තිරයේ ඇති QR වෙත කැමරාව යොමු කරන්න.";
+"pay_scan_no_camera" = "කැමරා අවසරය අක්‍රීයයි. සැකසුම් තුළ සක්‍රීය කරන්න, නැතහොත් බැංකු යෙදුමෙන් ගෙවන්න.";
+"pay_bank_app" = "මගේ බැංකු යෙදුමෙන් ගෙවන්න";
+"pay_ive_paid" = "මම ගෙවා ඇත";
+"pay_waiting" = "රියදුරු තහවුරු කරන තෙක් රැඳී සිටිමින්… %1$@";
+"pay_get_help" = "උදව් ලබාගන්න";
+"pay_confirmed" = "තහවුරු විය";
+"pay_settling" = "ගෙවීම සිදුවෙමින්…";
+"pay_switch_to_cash" = "ඒ වෙනුවට මුදලින් ගෙවන්න";
+
+/* SCR-PI-018 */
+"summary_title" = "ගමන අවසන්";
+"summary_settled" = "ගෙවා ඇත";
+"summary_unpaid" = "තවම ගෙවා නැත";
+"summary_breakdown" = "මෙය ගණනය කළ ආකාරය";
+"summary_total" = "එකතුව";
+"summary_pay_now" = "දැන් ගෙවන්න";
+"summary_rate" = "රියදුරාට ශ්‍රේණිගත කරන්න";
+
+/* SCR-PI-019 */
+"rate_stars" = "තරු %1$d";
+"rate_tag_clean" = "පිරිසිදුයි";
+"rate_tag_on_time" = "වේලාවට";
+"rate_tag_polite" = "ආචාරශීලීයි";
+"rate_tag_safe" = "ආරක්ෂිත රිය පැදවීම";
+"rate_comment" = "අදහසක් එක් කරන්න";
+"rate_comment_hint" = "අත්‍යවශ්‍ය නොවේ";
+"rate_submit" = "ශ්‍රේණිගත කිරීම සුරකින්න";
+
+/* Cluster 4's error table */
+"error_insufficient_wallet" = "ඔබේ පසුම්බියේ ශේෂය මදියි. මුදල් එක් කරන්න, නැතහොත් වෙනත් ආකාරයකින් ගෙවන්න.";
+"error_already_settled" = "මෙම ගමන දැනටමත් ගෙවා ඇත.";
+"error_ride_moved_on" = "මෙම ගමන වෙනස් වී ඇත. නැවත පූරණය වෙමින්.";
+"error_not_your_ride" = "මෙය ඔබේ ගමන නොවේ.";
+"error_gateway" = "ගෙවීම් සැපයුම්කරු වෙත සම්බන්ධ විය නොහැකි විය. නැවත උත්සාහ කරන්න හෝ මුදලින් ගෙවන්න.";
+"error_ride_not_found" = "එම ගමන සොයාගත නොහැකි විය.";
+
+/* Actions this cluster is the first on this platform to need */
+"action_cancel" = "අවලංගු කරන්න";
+"action_close" = "වසන්න";
+"action_retry" = "නැවත උත්සාහ කරන්න";
+
+/* NEW on iOS. */
+"pay_scan_title" = "ගෙවීමට රියදුරුගේ QR පරිලෝකනය කරන්න";
+"pay_scan_unsupported" = "මෙම දුරකථනයට කේත පරිලෝකනය කළ නොහැක. ඒ වෙනුවට බැංකු යෙදුමෙන් ගෙවන්න.";
+"pay_waiting_seconds" = "තත්පර %1$d";
+"payment_default" = "පෙරනිමි";
+"ride_arriving_minutes" = "මිනිත්තු %1$d";
+"ride_start_otp_unavailable" = "මෙම අනුවාදයේ කේතයක් අවශ්‍ය නැත — ඔබේ රියදුරාට ගමන ආරම්භ කළ හැකිය.";
+"summary_breakdown_unavailable" = "මෙම ගමන සඳහා විස්තරාත්මක ගාස්තුව නොමැත.";
+"summary_total_paid" = "ගෙවූ එකතුව";

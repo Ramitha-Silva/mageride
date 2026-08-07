@@ -13,3 +13,7 @@
 "CFBundleDisplayName" = "MageRide";
 
 "NSLocationWhenInUseUsageDescription" = "Your location centres the live map, shows the vehicles within about 3 km of you, and fills in your pickup point.";
+
+/* Δ C098 — SCR-PI-017's driver-QR scan (AL-22). The camera reads the driver's printed or
+ * on-screen LankaQR; this app renders no QR of its own. */
+"NSCameraUsageDescription" = "The camera reads your driver's payment QR code so you can pay the fare from your own bank app.";

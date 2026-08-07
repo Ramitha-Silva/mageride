@@ -174,6 +174,16 @@ lk.mageride.passenger
   the confirm dialog is the only moment a passenger can be told.
 - **`rideScoped(pattern, arg) { rideId -> … }`** registers a ride-scoped destination; every C080
   view model takes its id from the route, which is why none of them is a Koin `viewModel { }`.
+- **`RideHandOff` is what carries a finished ride to its money** (Δ C098). `ActiveRideScreen`'s KDoc
+  said the ride-state change did it and **nothing implemented it** — no screen, no `NavHost` arm and
+  no push built `PaymentMethod(rideId)`, so `Completed` left the passenger on a finished trip and
+  SCR-PA-016/017/018/019 were reachable only from the receipt they come *after*. Found while
+  building the iOS twin; both apps carry the same three-valued type.
+- **`PaymentSelection` is how the chosen rail reaches SCR-PA-017** (Δ C098). The NavHost was
+  *discarding* `onConfirmed`'s argument while `PayFareViewModel.method` defaulted to
+  `SCAN_DRIVER_QR` and `setMethod` had no production caller — so a passenger who chose **Cash** or
+  **Wallet** landed on a screen that had already posted a driver-QR payment. The rail is a
+  constructor parameter now, because the initiation happens in `init`.
 
 ## Cluster 5 (C081) — packages and history
 

@@ -60,6 +60,7 @@ import lk.mageride.passenger.ride.PayFareScreen
 import lk.mageride.passenger.ride.PayFareViewModel
 import lk.mageride.passenger.ride.PaymentMethodScreen
 import lk.mageride.passenger.ride.PaymentMethodViewModel
+import lk.mageride.passenger.ride.PaymentSelection
 import lk.mageride.passenger.ride.RateDriverScreen
 import lk.mageride.passenger.ride.RateDriverViewModel
 import lk.mageride.passenger.ride.RideRepository
@@ -125,6 +126,7 @@ internal fun PassengerNavHost(controller: NavHostController, modifier: Modifier 
     // so the view models are built here rather than resolved with `parametersOf`.
     val rideRepository = koinInject<RideRepository>()
     val callChoice = koinInject<CallChoice>()
+    val paymentSelection = koinInject<PaymentSelection>()
     val sessions = koinInject<AuthSessionManager>()
     val live = koinInject<PassengerLiveMap>()
     val databases = koinInject<PassengerDatabase>()
@@ -345,6 +347,19 @@ internal fun PassengerNavHost(controller: NavHostController, modifier: Modifier 
         rideScoped(PassengerRoute.ActiveRide.PATTERN, PassengerRoute.ActiveRide.ARG_RIDE_ID) { rideId ->
             ActiveRideScreen(
                 onFinished = { controller.popBackStack(PassengerRoute.LiveMap.path, inclusive = false) },
+                // Δ C098 — the hand-off this screen's own KDoc described and nothing implemented.
+                // A REPLACE, not a push: a completed ride must not be one back gesture from a screen
+                // that is still watching it.
+                onPayFare = {
+                    controller.navigate(PassengerRoute.PaymentMethod(rideId).path) {
+                        popUpTo(PassengerRoute.ActiveRide.PATTERN) { inclusive = true }
+                    }
+                },
+                onReceipt = {
+                    controller.navigate(PassengerRoute.TripSummary(rideId).path) {
+                        popUpTo(PassengerRoute.ActiveRide.PATTERN) { inclusive = true }
+                    }
+                },
                 onFreeCall = { controller.navigate(PassengerRoute.VoipCall(rideId).path) },
                 // `⛨ SOS` NAVIGATES; it does not raise the alarm (Δ C084). SCR-PA-029 is where the
                 // confirm, the countdown and the dispatched state live, and one door to
@@ -367,7 +382,7 @@ internal fun PassengerNavHost(controller: NavHostController, modifier: Modifier 
                 // the screen exists.
                 onTopUp = { },
                 model = viewModel(key = rideId) {
-                    PaymentMethodViewModel(rideId, rideRepository, sessions, paymentPreference)
+                    PaymentMethodViewModel(rideId, rideRepository, sessions, paymentPreference, paymentSelection)
                 },
             )
         }
@@ -377,11 +392,17 @@ internal fun PassengerNavHost(controller: NavHostController, modifier: Modifier 
                 onBack = { controller.popBackStack() },
                 onSupport = { controller.navigate(PassengerRoute.Support.path) },
                 onSettled = {
+                    paymentSelection.forget(rideId)
                     controller.navigate(PassengerRoute.TripSummary(rideId).path) {
                         popUpTo(PassengerRoute.ActiveRide.PATTERN) { inclusive = true }
                     }
                 },
-                model = viewModel(key = rideId) { PayFareViewModel(rideId, rideRepository) },
+                // Δ C098 — **the rail SCR-PA-016 confirmed**. This used to be the default
+                // (`scan_driver_qr`) whatever the passenger chose, because `onConfirmed`'s argument
+                // was discarded one arm up and `setMethod` had no caller. See `PaymentSelection`.
+                model = viewModel(key = rideId) {
+                    PayFareViewModel(rideId, rideRepository, paymentSelection.railFor(rideId))
+                },
             )
         }
 

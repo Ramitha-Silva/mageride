@@ -67,11 +67,16 @@ final class LocalizationTests: XCTestCase {
     /// The permission sheet and the Home-screen name, which the system renders and the app never
     /// does.
     ///
-    /// There is deliberately **no camera key**: SCR-PI-017's driver-QR scan is C098's and the purpose
-    /// string belongs in the commit that opens a camera. The same fence the driver app kept until
-    /// C087 needed the scanner.
+    /// **The camera key arrived with C098** — SCR-PI-017's driver-QR scan (AL-22) is the only place
+    /// this app opens a camera, and the purpose string belongs in the commit that opens one. The
+    /// permission sheet is read *before* the app has drawn anything, so its Sinhala and Tamil matter
+    /// more than most.
     func testThePurposeStringsAreTranslated() {
-        let keys = ["CFBundleDisplayName", "NSLocationWhenInUseUsageDescription"]
+        let keys = [
+            "CFBundleDisplayName",
+            "NSLocationWhenInUseUsageDescription",
+            "NSCameraUsageDescription",
+        ]
         let en = strings(in: "en", table: "InfoPlist")
         let si = strings(in: "si", table: "InfoPlist")
         let ta = strings(in: "ta", table: "InfoPlist")

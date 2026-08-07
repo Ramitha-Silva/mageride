@@ -15,9 +15,9 @@ import MageRideShared
 /// payment-custody change set, exactly as its Android twin does.
 ///
 /// **Cluster 3 needs the rail list first, so it lives here** — `apps/passenger-android` puts it in
-/// `ride/`, which is C098's folder on this side and does not exist yet. C098 owns SCR-PI-016 and
-/// should **extend this type** rather than open a second one: `preferable`, `caption(_:)`,
-/// `storedValueOf(_:)` and `fromStored(_:)` are its four, and the Android original is the reference.
+/// `ride/`, which is C098's folder on this side. C098 **extended this type** rather than opening a
+/// second one, as its predecessor asked: ``preferable``, ``caption(_:)``, ``storedValueOf(_:)`` and
+/// ``fromStored(_:)`` are the four it added, below.
 enum PaymentRails {
 
     /// What a **passenger ride** offers, in the wireframe's order. Cash first because it is the
@@ -41,6 +41,16 @@ enum PaymentRails {
         parcel.first { $0.wire == wire }
     }
 
+    /// What SCR-PI-027's **Default payment** row may offer (US-22.4, AL-14) — Δ C098, read by C101.
+    ///
+    /// **Two of ``ride``'s three, and the missing one is the contract's own exclusion.**
+    /// `iam.yaml#/components/schemas/DefaultPaymentMethod` says in as many words that *"the driver-QR
+    /// method is a **settlement** choice made during a ride, not a stored preference"* — it needs a
+    /// driver, a QR image and an amount, none of which exist when a passenger is sitting in Settings.
+    /// So a *preference* is cash or the wallet, and the third rail is chosen on SCR-PI-016 with the
+    /// fare on screen.
+    static let preferable: [PaymentMethod] = [PaymentMethod.cash, PaymentMethod.wallet]
+
     /// The rail's trilingual label key.
     static func labelKey(_ method: PaymentMethod) -> String {
         switch method {
@@ -51,6 +61,51 @@ enum PaymentRails {
         // Unreachable through `ride`/`parcel`, but `PaymentMethod` still declares them because
         // `:shared` types the whole `fares.ride_payments.method` domain, historical rows included.
         default: return "payment_retired"
+        }
+    }
+
+    /// The one-line explanation SCR-PI-016 draws under each rail (Δ C098).
+    ///
+    /// A key per rail rather than one sentence with the name substituted in, because what each rail
+    /// promises is genuinely different: cash is paid *in the vehicle*, the wallet settles *on the
+    /// spot*, the driver's QR is scanned *with the passenger's own bank app*, and COD is paid by
+    /// *somebody else* on delivery.
+    static func captionKey(_ method: PaymentMethod) -> String {
+        switch method {
+        case PaymentMethod.cash: return "payment_cash_caption"
+        case PaymentMethod.wallet: return "payment_wallet_caption"
+        case PaymentMethod.scanDriverQr: return "payment_driver_qr_caption"
+        case PaymentMethod.cod: return "payment_cod_caption"
+        default: return "payment_retired"
+        }
+    }
+
+    /// The `iam.users.default_payment_method` value for a chosen rail, or `nil` when the column
+    /// cannot express it (Δ C098).
+    ///
+    /// **`wallet` is the `nil`, and it is the AL-57 gap.** The contract's enum is still
+    /// `[cash, lankaqr, onepay]` and C003's `CHECK` behind it likewise, so the rail that *replaced*
+    /// `onepay` has no value to be stored as. A wallet default is therefore held on the device
+    /// (``AppPreferences/defaultPaymentMethod``) and does not follow the passenger to a second handset
+    /// until `iam.yaml` and that constraint gain `wallet`. C083 recorded the same gap from the Android
+    /// side; C101 is what reads this.
+    static func storedValueOf(_ method: PaymentMethod) -> DefaultPaymentMethod? {
+        method == PaymentMethod.cash ? DefaultPaymentMethod.cash : nil
+    }
+
+    /// What a profile's stored default means **today** (Δ C098).
+    ///
+    /// A row still carrying `lankaqr` or `onepay` was written before AL-57/AL-59 and names a rail this
+    /// app can no longer offer, so it reads as Cash — the platform default and the one that always
+    /// works. Pre-selecting a retired rail would put a booking on a method SCR-PI-016 does not draw.
+    static func fromStored(_ stored: DefaultPaymentMethod?) -> PaymentMethod {
+        switch stored {
+        case DefaultPaymentMethod.cash, .none:
+            return PaymentMethod.cash
+        // Both retired, and both answer Cash today. Written as their own arm rather than folded into
+        // the default so that the day `wallet` is added to the enum, this function is where it lands.
+        default:
+            return PaymentMethod.cash
         }
     }
 

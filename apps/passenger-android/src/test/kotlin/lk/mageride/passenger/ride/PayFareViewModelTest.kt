@@ -136,14 +136,14 @@ class PayFareViewModelTest {
     fun a_wallet_payment_is_settled_the_moment_it_returns() = runBlocking {
         // AL-57 — one balanced `trip_payment` journal entry, passenger wallet to driver wallet,
         // inside one transaction. No gateway, no `Pending`, nothing to poll.
-        val model = viewModel()
-        model.state.await { it.paymentId != null }
-
-        model.setMethod(PaymentMethod.WALLET)
+        //
+        // Δ C098: the rail arrives in the **constructor** now rather than through a `setMethod` the
+        // NavHost never called, so this drives the screen the way the app builds it.
+        val model = viewModel(method = PaymentMethod.WALLET)
         val state = model.state.await { it.paymentState == PaymentState.Succeeded }
 
         assertTrue(state.confirmed)
-        assertTrue(PaymentMethod.WALLET in rides.payments)
+        assertEquals(listOf(PaymentMethod.WALLET), rides.payments)
     }
 
     @Test
@@ -161,12 +161,48 @@ class PayFareViewModelTest {
         assertNull(state.error)
     }
 
+    /**
+     * **The rail SCR-PA-016 confirmed is the rail that is posted** (Δ C098).
+     *
+     * This is the defect `PaymentSelection` closes: `onConfirmed(method)` reached the NavHost, the
+     * NavHost dropped the argument, and this view model defaulted to the driver QR — so a passenger
+     * who chose **Cash** landed on a screen that had already posted `scan_driver_qr` and was asking
+     * them to scan. The method is a constructor parameter now, because the initiation happens in
+     * `init` and one arriving later would be a second `ride_payments` row for one fare.
+     */
+    @Test
+    fun the_rail_the_passenger_chose_is_the_rail_that_is_posted() = runBlocking {
+        val model = viewModel(method = PaymentMethod.CASH)
+        model.state.await { it.paymentId != null }
+
+        assertEquals(listOf(PaymentMethod.CASH), rides.payments)
+        assertEquals(PaymentMethod.CASH, model.state.value.method)
+    }
+
+    /**
+     * The holder is what carries it between two screens the route cannot connect, and a ride nobody
+     * answered for falls back to the rail that **asks before it acts**.
+     */
+    @Test
+    fun the_selection_holder_remembers_a_rail_per_ride_and_falls_back_to_the_driver_qr() {
+        val selection = PaymentSelection()
+
+        assertEquals(PaymentMethod.SCAN_DRIVER_QR, selection.railFor(FakeRideRepository.RIDE_ID))
+
+        selection.choose(FakeRideRepository.RIDE_ID, PaymentMethod.WALLET)
+        assertEquals(PaymentMethod.WALLET, selection.railFor(FakeRideRepository.RIDE_ID))
+
+        selection.forget(FakeRideRepository.RIDE_ID)
+        assertEquals(PaymentMethod.SCAN_DRIVER_QR, selection.railFor(FakeRideRepository.RIDE_ID))
+    }
+
     // ------------------------------------------------------------------------------------------
 
-    private fun viewModel() = main.own(
+    private fun viewModel(method: PaymentMethod = PaymentMethod.SCAN_DRIVER_QR) = main.own(
         PayFareViewModel(
             rideId = FakeRideRepository.RIDE_ID,
             rides = rides,
+            method = method,
             now = { clock },
             // The attestation pair is what is under test, not how long a passenger waits for it.
             pollInterval = POLL,

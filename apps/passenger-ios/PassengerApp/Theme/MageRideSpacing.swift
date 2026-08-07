@@ -180,6 +180,30 @@ enum MageRideControl {
 
     /// SCR-PI-009's map, which is a backdrop rather than the work (`flex:0 0 150px`).
     static let bookingMapHeight: CGFloat = 150
+
+    // MARK: - C098 · the ride, the call, the money and the rating
+    //
+    // `passenger_ios.html`'s cluster-4 pixels, on the 4pt grid or at the tap-target floor.
+
+    /// SCR-PI-014's `.pulse` — the radar's outer ring (`96 x 96` in the cell's own CSS).
+    static let radar: CGFloat = 96
+
+    /// One box of SCR-PI-015's start-code card (`.otp .b`), and the same square SCR-PI-003's
+    /// ``OtpField`` draws — kept as its own token because that one is a *field* and this is a label.
+    static let otpBox: CGFloat = MageRideControl.minimumTapTarget
+
+    /// SCR-PI-019's star (`font-size:34px`). Bigger than any glyph elsewhere in the app, which is
+    /// what makes a five-star tap a target rather than a hazard.
+    static let star: CGFloat = 34
+
+    /// SCR-PI-017's dashed scan panel (`.card` with `border:1.5px dashed`, `padding:22px`).
+    static let scanPanel: CGFloat = 160
+
+    /// The dash pattern on it, so the two numbers are written once.
+    static let scanPanelDash: CGFloat = 6
+
+    /// SCR-PI-018's receipt map (`flex:0 0 100px`).
+    static let receiptMapHeight: CGFloat = 100
 }
 
 extension View {

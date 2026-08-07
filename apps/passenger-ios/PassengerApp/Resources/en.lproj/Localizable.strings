@@ -311,3 +311,109 @@
 "paste_placeholder" = "Paste a Google Maps link";
 "paste_hint" = "Tap Paste to read the copied link from your clipboard.";
 "package_same_fare" = "Same Mode C fare";
+
+/* ---- C098 · the ride, the call, the money and the rating -------------------------
+ *
+ * SCR-PI-014/015/015a/016/017/018/019. The keys are
+ * `apps/passenger-android/src/main/res/values…/strings.xml`'s and carry the Android translations
+ * unchanged, except that every `%1$s` is a `%1$@` here — Objective-C string formats, not Java ones.
+ * Eight keys are new to this platform and are marked at the foot of this section.
+ */
+
+/* SCR-PI-014 — finding a driver */
+"finding_title" = "Finding a driver…";
+"finding_caption" = "Usually under 2 minutes · %1$@ left";
+"finding_none" = "No drivers available";
+"finding_none_caption" = "Nobody nearby accepted. Try again in a moment.";
+"finding_retry" = "Try again";
+"finding_cancel_free" = "Cancel (free)";
+
+/* SCR-PI-015 — the ride in progress */
+"ride_arriving" = "Driver arriving · %1$d min";
+"ride_rating" = "%1$.1f stars";
+"ride_start_otp" = "Start code — read it out to your driver";
+"ride_call" = "Call";
+"ride_sos" = "SOS";
+"ride_cancel" = "Cancel ride";
+"ride_cancel_title" = "Cancel this ride?";
+"ride_cancel_free" = "Your driver has not accepted yet, so cancelling costs nothing.";
+"ride_cancel_penalty" = "Your driver has already accepted. Cancelling now adds %1$@ to your next trip.";
+"ride_cancel_yes" = "Cancel ride";
+"ride_cancel_no" = "Keep it";
+
+/* SCR-PI-015a — the call-type chooser. No masking copy anywhere (AL-48) */
+"call_driver" = "Your driver";
+"call_how" = "How do you want to call?";
+"call_free" = "Free call";
+"call_free_caption" = "In the app · no charge · no number involved";
+"call_normal" = "Normal call";
+"call_normal_caption" = "Uses your minutes · calls the driver directly";
+"call_number_notice" = "Your number is visible to the other party on a normal call.";
+
+/* SCR-PI-016 — the rails that survive AL-57/AL-59. No surcharge on any of them */
+"payment_title" = "Payment method";
+"payment_cash_caption" = "Pay the driver in the vehicle";
+"payment_wallet_caption" = "Paid from your balance straight away";
+"payment_driver_qr_caption" = "Scan the driver QR with your bank app";
+"payment_cod_caption" = "The recipient pays on delivery";
+"payment_wallet_balance" = "Balance %1$@";
+"payment_top_up" = "Top up";
+"payment_confirm" = "Confirm";
+
+/* SCR-PI-017 — the driver-QR scan (AL-22) and AL-47 attestation */
+"pay_title" = "Pay fare";
+"pay_amount_due" = "Amount due";
+"pay_scan" = "Scan driver QR";
+"pay_scan_explainer" = "Point your camera at the printed or on-screen QR your driver shows you.";
+"pay_scan_no_camera" = "Camera access is off. Turn it on in Settings, or pay with your bank app.";
+"pay_bank_app" = "Pay with my bank app";
+"pay_ive_paid" = "I have paid";
+"pay_waiting" = "Waiting for the driver to confirm… %1$@";
+"pay_get_help" = "Get help";
+"pay_confirmed" = "Confirmed";
+"pay_settling" = "Settling…";
+"pay_switch_to_cash" = "Pay cash instead";
+
+/* SCR-PI-018 — the receipt */
+"summary_title" = "Trip complete";
+"summary_settled" = "Paid";
+"summary_unpaid" = "Not paid yet";
+"summary_breakdown" = "How this was worked out";
+"summary_total" = "Total";
+"summary_pay_now" = "Pay now";
+"summary_rate" = "Rate your driver";
+
+/* SCR-PI-019 — stars, compliment chips and an optional comment (US-18.1) */
+"rate_stars" = "%1$d stars";
+"rate_tag_clean" = "Clean";
+"rate_tag_on_time" = "On time";
+"rate_tag_polite" = "Polite";
+"rate_tag_safe" = "Safe driving";
+"rate_comment" = "Add a comment";
+"rate_comment_hint" = "Optional";
+"rate_submit" = "Save rating";
+
+/* Cluster 4's error table — every code one of its four contracts declares */
+"error_insufficient_wallet" = "Your wallet balance is short. Top up, or pay another way.";
+"error_already_settled" = "This ride has already been paid.";
+"error_ride_moved_on" = "This ride has changed. Reloading it now.";
+"error_not_your_ride" = "This is not your ride.";
+"error_gateway" = "The payment provider could not be reached. Try again or pay cash.";
+"error_ride_not_found" = "That ride could not be found.";
+
+/* Actions this cluster is the first on this platform to need */
+"action_cancel" = "Cancel";
+"action_close" = "Close";
+"action_retry" = "Try again";
+
+/* NEW on iOS: the driver row's ETA fragment, the start-code note (no operation returns one
+ * — see StartCodeCard), the DEFAULT badge, the scan panel's two lines, the wait counter,
+ * the receipt's hero caption and its missing-itemisation note. */
+"pay_scan_title" = "Scan the driver's QR to pay";
+"pay_scan_unsupported" = "This phone cannot scan codes. Pay with your bank app instead.";
+"pay_waiting_seconds" = "%1$ds";
+"payment_default" = "Default";
+"ride_arriving_minutes" = "%1$d min";
+"ride_start_otp_unavailable" = "No code is needed on this version — your driver can start the trip.";
+"summary_breakdown_unavailable" = "The itemised fare is not available for this trip.";
+"summary_total_paid" = "Total paid";

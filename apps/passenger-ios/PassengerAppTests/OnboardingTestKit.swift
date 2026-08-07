@@ -18,6 +18,9 @@ final class FakeAppPreferences: AppPreferences {
     var languagePendingSync = false
     var locationRationaleAcknowledged = false
     var defaultPaymentMethod: String?
+    /// Δ C098 — SCR-PI-015a's memory. Both outlive a ride, which is what `CallChoiceTests` asserts.
+    var lastCallType: String?
+    var callNumberNoticeShown = false
 }
 
 // MARK: - Sessions

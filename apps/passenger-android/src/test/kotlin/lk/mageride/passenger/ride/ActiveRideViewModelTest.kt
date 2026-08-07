@@ -169,6 +169,49 @@ class ActiveRideViewModelTest {
     // `POST /v1/sos` is what keeps one emergency to one row on the operator's live feed. The
     // assertion moved to `safety/SosViewModelTest`, which is where the behaviour is.
 
+    /**
+     * **A completed ride hands the passenger to SCR-PA-016** (Δ C098).
+     *
+     * `ActiveRideScreen`'s own KDoc said the ride-state change carried them there and **nothing
+     * implemented it** — no screen, no `NavHost` arm and no push built that destination — so
+     * `Completed` left a passenger on a finished trip and the whole of D-10 was reachable only from
+     * the receipt it comes *after*. Found while building the iOS twin.
+     */
+    @Test
+    fun a_completed_ride_hands_over_to_payment() = runBlocking {
+        rides.rideAnswer = FakeRideRepository.ride(state = RideState.Completed)
+        val model = viewModel()
+
+        val state = model.state.await { it.handOff != null }
+        assertEquals(RideHandOff.Payment, state.handOff)
+    }
+
+    /**
+     * A ride the driver settled in cash while the app was away has nothing to pay, so the receipt is
+     * where it belongs; a cancelled one has neither and goes back to the map.
+     */
+    @Test
+    fun a_settled_ride_goes_to_the_receipt_and_a_cancelled_one_to_the_map() = runBlocking {
+        rides.rideAnswer = FakeRideRepository.ride(state = RideState.CashSettled)
+        assertEquals(RideHandOff.Receipt, viewModel().state.await { it.handOff != null }.handOff)
+
+        rides.rideAnswer = FakeRideRepository.ride(state = RideState.CancelledByDriver)
+        assertEquals(RideHandOff.Finished, viewModel().state.await { it.handOff != null }.handOff)
+    }
+
+    /**
+     * **`ExpiredNoDriver` is deliberately not a hand-off.** SCR-PA-014 draws its own *"No drivers
+     * available"* plus a retry over the same screen (US-6A.11), and navigating away would take the
+     * retry with it.
+     */
+    @Test
+    fun an_expired_search_stays_on_the_screen_and_offers_a_retry() = runBlocking {
+        rides.rideAnswer = FakeRideRepository.ride(state = RideState.ExpiredNoDriver)
+        val state = viewModel().state.await { it.noDriver }
+
+        assertNull(state.handOff, "the retry lives on SCR-PA-014")
+    }
+
     // ------------------------------------------------------------------------------------------
 
     private fun viewModel() = main.own(

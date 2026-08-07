@@ -77,6 +77,7 @@ internal class PaymentMethodViewModel(
     private val rides: RideRepository,
     private val sessions: AuthSessionManager,
     private val payments: PaymentPreference,
+    private val selection: PaymentSelection,
 ) : ViewModel() {
 
     // US-22.4's *"pre-selected at booking/checkout (and still changeable per trip)"* — this is the
@@ -98,9 +99,14 @@ internal class PaymentMethodViewModel(
      *
      * This screen does **not** call `POST /v1/fare/pay` — SCR-PA-017 does, because the wallet rail
      * settles on the spot and the driver-QR rail needs the QR image the initiation returns. What
-     * Confirm does is decide which screen comes next.
+     * Confirm does is **record the rail** and decide which screen comes next.
+     *
+     * **The record is the fix** (Δ C098). The rail used to reach SCR-PA-017 through
+     * `onConfirmed(method)` and no further: the NavHost discarded the argument and `PayFareViewModel`
+     * defaulted to the driver QR, so choosing Cash landed on a QR scanner. See [PaymentSelection].
      */
     fun confirm() {
+        selection.choose(rideId, mutableState.value.chosen)
         mutableState.update { it.copy(confirmed = it.chosen) }
     }
 
@@ -199,6 +205,14 @@ internal data class PayFareState(
 internal class PayFareViewModel(
     private val rideId: String,
     private val rides: RideRepository,
+    /**
+     * The rail SCR-PA-016 confirmed (Δ C098).
+     *
+     * A **constructor parameter** rather than a `setMethod` call the NavHost was supposed to make and
+     * never did — the initiation happens in `init`, so a method arriving afterwards would post a
+     * second payment for one fare. See [PaymentSelection] for the defect this closes.
+     */
+    method: PaymentMethod = PaymentMethod.SCAN_DRIVER_QR,
     private val now: () -> Timestamp = { Clock.System.now() },
     /**
      * How often the wait for the driver's confirm re-reads the payment.
@@ -210,7 +224,7 @@ internal class PayFareViewModel(
     private val pollInterval: Duration = CONFIRM_POLL,
 ) : ViewModel() {
 
-    private val mutableState = MutableStateFlow(PayFareState())
+    private val mutableState = MutableStateFlow(PayFareState(method = method))
 
     val state: StateFlow<PayFareState> = mutableState.asStateFlow()
 
@@ -218,12 +232,6 @@ internal class PayFareViewModel(
 
     init {
         viewModelScope.launch { load() }
-    }
-
-    /** The chosen rail arrives from SCR-PA-016. */
-    fun setMethod(method: PaymentMethod) {
-        mutableState.update { it.copy(method = method) }
-        viewModelScope.launch { initiate(method) }
     }
 
     fun openScanner() {

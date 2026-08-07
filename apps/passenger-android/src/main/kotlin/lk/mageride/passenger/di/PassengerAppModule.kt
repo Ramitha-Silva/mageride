@@ -40,6 +40,7 @@ import lk.mageride.passenger.push.PushRouter
 import lk.mageride.passenger.push.PushTokenProvider
 import lk.mageride.passenger.ride.ApiRideRepository
 import lk.mageride.passenger.ride.CallChoice
+import lk.mageride.passenger.ride.PaymentSelection
 import lk.mageride.passenger.ride.RideRepository
 import lk.mageride.passenger.settings.AddressBook
 import lk.mageride.passenger.settings.ApiAddressBook
@@ -249,6 +250,10 @@ private fun Module.activeRideBindings() {
         ApiRideRepository(rides = get(), fares = get(), wallets = get(), safety = get(), comms = get())
     }
     single { CallChoice(preferences = get()) }
+    // Δ C098. A `single` for `CallChoice`'s reason and one more: SCR-PA-016 writes it and
+    // SCR-PA-017 reads it, and `PassengerRoute.PayFare` has no argument to carry a rail in — see
+    // `PaymentSelection` for the defect that leaves behind when it does not exist.
+    single { PaymentSelection() }
 }
 
 /**

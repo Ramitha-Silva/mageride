@@ -53,9 +53,11 @@ import lk.mageride.passenger.ui.theme.MageRideTheme
  * settles on the *next* trip rather than being charged now, which is precisely why it has to be
  * stated: nothing appears on a statement today, and an unwarned passenger meets it weeks later.
  *
- * **Payment is not reached from here.** The ride moves to `Completed` server-side and the ride-state
- * event carries the passenger to SCR-PA-016; a "pay now" button on a moving vehicle would be an
- * invitation to settle a fare that is not final yet.
+ * **Payment is not a button on this screen, and it is now reached from it.** The ride moves to
+ * `Completed` server-side and the ride-state change is what carries the passenger to SCR-PA-016 — a
+ * *"pay now"* control on a moving vehicle would be an invitation to settle a fare that is not final
+ * yet. Δ C098: that hand-off was documented here and **implemented nowhere**, so a completed ride
+ * left the passenger on a finished trip with D-10 unreachable. See [RideHandOff].
  *
  * **`📞 Call ▾` opens SCR-PA-015a rather than dialling.** Free VoIP and a direct cellular call are
  * genuinely different things — one costs the passenger minutes and shows their number — so the
@@ -69,6 +71,8 @@ import lk.mageride.passenger.ui.theme.MageRideTheme
 @Suppress("LongMethod") // The wireframe's layout tree: map, driver card, OTP, three actions.
 internal fun ActiveRideScreen(
     onFinished: () -> Unit,
+    onPayFare: () -> Unit,
+    onReceipt: () -> Unit,
     onFreeCall: () -> Unit,
     onSos: () -> Unit,
     choice: CallChoice,
@@ -77,7 +81,9 @@ internal fun ActiveRideScreen(
     val state by model.state.collectAsStateWithLifecycle()
     var callOpen by remember { mutableStateOf(false) }
 
-    LaunchedEffect(state.cancelled) { if (state.cancelled) onFinished() }
+    LaunchedEffect(state.handOff) {
+        state.handOff?.route(onPayFare = onPayFare, onReceipt = onReceipt, onFinished = onFinished)
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         Box(modifier = Modifier.weight(1f)) {
@@ -202,6 +208,19 @@ internal fun ActiveRideScreen(
             onDismiss = { callOpen = false },
         )
     }
+}
+
+/**
+ * Where a hand-off sends the passenger (Δ C098).
+ *
+ * A function rather than a `when` inside the `LaunchedEffect`, because detekt's cyclomatic ceiling
+ * for a composable is fifteen and this screen was already at it — which is the same reason the
+ * cancel dialog and the driver card are their own composables.
+ */
+private fun RideHandOff.route(onPayFare: () -> Unit, onReceipt: () -> Unit, onFinished: () -> Unit) = when (this) {
+    RideHandOff.Payment -> onPayFare()
+    RideHandOff.Receipt -> onReceipt()
+    RideHandOff.Finished -> onFinished()
 }
 
 /** `👤 K. Fernando ★4.8 · Sedan · ABC-1234 · 3 min`. */

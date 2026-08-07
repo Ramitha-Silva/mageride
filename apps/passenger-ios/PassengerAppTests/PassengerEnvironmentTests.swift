@@ -51,14 +51,19 @@ final class PassengerEnvironmentTests: XCTestCase {
         XCTAssertEqual(Set(modes), ["remote-notification"])
     }
 
-    /// SCR-PI-005 asks for when-in-use and nothing more. A purpose string with no API behind it asks
-    /// for a permission this app does not want — the fence `apps/driver-ios` kept until C087 needed
-    /// the camera.
-    func testOnlyTheWhenInUseLocationPurposeStringIsDeclared() {
-        XCTAssertNotNil(Bundle.main.object(forInfoDictionaryKey: "NSLocationWhenInUseUsageDescription"))
+    /// Two purpose strings, and each arrived with the component that opened the API behind it.
+    ///
+    /// SCR-PI-005 asks for when-in-use location and nothing more; **the camera key arrived with
+    /// C098**, which is SCR-PI-017's driver-QR scan (AL-22) and the only place this app opens one. A
+    /// purpose string with no API behind it asks for a permission this app does not want, which is
+    /// the fence `apps/driver-ios` kept until C087 needed its own scanner — so the *absent* keys are
+    /// the assertion that matters, and the day one of them is needed this test is what asks for it.
+    func testOnlyTheDeclaredPurposeStringsExist() {
+        for key in ["NSLocationWhenInUseUsageDescription", "NSCameraUsageDescription"] {
+            XCTAssertNotNil(Bundle.main.object(forInfoDictionaryKey: key), "\(key) is missing")
+        }
         for key in [
             "NSLocationAlwaysAndWhenInUseUsageDescription",
-            "NSCameraUsageDescription",
             "NSPhotoLibraryUsageDescription",
             "NSMicrophoneUsageDescription",
             "NSContactsUsageDescription",

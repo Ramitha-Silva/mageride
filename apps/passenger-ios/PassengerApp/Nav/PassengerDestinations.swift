@@ -48,12 +48,13 @@ struct PassengerDestinationView: View {
             BookingDestinationView(route: route)
 
         // ---- C098 · the ride and its payment -------------------------------------------
-        case .findingDriver: placeholder("SCR-PI-014 finding driver")
-        case .activeRide: placeholder("SCR-PI-015 active ride")
-        case .paymentMethod: placeholder("SCR-PI-016 payment method")
-        case .payFare: placeholder("SCR-PI-017 pay fare")
-        case .tripSummary: placeholder("SCR-PI-018 trip summary")
-        case .rateDriver: placeholder("SCR-PI-019 rate driver")
+        //
+        // Six destinations and one forward direction. SCR-PI-015a (the call-type chooser) and the QR
+        // scanner are sheets rather than destinations — the first because ``PassengerRoute``'s own
+        // note lists it among the overlays, the second because a scan is a string that comes straight
+        // back to the model that asked for it.
+        case .findingDriver, .activeRide, .paymentMethod, .payFare, .tripSummary, .rateDriver:
+            RideDestinationView(route: route)
 
         // ---- C099 · packages and history ------------------------------------------------
         case .packageTracking: placeholder("SCR-PI-020/021 package tracking")
