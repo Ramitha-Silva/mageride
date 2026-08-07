@@ -117,7 +117,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C088 | driver-ios-dashboard-dispatch | 4b | PARTIAL | 2026-08-06 | **Written in full; NOT compiled — this host cannot build iOS** (root CLAUDE.md), so the DoD is unverified and the status stays PARTIAL until `xcodebuild … test` on macOS. Verified here: `:shared:testDebugUnitTest detekt ktlintCheck` green (822 tests, unchanged) and `:shared:compileKotlinIosArm64` type-checking the four Kotlin additions. SCR-DI-010/011/013/014/015/036 built — **26 Swift files, 8 XCTest suites across 7 test files, 97 keys × si/ta/en** (C070's key names and C070's translations). **Home is one destination**, its sheet chosen by `LiveVehicle.isScheduledMode`; **SCR-DI-014 is a `fullScreenCover` with the interactive dismiss disabled**, not a route. **`OfferSlot` is the seam that makes the fifteen seconds testable** — `OfferSession.state` is a `StateFlow` and `IosFlowWatcher`'s constructor is `internal`, so a test cannot build one. **The countdown is local arithmetic** off `expiresAt`, not `OfferSession.countdown()` (a `Flow<Duration>` Swift cannot collect); the *decision* rule stays in `OfferSession.accept()`. **CallKit-aware means the direct dial**: a `tel:` URL places the call on iOS, so `CXCallObserver` gates it — Android's `ACTION_DIAL` has nothing to check. **The C087-recorded `VehicleToken.wire` defect is fixed** (camel case → `:shared`'s snake case; three of ten types were drawing grey). Four `iosMain` helpers added, each because a Kotlin default argument does not survive the export. Six spec gaps carried forward from C070 and two new iOS ones — see the handoff |
 | C089 | driver-ios-delivery | 4b | PARTIAL | 2026-08-07 | **Written in full; NOT compiled — this host cannot build iOS** (root CLAUDE.md), so the DoD is unverified and the status stays PARTIAL until `xcodebuild … test` on macOS. Verified here: `:shared:testDebugUnitTest detekt ktlintCheck` green (**822 tests, 0 failed** — unchanged, because this component adds **no Kotlin at all**), the `.pbxproj` regenerated from the tree (**99 app sources, 32 test sources**), a brace/paren sweep over all 131 Swift files, and the three `Localizable.strings` parsed with a real old-style-plist parser (**314 keys × 3**, key sets identical, none blank, none left in English, no specifier drift). SCR-DI-016a/b/c built — **6 Swift files, 3 XCTest suites / 30 tests, 22 keys × si/ta/en** (C071's key names and C071's translations). **The three `Localizable.strings` files did not parse before this component and now do** — a `.strings` comment is a C comment and does not nest, so `values*/strings.xml` inside one closed it on the `*/` and `NSDictionary(contentsOf:)` answered `nil`: **every key in the driver app resolved to its own name**, from C085 onward, and `LocalizationTests` would have failed at its first line on a Mac. Seven occurrences fixed. **`ActiveRideScreen` now hands a package over to `DeliveryScreen`** — the one `if` C088 left for this component; no route added, no deep link changed, and SCR-DI-015's poll and GNSS subscription stay off for a parcel so only one loop folds server states onto the ride. **`PackageHandoff` is the five-attempt rule** and the projection is seated once and kept, because re-seating throws the attempt count away. **The photograph completes the delivery** (Δ C037) so it uploads on the *"Delivery completed"* tap, not the shutter; `DocumentCaptureTarget.deliveryProof` is the first non-document use of SCR-DI-005. **One C071 defect found and not replicated**: the Android twin empties the four OTP boxes on every fold, and its five-second poll is a fold. Four C071 spec gaps carried forward, one new iOS delta — see the handoff |
 | C090 | driver-ios-jobs-level-earnings | 4b | PARTIAL | 2026-08-07 | **Written in full; NOT compiled — this host cannot build iOS** (root CLAUDE.md), so the DoD is unverified and the status stays PARTIAL until `xcodebuild … test` on macOS. Verified here: `:shared:compileKotlinIosArm64 detekt ktlintCheck` green with the **three new `iosMain` helpers** type-checked, the `.pbxproj` regenerated from the tree (**113 app sources, 40 test sources**), a brace/paren/string sweep over all 153 Swift files, an import and string-key audit, and the three `Localizable.strings` parsed with a real old-style-plist parser (**353 keys × 3**, key sets identical, none blank, none left in English, no specifier drift, no Android `%n$s` left behind). SCR-DI-017/018/019/020 built — **14 Swift files, 6 XCTest suites across 7 test files, 39 keys × si/ta/en** (C072's key names and C072's translations). **The board is post-intent only and the fence is asserted**; **US-6A.8 is three-valued** so an unread level renders as *"we could not read your Driver Level"* and never as the L1 gate; **T-30 is one instant read by two screens** through `jobBoardGoesLiveAtMillis` — SCR-DI-017's expiry and SCR-DI-018's *"reminder sent"* are the same comparison; earnings print query-svc's own summary and never a second total; every clock and bucket is Asia/Colombo through `:shared`'s zone. **Δ iOS: the trend is Swift Charts**, which is `driver_ios.html`'s own clause for the cell, and the period strip is a segmented `Picker`, which is what `.tabbar2` draws on this platform. One C072 defect found and not replicated (`DriverLevelState.error` is unreachable). Five C072 spec gaps carried forward, one new iOS delta — see the handoff |
-| C091 | driver-ios-wallet-credit | 4b | PENDING | | |
+| C091 | driver-ios-wallet-credit | 4b | PARTIAL | 2026-08-07 | **Written in full; NOT compiled — this host cannot build iOS** (root CLAUDE.md), so the DoD is unverified and the status stays PARTIAL until `xcodebuild … test` on macOS. Verified here: `:shared:compileKotlinIosArm64 detekt ktlintCheck` green with the **new `iosMain` helper** type-checked, the `.pbxproj` regenerated from the tree (**134 app sources, 47 test sources**), a brace/paren/string sweep over all 181 Swift files, an import and string-key audit (276 literal keys + 174 assigned, all resolving), and the three `Localizable.strings` re-parsed (**460 keys × 3**, identical key sets, none blank, none left in English, no specifier drift). SCR-DI-021/022/023/024/025 built — **20 Swift files, 7 XCTest suites across 6 test files, 107 keys × si/ta/en** (C073's key names and C073's translations, plus five this platform needs). **The biggest finding is a platform hazard, not a spec gap: a Kotlin `require` is a caught exception on Android and a TERMINATED PROCESS here**, and three `:shared` constructors this cluster builds from server data carry one — `DailyFeeSchedule`, `VoucherCatalogue` and `CreditTransferIntent` — so each is validated in Swift first and the refusal becomes copy. A Rs 1,000 voucher at 10 % prices at Rs 900, credits Rs 1,000 and goes to `POST /v1/vouchers/purchase`; a transfer's two legs are equal at every amount; no source or copy in the cluster names a bank transfer or a commission in any of the three languages (`WalletFenceTests`, which reads the source off disk through `#filePath`). Zero new dependencies — AL-15's encoder is `CIQRCodeGenerator`, so **no QR decoder is linked into this target at all**. Eight Δ iOS rows added to the target's Section C table; C073's five spec gaps carried forward unchanged |
 | C092 | driver-ios-tracker-sharing-profile | 4b | PENDING | | |
 | C093 | driver-ios-comms-safety-support | 4b | PENDING | | |
 | C094 | passenger-ios-shell | 4b | PENDING | | |
@@ -14261,3 +14261,183 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   `ScheduleLabelTests.swift`, `DriverLevelModelTests.swift`, `EarningsModelTests.swift`,
   `EarningsBucketsTests.swift`, `JobsNavigationTests.swift`. Plus
   `DriverApp.xcodeproj/project.pbxproj` (regenerated) and `apps/driver-ios/CLAUDE.md`.
+
+---
+
+- **Component:** C091 driver-ios-wallet-credit — 2026-08-07
+- **Status:** PARTIAL — **written in full and not compiled.** `apps/driver-ios` is an Xcode project
+  and this build host is Linux (root CLAUDE.md, `apps/driver-ios/CLAUDE.md`), so the DoD's
+  `xcodebuild … test` has not run and cannot run here; the status stays PARTIAL until the first Mac
+  build, exactly as C085–C090 stand. What *is* verified on this host is below.
+- **Notes:**
+
+  ### Verified here
+
+  * `./gradlew :shared:compileKotlinIosArm64 :shared:detekt :shared:ktlintCheck` — **BUILD
+    SUCCESSFUL**, with the one new `iosMain` function type-checked by the Kotlin/Native front end on
+    this Linux host. (A compile check, not a link.)
+  * `python3 apps/driver-ios/Tools/generate_xcodeproj.py` — **134 app sources, 47 test sources**,
+    3 resources, 2 localised tables. The `.pbxproj` is committed with the files.
+  * A structural sweep over **all 181 Swift files**: braces, parentheses, brackets, string literals
+    (including `\(…)` interpolation) and block comments balanced.
+  * An import and copy audit: every file naming a `:shared` symbol imports `MageRideShared`, all
+    **276** literal `Text(key:)` / `.localised` keys and all **174** keys a model or a label table
+    *returns* resolve in `en.lproj`.
+  * The three `Localizable.strings` re-parsed as old-style property lists: **460 keys each**, key
+    sets identical, none blank, none left equal to its English, every `%n$…` specifier surviving into
+    si and ta, no Android `%n$s` left behind, and no stray `/*` that would close a comment early
+    (the C089 trap).
+  * A simulation of `WalletFenceTests`' two source-scanning fences over the twenty files in
+    `DriverApp/Wallet`, and of its two copy fences over all three strings files: clean.
+
+  **Not verified, and it is the whole DoD:** `xcodebuild -project apps/driver-ios/DriverApp.xcodeproj
+  -scheme DriverApp -destination 'platform=iOS Simulator,name=iPhone 15' test`, after
+  `./gradlew :shared:assembleXCFramework`. Nothing here has been through a Swift compiler.
+
+  ### A Kotlin `require` is a caught exception on Android and a TERMINATED PROCESS here
+
+  **This is the finding that matters most, and it is not a spec gap — it is a property of the bridge
+  that this cluster is the first to be genuinely exposed to.** An exception thrown out of a Kotlin
+  function that is neither `suspend` nor `@Throws` reaches Swift as an *uncaught Objective-C
+  exception*: Swift cannot catch it and the process terminates. Every other cluster has crossed the
+  bridge through suspend functions, whose failures Kotlin/Native wraps in an `NSError` — which is why
+  `OnboardingErrors.kotlinCause` exists and why nothing has hit this before.
+
+  Three `:shared` value types this cluster builds **from server data** carry `require`s in their
+  constructors:
+
+  * `DailyFeeSchedule(rates)` — one rate per vehicle type. `GET /v1/fees/rates` returning two rows for
+    `sedan` would take the wallet tab down.
+  * `VoucherCatalogue(tiers)` — four rules: one tier per denomination, a positive denomination, and a
+    discount neither negative nor above 100%. `GET /v1/wallet/voucher/discount-tiers` is admin-edited
+    (SCR-AP-007), which is exactly the kind of table that acquires a duplicate row.
+  * `CreditTransferIntent(...)` — no self-transfer, positive amount. Both are things a **driver types**.
+
+  The Android twin's `launchGuarded` catches all three and shows copy. Here the same outcome has to be
+  arranged, so each is asked before it is built: `ApiWalletRepository.readSchedule` and
+  `ApiTopUpRepository.isWellFormed` raise a Swift `WalletContractViolation` that the existing
+  best-effort read and the existing error banner already know what to do with, and
+  `CreditTransferModel.rejectionForSend` answers the self-transfer and the non-positive amount before
+  an intent exists. `isWellFormed` is `static` and tested directly rather than re-typed in the test,
+  because what the safety depends on is that it and Kotlin's `init` agree.
+
+  **C092 and C093 should check any `:shared` constructor they call from Swift for a `require` before
+  handing it a server value or a typed one.** It is worth a sweep of the whole `domain` package.
+
+  ### Buying a voucher is a purchase, not a discounted top-up
+
+  Unchanged from C073 and re-asserted here: `POST /v1/vouchers/purchase` initiates the gateway payment
+  **and** posts the credit on confirmation, so `topupWithOnepay(90000)` followed by a purchase credits
+  Rs 900 on the webhook *and* Rs 1,000 on the purchase — Rs 1,900 for a Rs 1,000 voucher.
+  `TopUpModelTests` asserts that the voucher path calls `purchaseVoucher` and never `topUp`.
+
+  ### The two rails leave the app by different doors, and only one of them can fail
+
+  `driver_ios.html`'s own Δ clause for SCR-DI-022 is *"OnePay via `SFSafariViewController` / LankaQR
+  Universal Link"*, and following it removes a failure mode rather than adding one. On Android both
+  rails are an `ACTION_VIEW` that can find nothing to handle it; here the OnePay page is a browser
+  **inside the app**, so the *"no app could open the payment page"* branch the Android view model has
+  to report does not exist. What is left behind `PaymentHandoff` is the bank-app link alone.
+
+  That makes the return leg the screen's problem instead of the task stack's, and `PaymentReturn` is
+  the answer: OnePay is sent `pay.mageride.lk` as its `returnUrl` — the `applinks:` domain
+  `DriverApp.entitlements` already declares for this exact leg — and `SafariView` dismisses on a
+  redirect onto that **host**, matched on the host because the gateway appends its own query. It is a
+  shortcut and not a dependency: the driver's **Done** and a swipe both resolve the same session
+  through the same D6' §7.1 poll, which is the only thing that is ever believed about what happened.
+
+  AL-15's *"try, then fall back"* survives intact and for a symmetrical reason: `canOpenURL` answers
+  `false` for any scheme not in `LSApplicationQueriesSchemes`, a list capped at fifty that a LankaQR
+  *"Pay"* link — whose scheme is the **issuing bank's** — cannot be enumerated into. That is the same
+  wall `targetSdk` 30 package-visibility filtering puts up on Android, reached by a different road. So
+  the link is opened `universalLinksOnly` (without the flag iOS hands an https link to Safari and
+  reports success, which would suppress the fallback) and the completion handler is the answer.
+
+  ### SCR-DI-022 has ONE `.sheet` and three things to put in it (Δ iOS)
+
+  A voucher bought on OnePay sets the checkout **and** the receipt in one breath; one bought on
+  LankaQR sets the AL-15 code **and** the receipt. On Android those are two dialogs that stack.
+  SwiftUI presents at most one sheet per presentation context and silently drops the rest — so three
+  `.sheet` modifiers would leave the receipt un-presented on exactly the two paths where it is the
+  thing that says the credit is on its way. `TopUpSheet` ranks them (checkout → code → receipt) and
+  `TopUpModelTests` asserts the two-at-once state that makes the ranking necessary.
+
+  ### Δ iOS, the rest of it
+
+  Eight rows were added to the target's Section C table. The two worth reading twice:
+
+  * **AL-15's encoder is Core Image's, so this target links no QR *decoder* at all.** The Android app
+    added `com.google.zxing:core` for the fallback and C074 then used its reader half for SCR-DA-027;
+    `CIQRCodeGenerator` is a first-party writer, so AL-34's *"nothing here scans a code to find a
+    driver"* is a fact about the binary here and not only about which classes a package imports.
+    Zero new dependencies.
+  * **SCR-DI-025's date range is two `DatePicker`s in the Colombo calendar**, which removes a trap
+    rather than working around one: M3's `DateRangePicker` answers **UTC midnight** and the Android
+    screen has to convert and document it, while putting `ScheduleLabels.calendar` and `.zone` in the
+    environment makes the day the driver taps a Colombo day by construction.
+
+  The `.searchable` field the cell asks for is local, over the page already read — `GET …/transactions`
+  takes a date range and neither a `q` nor a `kind` — and it matches the row's **localised name** and
+  its `reference` and deliberately not the rendered amount, which would put every `Rs 1,000` line
+  under a search for `100`.
+
+  ### Spec gaps
+
+  All five of C073's are carried forward **unchanged and re-confirmed against the contracts**: there
+  is no `DRV-22011` (the Driver ID is the platform ULID and no route resolves one form into the
+  other); no notification type carries a credit-transfer request, so SCR-DI-024's inbox is read on
+  open and after every decision rather than waited for on a push; nothing stores a per-driver
+  low-balance threshold, so the on-screen nudge is the handset's and the sheet says so; `TransferRow`
+  carries no vehicle, so SCR-DI-024's *"· Three-wheeler"* is dropped rather than guessed; and
+  `VoucherPurchase` carries no `paymentLink`, so the LankaQR arm of a **voucher** is AL-15's fallback
+  by construction where a plain top-up on the same rail gets the bank-app link.
+
+  One iOS-specific consequence of the last gap is worth recording for whoever closes it: adding
+  `paymentLink` to `subscription.yaml#/components/schemas/VoucherPurchase` is the only change needed —
+  `TopUpModel.buyVoucher` would then take the same `TopupRules.actionFor` path the plain top-up does.
+
+  ### Wireframe deviations, and why
+
+  * **SCR-DI-021 gained one row: *"Warn me below Rs 200"*.** D2' §SCR-DI-021's own states line calls
+    the threshold *"driver-set"* and there is nowhere else in this group it could live. With the
+    default in force the row reads the default.
+  * **SCR-DI-023 gained a *"Waiting for approval"* list under the fields**, which D2' names as a state
+    of this screen. **It is not drawn when nothing is pending**, which is the state the sketch shows.
+  * **SCR-DI-025's toolbar carries two actions where the sketch draws none** — the date filter and the
+    statement download, both named in D2' §SCR-DI-025's own text.
+  * **The history's *"Reseller transfer"* row is *"Credit transfer"*.** AL-01 removed the reseller as a
+    role; a ledger line naming one would be the concept coming back through the copy. The word
+    *reseller* is deliberately **not** on `WalletFenceTests`' forbidden list, in any language: two of
+    the wireframe's own strings *deny* the concept, and a fence that fired on the denial would delete
+    the sentence that tells a driver AL-01 is true. What is forbidden is a **fee**.
+
+  ### For C092 and C093
+
+  * **`UI/PlatformId.swift` is the `Ulid` pattern, extracted here rather than left in the wallet.**
+    SCR-DI-028 asks the same question of a *passenger* id and SCR-DI-029 is where a driver reads their
+    own — and **if SCR-DI-029 does not print it verbatim and copyably, credit transfer has no way to
+    be used at all.** That screen is C092's and it is the other half of this component.
+  * Take `SafariView` and `ActivityView` from `Wallet/` rather than writing a second one: they are
+    this platform's two "hand this to something else" surfaces, and C093's support cluster wants both
+    (a help article and a ticket attachment).
+  * `RupeeField` and `DriverIdField` are in `UI/FormControls.swift` beside `LabelledTextField`, which
+    gained `prefix` / `keyboardType` / `autocapitalisation` to carry them. **A Driver ID field is never
+    autocapitalised**: a ULID is upper-case and a UUID lower-case, so `.words` breaks one of the two.
+  * **`TopUpState` is this app's and `TopupState` is `:shared`'s**, one letter apart and both in scope
+    in `TopUpModel`. The same pair exists on Android. Nothing warns — see the `DriverStanding` clash
+    C090 recorded for the general shape of this hazard.
+
+  **Files —** shared, new: `shared/kmp/src/iosMain/kotlin/lk/mageride/shared/data/api/IosBytes.kt`
+  (`nsDataOf`, for the reason `IosCapturedDocument` exists: `KotlinByteArray.get(index:)` is one
+  Objective-C message per byte and a PDF statement is hundreds of kilobytes). App, new: the twenty
+  files under `DriverApp/Wallet/` — `WalletInput`, `WalletLabels`, `WalletPreferences`,
+  `WalletRepository`, `CreditTransferRepository`, `TopUpRepository`, `PaymentHandoff`,
+  `StatementExporter`, `LankaQrCode`, `WalletModel`, `WalletScreen`, `TopUpModel`, `TopUpScreen`,
+  `RequestCreditModel`, `RequestCreditScreen`, `CreditTransferModel`, `CreditTransferScreen`,
+  `WalletHistoryModel`, `WalletHistoryScreen`, `WalletDestinationView` — plus `UI/PlatformId.swift`.
+  App, edited: `DI/DriverGraph.swift`, `Nav/DriverDestinations.swift`, `Onboarding/OnboardingErrors.swift`,
+  `UI/FormControls.swift`, `UI/MoneyFormat.swift` and the three `Localizable.strings`. Tests, new:
+  `DriverAppTests/WalletTestKit.swift`, `WalletInputTests.swift`, `WalletModelTests.swift`,
+  `TopUpModelTests.swift`, `CreditTransferModelTests.swift`, `WalletHistoryModelTests.swift`,
+  `WalletFenceTests.swift`. Plus `DriverApp.xcodeproj/project.pbxproj` (regenerated) and
+  `apps/driver-ios/CLAUDE.md`.

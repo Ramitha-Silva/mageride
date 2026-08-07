@@ -8,10 +8,10 @@ import MageRideShared
 /// app becomes an English one at exactly the moment it matters. The kebab `code` is the key; the
 /// copy is `Localizable.strings`', in all three languages.
 ///
-/// **Clusters 1, 2 and 3's codes only.** The Android twin carries the whole app's table because C068
-/// shipped after every other Android screen group had named its codes; here the wallet and the safety
-/// clusters have not landed, and a key with no renderer is a translation nobody can check. C089–C093
-/// extend this the way they extend the strings files — one `case` and three values, together.
+/// **Clusters 1, 2, 3 and the wallet's codes only.** The Android twin carries the whole app's table
+/// because C068 shipped after every other Android screen group had named its codes; here the safety and
+/// support clusters have not landed, and a key with no renderer is a translation nobody can check.
+/// C092–C093 extend this the way they extend the strings files — one `case` and three values, together.
 enum OnboardingErrors {
 
     /// The string key for [error], falling back to the shell's generic message.
@@ -115,6 +115,25 @@ enum OnboardingErrors {
         case ErrorCode.illegalTransition: return "error_illegal_transition"
 
         case ErrorCode.rideTerminal: return "error_ride_terminal"
+
+        // ---- C091 · the wallet (SCR-DI-021…025) --------------------------------------
+        //
+        // `insufficient-wallet` is above and is deliberately not repeated: C088 named it for the
+        // daily-fee gate on an accept and it means the same thing on a transfer approval — the wallet
+        // is short — which is advice a driver can act on in both readings.
+
+        // Below a gateway's floor, above the field's ceiling, or a voucher denomination that is not a
+        // tier — `POST /v1/vouchers/purchase` refuses an amount between tiers rather than rounding it,
+        // because interpolating one would invent a rate no admin set.
+        case ErrorCode.invalidAmount: return "error_invalid_amount"
+
+        // OnePay or the bank IPG did not answer. Nothing was charged and nothing was credited.
+        case ErrorCode.gatewayError: return "error_gateway_error"
+
+        // Approving a request somebody already answered, or a top-up session that has moved on.
+        case ErrorCode.conflict: return "error_already_done"
+
+        case ErrorCode.notFound: return "error_not_found"
 
         default: return "error_generic"
         }

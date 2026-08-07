@@ -108,6 +108,7 @@
 		A1D44372188948F49180F6BC /* MoneyFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = D21B482374E47A7EA9EC52FD /* MoneyFormat.swift */; };
 		CCAC00824DC736346AC16487 /* OnboardingControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 386245D1C07D23FF659FA353 /* OnboardingControls.swift */; };
 		B5E4E6CE29B6366F379B3DB4 /* PackageLabels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C8F9D6F32F44C1949124A72 /* PackageLabels.swift */; };
+		2E9EE0CBF67B1F2B42874DAE /* PlatformId.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78388A955A16552D12F56CCA /* PlatformId.swift */; };
 		F54D603516C0EF98814B96B1 /* VehicleControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6595D289D8F8244DE03BC4DF /* VehicleControls.swift */; };
 		2277C914CD631E70C099FF3B /* ActiveVehicleStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 640CC9BE709AFDB3BEBC57CF /* ActiveVehicleStore.swift */; };
 		F2C248B17E8F752C94B62507 /* VehicleDestinationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20218F4C756485D90D4868D6 /* VehicleDestinationView.swift */; };
@@ -120,7 +121,28 @@
 		787E0356C0F32DACCB4D8B31 /* VehicleOnboardingStatusScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 154DF3DF8925A94D392EAB07 /* VehicleOnboardingStatusScreen.swift */; };
 		EA0B1BA95691D306905FD6E9 /* VehiclesModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4F3AD1CFC08CA574047244E /* VehiclesModel.swift */; };
 		BEEDFC8D7A86192CA25E8DAC /* VehiclesScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36E667488B8830E71C99994E /* VehiclesScreen.swift */; };
+		7B2EC4F4B9476DDE26D6ABBF /* CreditTransferModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AE3548E5FD15C45984F574F /* CreditTransferModel.swift */; };
+		9D3C272FD96E527CD813FC0F /* CreditTransferRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5A0BC56CD324C547C9F4A81 /* CreditTransferRepository.swift */; };
+		A161C1A8998C5847E2E826FB /* CreditTransferScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15B17F454F35068EFA761EB7 /* CreditTransferScreen.swift */; };
+		199981055EC46854625F01D3 /* LankaQrCode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29AE61433C35DEAC46A892EB /* LankaQrCode.swift */; };
+		77CB870119620F4F218CCD6D /* PaymentHandoff.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C215385FEA56167A85DC4C8 /* PaymentHandoff.swift */; };
+		76B08587B0A8A68F9CF9F306 /* RequestCreditModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF646F9C0B3758101BB1DAA9 /* RequestCreditModel.swift */; };
+		4E9006553BFDD3F3A508AF7D /* RequestCreditScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE117EE4533F567D24BAF315 /* RequestCreditScreen.swift */; };
+		DC01EF49E0570194DF1C39F1 /* StatementExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3BA4110DB9E48A293E24012E /* StatementExporter.swift */; };
+		AEC70E4A6A6D39AE26D8C2A0 /* TopUpModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10FF36A096DB43B6B3C4709F /* TopUpModel.swift */; };
+		28372D7041DD3A4A43009BB5 /* TopUpRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07CF9944967EB6D79F567E0B /* TopUpRepository.swift */; };
+		6741657B577AC5D595578914 /* TopUpScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BDEEC42AD7773C4A081ED04 /* TopUpScreen.swift */; };
+		CE28EE9C448E95F1DA02CA47 /* WalletDestinationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6655281D23BAD176A4E5DCDD /* WalletDestinationView.swift */; };
+		25D7AFECDC0308AB2C88BBE0 /* WalletHistoryModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6E8B6F777FFAE6B9EF08F00 /* WalletHistoryModel.swift */; };
+		949FF102B9ECA941DF055C5C /* WalletHistoryScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1BE945234292E9C606E1687 /* WalletHistoryScreen.swift */; };
+		02F80A8C0C8453AFA7356976 /* WalletInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5FAC53D9CD53B4040F3C871 /* WalletInput.swift */; };
+		E5447D7221D72994FAE8FB92 /* WalletLabels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A60E0AA708B4C4CCDD353757 /* WalletLabels.swift */; };
+		3FCDC5C65C763AB591EA8D15 /* WalletModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DA924A40CB346821094ED52 /* WalletModel.swift */; };
+		EBBB5687C134D943A344CB4D /* WalletPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = 170737565268C008EF46400A /* WalletPreferences.swift */; };
+		F2555AFC4CCDCB98DFEF92E7 /* WalletRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = F29DD982A7449A052FFCE4B5 /* WalletRepository.swift */; };
+		A445B460E750DA61343AC86F /* WalletScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF75794A52B6DB2483C86233 /* WalletScreen.swift */; };
 		0FC865B504A3086408D672A1 /* ActiveRideModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EC7C5590CA36EFBD911ABAB /* ActiveRideModelTests.swift */; };
+		E5861ECD7711CB648BFE38DB /* CreditTransferModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D9FD5AE71884037C6D1C02B /* CreditTransferModelTests.swift */; };
 		BD74C7A34051CC18A8B82D8F /* DashboardLabelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80C288BC1ECA54BA8906F1DD /* DashboardLabelTests.swift */; };
 		A8C04D084FD48741D2E24D4A /* DashboardNavigationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64217834F7FEC495CF8B0B5F /* DashboardNavigationTests.swift */; };
 		1107F2C7587114F9A4D47B6A /* DashboardTestKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = E09544A537378B97739BDD4B /* DashboardTestKit.swift */; };
@@ -154,12 +176,18 @@
 		409B51789285B4F79E7BF931 /* ScheduleLabelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5581283A87DD0C5CC77B921E /* ScheduleLabelTests.swift */; };
 		7552205EE9A039D02C465E79 /* ScheduledRidesModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 074A42D0DED1F2E697048C69 /* ScheduledRidesModelTests.swift */; };
 		10262BD32DE9AF51BE826EBD /* ThemeTokenTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D526434D4088A6B7B5B16B5 /* ThemeTokenTests.swift */; };
+		5101C530DA4286F921110037 /* TopUpModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F91BFFAE2E14854D5EE1F5D7 /* TopUpModelTests.swift */; };
 		91BE4A2678D7962B0F86F238 /* VehicleLabelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AE38ADAF67B25231D699E77 /* VehicleLabelTests.swift */; };
 		465DD0CCD34A1A8616BAD5AB /* VehicleNavigationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95BABF81674CD9A06EDD8836 /* VehicleNavigationTests.swift */; };
 		3D9EADCC01C321E123FA5D81 /* VehicleOnboardingModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39828EF43E1BBAEB99A69DDA /* VehicleOnboardingModelTests.swift */; };
 		CA41D97C48D6D7FC1FA8BE79 /* VehicleOnboardingStatusModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 790EF5746DE65D68741817FF /* VehicleOnboardingStatusModelTests.swift */; };
 		8D46049658586069677A5703 /* VehicleTestKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DFF5375B672D052387BB558 /* VehicleTestKit.swift */; };
 		F497D6290159F0B0BC0FCE8E /* VehiclesModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10E714F616C58490454CB4F0 /* VehiclesModelTests.swift */; };
+		F57E0D3077DF48644795E50A /* WalletFenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB2ED57FFC56684B7AF76E0F /* WalletFenceTests.swift */; };
+		35C5AC9057CAF98968F94924 /* WalletHistoryModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45A07CB1A76953BF7D59CCAD /* WalletHistoryModelTests.swift */; };
+		F39BA2021ECAE59D7EC9A702 /* WalletInputTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C3539EFEE21AA19EC96F56E /* WalletInputTests.swift */; };
+		F9270453EF1031234CFC5548 /* WalletModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25A636312F894AF97F79447F /* WalletModelTests.swift */; };
+		18137BD969E9D6821FB97CEF /* WalletTestKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6437B53F09D12D440EB0DAE2 /* WalletTestKit.swift */; };
 		5261C276A98D8E78E1A67A46 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 62BD7C65D57D32EAA37B2D30 /* Assets.xcassets */; };
 		D3969C409DE3B4D94950A2A7 /* MapStyleDark.json in Resources */ = {isa = PBXBuildFile; fileRef = 4A96604D6400D373AD4669A7 /* MapStyleDark.json */; };
 		79AE007E768CA7211BE98822 /* MapStyleLight.json in Resources */ = {isa = PBXBuildFile; fileRef = 9D87EA9453EDBB1DA991C047 /* MapStyleLight.json */; };
@@ -276,6 +304,7 @@
 		D21B482374E47A7EA9EC52FD /* MoneyFormat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "MoneyFormat.swift"; path = "MoneyFormat.swift"; sourceTree = "<group>"; };
 		386245D1C07D23FF659FA353 /* OnboardingControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "OnboardingControls.swift"; path = "OnboardingControls.swift"; sourceTree = "<group>"; };
 		2C8F9D6F32F44C1949124A72 /* PackageLabels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PackageLabels.swift"; path = "PackageLabels.swift"; sourceTree = "<group>"; };
+		78388A955A16552D12F56CCA /* PlatformId.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PlatformId.swift"; path = "PlatformId.swift"; sourceTree = "<group>"; };
 		6595D289D8F8244DE03BC4DF /* VehicleControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "VehicleControls.swift"; path = "VehicleControls.swift"; sourceTree = "<group>"; };
 		640CC9BE709AFDB3BEBC57CF /* ActiveVehicleStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ActiveVehicleStore.swift"; path = "ActiveVehicleStore.swift"; sourceTree = "<group>"; };
 		20218F4C756485D90D4868D6 /* VehicleDestinationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "VehicleDestinationView.swift"; path = "VehicleDestinationView.swift"; sourceTree = "<group>"; };
@@ -288,7 +317,28 @@
 		154DF3DF8925A94D392EAB07 /* VehicleOnboardingStatusScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "VehicleOnboardingStatusScreen.swift"; path = "VehicleOnboardingStatusScreen.swift"; sourceTree = "<group>"; };
 		E4F3AD1CFC08CA574047244E /* VehiclesModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "VehiclesModel.swift"; path = "VehiclesModel.swift"; sourceTree = "<group>"; };
 		36E667488B8830E71C99994E /* VehiclesScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "VehiclesScreen.swift"; path = "VehiclesScreen.swift"; sourceTree = "<group>"; };
+		0AE3548E5FD15C45984F574F /* CreditTransferModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "CreditTransferModel.swift"; path = "CreditTransferModel.swift"; sourceTree = "<group>"; };
+		E5A0BC56CD324C547C9F4A81 /* CreditTransferRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "CreditTransferRepository.swift"; path = "CreditTransferRepository.swift"; sourceTree = "<group>"; };
+		15B17F454F35068EFA761EB7 /* CreditTransferScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "CreditTransferScreen.swift"; path = "CreditTransferScreen.swift"; sourceTree = "<group>"; };
+		29AE61433C35DEAC46A892EB /* LankaQrCode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "LankaQrCode.swift"; path = "LankaQrCode.swift"; sourceTree = "<group>"; };
+		2C215385FEA56167A85DC4C8 /* PaymentHandoff.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PaymentHandoff.swift"; path = "PaymentHandoff.swift"; sourceTree = "<group>"; };
+		CF646F9C0B3758101BB1DAA9 /* RequestCreditModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "RequestCreditModel.swift"; path = "RequestCreditModel.swift"; sourceTree = "<group>"; };
+		EE117EE4533F567D24BAF315 /* RequestCreditScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "RequestCreditScreen.swift"; path = "RequestCreditScreen.swift"; sourceTree = "<group>"; };
+		3BA4110DB9E48A293E24012E /* StatementExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "StatementExporter.swift"; path = "StatementExporter.swift"; sourceTree = "<group>"; };
+		10FF36A096DB43B6B3C4709F /* TopUpModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "TopUpModel.swift"; path = "TopUpModel.swift"; sourceTree = "<group>"; };
+		07CF9944967EB6D79F567E0B /* TopUpRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "TopUpRepository.swift"; path = "TopUpRepository.swift"; sourceTree = "<group>"; };
+		9BDEEC42AD7773C4A081ED04 /* TopUpScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "TopUpScreen.swift"; path = "TopUpScreen.swift"; sourceTree = "<group>"; };
+		6655281D23BAD176A4E5DCDD /* WalletDestinationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "WalletDestinationView.swift"; path = "WalletDestinationView.swift"; sourceTree = "<group>"; };
+		C6E8B6F777FFAE6B9EF08F00 /* WalletHistoryModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "WalletHistoryModel.swift"; path = "WalletHistoryModel.swift"; sourceTree = "<group>"; };
+		F1BE945234292E9C606E1687 /* WalletHistoryScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "WalletHistoryScreen.swift"; path = "WalletHistoryScreen.swift"; sourceTree = "<group>"; };
+		D5FAC53D9CD53B4040F3C871 /* WalletInput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "WalletInput.swift"; path = "WalletInput.swift"; sourceTree = "<group>"; };
+		A60E0AA708B4C4CCDD353757 /* WalletLabels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "WalletLabels.swift"; path = "WalletLabels.swift"; sourceTree = "<group>"; };
+		4DA924A40CB346821094ED52 /* WalletModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "WalletModel.swift"; path = "WalletModel.swift"; sourceTree = "<group>"; };
+		170737565268C008EF46400A /* WalletPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "WalletPreferences.swift"; path = "WalletPreferences.swift"; sourceTree = "<group>"; };
+		F29DD982A7449A052FFCE4B5 /* WalletRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "WalletRepository.swift"; path = "WalletRepository.swift"; sourceTree = "<group>"; };
+		FF75794A52B6DB2483C86233 /* WalletScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "WalletScreen.swift"; path = "WalletScreen.swift"; sourceTree = "<group>"; };
 		4EC7C5590CA36EFBD911ABAB /* ActiveRideModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ActiveRideModelTests.swift"; path = "ActiveRideModelTests.swift"; sourceTree = "<group>"; };
+		7D9FD5AE71884037C6D1C02B /* CreditTransferModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "CreditTransferModelTests.swift"; path = "CreditTransferModelTests.swift"; sourceTree = "<group>"; };
 		80C288BC1ECA54BA8906F1DD /* DashboardLabelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DashboardLabelTests.swift"; path = "DashboardLabelTests.swift"; sourceTree = "<group>"; };
 		64217834F7FEC495CF8B0B5F /* DashboardNavigationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DashboardNavigationTests.swift"; path = "DashboardNavigationTests.swift"; sourceTree = "<group>"; };
 		E09544A537378B97739BDD4B /* DashboardTestKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DashboardTestKit.swift"; path = "DashboardTestKit.swift"; sourceTree = "<group>"; };
@@ -322,12 +372,18 @@
 		5581283A87DD0C5CC77B921E /* ScheduleLabelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ScheduleLabelTests.swift"; path = "ScheduleLabelTests.swift"; sourceTree = "<group>"; };
 		074A42D0DED1F2E697048C69 /* ScheduledRidesModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ScheduledRidesModelTests.swift"; path = "ScheduledRidesModelTests.swift"; sourceTree = "<group>"; };
 		2D526434D4088A6B7B5B16B5 /* ThemeTokenTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ThemeTokenTests.swift"; path = "ThemeTokenTests.swift"; sourceTree = "<group>"; };
+		F91BFFAE2E14854D5EE1F5D7 /* TopUpModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "TopUpModelTests.swift"; path = "TopUpModelTests.swift"; sourceTree = "<group>"; };
 		2AE38ADAF67B25231D699E77 /* VehicleLabelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "VehicleLabelTests.swift"; path = "VehicleLabelTests.swift"; sourceTree = "<group>"; };
 		95BABF81674CD9A06EDD8836 /* VehicleNavigationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "VehicleNavigationTests.swift"; path = "VehicleNavigationTests.swift"; sourceTree = "<group>"; };
 		39828EF43E1BBAEB99A69DDA /* VehicleOnboardingModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "VehicleOnboardingModelTests.swift"; path = "VehicleOnboardingModelTests.swift"; sourceTree = "<group>"; };
 		790EF5746DE65D68741817FF /* VehicleOnboardingStatusModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "VehicleOnboardingStatusModelTests.swift"; path = "VehicleOnboardingStatusModelTests.swift"; sourceTree = "<group>"; };
 		3DFF5375B672D052387BB558 /* VehicleTestKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "VehicleTestKit.swift"; path = "VehicleTestKit.swift"; sourceTree = "<group>"; };
 		10E714F616C58490454CB4F0 /* VehiclesModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "VehiclesModelTests.swift"; path = "VehiclesModelTests.swift"; sourceTree = "<group>"; };
+		FB2ED57FFC56684B7AF76E0F /* WalletFenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "WalletFenceTests.swift"; path = "WalletFenceTests.swift"; sourceTree = "<group>"; };
+		45A07CB1A76953BF7D59CCAD /* WalletHistoryModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "WalletHistoryModelTests.swift"; path = "WalletHistoryModelTests.swift"; sourceTree = "<group>"; };
+		6C3539EFEE21AA19EC96F56E /* WalletInputTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "WalletInputTests.swift"; path = "WalletInputTests.swift"; sourceTree = "<group>"; };
+		25A636312F894AF97F79447F /* WalletModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "WalletModelTests.swift"; path = "WalletModelTests.swift"; sourceTree = "<group>"; };
+		6437B53F09D12D440EB0DAE2 /* WalletTestKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "WalletTestKit.swift"; path = "WalletTestKit.swift"; sourceTree = "<group>"; };
 		D459395A137E69E3408BA69B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = "Info.plist"; path = "Info.plist"; sourceTree = "<group>"; };
 		CB0D066169D3247984513AB9 /* DriverApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; name = "DriverApp.entitlements"; path = "DriverApp.entitlements"; sourceTree = "<group>"; };
 		D2C67D3364DB41C3BB90B99C /* Shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = "Shared.xcconfig"; path = "Shared.xcconfig"; sourceTree = "<group>"; };
@@ -411,6 +467,7 @@
 				4300180A9966B3D5DF19AB26 /* Theme */,
 				E7030148D39C574FFE66C0D5 /* UI */,
 				50583F9877C6F75EBE171FAF /* Vehicle */,
+				A1BBD091D7EB540AD3BC96FE /* Wallet */,
 				CB0D066169D3247984513AB9 /* DriverApp.entitlements */,
 				84ECFFBEA04E665A4A91B394 /* DriverApp.swift */,
 				89C110EC442B67250E0FBBD9 /* DriverAppDelegate.swift */,
@@ -652,6 +709,7 @@
 				D21B482374E47A7EA9EC52FD /* MoneyFormat.swift */,
 				386245D1C07D23FF659FA353 /* OnboardingControls.swift */,
 				2C8F9D6F32F44C1949124A72 /* PackageLabels.swift */,
+				78388A955A16552D12F56CCA /* PlatformId.swift */,
 				6595D289D8F8244DE03BC4DF /* VehicleControls.swift */,
 			);
 			path = "UI";
@@ -675,10 +733,38 @@
 			path = "Vehicle";
 			sourceTree = "<group>";
 		};
+		A1BBD091D7EB540AD3BC96FE /* Wallet */ = {
+			isa = PBXGroup;
+			children = (
+				0AE3548E5FD15C45984F574F /* CreditTransferModel.swift */,
+				E5A0BC56CD324C547C9F4A81 /* CreditTransferRepository.swift */,
+				15B17F454F35068EFA761EB7 /* CreditTransferScreen.swift */,
+				29AE61433C35DEAC46A892EB /* LankaQrCode.swift */,
+				2C215385FEA56167A85DC4C8 /* PaymentHandoff.swift */,
+				CF646F9C0B3758101BB1DAA9 /* RequestCreditModel.swift */,
+				EE117EE4533F567D24BAF315 /* RequestCreditScreen.swift */,
+				3BA4110DB9E48A293E24012E /* StatementExporter.swift */,
+				10FF36A096DB43B6B3C4709F /* TopUpModel.swift */,
+				07CF9944967EB6D79F567E0B /* TopUpRepository.swift */,
+				9BDEEC42AD7773C4A081ED04 /* TopUpScreen.swift */,
+				6655281D23BAD176A4E5DCDD /* WalletDestinationView.swift */,
+				C6E8B6F777FFAE6B9EF08F00 /* WalletHistoryModel.swift */,
+				F1BE945234292E9C606E1687 /* WalletHistoryScreen.swift */,
+				D5FAC53D9CD53B4040F3C871 /* WalletInput.swift */,
+				A60E0AA708B4C4CCDD353757 /* WalletLabels.swift */,
+				4DA924A40CB346821094ED52 /* WalletModel.swift */,
+				170737565268C008EF46400A /* WalletPreferences.swift */,
+				F29DD982A7449A052FFCE4B5 /* WalletRepository.swift */,
+				FF75794A52B6DB2483C86233 /* WalletScreen.swift */,
+			);
+			path = "Wallet";
+			sourceTree = "<group>";
+		};
 		8A4505F112D2FBD27635E508 /* DriverAppTests */ = {
 			isa = PBXGroup;
 			children = (
 				4EC7C5590CA36EFBD911ABAB /* ActiveRideModelTests.swift */,
+				7D9FD5AE71884037C6D1C02B /* CreditTransferModelTests.swift */,
 				80C288BC1ECA54BA8906F1DD /* DashboardLabelTests.swift */,
 				64217834F7FEC495CF8B0B5F /* DashboardNavigationTests.swift */,
 				E09544A537378B97739BDD4B /* DashboardTestKit.swift */,
@@ -712,12 +798,18 @@
 				5581283A87DD0C5CC77B921E /* ScheduleLabelTests.swift */,
 				074A42D0DED1F2E697048C69 /* ScheduledRidesModelTests.swift */,
 				2D526434D4088A6B7B5B16B5 /* ThemeTokenTests.swift */,
+				F91BFFAE2E14854D5EE1F5D7 /* TopUpModelTests.swift */,
 				2AE38ADAF67B25231D699E77 /* VehicleLabelTests.swift */,
 				95BABF81674CD9A06EDD8836 /* VehicleNavigationTests.swift */,
 				39828EF43E1BBAEB99A69DDA /* VehicleOnboardingModelTests.swift */,
 				790EF5746DE65D68741817FF /* VehicleOnboardingStatusModelTests.swift */,
 				3DFF5375B672D052387BB558 /* VehicleTestKit.swift */,
 				10E714F616C58490454CB4F0 /* VehiclesModelTests.swift */,
+				FB2ED57FFC56684B7AF76E0F /* WalletFenceTests.swift */,
+				45A07CB1A76953BF7D59CCAD /* WalletHistoryModelTests.swift */,
+				6C3539EFEE21AA19EC96F56E /* WalletInputTests.swift */,
+				25A636312F894AF97F79447F /* WalletModelTests.swift */,
+				6437B53F09D12D440EB0DAE2 /* WalletTestKit.swift */,
 			);
 			path = "DriverAppTests";
 			sourceTree = "<group>";
@@ -953,6 +1045,7 @@
 				A1D44372188948F49180F6BC /* MoneyFormat.swift in Sources */,
 				CCAC00824DC736346AC16487 /* OnboardingControls.swift in Sources */,
 				B5E4E6CE29B6366F379B3DB4 /* PackageLabels.swift in Sources */,
+				2E9EE0CBF67B1F2B42874DAE /* PlatformId.swift in Sources */,
 				F54D603516C0EF98814B96B1 /* VehicleControls.swift in Sources */,
 				2277C914CD631E70C099FF3B /* ActiveVehicleStore.swift in Sources */,
 				F2C248B17E8F752C94B62507 /* VehicleDestinationView.swift in Sources */,
@@ -965,6 +1058,26 @@
 				787E0356C0F32DACCB4D8B31 /* VehicleOnboardingStatusScreen.swift in Sources */,
 				EA0B1BA95691D306905FD6E9 /* VehiclesModel.swift in Sources */,
 				BEEDFC8D7A86192CA25E8DAC /* VehiclesScreen.swift in Sources */,
+				7B2EC4F4B9476DDE26D6ABBF /* CreditTransferModel.swift in Sources */,
+				9D3C272FD96E527CD813FC0F /* CreditTransferRepository.swift in Sources */,
+				A161C1A8998C5847E2E826FB /* CreditTransferScreen.swift in Sources */,
+				199981055EC46854625F01D3 /* LankaQrCode.swift in Sources */,
+				77CB870119620F4F218CCD6D /* PaymentHandoff.swift in Sources */,
+				76B08587B0A8A68F9CF9F306 /* RequestCreditModel.swift in Sources */,
+				4E9006553BFDD3F3A508AF7D /* RequestCreditScreen.swift in Sources */,
+				DC01EF49E0570194DF1C39F1 /* StatementExporter.swift in Sources */,
+				AEC70E4A6A6D39AE26D8C2A0 /* TopUpModel.swift in Sources */,
+				28372D7041DD3A4A43009BB5 /* TopUpRepository.swift in Sources */,
+				6741657B577AC5D595578914 /* TopUpScreen.swift in Sources */,
+				CE28EE9C448E95F1DA02CA47 /* WalletDestinationView.swift in Sources */,
+				25D7AFECDC0308AB2C88BBE0 /* WalletHistoryModel.swift in Sources */,
+				949FF102B9ECA941DF055C5C /* WalletHistoryScreen.swift in Sources */,
+				02F80A8C0C8453AFA7356976 /* WalletInput.swift in Sources */,
+				E5447D7221D72994FAE8FB92 /* WalletLabels.swift in Sources */,
+				3FCDC5C65C763AB591EA8D15 /* WalletModel.swift in Sources */,
+				EBBB5687C134D943A344CB4D /* WalletPreferences.swift in Sources */,
+				F2555AFC4CCDCB98DFEF92E7 /* WalletRepository.swift in Sources */,
+				A445B460E750DA61343AC86F /* WalletScreen.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -973,6 +1086,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				0FC865B504A3086408D672A1 /* ActiveRideModelTests.swift in Sources */,
+				E5861ECD7711CB648BFE38DB /* CreditTransferModelTests.swift in Sources */,
 				BD74C7A34051CC18A8B82D8F /* DashboardLabelTests.swift in Sources */,
 				A8C04D084FD48741D2E24D4A /* DashboardNavigationTests.swift in Sources */,
 				1107F2C7587114F9A4D47B6A /* DashboardTestKit.swift in Sources */,
@@ -1006,12 +1120,18 @@
 				409B51789285B4F79E7BF931 /* ScheduleLabelTests.swift in Sources */,
 				7552205EE9A039D02C465E79 /* ScheduledRidesModelTests.swift in Sources */,
 				10262BD32DE9AF51BE826EBD /* ThemeTokenTests.swift in Sources */,
+				5101C530DA4286F921110037 /* TopUpModelTests.swift in Sources */,
 				91BE4A2678D7962B0F86F238 /* VehicleLabelTests.swift in Sources */,
 				465DD0CCD34A1A8616BAD5AB /* VehicleNavigationTests.swift in Sources */,
 				3D9EADCC01C321E123FA5D81 /* VehicleOnboardingModelTests.swift in Sources */,
 				CA41D97C48D6D7FC1FA8BE79 /* VehicleOnboardingStatusModelTests.swift in Sources */,
 				8D46049658586069677A5703 /* VehicleTestKit.swift in Sources */,
 				F497D6290159F0B0BC0FCE8E /* VehiclesModelTests.swift in Sources */,
+				F57E0D3077DF48644795E50A /* WalletFenceTests.swift in Sources */,
+				35C5AC9057CAF98968F94924 /* WalletHistoryModelTests.swift in Sources */,
+				F39BA2021ECAE59D7EC9A702 /* WalletInputTests.swift in Sources */,
+				F9270453EF1031234CFC5548 /* WalletModelTests.swift in Sources */,
+				18137BD969E9D6821FB97CEF /* WalletTestKit.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -51,11 +51,11 @@ struct DriverDestinationView: View {
             JobsDestinationView(route: route)
 
         // ---- C091 · wallet / daily fee -----------------------------------------------
-        case .wallet: placeholder("SCR-DI-021 · wallet & fee")
-        case .walletTopUp: placeholder("SCR-DI-022 · top up")
-        case .walletRequestCredit: placeholder("SCR-DI-023 · request credit")
-        case .walletTransfer: placeholder("SCR-DI-024 · credit transfer")
-        case .walletHistory: placeholder("SCR-DI-025 · payment history")
+        //
+        // One arm for all five, and a sub-view rather than five inline screens — the same reason
+        // clusters 1, 2, 3 and 5 take one arm each above.
+        case .wallet, .walletTopUp, .walletRequestCredit, .walletTransfer, .walletHistory:
+            WalletDestinationView(route: route)
 
         // ---- menu and what hangs off it ----------------------------------------------
         //

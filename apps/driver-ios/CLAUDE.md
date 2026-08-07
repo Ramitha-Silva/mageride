@@ -43,6 +43,7 @@ apps/driver-ios/
 │   ├── Jobs/                    C090 · SCR-DI-017, 018 + the dispatch reads and the Colombo clock
 │   ├── Level/                   C090 · SCR-DI-019
 │   ├── Earnings/                C090 · SCR-DI-020 + its buckets and its chart
+│   ├── Wallet/                  C091 · SCR-DI-021…025 + the top-up rails and the ledger
 │   ├── Menu/                    C088 · SCR-DI-036 — AL-31's drawer, as a tab
 │   ├── Onboarding/              C086 · SCR-DI-001, 002, 003, 003a, 007 + their data layer
 │   ├── UI/                      the wireframe's shapes as views — fields, tiles, cards, pills
@@ -273,7 +274,71 @@ DriverApp/
   Kotlin parameter does not survive the export: `jobBoardGoesLiveAtMillis` / `driverLevelRulesFor`,
   and `colomboZoneId` / `colomboStartOfDayMillis` / `colomboBusinessDateOf`.
 
-**To add a screen (C091–C093):**
+## Cluster 6 (C091) — the wallet, the top-up and the credit transfer
+
+```
+DriverApp/
+└── Wallet/     SCR-DI-021…025 + the two top-up rails, the ledger and the driver-to-driver surface
+```
+
+- **A Kotlin `require` is a caught exception on Android and a TERMINATED PROCESS here**, and this
+  cluster is the first to be exposed to one. An exception thrown out of a non-suspend, non-`@Throws`
+  Kotlin function crosses as an uncaught Objective-C exception, which Swift cannot catch. Three
+  `:shared` value types this cluster builds from **server data** carry `require`s in their
+  constructors — `DailyFeeSchedule` (one rate per vehicle type), `VoucherCatalogue` (four rules on the
+  tier table) and `CreditTransferIntent` (no self-transfer, positive amount) — so each is validated in
+  Swift *first*: `ApiWalletRepository.readSchedule`, `ApiTopUpRepository.isWellFormed` and
+  `CreditTransferModel.rejectionForSend`'s two guards. The Android twin's `launchGuarded` catches the
+  identical failure and shows copy; here the same outcome has to be arranged. **Check any `:shared`
+  constructor you call from Swift for a `require` before calling it with a server value.**
+- **A voucher is a purchase, not a discounted top-up, and getting it wrong pays twice.** A tile goes to
+  subscription-svc's `POST /v1/vouchers/purchase`; a `topUp(90000)` followed by a purchase credits
+  Rs 900 on the webhook **and** Rs 1,000 on the purchase. wallet-svc's own `purchaseVoucherFromWallet`
+  takes an already-settled `gatewayRef` and is the reconciliation entry point, not the buy button.
+- **The balance is read and never computed** (D-09), and every *decision* asks `available` (net of
+  D-05 debt) while the headline prints `balance` (US-9.7 calls it that). Two different questions.
+- **D2' and D5' draw "Top Up Required" at two different lines and both are right** — §9.4 at a
+  negative balance, §SCR-DI-021 below one day's fee. `WalletState` carries both and the screen ranks
+  them. Read `WalletState.isBelowDayFee` before merging them.
+- **The two rails leave the app by different doors, and only one of them can fail.** OnePay is an
+  `SFSafariViewController` the *screen* presents — the cell's own `Δ iOS` clause — so `PaymentHandoff`
+  covers the LankaQR bank-app link alone and the Android twin's *"no app could open the payment page"*
+  does not exist here. The return leg is `PaymentReturn`: OnePay is sent `pay.mageride.lk` as its
+  `returnUrl` and `SafariView` dismisses on a redirect onto that **host**, which is the `applinks:`
+  domain the entitlements file already declares. The redirect is a shortcut; the driver's **Done** and
+  a swipe both resolve the same session through the same poll.
+- **SCR-DI-022 has ONE `.sheet` and three things to put in it.** A voucher purchase sets the checkout
+  *and* the receipt in one breath (LankaQR sets the code *and* the receipt); on Android those stack as
+  two dialogs, and SwiftUI presents one sheet per context and silently drops the rest. `TopUpSheet`
+  ranks them — checkout, then code, then receipt.
+- **`TopUpState` is this app's and `TopupState` is `:shared`'s**, one letter apart, and both are in
+  scope in `TopUpModel`. The same pair exists on Android. Nothing warns.
+- **The AL-34 fence is stronger here than on Android and the reason is the encoder.** AL-15's fallback
+  is `CIQRCodeGenerator`, a first-party **writer**, where the Android twin added `com.google.zxing:core`
+  — whose reader half C074 then used for SCR-DA-027. No decoder is linked into this target at all, so
+  *"nothing in the wallet scans a code"* is a fact about the binary and not only about the imports.
+  `WalletFenceTests` still asserts it, along with AL-05 in code **and in all three languages**.
+- **`WalletFenceTests` reads the cluster's own source off disk through `#filePath`**, which works
+  because a simulator shares the host's filesystem. It is the first test in this target to do that;
+  everything else reads the built bundle.
+- **US-9A.19's statement is written and shared in two steps here, where Android's exporter is one.**
+  A chooser is an `Intent` an application context launches there; a share sheet is a
+  `UIActivityViewController` a *view* presents. `StatementExporter` ends at a `URL` and `ActivityView`
+  presents it — which also removes the "nothing can receive it" failure the Android seam reports.
+- **SCR-DI-025's date range is two `DatePicker`s in the Colombo calendar**, which removes a trap: M3's
+  range picker answers **UTC midnight** and `WalletHistoryScreen.kt` has to convert; putting
+  `ScheduleLabels.calendar` and `.zone` in the environment makes the tapped day a Colombo day.
+- Reusable UI added here: `UI/PlatformId` (the `Ulid` pattern, which SCR-DI-028/029 will want),
+  `LabelledTextField`'s `prefix` / `keyboardType` / `autocapitalisation` plus the two combinations this
+  app uses (`RupeeField`, `DriverIdField`), `OutlinedAction`, `MoneyFormat.percentOfBps`,
+  `ActivityView` + `StatementFile`, and `SafariView` — the last two are the platform's two "hand this
+  to something else" surfaces and C092/C093 should take them from here.
+- One `:shared` `iosMain` helper was added, for the reason `IosCapturedDocument` exists rather than the
+  defaulted-parameter reason the other seven do: `nsDataOf` (`IosBytes.kt`) copies a `ByteArray` with
+  one `memcpy`, where `KotlinByteArray.get(index:)` is one Objective-C message per byte and a PDF
+  statement is hundreds of kilobytes.
+
+**To add a screen (C092–C093):**
 
 1. Its route is already in `Nav/DriverRoute.swift`. Use it; do not invent a case.
 2. Replace its `placeholder(...)` line in `Nav/DriverDestinations.swift` with the real view. That
@@ -366,6 +431,13 @@ Every one of these is D2' §C or a platform constraint, and each is called out a
 | Delivery call button (SCR-DI-016a/c) | a 46×38 outlined `📞` icon button | the wireframe's own `textlink` — a green `📞 Call` in a grouped-list row |
 | Earnings trend (SCR-DI-020) | bars hand-drawn from Compose primitives | **Swift Charts** — the cell's own `Δ iOS` clause; same spec, first-party axis and VoiceOver rotor |
 | Earnings periods (SCR-DI-020) | a `TabRow` | a segmented `Picker` — `.tabbar2` is `UISegmentedControl` in the wireframe's own CSS |
+| Top-up method (SCR-DI-022) | three `FilterChip`s | a segmented `Picker` — `.seg` is `UISegmentedControl` in the same CSS |
+| OnePay's hosted page | `ACTION_VIEW`, which can find no browser | `SFSafariViewController` in the app; the failure does not exist |
+| LankaQR bank app | `ACTION_VIEW`; `canOpenURL`'s answer is hidden by package visibility | `open(…, universalLinksOnly:)`; `canOpenURL` is hidden by `LSApplicationQueriesSchemes` |
+| AL-15's QR fallback | `com.google.zxing:core`, a third-party encoder | `CIQRCodeGenerator`, first-party — and no decoder is linked at all |
+| Statement download (SCR-DI-025) | write + `ACTION_SEND` chooser, from a context | write, then a `UIActivityViewController` a **view** presents |
+| History search (SCR-DI-025) | none — the Android screen has no search | `.searchable`, the cell's own `Δ iOS` clause |
+| History date range | M3's range picker, which answers **UTC** midnight | two `DatePicker`s in the Colombo calendar |
 
 ## Things that will bite
 

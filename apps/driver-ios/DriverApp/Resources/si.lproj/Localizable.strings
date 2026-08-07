@@ -470,3 +470,134 @@
 "earnings_empty" = "මෙම කාලය තුළ සම්පූර්ණ කළ ගමන් නැත.";
 "earnings_chart_bucket" = "කාල පරාසය";
 "earnings_chart_label" = "ඉපැයීම් ප්‍රවණතාව";
+
+/* ---------------------------------------------------------------------------------------------
+  MageRide Driver — iOS · C091 driver-ios-wallet-credit. Sinhala (සිංහල), AL-26's default.
+
+  Same keys, same order and the same translations as
+  `apps/driver-android/src/main/res/values-si/strings.xml`; see the English file for what each
+  section is and for the five keys that exist only on this platform.
+--------------------------------------------------------------------------------------------- */
+
+/* Shared failures the wallet cluster names (D-26 — the kebab `code` is the key, never the
+   server's own English `detail`). `insufficient-wallet` is C088's and is already above. */
+"error_invalid_amount" = "එම මුදල ගෙවිය නොහැක. එය පරීක්ෂා කර නැවත උත්සාහ කරන්න.";
+"error_gateway_error" = "ගෙවීම් සේවාව පිළිතුරු දුන්නේ නැත. කිසිවක් අය කළේ නැත.";
+"error_gateway_unreachable" = "ගෙවීම් පිටුව විවෘත කළ හැකි යෙදුමක් මෙම දුරකථනයේ නැත.";
+"error_already_done" = "එය දැනටමත් සිදු වී ඇත, නැතහොත් ඔබ බලා සිටියදී එය වෙනස් වී ඇත.";
+"error_not_found" = "එය සොයා ගත නොහැකි විය. ඔබ ඇතුළත් කළ දේ පරීක්ෂා කරන්න.";
+"action_save" = "සුරකින්න";
+
+/* SCR-DI-021 · wallet & daily-fee status (US-9.7, US-9.1, US-9.9). The threshold row is the one
+   addition to the wireframe — D2' calls it "driver-set" and `WalletPreferences` says where it lives. */
+"wallet_title" = "පසුම්බිය";
+"wallet_balance_label" = "ශේෂය (කියවීම පමණි)";
+"wallet_available_after_debt" = "මින් %1$@ ක් ණයට යටත් වන අතර වියදම් කළ නොහැක.";
+"wallet_daily_fee" = "දෛනික ගාස්තුව";
+"wallet_fee_vehicle" = "වාහනය";
+"wallet_fee_rate" = "අනුපාතය";
+"wallet_fee_rate_value" = "දිනකට %1$@";
+"wallet_fee_today" = "අද";
+"wallet_fee_paid" = "ගෙවා ඇත ✓";
+"wallet_fee_unpaid" = "ගෙවා නැත";
+"wallet_fee_status_first_free" = "%1$@ (පළමු ගමන නොමිලේ)";
+"wallet_fee_unavailable" = "අද දින ගාස්තුව කියවිය නොහැකි විය. මොහොතකින් මෙම තිරය නැවත විවෘත කරන්න.";
+"wallet_action_top_up" = "ණය පිරවීම / මිලදී ගැනීම";
+"wallet_action_request" = "ණය ඉල්ලන්න";
+"wallet_action_transfer" = "ණය මාරු කරන්න";
+"wallet_action_history" = "ගෙවීම් ඉතිහාසය";
+"wallet_low_balance" = "ශේෂය අඩුයි. %1$@ ට වඩා අඩු වූ විට දැනුම් දෙන ලෙස ඔබ ඉල්ලා තිබුණි.";
+"wallet_top_up_required" = "ණය පිරවීම අවශ්‍යයි. ඔබේ පසුම්බිය බිංදුවට වඩා %1$@ ක් අඩුයි.";
+"wallet_below_day_fee" = "ණය පිරවීම අවශ්‍යයි. දිනක ගාස්තුව වන %1$@ ට ඔබේ ශේෂය මදි, එබැවින් ඊළඟ ඉල්ලීම මඟ හැරෙනු ඇත.";
+"wallet_threshold_row" = "%1$@ ට වඩා අඩු වූ විට දැනුම් දෙන්න";
+"wallet_threshold_title" = "ශේෂය අඩු බවට අනතුරු ඇඟවීම";
+"wallet_threshold_body" = "මෙය ඔබේම තිරයේ අප අඳින සීමාවයි. MageRide එවන කෙටි පණිවුඩය කාර්යාලය විසින් තීරණය කරන අතර මෙය සමඟ වෙනස් නොවේ.";
+"wallet_threshold_reset" = "පෙරනිමිය භාවිත කරන්න";
+"wallet_amount_label" = "මුදල";
+
+/* SCR-DI-022 · top up (US-9.18, US-9.19, AL-05, AL-15). Three methods and no fourth. */
+"wallet_top_up_title" = "ණය පිරවීම";
+"wallet_method" = "ක්‍රමය";
+"wallet_method_card" = "කාඩ්පත";
+"wallet_method_onepay" = "OnePay පසුම්බිය";
+"wallet_method_lankaqr" = "LankaQR බැංකු යෙදුම";
+"wallet_voucher_label" = "තොග ණය වවුචරය — වට්ටම කාර්යාලය විසින් තීරණය කෙරේ";
+"wallet_voucher_tile" = "%1$@ · %2$@ ක වට්ටමක්";
+"wallet_voucher_loading" = "ණය වවුචර පූරණය වෙමින්…";
+"wallet_voucher_empty" = "දැනට විකිණීමට ණය වවුචර නැත.";
+"wallet_voucher_note" = "වට්ටම අදාළ වන්නේ ඔබ මිලදී ගන්නා විට පමණි. වවුචරයක් එහි මුහුණත වටිනාකමට වඩා අඩුවෙන් ලැබෙන අතර සම්පූර්ණ මුදල ඔබේ පසුම්බියට එක් වේ. පසුව වෙනත් රියදුරෙකුට දෙන ණය එහි නියම වටිනාකමින්ම යයි.";
+"wallet_pay" = "ගෙවන්න";
+"wallet_pay_amount" = "%1$@ ගෙවන්න";
+"wallet_pay_and_get" = "%1$@ ගෙවා %2$@ ලබා ගන්න";
+"wallet_topup_pending" = "ගෙවීම තහවුරු වන තෙක් බලා සිටියි.";
+"wallet_topup_slow" = "ගෙවීමට සුපුරුදුට වඩා කාලයක් ගතවේ. එය සම්පූර්ණ වූ පසු ඔබේ ණය පෙන්වයි.";
+"wallet_topup_failed" = "එම ගෙවීම සාර්ථක වූයේ නැත. කිසිවක් අය කළේ නැත.";
+"wallet_lankaqr_title" = "ගෙවීමට ස්කෑන් කරන්න";
+"wallet_lankaqr_body" = "ගෙවීම් සබැඳිය විවෘත කළ හැකි බැංකු යෙදුමක් මෙම දුරකථනයේ නැත. ඒ වෙනුවට ඔබේ බැංකු යෙදුමෙන් මෙම කේතය ස්කෑන් කරන්න.";
+"wallet_lankaqr_unavailable" = "මෙම ගෙවීම් කේතය ඇඳිය නොහැකි විය. ඒ වෙනුවට OnePay භාවිත කරන්න.";
+"wallet_receipt_title" = "ගෙවීම ආරම්භ විය";
+"wallet_receipt_paid" = "ඔබ ගෙවන්නේ %1$@";
+"wallet_receipt_credited" = "ඔබේ පසුම්බියට %1$@ එකතු වේ";
+"wallet_receipt_pending" = "ගෙවීම සම්පූර්ණ වූ විගස ණය පෙන්වයි.";
+
+/* SCR-DI-023 · request credit by Driver ID (US-9.10, AL-34 — there is no code to scan). */
+"wallet_request_title" = "ණය ඉල්ලන්න";
+"wallet_request_intro" = "පසුම්බියේ ණය ඇති රියදුරෙකුගේ රියදුරු අංකය ඇතුළත් කර ඔහුගෙන් මාරුවක් ඉල්ලන්න. ස්කෑන් කිරීමට කේතයක් හෝ විශේෂ අලෙවි අංකයක් නැත.";
+"wallet_driver_id_label" = "රියදුරු අංකය";
+"wallet_driver_id_help" = "අනෙක් රියදුරාට එය තම පැතිකඩ තිරයෙන් කියවිය හැක.";
+"wallet_driver_id_invalid" = "එය රියදුරු අංකයක් නොවේ. ඔහුගෙන් නැවත එය කියන ලෙස ඉල්ලන්න.";
+"wallet_request_action" = "මාරුව ඉල්ලන්න";
+"wallet_request_awaiting" = "%1$@ ක් ඉල්ලා ඇත. එම රියදුරාගේ අනුමැතිය එනතුරු බලා සිටියි.";
+"wallet_request_outstanding" = "අනුමැතිය එනතුරු";
+
+/* SCR-DI-024 · credit transfer and the approval inbox (US-9.11, US-9.12, US-9.20, US-9.21).
+   The exact value, on both legs, with nothing taken off (AL-01). */
+"wallet_transfer_title" = "ණය මාරුව";
+"wallet_transfer_incoming" = "ඔබෙන් ණය ඉල්ලන රියදුරන්";
+"wallet_transfer_incoming_empty" = "ඔබෙන් කිසිවෙකු ණය ඉල්ලා නැත.";
+"wallet_transfer_requested" = "%1$@ ක් ඉල්ලා ඇත";
+"wallet_transfer_approve" = "අනුමත කරන්න";
+"wallet_transfer_decline" = "ප්‍රතික්ෂේප කරන්න";
+"wallet_transfer_send_directly" = "නැතහොත් ණය කෙලින්ම යවන්න";
+"wallet_transfer_you_send" = "ඔබ යවන්නේ";
+"wallet_transfer_recipient_gets" = "ඔහුට ලැබෙන්නේ";
+"wallet_transfer_exact_value" = "කිසිවක් අඩු නොකර, නියම මුදලම.";
+"wallet_transfer_action" = "ණය යවන්න";
+"wallet_transfer_sent_notice" = "%1$@ ක් යවන ලදී.";
+"wallet_transfer_history" = "පෙර මාරු";
+"wallet_transfer_sent" = "යවන ලදී";
+"wallet_transfer_received" = "ලැබුණි";
+"wallet_transfer_pending" = "බලා සිටියි";
+"wallet_transfer_approved" = "අවසන්";
+"wallet_transfer_rejected" = "ප්‍රතික්ෂේප විය";
+"wallet_self_transfer" = "ඔබටම ණය යැවිය නොහැක.";
+"wallet_amount_required" = "යවන මුදල ඇතුළත් කරන්න.";
+
+/* SCR-DI-025 · payment and fee history (US-9A.6, US-9A.19, D-13). The dates are Asia/Colombo
+   business dates and so is the statement's range. */
+"wallet_history_title" = "ඉතිහාසය";
+"wallet_history_search" = "ඔබේ ඉතිහාසය සොයන්න";
+"wallet_history_range" = "දින තෝරන්න";
+"wallet_history_from" = "සිට";
+"wallet_history_to" = "දක්වා";
+"wallet_history_range_clear" = "සියල්ල පෙන්වන්න";
+"wallet_history_empty" = "තවම මෙහි කිසිවක් නැත.";
+"wallet_filter_all" = "සියල්ල";
+"wallet_filter_fees" = "ගාස්තු";
+"wallet_filter_topups" = "ණය පිරවීම්";
+"wallet_filter_transfers" = "මාරු";
+"wallet_kind_topup" = "ණය පිරවීම";
+"wallet_kind_daily_fee" = "දෛනික ගාස්තුව";
+"wallet_kind_trip_payment" = "ගමන් ගාස්තුව";
+"wallet_kind_penalty" = "දඩය";
+"wallet_kind_adjustment" = "කාර්යාලයේ සකස් කිරීමක්";
+"wallet_kind_tip" = "තෑගි මුදල";
+"wallet_kind_refund" = "ආපසු ගෙවීම";
+"wallet_kind_reversal" = "වැඩිපුර ගෙවීම ආපසු";
+"wallet_kind_voucher" = "ණය වවුචරය";
+"wallet_kind_transfer" = "ණය මාරුව";
+"wallet_kind_payout" = "ඔබේ බැංකුවට ගෙවන ලදී";
+"wallet_kind_other" = "පසුම්බි සටහන";
+"wallet_statement_download" = "ප්‍රකාශය බාගන්න";
+"wallet_statement_ready" = "ඔබේ %1$@ ප්‍රකාශය සූදානම්.";
+"wallet_statement_failed" = "එම ප්‍රකාශය සුරැකිය නොහැකි විය. නැවත උත්සාහ කරන්න.";

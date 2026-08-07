@@ -564,3 +564,155 @@
 "earnings_empty" = "No completed trips in this period.";
 "earnings_chart_bucket" = "Period";
 "earnings_chart_label" = "Earnings trend";
+
+/* ---------------------------------------------------------------------------------------------
+  MageRide Driver — iOS · C091 driver-ios-wallet-credit. English, the development region.
+
+  SCOPE. Cluster 3's money half: SCR-DI-021 the wallet and the daily fee, SCR-DI-022 top up,
+  SCR-DI-023 request credit, SCR-DI-024 credit transfer and its approval inbox, and SCR-DI-025 the
+  payment and fee history.
+
+  KEYS ARE C073'S. Same key names, same order and the same translations as
+  `apps/driver-android/src/main/res/values…/strings.xml`, so a divergence between the two driver
+  apps is a diff rather than an archaeology exercise. `%1$s` becomes `%1$@`, which is the only
+  systematic difference — see cluster 2's note above.
+
+  FIVE KEYS ARE NEW HERE, and each is something this platform draws and Compose does not.
+  `wallet_history_search` is the `.searchable` prompt, and `wallet_history_from` /
+  `wallet_history_to` label the two `DatePicker`s that stand in for M3's range picker — both are
+  `driver_ios.html`'s own Δ iOS clause for SCR-DI-025. `wallet_voucher_loading` is the tier read's
+  own line, because a segmented `Picker` has no shimmer to hide the wait behind. And
+  `wallet_lankaqr_unavailable` is what the AL-15 sheet says when Core Image refuses a payload; the
+  Android twin draws nothing in that case, which is a blank square with no explanation.
+
+  NOT HERE. `Rs`, `10%`, `−`, `+` and `—` are all data rather than copy (`MoneyFormat.rupees`,
+  `MoneyFormat.percentOfBps`, `SignBadge`, `MageRideSymbols`), and three identical values in the
+  three files is exactly what `LocalizationTests` fails on.
+
+  NOTHING BELOW NAMES A BANK TRANSFER OR A COMMISSION, in any of the three languages, and
+  `WalletFenceTests` reads all three files back to keep that true. AL-05 and AL-01 are as easy to
+  reintroduce through a translation nobody on the review reads as through a tile.
+--------------------------------------------------------------------------------------------- */
+
+/* Shared failures the wallet cluster names (D-26 — the kebab `code` is the key, never the
+   server's own English `detail`). `insufficient-wallet` is C088's and is already above. */
+"error_invalid_amount" = "That amount cannot be paid. Check it and try again.";
+"error_gateway_error" = "The payment service did not answer. Nothing was charged.";
+"error_gateway_unreachable" = "No app on this phone could open the payment page.";
+"error_already_done" = "That has already been done, or it changed while you were looking at it.";
+"error_not_found" = "We could not find that. Check what you entered.";
+"action_save" = "Save";
+
+/* SCR-DI-021 · wallet & daily-fee status (US-9.7, US-9.1, US-9.9). The threshold row is the one
+   addition to the wireframe — D2' calls it "driver-set" and `WalletPreferences` says where it lives. */
+"wallet_title" = "Wallet";
+"wallet_balance_label" = "Balance (read-only)";
+"wallet_available_after_debt" = "%1$@ of this is owed and cannot be spent.";
+"wallet_daily_fee" = "Daily fee";
+"wallet_fee_vehicle" = "Vehicle";
+"wallet_fee_rate" = "Rate";
+"wallet_fee_rate_value" = "%1$@ / day";
+"wallet_fee_today" = "Today";
+"wallet_fee_paid" = "PAID ✓";
+"wallet_fee_unpaid" = "UNPAID";
+"wallet_fee_status_first_free" = "%1$@ (first trip free)";
+"wallet_fee_unavailable" = "We could not read today's fee. Open this screen again in a moment.";
+"wallet_action_top_up" = "Top Up / Buy credit";
+"wallet_action_request" = "Request credit";
+"wallet_action_transfer" = "Transfer credit";
+"wallet_action_history" = "Payment history";
+"wallet_low_balance" = "Low balance. You asked to be warned below %1$@.";
+"wallet_top_up_required" = "Top Up Required. Your wallet is %1$@ below zero.";
+"wallet_below_day_fee" = "Top Up Required. You are short of one day's fee of %1$@, so your next request will be missed.";
+"wallet_threshold_row" = "Warn me below %1$@";
+"wallet_threshold_title" = "Low-balance warning";
+"wallet_threshold_body" = "This is the line we draw on your own screen. The text message MageRide sends is set by the office and does not change with it.";
+"wallet_threshold_reset" = "Use the default";
+"wallet_amount_label" = "Amount";
+
+/* SCR-DI-022 · top up (US-9.18, US-9.19, AL-05, AL-15). Three methods and no fourth. */
+"wallet_top_up_title" = "Top Up";
+"wallet_method" = "Method";
+"wallet_method_card" = "Card";
+"wallet_method_onepay" = "OnePay wallet";
+"wallet_method_lankaqr" = "LankaQR bank app";
+"wallet_voucher_label" = "Bulk credit voucher — discount set by the office";
+"wallet_voucher_tile" = "%1$@ · %2$@ off";
+"wallet_voucher_loading" = "Loading credit vouchers…";
+"wallet_voucher_empty" = "No credit vouchers are on sale right now.";
+"wallet_voucher_note" = "The discount applies only when you buy. A voucher costs less than its face value and puts the full amount in your wallet. Credit you pass to another driver later moves at its exact value.";
+"wallet_pay" = "Pay";
+"wallet_pay_amount" = "Pay %1$@";
+"wallet_pay_and_get" = "Pay %1$@ · get %2$@";
+"wallet_topup_pending" = "Waiting for the payment to be confirmed.";
+"wallet_topup_slow" = "The payment is taking longer than usual. Your credit will appear once it clears.";
+"wallet_topup_failed" = "That payment did not go through. Nothing was charged.";
+"wallet_lankaqr_title" = "Scan to pay";
+"wallet_lankaqr_body" = "No bank app on this phone could open the payment link. Scan this code with your bank app instead.";
+"wallet_lankaqr_unavailable" = "This payment code could not be drawn. Use OnePay instead.";
+"wallet_receipt_title" = "Payment started";
+"wallet_receipt_paid" = "You pay %1$@";
+"wallet_receipt_credited" = "Your wallet gets %1$@";
+"wallet_receipt_pending" = "The credit appears as soon as the payment clears.";
+
+/* SCR-DI-023 · request credit by Driver ID (US-9.10, AL-34 — there is no code to scan). */
+"wallet_request_title" = "Request credit";
+"wallet_request_intro" = "Enter the Driver ID of a driver who holds wallet credit and ask them for a transfer. There is no code to scan and no special reseller number.";
+"wallet_driver_id_label" = "Driver ID";
+"wallet_driver_id_help" = "The other driver can read this off their own profile screen.";
+"wallet_driver_id_invalid" = "That is not a Driver ID. Ask them to read theirs out again.";
+"wallet_request_action" = "Request transfer";
+"wallet_request_awaiting" = "Asked for %1$@. Waiting for that driver to approve it.";
+"wallet_request_outstanding" = "Waiting for approval";
+
+/* SCR-DI-024 · credit transfer and the approval inbox (US-9.11, US-9.12, US-9.20, US-9.21).
+   The exact value, on both legs, with nothing taken off (AL-01). */
+"wallet_transfer_title" = "Credit transfer";
+"wallet_transfer_incoming" = "Drivers asking you for credit";
+"wallet_transfer_incoming_empty" = "Nobody has asked you for credit.";
+"wallet_transfer_requested" = "Asked for %1$@";
+"wallet_transfer_approve" = "Approve";
+"wallet_transfer_decline" = "Decline";
+"wallet_transfer_send_directly" = "Or send credit directly";
+"wallet_transfer_you_send" = "You send";
+"wallet_transfer_recipient_gets" = "They receive";
+"wallet_transfer_exact_value" = "The exact amount, with nothing taken off.";
+"wallet_transfer_action" = "Send credit";
+"wallet_transfer_sent_notice" = "Sent %1$@.";
+"wallet_transfer_history" = "Past transfers";
+"wallet_transfer_sent" = "Sent";
+"wallet_transfer_received" = "Received";
+"wallet_transfer_pending" = "Waiting";
+"wallet_transfer_approved" = "Done";
+"wallet_transfer_rejected" = "Declined";
+"wallet_self_transfer" = "You cannot send credit to yourself.";
+"wallet_amount_required" = "Enter how much to send.";
+
+/* SCR-DI-025 · payment and fee history (US-9A.6, US-9A.19, D-13). The dates are Asia/Colombo
+   business dates and so is the statement's range. */
+"wallet_history_title" = "History";
+"wallet_history_search" = "Search your history";
+"wallet_history_range" = "Choose dates";
+"wallet_history_from" = "From";
+"wallet_history_to" = "To";
+"wallet_history_range_clear" = "Show everything";
+"wallet_history_empty" = "Nothing here yet.";
+"wallet_filter_all" = "All";
+"wallet_filter_fees" = "Fees";
+"wallet_filter_topups" = "Top-ups";
+"wallet_filter_transfers" = "Transfers";
+"wallet_kind_topup" = "Top-up";
+"wallet_kind_daily_fee" = "Daily fee";
+"wallet_kind_trip_payment" = "Trip fare";
+"wallet_kind_penalty" = "Penalty";
+"wallet_kind_adjustment" = "Adjustment by the office";
+"wallet_kind_tip" = "Tip";
+"wallet_kind_refund" = "Refund";
+"wallet_kind_reversal" = "Overpayment returned";
+"wallet_kind_voucher" = "Credit voucher";
+"wallet_kind_transfer" = "Credit transfer";
+"wallet_kind_payout" = "Paid out to your bank";
+"wallet_kind_other" = "Wallet entry";
+"wallet_statement_download" = "Download statement";
+"wallet_statement_ready" = "Your %1$@ statement is ready.";
+"wallet_statement_failed" = "We could not save that statement. Try again.";

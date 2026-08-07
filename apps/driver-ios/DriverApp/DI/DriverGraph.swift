@@ -136,6 +136,32 @@ final class DriverGraph: ObservableObject {
     /// query-svc's earnings read model, as SCR-DI-020 uses it (R-05).
     let earnings: EarningsRepository
 
+    // MARK: - C091 · the wallet
+    //
+    // Three repositories and one preference. The preference is here rather than constructed per screen
+    // because it is a **device** setting SCR-DI-021 both reads and writes, and a second store over the
+    // same `UserDefaults` key would be two objects disagreeing about the driver's own threshold until
+    // the next launch. The two system seams are held for the same reason C088 holds ``contact``: each
+    // wraps a process-wide facility and neither has any per-screen state.
+
+    /// wallet-svc's balance and ledger plus subscription-svc's fee table, as SCR-DI-021/025 use them.
+    let walletReads: WalletRepository
+
+    /// wallet-svc's driver-to-driver surface, as SCR-DI-023/024 use it (AL-01, AL-34).
+    let creditTransfers: CreditTransferRepository
+
+    /// The two top-up rails and the bulk-voucher ladder, as SCR-DI-022 uses them (AL-05, AL-15).
+    let topUps: TopUpRepository
+
+    /// US-9.9's driver-set low-balance line — **local, because no route stores one**.
+    let walletPreferences: WalletPreferences
+
+    /// AL-15's bank-app hand-off. OnePay is deliberately not behind it — see ``PaymentHandoff``.
+    let payments: PaymentHandoff
+
+    /// Where US-9A.19's statement lands before the share sheet picks it up.
+    let statements: StatementExporter
+
     init(environment: DriverEnvironment = .current) {
         self.environment = environment
 
@@ -207,6 +233,18 @@ final class DriverGraph: ObservableObject {
         // for the stats read as well to draw a badge would be a round trip a dashboard never uses.
         self.jobs = ApiJobsRepository(dispatch: shared.api.dispatch)
         self.earnings = ApiEarningsRepository(query: shared.api.query)
+
+        // C091. Three repositories over two services, split by what a screen asks rather than by which
+        // client answers: SCR-DI-021/025 read money, SCR-DI-023/024 move it between drivers, and
+        // SCR-DI-022 buys it. The wallet reads and the top-up rails both touch wallet-svc **and**
+        // subscription-svc — the fee table and the voucher purchase are the second service's — which is
+        // why neither is a thin wrapper over one client.
+        self.walletReads = ApiWalletRepository(wallet: shared.api.wallet, subscription: shared.api.subscription)
+        self.creditTransfers = ApiCreditTransferRepository(wallet: shared.api.wallet)
+        self.topUps = ApiTopUpRepository(wallet: shared.api.wallet, subscription: shared.api.subscription)
+        self.walletPreferences = UserDefaultsWalletPreferences()
+        self.payments = SystemPaymentHandoff()
+        self.statements = FileStatementExporter()
 
         // Before the first frame, so a driver who chose සිංහල never sees an English one. This is
         // the earliest point at which it can happen — `DriverLocale` redirects the bundle every
@@ -292,6 +330,37 @@ final class DriverGraph: ObservableObject {
     /// SCR-DI-020.
     func makeEarningsModel() -> EarningsModel {
         EarningsModel(identity: identity, earnings: earnings)
+    }
+
+    // MARK: - C091 · the per-screen models
+    //
+    // Factories for the reason C088's and C090's are: each is a `@StateObject` owned by the screen that
+    // shows it. SCR-DI-022's would be the worst one to hold — its model owns D6' §7.1's poll, and one
+    // that outlived the screen would keep re-reading a gateway session for the life of the process.
+
+    /// SCR-DI-021.
+    func makeWalletModel() -> WalletModel {
+        WalletModel(identity: identity, wallet: walletReads, preferences: walletPreferences)
+    }
+
+    /// SCR-DI-022.
+    func makeTopUpModel() -> TopUpModel {
+        TopUpModel(topUps: topUps, handoff: payments)
+    }
+
+    /// SCR-DI-023.
+    func makeRequestCreditModel() -> RequestCreditModel {
+        RequestCreditModel(identity: identity, transfers: creditTransfers)
+    }
+
+    /// SCR-DI-024.
+    func makeCreditTransferModel() -> CreditTransferModel {
+        CreditTransferModel(identity: identity, transfers: creditTransfers, wallet: walletReads)
+    }
+
+    /// SCR-DI-025.
+    func makeWalletHistoryModel() -> WalletHistoryModel {
+        WalletHistoryModel(identity: identity, wallet: walletReads, exporter: statements)
     }
 
     /// Start-up work that outlives any view.

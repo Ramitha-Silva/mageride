@@ -62,6 +62,21 @@ enum MoneyFormat {
         return "\(km).\(tenths) km"
     }
 
+    /// `1000` → `10%`; `1250` → `12.5%` (C091).
+    ///
+    /// A voucher discount is basis points on the wire (`billing.voucher_discount_tiers.discount_bps`)
+    /// because a percentage with a fraction cannot be an integer otherwise, and the tile has to print
+    /// what Finance set. Integer arithmetic and a trailing-zero trim for the same reason everything
+    /// else here is: `NumberFormatter.percentStyle` would follow the handset's locale, and a driver
+    /// whose phone groups by lakhs must read the same figure the receipt shows. Same function as
+    /// `apps/driver-android/.../ui/MoneyFormat.kt`'s.
+    static func percentOfBps(_ basisPoints: Int) -> String {
+        let whole = basisPoints / bpsInPercent
+        let remainder = basisPoints % bpsInPercent
+        let fraction = String(remainder).leftPadded(to: 2).trimmedTrailingZeroes
+        return fraction.isEmpty ? "\(whole)%" : "\(whole).\(fraction)%"
+    }
+
     /// `30000` → `30 km`. A **radius**, not a measured distance (Δ C090).
     ///
     /// Distinct from ``distance(metres:)`` because the two are different kinds of number: a distance
@@ -89,6 +104,7 @@ enum MoneyFormat {
     }
 
     private static let minorUnits: Int64 = 100
+    private static let bpsInPercent = 100
     private static let metresInKm: Int64 = 1_000
     private static let secondsInHour: Int64 = 3_600
     private static let secondsInMinute: Int64 = 60
@@ -126,5 +142,12 @@ extension String {
     /// Left-pads with zeroes, for a clock field and a cent pair.
     func leftPadded(to width: Int) -> String {
         count >= width ? self : String(repeating: "0", count: width - count) + self
+    }
+
+    /// Drops trailing zeroes, so `1000` bps prints `10%` rather than `10.00%`.
+    var trimmedTrailingZeroes: String {
+        var trimmed = Substring(self)
+        while trimmed.last == "0" { trimmed = trimmed.dropLast() }
+        return String(trimmed)
     }
 }

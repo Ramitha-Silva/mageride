@@ -469,3 +469,134 @@
 "earnings_empty" = "இந்தக் காலப்பகுதியில் முடிக்கப்பட்ட பயணங்கள் இல்லை.";
 "earnings_chart_bucket" = "காலப்பகுதி";
 "earnings_chart_label" = "வருமானப் போக்கு";
+
+/* ---------------------------------------------------------------------------------------------
+  MageRide Driver — iOS · C091 driver-ios-wallet-credit. Tamil (தமிழ்).
+
+  Same keys, same order and the same translations as
+  `apps/driver-android/src/main/res/values-ta/strings.xml`; see the English file for what each
+  section is and for the five keys that exist only on this platform.
+--------------------------------------------------------------------------------------------- */
+
+/* Shared failures the wallet cluster names (D-26 — the kebab `code` is the key, never the
+   server's own English `detail`). `insufficient-wallet` is C088's and is already above. */
+"error_invalid_amount" = "அந்தத் தொகையைச் செலுத்த முடியாது. சரிபார்த்து மீண்டும் முயலவும்.";
+"error_gateway_error" = "கட்டணச் சேவை பதிலளிக்கவில்லை. எதுவும் வசூலிக்கப்படவில்லை.";
+"error_gateway_unreachable" = "கட்டணப் பக்கத்தைத் திறக்கக்கூடிய செயலி இந்தத் தொலைபேசியில் இல்லை.";
+"error_already_done" = "அது ஏற்கெனவே முடிந்துவிட்டது, அல்லது நீங்கள் பார்த்துக்கொண்டிருக்கும்போது மாறிவிட்டது.";
+"error_not_found" = "அதைக் கண்டுபிடிக்க முடியவில்லை. நீங்கள் உள்ளிட்டதைச் சரிபார்க்கவும்.";
+"action_save" = "சேமி";
+
+/* SCR-DI-021 · wallet & daily-fee status (US-9.7, US-9.1, US-9.9). The threshold row is the one
+   addition to the wireframe — D2' calls it "driver-set" and `WalletPreferences` says where it lives. */
+"wallet_title" = "பணப்பை";
+"wallet_balance_label" = "இருப்பு (பார்வைக்கு மட்டும்)";
+"wallet_available_after_debt" = "இதில் %1$@ கடனாக உள்ளது, செலவழிக்க முடியாது.";
+"wallet_daily_fee" = "தினசரிக் கட்டணம்";
+"wallet_fee_vehicle" = "வாகனம்";
+"wallet_fee_rate" = "விகிதம்";
+"wallet_fee_rate_value" = "நாளொன்றுக்கு %1$@";
+"wallet_fee_today" = "இன்று";
+"wallet_fee_paid" = "செலுத்தப்பட்டது ✓";
+"wallet_fee_unpaid" = "செலுத்தப்படவில்லை";
+"wallet_fee_status_first_free" = "%1$@ (முதல் பயணம் இலவசம்)";
+"wallet_fee_unavailable" = "இன்றைய கட்டணத்தைப் படிக்க முடியவில்லை. சிறிது நேரத்தில் இந்தத் திரையை மீண்டும் திறக்கவும்.";
+"wallet_action_top_up" = "கடன் நிரப்பு / வாங்கு";
+"wallet_action_request" = "கடன் கேட்கவும்";
+"wallet_action_transfer" = "கடன் அனுப்பவும்";
+"wallet_action_history" = "கட்டண வரலாறு";
+"wallet_low_balance" = "இருப்பு குறைவு. %1$@ க்குக் கீழே எச்சரிக்கச் சொல்லியிருந்தீர்கள்.";
+"wallet_top_up_required" = "நிரப்ப வேண்டும். உங்கள் பணப்பை பூஜ்ஜியத்தை விட %1$@ குறைவு.";
+"wallet_below_day_fee" = "நிரப்ப வேண்டும். ஒரு நாளின் கட்டணமான %1$@ க்கு இருப்பு போதவில்லை, எனவே அடுத்த கோரிக்கை தவறிவிடும்.";
+"wallet_threshold_row" = "%1$@ க்குக் கீழே எச்சரிக்கவும்";
+"wallet_threshold_title" = "இருப்பு குறைவு எச்சரிக்கை";
+"wallet_threshold_body" = "இது உங்கள் திரையில் மட்டும் நாம் வரையும் எல்லை. MageRide அனுப்பும் குறுஞ்செய்தியை அலுவலகம் தீர்மானிக்கிறது, அது இதனுடன் மாறாது.";
+"wallet_threshold_reset" = "இயல்பை பயன்படுத்து";
+"wallet_amount_label" = "தொகை";
+
+/* SCR-DI-022 · top up (US-9.18, US-9.19, AL-05, AL-15). Three methods and no fourth. */
+"wallet_top_up_title" = "கடன் நிரப்புதல்";
+"wallet_method" = "முறை";
+"wallet_method_card" = "அட்டை";
+"wallet_method_onepay" = "OnePay பணப்பை";
+"wallet_method_lankaqr" = "LankaQR வங்கிச் செயலி";
+"wallet_voucher_label" = "மொத்தக் கடன் சான்றிதழ் — தள்ளுபடியை அலுவலகம் நிர்ணயிக்கிறது";
+"wallet_voucher_tile" = "%1$@ · %2$@ தள்ளுபடி";
+"wallet_voucher_loading" = "கடன் சான்றிதழ்கள் ஏற்றப்படுகின்றன…";
+"wallet_voucher_empty" = "இப்போது விற்பனையில் கடன் சான்றிதழ்கள் இல்லை.";
+"wallet_voucher_note" = "தள்ளுபடி வாங்கும் போது மட்டுமே பொருந்தும். சான்றிதழ் அதன் முகமதிப்பை விடக் குறைந்த விலையில் கிடைத்து முழுத் தொகையும் உங்கள் பணப்பையில் சேரும். பின்னர் மற்றொரு ஓட்டுநருக்கு அனுப்பும் கடன் அதன் சரியான மதிப்பிலேயே செல்லும்.";
+"wallet_pay" = "செலுத்து";
+"wallet_pay_amount" = "%1$@ செலுத்து";
+"wallet_pay_and_get" = "%1$@ செலுத்தி %2$@ பெறவும்";
+"wallet_topup_pending" = "கட்டணம் உறுதியாகும் வரை காத்திருக்கிறது.";
+"wallet_topup_slow" = "கட்டணத்திற்கு வழக்கத்தை விட நேரம் ஆகிறது. அது முடிந்ததும் உங்கள் கடன் தெரியும்.";
+"wallet_topup_failed" = "அந்தக் கட்டணம் நிறைவேறவில்லை. எதுவும் வசூலிக்கப்படவில்லை.";
+"wallet_lankaqr_title" = "செலுத்த ஸ்கேன் செய்யவும்";
+"wallet_lankaqr_body" = "கட்டண இணைப்பைத் திறக்கக்கூடிய வங்கிச் செயலி இந்தத் தொலைபேசியில் இல்லை. அதற்குப் பதிலாக உங்கள் வங்கிச் செயலியில் இந்தக் குறியீட்டை ஸ்கேன் செய்யவும்.";
+"wallet_lankaqr_unavailable" = "இந்தக் கட்டணக் குறியீட்டை வரைய முடியவில்லை. அதற்குப் பதிலாக OnePay ஐப் பயன்படுத்தவும்.";
+"wallet_receipt_title" = "கட்டணம் தொடங்கியது";
+"wallet_receipt_paid" = "நீங்கள் செலுத்துவது %1$@";
+"wallet_receipt_credited" = "உங்கள் பணப்பைக்கு %1$@ சேரும்";
+"wallet_receipt_pending" = "கட்டணம் முடிந்தவுடன் கடன் தெரியும்.";
+
+/* SCR-DI-023 · request credit by Driver ID (US-9.10, AL-34 — there is no code to scan). */
+"wallet_request_title" = "கடன் கேட்கவும்";
+"wallet_request_intro" = "பணப்பையில் கடன் வைத்திருக்கும் ஓட்டுநரின் ஓட்டுநர் எண்ணை உள்ளிட்டு அவரிடம் பரிமாற்றம் கேட்கவும். ஸ்கேன் செய்ய குறியீடோ சிறப்பு விற்பனையாளர் எண்ணோ இல்லை.";
+"wallet_driver_id_label" = "ஓட்டுநர் எண்";
+"wallet_driver_id_help" = "மற்ற ஓட்டுநர் அதைத் தன் சுயவிவரத் திரையில் பார்க்கலாம்.";
+"wallet_driver_id_invalid" = "அது ஓட்டுநர் எண் அல்ல. அவரிடம் மீண்டும் சொல்லச் சொல்லுங்கள்.";
+"wallet_request_action" = "பரிமாற்றம் கோரவும்";
+"wallet_request_awaiting" = "%1$@ கேட்கப்பட்டது. அந்த ஓட்டுநரின் ஒப்புதலுக்குக் காத்திருக்கிறது.";
+"wallet_request_outstanding" = "ஒப்புதலுக்குக் காத்திருப்பவை";
+
+/* SCR-DI-024 · credit transfer and the approval inbox (US-9.11, US-9.12, US-9.20, US-9.21).
+   The exact value, on both legs, with nothing taken off (AL-01). */
+"wallet_transfer_title" = "கடன் பரிமாற்றம்";
+"wallet_transfer_incoming" = "உங்களிடம் கடன் கேட்கும் ஓட்டுநர்கள்";
+"wallet_transfer_incoming_empty" = "உங்களிடம் யாரும் கடன் கேட்கவில்லை.";
+"wallet_transfer_requested" = "%1$@ கேட்கப்பட்டது";
+"wallet_transfer_approve" = "ஒப்புக";
+"wallet_transfer_decline" = "மறுக்க";
+"wallet_transfer_send_directly" = "அல்லது கடனை நேரடியாக அனுப்பவும்";
+"wallet_transfer_you_send" = "நீங்கள் அனுப்புவது";
+"wallet_transfer_recipient_gets" = "அவர் பெறுவது";
+"wallet_transfer_exact_value" = "எதுவும் பிடிக்காமல், சரியான தொகையே.";
+"wallet_transfer_action" = "கடன் அனுப்பு";
+"wallet_transfer_sent_notice" = "%1$@ அனுப்பப்பட்டது.";
+"wallet_transfer_history" = "முந்தைய பரிமாற்றங்கள்";
+"wallet_transfer_sent" = "அனுப்பியது";
+"wallet_transfer_received" = "பெற்றது";
+"wallet_transfer_pending" = "காத்திருக்கிறது";
+"wallet_transfer_approved" = "முடிந்தது";
+"wallet_transfer_rejected" = "மறுக்கப்பட்டது";
+"wallet_self_transfer" = "உங்களுக்கே கடன் அனுப்ப முடியாது.";
+"wallet_amount_required" = "எவ்வளவு அனுப்ப வேண்டும் என உள்ளிடவும்.";
+
+/* SCR-DI-025 · payment and fee history (US-9A.6, US-9A.19, D-13). The dates are Asia/Colombo
+   business dates and so is the statement's range. */
+"wallet_history_title" = "வரலாறு";
+"wallet_history_search" = "உங்கள் வரலாற்றைத் தேடுங்கள்";
+"wallet_history_range" = "தேதிகளைத் தேர்வு செய்";
+"wallet_history_from" = "முதல்";
+"wallet_history_to" = "வரை";
+"wallet_history_range_clear" = "அனைத்தையும் காட்டு";
+"wallet_history_empty" = "இங்கே இன்னும் எதுவும் இல்லை.";
+"wallet_filter_all" = "அனைத்தும்";
+"wallet_filter_fees" = "கட்டணங்கள்";
+"wallet_filter_topups" = "நிரப்பியவை";
+"wallet_filter_transfers" = "பரிமாற்றங்கள்";
+"wallet_kind_topup" = "கடன் நிரப்புதல்";
+"wallet_kind_daily_fee" = "தினசரிக் கட்டணம்";
+"wallet_kind_trip_payment" = "பயணக் கட்டணம்";
+"wallet_kind_penalty" = "அபராதம்";
+"wallet_kind_adjustment" = "அலுவலகத்தின் திருத்தம்";
+"wallet_kind_tip" = "உபகாரத் தொகை";
+"wallet_kind_refund" = "திரும்பச் செலுத்தியது";
+"wallet_kind_reversal" = "அதிகக் கட்டணம் திரும்பியது";
+"wallet_kind_voucher" = "கடன் சான்றிதழ்";
+"wallet_kind_transfer" = "கடன் பரிமாற்றம்";
+"wallet_kind_payout" = "உங்கள் வங்கிக்குச் செலுத்தியது";
+"wallet_kind_other" = "பணப்பைப் பதிவு";
+"wallet_statement_download" = "அறிக்கையைப் பதிவிறக்கு";
+"wallet_statement_ready" = "உங்கள் %1$@ அறிக்கை தயார்.";
+"wallet_statement_failed" = "அந்த அறிக்கையைச் சேமிக்க முடியவில்லை. மீண்டும் முயலவும்.";

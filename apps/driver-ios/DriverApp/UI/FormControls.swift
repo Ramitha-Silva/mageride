@@ -10,6 +10,13 @@ import SwiftUI
 // MARK: - Text fields
 
 /// The wireframe's `.field.lbl` — a label above its value, in one filled rounded field.
+///
+/// **`prefix`, `keyboardType` and `autocapitalisation` are Δ C091**, and each is a property of the
+/// *value* rather than of the field: a rupee amount is prefixed `Rs` and typed on a number pad, and a
+/// Driver ID is a case-significant identifier that `.words` would capitalise and autocorrect into
+/// something the gateway answers `404` to. They are defaulted to what cluster 1 already gets, so no
+/// existing caller changes. ``RupeeField`` and ``DriverIdField`` are the two combinations this app
+/// actually uses.
 struct LabelledTextField: View {
 
     let labelKey: String
@@ -17,6 +24,9 @@ struct LabelledTextField: View {
     var placeholder: String?
     var supportingKey: String?
     var isError: Bool = false
+    var prefix: String?
+    var keyboardType: UIKeyboardType = .default
+    var autocapitalisation: TextInputAutocapitalization = .words
 
     var body: some View {
         VStack(alignment: .leading, spacing: MageRideSpacing.xxs) {
@@ -24,11 +34,19 @@ struct LabelledTextField: View {
                 Text(key: labelKey)
                     .mageFont(.caption)
                     .foregroundStyle(MageRideColor.onSurfaceVariant)
-                TextField(placeholder ?? "", text: $value)
-                    .mageFont(.body)
-                    .foregroundStyle(MageRideColor.onSurface)
-                    .textInputAutocapitalization(.words)
-                    .autocorrectionDisabled()
+                HStack(spacing: MageRideSpacing.xxs) {
+                    if let prefix {
+                        Text(prefix)
+                            .mageFont(.bodyEmphasis)
+                            .foregroundStyle(MageRideColor.onSurfaceVariant)
+                    }
+                    TextField(placeholder ?? "", text: $value)
+                        .mageFont(.body)
+                        .foregroundStyle(MageRideColor.onSurface)
+                        .keyboardType(keyboardType)
+                        .textInputAutocapitalization(autocapitalisation)
+                        .autocorrectionDisabled()
+                }
             }
             .padding(.horizontal, MageRideSpacing.sm)
             .padding(.vertical, MageRideSpacing.xs)
@@ -50,6 +68,55 @@ struct LabelledTextField: View {
                     .foregroundStyle(MageRideColor.onSurfaceVariant)
             }
         }
+    }
+}
+
+/// The wireframe's `Rs 2,000` amount field (C091).
+///
+/// A number pad and the `Rs` prefix, over a binding the caller has already put through
+/// ``WalletInput/rupeeDigits(_:)`` — the field renders what it is given and decides nothing, which is
+/// what keeps *"what is a valid amount"* in one testable place rather than in four screens.
+struct RupeeField: View {
+
+    let labelKey: String
+    @Binding var value: String
+    var supportingKey: String?
+    var isError: Bool = false
+
+    var body: some View {
+        LabelledTextField(
+            labelKey: labelKey,
+            value: $value,
+            supportingKey: supportingKey,
+            isError: isError,
+            prefix: MoneyFormat.prefix,
+            keyboardType: .numberPad,
+            autocapitalisation: .never
+        )
+    }
+}
+
+/// The wireframe's `Driver ID` field (C091).
+///
+/// **Never autocapitalised and never autocorrected.** A platform id is case-significant — a ULID is
+/// upper-case and a UUID lower-case — so `.words` would break one of the two forms, and autocorrect
+/// on a 26-character string of consonants does worse than that. See ``PlatformId``.
+struct DriverIdField: View {
+
+    let labelKey: String
+    @Binding var value: String
+    var supportingKey: String?
+    var isError: Bool = false
+
+    var body: some View {
+        LabelledTextField(
+            labelKey: labelKey,
+            value: $value,
+            supportingKey: supportingKey,
+            isError: isError,
+            keyboardType: .asciiCapable,
+            autocapitalisation: .never
+        )
     }
 }
 
