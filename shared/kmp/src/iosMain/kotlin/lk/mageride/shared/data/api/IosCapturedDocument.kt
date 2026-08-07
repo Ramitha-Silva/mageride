@@ -28,6 +28,28 @@ public fun capturedDocument(
     contentType: String,
     capturedVia: CaptureSource,
 ): CapturedDocument = CapturedDocument(
-    file = FileUpload(fileName = fileName, bytes = data.toByteArray(), contentType = contentType),
+    file = fileUploadOf(fileName = fileName, data = data, contentType = contentType),
     capturedVia = capturedVia,
 )
+
+/**
+ * A bare [FileUpload] from iOS bytes — the same `memcpy` for a part that carries **no** provenance
+ * (C093).
+ *
+ * [capturedDocument] is the AL-43 form and is the one to reach for whenever the file is a *document*:
+ * `docs.uploads.captured_via` is what the Verification-Officer queue sorts on, and a document that
+ * arrived without it is a scan nobody can trust. This one is for the two multipart parts on the
+ * app-facing surface that are **not** documents and declare no `…CapturedVia` field beside them —
+ * `POST /v1/support/screenshots` (US-16.2) and P-10's delivery proof — where stamping a provenance
+ * would be inventing a column the contract does not have.
+ *
+ * The `contentType` default is spelled at the call site for the reason every other `iosMain` helper
+ * here exists: a Kotlin default argument does not survive the Objective-C export, so a Swift caller
+ * has to pass one anyway and it may as well be the honest one.
+ *
+ * @param fileName Name for the part's `Content-Disposition`.
+ * @param data The bytes.
+ * @param contentType Media type, e.g. `image/jpeg`.
+ */
+public fun fileUploadOf(fileName: String, data: NSData, contentType: String): FileUpload =
+    FileUpload(fileName = fileName, bytes = data.toByteArray(), contentType = contentType)

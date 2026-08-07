@@ -47,6 +47,10 @@ final class PositionService: NSObject, ObservableObject {
 
     private let graph: IosAppGraph
     private let connectivity: ConnectivityMonitor
+
+    /// The process's one `mageride_driver.db` (Δ C093). See ``DriverDatabase``.
+    private let databases: DriverDatabase
+
     private let manager = CLLocationManager()
     private let transport = CocoaMqttTransport()
 
@@ -57,9 +61,10 @@ final class PositionService: NSObject, ObservableObject {
     private var reconnectTask: Task<Void, Never>?
     private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
 
-    init(graph: IosAppGraph, connectivity: ConnectivityMonitor) {
+    init(graph: IosAppGraph, connectivity: ConnectivityMonitor, databases: DriverDatabase) {
         self.graph = graph
         self.connectivity = connectivity
+        self.databases = databases
         super.init()
 
         manager.delegate = self
@@ -93,10 +98,10 @@ final class PositionService: NSObject, ObservableObject {
         self.vehicleId = vehicleId
 
         // C018 deliberately binds no open database — opening it unwraps a key and is `suspend`, so
-        // it happens here rather than at launch. One handle for the whole process; C093's alert
-        // inbox and C088's buffered count share it rather than opening a second connection to one
-        // protected file.
-        guard let database = try? await graph.databases.openDriver(inMemory: false) else { return }
+        // it happens on first use rather than at launch. **One handle for the whole process**: C093
+        // moved this call onto ``DriverDatabase``, so SCR-DI-034's alert inbox and SCR-DI-035's
+        // backlog count share this connection rather than opening two more to one protected file.
+        guard let database = await databases.get() else { return }
 
         pipeline = IosPositionPipeline(
             buffer: database.gpsBuffer(vehicleId: vehicleId),

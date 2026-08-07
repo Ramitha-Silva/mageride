@@ -64,17 +64,20 @@ struct DriverDestinationView: View {
         case .trackerPairing, .sharing, .profile, .rideHistory:
             ProfileDestinationView(route: route)
 
+        // ---- C093 · comms, safety, support and the alerts ----------------------------
+        //
+        // One arm for all four, and a sub-view rather than four inline screens — the same reason
+        // every cluster above takes one arm. Two of the four are full-screen takeovers rather than
+        // pushed destinations; see ``CommsDestinationView``.
+        case .support, .notifications, .voipCall, .sos:
+            CommsDestinationView(route: route)
+
         // ---- menu and what hangs off it ----------------------------------------------
         //
         // `.menu` is SCR-DI-036 and is C088's — see the arm above; it is the Menu tab's root and the
-        // whole of AL-31's replacement for the hamburger.
+        // whole of AL-31's replacement for the hamburger. `Documents` is the one placeholder left in
+        // this app, on both platforms: no screen group owns it.
         case .documents: placeholder("driver documents")
-        case .support: placeholder("SCR-DI-033 · support")
-        case .notifications: placeholder("SCR-DI-034 · alerts")
-
-        // ---- C093 · the two takeovers ------------------------------------------------
-        case .voipCall(let rideId): placeholder("SCR-DI-031 · call on ride \(rideId)")
-        case .sos(let rideId): placeholder("SCR-DI-032 · SOS on ride \(rideId)")
         }
     }
 

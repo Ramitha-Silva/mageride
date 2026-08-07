@@ -697,3 +697,99 @@
 "history_rate_no_passenger" = "මෙම වෙන් කිරීම ලියාපදිංචි නොවූ අයෙකු වෙනුවෙන් කරන ලද බැවින් ශ්‍රේණිගත කිරීමට කිසිවෙක් නැත.";
 "history_rate_submit" = "ශ්‍රේණිගත කිරීම යවන්න";
 "history_passenger_unnamed" = "මගියා";
+
+/*
+  MageRide Driver — iOS · C093 driver-ios-comms-safety-support. සිංහල.
+  Values are `apps/driver-android/src/main/res/values-si/strings.xml`'s, value for value.
+*/
+
+/* SCR-DI-031 · යෙදුම තුළ ඇමතුම. */
+"call_in_app" = "යෙදුම තුළ ඇමතුම · දුරකථන අංකය සැඟවී ඇත";
+"call_rider" = "මගියා";
+"call_rider_named" = "%1$@ (මගියා)";
+"call_connecting" = "සම්බන්ධ වෙමින්…";
+"call_connected" = "සම්බන්ධයි";
+"call_mute" = "නිශ්ශබ්ද කරන්න";
+"call_unmute" = "නැවත ශබ්ද කරන්න";
+"call_speaker" = "ස්පීකරය";
+"call_hang_up" = "ඇමතුම කපන්න";
+"call_failed_signalling" = "නොමිලේ ඇමතුම ආරම්භ කිරීමට නොහැකි විය.";
+"call_failed_media" = "සම්බන්ධ වීමට පෙර නොමිලේ ඇමතුම කැඩී ගියේය.";
+"call_failed_unavailable" = "යෙදුමේ මෙම අනුවාදයේ නොමිලේ ඇමතුම් ලබා ගත නොහැක.";
+"call_fallback_question" = "ඒ වෙනුවට සාමාන්‍ය ලෙස අමතන්නද?";
+"call_fallback_action" = "සාමාන්‍ය ලෙස අමතන්න";
+
+/* SCR-DI-032 · රියදුරු SOS. */
+"sos_title" = "රියදුරු SOS";
+"sos_armed" = "දැන් යැවීමට SOS ඔබන්න, නැතහොත් රැඳී සිටින්න · එය තනිවම යයි.";
+"sos_waiting_position" = "ඔබේ ස්ථානය සොයමින්…";
+"sos_sending" = "යවමින්…";
+"sos_sending_body" = "ඔබේ ස්ථානය සහ මෙම ගමන කෙටි පණිවිඩයකින් ඔබේ හදිසි සම්බන්ධතාවට යවමින්.";
+"sos_dispatched" = "යවා ඇත. අපගේ මෙහෙයුම් කණ්ඩායමට දැන් මෙම ගමන පෙනේ.";
+"sos_failed" = "දැනුම්දීම ඔබේ දුරකථනයෙන් පිටව ගියේ නැත. නැවත උත්සාහ කරන්න.";
+"sos_no_position" = "ඔබේ ස්ථානය තවම දන්නේ නැත, දැනුම්දීමට එය අවශ්‍යයි. මොහොතක් රැඳී නැවත උත්සාහ කරන්න.";
+"sos_no_contact" = "තවම හදිසි සම්බන්ධතාවක් නැත. ඔබේ පැතිකඩෙන් එකක් එක් කරන්න.";
+"sos_sms_sent" = "යවා ඇත";
+"sos_sms_failed" = "කෙටි පණිවිඩය අසාර්ථකයි";
+"sos_sms_no_contact" = "සම්බන්ධතාවක් නැත";
+
+/* SCR-DI-033 / 033a · සහාය, දෛනික ගාස්තු ආපසු ගෙවීම සහ ප්‍රශ්නයක් යොමු කිරීම. */
+"support_title" = "සහාය";
+"support_search_hint" = "උදව් සොයන්න";
+"support_search_empty" = "ඊට ගැලපෙන කිසිවක් නැත. ප්‍රශ්නයක් යොමු කරන්න, අපි පිළිතුරු දෙන්නෙමු.";
+"support_quick_actions" = "ඉක්මන් ක්‍රියා";
+"support_refund_title" = "දෛනික ගාස්තුව ආපසු ඉල්ලන්න";
+"support_refund_hint" = "උදාහරණයක් ලෙස, ඔබ සබැඳි වූ විට යෙදුම නතර විය.";
+"support_refund_action" = "ඉල්ලන්න";
+"support_your_tickets" = "ඔබේ ප්‍රශ්න";
+"support_tickets_empty" = "ඔබ තවම ප්‍රශ්නයක් යොමු කර නැත.";
+"support_raise_ticket" = "ප්‍රශ්නයක් යොමු කරන්න";
+"support_ticket_raised" = "ප්‍රශ්නය යොමු කෙරිණි. එය පහත ලැයිස්තුවේ ඇත.";
+"support_issue_label" = "ප්‍රශ්නය විස්තර කරන්න";
+"support_issue_hint" = "වැරදුණේ කුමක්දැයි අපට කියන්න…";
+"support_related_trip" = "අදාළ ගමන";
+"support_trip_none" = "ගමනක් නැත";
+"support_trip_unnamed" = "ගමන";
+"support_attach" = "තිර රුවක් අමුණන්න";
+"support_attached" = "තිර රුව අමුණා ඇත";
+"support_submit_ticket" = "ප්‍රශ්නය යවන්න";
+"support_loading" = "පූරණය වෙමින්…";
+"support_category_refund" = "දෛනික ගාස්තුව ආපසු ගෙවීම";
+"support_category_general" = "සහාය ඉල්ලීම";
+"support_status_open" = "විවෘතයි";
+"support_status_in_progress" = "බලමින් සිටී";
+"support_status_resolved" = "විසඳා ඇත";
+"support_event_opened" = "ඔබ මෙය යොමු කළා";
+"support_event_responded" = "සහාය කණ්ඩායම පිළිතුරු දුන්නා";
+"support_event_resolved" = "විසඳූ ලෙස සලකුණු කර ඇත";
+"support_event_reopened" = "නැවත විවෘත කෙරිණි";
+
+/* SCR-DI-034 · දැනුම්දීම්. */
+"alerts_title" = "දැනුම්දීම්";
+"alerts_empty" = "තවම මෙහි කිසිවක් නැත.";
+"alerts_mark_all_read" = "සියල්ල කියවූ ලෙස සලකුණු කරන්න";
+"alert_kind_ride_offer" = "ගමන් ඉල්ලීම";
+"alert_kind_directional" = "ගමනාන්ත පෙරහන";
+"alert_kind_low_balance" = "ශේෂය අඩුයි";
+"alert_kind_money_in" = "ගෙවීම තහවුරුයි";
+"alert_kind_share" = "බෙදාගැනීමේ ඉල්ලීම";
+"alert_kind_package" = "පාර්සලය";
+"alert_kind_safety" = "ආරක්ෂක දැනුම්දීම";
+"alert_kind_other" = "දැනුම්දීම";
+"alert_age_now" = "දැන්";
+"alert_age_minutes" = "මිනිත්තු %1$d කට පෙර";
+"alert_age_hours" = "පැය %1$d කට පෙර";
+"alert_age_yesterday" = "ඊයේ";
+"alert_age_days" = "දින %1$d කට පෙර";
+
+/* SCR-DI-035 · සම්බන්ධතාවක් නොමැති විට රැස් කිරීම. */
+"offline_buffered_title" = "රැස් කළ ස්ථාන දත්ත";
+"offline_buffered_replay" = "සම්බන්ධතාවය නැවත ලැබුණු විට ඒවා යවනු ලැබේ.";
+"offline_buffered_count" = "%1$d ක් පෝලිමේ";
+
+/* C093 දෝෂ පිටපත. */
+"error_no_emergency_contact" = "හදිසි සම්බන්ධතාවක් ලේඛනගත වී නැති නිසා කෙටි පණිවිඩයක් ගියේ නැත. දැනුම්දීම අපගේ මෙහෙයුම් කණ්ඩායමට ලැබුණි.";
+"error_not_ride_participant" = "මෙය ඔබේ ගමන නොවේ.";
+
+/* සෙවුම් කොටුව හිස් කිරීමේ බොත්තම. */
+"action_clear" = "හිස් කරන්න";

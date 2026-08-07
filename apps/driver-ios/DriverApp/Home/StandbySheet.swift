@@ -26,6 +26,10 @@ struct StandbySheet: View {
 
     var body: some View {
         DashboardSheet {
+            // SCR-DI-035 (Δ C093). Draws nothing while the handset is online or the backlog is
+            // empty — see its own documentation.
+            BufferedSamplesCard()
+
             OnlineToggle(
                 label: (state.isOnline ? "home_online" : "home_offline").localised,
                 isOnline: state.isOnline,

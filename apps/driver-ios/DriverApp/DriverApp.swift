@@ -10,9 +10,10 @@ import SwiftUI
 @main
 struct DriverApp: App {
 
-    /// The delegate exists for exactly the three callbacks SwiftUI has no equivalent for: the APNs
-    /// device token, a push delivered while the app is running, and a push tapped from the
-    /// notification centre. Everything else about launch is in ``DriverGraph``.
+    /// The delegate exists for exactly the four callbacks SwiftUI has no equivalent for: the APNs
+    /// device token, a push delivered while the app is running, a push tapped from the notification
+    /// centre, and a **silent** push the system woke the app for (Δ C093). Everything else about
+    /// launch is in ``DriverGraph``.
     @UIApplicationDelegateAdaptor(DriverAppDelegate.self) private var delegate
 
     @StateObject private var graph = DriverGraph()

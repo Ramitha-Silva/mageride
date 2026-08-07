@@ -48,18 +48,23 @@ apps/driver-ios/
 │   ├── Sharing/                 C092 · SCR-DI-028 — Mode B grants, per vehicle
 │   ├── Profile/                 C092 · SCR-DI-029 + its three editors and the contact picker
 │   ├── History/                 C092 · SCR-DI-030 + the rate-passenger sheet
+│   ├── Comms/                   C093 · SCR-DI-031 + the WebRTC seam and the CallKit provider
+│   ├── Safety/                  C093 · SCR-DI-032 — the driver SOS
+│   ├── Support/                 C093 · SCR-DI-033 / 033a + the FAQ and the ticket sheets
+│   ├── Notifications/           C093 · SCR-DI-034 — the local push inbox
 │   ├── Menu/                    C088 · SCR-DI-036 — AL-31's drawer, as a tab
 │   ├── Onboarding/              C086 · SCR-DI-001, 002, 003, 003a, 007 + their data layer
 │   ├── UI/                      the wireframe's shapes as views — fields, tiles, cards, pills
 │   ├── DriverApp.swift          @main. One App, one shell.
-│   ├── DriverAppDelegate.swift  the three callbacks SwiftUI has no equivalent for
+│   ├── DriverAppDelegate.swift  the four callbacks SwiftUI has no equivalent for
 │   ├── Info.plist               background modes, purpose strings, the MageRide config dict
 │   ├── DriverApp.entitlements   App Attest, APNs, the payment Universal Link
 │   ├── DI/                      DriverEnvironment (the only Info.plist reader) + DriverGraph
 │   ├── Nav/                     DriverRoute (every destination), DriverTab, the navigator,
 │   │                            DriverDestinations (the ONE route→view switch)
 │   ├── Shell/                   DriverShell (TabView host), offline banner, update gate,
-│   │                            connectivity, the three cross-cutting subscriptions
+│   │                            connectivity, the three cross-cutting subscriptions,
+│   │                            C093's buffered-samples card
 │   ├── Theme/                   D2' §0.2 — colour, type, spacing/radius/elevation, the CTA
 │   ├── Map/                     MageRideMapView (MapLibre host), MapStyles, VehicleLayers
 │   ├── Location/                PositionService (CLLocationManager) + CocoaMqttTransport
@@ -417,7 +422,91 @@ DriverApp/
   needed — this cluster crosses the bridge only for DTOs and two `IosInstantKt` conversions that
   already existed.
 
-**To add a screen (C093):**
+## Cluster 8 (C093) — the call, the alarm, support and the system states
+
+```
+DriverApp/
+├── Comms/          SCR-DI-031 + the WebRTC seam and the CallKit provider
+├── Safety/         SCR-DI-032 — the driver SOS
+├── Support/        SCR-DI-033 / 033a + the FAQ, the ticket thread and the raise-ticket sheet
+├── Notifications/  SCR-DI-034 — the local push inbox
+└── Shell/BufferedSamplesCard.swift   SCR-DI-035's other half
+```
+
+- **The VoIP media client is NOT here, and it is a dependency wall rather than a decision** — the
+  same wall C075 hit from the other side, reached differently. `livekit/client-sdk-swift` is a
+  **remote** Swift package and this project's only package today is `shared/swiftpm/MageRideShared`,
+  resolved by path; it also needs `NSMicrophoneUsageDescription`, which `Info.plist` keeps out until
+  there is code behind it (the mirror of the Android manifest's missing `RECORD_AUDIO`); and neither
+  can be verified on a host that cannot compile iOS. So `VoipEngine` is the seam, `AbsentVoipEngine`
+  is what `DriverGraph` binds, and SCR-DI-031's **signalling half is real** while the media half
+  reports `noMediaClient` — which is exactly the condition AL-48 legislates for. `CommsFenceTests`
+  pins the absent purpose string, so the day the engine lands that assertion fails and asks for it.
+- **CallKit is driven by the LINK, never by the tap** (Δ C093, and the whole reason the ordering is
+  written down). `CallKitSession.startedConnecting` fires on `CallLink.connecting` and `connected()`
+  on `.connected`; a failure calls `end(reason: .failed)` **before** *"Call normally instead?"* is
+  offered. That last ordering is load-bearing: `SystemRideContact.dial` refuses while
+  `CXCallObserver` sees a call (C088's guard, which was waiting for this class), so a reported call
+  left up makes AL-48's fallback a button that silently does nothing. It also means a build with no
+  media client reports **no call at all** rather than flashing one into the status bar and out again.
+- **The reported handle is `.generic`, never `.phoneNumber`.** P-05 keeps the rider's number hidden
+  on a free call, and a `.phoneNumber` handle is rendered on the lock screen *and written into the
+  handset's own call history*.
+- **`POST /v1/sos` has no positionless form**, so SCR-DI-032 waits for a fix before it arms and the
+  disc reads `SOS` rather than a countdown until one arrives. BR-29.4 contemplates a positionless SOS
+  for the *web* surface and the app-facing contract carries no equivalent — the C075 gap, carried
+  forward. In practice it is milliseconds: `DriverLocationSource` emits the **last known** fix first,
+  and SCR-DI-015 already disables its SOS button without one.
+- **The three-second cancel window is not a spec number**, and it spends the D-33 budget. §14.3 fixes
+  p99 ≤ 5 s for the *dispatch* and says nothing about a confirmation. `SosSmsStatus.failed` is **not**
+  an error state: the alert is recorded and is on the admin live feed either way, so the screen stays
+  dispatched and only the pill says which leg failed.
+- **`RideContact` grew safety-svc rather than SCR-DI-032 growing a repository** — the alarm is raised
+  from the same sheet as the call button, it is about the same ride, and `POST /v1/sos` is the only
+  safety operation this app reaches. `triggerSos` is also the one method on that protocol that
+  **throws**; every other member is best-effort.
+- **The daily-fee refund is a `category`, not an endpoint** (US-9.23). It and *"Raise a ticket"* are
+  one flow — SCR-DI-033a — posting the same `POST /v1/support/tickets`; `daily_fee_refund` is what
+  derives `TicketQueue.finance`. The screenshot is a **separate upload** whose id the ticket links,
+  and a failed upload never costs the driver their ticket.
+- **`TicketDetail.description` collides with `NSObject.description` on the bridge**, so it is read
+  through `IosTicketKt.ticketDescription`. That is the first *name*-collision helper in this target —
+  the other eight `iosMain` helpers exist for defaulted parameters or for `memcpy` — and it is worth
+  checking any `:shared` property called `description`, `hash`, `debugDescription` or `class` before
+  reaching for it from Swift.
+- **SCR-DI-034 is read from the device, not from the platform.** There is no *"list my
+  notifications"* operation anywhere on the app-facing surface, so the list is `mobile_db_schema.md`
+  §1.6 — which is also why it works with no connection. **Δ iOS:** `onMessageReceived` fires for every
+  data message on Android; iOS hands a push to the app in three cases only — presented in the
+  foreground, tapped, or `content-available` and the system chose to wake us. All three now reach
+  `DriverAppDelegate.deliver(_:title:body:)`; a silent push the system declines to deliver is never
+  seen, and no local inbox on this platform can do better.
+- **`DriverDatabase` is the app's deferred answer to C018's un-bound database**, and it is an
+  `actor`: opening is `suspend`, the `await` inside `get()` is a suspension point two callers could
+  race, and every call on the handle is blocking. `PositionService` was moved onto it in the same
+  change, so the position buffer, the alert inbox and SCR-DI-035's backlog count are three callers of
+  **one** connection to one protected file.
+- **`BufferedSampleCounter` reads the table, not `PositionService.bufferedCount`**, and the
+  difference is a restart: that property is the live pipeline's and is zero when the service is not
+  running — which is exactly the case the card exists for.
+- **Swift has no key paths into tuples** (the C087 finding, and this cluster is where it bites four
+  times). `ForEach(Array(x.enumerated()), id: \.element.id)` does not compile; key the collection
+  itself and ask it whether a row is the last one.
+- Reusable UI added here: `SearchField` (the wireframe's `.searchbar`, drawn rather than
+  `.searchable` — that modifier belongs to a `List` and lives in the navigation bar, and this one is
+  in the body), `MultilineTextField` (a `TextEditor` with a drawn placeholder, because SCR-DI-033a
+  reserves three lines and `TextField(axis:)` cannot), `MoneyFormat.timer` (`00:42` — minutes and
+  seconds, distinct from `clock`'s `01:12:40` and `countdown`'s `1:42`), `MageRideCallColor` +
+  `MageRideSosColor` (the fourth and fifth palettes off §0.2's scheme, after the scanner and the
+  offer takeover), and `MageRideControl.callAction` / `.callEnd` / `.avatarLarge` / `.sosButton` /
+  `.sosHalo` / `.searchBar`. `avatarLarge` also replaced SCR-DI-003a's private `84`.
+- Three `:shared` `iosMain` helpers were added: `fileUploadOf` (the `memcpy` reason
+  `IosCapturedDocument` gives, for the two multipart parts that carry **no** AL-43 provenance),
+  `IosNotificationInbox.kt`'s four §1.6 functions (the SQLDelight `Query<T>` types are from a
+  dependency the framework does not `export`, and a view must not decode `data_json` per redraw), and
+  `ticketDescription` (the `NSObject` name collision above).
+
+**To add a screen:**
 
 1. Its route is already in `Nav/DriverRoute.swift`. Use it; do not invent a case.
 2. Replace its `placeholder(...)` line in `Nav/DriverDestinations.swift` with the real view. That
@@ -525,6 +614,16 @@ Every one of these is D2' §C or a platform constraint, and each is called out a
 | Language change (SCR-DI-029) | `Activity.recreate()` re-inflates every resource | no `recreate()`; `DriverLocale` redirects the bundle and views rebuild |
 | Profile editors (SCR-DI-029) | three `ModalBottomSheet`s | three `.sheet`s at `.medium` |
 | Rate passenger (SCR-DI-030) | `ModalBottomSheet` | `.sheet` with detent `.medium` — the cell's own clause |
+| Call UI (SCR-DI-031) | `ConnectionService`, unimplemented with the engine | **CallKit** — `CXProvider`, reported from the link; the audio session, the lock screen and `CXCallObserver` |
+| VoIP fallback dial (SCR-DI-031) | a number handed back for a `LaunchedEffect` to `ACTION_DIAL` | placed here, through `RideContact.dial`'s `CXCallObserver` guard |
+| Back on a takeover (SCR-DI-031/032) | a `BackHandler` that has to be disabled mid-request | nothing to disable — a `fullScreenCover` has no interactive dismissal |
+| Support search (SCR-DI-033) | an `OutlinedTextField` | a drawn `SearchField` — the wireframe puts `.searchbar` in the **body**, not the navigation bar |
+| Related trip (SCR-DI-033a) | `ExposedDropdownMenuBox` | a `.menu` `Picker` — D2' §SCR-DI-033a's own *"`Picker`"* |
+| Ticket sheets (SCR-DI-033/033a) | three `ModalBottomSheet`s | three `.sheet`s at `.medium`, ranked through **one** `item:` binding |
+| Screenshot picker (SCR-DI-033a) | `PickVisualMedia`, no `READ_MEDIA_IMAGES` | `PhotosPicker`, no `NSPhotoLibraryUsageDescription` |
+| Alert shimmer (SCR-DI-034) | three hand-built placeholder rows | `.redacted(reason: .placeholder)` over four real rows — respects Reduce Motion for free |
+| Filing a push (SCR-DI-034) | `onMessageReceived` fires for every data message | three doors only: foreground, tapped, or `content-available` and the system woke us |
+| Buffered count (SCR-DI-035) | a counter over `gps_buffer` for the active vehicle | the same, on an `actor` — the Native SQLDelight driver is blocking |
 
 ## Things that will bite
 

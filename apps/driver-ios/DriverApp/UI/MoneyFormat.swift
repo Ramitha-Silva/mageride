@@ -93,6 +93,21 @@ enum MoneyFormat {
             .joined(separator: ":")
     }
 
+    /// `00:42` — SCR-DI-031's call timer (Δ C093).
+    ///
+    /// A **third** clock, and the distinction is the unit that leads: ``clock(seconds:)`` leads with
+    /// hours because a shift is hours long, ``countdown(seconds:)`` leads with hours because a
+    /// Directional activation is, and a phone call leads with **minutes** — `01:12:40` on a
+    /// forty-two-second call would be two fields of noise in front of the only one that is moving.
+    /// A call past an hour keeps counting in minutes (`61:05`) rather than growing a field, which is
+    /// what every dialler on the platform does. Same function as
+    /// `apps/driver-android/.../ui/MoneyFormat.kt`'s `timer`.
+    static func timer(seconds: Int64) -> String {
+        let safe = max(seconds, 0)
+        return String(safe / secondsInMinute).leftPadded(to: 2)
+            + ":" + String(safe % secondsInMinute).leftPadded(to: 2)
+    }
+
     /// `1:42` — SCR-DI-013's *"1:42 left"*, hours and minutes only.
     ///
     /// Distinct from ``clock(seconds:)`` on purpose: a Directional activation is measured in hours

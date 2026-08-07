@@ -21,6 +21,13 @@ import UIKit
 /// two `comms.call_log` rows for one tap. What is CallKit-aware on *this* screen is the direct dial:
 /// it goes through ``dial(_:)``, which refuses while the system already has a call up rather than
 /// throwing the driver out of a conversation they are having with the same rider.
+///
+/// **Reaching the alarm is here too** (Δ C093), which is where `apps/driver-android`'s `RideContact`
+/// already put it: SCR-DI-032's `POST /v1/sos` is *about a ride the driver is on*, it is raised from
+/// the same sheet as the call button, and giving safety-svc a repository of its own would be a second
+/// seam over one call. ``triggerSos(rideId:at:)`` is the one method here that **throws** — every other
+/// member is best-effort, and an alarm that did not leave the handset is the one thing a driver has to
+/// be told about.
 @MainActor
 protocol RideContact: AnyObject {
 
@@ -29,7 +36,12 @@ protocol RideContact: AnyObject {
     /// A `CallType.directDial` call creates no session at all: the response is a `comms.call_log` row
     /// and nothing else, because a `tel:` dial cannot be server-verified. The log is **best-effort**
     /// for the same reason — a failure here must never stop the dial.
-    func startCall(rideId: String, kind: RideKind, type: CallType) async
+    ///
+    /// - Returns: The row and, for a free call, its session; `nil` when the call could not be
+    ///   recorded. Discardable, because a screen that is only logging a dial has nothing to do with
+    ///   it — SCR-DI-031 is the one caller that needs the answer (Δ C093).
+    @discardableResult
+    func startCall(rideId: String, kind: RideKind, type: CallType) async -> StartCallResponse?
 
     /// The same call, with the role **named** rather than derived (AL-33, Δ C089).
     ///
@@ -37,7 +49,29 @@ protocol RideContact: AnyObject {
     /// is being rung — the driver's tap is what decides, and the log has to record which. The kind-based
     /// form above is the passenger screen's and stays, because there the answer really is a property of
     /// the ride.
-    func startCall(rideId: String, calleeRole: CalleeRole, type: CallType) async
+    @discardableResult
+    func startCall(rideId: String, calleeRole: CalleeRole, type: CallType) async -> StartCallResponse?
+
+    /// `POST /v1/calls/{callId}/outcome` — how the call ended (Δ C093).
+    ///
+    /// **The only way the platform sees a call that never connected.** AL-48's fallback hangs on
+    /// `CallOutcome.voipFailed`: SCR-DI-031 sends it when it puts up *"Call normally instead?"*, and
+    /// the `direct_dial` row that follows on the same ride is then the fallback being taken rather
+    /// than a driver who simply preferred to dial.
+    ///
+    /// Best-effort, like the log it writes to. Nothing here reaches the driver.
+    func reportCallOutcome(callId: String, outcome: CallOutcome) async
+
+    /// `POST /v1/sos` — the driver's own SOS, during an active trip only (US-12.8, AL-13, Δ C093).
+    ///
+    /// D-33's dual gateway fans the SMS out in parallel and the response says which leg managed it.
+    /// `SosSmsStatus.failed` is **not** an error: the alert is recorded and is on the admin live feed
+    /// either way, and telling somebody in trouble that nothing happened would be worse than telling
+    /// them the SMS leg did not.
+    ///
+    /// **There is no positionless form.** `TriggerSosRequest.lat`/`.lng` are required, so a caller
+    /// with no fix has no request to make — see ``SosState/isAwaitingPosition``.
+    func triggerSos(rideId: String, at: GeoPoint) async throws -> SosDispatched
 
     /// Hands [phone] to the platform dialler.
     ///
@@ -47,25 +81,48 @@ protocol RideContact: AnyObject {
     func dial(_ phone: String) -> Bool
 }
 
-/// ``RideContact`` over voip-svc and the system dialler.
+/// ``RideContact`` over voip-svc, safety-svc and the system dialler.
 @MainActor
 final class SystemRideContact: RideContact {
 
     private let voip: VoipApi
+    private let safety: SafetyApi
 
-    init(voip: VoipApi) {
+    init(voip: VoipApi, safety: SafetyApi) {
         self.voip = voip
+        self.safety = safety
     }
 
-    func startCall(rideId: String, kind: RideKind, type: CallType) async {
+    @discardableResult
+    func startCall(rideId: String, kind: RideKind, type: CallType) async -> StartCallResponse? {
         await startCall(rideId: rideId, calleeRole: Self.calleeRole(kind), type: type)
     }
 
-    func startCall(rideId: String, calleeRole: CalleeRole, type: CallType) async {
+    @discardableResult
+    func startCall(rideId: String, calleeRole: CalleeRole, type: CallType) async -> StartCallResponse? {
         // Best-effort, and silently. A driver reaching the rider must never depend on
         // `comms.call_log` being writable, which is the same rule the Android twin states.
-        _ = try? await voip.startCall(
+        try? await voip.startCall(
             request: StartCallRequest(rideId: rideId, calleeRole: calleeRole, callType: type),
+            idempotencyKey: nil
+        )
+    }
+
+    func reportCallOutcome(callId: String, outcome: CallOutcome) async {
+        // Deliberately swallowed. `comms.call_log.outcome` is documented best-effort, and a driver
+        // mid-emergency must never be shown a failure about a log row.
+        _ = try? await voip.recordCallOutcome(
+            callId: callId,
+            request: RecordCallOutcomeRequest(outcome: outcome),
+            idempotencyKey: nil
+        )
+    }
+
+    func triggerSos(rideId: String, at: GeoPoint) async throws -> SosDispatched {
+        // `SosRole.driver`, always. This app has exactly one kind of user, and safety-svc keys the
+        // admin live feed and the SMS template on it.
+        try await safety.triggerSos(
+            request: TriggerSosRequest(rideId: rideId, lat: at.lat, lng: at.lng, role: SosRole.driver),
             idempotencyKey: nil
         )
     }

@@ -822,3 +822,116 @@
 "history_rate_no_passenger" = "This booking was made for somebody who is not registered, so there is nobody to rate.";
 "history_rate_submit" = "Submit rating";
 "history_passenger_unnamed" = "Passenger";
+
+/*
+  MageRide Driver — iOS · C093 driver-ios-comms-safety-support. English, the development region.
+
+  SCOPE. SCR-DI-031 the VoIP call, SCR-DI-032 the driver SOS, SCR-DI-033/033a support and the
+  daily-fee refund, SCR-DI-034 the alerts list, and SCR-DI-035's buffered-samples card. Keys are
+  `apps/driver-android/src/main/res/values…/strings.xml`'s, value for value, so the two apps stay a
+  diff rather than an archaeology exercise.
+
+  NOT HERE, and each is deliberate. `SOS` is an international distress signal and is
+  `SosLabels.sos`, a Swift constant, for the reason `Rs` and `+94` are (see MoneyFormat). The two
+  ticket category KEYS (`daily_fee_refund`, `general`) are `SupportCategories`' — they are server
+  values, not copy — while the labels beside them are `support_category_*` below. The CallKit
+  chrome, the PhotosPicker's chrome and the share sheet's are Apple's and are localised by iOS.
+*/
+
+/* SCR-DI-031 · the in-app VoIP call (US-6A.16, P-05, D-24, AL-48). "number hidden" is a property of
+   a LiveKit room rather than a promise the platform still makes — AL-48 withdrew masking — which is
+   why it is absent from the failure state, where a dial of the real number is the next thing
+   offered. */
+"call_in_app" = "In-app call · the number stays hidden";
+"call_rider" = "Rider";
+"call_rider_named" = "%1$@ (rider)";
+"call_connecting" = "Connecting…";
+"call_connected" = "Connected";
+"call_mute" = "Mute";
+"call_unmute" = "Unmute";
+"call_speaker" = "Speaker";
+"call_hang_up" = "Hang up";
+"call_failed_signalling" = "The free call could not be set up.";
+"call_failed_media" = "The free call dropped before it connected.";
+"call_failed_unavailable" = "Free calling is not available on this version of the app.";
+"call_fallback_question" = "Call normally instead?";
+"call_fallback_action" = "Call normally";
+
+/* SCR-DI-032 · the driver SOS (US-12.8, AL-13, D-33). `sos_failed` is the alert that never left the
+   handset; a `Failed` SMS pill is NOT that and does not say so — the alert is recorded and is on
+   the admin live feed either way. */
+"sos_title" = "Driver SOS";
+"sos_armed" = "Tap SOS to send now, or wait and it goes by itself.";
+"sos_waiting_position" = "Waiting for your position…";
+"sos_sending" = "Sending…";
+"sos_sending_body" = "Sending your position and this trip to your emergency contact by SMS.";
+"sos_dispatched" = "Sent. Our operators can see this trip now.";
+"sos_failed" = "The alert did not leave your phone. Try again.";
+"sos_no_position" = "Your position is not known yet, and the alert needs it. Wait a moment and try again.";
+"sos_no_contact" = "No emergency contact yet. Add one in your profile.";
+"sos_sms_sent" = "Sent";
+"sos_sms_failed" = "SMS failed";
+"sos_sms_no_contact" = "No contact";
+
+/* SCR-DI-033 / 033a · support, the daily-fee refund and the raise-ticket sheet (US-16.1/16.2,
+   US-9.23). Both entry points post the same operation and differ only in `category`. */
+"support_title" = "Support";
+"support_search_hint" = "Search help";
+"support_search_empty" = "Nothing matches that. Raise a ticket and we will answer.";
+"support_quick_actions" = "Quick actions";
+"support_refund_title" = "Request daily-fee refund";
+"support_refund_hint" = "For example, the app crashed when you went online.";
+"support_refund_action" = "Request";
+"support_your_tickets" = "Your tickets";
+"support_tickets_empty" = "You have not raised a ticket yet.";
+"support_raise_ticket" = "Raise a ticket";
+"support_ticket_raised" = "Ticket raised. It is in the list below.";
+"support_issue_label" = "Issue description";
+"support_issue_hint" = "Tell us what went wrong…";
+"support_related_trip" = "Related trip";
+"support_trip_none" = "No trip";
+"support_trip_unnamed" = "Trip";
+"support_attach" = "Attach a screenshot";
+"support_attached" = "Screenshot attached";
+"support_submit_ticket" = "Submit ticket";
+"support_loading" = "Loading…";
+"support_category_refund" = "Daily-fee refund";
+"support_category_general" = "Support request";
+"support_status_open" = "Open";
+"support_status_in_progress" = "Being looked at";
+"support_status_resolved" = "Resolved";
+"support_event_opened" = "You raised this";
+"support_event_responded" = "Support replied";
+"support_event_resolved" = "Marked resolved";
+"support_event_reopened" = "Opened again";
+
+/* SCR-DI-034 · alerts (Epic 10, D5' §14.4). A kind this build has never heard of falls back to
+   `alert_kind_other`, because `data.kind` grows without a contract change. */
+"alerts_title" = "Alerts";
+"alerts_empty" = "Nothing here yet.";
+"alerts_mark_all_read" = "Mark all read";
+"alert_kind_ride_offer" = "Ride offer";
+"alert_kind_directional" = "Destination filter";
+"alert_kind_low_balance" = "Low balance";
+"alert_kind_money_in" = "Payment confirmed";
+"alert_kind_share" = "Share request";
+"alert_kind_package" = "Package";
+"alert_kind_safety" = "Safety alert";
+"alert_kind_other" = "Notice";
+"alert_age_now" = "Just now";
+"alert_age_minutes" = "%1$d min ago";
+"alert_age_hours" = "%1$d h ago";
+"alert_age_yesterday" = "Yesterday";
+"alert_age_days" = "%1$d d ago";
+
+/* SCR-DI-035 · the buffered-samples card (R-17, US-15.1). */
+"offline_buffered_title" = "Buffered samples";
+"offline_buffered_replay" = "They will be sent when the connection is back.";
+"offline_buffered_count" = "%1$d queued";
+
+/* C093 error copy (D-26 — resolved from the kebab code, never from the server sentence). */
+"error_no_emergency_contact" = "No emergency contact is on file, so no SMS went out. The alert still reached our operators.";
+"error_not_ride_participant" = "This is not your trip.";
+
+/* The search field's clear button, which VoiceOver reads and nothing else does. */
+"action_clear" = "Clear";

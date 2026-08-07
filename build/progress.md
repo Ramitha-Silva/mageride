@@ -119,7 +119,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C090 | driver-ios-jobs-level-earnings | 4b | PARTIAL | 2026-08-07 | **Written in full; NOT compiled — this host cannot build iOS** (root CLAUDE.md), so the DoD is unverified and the status stays PARTIAL until `xcodebuild … test` on macOS. Verified here: `:shared:compileKotlinIosArm64 detekt ktlintCheck` green with the **three new `iosMain` helpers** type-checked, the `.pbxproj` regenerated from the tree (**113 app sources, 40 test sources**), a brace/paren/string sweep over all 153 Swift files, an import and string-key audit, and the three `Localizable.strings` parsed with a real old-style-plist parser (**353 keys × 3**, key sets identical, none blank, none left in English, no specifier drift, no Android `%n$s` left behind). SCR-DI-017/018/019/020 built — **14 Swift files, 6 XCTest suites across 7 test files, 39 keys × si/ta/en** (C072's key names and C072's translations). **The board is post-intent only and the fence is asserted**; **US-6A.8 is three-valued** so an unread level renders as *"we could not read your Driver Level"* and never as the L1 gate; **T-30 is one instant read by two screens** through `jobBoardGoesLiveAtMillis` — SCR-DI-017's expiry and SCR-DI-018's *"reminder sent"* are the same comparison; earnings print query-svc's own summary and never a second total; every clock and bucket is Asia/Colombo through `:shared`'s zone. **Δ iOS: the trend is Swift Charts**, which is `driver_ios.html`'s own clause for the cell, and the period strip is a segmented `Picker`, which is what `.tabbar2` draws on this platform. One C072 defect found and not replicated (`DriverLevelState.error` is unreachable). Five C072 spec gaps carried forward, one new iOS delta — see the handoff |
 | C091 | driver-ios-wallet-credit | 4b | PARTIAL | 2026-08-07 | **Written in full; NOT compiled — this host cannot build iOS** (root CLAUDE.md), so the DoD is unverified and the status stays PARTIAL until `xcodebuild … test` on macOS. Verified here: `:shared:compileKotlinIosArm64 detekt ktlintCheck` green with the **new `iosMain` helper** type-checked, the `.pbxproj` regenerated from the tree (**134 app sources, 47 test sources**), a brace/paren/string sweep over all 181 Swift files, an import and string-key audit (276 literal keys + 174 assigned, all resolving), and the three `Localizable.strings` re-parsed (**460 keys × 3**, identical key sets, none blank, none left in English, no specifier drift). SCR-DI-021/022/023/024/025 built — **20 Swift files, 7 XCTest suites across 6 test files, 107 keys × si/ta/en** (C073's key names and C073's translations, plus five this platform needs). **The biggest finding is a platform hazard, not a spec gap: a Kotlin `require` is a caught exception on Android and a TERMINATED PROCESS here**, and three `:shared` constructors this cluster builds from server data carry one — `DailyFeeSchedule`, `VoucherCatalogue` and `CreditTransferIntent` — so each is validated in Swift first and the refusal becomes copy. A Rs 1,000 voucher at 10 % prices at Rs 900, credits Rs 1,000 and goes to `POST /v1/vouchers/purchase`; a transfer's two legs are equal at every amount; no source or copy in the cluster names a bank transfer or a commission in any of the three languages (`WalletFenceTests`, which reads the source off disk through `#filePath`). Zero new dependencies — AL-15's encoder is `CIQRCodeGenerator`, so **no QR decoder is linked into this target at all**. Eight Δ iOS rows added to the target's Section C table; C073's five spec gaps carried forward unchanged |
 | C092 | driver-ios-tracker-sharing-profile | 4b | PARTIAL | 2026-08-07 | **Written in full; NOT compiled — this host cannot build iOS** (root CLAUDE.md), so the DoD is unverified and the status stays PARTIAL until `xcodebuild … test` on macOS. Verified here: the `.pbxproj` regenerated from the tree (**156 app sources, 54 test sources**), a brace/paren/string sweep over all 210 Swift files, a string-key audit (every key the four screens reference resolves, and every key declared is referenced), an import audit over the new files, and the three `Localizable.strings` re-parsed with a real old-style-plist parser (**544 keys × 3**, identical key sets, none blank, none left in English, no specifier drift). `:shared` is untouched — this cluster crosses the bridge for DTOs only. SCR-DI-027/028/029/030 built — **22 Swift files, 5 XCTest suites across 6 test files, 84 keys × si/ta/en** (C074's key names and C074's translations). **The C074 fence is the same decorator here**: `TrackerPositionPublisher` wraps the service publisher in `DriverGraph`, which closes all three doors onto the position plane at once, and pairing also stops a stream already running. **Δ iOS: the device QR is `DataScannerViewController`** — D2' §SCR-DI-027's own SwiftUI column, first-party, and **the first decoder linked into this target** (`WalletFenceTests` still pins AL-34 for the wallet). SCR-DI-028's chip row is a segmented `Picker` and its accept/reject are `.swipeActions` with no full swipe on the admitting edge; `ShareExpiry` needs one time-zone hop where Android needs two. SCR-DI-029's contact picker is `CNContactPickerViewController`, which needs **no contacts permission and no usage-description key**, and the driver's platform id is copyable (C091's handoff asked for it). Six C074 spec gaps carried forward unchanged; nine Δ iOS rows added to the target's Section C table |
-| C093 | driver-ios-comms-safety-support | 4b | PENDING | | |
+| C093 | driver-ios-comms-safety-support | 4b | PARTIAL | 2026-08-07 | written in full; iOS cannot compile on this Linux host — `:shared`'s new iosMain half verified here |
 | C094 | passenger-ios-shell | 4b | PENDING | | |
 | C095 | passenger-ios-auth-onboarding | 4b | PENDING | | |
 | C096 | passenger-ios-live-map-search | 4b | PENDING | | |
@@ -14614,4 +14614,134 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   `ShareExpiryTests.swift`, `DriverProfileModelTests.swift`, `RideHistoryModelTests.swift`. Tests,
   edited: `DashboardTestKit.swift` (a `riderId` on the ride fixture), `OnboardingTestKit.swift`
   (`logOut`), `VehicleTestKit.swift` (`isCodeScannerSupported`). Plus
+  `DriverApp.xcodeproj/project.pbxproj` (regenerated) and `apps/driver-ios/CLAUDE.md`.
+
+- **Component:** C093 driver-ios-comms-safety-support — 2026-08-07
+- **Status:** PARTIAL — **written in full and not compiled.** Root CLAUDE.md: *"iOS and KMP-iOS targets
+  do NOT compile on this Linux host … compile/verify runs on a Mac."* Every DoD line is written and
+  none of the Swift is proven, so the status stays PARTIAL until `xcodebuild -project
+  apps/driver-ios/DriverApp.xcodeproj -scheme DriverApp -destination 'platform=iOS Simulator,name=iPhone 15'
+  test` runs green on macOS — with `./gradlew :shared:assembleXCFramework` **first**, or SPM fails at
+  package resolution.
+
+  What *was* verified on this host, and it is more than C092 could verify because this cluster touches
+  `:shared`: **`./gradlew :shared:compileKotlinIosArm64 :shared:detekt :shared:ktlintCheck` green**, so
+  the three new `iosMain` files are type-checked against the iOS target rather than only read; and
+  **`:shared:testDebugUnitTest` green**, so nothing in the shared module regressed. On the app side —
+  the `.pbxproj` regenerated from the tree (**175 app sources, 60 test sources, 3 resources, 2
+  localised tables**); a comment-, string- and interpolation-aware delimiter sweep over all **235**
+  Swift files; a string-key audit in both directions (**77 C093 keys declared, all 77 referenced**, and
+  every key the four screens reference resolves in `en.lproj`); an import audit over the new app and
+  test files; the three `Localizable.strings` re-parsed with a real old-style-plist parser — **621 keys
+  × 3**, identical key sets, none blank, none left in English, no format-specifier drift; and the four
+  `CommsFenceTests` source assertions re-run as a script against the tree they read.
+
+- **Notes:**
+
+  **The VoIP media client is absent for a different reason than it is on Android, and both are walls
+  rather than decisions.** C075 could not add `io.livekit:livekit-android` because its `audioswitch`
+  transitive is JitPack-only and this repo resolves from `mavenCentral()` alone. Here the artefact is
+  `livekit/client-sdk-swift`, and the obstacle is that it is a **remote** Swift package in a project
+  whose only package today (`shared/swiftpm/MageRideShared`) is resolved **by path** — changing what
+  `xcodebuild` must fetch before it can build at all is a supply-chain decision about the app target,
+  not a screen's — plus `NSMicrophoneUsageDescription`, which `Info.plist`'s own header keeps out until
+  there is code behind it, and the fact that none of it could be verified here anyway. So `VoipEngine`
+  is the seam, `AbsentVoipEngine` is the binding, and SCR-DI-031's **signalling half is real**:
+  `POST /v1/calls/start` mints the room and writes `comms.call_log`, the engine reports
+  `noMediaClient`, `POST /v1/calls/{callId}/outcome` records `voip_failed`, and AL-48's *"Call normally
+  instead?"* reaches the rider on a `tel:` dial. Landing the real engine is one binding plus one
+  purpose string — and `CommsFenceTests.testNoMicrophonePurposeStringShipsWhileNoEngineNeedsOne` is
+  written so that it **fails** on the day the string is added, which is when somebody should be
+  reading this paragraph.
+
+  **CallKit is real, and it is driven by the LINK rather than by the tap (Δ C093).** D2' §SCR-DI-031 is
+  *"**iOS** CallKit"* and the wireframe's cell is titled for it, so `CallKitSession` is a genuine
+  `CXProvider`: it buys the audio session, the lock-screen call, the Recents entry and — the one that
+  matters today — `CXCallObserver.calls`, which C088's `SystemRideContact.dial` has been checking since
+  the dashboard landed. `startedConnecting` fires on `CallLink.connecting` and `connected()` on
+  `.connected`; a failure calls `end(reason: .failed)` **before** the fallback is offered. Two
+  consequences, both deliberate. A build with no media client reports **no call at all** rather than
+  flashing one into the status bar and out again for a call that never happened. And the end-before-dial
+  ordering is load-bearing: a reported call left up makes AL-48's *"Call normally"* a button that
+  silently does nothing, because `dial` refuses while the system has a call. `VoipCallModelTests` pins
+  that ordering as its own test. The reported handle is `CXHandle(type: .generic)` and never
+  `.phoneNumber` — a `.phoneNumber` handle is rendered on the lock screen *and written into the
+  handset's own call history*, which would leak precisely the number P-05 and AL-48 keep hidden.
+
+  **`RideContact` grew safety-svc and an outcome report rather than SCR-DI-032 growing a repository**,
+  which is where `apps/driver-android`'s `RideContact` already put both: the alarm is raised from the
+  same sheet as the call button, it is about the same ride, and `POST /v1/sos` is the only safety
+  operation this app reaches. `startCall` now **returns** its `StartCallResponse?` (`@discardableResult`,
+  so C089's delivery call sites are unchanged) because SCR-DI-031 needs the `callId` for the outcome and
+  the `session` for the room; `triggerSos` is the one member on that protocol that **throws**, because
+  an alarm that did not leave the handset is the one thing a driver has to be told about.
+
+  **Spec gap carried forward from C075, unchanged: `POST /v1/sos` has no positionless form.**
+  `TriggerSosRequest.lat`/`.lng` are required, so SCR-DI-032 waits for a fix before it arms and the disc
+  reads `SOS` rather than a countdown until one arrives. BR-29.4 contemplates exactly this case for the
+  *web* surface — *"geolocation denied → SOS still fires with the last known driver-reported position"* —
+  and the app-facing contract carries no equivalent. In practice it is milliseconds
+  (`DriverLocationSource` emits the last-known fix before it registers for updates, and SCR-DI-015
+  already disables its SOS button without one), but a handset that has never had a fix cannot raise an
+  alarm from this app at all. **The three-second cancel window is likewise not a spec number** and
+  spends the D-33 budget: §14.3 fixes p99 ≤ 5 s for the *dispatch* and says nothing about a
+  confirmation. `SosSmsStatus.Failed` is **not** an error state on that screen — the alert is recorded
+  and is on the admin live feed either way.
+
+  **`TicketDetail.description` collides with `NSObject.description` on the Objective-C bridge**, so it
+  is read through a new `:shared` helper (`IosTicketKt.ticketDescription`). This is the first *name*
+  collision this app has hit — the other `iosMain` helpers exist for defaulted parameters or for a
+  `memcpy` — and it is worth a check before reaching from Swift for any `:shared` property called
+  `description`, `hash`, `debugDescription` or `class`. Left un-wrapped, the two outcomes are a build
+  failure on a host that cannot build, or SCR-DI-033's thread sheet printing `TicketDetail(ticketId=…)`
+  at a driver.
+
+  **SCR-DI-034's inbox is `:shared`'s too, and for a different reason.** `DriverDb.sql
+  .notificationsQueries.selectAll()` answers an `app.cash.sqldelight.Query<T>` — a type from a
+  dependency the framework does not `export` — so `IosNotificationInbox.kt` puts §1.6's four operations
+  behind plain `:shared` types and decodes `data_json` **once**, on read, rather than in a view that
+  would parse JSON per redraw. **Δ iOS worth recording:** `onMessageReceived` fires for every FCM data
+  message on Android; iOS hands a push to the app in three cases only — presented in the foreground,
+  tapped, or `content-available` and the system chose to wake us. All three now reach
+  `DriverAppDelegate.deliver(_:title:body:)` (the silent-push callback is new here, and the
+  `remote-notification` background mode was already declared for E-01). A `content-available` push the
+  system declines to deliver is never seen, and no device-local inbox on this platform can do better.
+
+  **`DriverDatabase` is C018's un-bound database, deferred and shared.** Opening is `suspend`, so it
+  cannot be a stored property built before the first frame; the `await` inside `get()` is a suspension
+  point two callers could race, so it is an `actor` rather than a `@MainActor` class — the same job the
+  `Mutex` does in the Android twin. `PositionService` was **moved onto it** in this change, which is
+  what makes the comment C088 left there true: the position buffer, the alert inbox and SCR-DI-035's
+  backlog count are three callers of one connection to one protected file rather than three connections.
+
+  **For C094 (passenger-ios-shell) and C103 —** the four things this cluster leaves behind that another
+  iOS target will want: `DriverDatabase` is the shape a passenger app's own handle should take;
+  `CallKitSession` is complete and P-05-safe and SCR-PA-028 is the same screen from the other side;
+  `SearchField` and `MultilineTextField` are in `UI/FormControls` beside C091's fields; and
+  `AlertKind`/`AlertAge` are the push catalogue and the relative-time table, which SCR-PA-031's alerts
+  list shares. **C103 raises `SWIFT_STRICT_CONCURRENCY`** and this cluster is the first to add `actor`s
+  — `DriverDatabase`, `LocalNotificationInbox` and `BufferedSampleCounter` each hold a non-`Sendable`
+  Kotlin or Foundation collaborator, which is exactly what that setting will surface first.
+  `Nav/DriverDestinations.swift` now leaves **exactly one** placeholder in this app: `.documents`, which
+  no component owns on either platform.
+
+  **Files —** `:shared`, new: `iosMain/.../db/IosNotificationInbox.kt`,
+  `iosMain/.../data/models/support/IosTicket.kt`. `:shared`, edited:
+  `iosMain/.../data/api/IosCapturedDocument.kt` (`fileUploadOf`, for the two multipart parts that carry
+  no AL-43 provenance). App, new: `DriverApp/Comms/` (`VoipEngine`, `CallKitSession`, `VoipCallModel`,
+  `VoipCallScreen`, `CommsDestinationView`), `DriverApp/Safety/` (`SosModel`, `SosScreen`),
+  `DriverApp/Support/` (`SupportRepository`, `SupportLabels`, `SupportModel`, `SupportScreen`,
+  `SupportSheets`), `DriverApp/Notifications/` (`NotificationInbox`, `AlertKind`, `AlertAge`,
+  `NotificationsModel`, `NotificationsScreen`), `DriverApp/DI/DriverDatabase.swift`,
+  `DriverApp/Shell/BufferedSamplesCard.swift`, and the eleven colour sets under
+  `Resources/Assets.xcassets/Call/` and `/Sos/`. App, edited: `DI/DriverGraph.swift`,
+  `Nav/DriverDestinations.swift`, `Ride/RideContact.swift`, `Location/PositionService.swift`,
+  `DriverAppDelegate.swift`, `DriverApp.swift`, `Home/StandbySheet.swift`, `Home/JourneySheet.swift`,
+  `Onboarding/OnboardingErrors.swift`, `Onboarding/ProfileSetupScreen.swift`, `Theme/MageRideColor.swift`,
+  `Theme/MageRideSpacing.swift`, `UI/FormControls.swift`, `UI/MoneyFormat.swift` and the three
+  `Localizable.strings`. Tests, new: `CommsTestKit.swift`, `CommsFenceTests.swift`,
+  `VoipCallModelTests.swift`, `SosModelTests.swift`, `SupportModelTests.swift`,
+  `NotificationsModelTests.swift`. Tests, edited: `DashboardTestKit.swift` (`FakeRideContact` gained the
+  outcome log, the alarm log and the two programmable responses), `ThemeTokenTests.swift` (the two new
+  palettes, the halo's alpha and the six control sizes). Plus
   `DriverApp.xcodeproj/project.pbxproj` (regenerated) and `apps/driver-ios/CLAUDE.md`.

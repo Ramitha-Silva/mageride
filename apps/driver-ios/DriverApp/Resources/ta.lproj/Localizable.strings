@@ -696,3 +696,99 @@
 "history_rate_no_passenger" = "இந்த முன்பதிவு பதிவு செய்யாத ஒருவருக்காகச் செய்யப்பட்டது, எனவே மதிப்பிட யாரும் இல்லை.";
 "history_rate_submit" = "மதிப்பீட்டை அனுப்பு";
 "history_passenger_unnamed" = "பயணி";
+
+/*
+  MageRide Driver — iOS · C093 driver-ios-comms-safety-support. தமிழ்.
+  Values are `apps/driver-android/src/main/res/values-ta/strings.xml`'s, value for value.
+*/
+
+/* SCR-DI-031 · செயலிக்குள் அழைப்பு. */
+"call_in_app" = "செயலிக்குள் அழைப்பு · எண் மறைக்கப்பட்டுள்ளது";
+"call_rider" = "பயணி";
+"call_rider_named" = "%1$@ (பயணி)";
+"call_connecting" = "இணைக்கிறது…";
+"call_connected" = "இணைக்கப்பட்டது";
+"call_mute" = "ஒலி நிறுத்து";
+"call_unmute" = "ஒலியை மீட்டமை";
+"call_speaker" = "ஒலிபெருக்கி";
+"call_hang_up" = "அழைப்பைத் துண்டி";
+"call_failed_signalling" = "இலவச அழைப்பைத் தொடங்க முடியவில்லை.";
+"call_failed_media" = "இணைவதற்கு முன்பே இலவச அழைப்பு துண்டிக்கப்பட்டது.";
+"call_failed_unavailable" = "செயலியின் இந்தப் பதிப்பில் இலவச அழைப்பு கிடைக்காது.";
+"call_fallback_question" = "அதற்குப் பதிலாக சாதாரணமாக அழைக்கவா?";
+"call_fallback_action" = "சாதாரணமாக அழை";
+
+/* SCR-DI-032 · ஓட்டுநர் SOS. */
+"sos_title" = "ஓட்டுநர் SOS";
+"sos_armed" = "இப்போது அனுப்ப SOS ஐத் தட்டவும், அல்லது காத்திருந்தால் தானாகவே செல்லும்.";
+"sos_waiting_position" = "உங்கள் இருப்பிடத்தைத் தேடுகிறது…";
+"sos_sending" = "அனுப்புகிறது…";
+"sos_sending_body" = "உங்கள் இருப்பிடத்தையும் இந்தப் பயணத்தையும் உங்கள் அவசரத் தொடர்புக்கு SMS மூலம் அனுப்புகிறது.";
+"sos_dispatched" = "அனுப்பப்பட்டது. எங்கள் செயற்பாட்டுக் குழுவால் இந்தப் பயணத்தை இப்போது பார்க்க முடியும்.";
+"sos_failed" = "எச்சரிக்கை உங்கள் தொலைபேசியிலிருந்து வெளியேறவில்லை. மீண்டும் முயற்சிக்கவும்.";
+"sos_no_position" = "உங்கள் இருப்பிடம் இன்னும் தெரியவில்லை, எச்சரிக்கைக்கு அது தேவை. சிறிது நேரம் காத்திருந்து மீண்டும் முயற்சிக்கவும்.";
+"sos_no_contact" = "இன்னும் அவசரத் தொடர்பு இல்லை. உங்கள் சுயவிவரத்தில் ஒன்றைச் சேர்க்கவும்.";
+"sos_sms_sent" = "அனுப்பப்பட்டது";
+"sos_sms_failed" = "SMS தோல்வி";
+"sos_sms_no_contact" = "தொடர்பு இல்லை";
+
+/* SCR-DI-033 / 033a · ஆதரவு, நாள் கட்டணத் திரும்பப்பெறல், புகார் படிவம். */
+"support_title" = "ஆதரவு";
+"support_search_hint" = "உதவியைத் தேடு";
+"support_search_empty" = "அதற்கு எதுவும் பொருந்தவில்லை. ஒரு புகாரை அளியுங்கள், நாங்கள் பதிலளிப்போம்.";
+"support_quick_actions" = "விரைவுச் செயல்கள்";
+"support_refund_title" = "நாள் கட்டணத்தைத் திரும்பக் கோரு";
+"support_refund_hint" = "உதாரணமாக, நீங்கள் ஆன்லைனுக்கு வந்தபோது செயலி நின்றுவிட்டது.";
+"support_refund_action" = "கோரு";
+"support_your_tickets" = "உங்கள் புகார்கள்";
+"support_tickets_empty" = "நீங்கள் இன்னும் புகார் ஏதும் அளிக்கவில்லை.";
+"support_raise_ticket" = "புகார் அளி";
+"support_ticket_raised" = "புகார் பதிவு செய்யப்பட்டது. அது கீழே உள்ள பட்டியலில் உள்ளது.";
+"support_issue_label" = "பிரச்சினையை விவரிக்கவும்";
+"support_issue_hint" = "என்ன தவறு நடந்தது என்று சொல்லுங்கள்…";
+"support_related_trip" = "தொடர்புடைய பயணம்";
+"support_trip_none" = "பயணம் இல்லை";
+"support_trip_unnamed" = "பயணம்";
+"support_attach" = "திரைப்படம் ஒன்றை இணை";
+"support_attached" = "திரைப்படம் இணைக்கப்பட்டது";
+"support_submit_ticket" = "புகாரை அனுப்பு";
+"support_loading" = "ஏற்றுகிறது…";
+"support_category_refund" = "நாள் கட்டணத் திரும்பப்பெறல்";
+"support_category_general" = "ஆதரவுக் கோரிக்கை";
+"support_status_open" = "திறந்துள்ளது";
+"support_status_in_progress" = "பரிசீலனையில்";
+"support_status_resolved" = "தீர்க்கப்பட்டது";
+"support_event_opened" = "நீங்கள் இதை அளித்தீர்கள்";
+"support_event_responded" = "ஆதரவுக் குழு பதிலளித்தது";
+"support_event_resolved" = "தீர்க்கப்பட்டதாகக் குறிக்கப்பட்டது";
+"support_event_reopened" = "மீண்டும் திறக்கப்பட்டது";
+
+/* SCR-DI-034 · அறிவிப்புகள். */
+"alerts_title" = "அறிவிப்புகள்";
+"alerts_empty" = "இங்கு இன்னும் எதுவும் இல்லை.";
+"alerts_mark_all_read" = "அனைத்தையும் படித்ததாகக் குறி";
+"alert_kind_ride_offer" = "பயண வாய்ப்பு";
+"alert_kind_directional" = "சேருமிட வடிகட்டி";
+"alert_kind_low_balance" = "இருப்பு குறைவு";
+"alert_kind_money_in" = "கட்டணம் உறுதி";
+"alert_kind_share" = "பகிர்வுக் கோரிக்கை";
+"alert_kind_package" = "பொதி";
+"alert_kind_safety" = "பாதுகாப்பு எச்சரிக்கை";
+"alert_kind_other" = "அறிவிப்பு";
+"alert_age_now" = "இப்போதுதான்";
+"alert_age_minutes" = "%1$d நிமிடங்களுக்கு முன்";
+"alert_age_hours" = "%1$d மணி நேரத்திற்கு முன்";
+"alert_age_yesterday" = "நேற்று";
+"alert_age_days" = "%1$d நாட்களுக்கு முன்";
+
+/* SCR-DI-035 · இணைப்பு இல்லாதபோது சேமிப்பு. */
+"offline_buffered_title" = "சேமிக்கப்பட்ட இருப்பிடத் தரவு";
+"offline_buffered_replay" = "இணைப்பு திரும்பியதும் அவை அனுப்பப்படும்.";
+"offline_buffered_count" = "%1$d வரிசையில்";
+
+/* C093 பிழைச் செய்திகள். */
+"error_no_emergency_contact" = "அவசரத் தொடர்பு பதிவு செய்யப்படாததால் SMS எதுவும் செல்லவில்லை. எச்சரிக்கை எங்கள் செயற்பாட்டுக் குழுவை அடைந்தது.";
+"error_not_ride_participant" = "இது உங்கள் பயணம் அல்ல.";
+
+/* தேடல் புலத்தை அழிக்கும் பொத்தான். */
+"action_clear" = "அழி";

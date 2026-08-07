@@ -410,12 +410,43 @@ final class FakeRideContact: RideContact {
     private(set) var roleCalls: [(calleeRole: CalleeRole, type: CallType)] = []
     private(set) var dialled: [String] = []
 
-    func startCall(rideId: String, kind: RideKind, type: CallType) async {
+    /// The outcomes SCR-DI-031 reported (Δ C093), oldest first.
+    private(set) var outcomes: [(callId: String, outcome: CallOutcome)] = []
+
+    /// The alarms SCR-DI-032 raised (Δ C093), oldest first.
+    private(set) var alarms: [(rideId: String, at: GeoPoint)] = []
+
+    /// What ``startCall(rideId:calleeRole:type:)`` answers. `nil` is voip-svc refusing the call —
+    /// which is `VoipFailure.signalling` on SCR-DI-031 and a silent no-op everywhere else.
+    var nextCall: StartCallResponse?
+
+    /// What ``triggerSos(rideId:at:)`` answers, or the failure it throws first.
+    var nextDispatch = SosDispatched(sosId: "01JQSOS0000000000000000001", dispatchedAt: nil, smsStatus: .dispatched)
+    var nextSosFailure: Error?
+
+    @discardableResult
+    func startCall(rideId: String, kind: RideKind, type: CallType) async -> StartCallResponse? {
         calls.append((kind, type))
+        return nextCall
     }
 
-    func startCall(rideId: String, calleeRole: CalleeRole, type: CallType) async {
+    @discardableResult
+    func startCall(rideId: String, calleeRole: CalleeRole, type: CallType) async -> StartCallResponse? {
         roleCalls.append((calleeRole, type))
+        return nextCall
+    }
+
+    func reportCallOutcome(callId: String, outcome: CallOutcome) async {
+        outcomes.append((callId, outcome))
+    }
+
+    func triggerSos(rideId: String, at: GeoPoint) async throws -> SosDispatched {
+        alarms.append((rideId, at))
+        if let failure = nextSosFailure {
+            nextSosFailure = nil
+            throw failure
+        }
+        return nextDispatch
     }
 
     @discardableResult

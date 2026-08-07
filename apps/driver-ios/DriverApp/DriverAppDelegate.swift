@@ -2,7 +2,7 @@ import Foundation
 import UIKit
 import UserNotifications
 
-/// The three callbacks SwiftUI has no equivalent for.
+/// The four callbacks SwiftUI has no equivalent for.
 ///
 /// 1. **The APNs device token.** `didRegisterForRemoteNotificationsWithDeviceToken` is the only
 ///    delivery point, and without handing it to Firebase there is no FCM registration token to send
@@ -11,6 +11,9 @@ import UserNotifications
 ///    whether it is shown; E-01's fifteen-second offer must be, even in the foreground, because a
 ///    driver looking at their wallet still has to see it.
 /// 3. **A push that is tapped.** The deep link is on the response and nowhere else.
+/// 4. **A silent push** (Δ C093). `content-available` is how E-01's offer reaches a backgrounded
+///    app, and `didReceiveRemoteNotification` is the only place it lands. Adding it is also what
+///    makes SCR-DI-034's list non-empty for a driver who never taps a banner.
 ///
 /// **Two notification categories, not one per type** — the same split as the Android channels, for
 /// the same reason the C067 handoff gives: the unit a user silences must not put a ride offer and a
@@ -88,8 +91,9 @@ extension DriverAppDelegate: UNUserNotificationCenterDelegate {
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
-        let message = PushMessage.from(userInfo: notification.request.content.userInfo)
-        Task { @MainActor in self.deliver(message) }
+        let content = notification.request.content
+        let message = PushMessage.from(userInfo: content.userInfo)
+        Task { @MainActor in self.deliver(message, title: content.title, body: content.body) }
         completionHandler([.banner, .sound, .list])
     }
 
@@ -99,22 +103,61 @@ extension DriverAppDelegate: UNUserNotificationCenterDelegate {
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
-        let message = PushMessage.from(userInfo: response.notification.request.content.userInfo)
-        Task { @MainActor in self.deliver(message) }
+        let content = response.notification.request.content
+        let message = PushMessage.from(userInfo: content.userInfo)
+        Task { @MainActor in self.deliver(message, title: content.title, body: content.body) }
         completionHandler()
     }
+}
 
-    /// Hands one push to **both** subscribers (Δ C088).
+extension DriverAppDelegate {
+
+    /// A **silent** push — one carrying `content-available`, which is how E-01's offer arrives while
+    /// the app is backgrounded (D2' §C: *"APNs silent"*).
+    ///
+    /// The `remote-notification` background mode is already declared in `Info.plist` for the offer;
+    /// this is the callback it buys, and C093 is the first component to need it. Without it a silent
+    /// push reaches ``OfferInbox`` through no path at all when the app is not in the foreground, and
+    /// nothing reaches SCR-DI-034's list.
+    ///
+    /// `.newData` rather than `.noData`, always: the app *did* do work — it filed a row and may have
+    /// raised an offer — and reporting otherwise is how iOS learns to stop waking this app.
+    func application(
+        _ application: UIApplication,
+        didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+        fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
+    ) {
+        let message = PushMessage.from(userInfo: userInfo)
+        Task { @MainActor in
+            // A silent push carries no `alert` block, so there is no title or body to file — the
+            // row falls back to `AlertKind`'s own label, which is what that table is for.
+            self.deliver(message, title: nil, body: nil)
+            completionHandler(.newData)
+        }
+    }
+
+    /// Hands one push to **all three** subscribers (Δ C088, extended by C093).
     ///
     /// ``PushRouter`` decides which screen to open — for a `ride_offer` that is Home, because the offer
     /// is a takeover the dashboard presents rather than a destination. ``OfferInbox`` is what puts the
     /// offer *in* `OfferSession`, which is the slot SCR-DI-014 is drawn from. Neither can do the
     /// other's half: routing without the inbox opens an empty dashboard, and the inbox without routing
     /// raises the takeover behind whatever screen the driver was on.
+    ///
+    /// ``NotificationInbox`` is the third, and it is the one that runs for **every** push rather than
+    /// for the ones that open something: SCR-DI-034 is drawn from `mobile_db_schema.md` §1.6 and
+    /// there is no *"list my notifications"* operation anywhere on the app-facing surface, so a push
+    /// this method does not file is a push the driver can never see again. It is `await`-free at the
+    /// call site by design — filing is a database write on an actor, and a push handler that waited
+    /// on one would hold up the offer takeover behind it.
     @MainActor
-    private func deliver(_ message: PushMessage) {
+    func deliver(_ message: PushMessage, title: String?, body: String?) {
         graph?.offers.receive(message)
         graph?.pushes.offer(message)
+
+        if let alerts = graph?.alerts {
+            Task { await alerts.record(message, title: title, body: body) }
+        }
     }
 }
 

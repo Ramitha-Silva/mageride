@@ -347,6 +347,8 @@ struct ProfileSetupScreen: View {
         "vehicle_type_" + type.wire
     }
 
-    private let avatarSize: CGFloat = 84
+    /// The wireframe's `.avatar.lg`, which SCR-DI-031 also draws — promoted to a token by C093 so
+    /// the two screens cannot drift. `.avatar .cam`'s badge stays private: nothing else has one.
+    private let avatarSize: CGFloat = MageRideControl.avatarLarge
     private let badgeSize: CGFloat = 28
 }

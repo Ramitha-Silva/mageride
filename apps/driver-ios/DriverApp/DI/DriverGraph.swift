@@ -187,6 +187,35 @@ final class DriverGraph: ObservableObject {
     /// query-svc's trips read model and the platform's one rating route, as SCR-DI-030 uses them.
     let history: RideHistoryRepository
 
+    // MARK: - C093 · comms, safety, support and the system states
+    //
+    // Everything here is a **process** singleton and none of it could be built per screen. The
+    // database is opened once and shared by three callers (see ``DriverDatabase``); the inbox is
+    // written by the push delegate, which runs with no view anywhere — the same argument
+    // ``OfferInbox`` makes; the CallKit provider must outlive SCR-DI-031 because the system can end
+    // a call after the screen has gone; and the engine is a binding rather than a value, which is
+    // the whole point of the seam.
+
+    /// C018's `mageride_driver.db`, opened on first use. The position buffer, the alert inbox and
+    /// SCR-DI-035's backlog count are three callers of one handle.
+    let databases: DriverDatabase
+
+    /// `mobile_db_schema.md` §1.6 — every push this handset saw, as SCR-DI-034 reads it.
+    let alerts: NotificationInbox
+
+    /// SCR-DI-035's *"128 queued"*, read from the table rather than from the live pipeline.
+    let bufferedSamples: BufferedSampleCounter
+
+    /// D6' §6's LiveKit room, behind a seam. **This build binds ``AbsentVoipEngine``** — read its
+    /// documentation before concluding that SCR-DI-031's connected state is unreachable by accident.
+    let voip: VoipEngine
+
+    /// The system's idea that this app has a call up (D2' §SCR-DI-031, *"**iOS** CallKit"*).
+    let calls: CallSession
+
+    /// support-svc's FAQ and ticket queue plus the trips SCR-DI-033a attaches to.
+    let support: SupportRepository
+
     init(environment: DriverEnvironment = .current) {
         self.environment = environment
 
@@ -209,7 +238,15 @@ final class DriverGraph: ObservableObject {
 
         let shared = IosAppGraphKt.startIosGraph(config: config)
         self.shared = shared
-        let positions = PositionService(graph: shared, connectivity: connectivity)
+
+        // C093. Built first because ``PositionService`` takes it: the database handle is the one
+        // thing three separate planes share, and constructing it here is what makes "one connection
+        // to one protected file" a property of the graph rather than a convention three callers have
+        // to remember. **Nothing is opened yet** — see ``DriverDatabase``.
+        let databases = DriverDatabase(factory: shared.databases)
+        self.databases = databases
+
+        let positions = PositionService(graph: shared, connectivity: connectivity, databases: databases)
         self.positions = positions
 
         let preferences = UserDefaultsOnboardingPreferences()
@@ -248,7 +285,11 @@ final class DriverGraph: ObservableObject {
         self.rides = ApiActiveRideRepository(ride: shared.api.ride, fare: shared.api.fare)
         self.offerSlot = SharedOfferSlot(offers: shared.offers, states: shared.offerStates)
         self.offers = OfferInbox(offers: shared.offers, sessions: sessions)
-        self.contact = SystemRideContact(voip: shared.api.voip)
+
+        // C093 folded safety-svc in here rather than giving SCR-DI-032 a repository of its own: the
+        // alarm is raised from the same sheet as the call button, it is *about* the same ride, and
+        // `POST /v1/sos` is the only safety operation this app reaches. One seam, two services.
+        self.contact = SystemRideContact(voip: shared.api.voip, safety: shared.api.safety)
 
         // **C092's fence, and it is wired here because there is nowhere else it could close all three
         // doors.** SCR-DI-010's go-online toggle, SCR-DI-011's Start Journey and US-5.10's Restart all
@@ -305,6 +346,14 @@ final class DriverGraph: ObservableObject {
             ride: shared.api.ride,
             tripState: shared.api.tripState
         )
+
+        // C093. The handle itself is built at the top of this initialiser, because
+        // ``PositionService`` takes it; these are the three collaborators over it.
+        self.alerts = LocalNotificationInbox(databases: databases)
+        self.bufferedSamples = BufferedSampleCounter(databases: databases, vehicles: activeVehicle)
+        self.voip = AbsentVoipEngine()
+        self.calls = CallKitSession()
+        self.support = ApiSupportRepository(support: shared.api.support, query: shared.api.query)
 
         // Before the first frame, so a driver who chose සිංහල never sees an English one. This is
         // the earliest point at which it can happen — `DriverLocale` redirects the bundle every
@@ -448,6 +497,43 @@ final class DriverGraph: ObservableObject {
     /// SCR-DI-030.
     func makeRideHistoryModel() -> RideHistoryModel {
         RideHistoryModel(identity: identity, history: history)
+    }
+
+    // MARK: - C093 · the per-screen models
+    //
+    // Factories for the reason every other cluster's are: each is a `@StateObject` owned by the
+    // screen that shows it. SCR-DI-031's and SCR-DI-032's would be the worst two to hold — one owns
+    // a call timer and the other a three-second cancel window that raises an irrevocable alarm when
+    // it reaches zero, and either running for the life of the process is the failure this rule
+    // exists to prevent.
+
+    /// SCR-DI-031 — the takeover SCR-DI-015's **Free call** opens.
+    func makeVoipCallModel(rideId: String) -> VoipCallModel {
+        VoipCallModel(rideId: rideId, rides: rides, contact: contact, engine: voip, session: calls)
+    }
+
+    /// SCR-DI-032 — the takeover SCR-DI-015's and SCR-DI-016's **SOS** open.
+    ///
+    /// Its own ``DriverLocationSource``, per model, for the reason C088 gives: the alarm's coordinate
+    /// is a *screen's* subscription and not the publisher's, and this screen is reachable on a ride
+    /// whose own source belongs to the screen underneath the takeover.
+    func makeSosModel(rideId: String) -> SosModel {
+        SosModel(
+            rideId: rideId,
+            contact: contact,
+            profiles: profileSettings,
+            location: CoreLocationDriverLocationSource()
+        )
+    }
+
+    /// SCR-DI-033 / 033a.
+    func makeSupportModel() -> SupportModel {
+        SupportModel(identity: identity, support: support)
+    }
+
+    /// SCR-DI-034.
+    func makeNotificationsModel() -> NotificationsModel {
+        NotificationsModel(inbox: alerts)
     }
 
     /// Start-up work that outlives any view.

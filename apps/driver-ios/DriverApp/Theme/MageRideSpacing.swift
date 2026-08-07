@@ -135,6 +135,36 @@ enum MageRideControl {
 
     /// SCR-DI-020's trend (`.bars`, `height:90px`, rounded onto the grid).
     static let earningsChart: CGFloat = 88
+
+    // MARK: - C093 · the call, the alarm, support and the alerts
+    //
+    // The wireframe's own pixels, rounded onto the 4pt grid and up to the 44pt tap-target floor
+    // where a control is interactive. Three of the five differ from
+    // `apps/driver-android/.../ui/theme/Dimens.kt` by a point or two, because the two wireframes
+    // draw the same control at slightly different CSS sizes — the *rounded* value is the contract.
+
+    /// SCR-DI-031's 🔇 / 🔊 pair — the wireframe's `.fab` at `42 x 42`, raised to the HIG floor.
+    static let callAction: CGFloat = MageRideControl.minimumTapTarget
+
+    /// Its red hang-up disc (`.cta.err` at `62 x 62`, rounded onto the grid).
+    static let callEnd: CGFloat = 64
+
+    /// The callee disc — `driver_ios.html`'s `.avatar.lg` (`84 x 84`). Already on the 4pt grid, and
+    /// four points smaller than the Android twin's 96 because the two mocks draw it differently.
+    static let avatarLarge: CGFloat = 84
+
+    /// SCR-DI-032's disc (`128 x 128`) and the translucent ring around it (`box-shadow … 14px`,
+    /// rounded onto the grid).
+    ///
+    /// The largest control in the app on purpose: it is pressed by somebody who is not looking.
+    static let sosButton: CGFloat = 128
+    static let sosHalo: CGFloat = 16
+
+    /// SCR-DI-033's `🔍 Search help` field (`.searchbar`, `height:38px`).
+    ///
+    /// Raised to the tap-target floor for ``mapControl``'s reason: 38pt is a CSS mock's number and a
+    /// text field a driver has to hit is interactive. The Android twin's 48 is its own wireframe's.
+    static let searchBar: CGFloat = MageRideControl.minimumTapTarget
 }
 
 extension View {

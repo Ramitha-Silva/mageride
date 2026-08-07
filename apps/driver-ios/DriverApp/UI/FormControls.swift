@@ -120,6 +120,101 @@ struct DriverIdField: View {
     }
 }
 
+/// The wireframe's `.searchbar` — a filled rounded field with a leading 🔍 (Δ C093).
+///
+/// **Drawn rather than `.searchable`.** SwiftUI's own search modifier belongs to a `List` and lives
+/// in the navigation bar, collapsing on scroll; `driver_ios.html` draws this one **in the body**,
+/// above *"Quick actions"*, where it stays put. C092's SCR-DI-030 uses `.searchable` because that
+/// cell's own `Δ iOS` clause asks for it and that screen *is* a `List`; SCR-DI-033's cell asks for
+/// nothing of the sort and is a scrolling column of cards.
+///
+/// The `label` is a value rather than a key for the same reason ``StatusPill``'s is not: it is the
+/// field's accessibility name and its placeholder at once, and the caller has already resolved it.
+struct SearchField: View {
+
+    let placeholderKey: String
+    @Binding var value: String
+
+    var body: some View {
+        HStack(spacing: MageRideSpacing.xs) {
+            Image(systemName: "magnifyingglass")
+                .font(.footnote)
+                .foregroundStyle(MageRideColor.onSurfaceVariant)
+
+            TextField(placeholderKey.localised, text: $value)
+                .mageFont(.body)
+                .foregroundStyle(MageRideColor.onSurface)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .submitLabel(.search)
+
+            if !value.isEmpty {
+                Button { value = "" } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.footnote)
+                        .foregroundStyle(MageRideColor.outlineVariant)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(Text(key: "action_clear"))
+            }
+        }
+        .padding(.horizontal, MageRideSpacing.sm)
+        .frame(minHeight: MageRideControl.searchBar)
+        .background(
+            MageRideColor.surfaceVariant,
+            in: RoundedRectangle(cornerRadius: MageRideRadius.md, style: .continuous)
+        )
+        .accessibilityLabel(Text(key: placeholderKey))
+    }
+}
+
+/// The wireframe's `min-height:72px` description box — a label over a multi-line editor (Δ C093).
+///
+/// **A `TextEditor`, not a `TextField(axis: .vertical)`.** The growing single-line field is iOS 16's
+/// and would do, but it has no way to *reserve* the wireframe's three lines: SCR-DI-033a draws a box
+/// that is already the size of the answer it wants, which is what tells a driver that a sentence is
+/// expected rather than a word. The placeholder is drawn behind it because `TextEditor` has none.
+struct MultilineTextField: View {
+
+    let labelKey: String
+    let placeholderKey: String
+    @Binding var value: String
+    var lines: Int = 3
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(key: labelKey)
+                .mageFont(.caption)
+                .foregroundStyle(MageRideColor.onSurfaceVariant)
+
+            ZStack(alignment: .topLeading) {
+                if value.isEmpty {
+                    Text(key: placeholderKey)
+                        .mageFont(.body)
+                        .foregroundStyle(MageRideColor.onSurfaceVariant)
+                        // The four points a `TextEditor` insets its own text by. Without them the
+                        // placeholder and the typed first character sit at different x.
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 8)
+                        .allowsHitTesting(false)
+                }
+
+                TextEditor(text: $value)
+                    .mageFont(.body)
+                    .foregroundStyle(MageRideColor.onSurface)
+                    .scrollContentBackground(.hidden)
+                    .frame(minHeight: MageRideControl.minimumTapTarget * CGFloat(lines) / 2)
+            }
+        }
+        .padding(.horizontal, MageRideSpacing.xs)
+        .padding(.vertical, MageRideSpacing.xs)
+        .background(
+            MageRideColor.surfaceVariant,
+            in: RoundedRectangle(cornerRadius: MageRideRadius.md, style: .continuous)
+        )
+    }
+}
+
 /// The wireframe's `+94` field — a fixed prefix and the national number beside it.
 ///
 /// `+94` is a prefix on the field rather than a country picker because Sri Lanka is the only

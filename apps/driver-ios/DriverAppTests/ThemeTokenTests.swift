@@ -183,6 +183,76 @@ final class ThemeTokenTests: XCTestCase {
         }
     }
 
+    /// SCR-DI-031's and SCR-DI-032's palettes (Δ C093).
+    ///
+    /// The fourth and fifth things in this app that are not on §0.2's scheme, after the scanner, the
+    /// offer takeover and the vehicle legend — and the wireframe is explicit about both: the call
+    /// cell is drawn on a `#3a3d44 → #15171B` gradient and the alarm on `#2A0A0A`. One appearance
+    /// each, asserted in **both** so a dark variant added later fails here rather than at a junction.
+    ///
+    /// The same ten values are `apps/driver-android/.../ui/theme/Color.kt`'s `CallColors` and
+    /// `SosColors`. `sosHalo` is the eleventh and is asserted separately, because its alpha is the
+    /// whole point of it.
+    func testTheCallAndAlarmPalettesAreTheWireframesAndHaveOneAppearance() {
+        let fixed: [(String, UInt32)] = [
+            ("callBackground", 0x15171B),
+            ("callSurface", 0x2A2D31),
+            ("callOnCall", 0xFFFFFF),
+            ("callHint", 0xAEB3BC),
+            ("callConnected", 0x9FCAFF),
+            ("sosBackground", 0x2A0A0A),
+            ("sosSurface", 0x3A1414),
+            ("sosOutline", 0x5A2020),
+            ("sosOnSos", 0xFFFFFF),
+            ("sosHint", 0xFFB4AB),
+        ]
+        for (name, hex) in fixed {
+            assertColour(name, style: .light, equals: hex)
+            assertColour(name, style: .dark, equals: hex)
+        }
+    }
+
+    /// The halo is §0.2's `error` at **25%** — the wireframe's `box-shadow: 0 0 0 14px
+    /// rgba(211,47,47,.22)`, rounded to the quarter the Android twin uses.
+    ///
+    /// A catalogue entry with its alpha baked in rather than `MageRideColor.error.opacity(0.25)`,
+    /// because `error` has a dark appearance (`#FFB4AB`) and this screen is dark in both: a halo
+    /// derived from the role would turn pink at night on the one screen that must not change.
+    func testTheAlarmHaloIsTheErrorRoleAtAQuarterAndDoesNotFollowTheAppearance() throws {
+        for style in [UIUserInterfaceStyle.light, .dark] {
+            let colour = try XCTUnwrap(
+                UIColor(named: "sosHalo", in: bundle, compatibleWith: UITraitCollection(userInterfaceStyle: style))
+            )
+            var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
+            XCTAssertTrue(colour.getRed(&red, green: &green, blue: &blue, alpha: &alpha))
+
+            XCTAssertEqual(UInt32(round(red * 255)), 0xD3)
+            XCTAssertEqual(UInt32(round(green * 255)), 0x2F)
+            XCTAssertEqual(UInt32(round(blue * 255)), 0x2F)
+            XCTAssertEqual(alpha, 0.25, accuracy: 0.005)
+        }
+    }
+
+    /// C093's control sizes — the wireframe's own pixels, rounded onto the 4pt grid and up to the
+    /// 44pt tap-target floor where the control is interactive.
+    func testTheCallAndAlarmControlSizesAreTheWireframesRoundedOntoTheGrid() {
+        XCTAssertEqual(MageRideControl.callAction, 44, "the wireframe's 42pt `.fab`, at the HIG floor")
+        XCTAssertEqual(MageRideControl.callEnd, 64, "its 62pt hang-up disc, on the grid")
+        XCTAssertEqual(MageRideControl.avatarLarge, 84, "`.avatar.lg`")
+        XCTAssertEqual(MageRideControl.sosButton, 128)
+        XCTAssertEqual(MageRideControl.sosHalo, 16)
+        XCTAssertEqual(MageRideControl.searchBar, 44, "the wireframe's 38pt `.searchbar`, at the HIG floor")
+
+        for size in [MageRideControl.callAction, MageRideControl.callEnd, MageRideControl.searchBar] {
+            XCTAssertGreaterThanOrEqual(size, MageRideControl.minimumTapTarget)
+        }
+        XCTAssertGreaterThan(
+            MageRideControl.sosButton,
+            MageRideControl.bigToggle,
+            "the alarm is the largest control in the app — it is pressed by somebody not looking"
+        )
+    }
+
     /// C088's control sizes — the same numbers as `apps/driver-android/.../ui/theme/Dimens.kt`, because
     /// the two apps draw the same wireframe cell at the same size.
     func testTheDashboardControlSizesMatchTheAndroidTokens() {

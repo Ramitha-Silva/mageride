@@ -170,3 +170,78 @@ enum MageRideOfferColor {
         Color(name, bundle: MageRideColor.bundle)
     }
 }
+
+/// SCR-DI-031's palette (C093).
+///
+/// The **third** screen in this app that is not on the semantic scheme, after the scanner and the
+/// offer takeover, and the wireframe is as explicit about it: `driver_ios.html` draws the call cell
+/// on a `#3a3d44 → #15171B` gradient with a `#4a4d55` avatar disc and `#cfd3da` captions. A call
+/// screen that turned white in the light theme would be a different screen twice a day — the same
+/// argument ``MageRideScannerColor`` makes, and one that matters more here: the driver is looking at
+/// it while driving.
+///
+/// One appearance each, exactly as the vehicle legend and the offer takeover have. Still colour
+/// *assets* and not hexes in Swift, which is this target's rule without an exception. The same five
+/// values are `apps/driver-android/.../ui/theme/Color.kt`'s `CallColors`.
+enum MageRideCallColor {
+
+    /// The screen the call sits on (`#15171B` — the gradient's foot, which is what the flat
+    /// SwiftUI background takes; the wireframe's gradient is CSS chrome, not a §0.2 token).
+    static let background = named("callBackground")
+
+    /// The avatar disc and the two inert `.fab` controls (`#2A2D31`).
+    static let surface = named("callSurface")
+
+    /// The callee's name and an active toggle's label, at full contrast.
+    static let onCall = named("callOnCall")
+
+    /// *"In-app call · number hidden"* and the avatar's glyph (`#AEB3BC`).
+    static let hint = named("callHint")
+
+    /// *"Connected · 00:42"* — §0.2's `secondary` on a dark screen (`#9FCAFF`), which is the dark
+    /// appearance of that role rather than a sixth colour.
+    static let connected = named("callConnected")
+
+    private static func named(_ name: String) -> Color {
+        Color(name, bundle: MageRideColor.bundle)
+    }
+}
+
+/// SCR-DI-032's palette (C093).
+///
+/// The wireframe draws the driver SOS on `#2A0A0A` with a `#3A1414` contact card, a `#FFB4AB` status
+/// line and the §0.2 `error` disc inside a translucent halo of itself. **Dark in both appearances**,
+/// like ``MageRideCallColor`` and ``MageRideScannerColor``: an alarm screen that could be mistaken
+/// for an ordinary one is the failure mode this palette exists to prevent.
+///
+/// The same six values are `apps/driver-android/.../ui/theme/Color.kt`'s `SosColors`.
+enum MageRideSosColor {
+
+    /// The screen (`#2A0A0A`).
+    static let background = named("sosBackground")
+
+    /// The emergency-contact card (`#3A1414`).
+    static let surface = named("sosSurface")
+
+    /// That card's border (`#5A2020`). Deliberately not §0.2's `outline`, which is a light grey on
+    /// this background and would read as a control.
+    static let outline = named("sosOutline")
+
+    /// The title and the card's text.
+    static let onSos = named("sosOnSos")
+
+    /// *"Sending GPS + active trip via SMS…"* (`#FFB4AB`).
+    static let hint = named("sosHint")
+
+    /// The ring around the disc — the §0.2 `error` at 25% (`rgba(211,47,47,.25)`), which is the
+    /// wireframe's own `box-shadow: 0 0 0 14px`.
+    ///
+    /// A catalogue entry with its alpha baked in rather than `MageRideColor.error.opacity(0.25)`,
+    /// because `error` has a **dark appearance** (`#FFB4AB`) and this screen is dark in both — a halo
+    /// derived from the role would turn pink at night on the one screen that must not change.
+    static let halo = named("sosHalo")
+
+    private static func named(_ name: String) -> Color {
+        Color(name, bundle: MageRideColor.bundle)
+    }
+}

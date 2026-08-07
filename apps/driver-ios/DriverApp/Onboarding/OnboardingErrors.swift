@@ -8,10 +8,9 @@ import MageRideShared
 /// app becomes an English one at exactly the moment it matters. The kebab `code` is the key; the
 /// copy is `Localizable.strings`', in all three languages.
 ///
-/// **Clusters 1, 2, 3 and the wallet's codes only.** The Android twin carries the whole app's table
-/// because C068 shipped after every other Android screen group had named its codes; here the safety and
-/// support clusters have not landed, and a key with no renderer is a translation nobody can check.
-/// C092–C093 extend this the way they extend the strings files — one `case` and three values, together.
+/// **Every code this app's screens can reach**, which is now the whole table: C093 added the safety
+/// and support cluster's, which is what the note here previously asked for. A code with no renderer
+/// is still deliberately absent — a translation nobody can check is worse than the generic message.
 enum OnboardingErrors {
 
     /// The string key for [error], falling back to the shell's generic message.
@@ -134,6 +133,22 @@ enum OnboardingErrors {
         case ErrorCode.conflict: return "error_already_done"
 
         case ErrorCode.notFound: return "error_not_found"
+
+        // ---- C093 · the call, the alarm and support ----------------------------------
+        //
+        // `ride-terminal` is already above — C088 named it for a command on a ride that had ended,
+        // and it means the same thing to SCR-DI-031: there is nobody left to call. That is also why
+        // `VoipCallState.canDialDirectly` stays false on it (a terminal ride carries no
+        // `counterpartyPhone`), so the copy and the offered action agree.
+
+        // AL-13, seen from safety-svc: the alarm **was** recorded and reached the admin live feed;
+        // the SMS leg had nowhere to go. Deliberately not phrased as a failure — `SosSmsStatus`
+        // makes the same distinction in the success body, and this is the 400 arm of it.
+        case ErrorCode.noEmergencyContact: return "error_no_emergency_contact"
+
+        // A call or an alarm raised against a ride this driver is not on — a stale takeover left
+        // open across a reassignment, most often.
+        case ErrorCode.notRideParticipant: return "error_not_ride_participant"
 
         default: return "error_generic"
         }
