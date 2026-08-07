@@ -1,0 +1,49 @@
+/* MageRide Passenger — English.
+ *
+ * The keys are `apps/passenger-android/src/main/res/values…/strings.xml`'s, so a screen group
+ * porting its Android copy has a one-to-one mapping and a divergence between the two apps is a diff
+ * rather than an archaeology exercise. The five menu rows are the exception and the reason is
+ * Section C: the Android drawer's keys are `drawer_*` and this app has a Menu tab, so they are
+ * `menu_*` here. See `PassengerTab`.
+ *
+ * `LocalizationTests` fails the build on a key that exists in one file and not the others, on a
+ * translation left equal to its English, and on a format specifier dropped in translation. It also
+ * fails on a key nothing in the app references, which is what stops this file accumulating copy for
+ * a screen that was never built.
+ *
+ * A `.strings` comment is a C comment and does NOT nest: writing `values*` followed by a slash
+ * inside one closes it early and everything after is garbage the parser refuses, which makes
+ * `NSDictionary(contentsOf:)` answer nil and every key in the app resolve to its own name. C089
+ * found seven of those. Write a path without the glob.
+ */
+
+/* Tab bar */
+"nav_map" = "Map";
+"nav_trips" = "Trips";
+"nav_support" = "Support";
+"nav_menu" = "Menu";
+
+/* SCR-PI-033 — the Menu tab's rows */
+"menu_private_transport" = "Private transport";
+"menu_subscriptions" = "My subscriptions";
+"menu_saved_addresses" = "Saved addresses";
+"menu_settings" = "Profile & settings";
+"menu_support" = "Help & support";
+
+/* SCR-PI-032 — the offline banner */
+"offline_banner_message" = "Connection lost — showing last known positions";
+
+/* SCR-PI-031 — the update gate */
+"update_required_title" = "Update required";
+"update_mandatory_message" = "A new version is required to keep riding. This update can't be skipped.";
+"update_optional_message" = "A new version of MageRide is available";
+"update_action_now" = "Update";
+"update_action_dismiss" = "Dismiss";
+
+/* Registered destinations a screen group has not written yet */
+"route_placeholder_title" = "Coming soon";
+"route_placeholder_body" = "%1$@ is not built yet.";
+
+/* The map */
+"map_content_description" = "Live map of nearby vehicles";
+"map_recentre" = "Recentre on my location";

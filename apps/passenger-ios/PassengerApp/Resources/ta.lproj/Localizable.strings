@@ -1,0 +1,32 @@
+/* MageRide Passenger — Tamil. See en.lproj for the rules this file is held to. */
+
+/* Tab bar */
+"nav_map" = "வரைபடம்";
+"nav_trips" = "பயணங்கள்";
+"nav_support" = "உதவி";
+"nav_menu" = "மெனு";
+
+/* SCR-PI-033 — the Menu tab's rows */
+"menu_private_transport" = "தனியார் போக்குவரத்து";
+"menu_subscriptions" = "எனது சந்தாக்கள்";
+"menu_saved_addresses" = "சேமித்த முகவரிகள்";
+"menu_settings" = "சுயவிவரம் மற்றும் அமைப்புகள்";
+"menu_support" = "உதவி மற்றும் ஆதரவு";
+
+/* SCR-PI-032 — the offline banner */
+"offline_banner_message" = "இணைப்பு துண்டிக்கப்பட்டது — கடைசியாக அறிந்த இடங்கள் காட்டப்படுகின்றன";
+
+/* SCR-PI-031 — the update gate */
+"update_required_title" = "புதுப்பிப்பு தேவை";
+"update_mandatory_message" = "தொடர்ந்து பயணிக்க புதிய பதிப்பு தேவை. இதைத் தவிர்க்க முடியாது.";
+"update_optional_message" = "மேஜ்ரைட்டின் புதிய பதிப்பு கிடைக்கிறது";
+"update_action_now" = "புதுப்பி";
+"update_action_dismiss" = "நிராகரி";
+
+/* Registered destinations a screen group has not written yet */
+"route_placeholder_title" = "விரைவில்";
+"route_placeholder_body" = "%1$@ இன்னும் உருவாக்கப்படவில்லை.";
+
+/* The map */
+"map_content_description" = "அருகிலுள்ள வாகனங்களின் நேரடி வரைபடம்";
+"map_recentre" = "எனது இடத்தை மையப்படுத்து";

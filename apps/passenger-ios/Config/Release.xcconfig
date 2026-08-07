@@ -1,0 +1,14 @@
+#include "Shared.xcconfig"
+
+// Production. Fixed here so a release build cannot be pointed at a laptop by omission — the same
+// rule `apps/passenger-android/build.gradle.kts` states for its release build type.
+//
+// The `/$()/` is not a typo: an xcconfig treats `//` as a comment even inside a value, and `$()`
+// is the empty-substitution escape that breaks the pair without changing the string. Getting it
+// wrong yields a base URL of `https:` that fails at the first request.
+MAGERIDE_API_BASE_URL = https:/$()/api.mageride.lk
+MAGERIDE_PMTILES_URL = https:/$()/tiles.mageride.lk/sri-lanka.pmtiles
+
+SWIFT_OPTIMIZATION_LEVEL = -O
+SWIFT_COMPILATION_MODE = wholemodule
+VALIDATE_PRODUCT = YES

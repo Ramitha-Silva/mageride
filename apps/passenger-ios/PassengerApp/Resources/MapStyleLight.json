@@ -1,0 +1,45 @@
+{
+  "version": 8,
+  "name": "MageRide Light",
+  "glyphs": "https://tiles.mageride.lk/fonts/{fontstack}/{range}.pbf",
+  "sources": {
+    "basemap": {
+      "type": "vector",
+      "url": "pmtiles://__PMTILES_URL__",
+      "attribution": "© OpenStreetMap contributors"
+    }
+  },
+  "layers": [
+    { "id": "background", "type": "background", "paint": { "background-color": "#F7F8FA" } },
+    { "id": "earth", "type": "fill", "source": "basemap", "source-layer": "earth",
+      "paint": { "fill-color": "#FFFFFF" } },
+    { "id": "landuse", "type": "fill", "source": "basemap", "source-layer": "landuse",
+      "paint": { "fill-color": "#ECEEF1", "fill-opacity": 0.6 } },
+    { "id": "water", "type": "fill", "source": "basemap", "source-layer": "water",
+      "paint": { "fill-color": "#D1E4FF" } },
+    { "id": "roads-casing", "type": "line", "source": "basemap", "source-layer": "roads",
+      "layout": { "line-cap": "round", "line-join": "round" },
+      "paint": {
+        "line-color": "#C7CBD1",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 8, 1.4, 14, 6, 18, 22]
+      } },
+    { "id": "roads", "type": "line", "source": "basemap", "source-layer": "roads",
+      "layout": { "line-cap": "round", "line-join": "round" },
+      "paint": {
+        "line-color": "#FFFFFF",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 8, 0.6, 14, 4, 18, 18]
+      } },
+    { "id": "buildings", "type": "fill", "source": "basemap", "source-layer": "buildings",
+      "minzoom": 14,
+      "paint": { "fill-color": "#ECEEF1", "fill-outline-color": "#C7CBD1" } },
+    { "id": "boundaries", "type": "line", "source": "basemap", "source-layer": "boundaries",
+      "paint": { "line-color": "#74777C", "line-dasharray": [3, 2], "line-width": 1 } },
+    { "id": "places", "type": "symbol", "source": "basemap", "source-layer": "places",
+      "layout": {
+        "text-field": ["get", "name"],
+        "text-font": ["Inter Regular"],
+        "text-size": ["interpolate", ["linear"], ["zoom"], 8, 11, 14, 14]
+      },
+      "paint": { "text-color": "#44474B", "text-halo-color": "#FFFFFF", "text-halo-width": 1.2 } }
+  ]
+}

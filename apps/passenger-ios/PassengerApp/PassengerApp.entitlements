@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!--
+      D-30. `appattest` is the production environment; `appattestdevelop` is what a development
+      build gets, and Xcode substitutes it automatically for a Debug signing configuration. Without
+      this entitlement `DCAppAttestService.isSupported` is true and `generateKey` fails at runtime,
+      which is the failure that looks like a device problem rather than a project one.
+    -->
+    <key>com.apple.developer.devicecheck.appattest-environment</key>
+    <string>appattest</string>
+
+    <!--
+      APNs. `production` is correct for both TestFlight and the App Store; a development build gets
+      the sandbox by way of its provisioning profile, not by way of this string.
+    -->
+    <key>aps-environment</key>
+    <string>production</string>
+
+    <!--
+      **No associated domains, and that is a consequence of AL-57/AL-59 rather than an omission.**
+      The driver app declares `applinks:pay.mageride.lk` because SCR-DI-022's top-up leaves for a
+      hosted OnePay page and has to come back. Every surviving passenger rail is in-app — cash,
+      wallet, and scanning the driver's QR (`PaymentRails` on the Android side carries neither
+      `onepay` nor a platform LankaQR) — so nothing on this surface leaves for a web checkout, and a
+      wildcard over a domain no screen returns from would make every page on it open the app.
+
+      No `CFBundleURLTypes` either: `mageride://…` is a value inside notification-svc's push
+      payload, not a link the system routes. `PushRouter` resolves it; declaring the scheme would be
+      claiming a door nothing knocks on. `PassengerApp.onOpenURL` is still wired to the same table,
+      so if a domain is ever added there is one resolver rather than two.
+    -->
+
+    <!--
+      Keychain sharing is NOT declared, and that is the AL-08 fence: the driver and passenger apps
+      must not be able to read each other's session on a handset that runs both. Namespacing by
+      `kSecAttrService` (C014) is the belt; the absence of a shared access group is the braces.
+    -->
+</dict>
+</plist>

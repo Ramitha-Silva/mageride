@@ -1,0 +1,750 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		918C5BF0F53795B848047E58 /* PassengerDatabase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A63DB6E3CFA1956995596FD /* PassengerDatabase.swift */; };
+		8CDB50DCB0034921F415D470 /* PassengerEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24DA004F925603B84EF220CB /* PassengerEnvironment.swift */; };
+		346D6137FC046C51897AD94B /* PassengerGraph.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EE066024FBCF6E5C5D3F799 /* PassengerGraph.swift */; };
+		22099F210C0A2244C1C4CD4C /* SharedH3Grid.swift in Sources */ = {isa = PBXBuildFile; fileRef = F034848E4D15168E84E1FB0A /* SharedH3Grid.swift */; };
+		B0085075D8377CEE8234ECA1 /* AnyJSON.swift in Sources */ = {isa = PBXBuildFile; fileRef = A97F91714C73670EF89C5F2F /* AnyJSON.swift */; };
+		511D451FBC3F2B498702A935 /* HubSubscriptions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 312269124B19E9F13B2BFBC9 /* HubSubscriptions.swift */; };
+		6E5327A987ADE8CA73F17A8B /* LiveHubInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = 030168129B7253A97C99E9E1 /* LiveHubInbox.swift */; };
+		33C9CC7ED2202C7953D175A1 /* LiveHubTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = F29EE011127D804A2D3DC88E /* LiveHubTransport.swift */; };
+		D3E3D65CF5BB2EB960A7A4B5 /* LiveVehicleStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F7B52A0F8AF6E8ADC049E2F /* LiveVehicleStore.swift */; };
+		B57637552FEB19F52929E3AD /* PassengerLiveMap.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F84420C12F6F2564A26F6CF /* PassengerLiveMap.swift */; };
+		F7544712D56887564273B5EE /* PassengerLocationSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB83BEBE93D842A970B09A95 /* PassengerLocationSource.swift */; };
+		0B2B3A28EF914DB6DA291D88 /* EncodedPolyline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C2FDFB7361DBA90B7525376 /* EncodedPolyline.swift */; };
+		C605D9C11D91244FFCDD3537 /* MageRideMap.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4717494A182B502D148B590A /* MageRideMap.swift */; };
+		365380EEA4A06EFA78A1D9AB /* MapPalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0285AF379870247F2536355 /* MapPalette.swift */; };
+		6744978681B628E5289209AE /* MapStyles.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02A104A674DD77276DFF86B5 /* MapStyles.swift */; };
+		543C0F096B233C3D3DAFC310 /* MarkerInterpolator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03FE84F707261483A716B0D5 /* MarkerInterpolator.swift */; };
+		4200F06B85F185E6B97BC8F1 /* VehicleLayers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6390E64535B1FA0C7DBDECA3 /* VehicleLayers.swift */; };
+		B49EC93694011D73FEA9CEE8 /* PassengerDestinations.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FFBFCD1CE63D7629043BB81 /* PassengerDestinations.swift */; };
+		BE1A97860D99857C88D974AD /* PassengerMenuDestination.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4D222E109D2604594DD23CD /* PassengerMenuDestination.swift */; };
+		6980434123B2A8FB1A1A2AF3 /* PassengerNavigator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3549D08959111FBC45A5C368 /* PassengerNavigator.swift */; };
+		0BF692F60CF8FB6756F644CD /* PassengerRoute.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FE70B86D67979A07B3EA055 /* PassengerRoute.swift */; };
+		789DDACCCAD6BDC71FC697AD /* PassengerTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75F9CA4A7CE3B9C4F990214B /* PassengerTab.swift */; };
+		F8913A6094CB1AF570808E5D /* PassengerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF74974EEDB8B21C1C0D5965 /* PassengerApp.swift */; };
+		1D5DA0DBA6EADE8FC4CD430B /* PassengerAppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 382EED1EF16B9DD13C300904 /* PassengerAppDelegate.swift */; };
+		696D6A84612158CDBC01BCC1 /* PushRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3200D1C097744B58D988E2A3 /* PushRouter.swift */; };
+		9ADA667574C17B22605B372D /* PushTokenProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07F1EF2A90E2C39A6DC78EAE /* PushTokenProvider.swift */; };
+		2CC606CAABE6FDD3A280C6B6 /* DeviceBinding.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABD33763D7BC91FF4F3D5442 /* DeviceBinding.swift */; };
+		E2903C07E8ABA389BF30E335 /* AppPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F68D85818AC8D1E60ACABB1 /* AppPreferences.swift */; };
+		B8FBAFDC7F28A5BDE84A3EAA /* ConnectivityMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EA82D3363659BEFBE2E398C /* ConnectivityMonitor.swift */; };
+		330A162CC8534083E9CA5206 /* OfflineBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5C41EC02BAC01C5CDF7F29C /* OfflineBanner.swift */; };
+		2B4A1375BB8EC0DBE2B34F43 /* PassengerLocale.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48C369F4C63FA9B31C1FFB1E /* PassengerLocale.swift */; };
+		384237CA241077907328B94E /* PassengerShell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B380B5D9FA317E5A493EB92 /* PassengerShell.swift */; };
+		1F52E051BB37739380A5F509 /* PassengerShellModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C4CF2B7D2FFF94E4153D54A /* PassengerShellModel.swift */; };
+		BA262FB0B994D08076E0C30A /* UpdateGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A793F6958EACC180E11FF1D7 /* UpdateGate.swift */; };
+		40BE9AB2E124650EB30CF9D2 /* MageRideColor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DC740756DE0304276231937 /* MageRideColor.swift */; };
+		447DF25E476C41C7BB13E6E1 /* MageRideCta.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95FD7813ABFF4E6B8DC48C4E /* MageRideCta.swift */; };
+		518B1E6CA267120BBA13B6C8 /* MageRideSpacing.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5BD2BC376FDF25822B419F1 /* MageRideSpacing.swift */; };
+		6F8A8EED1D1056487BFAF659 /* MageRideTypography.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6764C5CA45F60065C3D82617 /* MageRideTypography.swift */; };
+		5906F55CA4D52CA023C69D0E /* VehicleToken.swift in Sources */ = {isa = PBXBuildFile; fileRef = E910A9FCCA116E44D2D1D56D /* VehicleToken.swift */; };
+		D0F18D6E25242D2C76A6F457 /* Localisation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41BFF6164F190FAD72DB4A78 /* Localisation.swift */; };
+		C6BE56F891657926BE9AA958 /* AnyJSONTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F47AB13334989925EC1BFCE8 /* AnyJSONTests.swift */; };
+		C765998EC557607BE16BFD6C /* H3GridTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AF0C3655D8873301EFAEFA1 /* H3GridTests.swift */; };
+		DC21B643B0C54AA0A079E542 /* LiveTestKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3AE71BA58788F582435B58D0 /* LiveTestKit.swift */; };
+		4C709FFBCBE31EB6E5746506 /* LocalizationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 377ECBDDE4B1F1BEE1891F5B /* LocalizationTests.swift */; };
+		50A4B202C1F8F93F5DD1B0E8 /* MapTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3791772D75BF5692DED24D2 /* MapTests.swift */; };
+		47630B5298A8E819A68A53A6 /* NavigationShellTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6122688CB40E17316622309 /* NavigationShellTests.swift */; };
+		F12713746D96576A23B34C0C /* PassengerEnvironmentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAE6B4C2145D664BA40FFF8B /* PassengerEnvironmentTests.swift */; };
+		C6E8266BFBF842B0A51EB517 /* PassengerLiveMapTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F23A45AF2B4A5B772B516AF /* PassengerLiveMapTests.swift */; };
+		3B23D16A765BE20FE507DA76 /* PushRouterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6C90E80EAE6E80DAF3A894C /* PushRouterTests.swift */; };
+		6CC2566BFAC64E6A55513820 /* ThemeTokenTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1C5080D5E19CF6E9F0AB3A0 /* ThemeTokenTests.swift */; };
+		4F40927C2435B92808CF21DA /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13AED341F97194F9FD6FAE90 /* Assets.xcassets */; };
+		6D3DF9427939F64C6DB49CD9 /* MapStyleDark.json in Resources */ = {isa = PBXBuildFile; fileRef = 1F4C5125873B8B0157A88FDA /* MapStyleDark.json */; };
+		43AAB2B8F1C2633FDEEEEDD0 /* MapStyleLight.json in Resources */ = {isa = PBXBuildFile; fileRef = FD0CFE8C20114B40BB6C4BB3 /* MapStyleLight.json */; };
+		3972C6A324034F3097825B18 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 935472707CCFE0C0D73A8435 /* InfoPlist.strings */; };
+		B07B63C901214B6CEE7CA2E8 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = D5AF54E5DA7A08CFA7C70124 /* Localizable.strings */; };
+		5E9D053F92B66B1582CF27CA /* MageRideShared in Frameworks */ = {isa = PBXBuildFile; productRef = FFB01CC612CD7B819C2C401B /* MageRideShared */; };
+		0C806860AA9CA1D063F34B21 /* MageRideH3 in Frameworks */ = {isa = PBXBuildFile; productRef = D372EA85A4AAABC92AA3879D /* MageRideH3 */; };
+		A976906608ED307E492B1FC2 /* MapLibre in Frameworks */ = {isa = PBXBuildFile; productRef = AD4E82A621D9DE21D0D61AD3 /* MapLibre */; };
+		33208C9ABF75019AF99C30AF /* SignalRClient in Frameworks */ = {isa = PBXBuildFile; productRef = 18D0B22B5576949C8F2F62FD /* SignalRClient */; };
+		4EE24989A2D61A678105D260 /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = 106922777A411F0E6D39AD07 /* FirebaseMessaging */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		5A63DB6E3CFA1956995596FD /* PassengerDatabase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PassengerDatabase.swift"; path = "PassengerDatabase.swift"; sourceTree = "<group>"; };
+		24DA004F925603B84EF220CB /* PassengerEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PassengerEnvironment.swift"; path = "PassengerEnvironment.swift"; sourceTree = "<group>"; };
+		5EE066024FBCF6E5C5D3F799 /* PassengerGraph.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PassengerGraph.swift"; path = "PassengerGraph.swift"; sourceTree = "<group>"; };
+		F034848E4D15168E84E1FB0A /* SharedH3Grid.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "SharedH3Grid.swift"; path = "SharedH3Grid.swift"; sourceTree = "<group>"; };
+		A97F91714C73670EF89C5F2F /* AnyJSON.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "AnyJSON.swift"; path = "AnyJSON.swift"; sourceTree = "<group>"; };
+		312269124B19E9F13B2BFBC9 /* HubSubscriptions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "HubSubscriptions.swift"; path = "HubSubscriptions.swift"; sourceTree = "<group>"; };
+		030168129B7253A97C99E9E1 /* LiveHubInbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "LiveHubInbox.swift"; path = "LiveHubInbox.swift"; sourceTree = "<group>"; };
+		F29EE011127D804A2D3DC88E /* LiveHubTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "LiveHubTransport.swift"; path = "LiveHubTransport.swift"; sourceTree = "<group>"; };
+		5F7B52A0F8AF6E8ADC049E2F /* LiveVehicleStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "LiveVehicleStore.swift"; path = "LiveVehicleStore.swift"; sourceTree = "<group>"; };
+		3F84420C12F6F2564A26F6CF /* PassengerLiveMap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PassengerLiveMap.swift"; path = "PassengerLiveMap.swift"; sourceTree = "<group>"; };
+		BB83BEBE93D842A970B09A95 /* PassengerLocationSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PassengerLocationSource.swift"; path = "PassengerLocationSource.swift"; sourceTree = "<group>"; };
+		0C2FDFB7361DBA90B7525376 /* EncodedPolyline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "EncodedPolyline.swift"; path = "EncodedPolyline.swift"; sourceTree = "<group>"; };
+		4717494A182B502D148B590A /* MageRideMap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "MageRideMap.swift"; path = "MageRideMap.swift"; sourceTree = "<group>"; };
+		D0285AF379870247F2536355 /* MapPalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "MapPalette.swift"; path = "MapPalette.swift"; sourceTree = "<group>"; };
+		02A104A674DD77276DFF86B5 /* MapStyles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "MapStyles.swift"; path = "MapStyles.swift"; sourceTree = "<group>"; };
+		03FE84F707261483A716B0D5 /* MarkerInterpolator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "MarkerInterpolator.swift"; path = "MarkerInterpolator.swift"; sourceTree = "<group>"; };
+		6390E64535B1FA0C7DBDECA3 /* VehicleLayers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "VehicleLayers.swift"; path = "VehicleLayers.swift"; sourceTree = "<group>"; };
+		7FFBFCD1CE63D7629043BB81 /* PassengerDestinations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PassengerDestinations.swift"; path = "PassengerDestinations.swift"; sourceTree = "<group>"; };
+		B4D222E109D2604594DD23CD /* PassengerMenuDestination.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PassengerMenuDestination.swift"; path = "PassengerMenuDestination.swift"; sourceTree = "<group>"; };
+		3549D08959111FBC45A5C368 /* PassengerNavigator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PassengerNavigator.swift"; path = "PassengerNavigator.swift"; sourceTree = "<group>"; };
+		9FE70B86D67979A07B3EA055 /* PassengerRoute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PassengerRoute.swift"; path = "PassengerRoute.swift"; sourceTree = "<group>"; };
+		75F9CA4A7CE3B9C4F990214B /* PassengerTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PassengerTab.swift"; path = "PassengerTab.swift"; sourceTree = "<group>"; };
+		FF74974EEDB8B21C1C0D5965 /* PassengerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PassengerApp.swift"; path = "PassengerApp.swift"; sourceTree = "<group>"; };
+		382EED1EF16B9DD13C300904 /* PassengerAppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PassengerAppDelegate.swift"; path = "PassengerAppDelegate.swift"; sourceTree = "<group>"; };
+		3200D1C097744B58D988E2A3 /* PushRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PushRouter.swift"; path = "PushRouter.swift"; sourceTree = "<group>"; };
+		07F1EF2A90E2C39A6DC78EAE /* PushTokenProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PushTokenProvider.swift"; path = "PushTokenProvider.swift"; sourceTree = "<group>"; };
+		13AED341F97194F9FD6FAE90 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = "Assets.xcassets"; path = "Assets.xcassets"; sourceTree = "<group>"; };
+		1F4C5125873B8B0157A88FDA /* MapStyleDark.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; name = "MapStyleDark.json"; path = "MapStyleDark.json"; sourceTree = "<group>"; };
+		FD0CFE8C20114B40BB6C4BB3 /* MapStyleLight.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; name = "MapStyleLight.json"; path = "MapStyleLight.json"; sourceTree = "<group>"; };
+		ABD33763D7BC91FF4F3D5442 /* DeviceBinding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DeviceBinding.swift"; path = "DeviceBinding.swift"; sourceTree = "<group>"; };
+		4F68D85818AC8D1E60ACABB1 /* AppPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "AppPreferences.swift"; path = "AppPreferences.swift"; sourceTree = "<group>"; };
+		1EA82D3363659BEFBE2E398C /* ConnectivityMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ConnectivityMonitor.swift"; path = "ConnectivityMonitor.swift"; sourceTree = "<group>"; };
+		C5C41EC02BAC01C5CDF7F29C /* OfflineBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "OfflineBanner.swift"; path = "OfflineBanner.swift"; sourceTree = "<group>"; };
+		48C369F4C63FA9B31C1FFB1E /* PassengerLocale.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PassengerLocale.swift"; path = "PassengerLocale.swift"; sourceTree = "<group>"; };
+		0B380B5D9FA317E5A493EB92 /* PassengerShell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PassengerShell.swift"; path = "PassengerShell.swift"; sourceTree = "<group>"; };
+		5C4CF2B7D2FFF94E4153D54A /* PassengerShellModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PassengerShellModel.swift"; path = "PassengerShellModel.swift"; sourceTree = "<group>"; };
+		A793F6958EACC180E11FF1D7 /* UpdateGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "UpdateGate.swift"; path = "UpdateGate.swift"; sourceTree = "<group>"; };
+		3DC740756DE0304276231937 /* MageRideColor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "MageRideColor.swift"; path = "MageRideColor.swift"; sourceTree = "<group>"; };
+		95FD7813ABFF4E6B8DC48C4E /* MageRideCta.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "MageRideCta.swift"; path = "MageRideCta.swift"; sourceTree = "<group>"; };
+		F5BD2BC376FDF25822B419F1 /* MageRideSpacing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "MageRideSpacing.swift"; path = "MageRideSpacing.swift"; sourceTree = "<group>"; };
+		6764C5CA45F60065C3D82617 /* MageRideTypography.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "MageRideTypography.swift"; path = "MageRideTypography.swift"; sourceTree = "<group>"; };
+		E910A9FCCA116E44D2D1D56D /* VehicleToken.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "VehicleToken.swift"; path = "VehicleToken.swift"; sourceTree = "<group>"; };
+		41BFF6164F190FAD72DB4A78 /* Localisation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "Localisation.swift"; path = "Localisation.swift"; sourceTree = "<group>"; };
+		F47AB13334989925EC1BFCE8 /* AnyJSONTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "AnyJSONTests.swift"; path = "AnyJSONTests.swift"; sourceTree = "<group>"; };
+		0AF0C3655D8873301EFAEFA1 /* H3GridTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "H3GridTests.swift"; path = "H3GridTests.swift"; sourceTree = "<group>"; };
+		3AE71BA58788F582435B58D0 /* LiveTestKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "LiveTestKit.swift"; path = "LiveTestKit.swift"; sourceTree = "<group>"; };
+		377ECBDDE4B1F1BEE1891F5B /* LocalizationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "LocalizationTests.swift"; path = "LocalizationTests.swift"; sourceTree = "<group>"; };
+		B3791772D75BF5692DED24D2 /* MapTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "MapTests.swift"; path = "MapTests.swift"; sourceTree = "<group>"; };
+		F6122688CB40E17316622309 /* NavigationShellTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "NavigationShellTests.swift"; path = "NavigationShellTests.swift"; sourceTree = "<group>"; };
+		BAE6B4C2145D664BA40FFF8B /* PassengerEnvironmentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PassengerEnvironmentTests.swift"; path = "PassengerEnvironmentTests.swift"; sourceTree = "<group>"; };
+		5F23A45AF2B4A5B772B516AF /* PassengerLiveMapTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PassengerLiveMapTests.swift"; path = "PassengerLiveMapTests.swift"; sourceTree = "<group>"; };
+		B6C90E80EAE6E80DAF3A894C /* PushRouterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "PushRouterTests.swift"; path = "PushRouterTests.swift"; sourceTree = "<group>"; };
+		E1C5080D5E19CF6E9F0AB3A0 /* ThemeTokenTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ThemeTokenTests.swift"; path = "ThemeTokenTests.swift"; sourceTree = "<group>"; };
+		3695FAF1DA83B1EFE5807B57 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = "Info.plist"; path = "Info.plist"; sourceTree = "<group>"; };
+		FE9111528950BE782FD8FDF7 /* PassengerApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; name = "PassengerApp.entitlements"; path = "PassengerApp.entitlements"; sourceTree = "<group>"; };
+		D2C67D3364DB41C3BB90B99C /* Shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = "Shared.xcconfig"; path = "Shared.xcconfig"; sourceTree = "<group>"; };
+		B77B88B69C2244A36219286E /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = "Debug.xcconfig"; path = "Debug.xcconfig"; sourceTree = "<group>"; };
+		3046F09A59C7E9407A2D0A5C /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = "Release.xcconfig"; path = "Release.xcconfig"; sourceTree = "<group>"; };
+		4A4D6D73855B78879C431461 /* PassengerApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "PassengerApp.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		D8865533EDBF86DF72D8AFBA /* PassengerAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "PassengerAppTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		5B9773D84493B3D713DB9AC0 = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5E9D053F92B66B1582CF27CA /* MageRideShared in Frameworks */,
+				0C806860AA9CA1D063F34B21 /* MageRideH3 in Frameworks */,
+				A976906608ED307E492B1FC2 /* MapLibre in Frameworks */,
+				33208C9ABF75019AF99C30AF /* SignalRClient in Frameworks */,
+				4EE24989A2D61A678105D260 /* FirebaseMessaging in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E51E325E2D7A6ADDC5C9CAB4 = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		DF891E785808226D241F246E = {
+			isa = PBXGroup;
+			children = (
+				5619E268CFFE28118C19FC6A /* Config */,
+				90AE456F79935BD6C6F78AD2 /* PassengerApp */,
+				4B28528649F129B6C41C8D37 /* PassengerAppTests */,
+				5151B46607EBC8890D8DFCC2 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		5619E268CFFE28118C19FC6A /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				D2C67D3364DB41C3BB90B99C /* Shared.xcconfig */,
+				B77B88B69C2244A36219286E /* Debug.xcconfig */,
+				3046F09A59C7E9407A2D0A5C /* Release.xcconfig */,
+			);
+			path = Config;
+			sourceTree = "<group>";
+		};
+		5151B46607EBC8890D8DFCC2 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				4A4D6D73855B78879C431461 /* PassengerApp.app */,
+				D8865533EDBF86DF72D8AFBA /* PassengerAppTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		90AE456F79935BD6C6F78AD2 /* PassengerApp */ = {
+			isa = PBXGroup;
+			children = (
+				2A11969776E43613EBD7F910 /* DI */,
+				CAAF82951F66016F59D360EF /* Geo */,
+				6EBDD09D536EB9D7B5AD5CAC /* Live */,
+				A39BDC2208D9FAB5D78E26D0 /* Location */,
+				49E028E97067D34D09099AF5 /* Map */,
+				A0F7755456F64B0210E83752 /* Nav */,
+				C0417FB2C3422415E4F9E8E4 /* Push */,
+				A433AD60302FBC3FB1CAF746 /* Resources */,
+				692F3ECAFFAFBA971B2FA647 /* Security */,
+				9060FDF9BA94D3C1C24C17FA /* Shell */,
+				3CDFB53FAD65DA9C99742698 /* Theme */,
+				292E027D10D622D4C8304A17 /* UI */,
+				3695FAF1DA83B1EFE5807B57 /* Info.plist */,
+				FE9111528950BE782FD8FDF7 /* PassengerApp.entitlements */,
+				FF74974EEDB8B21C1C0D5965 /* PassengerApp.swift */,
+				382EED1EF16B9DD13C300904 /* PassengerAppDelegate.swift */,
+			);
+			path = "PassengerApp";
+			sourceTree = "<group>";
+		};
+		2A11969776E43613EBD7F910 /* DI */ = {
+			isa = PBXGroup;
+			children = (
+				5A63DB6E3CFA1956995596FD /* PassengerDatabase.swift */,
+				24DA004F925603B84EF220CB /* PassengerEnvironment.swift */,
+				5EE066024FBCF6E5C5D3F799 /* PassengerGraph.swift */,
+			);
+			path = "DI";
+			sourceTree = "<group>";
+		};
+		CAAF82951F66016F59D360EF /* Geo */ = {
+			isa = PBXGroup;
+			children = (
+				F034848E4D15168E84E1FB0A /* SharedH3Grid.swift */,
+			);
+			path = "Geo";
+			sourceTree = "<group>";
+		};
+		6EBDD09D536EB9D7B5AD5CAC /* Live */ = {
+			isa = PBXGroup;
+			children = (
+				A97F91714C73670EF89C5F2F /* AnyJSON.swift */,
+				312269124B19E9F13B2BFBC9 /* HubSubscriptions.swift */,
+				030168129B7253A97C99E9E1 /* LiveHubInbox.swift */,
+				F29EE011127D804A2D3DC88E /* LiveHubTransport.swift */,
+				5F7B52A0F8AF6E8ADC049E2F /* LiveVehicleStore.swift */,
+				3F84420C12F6F2564A26F6CF /* PassengerLiveMap.swift */,
+			);
+			path = "Live";
+			sourceTree = "<group>";
+		};
+		A39BDC2208D9FAB5D78E26D0 /* Location */ = {
+			isa = PBXGroup;
+			children = (
+				BB83BEBE93D842A970B09A95 /* PassengerLocationSource.swift */,
+			);
+			path = "Location";
+			sourceTree = "<group>";
+		};
+		49E028E97067D34D09099AF5 /* Map */ = {
+			isa = PBXGroup;
+			children = (
+				0C2FDFB7361DBA90B7525376 /* EncodedPolyline.swift */,
+				4717494A182B502D148B590A /* MageRideMap.swift */,
+				D0285AF379870247F2536355 /* MapPalette.swift */,
+				02A104A674DD77276DFF86B5 /* MapStyles.swift */,
+				03FE84F707261483A716B0D5 /* MarkerInterpolator.swift */,
+				6390E64535B1FA0C7DBDECA3 /* VehicleLayers.swift */,
+			);
+			path = "Map";
+			sourceTree = "<group>";
+		};
+		A0F7755456F64B0210E83752 /* Nav */ = {
+			isa = PBXGroup;
+			children = (
+				7FFBFCD1CE63D7629043BB81 /* PassengerDestinations.swift */,
+				B4D222E109D2604594DD23CD /* PassengerMenuDestination.swift */,
+				3549D08959111FBC45A5C368 /* PassengerNavigator.swift */,
+				9FE70B86D67979A07B3EA055 /* PassengerRoute.swift */,
+				75F9CA4A7CE3B9C4F990214B /* PassengerTab.swift */,
+			);
+			path = "Nav";
+			sourceTree = "<group>";
+		};
+		C0417FB2C3422415E4F9E8E4 /* Push */ = {
+			isa = PBXGroup;
+			children = (
+				3200D1C097744B58D988E2A3 /* PushRouter.swift */,
+				07F1EF2A90E2C39A6DC78EAE /* PushTokenProvider.swift */,
+			);
+			path = "Push";
+			sourceTree = "<group>";
+		};
+		A433AD60302FBC3FB1CAF746 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				13AED341F97194F9FD6FAE90 /* Assets.xcassets */,
+				1F4C5125873B8B0157A88FDA /* MapStyleDark.json */,
+				FD0CFE8C20114B40BB6C4BB3 /* MapStyleLight.json */,
+				935472707CCFE0C0D73A8435 /* InfoPlist.strings */,
+				D5AF54E5DA7A08CFA7C70124 /* Localizable.strings */,
+			);
+			path = "Resources";
+			sourceTree = "<group>";
+		};
+		692F3ECAFFAFBA971B2FA647 /* Security */ = {
+			isa = PBXGroup;
+			children = (
+				ABD33763D7BC91FF4F3D5442 /* DeviceBinding.swift */,
+			);
+			path = "Security";
+			sourceTree = "<group>";
+		};
+		9060FDF9BA94D3C1C24C17FA /* Shell */ = {
+			isa = PBXGroup;
+			children = (
+				4F68D85818AC8D1E60ACABB1 /* AppPreferences.swift */,
+				1EA82D3363659BEFBE2E398C /* ConnectivityMonitor.swift */,
+				C5C41EC02BAC01C5CDF7F29C /* OfflineBanner.swift */,
+				48C369F4C63FA9B31C1FFB1E /* PassengerLocale.swift */,
+				0B380B5D9FA317E5A493EB92 /* PassengerShell.swift */,
+				5C4CF2B7D2FFF94E4153D54A /* PassengerShellModel.swift */,
+				A793F6958EACC180E11FF1D7 /* UpdateGate.swift */,
+			);
+			path = "Shell";
+			sourceTree = "<group>";
+		};
+		3CDFB53FAD65DA9C99742698 /* Theme */ = {
+			isa = PBXGroup;
+			children = (
+				3DC740756DE0304276231937 /* MageRideColor.swift */,
+				95FD7813ABFF4E6B8DC48C4E /* MageRideCta.swift */,
+				F5BD2BC376FDF25822B419F1 /* MageRideSpacing.swift */,
+				6764C5CA45F60065C3D82617 /* MageRideTypography.swift */,
+				E910A9FCCA116E44D2D1D56D /* VehicleToken.swift */,
+			);
+			path = "Theme";
+			sourceTree = "<group>";
+		};
+		292E027D10D622D4C8304A17 /* UI */ = {
+			isa = PBXGroup;
+			children = (
+				41BFF6164F190FAD72DB4A78 /* Localisation.swift */,
+			);
+			path = "UI";
+			sourceTree = "<group>";
+		};
+		4B28528649F129B6C41C8D37 /* PassengerAppTests */ = {
+			isa = PBXGroup;
+			children = (
+				F47AB13334989925EC1BFCE8 /* AnyJSONTests.swift */,
+				0AF0C3655D8873301EFAEFA1 /* H3GridTests.swift */,
+				3AE71BA58788F582435B58D0 /* LiveTestKit.swift */,
+				377ECBDDE4B1F1BEE1891F5B /* LocalizationTests.swift */,
+				B3791772D75BF5692DED24D2 /* MapTests.swift */,
+				F6122688CB40E17316622309 /* NavigationShellTests.swift */,
+				BAE6B4C2145D664BA40FFF8B /* PassengerEnvironmentTests.swift */,
+				5F23A45AF2B4A5B772B516AF /* PassengerLiveMapTests.swift */,
+				B6C90E80EAE6E80DAF3A894C /* PushRouterTests.swift */,
+				E1C5080D5E19CF6E9F0AB3A0 /* ThemeTokenTests.swift */,
+			);
+			path = "PassengerAppTests";
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXVariantGroup section */
+		935472707CCFE0C0D73A8435 /* InfoPlist.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				F8495DDB76058D3B306C0E11 /* en */,
+				6C9B1DCC6E924EEF4EE84924 /* si */,
+				077D473BF87A1E0913A0B13E /* ta */,
+			);
+			name = "InfoPlist.strings";
+			sourceTree = "<group>";
+		};
+		D5AF54E5DA7A08CFA7C70124 /* Localizable.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				EDDC57BF0F9BF145D3626239 /* en */,
+				CAC3EA3A15AE3939C3054F3F /* si */,
+				C9ABB3CAF628088C0EEFF0E8 /* ta */,
+			);
+			name = "Localizable.strings";
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
+
+/* Begin PBXNativeTarget section */
+		4D717606C771336E75B82C44 /* PassengerApp */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7F93A090E0298DD984D428C5;
+			buildPhases = (
+				031795138AA3D4C6C2BA6DA8 /* Sources */,
+				5B9773D84493B3D713DB9AC0 /* Frameworks */,
+				D43FA70992E070FFC267D150 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = PassengerApp;
+			packageProductDependencies = (
+				FFB01CC612CD7B819C2C401B /* MageRideShared */,
+				D372EA85A4AAABC92AA3879D /* MageRideH3 */,
+				AD4E82A621D9DE21D0D61AD3 /* MapLibre */,
+				18D0B22B5576949C8F2F62FD /* SignalRClient */,
+				106922777A411F0E6D39AD07 /* FirebaseMessaging */,
+			);
+			productName = PassengerApp;
+			productReference = 4A4D6D73855B78879C431461 /* PassengerApp.app */;
+			productType = "com.apple.product-type.application";
+		};
+		55BA0EAFA05EB7F61D8E1C1E /* PassengerAppTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 87F38413E35B2680A1D4EE94;
+			buildPhases = (
+				F9E7A69BD164E2EFE1274E7A /* Sources */,
+				E51E325E2D7A6ADDC5C9CAB4 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				30E8C5C99E0A261CF2285998 /* PBXTargetDependency */,
+			);
+			name = PassengerAppTests;
+			packageProductDependencies = (
+			);
+			productName = PassengerAppTests;
+			productReference = D8865533EDBF86DF72D8AFBA /* PassengerAppTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		1690B4BF0BC1A0738226FAB9 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					55BA0EAFA05EB7F61D8E1C1E = {
+						TestTargetID = 4D717606C771336E75B82C44;
+					};
+				};
+			};
+			buildConfigurationList = CD9B099C09BAFCEA918F1DA6;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				si,
+				ta,
+				Base,
+			);
+			mainGroup = DF891E785808226D241F246E;
+			packageReferences = (
+				0B71912143C05AB9EF9931CD /* XCLocalSwiftPackageReference */,
+				D1D3F2252B9B3130643B07C0 /* XCLocalSwiftPackageReference */,
+				66F179D0F9D1DF6CA925A765 /* XCRemoteSwiftPackageReference */,
+				6C31709819C4B3343C36BC76 /* XCRemoteSwiftPackageReference */,
+				5A7C9A6B89F369C5883A420C /* XCRemoteSwiftPackageReference */,
+			);
+			productRefGroup = 5151B46607EBC8890D8DFCC2 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				4D717606C771336E75B82C44 /* PassengerApp */,
+				55BA0EAFA05EB7F61D8E1C1E /* PassengerAppTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		D43FA70992E070FFC267D150 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4F40927C2435B92808CF21DA /* Assets.xcassets in Resources */,
+				6D3DF9427939F64C6DB49CD9 /* MapStyleDark.json in Resources */,
+				43AAB2B8F1C2633FDEEEEDD0 /* MapStyleLight.json in Resources */,
+				3972C6A324034F3097825B18 /* InfoPlist.strings in Resources */,
+				B07B63C901214B6CEE7CA2E8 /* Localizable.strings in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		031795138AA3D4C6C2BA6DA8 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				918C5BF0F53795B848047E58 /* PassengerDatabase.swift in Sources */,
+				8CDB50DCB0034921F415D470 /* PassengerEnvironment.swift in Sources */,
+				346D6137FC046C51897AD94B /* PassengerGraph.swift in Sources */,
+				22099F210C0A2244C1C4CD4C /* SharedH3Grid.swift in Sources */,
+				B0085075D8377CEE8234ECA1 /* AnyJSON.swift in Sources */,
+				511D451FBC3F2B498702A935 /* HubSubscriptions.swift in Sources */,
+				6E5327A987ADE8CA73F17A8B /* LiveHubInbox.swift in Sources */,
+				33C9CC7ED2202C7953D175A1 /* LiveHubTransport.swift in Sources */,
+				D3E3D65CF5BB2EB960A7A4B5 /* LiveVehicleStore.swift in Sources */,
+				B57637552FEB19F52929E3AD /* PassengerLiveMap.swift in Sources */,
+				F7544712D56887564273B5EE /* PassengerLocationSource.swift in Sources */,
+				0B2B3A28EF914DB6DA291D88 /* EncodedPolyline.swift in Sources */,
+				C605D9C11D91244FFCDD3537 /* MageRideMap.swift in Sources */,
+				365380EEA4A06EFA78A1D9AB /* MapPalette.swift in Sources */,
+				6744978681B628E5289209AE /* MapStyles.swift in Sources */,
+				543C0F096B233C3D3DAFC310 /* MarkerInterpolator.swift in Sources */,
+				4200F06B85F185E6B97BC8F1 /* VehicleLayers.swift in Sources */,
+				B49EC93694011D73FEA9CEE8 /* PassengerDestinations.swift in Sources */,
+				BE1A97860D99857C88D974AD /* PassengerMenuDestination.swift in Sources */,
+				6980434123B2A8FB1A1A2AF3 /* PassengerNavigator.swift in Sources */,
+				0BF692F60CF8FB6756F644CD /* PassengerRoute.swift in Sources */,
+				789DDACCCAD6BDC71FC697AD /* PassengerTab.swift in Sources */,
+				F8913A6094CB1AF570808E5D /* PassengerApp.swift in Sources */,
+				1D5DA0DBA6EADE8FC4CD430B /* PassengerAppDelegate.swift in Sources */,
+				696D6A84612158CDBC01BCC1 /* PushRouter.swift in Sources */,
+				9ADA667574C17B22605B372D /* PushTokenProvider.swift in Sources */,
+				2CC606CAABE6FDD3A280C6B6 /* DeviceBinding.swift in Sources */,
+				E2903C07E8ABA389BF30E335 /* AppPreferences.swift in Sources */,
+				B8FBAFDC7F28A5BDE84A3EAA /* ConnectivityMonitor.swift in Sources */,
+				330A162CC8534083E9CA5206 /* OfflineBanner.swift in Sources */,
+				2B4A1375BB8EC0DBE2B34F43 /* PassengerLocale.swift in Sources */,
+				384237CA241077907328B94E /* PassengerShell.swift in Sources */,
+				1F52E051BB37739380A5F509 /* PassengerShellModel.swift in Sources */,
+				BA262FB0B994D08076E0C30A /* UpdateGate.swift in Sources */,
+				40BE9AB2E124650EB30CF9D2 /* MageRideColor.swift in Sources */,
+				447DF25E476C41C7BB13E6E1 /* MageRideCta.swift in Sources */,
+				518B1E6CA267120BBA13B6C8 /* MageRideSpacing.swift in Sources */,
+				6F8A8EED1D1056487BFAF659 /* MageRideTypography.swift in Sources */,
+				5906F55CA4D52CA023C69D0E /* VehicleToken.swift in Sources */,
+				D0F18D6E25242D2C76A6F457 /* Localisation.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F9E7A69BD164E2EFE1274E7A /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C6BE56F891657926BE9AA958 /* AnyJSONTests.swift in Sources */,
+				C765998EC557607BE16BFD6C /* H3GridTests.swift in Sources */,
+				DC21B643B0C54AA0A079E542 /* LiveTestKit.swift in Sources */,
+				4C709FFBCBE31EB6E5746506 /* LocalizationTests.swift in Sources */,
+				50A4B202C1F8F93F5DD1B0E8 /* MapTests.swift in Sources */,
+				47630B5298A8E819A68A53A6 /* NavigationShellTests.swift in Sources */,
+				F12713746D96576A23B34C0C /* PassengerEnvironmentTests.swift in Sources */,
+				C6E8266BFBF842B0A51EB517 /* PassengerLiveMapTests.swift in Sources */,
+				3B23D16A765BE20FE507DA76 /* PushRouterTests.swift in Sources */,
+				6CC2566BFAC64E6A55513820 /* ThemeTokenTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		30E8C5C99E0A261CF2285998 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 4D717606C771336E75B82C44 /* PassengerApp */;
+			targetProxy = 44ED12FDE01AE89E51ED2519 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin PBXContainerItemProxy section */
+		44ED12FDE01AE89E51ED2519 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 1690B4BF0BC1A0738226FAB9 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 4D717606C771336E75B82C44;
+			remoteInfo = PassengerApp;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin XCBuildConfiguration section */
+		877A6BA951A2EA0025A2ABE8 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = B77B88B69C2244A36219286E /* Debug.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = "NO";
+				CLANG_ENABLE_MODULES = "YES";
+				CLANG_ENABLE_OBJC_ARC = "YES";
+				ENABLE_STRICT_OBJC_MSGSEND = "YES";
+				ENABLE_TESTABILITY = "YES";
+				GCC_NO_COMMON_BLOCKS = "YES";
+				SDKROOT = "iphoneos";
+				SWIFT_EMIT_LOC_STRINGS = "YES";
+			};
+			name = Debug;
+		};
+		959134B361DD7E21ADEA3164 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 3046F09A59C7E9407A2D0A5C /* Release.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = "NO";
+				CLANG_ENABLE_MODULES = "YES";
+				CLANG_ENABLE_OBJC_ARC = "YES";
+				ENABLE_STRICT_OBJC_MSGSEND = "YES";
+				GCC_NO_COMMON_BLOCKS = "YES";
+				SDKROOT = "iphoneos";
+				SWIFT_EMIT_LOC_STRINGS = "YES";
+			};
+			name = Release;
+		};
+		2D3C1C51E68F6EB8252222BE /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GENERATE_INFOPLIST_FILE = "NO";
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				PRODUCT_BUNDLE_IDENTIFIER = "lk.mageride.passenger";
+				SWIFT_EMIT_LOC_STRINGS = "YES";
+			};
+			name = Debug;
+		};
+		8F5B646E4D76B101D0862CB1 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GENERATE_INFOPLIST_FILE = "NO";
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				PRODUCT_BUNDLE_IDENTIFIER = "lk.mageride.passenger";
+				SWIFT_EMIT_LOC_STRINGS = "YES";
+			};
+			name = Release;
+		};
+		28A3E18F44B5F861604A6B52 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_ENTITLEMENTS = "";
+				GENERATE_INFOPLIST_FILE = "YES";
+				INFOPLIST_FILE = "";
+				IPHONEOS_DEPLOYMENT_TARGET = "16.0";
+				PRODUCT_BUNDLE_IDENTIFIER = "lk.mageride.passenger.tests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/PassengerApp.app/PassengerApp";
+			};
+			name = Debug;
+		};
+		40641AF52F888F05FCD9B490 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_ENTITLEMENTS = "";
+				GENERATE_INFOPLIST_FILE = "YES";
+				INFOPLIST_FILE = "";
+				IPHONEOS_DEPLOYMENT_TARGET = "16.0";
+				PRODUCT_BUNDLE_IDENTIFIER = "lk.mageride.passenger.tests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/PassengerApp.app/PassengerApp";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		CD9B099C09BAFCEA918F1DA6 /* Build configuration list for PBXProject */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				877A6BA951A2EA0025A2ABE8 /* Debug */,
+				959134B361DD7E21ADEA3164 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		7F93A090E0298DD984D428C5 /* Build configuration list for PBXNativeTarget PassengerApp */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				2D3C1C51E68F6EB8252222BE /* Debug */,
+				8F5B646E4D76B101D0862CB1 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		87F38413E35B2680A1D4EE94 /* Build configuration list for PBXNativeTarget PassengerAppTests */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				28A3E18F44B5F861604A6B52 /* Debug */,
+				40641AF52F888F05FCD9B490 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		0B71912143C05AB9EF9931CD /* XCLocalSwiftPackageReference */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = "../../shared/swiftpm/MageRideShared";
+		};
+		D1D3F2252B9B3130643B07C0 /* XCLocalSwiftPackageReference */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = "../../shared/swiftpm/MageRideH3";
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		66F179D0F9D1DF6CA925A765 /* XCRemoteSwiftPackageReference */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/maplibre/maplibre-gl-native-distribution";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = "6.0.0";
+			};
+		};
+		6C31709819C4B3343C36BC76 /* XCRemoteSwiftPackageReference */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/moozzyk/SignalR-Client-Swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = "1.2.0";
+			};
+		};
+		5A7C9A6B89F369C5883A420C /* XCRemoteSwiftPackageReference */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = "11.0.0";
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		FFB01CC612CD7B819C2C401B /* MageRideShared */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MageRideShared;
+		};
+		D372EA85A4AAABC92AA3879D /* MageRideH3 */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MageRideH3;
+		};
+		AD4E82A621D9DE21D0D61AD3 /* MapLibre */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 66F179D0F9D1DF6CA925A765 /* XCRemoteSwiftPackageReference */;
+			productName = MapLibre;
+		};
+		18D0B22B5576949C8F2F62FD /* SignalRClient */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 6C31709819C4B3343C36BC76 /* XCRemoteSwiftPackageReference */;
+			productName = SignalRClient;
+		};
+		106922777A411F0E6D39AD07 /* FirebaseMessaging */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 5A7C9A6B89F369C5883A420C /* XCRemoteSwiftPackageReference */;
+			productName = FirebaseMessaging;
+		};
+/* End XCSwiftPackageProductDependency section */
+
+/* Begin PBXFileReference section (localised) */
+		F8495DDB76058D3B306C0E11 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = "en.lproj/InfoPlist.strings"; sourceTree = "<group>"; };
+		6C9B1DCC6E924EEF4EE84924 /* si */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = si; path = "si.lproj/InfoPlist.strings"; sourceTree = "<group>"; };
+		077D473BF87A1E0913A0B13E /* ta */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ta; path = "ta.lproj/InfoPlist.strings"; sourceTree = "<group>"; };
+		EDDC57BF0F9BF145D3626239 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = "en.lproj/Localizable.strings"; sourceTree = "<group>"; };
+		CAC3EA3A15AE3939C3054F3F /* si */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = si; path = "si.lproj/Localizable.strings"; sourceTree = "<group>"; };
+		C9ABB3CAF628088C0EEFF0E8 /* ta */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ta; path = "ta.lproj/Localizable.strings"; sourceTree = "<group>"; };
+/* End PBXFileReference section (localised) */
+	};
+	rootObject = 1690B4BF0BC1A0738226FAB9 /* Project object */;
+}

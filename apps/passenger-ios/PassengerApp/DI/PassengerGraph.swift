@@ -1,0 +1,142 @@
+import Combine
+import Foundation
+import MageRideShared
+
+/// The app's object graph: `:shared`'s Koin, plus the handful of things that are native by
+/// construction.
+///
+/// **Why there is no Koin on the Swift side.** `Module.single`, `module { }` and `Koin.get` are all
+/// `inline` + `reified`, and an inline reified function is not exported to Objective-C at all — so
+/// Swift can neither build a Koin module nor resolve a definition from one. `:shared`'s
+/// `startIosGraphWithH3` is the seam: the app passes **values**, Kotlin does the wiring, and
+/// `IosAppGraph` hands back typed properties. What is native — the location manager, the SignalR
+/// socket, connectivity, push routing, the H3 engine — is constructed here, exactly as
+/// `passengerAppModule` does on Android for the Android half.
+///
+/// One instance, held by the `App`. Constructing a second would start a second Koin (which throws)
+/// and a second session manager racing the first on the same single-use refresh token (D-29).
+@MainActor
+final class PassengerGraph: ObservableObject {
+
+    /// The bindings `sharedModules` leaves to an app, resolved.
+    let shared: IosAppGraph
+
+    /// The build's own values. Read once — see ``PassengerEnvironment``.
+    let environment: PassengerEnvironment
+
+    /// Navigation state, held above the view tree so a push can reach it.
+    let navigator = PassengerNavigator()
+
+    /// SCR-PI-032's banner input (US-15.6).
+    let connectivity = ConnectivityMonitor()
+
+    /// Where a `mageride://…` link becomes a destination.
+    let pushes = PushRouter()
+
+    /// APNs-via-FCM registration. SCR-PI-005 asks; the delegate hands over the device token.
+    let pushTokens = PushTokenProvider()
+
+    /// SCR-PI-002's answers and C101's default rail, before and after there is a session.
+    let preferences: AppPreferences
+
+    /// R-06's geocell engine, over the vendored H3 C library.
+    ///
+    /// Held as a property as well as passed to Koin because ``PassengerLiveMap`` takes it directly —
+    /// resolving it back out of the graph would be a second path to one object.
+    let h3: H3Grid
+
+    /// The whole real-time plane: one `/hubs/live` connection for the process.
+    ///
+    /// **A property, not a per-screen object.** SCR-PI-015 watches a ride while SCR-PI-010's map is
+    /// still subscribed to nineteen cells, and a socket owned by a view would be torn down and
+    /// re-dialled on every navigation between them — each re-dial costing a fresh handshake, a
+    /// rejoin of all nineteen groups and a `/v1/nearby` read.
+    let live: PassengerLiveMap
+
+    /// Where the passenger is. The R-06 anchor, MAP-02's halo and every *"current location"*.
+    let locations: PassengerLocationSource
+
+    /// C018's `mageride_passenger.db`, opened on first use. **Nothing is opened yet** — see
+    /// ``PassengerDatabase``.
+    let databases: PassengerDatabase
+
+    init(environment: PassengerEnvironment = .current) {
+        self.environment = environment
+
+        // `AppSurface.passenger` is the `app` claim AL-08 scopes the session by. Getting it wrong
+        // does not fail loudly — it signs the passenger in as a driver and revokes the session they
+        // wanted. `MageRideApp.passenger` is the other half: `mobile_db_schema.md` §0.2 gives each
+        // app its own file, and this one physically cannot open the driver tables.
+        //
+        // The three MQTT values are the one part of `IosAppConfig` this app has no use for. D3'
+        // §3.3 makes position ingest the driver's plane, so nothing here constructs a broker socket
+        // and `MqttConfig` is built and never read. An empty host is the honest value: a real one
+        // would be a connection string in a build that has nothing to connect with, and
+        // `PassengerEnvironmentTests` asserts the plist carries no MQTT key at all.
+        let config = IosAppConfig(
+            baseUrl: environment.apiBaseUrl,
+            appVersion: environment.appVersion,
+            userAgent: environment.userAgent,
+            debug: environment.isDebug,
+            mqttHost: "",
+            mqttPort: 8883,
+            mqttTls: true,
+            surface: .passenger,
+            app: .passenger,
+            keychainService: environment.keychainService
+        )
+
+        // R-06's engine, bound before the graph starts because `geoRealtimeModule`'s default
+        // *throws* on resolution when the platform has none — see `SharedH3Grid`. This is the
+        // binding C017 and C085 both left to this component.
+        let h3 = SharedH3Grid()
+        self.h3 = h3
+
+        let shared = IosAppGraphKt.startIosGraphWithH3(config: config, h3Grid: h3)
+        self.shared = shared
+
+        self.databases = PassengerDatabase(factory: shared.databases)
+        self.preferences = UserDefaultsAppPreferences()
+        self.locations = CoreLocationPassengerSource()
+
+        self.live = PassengerLiveMap(
+            transport: SignalRLiveHubTransport(
+                baseUrl: environment.apiBaseUrl,
+                tokens: shared.tokens
+            ),
+            snapshots: ApiNearbySnapshots(query: shared.api.query),
+            grid: h3
+        )
+
+        // Before the first frame, so a passenger who chose සිංහල never sees an English one. This is
+        // the earliest point at which it can happen — `PassengerLocale` redirects the bundle every
+        // lookup goes through, and a view built before it would have resolved its strings already.
+        PassengerLocale.applyStored(preferences)
+    }
+
+    /// Start-up work that outlives any view.
+    ///
+    /// Deliberately small. Anything that can wait for a screen waits for a screen — a passenger on a
+    /// five-year-old handset feels every millisecond before the first frame, and the live socket is
+    /// started by the shell rather than here so that it is one subscription with one owner.
+    func warmUp() {
+        PushTokenProvider.configureIfAvailable()
+
+        Task { [shared] in
+            // C014's handoff asks for a warm-up so the first attested call does not pay the whole
+            // preparation cost, and on iOS the first attested call is `POST /v1/auth/otp/request`.
+            // The expensive half of App Attest is generating the Secure Enclave key, which
+            // `attestationToken` does on first use and then keeps — so asking for one token against
+            // the route the shell is about to call anyway both warms the key up and costs nothing
+            // extra. It answers `nil` on a simulator and on any device without App Attest, which is
+            // the fail-soft rule and not an error to report.
+            _ = try? await shared.attestation.attestationToken(
+                request: AttestationRequest(
+                    operationId: "checkAppVersion",
+                    method: "GET",
+                    path: "/v1/version/check"
+                )
+            )
+        }
+    }
+}

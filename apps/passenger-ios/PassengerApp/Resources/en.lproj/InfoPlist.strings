@@ -1,0 +1,15 @@
+/* The strings iOS renders on the app's behalf: the Home-screen name and the permission sheets.
+ *
+ * These are NOT in Localizable.strings and cannot be — the system reads them out of the bundle
+ * before the app runs, which is why a missing key here is a hard crash the first time the API is
+ * called rather than a label that says its own name. The English values in `Info.plist` exist so the
+ * key is present at all; these are what a passenger actually reads.
+ */
+
+/* Transliterated rather than translated, and deliberately (C076's call, kept). This is the consumer
+ * app: its icon sits on a home screen beside apps labelled in Sinhala, and AL-26's whole point is
+ * that a Sinhala-first passenger is not handed an English product. The driver app needed no such
+ * decision because its name carries a translatable noun. */
+"CFBundleDisplayName" = "MageRide";
+
+"NSLocationWhenInUseUsageDescription" = "Your location centres the live map, shows the vehicles within about 3 km of you, and fills in your pickup point.";

@@ -31,3 +31,13 @@ public fun timestampFromEpochMillis(millis: Long): Timestamp = Timestamp.fromEpo
 
 /** [instant] as milliseconds since the epoch — the reading half, so no call site spells it twice. */
 public fun timestampEpochMillis(instant: Timestamp): Long = instant.toEpochMilliseconds()
+
+/**
+ * The wall clock, as the rest of the platform reads it (Δ C094).
+ *
+ * `kotlin.time.Clock.System.now()` is reachable from Swift only through whatever spelling the
+ * compiler gives a stdlib object's companion, which is not something an app should depend on — and
+ * `Date().timeIntervalSince1970` would be a *second* clock, which is exactly what
+ * `GeoCellSubscription`'s thirty-second hysteresis compares against. One clock, one call.
+ */
+public fun nowTimestamp(): Timestamp = kotlin.time.Clock.System.now()

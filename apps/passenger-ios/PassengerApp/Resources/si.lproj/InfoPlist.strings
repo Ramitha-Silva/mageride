@@ -1,0 +1,5 @@
+/* Sinhala. See en.lproj/InfoPlist.strings for what these are and why they are not in Localizable. */
+
+"CFBundleDisplayName" = "මේජ්‍රයිඩ්";
+
+"NSLocationWhenInUseUsageDescription" = "ඔබේ ස්ථානය සජීවී සිතියම මධ්‍යගත කරයි, ඔබෙන් කිලෝමීටර 3ක් පමණ ඇතුළත වාහන පෙන්වයි, සහ ඔබේ පිටත්වීමේ ස්ථානය පුරවයි.";

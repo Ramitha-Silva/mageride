@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>$(DEVELOPMENT_LANGUAGE)</string>
+    <key>CFBundleExecutable</key>
+    <string>$(EXECUTABLE_NAME)</string>
+    <key>CFBundleIdentifier</key>
+    <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>$(PRODUCT_NAME)</string>
+    <!--
+      The Home-screen name is translated in `Resources/*.lproj/InfoPlist.strings`, and unlike the
+      driver app's it is **transliterated rather than translated** into Sinhala and Tamil. C076 made
+      the same call and argued it: this is the *consumer* app, its icon sits on a home screen beside
+      apps labelled in Sinhala, and AL-26's whole point is that a Sinhala-first passenger is not
+      handed an English product. The driver app needed no such decision because its name carries a
+      translatable noun.
+    -->
+    <key>CFBundleDisplayName</key>
+    <string>MageRide</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>$(MARKETING_VERSION)</string>
+    <key>CFBundleVersion</key>
+    <string>$(CURRENT_PROJECT_VERSION)</string>
+
+    <!--
+      The three languages CLAUDE.md fixes. Listed so iOS negotiates against exactly this set: a
+      handset set to Hindi resolves to `en` (the development region) rather than to whichever
+      `.lproj` happened to sort first.
+    -->
+    <key>CFBundleLocalizations</key>
+    <array>
+        <string>si</string>
+        <string>ta</string>
+        <string>en</string>
+    </array>
+
+    <!-- Portrait only. Every frame in `specs/wireframes/passenger_ios.html` is a portrait handset. -->
+    <key>UISupportedInterfaceOrientations</key>
+    <array>
+        <string>UIInterfaceOrientationPortrait</string>
+    </array>
+
+    <key>UILaunchScreen</key>
+    <dict>
+        <!-- §0.2's `primary`, resolved from the asset catalogue so the launch surface is the
+             brand's rather than the system's white. -->
+        <key>UIColorName</key>
+        <string>primary</string>
+    </dict>
+
+    <!--
+      **One background mode, and the absence of the other is the point.** `remote-notification` is
+      P-02's silent `location_request` data message and US-6A.15's scheduled reminder — the two
+      pushes this app renders itself. `location` is deliberately NOT declared: this app publishes
+      nothing (D3' §3.3 makes position ingest the driver's MQTT plane), the location source has
+      exactly three consumers and all three are on screen, and a passenger app that kept the GPS
+      running with the screen off would be spending a battery to recompute the same nineteen cells.
+      `apps/passenger-android`'s `ManifestTest` asserts the same absence from the other side.
+    -->
+    <key>UIBackgroundModes</key>
+    <array>
+        <string>remote-notification</string>
+    </array>
+
+    <!--
+      Purpose strings. English here so the key exists at all; the translations iOS actually shows
+      are in `Resources/*.lproj/InfoPlist.strings`. A missing key is a hard crash the first time the
+      API is called, which is why they are declared even though every value is overridden.
+
+      **When-in-use only.** The Android twin declares no `ACCESS_BACKGROUND_LOCATION` either;
+      SCR-PA-005's rationale screen asks for exactly this grant and nothing in this app runs a fix
+      with the screen off.
+
+      There is deliberately no `NSCameraUsageDescription` **yet**: SCR-PA-017's driver-QR scan
+      (AL-22, AL-47) is C080's and the key belongs in the commit that opens a camera. A purpose
+      string with no API behind it asks for a permission this app does not want — the same fence
+      `apps/driver-ios` kept until C087 needed the scanner.
+    -->
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>Your location centres the live map, shows the vehicles within about 3 km of you, and fills in your pickup point.</string>
+
+    <!--
+      Every build-time value the app reads, in one dictionary, interpolated from the xcconfig.
+      `PassengerApp/DI/PassengerEnvironment.swift` is the only file allowed to read it — a build flag
+      read at two call sites is a flag that gets overridden at one of them.
+
+      **No MQTT keys.** This app has no broker host and never will (D3' §3.3); the SignalR hub rides
+      `ApiBaseUrl`, so there is one origin rather than two.
+    -->
+    <key>MageRide</key>
+    <dict>
+        <key>ApiBaseUrl</key>
+        <string>$(MAGERIDE_API_BASE_URL)</string>
+        <key>PMTilesUrl</key>
+        <string>$(MAGERIDE_PMTILES_URL)</string>
+    </dict>
+
+    <!--
+      ATS. No exception is declared, so every request is HTTPS — including the Debug configuration's
+      `http://localhost`, which ATS exempts for loopback without an entry. An
+      `NSAllowsArbitraryLoads` here would be a debug convenience that shipped.
+    -->
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsLocalNetworking</key>
+        <true/>
+    </dict>
+</dict>
+</plist>

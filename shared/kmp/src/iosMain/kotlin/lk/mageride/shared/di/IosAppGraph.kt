@@ -22,6 +22,7 @@ import lk.mageride.shared.domain.auth.MqttSessionTokenManager
 import lk.mageride.shared.domain.auth.SessionEvent
 import lk.mageride.shared.domain.dispatch.OfferSession
 import lk.mageride.shared.domain.dispatch.OfferSessionState
+import lk.mageride.shared.domain.geo.H3Grid
 import lk.mageride.shared.mqtt.MqttConfig
 import lk.mageride.shared.platform.PlatformAttestationProvider
 import lk.mageride.shared.platform.PlatformSecureStore
@@ -106,11 +107,12 @@ public data class IosAppConfig(
  * Appended after `sharedModules`, so every definition here wins over a shared one — which is what
  * makes the [AttestationProvider] swap a value rather than an edit inside `:shared`.
  *
- * **No `H3Grid` is bound.** `geoRealtimeModule` throws on resolution when the platform has none
+ * **No `H3Grid` is bound here.** `geoRealtimeModule` throws on resolution when the platform has none
  * (`platformH3Grid()` is `null` on iOS), and that is left as it is for the driver app: AL-31's home
  * map joins no geocell group at all — it shows only the driver's own vehicle — so nothing in it
  * resolves one, and a binding written here would be untested code standing in for a decision. A
- * passenger app does need one (R-06's 19-cell view) and **C094 must add it**.
+ * passenger app does need one (R-06's 19-cell view) and supplies it through [iosH3Module] — see
+ * [startIosGraphWithH3].
  */
 public fun iosAppModule(config: IosAppConfig): Module = module {
     single { config }
@@ -175,6 +177,22 @@ public class IosAppGraph internal constructor(public val koin: Koin) {
     public val offers: OfferSession = koin.get()
     public val config: IosAppConfig = koin.get()
 
+    /**
+     * The access token the HTTP pipeline sends, for the one caller that is not the pipeline (Δ C094).
+     *
+     * `/hubs/live` is authenticated with the ordinary 30-minute API access token (D-29, E-02) and
+     * carries it in a query parameter, because a browser `WebSocket` cannot set an `Authorization`
+     * header. That connection is the app's, not `:shared`'s, so the passenger app's SignalR
+     * transport needs the provider — and it must be **this** one: [SessionTokenProvider] reads
+     * whatever the manager currently holds, so a socket built on a second instance would be reading
+     * a second view of the same rotation.
+     *
+     * Deliberately the [lk.mageride.shared.data.api.TokenProvider] interface and not the manager: a
+     * caller that could reach [AuthSessionManager] could also end a session, and a transport has no
+     * business doing that.
+     */
+    public val tokens: lk.mageride.shared.data.api.TokenProvider = koin.get()
+
     // The three flows an app *shell* subscribes to. Typed watchers rather than raw `Flow`s because
     // Swift cannot collect one — see IosFlowWatcher.
     public val upgrades: IosFlowWatcher<UpgradeRequiredSignal> = IosFlowWatcher(signals.upgradeRequired)
@@ -194,11 +212,42 @@ public class IosAppGraph internal constructor(public val koin: Koin) {
 }
 
 /**
+ * The app's H3 engine, as a Koin [Module] (Δ C094).
+ *
+ * **Swift can implement [H3Grid] but cannot write a Koin module**, for the reason this whole file
+ * exists: `module { }` and `Module.single` are `inline` + `reified` and are not exported to
+ * Objective-C at all. So the app hands over the *instance* and the module is built here.
+ *
+ * Appended after [iosAppModule], so this definition wins over `geoRealtimeModule`'s throwing
+ * default. The engine has to produce ids bit-identical to `position-processor-svc`'s — see
+ * [H3Grid]'s own KDoc, and `shared/swiftpm/MageRideH3`, which is what the passenger app passes.
+ */
+public fun iosH3Module(grid: H3Grid): Module = module {
+    single<H3Grid> { grid }
+}
+
+/**
  * Starts Koin with `sharedModules` + [iosAppModule] and answers the typed view of it.
  *
  * Called once, from the SwiftUI `App` initialiser. Calling it twice throws — Koin refuses a second
  * `startKoin` — which is the intended behaviour: two graphs would mean two session managers and two
  * refresh loops racing the same single-use refresh token (D-29).
+ *
+ * This is the **driver** app's entry point, and the absence of an [H3Grid] is deliberate rather
+ * than an omission: AL-31's home map joins no geocell group, so nothing in that app resolves one. A
+ * passenger app calls [startIosGraphWithH3] instead.
  */
 public fun startIosGraph(config: IosAppConfig): IosAppGraph =
     IosAppGraph(initKoin(appModules = listOf(iosAppModule(config))).koin)
+
+/**
+ * As [startIosGraph], with the app's own [H3Grid] bound (Δ C094).
+ *
+ * A second function rather than a defaulted or nullable parameter on the first, and both halves of
+ * that matter on this bridge: a Kotlin default argument does not survive the Objective-C export, so
+ * a nullable parameter would become **required** at every Swift call site — including the driver
+ * app's, which would have to pass an explicit `nil` for an engine it has no use for. Two names, two
+ * selectors, and neither call site can be read as the other by mistake.
+ */
+public fun startIosGraphWithH3(config: IosAppConfig, h3Grid: H3Grid): IosAppGraph =
+    IosAppGraph(initKoin(appModules = listOf(iosAppModule(config), iosH3Module(h3Grid))).koin)

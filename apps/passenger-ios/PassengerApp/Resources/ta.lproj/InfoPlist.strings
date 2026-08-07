@@ -1,0 +1,5 @@
+/* Tamil. See en.lproj/InfoPlist.strings for what these are and why they are not in Localizable. */
+
+"CFBundleDisplayName" = "மேஜ்ரைட்";
+
+"NSLocationWhenInUseUsageDescription" = "உங்கள் இருப்பிடம் நேரடி வரைபடத்தை மையப்படுத்துகிறது, உங்களிடமிருந்து சுமார் 3 கி.மீ. தொலைவிலுள்ள வாகனங்களைக் காட்டுகிறது, மேலும் உங்கள் ஏறும் இடத்தை நிரப்புகிறது.";

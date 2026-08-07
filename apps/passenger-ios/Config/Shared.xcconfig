@@ -1,0 +1,59 @@
+// Settings both build configurations share. The per-configuration values are in Debug/Release.
+//
+// This is the iOS counterpart of `apps/passenger-android/build.gradle.kts` — the reasoning for each
+// value lives here, and `PassengerApp/DI/PassengerEnvironment.swift` is the only code allowed to
+// read one.
+
+PRODUCT_NAME = PassengerApp
+PRODUCT_BUNDLE_IDENTIFIER = lk.mageride.passenger
+CURRENT_PROJECT_VERSION = 1
+MARKETING_VERSION = 0.1.0
+
+// **iOS 16.0**, the same floor `apps/driver-ios/Config/Shared.xcconfig` sets and for the same two
+// reasons: `NavigationStack` is iOS 16 and D2' §C names it as *the* scaffolding primitive, and
+// NFR-22's intent is reach on budget hardware — iOS 16 runs on the iPhone 8 and the SE 2, 2017
+// hardware, the same year as the Android 8.0 floor, while iOS 17 drops both.
+//
+// The two apps must not drift: a passenger app with a higher floor than the driver app would be a
+// handset that can be driven for and not ridden in. C085's gap (a) — that no spec states an iOS
+// deployment target — is still open and is restated in the C094 handoff.
+//
+// Every dependency clears it: MapLibre iOS needs 12, SignalR-Client-Swift 13, Firebase 13,
+// App Attest 14, and the vendored H3 is C99 with no platform floor at all.
+IPHONEOS_DEPLOYMENT_TARGET = 16.0
+TARGETED_DEVICE_FAMILY = 1
+
+SWIFT_VERSION = 5.0
+ENABLE_USER_SCRIPT_SANDBOXING = YES
+
+// `minimal`, matching the driver app and for its reason: this code was written on a host that
+// cannot compile it (root CLAUDE.md), so raising the checking to a level that rejects code nobody
+// has been able to build would put an unknown number of diagnostics between C095 and its first green
+// build. Every actor annotation the app needs is already written — `@MainActor` on the graph, the
+// navigator, the shell model and the live map's facade; `nonisolated` on the CoreLocation delegate;
+// `actor` on the database handle and the vehicle store.
+SWIFT_STRICT_CONCURRENCY = minimal
+
+// Portrait only — see `UISupportedInterfaceOrientations` in `PassengerApp/Info.plist`. It lives
+// there rather than as an `INFOPLIST_KEY_*` build setting because those are only read when
+// `GENERATE_INFOPLIST_FILE` is YES, and this target ships a real plist.
+
+// Sinhala first (AL-26), then Tamil, then English. `DEVELOPMENT_LANGUAGE` stays `en` because it is
+// the *fallback* — the language iOS resolves a key to when a translation is missing — and the three
+// `.lproj` directories are what the passenger actually gets. The order above is the onboarding
+// screen's, not the fallback order.
+DEVELOPMENT_LANGUAGE = en
+
+// The base-plate for the Info.plist. `GENERATE_INFOPLIST_FILE` is deliberately OFF: this target's
+// plist carries a `MageRide` dictionary, a background mode and a purpose string, none of which a
+// generated plist can express.
+INFOPLIST_FILE = PassengerApp/Info.plist
+CODE_SIGN_ENTITLEMENTS = PassengerApp/PassengerApp.entitlements
+
+ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon
+ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor
+
+// CI archives with `CODE_SIGNING_ALLOWED=NO`, and a developer signs with their own team. Neither is
+// pinned here — a `DEVELOPMENT_TEAM` in a tracked file is the setting every contributor has to
+// un-set locally.
+CODE_SIGN_STYLE = Automatic

@@ -1,0 +1,15 @@
+#include "Shared.xcconfig"
+
+// The dev compose stack (`infra/`), reachable from a simulator on the host.
+//
+// **There is no MQTT setting in this file and there is none in Release either.** D3' §3.3 splits the
+// two planes: device position *ingest* is MQTT and belongs to the driver app, and passenger
+// realtime-*out* is SignalR over the gateway origin below. `apps/passenger-android`'s `ManifestTest`
+// asserts the absence of a broker host on that side; `PassengerEnvironmentTests` asserts it here.
+// The hub rides `MAGERIDE_API_BASE_URL`, so there is one origin rather than two.
+MAGERIDE_API_BASE_URL = http:/$()/localhost:8080
+MAGERIDE_PMTILES_URL = http:/$()/localhost:8090/sri-lanka.pmtiles
+
+SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG
+SWIFT_OPTIMIZATION_LEVEL = -Onone
+ONLY_ACTIVE_ARCH = YES
