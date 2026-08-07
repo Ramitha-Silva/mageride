@@ -44,6 +44,10 @@ apps/driver-ios/
 │   ├── Level/                   C090 · SCR-DI-019
 │   ├── Earnings/                C090 · SCR-DI-020 + its buckets and its chart
 │   ├── Wallet/                  C091 · SCR-DI-021…025 + the top-up rails and the ledger
+│   ├── Tracker/                 C092 · SCR-DI-027 + the device-QR scanner and the publisher gate
+│   ├── Sharing/                 C092 · SCR-DI-028 — Mode B grants, per vehicle
+│   ├── Profile/                 C092 · SCR-DI-029 + its three editors and the contact picker
+│   ├── History/                 C092 · SCR-DI-030 + the rate-passenger sheet
 │   ├── Menu/                    C088 · SCR-DI-036 — AL-31's drawer, as a tab
 │   ├── Onboarding/              C086 · SCR-DI-001, 002, 003, 003a, 007 + their data layer
 │   ├── UI/                      the wireframe's shapes as views — fields, tiles, cards, pills
@@ -338,7 +342,82 @@ DriverApp/
   one `memcpy`, where `KotlinByteArray.get(index:)` is one Objective-C message per byte and a PDF
   statement is hundreds of kilobytes.
 
-**To add a screen (C092–C093):**
+## Cluster 7 (C092) — the tracker, the sharing, the profile and the history
+
+```
+DriverApp/
+├── Tracker/     SCR-DI-027 + the device-QR scanner and the publisher gate
+├── Sharing/     SCR-DI-028 — Mode B grants and the request queue, per vehicle
+├── Profile/     SCR-DI-029 + its three editors, the contact picker and the four-route destination view
+└── History/     SCR-DI-030 + the rate-passenger sheet
+```
+
+- **Pairing a tracker stops this phone publishing for that vehicle, and the rule lives at the
+  publisher seam.** `TrackerPositionPublisher` decorates `ServicePositionPublisher` and refuses
+  `start(vehicleId:…)` for a vehicle in `TrackerBindingStore` (US-3.6, *"exactly one publisher at a
+  time"*). A decorator rather than a check in a screen because **three** doors reach the position
+  service — SCR-DI-010's go-online toggle, SCR-DI-011's Start Journey and US-5.10's Restart — and a
+  rule written at one would be missing from the other two. `stop()` is **never** gated. `DriverGraph`
+  has exactly one `PositionPublisher` binding: the decorator replaced the bare service publisher
+  rather than being added beside it.
+- **`TrackerBindingStore` is local because nothing on the app-facing surface answers the question.**
+  Not a preference the way `ActiveVehicleStore` is: `POST /v1/vehicles/{id}/device` returns a
+  `bindingId` and **nothing reads one back** — no registry read carries a device, and
+  `GET /v1/trackers/{imei}` is provisioning-svc's, which `:shared` has no client for. Pair on one
+  handset and the other still publishes; that is the honest limit of a device-local answer.
+- **Δ iOS — the device QR is `DataScannerViewController`, and that is D2' §SCR-DI-027's own SwiftUI
+  column.** Android put ZXing's reader half behind a CameraX `ImageAnalysis`; here VisionKit does
+  barcodes, the highlight and the reticle with no dependency at all. **This is the first decoder
+  linked into this target** — C091's *"no decoder is linked at all"* was true of the binary at that
+  point, and `WalletFenceTests` still pins the half that matters (nothing in the **wallet** scans,
+  AL-34). The grant is asked for **before** the sheet: `DataScannerViewController.isAvailable` is
+  `false` without it, so presenting first would show a scanner that could not scan.
+  `CameraAuthoriser.isCodeScannerSupported` is the seam; `TrackerImei.imeiIn` decides which fifteen
+  digits in a payload are an IMEI and refuses a payload with two candidates.
+- **SCR-DI-028's selector is a scope and re-reads on every change.** Both list endpoints take the
+  vehicle in the path, so `SharingModel.select(vehicleId:)` **empties** the queue and the roster
+  before fetching that vehicle's own — AL-35's *"never mixed across vehicles"* is a re-read, not a
+  filter. Only Mode A/B vehicles are offered; a Mode C tuk has no subscribers. **Δ iOS:** the chip row
+  is a segmented `Picker` (the cell's own clause), and because a segment holds text alone the type dot
+  and the `FLEET` badge are drawn on the selected vehicle's identity row underneath — that row is not
+  AL-35's removed caption box, and `TrackerFenceTests` reads all three languages to keep it that way.
+- **Accept and reject are `.swipeActions`** — the cell's clause again — with `allowsFullSwipe: false`
+  on the **admitting** edge: one gesture with no confirmation starts a subscription on somebody else's
+  account, and a rejection is the recoverable one.
+- **`ShareExpiry` has one time-zone hop where the Android twin has two.** M3's date picker answers
+  **UTC midnight** and `ShareExpiry.kt` is mostly a warning about it; a SwiftUI `DatePicker` handed
+  `ScheduleLabels.calendar` and `.zone` answers a Colombo day directly. What is left is the rule that
+  matters: a grant lapses at the **end** of the chosen day, not its start (US-4.8).
+- **SCR-DI-029 is where a driver reads their own platform id, and it is copyable.** C091's handoff
+  asked for exactly that — *"if that screen does not print it verbatim and copyably, credit transfer
+  has no way to be used"* — so the row carries a copy button and `.textSelection(.enabled)`. There is
+  no `DRV-22011` (`UI/PlatformId`) and **no star average anywhere on the app-facing surface**, so the
+  card prints the level and an em dash.
+- **The emergency contact is replaced, never accumulated** (`EmergencyContact.isPrimary` is *"exactly
+  one per account that has any"*, because D-33's SOS is p99 ≤ 5 s off a denormalised column).
+  `ContactPickerView` is `CNContactPickerViewController`, which runs **out of process** and therefore
+  needs **no `NSContactsUsageDescription` and no authorisation** — the mirror of the Android twin's
+  `ACTION_PICK` avoiding `READ_CONTACTS`. Set `predicateForSelectionOfProperty`, or tapping a number
+  inside a multi-number contact **places a call** instead of selecting it.
+- **Log out navigates nothing.** `AuthSessionManager.logout()` clears the local session whatever the
+  gateway answered and raises `RouteToLogin`, and `DriverShellModel` is the single subscriber; a
+  second handler would reset the stacks twice. `DriverSessions.logOut()` is the seam C092 added.
+- **Notification switches are grouped five ways and nothing safety-critical is offered.**
+  `SOS_TRIGGERED`, `SOS_RESOLVED`, `RIDE_CANCELLED` and `SCHEDULE_NOT_STARTED` are absent because
+  iam-svc drops a mute for one on the way in. An **absent** key reads as **on** (US-10.7 is opt-out),
+  and the whole map is written back so a key this build has never heard of survives.
+- **SCR-DI-030's list is query-svc's `GET /v1/trips/{driverId}`, not `GET /v1/rides/history`.**
+  `TripSummary` has neither distance nor rating, so the screen reads one **detail per row** through a
+  `TaskGroup` — and `TripDetail.rating` is joined on `rater_id = @UserId`, which makes it *"the stars
+  I already left"* and is what stops a re-opened screen offering to rate a trip twice. A failed detail
+  is dropped, not fatal.
+- Reusable UI added here: `MageRideSymbols.starFilled` / `.starEmpty`, `RatingStars.text(_:)`, and
+  `OutlinedAction` gained `symbolName` / `isEnabled` (SCR-DI-027 draws a glyph on Scan and draws
+  **Bind code** disabled). `CameraAuthoriser` gained `isCodeScannerSupported`. No `:shared` helper was
+  needed — this cluster crosses the bridge only for DTOs and two `IosInstantKt` conversions that
+  already existed.
+
+**To add a screen (C093):**
 
 1. Its route is already in `Nav/DriverRoute.swift`. Use it; do not invent a case.
 2. Replace its `placeholder(...)` line in `Nav/DriverDestinations.swift` with the real view. That
@@ -438,6 +517,14 @@ Every one of these is D2' §C or a platform constraint, and each is called out a
 | Statement download (SCR-DI-025) | write + `ACTION_SEND` chooser, from a context | write, then a `UIActivityViewController` a **view** presents |
 | History search (SCR-DI-025) | none — the Android screen has no search | `.searchable`, the cell's own `Δ iOS` clause |
 | History date range | M3's range picker, which answers **UTC** midnight | two `DatePicker`s in the Colombo calendar |
+| Device QR (SCR-DI-027) | CameraX + ZXing's reader half | **`DataScannerViewController`** — D2' §SCR-DI-027's own SwiftUI column; first-party, no dependency |
+| Sharing selector (SCR-DI-028) | a row of full-width `VehicleChip`s | a segmented `Picker` + an identity row for what a segment cannot hold |
+| Accept / reject (SCR-DI-028) | two text buttons in the row | `.swipeActions`, with no full swipe on the admitting edge |
+| Share expiry (SCR-DI-028) | M3's picker answers **UTC** midnight, so two hops | one hop — the `DatePicker` is given the Colombo calendar |
+| Contact picker (SCR-DI-029) | `ACTION_PICK` over `Phone.CONTENT_URI`, no `READ_CONTACTS` | `CNContactPickerViewController`, out of process, no usage-description key |
+| Language change (SCR-DI-029) | `Activity.recreate()` re-inflates every resource | no `recreate()`; `DriverLocale` redirects the bundle and views rebuild |
+| Profile editors (SCR-DI-029) | three `ModalBottomSheet`s | three `.sheet`s at `.medium` |
+| Rate passenger (SCR-DI-030) | `ModalBottomSheet` | `.sheet` with detent `.medium` — the cell's own clause |
 
 ## Things that will bite
 

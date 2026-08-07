@@ -50,6 +50,7 @@ final class FakeDriverSessions: DriverSessions {
     private(set) var verifiedCode: String?
     private(set) var resendCount = 0
     private(set) var cancelCount = 0
+    private(set) var logOutCount = 0
 
     func restore() async {
         restoreCount += 1
@@ -80,6 +81,14 @@ final class FakeDriverSessions: DriverSessions {
     func cancelOtp() async {
         cancelCount += 1
         awaitingChallenge = nil
+    }
+
+    /// Δ C092. Never throws, for the reason ``SharedDriverSessions/logOut()`` does not: the local
+    /// session goes whatever the gateway answered.
+    func logOut() async {
+        logOutCount += 1
+        isSignedIn = false
+        userId = nil
     }
 
     private func throwIfProgrammed() throws {

@@ -57,16 +57,19 @@ struct DriverDestinationView: View {
         case .wallet, .walletTopUp, .walletRequestCredit, .walletTransfer, .walletHistory:
             WalletDestinationView(route: route)
 
+        // ---- C092 · tracker, sharing, profile and history -----------------------------
+        //
+        // One arm for all four, and a sub-view rather than four inline screens — the same reason
+        // clusters 1, 2, 3, 5 and 6 take one arm each above.
+        case .trackerPairing, .sharing, .profile, .rideHistory:
+            ProfileDestinationView(route: route)
+
         // ---- menu and what hangs off it ----------------------------------------------
         //
         // `.menu` is SCR-DI-036 and is C088's — see the arm above; it is the Menu tab's root and the
         // whole of AL-31's replacement for the hamburger.
         case .documents: placeholder("driver documents")
-        case .profile: placeholder("SCR-DI-029 · driver profile")
         case .support: placeholder("SCR-DI-033 · support")
-        case .trackerPairing: placeholder("SCR-DI-027 · tracker pairing")
-        case .sharing: placeholder("SCR-DI-028 · sharing management")
-        case .rideHistory: placeholder("SCR-DI-030 · ride history")
         case .notifications: placeholder("SCR-DI-034 · alerts")
 
         // ---- C093 · the two takeovers ------------------------------------------------

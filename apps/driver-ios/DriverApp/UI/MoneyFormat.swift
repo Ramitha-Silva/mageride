@@ -135,6 +135,14 @@ enum MageRideSymbols {
 
     /// The `·` every wireframe caption joins its halves with.
     static let separator = " · "
+
+    /// SCR-DI-029's `★` and SCR-DI-030's `★★★★★` / `★★★☆☆` (Δ C092).
+    ///
+    /// A rating is drawn with these two rather than with `star.fill` / `star`, because the wireframe
+    /// draws characters and because a star inside a `Text` scales with Dynamic Type and reads as part
+    /// of the sentence VoiceOver announces. SF Symbols are used where the wireframe draws an *icon*.
+    static let starFilled = "★"
+    static let starEmpty = "☆"
 }
 
 extension String {

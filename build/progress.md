@@ -118,7 +118,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C089 | driver-ios-delivery | 4b | PARTIAL | 2026-08-07 | **Written in full; NOT compiled — this host cannot build iOS** (root CLAUDE.md), so the DoD is unverified and the status stays PARTIAL until `xcodebuild … test` on macOS. Verified here: `:shared:testDebugUnitTest detekt ktlintCheck` green (**822 tests, 0 failed** — unchanged, because this component adds **no Kotlin at all**), the `.pbxproj` regenerated from the tree (**99 app sources, 32 test sources**), a brace/paren sweep over all 131 Swift files, and the three `Localizable.strings` parsed with a real old-style-plist parser (**314 keys × 3**, key sets identical, none blank, none left in English, no specifier drift). SCR-DI-016a/b/c built — **6 Swift files, 3 XCTest suites / 30 tests, 22 keys × si/ta/en** (C071's key names and C071's translations). **The three `Localizable.strings` files did not parse before this component and now do** — a `.strings` comment is a C comment and does not nest, so `values*/strings.xml` inside one closed it on the `*/` and `NSDictionary(contentsOf:)` answered `nil`: **every key in the driver app resolved to its own name**, from C085 onward, and `LocalizationTests` would have failed at its first line on a Mac. Seven occurrences fixed. **`ActiveRideScreen` now hands a package over to `DeliveryScreen`** — the one `if` C088 left for this component; no route added, no deep link changed, and SCR-DI-015's poll and GNSS subscription stay off for a parcel so only one loop folds server states onto the ride. **`PackageHandoff` is the five-attempt rule** and the projection is seated once and kept, because re-seating throws the attempt count away. **The photograph completes the delivery** (Δ C037) so it uploads on the *"Delivery completed"* tap, not the shutter; `DocumentCaptureTarget.deliveryProof` is the first non-document use of SCR-DI-005. **One C071 defect found and not replicated**: the Android twin empties the four OTP boxes on every fold, and its five-second poll is a fold. Four C071 spec gaps carried forward, one new iOS delta — see the handoff |
 | C090 | driver-ios-jobs-level-earnings | 4b | PARTIAL | 2026-08-07 | **Written in full; NOT compiled — this host cannot build iOS** (root CLAUDE.md), so the DoD is unverified and the status stays PARTIAL until `xcodebuild … test` on macOS. Verified here: `:shared:compileKotlinIosArm64 detekt ktlintCheck` green with the **three new `iosMain` helpers** type-checked, the `.pbxproj` regenerated from the tree (**113 app sources, 40 test sources**), a brace/paren/string sweep over all 153 Swift files, an import and string-key audit, and the three `Localizable.strings` parsed with a real old-style-plist parser (**353 keys × 3**, key sets identical, none blank, none left in English, no specifier drift, no Android `%n$s` left behind). SCR-DI-017/018/019/020 built — **14 Swift files, 6 XCTest suites across 7 test files, 39 keys × si/ta/en** (C072's key names and C072's translations). **The board is post-intent only and the fence is asserted**; **US-6A.8 is three-valued** so an unread level renders as *"we could not read your Driver Level"* and never as the L1 gate; **T-30 is one instant read by two screens** through `jobBoardGoesLiveAtMillis` — SCR-DI-017's expiry and SCR-DI-018's *"reminder sent"* are the same comparison; earnings print query-svc's own summary and never a second total; every clock and bucket is Asia/Colombo through `:shared`'s zone. **Δ iOS: the trend is Swift Charts**, which is `driver_ios.html`'s own clause for the cell, and the period strip is a segmented `Picker`, which is what `.tabbar2` draws on this platform. One C072 defect found and not replicated (`DriverLevelState.error` is unreachable). Five C072 spec gaps carried forward, one new iOS delta — see the handoff |
 | C091 | driver-ios-wallet-credit | 4b | PARTIAL | 2026-08-07 | **Written in full; NOT compiled — this host cannot build iOS** (root CLAUDE.md), so the DoD is unverified and the status stays PARTIAL until `xcodebuild … test` on macOS. Verified here: `:shared:compileKotlinIosArm64 detekt ktlintCheck` green with the **new `iosMain` helper** type-checked, the `.pbxproj` regenerated from the tree (**134 app sources, 47 test sources**), a brace/paren/string sweep over all 181 Swift files, an import and string-key audit (276 literal keys + 174 assigned, all resolving), and the three `Localizable.strings` re-parsed (**460 keys × 3**, identical key sets, none blank, none left in English, no specifier drift). SCR-DI-021/022/023/024/025 built — **20 Swift files, 7 XCTest suites across 6 test files, 107 keys × si/ta/en** (C073's key names and C073's translations, plus five this platform needs). **The biggest finding is a platform hazard, not a spec gap: a Kotlin `require` is a caught exception on Android and a TERMINATED PROCESS here**, and three `:shared` constructors this cluster builds from server data carry one — `DailyFeeSchedule`, `VoucherCatalogue` and `CreditTransferIntent` — so each is validated in Swift first and the refusal becomes copy. A Rs 1,000 voucher at 10 % prices at Rs 900, credits Rs 1,000 and goes to `POST /v1/vouchers/purchase`; a transfer's two legs are equal at every amount; no source or copy in the cluster names a bank transfer or a commission in any of the three languages (`WalletFenceTests`, which reads the source off disk through `#filePath`). Zero new dependencies — AL-15's encoder is `CIQRCodeGenerator`, so **no QR decoder is linked into this target at all**. Eight Δ iOS rows added to the target's Section C table; C073's five spec gaps carried forward unchanged |
-| C092 | driver-ios-tracker-sharing-profile | 4b | PENDING | | |
+| C092 | driver-ios-tracker-sharing-profile | 4b | PARTIAL | 2026-08-07 | **Written in full; NOT compiled — this host cannot build iOS** (root CLAUDE.md), so the DoD is unverified and the status stays PARTIAL until `xcodebuild … test` on macOS. Verified here: the `.pbxproj` regenerated from the tree (**156 app sources, 54 test sources**), a brace/paren/string sweep over all 210 Swift files, a string-key audit (every key the four screens reference resolves, and every key declared is referenced), an import audit over the new files, and the three `Localizable.strings` re-parsed with a real old-style-plist parser (**544 keys × 3**, identical key sets, none blank, none left in English, no specifier drift). `:shared` is untouched — this cluster crosses the bridge for DTOs only. SCR-DI-027/028/029/030 built — **22 Swift files, 5 XCTest suites across 6 test files, 84 keys × si/ta/en** (C074's key names and C074's translations). **The C074 fence is the same decorator here**: `TrackerPositionPublisher` wraps the service publisher in `DriverGraph`, which closes all three doors onto the position plane at once, and pairing also stops a stream already running. **Δ iOS: the device QR is `DataScannerViewController`** — D2' §SCR-DI-027's own SwiftUI column, first-party, and **the first decoder linked into this target** (`WalletFenceTests` still pins AL-34 for the wallet). SCR-DI-028's chip row is a segmented `Picker` and its accept/reject are `.swipeActions` with no full swipe on the admitting edge; `ShareExpiry` needs one time-zone hop where Android needs two. SCR-DI-029's contact picker is `CNContactPickerViewController`, which needs **no contacts permission and no usage-description key**, and the driver's platform id is copyable (C091's handoff asked for it). Six C074 spec gaps carried forward unchanged; nine Δ iOS rows added to the target's Section C table |
 | C093 | driver-ios-comms-safety-support | 4b | PENDING | | |
 | C094 | passenger-ios-shell | 4b | PENDING | | |
 | C095 | passenger-ios-auth-onboarding | 4b | PENDING | | |
@@ -14441,3 +14441,177 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   `TopUpModelTests.swift`, `CreditTransferModelTests.swift`, `WalletHistoryModelTests.swift`,
   `WalletFenceTests.swift`. Plus `DriverApp.xcodeproj/project.pbxproj` (regenerated) and
   `apps/driver-ios/CLAUDE.md`.
+
+---
+
+- **Component:** C092 driver-ios-tracker-sharing-profile — 2026-08-07
+- **Status:** PARTIAL — **written in full and not compiled.** Root CLAUDE.md: *"iOS and KMP-iOS targets
+  do NOT compile on this Linux host … compile/verify runs on a Mac."* Every DoD line is written and
+  none is proven, so the status stays PARTIAL until `xcodebuild -project apps/driver-ios/DriverApp.xcodeproj
+  -scheme DriverApp -destination 'platform=iOS Simulator,name=iPhone 15' test` runs green on macOS —
+  with `./gradlew :shared:assembleXCFramework` **first**, or SPM fails at package resolution.
+
+  What *was* verified on this host: the `.pbxproj` regenerated from the tree by
+  `Tools/generate_xcodeproj.py` (**156 app sources, 54 test sources, 3 resources, 2 localised
+  tables**); a comment-, string- and interpolation-aware brace/paren/bracket sweep over all **210**
+  Swift files; a string-key audit in both directions (every key the four screens reference resolves in
+  `en.lproj`, and every key C092 declared is referenced by the code); an import audit over the
+  twenty-two new app files and seven new test files; and the three `Localizable.strings` re-parsed
+  with a real old-style-plist parser — **544 keys × 3**, identical key sets, none blank, none left in
+  English, no format-specifier drift. `:shared` was not touched: this cluster crosses the bridge for
+  DTOs and two `IosInstantKt` conversions that already existed, so no `iosMain` helper was added and
+  nothing needed re-type-checking.
+
+- **Notes:**
+
+  **The fence is the same decorator it is on Android, and it is wired in the graph rather than in a
+  screen.** *"Paired tracker means the phone stops ingesting GPS for that vehicle"* is one rule with
+  three call sites — SCR-DI-010's go-online toggle, SCR-DI-011's Start Journey and US-5.10's Restart
+  all reach `PositionPublisher.start` — so it lives in `TrackerPositionPublisher`, which wraps
+  `ServicePositionPublisher` in `DriverGraph.init`. There is **exactly one** `PositionPublisher`
+  binding: the decorator replaced the bare one rather than being added beside it, so nothing rests on
+  which of two definitions wins. `stop()` is never gated — swallowing one would leave a handset
+  publishing for a vehicle it had just been paired away from — and pairing while online calls `stop()`
+  directly, because a gate that only refused the *next* start would leave a live stream running until
+  the driver went offline.
+
+  **The device QR is `DataScannerViewController`, and that is the wireframe's own instruction rather
+  than a substitution.** D2' §SCR-DI-027's component table reads *"QR scan · CameraX + ML Kit ·
+  `DataScannerViewController` · device QR"*, so the two apps decode the same sticker through two
+  first-party stacks: C074 used the reader half of `com.google.zxing:core` behind a CameraX
+  `ImageAnalysis` (its own recorded deviation, because ML Kit meant a Play-services dependency and a
+  downloaded model), and here VisionKit ships the scanner, the highlight and the reticle D2' asks for
+  under **Anim** with no dependency at all. Two consequences worth writing down:
+
+  1. **This is the first decoder linked into this target**, so the C091 handoff's *"no decoder is
+     linked at all"* is no longer a fact about the binary. The half that matters is unchanged and
+     still asserted: `WalletFenceTests` reads `DriverApp/Wallet` off disk and fails on
+     `AVCaptureMetadataOutput`, `CIDetector` or `DataScannerViewController` appearing there (AL-34).
+     The new scanner is in `DriverApp/Tracker` and nothing in the wallet reaches it.
+  2. **The camera grant is asked for before the sheet is presented.**
+     `DataScannerViewController.isAvailable` is `false` until the camera is granted, so presenting
+     first would show a scanner that could not scan and had nothing to say about why.
+     `CameraAuthoriser.isCodeScannerSupported` is the seam a model test sets; it is a *different*
+     question from `isScannerSupported` (the document camera) and is `false` on every simulator, so
+     the Scan button is drawn **disabled** rather than hidden and typing is the path that always
+     works. `NSCameraUsageDescription` was already present (C087) and no Info.plist change was needed.
+
+  **SCR-DI-028's selector is a scope, and the two things it draws are the cell's own `Δ iOS` clause.**
+  *"vehicle `Picker` + `.swipeActions` accept/reject"*. The chip row is a **segmented** `Picker`, which
+  is what a full-device-width one-of-N control is on this platform — the same reading C090 made of
+  SCR-DI-020's period strip and C091 of SCR-DI-022's methods. A segment holds text and nothing else,
+  so the type dot and the `FLEET` badge the chip carried are drawn on the **selected** vehicle's
+  identity row directly beneath it; that row says *which* vehicle in the chip's own words and never
+  who assigned it, which is the distinction AL-35 drew when it removed the *"Showing sharing for …
+  temporarily assigned by …"* caption box. `TrackerFenceTests` reads all three `Localizable.strings`
+  and fails on that caption coming back in any of them. Accept and reject are swipes with
+  **`allowsFullSwipe: false` on the admitting edge**: a full swipe is one gesture with no confirmation
+  and this one starts a subscription on somebody else's account, while a rejection is the recoverable
+  half — the passenger can ask again. The wireframe's own footnote habit (SCR-DI-026's *"Swipe a row
+  to deactivate"*) is followed with `sharing_swipe_hint`, because a swipe nobody is told about is a
+  control nobody finds.
+
+  **`ShareExpiry` needs one time-zone hop where the Android twin needs two, and the removed one is a
+  trap rather than a step.** M3's `DatePickerState` answers **UTC midnight** of the day that was
+  tapped, so `ShareExpiry.kt` has to read that instant back as a date in UTC before it can close it in
+  Colombo. A SwiftUI `DatePicker` handed `ScheduleLabels.calendar` and `.zone` in its environment
+  answers an instant already inside the Colombo day the driver tapped — the same removal
+  `WalletHistoryScreen`'s date range made. What is left is the rule that carries meaning and is
+  unit-tested from four directions: a grant lapses at the **end** of the chosen day, because a driver
+  who picks 30 June means *"through the 30th"* and US-4.8's auto-revoke acts on exactly this value.
+
+  **SCR-DI-029 is where a driver reads their own id, and C091's handoff asked for it in as many
+  words** — *"if that screen does not print it verbatim and copyably, credit transfer has no way to be
+  used"*. The row carries a copy button **and** `.textSelection(.enabled)`, so a long press works the
+  way it does everywhere else on the platform. There is no `DRV-22011` (`UI/PlatformId`), and the
+  star average is an em dash because nothing on the app-facing surface serves one — C088's menu header
+  and C074's Android screen reached the same conclusion.
+
+  **The contact picker needs no permission and no usage-description key, which is the exact mirror of
+  the Android trade.** `CNContactPickerViewController` runs **out of process**: the app never sees the
+  address book, the system does, and what comes back is the one row the driver tapped — so
+  `NSContactsUsageDescription` is absent from `Info.plist` on purpose, exactly as `READ_CONTACTS` is
+  absent from the Android manifest. One thing will bite whoever touches that file:
+  **`predicateForSelectionOfProperty` must be set**, or tapping a number inside a multi-number contact
+  performs the property's *default action* — which for a phone number is **placing a call**.
+
+  **Log out navigates nothing.** `AuthSessionManager.logout()` clears the local session whatever the
+  gateway answered and raises `SessionEvent.RouteToLogin`, and `DriverShellModel` is the single
+  subscriber to that signal (its own KDoc says a screen that also handled it would race the shell). So
+  where the Android view model raises a `signedOut` flag for its screen to act on, `DriverProfileModel`
+  raises nothing — the shell resets the four stacks. `DriverSessions.logOut()` is the one seam C092
+  added to C086's protocol, for the reason every seam in this target exists: `AuthSessionManager` is a
+  Kotlin class and a model test cannot stand one in.
+
+  **The language change is a real Section C delta and it is C086's, applied again.** Android calls
+  `Activity.recreate()`, which re-inflates every resource; iOS has no `recreate()` and needs none —
+  `DriverLocale.apply` redirects the bundle every lookup goes through, so the profile rebuilds on the
+  state change and every other screen resolves its strings in the new language the next time it is
+  built. `applyLanguage` is injected into `DriverProfileModel` for `LanguageCityModel`'s reason: that
+  call swaps the app bundle's class and writes `AppleLanguages`, which a test must not leave behind.
+
+  **SCR-DI-030 reads a detail per row, concurrently, through a `TaskGroup`.** `TripSummary` carries
+  neither the distance nor the rating the wireframe's second line prints, and `TripDetail.rating` is
+  joined on `rater_id = @UserId` — *"the stars I already left"* — which is what stops a re-opened
+  screen offering to rate a trip twice and writing a second `trips.ratings` row. It is a fan-out and
+  it is bounded to one page of twenty cacheable GETs against a read model. A detail that fails is
+  dropped, not fatal: the row keeps its summary and shows no distance.
+
+  ### Spec gaps — all six are C074's, carried forward unchanged
+
+  1. **No route writes a driver-to-passenger rating for a Mode C ride.** `ride.yaml` declares no rating
+     route in either direction; the only operation on the platform that writes one is trip-state-svc's
+     `POST /v1/sessions/{sessionId}/driver-rating`. `RideHistoryRepository.ratePassenger` sends the
+     subject id to that route — correct for a Mode A/B session, refused for a ride — and
+     `RideHistoryModelTests.testTheRatingIsSentToTheOneRouteThatExistsAndUpdatesTheRowLocally` pins the
+     path so the gap cannot be quietly "fixed" by inventing one. Still the single highest-value
+     follow-up in this cluster: **a micro-change-set adding `POST /v1/rides/{rideId}/driver-rating`**.
+  2. **There is no owner-facing unbind**, so the screen offers none. `provisioning.yaml` has
+     `POST /v1/trackers/unbind` and `registry.yaml` has no wrapper for it; forgetting the binding
+     locally would let the phone start publishing again while the device is still bound. The wrapper
+     registry needs is a `DELETE /v1/vehicles/{vehicleId}/device`.
+  3. **Nothing reads a tracker binding back**, so `TrackerBindingStore` is this handset's memory and
+     the wireframe's live device health (`lastSeen`/`battery`/`signal`, US-3.12) cannot be drawn.
+  4. **registry's bind wrapper drops `method` and `bindCode`.** A scanned IMEI is indistinguishable
+     from a typed one — the same provenance argument AL-43 makes about a document scan — and **Bind
+     code** has nothing to send, so it is drawn disabled with the reason under it.
+  5. **No read serves a driver their own star average**, so the identity card prints an em dash.
+  6. **No notification type carries a Mode B access request**, so the queue is read on open and after
+     every decision, and `DriverNotificationGroup` has no *sharing* row —
+     `DriverProfileModelTests.testThereIsNoSharingGroupBecauseNothingRaisesThatNotification` asserts
+     the absence rather than leaving it to be re-added by someone reading §SCR-DI-034's list.
+
+  ### One thing that is not a deviation, though it looks like one
+
+  **SCR-DI-030's two amounts are the same number.** The wireframe prints *"Rs 480"* and *"fare to you
+  Rs 480"*, and that is correct rather than a sketch error: D5' has no commission and AL-01 removed the
+  last thing that could have taken one, so what the passenger paid is what the driver keeps — less the
+  flat daily fee, which SCR-DI-021 accounts for separately.
+
+  **For C093 —** `Profile/ProfileRepository` is the one door onto `GET`/`PUT /v1/users/me`, the
+  emergency contacts and log out; **SCR-DI-032's driver SOS reads the contact this screen writes**, and
+  safety-svc answers `400 no-emergency-contact` to an account without one. `Profile/ContactPicker` is
+  the permission-free address-book seam and is reusable by any screen that needs a number.
+  `History/RideHistoryRepository` is the trips read model and the only rating door — read gap 1 before
+  wiring anything to it. `MageRideSymbols` now spells `★` and `☆` beside `—`, `→` and `·`;
+  `RatingStars.text(_:)` draws a five-star row; `OutlinedAction` gained `symbolName` / `isEnabled`;
+  `CameraAuthoriser` gained `isCodeScannerSupported`. **SCR-DI-034 (C093) is the screen the gap-6
+  notification would land on**, and `DriverNotificationGroup` is the table its preferences already
+  switch — add a row there if a sharing type is ever minted. `Nav/DriverDestinations.swift` now leaves
+  exactly three placeholders: `.documents`, `.support` and `.notifications`.
+
+  **Files —** app, new: the twenty-two files under `DriverApp/Tracker/` (`TrackerImei`,
+  `TrackerBindingStore`, `TrackerRepository`, `TrackerPositionPublisher`, `DeviceQrScanner`,
+  `TrackerPairingModel`, `TrackerPairingScreen`), `DriverApp/Sharing/` (`ShareExpiry`,
+  `SharingRepository`, `SharingModel`, `SharingScreen`), `DriverApp/Profile/` (`ProfileRepository`,
+  `DriverNotificationGroup`, `ContactPicker`, `DriverProfileModel`, `DriverProfileScreen`,
+  `ProfileEditors`, `ProfileDestinationView`) and `DriverApp/History/` (`RideHistoryRepository`,
+  `RideHistoryModel`, `RideHistoryScreen`, `RatePassengerSheet`). App, edited:
+  `DI/DriverGraph.swift`, `Nav/DriverDestinations.swift`, `Onboarding/DriverSessions.swift`,
+  `Capture/CameraAuthorisation.swift`, `UI/MoneyFormat.swift`, `Wallet/WalletScreen.swift` and the
+  three `Localizable.strings`. Tests, new: `DriverAppTests/ProfileTestKit.swift`,
+  `TrackerPairingModelTests.swift`, `TrackerFenceTests.swift`, `SharingModelTests.swift`,
+  `ShareExpiryTests.swift`, `DriverProfileModelTests.swift`, `RideHistoryModelTests.swift`. Tests,
+  edited: `DashboardTestKit.swift` (a `riderId` on the ride fixture), `OnboardingTestKit.swift`
+  (`logOut`), `VehicleTestKit.swift` (`isCodeScannerSupported`). Plus
+  `DriverApp.xcodeproj/project.pbxproj` (regenerated) and `apps/driver-ios/CLAUDE.md`.

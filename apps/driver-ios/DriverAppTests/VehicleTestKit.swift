@@ -279,6 +279,10 @@ final class FakeCameraAuthoriser: CameraAuthoriser {
     var authorisation: CameraAuthorisation = .granted
     var isScannerSupported = true
 
+    /// Whether VisionKit's **code** scanner can run (Δ C092). `false` is every simulator and every
+    /// device older than the A12 — the state SCR-DI-027 answers with a disabled Scan button.
+    var isCodeScannerSupported = true
+
     /// What ``request()`` answers.
     var grantsOnRequest = true
 

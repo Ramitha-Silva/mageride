@@ -27,6 +27,8 @@ func testFix(_ point: GeoPoint = testHere, headingDeg: Int? = nil) -> Fix {
 }
 
 /// A ride as `GET /v1/rides/{rideId}` returns it.
+/// - Parameter riderId: Who is travelling (Δ C092). `nil` is **P-01's proxy booking for an
+///   unregistered rider**, which is the one completed ride SCR-DI-030 can never rate.
 func rideDetail(
     state: RideState = RideState.accepted,
     version: Int32 = 3,
@@ -34,7 +36,8 @@ func rideDetail(
     paymentMethod: RidePaymentMethod = RidePaymentMethod.cash,
     counterpartyPhone: String? = "+94771234567",
     packageSize: PackageSize? = nil,
-    fareMinor: Int64 = 48_000
+    fareMinor: Int64 = 48_000,
+    riderId: String? = nil
 ) -> RideDetail {
     RideDetail(
         rideId: testRideId,
@@ -42,7 +45,7 @@ func rideDetail(
         state: state,
         version: version,
         bookerId: nil,
-        riderId: nil,
+        riderId: riderId,
         riderName: "Nimal",
         pickup: Place(lat: testHere.lat, lng: testHere.lng, address: "Galle Face"),
         dropoff: Place(lat: testThere.lat, lng: testThere.lng, address: "Nugegoda"),

@@ -59,6 +59,16 @@ protocol DriverSessions: AnyObject {
     /// Abandons the attempt without leaving the screen — the wireframe's `‹ Back` from the code
     /// half to the number.
     func cancelOtp() async
+
+    /// `POST /v1/auth/logout` — end this device's session (US-1.7, Δ C092).
+    ///
+    /// On the seam rather than through `IamApi`, because `AuthSessionManager` is what *holds* the
+    /// session: calling the route without telling it would leave a signed-out app whose `SessionState`
+    /// still said `SignedIn` until the next 401. The local half happens **whether or not the call
+    /// succeeds** — a driver who asked to be signed out on a handset with no signal must still end up
+    /// signed out on *this* device — and it raises `SessionEvent.RouteToLogin`, which
+    /// ``DriverShellModel`` is the single subscriber to. Nothing else navigates.
+    func logOut() async
 }
 
 /// ``DriverSessions`` over C014's `AuthSessionManager`.
@@ -100,6 +110,13 @@ final class SharedDriverSessions: DriverSessions {
 
     func cancelOtp() async {
         try? await sessions.cancelOtp()
+    }
+
+    /// `try?` because `AuthSessionManager.logout()` already swallows the gateway's half by design and
+    /// only the cancellation of the calling task can reach here. There is nothing a screen could do
+    /// with a failure: the local session is gone either way.
+    func logOut() async {
+        try? await sessions.logout()
     }
 
     /// `kotlin.time.Instant` reaches Swift as an opaque object; `toEpochMilliseconds()` is the one

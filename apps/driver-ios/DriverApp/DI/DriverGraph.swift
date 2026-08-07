@@ -162,6 +162,31 @@ final class DriverGraph: ObservableObject {
     /// Where US-9A.19's statement lands before the share sheet picks it up.
     let statements: StatementExporter
 
+    // MARK: - C092 · the tracker, the sharing, the profile and the history
+    //
+    // Three repositories and one store. The store is here rather than constructed per screen for
+    // ``activeVehicle``'s reason and one more: it is read by ``publisher`` on **every** go-online, and a
+    // second store over the same `UserDefaults` keys would be two objects disagreeing about which
+    // vehicles have a tracker on them.
+
+    /// Which vehicles a hardware tracker publishes for, as this handset knows it (US-3.6).
+    let trackerBindings: TrackerBindingStore
+
+    /// registry-svc's owner-facing device bind, as SCR-DI-027 uses it (T-02).
+    let trackers: TrackerRepository
+
+    /// registry-svc's grants and subscription-svc's request queue, as SCR-DI-028 uses them (AL-24).
+    let sharing: SharingRepository
+
+    /// `GET`/`PUT /v1/users/me`, the emergency contacts and the way out, as SCR-DI-029 uses them.
+    ///
+    /// Distinct from ``profiles``, which is C086's SCR-DI-003a **upload**; this one is the settings
+    /// screen's read and write surface.
+    let profileSettings: ProfileRepository
+
+    /// query-svc's trips read model and the platform's one rating route, as SCR-DI-030 uses them.
+    let history: RideHistoryRepository
+
     init(environment: DriverEnvironment = .current) {
         self.environment = environment
 
@@ -224,14 +249,27 @@ final class DriverGraph: ObservableObject {
         self.offerSlot = SharedOfferSlot(offers: shared.offers, states: shared.offerStates)
         self.offers = OfferInbox(offers: shared.offers, sessions: sessions)
         self.contact = SystemRideContact(voip: shared.api.voip)
-        self.publisher = ServicePositionPublisher(positions: positions)
+
+        // **C092's fence, and it is wired here because there is nowhere else it could close all three
+        // doors.** SCR-DI-010's go-online toggle, SCR-DI-011's Start Journey and US-5.10's Restart all
+        // reach the position service through this one property, so decorating it once is US-3.6's
+        // *"exactly one publisher at a time"* for every caller — see ``TrackerPositionPublisher``.
+        // There is exactly ONE binding of `PositionPublisher` in this graph; the decorator replaced the
+        // bare `ServicePositionPublisher` rather than being added beside it.
+        let trackerBindings = UserDefaultsTrackerBindingStore()
+        self.trackerBindings = trackerBindings
+        self.publisher = TrackerPositionPublisher(
+            delegate: ServicePositionPublisher(positions: positions),
+            bindings: trackerBindings
+        )
         self.deliveries = ApiDeliveryRepository(ride: shared.api.ride)
 
         // C090. dispatch-svc's board and reputation reads are one repository because the US-6A.8
         // gate joins them — see ``JobsRepository``. The dashboard's own level badge still comes
         // through ``StandbyRepository``: that is one field of a five-field status header, and asking
         // for the stats read as well to draw a badge would be a round trip a dashboard never uses.
-        self.jobs = ApiJobsRepository(dispatch: shared.api.dispatch)
+        let jobs = ApiJobsRepository(dispatch: shared.api.dispatch)
+        self.jobs = jobs
         self.earnings = ApiEarningsRepository(query: shared.api.query)
 
         // C091. Three repositories over two services, split by what a screen asks rather than by which
@@ -245,6 +283,28 @@ final class DriverGraph: ObservableObject {
         self.walletPreferences = UserDefaultsWalletPreferences()
         self.payments = SystemPaymentHandoff()
         self.statements = FileStatementExporter()
+
+        // C092. The tracker bind is registry's owner-facing wrapper and sharing is registry **and**
+        // subscription, because accepting a request creates the grant and starts the subscription in
+        // one transaction (AL-24). The profile reads the level through C090's `jobs` rather than a
+        // second `GET /v1/drivers/{id}/level`, which is what stops two screens disagreeing about a
+        // driver's level.
+        self.trackers = ApiTrackerRepository(registry: shared.api.registry, bindings: trackerBindings)
+        self.sharing = ApiSharingRepository(
+            registry: shared.api.registry,
+            subscription: shared.api.subscription
+        )
+        self.profileSettings = ApiProfileRepository(
+            iam: shared.api.iam,
+            jobs: jobs,
+            sessions: sessions,
+            preferences: preferences
+        )
+        self.history = ApiRideHistoryRepository(
+            query: shared.api.query,
+            ride: shared.api.ride,
+            tripState: shared.api.tripState
+        )
 
         // Before the first frame, so a driver who chose සිංහල never sees an English one. This is
         // the earliest point at which it can happen — `DriverLocale` redirects the bundle every
@@ -361,6 +421,33 @@ final class DriverGraph: ObservableObject {
     /// SCR-DI-025.
     func makeWalletHistoryModel() -> WalletHistoryModel {
         WalletHistoryModel(identity: identity, wallet: walletReads, exporter: statements)
+    }
+
+    // MARK: - C092 · the per-screen models
+    //
+    // Factories for the reason every other cluster's are: each is a `@StateObject` owned by the screen
+    // that shows it. SCR-DI-030's would be the worst one to hold — its model fans out a detail read per
+    // trip on `refresh()`, and one that outlived the screen would keep a page of twenty results for the
+    // life of the process.
+
+    /// SCR-DI-027.
+    func makeTrackerPairingModel() -> TrackerPairingModel {
+        TrackerPairingModel(identity: identity, trackers: trackers, publisher: publisher, camera: camera)
+    }
+
+    /// SCR-DI-028.
+    func makeSharingModel() -> SharingModel {
+        SharingModel(identity: identity, sharing: sharing)
+    }
+
+    /// SCR-DI-029.
+    func makeDriverProfileModel() -> DriverProfileModel {
+        DriverProfileModel(identity: identity, profiles: profileSettings)
+    }
+
+    /// SCR-DI-030.
+    func makeRideHistoryModel() -> RideHistoryModel {
+        RideHistoryModel(identity: identity, history: history)
     }
 
     /// Start-up work that outlives any view.

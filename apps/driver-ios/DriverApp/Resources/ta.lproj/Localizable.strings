@@ -600,3 +600,99 @@
 "wallet_statement_download" = "அறிக்கையைப் பதிவிறக்கு";
 "wallet_statement_ready" = "உங்கள் %1$@ அறிக்கை தயார்.";
 "wallet_statement_failed" = "அந்த அறிக்கையைச் சேமிக்க முடியவில்லை. மீண்டும் முயலவும்.";
+
+/* ---------------------------------------------------------------------------------------------
+  C092 · SCR-DI-027 / 028 / 029 / 030 — கண்காணிப்பான், பகிர்வு, சுயவிவரம் மற்றும் வரலாறு.
+--------------------------------------------------------------------------------------------- */
+
+/* SCR-DI-027 · GPS கண்காணிப்பானை இணைத்தல் (US-3.1/3.2, US-3.21–3.23, T-02/T-09). */
+"tracker_title" = "GPS கண்காணிப்பானை இணை";
+"tracker_vehicle_label" = "வாகனம்";
+"tracker_no_vehicles" = "கண்காணிப்பானை இணைக்க உங்களிடம் இன்னும் வாகனம் இல்லை.";
+"tracker_imei_label" = "IMEI எண்";
+"tracker_imei_help" = "கண்காணிப்பானில் அச்சிடப்பட்ட 15 இலக்கங்கள்.";
+"tracker_imei_invalid" = "IMEI எண் 15 இலக்கங்கள் கொண்டது. சாதனத்தில் உள்ள எண்ணைச் சரிபார்க்கவும்.";
+"tracker_scan_action" = "சாதன QR குறியீட்டை வருடு";
+"tracker_scan_hint" = "கண்காணிப்பானில் உள்ள குறியீட்டின் மேல் தொலைபேசியைப் பிடிக்கவும்.";
+"tracker_scan_unsupported" = "இந்தத் தொலைபேசியால் குறியீடுகளை வருட முடியாது. IMEI எண்ணைத் தட்டச்சு செய்யவும்.";
+"tracker_scan_blocked" = "வருடுவதற்கு MageRide-க்கு கேமரா தேவை. அமைப்புகளில் அதை இயக்கவும், அல்லது IMEI எண்ணைத் தட்டச்சு செய்யவும்.";
+"tracker_scan_unreadable" = "அந்தக் குறியீட்டிலிருந்து IMEI எண்ணைப் படிக்க முடியவில்லை. அதைத் தட்டச்சு செய்யவும்.";
+"tracker_bind_code_action" = "இணைப்புக் குறியீடு";
+"tracker_bind_code_help" = "இணைப்புக் குறியீடுகளை அலுவலகம் வழங்குகிறது; அவற்றை இங்கே இன்னும் உள்ளிட முடியாது.";
+"tracker_pair_action" = "சாதனத்தை இணை";
+"tracker_paired_title" = "இணைக்கப்பட்டது · சான்றிதழ் வழங்கப்பட்டது";
+"tracker_paired_body" = "இப்போது %1$@ சாதனம் இந்த வாகனத்திற்கு GPS அனுப்புகிறது.";
+"tracker_quarantined" = "அந்த IMEI எண் ஏற்கனவே வேறு வாகனத்தில் பயன்பாட்டில் உள்ளது. அது சரிபார்ப்புக்காக நிறுத்தி வைக்கப்பட்டுள்ளது. அலுவலகத்தைத் தொடர்பு கொள்ளவும்.";
+"tracker_behaviour_title" = "வன்பொருள் கண்காணிப்பானின் செயல்பாடு";
+"tracker_behaviour_publisher" = "கண்காணிப்பான் இணைக்கப்பட்ட பிறகு, இந்தத் தொலைபேசி இந்த வாகனத்திற்கு GPS அனுப்புவதை நிறுத்தும். சாதனமே ஒரே அனுப்புநராகும்.";
+"tracker_behaviour_ignition" = "A மற்றும் B முறைகள்: பயணம் இக்னிஷனுடன் தொடங்கி முடிகிறது, செயலி தேவையில்லை. செயலியைத் திறக்கும்போது பயணம் தொடங்கிவிட்டதாக உங்கள் திரை ஏற்கனவே காட்டும்.";
+"tracker_behaviour_mode_c" = "C முறை: நீங்கள் இணைப்பில் இருக்கும்போது மட்டுமே கண்காணிப்பானின் GPS ஏற்கப்படும்.";
+"tracker_fleet_csv" = "5,000 அல்லது அதற்கு மேற்பட்ட கண்காணிப்பான்களா? அலுவலகம் அவற்றை நிர்வாக இணையதளத்தில் விரிதாள் மூலம் ஏற்றும்.";
+
+/* SCR-DI-028 · பகிர்வு மேலாண்மை (Mode B), வாகனம் வாரியாக (US-4.1–4.4, US-4.7/4.8, AL-35). */
+"sharing_title" = "பகிர்வு (Mode B)";
+"sharing_vehicle_label" = "வாகனம்";
+"sharing_fleet_badge" = "வாகனத் தொகுப்பு";
+"sharing_no_vehicles" = "பகிர்வு A மற்றும் B முறை வாகனங்களுக்கானது. தற்போது உங்களிடம் அப்படி எதுவும் இல்லை.";
+"sharing_user_id_label" = "பயனர் ID உடன் பகிர்";
+"sharing_user_id_help" = "பயணி தனது சுயவிவரத் திரையில் இதைப் படிக்கலாம்.";
+"sharing_user_id_invalid" = "அது பயனர் ID அல்ல. அவர்களின் எண்ணை மீண்டும் சொல்லச் சொல்லுங்கள்.";
+"sharing_expiry_label" = "காலாவதி";
+"sharing_expiry_title" = "அணுகல் முடியும் நாள்";
+"sharing_expiry_none" = "முடிவு நாள் இல்லை";
+"sharing_expiry_clear" = "காலவரம்பு இன்றி விடு";
+"sharing_grant_action" = "அணுகலை வழங்கு";
+"sharing_granted" = "அழைப்பு அனுப்பப்பட்டது. அவர்கள் ஏற்றுக்கொண்ட பிறகு இந்த வாகனத்தைக் கண்காணிக்கலாம்.";
+"sharing_requests_heading" = "வரும் கோரிக்கைகள் · இந்த வாகனம்";
+"sharing_requests_empty" = "இந்த வாகனத்தைப் பின்தொடர யாரும் கேட்கவில்லை.";
+"sharing_accept" = "ஏற்";
+"sharing_reject" = "நிராகரி";
+"sharing_swipe_hint" = "ஏற்க கோரிக்கையை வலப்புறமும், நிராகரிக்க இடப்புறமும் இழுக்கவும்.";
+"sharing_grantees_heading" = "தற்போது அணுகல் உள்ளவர்கள் · இந்த வாகனம்";
+"sharing_grantees_empty" = "இந்த வாகனத்தை யாரும் பின்தொடரவில்லை.";
+"sharing_status_active" = "செயலில்";
+"sharing_passenger_unnamed" = "பயணி";
+
+/* SCR-DI-029 · ஓட்டுநர் சுயவிவரம் (US-18.3, AL-13, AL-26, US-10.7, US-1.5). */
+"profile_title" = "சுயவிவரம்";
+"profile_unnamed" = "ஓட்டுநர்";
+"profile_id_and_rating" = "%1$@ · மொத்தம் %2$@";
+"profile_copy_id" = "உங்கள் ஓட்டுநர் ID-ஐ நகலெடு";
+"profile_vehicle_details" = "வாகன விவரங்கள்";
+"profile_trip_ratings" = "பயணம் வாரியான மதிப்பீடுகள்";
+"profile_emergency_row" = "அவசரத் தொடர்பு";
+"profile_emergency_none" = "அமைக்கப்படவில்லை — உங்கள் SOS-க்கு இது தேவை";
+"profile_driver_level" = "ஓட்டுநர் நிலை";
+"profile_level_value" = "நிலை %1$d";
+"profile_language_row" = "மொழி";
+"profile_notify_heading" = "அறிவிப்புகள்";
+"profile_notify_dispatch" = "பயண வாய்ப்புகளும் நினைவூட்டல்களும்";
+"profile_notify_money" = "பணப்பையும் தினசரிக் கட்டணமும்";
+"profile_notify_registration" = "ஆவணங்களும் பதிவும்";
+"profile_notify_directional" = "சேருமிட வடிப்பான்";
+"profile_notify_announcements" = "அறிவிப்புச் செய்திகள்";
+"profile_notify_safety_note" = "பாதுகாப்பு எச்சரிக்கைகளும் பயண ரத்துகளும் எப்போதும் அனுப்பப்படும்; அவற்றை நிறுத்த முடியாது.";
+"profile_log_out" = "வெளியேறு";
+"profile_name_title" = "உங்கள் பெயர்";
+"profile_name_label" = "பயணிகளுக்குக் காட்டப்படும் பெயர்";
+"profile_emergency_title" = "அவசரத் தொடர்பு";
+"profile_emergency_why" = "நீங்கள் SOS அழுத்தினால், MageRide இந்த நபருக்கு உங்கள் இருப்பிடத்தையும் பயணத்தையும் அனுப்பும்.";
+"profile_emergency_pick" = "தொடர்புகளிலிருந்து தேர்ந்தெடு";
+"profile_emergency_name_label" = "அவரது பெயர்";
+"profile_emergency_phone_label" = "அவரது கைபேசி எண்";
+"profile_emergency_phone_invalid" = "7 இல் தொடங்கும் ஒன்பது இலக்கக் கைபேசி எண்ணை உள்ளிடவும்.";
+"profile_language_title" = "மொழி";
+
+/* SCR-DI-030 · பயண வரலாறும் பயணியை மதிப்பிடும் தாளும் (US-8.8, US-18.2, AL-35). */
+"history_title" = "பயண வரலாறு";
+"history_empty" = "நீங்கள் இன்னும் எந்தப் பயணமும் செய்யவில்லை.";
+"history_fare_to_you" = "உங்களுக்கான கட்டணம் %1$@";
+"history_rate_action" = "மதிப்பிடு";
+"history_rated_value" = "நீங்கள் %1$d நட்சத்திரங்கள் கொடுத்தீர்கள்";
+"history_rate_title" = "பயணியை மதிப்பிடு";
+"history_rate_stars" = "%1$d நட்சத்திரங்கள்";
+"history_rate_comment_label" = "கருத்து சேர் (விருப்பம்)";
+"history_rate_comment_hint" = "பயணி எப்படி இருந்தார்?";
+"history_rate_no_passenger" = "இந்த முன்பதிவு பதிவு செய்யாத ஒருவருக்காகச் செய்யப்பட்டது, எனவே மதிப்பிட யாரும் இல்லை.";
+"history_rate_submit" = "மதிப்பீட்டை அனுப்பு";
+"history_passenger_unnamed" = "பயணி";

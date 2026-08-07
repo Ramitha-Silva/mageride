@@ -42,6 +42,15 @@ protocol CameraAuthoriser: AnyObject {
     /// rectangle. The gallery fallback is that answer.
     var isScannerSupported: Bool { get }
 
+    /// Whether this device can run VisionKit's **code** scanner (Δ C092, SCR-DI-027).
+    ///
+    /// A different question from ``isScannerSupported`` and not derivable from it: the document
+    /// camera needs a camera, and `DataScannerViewController` needs an A12 or later **and** the
+    /// camera grant it reports through its own `isAvailable`. It is on this protocol rather than read
+    /// off the view so a model test can say *"this handset cannot scan"* — the state that decides
+    /// whether SCR-DI-027 offers the button or the keyboard.
+    var isCodeScannerSupported: Bool { get }
+
     /// Shows the system sheet, once. Answers whether the grant is held afterwards.
     func request() async -> Bool
 
@@ -62,6 +71,8 @@ final class SystemCameraAuthoriser: CameraAuthoriser {
     }
 
     var isScannerSupported: Bool { DocumentCameraView.isSupported }
+
+    var isCodeScannerSupported: Bool { DeviceQrScannerView.isSupported }
 
     func request() async -> Bool {
         await AVCaptureDevice.requestAccess(for: .video)

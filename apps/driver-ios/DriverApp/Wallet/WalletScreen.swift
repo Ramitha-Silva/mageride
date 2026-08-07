@@ -232,24 +232,39 @@ private struct FeeRow: View {
 ///
 /// Not `.bordered`: §0.2 fixes the CTA's height and radius and this is the same bar without the fill,
 /// which is what keeps the four buttons on this screen one control at four widths.
+///
+/// **`symbolName` and `isEnabled` are Δ C092**, and both are the wireframe's: SCR-DI-027 draws
+/// `▣ Scan device QR` with a glyph, and its **Bind code** button is drawn *disabled* because the
+/// owner-facing wrapper has no `bindCode` to send. Defaulted to what C091 already gets, so no existing
+/// caller changes.
 struct OutlinedAction: View {
 
     let labelKey: String
+    var symbolName: String?
+    var isEnabled: Bool = true
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            Text(key: labelKey)
-                .mageFont(.subtitle)
-                .foregroundStyle(MageRideColor.primary)
-                .frame(maxWidth: .infinity, minHeight: MageRideControl.ctaHeight)
-                .overlay {
-                    RoundedRectangle(cornerRadius: MageRideControl.ctaRadius, style: .continuous)
-                        .strokeBorder(MageRideColor.outline, lineWidth: 1)
+            HStack(spacing: MageRideSpacing.xxs) {
+                if let symbolName {
+                    Image(systemName: symbolName)
+                        .font(.footnote)
                 }
-                .contentShape(Rectangle())
+                Text(key: labelKey)
+                    .mageFont(.subtitle)
+            }
+            .foregroundStyle(MageRideColor.primary)
+            .frame(maxWidth: .infinity, minHeight: MageRideControl.ctaHeight)
+            .overlay {
+                RoundedRectangle(cornerRadius: MageRideControl.ctaRadius, style: .continuous)
+                    .strokeBorder(MageRideColor.outline, lineWidth: 1)
+            }
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .opacity(isEnabled ? 1 : 0.4)
     }
 }
 

@@ -716,3 +716,109 @@
 "wallet_statement_download" = "Download statement";
 "wallet_statement_ready" = "Your %1$@ statement is ready.";
 "wallet_statement_failed" = "We could not save that statement. Try again.";
+
+/* ---------------------------------------------------------------------------------------------
+  C092 · SCR-DI-027 / 028 / 029 / 030 — the tracker, the sharing, the profile and the history.
+
+  Same keys as `apps/driver-android/.../res/values…/strings.xml`, so a divergence between the two
+  driver apps is a diff. Proper nouns and symbols stay in Swift: the `★` pair is
+  `MageRideSymbols`, the `+94` prefix and the `7X XXX XXXX` mask are `PhoneNumber`'s, and a
+  registration number is printed as registry sent it. Three identical values across the three
+  files is exactly what `LocalizationTests` fails on.
+--------------------------------------------------------------------------------------------- */
+
+/* SCR-DI-027 · GPS tracker pairing (US-3.1/3.2, US-3.21–3.23, T-02/T-09). "Bind code" is drawn
+   disabled because registry's owner-facing wrapper carries no bind code to send. */
+"tracker_title" = "Pair GPS tracker";
+"tracker_vehicle_label" = "Vehicle";
+"tracker_no_vehicles" = "You have no vehicle to pair a tracker to yet.";
+"tracker_imei_label" = "IMEI";
+"tracker_imei_help" = "The 15 digits printed on the tracker.";
+"tracker_imei_invalid" = "An IMEI is 15 digits. Check the number on the device.";
+"tracker_scan_action" = "Scan device QR";
+"tracker_scan_hint" = "Hold the phone over the code on the tracker.";
+"tracker_scan_unsupported" = "This phone cannot scan codes. Type the IMEI instead.";
+"tracker_scan_blocked" = "MageRide needs the camera to scan. Turn it on in Settings, or type the IMEI.";
+"tracker_scan_unreadable" = "No IMEI could be read from that code. Type it in instead.";
+"tracker_bind_code_action" = "Bind code";
+"tracker_bind_code_help" = "Bind codes are given out by the office and cannot be entered here yet.";
+"tracker_pair_action" = "Pair device";
+"tracker_paired_title" = "Paired · certificate issued";
+"tracker_paired_body" = "Device %1$@ now publishes for this vehicle.";
+"tracker_quarantined" = "That IMEI is already in use on another vehicle. It has been held for checking. Call the office.";
+"tracker_behaviour_title" = "Hardware tracker behaviour";
+"tracker_behaviour_publisher" = "Once a tracker is paired, this phone stops sending GPS for this vehicle. The device becomes the only publisher.";
+"tracker_behaviour_ignition" = "Mode A and Mode B: the journey starts and ends with the ignition, with no app needed. Open the app and your dashboard already says the journey has started.";
+"tracker_behaviour_mode_c" = "Mode C: the tracker's GPS is accepted only while you are Online.";
+"tracker_fleet_csv" = "Have 5,000 trackers or more? The office loads them from a spreadsheet in the Admin Portal.";
+
+/* SCR-DI-028 · sharing management, Mode B, per vehicle (US-4.1–4.4, US-4.7/4.8, AL-35). The
+   selector is the scope: switching it re-reads both lists rather than filtering one. */
+"sharing_title" = "Sharing (Mode B)";
+"sharing_vehicle_label" = "Vehicle";
+"sharing_fleet_badge" = "FLEET";
+"sharing_no_vehicles" = "Sharing is for Mode A and Mode B vehicles. You have none right now.";
+"sharing_user_id_label" = "Share with User ID";
+"sharing_user_id_help" = "The passenger can read this off their own profile screen.";
+"sharing_user_id_invalid" = "That is not a User ID. Ask them to read theirs out again.";
+"sharing_expiry_label" = "Expiry";
+"sharing_expiry_title" = "Access ends on";
+"sharing_expiry_none" = "No end date";
+"sharing_expiry_clear" = "Leave it open-ended";
+"sharing_grant_action" = "Grant access";
+"sharing_granted" = "Offer sent. They can track this vehicle once they accept it.";
+"sharing_requests_heading" = "Incoming requests · this vehicle";
+"sharing_requests_empty" = "Nobody has asked to follow this vehicle.";
+"sharing_accept" = "Accept";
+"sharing_reject" = "Reject";
+"sharing_swipe_hint" = "Swipe a request right to accept it, left to reject it.";
+"sharing_grantees_heading" = "Current grantees · this vehicle";
+"sharing_grantees_empty" = "Nobody is following this vehicle.";
+"sharing_status_active" = "Active";
+"sharing_passenger_unnamed" = "Passenger";
+
+/* SCR-DI-029 · driver profile (US-18.3, AL-13, AL-26, US-10.7, US-1.5). The star average has no
+   read on the app-facing surface, so the card prints an em dash where the number would be. */
+"profile_title" = "Profile";
+"profile_unnamed" = "Driver";
+"profile_id_and_rating" = "%1$@ · %2$@ overall";
+"profile_copy_id" = "Copy your Driver ID";
+"profile_vehicle_details" = "Vehicle details";
+"profile_trip_ratings" = "Per-trip ratings";
+"profile_emergency_row" = "Emergency contact";
+"profile_emergency_none" = "Not set — your SOS needs one";
+"profile_driver_level" = "Driver Level";
+"profile_level_value" = "L%1$d";
+"profile_language_row" = "Language";
+"profile_notify_heading" = "Notifications";
+"profile_notify_dispatch" = "Ride offers and reminders";
+"profile_notify_money" = "Wallet and daily fee";
+"profile_notify_registration" = "Documents and registration";
+"profile_notify_directional" = "Destination filter";
+"profile_notify_announcements" = "Announcements";
+"profile_notify_safety_note" = "Safety alerts and ride cancellations are always sent and cannot be turned off.";
+"profile_log_out" = "Log out";
+"profile_name_title" = "Your name";
+"profile_name_label" = "Name shown to passengers";
+"profile_emergency_title" = "Emergency contact";
+"profile_emergency_why" = "If you raise an SOS, MageRide sends this person your location and your trip.";
+"profile_emergency_pick" = "Choose from contacts";
+"profile_emergency_name_label" = "Their name";
+"profile_emergency_phone_label" = "Their mobile number";
+"profile_emergency_phone_invalid" = "Enter a nine-digit mobile number starting with 7.";
+"profile_language_title" = "Language";
+
+/* SCR-DI-030 · ride history and the rate-passenger sheet (US-8.8, US-18.2, AL-35). "Fare to you"
+   is the fare: there is no commission, so the two amounts on a row are the same number. */
+"history_title" = "Ride history";
+"history_empty" = "You have not driven a trip yet.";
+"history_fare_to_you" = "fare to you %1$@";
+"history_rate_action" = "Rate";
+"history_rated_value" = "You gave %1$d stars";
+"history_rate_title" = "Rate passenger";
+"history_rate_stars" = "%1$d stars";
+"history_rate_comment_label" = "Add a comment (optional)";
+"history_rate_comment_hint" = "How was the passenger?";
+"history_rate_no_passenger" = "This booking was made for somebody who is not registered, so there is nobody to rate.";
+"history_rate_submit" = "Submit rating";
+"history_passenger_unnamed" = "Passenger";
