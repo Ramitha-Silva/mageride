@@ -55,6 +55,11 @@ export const adminTa: AdminMessages = {
   'admin.error.googleFailed':
     'Google உள்நுழைவு நிறைவடையவில்லை. மீண்டும் முயற்சிக்கவும், அல்லது கடவுச்சொல்லைப் பயன்படுத்தவும்.',
   'admin.error.reference': 'குறிப்பு: {traceId}',
+  'admin.error.feedDuplicate': 'இதே கோப்பு ஏற்கனவே பதிவேற்றப்பட்டுள்ளது.',
+  'admin.error.feedNotValidated':
+    'அந்தத் தரவுத்தொகுப்பு சோதனைகளில் தேறவில்லை, எனவே அதை நேரலைக்குக் கொண்டுவர முடியாது.',
+  'admin.error.feedAlreadyActive': 'அந்தத் தரவுத்தொகுப்புதான் ஏற்கனவே நேரலையில் உள்ளது.',
+  'admin.error.payloadTooLarge': 'இந்தப் பதிவேற்றத்திற்கு அந்தக் கோப்பு மிகப் பெரியது.',
 
   /* ---- Refusals and dead ends ------------------------------------------ */
   'admin.denied.title': 'இந்தப் பக்கத்திற்கு உங்களுக்கு அணுகல் இல்லை',
@@ -672,6 +677,108 @@ export const adminTa: AdminMessages = {
   'admin.config.flags.add': 'கொடியைச் சேமி',
   'admin.config.flags.saved': 'அம்சக் கொடி சேமிக்கப்பட்டது.',
   'admin.config.flags.keyInvalid': 'கொடியின் திறவுகோல் சிறிய எழுத்தில் ஓர் எழுத்துடன் தொடங்க வேண்டும், உதாரணமாக new_pay_sheet',
+
+  /* ---- SCR-AP-016 · GTFS Dataset Manager (Epic 28, AL-54…56, C110) ------ */
+  'admin.transit.live': 'நேரலை: {version} · {routes} வழித்தடங்கள்',
+  'admin.transit.noLive': 'நேரலையில் தரவுத்தொகுப்பு எதுவும் இல்லை',
+  'admin.transit.unknownCount': 'தெரியாத எண்ணிக்கை',
+  'admin.transit.none': '—',
+  'admin.transit.empty.title': 'GTFS தரவுத்தொகுப்பு எதுவும் ஏற்றப்படவில்லை',
+  'admin.transit.empty.body':
+    'ஒரு தரவுத்தொகுப்பு நேரலைக்கு வரும்வரை பயணிகளுக்கான வழித்தடப் பொருத்தம் மறைந்தே இருக்கும். தொடங்க, தேசிய GTFS zip கோப்பைக் கீழே பதிவேற்றவும்.',
+
+  'admin.transit.upload.heading': 'முழு GTFS தரவுத்தொகுப்பைப் பதிவேற்று',
+  'admin.transit.upload.dropzone': 'GTFS .zip கோப்பை இங்கே இழுத்துவிடவும்',
+  'admin.transit.upload.hint': 'அல்லது ஒரு கோப்பைத் தேர்ந்தெடுக்கவும் · .zip மட்டும், அதிகபட்சம் 200 MB',
+  'admin.transit.upload.required':
+    'தேவை: agency · routes · trips · stops · stop_times, மற்றும் calendar அல்லது calendar_dates. விருப்பம்: shapes · frequencies · translations · feed_info.',
+  'admin.transit.upload.externalNote':
+    'தரவுத்தொகுப்பு MageRide-ஐ வந்தடைவது முடிக்கப்பட்ட கோப்பாகவே. இந்தத் திரை அதைச் சோதித்து வெளியிடுகிறது; இங்கே எதுவும் அதைத் திருத்துவதில்லை.',
+  'admin.transit.upload.uploading': 'பதிவேற்றுகிறது',
+  'admin.transit.upload.percent': '{percent}% அனுப்பப்பட்டது',
+  'admin.transit.upload.cancel': 'ரத்து செய்',
+  'admin.transit.upload.rejectedType': 'GTFS தரவுத்தொகுப்பு என்பது ஒரு .zip கோப்பு. அத்தகைய ஒன்றைத் தேர்ந்து மீண்டும் முயலவும்.',
+  'admin.transit.upload.rejectedSize': 'அந்தக் கோப்பு 200 MB வரம்பைத் தாண்டியுள்ளது.',
+  'admin.transit.upload.rejectedCount': 'ஒரு நேரத்தில் ஒரு தரவுத்தொகுப்பை மட்டும் பதிவேற்றவும்.',
+  'admin.transit.upload.duplicate': 'இதே கோப்பு ஏற்கனவே பதிவேற்றப்பட்டுள்ளது (பதிப்பு {version}).',
+  'admin.transit.upload.duplicateOpen': 'அந்தப் பதிப்பைத் திற',
+  'admin.transit.upload.failed': 'பதிவேற்றம் நிறைவடையவில்லை. எதுவும் சேமிக்கப்படவில்லை — மீண்டும் முயலவும்.',
+
+  'admin.transit.stepper.label': 'சோதனையின் முன்னேற்றம்',
+  'admin.transit.step.uploaded': 'பதிவேற்றப்பட்டது',
+  'admin.transit.step.validating': 'சோதிக்கிறது',
+  'admin.transit.step.validated': 'சோதனையில் தேறியது',
+  'admin.transit.step.failed': 'தோல்வி',
+
+  'admin.transit.status.uploaded': 'பதிவேற்றப்பட்டது',
+  'admin.transit.status.validating': 'சோதிக்கிறது',
+  'admin.transit.status.validated': 'சோதனையில் தேறியது',
+  'admin.transit.status.failed': 'தோல்வி',
+  'admin.transit.status.active': 'நேரலை',
+  'admin.transit.status.archived': 'காப்பகப்படுத்தப்பட்டது',
+
+  'admin.transit.preview.heading': 'சோதனையும் முன்தோற்றமும்',
+  'admin.transit.preview.headingFile': 'சோதனையும் முன்தோற்றமும் — {file}',
+  'admin.transit.preview.version': 'தரவுத்தொகுப்புப் பதிப்பு',
+  'admin.transit.preview.noVersion': 'இந்தத் தரவுத்தொகுப்பில் feed_info பதிப்பு இல்லை',
+  'admin.transit.preview.serviceWindow': 'சேவை நாட்கள்',
+  'admin.transit.preview.window': '{start} முதல் {end} வரை',
+  'admin.transit.preview.noWindow': 'சேவைக் கால எல்லையை வாசிக்க முடியவில்லை',
+  'admin.transit.preview.countsCaption': 'இந்தத் தரவுத்தொகுப்பின் ஒவ்வொரு கோப்பிலும் உள்ள வரிசைகள்',
+  'admin.transit.preview.noCounts': 'இதுவரை எதுவும் எண்ணப்படவில்லை — சோதனைகள் இன்னும் நடக்கின்றன.',
+  'admin.transit.preview.validatingNote':
+    'இந்தத் தரவுத்தொகுப்பு சோதிக்கப்படுகிறது. முடிவு வரும்வரை இந்தப் பக்கம் ஒவ்வொரு இரண்டு வினாடிக்கும் தானே புதுப்பிக்கும்.',
+  'admin.transit.preview.warnings': '{count} எச்சரிக்கைகள் — இவை நேரலைக்குக் கொண்டுவருவதைத் தடுக்காது',
+  'admin.transit.preview.noWarnings': 'இந்தத் தரவுத்தொகுப்பில் எச்சரிக்கை எதுவும் இல்லை.',
+  'admin.transit.preview.liveNote': 'பயணிகளுக்கு வழித்தடங்கள் வழங்கப்படுவது இந்தத் தரவுத்தொகுப்பிலிருந்தே.',
+  'admin.transit.preview.archivedNote': 'இதை மீண்டும் நேரலைக்குக் கொண்டுவருவது ஒரு பின்னகர்வு.',
+
+  'admin.transit.failed.heading': 'இந்தத் தரவுத்தொகுப்பை நேரலைக்குக் கொண்டுவர முடியாது',
+  'admin.transit.failed.body':
+    'சோதனைகளில் பிழைகள் கண்டறியப்பட்டன. முதல் ஐந்து கீழே உள்ளன; முழு அறிக்கை ஒவ்வொரு பிழையையும் அதன் கோப்பு மற்றும் வரிசையுடன் குறிப்பிடுகிறது.',
+  'admin.transit.failed.reportCsv': 'அறிக்கையைப் பதிவிறக்கு (CSV)',
+  'admin.transit.failed.reportJson': 'அறிக்கையைப் பதிவிறக்கு (JSON)',
+
+  'admin.transit.activate.open': 'தரவுத்தொகுப்பை நேரலைக்குக் கொண்டுவா',
+  'admin.transit.activate.reactivate': 'மீண்டும் நேரலைக்கு',
+  'admin.transit.activate.title': 'இந்தத் தரவுத்தொகுப்பை நேரலைக்குக் கொண்டுவரவா?',
+  'admin.transit.activate.replacing':
+    'இப்போது நேரலையில் உள்ளது பதிப்பு {outgoing}, அது காப்பகப்படுத்தப்படும். அதன் இடத்தைப் பதிப்பு {incoming} எடுக்கும்.',
+  'admin.transit.activate.firstFeed':
+    'இதுவரை நேரலையில் தரவுத்தொகுப்பு இல்லை. பயணிகளுக்கு வழித்தடம் வழங்கும் முதல் தொகுப்பு பதிப்பு {incoming} ஆகும்.',
+  'admin.transit.activate.atomic':
+    'இந்த மாற்றம் ஒரே பரிவர்த்தனையில் நடக்கிறது. அது தோல்வியுற்றால் இப்போது நேரலையில் உள்ள தரவுத்தொகுப்பே தொடரும். புதிய தொகுப்பு ஒரு நிமிடத்திற்குள் வழித்தடப் பொருத்தத்தில் பயன்படும்.',
+  'admin.transit.activate.rollbackNote':
+    'இது ஒரு பின்னகர்வு — காப்பகப்படுத்தப்பட்ட ஒரு தரவுத்தொகுப்பு அதே உத்தரவாதத்துடன் மீண்டும் நேரலைக்கு வருகிறது.',
+  'admin.transit.activate.confirm': 'நேரலைக்குக் கொண்டுவா',
+  'admin.transit.activate.working': 'நேரலைத் தரவுத்தொகுப்பை மாற்றுகிறது…',
+  'admin.transit.activate.done': 'தரவுத்தொகுப்பு {version} நேரலையில் — பயணிகளின் வழித்தடத் தேர்வுகள் புதுப்பிக்கப்பட்டன.',
+  'admin.transit.activate.reload': 'வழித்தட மற்றும் நிறுத்தத் தற்காலிக நினைவகங்கள் ஒரு நிமிடத்திற்குள் மீளேற்றப்படும்.',
+  'admin.transit.activate.dismiss': 'அகற்று',
+
+  'admin.transit.history.heading': 'பதிப்பு வரலாறு',
+  'admin.transit.history.caption': 'பதிவேற்றப்பட்ட ஒவ்வொரு தரவுத்தொகுப்பும், புதியது முதலில்',
+  'admin.transit.history.version': 'தரவுத்தொகுப்புப் பதிப்பு',
+  'admin.transit.history.file': 'கோப்பு',
+  'admin.transit.history.uploaded': 'பதிவேற்றியது',
+  'admin.transit.history.routes': 'வழித்தடங்கள்',
+  'admin.transit.history.status': 'நிலை',
+  'admin.transit.history.actions': 'செயல்கள்',
+  'admin.transit.history.empty': 'இதுவரை GTFS தரவுத்தொகுப்பு எதுவும் பதிவேற்றப்படவில்லை.',
+  'admin.transit.history.report': 'அறிக்கை',
+  'admin.transit.history.zip': 'Zip',
+  'admin.transit.history.capped':
+    'சமீபத்திய {limit} பதிப்புகள் மட்டுமே பட்டியலிடப்படுகின்றன. பழையவை இன்னும் சேமிக்கப்பட்டுள்ளன, அவற்றுக்குப் பின்னகரவும் முடியும்.',
+
+  'admin.transit.file.agency': 'நிறுவனங்கள்',
+  'admin.transit.file.routes': 'வழித்தடங்கள்',
+  'admin.transit.file.trips': 'பயணங்கள்',
+  'admin.transit.file.stops': 'நிறுத்தங்கள்',
+  'admin.transit.file.stopTimes': 'நிறுத்த நேரங்கள்',
+  'admin.transit.file.shapes': 'வழிக்கோடுகள்',
+  'admin.transit.file.calendar': 'நாட்காட்டி',
+  'admin.transit.file.calendarDates': 'நாட்காட்டி விதிவிலக்குகள்',
+  'admin.transit.file.frequencies': 'அதிர்வெண்கள்',
 
   /* ---- SCR-AP-008 · users & roles (Epic 21, AL-06, C108) ---------------- */
   'admin.rbac.lookupHeading': 'உள்ளகப் பயனரைத் தேடு',

@@ -136,7 +136,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C107 | admin-portal-moderation-support | 4c | PARTIAL | 2026-08-08 | **306 tests green** in `@mageride/admin-portal` (24 files, was 241/19); `npm --prefix portals run lint --workspace admin && … test … && … build …` exits 0 and `next build` emits `/reports` and `/support/tickets`. **SCR-AP-004 and SCR-AP-005 are built; one DoD line cannot be met from this side.** A driver-QR dispute *does* reach the ticket queue (admin-bff sends no `queue` filter, so both piles arrive) and is pilled **Finance** — but **its evidence attachment never reaches this surface**: support-svc's own `TicketRow` carries `screenshotUrl`, `legacyScreenshotUrl` (written by fare-svc for exactly this, AL-47), `thread`, `tripId` and `queue`, and admin-bff's `SupportTicketRow` mapping keeps none of them. **There is no `GET /v1/admin/support/tickets/{ticketId}`** either, so the ticket being read is a row out of the queue page (`?ticket=`, not a path segment), and **no `…/respond`**, so the wireframe's Reply button has nothing to call and is not drawn. **A pending report is not a strike:** `ReportRow.confirmedCount` is `null` on every row (safety-svc's internal row does not carry it), so the count column says "{n} pending" and the confirmed total appears only on the banner after a verdict — the one moment the platform states one. **No Duration control** on Suspend/ban, because `ReasonBody` is one field and nothing reinstates a suspension; **no "Delist 24h" button**, because the third confirmation delists and no single press does. **The refund hand-off is a link and posts nothing** — URD §2.3 gives the CSR `◐ raise/recommend`, and a `daily_fee_refund`/`driver_qr_dispute` ticket is already on Finance's pile by its category. 3 wireframe deviations, 5 spec gaps / micro-change-sets; no spec, backend or contract file touched |
 | C108 | admin-portal-finance-config-rbac-audit | 4c | PARTIAL | 2026-08-08 | **468 tests green** in `@mageride/admin-portal` (32 files, was 306/24); the verify command exits 0 and `next build` emits all fourteen new routes. **All four screens are built; the wireframe baseline cannot be met in five places because the platform has no route behind the control** — the internal-user list, `+ Provision user`, account suspend/revoke + session termination (US-21.9), the IP-allow-list and Active-session columns, and a `Vehicle types` configuration tab (AL-09 is a CHECK, not a setting). **The largest finding is an audit hole:** `gateway-routes.json` matches `/v1/admin/fees/**`, `/v1/admin/voucher-discount-tiers`, `/v1/admin/drivers/level-config` and `/v1/admin/rbac/**` at **Order 20** and admin-bff maps no route onto any of them, so four configuration/RBAC write surfaces write **nothing** to `audit.events` — against D-35, against this component's own fence and against US-21.14, and against `AdminFeeEndpoints`' explicit claim that "every one of these calls arrives through that BFF". `AuditIntent` gained an `auditedElsewhere` arm so the console states which service answered instead of promising a trail entry an Auditor will not find. **Three configuration surfaces are `PUT`-only** (fare tariffs, daily-fee rates, Driver-Level params) so those forms start empty and say why; **payout-svc has no gateway cluster** so SCR-AP-006's Payouts tab 404s until C008 adds one; **`/v1/admin/audit-log` has no `.csv` sibling** so US-19.3's export is rendered in the portal, capped and stated. 6 wireframe deviations, 9 spec gaps / micro-change-sets; no spec, backend or contract file touched |
 | C109 | admin-portal-directories | 4c | DONE | 2026-08-08 | **580 tests green** in `@mageride/admin-portal` (36 files, was 468/32); the verify command exits 0, `next build` emits all eight new routes, and all five portal workspaces are green (814). **Six screens, six GETs and no seventh verb** — BR-28.8's "all are read-only" is asserted against the group's whole tree (no `mutate(`, no server-action import, no `<form>` that is not `method="get"`), and every wireframe button that would write is a **link to the screen that owns the action**, drawn only when the caller's own menu carries it. **Every criterion is independent** — the searches build one AND-ed query from every parameter `admin-bff.yaml` declares, and `?status=verified` is sent even as the default because the screen's caption claims it. **A mistyped `?id=` asks admin-bff nothing** and marks its own box (C105's `awaitingRange` rule). **Opening a record is the audited act and the portal does not write the row** — `test/directories-query.test.ts` parses `DirectoryEndpoints.cs` and fails if a detail route loses `.Audited(PiiRead, …)` or a search gains one. **The document relay is one implementation and two URLs**: `src/server/document-media.ts` now serves C106's route and a new `/vehicles/media/[docId]`, because `proxy.ts` gates on the screen a path resolves to and a Support CSR holds the vehicle directory without the verification queues; the tiles, grid and lightbox are C106's components imported unchanged. 6 wireframe deviations, 5 spec gaps / micro-change-sets; no spec, backend or contract file touched |
-| C110 | admin-portal-gtfs-manager | 4c | PENDING | | |
+| C110 | admin-portal-gtfs-manager | 4c | DONE | 2026-08-08 | **634 tests green** in `@mageride/admin-portal` (38 files, was 580/36); the verify command exits 0, `next build` emits all four new routes, and all five portal workspaces are green (868). **SCR-AP-016 is one screen whose entire state is `?feed=`**, and that single rule produces four of D2's seven states with no branch: absent, the selection is the newest upload — the last thing that happened — so a validating feed shows the stepper, a validated one the preview and Activate, a failed one the first five errors and the report, and once the newest upload is live the card *is* the live feed (`active-idle`). No versions is `empty`; `uploading` and `activating` are the two client-side moments. **The 2 s poll is `router.refresh()`, not a JSON fragment** — the stepper, the counts, the warnings and the history row move together because they are one render, and the copy stays where every other string is resolved. **The upload is the one thing in this portal that is not `fetch`**: `fetch` has no upload-progress event, so `UploadCard` posts by XHR to the portal's own route handler, which attaches the bearer and **streams** the 200 MB body on through a new `apiUpload`/`upload` pair the fences test names beside `apiFetch` and `apiDownload`. **A duplicate is refused on the bytes**, and the inline error reads the `409`'s RFC 7807 extensions to name and link the version that already holds them. **The confirm dialog names what is being switched off**, not "are you sure"; rollback is the same dialog and the same call with one line saying so, and both dialog and toast are *derived* from the action result rather than pushed by an effect. **`mutate()`'s audit gained a third case that is not C108's**: `/v1/admin/transit/**` is routed past admin-bff at Order 20, so `GTFS_PROXIED` is never written — but transit-svc writes `GTFS_FEED_UPLOADED`/`GTFS_FEED_ACTIVATED` inside the swap transaction, so a row always exists and `auditedElsewhere` would state the opposite of the truth. `test/audit.test.ts` now parses `GtfsAuditActions.cs` as the second writer. 3 wireframe deviations, 4 spec gaps / micro-change-sets; no spec, backend or contract file touched |
 | C111 | fleet-portal-shell | 4c | PENDING | | |
 | C112 | fleet-portal-auth-org-payout | 4c | PENDING | | |
 | C113 | fleet-portal-vehicles-drivers-trackers | 4c | PENDING | | |
@@ -17569,3 +17569,171 @@ _Append 3 lines per completed component (Component / Status / Notes)._
 
   **Build host —** no Docker, no replica, no backend build. `vitest run` takes ~30 s and
   `next build` ~45 s.
+
+---
+
+- **Component:** C110 admin-portal-gtfs-manager — 2026-08-08
+- **Status:** DONE —
+  `npm --prefix portals run lint --workspace admin && npm --prefix portals run test --workspace admin && npm --prefix portals run build --workspace admin`
+  exits 0. **634 tests, 38 files** (was 580/36); `eslint` + `tsc --noEmit` clean; `next build` emits
+  `/config/transit/gtfs` and its three relays, and `check-bundle.mjs` reports **AL-52: clean — 1
+  compiled stylesheet, 35.2 kB CSS**. All five portal workspaces are green (868 tests). SCR-AP-016 is
+  built to its wireframe in all seven documented states; the three deviations below are each a control
+  the sketch draws that no route on the platform can answer, drawn as the honest thing instead.
+  **This completes the Admin Portal's nineteen screens** — `app/(portal)/[...screen]` now has no
+  Configuration screen left to place-hold except `cities`, `trains` and `announcements`, which no
+  component on the manifest claims (recorded by C108 and unchanged here).
+- **Notes:**
+  **What was built —** four routes under the path `AdminMenu.cs` gives the `gtfs` nav item, which was
+  already in `src/server/routes.ts` and needed no change: `/config/transit/gtfs` (the screen),
+  `…/upload` (the streamed multipart relay), `…/report/[feedVersionId]` (the row-level report, CSV or
+  JSON) and `…/zip/[feedVersionId]` (the 302 to the signed original). All three relays resolve to the
+  **same** nav item as the page, so `proxy.ts` gates them on it with no entry in `routes.ts` and no
+  exemption — C105's rule for `/dashboard/export`.
+
+  **(1) `?feed=` is the whole of the state, and it is what makes seven states four branches.** D2
+  lists `empty · uploading · validating · validated-preview · failed-report · activating ·
+  active-idle`. Two of them are client-side moments — the progress bar inside `UploadCard`, the
+  spinner inside `ActivateForm` — and the remaining five are *the status of the selected version*.
+  Absent, the selection is the **newest upload, whatever its status**: it is the last thing that
+  happened, which is what an operator opening the screen needs, and it lands each remaining state
+  without a rule of its own (a feed still validating starts the poll; a validated one draws the
+  preview and Activate; a failed one draws the first five errors and the report; once the newest
+  upload has been activated the card *is* the live feed, which is `active-idle`; no versions at all is
+  `empty`). In the URL rather than in component state for C105's reason — a feed under review survives
+  a reload, a bookmark and being pasted into a ticket for a colleague to open.
+
+  **(2) The 2 s poll refreshes the screen instead of fetching a fragment.** `FeedPoller` calls
+  `router.refresh()` while the selected feed is `uploaded` or `validating` and tears the interval down
+  the moment a verdict lands. The alternative — a client component holding the status and drawing the
+  stepper itself — needs a second copy of the view model and a second set of translated labels in the
+  browser bundle, and *still* leaves the version-history table showing the world from before the feed
+  validated. The cost is stated rather than hidden: two admin-bff reads every two seconds, for as long
+  as one feed is validating and somebody is watching it, and nothing at all once it is not.
+
+  **(3) The upload is the one thing in this portal that is not `fetch`, and there is no way round
+  it.** D2 asks for "Progress bar during upload"; `fetch` has an event for bytes *received* and none
+  for bytes *sent*, and a server action can report neither and would additionally have to buffer the
+  body past Next's own limit. `XMLHttpRequest.upload.onprogress` is the only browser API that answers
+  the question, and a 200 MB national feed on an office connection is exactly the upload that must not
+  look frozen. Nothing about the shell's fourth decision moves: the XHR posts to **this application's
+  own route handler**, which attaches the operator's bearer and hands `request.body` straight to a new
+  **`apiUpload`** (`duplex: 'half'`, so 200 MB is never materialised in this process — the same
+  argument `GtfsProxyEndpoints` makes on the other side of the hop). `apiUpload`/`upload` are the
+  fourth member of the data layer and are named in `test/fences.test.ts` beside `apiFetch` and
+  `apiDownload`, which is the file's own instruction for adding one.
+
+  **(4) BR-32.1's ceiling is guarded three times and only one of them is a gate.** The dropzone
+  refuses a 400 MB file before a byte leaves the browser (which saves the operator ten minutes); the
+  route handler refuses a declared `Content-Length` over 200 MB + the multipart envelope before it
+  opens a connection upstream; transit-svc raises Kestrel's own limit to exactly that and counts the
+  file's bytes as it stores them. Only the third is a gate, because a client that declares nothing has
+  declared nothing — `GtfsAdminEndpoints`' own reasoning, mirrored rather than restated.
+
+  **(5) A duplicate is refused on the bytes and the message has somewhere to go.** `409
+  feed-duplicate` is sha256, so it catches a retry that regenerated its idempotency key *and* the same
+  file uploaded a month later by a different operator. `GtfsUploadService` attaches the existing
+  version as RFC 7807 extensions and says why — "a bare 409 leaves the operator with a message and
+  nowhere to go" — so `duplicateFeed()` narrows them and the inline error reads *"This exact file is
+  already uploaded (version feed-20260720)"* with a link that selects it.
+
+  **(6) The confirm dialog names what is being switched off.** Activation swaps the dataset every
+  passenger route query is answered from, so what the operator has to be sure of is not "am I
+  activating something" but *which feed stops being live* — the dialog states the outgoing version by
+  name and says it will be archived, and on day 0 says instead that nothing is live yet, because
+  "replacing —" is not a sentence. It also states the atomicity, because that is the fact that makes
+  the button safe: the staging load touches only `transit_staging.*` and the swap is one transaction,
+  so **a failed activation leaves the previous feed live** and the screen can say so before the press.
+  **Rollback is the same dialog and the same call** (BR-32.3) with one line saying that is what it is;
+  a second button would imply a second mechanism and a second risk.
+
+  **(7) The activation key is fresh on every press, and that is the opposite of the obvious choice.**
+  BR-32.2 makes activation idempotent on `Idempotency-Key` and transit-svc keeps a command log to
+  honour it — which is exactly why a **stable** key derived from the feed version id would be wrong:
+  rollback *is* activation, so `v3 → v2 → v3` is a legitimate sequence and the third press would
+  replay the first one's response out of the log without swapping anything. A double click is bounded
+  instead by the button, which is disabled while the request is in flight, and by transit-svc's
+  advisory lock, which answers the loser `409 feed-already-active` or `409 conflict`. Both are
+  refusals an operator can read; neither swaps twice.
+
+  **(8) `mutate()`'s audit declaration gained a third case, and it is deliberately not C108's.**
+  `gateway-routes.json` matches `/v1/admin/transit/**` at **Order 20**, so a GTFS call never reaches
+  admin-bff and its `GTFS_PROXIED` row is never written in the deployed topology. But unlike C108's
+  four prefixes, **a row always exists**: transit-svc writes `GTFS_FEED_UPLOADED` /
+  `GTFS_FEED_ACTIVATED` inside the same transaction as the change. Declaring `auditedElsewhere:
+  'transit-svc'` would make the console tell an operator their activation is unrecorded, which is the
+  opposite of true; declaring `GTFS_PROXIED` would name a row nobody can find. So `src/api/audit.ts`
+  gained a `TransitAuditAction` union for the second writer's vocabulary, `AuditIntent.action` widened
+  to `AdminAuditAction | TransitAuditAction`, and **`test/audit.test.ts` now parses
+  `GtfsAuditActions.cs` as well** — including that both files spell the entity type `gtfs_feed`, since
+  two services writing one entity under two spellings would split one auditor question across two
+  filters.
+
+  **Wireframe deviations (3), each forced by the contract —**
+  1. **The uploader is a user id, not `admin@mageride.lk`.** `FeedVersion.uploadedBy` is a ULID and
+     **iam-svc exposes no route that resolves an internal account to a name or an address** — the same
+     gap that cost C108 the whole SCR-AP-008 user directory. The id is shown instead, which is what an
+     auditor matches against `audit.events.actor_id` anyway.
+  2. **The counts grid omits a file the feed does not carry rather than printing `0`.** `shapes.txt`
+     is optional and BR-32.1 requires `calendar` **or** `calendar_dates`; a zero column reads as an
+     empty file, which is a defect, where an absent column reads as an absent file, which is not.
+  3. **The history states its page.** The sketch draws four rows; the contract caps `limit` at 100 and
+     offers a cursor. One page of a hundred is read and the table says when there are more — a history
+     that silently stopped at its page size would make "roll back to the feed we ran in March" fail
+     with no explanation (C108's audit-export rule: state the cap where it bites).
+
+  **Spec gaps and micro-change-sets (4) —**
+  1. **`409 feed-duplicate`'s third extension collides with RFC 7807.**
+     `GtfsUploadService.RejectDuplicateAsync` attaches `feedVersionId`, `feedInfoVersion` **and
+     `status`** — but `status` is already a Problem member and it is the HTTP one, so the two are
+     written into the same object and the transport's 409 is what any conforming client keeps. The
+     feed's own status is therefore unreadable from the refusal. Nothing is broken by it (the link
+     opens the version and the screen states its status in full) and the fix is a rename to
+     `feedStatus`; raised rather than worked around.
+  2. **No route answers "which feed is live".** `transit.yaml` has six admin operations and none of
+     them is that, so the live version — the topbar pill, and the name every confirm dialog has to
+     state — is the row whose status is `active` in the history page the screen read anyway. It works
+     because the active feed is always recent; it is a derivation the screen should not have to make,
+     and a `GET /v1/admin/transit/gtfs/active` would delete it.
+  3. **The signed zip URL has to be browser-reachable, and nothing states where that is.**
+     `…/versions/{id}/download` 302s to `Transit:Gtfs:PublicBaseUrl` (defaulting to the request's own
+     origin, which behind the gateway is the gateway's). The portal relays the redirect rather than
+     following it — the bytes must not pass through this process — so a deployment whose gateway
+     origin a browser cannot reach gets a dead download. Exactly C063's `Documents:PublicBaseUrl`
+     situation, and worth the same line in D7' §4.2.
+  4. **`GTFS_FEED_VALIDATED` is actor-less and there is no screen for it.** The verdict is reached by
+     a queued job, so the row has no `actor_id` — correct, and the reason the portal's stepper is a
+     poll rather than a notification. Recorded because SCR-AP-009's audit table renders an actor
+     column, and a blank one on these rows is the design rather than missing data.
+
+  **Not built here, and named rather than stubbed —** backward paging of the history (a cursor names
+  the page *after* this one and nothing else, so a numbered pager would invent a position in a list
+  whose length the platform never sent — C109's finding, unchanged); a diff between two feed versions
+  (nothing on any contract compares two datasets, and the report download is what an operator diffs);
+  and any view of what is *inside* a feed — routes, stops, trips — because AL-56 makes the file
+  somebody else's and this screen ingests it rather than browsing it.
+
+  **Files —** added `portals/admin/src/api/transit.ts`, `src/server/transit-actions.ts`,
+  `src/components/transit/{model.ts,UploadCard.tsx,FeedCard.tsx,ActivateForm.tsx,VersionHistory.tsx,FeedPoller.tsx}`,
+  the four `app/(portal)/config/transit/gtfs` routes above, and
+  `test/{transit-model.test.ts,transit-screen.test.tsx}`.
+
+  **Files touched outside this component's own tree —** none outside the portal. `src/api/http.ts`
+  gained `apiUpload` and `src/api/client.ts` gained `upload` (the data layer's fourth member);
+  `src/api/audit.ts` gained `TransitAuditAction` and widened `AuditIntent.action`; `src/api/problem.ts`
+  gained four GTFS error codes, because the generic conflict sentence — "someone changed this first,
+  reload" — is wrong for all three 409s (nothing changed, and reloading fixes none of them);
+  `test/fences.test.ts` gained `apiUpload` and the two `/v1/admin/transit/gtfs/*` literals;
+  `test/audit.test.ts` gained the second writer; `test/config-screen.test.tsx`'s "leaves SCR-AP-016 to
+  C110" assertion was inverted, since C110 is now here; `portals/admin/CLAUDE.md` gained this
+  component's section. **No spec, no contract, no backend, no migration.**
+
+  **i18n —** 86 new keys × 3 locales (939 keys total, was 853). Every string on the screen goes
+  through the translator; `i18n.test.ts`'s "actually translates the copy" rule passes, so no Sinhala or
+  Tamil value is a copy of the English. Two values are substituted **in the browser** rather than by
+  the translator — the upload percentage and the feed version in the confirm dialog and toast — because
+  the value exists only client-side; both use the translator's own `{name}` syntax and the placeholder
+  test covers all three locales.
+
+  **Build host —** no Docker, no replica, no backend build. `vitest run` takes ~20 s and
+  `next build` ~50 s.

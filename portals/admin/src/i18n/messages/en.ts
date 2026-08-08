@@ -83,6 +83,13 @@ export const adminEn = {
   'admin.error.googleFailed': 'Google sign-in did not complete. Try again, or use your password.',
   // Shown verbatim, in every language, because it is what support asks for.
   'admin.error.reference': 'Reference: {traceId}',
+  // Δ C110 · the GTFS lifecycle's own refusals (BR-32.1/32.2). The generic
+  // conflict sentence describes none of them correctly.
+  'admin.error.feedDuplicate': 'This exact file has already been uploaded.',
+  'admin.error.feedNotValidated':
+    'That feed has not passed its checks, so it cannot be made live.',
+  'admin.error.feedAlreadyActive': 'That feed is already the live one.',
+  'admin.error.payloadTooLarge': 'That file is too large for this upload.',
 
   /* ---- Refusals and dead ends ------------------------------------------ */
   'admin.denied.title': 'You do not have access to this page',
@@ -736,6 +743,108 @@ export const adminEn = {
   'admin.config.flags.add': 'Save the flag',
   'admin.config.flags.saved': 'Feature flag saved.',
   'admin.config.flags.keyInvalid': 'A flag key is lower case and starts with a letter, for example new_pay_sheet',
+
+  /* ---- SCR-AP-016 · GTFS Dataset Manager (Epic 28, AL-54…56, C110) ------ */
+  'admin.transit.live': 'Live: {version} · {routes} routes',
+  'admin.transit.noLive': 'No feed is live',
+  'admin.transit.unknownCount': 'an unknown number of',
+  'admin.transit.none': '—',
+  'admin.transit.empty.title': 'No GTFS feed loaded',
+  'admin.transit.empty.body':
+    'Passenger route-matching stays hidden until a feed is activated. Upload the national GTFS zip below to start.',
+
+  'admin.transit.upload.heading': 'Upload full GTFS feed',
+  'admin.transit.upload.dropzone': 'Drag the GTFS .zip here',
+  'admin.transit.upload.hint': 'or choose a file · .zip only, up to 200 MB',
+  'admin.transit.upload.required':
+    'Required: agency · routes · trips · stops · stop_times, and calendar or calendar_dates. Optional: shapes · frequencies · translations · feed_info.',
+  'admin.transit.upload.externalNote':
+    'The feed reaches MageRide as a finished file. This screen checks it and publishes it; nothing here edits it.',
+  'admin.transit.upload.uploading': 'Uploading',
+  'admin.transit.upload.percent': '{percent}% sent',
+  'admin.transit.upload.cancel': 'Cancel',
+  'admin.transit.upload.rejectedType': 'A GTFS feed is a .zip file. Choose one and try again.',
+  'admin.transit.upload.rejectedSize': 'That file is over the 200 MB limit.',
+  'admin.transit.upload.rejectedCount': 'Upload one feed at a time.',
+  'admin.transit.upload.duplicate': 'This exact file is already uploaded (version {version}).',
+  'admin.transit.upload.duplicateOpen': 'Open that version',
+  'admin.transit.upload.failed': 'The upload did not finish. Nothing was saved — try again.',
+
+  'admin.transit.stepper.label': 'Validation progress',
+  'admin.transit.step.uploaded': 'Uploaded',
+  'admin.transit.step.validating': 'Validating',
+  'admin.transit.step.validated': 'Validated',
+  'admin.transit.step.failed': 'Failed',
+
+  'admin.transit.status.uploaded': 'Uploaded',
+  'admin.transit.status.validating': 'Validating',
+  'admin.transit.status.validated': 'Validated',
+  'admin.transit.status.failed': 'Failed',
+  'admin.transit.status.active': 'Active',
+  'admin.transit.status.archived': 'Archived',
+
+  'admin.transit.preview.heading': 'Validation and preview',
+  'admin.transit.preview.headingFile': 'Validation and preview — {file}',
+  'admin.transit.preview.version': 'Feed version',
+  'admin.transit.preview.noVersion': 'This feed carries no feed_info version',
+  'admin.transit.preview.serviceWindow': 'Service dates',
+  'admin.transit.preview.window': '{start} to {end}',
+  'admin.transit.preview.noWindow': 'No service window could be read',
+  'admin.transit.preview.countsCaption': 'Rows in each file of this feed',
+  'admin.transit.preview.noCounts': 'Nothing has been counted yet — the checks are still running.',
+  'admin.transit.preview.validatingNote':
+    'This feed is being checked. The page refreshes itself every two seconds until there is a verdict.',
+  'admin.transit.preview.warnings': '{count} warnings — these do not stop activation',
+  'admin.transit.preview.noWarnings': 'No warnings were raised on this feed.',
+  'admin.transit.preview.liveNote': 'This is the feed passengers are being routed on.',
+  'admin.transit.preview.archivedNote': 'Making this feed live again is a rollback.',
+
+  'admin.transit.failed.heading': 'This feed cannot be made live',
+  'admin.transit.failed.body':
+    'The checks found errors. The first five are below; the full report names every one with its file and row.',
+  'admin.transit.failed.reportCsv': 'Download report (CSV)',
+  'admin.transit.failed.reportJson': 'Download report (JSON)',
+
+  'admin.transit.activate.open': 'Activate feed',
+  'admin.transit.activate.reactivate': 'Re-activate',
+  'admin.transit.activate.title': 'Make this feed live?',
+  'admin.transit.activate.replacing':
+    'Version {outgoing} is live now and will be archived. Version {incoming} takes its place.',
+  'admin.transit.activate.firstFeed':
+    'No feed is live yet. Version {incoming} becomes the first one passengers are routed on.',
+  'admin.transit.activate.atomic':
+    'The swap is one transaction. If it fails, the feed that is live now stays live. Route matching picks up the new feed within a minute.',
+  'admin.transit.activate.rollbackNote':
+    'This is a rollback — an archived feed is being made live again, with the same guarantee.',
+  'admin.transit.activate.confirm': 'Activate',
+  'admin.transit.activate.working': 'Swapping live dataset…',
+  'admin.transit.activate.done': 'Feed {version} is live — passenger route options updated.',
+  'admin.transit.activate.reload': 'Route and stop caches reload within a minute.',
+  'admin.transit.activate.dismiss': 'Dismiss',
+
+  'admin.transit.history.heading': 'Version history',
+  'admin.transit.history.caption': 'Every uploaded feed, newest first',
+  'admin.transit.history.version': 'Feed version',
+  'admin.transit.history.file': 'File',
+  'admin.transit.history.uploaded': 'Uploaded',
+  'admin.transit.history.routes': 'Routes',
+  'admin.transit.history.status': 'Status',
+  'admin.transit.history.actions': 'Actions',
+  'admin.transit.history.empty': 'No GTFS feed has been uploaded yet.',
+  'admin.transit.history.report': 'Report',
+  'admin.transit.history.zip': 'Zip',
+  'admin.transit.history.capped':
+    'Only the {limit} most recent versions are listed. Older ones are still stored and can still be rolled back to.',
+
+  'admin.transit.file.agency': 'Agencies',
+  'admin.transit.file.routes': 'Routes',
+  'admin.transit.file.trips': 'Trips',
+  'admin.transit.file.stops': 'Stops',
+  'admin.transit.file.stopTimes': 'Stop times',
+  'admin.transit.file.shapes': 'Shapes',
+  'admin.transit.file.calendar': 'Calendar',
+  'admin.transit.file.calendarDates': 'Calendar exceptions',
+  'admin.transit.file.frequencies': 'Frequencies',
 
   /* ---- SCR-AP-008 · users & roles (Epic 21, AL-06, C108) ---------------- */
   'admin.rbac.lookupHeading': 'Find an internal user',

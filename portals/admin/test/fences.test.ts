@@ -75,12 +75,13 @@ describe('the data layer is the only way out', () => {
     // and the AL-06 evaluation. Every *screen* goes through `read`/`mutate`/
     // `download`.
     //
-    // Both transport functions are named, not just `apiFetch`: `apiDownload`
-    // (C105's CSV export) leaves this process the same way and must stay behind
-    // the same door. A third one has to be added here on purpose.
+    // All three transport functions are named, not just `apiFetch`:
+    // `apiDownload` (C105's CSV export) and `apiUpload` (C110's GTFS feed) leave
+    // this process the same way and must stay behind the same door. A fourth one
+    // has to be added here on purpose.
     const callers = FILES.filter(
       ({ path, source }) =>
-        path !== 'src/api/http.ts' && /api(?:Fetch|Download)[(<]/.test(code(source)),
+        path !== 'src/api/http.ts' && /api(?:Fetch|Download|Upload)[(<]/.test(code(source)),
     ).map(({ path }) => path);
 
     expect(callers.sort()).toEqual(['proxy.ts', 'src/api/client.ts', 'src/server/session.ts']);
@@ -158,6 +159,11 @@ describe('AL-02 — nothing here is driver-facing or passenger-facing', () => {
       // `/v1/admin/documents` — AL-39's audited viewer, shared with C106 rather
       // than duplicated (`src/server/document-media.ts`).
       '/v1/admin/passengers',
+      // C110 · SCR-AP-016. transit-svc's GTFS lifecycle, which
+      // `gateway-routes.json` routes past admin-bff at Order 20 — the id-addressed
+      // status, report and activate are composed from the uploads prefix.
+      '/v1/admin/transit/gtfs/uploads',
+      '/v1/admin/transit/gtfs/versions',
     ]);
 
     const called = new Set<string>();

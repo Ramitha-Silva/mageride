@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { accessToken } from '@/server/session';
 
 import type { MutationAudit } from './audit';
-import { apiDownload, apiFetch, type ApiDownload } from './http';
+import { apiDownload, apiFetch, apiUpload, type ApiDownload } from './http';
 import { localProblem, ProblemError } from './problem';
 
 /**
@@ -150,6 +150,52 @@ export async function mutate<T = unknown, TBody = unknown>(
     idempotencyKey,
     ...(options.body === undefined ? {} : { body: options.body }),
     ...(options.searchParams ? { searchParams: options.searchParams } : {}),
+    ...(options.signal ? { signal: options.signal } : {}),
+  });
+
+  return { data, status, audit: options.audit, idempotencyKey };
+}
+
+export interface UploadOptions {
+  /** An absolute API path, `/v1/admin/...`. */
+  readonly path: string;
+  /** The caller's own body, streamed upstream rather than buffered here. */
+  readonly body: ReadableStream<Uint8Array>;
+  /** The inbound `Content-Type` — a multipart boundary is part of it. */
+  readonly contentType: string;
+  /** The `audit.events` row this call will cause (D-35). Required, as on {@link mutate}. */
+  readonly audit: MutationAudit;
+  readonly idempotencyKey?: string;
+  readonly signal?: AbortSignal;
+}
+
+/**
+ * A mutation whose body is a **file** — {@link mutate} for bytes.
+ *
+ * The fourth member of the data layer, and it exists for exactly one route:
+ * SCR-AP-016's GTFS upload, which is multipart and up to 200 MB. It is a mutation
+ * in every sense — it mints a `transit.gtfs_feed_versions` row and writes a
+ * `GTFS_FEED_UPLOADED` audit event — so it demands the same D-35 declaration and
+ * carries the same `Idempotency-Key`, and the split from `mutate` is only that
+ * `mutate` serialises its body to JSON.
+ *
+ * **The header is sent even though the server dedupes on content.** transit-svc
+ * opts out of the kernel's *replay* on this route (hashing a 200 MB body to key it
+ * would cost more than the upload) and still requires the header, so that a client
+ * cannot tell the two endpoints apart by what they accept. What actually stops a
+ * second copy is the file's own sha256 — stronger than a key, because it catches a
+ * retry that regenerated one.
+ */
+export async function upload<T = unknown>(options: UploadOptions): Promise<MutationOutcome<T>> {
+  const token = await requireToken(options.path);
+  const idempotencyKey = options.idempotencyKey ?? randomUUID();
+
+  const { data, status } = await apiUpload<T>({
+    path: options.path,
+    body: options.body,
+    contentType: options.contentType,
+    accessToken: token,
+    idempotencyKey,
     ...(options.signal ? { signal: options.signal } : {}),
   });
 

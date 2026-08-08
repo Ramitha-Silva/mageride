@@ -2,10 +2,11 @@
  * The D-35 vocabulary, as the portal's side of it.
  *
  * Transcribed from `MageRide.AdminBff.Auditing.AdminAuditActions`
- * (`backend/src/AdminBff/Auditing/AdminAuditActions.cs`), which is the writer.
- * `test/audit.test.ts` parses that file and asserts the two agree — an action
- * added there and missing here is a build failure, not a screen that names a row
- * nobody writes.
+ * (`backend/src/AdminBff/Auditing/AdminAuditActions.cs`), which is the writer —
+ * and, **Δ C110**, from `MageRide.Transit.Gtfs.GtfsAuditActions`, which is the
+ * other one. `test/audit.test.ts` parses both files and asserts they agree with
+ * the unions below — an action added there and missing here is a build failure,
+ * not a screen that names a row nobody writes.
  *
  * **Why the portal knows these at all.** D-35 makes every admin-bff mutation write
  * an `audit.events` row, and the interceptor *throws* on a mutating 2xx that
@@ -53,6 +54,38 @@ export type AdminAuditAction =
   | 'ANNOUNCEMENT_PUBLISHED'
   | 'GTFS_PROXIED';
 
+/**
+ * The rows **transit-svc** writes for SCR-AP-016 (Δ C110), which are the ones an
+ * auditor will actually find.
+ *
+ * `gateway-routes.json` matches `/v1/admin/transit/**` at **Order 20** and sends
+ * it to transit-svc, ahead of admin-bff's Order 90 catch-all — so on the deployed
+ * topology admin-bff never sees a GTFS call and `GTFS_PROXIED` is never written.
+ * What *is* written, in both topologies, is the dataset-level row transit-svc
+ * commits inside the same transaction as the change (`GtfsAuditActions`).
+ *
+ * **This is emphatically not the C108 case.** There, four prefixes reach their
+ * owning service and leave **nothing** in `audit.events`, so those calls declare
+ * {@link AuditedElsewhere} and the console says a row will not exist. Here a row
+ * always exists; it is simply written by the service that owns the tables the
+ * swap renames. Declaring `auditedElsewhere: 'transit-svc'` would tell an operator
+ * their activation is unrecorded, which is the opposite of true — and declaring
+ * `GTFS_PROXIED` would name a row that, in production, nobody can find.
+ *
+ * `GTFS_FEED_VALIDATED` is here for completeness and is **actor-less by
+ * construction**: a queued job reaches that verdict, not a person, and no screen
+ * declares it. It is in the union for the same reason `DOC_VIEW` and `PII_READ`
+ * are in admin-bff's — the vocabulary is what the log can contain, not what a
+ * button can cause.
+ */
+export type TransitAuditAction =
+  | 'GTFS_FEED_UPLOADED'
+  | 'GTFS_FEED_VALIDATED'
+  | 'GTFS_FEED_ACTIVATED';
+
+/** Every `audit.events.action` this console can name, whichever service writes it. */
+export type AuditAction = AdminAuditAction | TransitAuditAction;
+
 /** `audit.events.entity_type` — which kind of record the action was about. */
 export type AdminAuditEntity =
   | 'vehicle'
@@ -80,7 +113,7 @@ export type AdminAuditEntity =
  * record it is about, which is what a confirm dialog puts in front of the operator.
  */
 export interface AuditIntent {
-  readonly action: AdminAuditAction;
+  readonly action: AuditAction;
   readonly entity: AdminAuditEntity;
   readonly entityId?: string;
 }

@@ -73,11 +73,12 @@ describe('every configuration screen sits at the path its nav item names', () =>
     expect(existsSync(join(APP_ROOT, 'app/(portal)', path!, 'page.tsx'))).toBe(true);
   });
 
-  it('leaves SCR-AP-016 to C110 and links to it as an entry point', () => {
-    // The GTFS Dataset Manager is a screen this component does not own; the
-    // deliverable here is the way in, which is the tab.
+  it('reaches SCR-AP-016 through the same tab, now that C110 has built it', () => {
+    // C108's deliverable was the way in; the screen behind it is C110's. The tab
+    // and the page have to agree on the path `AdminMenu.cs` gives the nav item,
+    // or the strip offers a link `proxy.ts` resolves to a different screen.
     expect(paths.get('gtfs')).toBe('/config/transit/gtfs');
-    expect(existsSync(join(APP_ROOT, 'app/(portal)/config/transit/gtfs/page.tsx'))).toBe(false);
+    expect(existsSync(join(APP_ROOT, 'app/(portal)/config/transit/gtfs/page.tsx'))).toBe(true);
   });
 });
 

@@ -236,6 +236,100 @@ export async function apiDownload(request: ApiDownloadRequest): Promise<ApiDownl
   };
 }
 
+export interface ApiUploadRequest {
+  /** An absolute API path, `/v1/...`. */
+  readonly path: string;
+  /**
+   * The request body, **as a stream**, and the caller's own — not a copy of it.
+   *
+   * A GTFS feed is up to 200 MB (BR-32.1). Buffering it here would put the whole
+   * file in this process's memory on a route whose only job is to carry it, which
+   * is the same argument `GtfsProxyEndpoints` makes for streaming on the other
+   * side of the same hop.
+   */
+  readonly body: ReadableStream<Uint8Array>;
+  /** The inbound `Content-Type`, boundary and all. A multipart body without it is unreadable. */
+  readonly contentType: string;
+  readonly accessToken?: string;
+  /** R-14/R-18 replay key. Required — every mutation carries one. */
+  readonly idempotencyKey: string;
+  readonly signal?: AbortSignal;
+}
+
+/**
+ * A POST whose body is **bytes somebody is still sending**, as the signed-in
+ * operator.
+ *
+ * The fourth and last member of the transport, and the third the fences test
+ * names. It exists for one route — SCR-AP-016's `POST …/gtfs/uploads` — and the
+ * reason it cannot be {@link apiFetch} is that `apiFetch` serialises its body to
+ * JSON, which is the correct behaviour for every other mutation this console
+ * makes and the wrong one for a zip.
+ *
+ * Everything else is deliberately the same function's behaviour: same origin,
+ * same bearer, same `no-store`, same `problem+json` on a failure. `duplex: 'half'`
+ * is what lets a `ReadableStream` be a request body at all — the sender finishes
+ * before the receiver starts — and it is absent from the DOM's `RequestInit`
+ * because it is an HTTP/1.1 streaming concern the browser has never needed.
+ *
+ * **`Content-Length` is deliberately not forwarded.** A streamed body is sent
+ * chunked, and a declared length that disagrees with the framing is the classic
+ * proxy failure. The 200 MB ceiling is still enforced three times over — by the
+ * dropzone before a byte leaves the browser, by the route handler against the
+ * declared length before this is called, and by transit-svc's own Kestrel limit
+ * and object store.
+ */
+export async function apiUpload<T>(request: ApiUploadRequest): Promise<ApiResponse<T>> {
+  let url: string;
+  try {
+    url = buildUrl(request.path, undefined);
+  } catch (error) {
+    if (error instanceof MissingConfigurationError) {
+      throw new ProblemError(localProblem('service-unavailable', 503, request.path, error.message));
+    }
+    throw error;
+  }
+
+  const headers = new Headers({
+    accept: 'application/json, application/problem+json',
+    'content-type': request.contentType,
+    'idempotency-key': request.idempotencyKey,
+  });
+  if (request.accessToken) headers.set('authorization', `Bearer ${request.accessToken}`);
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: request.body,
+      cache: 'no-store',
+      redirect: 'manual',
+      signal: request.signal,
+      // Not on the DOM lib's `RequestInit`; undici requires it for a stream body.
+      duplex: 'half',
+    } as RequestInit & { duplex: 'half' });
+  } catch (error) {
+    throw new ProblemError(
+      localProblem(
+        'dependency-unavailable',
+        503,
+        request.path,
+        error instanceof Error ? error.message : 'The MageRide API could not be reached.',
+      ),
+    );
+  }
+
+  if (!response.ok) {
+    throw new ProblemError(await readProblem(response, request.path));
+  }
+
+  const text = await response.text();
+  if (!text) return { status: response.status, data: undefined as T };
+
+  return { status: response.status, data: JSON.parse(text) as T };
+}
+
 /**
  * The `filename` out of a `Content-Disposition`, if it is a plain one.
  *

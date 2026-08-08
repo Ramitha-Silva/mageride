@@ -309,6 +309,66 @@ Six screens across `/passengers`, `/drivers` and `/vehicles`, reading C064's AL-
   about a year, and `formatDateTime` drops it deliberately because a working queue compares against
   this morning.
 
+## SCR-AP-016 — the GTFS Dataset Manager (C110)
+
+One screen and three relays under `/config/transit/gtfs`, reading C057's AL-54 family. It is the
+**sole ingestion surface** for the national transit feed (AL-56) and the last of the nineteen.
+
+- **The feed is somebody else's file, and the screen's whole vocabulary says so.** AL-56 retired the
+  acquisition plan outright: the day-0 feed and every refresh arrive as a finished zip, so there is
+  no authoring control here, no route that can write a GTFS row, and server-side validation
+  (BR-32.1) is the only quality gate MageRide applies. `test/transit-screen.test.tsx` asserts the
+  absence, including of the superseded `gtfs-import` route — "retained as the internal import step"
+  is not an operator path and this screen must never call it.
+- **`?feed=` is the entire state, and it produces D2's seven states without a branch.** Absent, the
+  selection is the newest upload — the last thing that happened. A feed still validating shows the
+  stepper and starts the poll, a validated one shows the preview and Activate, a failed one shows
+  the first five errors and the report, and once the newest upload is live the card *is* the live
+  feed, which is `active-idle`. No versions at all is `empty`; `uploading` and `activating` are the
+  two client-side moments. In the URL rather than in state for C105's reason: a feed under review
+  survives a reload and can be pasted into a ticket.
+- **The poll is `router.refresh()`, not a fetch of a fragment.** Two admin-bff reads every two
+  seconds while a verdict is outstanding, and the stepper, the counts, the warnings *and* the
+  history row move together because they are one render. A client component holding the status
+  would need a second copy of the view model and a second set of translated labels in the bundle,
+  and would still leave the history table showing the world from before the feed validated.
+- **The upload is the one thing in this portal that is not `fetch`.** D2 asks for a progress bar and
+  `fetch` has no upload-progress event; only `XMLHttpRequest` does. So `UploadCard` posts by XHR to
+  **this application's own route handler**, which attaches the bearer and **streams** the body on —
+  `apiUpload`, the fourth member of the data layer, named in `test/fences.test.ts` beside `apiFetch`
+  and `apiDownload`. Buffering 200 MB to relay it is what `GtfsProxyEndpoints` refuses on the other
+  side of the same hop.
+- **A duplicate is refused on the bytes and the message has somewhere to go.** `409 feed-duplicate`
+  is sha256, so it catches a retry that regenerated its key and the same file uploaded a month later
+  by somebody else. `duplicateFeed()` narrows the problem's RFC 7807 extensions to the version that
+  already holds those bytes, and the inline error links to it. Its third extension, `status`,
+  collides with RFC 7807's own member and is unreadable — raised in the handoff.
+- **The confirm dialog names what is being switched off.** Not "are you sure" — *version N is live
+  now and will be archived*. Rollback is the same dialog and the same call (BR-32.3), with one line
+  saying that is what it is; giving it a second button would imply a second mechanism. The dialog
+  and the toast are **derived** from the action result rather than pushed by an effect, so there is
+  no window in which they disagree with it.
+- **The activation key is fresh on every press, deliberately.** BR-32.2 makes activation idempotent
+  on `Idempotency-Key` and transit-svc keeps a command log — which is exactly why a *stable* key
+  would be wrong: rollback is activation, so `v3 → v2 → v3` is legitimate and a key derived from the
+  feed id would replay the first response without swapping. A double click is bounded by the
+  disabled button and by transit-svc's advisory lock, which answers the second request `409`.
+- **`mutate()`'s audit is a third case, and it is not C108's.** `gateway-routes.json` sends
+  `/v1/admin/transit/**` to transit-svc at **Order 20**, so admin-bff never sees a GTFS call and its
+  `GTFS_PROXIED` row is never written — but transit-svc writes `GTFS_FEED_UPLOADED` /
+  `GTFS_FEED_ACTIVATED` inside the transaction that changes the feed. A row always exists, so
+  `auditedElsewhere` would tell an operator the opposite of the truth. `TransitAuditAction` is the
+  vocabulary of the second writer and `test/audit.test.ts` now parses `GtfsAuditActions.cs` too.
+- **Four GTFS codes joined `MESSAGE_KEYS`.** `feed-duplicate`, `feed-not-validated`,
+  `feed-already-active` and `payload-too-large`: the generic conflict sentence ("someone changed
+  this first — reload") is wrong for all three 409s, because nothing changed and reloading fixes
+  none of them.
+- **Deviations from the wireframe, each forced by the contract:** the uploader is a **user id**, not
+  `admin@mageride.lk` — iam-svc resolves no internal account to a name (C108 lost the whole user
+  directory to the same gap); the counts grid omits a file the feed does not carry rather than
+  printing `0` for an optional `shapes.txt`; and the history states its hundred-row page rather than
+  ending without explanation. See the C110 handoff.
+
 ## Configuration
 
 `.env.example` documents every variable. `MAGERIDE_API_BASE_URL` (the C008 gateway origin) is

@@ -55,6 +55,11 @@ export const adminSi: AdminMessages = {
   'admin.error.googleFailed':
     'Google පිවිසුම සම්පූර්ණ නොවීය. නැවත උත්සාහ කරන්න, නැතහොත් මුරපදය භාවිත කරන්න.',
   'admin.error.reference': 'යොමුව: {traceId}',
+  'admin.error.feedDuplicate': 'මෙම හරියටම එකම ගොනුව දැනටමත් උඩුගත කර ඇත.',
+  'admin.error.feedNotValidated':
+    'එම දත්ත කට්ටලය පරීක්ෂාවෙන් සමත් වී නැත, එබැවින් එය සජීවී කළ නොහැක.',
+  'admin.error.feedAlreadyActive': 'එම දත්ත කට්ටලය දැනටමත් සජීවී එකයි.',
+  'admin.error.payloadTooLarge': 'මෙම උඩුගත කිරීමට එම ගොනුව විශාල වැඩියි.',
 
   /* ---- Refusals and dead ends ------------------------------------------ */
   'admin.denied.title': 'මෙම පිටුවට ඔබට ප්‍රවේශය නැත',
@@ -672,6 +677,108 @@ export const adminSi: AdminMessages = {
   'admin.config.flags.add': 'සලකුණ සුරකින්න',
   'admin.config.flags.saved': 'විශේෂාංග සලකුණ සුරකින ලදී.',
   'admin.config.flags.keyInvalid': 'සලකුණේ යතුර කුඩා අකුරින් ලියා අකුරකින් ආරම්භ විය යුතුය, උදාහරණයක් ලෙස new_pay_sheet',
+
+  /* ---- SCR-AP-016 · GTFS Dataset Manager (Epic 28, AL-54…56, C110) ------ */
+  'admin.transit.live': 'සජීවී: {version} · මාර්ග {routes}',
+  'admin.transit.noLive': 'සජීවී දත්ත කට්ටලයක් නැත',
+  'admin.transit.unknownCount': 'නොදන්නා ගණනක්',
+  'admin.transit.none': '—',
+  'admin.transit.empty.title': 'GTFS දත්ත කට්ටලයක් පූරණය කර නැත',
+  'admin.transit.empty.body':
+    'දත්ත කට්ටලයක් සජීවී කරන තෙක් මගී මාර්ග ගැළපීම සැඟවී පවතී. ආරම්භ කිරීමට පහතින් ජාතික GTFS zip ගොනුව උඩුගත කරන්න.',
+
+  'admin.transit.upload.heading': 'සම්පූර්ණ GTFS දත්ත කට්ටලය උඩුගත කරන්න',
+  'admin.transit.upload.dropzone': 'GTFS .zip ගොනුව මෙතැනට ඇද දමන්න',
+  'admin.transit.upload.hint': 'නැතහොත් ගොනුවක් තෝරන්න · .zip පමණි, උපරිම 200 MB',
+  'admin.transit.upload.required':
+    'අවශ්‍යයි: agency · routes · trips · stops · stop_times, සහ calendar හෝ calendar_dates. විකල්පයි: shapes · frequencies · translations · feed_info.',
+  'admin.transit.upload.externalNote':
+    'දත්ත කට්ටලය MageRide වෙත එන්නේ සම්පූර්ණ කළ ගොනුවක් ලෙසයි. මෙම තිරය එය පරීක්ෂා කර ප්‍රකාශයට පත් කරයි; මෙතැනින් එය සංස්කරණය නොකෙරේ.',
+  'admin.transit.upload.uploading': 'උඩුගත වෙමින්',
+  'admin.transit.upload.percent': '{percent}% යවා ඇත',
+  'admin.transit.upload.cancel': 'අවලංගු කරන්න',
+  'admin.transit.upload.rejectedType': 'GTFS දත්ත කට්ටලයක් යනු .zip ගොනුවකි. එවැන්නක් තෝරා නැවත උත්සාහ කරන්න.',
+  'admin.transit.upload.rejectedSize': 'එම ගොනුව 200 MB සීමාව ඉක්මවා ඇත.',
+  'admin.transit.upload.rejectedCount': 'වරකට එක් දත්ත කට්ටලයක් උඩුගත කරන්න.',
+  'admin.transit.upload.duplicate': 'මෙම හරියටම එකම ගොනුව දැනටමත් උඩුගත කර ඇත (අනුවාදය {version}).',
+  'admin.transit.upload.duplicateOpen': 'එම අනුවාදය විවෘත කරන්න',
+  'admin.transit.upload.failed': 'උඩුගත කිරීම සම්පූර්ණ නොවීය. කිසිවක් සුරැකී නැත — නැවත උත්සාහ කරන්න.',
+
+  'admin.transit.stepper.label': 'පරීක්ෂා කිරීමේ ප්‍රගතිය',
+  'admin.transit.step.uploaded': 'උඩුගත කළා',
+  'admin.transit.step.validating': 'පරීක්ෂා කරමින්',
+  'admin.transit.step.validated': 'පරීක්ෂාවෙන් සමත්',
+  'admin.transit.step.failed': 'අසමත්',
+
+  'admin.transit.status.uploaded': 'උඩුගත කළා',
+  'admin.transit.status.validating': 'පරීක්ෂා කරමින්',
+  'admin.transit.status.validated': 'පරීක්ෂාවෙන් සමත්',
+  'admin.transit.status.failed': 'අසමත්',
+  'admin.transit.status.active': 'සජීවී',
+  'admin.transit.status.archived': 'සංරක්ෂිත',
+
+  'admin.transit.preview.heading': 'පරීක්ෂාව සහ පෙරදසුන',
+  'admin.transit.preview.headingFile': 'පරීක්ෂාව සහ පෙරදසුන — {file}',
+  'admin.transit.preview.version': 'දත්ත කට්ටල අනුවාදය',
+  'admin.transit.preview.noVersion': 'මෙම දත්ත කට්ටලයේ feed_info අනුවාදයක් නැත',
+  'admin.transit.preview.serviceWindow': 'සේවා දින',
+  'admin.transit.preview.window': '{start} සිට {end} දක්වා',
+  'admin.transit.preview.noWindow': 'සේවා කාල පරාසයක් කියවා ගත නොහැකි විය',
+  'admin.transit.preview.countsCaption': 'මෙම දත්ත කට්ටලයේ එක් එක් ගොනුවේ පේළි ගණන',
+  'admin.transit.preview.noCounts': 'තවම කිසිවක් ගණන් කර නැත — පරීක්ෂා තවමත් ක්‍රියාත්මකයි.',
+  'admin.transit.preview.validatingNote':
+    'මෙම දත්ත කට්ටලය පරීක්ෂා කරමින් පවතී. තීරණයක් ලැබෙන තෙක් මෙම පිටුව තත්පර දෙකකට වරක් නැවුම් වේ.',
+  'admin.transit.preview.warnings': 'අනතුරු ඇඟවීම් {count}ක් — ඒවා සජීවී කිරීම නවත්වන්නේ නැත',
+  'admin.transit.preview.noWarnings': 'මෙම දත්ත කට්ටලය සම්බන්ධව අනතුරු ඇඟවීම් නැත.',
+  'admin.transit.preview.liveNote': 'මගීන්ට මාර්ග සපයන්නේ මෙම දත්ත කට්ටලයෙනි.',
+  'admin.transit.preview.archivedNote': 'මෙය නැවත සජීවී කිරීම යනු පෙර තත්ත්වයට ගෙන ඒමකි.',
+
+  'admin.transit.failed.heading': 'මෙම දත්ත කට්ටලය සජීවී කළ නොහැක',
+  'admin.transit.failed.body':
+    'පරීක්ෂාවලදී දෝෂ හමු විය. පළමු පහ පහත දැක්වේ; සම්පූර්ණ වාර්තාවේ එක් එක් දෝෂය ගොනුව හා පේළිය සමඟ නම් කර ඇත.',
+  'admin.transit.failed.reportCsv': 'වාර්තාව බාගන්න (CSV)',
+  'admin.transit.failed.reportJson': 'වාර්තාව බාගන්න (JSON)',
+
+  'admin.transit.activate.open': 'දත්ත කට්ටලය සජීවී කරන්න',
+  'admin.transit.activate.reactivate': 'නැවත සජීවී කරන්න',
+  'admin.transit.activate.title': 'මෙම දත්ත කට්ටලය සජීවී කරන්නද?',
+  'admin.transit.activate.replacing':
+    'දැන් සජීවීව ඇත්තේ අනුවාදය {outgoing} වන අතර එය සංරක්ෂණය කෙරේ. එහි ස්ථානය අනුවාදය {incoming} ගනී.',
+  'admin.transit.activate.firstFeed':
+    'තවම සජීවී දත්ත කට්ටලයක් නැත. මගීන්ට මාර්ග සපයන පළමු එක අනුවාදය {incoming} වේ.',
+  'admin.transit.activate.atomic':
+    'මාරුව සිදු වන්නේ එකම ගනුදෙනුවකිනි. එය අසාර්ථක වුවහොත් දැන් සජීවීව ඇති දත්ත කට්ටලයම සජීවීව පවතී. නව දත්ත කට්ටලය මිනිත්තුවක් ඇතුළත මාර්ග ගැළපීමට යෙදේ.',
+  'admin.transit.activate.rollbackNote':
+    'මෙය පෙර තත්ත්වයට ගෙන ඒමකි — සංරක්ෂිත දත්ත කට්ටලයක් එම සහතිකයම සමඟ නැවත සජීවී කෙරේ.',
+  'admin.transit.activate.confirm': 'සජීවී කරන්න',
+  'admin.transit.activate.working': 'සජීවී දත්ත කට්ටලය මාරු කරමින්…',
+  'admin.transit.activate.done': 'දත්ත කට්ටලය {version} සජීවීයි — මගී මාර්ග විකල්ප යාවත්කාලීන විය.',
+  'admin.transit.activate.reload': 'මාර්ග හා නැවතුම් හැඹිලි මිනිත්තුවක් ඇතුළත නැවත පූරණය වේ.',
+  'admin.transit.activate.dismiss': 'ඉවත් කරන්න',
+
+  'admin.transit.history.heading': 'අනුවාද ඉතිහාසය',
+  'admin.transit.history.caption': 'උඩුගත කළ සෑම දත්ත කට්ටලයක්ම, අලුත්ම එක මුලින්',
+  'admin.transit.history.version': 'දත්ත කට්ටල අනුවාදය',
+  'admin.transit.history.file': 'ගොනුව',
+  'admin.transit.history.uploaded': 'උඩුගත කළේ',
+  'admin.transit.history.routes': 'මාර්ග',
+  'admin.transit.history.status': 'තත්ත්වය',
+  'admin.transit.history.actions': 'ක්‍රියා',
+  'admin.transit.history.empty': 'තවම GTFS දත්ත කට්ටලයක් උඩුගත කර නැත.',
+  'admin.transit.history.report': 'වාර්තාව',
+  'admin.transit.history.zip': 'Zip',
+  'admin.transit.history.capped':
+    'ලැයිස්තුගත වන්නේ අලුත්ම අනුවාද {limit} පමණි. පැරණි ඒවා තවමත් ගබඩා කර ඇති අතර ඒවාට නැවත යා හැක.',
+
+  'admin.transit.file.agency': 'ආයතන',
+  'admin.transit.file.routes': 'මාර්ග',
+  'admin.transit.file.trips': 'ගමන්',
+  'admin.transit.file.stops': 'නැවතුම්',
+  'admin.transit.file.stopTimes': 'නැවතුම් වේලාවන්',
+  'admin.transit.file.shapes': 'මාර්ග රේඛා',
+  'admin.transit.file.calendar': 'දින දර්ශනය',
+  'admin.transit.file.calendarDates': 'දින දර්ශන ව්‍යතිරේක',
+  'admin.transit.file.frequencies': 'සංඛ්‍යාත',
 
   /* ---- SCR-AP-008 · users & roles (Epic 21, AL-06, C108) ---------------- */
   'admin.rbac.lookupHeading': 'අභ්‍යන්තර පරිශීලකයෙකු සොයන්න',

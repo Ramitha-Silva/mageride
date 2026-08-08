@@ -95,6 +95,16 @@ const MESSAGE_KEYS: Readonly<Record<string, AdminMessageKey>> = {
   'service-unavailable': 'admin.error.serviceUnavailable',
   'upstream-timeout': 'admin.error.serviceUnavailable',
   'internal-error': 'admin.error.unexpected',
+  // Δ C110 · SCR-AP-016. The GTFS lifecycle's four refusals, which the generic
+  // `conflict` sentence ("someone changed this first — reload") describes wrongly
+  // in every case: a duplicate feed, a feed that never passed validation and the
+  // feed that is already live are three different things an operator does three
+  // different things about. Added here rather than branched on in the screen so
+  // `ProblemPanel` and the two server actions render the same sentence.
+  'feed-duplicate': 'admin.error.feedDuplicate',
+  'feed-not-validated': 'admin.error.feedNotValidated',
+  'feed-already-active': 'admin.error.feedAlreadyActive',
+  'payload-too-large': 'admin.error.payloadTooLarge',
 };
 
 export function problemMessageKey(problem: ProblemDetails): AdminMessageKey {
