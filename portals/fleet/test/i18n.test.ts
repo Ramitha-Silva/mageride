@@ -54,7 +54,16 @@ describe('the three tables agree', () => {
     // sentences are not. Anything longer than a couple of words that is
     // byte-identical to the English is an untranslated string that would
     // otherwise ship silently.
-    const ALLOWED_IDENTICAL = new Set(['fleet.error.reference', 'fleet.screen.servedBy']);
+    // Δ C113 — "IMEI / MAC" is two protocol acronyms and a slash. They are
+    // written that way on the ST-901's own label and in Sinhala and Tamil
+    // technical copy alike; transliterating them would produce a heading an
+    // operator could not match against the sticker they are reading from.
+    const ALLOWED_IDENTICAL = new Set([
+      'fleet.error.reference',
+      'fleet.screen.servedBy',
+      'fleet.trackers.field.imei',
+      'fleet.trackers.column.imei',
+    ]);
 
     // A template that is only placeholders and separators carries no language at
     // all, so identical is the correct translation of it — words are what has

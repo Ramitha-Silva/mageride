@@ -152,6 +152,26 @@ export const fleetEn = {
     'That needs a verified bank and payout profile. Add the account details and documents, and a verification officer will approve them.',
   'fleet.error.fileTooLarge': 'That file is larger than {megabytes} MB. Upload a smaller copy.',
   'fleet.error.fileNotAccepted': 'That kind of file is not accepted here.',
+  // Δ C113 — the codes SCR-FP-004…006 can be answered with.
+  'fleet.error.vehicleRegistrationExists':
+    'A vehicle is already registered on MageRide with that number plate. If it was sold to you, MageRide support can move it.',
+  'fleet.error.invalidVehicleType': 'That is not a MageRide vehicle type. Choose one from the list.',
+  'fleet.error.modeNotAllowed':
+    'A fleet operates scheduled and shared private vehicles. Trains are registered centrally by MageRide.',
+  'fleet.error.vehicleNotFound': 'That vehicle is not in your fleet.',
+  'fleet.error.driverNotFound':
+    'No MageRide driver account matches that User ID or mobile number. The driver signs up in the Driver App first.',
+  'fleet.error.imeiDuplicate':
+    'That IMEI is already bound to a vehicle. Both devices are held for an administrator to resolve, and neither is publishing until they do.',
+  'fleet.error.csvInvalid':
+    'That file could not be read as a CSV. Check the columns and upload it again.',
+  'fleet.error.tooManyRows': 'That file has too many rows. Split it and upload it in parts.',
+  'fleet.error.bulkInProgress':
+    'An import is already running for this organisation. Wait for it to finish and try again.',
+  'fleet.error.notOwner': 'That device belongs to another organisation.',
+  // The gateway's D-30 policy, met on exactly one route — see `tracker-actions.ts`.
+  'fleet.error.attestationFailed':
+    'MageRide only accepts this request from the Android and iOS apps at the moment. Ask MageRide support to run the batch for you.',
   // Shown verbatim, in every language, because it is what support asks for.
   'fleet.error.reference': 'Reference: {traceId}',
 
@@ -321,6 +341,296 @@ export const fleetEn = {
   'fleet.payout.error.fileRequired': 'Choose a file to upload',
   'fleet.payout.error.profileFirst':
     'Save the bank details first — a document is attached to a payout profile, not to an organisation.',
+
+  /* ---- SCR-FP-004 · vehicle onboarding (US-13.1/13.6, AL-50, AL-51) ---- */
+  'fleet.vehicles.title': 'Vehicle onboarding',
+  // `web_fleet.html` prints "Mode A / B only — no Mode C" here. The third mode is
+  // not named because AL-03 makes it not a fleet concept at all, and
+  // `test/fences.test.ts` holds the whole tree to that. The caption below says
+  // what the pill means without borrowing the vocabulary of a surface this
+  // console does not have.
+  'fleet.vehicles.modesOnly': 'Mode A / B only',
+  'fleet.vehicles.modesOnlyNote':
+    'A fleet runs scheduled public transport (Mode A) and shared private vehicles (Mode B). On-demand hire is a driver’s own vehicle and is onboarded in the Driver App.',
+  'fleet.vehicles.tabs': 'How to add vehicles',
+  'fleet.vehicles.tab.single': 'Single vehicle',
+  'fleet.vehicles.tab.bulk': 'Bulk CSV',
+  'fleet.vehicles.viewerNotice':
+    'You are signed in as a Viewer, so this screen shows the roster and adds nothing to it.',
+
+  'fleet.vehicles.add.heading': 'Add vehicle',
+  'fleet.vehicles.field.plate': 'Reg no',
+  'fleet.vehicles.field.plateHint': 'The number plate, exactly as it is painted — for example NB-4521.',
+  'fleet.vehicles.field.type': 'Vehicle type',
+  'fleet.vehicles.field.mode': 'Mode',
+  'fleet.vehicles.mode.a': 'Mode A — scheduled public transport',
+  'fleet.vehicles.mode.b': 'Mode B — shared private vehicle',
+  'fleet.vehicles.type.bus': 'Bus',
+  'fleet.vehicles.type.van': 'Van',
+  'fleet.vehicles.type.mini_van': 'Mini van',
+  'fleet.vehicles.type.flex': 'Flex',
+  'fleet.vehicles.type.sedan': 'Sedan',
+  'fleet.vehicles.type.three_wheeler': 'Three wheeler',
+  'fleet.vehicles.type.motorbike': 'Motorbike',
+  'fleet.vehicles.type.truck': 'Truck',
+  'fleet.vehicles.type.mini_truck': 'Mini truck',
+  // Trains are administered centrally (US-2.17/2.18), so they are not offered
+  // rather than offered and refused.
+  'fleet.vehicles.type.noTrain':
+    'Trains are registered centrally by MageRide and are not onboarded here.',
+  'fleet.vehicles.add.submit': 'Add vehicle',
+  'fleet.vehicles.add.submitting': 'Adding…',
+  'fleet.vehicles.add.added':
+    '{plate} is on the roster and under review. Upload its documents below.',
+
+  /* ---- AL-51's rename. The label is the only thing that changed. -------- */
+  'fleet.vehicles.field.servicePayment': 'Service payment',
+  'fleet.vehicles.field.servicePaymentHint':
+    'Mode B only. An office or staff transport collects nothing from its passengers and is Free; anything else is Paid with a default monthly fare.',
+  'fleet.vehicles.servicePayment.free': 'Free',
+  'fleet.vehicles.servicePayment.paid': 'Paid',
+  'fleet.vehicles.servicePayment.freeOffice': 'Free (office)',
+  'fleet.vehicles.servicePayment.notSet': 'Not set',
+  'fleet.vehicles.servicePayment.notApplicable': '—',
+  'fleet.vehicles.servicePayment.paidWithFare': 'Paid · Rs {fare}/mo',
+  'fleet.vehicles.field.fare': 'Default monthly fare (Paid)',
+  'fleet.vehicles.field.fareHint':
+    'Rupees per subscriber per month. Overridable per subscriber on the Subscriptions screen.',
+  'fleet.vehicles.servicePayment.heading': 'Service payment',
+  'fleet.vehicles.servicePayment.save': 'Save service payment',
+  'fleet.vehicles.servicePayment.saving': 'Saving…',
+  'fleet.vehicles.servicePayment.saved': 'Saved.',
+  'fleet.vehicles.servicePayment.modeANote':
+    'Service payment applies to Mode B vehicles. A Mode A vehicle carries no subscription fare.',
+
+  /* ---- AL-50's four named slots (US-27.3) ------------------------------ */
+  'fleet.vehicles.docs.heading': 'Vehicle documents',
+  'fleet.vehicles.docs.forVehicle': 'Vehicle documents · {plate}',
+  'fleet.vehicles.docs.chooseVehicle':
+    'A document is attached to a vehicle. Add the vehicle above, or choose one from the roster, and its four slots open here.',
+  'fleet.vehicles.docs.extraction':
+    'Each document is read by AI — the number plate against the registration, the insurance and revenue-license expiry, the permit number and route — and carries its own Verified / Pending / Missing chip.',
+  'fleet.vehicles.docs.approvalGate':
+    'A vehicle cannot reach Approved while a required document is Missing or Pending.',
+  'fleet.vehicles.docs.blocked': 'Waiting on: {slots}.',
+  'fleet.vehicles.docs.ready':
+    'Every required document is verified. A verification officer makes the decision.',
+  'fleet.vehicles.docs.backToRoster': 'Show the whole roster',
+  'fleet.vehicles.doc.registration': 'Registration copy (CR book)',
+  'fleet.vehicles.doc.registrationHint': 'The number plate is matched against the CR book.',
+  'fleet.vehicles.doc.insurance': 'Insurance certificate',
+  'fleet.vehicles.doc.insuranceHint': 'The expiry date is read from the certificate.',
+  'fleet.vehicles.doc.revenueLicense': 'Revenue license',
+  'fleet.vehicles.doc.revenueLicenseHint': 'The licence number and expiry date are read from it.',
+  'fleet.vehicles.doc.routePermit': 'Route permit',
+  'fleet.vehicles.doc.routePermitHint': 'The permit number and route are read from it.',
+  'fleet.vehicles.doc.upload': 'Drop the file or choose one',
+  'fleet.vehicles.doc.accept': 'PDF or photograph, up to {megabytes} MB.',
+  'fleet.vehicles.slot.verified': 'Verified',
+  'fleet.vehicles.slot.pending': 'Pending',
+  'fleet.vehicles.slot.missing': 'Missing',
+  'fleet.vehicles.slot.required': 'Required',
+  'fleet.vehicles.slot.optional': 'Optional for this vehicle',
+  'fleet.vehicles.slot.permitModeA': 'Required for Mode A.',
+  'fleet.vehicles.slot.expires': 'Expires {date}',
+  'fleet.vehicles.slot.uploading': 'Uploading and extracting…',
+  'fleet.vehicles.slot.replace': 'Uploading a new file replaces this one.',
+  'fleet.vehicles.slot.extracted': 'Extracted',
+  'fleet.vehicles.slot.fieldPending': 'awaiting an officer',
+  'fleet.vehicles.slot.fieldUnread': 'not read',
+  'fleet.vehicles.field.expiry': 'Expiry date',
+  'fleet.vehicles.field.expiryHint': 'Optional. Used only if the extraction cannot read one.',
+  // The eight `registry.document_fields.field_key` values AL-50's slots carry
+  // (fleet-svc's `VehicleDocumentFieldKeys`, mirroring ocr-svc). A key with no
+  // entry is rendered as itself rather than dropped — a field an officer can see
+  // and the operator cannot is worse than an untranslated label.
+  'fleet.vehicles.extract.reg_no_match': 'Plate matches the CR book',
+  'fleet.vehicles.extract.plate_text': 'Plate as read',
+  'fleet.vehicles.extract.insurance_expiry': 'Insurance expiry',
+  'fleet.vehicles.extract.revenue_no': 'Revenue licence number',
+  'fleet.vehicles.extract.revenue_expiry': 'Revenue licence expiry',
+  'fleet.vehicles.extract.permit_no': 'Permit number',
+  'fleet.vehicles.extract.permit_route': 'Route',
+  'fleet.vehicles.extract.permit_expiry': 'Permit expiry',
+
+  /* ---- The bulk CSV (US-13.1/13.6) ------------------------------------- */
+  'fleet.vehicles.bulk.heading': 'Bulk CSV',
+  'fleet.vehicles.bulk.prompt': 'Drop the CSV or choose a file',
+  'fleet.vehicles.bulk.hint': 'Up to {rows} rows, {megabytes} MB.',
+  'fleet.vehicles.bulk.columns': 'Columns: {columns}. A header row is optional.',
+  'fleet.vehicles.bulk.docsPending':
+    'Every imported row is created with its documents pending — a CSV carries no files, so the four slots are filled per vehicle afterwards.',
+  'fleet.vehicles.bulk.uploading': 'Uploading…',
+  'fleet.vehicles.bulk.processing': 'Importing {total} rows…',
+  'fleet.vehicles.bulk.imported': '{imported} of {total} rows imported.',
+  'fleet.vehicles.bulk.someFailed': '{failed} rows were not imported.',
+  'fleet.vehicles.bulk.allImported': 'Every row was imported.',
+  'fleet.vehicles.bulk.report': 'Download the error report',
+  'fleet.vehicles.bulk.refresh': 'Check again',
+  'fleet.vehicles.bulk.jobFailed':
+    'That import could not be processed. Check the file and upload it again.',
+
+  /* ---- The status table ------------------------------------------------ */
+  'fleet.vehicles.table.heading': 'Onboarding status',
+  'fleet.vehicles.table.caption': 'Every vehicle in this organisation, its documents and its approval status',
+  'fleet.vehicles.column.plate': 'Reg no',
+  'fleet.vehicles.column.type': 'Type',
+  'fleet.vehicles.column.servicePayment': 'Service payment',
+  'fleet.vehicles.column.documents': 'Documents',
+  'fleet.vehicles.column.status': 'Status',
+  'fleet.vehicles.table.empty': 'No vehicles yet. Add one above, or import a CSV.',
+  'fleet.vehicles.typeWithMode': '{type} ({mode})',
+  'fleet.vehicles.docsCell.verified': '{verified}/{required} verified',
+  'fleet.vehicles.docsCell.withPermit': '{verified}/{required} verified (incl. route permit)',
+  'fleet.vehicles.docsCell.outstanding': '{verified}/{required} — {slot} {status}',
+  'fleet.vehicles.docsCell.pending': 'Docs pending',
+  'fleet.vehicles.docsCell.complete': 'Docs complete',
+  'fleet.vehicles.manage': 'Documents',
+  'fleet.vehicles.status.pending': 'Under review',
+  'fleet.vehicles.status.approved': 'Approved',
+  'fleet.vehicles.status.rejected': 'Rejected',
+  'fleet.vehicles.status.deactivated': 'Deactivated',
+
+  'fleet.vehicles.error.plateRequired': 'Enter the number plate',
+  'fleet.vehicles.error.typeRequired': 'Choose the vehicle type',
+  'fleet.vehicles.error.modeRequired': 'Choose Mode A or Mode B',
+  'fleet.vehicles.error.fareRequired': 'Enter the default monthly fare in rupees',
+  'fleet.vehicles.error.servicePaymentRequired': 'Choose Free or Paid',
+  'fleet.vehicles.error.servicePaymentModeA':
+    'Service payment applies to Mode B vehicles only. Leave it unset for a Mode A vehicle.',
+  'fleet.vehicles.error.vehicleRequired': 'Choose the vehicle first',
+  'fleet.vehicles.error.kindRequired': 'That is not one of the four document slots',
+  'fleet.vehicles.error.fileRequired': 'Choose a file to upload',
+  'fleet.vehicles.error.csvRequired': 'Choose a CSV to import',
+  'fleet.vehicles.error.csvTooLarge': 'That file is larger than {megabytes} MB. Split it and import it in parts.',
+
+  /* ---- SCR-FP-005 · driver assignment (US-13.2/13.8, AL-23) ------------ */
+  'fleet.drivers.title': 'Driver assignment',
+  'fleet.drivers.assign.heading': 'Assign a driver',
+  'fleet.drivers.field.driver': 'Assign driver by User ID / phone',
+  'fleet.drivers.field.driverHint':
+    'The driver’s MageRide User ID, or the mobile number they use in the Driver App — for example 0771234567.',
+  'fleet.drivers.field.vehicles': 'Vehicles',
+  'fleet.drivers.field.vehiclesHint': 'One driver can be assigned to several vehicles at once.',
+  'fleet.drivers.field.from': 'From',
+  'fleet.drivers.field.fromHint': 'Leave empty to start now.',
+  'fleet.drivers.field.to': 'Until',
+  'fleet.drivers.field.toHint':
+    'Leave empty for an open-ended assignment. An end date makes it a temporary one and it expires on its own.',
+  'fleet.drivers.assign.submit': 'Assign',
+  'fleet.drivers.assign.submitting': 'Assigning…',
+  'fleet.drivers.assign.done': 'Assigned to {count} vehicles.',
+  'fleet.drivers.assign.doneOne': 'Assigned.',
+  'fleet.drivers.assign.refused': '{plate}: {reason}',
+  'fleet.drivers.temporary':
+    'A temporarily hired driver is assigned with an end date; the assignment expires by itself and nothing has to be revoked (AL-23).',
+  'fleet.drivers.noVehicles':
+    'There are no vehicles to assign to yet. Onboard one on the Vehicles screen first.',
+  'fleet.drivers.viewerNotice':
+    'You are signed in as a Viewer, so this screen shows the assignments and changes none of them.',
+
+  'fleet.drivers.table.heading': 'Assignments',
+  'fleet.drivers.table.caption': 'Every driver assignment in this organisation, active first',
+  'fleet.drivers.column.driver': 'Driver',
+  'fleet.drivers.column.vehicle': 'Vehicle',
+  'fleet.drivers.column.since': 'Since',
+  'fleet.drivers.column.until': 'Until',
+  'fleet.drivers.column.status': 'Status',
+  'fleet.drivers.column.actions': 'Actions',
+  'fleet.drivers.table.empty': 'No driver has been assigned yet.',
+  'fleet.drivers.openEnded': 'Open-ended',
+  'fleet.drivers.status.active': 'Active',
+  'fleet.drivers.status.revoked': 'Revoked',
+  'fleet.drivers.status.expired': 'Ended',
+  'fleet.drivers.status.scheduled': 'Starts later',
+  'fleet.drivers.revoke': 'Revoke',
+  'fleet.drivers.revoking': 'Revoking…',
+  'fleet.drivers.revokeNote':
+    'Revoking stops the driver starting a new session on that vehicle straight away; a journey already under way is left to finish.',
+  'fleet.drivers.history': 'Assignment history is kept per vehicle, including revoked and expired ones.',
+  // The sketch draws an "Invite sent / Resend" row. Nothing on any contract
+  // invites a driver: `POST …/assignments` answers `404 driver-not-found` for a
+  // number with no Driver App account, and there is no fleet-driver invitation
+  // template on the platform. C113 handoff.
+  'fleet.drivers.noInvite':
+    'A driver must already have a MageRide Driver App account. MageRide cannot send them an invitation from here — ask them to sign up in the Driver App, then assign them by their number.',
+  'fleet.drivers.error.driverRequired':
+    'Enter the driver’s User ID or a Sri Lankan mobile number, for example 0771234567',
+  'fleet.drivers.error.vehicleRequired': 'Choose at least one vehicle',
+  'fleet.drivers.error.windowInverted': 'The end date must be after the start date',
+  'fleet.drivers.error.assignmentRequired': 'That assignment no longer exists',
+
+  /* ---- SCR-FP-006 · tracker binding (US-13.12, US-3.13, T-09) ---------- */
+  'fleet.trackers.title': 'Tracker binding',
+  'fleet.trackers.bind.heading': 'Bind a tracker',
+  'fleet.trackers.autoSession': 'auto-session config',
+  'fleet.trackers.field.imei': 'IMEI / MAC',
+  'fleet.trackers.field.imeiHint':
+    'The 15 digits printed on the ST-901. Spaces and hyphens are ignored.',
+  'fleet.trackers.field.vehicle': 'Vehicle',
+  'fleet.trackers.field.autoStart': 'Start and end journeys from the tracker',
+  'fleet.trackers.field.autoStartHint':
+    'A bus broadcasts from its tracker whether or not a driver has opened the app, and its journey starts and ends with the ignition.',
+  'fleet.trackers.bind.submit': 'Bind tracker',
+  'fleet.trackers.bind.submitting': 'Binding…',
+  'fleet.trackers.bind.done': '{imei} is bound and its credential has been minted.',
+  'fleet.trackers.bind.pendingOrg':
+    'Binding a tracker opens when a verification officer approves this organisation.',
+  'fleet.trackers.noVehicles':
+    'There are no vehicles to bind a tracker to yet. Onboard one on the Vehicles screen first.',
+  'fleet.trackers.viewerNotice':
+    'You are signed in as a Viewer, so this screen shows tracker health and binds nothing.',
+
+  'fleet.trackers.bulk.heading': 'Bulk binding',
+  'fleet.trackers.bulk.prompt': 'Drop the CSV or choose a file',
+  'fleet.trackers.bulk.hint': 'Up to {rows} rows, {megabytes} MB.',
+  'fleet.trackers.bulk.columns': 'Columns: {columns}.',
+  'fleet.trackers.bulk.credentialType': 'Credential',
+  'fleet.trackers.bulk.credential.x509': 'Certificate (MQTT trackers)',
+  'fleet.trackers.bulk.credential.psk': 'Pre-shared key (legacy TCP trackers)',
+  'fleet.trackers.bulk.credentialHint':
+    'One choice for the whole batch — a fleet is usually one generation of hardware.',
+  'fleet.trackers.bulk.uploading': 'Uploading…',
+  'fleet.trackers.bulk.processing': 'Binding {total} trackers…',
+  'fleet.trackers.bulk.bound': '{succeeded} of {total} trackers bound.',
+  'fleet.trackers.bulk.someFailed': '{failed} rows were not bound.',
+  'fleet.trackers.bulk.report': 'Download the row report',
+  'fleet.trackers.bulk.refresh': 'Check again',
+  'fleet.trackers.bulk.jobFailed': 'That batch could not be processed. Check the file and try again.',
+
+  'fleet.trackers.table.heading': 'ST-901 trackers',
+  'fleet.trackers.table.caption':
+    'Every tracker bound to this organisation, its vehicle, its publish cadence and its health',
+  'fleet.trackers.column.imei': 'IMEI / MAC',
+  'fleet.trackers.column.vehicle': 'Vehicle',
+  'fleet.trackers.column.cadence': 'Cadence profile',
+  'fleet.trackers.column.lastSeen': 'Last seen',
+  'fleet.trackers.column.health': 'Health',
+  'fleet.trackers.column.credential': 'Credential',
+  'fleet.trackers.table.empty': 'No tracker is bound to a vehicle in this organisation yet.',
+  'fleet.trackers.state.online': 'Online',
+  'fleet.trackers.state.stale': 'Stale',
+  'fleet.trackers.state.offline': 'Offline',
+  'fleet.trackers.state.decommissioned': 'Decommissioned',
+  'fleet.trackers.credential.active': 'Active',
+  'fleet.trackers.credential.revoked': 'Revoked',
+  'fleet.trackers.counts': '{online} online · {stale} stale · {offline} offline',
+  'fleet.trackers.thresholds':
+    'Stale is no signal for {stale} minutes; offline is no signal for {offline} minutes.',
+  'fleet.trackers.truncated':
+    'This list is capped. The counts above still cover every tracker in the fleet.',
+  'fleet.trackers.asOf': 'As of {time}',
+  'fleet.trackers.never': 'Never',
+  'fleet.trackers.unknownVehicle': 'Not on the roster',
+  'fleet.trackers.cadence': '{moving} s moving · {stationary} s stationary',
+  // US-3.18's per-vehicle cadence profile has no route on any contract — the
+  // only cadence surface is the MQTT downlink, which is a device topic. C113
+  // handoff.
+  'fleet.trackers.cadenceNote':
+    'This is the rate every Mode A and Mode B session publishes at. A per-vehicle cadence profile cannot be set from the portal yet — ask MageRide support to change one.',
+  'fleet.trackers.error.imeiInvalid': 'Enter the 15 digits printed on the tracker',
+  'fleet.trackers.error.vehicleRequired': 'Choose the vehicle this tracker is fitted to',
+  'fleet.trackers.error.csvRequired': 'Choose a CSV to import',
 
   /* ---- The shell's placeholder for a screen a later component owns ------ */
   'fleet.screen.pendingTitle': 'This screen is not built yet',

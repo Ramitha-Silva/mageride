@@ -139,7 +139,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C110 | admin-portal-gtfs-manager | 4c | DONE | 2026-08-08 | **634 tests green** in `@mageride/admin-portal` (38 files, was 580/36); the verify command exits 0, `next build` emits all four new routes, and all five portal workspaces are green (868). **SCR-AP-016 is one screen whose entire state is `?feed=`**, and that single rule produces four of D2's seven states with no branch: absent, the selection is the newest upload — the last thing that happened — so a validating feed shows the stepper, a validated one the preview and Activate, a failed one the first five errors and the report, and once the newest upload is live the card *is* the live feed (`active-idle`). No versions is `empty`; `uploading` and `activating` are the two client-side moments. **The 2 s poll is `router.refresh()`, not a JSON fragment** — the stepper, the counts, the warnings and the history row move together because they are one render, and the copy stays where every other string is resolved. **The upload is the one thing in this portal that is not `fetch`**: `fetch` has no upload-progress event, so `UploadCard` posts by XHR to the portal's own route handler, which attaches the bearer and **streams** the 200 MB body on through a new `apiUpload`/`upload` pair the fences test names beside `apiFetch` and `apiDownload`. **A duplicate is refused on the bytes**, and the inline error reads the `409`'s RFC 7807 extensions to name and link the version that already holds them. **The confirm dialog names what is being switched off**, not "are you sure"; rollback is the same dialog and the same call with one line saying so, and both dialog and toast are *derived* from the action result rather than pushed by an effect. **`mutate()`'s audit gained a third case that is not C108's**: `/v1/admin/transit/**` is routed past admin-bff at Order 20, so `GTFS_PROXIED` is never written — but transit-svc writes `GTFS_FEED_UPLOADED`/`GTFS_FEED_ACTIVATED` inside the swap transaction, so a row always exists and `auditedElsewhere` would state the opposite of the truth. `test/audit.test.ts` now parses `GtfsAuditActions.cs` as the second writer. 3 wireframe deviations, 4 spec gaps / micro-change-sets; no spec, backend or contract file touched |
 | C111 | fleet-portal-shell | 4c | DONE | 2026-08-08 | **114 tests green** in `@mageride/fleet-portal` (9 files); `npm --prefix portals run lint --workspace fleet && … test … && … build …` exits 0, `next build` emits nine routes, `check-bundle.mjs` reports **AL-52: clean — 1 compiled stylesheet, 28.7 kB CSS**, and all six portal workspaces are green (982 tests, 54 files). **There is no Fleet Portal session endpoint**, so the shell composes one from `GET /v1/me/permissions` — the caller's URD §2.3 rows *plus* `fleetId`/`fleetRole` read from `iam.fleet_members` rather than from the token — and `GET /v1/fleets/{id}` for the organisation's `status`, the only route that carries it. **The nav manifest is local because nothing sends one**, but every entry declares what its own routes declare: the URD row and capability (answered by the caller's server-side evaluation, with URD §2.1's sub-model already applied), the `RequireFleetSubRole` the route names, and the `RequireApprovedFleet()` group it sits in — `test/routes.test.ts` parses `FleetEndpoints.cs`, `FleetOpsEndpoints.cs` and `MageRideClaims.cs` and fails when any moves. **The approval gate blocks exactly what fleet-svc blocks:** the vehicle and assignment groups carry it on the *group*, so a pending org loses those screens and the Mode B proxies built on them, while the ops reads (`/map`, `/analytics`, `/schedules`, `/health`) stay open and their individual writes are what get refused. **Two refusals, two pages** — `/denied` is a real 403 about the caller, `/pending` renders inside the chrome about the organisation and lists what *is* open. **A screen never holds an org id** (`read({ org: '/vehicles' })` is scoped from the session) and **every mutation declares the row it needs**, refused locally when the caller holds no `write` there. **Both federated arms are the implicit ID-token flow** — iam-svc takes `{idToken}` and the only code-exchange route forces `app=admin` — so both return by cross-site `form_post`, which is why the OAuth state cookie is the one `SameSite=None` cookie here. 3 wireframe deviations, 10 spec gaps / micro-change-sets — including **no sign-up, no password reset and no identity link/unlink route anywhere on the platform**; no spec, backend or contract file touched |
 | C112 | fleet-portal-auth-org-payout | 4c | DONE | 2026-08-08 | **193 tests green** in `@mageride/fleet-portal` (14 files, was 114/9); the verify command exits 0, `next build` emits **13 routes** (was 9), `check-bundle.mjs` reports **AL-52: clean — 1 compiled stylesheet, 29.7 kB CSS**, and all six portal workspaces are green (**1,061 tests, 59 files**). **SCR-FP-001 is one card with two tabs at two routes** — `/login` and the wireframe's own `/signup`, both public — and the Create-account tab holds **no form, no input and no submit**, because `POST /v1/fleets` needs the caller to already hold `fleet_owner` and nothing on any contract grants it to a stranger; the tab explains the two paths that do exist, and a test asserts the absence so a control cannot be added back without the reason being revisited. **SCR-FP-002 is two screens because an organisation starts existing** — the register form for a `fleet_owner` with no membership row, then the KYC record, the team and the payout link — and `canMutate(…, {allowsNoOrganisation:true})` is the control-level twin of the manifest's own flag, set on `POST /v1/fleets` and nowhere else because it is the one call that creates the membership every other write is scoped to. **SCR-FP-002a is gated three times** (proxy, fleet-svc, and the page's own `forbidden()`), is deliberately **not** approval-gated because AL-49's documents are what the officer reads *before* approving, and warns **before the press** that saving an edit to a verified profile re-enters Pending while subscribers keep paying the approved account (BR-31.1's expensive half). **The AL-49 gate ships as a predicate and a sentence, not as a rule two screens derive** — `canSetPaidServicePayment()` + `PAID_SERVICE_PAYMENT_BLOCKED_KEY` in `src/api/payout.ts`, which C113's SCR-FP-004 imports to disable "Service payment · Paid" and say why. **The statement and the passbook page are one slot with a chooser** (§26 gives them one column), and `apiFetch` gained a `FormData` passthrough for the portal's one multipart route. **112 new resource keys × 3 locales** (96 → 206); 7 wireframe affordances with no route behind them, each stated in words rather than drawn; **2 deviations, 9 spec gaps / micro-change-sets**; no spec, contract, backend or migration file touched |
-| C113 | fleet-portal-vehicles-drivers-trackers | 4c | PENDING | | |
+| C113 | fleet-portal-vehicles-drivers-trackers | 4c | DONE | 2026-08-08 | **250 tests green** in `@mageride/fleet-portal` (18 files, was 193/14); the verify command exits 0, `next build` emits **17 routes** (was 13), `check-bundle.mjs` reports **AL-52: clean — 1 compiled stylesheet, 30.7 kB CSS**, and all six portal workspaces are green (**1,118 tests, 63 files**). **AL-50 is four cards mounted from a literal list, and that is what makes "no generic dropzone" structural** — `VEHICLE_DOCUMENT_SLOTS` carries the four names and the *wire* kind each posts under, the panel maps that list rather than the server's answer, and `DocumentSlotCard` takes its kind as a prop, so a fifth slot needs a fifth entry and no form control can introduce one; the stored kinds and the wire kinds are two different lists (`registration` ≠ `registration_copy`) and both are pinned against `fleet.yaml`. **Whether a slot is required is the server's field, not `kind`'s** — the route permit is Mode A's — and `canBeApproved()` is US-27.3's rule as one predicate that answers **false** for a vehicle nobody has read the paperwork of, with the panel naming the slots that are holding it rather than colouring a chip. **A document is attached to a vehicle, so `?vehicle=` is the screen's whole state**: the add form navigates there on success, every roster row links to it, and a reload or a pasted link lands on the same slots. **The Paid gate is pre-empted for an Owner and translated for a Manager**, because `GET …/payout-profile` is Owner-only while SCR-FP-004 is Manager-reachable — both are blocked, only one can be told in advance. **A partial CSV import is reported as one** (the good rows land, the report is an HMAC-signed link handed straight to the browser, and the job polls itself to rest). **Three services answer SCR-FP-006 and their gates disagree** — the single bind is approval-gated, provisioning-svc's batch is not, and the health rollup is neither — transcribed rather than smoothed; `decommissioned` is rendered as a **revoked credential** in a column of its own, not as another shade of offline. **`Date.now()` never decides a server fact**: `Assignment.active` is the database's, and the clock only labels a row it already called inactive. **232 new resource keys × 3 locales** (206 → 438); **5 spec gaps / micro-change-set candidates** (headline: T-09's bulk-IMEI route is behind D-30 attestation a browser cannot satisfy, and its only caller is this portal), **4 deliberate wireframe deviations**; no spec, contract, backend or migration file touched |
 | C114 | fleet-portal-dashboard-map-analytics | 4c | PENDING | | |
 | C115 | fleet-portal-scheduling-billing | 4c | PENDING | | |
 | C116 | fleet-portal-subscriptions | 4c | PENDING | | |
@@ -18052,3 +18052,163 @@ _Append 3 lines per completed component (Component / Status / Notes)._
 
   **Build host —** no Docker, no replica, no backend build. `vitest run` takes ~9 s and `next build`
   ~35 s.
+
+---
+
+- **Component:** C113 fleet-portal-vehicles-drivers-trackers — 2026-08-08
+- **Status:** DONE —
+  `npm --prefix portals run lint --workspace fleet && npm --prefix portals run test --workspace fleet && npm --prefix portals run build --workspace fleet`
+  exits 0. **250 tests, 18 files** (was 193/14); `eslint` + `tsc --noEmit` clean; `next build` emits
+  **17 routes** (the thirteen C112 left, plus `/vehicles`, `/vehicles/onboard`, `/drivers`,
+  `/trackers`), and `check-bundle.mjs` reports **AL-52: clean — 1 compiled stylesheet, 30.7 kB CSS**.
+  All six portal workspaces are green (**1,118 tests, 63 files**) and `npm --prefix portals run lint`
+  passes across all of them. SCR-FP-004, SCR-FP-005 and SCR-FP-006 render for all three sub-roles,
+  approved and pending, in both appearances at 375 / 768 / 1024.
+- **Notes:**
+  **What was built —** the operating half of the console: vehicle onboarding with AL-50's four named
+  document slots and AL-51's Service payment (`app/(portal)/vehicles`, plus a 308 at
+  `/vehicles/onboard`, which is `web_fleet.html`'s own address bar), driver assignment
+  (`app/(portal)/drivers`) and tracker binding (`app/(portal)/trackers`); three model modules
+  (`src/api/{vehicles,drivers,trackers}.ts`), three action modules
+  (`src/server/{vehicle,driver,tracker}-actions.ts`), nine components under
+  `src/components/{vehicles,drivers,trackers}/` and one formatter module (`src/i18n/format.ts`).
+  **No nav entry was added** — C111's manifest already declared all three, with the three
+  declarations `test/routes.test.ts` holds against fleet-svc's C# — and no shell behaviour changed.
+
+  **(1) AL-50 is four cards mounted from a literal list, which is what makes "no generic dropzone"
+  structural.** `VEHICLE_DOCUMENT_SLOTS` in `src/api/vehicles.ts` carries the four slots — CR book,
+  insurance certificate, revenue license, route permit — each with the **wire** kind it posts under,
+  and `VehicleDocumentPanel` maps *that* list rather than whatever the server answered with. A fifth
+  slot needs a fifth entry, and `DocumentSlotCard` takes its `kind` as a prop rather than reading one
+  off a control, so a form field cannot introduce one. The stored kinds (`registration`, `permit`)
+  and the wire kinds (`registration_copy`, `route_permit`) are two different lists and fleet-svc
+  refuses a stored name in an upload — a client that reads a slot back and posts it again is written
+  against the wrong half of the mapping, so `test/vehicles.test.ts` pins both enums against
+  `fleet.yaml`.
+
+  **(2) Whether a slot is required is the server's field, and the approval rule is one predicate.**
+  The route permit is required for Mode A and optional for Mode B, so the same slot answers
+  differently on two vehicles — C059 added `VehicleDocumentSlot.required` for exactly that, and the
+  portal reads it instead of deriving it from `kind`. `canBeApproved(slots)` is US-27.3's rule
+  ("cannot be Approved while a required document is Missing or Pending") as one function, and an
+  empty slot list is **false**: a vehicle nobody has read the paperwork of has satisfied nothing, and
+  vacuous truth there would draw a green chip on a vehicle with no documents at all. The panel names
+  the slots that are holding the vehicle rather than colouring a chip, because "waiting on the route
+  permit (Pending)" is something an operator can act on.
+
+  **(3) A document is attached to a vehicle, so `?vehicle=` is the screen's whole state.** The
+  wireframe draws the four slots inside the add-vehicle card, which is the one place a vehicle does
+  not exist yet; `POST …/vehicles/{vehicleId}/documents` needs one. The add form navigates to
+  `?vehicle={the new id}` on success, every roster row links there, and the panel is server-rendered
+  from that vehicle's own `GET …/documents` — so a reload, a bookmark and a link pasted to a
+  colleague all land on the same slots.
+
+  **(4) The Paid gate is pre-empted for an Owner and translated for a Manager, and that asymmetry is
+  the contract's.** `canSetPaidServicePayment()` and `PAID_SERVICE_PAYMENT_BLOCKED_KEY` are C112's
+  pair and are imported rather than re-derived. But `GET …/payout-profile` is
+  `RequireFleetSubRole(Owner)` while SCR-FP-004 is Manager-reachable, so the profile is read **only**
+  for an Owner: an Owner gets "Paid" disabled with that sentence before the press, a Manager gets it
+  enabled and fleet-svc's `409 payout-profile-not-verified` mapped to the same sentence after. Both
+  are blocked; only one can be told in advance, and a portal that refused a Manager on a fact this
+  session cannot check would be inventing a refusal.
+
+  **(5) A bulk import's partial success is reported as one.** `fleet.yaml` says "`COMPLETED` with
+  `failedRows > 0` is a partial import with a downloadable report, not a failure", so the panel shows
+  two numbers and an `<a download>`; the `errorReportUrl` is HMAC-signed and bearer-free precisely so
+  the portal can hand it straight to the browser. The panel polls `GET …/vehicles/bulk/{jobId}` every
+  three seconds while the job is `PROCESSING` and stops the moment it is not, and the poll
+  revalidates the page so the status table gains the imported rows without a press. A **Check again**
+  button stays for a backgrounded tab that lost its interval.
+
+  **(6) Three services answer SCR-FP-006 and their gates disagree — transcribed, not smoothed.**
+  `POST …/trackers/bind` is fleet-svc's and carries `RequireApprovedFleet()`;
+  `POST …/trackers/bulk` is provisioning-svc's and carries **no** approval gate (the canonical
+  `fleet_owner` role alone); `GET …/health` is fleet-health-svc's and carries none either, which is
+  why C111 left the screen entry ungated. So the screen opens for a PENDING organisation with the
+  bind form replaced by the sentence that says when it opens, and the batch still available. That
+  reads oddly and it is what the two services actually declare — see finding 1.
+
+  **(7) `decommissioned` is a credential column, not another shade of offline.** US-3.13's fourth
+  state is a **revoked** credential (US-3.8), and folding it into the health chip would tell an
+  operator their tracker had a signal problem where somebody retired the device. The table therefore
+  carries a sixth column the wireframe does not draw, and it has two values.
+
+  **(8) The cadence column is a fact, and the legend is the deployment's.** `HealthThresholds` is
+  returned "so a dashboard can label its own legend instead of hardcoding US-3.13's 5 and 30
+  minutes", so the sentence under the table reads the answer; 5/30 appear only as the fallback for a
+  rollup that could not be read. The cadence itself is US-5.5's two published rates — see finding 3.
+
+  **(9) `Date.now()` never decides a server fact.** `Assignment.active` is "the validity window
+  evaluated by the database at read time" and US-13.9's auto-expiry is that flag going false with
+  nothing written and nobody pressing anything. The portal renders the flag; the clock is used only
+  to *label* a row the server already called inactive as "Starts later" or "Ended", and a row the
+  server still calls active is rendered active however the browser's clock reads. Asserted.
+
+  **Spec gaps and micro-change-set candidates found (5) —**
+  1. **`POST /v1/fleets/{fleetId}/trackers/bulk` is behind D-30 attestation, and its only caller is a
+     browser.** `provisioning.yaml` marks it `X-Attestation` required, the gateway's
+     `SensitiveOperations` lists it (and `ApiGateway.Tests` asserts the two sets are equal), and
+     `AttestationMiddleware` answers `401 attestation-failed` for a request with no `X-Platform` —
+     which a Fleet Portal request never has. Yet the route lives under `/v1/fleets/{fleetId}`, is
+     gated on `fleet_owner`, and its own tag says "Bulk IMEI onboarding **for fleet operators**". No
+     MageRide app calls it. **The proposed micro-change-set is to drop `XAttestation` from
+     `bulkBindTrackers`** (and its gateway entry), leaving `POST /v1/trackers/bind` — an app route —
+     attested. C113 did not take it: the policy is `Disabled` in development and the replica, so the
+     control works where it is being built, and the refusal has a sentence of its own
+     (`fleet.error.attestationFailed`) rather than the generic one.
+  2. **The single tracker bind is approval-gated and the batch is not.** fleet-svc puts
+     `RequireApprovedFleet()` on `trackers/bind`; provisioning-svc's `FleetTrackerEndpoints` has no
+     equivalent and no `RequireFleetSubRole` either — a Viewer's *canonical* role is `fleet_owner`,
+     so the org-scoped sub-model is not applied to that route at all. The portal gates the control on
+     `canMutate('tracker-binding')` regardless, but the service would accept a Viewer's batch. Worth
+     one of the two services changing.
+  3. **US-3.18's per-vehicle publish-cadence profile has no route on any contract.** The story is
+     explicit ("fleet operators can configure per-vehicle publish cadence profiles … and apply them
+     in bulk") and `web_fleet.html` prints a Cadence-profile column. The only cadence surface on the
+     platform is the MQTT downlink `veh/{vehicleId}/cmd` (US-3.17), which is a device topic and not an
+     API. The column reports US-5.5's standing rates and says so. A
+     `PUT /v1/fleets/{fleetId}/vehicles/{vehicleId}/cadence` is the missing route.
+  4. **Nothing invites a driver.** SCR-FP-005 sketches "Invite sent · Resend".
+     `POST …/assignments` answers `404 driver-not-found` for a number with no Driver App account, and
+     `content.notification_templates` has no fleet-driver invitation template — the same wall C112
+     hit on team invites (its finding 5). The screen says a driver signs up in the Driver App first.
+  5. **`GET …/vehicles` carries `docsStatus` but not the slot counts.** The wireframe's Documents
+     column reads "4/4 verified (incl. route permit)" and "2/3 — insurance pending"; the roster
+     answers one of two words. Rendering the sketch's cell would need one `GET …/documents` per row.
+     The table therefore shows `docs_pending`/`docs_complete` and the precise counts are on the panel
+     for the vehicle an operator opened. A `verifiedSlots`/`requiredSlots` pair on `FleetVehicle`
+     would close it in one field each.
+
+  **Deviations from `web_fleet.html`, all deliberate (4) —**
+  - **The bulk-CSV card is behind its own tab rather than also beside the add form.** The sketch
+    draws a `Single vehicle | Bulk CSV` tab strip *and* both cards in one row. The tab strip is a real
+    control, so it selects. Nothing the sketch draws is missing.
+  - **The "Mode A / B only — no Mode C" pill does not name the third mode.** C111's
+    `test/fences.test.ts` greps the whole tree — resource files included — for that vocabulary, and
+    AL-03 makes on-demand not a fleet concept at all. The pill reads "Mode A / B only" with a caption
+    saying what a fleet runs and where a driver's own vehicle is onboarded.
+  - **The Documents column is two words rather than a fraction** — finding 5.
+  - **The trackers table gains a Credential column** — finding 7 — and the driver table gains an
+    "Until" column, because `Assignment.to` is what makes AL-23's temporary hire visible and the
+    sketch has nowhere to show it.
+
+  **Files —** new: `app/(portal)/{vehicles,vehicles/onboard,drivers,trackers}/page.tsx`,
+  `src/api/{vehicles,drivers,trackers}.ts`, `src/server/{vehicle,driver,tracker}-actions.ts`,
+  `src/i18n/format.ts`,
+  `src/components/vehicles/{AddVehicleForm,ServicePaymentForm,DocumentSlotCard,VehicleDocumentPanel,BulkVehicleImport,VehicleStatusTable,vehicle-model}.tsx`,
+  `src/components/drivers/{AssignDriverForm,AssignmentTable}.tsx`,
+  `src/components/trackers/{BindTrackerForm,BulkTrackerImport,TrackerTable}.tsx`,
+  `test/{vehicles,drivers,trackers,vehicle-screens}.test.*`. Changed: `src/api/problem.ts` (eleven
+  new error codes), `src/i18n/messages/{en,si,ta}.ts`, `test/i18n.test.ts` (two identifier keys
+  allow-listed), `portals/fleet/CLAUDE.md`.
+
+  **Files touched outside this component's own tree —** none. **No spec, no contract, no backend, no
+  migration, and no change to any shared portal package.**
+
+  **i18n —** 438 keys × 3 locales, up from 206. `"IMEI / MAC"` is the only new value identical across
+  all three and is allow-listed with its reason: two protocol acronyms and a slash, written that way
+  on the ST-901's own label, and a transliteration would be a heading an operator could not match
+  against the sticker they are reading from.
+
+  **Build host —** no Docker, no replica, no backend build. `vitest run` takes ~12 s and `next build`
+  ~40 s.

@@ -1,4 +1,4 @@
-# Fleet Portal (C111 shell + C112 auth/org/payout) — `fleet.mageride.lk`
+# Fleet Portal (C111 shell + C112 auth/org/payout + C113 vehicles/drivers/trackers) — `fleet.mageride.lk`
 
 Next.js 16 (App Router) + TypeScript + React 19, styled **only** with Tailwind through
 `@mageride/tailwind-preset` (AL-52). npm workspace member `@mageride/fleet-portal` under `portals/`.
@@ -199,6 +199,83 @@ each in words rather than drawing a control that posts nowhere:
 `test/auth-screen.test.tsx` asserts the sign-up panel holds no form, no input and no submit, so a
 control cannot be added to it without the reason being revisited. See the C111 and C112 entries in
 `build/progress.md`.
+
+## What C113 is — SCR-FP-004, SCR-FP-005 and SCR-FP-006
+
+The operating half of the console: **vehicle onboarding** with AL-50's four named document slots
+and AL-51's Service payment, **driver assignment**, and **tracker binding**.
+`app/(portal)/{vehicles,drivers,trackers}`, `src/api/{vehicles,drivers,trackers}.ts`,
+`src/server/{vehicle,driver,tracker}-actions.ts`, `src/components/{vehicles,drivers,trackers}/` and
+`src/i18n/format.ts`. It added no nav entry — C111 declared all three — and no shell behaviour.
+
+`app/(portal)/vehicles/onboard/page.tsx` is a 308 to `/vehicles`: `web_fleet.html`'s address bar
+for SCR-FP-004 is `/vehicles/onboard`, and one screen with two URLs would give the nav highlight
+two places to be right.
+
+### AL-50 is four cards mounted from a literal list
+
+`VEHICLE_DOCUMENT_SLOTS` in `src/api/vehicles.ts` carries the four — registration copy, insurance
+certificate, revenue license, route permit — with the **wire** kind each posts under.
+`VehicleDocumentPanel` maps that list, never the server's answer, so "no generic dropzone" is a
+property of the code: a fifth slot needs a fifth entry, and `DocumentSlotCard` takes its `kind` as
+a prop rather than reading one from a control. The stored kinds (`registration`, `permit`) and the
+wire kinds (`registration_copy`, `route_permit`) are **two lists**, and fleet-svc refuses a stored
+name in an upload — `test/vehicles.test.ts` pins both against `fleet.yaml`.
+
+Whether a slot is *required* is the server's field, not `kind`'s: the route permit is required for
+Mode A and optional for Mode B, so one slot answers differently on two vehicles.
+`canBeApproved(slots)` is US-27.3's rule as one predicate, and an empty slot list is `false` — a
+vehicle nobody has read the paperwork of has satisfied nothing.
+
+### A document is attached to a vehicle, so `?vehicle=` is the screen's state
+
+The wireframe draws the four slots inside the add-vehicle card, which is the one place a vehicle
+does not exist yet. `POST …/vehicles/{vehicleId}/documents` needs one, so the panel renders for
+`?vehicle={id}`: the add form navigates there on success, every roster row links to it, and the
+slots are server-rendered from that vehicle's own `GET …/documents`.
+
+### The Paid gate is read for an Owner and refused for a Manager
+
+`canSetPaidServicePayment` and `PAID_SERVICE_PAYMENT_BLOCKED_KEY` come from C112's
+`src/api/payout.ts` — one predicate, one sentence. But `GET …/payout-profile` is
+`RequireFleetSubRole(Owner)` and SCR-FP-004 is Manager-reachable, so **the profile is read only for
+an Owner**: an Owner gets "Paid" disabled with that sentence before the press, a Manager gets it
+enabled and fleet-svc's `409 payout-profile-not-verified` translated to the same sentence after.
+Both are blocked; only one can be told in advance.
+
+### Three services answer SCR-FP-006, and their gates disagree
+
+`POST …/trackers/bind` is fleet-svc's and **is** approval-gated; `POST …/trackers/bulk` is
+provisioning-svc's and is **not** (it is gated on the canonical `fleet_owner` role alone);
+`GET …/health` is fleet-health-svc's. Each is transcribed where it is, because guessing high would
+refuse a write the platform allows. The screen therefore opens for a PENDING organisation with the
+bind form replaced by a sentence and the batch still available.
+
+The batch is also the **one control on this portal the gateway can refuse for being a browser**:
+`bulkBindTrackers` carries `X-Attestation`, so `AttestationMiddleware` lists it as a D-30 sensitive
+operation and a request with no `X-Platform` is `401 attestation-failed`. It is `Disabled` outside
+production, the control is drawn, and the refusal has a sentence of its own
+(`fleet.error.attestationFailed`). See the C113 handoff.
+
+### What SCR-FP-005 and SCR-FP-006 cannot do, and say so
+
+Two more affordances the wireframe draws have **no route on any contract**:
+
+1. **Inviting a driver.** SCR-FP-005 sketches an "Invite sent · Resend" row. `POST …/assignments`
+   answers `404 driver-not-found` for a number with no Driver App account, and no fleet-driver
+   invitation template exists. The screen says a driver signs up in the Driver App first.
+2. **A per-vehicle publish-cadence profile** (US-3.18). The only cadence surface on the platform is
+   the MQTT downlink `veh/{vehicleId}/cmd`, which is a device topic. The column reports US-5.5's
+   standing rates (`PUBLISH_CADENCE`) and the caption says the profile cannot be set from here.
+
+### Two more rules for a screen component
+
+- **`Date.now()` never decides a server fact.** `Assignment.active` is "the validity window
+  evaluated by the database at read time" and US-13.9's auto-expiry is that flag going false with
+  nothing written. The portal reads it; the clock is only used to *label* a row the server already
+  called inactive.
+- **Money crosses the boundary once.** `fareMinorFrom()` in `src/api/vehicles.ts` is the single
+  rupees→cents conversion; everything on the wire is integer minor units.
 
 ## Configuration
 

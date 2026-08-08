@@ -120,6 +120,25 @@ const MESSAGE_KEYS: Readonly<Record<string, FleetMessageKey>> = {
   'payout-profile-not-verified': 'fleet.error.payoutNotVerified',
   'payload-too-large': 'fleet.error.fileTooLarge',
   'unsupported-media-type': 'fleet.error.fileNotAccepted',
+  // Δ C113 — the codes SCR-FP-004, SCR-FP-005 and SCR-FP-006 can be answered
+  // with. Each is an `x-error-codes` entry on a route one of the three screens
+  // calls, and each names a different thing for the operator to do: a duplicate
+  // plate is somebody else's live registration, a duplicate IMEI is T-08's
+  // anti-clone hold on **both** devices, and a bulk job already running is a
+  // minute's wait rather than a failure.
+  'registration-exists': 'fleet.error.vehicleRegistrationExists',
+  'invalid-vehicle-type': 'fleet.error.invalidVehicleType',
+  'mode-not-allowed': 'fleet.error.modeNotAllowed',
+  'vehicle-not-found': 'fleet.error.vehicleNotFound',
+  'driver-not-found': 'fleet.error.driverNotFound',
+  'imei-duplicate': 'fleet.error.imeiDuplicate',
+  'csv-invalid': 'fleet.error.csvInvalid',
+  'too-many-rows': 'fleet.error.tooManyRows',
+  'bulk-in-progress': 'fleet.error.bulkInProgress',
+  'not-owner': 'fleet.error.notOwner',
+  // The gateway's D-30 refusal, which reaches this portal on exactly one route —
+  // see `bulkBindTrackers` in `src/server/tracker-actions.ts`.
+  'attestation-failed': 'fleet.error.attestationFailed',
 };
 
 export function problemMessageKey(problem: ProblemDetails): FleetMessageKey {
