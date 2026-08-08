@@ -4,7 +4,7 @@ import { startTransition, useActionState, useEffect, useState } from 'react';
 
 import { Button, Dropzone, Select, StatusPill, type DropzoneRejection } from '@mageride/ui';
 
-import { TRACKER_BULK_MAX_BYTES, type BulkTrackerJob, type CredentialType } from '@/api/trackers';
+import { TRACKER_BULK_MAX_BYTES, type CredentialType } from '@/api/trackers';
 import {
   importTrackerCsv,
   readTrackerBulkJob,
@@ -50,9 +50,6 @@ export interface BulkTrackerLabels {
   readonly x509: string;
   readonly psk: string;
   readonly uploading: string;
-  readonly processing: (total: number) => string;
-  readonly bound: (succeeded: number, total: number) => string;
-  readonly someFailed: (failed: number) => string;
   readonly report: string;
   readonly refresh: string;
   readonly jobFailed: string;
@@ -74,10 +71,15 @@ export function BulkTrackerImport({
 }) {
   const [state, submit, pending] = useActionState(importTrackerCsv, INITIAL);
   const [credentialType, setCredentialType] = useState<CredentialType>('x509');
-  const [polled, setPolled] = useState<BulkTrackerJob | null>(null);
+  const [polled, setPolled] = useState<TrackerActionState | null>(null);
   const [rejection, setRejection] = useState<string | null>(null);
 
-  const job = polled ?? state.job ?? null;
+  // The whole answer rather than the job alone: the two sentences beside it are
+  // composed by the action, because a client component cannot be handed a
+  // translator and a function prop does not survive the server boundary at all
+  // (React refuses to serialise one). Δ C115.
+  const view = polled ?? state;
+  const job = view.job ?? null;
   const jobId = job?.jobId ?? null;
   const processing = job?.status === 'PROCESSING';
 
@@ -86,7 +88,7 @@ export function BulkTrackerImport({
 
     const timer = setTimeout(() => {
       void readTrackerBulkJob(jobId).then((answer) => {
-        if (answer.job) setPolled(answer.job);
+        if (answer.job) setPolled(answer);
       });
     }, POLL_MS);
 
@@ -116,7 +118,7 @@ export function BulkTrackerImport({
   const refresh = () => {
     if (!jobId) return;
     void readTrackerBulkJob(jobId).then((answer) => {
-      if (answer.job) setPolled(answer.job);
+      if (answer.job) setPolled(answer);
     });
   };
 
@@ -168,13 +170,13 @@ export function BulkTrackerImport({
           {job.status === 'FAILED' ? (
             <p className="text-error">{labels.jobFailed}</p>
           ) : processing ? (
-            <p className="text-on-surface-variant">{labels.processing(job.totalRows)}</p>
+            <p className="text-on-surface-variant">{view.jobProgress}</p>
           ) : (
             <>
-              <p>{labels.bound(job.succeededRows ?? 0, job.totalRows)}</p>
+              <p>{view.jobProgress}</p>
               {(job.failedRows ?? 0) > 0 ? (
                 <StatusPill tone="warning" dot={false}>
-                  {labels.someFailed(job.failedRows ?? 0)}
+                  {view.jobFailures}
                 </StatusPill>
               ) : null}
             </>

@@ -47,6 +47,17 @@ export interface DriverActionState {
   readonly field?: 'driver' | 'vehicleIds' | 'from' | 'to';
   /** How many vehicles the driver was assigned to. */
   readonly assigned?: number;
+  /**
+   * The confirmation, **already written**, and present only when at least one
+   * assignment landed.
+   *
+   * A finished sentence rather than a count the form interpolates: React refuses
+   * to serialise a function across the server boundary, so a `labels.done(count)`
+   * prop throws when the page renders. It also puts the singular/plural choice
+   * where the translator is, which is where a language that inflects differently
+   * would need it. Δ C115.
+   */
+  readonly done?: string;
   /** The plates that were refused, with the sentence for each. */
   readonly refused?: readonly { readonly vehicleId: string; readonly message: string }[];
   readonly revoked?: true;
@@ -124,7 +135,18 @@ export async function assignDriver(
 
   revalidatePath('/drivers');
 
-  return { assigned, ...(refused.length > 0 ? { refused } : {}) };
+  return {
+    assigned,
+    ...(assigned > 0
+      ? {
+          done:
+            assigned === 1
+              ? t('fleet.drivers.assign.doneOne')
+              : t('fleet.drivers.assign.done', { count: assigned }),
+        }
+      : {}),
+    ...(refused.length > 0 ? { refused } : {}),
+  };
 }
 
 /**

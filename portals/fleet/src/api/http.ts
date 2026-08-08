@@ -44,11 +44,36 @@ export interface ApiRequest {
   readonly signal?: AbortSignal;
   /** Extra headers. Never a second `Authorization`. */
   readonly headers?: Readonly<Record<string, string>>;
+  /**
+   * Read the body as **bytes** rather than as JSON, and answer an
+   * {@link ApiDocument}.
+   *
+   * Δ C115. `GET …/billing/{invoiceId}/export` answers `text/csv` or
+   * `application/pdf` — the invoice document fleet-billing-svc renders, whose CSV
+   * "prints money twice … because a spreadsheet's floating-point sum must never be
+   * the authority on somebody's bill". Parsing that as JSON throws a `SyntaxError`
+   * on the first byte, and re-implementing the document in this portal would be a
+   * second file about the same money.
+   *
+   * A failure is still `application/problem+json` and is still read as one: this
+   * flag changes how a **success** is decoded and nothing else.
+   */
+  readonly binary?: boolean;
+  /** What to ask for. Defaults to JSON; a document route asks for its own types. */
+  readonly accept?: string;
 }
 
 export interface ApiResponse<T> {
   readonly status: number;
   readonly data: T;
+}
+
+/** A document a route answers with, rather than a body to parse. Δ C115. */
+export interface ApiDocument {
+  readonly bytes: ArrayBuffer;
+  readonly contentType: string;
+  /** The name the **service** gave it in `Content-Disposition`, if it gave one. */
+  readonly filename: string | null;
 }
 
 function buildUrl(path: string, searchParams: ApiRequest['searchParams']): string {
@@ -93,7 +118,11 @@ export async function apiFetch<T>(request: ApiRequest): Promise<ApiResponse<T>> 
   }
 
   const headers = new Headers({
-    accept: 'application/json, application/problem+json',
+    // `application/problem+json` is always acceptable, whatever the success type
+    // is: D3' §0 makes every error that shape and a document route is no exception.
+    accept: request.accept
+      ? `${request.accept}, application/problem+json`
+      : 'application/json, application/problem+json',
     ...request.headers,
   });
 
@@ -142,6 +171,17 @@ export async function apiFetch<T>(request: ApiRequest): Promise<ApiResponse<T>> 
     throw new ProblemError(await readProblem(response, request.path));
   }
 
+  if (request.binary) {
+    return {
+      status: response.status,
+      data: {
+        bytes: await response.arrayBuffer(),
+        contentType: response.headers.get('content-type') ?? 'application/octet-stream',
+        filename: filenameFrom(response.headers.get('content-disposition')),
+      } as T,
+    };
+  }
+
   if (response.status === 204) {
     return { status: 204, data: undefined as T };
   }
@@ -150,6 +190,33 @@ export async function apiFetch<T>(request: ApiRequest): Promise<ApiResponse<T>> 
   if (!text) return { status: response.status, data: undefined as T };
 
   return { status: response.status, data: JSON.parse(text) as T };
+}
+
+/**
+ * The filename out of a `Content-Disposition`, with anything that could steer a
+ * path or a second header removed.
+ *
+ * The value is the **service's**, not a client's — fleet-billing-svc composes
+ * `mageride-invoice-{yyyy-MM}-{invoiceId}` from ids it minted — so this is not a
+ * trust boundary so much as the same rule the kernel applies to object-store keys:
+ * never build a name out of bytes that arrived over a wire. A quote, a separator
+ * or a control character is dropped rather than the whole name being refused,
+ * because a download that failed over its own filename would be a worse outcome
+ * than one named a little differently.
+ */
+function filenameFrom(header: string | null): string | null {
+  const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(header ?? '');
+  if (!match) return null;
+
+  const cleaned = match[1]!
+    .trim()
+    // Control characters, quotes and both separators. A CR or an LF in a header
+    // value is how a second header gets written by a string that was never one.
+    // eslint-disable-next-line no-control-regex -- that is the point of the class.
+    .replaceAll(/[\u0000-\u001F\u007F"\\/]/g, '')
+    .replace(/^\.+/, '');
+
+  return cleaned === '' ? null : cleaned;
 }
 
 /** Whether a body is already an encoded request body rather than a value to serialise. */

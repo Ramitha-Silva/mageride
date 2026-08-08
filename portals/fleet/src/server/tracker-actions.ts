@@ -58,9 +58,21 @@ import { getTranslator } from '@/i18n/server';
 export interface TrackerActionState {
   readonly message?: string;
   readonly field?: 'imei' | 'vehicleId' | 'file';
-  /** Set on a successful bind — the IMEI, so the panel can name what landed. */
+  /**
+   * The confirmation, **already written**: "35…19 is bound and its credential
+   * has been minted."
+   *
+   * A finished sentence rather than the IMEI the form interpolates: React refuses
+   * to serialise a function across the server boundary, so a `labels.done(imei)`
+   * prop throws when the page renders. The action runs on the server, where the
+   * translator already is. Δ C115.
+   */
   readonly bound?: string;
   readonly job?: BulkTrackerJob;
+  /** Where that job has got to, as a sentence. Set whenever {@link job} is. Δ C115. */
+  readonly jobProgress?: string;
+  /** "12 rows were not bound." Present only when some were not. Δ C115. */
+  readonly jobFailures?: string;
 }
 
 /** `tracker-binding` is URD §2.3's "Hardware trackers — bind to vehicle, bulk onboard, fleet health". */
@@ -114,7 +126,7 @@ export async function bindTracker(
 
   revalidatePath('/trackers');
 
-  return { bound: imei };
+  return { bound: t('fleet.trackers.bind.done', { imei }) };
 }
 
 /**
@@ -166,7 +178,7 @@ export async function importTrackerCsv(
 
   revalidatePath('/trackers');
 
-  return { job };
+  return { job, ...bulkProgress(job, t) };
 }
 
 /** `GET /v1/fleets/{id}/trackers/bulk/{jobId}` — the poll, as an action. */
@@ -176,9 +188,39 @@ export async function readTrackerBulkJob(jobId: string): Promise<TrackerActionSt
   try {
     const job = await read<BulkTrackerJob>({ org: trackerBulkJobTarget(jobId) });
     if (job.status !== 'PROCESSING') revalidatePath('/trackers');
-    return { job };
+    return { job, ...bulkProgress(job, t) };
   } catch (error) {
     if (!(error instanceof ProblemError)) throw error;
     return { message: t(error.messageKey) };
   }
+}
+
+/**
+ * Where a batch has got to, as the two sentences the panel draws.
+ *
+ * Composed here for the reason {@link TrackerActionState.bound} gives — the panel
+ * polls, so these change with every answer, and a client component that built
+ * them would need a translator it cannot be handed. `succeededRows` and
+ * `failedRows` are optional on the wire and are read as zero, which is what a job
+ * that has not counted them yet has bound and failed.
+ */
+function bulkProgress(
+  job: BulkTrackerJob,
+  t: Awaited<ReturnType<typeof getTranslator>>,
+): { readonly jobProgress: string; readonly jobFailures?: string } {
+  if (job.status === 'PROCESSING') {
+    return { jobProgress: t('fleet.trackers.bulk.processing', { total: job.totalRows }) };
+  }
+
+  const failed = job.failedRows ?? 0;
+
+  return {
+    jobProgress: t('fleet.trackers.bulk.bound', {
+      succeeded: job.succeededRows ?? 0,
+      total: job.totalRows,
+    }),
+    ...(failed > 0
+      ? { jobFailures: t('fleet.trackers.bulk.someFailed', { failed }) }
+      : {}),
+  };
 }

@@ -46,6 +46,17 @@ const instants = memoise(
     }),
 );
 
+/**
+ * Δ C115. A `billing.fleet_invoices.period_month` is always the first of a Colombo
+ * month, and SCR-FP-010 heads a card with "Monthly invoice — June 2026". Printing
+ * the day would say the invoice is about the 1st, which is the one day of the
+ * month it is *not* about.
+ */
+const months = memoise(
+  (locale) =>
+    new Intl.DateTimeFormat(tag(locale), { year: 'numeric', month: 'long', timeZone: TIME_ZONE }),
+);
+
 const rupees = memoise((locale) => new Intl.NumberFormat(tag(locale)));
 
 const elapsed = memoise(
@@ -72,6 +83,17 @@ export function formatFareMinor(locale: Locale, minor: number): string {
 export function formatDay(locale: Locale, iso: string | undefined | null): string | null {
   const instant = parse(iso);
   return instant ? days(locale).format(instant) : null;
+}
+
+/**
+ * A `BusinessDate` as the month it names — "June 2026". Δ C115.
+ *
+ * Takes the bare `yyyy-MM-dd` an invoice's `periodMonth` is, and reads it at
+ * midnight UTC: 05:30 in Colombo on the same day, so the month never slips.
+ */
+export function formatMonth(locale: Locale, businessDate: string | undefined | null): string | null {
+  const instant = parse(businessDate ? `${businessDate}T00:00:00Z` : null);
+  return instant ? months(locale).format(instant) : null;
 }
 
 /** An ISO instant as day and time in Colombo, or `null` if it is not one. */

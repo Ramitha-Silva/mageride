@@ -146,7 +146,6 @@ export default async function TrackersPage() {
               submit: t('fleet.trackers.bind.submit'),
               submitting: t('fleet.trackers.bind.submitting'),
               noVehicles: t('fleet.trackers.noVehicles'),
-              done: (imei) => t('fleet.trackers.bind.done', { imei }),
             }}
           />
         ) : (
@@ -176,9 +175,6 @@ export default async function TrackersPage() {
               x509: t('fleet.trackers.bulk.credential.x509'),
               psk: t('fleet.trackers.bulk.credential.psk'),
               uploading: t('fleet.trackers.bulk.uploading'),
-              processing: (total) => t('fleet.trackers.bulk.processing', { total }),
-              bound: (succeeded, total) => t('fleet.trackers.bulk.bound', { succeeded, total }),
-              someFailed: (failed) => t('fleet.trackers.bulk.someFailed', { failed }),
               report: t('fleet.trackers.bulk.report'),
               refresh: t('fleet.trackers.bulk.refresh'),
               jobFailed: t('fleet.trackers.bulk.jobFailed'),

@@ -152,7 +152,6 @@ export default async function VehiclesPage({
             required: t('fleet.org.required'),
             submit: t('fleet.vehicles.add.submit'),
             submitting: t('fleet.vehicles.add.submitting'),
-            added: (plate) => t('fleet.vehicles.add.added', { plate }),
           }}
         />
       ) : (
@@ -220,9 +219,6 @@ export default async function VehiclesPage({
         columns: t('fleet.vehicles.bulk.columns', { columns: BULK_CSV_COLUMNS }),
         docsPending: t('fleet.vehicles.bulk.docsPending'),
         uploading: t('fleet.vehicles.bulk.uploading'),
-        processing: (total) => t('fleet.vehicles.bulk.processing', { total }),
-        imported: (imported, total) => t('fleet.vehicles.bulk.imported', { imported, total }),
-        someFailed: (failed) => t('fleet.vehicles.bulk.someFailed', { failed }),
         allImported: t('fleet.vehicles.bulk.allImported'),
         report: t('fleet.vehicles.bulk.report'),
         refresh: t('fleet.vehicles.bulk.refresh'),

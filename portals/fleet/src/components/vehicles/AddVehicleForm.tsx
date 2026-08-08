@@ -54,8 +54,6 @@ export interface AddVehicleLabels {
   readonly required: string;
   readonly submit: string;
   readonly submitting: string;
-  /** `{plate}` already substituted by the page. */
-  readonly added: (plate: string) => string;
 }
 
 export interface VehicleOption {
@@ -200,9 +198,15 @@ export function AddVehicleForm({
           </p>
         ) : null}
 
+        {/*
+          The confirmation is composed by the action, not built here from a label
+          function: a function cannot cross the server/client boundary at all
+          (React refuses to serialise one), so a `labels.added(plate)` prop is a
+          render-time error rather than a style choice. Δ C115.
+        */}
         {state.added ? (
           <p role="status" className="text-body-sm text-success">
-            {labels.added(state.added)}
+            {state.added}
           </p>
         ) : null}
 

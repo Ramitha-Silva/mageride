@@ -1,4 +1,4 @@
-# Fleet Portal (C111 shell + C112 auth/org/payout + C113 vehicles/drivers/trackers + C114 dashboard/map/analytics) — `fleet.mageride.lk`
+# Fleet Portal (C111 shell + C112 auth/org/payout + C113 vehicles/drivers/trackers + C114 dashboard/map/analytics + C115 scheduling/billing) — `fleet.mageride.lk`
 
 Next.js 16 (App Router) + TypeScript + React 19, styled **only** with Tailwind through
 `@mageride/tailwind-preset` (AL-52). npm workspace member `@mageride/fleet-portal` under `portals/`.
@@ -163,9 +163,20 @@ password arm does, and `.env.example` says so.
   takes precedence over the catch-all automatically. A *new* nav entry has to be added to the
   manifest in the same change, and `test/routes.test.ts` will hold its three declarations against
   fleet-svc's.
-- **Call `read()` / `mutate()` from `@/api/client`, with `{ org: … }`.** `test/fences.test.ts` fails
-  on a raw `fetch`, on `apiFetch` outside the three modules that own it, on a `/v1/**` path outside
-  the seven the shell needs, and on any second place that builds a `/v1/fleets/{id}` URL.
+- **Call `read()` / `mutate()` / `download()` from `@/api/client`, with `{ org: … }`.**
+  `test/fences.test.ts` fails on a raw `fetch`, on `apiFetch` outside the three modules that own it,
+  on a `/v1/**` path outside the seven the shell needs, and on any second place that builds a
+  `/v1/fleets/{id}` URL. `download()` (Δ C115) is the third and is for a route that answers a
+  **document** rather than a body — one caller, SCR-FP-010's invoice CSV/PDF.
+- **A label prop is a string, never a function.** React refuses to serialise a function across the
+  server/client boundary, so `labels={{ done: (x) => t('…', { x }) }}` is a runtime error on the
+  page that renders it. A sentence that depends on the *result* of an action is composed **in the
+  action**, which runs on the server and already has the translator and the Colombo formatter —
+  `VehicleActionState.added`, `TrackerActionState.bound`, `DriverActionState.done`, the two bulk
+  panels' `jobProgress`/`jobFailures`, `ScheduleActionState.booked` and `TopupView`.
+  `test/fences.test.ts` asserts it over every `'use client'` component's props, with three
+  documented exemptions: a **server action** (which serialises as a reference, not a body) and the
+  `reset` Next hands its own error boundaries.
 - **Gate a mutating control on `canMutate(session, area)`,** never on the sub-role. The one
   exception is `canManageTeam()`, and its comment says why.
 - **Every string goes through the translator, in all three files, in the same change.** `en.ts`
@@ -377,6 +388,104 @@ three top-up routes belong in that file when it lands. The card's own "Top up wa
   it, which is why the dashboard's wallet reads happen in the page and the card is synchronous —
   a page whose tree contains an unresolved async child renders as nothing under `@testing-library`,
   and that is a test that cannot be written rather than a test that fails.
+
+## What C115 is — SCR-FP-008 and SCR-FP-010
+
+The two screens the Manage group is named for: **scheduling with US-13.11's not-started alarm**, and
+the **consolidated monthly invoice with the fleet wallet it is settled from**.
+`app/(portal)/{scheduling,billing}` + `app/(portal)/billing/export/route.ts`, `src/api/schedules.ts`,
+`src/api/billing.ts` (completed), `src/server/{schedule,billing}-actions.ts` and
+`src/components/{scheduling,billing}/`. It added no nav entry — C111 declared both — and one shell
+behaviour: `download()` in `src/api/client.ts`.
+
+### The departure clock is Colombo's, and that is the one bug this screen could not survive
+
+`<input type="datetime-local">` has no time zone on it, and the server action that reads it runs in a
+container set to **UTC**. `new Date('2026-06-18T06:00')` there is 11:30 in Colombo — a bus booked out
+five and a half hours late with an alarm to match. `departAtFrom()` resolves the wall clock against
+`Asia/Colombo` explicitly (D-13), reading the offset out of `Intl`'s own zone rules rather than
+writing `+05:30` down, and `colomboLocalNow()` writes the form's `min` in the same clock.
+
+### Whose app rings is worked out the way the alarm worker works it out
+
+`ScheduleAlarmWorker` resolves the recipient from the assignment covering the **booked departure**,
+not the one covering now — "an alarm raised at 06:20 about the 06:10 belongs to the 06:10's driver".
+`driversCovering()` is `DriversCoveringAsync`'s predicate transcribed, vehicle included, and the
+Vehicle cell says who would be rung — or that **nobody is assigned over this departure**, which is
+the case the worker otherwise discovers at alarm time and logs as "there is nobody to tell".
+
+That is not the portal re-deriving `Assignment.active`, which stays the database's (C113's rule): it
+is window arithmetic over an instant that has nothing to do with the clock.
+
+### What SCR-FP-008 cannot do, and says so
+
+1. **Change or cancel a booked departure.** `fleet.yaml` declares exactly two operations on
+   `/schedules` — list and create. `CANCELLED` is a status 0314's CHECK admits and attributes to
+   "the operator", and **nothing on the platform can write it**. The deliverable asks for
+   "add/change", so this is a gap; `test/schedules.test.ts` parses the contract's own path block and
+   fails if a third verb appears.
+2. **Turn the alarm off.** `not_started_alarm_minutes` is `NOT NULL DEFAULT 10` with a 1…120 CHECK,
+   so the wireframe's toggle has no state to write. What an operator chooses is the offset, once.
+3. **Name or choose a route.** `FleetSchedule.routeId` is a `spatial.routes` id (FK added by 1408)
+   and no contract lists those rows; `GET /v1/transit/routes/{routeId}` is transit-svc's and takes a
+   **GTFS string**, an entirely different id space. The column shows the reference; the form sends
+   none.
+
+### SCR-FP-010 reads nothing until the caller is known to be entitled
+
+`canReadBilling()` is checked **before the first read**, not around the results: a Manager who
+follows a link gets one sentence naming whose screen it is, rather than four 403s and an audit trail
+of an access attempt nobody made. The nav does not offer the entry and `proxy.ts` refuses the route;
+this is the third of the three, and it is the one that stops the requests.
+
+### The Mode A row is on the card and is not on the invoice
+
+The sketch draws "Mode A vehicles · 88 · Free · Rs 0" and **no invoice has a Mode A line** — a line
+exists only for a charge `billing.monthly_subscriptions` raised, and that table carries Mode B rows
+only (AL-03). So that count is `GET …/vehicles` **today**, contributes nothing to the total, and the
+caption says which of the two it is. `invoiceSummary()` totals Σ of the lines and compares it against
+both `lineSumMinor` and `invoice.amountMinor` — the contract returns the first "so a client can check
+rather than trust" — and the card draws a warning rather than picking one when they disagree.
+
+### The invoice document is fleet-billing-svc's; the analytics CSV was ours
+
+`/billing/export` streams `GET …/billing/{invoiceId}/export?format=csv|pdf` through `download()`,
+because the platform renders both and its CSV "prints money twice — rupees for a bank reconciliation,
+integer minor units for a reconciliation against this platform". SCR-FP-009's CSV is written in this
+repo for the opposite reason: **no contract has an analytics export route at all.** The difference is
+not a preference.
+
+`download()` exists because the browser holds no bearer and cannot reach the gateway, so a link
+straight to the API would download a `401`. `apiFetch` gained `binary` + `accept` for it; a failure
+is still `application/problem+json` and still a `ProblemError`.
+
+### Nothing on the top-up form credits anything
+
+`POST …/wallet/topup` opens a **payment session**; the wallet is credited on the provider callback
+(D-09), "never here: a session the gateway accepted has moved no money". So the form ends in a link
+to finish paying and a **Check payment** button — a button, not a timer, because the operator is
+completing the payment on a bank app or a hosted card page, often on another device.
+
+Three more things about the rails:
+
+- **The sketch's three rows are two rails.** `method` admits `onepay` and `lankaqr`; **OnePay is the
+  card rail** (`Onepay:ApiKey` unset ⇒ "the card rail answers 503"), so a card is entered on OnePay's
+  hosted page rather than being a third method. Bank transfer is not offered anywhere (AL-05) and
+  `ck_fleet_topups_method` is where that is actually enforced.
+- **No `returnUrl` is sent.** It is passed straight to OnePay, this portal has no configured public
+  origin, and deriving one from the request's `Host` would hand a payment gateway a caller-controlled
+  value.
+- **The LankaQR payload is shown as text, not as a code.** An EMVCo payload belongs to the acquiring
+  bank and arrives whole; rendering it would put a QR encoder in the browser bundle for the fallback
+  AL-15's deep link exists to avoid.
+
+### The Pay button is drawn for the two states that can be paid
+
+`DUE` and `OVERDUE`. `FREE` and `PAID` both answer `409 invoice-not-payable` and both are knowable
+before the press. `402 insufficient-wallet` is **not** one of them — that is an amount to top up, the
+invoice is deliberately left open, and the operator has to be able to try. Settlement is idempotent
+by construction (`fleet_invoice:{invoiceId}` is UNIQUE in `billing.journal_entries`), so the
+`Idempotency-Key` is a fresh one rather than a second, weaker guard over the same money.
 
 ## Configuration
 

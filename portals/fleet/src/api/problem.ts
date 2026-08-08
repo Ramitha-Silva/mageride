@@ -139,6 +139,21 @@ const MESSAGE_KEYS: Readonly<Record<string, FleetMessageKey>> = {
   // The gateway's D-30 refusal, which reaches this portal on exactly one route —
   // see `bulkBindTrackers` in `src/server/tracker-actions.ts`.
   'attestation-failed': 'fleet.error.attestationFailed',
+  // Δ C115 — the codes SCR-FP-010 can be answered with, each an `x-error-codes`
+  // entry on a `fleet-billing.yaml` route this screen calls. The two that matter
+  // are the Pay button's, and they are two sentences because an operator does two
+  // different things about them: `insufficient-wallet` is "top up and press it
+  // again" and the invoice is deliberately left open, while `invoice-not-payable`
+  // is a month that is already settled or cost nothing — "a FREE invoice has a
+  // zero total and no journal entry could balance, so this is a state rather than
+  // a transient failure".
+  'insufficient-wallet': 'fleet.error.insufficientWallet',
+  'invoice-not-payable': 'fleet.error.invoiceNotPayable',
+  'invalid-amount': 'fleet.error.invalidAmount',
+  // The top-up rail this deployment has not configured, or one that refused the
+  // session. AL-05 leaves two rails and no bank-transfer fallback, so the sentence
+  // sends the operator to the other one.
+  'gateway-error': 'fleet.error.railUnavailable',
 };
 
 export function problemMessageKey(problem: ProblemDetails): FleetMessageKey {

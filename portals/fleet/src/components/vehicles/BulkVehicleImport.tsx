@@ -4,7 +4,7 @@ import { startTransition, useActionState, useEffect, useState } from 'react';
 
 import { Button, Dropzone, StatusPill, type DropzoneRejection } from '@mageride/ui';
 
-import { BULK_UPLOAD_MAX_BYTES, type BulkVehicleJob } from '@/api/vehicles';
+import { BULK_UPLOAD_MAX_BYTES } from '@/api/vehicles';
 import { importVehicleCsv, readBulkJob, type VehicleActionState } from '@/server/vehicle-actions';
 
 /**
@@ -44,9 +44,6 @@ export interface BulkVehicleLabels {
   readonly columns: string;
   readonly docsPending: string;
   readonly uploading: string;
-  readonly processing: (total: number) => string;
-  readonly imported: (imported: number, total: number) => string;
-  readonly someFailed: (failed: number) => string;
   readonly allImported: string;
   readonly report: string;
   readonly refresh: string;
@@ -68,10 +65,15 @@ export function BulkVehicleImport({
   labels: BulkVehicleLabels;
 }) {
   const [state, submit, pending] = useActionState(importVehicleCsv, INITIAL);
-  const [polled, setPolled] = useState<BulkVehicleJob | null>(null);
+  const [polled, setPolled] = useState<VehicleActionState | null>(null);
   const [rejection, setRejection] = useState<string | null>(null);
 
-  const job = polled ?? state.job ?? null;
+  // The whole answer rather than the job alone: the two sentences beside it are
+  // composed by the action, because a client component cannot be handed a
+  // translator and a function prop does not survive the server boundary at all
+  // (React refuses to serialise one). Δ C115.
+  const view = polled ?? state;
+  const job = view.job ?? null;
   const jobId = job?.jobId ?? null;
   const processing = job?.status === 'PROCESSING';
 
@@ -80,7 +82,7 @@ export function BulkVehicleImport({
 
     const timer = setTimeout(() => {
       void readBulkJob(jobId).then((answer) => {
-        if (answer.job) setPolled(answer.job);
+        if (answer.job) setPolled(answer);
       });
     }, POLL_MS);
 
@@ -112,7 +114,7 @@ export function BulkVehicleImport({
   const refresh = () => {
     if (!jobId) return;
     void readBulkJob(jobId).then((answer) => {
-      if (answer.job) setPolled(answer.job);
+      if (answer.job) setPolled(answer);
     });
   };
 
@@ -152,13 +154,13 @@ export function BulkVehicleImport({
           {job.status === 'FAILED' ? (
             <p className="text-error">{labels.jobFailed}</p>
           ) : processing ? (
-            <p className="text-on-surface-variant">{labels.processing(job.totalRows)}</p>
+            <p className="text-on-surface-variant">{view.jobProgress}</p>
           ) : (
             <>
-              <p>{labels.imported(job.importedRows, job.totalRows)}</p>
+              <p>{view.jobProgress}</p>
               {job.failedRows > 0 ? (
                 <StatusPill tone="warning" dot={false}>
-                  {labels.someFailed(job.failedRows)}
+                  {view.jobFailures}
                 </StatusPill>
               ) : (
                 <StatusPill tone="success" dot={false}>

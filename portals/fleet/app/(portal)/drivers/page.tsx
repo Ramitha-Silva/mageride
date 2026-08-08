@@ -93,10 +93,6 @@ export default async function DriversPage() {
             temporary: t('fleet.drivers.temporary'),
             noInvite: t('fleet.drivers.noInvite'),
             noVehicles: t('fleet.drivers.noVehicles'),
-            done: (count) =>
-              count === 1
-                ? t('fleet.drivers.assign.doneOne')
-                : t('fleet.drivers.assign.done', { count }),
           }}
         />
       ) : (

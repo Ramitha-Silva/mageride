@@ -803,6 +803,184 @@ export const fleetEn = {
   'fleet.billing.status.paid': 'Paid',
   'fleet.billing.status.overdue': 'Overdue',
 
+  /* ---- SCR-FP-008 · Scheduling & alarms (US-13.11, Δ C115) ------------- */
+  'fleet.scheduling.title': 'Scheduling & alarms',
+  'fleet.scheduling.missedCount': '{count} not started',
+  'fleet.scheduling.book.open': '+ Schedule ride',
+  'fleet.scheduling.book.heading': 'Schedule a ride',
+  'fleet.scheduling.book.submit': 'Schedule ride',
+  'fleet.scheduling.book.submitting': 'Scheduling…',
+  'fleet.scheduling.book.noVehicles':
+    'There is no approved vehicle to give a departure to. A vehicle can be scheduled once a Verification Officer has approved it.',
+  'fleet.scheduling.book.done':
+    'Booked to depart {departAt}. If no journey has started {minutes} minutes after that, the alarm rings in the assigned driver’s app.',
+  'fleet.scheduling.field.vehicle': 'Vehicle',
+  'fleet.scheduling.field.departAt': 'Departure',
+  'fleet.scheduling.field.departAtHint': 'Sri Lanka time, and it has to be ahead of now.',
+  'fleet.scheduling.field.alarm': 'Alarm after',
+  'fleet.scheduling.field.alarmHint':
+    'Minutes, {min} to {max}. A journey that starts up to {grace} minutes early still counts as making the departure.',
+  'fleet.scheduling.viewerNotice':
+    'Your seat reads the schedule and does not add to it. An Owner or a Manager of this organisation can book a departure.',
+  'fleet.scheduling.pendingOrg':
+    'Departures can be booked once a Verification Officer has approved this organisation. The schedule can be read meanwhile.',
+  'fleet.scheduling.table.heading': 'Per-vehicle scheduled rides',
+  'fleet.scheduling.table.caption':
+    'Every booked departure for this organisation, its not-started alarm and whether it was made',
+  'fleet.scheduling.table.empty': 'No departure is booked for this period.',
+  'fleet.scheduling.table.emptyPending':
+    'Nothing is scheduled. Departures can be booked once this organisation is approved.',
+  'fleet.scheduling.column.vehicle': 'Vehicle',
+  'fleet.scheduling.column.route': 'Route',
+  'fleet.scheduling.column.start': 'Start',
+  'fleet.scheduling.column.alarm': 'Not-started alarm',
+  'fleet.scheduling.column.status': 'Status',
+  'fleet.scheduling.alarmNote':
+    'The not-started alarm rings in the assigned driver’s app, and everyone in this organisation is told as well (US-13.11). A journey that starts up to {grace} minutes early still counts as made.',
+  'fleet.scheduling.windowNote':
+    'Departures from the last {hours} hours onwards are listed, so the ones whose alarm has just rung are on this screen.',
+  'fleet.scheduling.routeNote':
+    'A route cannot be named or chosen here: MageRide publishes no list of this organisation’s routes, so a departure carries a route reference and no name.',
+  'fleet.scheduling.writeOnceNote':
+    'A booked departure cannot be edited or cancelled — MageRide serves no route for either — and every departure has an alarm, so there is nothing to switch off.',
+  'fleet.scheduling.route.none': 'Not set',
+  'fleet.scheduling.unknownVehicle': 'Vehicle not on the roster',
+  'fleet.scheduling.ringsDriver': 'Alarm rings: {driver}',
+  'fleet.scheduling.ringsNobody': 'No driver is assigned over this departure',
+  'fleet.scheduling.driverUnnamed': 'the assigned driver',
+  'fleet.scheduling.alarmOffset': '+{minutes} min',
+  'fleet.scheduling.alarmRang': 'Rang {time}',
+  'fleet.scheduling.status.scheduled': 'Scheduled',
+  'fleet.scheduling.status.started': 'On time',
+  'fleet.scheduling.status.missed': 'Not started — alarm rang',
+  'fleet.scheduling.status.cancelled': 'Cancelled',
+  'fleet.scheduling.error.vehicleRequired': 'Choose the vehicle this departure is for.',
+  'fleet.scheduling.error.departAtInvalid': 'Give the date and time of the departure.',
+  'fleet.scheduling.error.departAtPast':
+    'That departure has already passed. A booking has to be ahead of now, or its alarm would ring straight away.',
+  'fleet.scheduling.error.alarmRange': 'The alarm is between {min} and {max} minutes after departure.',
+  'fleet.scheduling.error.slotTaken': 'This vehicle already has a departure booked at that time.',
+
+  /* ---- SCR-FP-010 · Billing & wallet (US-13.10/10b, Δ C115) ------------ */
+  'fleet.billing.title': 'Billing & wallet',
+  'fleet.billing.topUp': 'Top up wallet',
+  'fleet.billing.ownerOnly':
+    'Billing belongs to the organisation’s Owner. Ask them for the invoice, or for a copy of it.',
+  'fleet.billing.pendingOrg':
+    'There is nothing to bill yet. An organisation is charged for its Mode B vehicles once a Verification Officer has approved it.',
+  'fleet.billing.noInvoices':
+    'No month has been invoiced yet. An invoice is raised for each Colombo month in which this organisation ran a Mode B vehicle.',
+  'fleet.billing.invoiceUnavailable':
+    'That invoice could not be read just now. The months below are still listed, and the rest of this screen is unaffected.',
+  'fleet.billing.invoice.heading': 'Monthly invoice — {month}',
+  'fleet.billing.invoice.label': 'Monthly invoice',
+  'fleet.billing.invoice.caption': 'What this organisation is charged for the month, by category',
+  'fleet.billing.column.item': 'Item',
+  'fleet.billing.column.qty': 'Qty',
+  'fleet.billing.column.rate': 'Rate',
+  'fleet.billing.column.amount': 'Amount',
+  'fleet.billing.column.vehicle': 'Vehicle',
+  'fleet.billing.column.vehicleType': 'Type',
+  'fleet.billing.column.lineStatus': 'Charge',
+  'fleet.billing.column.period': 'Month',
+  'fleet.billing.column.vehicles': 'Vehicles',
+  'fleet.billing.column.status': 'Status',
+  'fleet.billing.column.movement': 'Movement',
+  'fleet.billing.column.when': 'When',
+  'fleet.billing.column.balanceAfter': 'Balance after',
+  'fleet.billing.summary.modeB': 'Mode B vehicles',
+  'fleet.billing.summary.modeBFree': 'Mode B vehicles — first month',
+  'fleet.billing.summary.modeA': 'Mode A vehicles',
+  'fleet.billing.summary.free': 'Free',
+  'fleet.billing.summary.mixedRate': 'Varies',
+  'fleet.billing.summary.total': 'Total due',
+  'fleet.billing.unknownCount': '—',
+  'fleet.billing.modeANote':
+    'Mode A vehicles are never charged, so they are not on the invoice at all: the count above is your roster today, not a billed line. A vehicle’s first month is free as well.',
+  'fleet.billing.reconcileWarning':
+    'The per-vehicle lines do not add up to the invoice total. Do not pay this month before asking MageRide support about it.',
+  'fleet.billing.lines.heading': 'Per-vehicle breakdown',
+  'fleet.billing.lines.caption': 'One line per vehicle charged this month, as it was billed',
+  'fleet.billing.lines.empty':
+    'No vehicle was charged this month, so the invoice is a record that the run considered them.',
+  'fleet.billing.line.charged': 'Charged',
+  'fleet.billing.line.firstMonthFree': 'First month free',
+  'fleet.billing.download.csv': 'Download CSV',
+  'fleet.billing.download.pdf': 'Download PDF',
+  'fleet.billing.receipt.label': 'Receipt',
+  'fleet.billing.receipt.settled':
+    'Settled from the fleet wallet on {date}. Ledger entry {entry} is the receipt for it.',
+  'fleet.billing.pay.submit': 'Pay from wallet',
+  'fleet.billing.pay.submitting': 'Paying…',
+  'fleet.billing.pay.done': '{amount} was taken from the fleet wallet and this month is settled.',
+  'fleet.billing.date.due': 'Payable by {date}',
+  'fleet.billing.date.overdue': 'Overdue since {date}',
+  'fleet.billing.date.settled': 'Settled {date}',
+  'fleet.billing.wallet.heading': 'Fleet wallet',
+  'fleet.billing.wallet.balance': 'Balance',
+  'fleet.billing.wallet.outstanding': 'Invoiced and unpaid',
+  'fleet.billing.wallet.available': 'Left after what is owed',
+  'fleet.billing.wallet.shortfall':
+    'This organisation owes more than the wallet holds. Top up the difference and the open months settle by themselves.',
+  'fleet.billing.wallet.updatedAt': 'Balance as at {time}',
+  'fleet.billing.wallet.unavailable':
+    'The wallet could not be read just now. The invoice beside it is unaffected, and nothing has been charged twice.',
+  'fleet.billing.statement.heading': 'Recent movements',
+  'fleet.billing.statement.caption': 'Top-ups and settlements on the fleet wallet, newest first',
+  'fleet.billing.statement.empty': 'No money has moved through this wallet yet.',
+  'fleet.billing.movement.topup': 'Top-up',
+  'fleet.billing.movement.invoice': 'Monthly invoice',
+  'fleet.billing.movement.adjustment': 'Adjustment',
+  'fleet.billing.movement.other': 'Other',
+  'fleet.billing.topup.heading': 'Top up the wallet',
+  'fleet.billing.topup.amount': 'Amount (Rs)',
+  'fleet.billing.topup.amountHint': 'Between {min} and {max} in one payment.',
+  'fleet.billing.topup.method': 'Pay with',
+  'fleet.billing.topup.method.onepay': 'Card, through OnePay',
+  'fleet.billing.topup.method.lankaqr': 'LankaQR',
+  'fleet.billing.topup.onepayHint':
+    'Your card details are entered on OnePay’s own page and never on this one.',
+  'fleet.billing.topup.lankaqrHint':
+    'Opens your bank app to pay. Use this one on a phone, where the bank app is.',
+  'fleet.billing.topup.noBankTransfer':
+    'A bank transfer cannot top up this wallet. MageRide takes card and LankaQR payments only.',
+  'fleet.billing.topup.submit': 'Continue to payment',
+  'fleet.billing.topup.submitting': 'Opening…',
+  'fleet.billing.topup.session': '{amount} · {method}',
+  'fleet.billing.topup.continueOnepay': 'Open the payment page',
+  'fleet.billing.topup.continueLankaqr': 'Open my bank app',
+  'fleet.billing.topup.pending':
+    'Waiting for the payment. Finish it within {seconds} seconds, then press Check payment.',
+  'fleet.billing.topup.succeeded': 'Paid — the wallet has been credited.',
+  'fleet.billing.topup.failed': 'The payment did not go through. Nothing was taken.',
+  'fleet.billing.topup.expired':
+    'This payment window has closed. Start another top-up; nothing was taken for this one.',
+  'fleet.billing.topup.check': 'Check payment',
+  'fleet.billing.topup.checking': 'Checking…',
+  'fleet.billing.topup.qrHeading': 'LankaQR code',
+  'fleet.billing.topup.qrHint':
+    'Use this only if the bank app did not open. It is valid for {seconds} seconds.',
+  'fleet.billing.history.heading': 'Months',
+  'fleet.billing.history.caption': 'Every month this organisation has been invoiced for, newest first',
+  'fleet.billing.history.empty': 'No month has been invoiced yet.',
+  'fleet.billing.history.more':
+    'The most recent {months} months are shown. Older invoices are kept and can be sent to you by MageRide support.',
+  'fleet.billing.freeNote':
+    'A month with no charge is still an invoice: it is the record that the billing run looked at this organisation and found nothing to charge for.',
+  'fleet.billing.error.amountInvalid': 'Give the amount to top up, in rupees.',
+  'fleet.billing.error.amountRange': 'One top-up is between {min} and {max}.',
+  'fleet.billing.error.methodInvalid': 'Choose card or LankaQR.',
+  'fleet.billing.error.invoiceMissing': 'That invoice could not be identified. Open the month again.',
+
+  /* ---- Δ C115 — the codes SCR-FP-010 can be answered with -------------- */
+  'fleet.error.insufficientWallet':
+    'The fleet wallet does not cover this invoice. Top it up and pay again — the month stays open until it is settled.',
+  'fleet.error.invoiceNotPayable':
+    'There is nothing to pay on this month. It has either been settled already or cost nothing.',
+  'fleet.error.invalidAmount': 'That amount cannot be paid. Check it and try again.',
+  'fleet.error.railUnavailable':
+    'That payment method is not available just now. Try the other one — MageRide takes card and LankaQR payments only.',
+
   /* ---- The shell's placeholder for a screen a later component owns ------ */
   'fleet.screen.pendingTitle': 'This screen is not built yet',
   'fleet.screen.pendingBody':

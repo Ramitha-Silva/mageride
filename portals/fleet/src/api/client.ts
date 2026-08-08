@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { canMutate } from '@/server/access';
 import { accessToken, getSession } from '@/server/session';
 
-import { apiFetch } from './http';
+import { apiFetch, type ApiDocument } from './http';
 import { localProblem, ProblemError } from './problem';
 
 /**
@@ -72,6 +72,43 @@ export async function read<T>(options: ReadOptions): Promise<T> {
     ...(options.searchParams ? { searchParams: options.searchParams } : {}),
     ...(options.signal ? { signal: options.signal } : {}),
   });
+  return data;
+}
+
+export type DownloadOptions = ApiTarget & {
+  readonly searchParams?: Readonly<Record<string, string | number | boolean | undefined>>;
+  /** What the route answers with. Sent so the far side is asked for what is wanted. */
+  readonly accept?: string;
+  readonly signal?: AbortSignal;
+};
+
+/**
+ * A GET whose answer is a **document**, not a body to parse. Δ C115.
+ *
+ * The one caller is SCR-FP-010's Download: `GET …/billing/{invoiceId}/export`
+ * answers `text/csv` or `application/pdf`, rendered by fleet-billing-svc, and the
+ * portal streams it to the operator rather than composing a second document about
+ * the same money. It goes through {@link resolvePath} like every other read — the
+ * organisation is still the session's own and still un-nameable by a screen — and
+ * a failure is still a `ProblemError`, because a failure is still problem+json.
+ *
+ * `download` rather than a flag on {@link read} so a screen has to say that what
+ * it is fetching is bytes: the two have different failure modes at the call site,
+ * and a `read<Blob>` would look like a typing mistake either way.
+ */
+export async function download(options: DownloadOptions): Promise<ApiDocument> {
+  const path = await resolvePath(options);
+  const token = await requireToken(path);
+
+  const { data } = await apiFetch<ApiDocument>({
+    path,
+    accessToken: token,
+    binary: true,
+    ...(options.accept ? { accept: options.accept } : {}),
+    ...(options.searchParams ? { searchParams: options.searchParams } : {}),
+    ...(options.signal ? { signal: options.signal } : {}),
+  });
+
   return data;
 }
 

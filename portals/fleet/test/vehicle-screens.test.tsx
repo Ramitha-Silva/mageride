@@ -337,6 +337,11 @@ describe('SCR-FP-004 · vehicle onboarding', () => {
         status: 'COMPLETED',
         errorReportUrl: 'https://api.mageride.lk/v1/fleets/x/vehicles/bulk/y/errors.csv?sig=z',
       },
+      // Δ C115 — the two sentences are the **action's**, composed where the
+      // translator is, because a function label cannot cross the server/client
+      // boundary. The panel renders them and builds neither.
+      jobProgress: t('fleet.vehicles.bulk.imported', { imported: 118, total: 120 }),
+      jobFailures: t('fleet.vehicles.bulk.someFailed', { failed: 2 }),
     });
 
     const { container } = render(await VehiclesPage({ searchParams: Promise.resolve({}) }));

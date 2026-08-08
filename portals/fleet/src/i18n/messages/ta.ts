@@ -718,6 +718,190 @@ export const fleetTa: FleetMessages = {
   'fleet.billing.status.paid': 'செலுத்தப்பட்டது',
   'fleet.billing.status.overdue': 'தாமதமானது',
 
+  /* ---- SCR-FP-008 · கால அட்டவணை மற்றும் அலாரம் (Δ C115) ----------------- */
+  'fleet.scheduling.title': 'கால அட்டவணை மற்றும் அலாரம்',
+  'fleet.scheduling.missedCount': 'தொடங்காதவை {count}',
+  'fleet.scheduling.book.open': '+ பயணத்தைப் பதிவு செய்',
+  'fleet.scheduling.book.heading': 'ஒரு பயணத்தை அட்டவணைப்படுத்து',
+  'fleet.scheduling.book.submit': 'பயணத்தைப் பதிவு செய்',
+  'fleet.scheduling.book.submitting': 'பதிவு செய்கிறது…',
+  'fleet.scheduling.book.noVehicles':
+    'புறப்பாடு வழங்கக்கூடிய அங்கீகரிக்கப்பட்ட வாகனம் இல்லை. சரிபார்ப்பு அதிகாரி வாகனத்தை அங்கீகரித்த பிறகு அதற்குப் பயணங்களைப் பதிவு செய்யலாம்.',
+  'fleet.scheduling.book.done':
+    '{departAt} புறப்படுவதாகப் பதிவாகியுள்ளது. அதற்குப் பிறகு {minutes} நிமிடங்களுக்குள் பயணம் தொடங்கவில்லை என்றால், நியமிக்கப்பட்ட ஓட்டுநரின் செயலியில் அலாரம் ஒலிக்கும்.',
+  'fleet.scheduling.field.vehicle': 'வாகனம்',
+  'fleet.scheduling.field.departAt': 'புறப்பாடு',
+  'fleet.scheduling.field.departAtHint': 'இலங்கை நேரம்; இப்போதைக்கு முன்னால் இருக்க வேண்டும்.',
+  'fleet.scheduling.field.alarm': 'அலாரம் ஒலிக்க',
+  'fleet.scheduling.field.alarmHint':
+    'நிமிடங்கள், {min} முதல் {max} வரை. {grace} நிமிடங்கள் வரை முன்கூட்டித் தொடங்கும் பயணமும் புறப்பாடு நிறைவேறியதாகவே கணக்கிடப்படும்.',
+  'fleet.scheduling.viewerNotice':
+    'உங்கள் பதவி அட்டவணையைப் படிக்கும், அதில் சேர்க்காது. இந்த நிறுவனத்தின் உரிமையாளர் அல்லது மேலாளர் ஒரு புறப்பாட்டைப் பதிவு செய்யலாம்.',
+  'fleet.scheduling.pendingOrg':
+    'சரிபார்ப்பு அதிகாரி இந்த நிறுவனத்தை அங்கீகரித்த பிறகு புறப்பாடுகளைப் பதிவு செய்யலாம். அதுவரை அட்டவணையைப் படிக்கலாம்.',
+  'fleet.scheduling.table.heading': 'வாகனம் வாரியான அட்டவணைப் பயணங்கள்',
+  'fleet.scheduling.table.caption':
+    'இந்த நிறுவனத்திற்குப் பதிவு செய்யப்பட்ட ஒவ்வொரு புறப்பாடும், அதன் தொடங்காமை அலாரமும், அது நிறைவேறியதா என்பதும்',
+  'fleet.scheduling.table.empty': 'இந்தக் காலப்பகுதிக்கு எந்தப் புறப்பாடும் பதிவு செய்யப்படவில்லை.',
+  'fleet.scheduling.table.emptyPending':
+    'எதுவும் பதிவு செய்யப்படவில்லை. இந்த நிறுவனம் அங்கீகரிக்கப்பட்ட பிறகு புறப்பாடுகளைப் பதிவு செய்யலாம்.',
+  'fleet.scheduling.column.vehicle': 'வாகனம்',
+  'fleet.scheduling.column.route': 'வழித்தடம்',
+  'fleet.scheduling.column.start': 'தொடக்கம்',
+  'fleet.scheduling.column.alarm': 'தொடங்காமை அலாரம்',
+  'fleet.scheduling.column.status': 'நிலை',
+  'fleet.scheduling.alarmNote':
+    'தொடங்காமை அலாரம் நியமிக்கப்பட்ட ஓட்டுநரின் செயலியில் ஒலிக்கும்; இந்த நிறுவனத்தில் உள்ள அனைவருக்கும் தெரிவிக்கப்படும் (US-13.11). {grace} நிமிடங்கள் வரை முன்கூட்டித் தொடங்கும் பயணமும் நிறைவேறியதாகவே கணக்கிடப்படும்.',
+  'fleet.scheduling.windowNote':
+    'கடந்த {hours} மணி நேரம் முதல் உள்ள புறப்பாடுகள் பட்டியலிடப்படுகின்றன, எனவே அலாரம் ஒலித்தவை இந்தத் திரையில் தெரியும்.',
+  'fleet.scheduling.routeNote':
+    'இங்கே வழித்தடத்தைப் பெயரிடவோ தேர்வு செய்யவோ முடியாது: இந்த நிறுவனத்தின் வழித்தடப் பட்டியலை MageRide வெளியிடுவதில்லை, எனவே ஒரு புறப்பாட்டில் வழித்தடக் குறிப்பு மட்டுமே இருக்கும், பெயர் இருக்காது.',
+  'fleet.scheduling.writeOnceNote':
+    'பதிவு செய்யப்பட்ட புறப்பாட்டைத் திருத்தவோ ரத்து செய்யவோ முடியாது — MageRide அதற்கு எந்த வழியையும் வழங்கவில்லை — மேலும் ஒவ்வொரு புறப்பாட்டுக்கும் அலாரம் இருப்பதால் அணைக்க எதுவும் இல்லை.',
+  'fleet.scheduling.route.none': 'அமைக்கப்படவில்லை',
+  'fleet.scheduling.unknownVehicle': 'வாகனப் பட்டியலில் இல்லை',
+  'fleet.scheduling.ringsDriver': 'அலாரம் ஒலிப்பது: {driver}',
+  'fleet.scheduling.ringsNobody': 'இந்தப் புறப்பாட்டுக்கு ஓட்டுநர் நியமிக்கப்படவில்லை',
+  'fleet.scheduling.driverUnnamed': 'நியமிக்கப்பட்ட ஓட்டுநர்',
+  'fleet.scheduling.alarmOffset': '+{minutes} நிமி.',
+  'fleet.scheduling.alarmRang': '{time} இல் ஒலித்தது',
+  'fleet.scheduling.status.scheduled': 'அட்டவணையில்',
+  'fleet.scheduling.status.started': 'சரியான நேரத்தில்',
+  'fleet.scheduling.status.missed': 'தொடங்கவில்லை — அலாரம் ஒலித்தது',
+  'fleet.scheduling.status.cancelled': 'ரத்து செய்யப்பட்டது',
+  'fleet.scheduling.error.vehicleRequired': 'இந்தப் புறப்பாடு எந்த வாகனத்திற்கு என்பதைத் தேர்வு செய்யவும்.',
+  'fleet.scheduling.error.departAtInvalid': 'புறப்பாட்டின் தேதியையும் நேரத்தையும் கொடுக்கவும்.',
+  'fleet.scheduling.error.departAtPast':
+    'அந்தப் புறப்பாட்டு நேரம் ஏற்கெனவே கடந்துவிட்டது. பதிவு இப்போதைக்கு முன்னால் இருக்க வேண்டும், இல்லையெனில் அதன் அலாரம் உடனே ஒலிக்கும்.',
+  'fleet.scheduling.error.alarmRange':
+    'அலாரம் புறப்பாட்டுக்குப் பிறகு {min} முதல் {max} நிமிடங்களுக்கு இடையில் இருக்க வேண்டும்.',
+  'fleet.scheduling.error.slotTaken':
+    'இந்த வாகனத்திற்கு அந்த நேரத்தில் ஏற்கெனவே ஒரு புறப்பாடு பதிவாகியுள்ளது.',
+
+  /* ---- SCR-FP-010 · கட்டணப் பட்டியல் மற்றும் பணப்பை (Δ C115) --------------- */
+  'fleet.billing.title': 'கட்டணப் பட்டியல் மற்றும் பணப்பை',
+  'fleet.billing.topUp': 'பணப்பையை நிரப்பவும்',
+  'fleet.billing.ownerOnly':
+    'கட்டணம் நிறுவனத்தின் உரிமையாளருக்கு உரியது. விலைப்பட்டியலையோ அதன் நகலையோ அவர்களிடம் கேட்கவும்.',
+  'fleet.billing.pendingOrg':
+    'இன்னும் கட்டணம் விதிக்க எதுவும் இல்லை. சரிபார்ப்பு அதிகாரி நிறுவனத்தை அங்கீகரித்த பிறகே அதன் B முறை வாகனங்களுக்குக் கட்டணம் விதிக்கப்படும்.',
+  'fleet.billing.noInvoices':
+    'இதுவரை எந்த மாதத்திற்கும் விலைப்பட்டியல் வழங்கப்படவில்லை. இந்த நிறுவனம் B முறை வாகனத்தை இயக்கிய ஒவ்வொரு கொழும்பு மாதத்திற்கும் ஒரு விலைப்பட்டியல் உருவாக்கப்படும்.',
+  'fleet.billing.invoiceUnavailable':
+    'அந்த விலைப்பட்டியலை இப்போது படிக்க முடியவில்லை. கீழே உள்ள மாதங்கள் இன்னும் பட்டியலிடப்பட்டுள்ளன, இந்தத் திரையின் மற்ற பகுதிகள் பாதிக்கப்படவில்லை.',
+  'fleet.billing.invoice.heading': 'மாதாந்த விலைப்பட்டியல் — {month}',
+  'fleet.billing.invoice.label': 'மாதாந்த விலைப்பட்டியல்',
+  'fleet.billing.invoice.caption': 'இந்த மாதத்திற்கு இந்த நிறுவனத்திடம் வசூலிக்கப்படுவது, வகை வாரியாக',
+  'fleet.billing.column.item': 'விவரம்',
+  'fleet.billing.column.qty': 'எண்ணிக்கை',
+  'fleet.billing.column.rate': 'விகிதம்',
+  'fleet.billing.column.amount': 'தொகை',
+  'fleet.billing.column.vehicle': 'வாகனம்',
+  'fleet.billing.column.vehicleType': 'வகை',
+  'fleet.billing.column.lineStatus': 'கட்டணம்',
+  'fleet.billing.column.period': 'மாதம்',
+  'fleet.billing.column.vehicles': 'வாகனங்கள்',
+  'fleet.billing.column.status': 'நிலை',
+  'fleet.billing.column.movement': 'பரிவர்த்தனை',
+  'fleet.billing.column.when': 'தேதி',
+  'fleet.billing.column.balanceAfter': 'அதன் பின் இருப்பு',
+  'fleet.billing.summary.modeB': 'B முறை வாகனங்கள்',
+  'fleet.billing.summary.modeBFree': 'B முறை வாகனங்கள் — முதல் மாதம்',
+  'fleet.billing.summary.modeA': 'A முறை வாகனங்கள்',
+  'fleet.billing.summary.free': 'இலவசம்',
+  'fleet.billing.summary.mixedRate': 'மாறுபடும்',
+  'fleet.billing.summary.total': 'செலுத்த வேண்டிய மொத்தம்',
+  'fleet.billing.unknownCount': '—',
+  'fleet.billing.modeANote':
+    'A முறை வாகனங்களுக்கு எப்போதும் கட்டணம் இல்லை, எனவே அவை விலைப்பட்டியலில் இடம்பெறுவதில்லை: மேலே உள்ள எண்ணிக்கை இன்றைய உங்கள் வாகனப் பட்டியலே அன்றி வசூலிக்கப்பட்ட வரி அல்ல. ஒரு வாகனத்தின் முதல் மாதமும் இலவசம்.',
+  'fleet.billing.reconcileWarning':
+    'வாகனம் வாரியான வரிகளின் கூட்டுத்தொகை விலைப்பட்டியலின் மொத்தத்துடன் பொருந்தவில்லை. இதுபற்றி MageRide ஆதரவைக் கேட்கும் வரை இந்த மாதத்தைச் செலுத்த வேண்டாம்.',
+  'fleet.billing.lines.heading': 'வாகனம் வாரியான விவரம்',
+  'fleet.billing.lines.caption':
+    'இந்த மாதம் கட்டணம் விதிக்கப்பட்ட ஒவ்வொரு வாகனத்திற்கும் ஒரு வரி, வசூலிக்கப்பட்டவாறே',
+  'fleet.billing.lines.empty':
+    'இந்த மாதம் எந்த வாகனத்திற்கும் கட்டணம் விதிக்கப்படவில்லை, எனவே இந்த விலைப்பட்டியல் அவை பரிசீலிக்கப்பட்டதற்கான பதிவாகும்.',
+  'fleet.billing.line.charged': 'வசூலிக்கப்பட்டது',
+  'fleet.billing.line.firstMonthFree': 'முதல் மாதம் இலவசம்',
+  'fleet.billing.download.csv': 'CSV பதிவிறக்கு',
+  'fleet.billing.download.pdf': 'PDF பதிவிறக்கு',
+  'fleet.billing.receipt.label': 'ரசீது',
+  'fleet.billing.receipt.settled':
+    '{date} அன்று தொகுதிப் பணப்பையிலிருந்து செலுத்தப்பட்டது. பேரேட்டுப் பதிவு {entry} அதற்கான ரசீது.',
+  'fleet.billing.pay.submit': 'பணப்பையிலிருந்து செலுத்து',
+  'fleet.billing.pay.submitting': 'செலுத்துகிறது…',
+  'fleet.billing.pay.done': 'தொகுதிப் பணப்பையிலிருந்து {amount} எடுக்கப்பட்டு இந்த மாதம் செலுத்தப்பட்டது.',
+  'fleet.billing.date.due': '{date} க்குள் செலுத்த வேண்டும்',
+  'fleet.billing.date.overdue': '{date} முதல் தாமதமாகியுள்ளது',
+  'fleet.billing.date.settled': '{date} அன்று செலுத்தப்பட்டது',
+  'fleet.billing.wallet.heading': 'தொகுதி பணப்பை',
+  'fleet.billing.wallet.balance': 'இருப்பு',
+  'fleet.billing.wallet.outstanding': 'விலைப்பட்டியல் இடப்பட்டு செலுத்தப்படாதது',
+  'fleet.billing.wallet.available': 'செலுத்த வேண்டியதைக் கழித்த பிறகு மீதம்',
+  'fleet.billing.wallet.shortfall':
+    'இந்த நிறுவனம் செலுத்த வேண்டிய தொகை பணப்பையில் உள்ளதைவிட அதிகம். வித்தியாசத்தை நிரப்பினால் நிலுவை மாதங்கள் தானாகவே செலுத்தப்படும்.',
+  'fleet.billing.wallet.updatedAt': '{time} நிலவரப்படி இருப்பு',
+  'fleet.billing.wallet.unavailable':
+    'பணப்பையை இப்போது படிக்க முடியவில்லை. அருகில் உள்ள விலைப்பட்டியல் பாதிக்கப்படவில்லை, எதுவும் இரண்டு முறை வசூலிக்கப்படவில்லை.',
+  'fleet.billing.statement.heading': 'சமீபத்தியப் பரிவர்த்தனைகள்',
+  'fleet.billing.statement.caption':
+    'தொகுதிப் பணப்பையின் நிரப்புதல்களும் செலுத்தல்களும், புதியவை முதலில்',
+  'fleet.billing.statement.empty': 'இந்தப் பணப்பை வழியாக இதுவரை பணம் நகரவில்லை.',
+  'fleet.billing.movement.topup': 'நிரப்புதல்',
+  'fleet.billing.movement.invoice': 'மாதாந்த விலைப்பட்டியல்',
+  'fleet.billing.movement.adjustment': 'சரிசெய்தல்',
+  'fleet.billing.movement.other': 'மற்றவை',
+  'fleet.billing.topup.heading': 'பணப்பையை நிரப்புதல்',
+  'fleet.billing.topup.amount': 'தொகை (ரூ.)',
+  'fleet.billing.topup.amountHint': 'ஒரு கட்டணத்தில் {min} முதல் {max} வரை.',
+  'fleet.billing.topup.method': 'செலுத்தும் முறை',
+  'fleet.billing.topup.method.onepay': 'அட்டை, OnePay மூலம்',
+  'fleet.billing.topup.method.lankaqr': 'LankaQR',
+  'fleet.billing.topup.onepayHint':
+    'உங்கள் அட்டை விவரங்கள் OnePay இன் பக்கத்தில் மட்டுமே பதியப்படும், இந்தப் பக்கத்தில் ஒருபோதும் இல்லை.',
+  'fleet.billing.topup.lankaqrHint':
+    'செலுத்த உங்கள் வங்கிச் செயலியைத் திறக்கும். வங்கிச் செயலி உள்ள கைபேசியில் இதைப் பயன்படுத்தவும்.',
+  'fleet.billing.topup.noBankTransfer':
+    'வங்கிப் பரிமாற்றம் மூலம் இந்தப் பணப்பையை நிரப்ப முடியாது. MageRide அட்டை மற்றும் LankaQR கட்டணங்களை மட்டுமே ஏற்கிறது.',
+  'fleet.billing.topup.submit': 'கட்டணத்திற்குச் செல்',
+  'fleet.billing.topup.submitting': 'திறக்கிறது…',
+  'fleet.billing.topup.session': '{amount} · {method}',
+  'fleet.billing.topup.continueOnepay': 'கட்டணப் பக்கத்தைத் திற',
+  'fleet.billing.topup.continueLankaqr': 'என் வங்கிச் செயலியைத் திற',
+  'fleet.billing.topup.pending':
+    'கட்டணத்திற்குக் காத்திருக்கிறது. {seconds} விநாடிகளுக்குள் அதை முடித்து, கட்டணத்தைச் சரிபார் என்பதை அழுத்தவும்.',
+  'fleet.billing.topup.succeeded': 'செலுத்தப்பட்டது — பணப்பையில் தொகை சேர்க்கப்பட்டது.',
+  'fleet.billing.topup.failed': 'கட்டணம் நிறைவேறவில்லை. எந்தத் தொகையும் எடுக்கப்படவில்லை.',
+  'fleet.billing.topup.expired':
+    'இந்தக் கட்டண இடைவெளி மூடப்பட்டது. மற்றொரு நிரப்புதலைத் தொடங்கவும்; இதற்காக எந்தத் தொகையும் எடுக்கப்படவில்லை.',
+  'fleet.billing.topup.check': 'கட்டணத்தைச் சரிபார்',
+  'fleet.billing.topup.checking': 'சரிபார்க்கிறது…',
+  'fleet.billing.topup.qrHeading': 'LankaQR குறியீடு',
+  'fleet.billing.topup.qrHint':
+    'வங்கிச் செயலி திறக்கவில்லை என்றால் மட்டும் இதைப் பயன்படுத்தவும். இது {seconds} விநாடிகளுக்கு மட்டுமே செல்லுபடியாகும்.',
+  'fleet.billing.history.heading': 'மாதங்கள்',
+  'fleet.billing.history.caption':
+    'இந்த நிறுவனத்திற்கு விலைப்பட்டியல் இடப்பட்ட ஒவ்வொரு மாதமும், புதியவை முதலில்',
+  'fleet.billing.history.empty': 'இதுவரை எந்த மாதத்திற்கும் விலைப்பட்டியல் வழங்கப்படவில்லை.',
+  'fleet.billing.history.more':
+    'சமீபத்திய {months} மாதங்கள் காட்டப்படுகின்றன. பழைய விலைப்பட்டியல்கள் பாதுகாக்கப்படுகின்றன, MageRide ஆதரவின் மூலம் அவற்றைப் பெறலாம்.',
+  'fleet.billing.freeNote':
+    'கட்டணம் இல்லாத மாதமும் ஒரு விலைப்பட்டியலே: கட்டண இயக்கம் இந்த நிறுவனத்தைப் பரிசீலித்து வசூலிக்க எதுவும் இல்லை என்று கண்டதற்கான பதிவு அது.',
+  'fleet.billing.error.amountInvalid': 'நிரப்ப வேண்டிய தொகையை ரூபாயில் கொடுக்கவும்.',
+  'fleet.billing.error.amountRange': 'ஒரு நிரப்புதல் {min} முதல் {max} வரை இருக்க வேண்டும்.',
+  'fleet.billing.error.methodInvalid': 'அட்டை அல்லது LankaQR ஐத் தேர்வு செய்யவும்.',
+  'fleet.billing.error.invoiceMissing':
+    'அந்த விலைப்பட்டியலை அடையாளம் காண முடியவில்லை. மாதத்தை மீண்டும் திறக்கவும்.',
+
+  /* ---- Δ C115 — SCR-FP-010 க்கு வரக்கூடிய பிழைக் குறியீடுகள் ---------------- */
+  'fleet.error.insufficientWallet':
+    'இந்த விலைப்பட்டியலைச் செலுத்தத் தொகுதிப் பணப்பையில் போதிய தொகை இல்லை. நிரப்பிவிட்டு மீண்டும் செலுத்தவும் — செலுத்தும் வரை மாதம் நிலுவையில் இருக்கும்.',
+  'fleet.error.invoiceNotPayable':
+    'இந்த மாதத்திற்குச் செலுத்த எதுவும் இல்லை. அது ஏற்கெனவே செலுத்தப்பட்டுள்ளது அல்லது கட்டணம் ஏதும் இல்லை.',
+  'fleet.error.invalidAmount': 'அந்தத் தொகையைச் செலுத்த முடியாது. அதைச் சரிபார்த்து மீண்டும் முயற்சிக்கவும்.',
+  'fleet.error.railUnavailable':
+    'அந்தக் கட்டண முறை இப்போது கிடைக்கவில்லை. மற்றொன்றை முயற்சிக்கவும் — MageRide அட்டை மற்றும் LankaQR கட்டணங்களை மட்டுமே ஏற்கிறது.',
+
   /* ---- The shell's placeholder ------------------------------------------ */
   'fleet.screen.pendingTitle': 'இந்தத் திரை இன்னும் உருவாக்கப்படவில்லை',
   'fleet.screen.pendingBody':

@@ -718,6 +718,184 @@ export const fleetSi: FleetMessages = {
   'fleet.billing.status.paid': 'ගෙවා ඇත',
   'fleet.billing.status.overdue': 'කල් ඉකුත්',
 
+  /* ---- SCR-FP-008 · කාලසටහන් සහ එලාම (Δ C115) -------------------------- */
+  'fleet.scheduling.title': 'කාලසටහන් සහ එලාම',
+  'fleet.scheduling.missedCount': 'ආරම්භ නොවූ {count} ක්',
+  'fleet.scheduling.book.open': '+ ගමනක් යොදන්න',
+  'fleet.scheduling.book.heading': 'ගමනක් කාලසටහන් කරන්න',
+  'fleet.scheduling.book.submit': 'ගමන යොදන්න',
+  'fleet.scheduling.book.submitting': 'යොදමින්…',
+  'fleet.scheduling.book.noVehicles':
+    'පිටත් වීමක් යෙදිය හැකි අනුමත වාහනයක් නැත. සත්‍යාපන නිලධාරියෙකු වාහනය අනුමත කළ පසු එයට ගමන් යෙදිය හැකිය.',
+  'fleet.scheduling.book.done':
+    '{departAt} පිටත් වීමට යොදා ඇත. ඉන් මිනිත්තු {minutes} ක් ඇතුළත ගමනක් ආරම්භ නොවුවහොත්, පවරා ඇති රියදුරුගේ යෙදුමේ එලාමය නාද වේ.',
+  'fleet.scheduling.field.vehicle': 'වාහනය',
+  'fleet.scheduling.field.departAt': 'පිටත් වීම',
+  'fleet.scheduling.field.departAtHint': 'ශ්‍රී ලංකා වේලාව අනුව, දැනට වඩා ඉදිරි වේලාවක් විය යුතුය.',
+  'fleet.scheduling.field.alarm': 'එලාමය නාද වන්නේ',
+  'fleet.scheduling.field.alarmHint':
+    'මිනිත්තු, {min} සිට {max} දක්වා. මිනිත්තු {grace} කට පෙර ආරම්භ වූ ගමනක් ද පිටත් වීම සිදු වූවක් ලෙස ගැනේ.',
+  'fleet.scheduling.viewerNotice':
+    'ඔබගේ භූමිකාවට කාලසටහන කියවිය හැකි නමුත් එයට එකතු කළ නොහැක. මෙම ආයතනයේ හිමිකරුවෙකුට හෝ කළමනාකරුවෙකුට පිටත් වීමක් යෙදිය හැකිය.',
+  'fleet.scheduling.pendingOrg':
+    'සත්‍යාපන නිලධාරියෙකු මෙම ආයතනය අනුමත කළ පසු පිටත් වීම් යෙදිය හැකිය. එතෙක් කාලසටහන කියවිය හැකිය.',
+  'fleet.scheduling.table.heading': 'වාහනය අනුව යෙදූ ගමන්',
+  'fleet.scheduling.table.caption':
+    'මෙම ආයතනය සඳහා යොදා ඇති සෑම පිටත් වීමක්ම, එහි ආරම්භ නොවීමේ එලාමය සහ එය සිදු වූයේ ද යන්න',
+  'fleet.scheduling.table.empty': 'මෙම කාලය සඳහා පිටත් වීමක් යොදා නැත.',
+  'fleet.scheduling.table.emptyPending':
+    'කිසිවක් යොදා නැත. මෙම ආයතනය අනුමත වූ පසු පිටත් වීම් යෙදිය හැකිය.',
+  'fleet.scheduling.column.vehicle': 'වාහනය',
+  'fleet.scheduling.column.route': 'මාර්ගය',
+  'fleet.scheduling.column.start': 'ආරම්භය',
+  'fleet.scheduling.column.alarm': 'ආරම්භ නොවීමේ එලාමය',
+  'fleet.scheduling.column.status': 'තත්ත්වය',
+  'fleet.scheduling.alarmNote':
+    'ආරම්භ නොවීමේ එලාමය පවරා ඇති රියදුරුගේ යෙදුමේ නාද වන අතර, මෙම ආයතනයේ සියලු දෙනාට ද දැනුම් දෙනු ලැබේ (US-13.11). මිනිත්තු {grace} කට පෙර ආරම්භ වූ ගමනක් ද සිදු වූවක් ලෙස ගැනේ.',
+  'fleet.scheduling.windowNote':
+    'පසුගිය පැය {hours} සිට ඉදිරියට ඇති පිටත් වීම් මෙහි ලැයිස්තුගත වේ, එබැවින් එලාමය නාද වූ ඒවා මෙම තිරයේ දිස් වේ.',
+  'fleet.scheduling.routeNote':
+    'මෙහිදී මාර්ගයක් නම් කිරීමට හෝ තේරීමට නොහැක: මෙම ආයතනයේ මාර්ග ලැයිස්තුවක් MageRide ප්‍රකාශ නොකරන බැවින්, පිටත් වීමක් සතුව ඇත්තේ මාර්ග යොමුවක් මිස නමක් නොවේ.',
+  'fleet.scheduling.writeOnceNote':
+    'යොදා ඇති පිටත් වීමක් සංස්කරණය කිරීමට හෝ අවලංගු කිරීමට නොහැක — MageRide එයට ක්‍රමයක් ලබා නොදේ — තවද සෑම පිටත් වීමකටම එලාමයක් ඇති බැවින් ක්‍රියාවිරහිත කිරීමට කිසිවක් නැත.',
+  'fleet.scheduling.route.none': 'යොදා නැත',
+  'fleet.scheduling.unknownVehicle': 'වාහන ලේඛනයේ නැත',
+  'fleet.scheduling.ringsDriver': 'එලාමය නාද වන්නේ: {driver}',
+  'fleet.scheduling.ringsNobody': 'මෙම පිටත් වීමට රියදුරෙකු පවරා නැත',
+  'fleet.scheduling.driverUnnamed': 'පවරා ඇති රියදුරු',
+  'fleet.scheduling.alarmOffset': '+{minutes} මිනි.',
+  'fleet.scheduling.alarmRang': '{time} ට නාද විය',
+  'fleet.scheduling.status.scheduled': 'යොදා ඇත',
+  'fleet.scheduling.status.started': 'නියමිත වේලාවට',
+  'fleet.scheduling.status.missed': 'ආරම්භ නොවීය — එලාමය නාද විය',
+  'fleet.scheduling.status.cancelled': 'අවලංගු කර ඇත',
+  'fleet.scheduling.error.vehicleRequired': 'මෙම පිටත් වීම කුමන වාහනයටදැයි තෝරන්න.',
+  'fleet.scheduling.error.departAtInvalid': 'පිටත් වීමේ දිනය සහ වේලාව ලබා දෙන්න.',
+  'fleet.scheduling.error.departAtPast':
+    'එම පිටත් වීමේ වේලාව දැනටමත් ගෙවී ගොස් ඇත. යෙදීමක් ඉදිරි වේලාවකට විය යුතුය, නැතහොත් එහි එලාමය වහාම නාද වේ.',
+  'fleet.scheduling.error.alarmRange': 'එලාමය පිටත් වීමෙන් මිනිත්තු {min} ත් {max} ත් අතර විය යුතුය.',
+  'fleet.scheduling.error.slotTaken': 'මෙම වාහනයට එම වේලාවට දැනටමත් පිටත් වීමක් යොදා ඇත.',
+
+  /* ---- SCR-FP-010 · බිල්පත් සහ පසුම්බිය (Δ C115) ------------------------ */
+  'fleet.billing.title': 'බිල්පත් සහ පසුම්බිය',
+  'fleet.billing.topUp': 'පසුම්බියට මුදල් එකතු කරන්න',
+  'fleet.billing.ownerOnly':
+    'බිල්පත් ආයතනයේ හිමිකරුට අයත් වේ. ඉන්වොයිසිය හෝ එහි පිටපතක් ඔවුන්ගෙන් ඉල්ලා ගන්න.',
+  'fleet.billing.pendingOrg':
+    'තවම බිල් කිරීමට කිසිවක් නැත. සත්‍යාපන නිලධාරියෙකු ආයතනය අනුමත කළ පසු එහි B ක්‍රමයේ වාහන සඳහා ගාස්තු අය කෙරේ.',
+  'fleet.billing.noInvoices':
+    'තවම කිසිදු මාසයක් සඳහා ඉන්වොයිසියක් නිකුත් කර නැත. මෙම ආයතනය B ක්‍රමයේ වාහනයක් ධාවනය කළ සෑම කොළඹ මාසයක් සඳහාම ඉන්වොයිසියක් නිකුත් වේ.',
+  'fleet.billing.invoiceUnavailable':
+    'එම ඉන්වොයිසිය දැන් කියවිය නොහැකි විය. පහත මාස තවමත් ලැයිස්තුගත වන අතර මෙම තිරයේ සෙසු කොටස්වලට බලපෑමක් නැත.',
+  'fleet.billing.invoice.heading': 'මාසික ඉන්වොයිසිය — {month}',
+  'fleet.billing.invoice.label': 'මාසික ඉන්වොයිසිය',
+  'fleet.billing.invoice.caption': 'මෙම මාසය සඳහා මෙම ආයතනයෙන් අය කරන දෑ, ප්‍රවර්ග අනුව',
+  'fleet.billing.column.item': 'විස්තරය',
+  'fleet.billing.column.qty': 'ගණන',
+  'fleet.billing.column.rate': 'අනුපාතය',
+  'fleet.billing.column.amount': 'මුදල',
+  'fleet.billing.column.vehicle': 'වාහනය',
+  'fleet.billing.column.vehicleType': 'වර්ගය',
+  'fleet.billing.column.lineStatus': 'ගාස්තුව',
+  'fleet.billing.column.period': 'මාසය',
+  'fleet.billing.column.vehicles': 'වාහන',
+  'fleet.billing.column.status': 'තත්ත්වය',
+  'fleet.billing.column.movement': 'ගනුදෙනුව',
+  'fleet.billing.column.when': 'දිනය',
+  'fleet.billing.column.balanceAfter': 'ඉන් පසු ශේෂය',
+  'fleet.billing.summary.modeB': 'B ක්‍රමයේ වාහන',
+  'fleet.billing.summary.modeBFree': 'B ක්‍රමයේ වාහන — පළමු මාසය',
+  'fleet.billing.summary.modeA': 'A ක්‍රමයේ වාහන',
+  'fleet.billing.summary.free': 'නොමිලේ',
+  'fleet.billing.summary.mixedRate': 'වෙනස් වේ',
+  'fleet.billing.summary.total': 'ගෙවිය යුතු මුළු මුදල',
+  'fleet.billing.unknownCount': '—',
+  'fleet.billing.modeANote':
+    'A ක්‍රමයේ වාහන සඳහා කිසිදු ගාස්තුවක් අය නොවන බැවින් ඒවා ඉන්වොයිසියේ නොමැත: ඉහත ගණන අද ඔබේ වාහන ලේඛනයේ ඇති ගණන මිස බිල් කළ පේළියක් නොවේ. වාහනයක පළමු මාසය ද නොමිලේ වේ.',
+  'fleet.billing.reconcileWarning':
+    'වාහන අනුව ඇති පේළිවල එකතුව ඉන්වොයිසියේ මුළු මුදලට නොගැලපේ. මේ ගැන MageRide සහායෙන් විමසන තුරු මෙම මාසය නොගෙවන්න.',
+  'fleet.billing.lines.heading': 'වාහනය අනුව බිඳීම',
+  'fleet.billing.lines.caption': 'මෙම මාසයේ ගාස්තු අය කළ සෑම වාහනයකටම එක් පේළියක්, බිල් කළ ආකාරයටම',
+  'fleet.billing.lines.empty':
+    'මෙම මාසයේ කිසිදු වාහනයකට ගාස්තු අය කර නැත, එබැවින් මෙම ඉන්වොයිසිය ඒවා පරීක්ෂා කළ බවට වන වාර්තාවකි.',
+  'fleet.billing.line.charged': 'අය කෙරිණි',
+  'fleet.billing.line.firstMonthFree': 'පළමු මාසය නොමිලේ',
+  'fleet.billing.download.csv': 'CSV බාගන්න',
+  'fleet.billing.download.pdf': 'PDF බාගන්න',
+  'fleet.billing.receipt.label': 'රිසිට්පත',
+  'fleet.billing.receipt.settled':
+    '{date} දින සමූහ පසුම්බියෙන් ගෙවා ඇත. ලෙජර් සටහන {entry} එහි රිසිට්පත වේ.',
+  'fleet.billing.pay.submit': 'පසුම්බියෙන් ගෙවන්න',
+  'fleet.billing.pay.submitting': 'ගෙවමින්…',
+  'fleet.billing.pay.done': 'සමූහ පසුම්බියෙන් {amount} ක් අඩු වී මෙම මාසය ගෙවා අවසන් වී ඇත.',
+  'fleet.billing.date.due': '{date} දිනට පෙර ගෙවිය යුතුය',
+  'fleet.billing.date.overdue': '{date} සිට කල් ඉකුත් වී ඇත',
+  'fleet.billing.date.settled': '{date} දින ගෙවා ඇත',
+  'fleet.billing.wallet.heading': 'සමූහ පසුම්බිය',
+  'fleet.billing.wallet.balance': 'ශේෂය',
+  'fleet.billing.wallet.outstanding': 'ඉන්වොයිස් කර නොගෙවූ',
+  'fleet.billing.wallet.available': 'ගෙවීමට ඇති දෑ අඩු කළ පසු ඉතිරිය',
+  'fleet.billing.wallet.shortfall':
+    'මෙම ආයතනය ගෙවිය යුතු මුදල පසුම්බියේ ඇති මුදලට වඩා වැඩිය. වෙනස පසුම්බියට එකතු කළ පසු නොගෙවූ මාස ඉබේම ගෙවී යයි.',
+  'fleet.billing.wallet.updatedAt': '{time} වන විට ශේෂය',
+  'fleet.billing.wallet.unavailable':
+    'පසුම්බිය දැන් කියවිය නොහැකි විය. අසල ඇති ඉන්වොයිසියට එයින් බලපෑමක් නැත, තවද කිසිවක් දෙවරක් අය කර නොමැත.',
+  'fleet.billing.statement.heading': 'මෑත ගනුදෙනු',
+  'fleet.billing.statement.caption': 'සමූහ පසුම්බියේ මුදල් එකතු කිරීම් සහ ගෙවීම්, අලුත්ම ඒවා මුලින්',
+  'fleet.billing.statement.empty': 'මෙම පසුම්බිය හරහා තවම මුදල් ගමන් කර නැත.',
+  'fleet.billing.movement.topup': 'මුදල් එකතු කිරීම',
+  'fleet.billing.movement.invoice': 'මාසික ඉන්වොයිසිය',
+  'fleet.billing.movement.adjustment': 'සීරුමාරුව',
+  'fleet.billing.movement.other': 'වෙනත්',
+  'fleet.billing.topup.heading': 'පසුම්බියට මුදල් එකතු කිරීම',
+  'fleet.billing.topup.amount': 'මුදල (රු.)',
+  'fleet.billing.topup.amountHint': 'එක් ගෙවීමකින් {min} ත් {max} ත් අතර.',
+  'fleet.billing.topup.method': 'ගෙවන ක්‍රමය',
+  'fleet.billing.topup.method.onepay': 'කාඩ්පත, OnePay හරහා',
+  'fleet.billing.topup.method.lankaqr': 'LankaQR',
+  'fleet.billing.topup.onepayHint':
+    'ඔබේ කාඩ්පත් තොරතුරු OnePay හි පිටුවේ ඇතුළත් කරන අතර මෙම පිටුවේ කිසිවිටෙක ඇතුළත් නොකෙරේ.',
+  'fleet.billing.topup.lankaqrHint':
+    'ගෙවීම සඳහා ඔබේ බැංකු යෙදුම විවෘත කරයි. බැංකු යෙදුම ඇති දුරකථනයකින් මෙය භාවිත කරන්න.',
+  'fleet.billing.topup.noBankTransfer':
+    'බැංකු හුවමාරුවකින් මෙම පසුම්බියට මුදල් එකතු කළ නොහැක. MageRide පිළිගන්නේ කාඩ්පත් සහ LankaQR ගෙවීම් පමණි.',
+  'fleet.billing.topup.submit': 'ගෙවීමට යන්න',
+  'fleet.billing.topup.submitting': 'විවෘත කරමින්…',
+  'fleet.billing.topup.session': '{amount} · {method}',
+  'fleet.billing.topup.continueOnepay': 'ගෙවීම් පිටුව විවෘත කරන්න',
+  'fleet.billing.topup.continueLankaqr': 'මගේ බැංකු යෙදුම විවෘත කරන්න',
+  'fleet.billing.topup.pending':
+    'ගෙවීම සඳහා බලා සිටී. තත්පර {seconds} ක් ඇතුළත එය සම්පූර්ණ කර, ගෙවීම පරීක්ෂා කරන්න ඔබන්න.',
+  'fleet.billing.topup.succeeded': 'ගෙවා ඇත — පසුම්බියට මුදල් බැර වී ඇත.',
+  'fleet.billing.topup.failed': 'ගෙවීම සාර්ථක නොවීය. කිසිදු මුදලක් අඩු කර නැත.',
+  'fleet.billing.topup.expired':
+    'මෙම ගෙවීම් කවුළුව වැසී ඇත. නව මුදල් එකතු කිරීමක් ආරම්භ කරන්න; මේ සඳහා කිසිදු මුදලක් අඩු කර නැත.',
+  'fleet.billing.topup.check': 'ගෙවීම පරීක්ෂා කරන්න',
+  'fleet.billing.topup.checking': 'පරීක්ෂා කරමින්…',
+  'fleet.billing.topup.qrHeading': 'LankaQR කේතය',
+  'fleet.billing.topup.qrHint':
+    'බැංකු යෙදුම විවෘත නොවුවහොත් පමණක් මෙය භාවිත කරන්න. එය තත්පර {seconds} ක් වලංගු වේ.',
+  'fleet.billing.history.heading': 'මාස',
+  'fleet.billing.history.caption': 'මෙම ආයතනයට ඉන්වොයිස් කළ සෑම මාසයක්ම, අලුත්ම ඒවා මුලින්',
+  'fleet.billing.history.empty': 'තවම කිසිදු මාසයක් සඳහා ඉන්වොයිසියක් නිකුත් කර නැත.',
+  'fleet.billing.history.more':
+    'මෑතම මාස {months} පෙන්වා ඇත. පැරණි ඉන්වොයිස් තබාගෙන ඇති අතර MageRide සහායෙන් ඒවා ලබා ගත හැකිය.',
+  'fleet.billing.freeNote':
+    'ගාස්තුවක් නැති මාසයක් ද ඉන්වොයිසියකි: එය බිල් කිරීමේ ක්‍රියාවලිය මෙම ආයතනය පරීක්ෂා කර අය කිරීමට කිසිවක් නොතිබූ බවට වන වාර්තාවයි.',
+  'fleet.billing.error.amountInvalid': 'එකතු කිරීමට අවශ්‍ය මුදල රුපියල්වලින් ලබා දෙන්න.',
+  'fleet.billing.error.amountRange': 'එක් මුදල් එකතු කිරීමක් {min} ත් {max} ත් අතර විය යුතුය.',
+  'fleet.billing.error.methodInvalid': 'කාඩ්පත හෝ LankaQR තෝරන්න.',
+  'fleet.billing.error.invoiceMissing': 'එම ඉන්වොයිසිය හඳුනාගත නොහැකි විය. මාසය නැවත විවෘත කරන්න.',
+
+  /* ---- Δ C115 — SCR-FP-010 ට ලැබිය හැකි දෝෂ කේත ------------------------ */
+  'fleet.error.insufficientWallet':
+    'මෙම ඉන්වොයිසිය ගෙවීමට සමූහ පසුම්බියේ මුදල් ප්‍රමාණවත් නොවේ. මුදල් එකතු කර නැවත ගෙවන්න — ගෙවන තුරු මාසය විවෘතව පවතී.',
+  'fleet.error.invoiceNotPayable':
+    'මෙම මාසය සඳහා ගෙවීමට කිසිවක් නැත. එය දැනටමත් ගෙවා ඇත, නැතහොත් ගාස්තුවක් අය වී නැත.',
+  'fleet.error.invalidAmount': 'එම මුදල ගෙවිය නොහැක. එය පරීක්ෂා කර නැවත උත්සාහ කරන්න.',
+  'fleet.error.railUnavailable':
+    'එම ගෙවීම් ක්‍රමය දැන් නොමැත. අනෙක් ක්‍රමය උත්සාහ කරන්න — MageRide පිළිගන්නේ කාඩ්පත් සහ LankaQR ගෙවීම් පමණි.',
+
   /* ---- The shell's placeholder ------------------------------------------ */
   'fleet.screen.pendingTitle': 'මෙම තිරය තවම නිර්මාණය කර නැත',
   'fleet.screen.pendingBody':

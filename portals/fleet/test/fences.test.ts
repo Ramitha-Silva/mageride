@@ -225,6 +225,49 @@ describe('the browser is never handed the platform', () => {
     }
   });
 
+  it('hands a client component data and never behaviour', () => {
+    // **Δ C115, and this one was a real defect rather than a rule.** Every
+    // `'use client'` component in this portal is mounted by a server component,
+    // and React refuses to serialise a function across that boundary:
+    // "Functions cannot be passed directly to Client Components unless you
+    // explicitly expose it by marking it with 'use server'". So a label prop
+    // typed `(plate: string) => string` — which is how C113's three screens
+    // built their confirmation sentences — throws when the page renders.
+    //
+    // Neither of the two checks that should have caught it can: `@testing-library`
+    // renders the tree directly rather than through the Flight serialiser, and
+    // `next build` prerenders none of these pages because they are all
+    // `force-dynamic`. So it is asserted here, over the component *contracts*.
+    //
+    // A sentence that depends on the result of an action is composed **in the
+    // action**, which runs on the server and already has the translator
+    // (`VehicleActionState.added`, `TrackerActionState.bound`,
+    // `DriverActionState.done`, and the two bulk panels' `jobProgress`).
+    const ALLOWED: Readonly<Record<string, readonly string[]>> = {
+      // A **server action**, which is the one kind of function that does cross:
+      // it serialises as a reference to a `'use server'` export, not as a body.
+      'src/components/AccountMenu.tsx': ['action'],
+      // Next hands an error boundary its own `reset`; no server component of
+      // ours mounts either of these or passes a prop to them.
+      'app/error.tsx': ['reset'],
+      'app/global-error.tsx': ['reset'],
+    };
+
+    const found: Record<string, string[]> = {};
+
+    for (const { path, source } of FILES) {
+      if (!source.includes("'use client'")) continue;
+
+      const props = [...code(source).matchAll(/^\s+(?:readonly\s+)?(\w+)\??:\s*\([^)]*\)\s*=>/gm)]
+        .map((match) => match[1]!)
+        .filter((name) => !(ALLOWED[path] ?? []).includes(name));
+
+      if (props.length > 0) found[path] = props;
+    }
+
+    expect(found).toEqual({});
+  });
+
   it('keeps the screen manifest out of every client component', () => {
     // `src/server/routes.ts` carries each screen's URD row, its minimum sub-role
     // and its approval gate. None of that is any use to a browser, and shipping

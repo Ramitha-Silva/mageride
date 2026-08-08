@@ -62,7 +62,15 @@ export interface VehicleActionState {
   /** The failure, already translated. */
   readonly message?: string;
   readonly field?: 'registrationNumber' | 'vehicleType' | 'mode' | 'fare' | 'file';
-  /** Set on success — the plate, so the panel can name what it created. */
+  /**
+   * The confirmation, **already written**: "NB-4521 is on the roster…".
+   *
+   * A finished sentence rather than the plate the form interpolates, because a
+   * client component cannot be handed a function to build one with — React
+   * refuses to serialise a function across the server boundary, so a
+   * `labels.added(plate)` prop throws when the page renders. The action runs on
+   * the server, where the translator already is. Δ C115.
+   */
   readonly added?: string;
   /** The new vehicle's id, so the document slots can attach to it without a reload. */
   readonly vehicleId?: string;
@@ -71,6 +79,10 @@ export interface VehicleActionState {
   readonly uploaded?: string;
   /** Set by the bulk import, and by every poll of it afterwards. */
   readonly job?: BulkVehicleJob;
+  /** Where that job has got to, as a sentence. Set whenever {@link job} is. Δ C115. */
+  readonly jobProgress?: string;
+  /** "2 rows were not imported." Present only when some were not. Δ C115. */
+  readonly jobFailures?: string;
 }
 
 const REQUIRES = { area: 'fleet-operations', requiresApprovedOrg: true } as const;
@@ -143,7 +155,10 @@ export async function addVehicle(
 
   revalidatePath('/vehicles');
 
-  return { added: created.registrationNumber, vehicleId: created.vehicleId };
+  return {
+    added: t('fleet.vehicles.add.added', { plate: created.registrationNumber }),
+    vehicleId: created.vehicleId,
+  };
 }
 
 /**
@@ -324,7 +339,35 @@ export async function importVehicleCsv(
 
   revalidatePath('/vehicles');
 
-  return { job };
+  return { job, ...bulkProgress(job, t) };
+}
+
+/**
+ * Where a job has got to, as the two sentences the panel draws.
+ *
+ * Composed **here** for the reason {@link VehicleActionState.added} gives: the
+ * panel polls, so these change with every answer, and a client component that
+ * built them would need a translator it cannot be handed. `PROCESSING` has no
+ * failure count worth printing — the rows that failed are counted when the job
+ * settles — so the second sentence is absent until then.
+ */
+function bulkProgress(
+  job: BulkVehicleJob,
+  t: Awaited<ReturnType<typeof getTranslator>>,
+): { readonly jobProgress: string; readonly jobFailures?: string } {
+  if (job.status === 'PROCESSING') {
+    return { jobProgress: t('fleet.vehicles.bulk.processing', { total: job.totalRows }) };
+  }
+
+  return {
+    jobProgress: t('fleet.vehicles.bulk.imported', {
+      imported: job.importedRows,
+      total: job.totalRows,
+    }),
+    ...(job.failedRows > 0
+      ? { jobFailures: t('fleet.vehicles.bulk.someFailed', { failed: job.failedRows }) }
+      : {}),
+  };
 }
 
 /**
@@ -341,7 +384,7 @@ export async function readBulkJob(jobId: string): Promise<VehicleActionState> {
   try {
     const job = await read<BulkVehicleJob>({ org: bulkJobTarget(jobId) });
     if (job.status !== 'PROCESSING') revalidatePath('/vehicles');
-    return { job };
+    return { job, ...bulkProgress(job, t) };
   } catch (error) {
     if (!(error instanceof ProblemError)) throw error;
     return { message: t(error.messageKey) };

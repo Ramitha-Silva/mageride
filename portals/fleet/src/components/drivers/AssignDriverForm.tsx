@@ -49,7 +49,6 @@ export interface AssignDriverLabels {
   readonly temporary: string;
   readonly noInvite: string;
   readonly noVehicles: string;
-  readonly done: (count: number) => string;
 }
 
 export interface AssignableVehicle {
@@ -141,9 +140,10 @@ export function AssignDriverForm({
           </p>
         ) : null}
 
-        {state.assigned !== undefined && state.assigned > 0 ? (
+        {/* Composed by the action — see `DriverActionState.done`. Δ C115. */}
+        {state.done ? (
           <p role="status" className="text-body-sm text-success">
-            {labels.done(state.assigned)}
+            {state.done}
           </p>
         ) : null}
 

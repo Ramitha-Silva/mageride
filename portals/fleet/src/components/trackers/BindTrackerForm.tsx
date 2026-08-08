@@ -37,7 +37,6 @@ export interface BindTrackerLabels {
   readonly submit: string;
   readonly submitting: string;
   readonly noVehicles: string;
-  readonly done: (imei: string) => string;
 }
 
 export interface BindableVehicle {
@@ -118,9 +117,10 @@ export function BindTrackerForm({
           </p>
         ) : null}
 
+        {/* Composed by the action — see `TrackerActionState.bound`. Δ C115. */}
         {state.bound ? (
           <p role="status" className="text-body-sm text-success">
-            {labels.done(state.bound)}
+            {state.bound}
           </p>
         ) : null}
 
