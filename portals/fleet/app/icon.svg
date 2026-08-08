@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="MageRide Fleet">
+  <!-- D2 §0.2 `primary` (#FF6D00) on `onPrimary` (#FFFFFF). The two hexes are the
+       tab icon's whole palette; every other colour in this application comes from
+       @mageride/tailwind-preset, which cannot reach a favicon. -->
+  <rect width="32" height="32" rx="8" fill="#FF6D00"/>
+  <path d="M8 23V9h3.6l4.4 7.4L20.4 9H24v14h-3.4v-8.3L16.6 21h-1.2l-4-6.3V23z" fill="#FFFFFF"/>
+</svg>

@@ -137,7 +137,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C108 | admin-portal-finance-config-rbac-audit | 4c | PARTIAL | 2026-08-08 | **468 tests green** in `@mageride/admin-portal` (32 files, was 306/24); the verify command exits 0 and `next build` emits all fourteen new routes. **All four screens are built; the wireframe baseline cannot be met in five places because the platform has no route behind the control** — the internal-user list, `+ Provision user`, account suspend/revoke + session termination (US-21.9), the IP-allow-list and Active-session columns, and a `Vehicle types` configuration tab (AL-09 is a CHECK, not a setting). **The largest finding is an audit hole:** `gateway-routes.json` matches `/v1/admin/fees/**`, `/v1/admin/voucher-discount-tiers`, `/v1/admin/drivers/level-config` and `/v1/admin/rbac/**` at **Order 20** and admin-bff maps no route onto any of them, so four configuration/RBAC write surfaces write **nothing** to `audit.events` — against D-35, against this component's own fence and against US-21.14, and against `AdminFeeEndpoints`' explicit claim that "every one of these calls arrives through that BFF". `AuditIntent` gained an `auditedElsewhere` arm so the console states which service answered instead of promising a trail entry an Auditor will not find. **Three configuration surfaces are `PUT`-only** (fare tariffs, daily-fee rates, Driver-Level params) so those forms start empty and say why; **payout-svc has no gateway cluster** so SCR-AP-006's Payouts tab 404s until C008 adds one; **`/v1/admin/audit-log` has no `.csv` sibling** so US-19.3's export is rendered in the portal, capped and stated. 6 wireframe deviations, 9 spec gaps / micro-change-sets; no spec, backend or contract file touched |
 | C109 | admin-portal-directories | 4c | DONE | 2026-08-08 | **580 tests green** in `@mageride/admin-portal` (36 files, was 468/32); the verify command exits 0, `next build` emits all eight new routes, and all five portal workspaces are green (814). **Six screens, six GETs and no seventh verb** — BR-28.8's "all are read-only" is asserted against the group's whole tree (no `mutate(`, no server-action import, no `<form>` that is not `method="get"`), and every wireframe button that would write is a **link to the screen that owns the action**, drawn only when the caller's own menu carries it. **Every criterion is independent** — the searches build one AND-ed query from every parameter `admin-bff.yaml` declares, and `?status=verified` is sent even as the default because the screen's caption claims it. **A mistyped `?id=` asks admin-bff nothing** and marks its own box (C105's `awaitingRange` rule). **Opening a record is the audited act and the portal does not write the row** — `test/directories-query.test.ts` parses `DirectoryEndpoints.cs` and fails if a detail route loses `.Audited(PiiRead, …)` or a search gains one. **The document relay is one implementation and two URLs**: `src/server/document-media.ts` now serves C106's route and a new `/vehicles/media/[docId]`, because `proxy.ts` gates on the screen a path resolves to and a Support CSR holds the vehicle directory without the verification queues; the tiles, grid and lightbox are C106's components imported unchanged. 6 wireframe deviations, 5 spec gaps / micro-change-sets; no spec, backend or contract file touched |
 | C110 | admin-portal-gtfs-manager | 4c | DONE | 2026-08-08 | **634 tests green** in `@mageride/admin-portal` (38 files, was 580/36); the verify command exits 0, `next build` emits all four new routes, and all five portal workspaces are green (868). **SCR-AP-016 is one screen whose entire state is `?feed=`**, and that single rule produces four of D2's seven states with no branch: absent, the selection is the newest upload — the last thing that happened — so a validating feed shows the stepper, a validated one the preview and Activate, a failed one the first five errors and the report, and once the newest upload is live the card *is* the live feed (`active-idle`). No versions is `empty`; `uploading` and `activating` are the two client-side moments. **The 2 s poll is `router.refresh()`, not a JSON fragment** — the stepper, the counts, the warnings and the history row move together because they are one render, and the copy stays where every other string is resolved. **The upload is the one thing in this portal that is not `fetch`**: `fetch` has no upload-progress event, so `UploadCard` posts by XHR to the portal's own route handler, which attaches the bearer and **streams** the 200 MB body on through a new `apiUpload`/`upload` pair the fences test names beside `apiFetch` and `apiDownload`. **A duplicate is refused on the bytes**, and the inline error reads the `409`'s RFC 7807 extensions to name and link the version that already holds them. **The confirm dialog names what is being switched off**, not "are you sure"; rollback is the same dialog and the same call with one line saying so, and both dialog and toast are *derived* from the action result rather than pushed by an effect. **`mutate()`'s audit gained a third case that is not C108's**: `/v1/admin/transit/**` is routed past admin-bff at Order 20, so `GTFS_PROXIED` is never written — but transit-svc writes `GTFS_FEED_UPLOADED`/`GTFS_FEED_ACTIVATED` inside the swap transaction, so a row always exists and `auditedElsewhere` would state the opposite of the truth. `test/audit.test.ts` now parses `GtfsAuditActions.cs` as the second writer. 3 wireframe deviations, 4 spec gaps / micro-change-sets; no spec, backend or contract file touched |
-| C111 | fleet-portal-shell | 4c | PENDING | | |
+| C111 | fleet-portal-shell | 4c | DONE | 2026-08-08 | **114 tests green** in `@mageride/fleet-portal` (9 files); `npm --prefix portals run lint --workspace fleet && … test … && … build …` exits 0, `next build` emits nine routes, `check-bundle.mjs` reports **AL-52: clean — 1 compiled stylesheet, 28.7 kB CSS**, and all six portal workspaces are green (982 tests, 54 files). **There is no Fleet Portal session endpoint**, so the shell composes one from `GET /v1/me/permissions` — the caller's URD §2.3 rows *plus* `fleetId`/`fleetRole` read from `iam.fleet_members` rather than from the token — and `GET /v1/fleets/{id}` for the organisation's `status`, the only route that carries it. **The nav manifest is local because nothing sends one**, but every entry declares what its own routes declare: the URD row and capability (answered by the caller's server-side evaluation, with URD §2.1's sub-model already applied), the `RequireFleetSubRole` the route names, and the `RequireApprovedFleet()` group it sits in — `test/routes.test.ts` parses `FleetEndpoints.cs`, `FleetOpsEndpoints.cs` and `MageRideClaims.cs` and fails when any moves. **The approval gate blocks exactly what fleet-svc blocks:** the vehicle and assignment groups carry it on the *group*, so a pending org loses those screens and the Mode B proxies built on them, while the ops reads (`/map`, `/analytics`, `/schedules`, `/health`) stay open and their individual writes are what get refused. **Two refusals, two pages** — `/denied` is a real 403 about the caller, `/pending` renders inside the chrome about the organisation and lists what *is* open. **A screen never holds an org id** (`read({ org: '/vehicles' })` is scoped from the session) and **every mutation declares the row it needs**, refused locally when the caller holds no `write` there. **Both federated arms are the implicit ID-token flow** — iam-svc takes `{idToken}` and the only code-exchange route forces `app=admin` — so both return by cross-site `form_post`, which is why the OAuth state cookie is the one `SameSite=None` cookie here. 3 wireframe deviations, 10 spec gaps / micro-change-sets — including **no sign-up, no password reset and no identity link/unlink route anywhere on the platform**; no spec, backend or contract file touched |
 | C112 | fleet-portal-auth-org-payout | 4c | PENDING | | |
 | C113 | fleet-portal-vehicles-drivers-trackers | 4c | PENDING | | |
 | C114 | fleet-portal-dashboard-map-analytics | 4c | PENDING | | |
@@ -17737,3 +17737,167 @@ _Append 3 lines per completed component (Component / Status / Notes)._
 
   **Build host —** no Docker, no replica, no backend build. `vitest run` takes ~20 s and
   `next build` ~50 s.
+
+---
+
+- **Component:** C111 fleet-portal-shell — 2026-08-08
+- **Status:** DONE —
+  `npm --prefix portals run lint --workspace fleet && npm --prefix portals run test --workspace fleet && npm --prefix portals run build --workspace fleet`
+  exits 0. **114 tests, 9 files**; `eslint` + `tsc --noEmit` clean; `next build` emits nine routes
+  (`/`, `/login`, `/auth/[provider]`, `/auth/callback/[provider]`, `/denied`, `/pending`,
+  `/[...screen]`, the proxy and the icon), and `check-bundle.mjs` reports **AL-52: clean — 1
+  compiled stylesheet, 28.7 kB CSS**. All six portal workspaces are green (**982 tests, 54 files**)
+  and `npm --prefix portals run lint` passes across all of them. The shell is navigable end to end
+  for all three sub-roles in both appearances at 375 / 768 / 1024, with every screen resolving to the
+  placeholder C112…C116 replace.
+- **Notes:**
+  **What was built —** the Fleet Portal application shell: `proxy.ts`, the session, the org-scoped
+  data layer, the screen manifest, the chrome, the sign-in screen (all three AL-07 arms) and the
+  verification-gate state. It owns no wireframe screen id: the credential form is here because there
+  is no session to hand a screen without one, but **SCR-FP-001 stays C112's** along with sign-up, the
+  organisation form and the payout profile.
+
+  **(1) There is no Fleet Portal session endpoint, so the shell composes one from two reads.**
+  `GET /v1/admin/session` is the Admin Portal's whole answer and fleet-svc has nothing like it —
+  nothing on any contract answers "who is this, in which organisation, at what seat, and has it been
+  approved". So: `GET /v1/me/permissions` (iam-svc) for the caller's URD §2.3 rows **plus `fleetId`
+  and `fleetRole`, read from `iam.fleet_members` rather than from the token**, which carries only the
+  most privileged of a person's memberships; then `GET /v1/fleets/{fleetId}` (fleet-svc) for the
+  organisation and its `status`, which is the only route that carries it and is deliberately ungated
+  on approval ("a PENDING org's owner needs to see that it is pending"). The pair is `cache()`d per
+  render and cached per bearer in the proxy for `FLEET_PORTAL_SESSION_CACHE_SECONDS`. **Raised
+  below** — one route would remove a call from every navigation.
+
+  **(2) The nav manifest is local, and it had to be — but every entry declares what its own routes
+  declare.** C104's second load-bearing decision is "the portal never decides who may see what",
+  which it can hold because admin-bff sends a filtered menu. This portal has no such thing, so
+  `src/server/routes.ts` exists; what keeps it honest is that each entry carries three declarations
+  transcribed off the endpoints it fronts and nothing derived here: the **URD §2.3 row + capability**
+  (answered by `GET /v1/me/permissions`, whose narrowing `PermissionEvaluator` has already applied —
+  a Viewer's rows carry `read` and no `write` because iam-svc said so), the **`RequireFleetSubRole`**
+  the route declares, and the **`RequireApprovedFleet()`** group it sits in. `test/routes.test.ts`
+  parses `FleetEndpoints.cs`, `FleetOpsEndpoints.cs` and `MageRideClaims.cs` and fails the build when
+  any of the three moves. There is no `if (fleetRole === 'owner')` anywhere except `canManageTeam()`,
+  whose comment says why.
+
+  **(3) The approval gate blocks exactly what fleet-svc blocks, and not one screen more.**
+  `FleetVehiclesGroup` and `FleetAssignmentsGroup` carry `RequireApprovedFleet()` on the **group**,
+  so a pending organisation cannot even *list* its vehicles — those screens leave the nav, and the
+  Mode B subscription proxies with them, because `MapSubscriptionProxies` deliberately builds on the
+  vehicle group. The ops group does **not** carry it (`/map`, `/analytics`, `/schedules`,
+  `/geofences`, and fleet-health's `/health`), so the dashboard, map, analytics, scheduling and
+  tracker screens stay open for a pending org and the three individual writes are what get refused.
+  Refusing a read the platform allows would be this portal inventing a refusal; the test asserts both
+  directions against the C#.
+
+  **(4) Two refusals, two pages, and the difference is who the fact is about.** `/denied` calls
+  `forbidden()` and answers a real **403** — the caller's seat does not carry that screen and nothing
+  they do today changes it. `/pending` renders **inside the chrome with a 200**, because an
+  unapproved organisation is not a refusal of the person: everybody in it is waiting on the same
+  verification officer, the wait ends by itself, and the useful thing on the page is the list of
+  screens that *are* open — drawn from the same evaluation the sidebar is, so it cannot offer
+  something the nav does not. Enforcement is unaffected: fleet-svc answers `403 fleet-not-approved`
+  to every request behind those screens. A rejected organisation lands on the same page with the
+  officer's own reason.
+
+  **(5) A screen never holds an organisation id.** `read({ org: '/vehicles' })` becomes
+  `/v1/fleets/{the caller's own fleetId}/vehicles`; there is no parameter, prop or query string by
+  which a screen could name a different one. `test/fences.test.ts` enumerates the tree and fails on a
+  fourth place that builds such a URL or on a `fleetId` passed into the data layer. **And every
+  mutation declares the row it needs** — `mutate()` takes `requires: { area, requiresApprovedOrg? }`
+  and refuses locally when the caller's evaluated permissions do not carry `write` there, which is
+  the second half of "a Viewer session renders no mutating control anywhere": if one is ever drawn by
+  mistake, pressing it changes nothing.
+
+  **(6) Both federated arms are the implicit ID-token flow, and the state cookie is `SameSite=None`.**
+  iam-svc's `/v1/auth/google` and `/v1/auth/apple` take `{idToken}`; redeeming an authorization code
+  needs a client secret, and the only route that holds one (`POST /v1/admin/auth/login
+  {googleAuthCode}`) forces `app=admin` and would refuse a fleet account. So the browser asks for a
+  signed ID token — `response_type=id_token` for Google, `code id_token` for Apple, which is the only
+  shape Apple issues one for — and both come back by `response_mode=form_post`, which Apple requires
+  and which is Google's only server-visible alternative to `fragment`. **That makes the callback a
+  cross-site POST, and a `Lax` cookie is not sent on one**, so `mr_fleet_oauth_state` is the single
+  `SameSite=None` cookie on this portal: ten minutes, httpOnly, a nonce and a `?next=` path, spent by
+  the callback that reads it. `None` requires `Secure`, so federated sign-in cannot complete over
+  plain HTTP — `.env.example` says so and the password arm works there.
+
+  **Spec gaps and micro-change-sets —**
+  1. **There is no sign-up route, and the wireframe draws a "Create account" button.** `POST /v1/fleets`
+     is `RequireMageRideRole(FleetOwner)`, and the only two things that grant `fleet_owner` are an
+     existing Owner's `POST /v1/fleets/{id}/members` and a Super Admin's `POST /v1/admin/rbac/users/{id}/roles`.
+     **A new fleet operator cannot create an account from this screen, or from any screen.** Either
+     iam-svc needs a portal self-registration route or D2 SCR-FP-001 should drop the control; the
+     sign-in screen states the real path in words meanwhile.
+  2. **No email verification and no password reset.** `iam.yaml` has nine auth operations and none of
+     them verifies an address or resets a password — the same wall C104 hit, and D2 gives *this*
+     surface the affordance explicitly ("email verification + password reset"). Stated as a
+     disclosure rather than linked to a route that does not exist.
+  3. **No identity link/unlink.** `iam.federated_identities` is written by a provider sign-in
+     (`CredentialRepository`) and **no route reads, adds or removes a row**, so US-13.A3's
+     "link/unlink identities" has no surface. C112 will find the same wall.
+  4. **fleet-billing-svc is stricter than URD §2.3, and the portal follows the service.**
+     `fleet-billing.yaml`'s own preamble: "every route under `/v1/fleets/{fleetId}` here — reads
+     included — requires the `owner` sub-role". URD §2.1 narrows a Manager out of *writing* to
+     `fleet-billing` and leaves the read, so the matrix says a Manager may open SCR-FP-010 and the
+     service says otherwise. The Billing entry is gated on `write` (= Owner) because a nav entry
+     whose every request answers 403 is worse than an absent one. One of the two should move.
+  5. **The Owner/Manager split is finer than URD §2.3 can express.** `POST …/members` is Owner-only
+     while `GET …/members` is Viewer, and no row in the matrix separates an Owner from a Manager
+     outside `fleet-billing`. `canManageTeam()` is therefore the one control gated on the seat as
+     well as on the row — reading fleet-svc's own declaration, not a rule invented here. A
+     `fleet-team` feature area would make it expressible.
+  6. **Ask for one route, or two fields.** Every navigation costs `GET /v1/me/permissions` **and**
+     `GET /v1/fleets/{id}`, purely because the second is the only place `status` lives. Putting
+     `fleetStatus` beside `fleetId` on `EffectivePermissions` — or adding `GET /v1/fleets/session` —
+     would halve the shell's traffic and remove a class of "the two reads disagree" bug that only
+     time can create.
+  7. **The provider `nonce` is sent and cannot be checked by this portal.** It is bound into the ID
+     token by Google/Apple, and only the side that validates the signature can verify it — iam-svc,
+     which accepts `{idToken}` alone. The portal checks `state` against an httpOnly cookie, which is
+     the login-CSRF defence; a `nonce` parameter on those two routes would close the replay window
+     the flow leaves open.
+  8. **Every browser signing in to a portal shares one device row per account.** `WebDeviceKeys.From`
+     hashes the **User-Agent of the request iam-svc sees**, which for a server-rendered portal is the
+     Next process, not the operator's browser. Under AL-08's partial unique index on
+     `(user_id, app)` a second browser therefore ends the first one's session for the same account.
+     True of the Admin Portal too, and worth a line in D6' §2.
+  9. `fleet.yaml`'s `FleetStatus` still lists `SUSPENDED`, which the `registry.fleets` CHECK does not
+     admit — already raised in the C058 handoff. `src/api/types.ts` omits it for the same reason.
+  10. The three portal sign-in routes reference `_shared.yaml`'s `IdempotencyKey`, which is
+     `required: true`. This portal sends one; **C104's admin sign-in does not** — a small divergence
+     worth settling in whichever direction.
+
+  **Deviations from `web_fleet.html`, each deliberate —**
+  - **The sidebar palette is the preset's, not the sketch's.** The wireframe draws it `#0E2A1C` on
+    `#bfe3cf`, neither of which is a D2 §0.2 token and neither of which has a dark counterpart, so a
+    portal built on them would be the one surface whose chrome ignores the design system and reads
+    identically in both themes. The structure is the wireframe's exactly.
+  - **"Create account" is a disclosure, not a button** (finding 1), as are the reset and link/unlink
+    lines (findings 2 and 3).
+  - **One nav with four groups, filtered — not the two different navs the sketch draws.**
+    `web_fleet.html` shows only *Setup* on SCR-FP-002/002a and only *Operate*/*Manage* afterwards. The
+    setup screens have to stay reachable after approval (AL-49: any payout edit re-enters Pending), so
+    the shell draws one nav and lets the gate remove what a pending organisation cannot open — which
+    produces the sketch's own first picture without hiding anything later.
+
+  **Files —** `portals/fleet/` is now a full application: `package.json`, `next.config.ts`,
+  `tsconfig.json`, `vitest.config.ts`, `eslint.config.js`, `postcss.config.mjs`, `.env.example`,
+  `proxy.ts`, `scripts/check-bundle.mjs`, `public/robots.txt`; `app/` (root layout, globals.css,
+  icon, `/`, `/login` + form, `/auth/[provider]`, `/auth/callback/[provider]`, `/denied`, error,
+  global-error, not-found, forbidden, `(portal)/layout.tsx`, `(portal)/pending`,
+  `(portal)/[...screen]`); `src/api/{http,client,problem,types}.ts`; `src/config/env.ts`;
+  `src/i18n/{index,server}.ts` + `messages/{en,si,ta}.ts`;
+  `src/server/{cookies,session,access,routes,next-path,oauth,auth-actions,preferences}.ts`;
+  `src/components/{Brand,icons,nav-model,PortalChrome,SideNav,MobileNav,AccountMenu,OrgStatusBanner,ScreenPlaceholder,ProblemPanel,ErrorPanel}`;
+  `test/{fences,access,routes,i18n,oauth,sign-in,problem,chrome,pending}` + `test/support/{server-only,fleet}.ts`.
+  `portals/fleet/CLAUDE.md` was rewritten as the component's own reference.
+
+  **Files touched outside this component's own tree —** none. **No spec, no contract, no backend, no
+  migration, and no change to any shared portal package.**
+
+  **i18n —** 76 keys × 3 locales, every string on every screen through the translator.
+  `i18n.test.ts`'s "actually translates the copy" rule passes, so no Sinhala or Tamil value is a copy
+  of the English, and every nav label differs from its English form in both.
+
+  **Build host —** no Docker, no replica, no backend build. `vitest run` takes ~5 s and `next build`
+  ~35 s.
