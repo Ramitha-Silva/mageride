@@ -55,6 +55,9 @@ apps/passenger-ios/
 │   │                history, the trip receipt, and TripLabels (this app's Colombo clock)
 │   ├── Subscription/ C100 · SCR-PI-024/025/025a/025b — the Mode B access request, the cards, the
 │   │                owner-paid rails and the statement
+│   ├── Settings/    C101 · SCR-PI-026/026a/027/027b/033 — the address book, settings, edit profile
+│   │                and the Menu tab, plus AddressBook, SosContacts, PassengerIdentity and the
+│   │                default-rail rules
 │   ├── Nav/         PassengerRoute (32 destinations), PassengerTab, the navigator,
 │   │                PassengerMenuDestination (SCR-PI-033's rows),
 │   │                PassengerDestinations (the ONE route→view switch)
@@ -375,6 +378,80 @@ apps/passenger-ios/
   `MageRideControl.ownerQr` — which is the point of those controls existing. `SubscriptionLabels` is
   the cluster's copy table, the shape ``RideStateLabel`` established.
 
+## Cluster 7 (C101) — the address book, settings, the profile and the Menu tab
+
+- **SCR-PI-026's Home and Work are the `isHome`/`isWork` flags, never a label convention.** The
+  label is free text a passenger types in their own language, so matching `"Home"` against it would
+  make a Sinhala *"නිවස"* not a Home. The two rows are drawn **always**, set or not, and tapping
+  either is the wireframe's only *"Home & Work via OSM pin"* control — which is why SCR-PI-026a can
+  keep to AL-26's four fields and ask nothing about shortcuts.
+- **`IosSavedAddress.kt` is why no screen in this cluster boxes a Kotlin primitive.** `isHome` and
+  `isWork` are `Boolean?` on both `SavedAddress` and `SavedAddressInput`, and the C096 finding is
+  that this repository spells `KotlinInt`'s initialiser two different ways in two apps neither host
+  has compiled. So the input is **built in Kotlin** (`savedAddressInputOf`), the flags are **read in
+  Kotlin** (`savedAddressIsHome`), and the merge's `copy` is Kotlin's too — the same way out
+  `IosBookingRequests.kt` takes, and it type-checks on this Linux host with
+  `./gradlew :shared:compileKotlinIosArm64`.
+- **`AddressBook` is the only door onto `iam.saved_addresses`, and the one seam in this app that
+  spans two services on purpose.** AL-14's *"OSM-pin + reverse-geocode"* is one gesture.
+  `describe()` answers `nil` rather than throwing: a geocoder that cannot name a coordinate has not
+  stopped a passenger saving it, so the lookup is a **pre-fill and never a gate**. `GET
+  /v1/me/saved-addresses` is *also* read by ``PassengerPlaces`` — two seams over one operation,
+  because SCR-PI-008 wants a destination chooser's shortcut list and this wants rows with ids. The
+  Android side splits the same way.
+- **The pin comes from `LastKnownFix`, not from a subscription.** The Android twin collects exactly
+  one value off the fix flow; here that would be a fifth subscriber on a cold `CLLocationManager`,
+  and C097 already built the seam that makes it unnecessary.
+- **`PassengerProfileRepository.update` still has no `language` parameter, and that is AL-26 made
+  structural.** Everything SCR-PI-027b saves goes through it; the language has its own route
+  (`saveLanguage`) reached only from SCR-PI-027. C101 added `saveDefaultPaymentMethod` and
+  `deleteAccount` beside them rather than opening a second seam.
+- **A language change takes effect immediately and nothing is re-created.** `PassengerLocale.apply`
+  re-points the bundle and the model's own `@Published` change re-renders the screen that made it;
+  the Android twin calls `Activity.recreate()` because `attachBaseContext` has already run. The
+  device is written **first** and the server write is allowed to fail — `languagePendingSync` is
+  left set for C095's next authenticated pass.
+- **The default rail lives on `AppPreferences` as `preferredRail`, not in a `PaymentPreference`
+  object.** `apps/passenger-android` has the class because it is the first reader there; here
+  `BookingDraft` and `PaymentMethodModel` were **already** spelling
+  `preferences.defaultPaymentMethod.flatMap(PaymentRails.fromWire) ?? .cash`, so a wrapper would
+  have been a third path unless both constructors changed with it. Three members on the one
+  preference protocol is the same *"one door"*; both call sites now read it (Δ C101).
+- **`PassengerIdentity` is a graph singleton because two screens draw the same card.** SCR-PI-027's
+  and SCR-PI-033's are the same three values, and a rename on SCR-PI-027b has to reach both without
+  a second `GET /v1/users/me`. It is cleared by SCR-PI-027's *Log out* **and** by
+  `PassengerShellModel`'s `RouteToLogin` collector, which is every other way a session can end.
+- **Nothing on SCR-PI-027 navigates on log out.** `PassengerSessions.logOut()` raises C014's
+  `RouteToLogin` and the shell is its single subscriber — one path out for a deliberate logout, a
+  failed refresh and a revoked device alike.
+- **`DELETE /v1/users/me` is accepted, not done** (E-06). The `202` becomes a pdpa-svc erasure
+  request a statutory hold can delay, so the screen reports a *request* and the session is
+  deliberately left alone: signing the passenger out would claim an erasure that has not happened
+  and would take away the surface that can tell them when it has.
+- **Nothing here sets `EmergencyContact.isPrimary`.** iam-svc promotes the first contact onto
+  `iam.users.emergency_contact_name/phone` for D-33's five-second SOS budget and re-promotes on a
+  delete — which is why a removal **re-reads** the list rather than dropping the row locally. C102's
+  SCR-PI-029 reads the same `SosContacts` seam; an empty list is what makes `POST /v1/sos` answer
+  `400 no-emergency-contact`, and SCR-PI-027b says so where the list is empty.
+- **SCR-PI-033 is a `GroupedList` of `Button`s, not a `List` of `NavigationLink`s.** The cell's
+  `Δ iOS` clause names the latter; this app's navigation is **value-based** through
+  `PassengerNavigator` (one `navigationDestination` for the whole app — see `PassengerDestinations`),
+  so a row opens a route. The shape on screen is the cell's `glist`; only the mechanism differs.
+- Reusable UI added here (`UI/SettingsControls.swift`): `RowChevron`, `GroupedValueRow` (the `.gr`
+  whose title and subtitle are **data** rather than keys — a passenger's own address label),
+  `CentredActionRow` and `IdentityCard`. `ProfileAvatar` gained a `badgeSymbol` (SCR-PI-004 draws
+  `＋`, SCR-PI-027b draws `📷`). Tokens: `addressMapHeight`, `addressSheetHeight`,
+  `contactSheetHeight`, `pickerSheetHeight`.
+- **Five places `passenger_ios.html` and C083 disagree**, all resolved by the C099 split — *layout,
+  controls, states and navigation* follow the wireframe, *behaviour* follows Android — and all five
+  recorded in the C101 handoff: `＋ Add address` is a **navigation-bar item** here and a bottom CTA
+  there; SCR-PI-027 draws **four** rows in its first group where Android draws five (no separate
+  *"Saved addresses"* row — the Menu tab carries it, and *Save Home & Work* opens the same screen);
+  *Log out* and *Delete account* are centred `glist` rows rather than a textlink pair; a contact row
+  draws `✎` alone, so **delete lives inside the contact editor** as it already does inside
+  SCR-PI-026a; and SCR-PI-027's states line still says *"Default payment Cash/LankaQR/OnePay"*,
+  which AL-57/AL-59 retired.
+
 ## The Xcode project is generated, and the generator is shared
 
 `.pbxproj` is the committed artefact — CI probes for it and `xcodebuild` reads it. It is also a file
@@ -510,6 +587,16 @@ constraint, and each is called out at its call site.
 | Slip picker (025a) | `GetContent()`, so a PDF from a banking app works | `PhotosPicker`, so no photo-library purpose string is needed; images only |
 | Owner's LankaQR (025a) | `BitmapFactory` + `Image` | `UIImage(data:)` + `.interpolation(.none)` — a QR is a grid, and smoothing it stops it scanning |
 | List loading (025 / 025b) | a centred `CircularProgressIndicator` | a labelled `LoadingRow`, because a `List` row with no words in it reads as an empty list |
+| Add address (026) | a full-width `＋ Add address` CTA at the foot | a `＋` in the **navigation bar** — the cell's own `navtop .act` slot (Δ C101) |
+| Save-address capture (026a) | a `ModalBottomSheet` | a `.sheet` at a measured detent plus `.large`, because four fields do not fit a fixed height at an accessibility content size |
+| Settings rows (027) | five in the first group, *"Saved addresses"* among them | **four** — the Menu tab carries that row, and *Save Home & Work* opens the same screen (Δ C101) |
+| Log out / Delete (027) | a `MageRideTextLink` and a `TextButton` on one row | two centred `glist` rows, which is what the cell draws (Δ C101) |
+| Language / payment chooser (027) | two `AlertDialog`s of `SelectionBox`es | one `.sheet` of `SelectionRow`s — a dialog holding three tappable boxes is a Material shape |
+| Delete account (027) | an `AlertDialog` | an `.alert` — the cell's own *"delete → `.alert` confirm (PDPA)"* |
+| SOS contact row (027b) | `✎` **and** 🗑 on every row | `✎` alone; delete lives in the editor, as it already does in SCR-PI-026a (Δ C101) |
+| SOS contact editor (027b) | an `AlertDialog` with two fields | a `.sheet`, for SCR-PI-026a's reason |
+| Language change (027) | `Activity.recreate()`, so the model carries a `relaunch` flag | none — the bundle is re-pointed and the model's own `@Published` change re-renders the screen |
+
 
 ## Things that will bite
 

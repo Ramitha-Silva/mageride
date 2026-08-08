@@ -74,36 +74,52 @@ struct OnboardingScreen: View {
         }
     }
 
+    /// **The pages are walked by index rather than by `enumerated()`** (Δ C101).
+    ///
+    /// This loop was `ForEach(Array(model.state.slides.enumerated()), id: \.element.id)`, and
+    /// `\.element` is a key path into a **tuple** — which the C087 finding this repository carries
+    /// says does not compile, and which `ModeFilterSheet`, `PaymentMethodScreen` and
+    /// `HistoryControls` all deliberately avoid for that reason. No host has built this target, so
+    /// nothing has settled which reading is right; walking indices is correct under either, which is
+    /// why it is written this way rather than left for a macOS runner to adjudicate. (`apps/driver-ios`
+    /// has six more of the same shape — that target's to settle, not this one's.)
+    ///
+    /// The index cannot simply be dropped: `.tag(index)` is what `pageBinding` selects on, so a page
+    /// is identified by its position rather than by its slide.
     private var carousel: some View {
         TabView(selection: pageBinding) {
-            ForEach(Array(model.state.slides.enumerated()), id: \.element.id) { index, slide in
-                VStack(spacing: MageRideSpacing.sm) {
-                    IllustrationPanel(
-                        symbolName: slide.symbolName,
-                        caption: slide.caption,
-                        height: MageRideControl.illustrationPanel
-                    )
-
-                    Text(slide.title)
-                        .mageFont(.headline)
-                        .foregroundStyle(MageRideColor.onSurface)
-                        .multilineTextAlignment(.center)
-
-                    Text(slide.body)
-                        .mageFont(.bodySmall)
-                        .foregroundStyle(MageRideColor.onSurfaceVariant)
-                        .multilineTextAlignment(.center)
-
-                    Spacer(minLength: 0)
-                }
-                .tag(index)
-                // One announcement per slide: VoiceOver reads the headline and its sentence
-                // together rather than as two elements a reader has to assemble (US-19.1/19.2).
-                .accessibilityElement(children: .combine)
+            ForEach(model.state.slides.indices, id: \.self) { index in
+                slide(model.state.slides[index])
+                    .tag(index)
+                    // One announcement per slide: VoiceOver reads the headline and its sentence
+                    // together rather than as two elements a reader has to assemble (US-19.1/19.2).
+                    .accessibilityElement(children: .combine)
             }
         }
         .tabViewStyle(.page(indexDisplayMode: .never))
         .frame(height: carouselHeight)
+    }
+
+    private func slide(_ slide: FeatureSlide) -> some View {
+        VStack(spacing: MageRideSpacing.sm) {
+            IllustrationPanel(
+                symbolName: slide.symbolName,
+                caption: slide.caption,
+                height: MageRideControl.illustrationPanel
+            )
+
+            Text(slide.title)
+                .mageFont(.headline)
+                .foregroundStyle(MageRideColor.onSurface)
+                .multilineTextAlignment(.center)
+
+            Text(slide.body)
+                .mageFont(.bodySmall)
+                .foregroundStyle(MageRideColor.onSurfaceVariant)
+                .multilineTextAlignment(.center)
+
+            Spacer(minLength: 0)
+        }
     }
 
     /// US-1.3's rows, in the order the story fixes: Sinhala, Tamil, English.

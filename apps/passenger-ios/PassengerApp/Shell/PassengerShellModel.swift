@@ -14,7 +14,9 @@ import UIKit
 ///    the first thing a passenger below the floor sees is a login screen whose OTP request failed.
 /// 3. **The session that ended** — C014 raises `RouteToLogin` for logout, a failed refresh,
 ///    `403 device-revoked` (AL-08) and PDPA erasure, and the whole stack belongs to a passenger who
-///    is no longer signed in.
+///    is no longer signed in. The name on SCR-PI-027's and SCR-PI-033's cards belongs to them too,
+///    which is why ``PassengerIdentity`` is cleared from here (Δ C101) and not only by the *Log out*
+///    row that is one of the four ways in.
 /// 4. **The live socket.** `connect()` is idempotent, so calling it here is *"make sure it is up"*
 ///    rather than *"open one now"*; the only things that take it down are a signed-out session and
 ///    the process ending. Nothing is **joined** until a position arrives — see
@@ -32,13 +34,20 @@ final class PassengerShellModel: ObservableObject {
     private let graph: IosAppGraph
     private let navigator: PassengerNavigator
     private let live: PassengerLiveMap
+    private let identity: PassengerIdentity
     private var subscriptions: [FlowSubscription] = []
     private var versionCheck: Task<Void, Never>?
 
-    init(graph: IosAppGraph, navigator: PassengerNavigator, live: PassengerLiveMap) {
+    init(
+        graph: IosAppGraph,
+        navigator: PassengerNavigator,
+        live: PassengerLiveMap,
+        identity: PassengerIdentity
+    ) {
         self.graph = graph
         self.navigator = navigator
         self.live = live
+        self.identity = identity
     }
 
     deinit {
@@ -66,6 +75,7 @@ final class PassengerShellModel: ObservableObject {
             // it. `disconnect()` also forgets the map, which is what stops the next passenger's
             // first frame being drawn over the previous one's vehicles.
             Task { await self.live.disconnect() }
+            self.identity.clear()
             self.navigator.reset(to: .login)
         })
 

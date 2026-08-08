@@ -27,8 +27,20 @@ struct PassengerShell: View {
     @StateObject private var model: PassengerShellModel
 
     @MainActor
-    init(graph: IosAppGraph, navigator: PassengerNavigator, live: PassengerLiveMap) {
-        _model = StateObject(wrappedValue: PassengerShellModel(graph: graph, navigator: navigator, live: live))
+    init(
+        graph: IosAppGraph,
+        navigator: PassengerNavigator,
+        live: PassengerLiveMap,
+        identity: PassengerIdentity
+    ) {
+        _model = StateObject(
+            wrappedValue: PassengerShellModel(
+                graph: graph,
+                navigator: navigator,
+                live: live,
+                identity: identity
+            )
+        )
     }
 
     var body: some View {

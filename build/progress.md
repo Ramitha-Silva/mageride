@@ -127,7 +127,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C098 | passenger-ios-ride-payment | 4b | PARTIAL | 2026-08-07 | SCR-PI-014/015/015a/016/017/018/019 built to `specs/wireframes/passenger_ios.html`; 57 new tests across 6 suites (`RideFlowTests` + `RideTestKit`). **PARTIAL only because the verify command is `xcodebuild` and this host cannot run it** — `:shared` is green here and the three `.strings` check out at 283 keys × 3 locales. **Two C080 defects found and fixed on BOTH platforms**: nothing carried a `Completed` ride to SCR-PA/PI-016, so D-10 was unreachable (`RideHandOff`); and the rail confirmed on SCR-PA-016 was discarded before SCR-PA-017, so choosing Cash posted `scan_driver_qr` (`PaymentSelection`). `apps/passenger-android` **300 tests green** (was 295), detekt + ktlint + `assembleDebug` clean. The camera key and its three purpose strings arrived with the commit that opens a camera; VisionKit is the scanner (Δ iOS). **Three contract gaps restated**: no route POSTs a Mode C ride rating, no read returns a settled fare's breakdown, and no operation issues a rider start OTP |
 | C099 | passenger-ios-package-history | 4b | PARTIAL | 2026-08-07 | SCR-PI-020/021/022/023 built to `specs/wireframes/passenger_ios.html`; 20 new tests across 4 suites (`HistoryFlowTests` + `HistoryTestKit`), strings now 315 keys × 3 locales. **PARTIAL only because the verify command is `xcodebuild` and this host cannot run it.** **One model for SCR-PI-020 and SCR-PI-021**, because it is one ride — the party is read off `bookerId` and never off the URI, so `mageride://package/{rideId}` serves both ends. **US-20.5's delivery OTP is now captured on this platform**: `PassengerAppDelegate.deliver` writes `PackageOtps` before routing, which C097 built the holder for and nothing called. **AL-48 on the history card**: `mobileMasked` is rendered and never dialled, so **Call** costs one `GET /v1/rides/{id}`; a cancelled-before-assignment trip offers neither, refused in the card *and* the model. **Four wireframe/parity divergences recorded** (SCR-PI-021 draws no Call, SCR-PI-023 draws a disabled `⬇ Receipt` no operation can fill, the status pill is copy rather than `RideState.name`, the history Free call routes to SCR-PI-028) and **six contract gaps restated or found** — no passenger read of their own scheduled rides, no `kind` on `RideHistoryRow`, no distance/vehicle on a history row, no vehicle type or driver rating on `TripDriver`, no trip-receipt operation anywhere, and `counterpartyPhone` being ambiguous on a package |
 | C100 | passenger-ios-mode-b-subscriptions | 4b | PARTIAL | 2026-08-07 | SCR-PI-024/025/025a/025b built to `specs/wireframes/passenger_ios.html`; 27 new tests across 7 suites (`SubscriptionFlowTests` + `SubscriptionTestKit`), strings now 393 keys × 3 locales. **PARTIAL only because the verify command is `xcodebuild` and this host cannot run it** — the five `LocalizationTests` rules were run as a script and the generator regenerates cleanly at **146 app sources, 28 test sources**. **AL-49 is the shape of the pay sheet**: `payTo` is minted by `POST …/pay` from a *verified* payout profile and by nothing else, so the chooser is stage one and the owner's account is stage two. **AL-59's OnePay row is absent and Cash takes it** — the wireframe still draws `OnePay · +5 %`, which would route a fleet's money into MageRide's merchant account; `SubscriptionRailsTests` reads all three languages to keep it out. **AL-25's unsubscribe erases the marker on the response**, not on `share.revoked`, and sends nothing to the hub. **Accepted is inferred from the subscription and Rejected cannot be observed at all** — C082's gap, restated. `BankAppHandoff` gained a URL-taking hand-off (Δ C100) and `TripLabels` two `BusinessDate` formatters; **one wireframe divergence** (no OnePay rail) and **three contract gaps restated** — no passenger read of their own access requests, no `GET …/subscriptions/{subscriptionId}`, and no passenger-readable vehicle name |
-| C101 | passenger-ios-settings-addresses | 4b | PENDING | | |
+| C101 | passenger-ios-settings-addresses | 4b | PARTIAL | 2026-08-07 | SCR-PI-026/026a/027/027b/033 built to `specs/wireframes/passenger_ios.html`; 44 new tests across 5 suites (`SettingsFlowTests` + `SettingsTestKit`), strings now **436 keys × 3 locales**. **PARTIAL only because the verify command is `xcodebuild` and this host cannot run it** — the five `LocalizationTests` rules were run as a script and the generator regenerates cleanly at **160 app sources, 30 test sources**. **`IosSavedAddress.kt` is the cluster's answer to the boxed-`Boolean?` problem**: the `isHome`/`isWork` pair is built, read and copied in Kotlin, so no screen spells an initialiser the C096 finding says this repository disagrees with itself about — and it type-checks here with `:shared:compileKotlinIosArm64`. **Home and Work are the flags, never the label** (a Sinhala *"නිවස"* is a Home). **A reverse geocode is a pre-fill and never a gate** (AL-14). **The language change re-points the bundle and re-creates nothing** (Δ Section C). **`DELETE /v1/users/me` is accepted, not done** (E-06). `AppPreferences.preferredRail` became the one door onto the default rail and C097's/C098's two direct reads now go through it (Δ C101); `PassengerProfileRepository` gained `saveDefaultPaymentMethod` and `deleteAccount`; `PassengerShellModel` gained the identity clear. **Five wireframe divergences** and **three contract gaps** — see the handoff |
 | C102 | passenger-ios-comms-safety-support | 4b | PENDING | | |
 | C103 | tailwind-preset | 4c | PENDING | | |
 | C104 | admin-portal-shell | 4c | PENDING | | |
@@ -15981,3 +15981,190 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   `PassengerApp.xcodeproj/project.pbxproj`, and `apps/passenger-ios/CLAUDE.md`. **No Android file was
   touched** — this component found no C082 defect, and the OnePay divergence is a wireframe
   micro-change-set rather than a code change on either side.
+
+- **Component:** C101 passenger-ios-settings-addresses — 2026-08-07
+- **Status:** PARTIAL — all five screens built, 44 new tests written. **The verify command is
+  `xcodebuild` on a macOS simulator and this build host is Linux** (root CLAUDE.md's iOS fence), so
+  the same PARTIAL C094–C100 carry forward for the same reason. What *was* checked here: the three
+  `Localizable.strings` parse, carry identical key sets (**436 keys × 3 locales**, up from 393),
+  leave nothing in English, keep every `%n$` specifier through Sinhala and Tamil, and reference every
+  declared key from a Swift source — the five rules `LocalizationTests` enforces, run as a script.
+  `python3 apps/passenger-ios/Tools/generate_xcodeproj.py` regenerates cleanly at **160 app sources,
+  30 test sources**, with all fourteen new files in both the group and the Sources phase. The one
+  Kotlin file this component adds is genuinely compiled: `./gradlew :shared:compileKotlinIosArm64
+  :shared:ktlintCheck :shared:detekt` is clean.
+- **Notes:**
+  **`IosSavedAddress.kt` is this cluster's whole answer to the optional-primitive problem, and it is
+  the reason the boxing question never reaches a screen.** `SavedAddress.isHome`/`.isWork` and
+  `SavedAddressInput`'s pair are `Boolean?`, so each crosses the bridge as a `KotlinBoolean?` — and
+  the C096 finding is that `apps/driver-ios` and `apps/passenger-ios` currently spell the same boxed
+  initialiser two different ways in files neither host has compiled. That is tolerable for a
+  cosmetic field and not for these: an `isHome` the Swift side spelled wrongly is a passenger whose
+  Home address silently becomes an unlabelled one. So the input is **built** in Kotlin
+  (`savedAddressInputOf`, which also owns the blank-to-absent rule), the flags are **read** in Kotlin
+  (`savedAddressIsHome`/`…IsWork`), and the merge's `copy` is Kotlin's (`savedAddressWithShortcuts`)
+  — the way out `IosBookingRequests.kt` already takes, with the added benefit that
+  `:shared:compileKotlinIosArm64` type-checks it **on this Linux host** where nothing else in this
+  component can be compiled at all. Two read helpers exist for the *input* as well
+  (`savedAddressInputIsHome`/`…IsWork`) so the tests can assert on the body the screen built.
+
+  **Home and Work are the `isHome`/`isWork` flags and never a label convention.** The label is free
+  text a passenger types in their own language, so matching `"Home"` against it would make a Sinhala
+  *"නිවස"* not a Home. Both rows are drawn **always**, set or not, with *"Not set"* under an empty
+  one — they are the only *"Home & Work via OSM pin"* control either wireframe draws, which is what
+  lets SCR-PI-026a keep to AL-26's four fields and ask nothing about shortcuts. An existing shortcut
+  is edited at **its own coordinates**, not at the pin: tapping a row that already has an address is
+  a request to correct that address, and moving it to wherever the map happens to be centred would
+  be a different action behind the same affordance.
+
+  **A reverse geocode is a pre-fill and never a gate** (AL-14). `GET /v1/geo/reverse` answers `404`
+  for a coordinate in the sea and `503` when Nominatim is unreachable, and neither stops a passenger
+  saving the place they just pinned: `AddressBook.describe` answers `nil` rather than throwing, the
+  lines open empty, and the keyboard is already up. It fills line 1 and line **3** — street then
+  city — because `GeocodedPlace` has exactly those two fields and AL-26's line 2 is *"area/suburb"*,
+  which nothing on the wire carries; guessing one by splitting `displayName` on commas would fill a
+  form with an answer nobody checked. Nothing already typed is overwritten, and the answer is
+  discarded if the sheet has since moved to another row.
+
+  **The pin is `LastKnownFix`, not a subscription** (Δ C097's seam, used). The Android twin collects
+  exactly one value off the fix flow; on this platform that would be a fifth subscriber on a *cold*
+  `CLLocationManager`, which keeps the blue status-bar indicator lit for as long as anything is
+  subscribed. Taking the last fix anybody saw costs nothing and is the same answer.
+
+  **A language change re-points the bundle and re-creates nothing** (Δ Section C). `PassengerLocale.apply`
+  redirects every lookup and the model's own `@Published` change re-renders the screen that made it;
+  the Android twin calls `Activity.recreate()` because `attachBaseContext` has already run by the
+  time a composable exists, and `SettingsState` here therefore carries no `relaunch` flag at all.
+  The **device is written first and unconditionally** — a passenger who chose Tamil on a train with
+  no signal asked for a Tamil app — and `languagePendingSync` is left set when the server write
+  fails, for C095's next authenticated pass.
+
+  **`AppPreferences.preferredRail` is now the one door onto the default rail, and that is a
+  de-duplication rather than a new object** (Δ C101). `apps/passenger-android` has a
+  `PaymentPreference` class because `settings/` is the first reader there; here `BookingDraft` and
+  `PaymentMethodModel` were **already** spelling
+  `preferences.defaultPaymentMethod.flatMap(PaymentRails.fromWire) ?? .cash`, so a wrapper object
+  introduced by this component would have been a *third* path onto one key unless both of their
+  constructors changed with it. Three members on the one preference protocol is the same *"one
+  door"* with no constructor churn, and both call sites now read it. It also tightened the two: the
+  rail is now filtered through `PaymentRails.preferable`, so a `scan_driver_qr` in the key — which
+  `iam.yaml` itself excludes from a stored preference — can never be what a booking opens on.
+
+  **Two writes for the default rail, and one of them may not be possible.** The device always
+  remembers; `iam.users.default_payment_method` is written only when `PaymentRails.storedValueOf`
+  can express the choice, which for `wallet` it cannot — the enum is still `[cash, lankaqr, onepay]`
+  (C083's gap, unchanged). A wallet default is honoured on this handset and does not follow the
+  passenger to a second one.
+
+  **`DELETE /v1/users/me` is accepted, not done** (US-1.8, E-06). The `202` becomes a pdpa-svc
+  erasure request a statutory hold can delay, so the screen reports a *request* and **the session is
+  deliberately left alone**: signing the passenger out would claim an erasure that has not happened
+  and would take away the only surface that can tell them when it has. A `409` there means *"one is
+  already open"* and not *"you already have a Home"*, which is why `SettingsErrors` has a second
+  function rather than one arm guessing from a code.
+
+  **Nothing on SCR-PI-027 navigates on log out.** `PassengerSessions.logOut()` raises C014's
+  `RouteToLogin` and `PassengerShellModel` is its single subscriber — one path out for a deliberate
+  logout, a failed refresh, `403 device-revoked` and a PDPA erasure alike. That collector now also
+  clears `PassengerIdentity` (Δ C101), because the name on two cards belongs to the session that
+  ended; SCR-PI-027's own row clears it as well, since that is the exit the passenger chose.
+
+  **`PassengerIdentity` is a graph singleton because two screens draw the same card.** SCR-PI-027's
+  profile card and SCR-PI-033's identity block are the same three values, both live on the Menu
+  tab's stack, and a rename on SCR-PI-027b has to reach both without a second `GET /v1/users/me`.
+  The Android twin is a `single` for a stronger reason — its drawer is hosted *above every screen*
+  and genuinely cannot own a fetch — and this one could have owned one; it does not, because a
+  screen cannot publish into another screen's model.
+
+  **Nothing here sets `EmergencyContact.isPrimary`, and a delete therefore re-reads.** iam-svc
+  promotes the first contact onto `iam.users.emergency_contact_name/phone` for D-33's five-second
+  SOS budget and **re-promotes on a delete**; `EmergencyContactInput` has no field for it. A client
+  that just dropped the row would keep showing a list whose `isPrimary` was a lie about where the
+  SOS SMS is going, so `removeContact` is the one place in this cluster that re-reads.
+
+  ### Five places `passenger_ios.html` and C083 disagree
+
+  All resolved by the C099 split — *layout, controls, states and navigation* follow the wireframe,
+  *behaviour* follows Android — and all five are micro-change-set candidates:
+
+  1. **`＋ Add address` is a navigation-bar item here and a bottom CTA there.** The iOS cell puts it
+     in the `navtop`'s `.act` slot; same action, same enabling rule (there has to be a pin).
+  2. **SCR-PI-027's first group has four rows and SCR-PA-027's has five.** The Android screen carries
+     a separate *"Saved addresses"* row; this one does not, because the Menu **tab** already carries
+     it one tap away where a drawer does not. *Save Home & Work* opens SCR-PI-026 either way, so the
+     behaviour is identical.
+  3. **Log out and Delete account are centred `glist` rows**, not a textlink beside a `TextButton`.
+  4. **A contact row draws `✎` alone** where the Android row draws `✎` and 🗑, so **delete lives
+     inside the contact editor** — which is where SCR-PI-026a already puts it in this same cluster.
+     US-12.1's capability is unchanged.
+  5. **SCR-PI-027's states line still says *"Default payment Cash/LankaQR/OnePay"***, which predates
+     the 2026-08-01 payment-custody change set: AL-57 and AL-59 retired both of those rails and the
+     third survivor is a settlement choice the contract excludes from a stored preference. The
+     screen offers Cash and Wallet (`PaymentRails.preferable`). The same divergence C083 recorded.
+
+  ### Three contract gaps this cluster draws around
+
+  - **No contract carries a human-readable passenger number.** Both cells print `PAX-90431`;
+    `UserProfile` has `userId` and nothing else that identifies the account to its owner, so
+    `IdentityCard` prints the ULID. A made-up `PAX-` prefix would be a client inventing an
+    identifier — the same call C083 made, and C100 made about a Vehicle ID.
+  - **There is no avatar upload route anywhere in the contract set.** `UpdateProfileRequest.photoUrl`
+    is a *URL*, and `POST /v1/support/screenshots`, the Mode B transfer slip and the driver's
+    documents are the whole upload surface. SCR-PI-027b draws the 📷 badge and *"Take photo or
+    upload"* **disabled**, which is what C095 did on SCR-PI-004; the cell's `PhotosPicker` note is
+    unimplementable until an upload route exists. The stored photo is not *rendered* either — this
+    app ships no image loader (C100 made the same call about the fleet's LankaQR).
+  - **`mobile_db_schema.md` §2.1's on-device `saved_addresses` has no writer**, here or on Android.
+    Both apps read the server. A mirror with no outbox between it and the API would be two writers
+    for one list; US-22.6 already puts the list in the **eager-fetch** set, which is a
+    `GET /v1/me/bootstrap` concern rather than a table this screen owns.
+
+  ### One thing found outside this cluster (Δ C101)
+
+  **`OnboardingScreen`'s carousel was keyed on a tuple.** C095 wrote
+  `ForEach(Array(model.state.slides.enumerated()), id: \.element.id)`, and `\.element` is a key path
+  into a **tuple** — which the C087 finding this repository carries says does not compile, and which
+  `ModeFilterSheet`, `PaymentMethodScreen` and `HistoryControls` were each written to avoid, saying
+  so at the call site. Nothing had caught it because no host has ever built this target. It is now
+  `ForEach(slides.indices, id: \.self)` with the slide body lifted into a sub-view, which is correct
+  whichever way the finding resolves; `.tag(index)` still drives `pageBinding`, so the page is
+  identified by position as it must be. **`apps/driver-ios` carries six more of the same shape**
+  (`ProfileEditors`, `PermissionsScreen`, `LanguageCityScreen` ×3, `CreditTransferScreen`,
+  `RequestCreditScreen`) — that target's to settle, and this component did not touch it.
+
+  ### For C102
+
+  - **`SosContacts` is the seam SCR-PI-029 wants.** An empty list is what makes `POST /v1/sos` answer
+    `400 no-emergency-contact`, and SCR-PI-027b already says so where the list is empty — do not
+    explain it again at the moment somebody is pressing an alarm.
+  - **`PassengerIdentity` is on the graph** if SCR-PI-029 or SCR-PI-030 needs a name; `adopt(_:)` it
+    after any read rather than opening a third `GET /v1/users/me`.
+  - **`SettingsErrors` is cluster 7's code table and stays cluster 7's.** Add your own for
+    safety-svc's and support-svc's codes, the shape the other four tables established.
+  - **The Menu tab is real now** and its *Help & support* row opens `PassengerRoute.support`, which is
+    the same destination as tab 3 — the wireframe's own choice rather than an oversight.
+  - **Every route in `PassengerDestinations` except C102's three now registers a real screen.**
+    `PlaceholderScreen` and the two `route_placeholder_*` strings go with the last of them; the
+    Android side did exactly that at C084.
+
+  ### Files touched
+
+  `apps/passenger-ios/PassengerApp/Settings/` (13 new files),
+  `PassengerApp/UI/SettingsControls.swift` (new),
+  `shared/kmp/src/iosMain/kotlin/lk/mageride/shared/data/models/iam/IosSavedAddress.kt` (new),
+  `PassengerApp/Nav/PassengerDestinations.swift`, `PassengerApp/DI/PassengerGraph.swift`,
+  `PassengerApp/PassengerApp.swift`, `PassengerApp/Shell/PassengerShell.swift`,
+  `PassengerApp/Shell/PassengerShellModel.swift`,
+  `PassengerApp/Onboarding/PassengerProfileRepository.swift` (two new operations and
+  `withMarketing`), `PassengerApp/Onboarding/OnboardingScreen.swift` (the tuple-keyed `ForEach`
+  above), `PassengerApp/Booking/BookingDraft.swift` and
+  `PassengerApp/Ride/PaymentMethodModel.swift` (both now read `preferredRail`),
+  `PassengerApp/UI/FormControls.swift` (`ProfileAvatar.badgeSymbol`),
+  `PassengerApp/Theme/MageRideSpacing.swift` (four cluster-7 tokens), the three
+  `Resources/*.lproj/Localizable.strings` (+43 keys each),
+  `PassengerAppTests/SettingsTestKit.swift` and `PassengerAppTests/SettingsFlowTests.swift` (both
+  new), `PassengerAppTests/OnboardingTestKit.swift` (the profile fake's four new arms), the
+  regenerated `PassengerApp.xcodeproj/project.pbxproj`, and `apps/passenger-ios/CLAUDE.md`. **No
+  Android file was touched** — this component found no C083 defect, and the five divergences above
+  are wireframe micro-change-sets rather than code changes on either side.
+

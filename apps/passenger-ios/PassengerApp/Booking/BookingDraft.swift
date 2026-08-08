@@ -223,10 +223,10 @@ final class BookingDraft: ObservableObject {
     }
 
     /// The stored rail, or Cash. A value this build has never heard of reads as Cash rather than as
-    /// nothing — see ``PaymentRails/fromWire(_:)``.
-    private var defaultRail: PaymentMethod {
-        preferences.defaultPaymentMethod.flatMap(PaymentRails.fromWire) ?? PaymentMethod.cash
-    }
+    /// nothing — see ``AppPreferences/preferredRail``, which C101 made the one door onto it (Δ C101;
+    /// this used to spell the same expression here, and the Settings screen would have been a third
+    /// copy of it).
+    private var defaultRail: PaymentMethod { preferences.preferredRail }
 }
 
 extension String {

@@ -20,7 +20,12 @@ struct PassengerApp: App {
 
     var body: some Scene {
         WindowGroup {
-            PassengerShell(graph: graph.shared, navigator: graph.navigator, live: graph.live)
+            PassengerShell(
+                graph: graph.shared,
+                navigator: graph.navigator,
+                live: graph.live,
+                identity: graph.identity
+            )
                 .environmentObject(graph)
                 .environmentObject(graph.navigator)
                 .environmentObject(graph.connectivity)

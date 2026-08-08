@@ -176,6 +176,26 @@ final class PassengerGraph: ObservableObject {
     /// **Never wallet-svc**: this money is a pass-through to the fleet owner (AL-24, §18b).
     let subscriptions: SubscriptionRepository
 
+    // MARK: - C101 · cluster 7
+    //
+    // Two seams and one holder. The seams are process singletons for the reason every other
+    // repository here is; the holder is one because **two screens draw the same card** and a rename
+    // on one of them has to reach the other without a second `GET /v1/users/me`.
+    //
+    // There is deliberately no payment-preference object beside them: the default rail lives on
+    // ``AppPreferences`` as ``AppPreferences/preferredRail``, which is where ``BookingDraft`` and
+    // ``PaymentMethodModel`` were already reading it — see `Settings/PaymentPreference.swift`.
+
+    /// `iam.saved_addresses` plus AL-14's one reverse geocode, behind one door.
+    let addresses: AddressBook
+
+    /// `iam.emergency_contacts` — what makes C102's `POST /v1/sos` answer anything but
+    /// `400 no-emergency-contact`.
+    let sosContacts: SosContacts
+
+    /// Who is signed in, for SCR-PI-027's card and SCR-PI-033's.
+    let identity: PassengerIdentity
+
     init(environment: PassengerEnvironment = .current) {
         self.environment = environment
 
@@ -232,7 +252,8 @@ final class PassengerGraph: ObservableObject {
             iam: shared.api.iam,
             preferences: preferences
         )
-        self.profiles = ApiPassengerProfileRepository(iam: shared.api.iam)
+        let profiles = ApiPassengerProfileRepository(iam: shared.api.iam)
+        self.profiles = profiles
         self.locationPermission = SystemLocationPermission()
         self.activeRides = ApiActiveRideLookup(rides: shared.api.ride)
 
@@ -282,6 +303,14 @@ final class PassengerGraph: ObservableObject {
         // ladder and the credit transfers share `subscription.yaml` and answer `403` to a passenger
         // bearer. See ``SubscriptionRepository``.
         self.subscriptions = ApiSubscriptionRepository(subscriptions: shared.api.subscription)
+
+        // C101. The address book spans iam-svc and query-svc on purpose — AL-14's *"OSM-pin +
+        // reverse-geocode"* is one gesture — and the identity holder takes the **same**
+        // `PassengerProfileRepository` cluster 1 already built, because a second seam onto
+        // `/v1/users/me` would be two places that decide what `notif_prefs` looks like.
+        self.addresses = ApiAddressBook(iam: shared.api.iam, query: shared.api.query)
+        self.sosContacts = ApiSosContacts(iam: shared.api.iam)
+        self.identity = PassengerIdentity(profiles: profiles)
 
         self.live = PassengerLiveMap(
             transport: SignalRLiveHubTransport(

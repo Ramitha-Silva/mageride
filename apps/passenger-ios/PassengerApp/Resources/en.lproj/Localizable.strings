@@ -571,3 +571,73 @@
  * an empty list. */
 "subscriptions_loading" = "Loading your subscriptions…";
 "subscription_payments_loading" = "Loading your payments…";
+
+/* ---- C101 · addresses, settings and the Menu tab ------------------------------------
+ *
+ * SCR-PI-026/026a/027/027b and SCR-PI-033's card. The keys are
+ * `apps/passenger-android/src/main/res/values…/strings.xml`'s and carry the Android translations
+ * unchanged, except that every `%1$s` is a `%1$@` here — Objective-C string formats, not Java ones.
+ * Three keys differ and are marked at the foot of this section.
+ *
+ * The Menu row labels are NOT repeated here: SCR-PI-027's own title and its Help & support row are
+ * `menu_settings` and `menu_support`, which the shell already declares. Two identical values under
+ * two keys is exactly what `LocalizationTests` reads as a translation nobody did.
+ */
+
+/* SCR-PI-026 — saved addresses */
+"addresses_home" = "Home";
+"addresses_work" = "Work";
+"addresses_not_set" = "Not set";
+"addresses_pin_hint" = "Move the map to place the pin — the address is filled in for you";
+"addresses_add" = "Add address";
+
+/* SCR-PI-026a — the save-address sheet */
+"address_sheet_add_title" = "Add address";
+"address_sheet_edit_title" = "Edit address";
+"address_sheet_pinned" = "Pinned at %1$@ · address looked up from the map";
+"address_line1" = "Address Line 1";
+"address_line2" = "Address Line 2";
+"address_line3" = "Address Line 3";
+"address_label" = "Label";
+"address_label_hint" = "Gym, Mum's House, Office";
+"address_save" = "Save address";
+"address_delete" = "Delete address";
+
+/* SCR-PI-027 — profile & settings */
+"settings_identity" = "ID: %1$@ · %2$@";
+"settings_unnamed_passenger" = "Your profile";
+"settings_language" = "Language";
+"settings_save_home_work" = "Save Home & Work";
+"settings_default_payment" = "Default payment";
+"settings_notifications" = "Notifications";
+"settings_log_out" = "Log out";
+"settings_delete_account" = "Delete account";
+"settings_delete_title" = "Delete your account?";
+"settings_delete_body" = "We will start deleting your account and your data. Some records must be kept for a period the law sets, so this is a request rather than an instant erase.";
+"settings_delete_confirm" = "Request deletion";
+"settings_delete_requested" = "Your deletion request has been received. We will let you know when it is done.";
+"settings_delete_already_requested" = "A deletion request is already being handled.";
+
+/* SCR-PI-027b — edit profile */
+"edit_profile_title" = "Edit profile";
+"edit_profile_name" = "Full name";
+"edit_profile_notifications" = "Notifications & offers";
+"edit_profile_photo" = "Take photo or upload";
+"edit_profile_sos_contacts" = "SOS / emergency contacts";
+"edit_profile_sos_empty" = "Add someone here and MageRide can alert them if you ever use SOS.";
+"edit_profile_add_sos" = "Add SOS contact";
+"edit_profile_edit_sos" = "Edit SOS contact";
+"edit_profile_remove_sos" = "Remove SOS contact";
+"edit_profile_sos_name" = "Name";
+"edit_profile_sos_phone" = "Mobile number";
+
+/* Failures iam-svc declares on this cluster's eleven operations */
+"error_address_shortcut_taken" = "You already have an address saved there. Edit that one instead.";
+"error_address_not_found" = "That was already removed on another device.";
+
+/* NEW on iOS. The two loading rows exist for the reason cluster 6's do — a `List` row with no words
+ * in it reads as an empty list, where the Android screens draw a centred spinner. `settings_log_out`
+ * is `drawer_log_out` renamed: this app has a Menu tab and no drawer, which is the same rename the
+ * five `menu_*` rows carry. */
+"addresses_loading" = "Loading your addresses…";
+"address_sheet_locating" = "Looking up the address…";

@@ -234,6 +234,32 @@ enum MageRideControl {
     /// its smallest module to survive that round trip, and 200pt is about where a 33×33 EMVCo grid
     /// stops being marginal on a 5.4" handset. Drawn without interpolation for the same reason.
     static let ownerQr: CGFloat = 200
+
+    // MARK: - C101 · addresses, settings and the Menu tab
+    //
+    // One wireframe measurement and three sheet detents. Everything else on the four screens is an
+    // `IdentityCard`, a `glist` row, a `LabelledTextField` or a CTA, which is the point of the
+    // twenty-odd tokens above.
+
+    /// SCR-PI-026's pin map (`.map` at `flex:0 0 100px`, `border-radius:13px`).
+    ///
+    /// The shortest map in the app, and deliberately: the passenger is placing **one point**, the
+    /// list above it is the screen, and a taller map would push the Home and Work rows off a 5.4"
+    /// handset at the larger content sizes.
+    static let addressMapHeight: CGFloat = 100
+
+    /// SCR-PI-026a's own `.sheet` detent — a title, a caption, four fields, a CTA and a delete.
+    ///
+    /// Measured from the cell's frame, and paired with `.large` rather than used alone: four
+    /// `LabelledTextField`s at an accessibility content size do not fit in any fixed height, and a
+    /// second detent is what stops the last field being under the keyboard.
+    static let addressSheetHeight: CGFloat = 520
+
+    /// SCR-PI-027b's contact editor — a title, a name field, a labelled phone field and a CTA.
+    static let contactSheetHeight: CGFloat = 380
+
+    /// SCR-PI-027's two value-row choosers — a title and three `SelectionRow`s at most.
+    static let pickerSheetHeight: CGFloat = 300
 }
 
 extension View {

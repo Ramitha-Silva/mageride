@@ -117,10 +117,31 @@ final class FakePassengerProfileRepository: PassengerProfileRepository {
     var profile: UserProfile? = Fixtures.profile()
     var saveFailure: Error?
 
+    /// Thrown by `update`, `saveLanguage`, `saveDefaultPaymentMethod` or `deleteAccount` — the four
+    /// writes C101's two screens make. One variable rather than four, because no suite arms two at
+    /// once and a per-method failure would be four fields three of which are always `nil`. Δ C101.
+    var writeFailure: Error?
+
     private(set) var savedNames: [String] = []
     private(set) var savedLanguages: [Language] = []
     private(set) var savedNotifications: [Bool] = []
     private(set) var meCount = 0
+
+    /// Δ C101 — what SCR-PI-027 and SCR-PI-027b sent, in order. Several rules in that cluster are
+    /// about *what was asked* rather than about state: the `notif_prefs` map has to carry keys this
+    /// build has never heard of, and the language write has to happen even when the device write
+    /// already has.
+    private(set) var updatedNames: [String?] = []
+    private(set) var updatedNotifPrefs: [[String: Bool]?] = []
+    private(set) var savedDefaultPayments: [DefaultPaymentMethod] = []
+    private(set) var deletionCount = 0
+
+    /// `PUT /v1/me/prefs/language` — SCR-PI-027's row. Kept apart from ``savedLanguages``, which is
+    /// SCR-PI-004's whole-profile save: the two are different routes and AL-26 is the reason.
+    private(set) var pushedLanguages: [Language] = []
+
+    /// What `deleteAccount()` answers — the PDPA request id the `202` carries.
+    var deletionRequestId = Fixtures.deletionRequestId
 
     func me() async throws -> UserProfile {
         meCount += 1
@@ -137,13 +158,43 @@ final class FakePassengerProfileRepository: PassengerProfileRepository {
         return profile ?? Fixtures.profile(firstName: name, language: language)
     }
 
+    /// Δ C101 — the save now **records** and can fail, because SCR-PI-027's 🔔 switch has to be put
+    /// back when it does and SCR-PI-027b's Save must not report success it did not get. It also
+    /// applies the answer to ``profile``, so a second read sees what was written.
     @discardableResult
     func update(name: String?, notifPrefs: [String: Bool]?) async throws -> UserProfile {
-        profile ?? Fixtures.profile()
+        updatedNames.append(name)
+        updatedNotifPrefs.append(notifPrefs)
+        if let writeFailure { throw writeFailure }
+        let saved = Fixtures.profile(
+            firstName: name ?? profile?.firstName,
+            language: profile?.language,
+            notifPrefs: notifPrefs
+        )
+        profile = saved
+        return saved
     }
 
     @discardableResult
-    func saveLanguage(_ language: Language) async throws -> Language { language }
+    func saveLanguage(_ language: Language) async throws -> Language {
+        pushedLanguages.append(language)
+        if let writeFailure { throw writeFailure }
+        return language
+    }
+
+    @discardableResult
+    func saveDefaultPaymentMethod(_ method: DefaultPaymentMethod) async throws -> DefaultPaymentMethod {
+        savedDefaultPayments.append(method)
+        if let writeFailure { throw writeFailure }
+        return method
+    }
+
+    @discardableResult
+    func deleteAccount() async throws -> String {
+        deletionCount += 1
+        if let writeFailure { throw writeFailure }
+        return deletionRequestId
+    }
 }
 
 // MARK: - Active ride
@@ -196,6 +247,10 @@ enum Fixtures {
     /// same way.
     static let passengerId = "01JQ9F8Z6N0000000000000001"
     static let rideId = "01JQ9F8Z6N0000000000000003"
+
+    /// The PDPA erasure request `DELETE /v1/users/me` answers with (Δ C101). A ULID, because
+    /// `DeleteAccountResponse.requestId` is one — there is no `PDPA-` series to print.
+    static let deletionRequestId = "01JQ9F8Z6N0000000000000009"
 
     /// A complete Sri Lankan mobile, national form.
     static let phone = "771234567"

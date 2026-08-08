@@ -74,13 +74,13 @@ struct PassengerDestinationView: View {
 
         // ---- C101 · addresses, settings and the Menu tab ----------------------------------
         //
-        // `.menu` is SCR-PI-033 and is C101's (`build/screen_coverage.md` is the authority). Its row
-        // table is already written — see ``PassengerMenuDestination`` — so what that component adds
-        // is the `List`, the `NavigationLink`s and the identity card above them.
-        case .savedAddresses: placeholder("SCR-PI-026 saved addresses")
-        case .settings: placeholder("SCR-PI-027 profile & settings")
-        case .editProfile: placeholder("SCR-PI-027b edit profile")
-        case .menu: placeholder("SCR-PI-033 menu")
+        // Four destinations and one of them is a **tab root**: `.menu` is SCR-PI-033, and its row
+        // table stays in the shell — see ``PassengerMenuDestination`` — because it is a statement
+        // about the route table. SCR-PI-026a (the save-address sheet) and the SOS-contact editor are
+        // sheets of their screens rather than destinations, the same call C097 and C098 made about
+        // theirs.
+        case .savedAddresses, .settings, .editProfile, .menu:
+            SettingsDestinationView(route: route)
 
         // ---- C102 · comms, safety and support ---------------------------------------------
         //

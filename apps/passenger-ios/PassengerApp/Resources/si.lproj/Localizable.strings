@@ -490,3 +490,60 @@
 /* NEW on iOS. */
 "subscriptions_loading" = "ඔබේ දායකත්ව පූරණය වෙමින්…";
 "subscription_payments_loading" = "ඔබේ ගෙවීම් පූරණය වෙමින්…";
+
+/* ---- C101 · addresses, settings and the Menu tab ---- */
+
+/* SCR-PI-026 — saved addresses */
+"addresses_home" = "නිවස";
+"addresses_work" = "කාර්යාලය";
+"addresses_not_set" = "සකසා නැත";
+"addresses_pin_hint" = "ලක්ෂ්‍යය තැබීමට සිතියම ගෙන යන්න — ලිපිනය ස්වයංක්‍රීයව පිරවේ";
+"addresses_add" = "ලිපිනයක් එක් කරන්න";
+
+/* SCR-PI-026a — the save-address sheet */
+"address_sheet_add_title" = "ලිපිනයක් එක් කරන්න";
+"address_sheet_edit_title" = "ලිපිනය සංස්කරණය කරන්න";
+"address_sheet_pinned" = "%1$@ හි සලකුණු කර ඇත · ලිපිනය සිතියමෙන් ලබාගන්නා ලදී";
+"address_line1" = "ලිපිනයේ 1 වන පේළිය";
+"address_line2" = "ලිපිනයේ 2 වන පේළිය";
+"address_line3" = "ලිපිනයේ 3 වන පේළිය";
+"address_label" = "නම";
+"address_label_hint" = "ව්‍යායාම ශාලාව, අම්මාගේ ගෙදර, කාර්යාලය";
+"address_save" = "ලිපිනය සුරකින්න";
+"address_delete" = "ලිපිනය මකන්න";
+
+/* SCR-PI-027 — profile & settings */
+"settings_identity" = "හැඳුනුම: %1$@ · %2$@";
+"settings_unnamed_passenger" = "ඔබේ පැතිකඩ";
+"settings_language" = "භාෂාව";
+"settings_save_home_work" = "නිවස සහ කාර්යාලය සුරකින්න";
+"settings_default_payment" = "පෙරනිමි ගෙවීම";
+"settings_notifications" = "දැනුම්දීම්";
+"settings_log_out" = "ඉවත් වන්න";
+"settings_delete_account" = "ගිණුම මකන්න";
+"settings_delete_title" = "ඔබේ ගිණුම මකන්නද?";
+"settings_delete_body" = "ඔබේ ගිණුම සහ දත්ත මැකීම අපි ආරම්භ කරමු. නීතියෙන් නියම කළ කාලයක් සඳහා සමහර වාර්තා තබාගත යුතු බැවින්, මෙය ක්ෂණික මැකීමක් නොව ඉල්ලීමකි.";
+"settings_delete_confirm" = "මැකීම ඉල්ලන්න";
+"settings_delete_requested" = "ඔබේ මැකීමේ ඉල්ලීම ලැබී ඇත. එය අවසන් වූ විට අපි ඔබට දන්වන්නෙමු.";
+"settings_delete_already_requested" = "මැකීමේ ඉල්ලීමක් දැනටමත් සලකා බලමින් පවතී.";
+
+/* SCR-PI-027b — edit profile */
+"edit_profile_title" = "පැතිකඩ සංස්කරණය";
+"edit_profile_name" = "සම්පූර්ණ නම";
+"edit_profile_notifications" = "දැනුම්දීම් සහ දීමනා";
+"edit_profile_photo" = "ඡායාරූපයක් ගන්න හෝ උඩුගත කරන්න";
+"edit_profile_sos_contacts" = "SOS / හදිසි සම්බන්ධතා";
+"edit_profile_sos_empty" = "මෙහි කෙනෙකු එක් කළොත්, ඔබ SOS භාවිතා කරන විට MageRide ඔවුන්ට දැනුම් දිය හැක.";
+"edit_profile_add_sos" = "SOS සම්බන්ධතාවක් එක් කරන්න";
+"edit_profile_edit_sos" = "SOS සම්බන්ධතාව සංස්කරණය කරන්න";
+"edit_profile_remove_sos" = "SOS සම්බන්ධතාව ඉවත් කරන්න";
+"edit_profile_sos_name" = "නම";
+"edit_profile_sos_phone" = "ජංගම දුරකථන අංකය";
+
+/* Cluster 7's error table */
+"error_address_shortcut_taken" = "එහි දැනටමත් ලිපිනයක් සුරකා ඇත. ඒක සංස්කරණය කරන්න.";
+"error_address_not_found" = "එය දැනටමත් වෙනත් උපාංගයකින් ඉවත් කර ඇත.";
+
+/* NEW on iOS. */
+"addresses_loading" = "ඔබේ ලිපින පූරණය වෙමින්…";
+"address_sheet_locating" = "ලිපිනය සොයමින්…";

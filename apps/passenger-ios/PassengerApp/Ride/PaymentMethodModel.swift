@@ -88,8 +88,9 @@ final class PaymentMethodModel: ObservableObject {
 
         // US-22.4's *"pre-selected at booking/checkout (and still changeable per trip)"* — this is
         // the checkout half, and C101's SCR-PI-027 row is what sets it. A stored value this build
-        // cannot offer reads as Cash rather than as nothing (see ``PaymentRails/fromWire(_:)``).
-        let stored = preferences.defaultPaymentMethod.flatMap(PaymentRails.fromWire) ?? PaymentMethod.cash
+        // cannot offer reads as Cash rather than as nothing — see ``AppPreferences/preferredRail``,
+        // which C101 made the one door onto that key (Δ C101).
+        let stored = preferences.preferredRail
         state.chosen = stored
         state.preferred = stored
     }

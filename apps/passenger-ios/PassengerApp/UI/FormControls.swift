@@ -280,9 +280,14 @@ struct LabelledDivider: View {
 /// picker here would hand the passenger an image the app cannot send. C077 recorded the same gap
 /// from the Android side; landing it needs an upload route first, and then this control grows an
 /// `onTap`.
+///
+/// **`badgeSymbol` is a parameter because the two cells genuinely differ** (Δ C101): SCR-PI-004
+/// draws a `＋` on the badge and SCR-PI-027b draws a `📷`, which is the difference between *"add
+/// one"* and *"change it"*. Same disc, same disabled treatment, same missing route.
 struct ProfileAvatar: View {
 
     var isEnabled: Bool = false
+    var badgeSymbol: String = "plus"
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
@@ -295,7 +300,7 @@ struct ProfileAvatar: View {
                         .foregroundStyle(MageRideColor.outlineVariant)
                 }
 
-            Image(systemName: "plus")
+            Image(systemName: badgeSymbol)
                 .font(.footnote.weight(.bold))
                 .foregroundStyle(MageRideColor.onPrimary)
                 .frame(width: MageRideControl.avatarBadge, height: MageRideControl.avatarBadge)
