@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 
 import { accessToken } from '@/server/session';
 
-import type { AuditIntent } from './audit';
+import type { MutationAudit } from './audit';
 import { apiDownload, apiFetch, type ApiDownload } from './http';
 import { localProblem, ProblemError } from './problem';
 
@@ -62,7 +62,7 @@ export interface DownloadOptions {
  * separate only because the body is bytes: an export is relayed from the service
  * that computed it, never re-rendered here (see `apiDownload`).
  *
- * A download is **not** a mutation and takes no {@link AuditIntent}: D-35 audits
+ * A download is **not** a mutation and takes no audit declaration: D-35 audits
  * changes, and AL-39/AL-40 add `DOC_VIEW` and `PII_READ` for the reads that
  * disclose a person's data. A count of last month's trips discloses nothing about
  * anybody — admin-bff's own dashboard endpoints say so in as many words — so a row
@@ -91,8 +91,14 @@ export interface MutateOptions<TBody = unknown> {
    * to start if a mutating route could avoid it — but because a screen that cannot
    * name the row it causes cannot tell the operator what is about to be recorded
    * against their name, and this console suspends drivers and reverses fees.
+   *
+   * **Δ C108 — or an `AuditedElsewhere` declaration**, for the four
+   * `/v1/admin/**` routes the gateway sends past admin-bff, which therefore write
+   * no row at all. Still required, and still a positive statement: the type makes
+   * "no row is written here" something a screen has to say on purpose, rather than
+   * something it can arrive at by leaving a field out.
    */
-  readonly audit: AuditIntent;
+  readonly audit: MutationAudit;
   /**
    * R-14/R-18 replay key. Defaults to a fresh UUID.
    *
@@ -112,9 +118,9 @@ export interface MutationOutcome<T> {
   readonly status: number;
   /**
    * The row the platform recorded, echoed back so a success toast can say what was
-   * written down without re-deriving it.
+   * written down without re-deriving it — or the declaration that nothing was.
    */
-  readonly audit: AuditIntent;
+  readonly audit: MutationAudit;
   /** The key that was sent, so a retry of *this* attempt can reuse it. */
   readonly idempotencyKey: string;
 }

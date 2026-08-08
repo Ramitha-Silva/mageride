@@ -122,6 +122,36 @@ describe('AL-02 — nothing here is driver-facing or passenger-facing', () => {
       '/v1/admin/vehicles',
       '/v1/admin/drivers',
       '/v1/admin/support/tickets',
+      // C108 · SCR-AP-006. Gateway settlement and its exception queue, the refund
+      // queue and its decision, the wallet-ledger report with its two exports, and
+      // the daily-fee reversal.
+      '/v1/admin/finance/reconciliation',
+      '/v1/admin/finance/reconciliation/exceptions',
+      '/v1/admin/finance/refunds',
+      '/v1/admin/finance/transactions',
+      '/v1/admin/finance/transactions.csv',
+      '/v1/admin/finance/transactions.pdf',
+      '/v1/admin/drivers/wallet',
+      // AL-58's payout run. **Answered by payout-svc, which `gateway-routes.json`
+      // has no cluster for**, so these two resolve to admin-bff's Order 90
+      // catch-all and 404 until C008 adds it. They are listed because the screen
+      // calls them and the contract declares them; see the C108 handoff.
+      '/v1/admin/payouts',
+      '/v1/admin/payouts/batches',
+      // C108 · SCR-AP-007. Two are admin-bff's; three are routed past it at
+      // Order 20 to subscription-svc and dispatch-svc, which is why their writes
+      // declare `auditedElsewhere` rather than a D-35 action (`api/audit.ts`).
+      '/v1/admin/fares/tariffs',
+      '/v1/admin/config/feature-flags',
+      '/v1/admin/fees/rates',
+      '/v1/admin/voucher-discount-tiers',
+      '/v1/admin/drivers/level-config',
+      // C108 · SCR-AP-008. iam-svc's RBAC surface, likewise routed past admin-bff.
+      '/v1/admin/rbac/matrix',
+      '/v1/admin/rbac/roles',
+      '/v1/admin/rbac/users',
+      // C108 · SCR-AP-009.
+      '/v1/admin/audit-log',
     ]);
 
     const called = new Set<string>();

@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import type { AdminMenuGroup, AdminSession, Role } from '@/api/types';
+import type { AdminMenuGroup, AdminPermission, AdminSession, PermissionGrant, Role } from '@/api/types';
 
 /**
  * Builds a caller's `GET /v1/admin/session` menu **from the specifications**, so
@@ -332,12 +332,58 @@ export function menuFor(roles: readonly Role[]): AdminMenuGroup[] {
     .filter((group) => group.items.length > 0);
 }
 
+/**
+ * `AdminSession.permissions` — the caller's own row of URD §2.3, as
+ * `SessionEndpoints` projects it (Δ C108).
+ *
+ * The same evaluation {@link menuFor} runs, rendered the way the wire renders it:
+ * areas with no grant are dropped (`Where(Grants != None)`), the capability flags
+ * become verbs, and `ownScope` is `ScopedGrants != None` — *some* capability here
+ * is limited to the caller's own records, which is the coarse boolean the C#
+ * response collapses `ScopedGrants` into.
+ *
+ * It exists because C108 gates a **control** rather than a screen: the refund
+ * queue is one nav item with two audiences, and `holdsGrant` reads this field to
+ * decide whether the raise form is drawn. A fixture of `[]` would have made that
+ * test assert nothing.
+ */
+export function permissionsFor(roles: readonly Role[]): AdminPermission[] {
+  const matrix = permissionMatrix();
+  const effective = evaluate(roles);
+
+  const VERBS: readonly (readonly [Grant, PermissionGrant])[] = [
+    [Grant.Read, 'read'],
+    [Grant.Write, 'write'],
+    [Grant.Configure, 'configure'],
+    [Grant.Raise, 'raise'],
+  ];
+
+  return [...effective.entries()]
+    .filter(([, permission]) => permission.grants !== Grant.None)
+    .map(([area, permission]) => {
+      const cells = matrix.get(area);
+      // The symbol is per (area, role) on the spec and per caller on the wire; a
+      // single-role caller is what these fixtures build, so the first held cell is
+      // the caller's. Nothing in the portal renders it.
+      const cell = roles.map((role) => cells?.get(role)).find((held) => held && held.grants !== Grant.None);
+
+      return {
+        featureArea: area,
+        label: area,
+        symbol: cell?.qualifier ?? '',
+        grants: VERBS.filter(([flag]) => (permission.grants & flag) !== 0).map(([, verb]) => verb),
+        ...(cell?.qualifier ? { qualifier: cell.qualifier } : {}),
+        ownScope: permission.scopedOnly !== Grant.None,
+      };
+    });
+}
+
 /** A `GET /v1/admin/session` payload for a caller holding `roles`. */
 export function sessionFor(roles: readonly Role[]): AdminSession {
   return {
     userId: '01JQ0000000000000000000000',
     roles,
-    permissions: [],
+    permissions: permissionsFor(roles),
     menu: menuFor(roles),
     mfaRequired: false,
   };

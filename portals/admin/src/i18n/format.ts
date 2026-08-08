@@ -94,6 +94,48 @@ const confidences = memoise(
     new Intl.NumberFormat(tag(locale), { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
 );
 
+/**
+ * Money to the minor unit, and **signed when it is not zero** (Δ C108).
+ *
+ * SCR-AP-006 is the screen the rounding above is wrong for. A reconciliation
+ * variance of two cents is still a variance — "zero is what reconciled means", in
+ * the contract's own words — and `formatMinorUnits`' whole-rupee rounding would
+ * print it as `0` beside a pill saying the rails disagree. So the finance surface
+ * formats exactly, and the two formatters exist side by side because a KPI card
+ * and a ledger are asking different questions of the same integer.
+ *
+ * `exceptZero` is the sign rule: a variance of zero reads `0.00` rather than
+ * `+0.00`, and every non-zero one carries the direction it went.
+ */
+const exactMoney = memoise(
+  (locale) =>
+    new Intl.NumberFormat(tag(locale), { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+);
+
+const signedMoney = memoise(
+  (locale) =>
+    new Intl.NumberFormat(tag(locale), {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+      signDisplay: 'exceptZero',
+    }),
+);
+
+/**
+ * A commission rate, from the basis points the ledger keeps it in.
+ *
+ * Two fraction digits rather than `percents`' one: a voucher tier is set to the
+ * basis point and `1875` is 18.75 %, which the KPI formatter would round to
+ * 18.8 % — a rate that is not the rate anybody configured.
+ */
+const basisPoints = memoise(
+  (locale) =>
+    new Intl.NumberFormat(tag(locale), {
+      style: 'percent',
+      maximumFractionDigits: 2,
+    }),
+);
+
 /** A count, grouped for the locale. */
 export function formatCount(locale: Locale, value: number): string {
   return counts(locale).format(value);
@@ -154,4 +196,41 @@ export function formatDateTime(locale: Locale, iso: string | undefined | null): 
 export function formatConfidence(locale: Locale, value: number | undefined | null): string | null {
   if (typeof value !== 'number' || !Number.isFinite(value)) return null;
   return confidences(locale).format(value);
+}
+
+/**
+ * Integer minor units → rupees and cents, **without** the rupee mark.
+ *
+ * The finance surface's formatter; see the note beside it. Division by 100 is a
+ * unit conversion of an integer, not arithmetic on money — nothing is added,
+ * multiplied or rounded, so the figure printed is the figure the ledger holds.
+ */
+export function formatMoneyMinor(locale: Locale, minor: number): string {
+  return exactMoney(locale).format(minor / 100);
+}
+
+/** The same, signed unless it is exactly zero — a reconciliation variance. */
+export function formatSignedMoneyMinor(locale: Locale, minor: number): string {
+  return signedMoney(locale).format(minor / 100);
+}
+
+/** One `BusinessDate`, `2026-06-17` → the operator's own rendering of that day. */
+export function formatBusinessDate(locale: Locale, value: string | undefined | null): string | null {
+  if (!value) return null;
+
+  const day = new Date(`${value}T00:00:00Z`);
+  if (Number.isNaN(day.getTime())) return null;
+
+  return dates(locale).format(day);
+}
+
+/**
+ * A basis-point rate as the percentage an operator set — `1250` → `12.5%`.
+ *
+ * Basis points are the wire unit because a percentage of money must not be a
+ * float (CLAUDE.md); the division here converts a unit for display and the
+ * integer is what is sent back.
+ */
+export function formatBasisPoints(locale: Locale, bps: number): string {
+  return basisPoints(locale).format(bps / 10_000);
 }

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { isAuditIntent } from '@/api/audit';
 import type { MutateOptions } from '@/api/client';
 import { ProblemError } from '@/api/problem';
 import { createAdminTranslator } from '@/i18n';
@@ -227,7 +228,12 @@ describe('approving and rejecting', () => {
       approvable: 'true',
     });
 
-    expect(mutate.mock.calls[0]?.[0].audit.entity).toBe('fleet_org');
+    // Δ C108: `audit` is now a union — a D-35 row, or a declaration that the
+    // owning service answers the call and writes none. A verification decision is
+    // always the former, and narrowing here says so rather than assuming it.
+    const audit = mutate.mock.calls[0]?.[0].audit ?? { auditedElsewhere: 'iam-svc' as const };
+    expect(isAuditIntent(audit)).toBe(true);
+    expect(isAuditIntent(audit) ? audit.entity : null).toBe('fleet_org');
   });
 
   it('returns to the queue the officer came from, saying what was decided', async () => {

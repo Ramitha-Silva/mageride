@@ -84,3 +84,47 @@ export interface AuditIntent {
   readonly entity: AdminAuditEntity;
   readonly entityId?: string;
 }
+
+/**
+ * The services whose `/v1/admin/**` routes the gateway sends **past** admin-bff,
+ * so that no `audit.events` row is written for them (Δ C108).
+ *
+ * `gateway-routes.json` matches `/v1/admin/fees/**`,
+ * `/v1/admin/voucher-discount-tiers`, `/v1/admin/drivers/level-config` and
+ * `/v1/admin/rbac/**` at **Order 20** — ahead of the Order 90 admin-bff
+ * catch-all — and admin-bff maps no route of its own onto any of the four. The
+ * GTFS proxy is the shape that *does* work and says why in its own remark: it is
+ * shadowed by an Order 20 route, but a copy exists here, so "the RBAC matrix and
+ * the audit guard cover the path either way". These four have no such copy.
+ *
+ * So on the deployed topology a daily-fee rate change, a voucher-tier change, a
+ * Driver-Level change and every role grant reach their owning service with the
+ * operator's bearer and leave **nothing in the immutable log** — against D-35 and
+ * against US-21.14 ("permission changes … are themselves audited"). Raised as a
+ * micro-change-set in the C108 handoff.
+ */
+export type AuditedElsewhereService = 'subscription-svc' | 'dispatch-svc' | 'iam-svc';
+
+/**
+ * A mutation that will **not** produce a D-35 row, and the service that answers
+ * it instead.
+ *
+ * Declared rather than omitted. `mutate()` could have taken an optional
+ * `AuditIntent` and let these four pass `undefined`, but then "this screen forgot
+ * to declare its row" and "this route writes no row" would be the same value —
+ * and the operator-facing consequence is the opposite in each case. Naming the
+ * service is what lets {@link AuditNotice} tell the truth: an Auditor who is told
+ * a change is in the trail and then cannot find it has been misled by the console
+ * about the one thing the console exists to be trusted on.
+ */
+export interface AuditedElsewhere {
+  readonly auditedElsewhere: AuditedElsewhereService;
+}
+
+/** What a call to `mutate()` says about the audit row it does or does not cause. */
+export type MutationAudit = AuditIntent | AuditedElsewhere;
+
+/** Whether a declaration is a D-35 row admin-bff's interceptor will write. */
+export function isAuditIntent(audit: MutationAudit): audit is AuditIntent {
+  return 'action' in audit;
+}

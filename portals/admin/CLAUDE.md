@@ -76,6 +76,11 @@ the change); it declares it so a confirm dialog can tell the operator which row 
 to appear on, and so `AuditNotice` cannot be rendered for a call whose row was never named.
 Every mutation carries an `Idempotency-Key`.
 
+**Δ C108 — or an `AuditedElsewhere`.** Four `/v1/admin/**` prefixes are routed past admin-bff by the
+gateway and write no row at all, so `audit` is a union and the second arm names the service that
+answered instead. It is still **required**: "this screen forgot to declare its row" and "this route
+writes none" must not be the same value. See the C108 section.
+
 ## Rules for a screen component (C105…C110)
 
 - **Add `app/(portal)/<path>/page.tsx`** at the path `AdminMenu.cs` gives your nav item. It takes
@@ -205,6 +210,56 @@ the wireframe's `/moderation` is the *group*, whose third member is C065's fraud
   the one `GET /v1/admin/session` sent (`AlertsCard`'s rule).
 - **`CursorPage` now lives in `src/api/types.ts`** (Δ C107) and `src/api/verification.ts` re-exports
   it. Three screen groups page; the envelope belongs to none of them.
+
+## SCR-AP-006/007/008/009 — finance, configuration, RBAC and the trail (C108)
+
+Fourteen routes across four wireframe screens, and the component where **the platform's own gaps
+are the design**. Read `AuditIntent` first: it changed shape here.
+
+- **`mutate()`'s `audit` is now a union, and the second arm is a confession.** `gateway-routes.json`
+  matches `/v1/admin/fees/**`, `/v1/admin/voucher-discount-tiers`, `/v1/admin/drivers/level-config`
+  and `/v1/admin/rbac/**` at **Order 20**, ahead of admin-bff's Order 90 catch-all — and admin-bff
+  maps no route onto any of them (the GTFS proxy is the shape that *does* work: shadowed in
+  production, present so "the RBAC matrix and the audit guard cover the path either way"). So those
+  four writes reach their owning service and **leave nothing in `audit.events`**, against D-35 and
+  against US-21.14. They declare `{ auditedElsewhere: 'subscription-svc' | 'dispatch-svc' |
+  'iam-svc' }`, `AuditNotice` says which service answered instead, and the C108 handoff raises it.
+  Declaring it beats omitting it: "this screen forgot its row" and "this route writes none" must not
+  be the same value.
+- **Three configuration surfaces have a write and no read.** Fare tariffs, daily-fee rates and the
+  Driver-Level parameters are `PUT`-only across every contract on the platform. The forms therefore
+  **start empty and say so**; seeding them with D2's illustrative figures would invent the platform's
+  live prices, and the first operator to trust that publishes a version over the top of what is
+  really running. The voucher ladder and the feature flags do have reads and are read.
+- **One D2 screen, four nav items, one tab strip built from the caller's menu.** SCR-AP-006 is drawn
+  as five tabs; `AdminMenu.cs` splits it because they are four different URD §2.3 rows. `financeTabs`
+  / `configTabs` resolve each tab against the item admin-bff sent, so a Support CSR sees one tab and
+  a Verification Officer sees none — `AlertsCard`'s rule, applied to navigation.
+- **`holdsGrant(session, area, grant)` gates a *control* where a nav item is too coarse.** The refund
+  queue is one screen with two audiences (`◐ raise/recommend` vs `✅ approve/execute`), so the raise
+  form is drawn from the caller's own `permissions`, which is admin-bff's evaluation read back rather
+  than a second copy of the matrix. It cannot make admin-bff's precise `RequiresOwnScope(needed)`
+  check — the session response collapses `ScopedGrants` to a boolean — so `test/finance-access.test.ts`
+  parses URD §2.3 and fails the build if any internal role ever holds a scope-limited write in a
+  gated row.
+- **SCR-AP-008 is a lookup, not a directory.** iam-svc has no route that lists internal users, none
+  that provisions one, and none that suspends an account or its sessions. Those wireframe
+  affordances are absent rather than dead, and the screen says why in the operator's own language.
+  The permission-set toggles are **cells**: `getPermissionMatrix` is read-only by design, because a
+  Super Admin who could edit the matrix could grant themselves something URD §2.3 forbids.
+- **The audit export is the one export this portal renders itself.** Every other one relays bytes a
+  service produced; `/v1/admin/audit-log` has no `.csv` sibling and US-19.3 asks for one. It follows
+  the cursor to `AUDIT_EXPORT_MAX_PAGES` and states the cap on the screen, in the `#` preamble and
+  again in the file when it actually bit — a silent truncation is the one failure an audit export
+  cannot have. The handoff asks admin-bff for the route that would let it be deleted.
+- **Money is formatted to the cent here, not to the rupee.** `formatMoneyMinor` /
+  `formatSignedMoneyMinor` sit beside `formatMinorUnits` because a two-cent reconciliation variance
+  is still a variance, and the KPI card's rounding would print it as `0` under a pill saying the
+  rails disagree.
+- **Payouts is a tab, not a card.** `payout.yaml` names SCR-AP-006 and `Payout.Api` is built, but the
+  gateway has **no payout-svc cluster**, so both reads 404 today. Behind a tab, the failure appears
+  when somebody asks for payouts instead of greeting every Finance Officer with an error panel over
+  a working reconciliation.
 
 ## Configuration
 

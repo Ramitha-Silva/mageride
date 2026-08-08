@@ -134,7 +134,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C105 | admin-portal-auth-dashboard | 4c | DONE | 2026-08-08 | **167 tests green** in `@mageride/admin-portal` (14 files, was 119/11) and **39** in `@mageride/ui` (was 36); `npm --prefix portals run lint --workspace admin && … test … && … build …` exits 0, and `npm --prefix portals run lint && … test` is green across all five workspaces (395). **SCR-AP-002 is a server render whose entire state is the URL** — four `<Link>`s and a `method="get"` form, so a comparison survives a reload, a bookmark and the back button, and `src/api/dashboard.ts` builds the one query the screen and its CSV export both send. **Period KPIs recompute and the three live cards do not**, drawn under separate headings because a filter that visibly moves five figures and not three reads as broken (AL-38, D6' §I-28.5). **An absent delta renders `—`, never 0 %** — C061 answers null when the previous period was empty, which is a different fact from no change. **The export relays admin-bff's bytes rather than rendering a second CSV**, through a new `apiDownload`/`download` pair the fences test names beside `apiFetch`; it is a route handler under `/dashboard`, so `resolveRoute` gates it on the same nav item as the page. **SCR-AP-001 keeps its AL-37 absence** and gains the deliverable's forgot-password affordance as a disclosure, because no reset route exists on any contract. **One cross-component fix:** `@mageride/ui`'s `Field` used `createContext`/`useId` without `'use client'`, which — through the barrel — made the whole package unusable from a server component; `portals/ui/test/server-components.test.ts` is now the executable form of that package's own rule. 7 findings recorded (two wireframe tiles and the alerts feed's three rows have no endpoint on any contract, no password-reset route exists anywhere, the riders/drivers tile, the unfiltered dashboard route, rupee rounding, C109's topbar search) |
 | C106 | admin-portal-verification | 4c | DONE | 2026-08-08 | **241 tests green** in `@mageride/admin-portal` (19 files, was 167/14); `npm --prefix portals run lint --workspace admin && … test … && … build …` exits 0, and `npm --prefix portals run lint` is green across all five workspaces. **A queue is not filtered here — a queue *is* the filter**: membership is "a `registry.document_fields` row is still `pending`" (AL-27 as the query C063 made it), so an auto-verified document cannot reach this screen rather than being filtered out by code that could stop filtering; the status column carries the **subject's own** registration status, which is what D2's filter filters on. **All three queues are read on every render** under one search and one status filter, because the wireframe draws a count on each tab and their sum in the topbar and cursor pagination carries no total — the badge is the rows a queue answered, `100+` past a page, `—` for a queue that failed, and a failed queue does not take the screen with it. **The tabs are links, not `@mageride/ui`'s `Tabs`** — that primitive holds the tab in state, and an officer who opens a row, decides and comes back would come back to the first tab. **Every document fetch goes through `/verification/media/{docId}`**, the portal's relay of the audited viewer: `DocumentRef`'s links are deliberately unused (the browser holds no bearer, and building the fetch from `docId` keeps an upstream string out of an `src`), the `302` is passed on rather than followed so the bytes never enter this process, and **one view is one row** — six thumbnails are six `DOC_VIEW` rows, which is why they are not lazy-loaded and the response is `no-store`. **Approve is disabled while any flagged field is unconfirmed** and the rule is stated three times on purpose — button, action, and admin-bff's `409`, which is the only one that is authorization. **Confirm sends no `value` and Edit & confirm sends the officer's**, one boolean that decides whether the extraction stays evidence or the field becomes `manual` with no confidence. `/verification/expiring` is a **different screen** the new dynamic segment out-ranks, so the detail page hands it back to the shell's placeholder. 1 wireframe conflict, 1 copy deviation, 4 spec gaps / micro-change-sets; no spec, backend or contract file touched. |
 | C107 | admin-portal-moderation-support | 4c | PARTIAL | 2026-08-08 | **306 tests green** in `@mageride/admin-portal` (24 files, was 241/19); `npm --prefix portals run lint --workspace admin && … test … && … build …` exits 0 and `next build` emits `/reports` and `/support/tickets`. **SCR-AP-004 and SCR-AP-005 are built; one DoD line cannot be met from this side.** A driver-QR dispute *does* reach the ticket queue (admin-bff sends no `queue` filter, so both piles arrive) and is pilled **Finance** — but **its evidence attachment never reaches this surface**: support-svc's own `TicketRow` carries `screenshotUrl`, `legacyScreenshotUrl` (written by fare-svc for exactly this, AL-47), `thread`, `tripId` and `queue`, and admin-bff's `SupportTicketRow` mapping keeps none of them. **There is no `GET /v1/admin/support/tickets/{ticketId}`** either, so the ticket being read is a row out of the queue page (`?ticket=`, not a path segment), and **no `…/respond`**, so the wireframe's Reply button has nothing to call and is not drawn. **A pending report is not a strike:** `ReportRow.confirmedCount` is `null` on every row (safety-svc's internal row does not carry it), so the count column says "{n} pending" and the confirmed total appears only on the banner after a verdict — the one moment the platform states one. **No Duration control** on Suspend/ban, because `ReasonBody` is one field and nothing reinstates a suspension; **no "Delist 24h" button**, because the third confirmation delists and no single press does. **The refund hand-off is a link and posts nothing** — URD §2.3 gives the CSR `◐ raise/recommend`, and a `daily_fee_refund`/`driver_qr_dispute` ticket is already on Finance's pile by its category. 3 wireframe deviations, 5 spec gaps / micro-change-sets; no spec, backend or contract file touched |
-| C108 | admin-portal-finance-config-rbac-audit | 4c | PENDING | | |
+| C108 | admin-portal-finance-config-rbac-audit | 4c | PARTIAL | 2026-08-08 | **468 tests green** in `@mageride/admin-portal` (32 files, was 306/24); the verify command exits 0 and `next build` emits all fourteen new routes. **All four screens are built; the wireframe baseline cannot be met in five places because the platform has no route behind the control** — the internal-user list, `+ Provision user`, account suspend/revoke + session termination (US-21.9), the IP-allow-list and Active-session columns, and a `Vehicle types` configuration tab (AL-09 is a CHECK, not a setting). **The largest finding is an audit hole:** `gateway-routes.json` matches `/v1/admin/fees/**`, `/v1/admin/voucher-discount-tiers`, `/v1/admin/drivers/level-config` and `/v1/admin/rbac/**` at **Order 20** and admin-bff maps no route onto any of them, so four configuration/RBAC write surfaces write **nothing** to `audit.events` — against D-35, against this component's own fence and against US-21.14, and against `AdminFeeEndpoints`' explicit claim that "every one of these calls arrives through that BFF". `AuditIntent` gained an `auditedElsewhere` arm so the console states which service answered instead of promising a trail entry an Auditor will not find. **Three configuration surfaces are `PUT`-only** (fare tariffs, daily-fee rates, Driver-Level params) so those forms start empty and say why; **payout-svc has no gateway cluster** so SCR-AP-006's Payouts tab 404s until C008 adds one; **`/v1/admin/audit-log` has no `.csv` sibling** so US-19.3's export is rendered in the portal, capped and stated. 6 wireframe deviations, 9 spec gaps / micro-change-sets; no spec, backend or contract file touched |
 | C109 | admin-portal-directories | 4c | PENDING | | |
 | C110 | admin-portal-gtfs-manager | 4c | PENDING | | |
 | C111 | fleet-portal-shell | 4c | PENDING | | |
@@ -17185,3 +17185,237 @@ _Append 3 lines per completed component (Component / Status / Notes)._
 
   **Build host —** no Docker, no replica, no backend build. `vitest run` takes ~16 s and
   `next build` ~25 s.
+
+---
+
+- **Component:** C108 admin-portal-finance-config-rbac-audit — 2026-08-08
+- **Status:** PARTIAL —
+  `npm --prefix portals run lint --workspace admin && npm --prefix portals run test --workspace admin && npm --prefix portals run build --workspace admin`
+  exits 0. **468 tests, 32 files** (was 306/24); `eslint` + `tsc --noEmit` clean; `next build` emits
+  all fourteen new routes and `check-bundle.mjs` reports **AL-52: clean — 1 compiled stylesheet,
+  34.0 kB CSS**. All four screens are built. **PARTIAL because the DoD line "every screen matches its
+  wireframe layout, controls, states and navigation" cannot be met in five places** — each one a
+  control the wireframe draws and the platform has no route behind (findings 5 and 7 below).
+- **Notes:**
+  **What was built —** fourteen routes across SCR-AP-006/007/008/009, each at the path `AdminMenu.cs`
+  gives its nav item: `/finance/reconciliation` (gateway settlement, its exception queue and — behind
+  `?view=payouts` — AL-58's payout run), `/finance/transactions` (the wallet ledger, its CSV and PDF
+  relays, and at `?kind=driver_transfer` the wireframe's Credit-transfers tab), `/finance/refunds`,
+  `/finance/adjustments`, `/config/fares`, `/config/fees`, `/config/voucher-tiers`,
+  `/config/driver-levels`, `/config/feature-flags`, `/access/users`, `/audit-log` and
+  `/audit-log/export`.
+
+  **(1) The audit hole, and it is the finding this component is about.** `gateway-routes.json`
+  matches **`/v1/admin/fees/{**remainder}`**, **`/v1/admin/voucher-discount-tiers`**,
+  **`/v1/admin/drivers/level-config`** and **`/v1/admin/rbac/{**remainder}`** at **Order 20** — ahead
+  of admin-bff's Order 90 catch-all — and admin-bff maps **no route** onto any of the four. So a
+  daily-fee rate change, a voucher-tier change, a Driver-Level change and **every role grant and
+  revocation** reach their owning service with the operator's bearer and write **nothing** to
+  `audit.events`. That is against D-35, against this component's own fence ("configuration writes are
+  audited"), and against **US-21.14** in as many words: "permission changes, role assignments and
+  internal-account lifecycle events are **themselves audited** and visible to Auditors and Super
+  Admins". SCR-AP-009's own wireframe draws a `ROLE_GRANT Finance` row that nothing currently writes.
+  `AdminFeeEndpoints`' remark states the opposite — "every one of these calls arrives through that
+  BFF, which records the actor, the before-image and the after-image for the whole Admin Portal" —
+  and is mistaken about the deployed topology. **`GtfsProxyEndpoints` is the shape that works**: it is
+  shadowed by an Order 20 route in production *and* exists in admin-bff anyway, precisely so "the RBAC
+  matrix and the audit guard cover the path either way". **Micro-change-set: give the four the same
+  treatment**, or move the audit interceptor to the gateway. Until then the portal declares
+  `{ auditedElsewhere: 'subscription-svc' | 'dispatch-svc' | 'iam-svc' }` on those calls and
+  `AuditNotice` renders "this change is answered by {service} directly, so it does not appear in the
+  audit trail". Telling an operator their change is in a trail an Auditor cannot find it in is the one
+  thing a console that exists to be trusted on the audit trail must not do.
+
+  **(2) Three configuration surfaces have a write and no read.** `PUT /v1/admin/fares/tariffs`,
+  `PUT /v1/admin/fees/rates` and `PUT /v1/admin/drivers/level-config` have no `GET` anywhere on the
+  platform — not in `admin-bff.yaml`, `subscription.yaml`, `dispatch.yaml` or `fare.yaml`.
+  (`GET /v1/fees/rates` exists but is the driver-facing ladder on a non-admin prefix, and reading it
+  from this console would be AL-02's fence widening for a config form.) So those three tabs are
+  **publish forms that start empty and say why**. Seeding them with D2's illustrative figures would
+  have this screen inventing the platform's live prices, and the first operator to trust that
+  publishes a version over the top of whatever is really in force — the tariff `PUT` replaces the
+  whole ladder. **Micro-change-set: `GET /v1/admin/fares/tariffs`, `GET /v1/admin/fees/rates`,
+  `GET /v1/admin/drivers/level-config`.** The voucher ladder and the feature flags do have reads and
+  are read; the voucher tab is consequently the only configuration screen showing real values.
+
+  **(3) payout-svc has no gateway cluster.** `payout.yaml` names **SCR-AP-006** on `listPayouts` and
+  `listPayoutBatches` (AL-58), `Payout.Api` is built (C133), and `gateway-routes.json` has **no
+  `payout-svc` cluster at all** — so `/v1/admin/payouts` falls through to admin-bff's Order 90
+  catch-all, which maps no such route, and both reads answer 404. The tab is built against the
+  contract and is a **view (`?view=payouts`) rather than a card**, so the failure appears when
+  somebody asks for payouts instead of putting a permanent error panel over the reconciliation every
+  Finance Officer opens first. **One JSON entry in C008 fixes it.** `POST /v1/admin/payouts/batches`
+  (run the sweep out of band) is deliberately **not** wired to a button: a control that moves every
+  driver's whole balance should not land in the same change that discovers the read half does not
+  resolve.
+
+  **(4) `GET /v1/admin/audit-log` has no `.csv` sibling.** `/dashboard/stats` and
+  `/finance/transactions` both do, and C105's rule is that the portal relays bytes rather than
+  rendering a second copy of a document a service already produces. Here there is no first
+  implementation, and US-19.3 plus the wireframe's own "Export CSV" both ask for one — so
+  `/audit-log/export` **renders it in the portal**, from the same `auditSelection`/`auditSearch` pair
+  the screen uses. It follows the cursor to a stated maximum (`AUDIT_EXPORT_MAX_PAGES × 100`) and says
+  so **three times**: on the screen beside the link, in the file's `#` preamble, and again as an
+  explicit `# TRUNCATED` line when the cap actually bit. A silent truncation is the one failure an
+  audit export cannot have. **Micro-change-set: `GET /v1/admin/audit-log.csv`**, after which this
+  handler can be deleted rather than maintained.
+
+  **(5) Epic 21 has three stories with no route, and SCR-AP-008 is a lookup because of the first.**
+  iam-svc exposes `GET /v1/admin/rbac/{matrix,roles,users/{userId}}` and the two role writes — and
+  **nothing that lists internal users**, **nothing that provisions an account** (US-21.2's first half)
+  and **nothing that suspends, reactivates or revokes an account and force-terminates its sessions**
+  (US-21.9, "within 60 seconds"). The wireframe's "Internal users" table therefore cannot be
+  populated: this is not a filter returning nothing, it is a question the platform cannot answer. So
+  the screen takes a user id — which is exactly what `getUserRoleGrants` is described as serving —
+  and says in the operator's own language that provisioning and account suspension are not possible
+  from here yet. The **IP allow-list** and **Active session** columns name state no contract exposes
+  and are likewise absent. **Micro-change-set: `GET /v1/admin/rbac/users` (search), `POST
+  /v1/admin/rbac/users` (provision), `POST /v1/admin/rbac/users/{userId}/suspend` + session
+  revocation.** *(Whoever picks this up: the audit hole in finding 1 covers the same prefix, so both
+  should be one change.)*
+
+  **(6) US-21.3 has no route and that is correct, not a gap.** "Create custom permission sets /
+  adjust role-to-feature grants without a code deployment" is contradicted by `getPermissionMatrix`'s
+  own description — "read-only, and deliberately so: the matrix is a specification, not
+  configuration. A Super Admin who could edit it could grant themselves something URD §2.3 forbids,
+  which is the one thing the matrix exists to prevent." The wireframe's permission-set **toggles are
+  therefore drawn as read-only cells** rendering the spec's own notation (`✅`, `◐ on tickets`,
+  `⚙ rates`) with the capabilities in words beside them, and the card says where the rule lives.
+  **Micro-change-set against the URD rather than the code: US-21.3 should be struck or re-worded**,
+  because the contract, C027 and this screen all now disagree with it.
+
+  **(7) Six wireframe deviations.**
+  • **No "Vehicle types" tab.** AL-09's list is the CHECK on `registry.vehicles.vehicle_type`, a
+  `HashSet` in subscription-svc that refuses a rate outside it, and an enum in `_shared.yaml`; no
+  route on the platform adds one, so a tab offering to configure them would be offering a migration.
+  What the wireframe's "all admin-configurable" note actually means is the *rates* per type, and those
+  are the first two tabs.
+  • **"Reversals & refunds" is two tabs, not one.** They are two URD §2.3 rows with different cells —
+  Refunds gives a Support CSR `◐ raise/recommend` and Driver-wallet-adjustments gives them `➖` — so
+  one tab would have to either show a CSR the reversal form the matrix withholds or hide the refund
+  queue it grants them. `AdminMenu.cs` had already split them into two items.
+  • **No `+5 %` beside OnePay.** AL-57/AL-59 removed the rail's ride-payment role and the surcharge
+  with it; printing it would describe a fee nothing charges.
+  • **The reversal card names three things, not one.** `billing.daily_fee_charges` is keyed per
+  driver, per vehicle, per day (D-13's idempotency), so the wireframe's single "Driver" field
+  identifies a person and not a charge — and the platform has no route that takes it.
+  • **No retry on a failed payout.** C133 removed `POST /v1/admin/payouts/{payoutId}/retry` because a
+  `FAILED` instruction has already had its debit reversed; the row shows the reason and the panel says
+  the next weekly run picks the restored balance up.
+  • **The internal-user list, `+ Provision user`, `Revoke` (the account) and the IP-allow-list /
+  Active-session columns** — finding 5.
+
+  **(8) `AdminPermission.ownScope` cannot answer the question admin-bff asks of it.** The refund queue
+  is one nav item with two audiences, so the raise form is gated on a *capability* rather than on the
+  item: `holdsGrant(session, 'refunds', 'write')`, reading the caller's own `permissions` — admin-bff's
+  evaluation read back, not a second copy of URD §2.3. But `AdminPermissionResponse.OwnScope` is
+  `ScopedGrants != None` and does **not** say which capability is scoped, so the portal cannot make
+  admin-bff's own precise `RequiresOwnScope(needed)` check; a caller holding two roles (US-21.4's
+  union) could have platform-wide `write` from one and own-scope `raise` from the other. The coarse
+  reading is taken, and `test/finance-access.test.ts` parses URD §2.3 and **fails the build** if any
+  internal role ever holds a scope-limited `write` in a row this console gates a control on. **Optional
+  micro-change-set: put `scopedGrants` on `AdminPermission`** as `iam.yaml`'s own `PermissionEntry`
+  already does, and the coarse reading goes away.
+
+  **(9) Five Admin Portal nav items are claimed by no component.** `cities` (`/config/cities`),
+  `trains` (`/config/trains`), `announcements` (`/announcements`), `pdpa` (`/pdpa`) and `fraud-review`
+  (`/moderation/fraud`) are in `AdminMenu.cs`, are gated, and are still on the shell's
+  `<ScreenPlaceholder>`. All five have contracts and admin-bff routes; none appears in
+  `screen_coverage.md` under any component, because none has a D2 screen id. C108's ADD list includes
+  **E-06**, which is PDPA — but PDPA has no wireframe and no screen id either, and building an
+  operator queue for statutory requests off an ADD reference alone would be inventing a screen. **The
+  manifest needs a decision**: either give them screen ids and a component, or state that the nav
+  items ship as placeholders. *(The C107 handoff already raised the same thing for `fraud-review`.)*
+
+  **The decisions worth knowing about.**
+
+  • **The tab strip is built from the caller's own menu, not from `routes.ts`.** D2 draws SCR-AP-006 as
+  one screen with five tabs and SCR-AP-007 as one with six; the manifest splits the first across four
+  nav items and the second across five. `financeTabs` / `configTabs` resolve each tab against the item
+  `GET /v1/admin/session` actually sent, so a Support CSR sees one finance tab, a Finance Officer sees
+  six, and a Verification Officer sees none — `AlertsCard`'s rule ("the link comes from the item
+  admin-bff sent, not from `routes.ts`") applied to navigation. Two tabs are *views* of a screen
+  (`?view=payouts`, `?kind=driver_transfer`) rather than screens, so neither needs a nav item, a route
+  entry or an exemption.
+
+  • **Money is formatted to the cent on this surface.** `formatMoneyMinor` / `formatSignedMoneyMinor`
+  sit beside C105's `formatMinorUnits`, which rounds to whole rupees. A two-cent reconciliation
+  variance is still a variance — "zero is what reconciled means" — and the KPI rounding would print it
+  as `0` beside a pill saying the two rails disagree. A variance of zero is `Reconciled` in words and
+  every other value carries its sign; there is no warning band, because there is no amount of
+  unexplained money that is nearly fine.
+
+  • **Nothing on the screen recomputes a variance.** `varianceMinor` arrives per day and per window
+  and is added up as sent. Today that is arithmetically identical to subtracting the folded totals —
+  a sum of differences is the difference of sums — so this is not a defence against rounding. It is a
+  defence against the *definition* changing: `varianceMinor` is what admin-bff computed against the
+  ledger's credit leg, and the test hands the fold a payload where the two disagree to prove the
+  screen forwards rather than substitutes.
+
+  • **An absent `postedMinor` renders `—`, never `0`.** "Absent is itself the exception on a settled
+  session" (the contract's own words), and a zero in that cell would read as a posted entry of no
+  value — a different and much less alarming fact. Same rule SCR-AP-002 applies to a null delta.
+
+  • **The refund queue's raise form appears on the unraised row only.** `source=overpaid` has no
+  `refundId` — "that is the point of it" — and is the R-19 failure the queue exists to catch; a row
+  that already has a refund gets no button, because a second one against the same payment is what
+  `409 payment-already-settled` is for. `amountMinor` is **omitted** on a `full` or
+  `overpaid_reversal`: the field's absence *is* the instruction "the whole payment", and computing it
+  here would put this process's arithmetic between an operator and `fares.ride_payments`.
+
+  • **The exception queue offers nothing to close.** The four kinds are derived from the row rather
+  than stored on it, so a session that resolves itself leaves the queue with nobody having to close
+  it; a "dismiss" control would be a second source of truth for membership whose first mistake would
+  be hiding a mismatch that is still a mismatch. The rows are drawn in the order admin-bff sent —
+  "the queue is worked oldest first and an operator touching a row must not move it to the back".
+
+  • **The fee reversal sends no stable `Idempotency-Key` and does not need one.** The ledger key is
+  `adjustment:fee_reversal:{driverId}:{vehicleId}:{feeDate}`, composed from the business fact, so a
+  double click collides in the ledger and comes back `replayed: true` with the original entry. The
+  card **says so**: an operator who pressed twice is told the second press did nothing, which is the
+  whole reason that flag is on the wire. The confirmation figures are formatted **in the server
+  action**, because the card is a client component and this surface's rule is that every string
+  reaches one already translated (`SignInForm`).
+
+  • **The daily-fee `PUT` is sent one rung at a time, the voucher `PUT` whole.** subscription-svc's
+  own remark is that the fee upsert must not delete rows it was not given, "because a Config screen
+  rendering six of the eight tiers" would silently un-configure the other two — and an un-configured
+  type cannot go online at all. Sending one rung is the shape that cannot get that wrong, and with no
+  read route it is the only shape available. The voucher ladder *has* a read, so it is a
+  read-modify-write — and the ladder travels back on a hidden field so the write modifies **what was
+  rendered** rather than a second read that may have moved underneath it.
+
+  • **The tariff form requires all eight fared types.** The `PUT` publishes a *version*; a version
+  missing a type is a version in which that type has no price, and unlike the fee upsert there is no
+  "keep what was there" to fall back on. `bus` and `train` are absent because they are Mode A. A night
+  window whose end is before its start is sent unchanged — the platform's own default is 22:00–05:00,
+  and a form validating `end > start` would refuse it.
+
+  • **SCR-AP-009 is read-only for everybody, not for the Auditor.** "Append-only — there is no write
+  route here", so the DoD item is not something the screen enforces by hiding controls from a role.
+  `test/audit-screen.test.tsx` walks every file under `app/(portal)/audit-log` and
+  `src/components/audit` and fails on a `mutate(`, a server-action import, or a `<form>` that is not
+  `method="get"` — the executable form of a sentence that would otherwise be a comment. The `action`
+  column is printed **verbatim and never translated**: it is what `?action=` filters on and what
+  `AdminAuditActions.cs` keeps as constants so that "an action string that differs by one character
+  between the route that writes it and the screen that filters on it" cannot happen. `before`/`after`
+  are rendered as the JSON they are stored as — an audit trail may be terse, but it may not paraphrase.
+
+  • **`test/support/urd.ts` now builds `permissions` as well as the menu.** `sessionFor` returned
+  `permissions: []`, which would have made the CSR-versus-Finance refund test assert nothing.
+  `permissionsFor(roles)` mirrors `SessionEndpoints`' projection over the same URD §2.3 evaluation, so
+  the DoD claims "a wallet reversal requires the Finance or Super Admin role" and "the CSR sees the
+  queue and not the button" are now checked **against the spec file** rather than against a fixture.
+
+  **Files touched outside this component's own tree —** none. No spec, no contract, no backend, no
+  migration. `src/api/audit.ts`, `src/api/client.ts`, `src/components/AuditNotice.tsx`,
+  `src/server/access.ts`, `src/i18n/format.ts` and `test/support/urd.ts` are C104's files extended in
+  place; `test/fences.test.ts` gained this component's eighteen `/v1/**` paths, and
+  `test/verification-actions.test.ts` narrows the audit union it now asserts against.
+
+  **i18n —** 315 new keys × 3 locales (662 keys total, was 347). Every one goes through the
+  translator; `i18n.test.ts`'s "actually translates the copy" rule passes, so no Sinhala or Tamil
+  value is a copy of the English.
+
+  **Build host —** no Docker, no replica, no backend build. `vitest run` takes ~21 s and
+  `next build` ~45 s.
