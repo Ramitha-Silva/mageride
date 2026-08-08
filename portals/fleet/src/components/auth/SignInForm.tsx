@@ -7,7 +7,7 @@ import { Button, Field, Input } from '@mageride/ui';
 import { signIn, type SignInState } from '@/server/auth-actions';
 
 /**
- * The credential form on SCR-FP-001.
+ * The credential form on SCR-FP-001's **Sign in** tab.
  *
  * Every string arrives already translated, as a prop. The alternative — importing
  * the translator into a client component — would ship all three locale tables to

@@ -90,9 +90,31 @@ export const fleetEn = {
   'fleet.signIn.forgot': 'Forgotten your password?',
   'fleet.signIn.forgotBody':
     'MageRide cannot reset a Fleet Portal password from this screen yet. Ask your organisation owner, or contact MageRide support, and a new password will be set for you.',
-  'fleet.signIn.newAccount': 'Do not have an account yet?',
-  'fleet.signIn.newAccountBody':
-    'A Fleet Portal account is created for you — either by the owner of an organisation that invites you, or by MageRide when a new operator is taken on. Once you can sign in, the organisation itself is set up on the first screen.',
+
+  /* ---- SCR-FP-001 · the sign-up half (US-13.A2/A3) --------------------- */
+  // `web_fleet.html` draws one card whose states are "sign-up vs login", so the
+  // card has two tabs. What the second one cannot have is a Create-account
+  // button: `POST /v1/fleets` needs the caller to already hold `fleet_owner`,
+  // and nothing on any contract grants it to a stranger. So the tab says how an
+  // account really comes to exist — see the C112 handoff.
+  'fleet.auth.tabs': 'Fleet Portal access',
+  'fleet.auth.tab.signIn': 'Sign in',
+  'fleet.auth.tab.signUp': 'Create account',
+  'fleet.signUp.title': 'How a Fleet Portal account is created',
+  'fleet.signUp.unavailable':
+    'MageRide cannot open a new Fleet Portal account from this screen. There are two ways to get one, and both start somewhere else.',
+  'fleet.signUp.byOwner':
+    'Your organisation already uses MageRide — ask its owner to add your work email address to the team from Organisation setup. You can sign in as soon as they have.',
+  'fleet.signUp.byMageRide':
+    'Your organisation is new to MageRide — contact MageRide so an operator account can be opened for you.',
+  'fleet.signUp.thenOrg':
+    'Once you can sign in, you register the organisation itself on the first screen you are shown.',
+  'fleet.signUp.verification': 'Verifying an email address?',
+  'fleet.signUp.verificationBody':
+    'MageRide does not send a verification email for a Fleet Portal account yet, and there is no self-service password reset. Your address is confirmed by whoever adds you to the team.',
+  'fleet.signUp.identities': 'Using Google or Apple?',
+  'fleet.signUp.identitiesBody':
+    'Google and Apple work as soon as your account exists, as long as you use the same work email address. Linking or unlinking a provider afterwards is not available yet.',
 
   /* ---- Errors ---------------------------------------------------------- */
   'fleet.error.title': 'That did not work',
@@ -121,6 +143,15 @@ export const fleetEn = {
   'fleet.error.roleInsufficient': 'Your role in this organisation does not permit that.',
   'fleet.error.orgNotApproved':
     'This organisation is still being verified, so that is not available yet.',
+  // Δ C112 — the six codes SCR-FP-002 and SCR-FP-002a can be answered with.
+  'fleet.error.registrationExists':
+    'That business registration number is already registered with MageRide. Contact MageRide support if it should be yours.',
+  'fleet.error.memberExists': 'That email address already has a seat in this organisation.',
+  'fleet.error.payoutNotFound': 'This organisation has no bank and payout details yet.',
+  'fleet.error.payoutNotVerified':
+    'That needs a verified bank and payout profile. Add the account details and documents, and a verification officer will approve them.',
+  'fleet.error.fileTooLarge': 'That file is larger than {megabytes} MB. Upload a smaller copy.',
+  'fleet.error.fileNotAccepted': 'That kind of file is not accepted here.',
   // Shown verbatim, in every language, because it is what support asks for.
   'fleet.error.reference': 'Reference: {traceId}',
 
@@ -158,6 +189,138 @@ export const fleetEn = {
   // Drawn once, in the chrome, rather than beside every absent button — an empty
   // screen with no explanation reads as a broken screen.
   'fleet.banner.viewer': 'You are signed in as a Viewer, so this session is read-only.',
+
+  /* ---- SCR-FP-002 · organisation setup (US-13.A5/A7) ------------------- */
+  'fleet.org.profile.heading': 'Org profile & KYC',
+  'fleet.org.field.name': 'Organisation name',
+  'fleet.org.field.registrationNo': 'Business registration no',
+  'fleet.org.field.contactPhone': 'Contact mobile',
+  'fleet.org.field.contactEmail': 'Contact email',
+  'fleet.org.field.address': 'Address',
+  'fleet.org.field.registered': 'Registered with MageRide',
+  'fleet.org.field.language': 'Language',
+  'fleet.org.hint.registrationNo': 'Exactly as printed on the business registration certificate.',
+  'fleet.org.hint.contactPhone': 'A Sri Lankan mobile number, for example 0771234567.',
+  'fleet.org.optional': 'Optional',
+  'fleet.org.required': 'required',
+  // The wireframe puts a language control on the organisation card, and no
+  // organisation-level language exists to put behind it — `registry.fleets` has
+  // no such column and `POST /v1/fleets` takes no such field. The control is
+  // real and sets this console's language; the caption says exactly that.
+  'fleet.org.language.note':
+    'Sets the language of this console in this browser. MageRide does not store a language for the organisation itself.',
+  'fleet.org.readOnly':
+    'These details are the record a verification officer reads, and the portal cannot edit them yet. Contact MageRide support to correct anything here.',
+  'fleet.org.kyc.heading': 'KYC and verification',
+  'fleet.org.kyc.gate':
+    'A MageRide verification officer checks the registration before vehicle onboarding and driver assignment open. Until then only read operations are available.',
+  'fleet.org.kyc.unavailable':
+    'The business registration certificate and the owner identity document are collected by MageRide support; the portal has nowhere to upload them yet. The bank documents below are attached to the bank and payout profile.',
+  'fleet.org.payout.link': 'Bank & payout details',
+  'fleet.org.payout.linkBody':
+    'The account that receives Mode B subscription payments, and the bank-app QR your passengers scan. Owner only.',
+  'fleet.org.register.heading': 'Register your organisation',
+  'fleet.org.register.body':
+    'This account can create an organisation but does not belong to one yet. Register it to begin onboarding vehicles and drivers.',
+  'fleet.org.register.gate':
+    'The organisation is created pending verification. A MageRide verification officer reviews it, and until they approve it only read operations are available.',
+  'fleet.org.register.submit': 'Register organisation',
+  'fleet.org.register.submitting': 'Registering…',
+  'fleet.org.error.nameRequired': 'Enter the organisation name',
+  'fleet.org.error.registrationRequired': 'Enter the business registration number',
+  'fleet.org.error.phoneInvalid': 'Enter a Sri Lankan mobile number, for example 0771234567',
+  'fleet.org.error.emailInvalid': 'Enter a valid email address',
+
+  /* ---- SCR-FP-002 · the team (US-13.A5) -------------------------------- */
+  'fleet.team.heading': 'Team members',
+  'fleet.team.caption': 'The people who can sign in for this organisation, and their roles',
+  'fleet.team.column.member': 'Member',
+  'fleet.team.column.role': 'Role',
+  'fleet.team.you': '(you)',
+  'fleet.team.empty': 'No team members yet.',
+  'fleet.team.backToOrg': 'Back to organisation setup',
+  'fleet.team.invite.heading': 'Invite a team member',
+  'fleet.team.invite.email': 'Work email',
+  'fleet.team.invite.name': 'Name',
+  'fleet.team.invite.role': 'Role',
+  'fleet.team.invite.submit': 'Invite member',
+  'fleet.team.invite.submitting': 'Inviting…',
+  'fleet.team.invite.done': 'That address now has a seat in this organisation.',
+  // US-13.A5 gives the Owner "Manager and Viewer". A second Owner is a change of
+  // who the organisation belongs to, which no route makes.
+  'fleet.team.invite.noOwnerSeat':
+    'A second Owner cannot be added here — the organisation belongs to the person who registered it.',
+  // fleet-svc provisions the seat and tells nobody: no fleet-org invitation
+  // template exists on the platform. An owner who is not told that waits for a
+  // mail that never arrives. C112 handoff.
+  'fleet.team.invite.noEmail':
+    'MageRide does not send an invitation email yet. Tell your colleague their address has been added — they can then sign in with Google or Apple using it, or ask MageRide support to set a password.',
+  'fleet.team.invite.ownerOnlyNotice':
+    'Only the organisation owner can add or change team members.',
+  'fleet.team.error.ownerOnly': 'Only the organisation owner can add a team member.',
+  'fleet.team.error.roleRequired': 'Choose Manager or Viewer',
+
+  /* ---- SCR-FP-002a · bank & payout details (AL-49, US-27.1/27.2) ------- */
+  'fleet.payout.title': 'Bank & payout details',
+  'fleet.payout.heading': 'Bank account — receives Mode B subscription payments',
+  'fleet.payout.field.bank': 'Bank',
+  'fleet.payout.field.bankPlaceholder': 'Choose your bank',
+  'fleet.payout.field.branch': 'Branch',
+  'fleet.payout.field.accountNo': 'Account number',
+  'fleet.payout.field.holder': 'Account holder name',
+  'fleet.payout.holderHint':
+    'Must match the organisation or owner KYC name. A verification officer compares the two.',
+  'fleet.payout.editWarning':
+    'Saving these details sends them for verification. They are checked against the documents on the right.',
+  // BR-31.1's second half, before the press rather than after it.
+  'fleet.payout.editVerifiedWarning':
+    'This profile is verified. Saving a change sends the new details for verification, and your Mode B subscribers keep paying into the approved account until an officer has approved the change.',
+  'fleet.payout.submit': 'Save bank details',
+  'fleet.payout.submitting': 'Saving…',
+  'fleet.payout.saved': 'Saved. The details are now pending verification.',
+  'fleet.payout.backToOrg': 'Back to organisation setup',
+  'fleet.payout.status.none': 'Not submitted',
+  'fleet.payout.status.pending': 'Pending verification',
+  'fleet.payout.status.verified': 'Verified',
+  'fleet.payout.status.rejected': 'Rejected',
+  'fleet.payout.status.superseded': 'Replaced by a newer version',
+  'fleet.payout.rejectedReason': 'Reason given: {reason}',
+  'fleet.payout.verifiedOn': 'Verified on {date}.',
+  'fleet.payout.gate.heading': 'What is waiting on this profile',
+  // The sentence C113's SCR-FP-004 puts beside the disabled "Paid" option.
+  'fleet.payout.gate.paid':
+    'A Mode B vehicle cannot be set to Service payment "Paid" until this profile is verified.',
+  'fleet.payout.gate.paidReady':
+    'Mode B vehicles can be set to Service payment "Paid" with a monthly fare.',
+  'fleet.payout.gate.billing':
+    'Paid subscriptions do not start billing, and the passenger pay sheet shows nothing to pay into, until an officer approves these details.',
+  'fleet.payout.gate.paySheetReady':
+    'Mode B subscribers see these account details for an online transfer, and the QR image below for a LankaQR payment.',
+  'fleet.payout.proof.heading': 'Proof of account',
+  'fleet.payout.proof.which': 'Which document is this?',
+  'fleet.payout.proof.prompt': 'Upload the bank statement or passbook page',
+  'fleet.payout.proof.hint': 'PDF or photograph, up to 8 MB.',
+  'fleet.payout.qr.heading': 'Bank-app LankaQR code',
+  'fleet.payout.qr.prompt': 'Upload the LankaQR code image from your bank app',
+  'fleet.payout.qr.hint': 'Photograph or screenshot, up to 8 MB.',
+  'fleet.payout.qr.note':
+    'Shown to Mode B subscribers in the passenger pay sheet, to scan or open in their bank app. Passengers paying by transfer see the verified account details instead.',
+  // BR-31.1 gives the statement and the passbook page one slot, so the screen
+  // asks which of the two the file is.
+  'fleet.payout.kind.bankStatement': 'Latest bank statement',
+  'fleet.payout.kind.passbook': 'First page of the passbook',
+  'fleet.payout.kind.lankaqr': 'Bank-app LankaQR code',
+  'fleet.payout.doc.uploading': 'Uploading…',
+  'fleet.payout.doc.uploaded': 'Uploaded',
+  'fleet.payout.doc.missing': 'Not uploaded',
+  'fleet.payout.error.bankRequired': 'Choose the bank',
+  'fleet.payout.error.branchRequired': 'Enter the branch',
+  'fleet.payout.error.accountRequired': 'Enter the account number',
+  'fleet.payout.error.holderRequired': 'Enter the account holder name',
+  'fleet.payout.error.kindRequired': 'Choose which document this is',
+  'fleet.payout.error.fileRequired': 'Choose a file to upload',
+  'fleet.payout.error.profileFirst':
+    'Save the bank details first — a document is attached to a payout profile, not to an organisation.',
 
   /* ---- The shell's placeholder for a screen a later component owns ------ */
   'fleet.screen.pendingTitle': 'This screen is not built yet',

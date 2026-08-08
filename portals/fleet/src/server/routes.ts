@@ -301,16 +301,23 @@ export const FLEET_NAV: readonly FleetNavGroup[] = [
 export const FLEET_SCREENS: readonly FleetScreen[] = FLEET_NAV.flatMap((group) => group.items);
 
 /**
- * Routes served without a session: the sign-in screen, the two federated sign-in
- * legs and their callbacks. Nothing else in the application is reachable signed
- * out.
+ * Routes served without a session: the two halves of SCR-FP-001, the two
+ * federated sign-in legs and their callbacks. Nothing else in the application is
+ * reachable signed out.
  *
  * The provider legs are enumerated rather than matched by prefix. `/auth/**` as a
  * public prefix would make any future route under it public by accident, and this
  * is the one list where an accident is a hole.
+ *
+ * **Δ C112 — `/signup` is `web_fleet.html`'s own address bar for SCR-FP-001**, so
+ * it is a real route rather than a 404 beside a screen the wireframe draws. It is
+ * the same screen with the other tab selected, and it holds no control that posts
+ * anywhere: the platform has no self-service registration (C111 handoff, finding
+ * 1), and the tab says so in words.
  */
 export const PUBLIC_PATHS: readonly string[] = [
   '/login',
+  '/signup',
   '/auth/google',
   '/auth/apple',
   '/auth/callback/google',

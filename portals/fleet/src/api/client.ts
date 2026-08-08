@@ -93,6 +93,11 @@ export interface RequiredGrant {
    * what the Verification Officer reads *before* approving).
    */
   readonly requiresApprovedOrg?: boolean;
+  /**
+   * Whether the route works for a caller who belongs to no organisation yet.
+   * **True for `POST /v1/fleets` and nothing else** — see {@link canMutate}.
+   */
+  readonly allowsNoOrganisation?: boolean;
 }
 
 export type MutateOptions<TBody = unknown> = ApiTarget & {

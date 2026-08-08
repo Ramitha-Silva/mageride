@@ -24,6 +24,17 @@ export interface ApiRequest {
   /** An absolute API path, `/v1/...`. */
   readonly path: string;
   readonly method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+  /**
+   * Serialised as JSON — **unless it is a `FormData`**, which is sent as the
+   * multipart body it already is.
+   *
+   * Δ C112. `POST /v1/fleets/{id}/payout-profile/documents` is the portal's one
+   * `multipart/form-data` route (AL-49: the bank statement or passbook page, and
+   * the bank-app LankaQR image), and fleet-svc's handler reads `kind` and `file`
+   * off the form. Everything else about the call is unchanged — same origin, same
+   * bearer, same `Idempotency-Key`, same `no-store`, same problem+json on failure
+   * — so it stays this function rather than becoming a second transport.
+   */
   readonly body?: unknown;
   /** Bearer to present. Omitted on the sign-in and refresh routes. */
   readonly accessToken?: string;
@@ -88,14 +99,20 @@ export async function apiFetch<T>(request: ApiRequest): Promise<ApiResponse<T>> 
 
   if (request.accessToken) headers.set('authorization', `Bearer ${request.accessToken}`);
   if (request.idempotencyKey) headers.set('idempotency-key', request.idempotencyKey);
-  if (request.body !== undefined) headers.set('content-type', 'application/json');
+  // A `FormData` body carries its own content type, and the multipart boundary is
+  // part of it — set `application/json` over one and the far side reads a body it
+  // cannot parse. `undici` writes the header when it is left alone, so the one
+  // correct thing to do here is nothing. See {@link ApiRequest.body}.
+  if (request.body !== undefined && !isMultipart(request.body)) {
+    headers.set('content-type', 'application/json');
+  }
 
   let response: Response;
   try {
     response = await fetch(url, {
       method,
       headers,
-      body: request.body === undefined ? undefined : JSON.stringify(request.body),
+      body: encodeBody(request.body),
       cache: 'no-store',
       redirect: 'manual',
       signal: request.signal,
@@ -133,4 +150,14 @@ export async function apiFetch<T>(request: ApiRequest): Promise<ApiResponse<T>> 
   if (!text) return { status: response.status, data: undefined as T };
 
   return { status: response.status, data: JSON.parse(text) as T };
+}
+
+/** Whether a body is already an encoded request body rather than a value to serialise. */
+function isMultipart(body: unknown): body is FormData {
+  return typeof FormData !== 'undefined' && body instanceof FormData;
+}
+
+function encodeBody(body: unknown): BodyInit | undefined {
+  if (body === undefined) return undefined;
+  return isMultipart(body) ? body : JSON.stringify(body);
 }

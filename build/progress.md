@@ -138,7 +138,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C109 | admin-portal-directories | 4c | DONE | 2026-08-08 | **580 tests green** in `@mageride/admin-portal` (36 files, was 468/32); the verify command exits 0, `next build` emits all eight new routes, and all five portal workspaces are green (814). **Six screens, six GETs and no seventh verb** — BR-28.8's "all are read-only" is asserted against the group's whole tree (no `mutate(`, no server-action import, no `<form>` that is not `method="get"`), and every wireframe button that would write is a **link to the screen that owns the action**, drawn only when the caller's own menu carries it. **Every criterion is independent** — the searches build one AND-ed query from every parameter `admin-bff.yaml` declares, and `?status=verified` is sent even as the default because the screen's caption claims it. **A mistyped `?id=` asks admin-bff nothing** and marks its own box (C105's `awaitingRange` rule). **Opening a record is the audited act and the portal does not write the row** — `test/directories-query.test.ts` parses `DirectoryEndpoints.cs` and fails if a detail route loses `.Audited(PiiRead, …)` or a search gains one. **The document relay is one implementation and two URLs**: `src/server/document-media.ts` now serves C106's route and a new `/vehicles/media/[docId]`, because `proxy.ts` gates on the screen a path resolves to and a Support CSR holds the vehicle directory without the verification queues; the tiles, grid and lightbox are C106's components imported unchanged. 6 wireframe deviations, 5 spec gaps / micro-change-sets; no spec, backend or contract file touched |
 | C110 | admin-portal-gtfs-manager | 4c | DONE | 2026-08-08 | **634 tests green** in `@mageride/admin-portal` (38 files, was 580/36); the verify command exits 0, `next build` emits all four new routes, and all five portal workspaces are green (868). **SCR-AP-016 is one screen whose entire state is `?feed=`**, and that single rule produces four of D2's seven states with no branch: absent, the selection is the newest upload — the last thing that happened — so a validating feed shows the stepper, a validated one the preview and Activate, a failed one the first five errors and the report, and once the newest upload is live the card *is* the live feed (`active-idle`). No versions is `empty`; `uploading` and `activating` are the two client-side moments. **The 2 s poll is `router.refresh()`, not a JSON fragment** — the stepper, the counts, the warnings and the history row move together because they are one render, and the copy stays where every other string is resolved. **The upload is the one thing in this portal that is not `fetch`**: `fetch` has no upload-progress event, so `UploadCard` posts by XHR to the portal's own route handler, which attaches the bearer and **streams** the 200 MB body on through a new `apiUpload`/`upload` pair the fences test names beside `apiFetch` and `apiDownload`. **A duplicate is refused on the bytes**, and the inline error reads the `409`'s RFC 7807 extensions to name and link the version that already holds them. **The confirm dialog names what is being switched off**, not "are you sure"; rollback is the same dialog and the same call with one line saying so, and both dialog and toast are *derived* from the action result rather than pushed by an effect. **`mutate()`'s audit gained a third case that is not C108's**: `/v1/admin/transit/**` is routed past admin-bff at Order 20, so `GTFS_PROXIED` is never written — but transit-svc writes `GTFS_FEED_UPLOADED`/`GTFS_FEED_ACTIVATED` inside the swap transaction, so a row always exists and `auditedElsewhere` would state the opposite of the truth. `test/audit.test.ts` now parses `GtfsAuditActions.cs` as the second writer. 3 wireframe deviations, 4 spec gaps / micro-change-sets; no spec, backend or contract file touched |
 | C111 | fleet-portal-shell | 4c | DONE | 2026-08-08 | **114 tests green** in `@mageride/fleet-portal` (9 files); `npm --prefix portals run lint --workspace fleet && … test … && … build …` exits 0, `next build` emits nine routes, `check-bundle.mjs` reports **AL-52: clean — 1 compiled stylesheet, 28.7 kB CSS**, and all six portal workspaces are green (982 tests, 54 files). **There is no Fleet Portal session endpoint**, so the shell composes one from `GET /v1/me/permissions` — the caller's URD §2.3 rows *plus* `fleetId`/`fleetRole` read from `iam.fleet_members` rather than from the token — and `GET /v1/fleets/{id}` for the organisation's `status`, the only route that carries it. **The nav manifest is local because nothing sends one**, but every entry declares what its own routes declare: the URD row and capability (answered by the caller's server-side evaluation, with URD §2.1's sub-model already applied), the `RequireFleetSubRole` the route names, and the `RequireApprovedFleet()` group it sits in — `test/routes.test.ts` parses `FleetEndpoints.cs`, `FleetOpsEndpoints.cs` and `MageRideClaims.cs` and fails when any moves. **The approval gate blocks exactly what fleet-svc blocks:** the vehicle and assignment groups carry it on the *group*, so a pending org loses those screens and the Mode B proxies built on them, while the ops reads (`/map`, `/analytics`, `/schedules`, `/health`) stay open and their individual writes are what get refused. **Two refusals, two pages** — `/denied` is a real 403 about the caller, `/pending` renders inside the chrome about the organisation and lists what *is* open. **A screen never holds an org id** (`read({ org: '/vehicles' })` is scoped from the session) and **every mutation declares the row it needs**, refused locally when the caller holds no `write` there. **Both federated arms are the implicit ID-token flow** — iam-svc takes `{idToken}` and the only code-exchange route forces `app=admin` — so both return by cross-site `form_post`, which is why the OAuth state cookie is the one `SameSite=None` cookie here. 3 wireframe deviations, 10 spec gaps / micro-change-sets — including **no sign-up, no password reset and no identity link/unlink route anywhere on the platform**; no spec, backend or contract file touched |
-| C112 | fleet-portal-auth-org-payout | 4c | PENDING | | |
+| C112 | fleet-portal-auth-org-payout | 4c | DONE | 2026-08-08 | **193 tests green** in `@mageride/fleet-portal` (14 files, was 114/9); the verify command exits 0, `next build` emits **13 routes** (was 9), `check-bundle.mjs` reports **AL-52: clean — 1 compiled stylesheet, 29.7 kB CSS**, and all six portal workspaces are green (**1,061 tests, 59 files**). **SCR-FP-001 is one card with two tabs at two routes** — `/login` and the wireframe's own `/signup`, both public — and the Create-account tab holds **no form, no input and no submit**, because `POST /v1/fleets` needs the caller to already hold `fleet_owner` and nothing on any contract grants it to a stranger; the tab explains the two paths that do exist, and a test asserts the absence so a control cannot be added back without the reason being revisited. **SCR-FP-002 is two screens because an organisation starts existing** — the register form for a `fleet_owner` with no membership row, then the KYC record, the team and the payout link — and `canMutate(…, {allowsNoOrganisation:true})` is the control-level twin of the manifest's own flag, set on `POST /v1/fleets` and nowhere else because it is the one call that creates the membership every other write is scoped to. **SCR-FP-002a is gated three times** (proxy, fleet-svc, and the page's own `forbidden()`), is deliberately **not** approval-gated because AL-49's documents are what the officer reads *before* approving, and warns **before the press** that saving an edit to a verified profile re-enters Pending while subscribers keep paying the approved account (BR-31.1's expensive half). **The AL-49 gate ships as a predicate and a sentence, not as a rule two screens derive** — `canSetPaidServicePayment()` + `PAID_SERVICE_PAYMENT_BLOCKED_KEY` in `src/api/payout.ts`, which C113's SCR-FP-004 imports to disable "Service payment · Paid" and say why. **The statement and the passbook page are one slot with a chooser** (§26 gives them one column), and `apiFetch` gained a `FormData` passthrough for the portal's one multipart route. **112 new resource keys × 3 locales** (96 → 206); 7 wireframe affordances with no route behind them, each stated in words rather than drawn; **2 deviations, 9 spec gaps / micro-change-sets**; no spec, contract, backend or migration file touched |
 | C113 | fleet-portal-vehicles-drivers-trackers | 4c | PENDING | | |
 | C114 | fleet-portal-dashboard-map-analytics | 4c | PENDING | | |
 | C115 | fleet-portal-scheduling-billing | 4c | PENDING | | |
@@ -17900,4 +17900,155 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   of the English, and every nav label differs from its English form in both.
 
   **Build host —** no Docker, no replica, no backend build. `vitest run` takes ~5 s and `next build`
+  ~35 s.
+
+---
+
+- **Component:** C112 fleet-portal-auth-org-payout — 2026-08-08
+- **Status:** DONE —
+  `npm --prefix portals run lint --workspace fleet && npm --prefix portals run test --workspace fleet && npm --prefix portals run build --workspace fleet`
+  exits 0. **193 tests, 14 files** (was 114/9); `eslint` + `tsc --noEmit` clean; `next build` emits
+  **13 routes** (the nine C111 left, plus `/signup`, `/org/setup`, `/org/team`, `/org/payout`), and
+  `check-bundle.mjs` reports **AL-52: clean — 1 compiled stylesheet, 29.7 kB CSS**. All six portal
+  workspaces are green (**1,061 tests, 59 files**) and `npm --prefix portals run lint` passes across
+  all of them. SCR-FP-001, SCR-FP-002 and SCR-FP-002a render for all three sub-roles in both
+  appearances at 375 / 768 / 1024.
+- **Notes:**
+  **What was built —** the Fleet Portal's first three screens: sign-in **and sign-up**
+  (`app/login`, `app/signup`), the organisation and its team (`app/(portal)/org/setup`,
+  `app/(portal)/org/team`) and the Owner-only bank & payout profile
+  (`app/(portal)/org/payout`), plus the two model modules (`src/api/{org,payout}.ts`), the four
+  server actions (`src/server/{org,payout}-actions.ts`) and six components under
+  `src/components/{auth,org,payout}/`.
+
+  **(1) SCR-FP-001 is one card with two tabs at two routes, and the second tab holds no control.**
+  `web_fleet.html` draws this screen with its address bar on `/signup` and a **Create account**
+  button, and its states line reads "sign-up vs login". Both halves are here and `/signup` is a real
+  public route — a 404 beside a screen the wireframe draws tells an operator who typed the address
+  that MageRide has no such thing, when what it has is a different path to it. What the tab cannot
+  have is the button: `POST /v1/fleets` is `RequireMageRideRole(FleetOwner)`, and the only two things
+  that grant `fleet_owner` are an existing Owner's `POST /v1/fleets/{id}/members` and a Super Admin's
+  role grant. So the tab explains those two paths, and `test/auth-screen.test.tsx` asserts the panel
+  contains **no form, no input and no submit** — the absence is a decision with a test on it rather
+  than something the next component quietly fills in.
+
+  **(2) SCR-FP-002 is two screens, because an organisation is a thing that starts existing.**
+  The wireframe draws the state *after* registration, which is the state the screen spends its life
+  in. Before it there is a signed-in `fleet_owner` with **no membership row** — the one session for
+  which `./access` opens exactly one screen — and that is the register form. It needed one shell
+  change: `canMutate(session, area, { allowsNoOrganisation: true })`, the control-level twin of the
+  manifest's own `allowsNoOrganisation`, **set on `POST /v1/fleets` and nowhere else** because it is
+  the one fleet route with no `{fleetId}` and the one call that creates the membership every other
+  write is scoped to. `test/org.test.ts` asserts it does not weaken a Viewer's refusal or the
+  approval gate.
+
+  **(3) SCR-FP-002a is gated three times, and deliberately not gated on approval.** The manifest
+  entry (`fleet-billing` / `write` / `owner`) is transcribed off fleet-svc's own
+  `RequireFleetSubRole(FleetRoles.Owner)` on all three payout routes, so `proxy.ts` refuses the URL;
+  fleet-svc refuses every request behind it, re-reading the seat from `iam.fleet_members`; and the
+  page itself calls `forbidden()`, so a proxy matcher that stopped covering the path becomes a 403
+  rather than a rendered screen. It is **not** behind `RequireApprovedFleet()` and must not be:
+  AL-49's documents are part of what the Verification Officer reads *before* approving, and gating
+  them would mean approving an organisation before seeing the evidence you approve it on.
+
+  **(4) BR-31.1's expensive half is a warning before the press, not a chip that changed colour.**
+  An edit to a **verified** profile inserts a new pending version and leaves the incumbent verified —
+  so subscription-svc's `payTo` keeps rendering the account an officer approved and no subscriber's
+  next transfer is silently redirected — but Paid classification and the pay sheet keep pointing at
+  the old account until the new one is approved. An owner who did not know that would read the chip
+  flipping back to Pending as something having gone wrong, so the form carries a different sentence
+  while the profile is verified. A **document upload is an edit too**, for the same reason and with
+  the same consequence.
+
+  **(5) The AL-49 gate ships as a predicate and a sentence, because it belongs to two screens.**
+  `PUT …/vehicles/{id}/classification {mode_b_billing:'paid'}` answers
+  `409 payout-profile-not-verified` while the org profile is not `verified`. The **control** is
+  SCR-FP-004's ("Service payment · Free / Paid", C113); the **fact** is SCR-FP-002a's. So
+  `src/api/payout.ts` exports `canSetPaidServicePayment(profile)` and
+  `PAID_SERVICE_PAYMENT_BLOCKED_KEY` as a pair, SCR-FP-002a renders them as "what is waiting on this
+  profile", and **C113 imports both** rather than re-deriving the rule. `test/payout.test.ts` pins
+  the predicate for all four statuses plus the never-submitted case, and pins the sentence's
+  existence in all three locales.
+
+  **(6) The statement and the passbook page are one slot with a chooser.** BR-31.1 asks for the
+  latest statement *or* the first page of the passbook and §26 gives them one `proof_upload_id`, so
+  the wireframe's single dropzone gets the one control the wire needs to tell the two apart — and
+  uploading a passbook after a statement replaces it, which is what somebody re-photographing a
+  blurred page is trying to do. That needed the shell's second change: **`apiFetch` sends a
+  `FormData` body as the multipart it already is** instead of JSON-encoding it, and
+  `next.config.ts` raises `serverActions.bodySizeLimit` to fleet-svc's own `Fleet:DocumentMaxBytes`
+  (8 MB) — Next's 1 MB default would refuse a photographed passbook page *before* the service that
+  owns the rule ever saw it.
+
+  **Spec gaps and micro-change-sets —**
+  1. **No route edits an organisation.** `POST /v1/fleets` creates and `GET /v1/fleets/{id}` reads;
+     there is no `PUT`. SCR-FP-002 draws editable fields, so the screen renders them as the KYC
+     record an officer is reading and says to contact support. **`PUT /v1/fleets/{fleetId}` (owner,
+     re-entering PENDING on a KYC-relevant change) is the missing route.**
+  2. **No org-level KYC document exists.** The wireframe's "⬆ Upload KYC documents (BR, owner ID)"
+     has nothing behind it: fleet-svc's only document route is `POST …/payout-profile/documents`
+     (three AL-49 kinds), and `registry.documents`' fleet kinds are AL-50's four **per-vehicle**
+     slots. Yet `GET /v1/admin/verification/org/{orgId}` promises the officer a `documents[]` for the
+     organisation, and US-13.A7's gate is a KYC gate. Either a `business_registration` /
+     `owner_identity` kind on `POST /v1/fleets/{id}/documents`, or D2 drops the dropzone.
+  3. **An organisation has no language.** `registry.fleets` has no column, `POST /v1/fleets` takes no
+     field, and D2 §FP gives SCR-FP-002 a language control. The control is real and sets *this
+     console's* language, with a caption saying exactly that. `registry.fleets.language` would make
+     the wireframe's reading true.
+  4. **A member can be provisioned and never removed or re-seated.** `POST …/members` is the only
+     write; there is no `DELETE …/members/{userId}` and no `PUT …/members/{userId}`. An owner who
+     invites the wrong address, or whose manager leaves, has no way back.
+  5. **Nothing tells an invited member they have been invited.** fleet-svc says so itself — no
+     fleet-org invitation template exists in `content.notification_templates` — so the invite form
+     says to pass the address on out of band. And **no credential is set**: the invitee can use
+     Google or Apple with that address, but a password has to come from support. A seeded
+     `fleet_member_invited` template (trilingual) closes it.
+  6. **There is no bank reference list on any contract.** `bank` is free text, and `web_fleet.html`
+     draws a dropdown — because a bank name typed three ways is three accounts to an officer reading
+     a statement. `LICENSED_BANKS` in `src/api/payout.ts` is therefore local, and the same list is
+     needed by the driver payout profile (AL-58, SCR-DA-022a). content-svc already publishes
+     `GET /v1/config/cities`; **`GET /v1/config/banks` is its natural sibling.**
+  7. **The account-holder name "must match org/owner KYC" is unenforceable client-side, and should
+     stay that way.** Only the Verification Officer holds the KYC record; a portal comparing the
+     field against `registry.fleets.name` would refuse a sole proprietor's correct personal account.
+     It is stated on the field. Worth a line in D2 so a later component does not "fix" it.
+  8. **`getPayoutProfile` answers 404 for the state every organisation starts in.** The screen reads
+     `payout-profile-not-found` as the empty form rather than as a failure, which is right — but a
+     `200` with `status: null`, or a documented "404 means not submitted", would stop the next client
+     drawing a problem panel on a first visit.
+  9. **The three sign-in routes and `POST /v1/fleets` all require `Idempotency-Key`; `PUT
+     …/payout-profile` does not declare the parameter** while `POST …/payout-profile/documents`
+     does. The portal sends one on both (`mutate()` always does). One of the two contract entries is
+     wrong — carried over from the C111 handoff's finding 10, now with a second instance.
+
+  **Deviations from `web_fleet.html`, both deliberate —**
+  - **The payout status chip is at the head of the screen, not in the topbar.** The sketch puts
+    "Pending verification" in SCR-FP-002a's topbar; the shell's topbar chip is the **organisation's**
+    verification state and is drawn on every screen (C111). Two chips in one bar reporting two
+    different verifications is the worse reading, so the profile's own chip sits beside the screen's
+    heading where it belongs.
+  - **Seven affordances are sentences rather than controls** — Create account, email verification,
+    password reset, identity link/unlink, editing the organisation, the KYC dropzone, and a second
+    Owner. Each is a route that does not exist (findings 1, 2, 4 and the C111 handoff's 1–3); a
+    control that posted nowhere would be worse, because an operator cannot tell a broken control from
+    an absent feature.
+
+  **Files —** new: `app/signup/page.tsx`, `app/login/params.ts`,
+  `app/(portal)/org/{setup,team,payout}/page.tsx`, `src/api/{org,payout}.ts`,
+  `src/server/{org-actions,payout-actions}.ts`,
+  `src/components/auth/{AuthScreen,SignInForm}.tsx` (the form moved out of `app/login/`),
+  `src/components/org/{OrgRegisterForm,TeamPanel,ConsoleLanguage,team-model}.tsx`,
+  `src/components/payout/{PayoutProfileForm,PayoutDocumentUpload}.tsx`,
+  `test/{org,payout,actions,org-screens,auth-screen}.test.*`. Changed: `app/login/page.tsx`,
+  `next.config.ts`, `src/api/{http,client,problem}.ts`, `src/server/{access,routes}.ts`,
+  `src/i18n/messages/{en,si,ta}.ts`, `test/{routes,support/fleet}.ts`, `portals/fleet/CLAUDE.md`.
+
+  **Files touched outside this component's own tree —** none. **No spec, no contract, no backend, no
+  migration, and no change to any shared portal package.**
+
+  **i18n —** 206 keys × 3 locales, up from 96; two dead keys (`fleet.signIn.newAccount*`) removed
+  when the sign-up tab replaced the disclosure that carried them. `i18n.test.ts`'s "actually
+  translates the copy" rule passes, so no Sinhala or Tamil value is a copy of the English.
+
+  **Build host —** no Docker, no replica, no backend build. `vitest run` takes ~9 s and `next build`
   ~35 s.

@@ -1,4 +1,4 @@
-# Fleet Portal (C111 shell) — `fleet.mageride.lk`
+# Fleet Portal (C111 shell + C112 auth/org/payout) — `fleet.mageride.lk`
 
 Next.js 16 (App Router) + TypeScript + React 19, styled **only** with Tailwind through
 `@mageride/tailwind-preset` (AL-52). npm workspace member `@mageride/fleet-portal` under `portals/`.
@@ -16,6 +16,49 @@ chrome the twelve screens sit inside. C111 owns no wireframe screen ID — the s
 because there is no session to hand a screen without one, but SCR-FP-001 itself (sign-up, the
 verification and reset copy, identity link/unlink) is C112's, which drops its own
 `app/(portal)/…/page.tsx` beside the catch-all placeholder, as do C113…C116.
+
+## What C112 is — SCR-FP-001, SCR-FP-002 and SCR-FP-002a
+
+The first three screens: sign-in **and sign-up**, the organisation, its team, and the Owner-only
+bank & payout profile. `app/login` + `app/signup` (one card, two tabs, two routes),
+`app/(portal)/org/{setup,team,payout}`, `src/api/{org,payout}.ts`,
+`src/server/{org,payout}-actions.ts` and `src/components/{auth,org,payout}/`.
+
+Three things it added to the shell, each on one route's account:
+
+- **`apiFetch` sends a `FormData` body as multipart** rather than JSON-encoding it.
+  `POST …/payout-profile/documents` is the portal's one multipart route (AL-49), and
+  `next.config.ts` raises `serverActions.bodySizeLimit` to fleet-svc's own `DocumentMaxBytes` (8 MB)
+  so a photographed passbook page is not refused before the service that owns the rule sees it.
+- **`canMutate(…, { allowsNoOrganisation: true })`** — the control-level twin of the manifest's
+  `allowsNoOrganisation`, set on `POST /v1/fleets` and nowhere else. It is the one mutation an
+  account with no membership can make, because it is the call that creates the membership.
+- **`/signup` is public** — `web_fleet.html`'s own address bar for SCR-FP-001.
+
+### The AL-49 gate lives in `src/api/payout.ts`, and C113 imports it
+
+BR-31.1 makes `PUT …/classification {mode_b_billing:'paid'}` answer `409 payout-profile-not-verified`
+while the org profile is not `verified`. The **control** is SCR-FP-004's ("Service payment ·
+Free / Paid", C113); the **fact** is this screen's. So `canSetPaidServicePayment(profile)` and
+`PAID_SERVICE_PAYMENT_BLOCKED_KEY` are exported as a pair — one predicate, one sentence — and
+SCR-FP-004 disables the Paid option and explains it without re-deriving anything.
+`test/payout.test.ts` pins both against `fleet.yaml`.
+
+### What SCR-FP-002 and SCR-FP-002a cannot do, and say so
+
+Four affordances the wireframe draws have **no route on any contract**, and each is a sentence on
+the screen rather than a control that posts nowhere (all four are in the C112 handoff):
+
+1. **Editing an organisation.** `POST /v1/fleets` creates and `GET /v1/fleets/{id}` reads; there is
+   no `PUT`. The KYC fields are rendered as the record an officer is reading.
+2. **Org-level KYC documents** ("⬆ Upload KYC documents (BR, owner ID)"). fleet-svc's only document
+   route is the AL-49 payout evidence; `registry.documents`' fleet kinds are AL-50's four
+   **per-vehicle** slots.
+3. **An organisation language.** `registry.fleets` has no such column. The control is real and sets
+   *this console's* language, and its caption says exactly that.
+4. **Removing or re-seating a member.** `POST …/members` provisions; nothing deletes or changes a
+   seat. And nothing emails the invitee — there is no fleet-org template on the platform — so the
+   invite form says to tell them out of band.
 
 Shared infrastructure (C103) — use it, do not re-implement it: `@mageride/tailwind-preset`
 (D2 §0.2 tokens), `@mageride/ui` (button/field/chip/pill/table/modal/toast/tabs/dropzone),
@@ -114,7 +157,7 @@ here: a `Lax` cookie is not sent on a cross-site POST, so the CSRF check would f
 sign-in. `None` requires `Secure`, so federated sign-in does not complete over plain HTTP — the
 password arm does, and `.env.example` says so.
 
-## Rules for a screen component (C112…C116)
+## Rules for a screen component (C113…C116)
 
 - **Add `app/(portal)/<path>/page.tsx`** at the path your entry has in `src/server/routes.ts`. It
   takes precedence over the catch-all automatically. A *new* nav entry has to be added to the
@@ -139,21 +182,23 @@ password arm does, and `.env.example` says so.
 - **Never surface a Mode C option (AL-03).** `test/fences.test.ts` greps the whole tree for it and
   for a `/v1/rides` or `/v1/dispatch` call.
 
-## What the platform cannot do yet (read before building SCR-FP-001)
+## What the platform cannot do on SCR-FP-001
 
-Three of the wireframe's own affordances have **no route on any contract**, and the sign-in screen
-states each in words rather than drawing a control that posts nowhere:
+Three of the wireframe's own affordances have **no route on any contract**, and the screen states
+each in words rather than drawing a control that posts nowhere:
 
 1. **Sign-up.** `POST /v1/fleets` registers an *organisation* and is gated on already holding
    `fleet_owner`. The only two things that grant it are an existing Owner's
    `POST /v1/fleets/{id}/members` and a Super Admin's role grant. A new operator cannot create an
-   account from this screen.
+   account from this screen. The **Create account** tab explains those two paths instead.
 2. **Email verification and password reset.** iam-svc has nine auth operations and none of them
    verifies an address or resets a password.
 3. **Identity link/unlink.** `iam.federated_identities` is written by a provider sign-in; no route
    reads, adds or removes a row.
 
-See the C111 entry in `build/progress.md`.
+`test/auth-screen.test.tsx` asserts the sign-up panel holds no form, no input and no submit, so a
+control cannot be added to it without the reason being revisited. See the C111 and C112 entries in
+`build/progress.md`.
 
 ## Configuration
 

@@ -72,6 +72,8 @@ describe('the manifest is internally consistent', () => {
   it('keeps the sign-in flow public and the two refusal pages unscreened', () => {
     expect(PUBLIC_PATHS).toEqual([
       '/login',
+      // Δ C112 — SCR-FP-001's other half, at the wireframe's own `/signup`.
+      '/signup',
       '/auth/google',
       '/auth/apple',
       '/auth/callback/google',

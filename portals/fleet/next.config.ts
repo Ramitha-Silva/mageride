@@ -19,6 +19,14 @@ import type { NextConfig } from 'next';
  *     `node portals/$PORTAL/server.js`. Left alone, Next roots the tree at the
  *     nearest lockfile — `portals/` — and emits one path segment less.
  *
+ * **Δ C112 — `serverActions.bodySizeLimit` is fleet-svc's own ceiling.** SCR-FP-002a
+ * uploads a bank statement, a passbook page or a LankaQR image through a server
+ * action, and Next caps an action body at 1 MB by default — a limit a photograph
+ * of a passbook routinely passes, and one that would refuse the file *before* the
+ * service that owns the rule ever saw it. `Fleet:DocumentMaxBytes` is 8 MiB, so
+ * this is 8 MB: the portal stops nothing the platform would accept, and the
+ * platform still counts the bytes it actually received.
+ *
  * There is deliberately **no** styling configuration here. Tailwind v4 reads its
  * theme from CSS (`app/globals.css` → `@mageride/tailwind-preset/theme.css`), and
  * a `tailwind.config.js` on v4 *merges* `screens` instead of replacing them,
@@ -32,6 +40,7 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   experimental: {
     authInterrupts: true,
+    serverActions: { bodySizeLimit: '8mb' },
   },
 };
 

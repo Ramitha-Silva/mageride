@@ -108,6 +108,18 @@ const MESSAGE_KEYS: Readonly<Record<string, FleetMessageKey>> = {
   'not-fleet-member': 'fleet.error.notMember',
   'fleet-role-insufficient': 'fleet.error.roleInsufficient',
   'fleet-not-approved': 'fleet.error.orgNotApproved',
+  // Δ C112 — the codes SCR-FP-002 and SCR-FP-002a can be answered with. Each is
+  // an `x-error-codes` entry on a route this component calls, and each says
+  // something different about what the operator should do next: a duplicate
+  // business registration is somebody else's application on the same number, a
+  // duplicate member is a colleague who already has a seat, and an unsubmitted
+  // payout profile is a screen to fill in rather than a failure.
+  'business-registration-exists': 'fleet.error.registrationExists',
+  'fleet-member-exists': 'fleet.error.memberExists',
+  'payout-profile-not-found': 'fleet.error.payoutNotFound',
+  'payout-profile-not-verified': 'fleet.error.payoutNotVerified',
+  'payload-too-large': 'fleet.error.fileTooLarge',
+  'unsupported-media-type': 'fleet.error.fileNotAccepted',
 };
 
 export function problemMessageKey(problem: ProblemDetails): FleetMessageKey {

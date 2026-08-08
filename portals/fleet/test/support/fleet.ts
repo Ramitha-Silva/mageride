@@ -52,6 +52,27 @@ export const FLEET_OPS_ENDPOINTS_SOURCE = join(
   'backend/src/Fleet.Api/Endpoints/FleetOpsEndpoints.cs',
 );
 
+/** The two contracts C112's screens are transcribed from. */
+export const FLEET_CONTRACT = join(REPO_ROOT, 'backend/contracts/fleet.yaml');
+export const SHARED_CONTRACT = join(REPO_ROOT, 'backend/contracts/_shared.yaml');
+
+/**
+ * A `enum: [a, b, c]` list out of an OpenAPI document, found by its first member.
+ *
+ * Crude on purpose. The alternative is a YAML parser as a dependency of the test
+ * suite, to read three lists that are each written on one line and each found by
+ * the value the portal claims comes first.
+ */
+export function contractEnum(source: string, firstMember: string): string[] {
+  const match = new RegExp(`enum: \\[${firstMember}[^\\]]*\\]`).exec(source);
+  if (!match) throw new Error(`No enum beginning "${firstMember}" in the contract.`);
+  return match[0]
+    .replace(/^enum: \[/, '')
+    .replace(/\]$/, '')
+    .split(',')
+    .map((entry) => entry.trim());
+}
+
 /* ---------------------------------------------------------------------------
  * URD §2.3's legend, as `PermissionCell.Parse` reads it
  * ------------------------------------------------------------------------ */

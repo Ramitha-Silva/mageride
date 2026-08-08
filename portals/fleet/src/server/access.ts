@@ -198,13 +198,25 @@ export function landingPath(session: FleetSession): string | null {
  * button that is drawn, pressed and then answered `403 fleet-not-approved` has
  * told the operator nothing they could act on. Callers whose route is *not* inside
  * an approval-gated group pass `requiresApprovedOrg: false`.
+ *
+ * **No membership means no mutation, with exactly one exception** — the call that
+ * creates the membership. `POST /v1/fleets` is the only fleet route with no
+ * `{fleetId}` in it and the only one gated on the canonical `fleet_owner` role
+ * rather than on a seat (`FleetEndpoints`: "the one route with no organisation to
+ * be scoped to yet"), so it is the one mutation an account with no organisation
+ * can make. Callers say so with `allowsNoOrganisation`, which is the control-level
+ * twin of {@link FleetScreen.allowsNoOrganisation} and is set on the same single
+ * route for the same reason. Δ C112.
  */
 export function canMutate(
   session: FleetSession,
   featureArea: string,
-  options: { readonly requiresApprovedOrg?: boolean } = {},
+  options: {
+    readonly requiresApprovedOrg?: boolean;
+    readonly allowsNoOrganisation?: boolean;
+  } = {},
 ): boolean {
-  if (!session.fleetId) return false;
+  if (!session.fleetId && !options.allowsNoOrganisation) return false;
   if (!holdsGrant(session, featureArea, 'write')) return false;
   if (options.requiresApprovedOrg && !isApproved(session)) return false;
   return true;
