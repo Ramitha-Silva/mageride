@@ -1,0 +1,6 @@
+# admin.mageride.lk is the internal back-office (AL-02). Nothing here is public,
+# and a sign-in form that turns up in a search result is an invitation to try it.
+# The same instruction is served as a `robots` meta tag from `app/layout.tsx`, for
+# the crawlers that ignore this file.
+User-agent: *
+Disallow: /

@@ -130,7 +130,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C101 | passenger-ios-settings-addresses | 4b | PARTIAL | 2026-08-07 | SCR-PI-026/026a/027/027b/033 built to `specs/wireframes/passenger_ios.html`; 44 new tests across 5 suites (`SettingsFlowTests` + `SettingsTestKit`), strings now **436 keys × 3 locales**. **PARTIAL only because the verify command is `xcodebuild` and this host cannot run it** — the five `LocalizationTests` rules were run as a script and the generator regenerates cleanly at **160 app sources, 30 test sources**. **`IosSavedAddress.kt` is the cluster's answer to the boxed-`Boolean?` problem**: the `isHome`/`isWork` pair is built, read and copied in Kotlin, so no screen spells an initialiser the C096 finding says this repository disagrees with itself about — and it type-checks here with `:shared:compileKotlinIosArm64`. **Home and Work are the flags, never the label** (a Sinhala *"නිවස"* is a Home). **A reverse geocode is a pre-fill and never a gate** (AL-14). **The language change re-points the bundle and re-creates nothing** (Δ Section C). **`DELETE /v1/users/me` is accepted, not done** (E-06). `AppPreferences.preferredRail` became the one door onto the default rail and C097's/C098's two direct reads now go through it (Δ C101); `PassengerProfileRepository` gained `saveDefaultPaymentMethod` and `deleteAccount`; `PassengerShellModel` gained the identity clear. **Five wireframe divergences** and **three contract gaps** — see the handoff |
 | C102 | passenger-ios-comms-safety-support | 4b | PARTIAL | 2026-08-08 | SCR-PI-028/029/030/030a built to `specs/wireframes/passenger_ios.html` and SCR-PI-031 finished to its frame; **51 new tests across 8 suites** (`CommsFlowTests` + `CommsTestKit`, plus one in `ThemeTokenTests`), strings now **496 keys × 3 locales**. **PARTIAL only because the verify command is `xcodebuild` and this host cannot run it** — the five `LocalizationTests` rules were run as a script, the `.pbxproj` was checked structurally (499 objects, no duplicate or dangling ids, balanced delimiters) and the generator regenerates cleanly and idempotently at **176 app sources, 32 test sources**. **The last three placeholders are gone, so every route in `PassengerDestinations` now draws a real screen** — `PlaceholderScreen` and both `route_placeholder_*` strings went with them, and `UnreachableRoute` (no copy at all) is what an impossible `default:` arm draws. **AL-48 end to end**: SCR-PI-028's signalling half is real and its media half reports `noMediaClient`, which is a **dependency wall** rather than a decision — `livekit/client-sdk-swift` is a remote package where this project resolves one by path, and `NSMicrophoneUsageDescription` is absent on purpose (`CommsFenceTests` pins it). **CallKit is driven by the LINK, never the tap**, and the reported call is ended *before* the fallback dial is offered, because a `tel:` URL on iOS places a call. **safety-svc got its own seam** rather than joining `RideRepository` — one caller of `POST /v1/sos` is one row on the operator's feed — while `reportCallOutcome` went **onto** `RideRepository`, whose comms-svc half already minted the `callId`. **No `:shared` helper was added**: `ticketDescription` (C093) and `fileUploadOf` (C091) were reused. **Three wireframe divergences** and **three contract gaps restated** — see the handoff
 | C103 | tailwind-preset | 4c | DONE | 2026-08-08 | **231 tests green** across **four new workspace packages** (`@mageride/tailwind-preset` 124, `@mageride/eslint-config` 41, `@mageride/ui` 36, `@mageride/i18n` 30); `npm --prefix portals run build -w @mageride/tailwind-preset && npm --prefix portals run lint` exits 0. **`src/tokens.ts` is the only place a D2 §0.2 value is spelled on the web** — `dist/theme.css` (the consumption path) and `dist/preset.js` (the preset AL-52 names) are both GENERATED from it, and a test holds them to each other and to the compiled stylesheet. **Tailwind v4 + `theme.css`, not the JS preset alone**: a v4 JS config's `screens` *merges* with the built-in breakpoints, so `sm:` would silently keep meaning 640px — AL-52 says the D2 three *become* the screens config, and only `--breakpoint-*: initial` in CSS makes that true. Semantic colours resolve through `@theme inline` + `--mr-color-*` so one `.dark` class flips the tokens **and** the `dark:` variant together. The DoD grep returns only the AL-52 enforcement itself; `portals/scripts/check-al52.mjs` is its executable, stricter form and runs inside `npm run lint`. 7 spec gaps recorded (line heights, web elevation, status foregrounds, web default locale, font delivery, the 11th vehicle token, three unscaffolded workspace members) |
-| C104 | admin-portal-shell | 4c | PENDING | | |
+| C104 | admin-portal-shell | 4c | DONE | 2026-08-08 | **119 tests green** (11 files); `npm --prefix portals run lint --workspace admin && … test … && … build …` exits 0 from a clean tree. **The RBAC gate is `proxy.ts`, not a layout** — an App Router layout is reused rather than re-rendered between sibling routes, so a guard there runs once per session; the proxy sees every request including the RSC fetch a client navigation makes, and rewrites a refusal to `/denied` → `forbidden()` for a real **403** on the URL the operator asked for. **The portal never evaluates URD §2.3**: a screen is reachable iff its item is in the menu `GET /v1/admin/session` already filtered, so hiding the nav entry and refusing the route are one act. `src/server/routes.ts` is the single local copy (key → path only) and exists to stop a permitted parent screen leaking a nested one; `test/routes.test.ts` parses `AdminMenu.cs` and `test/support/urd.ts` builds every role's expected menu from the URD's own §2.3 table, so the DoD is asserted against the spec rather than a fixture. Sign-in is iam-svc's and carries no MFA branch (AL-37) while surfacing the `423` lock-out with its remaining minutes. `scripts/check-bundle.mjs` proves the DoD's no-runtime-CSS-in-JS claim about the artefact inside `npm run build`. 8 findings recorded (D2 §AP vs URD §2.3 on the Verification Officer, two `Dockerfile.portal` assumptions fixed portal-side, the proxy matcher, four no-spec choices) |
 | C105 | admin-portal-auth-dashboard | 4c | PENDING | | |
 | C106 | admin-portal-verification | 4c | PENDING | | |
 | C107 | admin-portal-moderation-support | 4c | PENDING | | |
@@ -16577,3 +16577,165 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   `portals/tailwind-preset/{package.json,CLAUDE.md}`, and one line each in
   `portals/{admin,fleet,web-passenger}/CLAUDE.md`. **No spec file and no backend file was
   touched** — the seven gaps above are micro-change-sets, not edits.
+
+- **Component:** C104 admin-portal-shell — 2026-08-08
+- **Status:** DONE — `npm --prefix portals run lint --workspace admin && npm --prefix portals run
+  test --workspace admin && npm --prefix portals run build --workspace admin` exits 0 from a clean
+  tree (**119 tests green**, 11 files). All four DoD items verified against a running server, not
+  only in unit tests: a Support/CSR session's sidebar carries exactly the ten entries URD §2.3
+  permits and `GET /access/users` · `/config/**` · `/finance/reconciliation` · `/pdpa` · `/audit-log`
+  · `/announcements` each answer a real **403**; sign-in completes with no second factor and no
+  second form; the shell renders at 375/768/1024 in both appearances (the compiled stylesheet
+  contains those three widths and no others, and `.dark` on `<html>` flips the tokens and the
+  `dark:` variant together); and the production bundle carries no style-injecting runtime, asserted
+  by `scripts/check-bundle.mjs` inside `npm run build`. Probed through **the container entrypoint**
+  (`node portals/admin/server.js` from the standalone bundle), not just `next start`.
+- **Notes:**
+  **What was built.** `portals/admin` — Next.js 16 App Router, React 19, TypeScript. `proxy.ts`
+  (Next 16's `middleware.ts`, Node runtime) holds authentication, D-29 token rotation and the AL-06
+  route gate; `app/(portal)/` is the chrome; `src/api/` is the typed data layer; `src/server/` is
+  the session, the route table and the two preference actions; `src/i18n/` is this surface's si/ta/en
+  resources over `@mageride/i18n`'s shared ones. One screen is owned here — **SCR-AP-001 sign-in** —
+  and the rest of `app/(portal)/[...screen]` is a placeholder a sibling's own `page.tsx` supersedes
+  by existing.
+
+  **Decisions —**
+  (1) **The RBAC gate is in `proxy.ts`, not in the portal layout, and that is a routing fact rather
+  than a preference.** An App Router layout is *reused, not re-rendered*, when navigation moves
+  between its children, so a guard in `app/(portal)/layout.tsx` would run on the first page load of
+  a session and never again — precisely the case a route guard exists for. The proxy runs on every
+  request including the RSC fetch a client-side navigation makes. It **rewrites** to `/denied`
+  (which calls `forbidden()`) rather than redirecting: the operator keeps the URL they asked for and
+  the response is a real 403, which a 200 whose body says "no" would not be.
+
+  (2) **The portal never evaluates URD §2.3.** A screen is reachable **iff** its nav item is in the
+  menu `GET /v1/admin/session` returned — the manifest admin-bff already filtered through the same
+  `IPermissionEvaluator` its endpoints gate on. There is no role check anywhere in the application.
+  Hiding the nav entry and refusing the route are therefore the same act and cannot drift.
+  It is still not authorization (AL-06/US-21.1): every endpoint re-decides, and a stale cache entry
+  costs at most a screen that renders and then 403s its own data.
+
+  (3) **`src/server/routes.ts` is the one local copy, and it exists to close a leak.**
+  Deny-by-default over the menu alone means "reachable if a permitted item's path is a prefix" —
+  which hands `/verification/expiring` to anyone holding `/verification`, whatever the matrix says.
+  Knowing every screen's path is what lets a nested screen be checked on its own entry. It carries
+  key → path and nothing about roles; `test/routes.test.ts` parses `AdminMenu.cs` and fails on drift.
+  It reaches the browser (the sidebar needs it to mark the current page and is a client component) —
+  25 paths, all printed in D2 §AP and drawn in `web_admin.html`, none of which says who may open it.
+
+  (4) **A URL no screen claims answers 403, not 404.** Deny-by-default cannot make an exception for
+  "no screen matched" without that becoming the way a future unregistered route gets in ungated —
+  and `AdminMenu.cs` says the intended behaviour in as many words ("a caller who guesses a path gets
+  a 403, not a page"). The 404 branch survives in the catch-all page for a render without the proxy
+  in front of it.
+
+  (5) **Landing is the caller's first permitted screen, never `/dashboard`.** URD §2.3 gives the
+  Verification Officer ➖ on "Analytics & reporting", so they have no dashboard at all; a fixed
+  landing route would greet the one role the queues were designed around with a 403 on their first
+  page. `/` is the redirect and the only thing it renders is the "no modules are assigned to you"
+  case, which exists because `GET /v1/admin/session` is gated on being authenticated rather than on
+  a feature area precisely so that case can be answered.
+
+  (6) **No credential is checked in the portal and there is no MFA branch (AL-37).** Sign-in is
+  iam-svc's `POST /v1/admin/auth/login`; a second place a password is checked is a second place the
+  lock-out is forgotten. `mfaRequired` is typed `false`, so no code path for the true case can be
+  written, and `test/fences.test.ts` asserts the absence of an MFA route, a TOTP flow and a branch
+  on the flag against the tree. **The lock-out is surfaced**: `423 otp-locked` carries
+  `retryAfterSeconds` and the form says "try again in about N minutes" — a bare refusal leaves an
+  operator guessing, and every guess extends the window.
+
+  (7) **The browser never holds a token and never learns where admin-bff is.** Every call leaves the
+  Next server; the session is httpOnly cookies; `src/api/http.ts` is the only module that calls
+  `fetch` and is `server-only`, so a client component importing it fails to compile. There is no
+  `NEXT_PUBLIC_*` variable, and the fence test enumerates the tree for one. The four `/v1/**` paths
+  the shell may call are allow-listed by the same test — the portal-side form of AL-02.
+
+  (8) **`mutate()` requires the D-35 row it will cause.** The portal writes no audit row (admin-bff's
+  interceptor does, inside the same transaction as the change; a portal-written one would be an
+  unbacked entry in an immutable log). It declares the row so a confirm dialog can name what is about
+  to be recorded against the operator's name, and so `AuditNotice` cannot be rendered for a call
+  whose row was never named. `test/audit.test.ts` parses `AdminAuditActions.cs` and holds the two
+  vocabularies together.
+
+  (9) **The chrome takes the wireframe's structure and the preset's palette.**
+  `specs/wireframes/web_admin.html` draws the sidebar in `#15171B`, a slate that appears nowhere in
+  D2 §0.2 and has no dark-appearance counterpart — a portal built on it would be the one surface
+  whose chrome ignores the design system and reads identically in both themes. The 240px rail, the
+  group captions, the topbar and the content column are the wireframe's; every colour is a token.
+
+  (10) **Screen copy lives in `portals/admin/src/i18n/messages/`, not in `@mageride/i18n`.** That
+  package's own CLAUDE.md says it "carries only what every surface shares", and `nav.fareTariffs` is
+  not shared with the Fleet Portal. `en.ts` defines the key set; `si.ts`/`ta.ts` are typed against
+  it, so a missing translation is a compile error, and `test/i18n.test.ts` additionally fails on a
+  Sinhala or Tamil value that is byte-identical to the English. **The `nav.*` block is a contract**:
+  every `labelKey` `AdminMenu.cs` can send must resolve in all three languages, asserted by parsing
+  that file.
+
+  (11) **Language is a browser preference here, not a write to `iam.users.language`.**
+  `PUT /v1/me/prefs/language` is the apps' Settings route (AL-26, C027) and that column decides what
+  language MageRide *messages* somebody in; an operator switching the console to English for an
+  afternoon has not asked for their SMS to change. The account language is still the second of four
+  sources `getLocale()` consults, so a new browser opens in the language they chose elsewhere.
+
+  (12) **`system` appearance is finished by a 20-line inline script.** The server applies `light` or
+  `dark` from the cookie; it cannot know the OS setting before the first paint. The script only adds
+  and removes the `.dark` class and writes no CSS, so AL-52 is untouched. **It will need a CSP nonce**
+  when the portal gets a strict policy — noted for C124.
+
+  **Spec gaps and findings —**
+  (a) **D2 §AP's "Verification Officer → onboarding queue only" is one cell narrower than URD §2.3.**
+  The matrix gives VER `◐ at onboarding` on Moderation, so the vehicle-report and fraud-review
+  *queues* open to them (the platform-wide suspend button does not — admin-bff fences it with
+  `RequirePlatformWideFeature`). The matrix is what the API enforces, so the portal follows it and
+  the tests assert it. **D2 §AP's phrasing is worth a micro-change-set**; nothing in code changes.
+  (b) **`infra/docker/Dockerfile.portal` (C010) asserted a standalone path this build did not
+  produce.** It expects `.next/standalone/portals/<portal>/server.js` and starts
+  `node portals/$PORTAL/server.js`, but Next roots the bundle at the nearest lockfile — `portals/` —
+  and emits `.next/standalone/admin/server.js`, which its own guard turns into a build-time error.
+  Fixed **in this component** with `outputFileTracingRoot` (one line in `next.config.ts`) rather than
+  by editing another component's file, so the same shape holds in the image and in a local build.
+  **C111 and C117 must set it too**, or their images fail that guard.
+  (c) **The same Dockerfile `COPY`s `public/`, which did not exist.** `portals/admin/public/` now
+  carries `robots.txt` — a real need on an internal console whose sign-in form should not appear in
+  a search result, matching the `noindex` metadata. **C111/C117 need the directory to exist.**
+  (d) **The proxy matcher had to exclude `.txt`.** With only the image extensions excluded,
+  `robots.txt` was gated and answered 307 to the sign-in screen — a file whose entire purpose is to
+  be read by something that has never signed in. Caught by probing the container, not by reading it.
+  (e) **No spec states the Admin Portal's landing route, its session-cache window, or its cookie
+  names.** Chosen as (5) above, `ADMIN_PORTAL_SESSION_CACHE_SECONDS=15`, and `mr_admin_*`; all three
+  are documented at their declaration and in `.env.example`.
+  (f) **`Oidc__Google__RedirectUri` in `infra/env/.env.app.example` is
+  `https://admin.mageride.lk/auth/callback`**, so the portal's callback route is fixed at
+  `/auth/callback` by that registration and by the Google client. Renaming it means changing three
+  things together; said so in `.env.example`.
+  (g) **The sign-in form needs JavaScript.** `useActionState` has no progressive-enhancement path
+  without a `permalink`, so React renders no hidden action fields. Everything else in the shell is
+  server-rendered. Acceptable for an internal console and recorded rather than discovered later.
+  (h) **Vitest 4 / Vite 8 transform with Oxc, not esbuild.** `portals/ui/vitest.config.ts` still sets
+  `esbuild: { jsx: 'automatic' }`, which no longer type-checks; this component uses
+  `oxc: { jsx: { runtime: 'automatic' } }`. `portals/ui` does not typecheck its config file, so it
+  is not failing — worth aligning when that package is next touched.
+
+  **For C105–C110 (the Admin Portal screens) —**
+  - Read `portals/admin/CLAUDE.md` first; its "Rules for a screen component" section is the contract.
+  - Drop `app/(portal)/<path>/page.tsx` at the path `AdminMenu.cs` gives your nav item; it supersedes
+    the catch-all automatically. If the manifest gains an item, add it to `src/server/routes.ts` in
+    the same change or `test/routes.test.ts` fails.
+  - Call `read()` / `mutate()` from `@/api/client` — `test/fences.test.ts` fails the build on a raw
+    `fetch`, on `apiFetch` outside the three modules that own it, and on any `/v1/**` path outside
+    the four the shell needs. Every mutation names its `AuditIntent`.
+  - Render failures with `<ProblemPanel>`; **never** `problem.title` (`_shared.yaml`: "Never
+    localised"). Add screen copy to all three `src/i18n/messages/*` files in one change.
+  - `sm:` is 375px and there is no `xl:`; dark mode is the `.dark` class set once in
+    `app/layout.tsx`. `@mageride/ui` primitives use hooks and belong in client components.
+  - `test/support/urd.ts` builds any role's session menu from the URD's own §2.3 table — use it
+    rather than typing a fixture.
+
+  **Files touched —** New: 60 under `portals/admin/` — 15 in `app/`, 22 in `src/`, 13 in `test/`
+  (11 suites + 2 helpers), `proxy.ts`, and eight config/asset files (`next.config.ts`,
+  `postcss.config.mjs`, `tsconfig.json`, `eslint.config.js`, `vitest.config.ts`, `next-env.d.ts`,
+  `.env.example`, `scripts/check-bundle.mjs`, `public/robots.txt`) — plus
+  `portals/scripts/ensure-workspace-deps.mjs`, which builds the three shared packages when their
+  gitignored `dist/` is absent so this component's Verify line works on a fresh checkout. Modified: `portals/admin/{package.json,CLAUDE.md}`,
+  `portals/package-lock.json`. **No spec file, no backend file and no other workspace's source was
+  touched** — the findings above are micro-change-sets, not edits.
