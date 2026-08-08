@@ -32,6 +32,9 @@ export const adminSi: AdminMessages = {
   'admin.signIn.emailRequired': 'ඔබේ කාර්යාල විද්‍යුත් තැපැල් ලිපිනය ඇතුළත් කරන්න',
   'admin.signIn.passwordRequired': 'ඔබේ මුරපදය ඇතුළත් කරන්න',
   'admin.signIn.signedOut': 'ඔබ ගිණුමෙන් ඉවත් කර ඇත.',
+  'admin.signIn.forgot': 'මුරපදය අමතක වුණාද?',
+  'admin.signIn.forgotBody':
+    'අභ්‍යන්තර ගිණුම් සාදන්නේත් නැවත සකසන්නේත් Super Admin කෙනෙකි — මෙහි ස්වයං-සේවා යළි සැකසීමක් නැත. ඔබට නව මුරපදයක් ලබා දෙන ලෙස ඔහුගෙන්/ඇයගෙන් ඉල්ලන්න.',
 
   /* ---- Errors ---------------------------------------------------------- */
   'admin.error.title': 'එය සාර්ථක නොවීය',
@@ -69,6 +72,49 @@ export const adminSi: AdminMessages = {
   'admin.screen.pendingBody':
     'පරිපාලන පෝට්ල රාමුව මෙම මාර්ගය හඳුනාගත් අතර ඔබේ භූමිකාව එයට අවසර දෙයි. තිරය පසුව එන ගොඩනැගීමේ අංගයක් සමඟ ලැබෙනු ඇත.',
   'admin.screen.servedBy': 'API සපයන්නේ {service}',
+
+  /* ---- SCR-AP-002 · dashboard and its statistics filter (AL-38) -------- */
+  'admin.dashboard.filter.legend': 'සංඛ්‍යාලේඛන කාලය',
+  'admin.dashboard.filter.today': 'අද',
+  'admin.dashboard.filter.week': 'මේ සතිය',
+  'admin.dashboard.filter.month': 'මේ මාසය',
+  'admin.dashboard.filter.custom': 'තෝරාගත් කාල පරාසය',
+  'admin.dashboard.filter.from': 'සිට',
+  'admin.dashboard.filter.to': 'දක්වා',
+  'admin.dashboard.filter.apply': 'යොදන්න',
+  'admin.dashboard.filter.comparison': 'පෙර කාලයට සාපේක්ෂව',
+  'admin.dashboard.filter.export': 'CSV ලෙස බාගන්න',
+  'admin.dashboard.filter.chooseRange': 'එම කාලයේ සංඛ්‍යා බැලීමට පරාසයේ දෙකෙළවරම තෝරන්න.',
+  'admin.dashboard.filter.timezone': 'දින ශ්‍රී ලංකා වේලාවෙනි (Asia/Colombo).',
+
+  'admin.dashboard.period.heading': 'තෝරාගත් කාලය සඳහා',
+  'admin.dashboard.live.heading': 'දැන් මේ මොහොතේ',
+  'admin.dashboard.live.note': 'සජීවී ගණන්. මේ තුන කාල පෙරහනට අනුව වෙනස් නොවේ.',
+
+  'admin.dashboard.kpi.completedTrips': 'සම්පූර්ණ කළ ගමන්',
+  'admin.dashboard.kpi.grossFare': 'දළ ගාස්තු',
+  'admin.dashboard.kpi.newRidersDrivers': 'නව මගීන් / රියදුරන්',
+  'admin.dashboard.kpi.newRiders': 'නව මගීන්',
+  'admin.dashboard.kpi.newDrivers': 'නව රියදුරන්',
+  'admin.dashboard.kpi.riders': 'මගීන්',
+  'admin.dashboard.kpi.drivers': 'රියදුරන්',
+  'admin.dashboard.kpi.dailyFeeRevenue': 'දෛනික ගාස්තු ආදායම',
+  'admin.dashboard.kpi.onlineDrivers': 'මාර්ගගත රියදුරන්',
+  'admin.dashboard.kpi.pendingVerifications': 'තහවුරු කිරීමට ඇති',
+  'admin.dashboard.kpi.openTickets': 'විවෘත ටිකට්පත්',
+
+  'admin.dashboard.delta.up': '{metric}: පෙර කාලයට වඩා {value} කින් ඉහළ',
+  'admin.dashboard.delta.down': '{metric}: පෙර කාලයට වඩා {value} කින් පහළ',
+  'admin.dashboard.delta.flat': '{metric}: පෙර කාලයට සමානයි',
+  'admin.dashboard.delta.unknown': '{metric}: සැසඳීමක් නැත, පෙර කාලයේ කිසිවක් නොතිබුණි',
+
+  'admin.dashboard.money': 'රු. {amount}',
+
+  'admin.dashboard.alerts.heading': 'අවධානය අවශ්‍යයි',
+  'admin.dashboard.alerts.clear': 'දැනට ඔබ වෙනුවෙන් රැඳී ඇති කිසිවක් නැත.',
+  'admin.dashboard.alerts.verification': 'තහවුරු කිරීමට රැඳී ඇති ඉදිරිපත් කිරීම්',
+  'admin.dashboard.alerts.tickets': 'තවම විවෘත සහාය ටිකට්පත්',
+  'admin.dashboard.alerts.count': '{count} ක් රැඳී ඇත',
 
   /* ---- D-35 ------------------------------------------------------------ */
   'admin.audit.notice': 'මෙම ක්‍රියාව ඔබේ නම සමඟ විගණන ලොගයට ලියැවේ.',

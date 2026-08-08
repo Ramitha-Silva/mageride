@@ -130,3 +130,130 @@ export async function apiFetch<T>(request: ApiRequest): Promise<ApiResponse<T>> 
 
   return { status: response.status, data: JSON.parse(text) as T };
 }
+
+export interface ApiDownloadRequest {
+  /** An absolute API path, `/v1/...`. */
+  readonly path: string;
+  /** The media type this route answers — `text/csv`, `application/pdf`. */
+  readonly accept: string;
+  readonly accessToken?: string;
+  readonly searchParams?: Readonly<Record<string, string | number | boolean | undefined>>;
+  readonly signal?: AbortSignal;
+}
+
+export interface ApiDownload {
+  readonly status: number;
+  readonly body: ArrayBuffer;
+  /** What the platform said the bytes are. Never guessed from the path. */
+  readonly contentType: string;
+  /** The filename the platform named, when it named one. */
+  readonly filename?: string;
+}
+
+/**
+ * A GET whose answer is a **file**, not JSON.
+ *
+ * It exists because {@link apiFetch} parses, and a CSV put through `JSON.parse`
+ * is a `SyntaxError` where a download should have been. Everything else is
+ * deliberately the same function's behaviour — the same origin, the same bearer,
+ * the same `no-store`, the same `problem+json` on a failure — because a second
+ * way out of this process is exactly what `test/fences.test.ts` exists to prevent.
+ * That test names this function alongside `apiFetch`; a third one has to be added
+ * to it on purpose.
+ *
+ * **The bytes are relayed, never re-rendered.** admin-bff builds
+ * `stats.csv` from the same `IDashboardStatsService` call that answers
+ * `/dashboard/stats`, so "the export matches the screen" holds because there is
+ * one computation. A portal that formatted its own CSV from the JSON would be a
+ * second implementation of the same file, and the two would diverge the first time
+ * either changed.
+ */
+export async function apiDownload(request: ApiDownloadRequest): Promise<ApiDownload> {
+  let url: string;
+  try {
+    url = buildUrl(request.path, request.searchParams);
+  } catch (error) {
+    if (error instanceof MissingConfigurationError) {
+      throw new ProblemError(localProblem('service-unavailable', 503, request.path, error.message));
+    }
+    throw error;
+  }
+
+  const headers = new Headers({
+    // The problem type is accepted too: a refusal is still JSON, whatever the
+    // route's success body is.
+    accept: `${request.accept}, application/problem+json`,
+  });
+  if (request.accessToken) headers.set('authorization', `Bearer ${request.accessToken}`);
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: 'GET',
+      headers,
+      cache: 'no-store',
+      redirect: 'manual',
+      signal: request.signal,
+    });
+  } catch (error) {
+    throw new ProblemError(
+      localProblem(
+        'dependency-unavailable',
+        503,
+        request.path,
+        error instanceof Error ? error.message : 'The MageRide API could not be reached.',
+      ),
+    );
+  }
+
+  // A download route that redirects is not one this portal follows: the bytes
+  // would be fetched from an origin nothing here vetted. No `/v1/admin/**` export
+  // does — `apiFetch` handles the one route that 302s (C063's document viewer) by
+  // handing the caller the `Location` — so this is a refusal, not a case with a
+  // design behind it.
+  if (response.status >= 300 && response.status < 400) {
+    throw new ProblemError(
+      localProblem(
+        'dependency-unavailable',
+        502,
+        request.path,
+        `The platform answered ${response.status} with a redirect this route cannot follow.`,
+      ),
+    );
+  }
+
+  if (!response.ok) {
+    throw new ProblemError(await readProblem(response, request.path));
+  }
+
+  const filename = filenameFrom(response.headers.get('content-disposition'));
+
+  return {
+    status: response.status,
+    body: await response.arrayBuffer(),
+    contentType: response.headers.get('content-type') ?? request.accept,
+    ...(filename ? { filename } : {}),
+  };
+}
+
+/**
+ * The `filename` out of a `Content-Disposition`, if it is a plain one.
+ *
+ * Anything with a path separator or a quote in it is dropped rather than
+ * sanitised: the value is a header from upstream and the portal puts it straight
+ * back into a header of its own, so the safe reading of an unexpected one is that
+ * there is no filename and the caller names the file itself.
+ */
+function filenameFrom(header: string | null): string | undefined {
+  const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(header ?? '');
+  const name = match?.[1]?.trim();
+  if (!name || /["\\/\r\n]/.test(name)) return undefined;
+
+  try {
+    return decodeURIComponent(name);
+  } catch {
+    // A stray `%` is not an escape. The header is still a filename; it is just
+    // not a percent-encoded one.
+    return name;
+  }
+}

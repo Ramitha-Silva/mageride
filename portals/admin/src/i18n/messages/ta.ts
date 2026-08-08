@@ -32,6 +32,9 @@ export const adminTa: AdminMessages = {
   'admin.signIn.emailRequired': 'உங்கள் பணி மின்னஞ்சல் முகவரியை உள்ளிடவும்',
   'admin.signIn.passwordRequired': 'உங்கள் கடவுச்சொல்லை உள்ளிடவும்',
   'admin.signIn.signedOut': 'நீங்கள் வெளியேற்றப்பட்டுள்ளீர்கள்.',
+  'admin.signIn.forgot': 'கடவுச்சொல்லை மறந்துவிட்டீர்களா?',
+  'admin.signIn.forgotBody':
+    'உள்ளக கணக்குகளை உருவாக்குவதும் மீட்டமைப்பதும் ஒரு Super Admin — இங்கு சுய-சேவை மீட்டமைப்பு இல்லை. உங்களுக்குப் புதிய கடவுச்சொல்லை அமைக்கும்படி அவரிடம் கேளுங்கள்.',
 
   /* ---- Errors ---------------------------------------------------------- */
   'admin.error.title': 'அது நிறைவேறவில்லை',
@@ -69,6 +72,49 @@ export const adminTa: AdminMessages = {
   'admin.screen.pendingBody':
     'நிர்வாகப் போர்ட்டல் கட்டமைப்பு இந்தப் பாதையைக் கண்டறிந்தது, உங்கள் பாத்திரமும் அதை அனுமதிக்கிறது. திரை பிற்கால கட்டமைப்புக் கூறுடன் வரும்.',
   'admin.screen.servedBy': 'API வழங்குவது {service}',
+
+  /* ---- SCR-AP-002 · dashboard and its statistics filter (AL-38) -------- */
+  'admin.dashboard.filter.legend': 'புள்ளிவிவரக் காலம்',
+  'admin.dashboard.filter.today': 'இன்று',
+  'admin.dashboard.filter.week': 'இந்த வாரம்',
+  'admin.dashboard.filter.month': 'இந்த மாதம்',
+  'admin.dashboard.filter.custom': 'தெரிவு செய்த காலம்',
+  'admin.dashboard.filter.from': 'முதல்',
+  'admin.dashboard.filter.to': 'வரை',
+  'admin.dashboard.filter.apply': 'பயன்படுத்து',
+  'admin.dashboard.filter.comparison': 'முந்தைய காலத்துடன் ஒப்பிடும்போது',
+  'admin.dashboard.filter.export': 'CSV ஆகப் பதிவிறக்கு',
+  'admin.dashboard.filter.chooseRange': 'அந்தக் காலத்தின் புள்ளிகளைப் பார்க்க இரு முனைகளையும் தேர்வு செய்யுங்கள்.',
+  'admin.dashboard.filter.timezone': 'திகதிகள் இலங்கை நேரப்படி (Asia/Colombo).',
+
+  'admin.dashboard.period.heading': 'தேர்ந்தெடுத்த காலத்திற்கு',
+  'admin.dashboard.live.heading': 'இப்போது',
+  'admin.dashboard.live.note': 'நேரடி எண்ணிக்கைகள். இம்மூன்றும் கால வடிகட்டியால் மாறுவதில்லை.',
+
+  'admin.dashboard.kpi.completedTrips': 'நிறைவடைந்த பயணங்கள்',
+  'admin.dashboard.kpi.grossFare': 'மொத்தக் கட்டணம்',
+  'admin.dashboard.kpi.newRidersDrivers': 'புதிய பயணிகள் / ஓட்டுநர்கள்',
+  'admin.dashboard.kpi.newRiders': 'புதிய பயணிகள்',
+  'admin.dashboard.kpi.newDrivers': 'புதிய ஓட்டுநர்கள்',
+  'admin.dashboard.kpi.riders': 'பயணிகள்',
+  'admin.dashboard.kpi.drivers': 'ஓட்டுநர்கள்',
+  'admin.dashboard.kpi.dailyFeeRevenue': 'தினசரிக் கட்டண வருவாய்',
+  'admin.dashboard.kpi.onlineDrivers': 'இணைப்பில் உள்ள ஓட்டுநர்கள்',
+  'admin.dashboard.kpi.pendingVerifications': 'சரிபார்க்க நிலுவையில்',
+  'admin.dashboard.kpi.openTickets': 'திறந்த டிக்கெட்டுகள்',
+
+  'admin.dashboard.delta.up': '{metric}: முந்தைய காலத்தை விட {value} அதிகம்',
+  'admin.dashboard.delta.down': '{metric}: முந்தைய காலத்தை விட {value} குறைவு',
+  'admin.dashboard.delta.flat': '{metric}: முந்தைய காலத்தைப் போலவே',
+  'admin.dashboard.delta.unknown': '{metric}: ஒப்பீடு இல்லை, முந்தைய காலத்தில் எதுவும் இல்லை',
+
+  'admin.dashboard.money': 'ரூ. {amount}',
+
+  'admin.dashboard.alerts.heading': 'கவனம் தேவை',
+  'admin.dashboard.alerts.clear': 'இப்போது உங்களுக்காக எதுவும் காத்திருக்கவில்லை.',
+  'admin.dashboard.alerts.verification': 'சரிபார்ப்புக்குக் காத்திருக்கும் சமர்ப்பிப்புகள்',
+  'admin.dashboard.alerts.tickets': 'இன்னும் திறந்திருக்கும் ஆதரவு டிக்கெட்டுகள்',
+  'admin.dashboard.alerts.count': '{count} காத்திருக்கிறது',
 
   /* ---- D-35 ------------------------------------------------------------ */
   'admin.audit.notice': 'இந்தச் செயல் உங்கள் பெயருடன் தணிக்கைப் பதிவில் எழுதப்படும்.',

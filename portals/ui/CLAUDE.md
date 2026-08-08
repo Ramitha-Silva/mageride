@@ -17,5 +17,8 @@
 - Radix primitives are permitted because focus traps, roving tabindex and live regions are
   behaviour, not styling. Pre-styled component kits are not
 - Components that use hooks, context or Radix carry `'use client'`; the rest stay usable
-  from a React Server Component
+  from a React Server Component. **`index.ts` is a barrel, so this is a property of the
+  package, not of one file** — one unmarked hook makes every component here client-only,
+  because a server component that imports `Table` imports that module too. Asserted by
+  `test/server-components.test.ts` in both directions (Δ C105: `Field` was unmarked)
 - Verify: `npm --prefix portals run build -w @mageride/ui && npm --prefix portals run test -w @mageride/ui`

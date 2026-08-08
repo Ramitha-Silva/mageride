@@ -54,6 +54,13 @@ export const adminEn = {
   'admin.signIn.emailRequired': 'Enter your work email address',
   'admin.signIn.passwordRequired': 'Enter your password',
   'admin.signIn.signedOut': 'You have been signed out.',
+  // There is no self-service reset on this surface and no contract for one —
+  // internal accounts are provisioned by a Super Admin (AL-06, Epic 21). Saying so
+  // is the whole feature: a link to a route that does not exist would be worse
+  // than the silence it replaced.
+  'admin.signIn.forgot': 'Forgotten your password?',
+  'admin.signIn.forgotBody':
+    'Internal accounts are created and reset by a Super Admin — there is no self-service reset here. Ask yours to set a new password for you.',
 
   /* ---- Errors ---------------------------------------------------------- */
   'admin.error.title': 'That did not work',
@@ -93,6 +100,54 @@ export const adminEn = {
   'admin.screen.pendingBody':
     'The Admin Portal shell resolved this route and your role permits it. The screen itself arrives with a later build component.',
   'admin.screen.servedBy': 'API served by {service}',
+
+  /* ---- SCR-AP-002 · dashboard and its statistics filter (AL-38) -------- */
+  'admin.dashboard.filter.legend': 'Statistics for',
+  'admin.dashboard.filter.today': 'Today',
+  'admin.dashboard.filter.week': 'This week',
+  'admin.dashboard.filter.month': 'This month',
+  'admin.dashboard.filter.custom': 'Custom range',
+  'admin.dashboard.filter.from': 'From',
+  'admin.dashboard.filter.to': 'To',
+  'admin.dashboard.filter.apply': 'Apply',
+  'admin.dashboard.filter.comparison': 'vs previous period',
+  'admin.dashboard.filter.export': 'Export CSV',
+  'admin.dashboard.filter.chooseRange': 'Pick both ends of the range to see the figures for it.',
+  'admin.dashboard.filter.timezone': 'Dates are Sri Lanka time (Asia/Colombo).',
+
+  'admin.dashboard.period.heading': 'For the chosen period',
+  'admin.dashboard.live.heading': 'Right now',
+  'admin.dashboard.live.note': 'Live counts. These three do not move with the period filter.',
+
+  'admin.dashboard.kpi.completedTrips': 'Completed trips',
+  'admin.dashboard.kpi.grossFare': 'Gross fare',
+  'admin.dashboard.kpi.newRidersDrivers': 'New riders / drivers',
+  'admin.dashboard.kpi.newRiders': 'New riders',
+  'admin.dashboard.kpi.newDrivers': 'New drivers',
+  'admin.dashboard.kpi.riders': 'riders',
+  'admin.dashboard.kpi.drivers': 'drivers',
+  'admin.dashboard.kpi.dailyFeeRevenue': 'Daily-fee revenue',
+  'admin.dashboard.kpi.onlineDrivers': 'Online drivers',
+  'admin.dashboard.kpi.pendingVerifications': 'Pending verifications',
+  'admin.dashboard.kpi.openTickets': 'Open tickets',
+
+  // The whole sentence, because this is what a screen reader is given: the arrow
+  // and the percentage beside it are `aria-hidden`.
+  'admin.dashboard.delta.up': '{metric}: up {value} on the previous period',
+  'admin.dashboard.delta.down': '{metric}: down {value} on the previous period',
+  'admin.dashboard.delta.flat': '{metric}: unchanged on the previous period',
+  // Not "0%". C061 answers null when the previous period was empty — growth from
+  // nothing has no percentage — and that is a different fact from no change.
+  'admin.dashboard.delta.unknown': '{metric}: no comparison, the previous period had none',
+
+  // The mark is a word and is translated; the amount is formatted by `Intl`.
+  'admin.dashboard.money': 'Rs {amount}',
+
+  'admin.dashboard.alerts.heading': 'Needs attention',
+  'admin.dashboard.alerts.clear': 'Nothing is waiting on you right now.',
+  'admin.dashboard.alerts.verification': 'Submissions waiting to be verified',
+  'admin.dashboard.alerts.tickets': 'Support tickets still open',
+  'admin.dashboard.alerts.count': '{count} waiting',
 
   /* ---- D-35 ------------------------------------------------------------ */
   'admin.audit.notice': 'This action is written to the audit trail against your name.',

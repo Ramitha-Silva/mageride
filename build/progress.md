@@ -131,7 +131,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C102 | passenger-ios-comms-safety-support | 4b | PARTIAL | 2026-08-08 | SCR-PI-028/029/030/030a built to `specs/wireframes/passenger_ios.html` and SCR-PI-031 finished to its frame; **51 new tests across 8 suites** (`CommsFlowTests` + `CommsTestKit`, plus one in `ThemeTokenTests`), strings now **496 keys × 3 locales**. **PARTIAL only because the verify command is `xcodebuild` and this host cannot run it** — the five `LocalizationTests` rules were run as a script, the `.pbxproj` was checked structurally (499 objects, no duplicate or dangling ids, balanced delimiters) and the generator regenerates cleanly and idempotently at **176 app sources, 32 test sources**. **The last three placeholders are gone, so every route in `PassengerDestinations` now draws a real screen** — `PlaceholderScreen` and both `route_placeholder_*` strings went with them, and `UnreachableRoute` (no copy at all) is what an impossible `default:` arm draws. **AL-48 end to end**: SCR-PI-028's signalling half is real and its media half reports `noMediaClient`, which is a **dependency wall** rather than a decision — `livekit/client-sdk-swift` is a remote package where this project resolves one by path, and `NSMicrophoneUsageDescription` is absent on purpose (`CommsFenceTests` pins it). **CallKit is driven by the LINK, never the tap**, and the reported call is ended *before* the fallback dial is offered, because a `tel:` URL on iOS places a call. **safety-svc got its own seam** rather than joining `RideRepository` — one caller of `POST /v1/sos` is one row on the operator's feed — while `reportCallOutcome` went **onto** `RideRepository`, whose comms-svc half already minted the `callId`. **No `:shared` helper was added**: `ticketDescription` (C093) and `fileUploadOf` (C091) were reused. **Three wireframe divergences** and **three contract gaps restated** — see the handoff
 | C103 | tailwind-preset | 4c | DONE | 2026-08-08 | **231 tests green** across **four new workspace packages** (`@mageride/tailwind-preset` 124, `@mageride/eslint-config` 41, `@mageride/ui` 36, `@mageride/i18n` 30); `npm --prefix portals run build -w @mageride/tailwind-preset && npm --prefix portals run lint` exits 0. **`src/tokens.ts` is the only place a D2 §0.2 value is spelled on the web** — `dist/theme.css` (the consumption path) and `dist/preset.js` (the preset AL-52 names) are both GENERATED from it, and a test holds them to each other and to the compiled stylesheet. **Tailwind v4 + `theme.css`, not the JS preset alone**: a v4 JS config's `screens` *merges* with the built-in breakpoints, so `sm:` would silently keep meaning 640px — AL-52 says the D2 three *become* the screens config, and only `--breakpoint-*: initial` in CSS makes that true. Semantic colours resolve through `@theme inline` + `--mr-color-*` so one `.dark` class flips the tokens **and** the `dark:` variant together. The DoD grep returns only the AL-52 enforcement itself; `portals/scripts/check-al52.mjs` is its executable, stricter form and runs inside `npm run lint`. 7 spec gaps recorded (line heights, web elevation, status foregrounds, web default locale, font delivery, the 11th vehicle token, three unscaffolded workspace members) |
 | C104 | admin-portal-shell | 4c | DONE | 2026-08-08 | **119 tests green** (11 files); `npm --prefix portals run lint --workspace admin && … test … && … build …` exits 0 from a clean tree. **The RBAC gate is `proxy.ts`, not a layout** — an App Router layout is reused rather than re-rendered between sibling routes, so a guard there runs once per session; the proxy sees every request including the RSC fetch a client navigation makes, and rewrites a refusal to `/denied` → `forbidden()` for a real **403** on the URL the operator asked for. **The portal never evaluates URD §2.3**: a screen is reachable iff its item is in the menu `GET /v1/admin/session` already filtered, so hiding the nav entry and refusing the route are one act. `src/server/routes.ts` is the single local copy (key → path only) and exists to stop a permitted parent screen leaking a nested one; `test/routes.test.ts` parses `AdminMenu.cs` and `test/support/urd.ts` builds every role's expected menu from the URD's own §2.3 table, so the DoD is asserted against the spec rather than a fixture. Sign-in is iam-svc's and carries no MFA branch (AL-37) while surfacing the `423` lock-out with its remaining minutes. `scripts/check-bundle.mjs` proves the DoD's no-runtime-CSS-in-JS claim about the artefact inside `npm run build`. 8 findings recorded (D2 §AP vs URD §2.3 on the Verification Officer, two `Dockerfile.portal` assumptions fixed portal-side, the proxy matcher, four no-spec choices) |
-| C105 | admin-portal-auth-dashboard | 4c | PENDING | | |
+| C105 | admin-portal-auth-dashboard | 4c | DONE | 2026-08-08 | **167 tests green** in `@mageride/admin-portal` (14 files, was 119/11) and **39** in `@mageride/ui` (was 36); `npm --prefix portals run lint --workspace admin && … test … && … build …` exits 0, and `npm --prefix portals run lint && … test` is green across all five workspaces (395). **SCR-AP-002 is a server render whose entire state is the URL** — four `<Link>`s and a `method="get"` form, so a comparison survives a reload, a bookmark and the back button, and `src/api/dashboard.ts` builds the one query the screen and its CSV export both send. **Period KPIs recompute and the three live cards do not**, drawn under separate headings because a filter that visibly moves five figures and not three reads as broken (AL-38, D6' §I-28.5). **An absent delta renders `—`, never 0 %** — C061 answers null when the previous period was empty, which is a different fact from no change. **The export relays admin-bff's bytes rather than rendering a second CSV**, through a new `apiDownload`/`download` pair the fences test names beside `apiFetch`; it is a route handler under `/dashboard`, so `resolveRoute` gates it on the same nav item as the page. **SCR-AP-001 keeps its AL-37 absence** and gains the deliverable's forgot-password affordance as a disclosure, because no reset route exists on any contract. **One cross-component fix:** `@mageride/ui`'s `Field` used `createContext`/`useId` without `'use client'`, which — through the barrel — made the whole package unusable from a server component; `portals/ui/test/server-components.test.ts` is now the executable form of that package's own rule. 7 findings recorded (two wireframe tiles and the alerts feed's three rows have no endpoint on any contract, no password-reset route exists anywhere, the riders/drivers tile, the unfiltered dashboard route, rupee rounding, C109's topbar search) |
 | C106 | admin-portal-verification | 4c | PENDING | | |
 | C107 | admin-portal-moderation-support | 4c | PENDING | | |
 | C108 | admin-portal-finance-config-rbac-audit | 4c | PENDING | | |
@@ -16739,3 +16739,159 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   gitignored `dist/` is absent so this component's Verify line works on a fresh checkout. Modified: `portals/admin/{package.json,CLAUDE.md}`,
   `portals/package-lock.json`. **No spec file, no backend file and no other workspace's source was
   touched** — the findings above are micro-change-sets, not edits.
+
+---
+
+- **Component:** C105 admin-portal-auth-dashboard — 2026-08-08
+- **Status:** DONE — `npm --prefix portals run lint --workspace admin && npm --prefix portals run test
+  --workspace admin && npm --prefix portals run build --workspace admin` exits 0 from a clean tree:
+  **167 tests green** across 14 files (was 119/11), `eslint . && tsc --noEmit` clean, and
+  `check-bundle.mjs` reports "1 compiled stylesheet, 28.4 kB CSS; 786 kB of client JavaScript carries
+  no style-injecting runtime". The whole workspace was re-run because a shared package changed:
+  `npm --prefix portals run lint` and `… run test` are green across all five members
+  (`@mageride/eslint-config` 41, `@mageride/tailwind-preset` 124, `@mageride/i18n` 30,
+  `@mageride/ui` **39** (was 36), `@mageride/admin-portal` **167**).
+- **Notes:**
+  **What was built —** SCR-AP-001's remaining deliverable (the forgot-password affordance; the form,
+  the Google arm and the lock-out messaging are C104's and were left alone) and the whole of
+  SCR-AP-002: the period filter, four period KPI tiles with vs-previous-period deltas, the three
+  real-time tiles, the alerts feed, and the CSV export.
+
+  **The filter is the URL and nothing else, and that is the design decision of the component.**
+  `?period=today|week|month|custom&from&to`, four `<Link>`s and a `method="get"` form — no client
+  state anywhere. So a comparison survives a reload, a bookmark, the back button and a link pasted
+  into a support ticket, and it works with JavaScript off. `StatsFilter` is a client component for one
+  reason only (`Field`/`Input` use hooks) and holds nothing. `src/api/dashboard.ts#statsSearch` is the
+  single place that query is built, which is what makes the DoD's **"the CSV export contains exactly
+  the filtered figures on screen"** structural: the page and the export send the same query, and
+  admin-bff renders `stats` and `stats.csv` from one `IDashboardStatsService` call (C061's own rule —
+  "there is no second query and no second period resolution").
+
+  **A half-chosen custom range asks admin-bff nothing.** `StatsSelection.awaitingRange` is a third
+  state next to "resolved" and "refused", and both obvious alternatives are wrong: substituting
+  today's figures puts the wrong number under a heading that says *Custom range* — the substitution
+  C061 refuses to make server-side, and doing it in the portal first would defeat that refusal —
+  while sending the incomplete query answers the operator's *first click* on the button with a
+  validation error about a form they have not filled in. So the date form is shown waiting, no
+  figures are drawn, and **the Export button is not rendered at all**, because with nothing on screen
+  the honest control is no control. A range that is complete but impossible (`to` before `from`, a
+  window longer than `MaxRangeDays`) is still admin-bff's to refuse: that is policy, and a second copy
+  of it here is a second place it drifts.
+
+  **Period KPIs recompute; the live cards do not — and the screen has to say so.** The two blocks
+  arrive on the same payload and mean different things (AL-38, D6' §I-28.5: the live block "bypasses
+  the period filter"). They are drawn under separate headings with a note on the live one, because a
+  filter that visibly moves five figures and leaves three alone otherwise reads as a bug. The live
+  tiles carry **no** delta line at all: there is no previous period for a fact about this second, and
+  C061's CSV makes the same statement by leaving those cells empty.
+
+  **An absent delta is `—`, never `0 %`.** C061 answers `null` when the previous period was empty
+  ("growth from nothing has no percentage") and that is a different fact from a comparison that found
+  no change — which is `0%`, with no arrow. `NaN` and `Infinity` join `null` in the unknown case: a
+  card reading "▲ NaN%" is worse than one reading "—". The arrow and the percentage are `aria-hidden`
+  and a full sentence naming its metric ("Completed trips: up 9% on the previous period") is `sr-only`
+  beside them — "up-pointing triangle nine percent", announced under a heading the reader has already
+  left, is not the same information. Up is green and down is red **only because all five of these
+  figures are ones where more is better**; a tile whose metric was a failure rate would need the
+  opposite mapping, and `StatGrid` says so at the point somebody would add one.
+
+  **The export is a route handler, and the bytes are relayed.** The browser never holds a token
+  (C104's fourth decision), so an `<a href>` at admin-bff could not work; `/dashboard/export` attaches
+  the session server-side and streams `stats.csv` through with admin-bff's own `Content-Disposition`
+  filename, which names the range — "a folder of `stats.csv` files is a folder of files nobody can
+  tell apart". It sits **under `/dashboard` on purpose**: `resolveRoute` resolves it to the
+  `dashboard` screen, so `proxy.ts` gates the download on the same nav item as the page, with no entry
+  in `src/server/routes.ts` and no exemption anywhere. A failure comes back as `problem+json` with the
+  status it actually was, clamped into 4xx/5xx — a 200 carrying an error body would be a download that
+  silently produced a broken CSV.
+
+  **The data layer grew a third function rather than a second door.** `apiFetch` parses, and a CSV
+  through `JSON.parse` is a `SyntaxError` where a download should have been — so `apiDownload` (in the
+  same module, same origin, same bearer, same `no-store`, same `problem+json`) and `download` (same
+  bearer refusal with no session, no `AuditIntent` because a count of last month's trips discloses
+  nothing about anybody). `test/fences.test.ts` now names **both** transport functions, so a third one
+  has to be added to that fence on purpose. Two fences were widened deliberately and only by their
+  own rule: the AL-02 allow-list gained `/v1/admin/dashboard/stats` and `/stats.csv` — the point of
+  enumerating the set is that a screen component adds its endpoints in the change that starts calling
+  them, rather than the fence admitting `/v1/admin/**` wholesale.
+
+  **The alerts feed is role-scoped by the menu, not by a role check.** There is no `if (role === …)`
+  in this component and there must not be. The count reaches every role permitted the dashboard; the
+  queue behind it does not — so a row is a **link** only when the caller's menu carries that module,
+  and the href is the path *admin-bff sent*, not the local `routes.ts` copy, because the server's own
+  path is the one its own gate agrees with. A Finance Officer sees "38 submissions waiting to be
+  verified" as text. Rows appear only above zero, which is what makes the card a to-do list rather
+  than a second copy of the live tiles beside it.
+
+  **One cross-component fix, and it was not optional.** `@mageride/ui`'s `Field` used `createContext`
+  / `useContext` / `useId` **without `'use client'`**, in violation of that package's own stated rule.
+  Because `index.ts` is a barrel this is a property of the *package*: a React Server Component
+  importing `Table` pulled `createContext` into the server graph and `next build` failed. C105 is the
+  first server component to import from there and find out. Fixed at source (one directive) and
+  `portals/ui/test/server-components.test.ts` added, asserting the rule in both directions over the
+  tree — an unmarked hook fails there now instead of failing a build four components later. Without
+  it, every one of C106…C110 would have had to make each screen a client component to draw a table.
+
+  **Findings (micro-change-sets raised) —**
+  (a) **Three tiles the wireframe draws have no endpoint on any contract.** `web_admin.html`'s
+  SCR-AP-002 carries a "Gateway settlement Rs 4.2M / to reconcile" tile and a "Live trips by mode"
+  card (Mode A 412 / Mode B 88 / Mode C 936); `admin-bff.yaml`'s `DashboardKpis` + `DashboardLive` are
+  the five figures and three counters AL-38 names and nothing else. AL-02 keeps this console inside
+  `/v1/admin/**`, so there is nowhere else to ask. Settlement *could* be approximated from
+  `GET /v1/admin/finance/reconciliation`, but that route is gated on Finance · Read — putting it on
+  the landing screen would 403 for Admin, Auditor and Support/CSR, and its response is a queue rather
+  than a figure. **Both tiles are omitted rather than invented.** Either D2/the wireframe drops them,
+  or `getAdminDashboardStats` gains `settlementToReconcileMinor` and a `liveTripsByMode` block.
+  (b) **The alerts feed's three illustrative rows have no source either** — "tracker offline > 15 min"
+  (fleet-health-svc, which exposes only `GET /v1/fleets/{fleetId}/health`, per-fleet), "duplicate IMEI
+  quarantine" and "COD uncollected > 24h". The feed is built from the two `live` counters that *are*
+  outstanding work. A real feed needs an `alerts` route on `admin-bff.yaml` with a severity per row;
+  every row here is `warning` because the payload carries counts and no severity, and a threshold that
+  turned 50 tickets red would be this portal deciding an operations policy.
+  (c) **There is no password-reset contract anywhere, and the deliverable asks for
+  forgot-password.** `iam.yaml` has nine auth operations and none resets a password; D2 gives a reset
+  to SCR-FP-001 (Fleet Portal) and none to SCR-AP-001; AL-06 says internal roles "are provisioned only
+  by Super Admin". So the affordance is a `<details>` disclosure saying exactly that — a link to
+  `/forgot-password` would be a dead end that looks like a way out, and a form that posted somewhere
+  would be this portal inventing a credential path, which `session.ts` says it will never do. **This
+  is the one element on SCR-AP-001 the wireframe does not draw**; it is closed by default and costs
+  the card one line. Either D2/the wireframe gains the row, or iam-svc gains
+  `POST /v1/admin/auth/password/reset` and the disclosure becomes a link.
+  (d) **The riders/drivers tile keeps the wireframe's single card and shows both deltas.**
+  `web_admin.html` draws one tile for the pair and one delta ("▲ 12% riders"); the contract carries a
+  delta for each. Splitting into two tiles would have been a layout deviation, and dropping
+  `newDriversPct` would have thrown away a figure the filter exists to produce — so both are shown,
+  qualified ("riders" / "drivers"), inside the one tile. No spec change needed; recorded because it is
+  the one place the tile's content is richer than the sketch.
+  (e) **`GET /v1/admin/dashboard` is not called by this portal.** The unfiltered US-14.6 landing view
+  is `GetAsync("today", …)` with no deltas; `/dashboard/stats` with no query answers the same figures
+  *plus* the comparison, so the screen has one code path for all four periods. The route stays for the
+  contract; nothing here needs it.
+  (f) **Money is rounded to whole rupees on a card (no spec).** `Rs 38,600,000` rather than the
+  wireframe's abbreviated `38.6M`: `Intl`'s compact notation is unevenly supported for `si-LK`/`ta-LK`
+  and an abbreviation is a translation problem the design system does not answer. The exact minor-unit
+  figures are in the CSV, which states its own units in its preamble, so nothing is lost — only
+  unstated on a tile. The rupee mark itself **is** a resource string in all three languages
+  (`admin.dashboard.money`); the number beside it is `Intl`'s.
+  (g) **The topbar search the wireframe draws ("Search driver / trip / ticket") is still absent.** It
+  is chrome, it spans every screen, and it searches the three directories — C109's, not this
+  component's. Recorded so it is not lost between the two.
+
+  **Not built here, and named rather than stubbed —** any drill-down behind a KPI (ADD §10 puts
+  operator analytics on ClickHouse in Phase 3; C061 is five figures a day and three live counts); an
+  auto-refresh on the live tiles (nothing in D2 or US-24.7 asks for one, and a console that re-rendered
+  under an operator mid-read is worse than one they reload); and a rebuild/backfill control, which
+  `IAnalyticsRollupService.RunRangeAsync` would serve but no route exposes.
+
+  **Files —** added `portals/admin/src/api/dashboard.ts`, `src/i18n/format.ts`,
+  `src/components/dashboard/{model.ts,StatGrid.tsx,StatsFilter.tsx,AlertsCard.tsx}`,
+  `app/(portal)/dashboard/page.tsx`, `app/(portal)/dashboard/export/route.ts`, and four test files
+  (`dashboard-filter`, `dashboard`, `dashboard-export`, plus the `apiDownload` block appended to
+  `http.test.ts`). Modified `src/api/{http.ts,client.ts}`, `src/i18n/messages/{en,si,ta}.ts`,
+  `app/login/page.tsx`, `test/fences.test.ts`, `portals/admin/CLAUDE.md`. **Outside this component:**
+  `portals/ui/src/components/Field.tsx` (one directive), `portals/ui/test/server-components.test.ts`
+  (new) and `portals/ui/CLAUDE.md` — the cross-component fix above. **No spec file, no backend file and no
+  contract was touched**; the findings are micro-change-sets, not edits.
+
+  **Build host —** no Docker, no replica, no backend build. `vitest run` takes ~7 s and
+  `next build` ~25 s.

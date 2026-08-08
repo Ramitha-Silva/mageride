@@ -110,6 +110,30 @@ export default async function LoginPage({
           <p className="rounded-md bg-surface-variant px-sm py-xs text-center text-caption text-on-surface-variant">
             {t('admin.signIn.noSecondFactor')}
           </p>
+
+          {/*
+            The deliverable's forgot-password affordance, and it is a disclosure
+            rather than a link because **no reset route exists on any contract**.
+            `iam.yaml` has nine auth operations and none of them resets a password;
+            D2 gives one to SCR-FP-001 (the Fleet Portal) and none to SCR-AP-001;
+            AL-06 says internal roles "are provisioned only by Super Admin". So the
+            honest control is the sentence telling an operator what actually
+            unblocks them. A link to `/forgot-password` would be a dead end that
+            looks like a way out, and a form that posted somewhere would be this
+            portal inventing a credential path — the one thing `session.ts` says it
+            will never do. Recorded as a spec gap in the C105 handoff.
+
+            `<details>` because it is closed by default: the wireframe's card has
+            no such row, and this costs it one line rather than a block.
+          */}
+          <details className="text-center">
+            <summary className="cursor-pointer text-caption text-on-surface-variant underline underline-offset-2">
+              {t('admin.signIn.forgot')}
+            </summary>
+            <p className="pt-xs text-caption text-on-surface-variant">
+              {t('admin.signIn.forgotBody')}
+            </p>
+          </details>
         </div>
       </div>
     </main>

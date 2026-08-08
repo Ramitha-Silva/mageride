@@ -1,3 +1,5 @@
+'use client';
+
 /**
  * Field — the label / control / hint / error wrapper, plus the three controls
  * the portals actually type into.
@@ -10,6 +12,12 @@
  * a screen reader. Controls read their id and description from context rather
  * than taking them as props, because a caller that has to pass them is a caller
  * that can forget to.
+ *
+ * `'use client'` because of that context and that `useId` — the package's own
+ * rule, and it is load-bearing for every *other* component here. `index.ts` is a
+ * barrel, so a React Server Component that imports `Table` imports this module
+ * too; without the directive the whole package becomes client-only, and a screen
+ * that only wanted a table has to become a client component to draw one.
  */
 
 import type { ComponentProps, ReactNode } from 'react';

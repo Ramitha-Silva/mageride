@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { apiFetch } from '@/api/http';
+import { apiDownload, apiFetch } from '@/api/http';
 import { ProblemError } from '@/api/problem';
 
 /**
@@ -157,5 +157,81 @@ describe('when the platform is not there', () => {
     expect((error as ProblemError).status).toBe(503);
     expect((error as ProblemError).problem.detail).toContain('MAGERIDE_API_BASE_URL');
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('a download', () => {
+  const CSV = 'metric,value\r\ncompletedTrips,48210\r\n';
+
+  function file(headers: Record<string, string> = {}): Response {
+    return new Response(CSV, {
+      status: 200,
+      headers: { 'content-type': 'text/csv; charset=utf-8', ...headers },
+    });
+  }
+
+  it('asks for its own media type and carries the operator’s bearer', async () => {
+    fetchMock.mockResolvedValue(file());
+
+    await apiDownload({
+      path: '/v1/admin/dashboard/stats.csv',
+      accept: 'text/csv',
+      accessToken: 'token',
+      searchParams: { period: 'month' },
+    });
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit & { headers: Headers }];
+
+    expect(url).toBe(`${BASE}/v1/admin/dashboard/stats.csv?period=month`);
+    expect(init.headers.get('accept')).toBe('text/csv, application/problem+json');
+    expect(init.headers.get('authorization')).toBe('Bearer token');
+    expect(init.cache).toBe('no-store');
+  });
+
+  it('hands back the bytes, the media type and the platform’s own filename', async () => {
+    fetchMock.mockResolvedValue(
+      file({ 'content-disposition': 'attachment; filename=mageride-stats-20260601-20260628.csv' }),
+    );
+
+    const download = await apiDownload({ path: '/v1/admin/dashboard/stats.csv', accept: 'text/csv' });
+
+    expect(new TextDecoder().decode(download.body)).toBe(CSV);
+    expect(download.contentType).toBe('text/csv; charset=utf-8');
+    expect(download.filename).toBe('mageride-stats-20260601-20260628.csv');
+  });
+
+  it('drops a filename carrying a path separator rather than sanitising one', async () => {
+    // The value goes straight back out in a header of this portal's own. The safe
+    // reading of an unexpected one is that there is no filename.
+    fetchMock.mockResolvedValue(file({ 'content-disposition': 'attachment; filename="../../etc/passwd"' }));
+
+    const download = await apiDownload({ path: '/v1/admin/dashboard/stats.csv', accept: 'text/csv' });
+    expect(download.filename).toBeUndefined();
+  });
+
+  it('refuses to follow a redirect on a file route', async () => {
+    fetchMock.mockResolvedValue(
+      new Response(null, { status: 302, headers: { location: 'https://elsewhere.example/f.csv' } }),
+    );
+
+    const error = await apiDownload({ path: '/v1/admin/dashboard/stats.csv', accept: 'text/csv' }).catch(
+      (e: unknown) => e,
+    );
+
+    // The bytes would be fetched from an origin nothing here vetted.
+    expect((error as ProblemError).status).toBe(502);
+  });
+
+  it('turns a refusal into the same ProblemError every read produces', async () => {
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({ type: 'https://mageride.lk/errors/forbidden', title: 'Forbidden', status: 403 }),
+        { status: 403, headers: { 'content-type': 'application/problem+json' } },
+      ),
+    );
+
+    await expect(
+      apiDownload({ path: '/v1/admin/dashboard/stats.csv', accept: 'text/csv' }),
+    ).rejects.toMatchObject({ status: 403, code: 'forbidden' });
   });
 });

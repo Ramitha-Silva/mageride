@@ -94,7 +94,42 @@ Every mutation carries an `Idempotency-Key`.
   Tailwind's breakpoints; D2 §AP defines three widths and the portal gets three.
 - **Dark mode is the `.dark` class on `<html>`, set once in `app/layout.tsx`.** Do not add a second
   mechanism; the tokens and the `dark:` variant are wired to the same class and must stay that way.
-- `@mageride/ui` primitives use hooks — they belong in client components. `Button` does not.
+- **`@mageride/ui` is importable from a server component.** `Field`/`Input`/`Select`/`Textarea`,
+  `Tabs`, `Modal`, `Toast` and `Dropzone` carry `'use client'` and become a client boundary; the
+  rest (`Button`, `Table`, `StatusPill`, `Chip`) render on the server. **Δ C105:** `Field` shipped
+  without the directive, and because `index.ts` is a barrel that made the *package* client-only —
+  a server component importing `Table` pulled `createContext` into the server graph and the build
+  failed. `portals/ui/test/server-components.test.ts` is now the executable form of that rule.
+- **Reach for a client component when something is interactive, not when something is a form.**
+  A `<form method="get">` and a `<Link>` need no JavaScript, and a filter held in the URL survives a
+  reload, a bookmark, the back button and a link pasted into a ticket (`StatsFilter`).
+
+## SCR-AP-002 — the dashboard and its statistics filter (C105)
+
+The first screen to land beside the shell, and the template for C106…C110.
+
+- **The filter is the URL and nothing else.** `?period=today|week|month|custom&from&to`, four
+  `<Link>`s and a `method="get"` form — no client state, so a comparison survives a reload and can be
+  pasted into a ticket. `src/api/dashboard.ts` owns the one function that builds that query, and the
+  page and the export both call it: "the CSV contains exactly the filtered figures on screen" is one
+  query into a service that renders both from one call, not two implementations that agree.
+- **Period KPIs recompute; the three live cards do not.** They arrive on the same payload and mean
+  different things (AL-38, D6' §I-28.5), so they are drawn under separate headings — a filter that
+  visibly moved five figures and not three would otherwise read as broken.
+- **A half-chosen custom range asks admin-bff nothing.** `StatsSelection.awaitingRange`. Substituting
+  today's figures would put the wrong number under the right heading — the substitution C061 refuses
+  to make server-side — and sending the incomplete query would answer the operator's first click with
+  a validation error about a form they have not filled in.
+- **An absent delta is `—`, never `0 %`.** `null` means the previous period was empty and there is no
+  percentage; zero means a comparison that found no change. The glyph and the figure are
+  `aria-hidden` and a full sentence naming the metric is `sr-only` beside them.
+- **The export is a route handler under `/dashboard`,** so `resolveRoute` gates it on the same nav
+  item as the page — no entry in `routes.ts`, no exemption. It relays bytes; it does not render a
+  second CSV. `apiDownload`/`download` are the file-shaped members of the data layer and are named in
+  `test/fences.test.ts` alongside `apiFetch`.
+- **The alerts feed links a row only when the caller's menu carries that module.** The count reaches
+  every permitted role; the queue does not. The link comes from the item admin-bff sent, not from
+  `routes.ts` — the server's own path is the one its own gate agrees with.
 
 ## Configuration
 

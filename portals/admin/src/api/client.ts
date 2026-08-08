@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { accessToken } from '@/server/session';
 
 import type { AuditIntent } from './audit';
-import { apiFetch } from './http';
+import { apiDownload, apiFetch, type ApiDownload } from './http';
 import { localProblem, ProblemError } from './problem';
 
 /**
@@ -43,6 +43,41 @@ export async function read<T>(options: ReadOptions): Promise<T> {
     ...(options.signal ? { signal: options.signal } : {}),
   });
   return data;
+}
+
+export interface DownloadOptions {
+  /** An absolute API path, `/v1/admin/...`. */
+  readonly path: string;
+  /** The media type the route answers — `text/csv` for AL-38's export. */
+  readonly accept: string;
+  readonly searchParams?: Readonly<Record<string, string | number | boolean | undefined>>;
+  readonly signal?: AbortSignal;
+}
+
+/**
+ * A GET whose answer is a file, as the signed-in operator.
+ *
+ * The third member of the data layer, and it is a `read` in every sense that
+ * matters — same bearer, same refusal with no session, same problem out. It is
+ * separate only because the body is bytes: an export is relayed from the service
+ * that computed it, never re-rendered here (see `apiDownload`).
+ *
+ * A download is **not** a mutation and takes no {@link AuditIntent}: D-35 audits
+ * changes, and AL-39/AL-40 add `DOC_VIEW` and `PII_READ` for the reads that
+ * disclose a person's data. A count of last month's trips discloses nothing about
+ * anybody — admin-bff's own dashboard endpoints say so in as many words — so a row
+ * here would bury the rows that matter.
+ */
+export async function download(options: DownloadOptions): Promise<ApiDownload> {
+  const token = await requireToken(options.path);
+
+  return apiDownload({
+    path: options.path,
+    accept: options.accept,
+    accessToken: token,
+    ...(options.searchParams ? { searchParams: options.searchParams } : {}),
+    ...(options.signal ? { signal: options.signal } : {}),
+  });
 }
 
 export interface MutateOptions<TBody = unknown> {

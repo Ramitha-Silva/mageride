@@ -69,12 +69,18 @@ describe('the data layer is the only way out', () => {
     expect(callers).toEqual(['src/api/http.ts']);
   });
 
-  it('lets only the session, the client and the proxy call apiFetch directly', () => {
+  it('lets only the session, the client and the proxy call the transport directly', () => {
     // The session module owns the three iam-svc auth routes, which have no
     // bearer to attach and no audit row to declare; the proxy owns the rotation
-    // and the AL-06 evaluation. Every *screen* goes through `read`/`mutate`.
+    // and the AL-06 evaluation. Every *screen* goes through `read`/`mutate`/
+    // `download`.
+    //
+    // Both transport functions are named, not just `apiFetch`: `apiDownload`
+    // (C105's CSV export) leaves this process the same way and must stay behind
+    // the same door. A third one has to be added here on purpose.
     const callers = FILES.filter(
-      ({ path, source }) => path !== 'src/api/http.ts' && /apiFetch[(<]/.test(code(source)),
+      ({ path, source }) =>
+        path !== 'src/api/http.ts' && /api(?:Fetch|Download)[(<]/.test(code(source)),
     ).map(({ path }) => path);
 
     expect(callers.sort()).toEqual(['proxy.ts', 'src/api/client.ts', 'src/server/session.ts']);
@@ -87,10 +93,16 @@ describe('AL-02 — nothing here is driver-facing or passenger-facing', () => {
     // A screen that started calling `/v1/rides/**` or `/v1/drivers/**` directly
     // would be this console growing an end-user surface.
     const ALLOWED = new Set([
+      // The shell's four.
       '/v1/admin/session',
       '/v1/admin/auth/login',
       '/v1/auth/refresh',
       '/v1/auth/logout',
+      // C105 · SCR-AP-002. A screen component adds its own endpoints here, in the
+      // change that starts calling them — which is the point of enumerating the
+      // set rather than admitting `/v1/admin/**` wholesale.
+      '/v1/admin/dashboard/stats',
+      '/v1/admin/dashboard/stats.csv',
     ]);
 
     const called = new Set<string>();
