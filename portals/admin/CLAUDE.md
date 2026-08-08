@@ -172,6 +172,40 @@ Four screens and one route handler under `/verification`, all reading C063's AL-
   disabled for exactly the reason that label would have promised to fix. SCR-AP-003c's own button is
   the wording followed.
 
+## SCR-AP-004/005 — moderation and the support queue (C107)
+
+Two screens, at `/reports` and `/support/tickets` — the paths `AdminMenu.cs` gives their nav items;
+the wireframe's `/moderation` is the *group*, whose third member is C065's fraud queue.
+
+- **A queue is not filtered here either.** The report queue is "a `safety.vehicle_reports` row is
+  still `PENDING`", decided in safety-svc and forwarded, so a decided report leaves because it is no
+  longer pending. There is no status control on SCR-AP-004 and there must not be one.
+- **A pending report is not a strike.** Three *confirmed* reports delist a vehicle (US-12.6) and
+  `ReportRow.confirmedCount` is `null` on every row admin-bff answers with — so the queue's count
+  column says "{n} pending" and means it, and the confirmed total appears **only** on the banner
+  after a verdict, which is the one moment the platform states one. Printing the pending count as a
+  strike total would tell a moderator they were one press from delisting somebody when they are
+  three.
+- **A suspension has no duration and the wireframe's dropdown is not drawn.** `ReasonBody` is one
+  field, admin-bff writes `dispatch_state`/`is_blocked`, and nothing reinstates. The card says so.
+  "Driver / vehicle ID" is two controls, because they are two routes doing two different things.
+- **The ticket being read is `?ticket=`, not a path segment** — admin-bff exposes no
+  `GET /v1/admin/support/tickets/{ticketId}`, so the detail is a row out of the page the queue was
+  read from (`findTicket`). D2 gives the queue and the ticket one screen id, so one screen with two
+  panes is also what the wireframe draws.
+- **Resolve is the only decision.** support-svc's `…/respond` (reply without closing) has no
+  admin-bff route, so the wireframe's Reply button is absent rather than dead.
+- **The refund hand-off is a link and posts nothing.** URD §2.3's Refunds row gives the CSR
+  `◐ raise/recommend` — Read opens SCR-AP-006's queue, Write is withheld — and a `daily_fee_refund`
+  or `driver_qr_dispute` ticket is *already* on Finance's pile, because support-svc derives the queue
+  from the category and never stores it. `FINANCE_CATEGORIES` mirrors `TicketQueues.FinanceCategories`
+  and `test/support-model.test.ts` parses the C# to hold the two together.
+- **The directory lookups come from the caller's menu, both of them.** `TicketRow` carries a `userId`
+  and nothing saying which directory holds it, so passenger and driver are offered and the path is
+  the one `GET /v1/admin/session` sent (`AlertsCard`'s rule).
+- **`CursorPage` now lives in `src/api/types.ts`** (Δ C107) and `src/api/verification.ts` re-exports
+  it. Three screen groups page; the envelope belongs to none of them.
+
 ## Configuration
 
 `.env.example` documents every variable. `MAGERIDE_API_BASE_URL` (the C008 gateway origin) is

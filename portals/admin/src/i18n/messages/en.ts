@@ -315,6 +315,128 @@ export const adminEn = {
   'admin.verification.payout.rejected': 'Payout rejected',
   'admin.verification.payout.superseded': 'Payout superseded',
 
+  /* ---- SCR-AP-004 · moderation (US-12.6, US-14.3, C107) ---------------- */
+  'admin.moderation.queue.heading': 'Vehicle reports — pending review',
+  'admin.moderation.queue.caption': 'Vehicle reports awaiting a decision',
+  // US-12.6, stated where the decision is taken. The count is the platform's, not
+  // this screen's: safety-svc reaches it inside the transaction that writes the
+  // third status.
+  'admin.moderation.queue.rule': '{count} confirmed reports delist the vehicle',
+  'admin.moderation.queue.scope':
+    'Reports nobody has decided yet. A confirmed or dismissed report leaves this queue.',
+  'admin.moderation.queue.total': '{count} waiting',
+  'admin.moderation.queue.totalMore': '{count}+ waiting',
+  'admin.moderation.queue.capped': 'Showing the first {count}.',
+  'admin.moderation.queue.empty': 'No vehicle report is waiting on you.',
+
+  'admin.moderation.column.subject': 'Subject',
+  'admin.moderation.column.reports': 'Reports',
+  'admin.moderation.column.reason': 'Reason',
+  'admin.moderation.column.raised': 'Raised',
+  'admin.moderation.column.action': 'Action',
+
+  // "Pending", never "strikes": these are reports nobody has upheld yet, and the
+  // confirmed total is a figure only a decision returns.
+  'admin.moderation.report.pendingCount': '{count} pending',
+  'admin.moderation.report.noReason': 'No reason was given',
+  'admin.moderation.report.suspendVehicle': 'Suspend this vehicle',
+  'admin.moderation.report.confirm': 'Confirm report',
+  'admin.moderation.report.dismiss': 'Dismiss',
+  'admin.moderation.report.working': 'Recording…',
+  'admin.moderation.report.confirmNamed': 'Confirm the report against vehicle {vehicle}',
+  'admin.moderation.report.dismissNamed': 'Dismiss the report against vehicle {vehicle}',
+
+  'admin.moderation.verdict.confirmed': 'Report confirmed.',
+  'admin.moderation.verdict.confirmedCount':
+    'Report confirmed. This vehicle now has {count} confirmed reports; {remaining} more delists it.',
+  'admin.moderation.verdict.delisted':
+    'Report confirmed. That is {count} confirmed reports, so the vehicle has been delisted.',
+  'admin.moderation.verdict.dismissed': 'Report dismissed.',
+
+  'admin.moderation.suspend.heading': 'Suspend / ban',
+  'admin.moderation.suspend.subject': 'Suspend a',
+  'admin.moderation.suspend.driver': 'Driver',
+  'admin.moderation.suspend.vehicle': 'Vehicle',
+  'admin.moderation.suspend.subjectId': 'Driver / vehicle ID',
+  'admin.moderation.suspend.subjectIdHint': 'The platform id, exactly as it appears on the record.',
+  'admin.moderation.suspend.reason': 'Reason',
+  'admin.moderation.suspend.reasonHint': 'Required, and recorded against your name.',
+  'admin.moderation.suspend.apply': 'Apply',
+  'admin.moderation.suspend.working': 'Recording…',
+  'admin.moderation.suspend.idRequired': 'Enter the id exactly as it appears on the record.',
+  // admin-bff refuses one without a reason and its own comment says why: a
+  // suspension nobody can explain is one nobody can appeal.
+  'admin.moderation.suspend.reasonRequired':
+    'Give a reason. It is recorded in the audit trail and it is what an appeal is answered from.',
+  'admin.moderation.suspend.noDuration':
+    'A suspension stays in force until somebody lifts it. There is no duration to choose and nothing reinstates it automatically.',
+  'admin.moderation.suspend.doneDriver':
+    'Driver suspended. Their session has ended and they take no new dispatch; a ride already in flight is left to finish.',
+  'admin.moderation.suspend.doneVehicle':
+    'Vehicle suspended. It has left dispatch and the live map.',
+
+  /* ---- SCR-AP-005 · support & disputes (US-14.13, US-16.3, C107) ------- */
+  'admin.support.filter.status': 'Status',
+  'admin.support.filter.statusAll': 'Any status',
+  'admin.support.filter.category': 'Category',
+  // A stored key, not copy: `support.tickets.category` carries no CHECK, so the
+  // agent filters on the value the row holds.
+  'admin.support.filter.categoryHint': 'The stored category key, such as driver_qr_dispute.',
+  'admin.support.filter.apply': 'Apply',
+  'admin.support.filter.clear': 'Clear',
+
+  'admin.support.status.open': 'Open',
+  'admin.support.status.inProgress': 'In progress',
+  'admin.support.status.resolved': 'Resolved',
+
+  'admin.support.category.dailyFeeRefund': 'Daily-fee refund request',
+  'admin.support.category.driverQrDispute': 'Driver-QR payment dispute',
+
+  'admin.support.queue.heading': 'Queue',
+  'admin.support.queue.empty': 'No ticket matches this filter.',
+  'admin.support.queue.finance': 'Finance',
+  'admin.support.queue.total': '{count} in this queue',
+  'admin.support.queue.totalMore': '{count}+ in this queue',
+  'admin.support.queue.capped': 'Showing the first {count}. Narrow the filter to reach the rest.',
+
+  'admin.support.detail.raisedBy': 'Raised by',
+  'admin.support.detail.noneHeading': 'No ticket open',
+  'admin.support.detail.noneBody': 'Choose a ticket from the queue to read it.',
+  'admin.support.detail.notInView':
+    'That ticket is not in the pile you are filtered to. Clear the filter to find it.',
+
+  'admin.support.thread.heading': 'Thread',
+  'admin.support.thread.empty': 'This ticket carries no message.',
+  'admin.support.thread.raiser': 'The person who raised it',
+  'admin.support.thread.agent': 'MageRide support',
+
+  'admin.support.lookup.heading': 'Read-only lookup',
+  'admin.support.lookup.passenger': 'Open the passenger record',
+  'admin.support.lookup.driver': 'Open the driver record',
+  'admin.support.lookup.note':
+    'A directory record is read-only, and opening one is itself written to the audit trail.',
+  'admin.support.lookup.none': 'The directories are not part of your role.',
+
+  // The C107 fence, in the words an agent needs: not "you cannot", but "here is
+  // who does, and this ticket is already with them".
+  'admin.support.refund.heading': 'Refund request',
+  'admin.support.refund.note':
+    'Support does not move money. A refund is raised and paid by Finance on the refunds queue — and a daily-fee refund or a driver-QR dispute is already on that queue, because that is what its category means.',
+  'admin.support.refund.link': 'Open the refunds queue',
+
+  'admin.support.resolved.heading': 'Resolved',
+  'admin.support.resolved.note':
+    'This ticket is closed. The person who raised it can read the reply above in their app.',
+
+  'admin.support.resolve.response': 'Your reply',
+  'admin.support.resolve.responseHint':
+    'Shown to the person who raised the ticket, exactly as you write it.',
+  'admin.support.resolve.submit': 'Resolve',
+  'admin.support.resolve.working': 'Recording…',
+  'admin.support.resolve.responseRequired':
+    'Write the reply first — it is what the person who raised the ticket is shown.',
+  'admin.support.resolve.done': 'Ticket resolved.',
+
   /* ---- D-35 ------------------------------------------------------------ */
   'admin.audit.notice': 'This action is written to the audit trail against your name.',
   'admin.audit.recorded': 'Recorded in the audit trail as {action}.',

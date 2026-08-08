@@ -274,6 +274,117 @@ export const adminSi: AdminMessages = {
   'admin.verification.payout.rejected': 'ගෙවීම් ප්‍රතික්ෂේපිතයි',
   'admin.verification.payout.superseded': 'ගෙවීම් අභිබවා ගොස් ඇත',
 
+  /* ---- SCR-AP-004 · moderation ----------------------------------------- */
+  'admin.moderation.queue.heading': 'වාහන පැමිණිලි — සමාලෝචනය පොරොත්තුවේ',
+  'admin.moderation.queue.caption': 'තීරණයක් පොරොත්තුවෙන් සිටින වාහන පැමිණිලි',
+  'admin.moderation.queue.rule': 'තහවුරු කළ පැමිණිලි {count}ක් වාහනය ඉවත් කරයි',
+  'admin.moderation.queue.scope':
+    'තවම කිසිවෙකු තීරණය නොකළ පැමිණිලි. තහවුරු කළ හෝ ඉවත ලූ පැමිණිල්ලක් මෙම පෝලිමෙන් ඉවත් වේ.',
+  'admin.moderation.queue.total': 'පොරොත්තුවේ {count}ක්',
+  'admin.moderation.queue.totalMore': 'පොරොත්තුවේ {count}+ ක්',
+  'admin.moderation.queue.capped': 'පළමු {count} පෙන්වයි.',
+  'admin.moderation.queue.empty': 'ඔබ වෙත පොරොත්තුවෙන් වාහන පැමිණිල්ලක් නැත.',
+
+  'admin.moderation.column.subject': 'විෂය',
+  'admin.moderation.column.reports': 'පැමිණිලි',
+  'admin.moderation.column.reason': 'හේතුව',
+  'admin.moderation.column.raised': 'ඉදිරිපත් කළේ',
+  'admin.moderation.column.action': 'ක්‍රියාව',
+
+  'admin.moderation.report.pendingCount': 'පොරොත්තුවේ {count}ක්',
+  'admin.moderation.report.noReason': 'හේතුවක් දක්වා නැත',
+  'admin.moderation.report.suspendVehicle': 'මෙම වාහනය අත්හිටුවන්න',
+  'admin.moderation.report.confirm': 'පැමිණිල්ල තහවුරු කරන්න',
+  'admin.moderation.report.dismiss': 'ඉවත ලන්න',
+  'admin.moderation.report.working': 'සටහන් කරමින්…',
+  'admin.moderation.report.confirmNamed': '{vehicle} වාහනයට එරෙහි පැමිණිල්ල තහවුරු කරන්න',
+  'admin.moderation.report.dismissNamed': '{vehicle} වාහනයට එරෙහි පැමිණිල්ල ඉවත ලන්න',
+
+  'admin.moderation.verdict.confirmed': 'පැමිණිල්ල තහවුරු කරන ලදී.',
+  'admin.moderation.verdict.confirmedCount':
+    'පැමිණිල්ල තහවුරු කරන ලදී. දැන් මෙම වාහනයට තහවුරු කළ පැමිණිලි {count}ක් ඇත; තවත් {remaining}ක් එය ඉවත් කරයි.',
+  'admin.moderation.verdict.delisted':
+    'පැමිණිල්ල තහවුරු කරන ලදී. එය තහවුරු කළ පැමිණිලි {count}ක් වන බැවින් වාහනය ඉවත් කර ඇත.',
+  'admin.moderation.verdict.dismissed': 'පැමිණිල්ල ඉවත ලන ලදී.',
+
+  'admin.moderation.suspend.heading': 'අත්හිටුවීම / තහනම',
+  'admin.moderation.suspend.subject': 'අත්හිටුවන්නේ',
+  'admin.moderation.suspend.driver': 'රියදුරු',
+  'admin.moderation.suspend.vehicle': 'වාහනය',
+  'admin.moderation.suspend.subjectId': 'රියදුරු / වාහන ID',
+  'admin.moderation.suspend.subjectIdHint': 'වාර්තාවේ ඇති ආකාරයටම වේදිකා හැඳුනුම.',
+  'admin.moderation.suspend.reason': 'හේතුව',
+  'admin.moderation.suspend.reasonHint': 'අනිවාර්යයි; ඔබේ නම සමඟ සටහන් වේ.',
+  'admin.moderation.suspend.apply': 'යොදන්න',
+  'admin.moderation.suspend.working': 'සටහන් කරමින්…',
+  'admin.moderation.suspend.idRequired': 'වාර්තාවේ ඇති ආකාරයටම හැඳුනුම ඇතුළත් කරන්න.',
+  'admin.moderation.suspend.reasonRequired':
+    'හේතුවක් දක්වන්න. එය විගණන ලොගයට ලියැවෙන අතර අභියාචනයකට පිළිතුරු දෙන්නේ එයිනි.',
+  'admin.moderation.suspend.noDuration':
+    'යමෙකු එය ඉවත් කරන තුරු අත්හිටුවීම බලපැවැත්වේ. තෝරා ගැනීමට කාලයක් නැති අතර ස්වයංක්‍රීයව එය යථා තත්ත්වයට පත් නොවේ.',
+  'admin.moderation.suspend.doneDriver':
+    'රියදුරු අත්හිටුවන ලදී. ඔහුගේ/ඇයගේ සැසිය අවසන් වී ඇති අතර නව ගමන් ලබා නොදේ; දැනටමත් ආරම්භ වී ඇති ගමනක් අවසන් වීමට ඉඩ දෙයි.',
+  'admin.moderation.suspend.doneVehicle':
+    'වාහනය අත්හිටුවන ලදී. එය ගමන් බෙදාහැරීමෙන් සහ සජීවී සිතියමෙන් ඉවත් වී ඇත.',
+
+  /* ---- SCR-AP-005 · support & disputes ---------------------------------- */
+  'admin.support.filter.status': 'තත්ත්වය',
+  'admin.support.filter.statusAll': 'ඕනෑම තත්ත්වයක්',
+  'admin.support.filter.category': 'ප්‍රවර්ගය',
+  'admin.support.filter.categoryHint': 'ගබඩා කළ ප්‍රවර්ග යතුර, උදා: driver_qr_dispute.',
+  'admin.support.filter.apply': 'යොදන්න',
+  'admin.support.filter.clear': 'ඉවත් කරන්න',
+
+  'admin.support.status.open': 'විවෘතයි',
+  'admin.support.status.inProgress': 'කටයුතු කරමින්',
+  'admin.support.status.resolved': 'විසඳා ඇත',
+
+  'admin.support.category.dailyFeeRefund': 'දෛනික ගාස්තු ආපසු ගෙවීමේ ඉල්ලීම',
+  'admin.support.category.driverQrDispute': 'රියදුරු QR ගෙවීම් ආරවුල',
+
+  'admin.support.queue.heading': 'පෝලිම',
+  'admin.support.queue.empty': 'මෙම පෙරහනට ගැළපෙන ටිකට් පතක් නැත.',
+  'admin.support.queue.finance': 'මූල්‍ය',
+  'admin.support.queue.total': 'මෙම පෝලිමේ {count}ක්',
+  'admin.support.queue.totalMore': 'මෙම පෝලිමේ {count}+ ක්',
+  'admin.support.queue.capped': 'පළමු {count} පෙන්වයි. ඉතිරිය සඳහා පෙරහන පටු කරන්න.',
+
+  'admin.support.detail.raisedBy': 'ඉදිරිපත් කළේ',
+  'admin.support.detail.noneHeading': 'ටිකට් පතක් විවෘත කර නැත',
+  'admin.support.detail.noneBody': 'කියවීමට පෝලිමෙන් ටිකට් පතක් තෝරන්න.',
+  'admin.support.detail.notInView':
+    'ඔබ පෙරහන යොදා ඇති කොටසේ එම ටිකට් පත නැත. එය සොයා ගැනීමට පෙරහන ඉවත් කරන්න.',
+
+  'admin.support.thread.heading': 'සංවාදය',
+  'admin.support.thread.empty': 'මෙම ටිකට් පතේ පණිවිඩයක් නැත.',
+  'admin.support.thread.raiser': 'ඉදිරිපත් කළ පුද්ගලයා',
+  'admin.support.thread.agent': 'MageRide සහාය',
+
+  'admin.support.lookup.heading': 'කියවීම පමණක් වන සෙවුම',
+  'admin.support.lookup.passenger': 'මගී වාර්තාව විවෘත කරන්න',
+  'admin.support.lookup.driver': 'රියදුරු වාර්තාව විවෘත කරන්න',
+  'admin.support.lookup.note':
+    'නාමාවලි වාර්තාවක් කියවීම පමණි, සහ එකක් විවෘත කිරීමද විගණන ලොගයට ලියැවේ.',
+  'admin.support.lookup.none': 'නාමාවලි ඔබේ භූමිකාවට අයත් නොවේ.',
+
+  'admin.support.refund.heading': 'ආපසු ගෙවීමේ ඉල්ලීම',
+  'admin.support.refund.note':
+    'සහාය අංශය මුදල් නොගෙනයයි. ආපසු ගෙවීමක් ඉල්ලා සිදු කරන්නේ මූල්‍ය අංශය, ආපසු ගෙවීම් පෝලිමේදීය — දෛනික ගාස්තු ආපසු ගෙවීමක් හෝ රියදුරු QR ආරවුලක් එහි ප්‍රවර්ගය නිසාම දැනටමත් එම පෝලිමේ ඇත.',
+  'admin.support.refund.link': 'ආපසු ගෙවීම් පෝලිම විවෘත කරන්න',
+
+  'admin.support.resolved.heading': 'විසඳා ඇත',
+  'admin.support.resolved.note':
+    'මෙම ටිකට් පත වසා ඇත. ඉදිරිපත් කළ පුද්ගලයාට ඉහත පිළිතුර තම යෙදුමෙන් කියවිය හැක.',
+
+  'admin.support.resolve.response': 'ඔබේ පිළිතුර',
+  'admin.support.resolve.responseHint':
+    'ඔබ ලියන ආකාරයටම ටිකට් පත ඉදිරිපත් කළ පුද්ගලයාට පෙන්වයි.',
+  'admin.support.resolve.submit': 'විසඳන්න',
+  'admin.support.resolve.working': 'සටහන් කරමින්…',
+  'admin.support.resolve.responseRequired':
+    'මුලින්ම පිළිතුර ලියන්න — ටිකට් පත ඉදිරිපත් කළ පුද්ගලයාට පෙන්වන්නේ එයයි.',
+  'admin.support.resolve.done': 'ටිකට් පත විසඳන ලදී.',
+
   /* ---- D-35 ------------------------------------------------------------ */
   'admin.audit.notice': 'මෙම ක්‍රියාව ඔබේ නම සමඟ විගණන ලොගයට ලියැවේ.',
   'admin.audit.recorded': '{action} ලෙස විගණන ලොගයේ සටහන් විය.',

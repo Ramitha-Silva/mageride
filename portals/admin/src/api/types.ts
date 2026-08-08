@@ -8,6 +8,21 @@
  * they do not own.
  */
 
+/**
+ * `_shared.yaml#/components/schemas/CursorPage`, with the items typed.
+ *
+ * **Δ C107 — hoisted here from `./verification`.** It is not a screen's shape: it
+ * is the envelope every paged admin-bff route answers in, and the third screen
+ * group to need it was the point at which one of them owning it would have made
+ * the other two import a queue module they have nothing to do with. `verification`
+ * re-exports it, so C106's callers are untouched.
+ */
+export interface CursorPage<T> {
+  readonly items: readonly T[];
+  readonly cursor: string | null;
+  readonly hasMore: boolean;
+}
+
 /** `_shared.yaml#/components/schemas/Role` — the nine canonical roles (AL-06). */
 export type Role =
   | 'driver'

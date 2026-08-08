@@ -274,6 +274,117 @@ export const adminTa: AdminMessages = {
   'admin.verification.payout.rejected': 'கொடுப்பனவு நிராகரிக்கப்பட்டது',
   'admin.verification.payout.superseded': 'கொடுப்பனவு மாற்றப்பட்டது',
 
+  /* ---- SCR-AP-004 · moderation ----------------------------------------- */
+  'admin.moderation.queue.heading': 'வாகனப் புகார்கள் — மீளாய்வு நிலுவையில்',
+  'admin.moderation.queue.caption': 'தீர்மானம் நிலுவையிலுள்ள வாகனப் புகார்கள்',
+  'admin.moderation.queue.rule': 'உறுதிப்படுத்தப்பட்ட {count} புகார்கள் வாகனத்தை நீக்கும்',
+  'admin.moderation.queue.scope':
+    'இன்னும் யாரும் தீர்மானிக்காத புகார்கள். உறுதிப்படுத்தப்பட்ட அல்லது நிராகரிக்கப்பட்ட புகார் இந்த வரிசையிலிருந்து விலகும்.',
+  'admin.moderation.queue.total': '{count} நிலுவையில்',
+  'admin.moderation.queue.totalMore': '{count}+ நிலுவையில்',
+  'admin.moderation.queue.capped': 'முதல் {count} காட்டப்படுகிறது.',
+  'admin.moderation.queue.empty': 'உங்களிடம் நிலுவையில் வாகனப் புகார் எதுவும் இல்லை.',
+
+  'admin.moderation.column.subject': 'பொருள்',
+  'admin.moderation.column.reports': 'புகார்கள்',
+  'admin.moderation.column.reason': 'காரணம்',
+  'admin.moderation.column.raised': 'பதிவு செய்யப்பட்டது',
+  'admin.moderation.column.action': 'செயல்',
+
+  'admin.moderation.report.pendingCount': '{count} நிலுவையில்',
+  'admin.moderation.report.noReason': 'காரணம் தரப்படவில்லை',
+  'admin.moderation.report.suspendVehicle': 'இந்த வாகனத்தை இடைநிறுத்து',
+  'admin.moderation.report.confirm': 'புகாரை உறுதிப்படுத்து',
+  'admin.moderation.report.dismiss': 'நிராகரி',
+  'admin.moderation.report.working': 'பதிவு செய்கிறது…',
+  'admin.moderation.report.confirmNamed': '{vehicle} வாகனத்துக்கு எதிரான புகாரை உறுதிப்படுத்து',
+  'admin.moderation.report.dismissNamed': '{vehicle} வாகனத்துக்கு எதிரான புகாரை நிராகரி',
+
+  'admin.moderation.verdict.confirmed': 'புகார் உறுதிப்படுத்தப்பட்டது.',
+  'admin.moderation.verdict.confirmedCount':
+    'புகார் உறுதிப்படுத்தப்பட்டது. இந்த வாகனத்துக்கு இப்போது உறுதிப்படுத்தப்பட்ட {count} புகார்கள் உள்ளன; மேலும் {remaining} அதை நீக்கும்.',
+  'admin.moderation.verdict.delisted':
+    'புகார் உறுதிப்படுத்தப்பட்டது. அது உறுதிப்படுத்தப்பட்ட {count} புகார்கள் என்பதால் வாகனம் நீக்கப்பட்டது.',
+  'admin.moderation.verdict.dismissed': 'புகார் நிராகரிக்கப்பட்டது.',
+
+  'admin.moderation.suspend.heading': 'இடைநிறுத்தம் / தடை',
+  'admin.moderation.suspend.subject': 'இடைநிறுத்துவது',
+  'admin.moderation.suspend.driver': 'ஓட்டுநர்',
+  'admin.moderation.suspend.vehicle': 'வாகனம்',
+  'admin.moderation.suspend.subjectId': 'ஓட்டுநர் / வாகன ID',
+  'admin.moderation.suspend.subjectIdHint': 'பதிவேட்டில் உள்ளவாறே தளத்தின் அடையாள இலக்கம்.',
+  'admin.moderation.suspend.reason': 'காரணம்',
+  'admin.moderation.suspend.reasonHint': 'கட்டாயம்; உங்கள் பெயருடன் பதிவு செய்யப்படும்.',
+  'admin.moderation.suspend.apply': 'பயன்படுத்து',
+  'admin.moderation.suspend.working': 'பதிவு செய்கிறது…',
+  'admin.moderation.suspend.idRequired': 'பதிவேட்டில் உள்ளவாறே அடையாள இலக்கத்தை உள்ளிடுங்கள்.',
+  'admin.moderation.suspend.reasonRequired':
+    'ஒரு காரணத்தைத் தாருங்கள். அது தணிக்கைப் பதிவில் எழுதப்படும், மேல்முறையீட்டுக்கு பதில் அதிலிருந்தே வரும்.',
+  'admin.moderation.suspend.noDuration':
+    'யாராவது நீக்கும் வரை இடைநிறுத்தம் நீடிக்கும். தேர்ந்தெடுக்க கால அளவு இல்லை, தானாக மீட்கப்படுவதும் இல்லை.',
+  'admin.moderation.suspend.doneDriver':
+    'ஓட்டுநர் இடைநிறுத்தப்பட்டார். அவரது அமர்வு முடிந்தது, புதிய பயணங்கள் வழங்கப்படாது; ஏற்கெனவே நடக்கும் பயணம் முடிய அனுமதிக்கப்படும்.',
+  'admin.moderation.suspend.doneVehicle':
+    'வாகனம் இடைநிறுத்தப்பட்டது. அது பயண ஒதுக்கீட்டிலிருந்தும் நேரடி வரைபடத்திலிருந்தும் விலகியது.',
+
+  /* ---- SCR-AP-005 · support & disputes ---------------------------------- */
+  'admin.support.filter.status': 'நிலை',
+  'admin.support.filter.statusAll': 'எந்த நிலையும்',
+  'admin.support.filter.category': 'வகை',
+  'admin.support.filter.categoryHint': 'சேமிக்கப்பட்ட வகைச் சாவி, எ.கா. driver_qr_dispute.',
+  'admin.support.filter.apply': 'பயன்படுத்து',
+  'admin.support.filter.clear': 'அழி',
+
+  'admin.support.status.open': 'திறந்துள்ளது',
+  'admin.support.status.inProgress': 'கையாளப்படுகிறது',
+  'admin.support.status.resolved': 'தீர்க்கப்பட்டது',
+
+  'admin.support.category.dailyFeeRefund': 'தினசரிக் கட்டணத் திருப்பிச் செலுத்தல் கோரிக்கை',
+  'admin.support.category.driverQrDispute': 'ஓட்டுநர் QR கொடுப்பனவுத் தகராறு',
+
+  'admin.support.queue.heading': 'வரிசை',
+  'admin.support.queue.empty': 'இந்த வடிகட்டலுக்குப் பொருந்தும் சீட்டு இல்லை.',
+  'admin.support.queue.finance': 'நிதி',
+  'admin.support.queue.total': 'இந்த வரிசையில் {count}',
+  'admin.support.queue.totalMore': 'இந்த வரிசையில் {count}+',
+  'admin.support.queue.capped': 'முதல் {count} காட்டப்படுகிறது. மீதியை அடைய வடிகட்டலைக் குறுக்குங்கள்.',
+
+  'admin.support.detail.raisedBy': 'பதிவு செய்தவர்',
+  'admin.support.detail.noneHeading': 'எந்தச் சீட்டும் திறக்கப்படவில்லை',
+  'admin.support.detail.noneBody': 'படிக்க வரிசையிலிருந்து ஒரு சீட்டைத் தேர்ந்தெடுங்கள்.',
+  'admin.support.detail.notInView':
+    'நீங்கள் வடிகட்டியுள்ள பகுதியில் அந்தச் சீட்டு இல்லை. அதைக் கண்டறிய வடிகட்டலை அழியுங்கள்.',
+
+  'admin.support.thread.heading': 'உரையாடல்',
+  'admin.support.thread.empty': 'இந்தச் சீட்டில் செய்தி எதுவும் இல்லை.',
+  'admin.support.thread.raiser': 'பதிவு செய்த நபர்',
+  'admin.support.thread.agent': 'MageRide ஆதரவு',
+
+  'admin.support.lookup.heading': 'படிக்க மட்டுமான தேடல்',
+  'admin.support.lookup.passenger': 'பயணியின் பதிவேட்டைத் திற',
+  'admin.support.lookup.driver': 'ஓட்டுநரின் பதிவேட்டைத் திற',
+  'admin.support.lookup.note':
+    'அடைவுப் பதிவேடு படிக்க மட்டுமே, ஒன்றைத் திறப்பதும் தணிக்கைப் பதிவில் எழுதப்படும்.',
+  'admin.support.lookup.none': 'அடைவுகள் உங்கள் பாத்திரத்தில் இல்லை.',
+
+  'admin.support.refund.heading': 'திருப்பிச் செலுத்தல் கோரிக்கை',
+  'admin.support.refund.note':
+    'ஆதரவுப் பிரிவு பணத்தை நகர்த்தாது. திருப்பிச் செலுத்தலை நிதிப் பிரிவே திருப்பிச் செலுத்தல் வரிசையில் கோரி நிறைவேற்றும் — தினசரிக் கட்டணத் திருப்பமோ ஓட்டுநர் QR தகராறோ அதன் வகையாலேயே ஏற்கெனவே அந்த வரிசையில் உள்ளது.',
+  'admin.support.refund.link': 'திருப்பிச் செலுத்தல் வரிசையைத் திற',
+
+  'admin.support.resolved.heading': 'தீர்க்கப்பட்டது',
+  'admin.support.resolved.note':
+    'இந்தச் சீட்டு மூடப்பட்டது. பதிவு செய்த நபர் மேலுள்ள பதிலைத் தமது செயலியில் படிக்கலாம்.',
+
+  'admin.support.resolve.response': 'உங்கள் பதில்',
+  'admin.support.resolve.responseHint':
+    'நீங்கள் எழுதியவாறே சீட்டைப் பதிவு செய்த நபருக்குக் காட்டப்படும்.',
+  'admin.support.resolve.submit': 'தீர்',
+  'admin.support.resolve.working': 'பதிவு செய்கிறது…',
+  'admin.support.resolve.responseRequired':
+    'முதலில் பதிலை எழுதுங்கள் — சீட்டைப் பதிவு செய்த நபருக்குக் காட்டப்படுவது அதுவே.',
+  'admin.support.resolve.done': 'சீட்டு தீர்க்கப்பட்டது.',
+
   /* ---- D-35 ------------------------------------------------------------ */
   'admin.audit.notice': 'இந்தச் செயல் உங்கள் பெயருடன் தணிக்கைப் பதிவில் எழுதப்படும்.',
   'admin.audit.recorded': '{action} என தணிக்கைப் பதிவில் பதிவு செய்யப்பட்டது.',

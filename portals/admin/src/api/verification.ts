@@ -54,12 +54,14 @@ export const DOCUMENTS_PATH = '/v1/admin/documents';
  */
 export const QUEUE_PAGE_SIZE = 100;
 
-/** `_shared.yaml#/components/schemas/CursorPage`, with the items typed. */
-export interface CursorPage<T> {
-  readonly items: readonly T[];
-  readonly cursor: string | null;
-  readonly hasMore: boolean;
-}
+/**
+ * `_shared.yaml#/components/schemas/CursorPage`, with the items typed.
+ *
+ * Δ C107 moved the declaration to `./types` — three screen groups page now, and
+ * the envelope belongs to none of them. Re-exported here so every C106 import
+ * still resolves.
+ */
+export type { CursorPage } from './types';
 
 /** The subject's own registration status — what the SCR-AP-003 filter filters on. */
 export const VERIFICATION_STATUSES = ['PENDING', 'APPROVED', 'REJECTED'] as const;

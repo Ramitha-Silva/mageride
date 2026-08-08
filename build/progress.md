@@ -133,7 +133,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C104 | admin-portal-shell | 4c | DONE | 2026-08-08 | **119 tests green** (11 files); `npm --prefix portals run lint --workspace admin && … test … && … build …` exits 0 from a clean tree. **The RBAC gate is `proxy.ts`, not a layout** — an App Router layout is reused rather than re-rendered between sibling routes, so a guard there runs once per session; the proxy sees every request including the RSC fetch a client navigation makes, and rewrites a refusal to `/denied` → `forbidden()` for a real **403** on the URL the operator asked for. **The portal never evaluates URD §2.3**: a screen is reachable iff its item is in the menu `GET /v1/admin/session` already filtered, so hiding the nav entry and refusing the route are one act. `src/server/routes.ts` is the single local copy (key → path only) and exists to stop a permitted parent screen leaking a nested one; `test/routes.test.ts` parses `AdminMenu.cs` and `test/support/urd.ts` builds every role's expected menu from the URD's own §2.3 table, so the DoD is asserted against the spec rather than a fixture. Sign-in is iam-svc's and carries no MFA branch (AL-37) while surfacing the `423` lock-out with its remaining minutes. `scripts/check-bundle.mjs` proves the DoD's no-runtime-CSS-in-JS claim about the artefact inside `npm run build`. 8 findings recorded (D2 §AP vs URD §2.3 on the Verification Officer, two `Dockerfile.portal` assumptions fixed portal-side, the proxy matcher, four no-spec choices) |
 | C105 | admin-portal-auth-dashboard | 4c | DONE | 2026-08-08 | **167 tests green** in `@mageride/admin-portal` (14 files, was 119/11) and **39** in `@mageride/ui` (was 36); `npm --prefix portals run lint --workspace admin && … test … && … build …` exits 0, and `npm --prefix portals run lint && … test` is green across all five workspaces (395). **SCR-AP-002 is a server render whose entire state is the URL** — four `<Link>`s and a `method="get"` form, so a comparison survives a reload, a bookmark and the back button, and `src/api/dashboard.ts` builds the one query the screen and its CSV export both send. **Period KPIs recompute and the three live cards do not**, drawn under separate headings because a filter that visibly moves five figures and not three reads as broken (AL-38, D6' §I-28.5). **An absent delta renders `—`, never 0 %** — C061 answers null when the previous period was empty, which is a different fact from no change. **The export relays admin-bff's bytes rather than rendering a second CSV**, through a new `apiDownload`/`download` pair the fences test names beside `apiFetch`; it is a route handler under `/dashboard`, so `resolveRoute` gates it on the same nav item as the page. **SCR-AP-001 keeps its AL-37 absence** and gains the deliverable's forgot-password affordance as a disclosure, because no reset route exists on any contract. **One cross-component fix:** `@mageride/ui`'s `Field` used `createContext`/`useId` without `'use client'`, which — through the barrel — made the whole package unusable from a server component; `portals/ui/test/server-components.test.ts` is now the executable form of that package's own rule. 7 findings recorded (two wireframe tiles and the alerts feed's three rows have no endpoint on any contract, no password-reset route exists anywhere, the riders/drivers tile, the unfiltered dashboard route, rupee rounding, C109's topbar search) |
 | C106 | admin-portal-verification | 4c | DONE | 2026-08-08 | **241 tests green** in `@mageride/admin-portal` (19 files, was 167/14); `npm --prefix portals run lint --workspace admin && … test … && … build …` exits 0, and `npm --prefix portals run lint` is green across all five workspaces. **A queue is not filtered here — a queue *is* the filter**: membership is "a `registry.document_fields` row is still `pending`" (AL-27 as the query C063 made it), so an auto-verified document cannot reach this screen rather than being filtered out by code that could stop filtering; the status column carries the **subject's own** registration status, which is what D2's filter filters on. **All three queues are read on every render** under one search and one status filter, because the wireframe draws a count on each tab and their sum in the topbar and cursor pagination carries no total — the badge is the rows a queue answered, `100+` past a page, `—` for a queue that failed, and a failed queue does not take the screen with it. **The tabs are links, not `@mageride/ui`'s `Tabs`** — that primitive holds the tab in state, and an officer who opens a row, decides and comes back would come back to the first tab. **Every document fetch goes through `/verification/media/{docId}`**, the portal's relay of the audited viewer: `DocumentRef`'s links are deliberately unused (the browser holds no bearer, and building the fetch from `docId` keeps an upstream string out of an `src`), the `302` is passed on rather than followed so the bytes never enter this process, and **one view is one row** — six thumbnails are six `DOC_VIEW` rows, which is why they are not lazy-loaded and the response is `no-store`. **Approve is disabled while any flagged field is unconfirmed** and the rule is stated three times on purpose — button, action, and admin-bff's `409`, which is the only one that is authorization. **Confirm sends no `value` and Edit & confirm sends the officer's**, one boolean that decides whether the extraction stays evidence or the field becomes `manual` with no confidence. `/verification/expiring` is a **different screen** the new dynamic segment out-ranks, so the detail page hands it back to the shell's placeholder. 1 wireframe conflict, 1 copy deviation, 4 spec gaps / micro-change-sets; no spec, backend or contract file touched. |
-| C107 | admin-portal-moderation-support | 4c | PENDING | | |
+| C107 | admin-portal-moderation-support | 4c | PARTIAL | 2026-08-08 | **306 tests green** in `@mageride/admin-portal` (24 files, was 241/19); `npm --prefix portals run lint --workspace admin && … test … && … build …` exits 0 and `next build` emits `/reports` and `/support/tickets`. **SCR-AP-004 and SCR-AP-005 are built; one DoD line cannot be met from this side.** A driver-QR dispute *does* reach the ticket queue (admin-bff sends no `queue` filter, so both piles arrive) and is pilled **Finance** — but **its evidence attachment never reaches this surface**: support-svc's own `TicketRow` carries `screenshotUrl`, `legacyScreenshotUrl` (written by fare-svc for exactly this, AL-47), `thread`, `tripId` and `queue`, and admin-bff's `SupportTicketRow` mapping keeps none of them. **There is no `GET /v1/admin/support/tickets/{ticketId}`** either, so the ticket being read is a row out of the queue page (`?ticket=`, not a path segment), and **no `…/respond`**, so the wireframe's Reply button has nothing to call and is not drawn. **A pending report is not a strike:** `ReportRow.confirmedCount` is `null` on every row (safety-svc's internal row does not carry it), so the count column says "{n} pending" and the confirmed total appears only on the banner after a verdict — the one moment the platform states one. **No Duration control** on Suspend/ban, because `ReasonBody` is one field and nothing reinstates a suspension; **no "Delist 24h" button**, because the third confirmation delists and no single press does. **The refund hand-off is a link and posts nothing** — URD §2.3 gives the CSR `◐ raise/recommend`, and a `daily_fee_refund`/`driver_qr_dispute` ticket is already on Finance's pile by its category. 3 wireframe deviations, 5 spec gaps / micro-change-sets; no spec, backend or contract file touched |
 | C108 | admin-portal-finance-config-rbac-audit | 4c | PENDING | | |
 | C109 | admin-portal-directories | 4c | PENDING | | |
 | C110 | admin-portal-gtfs-manager | 4c | PENDING | | |
@@ -17043,4 +17043,145 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   applies to JSX.
 
   **Build host —** no Docker, no replica, no backend build. `vitest run` takes ~10 s and
+  `next build` ~25 s.
+
+---
+
+- **Component:** C107 admin-portal-moderation-support — 2026-08-08
+- **Status:** PARTIAL —
+  `npm --prefix portals run lint --workspace admin && npm --prefix portals run test --workspace admin && npm --prefix portals run build --workspace admin`
+  exits 0. **306 tests, 24 files** (was 241/19); `eslint` + `tsc --noEmit` clean; `next build` emits
+  `/reports` and `/support/tickets` and `check-bundle.mjs` reports **AL-52: clean — 1 compiled
+  stylesheet, 32.9 kB CSS**. Both screens are built to the wireframe; **one Definition-of-Done line
+  cannot be met from the portal** and is finding 1 below.
+- **Notes:**
+  **What was built —** SCR-AP-004 at `/reports` (the pending vehicle-report queue with per-row
+  Confirm / Dismiss, the three-strike delisting notice, and the Suspend / ban card for a driver or a
+  vehicle) and SCR-AP-005 at `/support/tickets` (the ticket queue with status + category filters, the
+  ticket pane with its thread and Resolve, the read-only directory lookups and the refund hand-off).
+  The paths are the ones `AdminMenu.cs` gives the `reports` and `support-tickets` items — the
+  wireframe's `/moderation` is the nav *group*, whose third member is C065's fraud queue (not this
+  component's screen, and still on the shell's placeholder).
+
+  **The decisions this component is about.**
+
+  • **A pending report is not a strike, and the screen never confuses the two.** US-12.6 delists on
+  the **third confirmed** report; the queue holds the ones nobody has decided. `ReportRow.confirmedCount`
+  is declared by the contract and answered `null` for every row — `ReportQueue.QueueAsync` maps it so,
+  because safety-svc's internal row does not carry it — so the wireframe's "Reports · 3" column is
+  drawn as **"{n} pending"**, counting that vehicle's pending reports on the page, and the confirmed
+  total appears **only** on the banner after a verdict, where it is the number the platform committed
+  inside the transaction that wrote the third status. A count of pending reports rendered as a strike
+  total would tell a moderator they were one press from delisting somebody when they might be three.
+
+  • **No control claims an action the platform does not take.** The sketch's **"Delist 24h"** is
+  `Confirm report`: one press records one verdict, and the delisting is a consequence of the third,
+  decided in safety-svc. The sketch's **"Duration — Temporary 24h ▾"** is not drawn at all:
+  `ReasonBody` is one field, admin-bff writes `dispatch_state = DISPATCH_SUSPENDED` / `is_blocked`,
+  and **nothing anywhere reinstates a suspension** — a dropdown would be a control whose value is
+  discarded, and the operator would go home believing the driver comes back tomorrow. The card says
+  what a suspension is instead.
+
+  • **The reason is required in three places and the id is checked before it is a path.** admin-bff
+  refuses a suspension with no reason and its own comment is the argument ("one nobody can appeal and
+  nobody can explain"); the action refuses it first, in the operator's language, and the card says so
+  under the box. The suspend card is the one control on this console that takes an **identifier from a
+  person**, so `isAdminId` checks the `{…:guid}` shape admin-bff routes on before the value reaches a
+  URL this process builds — a mistyped id fails as a mistyped id, not as somebody else's 404.
+
+  • **The ticket being read is `?ticket=`, and that is forced.** There is no
+  `GET /v1/admin/support/tickets/{ticketId}`, so the ticket an agent opens is a row out of the page
+  the queue was read from (`findTicket`). D2 gives the queue and the ticket **one** screen id and the
+  wireframe draws them side by side, so one screen with two panes is the right shape anyway — and a
+  path segment would have promised a detail the portal can only reach by paging.
+
+  • **The refund hand-off is a link, and this screen posts nothing to a finance route.** URD §2.3's
+  Refunds row gives the Support CSR `◐ raise/recommend`: Read opens SCR-AP-006's queue, Write is
+  withheld, and admin-bff enforces it. A `daily_fee_refund` or `driver_qr_dispute` ticket is **already**
+  on Finance's pile — support-svc derives the queue from the category and never stores it — so there is
+  no "escalate" button to press: the routing happened when the ticket was raised. The panel says that,
+  pills the ticket **Finance**, and links to the refund queue only when the caller's menu carries it.
+  `FINANCE_CATEGORIES` is a fourth deliberate copy of two strings (`SupportVocabulary.cs` explains why
+  there are three); `test/support-model.test.ts` parses the C# and fails if they drift, the shape
+  `audit.test.ts` uses for the D-35 vocabulary.
+
+  • **Both directory lookups are offered, because the payload cannot say which one applies.**
+  `TicketRow` carries a `userId` and nothing about the account's kind — a daily-fee refund is a
+  driver's, a fare complaint a passenger's, and both are `iam.users` ids. Each link is drawn only when
+  the operator's menu carries that item, and its path is the one `GET /v1/admin/session` sent, never
+  `routes.ts` (`AlertsCard`'s rule; a link the proxy would refuse is worse than no link).
+
+  **Three deviations from `web_admin.html`, each recorded rather than quietly made —**
+  1. ⚠ **SCR-AP-004's "Driver Level" column is `Raised` instead.** A `ReportRow` names a vehicle and
+  nothing else — no driver, no plate, no level. Driver Level is reputation-svc's (D-04) and no
+  admin-bff route joins it onto a report, so the column would be a header over an em dash on every
+  row. **Either the wireframe drops it, or `ReportRow` gains the vehicle's driver and level** — the
+  latter is the more useful screen and is a safety-svc + admin-bff change, not a portal one.
+  2. ⚠ **The sketch's third report row (`0` reports · "No action") cannot exist.** Membership of this
+  queue *is* having a pending report. Same shape as C106's `Auto-verified · View` row and the same
+  answer: it is not drawn, because the platform cannot produce it. **`web_admin.html` should drop it.**
+  3. ⚠ **"Delist 24h" and the Duration dropdown** — see above. **`web_admin.html` and D2 §SCR-AP-004
+  should carry both changes**; a temporary, self-expiring suspension would be a real feature (a column,
+  a sweeper and a route to lift one), not a control.
+
+  **Spec gaps / micro-change-sets raised (5) —**
+  1. ⚠ **The DoD's evidence attachment does not reach this surface, and support-svc kept it on
+  purpose.** `support.yaml`'s agent-side `TicketRow` carries `screenshotUrl` (a short-lived signed
+  link), **`legacyScreenshotUrl`** — whose own description says it exists because "fare-svc (C050)
+  writes it, for AL-47's driver-QR dispute evidence, so dropping it would lose the attachment on a
+  Finance-queue ticket" — plus `thread`, `tripId`, `queue`, `assignedTo` and `resolvedBy`.
+  **admin-bff's `SupportTicketRow` maps eight fields and keeps none of those**, and `admin-bff.yaml`'s
+  `TicketRow` declares none of them. So the dispute appears in the queue (that half of the DoD holds)
+  and its evidence does not. Nothing was faked. **`admin-bff.yaml#TicketRow` should become the subset
+  of support-svc's that its own comment says it is** — at minimum `queue`, `tripId`, `thread` and the
+  two screenshot links — and the portal renders them the day it can. The signed link needs no new auth
+  work: `GET /v1/support/screenshots/{uploadId}` is `security: []` because the signature *is* the
+  credential.
+  2. ⚠ **No `GET /v1/admin/support/tickets/{ticketId}`.** support-svc built
+  `GET /v1/internal/support/tickets/{ticketId}` **for this BFF** ("one ticket with its whole thread")
+  and admin-bff exposes no route onto it. Until it does, an agent's detail view is a row from a queue
+  page — so a bookmarked ticket outside the current filter or past row 100 cannot be opened, and the
+  screen says so rather than 404ing.
+  3. ⚠ **No `POST /v1/admin/support/tickets/{id}/respond`.** US-16.3 is two verbs and support-svc
+  built both; the C053 handoff already recorded that admin-bff has a route for only the second, and
+  C062 shipped without it. An agent who needs a clarification still has to close the ticket to be
+  heard. The wireframe's **Reply** button is therefore not drawn.
+  4. ⚠ **The report queue carries no strike count.** `ReportRow.confirmedCount` exists in the contract
+  and is `null` in practice because safety-svc's `VehicleReport` has no such field — so the "3 reports"
+  the wireframe puts on a row is unanswerable before a decision. **safety-svc's `VehicleReport` should
+  carry the vehicle's confirmed total** (it is already counted in the same transaction on resolve), and
+  admin-bff should forward it. Until then the delisting view is the rule plus the post-verdict banner.
+  5. ⚠ **Nothing lifts a suspension.** admin-bff has `…/suspend` for both subjects and no
+  reinstatement route anywhere, while `ModerationResult.status` declares `ACTIVE` as a value nothing
+  can produce. A moderator who suspends the wrong vehicle cannot undo it from this console. **A
+  `…/reinstate` on the same two paths** is the missing half; the audit vocabulary would need
+  `VEHICLE_REINSTATED` / `DRIVER_REINSTATED`.
+
+  **Not built here, and named rather than stubbed —** the fraud-review queue (`/moderation/fraud`,
+  C065's E-07 surface: it sits in this nav group, has no wireframe and is in neither C107's nor C108's
+  screen list — it needs an owner); ticket **assignment** (support-svc's `…/assign` has no admin-bff
+  route either, and no wireframe draws it); pagination past 100 rows on either queue, which the
+  filters are the answer to and which no wireframe draws; and the wireframe's read-only **trip** table
+  on a ticket, which cannot be built while `tripId` is dropped (finding 1).
+
+  **Files —** added `portals/admin/src/api/{moderation.ts,support.ts}`,
+  `src/server/{moderation-actions.ts,support-actions.ts}`,
+  `src/components/moderation/{model.ts,ReportQueueTable.tsx,ReportDecisionForm.tsx,SuspendCard.tsx}`,
+  `src/components/support/{model.ts,TicketFilter.tsx,TicketQueueList.tsx,TicketPanel.tsx,ResolveTicketForm.tsx}`,
+  `app/(portal)/reports/page.tsx`, `app/(portal)/support/tickets/page.tsx` and five test files
+  (`moderation-model`, `moderation-actions`, `moderation-screen`, `support-model`, `support-actions`).
+  Modified `src/i18n/messages/{en,si,ta}.ts` (~65 keys × 3), `src/api/types.ts` and
+  `src/api/verification.ts` (`CursorPage` hoisted to the shell's shapes and re-exported — three screen
+  groups page now, and the `_shared.yaml` envelope belongs to none of them), `test/fences.test.ts`
+  (this component's five `/v1/**` paths, which is the point of enumerating the set) and
+  `portals/admin/CLAUDE.md`. **No spec file, no wireframe, no backend file and no contract was
+  touched**; the findings above are micro-change-sets, not edits.
+
+  **One note on the allowed-path list —** `/v1/admin/vehicles` and `/v1/admin/drivers` are now in
+  `fences.test.ts`'s set because US-14.3's routes are `…/vehicles/{id}/suspend` and
+  `…/drivers/{id}/suspend`. They are the only two writes anywhere under those prefixes, which
+  admin-bff asserts against its own route table (`No_directory_route_accepts_a_write`), so C109's
+  directories inherit a read-only surface unchanged.
+
+  **Build host —** no Docker, no replica, no backend build. `vitest run` takes ~16 s and
   `next build` ~25 s.

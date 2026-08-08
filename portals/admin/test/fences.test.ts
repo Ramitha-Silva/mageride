@@ -112,6 +112,16 @@ describe('AL-02 — nothing here is driver-facing or passenger-facing', () => {
       '/v1/admin/verification',
       '/v1/admin/verification/org',
       '/v1/admin/documents',
+      // C107 · SCR-AP-004/005. The vehicle-report queue and its verdict, the two
+      // suspensions, and the support-ticket queue with its resolution. The two
+      // directory prefixes are here because US-14.3's routes are
+      // `…/vehicles/{id}/suspend` and `…/drivers/{id}/suspend` — the *only* two
+      // writes anywhere under them (`No_directory_route_accepts_a_write`).
+      '/v1/admin/reports/queue',
+      '/v1/admin/reports',
+      '/v1/admin/vehicles',
+      '/v1/admin/drivers',
+      '/v1/admin/support/tickets',
     ]);
 
     const called = new Set<string>();
