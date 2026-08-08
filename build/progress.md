@@ -128,7 +128,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C099 | passenger-ios-package-history | 4b | PARTIAL | 2026-08-07 | SCR-PI-020/021/022/023 built to `specs/wireframes/passenger_ios.html`; 20 new tests across 4 suites (`HistoryFlowTests` + `HistoryTestKit`), strings now 315 keys × 3 locales. **PARTIAL only because the verify command is `xcodebuild` and this host cannot run it.** **One model for SCR-PI-020 and SCR-PI-021**, because it is one ride — the party is read off `bookerId` and never off the URI, so `mageride://package/{rideId}` serves both ends. **US-20.5's delivery OTP is now captured on this platform**: `PassengerAppDelegate.deliver` writes `PackageOtps` before routing, which C097 built the holder for and nothing called. **AL-48 on the history card**: `mobileMasked` is rendered and never dialled, so **Call** costs one `GET /v1/rides/{id}`; a cancelled-before-assignment trip offers neither, refused in the card *and* the model. **Four wireframe/parity divergences recorded** (SCR-PI-021 draws no Call, SCR-PI-023 draws a disabled `⬇ Receipt` no operation can fill, the status pill is copy rather than `RideState.name`, the history Free call routes to SCR-PI-028) and **six contract gaps restated or found** — no passenger read of their own scheduled rides, no `kind` on `RideHistoryRow`, no distance/vehicle on a history row, no vehicle type or driver rating on `TripDriver`, no trip-receipt operation anywhere, and `counterpartyPhone` being ambiguous on a package |
 | C100 | passenger-ios-mode-b-subscriptions | 4b | PARTIAL | 2026-08-07 | SCR-PI-024/025/025a/025b built to `specs/wireframes/passenger_ios.html`; 27 new tests across 7 suites (`SubscriptionFlowTests` + `SubscriptionTestKit`), strings now 393 keys × 3 locales. **PARTIAL only because the verify command is `xcodebuild` and this host cannot run it** — the five `LocalizationTests` rules were run as a script and the generator regenerates cleanly at **146 app sources, 28 test sources**. **AL-49 is the shape of the pay sheet**: `payTo` is minted by `POST …/pay` from a *verified* payout profile and by nothing else, so the chooser is stage one and the owner's account is stage two. **AL-59's OnePay row is absent and Cash takes it** — the wireframe still draws `OnePay · +5 %`, which would route a fleet's money into MageRide's merchant account; `SubscriptionRailsTests` reads all three languages to keep it out. **AL-25's unsubscribe erases the marker on the response**, not on `share.revoked`, and sends nothing to the hub. **Accepted is inferred from the subscription and Rejected cannot be observed at all** — C082's gap, restated. `BankAppHandoff` gained a URL-taking hand-off (Δ C100) and `TripLabels` two `BusinessDate` formatters; **one wireframe divergence** (no OnePay rail) and **three contract gaps restated** — no passenger read of their own access requests, no `GET …/subscriptions/{subscriptionId}`, and no passenger-readable vehicle name |
 | C101 | passenger-ios-settings-addresses | 4b | PARTIAL | 2026-08-07 | SCR-PI-026/026a/027/027b/033 built to `specs/wireframes/passenger_ios.html`; 44 new tests across 5 suites (`SettingsFlowTests` + `SettingsTestKit`), strings now **436 keys × 3 locales**. **PARTIAL only because the verify command is `xcodebuild` and this host cannot run it** — the five `LocalizationTests` rules were run as a script and the generator regenerates cleanly at **160 app sources, 30 test sources**. **`IosSavedAddress.kt` is the cluster's answer to the boxed-`Boolean?` problem**: the `isHome`/`isWork` pair is built, read and copied in Kotlin, so no screen spells an initialiser the C096 finding says this repository disagrees with itself about — and it type-checks here with `:shared:compileKotlinIosArm64`. **Home and Work are the flags, never the label** (a Sinhala *"නිවස"* is a Home). **A reverse geocode is a pre-fill and never a gate** (AL-14). **The language change re-points the bundle and re-creates nothing** (Δ Section C). **`DELETE /v1/users/me` is accepted, not done** (E-06). `AppPreferences.preferredRail` became the one door onto the default rail and C097's/C098's two direct reads now go through it (Δ C101); `PassengerProfileRepository` gained `saveDefaultPaymentMethod` and `deleteAccount`; `PassengerShellModel` gained the identity clear. **Five wireframe divergences** and **three contract gaps** — see the handoff |
-| C102 | passenger-ios-comms-safety-support | 4b | PENDING | | |
+| C102 | passenger-ios-comms-safety-support | 4b | PARTIAL | 2026-08-08 | SCR-PI-028/029/030/030a built to `specs/wireframes/passenger_ios.html` and SCR-PI-031 finished to its frame; **51 new tests across 8 suites** (`CommsFlowTests` + `CommsTestKit`, plus one in `ThemeTokenTests`), strings now **496 keys × 3 locales**. **PARTIAL only because the verify command is `xcodebuild` and this host cannot run it** — the five `LocalizationTests` rules were run as a script, the `.pbxproj` was checked structurally (499 objects, no duplicate or dangling ids, balanced delimiters) and the generator regenerates cleanly and idempotently at **176 app sources, 32 test sources**. **The last three placeholders are gone, so every route in `PassengerDestinations` now draws a real screen** — `PlaceholderScreen` and both `route_placeholder_*` strings went with them, and `UnreachableRoute` (no copy at all) is what an impossible `default:` arm draws. **AL-48 end to end**: SCR-PI-028's signalling half is real and its media half reports `noMediaClient`, which is a **dependency wall** rather than a decision — `livekit/client-sdk-swift` is a remote package where this project resolves one by path, and `NSMicrophoneUsageDescription` is absent on purpose (`CommsFenceTests` pins it). **CallKit is driven by the LINK, never the tap**, and the reported call is ended *before* the fallback dial is offered, because a `tel:` URL on iOS places a call. **safety-svc got its own seam** rather than joining `RideRepository` — one caller of `POST /v1/sos` is one row on the operator's feed — while `reportCallOutcome` went **onto** `RideRepository`, whose comms-svc half already minted the `callId`. **No `:shared` helper was added**: `ticketDescription` (C093) and `fileUploadOf` (C091) were reused. **Three wireframe divergences** and **three contract gaps restated** — see the handoff
 | C103 | tailwind-preset | 4c | PENDING | | |
 | C104 | admin-portal-shell | 4c | PENDING | | |
 | C105 | admin-portal-auth-dashboard | 4c | PENDING | | |
@@ -16168,3 +16168,231 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   Android file was touched** — this component found no C083 defect, and the five divergences above
   are wireframe micro-change-sets rather than code changes on either side.
 
+- **Component:** C102 passenger-ios-comms-safety-support — 2026-08-08
+- **Status:** PARTIAL — **the cluster is written in full and none of it has been compiled.** This
+  Linux build host cannot build for iOS (root `CLAUDE.md`, "Build Host"), so the component's own
+  verify line — `xcodebuild … -destination 'platform=iOS Simulator,name=iPhone 15' test` — has not
+  been run and every DoD line stays unverified until the first `xcodebuild` on macOS. Saying
+  anything else would be claiming a green build nobody has seen. Same status, same reason, as
+  C094–C101.
+
+  **What IS verified here.** The five rules `LocalizationTests` enforces were run as a script over
+  the built tables: **496 keys × 3 locales**, no key in one file and not the others, nothing blank,
+  nothing left as its English placeholder, every positional specifier surviving into si/ta, no
+  nested `/* … */` (the C089 trap), and **no declared key that nothing references** — the last one
+  is what caught the two `route_placeholder_*` strings this component deletes. Every snake_case
+  literal in the Swift sources was checked back against the table in the other direction as well;
+  the only ones with no key are the ten wire values and `UserDefaults` keys that predate this
+  component. The `.pbxproj` was checked structurally (499 objects, no duplicate ids, no reference to
+  an id that is not defined, balanced delimiters) and `Tools/generate_xcodeproj.py` regenerates it
+  **idempotently** at 176 app sources / 32 test sources. **`:shared` was not touched at all**, so
+  there is no Kotlin half to compile: both `iosMain` helpers this cluster needed already existed.
+- **Notes:**
+
+  **The VoIP media client is not here, and it is a dependency wall rather than a decision.** D6' §6
+  names LiveKit and `passenger_ios.html`'s SCR-PI-028 cell says *"native **CallKit** `CXProvider` +
+  WebRTC"*, so the intended client is `livekit/client-sdk-swift`. Three things stop it landing in
+  this component: it is a **remote** Swift package and this project's only package is
+  `shared/swiftpm/MageRideShared`, resolved **by path** — adding a remote dependency changes what
+  `xcodebuild` has to fetch before it can build at all, which is a decision about the app target
+  rather than a screen's; it needs `NSMicrophoneUsageDescription`, which `Info.plist`'s own header
+  keeps out until there is code behind it (the mirror of `apps/passenger-android`'s missing
+  `RECORD_AUDIO`); and neither can be verified on a host that cannot compile iOS. So `VoipEngine` is
+  the seam, `AbsentVoipEngine` is what `PassengerGraph` binds, and **the signalling half is real**:
+  `POST /v1/calls/start` mints the room and writes `comms.call_log`, then the engine reports
+  `noMediaClient` — precisely the condition AL-48 legislates for, so the screen offers *"Call
+  normally instead?"* and the passenger reaches the driver. Nothing is faked and nothing is
+  swallowed: `voip_failed` is reported to voip-svc, so the platform's own call log tells the truth
+  about what this build can do. Landing the real engine is **one binding** plus the package and the
+  purpose string; the model, the screen, `CallKitSession` and the fallback are already written
+  against the protocol and do not change. C075, C084 and C093 all hit this wall; C093 hit it in
+  exactly this form.
+
+  **CallKit is driven by the LINK, never by the tap, and the ordering is load-bearing.**
+  `CallKitSession.startedConnecting` fires on `CallLink.connecting` and `connected()` on
+  `.connected`; a failure calls `end(reason: .failed)` **before** the direct-dial prompt is drawn. On
+  this platform a `tel:` URL *places* a call, so a dial taken while the system still believed a call
+  was up would hang the new one straight back up — `FakeCallSession` records the sequence as a list
+  and `testAFailedCallEndsTheSystemCallFirstAndReportsExactlyOneOutcome` asserts it. The same
+  ordering is why a build with `AbsentVoipEngine` reports **no call at all** rather than flashing one
+  into the status bar and out again: it fails before it ever reports connecting. The reported handle
+  is `CXHandle(type: .generic)` and never `.phoneNumber` — AL-48 left exactly one privacy claim
+  standing, and a `.phoneNumber` handle is rendered on the lock screen *and written into the
+  handset's own call history*.
+
+  **safety-svc got its own seam; comms-svc did not.** `POST /v1/sos` having **one** caller is what
+  stops one emergency arriving on the operator's live feed as two events, and `RideRepository`'s own
+  KDoc had reserved that boundary for this component since C098 — so `SafetyRepository` is new.
+  `reportCallOutcome` went the other way, **onto** `RideRepository`: comms-svc was already one of
+  that door's four services and `startCall` is what mints the `callId` an outcome is reported
+  against, so a second comms seam would have split one operation pair across two files. The safety
+  seam carries the alarm and D-34's link and nothing else — the vehicle report (US-12.6), the driver
+  block (D-04/E-07), the SOS history and the public share view are all on `safety.yaml` and none has
+  a passenger cell in this build; `getSharedTrip` is `security: []` and is a browser's, on SCR-WT.
+
+  **The alarm reads a live fix, and it is the one screen in this app that should.** C097's
+  `LastKnownFix` is the right answer for a booking's default pickup and SCR-PI-008's geocoder bias,
+  and C101 used it for the address pin rather than adding a fifth subscriber. Here the **countdown
+  starts on the first emission**, and a passenger in a moving vehicle should send where they are now
+  rather than where the last screen saw them — so `SosModel` subscribes and cancels on
+  `.onDisappear`. The first emission of that flow *is* the last known fix, so on any handset that has
+  ever had one the two agree at the same instant; on one that has not, the disc reads `SOS` rather
+  than a countdown and a tap raises nothing, which is the positionless-SOS gap made visible.
+
+  **The three-second cancel window spends D-33's budget, and that is why it is three.** §14.3 fixes
+  p99 ≤ 5 s for the *dispatch* and says nothing about a confirmation; three is what is left of a
+  five-second sense of urgency once a mis-tap on the largest control on the screen has to be
+  recoverable, and a deliberate tap sends immediately rather than waiting out the timer it
+  interrupted. The same number as SCR-PA-029, SCR-DA-032 and SCR-DI-032 — one platform should not
+  have two answers to *"how long do I have to cancel"*. `SosSmsStatus.failed` is **not** an error
+  state and does not colour like one: the alert is recorded and is on the admin live feed either way.
+
+  **D-34's link is minted after the alarm and is allowed to fail**, because putting
+  `POST /v1/trip-share/{tripId}` in front of `POST /v1/sos` would spend the five-second budget on a
+  URL. **Δ iOS — it is shared with `ShareLink`**, first-party since iOS 16 (this target's floor),
+  where the Android twin builds an `ACTION_SEND` chooser. The item is the URL **as text**, which is
+  what `type = "text/plain"` sends there; a `URL` item would let some receivers rewrite it into a
+  title-and-link pair the recipient cannot paste into a browser.
+
+  **SCR-PI-030's FAQ is an accordion and its ticket thread is a sheet.** The cell draws a `＋` per
+  `glist` row and its own `Δ iOS` clause is *"`List` + `DisclosureGroup`"*, so a row expands **in
+  place** with the body held in state beside the id that is open — one at a time, because two open
+  bodies push *"Your tickets"* off a 5.4" screen. The **thread** goes the other way: the baseline
+  draws no frame for it, and adding a destination the team-approved wireframes have no picture of
+  would be a deviation, so it is a `.sheet` over the list that was tapped. `apps/driver-ios` puts its
+  *article* in a sheet as well, and that is the two wireframes disagreeing rather than the two apps —
+  `driver_ios.html`'s SCR-DI-033 draws a search field with no results under it and this cell draws
+  two expandable rows. Both sheets go through **one** `.sheet(item:)` binding, because SwiftUI
+  presents one sheet per context and silently drops the rest (the trap C100 recorded on SCR-PI-025a).
+
+  **This app passes `lang` on the FAQ and `apps/driver-ios` deliberately does not.** `SupportApi`'s
+  KDoc argues for `nil` — let support-svc fall back to the caller's profile, *"one fewer place for
+  the app's idea of the current language to disagree with the profile's"* — and C093 took that
+  advice. It is wrong here for the reason C084 gave on the Android side: AL-26 makes the passenger's
+  language a **device-first** answer given on SCR-PI-002 before there is a session, written to the
+  device first on SCR-PI-027, and allowed to lag on the server (`languagePendingSync`). A passenger
+  reading a Sinhala app whose profile had not caught up would get English articles inside it. So the
+  FAQ and each opened article are asked for in the language `PassengerLocale` is drawing in, and
+  `nil` still means *"use the profile's"* before SCR-PI-002 has been answered. Three assertions pin
+  all three cases.
+
+  **One ticket category on this side, and the screenshot is uploaded by Submit.** `daily_fee_refund`
+  is the *driver's* fee (US-9.23), so no passenger-facing category derives `TicketQueue.finance` and
+  SCR-PI-030 has no quick action — every ticket it raises is `general` and Support's (US-14.13). A
+  ticket another service opened (fare-svc's AL-47 driver-QR dispute) still renders, from its own key
+  made legible. The attachment is two calls because that is the contract's shape (the ticket takes an
+  already-uploaded id), and a failed upload never costs the passenger their ticket: what they wrote
+  is the part support acts on. The bytes are held **off** `SupportState` for the reason C100 holds
+  its transfer slip off `SubscriptionPayState` — a couple of megabytes on an `@Published` value is
+  copied on every keystroke in the description field.
+
+  **SCR-PI-031 was already built and is now drawn to its frame.** C094 shipped the split the
+  wireframe asks for — mandatory is a non-dismissible `.alert`, soft is a dismissible banner — and
+  what was missing was the cell's `⬆️`, its **two-line** banner (*"Update available"* over *"A newer
+  version is ready"*) and its *"Update in App Store"* bar label, which is a different string from the
+  banner's bare *"Update"*. All three are there. The **alert's** `⬆️` is not, and cannot be: a
+  SwiftUI `.alert` takes a title, a message and buttons and has no image slot, and reaching for a
+  custom presentation to draw one would trade the platform's own non-dismissible wall for a view that
+  has to re-implement it. Recorded as a Section C row rather than a gap.
+
+  **`PlaceholderScreen` is gone, and what replaced it carries no copy.** C102 took the last three
+  destinations, so every route in `PassengerDestinations` now draws a real screen and both
+  `route_placeholder_*` strings were deleted — `apps/passenger-android` did exactly this at C084.
+  What Swift needs and Kotlin did not is *something* in each `…DestinationView`'s impossible
+  `default:` arm, since `PassengerRoute` has thirty-two cases: `UnreachableRoute` draws the app
+  background and trips an `assertionFailure`, so a routing mistake fails on the machine that made it
+  rather than shipping a translated *"coming soon"* for a state the app can no longer be in.
+
+  **The call and SOS palettes are the transcribed ones, not this wireframe's CSS.** Both
+  `passenger_ios.html`'s SCR-PI-028 and `driver_ios.html`'s SCR-DI-031 declare their own call palette
+  — a `#3a3d44 → #15171B` gradient, a `#4a4d55` avatar and `#cfd3da` captions — and C093 kept the
+  §0.2-derived one for `apps/driver-ios` under C085's decision (1). The same call is made here, so
+  the two iOS apps and the two Android apps draw **one** call screen rather than four; the eleven
+  colorsets are byte-identical to `apps/driver-ios`'s. `ThemeTokenTests` now asserts all eleven in
+  **both** appearances — the plausible mistake is somebody giving `sosHalo` a dark variant, since it
+  is derived from `error` and `error` has one, which would turn the ring pink at night on the one
+  screen that must not change. Its 25 % alpha is baked into the asset for exactly that reason, and
+  the test helper grew an `alpha:` parameter to say so.
+
+  ### Wireframe divergences (micro-change-set candidates)
+
+  All three are resolved by the C099 split the prompt restates — *layout, controls, states and
+  navigation* follow the wireframe, *behaviour* follows Android — and none is a code change on either
+  side.
+
+  1. **SCR-PI-028's caption is `MageRide Audio` in the cell and *"In-app call, number hidden"* in the
+     app.** The Android cell draws the second, `apps/passenger-android` ships it and C093 made the
+     same call for `apps/driver-ios` against the identical iOS cell. The sentence is the one that
+     carries AL-48's surviving privacy claim; *"MageRide Audio"* is a product name where a promise
+     belongs. Either the two `*_ios.html` cells need the Android copy or all four apps need
+     *"MageRide Audio"* — one decision, four screens.
+  2. **SCR-PI-029 draws no footer at all.** The cell draws the *dispatched* state only, so there is
+     no Cancel, Close or Try again in it; the app draws the Android twin's three, because a screen
+     with no way out of the armed state is one a mis-tap cannot be taken back from — which is the
+     whole point of the countdown the cell's own states line names (*"confirmation ≤5s (D-33)"*).
+  3. **SCR-PI-030's ticket card prints `#TK-4521` and SCR-PI-030a's picker prints
+     `PAX-90431-0617`.** Neither identifier exists: a `support.tickets` id is a ULID, there is no
+     `TK-` series, and no contract carries a human-readable passenger or trip number. The card leads
+     with its **category** and the picker row is the **day and the route**. This is the fourth
+     component to hit it (C074's `DRV-22011`, C083's and C101's `PAX-90431`, C084's `#TK-4521`) and
+     the pattern is now consistent enough to be worth one platform decision rather than five client
+     workarounds.
+
+  ### Contract gaps
+
+  All three are restated rather than new, and all three are the same on both platforms.
+
+  1. **`POST /v1/sos` has no positionless form.** `TriggerSosRequest.lat`/`.lng` are required, so
+     SCR-PI-029 cannot arm until the handset has answered once — and a passenger who has denied
+     location has no way to raise an alarm from this app at all. BR-29.4 contemplates exactly this
+     case for the **web** surface (*"geolocation permission denied → SOS still fires with the last
+     known driver-reported position, marked `accuracy=unknown`"*) and the app-facing contract carries
+     no equivalent. In practice the wait is milliseconds; the gap is the handset that has never had a
+     fix. The fix is a nullable `lat`/`lng` pair plus the same `accuracy=unknown` marking
+     `safety.sos_events` already carries for the web path. C075, C084 and C093 each recorded it.
+  2. **No contract mints a ticket or trip number** — see divergence 3 above.
+  3. **No passenger-facing support category routes to the Finance queue.** `TicketQueue` is derived
+     from `category` and `daily_fee_refund` is the driver's, so a passenger with a money complaint
+     opens a `general` ticket that lands on the Support pile. AL-47's driver-QR dispute has its own
+     fare-svc route which files a Finance ticket on the passenger's behalf, so the hole is only for a
+     complaint the passenger raises themselves. A `fare_dispute` category in support-svc's published
+     list would close it with no client change: `SupportCategories` is one constant.
+
+  ### For C103 and anything that opens this target next
+
+  - **`SWIFT_STRICT_CONCURRENCY` is still `minimal`**, and this cluster adds the first `@MainActor`
+    protocol pair in the app whose implementations are handed callbacks from a system framework
+    (`CallSession`'s `onSystemEnd` / `onSystemMute`, delivered from `CXProviderDelegate` on an
+    arbitrary queue and hopped with `Task { @MainActor … }`). Raising the setting will surface those
+    hops first; they are already written the way the answer wants them.
+  - **`RideContact.dial` still has no `CXCallObserver` guard**, and `apps/driver-ios`'s does. That is
+    deliberate here and is worth a decision rather than a copy: this app has exactly **one** dial site
+    (SCR-PI-015a's *Normal call*), and its caller discards the `Bool` — so adding the guard without
+    also giving that sheet somewhere to report a refusal would turn a rare silent success into a rare
+    silent no-op. SCR-PI-028 does not need it, because `VoipCallModel.fail(_:)` ends the reported
+    call before the fallback is offered and the model draws the refusal as copy. Closing it properly
+    means an error line on `CallChooserSheet`, which is C098's screen.
+  - **`UnreachableRoute` is the honest `default:`** — do not put copy back into it. If a new route
+    ever needs a real screen, register it; if a sub-view genuinely cannot claim one, the assertion is
+    the thing that should fire.
+
+  ### Files touched
+
+  `apps/passenger-ios/PassengerApp/Comms/` (5 new files), `PassengerApp/Safety/` (4 new),
+  `PassengerApp/Support/` (6 new), `PassengerApp/UI/SupportControls.swift` (new),
+  `PassengerApp/Resources/Assets.xcassets/Call/` + `Sos/` (11 new colorsets),
+  `PassengerApp/Nav/PassengerDestinations.swift` (the last three placeholders, `PlaceholderScreen`
+  deleted, `UnreachableRoute` added), the seven other `…DestinationView`s (their `default:` arms),
+  `PassengerApp/DI/PassengerGraph.swift`, `PassengerApp/Ride/RideRepository.swift`
+  (`reportCallOutcome`), `PassengerApp/Shell/UpdateGate.swift` (SCR-PI-031 to its frame),
+  `PassengerApp/Theme/MageRideColor.swift` (two palettes),
+  `PassengerApp/Theme/MageRideSpacing.swift` (six tokens),
+  `PassengerApp/UI/MoneyFormat.swift` (`timer(seconds:)`), the three
+  `Resources/*.lproj/Localizable.strings` (+62 keys each, −2),
+  `PassengerAppTests/CommsTestKit.swift` and `PassengerAppTests/CommsFlowTests.swift` (both new),
+  `PassengerAppTests/RideTestKit.swift` (the call fake's outcome half),
+  `PassengerAppTests/ThemeTokenTests.swift` (the two palettes and the `alpha:` parameter), the
+  regenerated `PassengerApp.xcodeproj/project.pbxproj`, and `apps/passenger-ios/CLAUDE.md`. **No
+  Android file and no `:shared` file was touched** — this component found no C084 defect, both
+  `iosMain` helpers it needed already existed, and the three divergences above are wireframe
+  micro-change-sets rather than code changes on either side.

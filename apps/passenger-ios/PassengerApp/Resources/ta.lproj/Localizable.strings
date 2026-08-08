@@ -19,13 +19,11 @@
 /* SCR-PI-031 — the update gate */
 "update_required_title" = "புதுப்பிப்பு தேவை";
 "update_mandatory_message" = "தொடர்ந்து பயணிக்க புதிய பதிப்பு தேவை. இதைத் தவிர்க்க முடியாது.";
-"update_optional_message" = "மேஜ்ரைட்டின் புதிய பதிப்பு கிடைக்கிறது";
+"update_optional_title" = "புதுப்பிப்பு உள்ளது";
+"update_optional_message" = "புதிய பதிப்பு தயாராக உள்ளது";
 "update_action_now" = "புதுப்பி";
+"update_action_store" = "App Store இல் புதுப்பி";
 "update_action_dismiss" = "நிராகரி";
-
-/* Registered destinations a screen group has not written yet */
-"route_placeholder_title" = "விரைவில்";
-"route_placeholder_body" = "%1$@ இன்னும் உருவாக்கப்படவில்லை.";
 
 /* The map */
 "map_content_description" = "அருகிலுள்ள வாகனங்களின் நேரடி வரைபடம்";
@@ -547,3 +545,76 @@
 /* NEW on iOS. */
 "addresses_loading" = "உங்கள் முகவரிகள் ஏற்றப்படுகின்றன…";
 "address_sheet_locating" = "முகவரி தேடப்படுகிறது…";
+
+/* C102 · SCR-PI-028 / 029 / 030 / 030a */
+
+/* SCR-PI-028 — செயலி வழி அழைப்பு */
+"call_in_app" = "செயலி வழி அழைப்பு, எண் மறைக்கப்பட்டுள்ளது";
+"call_connecting" = "இணைக்கிறது…";
+"call_connected" = "இணைக்கப்பட்டது";
+"call_mute" = "ஒலி நிறுத்து";
+"call_unmute" = "ஒலி இயக்கு";
+"call_speaker" = "ஒலிபெருக்கி";
+"call_hang_up" = "அழைப்பை முடி";
+"call_fallback_question" = "அந்த அழைப்பு இணையவில்லை. ஓட்டுநரை வழக்கமான முறையில் அழைக்கவா?";
+"call_fallback_action" = "வழக்கமான அழைப்பு";
+"call_failed_signalling" = "அழைப்பை அமைக்க முடியவில்லை. இணைப்பைச் சரிபார்த்து மீண்டும் முயற்சிக்கவும்.";
+"call_failed_media" = "அழைப்பு அமைக்கப்பட்டது, ஆனால் ஒலி கிடைக்கவில்லை.";
+"call_failed_unavailable" = "இந்தச் செயலி பதிப்பில் செயலி வழி அழைப்பு இல்லை.";
+"call_dial_refused" = "இந்தச் சாதனத்தால் தொலைபேசி அழைப்புகளைச் செய்ய முடியாது.";
+
+/* SCR-PI-029 — அவசர SOS */
+"sos_title" = "அவசர SOS";
+"sos_armed" = "சிறிது நேரத்தில் அனுப்பப்படும். இப்போது அனுப்ப SOS ஐத் தட்டவும், அல்லது ரத்து செய்யவும்.";
+"sos_waiting_position" = "உங்கள் இருப்பிடத்தைக் கண்டறிகிறது…";
+"sos_sending_body" = "GPS மற்றும் பயணத்தை அவசரத் தொடர்புகளுக்கு SMS மூலம் அனுப்புகிறது…";
+"sos_sending" = "அனுப்புகிறது…";
+"sos_dispatched" = "எச்சரிக்கை அனுப்பப்பட்டது. உங்கள் இருப்பிடமும் பயணமும் எங்கள் பாதுகாப்புக் குழுவிடம் உள்ளன.";
+"sos_failed" = "எச்சரிக்கையை அனுப்ப முடியவில்லை.";
+"sos_no_position" = "உங்கள் இருப்பிடம் இன்னும் கிடைக்கவில்லை, எனவே எதுவும் அனுப்பப்படவில்லை.";
+"sos_contacts_loading" = "உங்கள் தொடர்புகள் ஏற்றப்படுகின்றன…";
+"sos_no_contact" = "அவசரத் தொடர்பு எதுவும் சேமிக்கப்படவில்லை";
+"sos_no_contact_hint" = "SMS சென்றடைய, சுயவிவரத் திருத்தத்தில் ஒன்றைச் சேர்க்கவும்.";
+"sos_sms_sent" = "அனுப்பப்பட்டது";
+"sos_sms_failed" = "SMS தாமதம்";
+"sos_sms_no_contact" = "தொடர்பு இல்லை";
+"sos_share_hint" = "இந்தப் பயணத்தின் நேரடி இணைப்பை யாருக்கேனும் அனுப்பவும்.";
+"sos_share_action" = "நேரடிப் பயணத்தைப் பகிர்";
+
+/* SCR-PI-030 — ஆதரவு */
+"support_title" = "ஆதரவு";
+"support_search_hint" = "உதவியைத் தேடு";
+"support_faq" = "அடிக்கடி கேட்கும் கேள்விகள்";
+"support_faq_empty" = "இன்னும் உதவிக் கட்டுரைகள் இல்லை.";
+"support_search_empty" = "அதற்குப் பொருந்தும் எதுவும் இல்லை.";
+"support_loading" = "ஏற்றுகிறது…";
+"support_your_tickets" = "உங்கள் டிக்கெட்டுகள்";
+"support_tickets_empty" = "நீங்கள் இன்னும் டிக்கெட் எதுவும் பதிவு செய்யவில்லை.";
+"support_raise_ticket" = "டிக்கெட் பதிவு செய்";
+"support_ticket_raised" = "உங்கள் டிக்கெட் ஆதரவுக் குழுவிடம் உள்ளது. அவர்களின் பதில் இங்கே தோன்றும்.";
+"support_attached_trip" = "ஒரு பயணத்துடன் இணைக்கப்பட்டது";
+"support_category_general" = "ஆதரவு கோரிக்கை";
+"support_status_open" = "திறந்துள்ளது";
+"support_status_in_progress" = "நடைபெறுகிறது";
+"support_status_resolved" = "தீர்க்கப்பட்டது";
+"support_event_opened" = "டிக்கெட் திறக்கப்பட்டது";
+"support_event_responded" = "ஆதரவுக் குழு பதிலளித்தது";
+"support_event_resolved" = "தீர்க்கப்பட்டதாகக் குறிக்கப்பட்டது";
+"support_event_reopened" = "மீண்டும் திறக்கப்பட்டது";
+
+/* SCR-PI-030a — டிக்கெட் பதிவுத் தாள் */
+"support_issue_label" = "சிக்கல் விவரம்";
+"support_issue_hint" = "என்ன தவறு நடந்தது என்று சொல்லுங்கள்…";
+"support_related_trip" = "தொடர்புடைய பயணம்";
+"support_trip_none" = "பயணம் இல்லை";
+"support_attach" = "திரைப்படத்தை இணை";
+"support_attached" = "திரைப்படம் இணைக்கப்பட்டது";
+"support_submit_ticket" = "டிக்கெட்டைச் சமர்ப்பி";
+
+/* இந்தக் கொத்தின் பிழைகள் */
+"error_no_emergency_contact" = "SOS எழுப்புவதற்கு முன் அவசரத் தொடர்பு ஒன்றைச் சேர்க்கவும்.";
+"error_ride_ended" = "இந்தப் பயணம் ஏற்கெனவே முடிந்துவிட்டது.";
+"error_ticket_not_found" = "அந்த டிக்கெட்டைக் கண்டறிய முடியவில்லை.";
+"error_screenshot_too_large" = "அந்தத் திரைப்படம் மிகப் பெரியது. சிறிய படத்தை இணைக்கவும்.";
+
+"action_clear" = "அழி";

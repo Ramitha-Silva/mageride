@@ -23,6 +23,15 @@ import SwiftUI
 ///   and stay put.
 ///
 /// The driver app answers both with one dialog because D2' §SCR-DI-035 does not draw the split.
+///
+/// **What C102 finished, and the one thing it could not** (Δ C102). The cell draws the dialog with a
+/// `⬆️` mark above its title and a full-width *"Update in App Store"* bar, and the banner as a `⬆️`
+/// beside **two** lines (*"Update available"* over *"A newer version is ready"*) with the `Update`
+/// textlink at its trailing edge. The banner is now exactly that. The alert's `⬆️` is **not drawn
+/// and cannot be**: a SwiftUI `.alert` takes a title, a message and buttons and has no slot for an
+/// image — the mark is what an `AlertDialog` gets on Android, and reaching for a custom presentation
+/// to draw one would trade the platform's own non-dismissible wall for a view that has to
+/// re-implement it. The bar's *label* is the cell's, which is the half that carries the meaning.
 struct UpdateGate: ViewModifier {
 
     let signal: UpgradeRequiredSignal?
@@ -58,7 +67,11 @@ struct UpdateGate: ViewModifier {
                 Button {
                     onUpdate(gate.updateUrl)
                 } label: {
-                    Text("update_action_now", bundle: MageRideColor.bundle)
+                    // The cell's own *"Update in App Store"*, which is a different label from the
+                    // banner's bare *"Update"* — the wall names where it is sending the passenger
+                    // because it is the only thing they can do, and the banner does not because it
+                    // sits beside a ✕.
+                    Text("update_action_store", bundle: MageRideColor.bundle)
                 }
             } message: { _ in
                 Text("update_mandatory_message", bundle: MageRideColor.bundle)
@@ -71,6 +84,11 @@ struct UpdateGate: ViewModifier {
 /// Drawn on `primaryContainer` rather than on ``MageRideColor/warning``, which is
 /// ``OfflineBanner``'s: the two can be on screen at once (a passenger below the version floor in a
 /// tunnel), and two amber bars stacked would read as one condition described twice.
+///
+/// **Two lines and an up arrow, which is the cell's `.alertbanner`** (Δ C102): `⬆️`, then *"Update
+/// available"* over *"A newer version is ready"*, then the `Update` textlink and the ✕. The arrow
+/// points **up** because the wireframe's glyph does and because the action is an upgrade — a
+/// download chevron would read as *"save this"*.
 struct SoftUpdateBanner: View {
 
     let signal: UpgradeRequiredSignal?
@@ -80,12 +98,16 @@ struct SoftUpdateBanner: View {
     var body: some View {
         if signal != nil {
             HStack(spacing: MageRideSpacing.xs) {
-                Image(systemName: "arrow.down.circle")
+                Image(systemName: "arrow.up.circle")
                     .imageScale(.small)
 
-                Text("update_optional_message", bundle: MageRideColor.bundle)
-                    .mageFont(.label)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("update_optional_title", bundle: MageRideColor.bundle)
+                        .mageFont(.label)
+                    Text("update_optional_message", bundle: MageRideColor.bundle)
+                        .mageFont(.caption)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
 
                 Button(action: onUpdate) {
                     Text("update_action_now", bundle: MageRideColor.bundle)

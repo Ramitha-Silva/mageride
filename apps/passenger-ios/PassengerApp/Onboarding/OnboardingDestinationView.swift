@@ -72,7 +72,7 @@ struct OnboardingDestinationView: View {
             // Unreachable: ``PassengerDestinationView`` routes exactly the five cases above here, and
             // ``PassengerRoute/isPreSession`` is the same five. The arm exists because
             // `PassengerRoute` has thirty-two cases and Swift wants them all accounted for.
-            PlaceholderScreen(screen: route.path, route: route)
+            UnreachableRoute(route: route)
         }
     }
 }

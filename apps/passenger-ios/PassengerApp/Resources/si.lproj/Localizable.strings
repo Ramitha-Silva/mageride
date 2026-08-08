@@ -19,13 +19,11 @@
 /* SCR-PI-031 — the update gate */
 "update_required_title" = "යාවත්කාලීන කිරීම අවශ්‍යයි";
 "update_mandatory_message" = "දිගටම ගමන් කිරීමට නව අනුවාදයක් අවශ්‍යයි. මෙය මඟ හැරිය නොහැක.";
-"update_optional_message" = "මේජ්‍රයිඩ් හි නව අනුවාදයක් තිබේ";
+"update_optional_title" = "යාවත්කාලීන කිරීමක් තිබේ";
+"update_optional_message" = "නවතම අනුවාදය සූදානම්";
 "update_action_now" = "යාවත්කාලීන කරන්න";
+"update_action_store" = "App Store හි යාවත්කාලීන කරන්න";
 "update_action_dismiss" = "ඉවත් කරන්න";
-
-/* Registered destinations a screen group has not written yet */
-"route_placeholder_title" = "ඉදිරියේදී";
-"route_placeholder_body" = "%1$@ තවම සාදා නැත.";
 
 /* The map */
 "map_content_description" = "අවට වාහනවල සජීවී සිතියම";
@@ -547,3 +545,76 @@
 /* NEW on iOS. */
 "addresses_loading" = "ඔබේ ලිපින පූරණය වෙමින්…";
 "address_sheet_locating" = "ලිපිනය සොයමින්…";
+
+/* C102 · SCR-PI-028 / 029 / 030 / 030a */
+
+/* SCR-PI-028 — ඇප් තුළ ඇමතුම */
+"call_in_app" = "ඇප් තුළ ඇමතුම, අංකය සැඟවී ඇත";
+"call_connecting" = "සම්බන්ධ වෙමින්…";
+"call_connected" = "සම්බන්ධයි";
+"call_mute" = "නිශ්ශබ්ද";
+"call_unmute" = "ශබ්ද කරන්න";
+"call_speaker" = "ස්පීකරය";
+"call_hang_up" = "ඇමතුම අවසන් කරන්න";
+"call_fallback_question" = "එම ඇමතුම ලබා ගත නොහැකි විය. රියදුරාට සාමාන්‍ය ලෙස ඇමතුම දෙන්නද?";
+"call_fallback_action" = "සාමාන්‍ය ඇමතුමක්";
+"call_failed_signalling" = "ඇමතුම සකස් කළ නොහැකි විය. සම්බන්ධතාව පරීක්ෂා කර නැවත උත්සාහ කරන්න.";
+"call_failed_media" = "ඇමතුම සකස් වුවත් හඬ ලබා ගත නොහැකි විය.";
+"call_failed_unavailable" = "මෙම ඇප් අනුවාදයේ ඇප් තුළ ඇමතුම් ලබා ගත නොහැක.";
+"call_dial_refused" = "මෙම උපාංගයෙන් දුරකථන ඇමතුම් ලබා දිය නොහැක.";
+
+/* SCR-PI-029 — හදිසි SOS */
+"sos_title" = "හදිසි SOS";
+"sos_armed" = "ටික වේලාවකින් යවයි. දැන් යැවීමට SOS ඔබන්න, නැතහොත් අවලංගු කරන්න.";
+"sos_waiting_position" = "ඔබේ ස්ථානය සොයමින්…";
+"sos_sending_body" = "GPS සහ ගමන හදිසි සම්බන්ධතාවලට SMS මගින් යවමින්…";
+"sos_sending" = "යවමින්…";
+"sos_dispatched" = "අනතුරු ඇඟවීම යවා ඇත. ඔබේ ස්ථානය සහ ගමන අපගේ ආරක්ෂක කණ්ඩායම සතුය.";
+"sos_failed" = "අනතුරු ඇඟවීම යැවිය නොහැකි විය.";
+"sos_no_position" = "ඔබේ ස්ථානය තවම නොමැති බැවින් කිසිවක් යැවිය නොහැකි විය.";
+"sos_contacts_loading" = "ඔබේ සම්බන්ධතා පූරණය වෙමින්…";
+"sos_no_contact" = "හදිසි සම්බන්ධතාවක් සුරකා නැත";
+"sos_no_contact_hint" = "SMS එකක් යා හැකි වන පරිදි පැතිකඩ සංස්කරණය යටතේ එකක් එක් කරන්න.";
+"sos_sms_sent" = "යවා ඇත";
+"sos_sms_failed" = "SMS ප්‍රමාදයි";
+"sos_sms_no_contact" = "සම්බන්ධතාවක් නැත";
+"sos_share_hint" = "මෙම ගමනේ සජීවී සබැඳියක් යමෙකුට යවන්න.";
+"sos_share_action" = "සජීවී ගමන බෙදාගන්න";
+
+/* SCR-PI-030 — සහාය */
+"support_title" = "සහාය";
+"support_search_hint" = "උදව් සොයන්න";
+"support_faq" = "නිතර අසන ප්‍රශ්න";
+"support_faq_empty" = "තවම උදව් ලිපි නොමැත.";
+"support_search_empty" = "එයට ගැළපෙන කිසිවක් නැත.";
+"support_loading" = "පූරණය වෙමින්…";
+"support_your_tickets" = "ඔබේ ටිකට්පත්";
+"support_tickets_empty" = "ඔබ තවම ටිකට්පතක් ඉදිරිපත් කර නැත.";
+"support_raise_ticket" = "ටිකට්පතක් ඉදිරිපත් කරන්න";
+"support_ticket_raised" = "ඔබේ ටිකට්පත සහාය කණ්ඩායම සතුය. ඔවුන්ගේ පිළිතුර මෙහි පෙනේ.";
+"support_attached_trip" = "ගමනකට අමුණා ඇත";
+"support_category_general" = "සහාය ඉල්ලීම";
+"support_status_open" = "විවෘතයි";
+"support_status_in_progress" = "සිදුවෙමින්";
+"support_status_resolved" = "විසඳා ඇත";
+"support_event_opened" = "ටිකට්පත විවෘත කරන ලදී";
+"support_event_responded" = "සහාය කණ්ඩායම පිළිතුරු දුන්නා";
+"support_event_resolved" = "විසඳා ඇති බව සලකුණු කළා";
+"support_event_reopened" = "නැවත විවෘත කළා";
+
+/* SCR-PI-030a — ටිකට්පත ඉදිරිපත් කිරීමේ පත්‍රය */
+"support_issue_label" = "ගැටලුවේ විස්තරය";
+"support_issue_hint" = "සිදු වූයේ කුමක්දැයි කියන්න…";
+"support_related_trip" = "අදාළ ගමන";
+"support_trip_none" = "ගමනක් නැත";
+"support_attach" = "තිර පිටපතක් අමුණන්න";
+"support_attached" = "තිර පිටපත අමුණා ඇත";
+"support_submit_ticket" = "ටිකට්පත යවන්න";
+
+/* මෙම පොකුරේ දෝෂ */
+"error_no_emergency_contact" = "SOS එකක් ලබා දීමට පෙර හදිසි සම්බන්ධතාවක් එක් කරන්න.";
+"error_ride_ended" = "මෙම ගමන දැනටමත් අවසන් වී ඇත.";
+"error_ticket_not_found" = "එම ටිකට්පත සොයාගත නොහැකි විය.";
+"error_screenshot_too_large" = "එම තිර පිටපත ඉතා විශාලයි. කුඩා රූපයක් අමුණන්න.";
+
+"action_clear" = "හිස් කරන්න";

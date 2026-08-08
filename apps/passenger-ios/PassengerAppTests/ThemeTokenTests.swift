@@ -96,17 +96,60 @@ final class ThemeTokenTests: XCTestCase {
         assertColour("AccentColor", style: .dark, equals: 0xFFB68A)
     }
 
-    /// **The four palettes the driver app has and this one does not.** Each was added by the
-    /// component that drew the screen fixing it — the scanner (C087), the offer takeover (C088), the
-    /// call and the SOS (C093) — and the shell must not ship a palette no wireframe cell asks for.
-    /// A passenger screen group that needs one adds it *and* deletes its name from this list.
+    /// **The palettes the driver app has and this one does not.** Each was added there by the
+    /// component that drew the screen fixing it — the scanner (C087) and the offer takeover (C088) —
+    /// and this app must not ship a palette no `passenger_ios.html` cell asks for. A passenger
+    /// screen group that needs one adds it *and* deletes its name from this list, which is what
+    /// C102 did with `callBackground` and `sosBackground`: SCR-PI-028 and SCR-PI-029 are the two
+    /// cells that fix them.
+    ///
+    /// AL-31's driver home map and the fifteen-second offer takeover have no passenger counterpart
+    /// at all, so the two names left here are permanent rather than pending.
     func testTheShellShipsNoScreenSpecificPalette() {
-        for name in ["scannerBackground", "offerBackground", "callBackground", "sosBackground"] {
+        for name in ["scannerBackground", "offerBackground"] {
             XCTAssertNil(
                 UIColor(named: name, in: bundle, compatibleWith: nil),
                 "\(name) is a driver-screen palette; a passenger screen adding one should say which cell fixes it"
             )
         }
+    }
+
+    /// **SCR-PI-028's and SCR-PI-029's palettes are dark in BOTH appearances** (C102).
+    ///
+    /// A call screen or an alarm screen that turned white in the light theme would be a different
+    /// screen twice a day, which is why every one of these is a transcribed hex with a single
+    /// appearance rather than an alias of a §0.2 role. Asserting both styles is the *whole* test:
+    /// somebody adding a dark variant to `sosHalo` — the plausible mistake, since it is derived from
+    /// `error`, and `error` has one — would turn the ring pink at night.
+    ///
+    /// **The same eleven values as `apps/driver-ios`'s catalogue**, typed out again rather than
+    /// imported: that app is a different target and this test cannot see it, so what is asserted is
+    /// that both were transcribed from the same table. Where those two disagree with the wireframes'
+    /// own CSS — both `*_ios.html` cells declare a lighter call palette — the transcribed one wins,
+    /// which is C085's decision (1) and is recorded on ``MageRideCallColor``.
+    func testTheCallAndSosPalettesAreDarkInBothAppearances() {
+        let palette: [(String, UInt32)] = [
+            ("callBackground", 0x15171B),
+            ("callSurface", 0x2A2D31),
+            ("callOnCall", 0xFFFFFF),
+            ("callHint", 0xAEB3BC),
+            ("callConnected", 0x9FCAFF),
+            ("sosBackground", 0x2A0A0A),
+            ("sosSurface", 0x3A1414),
+            ("sosOutline", 0x5A2020),
+            ("sosOnSos", 0xFFFFFF),
+            ("sosHint", 0xFFB4AB),
+        ]
+        for (name, hex) in palette {
+            assertColour(name, style: .light, equals: hex)
+            assertColour(name, style: .dark, equals: hex)
+        }
+
+        // The halo is the §0.2 `error` at 25%, and the alpha is **in the asset**: derived from the
+        // role with `.opacity(0.25)` it would resolve to `#FFB4AB` at night on the one screen that
+        // must not change.
+        assertColour("sosHalo", style: .light, equals: 0xD32F2F, alpha: 0.25)
+        assertColour("sosHalo", style: .dark, equals: 0xD32F2F, alpha: 0.25)
     }
 
     // MARK: - Type
@@ -181,10 +224,15 @@ final class ThemeTokenTests: XCTestCase {
 
     // MARK: -
 
+    /// - Parameter alpha: What the catalogue entry's own alpha should be. Every §0.2 role is opaque
+    ///   and the default says so; the one exception is C102's `sosHalo`, which bakes the wireframe's
+    ///   `rgba(211,47,47,.25)` into the asset **precisely so** no call site writes `.opacity(0.25)`
+    ///   over a role that has a dark appearance.
     private func assertColour(
         _ name: String,
         style: UIUserInterfaceStyle,
         equals expected: UInt32,
+        alpha expectedAlpha: CGFloat = 1,
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
@@ -204,6 +252,6 @@ final class ThemeTokenTests: XCTestCase {
             file: file,
             line: line
         )
-        XCTAssertEqual(alpha, 1, accuracy: 0.001, "\(name) alpha", file: file, line: line)
+        XCTAssertEqual(alpha, expectedAlpha, accuracy: 0.001, "\(name) alpha", file: file, line: line)
     }
 }

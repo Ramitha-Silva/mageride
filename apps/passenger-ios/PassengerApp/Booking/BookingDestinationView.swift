@@ -99,7 +99,7 @@ struct BookingDestinationView: View {
 
         default:
             // Unreachable: ``PassengerDestinationView`` routes exactly the five cases above here.
-            PlaceholderScreen(screen: route.path, route: route)
+            UnreachableRoute(route: route)
         }
     }
 }

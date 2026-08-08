@@ -52,6 +52,22 @@ enum MoneyFormat {
     /// The same, for a DTO that carries a `Money` rather than a bare `…Minor` field.
     static func rupees(_ money: Money) -> String { rupees(money.amountMinor) }
 
+    /// `84` → `01:24` — SCR-PI-028's call timer (Δ C102).
+    ///
+    /// **Minutes and seconds, and they do not roll over into hours.** A call that ran past sixty
+    /// minutes reads `61:07`, which is what the wireframe's two-field `01:24` means and what every
+    /// telephone on the platform does; a third field would make a two-minute call read `00:02:14`.
+    /// The same function is `apps/driver-ios`'s `MoneyFormat.timer(seconds:)` and
+    /// `apps/passenger-android`'s `DateFormat.timer`.
+    ///
+    /// It lives here rather than in ``TripLabels`` because it is **not a clock**: there is no zone,
+    /// no calendar and no locale in an elapsed duration, which is the whole reason D-38's Colombo
+    /// rules do not apply to it.
+    static func timer(seconds: Int64) -> String {
+        let total = max(0, seconds)
+        return String(format: "%02lld:%02lld", total / 60, total % 60)
+    }
+
     private static let minorUnits: Int64 = 100
 
     private static let grouping: NumberFormatter = {

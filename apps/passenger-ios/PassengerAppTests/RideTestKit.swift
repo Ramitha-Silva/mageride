@@ -28,6 +28,13 @@ final class FakeRideRepository: RideRepository, @unchecked Sendable {
     var scanFailure: Error?
     var fallbackFailure: Error?
 
+    /// `POST /v1/calls/start` refusing — SCR-PI-028's ``VoipFailure/signalling`` (Δ C102).
+    var callFailure: Error?
+
+    /// `POST /v1/calls/{callId}/outcome` refusing. **Never visible to a passenger**, which is what
+    /// `VoipCallModelTests` asserts by arming this and expecting the screen not to move.
+    var outcomeFailure: Error?
+
     var ride = RideFixtures.ride()
     var stateSnapshot = RideStateSnapshot(state: RideState.matching, version: 1, offerExpiresAt: nil)
     var cancelResponse = RideFixtures.cancelled(penaltyMinor: nil)
@@ -56,6 +63,7 @@ final class FakeRideRepository: RideRepository, @unchecked Sendable {
     private(set) var fallbacks: [String] = []
     private(set) var statusReads: [String] = []
     private(set) var calls: [(rideId: String, type: CallType)] = []
+    private(set) var outcomes: [ReportedOutcome] = []
 
     func ride(rideId: String) async throws -> RideDetail {
         rideReads += 1
@@ -111,8 +119,24 @@ final class FakeRideRepository: RideRepository, @unchecked Sendable {
 
     func startCall(rideId: String, type: CallType) async throws -> StartCallResponse {
         calls.append((rideId, type))
+        if let callFailure { throw callFailure }
         return callResponse
     }
+
+    func reportCallOutcome(callId: String, outcome: CallOutcome) async throws {
+        outcomes.append(ReportedOutcome(callId: callId, outcome: outcome))
+        if let outcomeFailure { throw outcomeFailure }
+    }
+}
+
+/// One `POST /v1/calls/{callId}/outcome`, recorded (Δ C102).
+///
+/// A named type rather than a tuple, for the reason ``ReplacedAddress`` and ``SavedContact`` are:
+/// `outcomes.map(\.outcome)` is a key path, and **Swift has none into a tuple** (the C087 finding).
+/// The tuples above it predate that rule and are read positionally.
+struct ReportedOutcome {
+    let callId: String
+    let outcome: CallOutcome
 }
 
 // MARK: - The system seams

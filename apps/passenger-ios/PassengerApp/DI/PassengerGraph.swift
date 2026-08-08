@@ -196,6 +196,33 @@ final class PassengerGraph: ObservableObject {
     /// Who is signed in, for SCR-PI-027's card and SCR-PI-033's.
     let identity: PassengerIdentity
 
+    // MARK: - C102 · cluster 8
+    //
+    // Two seams and two system objects. The seams are process singletons for the reason every other
+    // repository here is; the engine and the CallKit provider are one each because **the system owns
+    // at most one call** — a second `CXProvider` would be a second call the passenger can see in
+    // the status bar, and a second engine would be a second room membership nothing hangs up.
+
+    /// safety-svc's two passenger operations — `POST /v1/sos` and D-34's share link.
+    ///
+    /// **Deliberately not on ``rides``**: `POST /v1/sos` having one caller is what stops one
+    /// emergency arriving on the operator's live feed as two events. See ``SafetyRepository``.
+    let safety: SafetyRepository
+
+    /// support-svc's FAQ and ticket queue, plus C099's history read for SCR-PI-030a's trip picker.
+    let support: SupportRepository
+
+    /// D6' §6's LiveKit room, behind a protocol. **This build binds ``AbsentVoipEngine``** — read
+    /// its documentation before concluding that a connected call is unreachable by accident.
+    let voip: VoipEngine = AbsentVoipEngine()
+
+    /// The system's idea that this app has a call up — `CXProvider`, driven by the link.
+    ///
+    /// Constructed at launch rather than per call, because `CXProvider(configuration:)` registers
+    /// the app with CallKit and a provider built inside a screen would be torn down while the system
+    /// still believed it owned a call.
+    let callSession: CallSession = CallKitSession()
+
     init(environment: PassengerEnvironment = .current) {
         self.environment = environment
 
@@ -293,11 +320,12 @@ final class PassengerGraph: ObservableObject {
 
         // C099. Two clients it reads and one it holds for a route that does not exist — see
         // `ApiHistoryRepository.scheduled`.
-        self.history = ApiHistoryRepository(
+        let history = ApiHistoryRepository(
             rides: shared.api.ride,
             query: shared.api.query,
             dispatch: shared.api.dispatch
         )
+        self.history = history
 
         // C100. One client, and deliberately only its Mode B half — the driver daily fee, the voucher
         // ladder and the credit transfers share `subscription.yaml` and answer `403` to a passenger
@@ -311,6 +339,14 @@ final class PassengerGraph: ObservableObject {
         self.addresses = ApiAddressBook(iam: shared.api.iam, query: shared.api.query)
         self.sosContacts = ApiSosContacts(iam: shared.api.iam)
         self.identity = PassengerIdentity(profiles: profiles)
+
+        // C102. Two seams over two clients, and the support one takes C099's history rather than a
+        // fifth reader of `GET /v1/rides/history`: D2' §SCR-PI-030a's *"past Trip ID"* picker is the
+        // same list SCR-PI-022's Past tab draws. safety-svc's other four operations — the vehicle
+        // report, the driver block, the SOS history and the public share view — have no passenger
+        // wireframe cell in this build and deliberately no seam.
+        self.safety = ApiSafetyRepository(safety: shared.api.safety)
+        self.support = ApiSupportRepository(support: shared.api.support, history: history)
 
         self.live = PassengerLiveMap(
             transport: SignalRLiveHubTransport(

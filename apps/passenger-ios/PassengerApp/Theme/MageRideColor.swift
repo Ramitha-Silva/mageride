@@ -110,3 +110,84 @@ enum MageRideVehicleColor {
         Color(name, bundle: MageRideColor.bundle)
     }
 }
+
+/// SCR-PI-028's palette (C102).
+///
+/// **Dark in both appearances**, which is why every value here is a transcribed hex with one
+/// appearance rather than an alias of a semantic role. A call screen that turned white in the light
+/// theme would be a different screen twice a day, and a phone call has one appearance — the same
+/// argument `apps/driver-ios`'s ``MageRideCallColor`` makes for SCR-DI-031, and the reason C084's
+/// handoff asked this side to mirror the values rather than derive them.
+///
+/// **The five hexes are `apps/driver-ios`'s and `apps/passenger-android`'s `CallColors`, not this
+/// wireframe's.** `passenger_ios.html`'s SCR-PI-028 cell declares its own call palette — a
+/// `#3a3d44 → #15171B` gradient, a `#4a4d55` avatar and `#cfd3da` captions — and so does
+/// `driver_ios.html`'s SCR-DI-031, identically. C085's decision (1) settled that conflict for this
+/// platform: **where a wireframe's CSS and the transcribed palette disagree, the palette wins**, so
+/// the two iOS apps and the two Android apps all draw one call screen rather than four. The
+/// gradient is CSS chrome; the flat background is its foot, which is the value both catalogues carry.
+enum MageRideCallColor {
+
+    /// The screen the call sits on (`#15171B`).
+    static let background = named("callBackground")
+
+    /// The avatar disc and the two inert `.fab` controls (`#2A2D31`).
+    static let surface = named("callSurface")
+
+    /// The callee's name and an active toggle's label, at full contrast.
+    static let onCall = named("callOnCall")
+
+    /// *"In-app call · number hidden"*, the avatar's glyph and the `mute` / `speaker` captions the
+    /// cell draws under its two `.fab`s (`#AEB3BC`).
+    static let hint = named("callHint")
+
+    /// *"Connected · 01:24"* — §0.2's `secondary` on a dark screen (`#9FCAFF`), which is the dark
+    /// appearance of that role rather than a sixth colour.
+    static let connected = named("callConnected")
+
+    private static func named(_ name: String) -> Color {
+        Color(name, bundle: MageRideColor.bundle)
+    }
+}
+
+/// SCR-PI-029's palette (C102).
+///
+/// The wireframe draws the passenger SOS on `#2A0A0A` with a `#3A1414` contact card, a `#FFB4AB`
+/// status line and the §0.2 `error` disc inside a translucent halo of itself. **Dark in both
+/// appearances**, like ``MageRideCallColor``: an alarm screen that could be mistaken for an ordinary
+/// one is the failure mode this palette exists to prevent.
+///
+/// The same six values are `apps/driver-ios`'s ``MageRideSosColor`` and
+/// `apps/passenger-android/.../ui/theme/Color.kt`'s `SosColors`.
+enum MageRideSosColor {
+
+    /// The screen (`#2A0A0A`).
+    static let background = named("sosBackground")
+
+    /// The emergency-contact card (`#3A1414`).
+    static let surface = named("sosSurface")
+
+    /// That card's border (`#5A2020`). Deliberately not §0.2's `outline`, which is a light grey on
+    /// this background and would read as a control. `passenger_ios.html`'s own cell leaves the card
+    /// border at the sheet default; `passenger_android.html`'s names this hex, and the Android app
+    /// carries it — so the border is the twin's rather than a sixth value invented here.
+    static let outline = named("sosOutline")
+
+    /// The title and the card's text.
+    static let onSos = named("sosOnSos")
+
+    /// *"Sending GPS + trip to emergency contacts via SMS…"* (`#FFB4AB`).
+    static let hint = named("sosHint")
+
+    /// The ring around the disc — the §0.2 `error` at 25% (`rgba(211,47,47,.25)`), which is the
+    /// wireframe's own `box-shadow: 0 0 0 14px`.
+    ///
+    /// A catalogue entry with its alpha baked in rather than `MageRideColor.error.opacity(0.25)`,
+    /// because `error` has a **dark appearance** (`#FFB4AB`) and this screen is dark in both — a halo
+    /// derived from the role would turn pink at night on the one screen that must not change.
+    static let halo = named("sosHalo")
+
+    private static func named(_ name: String) -> Color {
+        Color(name, bundle: MageRideColor.bundle)
+    }
+}

@@ -7,11 +7,13 @@ import SwiftUI
 /// app; a second `navigationDestination` for the same type would fork the back stack the way a
 /// second `NavHost` does on Android.
 ///
-/// Every destination is registered from the day the shell lands, as a placeholder. That is what
-/// makes a cross-group navigation — SCR-PI-010's Mode B marker opening SCR-PI-024 (AL-23),
-/// SCR-PI-015 opening SCR-PI-016 (AL-47) — a compile-time reference during wave 4b rather than a
-/// promise: a screen group can navigate to a screen that has not been written, and what it gets is a
-/// labelled placeholder rather than a dead end.
+/// **Every route in this file now draws a real screen** (Δ C102). The shell registered all
+/// thirty-two from the day it landed, as labelled placeholders, which is what made a cross-group
+/// navigation — SCR-PI-010's Mode B marker opening SCR-PI-024 (AL-23), SCR-PI-015 opening
+/// SCR-PI-016 (AL-47) — a compile-time reference during wave 4b rather than a promise. C102 took the
+/// last three, so `PlaceholderScreen` and the two `route_placeholder_*` strings are gone with them:
+/// re-adding either would be a way to register a route with nothing behind it. `apps/passenger-android`
+/// deleted its own `RoutePlaceholder` at C084 for the same reason.
 ///
 /// **Add a sub-view, not an inline screen.** `body` is an implicit `@ViewBuilder`, so every arm of
 /// this switch becomes another layer of `_ConditionalContent` around every other arm's type —
@@ -84,55 +86,40 @@ struct PassengerDestinationView: View {
 
         // ---- C102 · comms, safety and support ---------------------------------------------
         //
-        // The first two are full-screen takeovers rather than pushed destinations — see
-        // ``PassengerRoute/isFullScreenTakeover``.
-        case .voipCall: placeholder("SCR-PI-028 VoIP call")
-        case .sos: placeholder("SCR-PI-029 SOS")
-        case .support: placeholder("SCR-PI-030 support")
+        // Three destinations, and the first two are full-screen takeovers rather than pushed
+        // destinations — see ``PassengerRoute/isFullScreenTakeover``. SCR-PI-030a (the raise-ticket
+        // sheet) is a sheet of SCR-PI-030 and SCR-PI-031 (D-31's update gate) is the shell's, which
+        // is why neither is a case here.
+        case .voipCall, .sos, .support:
+            CommsDestinationView(route: route)
         }
-    }
-
-    private func placeholder(_ screen: String) -> some View {
-        PlaceholderScreen(screen: screen, route: route)
     }
 }
 
-/// What a registered-but-unwritten destination draws.
+/// The arm a cluster's own `switch` cannot reach, and what it draws if it ever does.
 ///
-/// Trilingual, because it renders on a real device during wave 4b exactly like anything else. It
-/// names the screen id rather than the component, because the screen id is what
-/// `specs/wireframes/passenger_ios.html` and D2' §A are indexed by.
-struct PlaceholderScreen: View {
+/// ``PassengerDestinationView`` routes exactly the cases each sub-view handles, so every
+/// `…DestinationView`'s `default:` is unreachable — but `PassengerRoute` has thirty-two cases and
+/// Swift wants them all accounted for, so eight files need *something* there.
+///
+/// **Deliberately not copy.** This is not `PlaceholderScreen`'s successor: that view existed to
+/// tell a passenger during wave 4b that a route had no screen yet, and after C102 no route is in
+/// that position. A translated *"coming soon"* for a state the app can no longer be in would be
+/// three `.strings` entries describing an impossibility — which is exactly what `LocalizationTests`
+/// exists to prevent. So this draws the app's own background and nothing else, and trips an
+/// assertion in a debug build so a routing mistake fails on the machine that made it rather than on
+/// a handset.
+struct UnreachableRoute: View {
 
-    let screen: String
     let route: PassengerRoute
 
+    init(route: PassengerRoute) {
+        self.route = route
+        assertionFailure("no destination view claims \(route.path)")
+    }
+
     var body: some View {
-        VStack(spacing: MageRideSpacing.sm) {
-            Image(systemName: "square.dashed")
-                .font(.largeTitle)
-                .foregroundStyle(MageRideColor.outlineVariant)
-            Text("route_placeholder_title", bundle: MageRideColor.bundle)
-                .mageFont(.title)
-                .foregroundStyle(MageRideColor.onSurface)
-            Text(
-                String(
-                    format: NSLocalizedString(
-                        "route_placeholder_body",
-                        bundle: MageRideColor.bundle,
-                        comment: "the screen a route will get"
-                    ),
-                    screen
-                )
-            )
-            .mageFont(.bodySmall)
-            .foregroundStyle(MageRideColor.onSurfaceVariant)
-            .multilineTextAlignment(.center)
-        }
-        .padding(MageRideSpacing.lg)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(MageRideColor.background)
-        .navigationTitle(route.path)
-        .navigationBarTitleDisplayMode(.inline)
+        MageRideColor.background
+            .ignoresSafeArea()
     }
 }

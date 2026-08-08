@@ -61,7 +61,7 @@ struct HistoryDestinationView: View {
 
         default:
             // Unreachable: ``PassengerDestinationView`` routes exactly the three cases above here.
-            PlaceholderScreen(screen: route.path, route: route)
+            UnreachableRoute(route: route)
         }
     }
 }

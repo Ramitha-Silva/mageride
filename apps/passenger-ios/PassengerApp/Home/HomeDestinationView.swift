@@ -97,7 +97,7 @@ struct HomeDestinationView: View {
             // Unreachable: ``PassengerDestinationView`` routes exactly the two cases above here. The
             // arm exists because `PassengerRoute` has thirty-two cases and Swift wants them all
             // accounted for.
-            PlaceholderScreen(screen: route.path, route: route)
+            UnreachableRoute(route: route)
         }
     }
 }

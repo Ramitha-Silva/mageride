@@ -36,13 +36,11 @@
 /* SCR-PI-031 — the update gate */
 "update_required_title" = "Update required";
 "update_mandatory_message" = "A new version is required to keep riding. This update can't be skipped.";
-"update_optional_message" = "A new version of MageRide is available";
+"update_optional_title" = "Update available";
+"update_optional_message" = "A newer version is ready";
 "update_action_now" = "Update";
+"update_action_store" = "Update in App Store";
 "update_action_dismiss" = "Dismiss";
-
-/* Registered destinations a screen group has not written yet */
-"route_placeholder_title" = "Coming soon";
-"route_placeholder_body" = "%1$@ is not built yet.";
 
 /* The map */
 "map_content_description" = "Live map of nearby vehicles";
@@ -641,3 +639,80 @@
  * five `menu_*` rows carry. */
 "addresses_loading" = "Loading your addresses…";
 "address_sheet_locating" = "Looking up the address…";
+
+/* ---------------------------------------------------------------------------------------------
+ * C102 · SCR-PI-028 / 029 / 030 / 030a — the call, the alarm and support
+ * ------------------------------------------------------------------------------------------- */
+
+/* SCR-PI-028 — the in-app VoIP call. The caption is true only because a LiveKit room carries no
+ * number at all (AL-48 withdrew masking), which is why it is absent from the failure state. */
+"call_in_app" = "In-app call, number hidden";
+"call_connecting" = "Connecting…";
+"call_connected" = "Connected";
+"call_mute" = "Mute";
+"call_unmute" = "Unmute";
+"call_speaker" = "Speaker";
+"call_hang_up" = "End call";
+"call_fallback_question" = "That call could not go through. Call the driver normally instead?";
+"call_fallback_action" = "Call normally";
+"call_failed_signalling" = "The call could not be set up. Check your connection and try again.";
+"call_failed_media" = "The call was set up but no sound could get through.";
+"call_failed_unavailable" = "In-app calling is not available in this version of the app.";
+"call_dial_refused" = "This device cannot place phone calls.";
+
+/* SCR-PI-029 — the passenger SOS (US-12.1, AL-13, D-33, D-34) */
+"sos_title" = "Emergency SOS";
+"sos_armed" = "Sending shortly. Tap SOS to send now, or Cancel.";
+"sos_waiting_position" = "Finding your location…";
+"sos_sending_body" = "Sending GPS + trip to emergency contacts via SMS…";
+"sos_sending" = "Sending…";
+"sos_dispatched" = "Alert raised. Your location and trip are with our safety team.";
+"sos_failed" = "The alert did not go through.";
+"sos_no_position" = "Your location is not available yet, so nothing could be sent.";
+"sos_contacts_loading" = "Loading your contacts…";
+"sos_no_contact" = "No emergency contact saved";
+"sos_no_contact_hint" = "Add one under Edit profile so an SMS has somewhere to go.";
+"sos_sms_sent" = "Sent";
+"sos_sms_failed" = "SMS delayed";
+"sos_sms_no_contact" = "No contact";
+"sos_share_hint" = "Send someone a live link to this trip.";
+"sos_share_action" = "Share live trip";
+
+/* SCR-PI-030 — support (US-16.1, US-16.2) */
+"support_title" = "Support";
+"support_search_hint" = "Search help";
+"support_faq" = "FAQ";
+"support_faq_empty" = "No help articles yet.";
+"support_search_empty" = "Nothing here matches that.";
+"support_loading" = "Loading…";
+"support_your_tickets" = "Your tickets";
+"support_tickets_empty" = "You have not raised a ticket yet.";
+"support_raise_ticket" = "Raise a ticket";
+"support_ticket_raised" = "Your ticket is with support. Their reply appears here.";
+"support_attached_trip" = "Attached to a trip";
+"support_category_general" = "Support request";
+"support_status_open" = "Open";
+"support_status_in_progress" = "In progress";
+"support_status_resolved" = "Resolved";
+"support_event_opened" = "Ticket opened";
+"support_event_responded" = "Support replied";
+"support_event_resolved" = "Marked resolved";
+"support_event_reopened" = "Reopened";
+
+/* SCR-PI-030a — the raise-ticket sheet */
+"support_issue_label" = "Issue description";
+"support_issue_hint" = "Tell us what went wrong…";
+"support_related_trip" = "Related trip";
+"support_trip_none" = "No trip";
+"support_attach" = "Attach a screenshot";
+"support_attached" = "Screenshot attached";
+"support_submit_ticket" = "Submit ticket";
+
+/* Failures safety-svc and support-svc declare on this cluster's operations */
+"error_no_emergency_contact" = "Add an emergency contact before you can raise an SOS.";
+"error_ride_ended" = "This ride has already ended.";
+"error_ticket_not_found" = "That ticket could not be found.";
+"error_screenshot_too_large" = "That screenshot is too large. Attach a smaller image.";
+
+/* Shared with every screen that has something to clear */
+"action_clear" = "Clear";

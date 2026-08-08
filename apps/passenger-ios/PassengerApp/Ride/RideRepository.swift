@@ -54,6 +54,18 @@ protocol RideRepository: AnyObject {
 
     /// `POST /v1/calls/start` — logs the tap; a VoIP call also gets a session back (AL-48).
     func startCall(rideId: String, type: CallType) async throws -> StartCallResponse
+
+    /// `POST /v1/calls/{callId}/outcome` — how the call ended (Δ C055, added by C102).
+    ///
+    /// The only way voip-svc learns about a call that never connected, and therefore the signal
+    /// AL-48's *"Call normally instead?"* hangs on: SCR-PI-028 reports `CallOutcome.voipFailed` when
+    /// it puts the prompt up, and a `direct_dial` row after one on the same ride is the fallback
+    /// being taken rather than a passenger who simply preferred to dial.
+    ///
+    /// It belongs here rather than behind a second comms seam for the reason this door exists at
+    /// all: comms-svc is already one of the four services on it, and ``startCall(rideId:type:)`` is
+    /// the operation that mints the `callId` this one reports against.
+    func reportCallOutcome(callId: String, outcome: CallOutcome) async throws
 }
 
 /// ``RideRepository`` over the generated clients.
@@ -139,6 +151,20 @@ final class ApiRideRepository: RideRepository {
     func startCall(rideId: String, type: CallType) async throws -> StartCallResponse {
         try await comms.startCall(
             request: StartCallRequest(rideId: rideId, calleeRole: CalleeRole.driver, callType: type),
+            idempotencyKey: nil
+        )
+    }
+
+    /// Records how the call ended.
+    ///
+    /// **`throws`, and every caller swallows** — which is not the same as swallowing here. voip-svc
+    /// only accepts one outcome per call and answers `404` for somebody else's, so a failure is a
+    /// fact worth having at the seam; what must never happen is a passenger seeing an error about a
+    /// log row, and ``VoipCallModel/report(_:)`` is where that rule lives.
+    func reportCallOutcome(callId: String, outcome: CallOutcome) async throws {
+        try await comms.recordCallOutcome(
+            callId: callId,
+            request: RecordCallOutcomeRequest(outcome: outcome),
             idempotencyKey: nil
         )
     }

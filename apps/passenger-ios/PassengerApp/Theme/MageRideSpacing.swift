@@ -260,6 +260,48 @@ enum MageRideControl {
 
     /// SCR-PI-027's two value-row choosers — a title and three `SelectionRow`s at most.
     static let pickerSheetHeight: CGFloat = 300
+
+    // MARK: - C102 · the call, the alarm and support
+    //
+    // `passenger_ios.html`'s cluster-8 pixels. The two takeovers are the only screens in the app
+    // whose controls are sized in the cell's CSS rather than assembled from rows and CTAs, which is
+    // why this is the first block since C098 to add more than one measurement.
+
+    /// One of SCR-PI-028's two `.fab` toggles (`44 x 44` in the cell's own CSS — the `.fab` class),
+    /// which is also the tap-target floor.
+    static let callAction: CGFloat = MageRideControl.minimumTapTarget
+
+    /// SCR-PI-028's red hang-up disc (`width:62px;height:62px;border-radius:50%`).
+    ///
+    /// The passenger cell draws 62 where `passenger_android.html` draws 64; `driver_ios.html` draws
+    /// 62 as well, so the two iOS apps agree and the two-point difference is the Android cell's.
+    static let callEnd: CGFloat = 62
+
+    /// SCR-PI-029's alarm disc (`width:128px;height:128px`).
+    ///
+    /// The Android cell draws 130. Both wireframes' own numbers are kept on their own platforms —
+    /// this is a *drawn measurement* rather than a §0.2 token, and 128 is what `driver_ios.html`
+    /// draws too, so the two takeovers on this platform are the same size.
+    static let sosButton: CGFloat = 128
+
+    /// The translucent ring around it (`box-shadow: 0 0 0 14px`), as a radius rather than a spread —
+    /// so the halo circle is ``sosButton`` plus twice this.
+    static let sosHalo: CGFloat = 14
+
+    /// SCR-PI-030a's **Issue description** box (`.field.lbl` at `min-height:72px`).
+    ///
+    /// A floor rather than a height: the box grows with what is typed and with the content size, and
+    /// 72 is what reserves the wireframe's three lines *before* anything is — see
+    /// ``MultilineTextField`` for why that is the whole reason the control is a `TextEditor`.
+    static let multilineField: CGFloat = 72
+
+    /// SCR-PI-030a's own `.sheet` detent floor.
+    ///
+    /// The cell's states line says `.sheet` **detent `.medium`**, which is what is used; this number
+    /// is the *thread* sheet's minimum, because a ticket with a four-entry conversation does not fit
+    /// a half screen and `.medium` alone would make the passenger drag before they could read the
+    /// reply they came for.
+    static let ticketSheetHeight: CGFloat = 420
 }
 
 extension View {
