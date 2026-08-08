@@ -84,6 +84,40 @@ const dateTimes = memoise(
 );
 
 /**
+ * An instant as a **calendar day**, with the year, on a Sri Lankan clock.
+ *
+ * The third of the trio and the one a directory needs (Δ C109): "Joined" and
+ * "Registered" are facts about a year, and `dateTimes` deliberately drops it
+ * because a working queue compares against this morning. Rendering `joinedAt`
+ * through that formatter would print "14 Jan" for an account opened in 2024 and
+ * for one opened last week.
+ *
+ * The zone is pinned for the same reason `dateTimes` pins it: the day an operator
+ * means is the day it was in Colombo (D-38), not in whichever region the container
+ * happens to be scheduled.
+ */
+const dayStamps = memoise(
+  (locale) =>
+    new Intl.DateTimeFormat(tag(locale), {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      timeZone: 'Asia/Colombo',
+    }),
+);
+
+/**
+ * A rating out of five, always to one decimal.
+ *
+ * `4` and `4.0` are the same score and a column that printed both would read as two
+ * different precisions of measurement.
+ */
+const ratings = memoise(
+  (locale) =>
+    new Intl.NumberFormat(tag(locale), { minimumFractionDigits: 1, maximumFractionDigits: 1 }),
+);
+
+/**
  * An OCR confidence — `0.98` from the wire, as SCR-AP-003a prints it.
  *
  * Two decimals, always, so a column of scores stays a column: `0.6` beside
@@ -190,6 +224,22 @@ export function formatDateTime(locale: Locale, iso: string | undefined | null): 
   if (Number.isNaN(instant.getTime())) return null;
 
   return dateTimes(locale).format(instant);
+}
+
+/** An ISO instant as a dated day in Asia/Colombo — see the formatter's own note. */
+export function formatDay(locale: Locale, iso: string | undefined | null): string | null {
+  if (!iso) return null;
+
+  const instant = new Date(iso);
+  if (Number.isNaN(instant.getTime())) return null;
+
+  return dayStamps(locale).format(instant);
+}
+
+/** A `0`–`5` rating, to one decimal, or `null` where nobody has rated. */
+export function formatRating(locale: Locale, value: number | undefined | null): string | null {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+  return ratings(locale).format(value);
 }
 
 /** A `0`–`1` OCR confidence, or `null` when the field carries none. */

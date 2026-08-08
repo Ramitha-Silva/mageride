@@ -152,6 +152,12 @@ describe('AL-02 — nothing here is driver-facing or passenger-facing', () => {
       '/v1/admin/rbac/users',
       // C108 · SCR-AP-009.
       '/v1/admin/audit-log',
+      // C109 · SCR-AP-010…015. The passenger directory is the only new prefix:
+      // `/v1/admin/drivers` and `/v1/admin/vehicles` are already here for C107's
+      // two suspensions, and the vehicle detail's thumbnails go through
+      // `/v1/admin/documents` — AL-39's audited viewer, shared with C106 rather
+      // than duplicated (`src/server/document-media.ts`).
+      '/v1/admin/passengers',
     ]);
 
     const called = new Set<string>();

@@ -135,7 +135,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C106 | admin-portal-verification | 4c | DONE | 2026-08-08 | **241 tests green** in `@mageride/admin-portal` (19 files, was 167/14); `npm --prefix portals run lint --workspace admin && … test … && … build …` exits 0, and `npm --prefix portals run lint` is green across all five workspaces. **A queue is not filtered here — a queue *is* the filter**: membership is "a `registry.document_fields` row is still `pending`" (AL-27 as the query C063 made it), so an auto-verified document cannot reach this screen rather than being filtered out by code that could stop filtering; the status column carries the **subject's own** registration status, which is what D2's filter filters on. **All three queues are read on every render** under one search and one status filter, because the wireframe draws a count on each tab and their sum in the topbar and cursor pagination carries no total — the badge is the rows a queue answered, `100+` past a page, `—` for a queue that failed, and a failed queue does not take the screen with it. **The tabs are links, not `@mageride/ui`'s `Tabs`** — that primitive holds the tab in state, and an officer who opens a row, decides and comes back would come back to the first tab. **Every document fetch goes through `/verification/media/{docId}`**, the portal's relay of the audited viewer: `DocumentRef`'s links are deliberately unused (the browser holds no bearer, and building the fetch from `docId` keeps an upstream string out of an `src`), the `302` is passed on rather than followed so the bytes never enter this process, and **one view is one row** — six thumbnails are six `DOC_VIEW` rows, which is why they are not lazy-loaded and the response is `no-store`. **Approve is disabled while any flagged field is unconfirmed** and the rule is stated three times on purpose — button, action, and admin-bff's `409`, which is the only one that is authorization. **Confirm sends no `value` and Edit & confirm sends the officer's**, one boolean that decides whether the extraction stays evidence or the field becomes `manual` with no confidence. `/verification/expiring` is a **different screen** the new dynamic segment out-ranks, so the detail page hands it back to the shell's placeholder. 1 wireframe conflict, 1 copy deviation, 4 spec gaps / micro-change-sets; no spec, backend or contract file touched. |
 | C107 | admin-portal-moderation-support | 4c | PARTIAL | 2026-08-08 | **306 tests green** in `@mageride/admin-portal` (24 files, was 241/19); `npm --prefix portals run lint --workspace admin && … test … && … build …` exits 0 and `next build` emits `/reports` and `/support/tickets`. **SCR-AP-004 and SCR-AP-005 are built; one DoD line cannot be met from this side.** A driver-QR dispute *does* reach the ticket queue (admin-bff sends no `queue` filter, so both piles arrive) and is pilled **Finance** — but **its evidence attachment never reaches this surface**: support-svc's own `TicketRow` carries `screenshotUrl`, `legacyScreenshotUrl` (written by fare-svc for exactly this, AL-47), `thread`, `tripId` and `queue`, and admin-bff's `SupportTicketRow` mapping keeps none of them. **There is no `GET /v1/admin/support/tickets/{ticketId}`** either, so the ticket being read is a row out of the queue page (`?ticket=`, not a path segment), and **no `…/respond`**, so the wireframe's Reply button has nothing to call and is not drawn. **A pending report is not a strike:** `ReportRow.confirmedCount` is `null` on every row (safety-svc's internal row does not carry it), so the count column says "{n} pending" and the confirmed total appears only on the banner after a verdict — the one moment the platform states one. **No Duration control** on Suspend/ban, because `ReasonBody` is one field and nothing reinstates a suspension; **no "Delist 24h" button**, because the third confirmation delists and no single press does. **The refund hand-off is a link and posts nothing** — URD §2.3 gives the CSR `◐ raise/recommend`, and a `daily_fee_refund`/`driver_qr_dispute` ticket is already on Finance's pile by its category. 3 wireframe deviations, 5 spec gaps / micro-change-sets; no spec, backend or contract file touched |
 | C108 | admin-portal-finance-config-rbac-audit | 4c | PARTIAL | 2026-08-08 | **468 tests green** in `@mageride/admin-portal` (32 files, was 306/24); the verify command exits 0 and `next build` emits all fourteen new routes. **All four screens are built; the wireframe baseline cannot be met in five places because the platform has no route behind the control** — the internal-user list, `+ Provision user`, account suspend/revoke + session termination (US-21.9), the IP-allow-list and Active-session columns, and a `Vehicle types` configuration tab (AL-09 is a CHECK, not a setting). **The largest finding is an audit hole:** `gateway-routes.json` matches `/v1/admin/fees/**`, `/v1/admin/voucher-discount-tiers`, `/v1/admin/drivers/level-config` and `/v1/admin/rbac/**` at **Order 20** and admin-bff maps no route onto any of them, so four configuration/RBAC write surfaces write **nothing** to `audit.events` — against D-35, against this component's own fence and against US-21.14, and against `AdminFeeEndpoints`' explicit claim that "every one of these calls arrives through that BFF". `AuditIntent` gained an `auditedElsewhere` arm so the console states which service answered instead of promising a trail entry an Auditor will not find. **Three configuration surfaces are `PUT`-only** (fare tariffs, daily-fee rates, Driver-Level params) so those forms start empty and say why; **payout-svc has no gateway cluster** so SCR-AP-006's Payouts tab 404s until C008 adds one; **`/v1/admin/audit-log` has no `.csv` sibling** so US-19.3's export is rendered in the portal, capped and stated. 6 wireframe deviations, 9 spec gaps / micro-change-sets; no spec, backend or contract file touched |
-| C109 | admin-portal-directories | 4c | PENDING | | |
+| C109 | admin-portal-directories | 4c | DONE | 2026-08-08 | **580 tests green** in `@mageride/admin-portal` (36 files, was 468/32); the verify command exits 0, `next build` emits all eight new routes, and all five portal workspaces are green (814). **Six screens, six GETs and no seventh verb** — BR-28.8's "all are read-only" is asserted against the group's whole tree (no `mutate(`, no server-action import, no `<form>` that is not `method="get"`), and every wireframe button that would write is a **link to the screen that owns the action**, drawn only when the caller's own menu carries it. **Every criterion is independent** — the searches build one AND-ed query from every parameter `admin-bff.yaml` declares, and `?status=verified` is sent even as the default because the screen's caption claims it. **A mistyped `?id=` asks admin-bff nothing** and marks its own box (C105's `awaitingRange` rule). **Opening a record is the audited act and the portal does not write the row** — `test/directories-query.test.ts` parses `DirectoryEndpoints.cs` and fails if a detail route loses `.Audited(PiiRead, …)` or a search gains one. **The document relay is one implementation and two URLs**: `src/server/document-media.ts` now serves C106's route and a new `/vehicles/media/[docId]`, because `proxy.ts` gates on the screen a path resolves to and a Support CSR holds the vehicle directory without the verification queues; the tiles, grid and lightbox are C106's components imported unchanged. 6 wireframe deviations, 5 spec gaps / micro-change-sets; no spec, backend or contract file touched |
 | C110 | admin-portal-gtfs-manager | 4c | PENDING | | |
 | C111 | fleet-portal-shell | 4c | PENDING | | |
 | C112 | fleet-portal-auth-org-payout | 4c | PENDING | | |
@@ -17418,4 +17418,154 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   value is a copy of the English.
 
   **Build host —** no Docker, no replica, no backend build. `vitest run` takes ~21 s and
+  `next build` ~45 s.
+
+---
+
+- **Component:** C109 admin-portal-directories — 2026-08-08
+- **Status:** DONE —
+  `npm --prefix portals run lint --workspace admin && npm --prefix portals run test --workspace admin && npm --prefix portals run build --workspace admin`
+  exits 0. **580 tests, 36 files** (was 468/32); `eslint` + `tsc --noEmit` clean; `next build` emits
+  all eight new routes and `check-bundle.mjs` reports **AL-52: clean — 1 compiled stylesheet,
+  34.4 kB CSS**. All five portal workspaces are green (814 tests). All six screens are built; the six
+  deviations below are each a control the wireframe draws that the contract cannot answer, and each is
+  drawn as the honest thing instead of omitted silently.
+- **Notes:**
+  **What was built —** eight routes: `/passengers`, `/passengers/[passengerId]`, `/drivers`,
+  `/drivers/[driverId]`, `/vehicles`, `/vehicles/[vehicleId]`, `/vehicles/[vehicleId]/doc/[docId]`
+  (SCR-AP-003b opened from a vehicle) and `/vehicles/media/[docId]` (the document relay on the vehicle
+  directory's own gate). The first three sit at the paths `AdminMenu.cs` gives `passengers`, `drivers`
+  and `vehicles`, which were already in `src/server/routes.ts`; nothing there changed.
+
+  **(1) Six GETs and no seventh verb, asserted against the tree.** BR-28.8 — "all are read-only;
+  refunds route to Finance and wallet reversals stay Finance-only" — is the fence, and admin-bff holds
+  its own half of it (`No_directory_route_accepts_a_write`). This side holds the other half the way
+  C108's audit screen does: `test/directories-screen.test.tsx` walks every file under
+  `app/(portal)/{passengers,drivers,vehicles}` and `src/components/directories` and fails on a
+  `mutate(`, an import from `@/server/*-actions`, or a `<form>` that is not `method="get"`. The
+  wireframe's write-shaped controls therefore appear as **hand-offs** — the reversal form
+  (`/finance/adjustments?driverId=…`), the suspend card (`/reports?subject=…&subjectId=…#suspend`),
+  the verification subject, the ticket queue — each carrying the subject in the URL so the address bar
+  names who is about to be credited or suspended before anything is pressed, and each drawn **only
+  when the caller's own menu carries that screen** (`AlertsCard`'s rule). A link `proxy.ts` would
+  answer 403 on reads as a permission the operator has and a system that is broken.
+
+  **(2) Every documented criterion works singly and in combination, and that is a property of the
+  query rather than a matrix of cases.** Each search builds one object from every parameter
+  `admin-bff.yaml` declares; admin-bff ANDs whatever arrives. There is no primary field, no mode, and
+  no branch that drops one criterion because another is filled — `test/directories-query.test.ts`
+  asserts each parameter alone and all of them together, against the contract's own names, because a
+  criterion the screen spells differently is a filter that silently does nothing. **`status=verified`
+  is sent even when it is the default** (US-24.10): the screen's own pill says "verified drivers only",
+  and a caption true only for as long as a server-side default is, is a caption waiting to become a lie.
+
+  **(3) A mistyped `?id=` asks admin-bff nothing.** `DirectoryEndpoints.Identifier` parses the
+  criterion as a UUID and throws a `400` naming the field, so a pasted `PAX-90431` would answer an
+  operator's first press with a validation error about a form they are still filling in. The selection
+  keeps the raw text, marks that box `aria-invalid` with a sentence in their own language, and sends
+  no request — C105's `StatsSelection.awaitingRange`, applied to the one criterion that is typed
+  rather than chosen. The raw value travels on the portal's own links too, so Back does not silently
+  empty a box they are still fixing.
+
+  **(4) Opening a record is the audited act, and the portal does not write the row.** All three
+  `GET …/{id}` routes carry `.Audited(AdminAuditActions.PiiRead, …)`; the interceptor writes the row
+  once the response is known to be a success, which is the only arrangement in which the row and the
+  disclosure cannot disagree. What this side contributes is that the screen **says so** —
+  `admin.directory.piiNotice` on every search and on every record — and
+  `test/directories-query.test.ts` parses `DirectoryEndpoints.cs` and fails if a detail read loses the
+  declaration **or a search gains one**: a search discloses only masked numbers, and a row per
+  keystroke would bury the rows that name a person.
+
+  **(5) The tabs are `?tab=`, and the reason is what reaches the browser.** All four or five arrays
+  arrive on the one detail read, and only the tab being read is rendered — a client component holding
+  the payload would serialise every ledger entry, every recipient's number and the NIC into the RSC
+  payload so that the other tabs could be shown by a press. The cost is stated rather than hidden: a
+  second tab is a second `GET`, and that read is `PII_READ`-audited, so an investigator who opens four
+  tabs leaves four rows. That is what happened — four looks at one person's record — and it is C106's
+  "a grid of six thumbnails is six `DOC_VIEW` rows" applied to a record. Under-counting a disclosure is
+  the one failure an audit trail cannot have.
+
+  **(6) The document relay is one implementation and deliberately two URLs.** `relayDocument` moved to
+  `src/server/document-media.ts` and C106's `/verification/media/[docId]` is now three lines over it;
+  `/vehicles/media/[docId]` is the second door. It has to be a second door: `proxy.ts` gates a route on
+  the screen its path resolves to, so a vehicle's thumbnails fetched through `/verification/media/…`
+  would be gated on the **verification** nav item — and URD §2.3 gives a Support CSR the vehicle
+  directory (Fleet live map & per-vehicle analytics) and **not** the queues, so every thumbnail on a
+  screen they may open would 403. Adding `/verification/media` to `routes.ts` as an exemption would
+  have been worse: it would hand the queues' media to anyone holding any screen. `DocumentGrid`,
+  `documentTiles`, `viewerPosition` and `DocumentViewer` are C106's components imported unchanged, so
+  "a vehicle's thumbnails open the shared viewer" is true of the code and not only of the screens.
+
+  **Wireframe deviations — six, each forced by a contract that cannot answer the control:**
+  (a) **Driver Level is L1–L3, not the wireframe's "L1–L5 ▾".** `dispatch.driver_levels.level` is
+  1–3, `searchDrivers` bounds `level` to `[1, 3]` and answers `400` outside it, and D-14 describes
+  three bands. A fourth option would be a filter the platform refuses.
+  (b) **"Fleet org: Lanka Transit ▾" is a text box.** No route on any contract lists fleet
+  organisations, and the parameter is a `maxLength: 200` string. A dropdown would be this portal
+  inventing a vocabulary the platform does not publish — C107 made the same call for a ticket category.
+  (c) **No Route column on any Trips tab.** `DirectoryTrip` carries no origin and no destination, so a
+  column headed "Route" over a plate would be a label that lies about its own cells. The tab says what
+  the record does not hold instead. The wireframe's "map link" is absent for the same reason.
+  (d) **No gateway reference on the Payments tab.** `DirectoryPayment` / `PaymentResponse` carry
+  `paymentId`, `rideId`, `method`, `state`, the amounts and `attemptNo`, and no processor reference —
+  which SCR-AP-011's own state note asks for ("each payment shows method, gateway ref & status").
+  (e) **"Raise / link ticket" is a link to the support queue.** support-svc has a create route;
+  admin-bff exposes none onto it, so a button here would post nothing.
+  (f) **"View documents" on a driver is a link to `/verification/{driverId}`.** `DriverDetail` carries
+  no documents — a licence lives behind AL-39's viewer with its own `DOC_VIEW` row and its own nav
+  item — and the link is drawn only for a caller who holds the queues.
+
+  **Spec gaps and micro-change-sets — five:**
+  (1) **`DirectoryTrip` has no origin, destination or distance.** SCR-AP-011/013/015 all draw
+  "Nugegoda → Galle Face · 8.2 km", and every service behind the read has the geometry
+  (`rides.rides` pickup/dropoff, `trips.sessions`). A `from`/`to`/`distanceKm` triple on `TripResponse`
+  would close (c) above without changing a gate.
+  (2) **`DirectoryPayment` has no gateway reference.** D-10's `payments` row carries the processor's
+  id; a `gatewayRef` on `PaymentResponse` would close (d) and is what a CSR needs to talk to OnePay.
+  (3) **No fleet-organisation lookup exists anywhere on admin-bff.** `GET /v1/admin/fleets` (id, name)
+  would turn SCR-AP-014's `fleetOrg` box back into the dropdown the wireframe draws. It is also what
+  SCR-AP-003c's queue would use.
+  (4) **No route creates a support ticket on behalf of a passenger**, so (e) is a hand-off rather than
+  the wireframe's control. support-svc has the capability; admin-bff has no route onto it. This is the
+  same gap C107 recorded for `…/respond`, on the other verb.
+  (5) **`PassengerRow.status` can never answer `deleted`.** The contract declares the third value and
+  C064's own note says no column records a PDPA erasure, so the pill for it is written and unreachable
+  until C065's erasure lands. Left in place deliberately: the day it becomes answerable, nothing here
+  has to change.
+
+  **The topbar search, closed rather than deferred again.** C105 and C106 both recorded the
+  wireframe's "🔍 Search driver / trip / ticket" as "still C109's". It is **not** on any of
+  SCR-AP-010…015 — it is chrome on SCR-AP-002/003/004/006/009, which belong to C105, C106, C107 and
+  C108 — and it cannot be built as a directory feature: **two of its three targets have no route.**
+  admin-bff has no trip lookup at all and no `GET /v1/admin/support/tickets/{ticketId}` (C107's own
+  finding), so a box labelled "driver / trip / ticket" would find drivers and silently fail at the
+  other two. It needs finding (1) above or a `GET /v1/admin/trips/{tripId}` before it is worth
+  building; recorded here so the pointer stops moving between components.
+
+  **Not built here, and named rather than stubbed —** backward paging (a cursor names the page *after*
+  this one and nothing else, so a numbered pager would be this screen inventing a position in a list
+  whose length the platform never sent; Back is the browser's, which works because every page of
+  results is its own URL); a Mode A/B "subscription pass-through" panel on SCR-AP-015, which the
+  screen's state note mentions and `AdminVehicleDetail` carries nothing for; and any drill-down from a
+  trip row into a trip, which is finding (1)'s route.
+
+  **Files —** added `portals/admin/src/api/directories.ts`, `src/server/document-media.ts`,
+  `src/components/directories/{model.ts,links.ts,SearchForm.tsx,ResultsTable.tsx,ProfileCard.tsx,ActivityPanel.tsx,DetailHeader.tsx,LinkedVehicles.tsx,Handoffs.tsx}`,
+  the eight `app/(portal)` routes above, and
+  `test/{directories-query,directories-model,directories-screen,directories-media}.test.*`.
+
+  **Files touched outside this component's own tree —** none outside the portal. `src/i18n/format.ts`
+  gained `formatDay` and `formatRating` ("Joined" and "Registered" are facts about a year, and
+  `formatDateTime` drops it on purpose because a working queue compares against this morning);
+  `app/(portal)/verification/media/[docId]/route.ts` became a three-line call into the extracted relay
+  with its behaviour and its own tests unchanged; `test/fences.test.ts` gained one path
+  (`/v1/admin/passengers` — the other two prefixes were already there for C107's suspensions, and the
+  thumbnails reuse `/v1/admin/documents`); `portals/admin/CLAUDE.md` gained this component's section.
+  No spec, no contract, no backend, no migration.
+
+  **i18n —** 191 new keys × 3 locales (853 keys total, was 662). Every string on the six screens goes
+  through the translator; `i18n.test.ts`'s "actually translates the copy" rule passes, so no Sinhala or
+  Tamil value is a copy of the English.
+
+  **Build host —** no Docker, no replica, no backend build. `vitest run` takes ~30 s and
   `next build` ~45 s.

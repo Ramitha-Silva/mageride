@@ -1,37 +1,16 @@
-import { read } from '@/api/client';
-import { localProblem, ProblemError, type ProblemDetails } from '@/api/problem';
-import { documentPath, isSubjectId } from '@/api/verification';
+import { relayDocument } from '@/server/document-media';
 
 /**
- * SCR-AP-003b's bytes: the portal's relay of `GET /v1/admin/documents/{docId}`.
+ * SCR-AP-003b's bytes: the verification screens' door onto the audited document
+ * viewer.
  *
- * ## Why the browser cannot fetch the document itself
- *
- * The shell's fourth load-bearing decision is that the browser never holds a
- * token and never talks to the gateway, so an `<img src>` pointed at admin-bff
- * would be an anonymous request answered `401`. This handler makes the call the
- * way every other read is made — the caller's own session, through the data layer
- * — and hands back what admin-bff answered.
- *
- * ## What admin-bff answers, and why this relays rather than fetches
- *
- * A `302` to a **short-lived signed object-storage URL**, minted on the way out of
- * the `DOC_VIEW` row that records the view (AL-39, C063). So this passes the
- * redirect on: the browser follows it to storage, the bytes never enter this
- * process, and the audit row is already written. Fetching the object here and
- * streaming it would put somebody's licence through the portal's memory for no
- * gain, and would make the signed URL's short life pointless.
- *
- * `apiFetch` is configured `redirect: 'manual'` for exactly this route, which is
- * why the `Location` is available to hand on rather than already followed.
- *
- * ## One view is one row
- *
- * Both `variant=thumb` and `variant=full` come here, so the grid of six
- * thumbnails records six views and opening one in the lightbox records another.
- * That is the contract's own reading — each is a look at somebody's document —
- * and it is why the response is `no-store`: a cached rendition served to a later
- * caller would be a read with no row behind it.
+ * The relay itself — why the browser cannot make this call, why the redirect is
+ * passed on rather than followed, and why one view is one `DOC_VIEW` row — lives in
+ * `src/server/document-media.ts`. What this file contributes is the **path**, and
+ * the path is the point: `proxy.ts` resolves `/verification/**` to the verification
+ * nav item, so an officer who may open SCR-AP-003a may fetch its thumbnails and a
+ * caller who may not is refused before admin-bff is asked. C109's vehicle detail
+ * has its own handler under `/vehicles` for the same reason.
  */
 
 export const dynamic = 'force-dynamic';
@@ -41,74 +20,5 @@ export async function GET(
   context: { params: Promise<{ docId: string }> },
 ): Promise<Response> {
   const { docId } = await context.params;
-  const instance = `/verification/media/${docId}`;
-
-  // The id goes into a path this process builds. admin-bff routes the document
-  // viewer on `{docId:guid}` and would refuse anything else anyway; checking the
-  // shape here means the refusal never depends on that.
-  if (!isSubjectId(docId)) {
-    return problemResponse(localProblem('not-found', 404, instance, 'Not a document id.'));
-  }
-
-  const variant =
-    new URL(request.url).searchParams.get('variant') === 'thumb' ? 'thumb' : 'full';
-
-  let answer: { location?: string | null };
-  try {
-    answer = await read<{ location?: string | null }>({
-      path: documentPath(docId),
-      searchParams: { variant },
-    });
-  } catch (error) {
-    if (!(error instanceof ProblemError)) throw error;
-    return problemResponse(error.problem);
-  }
-
-  const location = answer?.location;
-
-  // A `200` here means admin-bff answered a body rather than a redirect, which is
-  // not a shape this route knows how to be. Better a visible failure than an
-  // `<img>` whose source is whatever that body happened to serialise to.
-  if (!isStorageUrl(location)) {
-    return problemResponse(
-      localProblem(
-        'dependency-unavailable',
-        502,
-        instance,
-        'The document viewer did not answer a redirect to object storage.',
-      ),
-    );
-  }
-
-  return new Response(null, {
-    status: 302,
-    headers: {
-      location,
-      'cache-control': 'no-store',
-      // The path this redirect came from carries a document id. Storage has no
-      // use for it and no claim on it.
-      'referrer-policy': 'no-referrer',
-    },
-  });
-}
-
-/** An absolute `http(s)` URL, and nothing else — a relay is not an open redirect. */
-function isStorageUrl(value: string | null | undefined): value is string {
-  if (!value) return false;
-
-  try {
-    const url = new URL(value);
-    return url.protocol === 'http:' || url.protocol === 'https:';
-  } catch {
-    return false;
-  }
-}
-
-function problemResponse(problem: ProblemDetails): Response {
-  const status = problem.status >= 400 && problem.status <= 599 ? problem.status : 502;
-
-  return new Response(JSON.stringify(problem), {
-    status,
-    headers: { 'content-type': 'application/problem+json', 'cache-control': 'no-store' },
-  });
+  return relayDocument(request, docId, `/verification/media/${docId}`);
 }

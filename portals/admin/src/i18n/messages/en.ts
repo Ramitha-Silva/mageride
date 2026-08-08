@@ -818,6 +818,256 @@ export const adminEn = {
   'admin.audit.exportCap':
     'The export follows this filter up to {count} entries and says so in the file when it stops there.',
 
+  /* ---- SCR-AP-010…015 · the three directories (AL-40/41/42, C109) ------- */
+  // The one thing every screen in the group says, on the search and on the record.
+  // URD §2.3's privacy clause: "All passenger/driver/vehicle directory lookups …
+  // write a read-access audit entry."
+  'admin.directory.piiPill': 'Read-only · PII access audited',
+  'admin.directory.piiNotice':
+    'Opening a record is written to the audit trail against your name, together with whether the contact details were shown.',
+  'admin.directory.clear': 'Clear',
+  'admin.directory.open': 'Open',
+  'admin.directory.openNamed': 'Open the record for {subject}',
+  'admin.directory.more': 'Next page',
+  'admin.directory.results.count': '{count} results',
+  'admin.directory.results.countMore': '{count}+ results',
+  'admin.directory.hint.anyCriterion': 'any criterion',
+  'admin.directory.hint.multipleCriteria': 'multiple criteria',
+  'admin.directory.hint.differentCriteria': 'different criteria',
+  'admin.directory.tabs.label': 'Activity',
+  'admin.directory.backToPassengers': 'Passengers',
+  'admin.directory.backToDrivers': 'Drivers',
+  'admin.directory.backToVehicles': 'Vehicles',
+
+  /* Criteria and profile fields */
+  'admin.directory.field.name': 'Name',
+  'admin.directory.field.mobile': 'Mobile',
+  'admin.directory.field.email': 'Email',
+  'admin.directory.field.passengerId': 'Passenger ID',
+  'admin.directory.field.driverId': 'Driver ID',
+  'admin.directory.field.vehicleId': 'Vehicle ID',
+  'admin.directory.field.idHint': 'The platform id, exactly as it appears on the record.',
+  // The id is parsed as a UUID by admin-bff, so a mistyped one is refused here
+  // rather than sent — see `api/directories.ts`.
+  'admin.directory.field.idInvalid':
+    'That is not a platform id. Copy it from the record, or search by name instead.',
+  'admin.directory.field.nic': 'NIC no',
+  'admin.directory.field.regNo': 'Registration no',
+  'admin.directory.field.ownerMobile': 'Owner mobile',
+  'admin.directory.field.fleetOrg': 'Fleet organisation',
+  'admin.directory.field.fleetOrgHint': 'Part of the name is enough.',
+  'admin.directory.field.type': 'Type',
+  'admin.directory.field.mode': 'Mode',
+  'admin.directory.field.owner': 'Owner',
+  'admin.directory.field.level': 'Driver Level',
+  'admin.directory.field.joined': 'Joined',
+  'admin.directory.field.verifiedAt': 'Verified',
+  'admin.directory.field.rating': 'Rating',
+  'admin.directory.field.ratingValue': '★ {rating}',
+  'admin.directory.field.wallet': 'Wallet',
+  'admin.directory.field.defaultPay': 'Default pay',
+  'admin.directory.field.sosContacts': 'SOS contacts',
+  'admin.directory.field.sosNone': 'None saved',
+  'admin.directory.field.insurance': 'Insurance',
+  'admin.directory.field.revenueLicence': 'Revenue licence',
+  'admin.directory.field.tracker': 'Tracker',
+  'admin.directory.field.registered': 'Registered',
+  'admin.directory.field.onboarding': 'Onboarding',
+
+  /* Result and activity columns */
+  'admin.directory.column.passenger': 'Passenger',
+  'admin.directory.column.driver': 'Driver',
+  'admin.directory.column.vehicle': 'Vehicle',
+  'admin.directory.column.vehicles': 'Vehicles',
+  'admin.directory.column.typeMode': 'Type · mode',
+  'admin.directory.column.ownerFleet': 'Owner / fleet',
+  'admin.directory.column.trips': 'Trips',
+  'admin.directory.column.joined': 'Joined',
+  'admin.directory.column.status': 'Status',
+  'admin.directory.column.state': 'State',
+  'admin.directory.column.when': 'When',
+  'admin.directory.column.journey': 'Journey',
+  'admin.directory.column.fare': 'Fare',
+  'admin.directory.column.method': 'Method',
+  'admin.directory.column.amount': 'Amount',
+  'admin.directory.column.extras': 'Surcharge / tip',
+  'admin.directory.column.attempt': 'Attempt',
+  'admin.directory.column.package': 'Package',
+  'admin.directory.column.recipient': 'Recipient',
+  'admin.directory.column.delivered': 'Delivered',
+  'admin.directory.column.raised': 'Raised',
+  'admin.directory.column.category': 'Category',
+  'admin.directory.column.description': 'Description',
+  'admin.directory.column.updated': 'Updated',
+  'admin.directory.column.entry': 'Entry',
+  'admin.directory.column.balanceAfter': 'Balance after',
+  'admin.directory.column.feeDate': 'Fee date',
+  'admin.directory.column.tripsThatDay': 'Trips that day',
+  'admin.directory.column.charged': 'Charged',
+  'admin.directory.column.direction': 'Direction',
+  'admin.directory.column.counterparty': 'Counterparty',
+  'admin.directory.column.initiation': 'Started by',
+  'admin.directory.column.reason': 'Reason',
+  'admin.directory.column.day': 'Day',
+  'admin.directory.column.gross': 'Gross fare',
+
+  /* Tabs */
+  'admin.directory.tab.trips': 'Trips',
+  'admin.directory.tab.payments': 'Payments',
+  'admin.directory.tab.packages': 'Packages',
+  'admin.directory.tab.disputes': 'Disputes',
+  'admin.directory.tab.wallet': 'Wallet ledger',
+  'admin.directory.tab.dailyFee': 'Daily fee',
+  'admin.directory.tab.transfers': 'Credit transfers',
+  'admin.directory.tab.reports': 'Reports',
+  'admin.directory.tab.earnings': 'Earnings',
+
+  /* SCR-AP-010 / 011 · passengers */
+  'admin.directory.passenger.searchHeading': 'Search passengers',
+  'admin.directory.passenger.caption': 'Passengers matching your search',
+  'admin.directory.passenger.empty': 'No matching passengers.',
+  'admin.directory.passenger.profile': 'Profile',
+  'admin.directory.passenger.unavailable': 'This passenger record could not be opened',
+
+  /* SCR-AP-012 / 013 · drivers */
+  'admin.directory.driver.searchHeading': 'Search drivers',
+  'admin.directory.driver.caption': 'Drivers matching your search',
+  'admin.directory.driver.empty': 'No matching drivers.',
+  'admin.directory.driver.profile': 'Driver',
+  'admin.directory.driver.unavailable': 'This driver record could not be opened',
+  'admin.directory.driver.statusAll': 'Any status',
+  'admin.directory.driver.anyLevel': 'Any level',
+  // US-24.10: the directory is for the people currently driving, so the default is
+  // stated rather than left for the operator to infer from a select.
+  'admin.directory.driver.verifiedOnly': 'verified drivers only',
+  'admin.directory.driver.statusShown': 'showing: {status}',
+  'admin.directory.driver.levelShort': 'L{level}',
+  'admin.directory.driver.levelPoints': 'L{level} · {points} pts',
+  'admin.directory.driver.vehicles': 'Linked vehicles',
+  'admin.directory.driver.noVehicles': 'No vehicle is owned by or assigned to this driver.',
+
+  /* SCR-AP-014 / 015 · vehicles */
+  'admin.directory.vehicle.searchHeading': 'Search vehicles',
+  'admin.directory.vehicle.caption': 'Vehicles matching your search',
+  'admin.directory.vehicle.empty': 'No matching vehicles.',
+  'admin.directory.vehicle.profile': 'Vehicle',
+  'admin.directory.vehicle.unavailable': 'This vehicle record could not be opened',
+  'admin.directory.vehicle.anyType': 'Any type',
+  'admin.directory.vehicle.anyMode': 'Any mode',
+  'admin.directory.vehicle.anyStatus': 'Any status',
+  'admin.directory.vehicle.owned': 'owned',
+  'admin.directory.vehicle.assigned': 'assigned by a fleet',
+  'admin.directory.vehicle.noDocuments': 'No document is attached to this vehicle.',
+  // E-03. A suspension from dispatch is not the end of a registration, and the two
+  // must not read as one another.
+  'admin.directory.vehicle.dispatchSuspendedNote':
+    'This vehicle is suspended from dispatch. Its registration is unchanged; a moderator lifts the suspension.',
+
+  /* Statuses this surface names that the shared table does not */
+  'admin.directory.status.blocked': 'Blocked',
+  'admin.directory.status.deleted': 'Erased',
+  'admin.directory.status.deactivated': 'Deactivated',
+  'admin.directory.status.dispatchSuspended': 'Dispatch suspended',
+  'admin.directory.onboarding.approved': 'Complete',
+  'admin.directory.onboarding.incomplete': 'Incomplete',
+
+  /* Certificate expiries (`expiryPill`) */
+  'admin.directory.expiry.valid': 'to {date}',
+  'admin.directory.expiry.soon': 'expires {date} · {days} days',
+  'admin.directory.expiry.expired': 'expired {date}',
+
+  /* The bound tracker (T-08) */
+  'admin.directory.tracker.none': 'Not paired',
+  'admin.directory.tracker.online': 'Online',
+  'admin.directory.tracker.offline': 'Silent',
+  'admin.directory.tracker.quarantined': 'Quarantined',
+  'admin.directory.tracker.revoked': 'Revoked',
+
+  /* Payment methods (D-10) */
+  'admin.directory.pay.cash': 'Cash',
+  'admin.directory.pay.lankaqr': 'LankaQR',
+  'admin.directory.pay.onepay': 'OnePay',
+  'admin.directory.pay.cod': 'Cash on delivery',
+  'admin.directory.pay.scanDriverQr': 'Driver QR',
+  'admin.directory.pay.wallet': 'Wallet',
+
+  /* Wallet-ledger kinds (D-09 §10) */
+  'admin.directory.wallet.topup': 'Top-up',
+  'admin.directory.wallet.dailyFee': 'Daily fee',
+  'admin.directory.wallet.adjustment': 'Adjustment',
+  'admin.directory.wallet.reversal': 'Fee reversal',
+  'admin.directory.wallet.transfer': 'Credit transfer',
+  'admin.directory.wallet.transferIn': 'Transfer received',
+  'admin.directory.wallet.transferOut': 'Transfer sent',
+  'admin.directory.wallet.empty': 'This wallet has no entries.',
+  'admin.directory.wallet.note':
+    'A debit is negative and the balance beside it is the balance the ledger held after that entry.',
+
+  /* Tab bodies */
+  'admin.directory.trip.ride': 'On-demand ride',
+  'admin.directory.trip.session': 'Scheduled journey',
+  'admin.directory.trip.empty': 'No journey is recorded here.',
+  // `DirectoryTrip` carries no origin and no destination, so the wireframe's
+  // "Route" column is not drawn. See the C109 handoff.
+  'admin.directory.trip.note':
+    'Pick-up and drop-off are not part of this record. A scheduled journey is covered by a subscription and carries no fare.',
+  'admin.directory.payment.attempt': 'Attempt {attempt}',
+  'admin.directory.payment.surcharge': 'surcharge {amount}',
+  'admin.directory.payment.tip': 'tip {amount}',
+  'admin.directory.payment.empty': 'No payment attempt is recorded here.',
+  // admin-bff's `PaymentResponse` carries no gateway reference, which the wireframe
+  // asks for. Recorded in the C109 handoff.
+  'admin.directory.payment.note':
+    'Every attempt is its own row, so a retry appears beside the attempt it replaced. A refund is raised and paid by Finance.',
+  'admin.directory.package.empty': 'No delivery is recorded here.',
+  'admin.directory.dispute.empty': 'No ticket has been raised by this passenger.',
+  // The whole ticket list, because `support.tickets.category` is free text.
+  'admin.directory.dispute.note':
+    'Every ticket this account raised is listed, whatever its category — the platform stores no separate list of disputes.',
+  'admin.directory.dispute.openNamed': 'Open this ticket in the support queue',
+  'admin.directory.fee.paid': 'Charged',
+  'admin.directory.fee.waived': 'Waived',
+  'admin.directory.fee.empty': 'No daily fee has been charged here.',
+  'admin.directory.fee.note':
+    'The fee is charged once per driver, per vehicle, per day, and the first trip of the day is waived.',
+  'admin.directory.transfer.in': 'Received',
+  'admin.directory.transfer.out': 'Sent',
+  'admin.directory.transfer.requested': 'Requested',
+  'admin.directory.transfer.direct': 'Sent directly',
+  'admin.directory.transfer.empty': 'No credit transfer is recorded here.',
+  // AL-01: a transfer moves its exact value and the platform takes nothing.
+  'admin.directory.transfer.note':
+    'A credit transfer moves its exact value between two drivers and no commission is taken.',
+  'admin.directory.report.confirmed': 'Confirmed',
+  'admin.directory.report.dismissed': 'Dismissed',
+  'admin.directory.report.empty': 'No report has been raised here.',
+  'admin.directory.report.note':
+    'Three confirmed reports delist a vehicle. A pending report is not a strike, and the decision is taken on the moderation queue.',
+  'admin.directory.earnings.empty': 'No settled fare is recorded here.',
+  'admin.directory.earnings.note':
+    'One row per business day, from the fares actually settled on this vehicle rather than from a driver rollup.',
+
+  /* Hand-offs — every action this read-only screen sends somewhere else */
+  'admin.directory.handoff.heading': 'Go to',
+  'admin.directory.handoff.tickets': 'Support tickets',
+  'admin.directory.handoff.ticketsHint':
+    'A ticket is raised by the passenger in their own app; agents work the queue there.',
+  'admin.directory.handoff.documents': 'Documents & verification',
+  'admin.directory.handoff.documentsHint':
+    'Licences and identity documents are opened on the verification screen, which records each view.',
+  'admin.directory.handoff.reversal': 'Reverse a daily fee',
+  'admin.directory.handoff.reversalHint':
+    'The reversal is posted on the wallet-adjustments screen, with this driver already filled in.',
+  'admin.directory.handoff.suspendDriver': 'Suspend this driver',
+  'admin.directory.handoff.suspendVehicle': 'Suspend this vehicle',
+  'admin.directory.handoff.suspendHint':
+    'A suspension is a moderation decision and needs a reason recorded against your name.',
+  'admin.directory.handoff.owner': "Open the owner's record",
+  'admin.directory.handoff.ownerHint': 'The driver who registered this vehicle.',
+  'admin.directory.handoff.registration': 'Registration documents',
+  'admin.directory.handoff.registrationHint':
+    'Insurance, revenue licence and photographs as the verification officer sees them.',
+
   /* ---- D-35 ------------------------------------------------------------ */
   'admin.audit.notice': 'This action is written to the audit trail against your name.',
   'admin.audit.recorded': 'Recorded in the audit trail as {action}.',

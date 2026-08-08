@@ -261,6 +261,54 @@ are the design**. Read `AuditIntent` first: it changed shape here.
   when somebody asks for payouts instead of greeting every Finance Officer with an error panel over
   a working reconciliation.
 
+## SCR-AP-010…015 — the three directories (C109)
+
+Six screens across `/passengers`, `/drivers` and `/vehicles`, reading C064's AL-40/41/42 family.
+**Six GETs and nothing else** (BR-28.8), which is what makes everything below liveable.
+
+- **A search is the URL, and every criterion is independent.** One `method="get"` form per screen,
+  every documented parameter as its own control, admin-bff ANDs whatever arrives — there is no
+  primary field and no branch that drops one criterion because another is filled, which is the only
+  shape in which "works singly and in combination" is a property rather than a matrix of cases.
+  `driverSearch` sends `status=verified` **even when it is the default**, because the screen's own
+  caption claims it and a caption true only for as long as a server-side default is, is a caption
+  waiting to become a lie.
+- **A mistyped `?id=` asks admin-bff nothing.** `DirectoryEndpoints.Identifier` parses it as a UUID
+  and answers `400` on the field; the selection keeps the operator's text, marks that box, and sends
+  no request — `StatsSelection.awaitingRange`'s rule.
+- **Masking is server-side and this portal cannot undo it.** A **list** row is `PhoneMasked` for
+  every caller whatever they hold; a **detail** is `MaskablePhone` and arrives already decided. There
+  is no branch here on which form a value is, because a portal able to tell would be one that had
+  been sent both.
+- **Opening a record is the audited act, and the portal does not write the row.** The three
+  `GET …/{id}` routes carry `.Audited(PII_READ, …)`; the interceptor writes it once the response is
+  known to be a success. What this side owes is that the screen *says so* — `admin.directory.piiNotice`,
+  on the search and on the record. `test/directories-query.test.ts` parses `DirectoryEndpoints.cs`
+  and fails if a detail route loses the declaration or a search gains one.
+- **The activity tabs are `?tab=`, and only the tab being read reaches the browser.** All the arrays
+  arrive on one payload; a client component holding it would serialise every ledger entry and every
+  recipient's number so that four tabs could be shown by a press. The cost is stated rather than
+  hidden: a second tab is a second read and therefore a second `PII_READ` row, which is what a second
+  look at somebody's record is (C106's "one view is one row", applied to a record).
+- **Every action is a link to the screen that owns it, drawn only when the caller's menu carries
+  that screen.** The reversal form, the suspend card, the verification subject, the ticket queue —
+  `AlertsCard`'s rule. `test/directories-screen.test.tsx` walks the group's whole tree and fails on a
+  `mutate(`, a server-action import, or a `<form>` that is not `method="get"`.
+- **The document relay is one implementation and two URLs.** `src/server/document-media.ts` is the
+  body C106's route now calls too; `/vehicles/media/[docId]` exists because `proxy.ts` gates a route
+  on the screen its path resolves to, and a Support CSR holds the vehicle directory without the
+  verification queues. The thumbnails, the tiles and the lightbox are C106's own components,
+  imported — so "a vehicle's thumbnails open the shared viewer" is true of the code, not only of the
+  screens.
+- **Deviations from the wireframe, each forced by the contract:** three Driver Levels rather than
+  "L1–L5"; `fleetOrg` a text box rather than a dropdown (no route lists organisations); no Route
+  column on a Trips tab and no gateway reference on a Payments tab (`DirectoryTrip` /
+  `DirectoryPayment` carry neither); "Raise / link ticket" and "View documents" as hand-offs rather
+  than buttons. See the C109 handoff.
+- **`formatDay` and `formatRating` join `src/i18n/format.ts`.** "Joined" and "Registered" are facts
+  about a year, and `formatDateTime` drops it deliberately because a working queue compares against
+  this morning.
+
 ## Configuration
 
 `.env.example` documents every variable. `MAGERIDE_API_BASE_URL` (the C008 gateway origin) is
