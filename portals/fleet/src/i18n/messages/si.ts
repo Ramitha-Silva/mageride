@@ -561,6 +561,163 @@ export const fleetSi: FleetMessages = {
   'fleet.trackers.error.vehicleRequired': 'මෙම ට්‍රැකරය සවි කර ඇති වාහනය තෝරන්න',
   'fleet.trackers.error.csvRequired': 'ආයාත කිරීමට CSV එකක් තෝරන්න',
 
+  /* ---- Money ------------------------------------------------------------ */
+  'fleet.money.rupees': 'රු. {amount}',
+
+  /* ---- SCR-FP-003 · fleet dashboard ------------------------------------ */
+  'fleet.dashboard.title': 'උපකරණ පුවරුව',
+  'fleet.dashboard.kpi.online': 'සබැඳි',
+  'fleet.dashboard.kpi.ofVehicles': 'සේවයේ යෙදෙන වාහන {count} කින්',
+  'fleet.dashboard.kpi.ofTrackers': 'බැඳී ඇති ට්‍රැකර් {count} කින්',
+  'fleet.dashboard.kpi.stale': 'පරණ',
+  'fleet.dashboard.kpi.staleAfter': 'මිනිත්තු {minutes} ක් සංඥාවක් නැත',
+  'fleet.dashboard.kpi.offline': 'නොබැඳි',
+  'fleet.dashboard.kpi.offlineAfter': 'මිනිත්තු {minutes} ක් සංඥාවක් නැත',
+  'fleet.dashboard.kpi.trips': 'අද ගමන්',
+  'fleet.dashboard.kpi.modeSplit': 'A ක්‍රමය {a} · B ක්‍රමය {b}',
+  'fleet.dashboard.kpi.noModeSplit': 'ක්‍රමය අනුව බෙදීම සඳහා වාහන ලැයිස්තුව අවශ්‍යයි.',
+
+  'fleet.dashboard.alerts.heading': 'ඇඟවීම්',
+  'fleet.dashboard.alert.notStarted': 'නියමිත වේලාවට ආරම්භ නොවූ වාහන',
+  'fleet.dashboard.alert.trackerOffline': 'නොබැඳි ට්‍රැකර්',
+  'fleet.dashboard.alert.trackerStale': 'දුර්වල සංඥාවක් ඇති ට්‍රැකර්',
+  'fleet.dashboard.alert.documentsOutstanding': 'ලේඛන අසම්පූර්ණ වාහන',
+  'fleet.dashboard.alert.deviceDown':
+    'පසුගිය මිනිත්තු {minutes} තුළ ට්‍රැකර් {expected} කින් {offline} ක් කිසිවක් වාර්තා කර නැත. එය MageRide උපාංග ඇඟවීමක් නිකුත් කරන {threshold}% සීමාවට වඩා වැඩිය.',
+  'fleet.dashboard.alerts.phaseThree':
+    'මාර්ග අපගමන හා භූ-වැට ඇඟවීම් (දැනට {count}) MageRide මායිම් නිරීක්ෂණය ක්‍රියාත්මක කළ පසු ආරම්භ වේ. ඔබේ භූ-වැට ඊට පෙර නිර්වචනය කළ හැක.',
+  'fleet.dashboard.alerts.noExpiryRow':
+    'රක්ෂණ හා ආදායම් බලපත්‍ර කල් ඉකුත්වීම එක් එක් වාහනය සඳහා වාහන තිරයේ පෙන්වයි; MageRide හට තවම මුළු සමූහය සඳහා ඒවා ගණන් කළ නොහැක.',
+
+  'fleet.dashboard.wallet.heading': 'පසුම්බිය සහ ඊළඟ ඉන්වොයිසිය',
+  'fleet.dashboard.wallet.balance': 'සමූහ පසුම්බියේ ශේෂය',
+  'fleet.dashboard.wallet.outstanding': 'ඉන්වොයිස් කර නොගෙවූ',
+  'fleet.dashboard.wallet.available': 'ගෙවීමට ඇති දෑ අඩු කළ පසු ඉතිරිය',
+  'fleet.dashboard.wallet.nextInvoice': 'ගෙවීමට ඇති ඊළඟ ඉන්වොයිසිය',
+  'fleet.dashboard.wallet.vehicleLines': 'මෙම ඉන්වොයිසියේ B ක්‍රමයේ වාහන {count} ක්',
+  'fleet.dashboard.wallet.dueAt': '{date} දිනට පෙර ගෙවිය යුතුය',
+  'fleet.dashboard.wallet.nothingDue':
+    'සියලු ඉන්වොයිස් ගෙවා අවසන්. ඊළඟ ඉන්වොයිසිය ලබන මාසයේ පළමු දින නිකුත් වේ.',
+  'fleet.dashboard.wallet.topUp': 'පසුම්බියට මුදල් එකතු කරන්න',
+  'fleet.dashboard.wallet.modeANote':
+    'MageRide සෑම මසකම B ක්‍රමයේ එක් වාහනයකට එක් පේළියක් බැගින් ඉන්වොයිස් කරයි. A ක්‍රමයේ වාහන නොමිලේ.',
+  'fleet.dashboard.wallet.ownerOnly':
+    'පසුම්බිය සහ මාසික ඉන්වොයිසිය ආයතනයේ හිමිකරුට අයත් වේ. මෙතැනින් අගයක් අවශ්‍ය නම් ඔවුන්ගෙන් විමසන්න.',
+  'fleet.dashboard.wallet.pendingOrg':
+    'සත්‍යාපන නිලධාරියෙකු මෙම ආයතනය අනුමත කළ පසු බිල්පත් ආරම්භ වේ. එතෙක් ඉන්වොයිස් කිරීමට අනුමත වාහන නොමැත.',
+  'fleet.dashboard.wallet.unavailable':
+    'පසුම්බිය දැන් කියවීමට නොහැකි විය. මෙම තිරයේ අනෙක් සියල්ල යාවත්කාලීනයි.',
+  'fleet.dashboard.asOf': 'ට්‍රැකර් සෞඛ්‍යය {time} වන විට',
+  'fleet.dashboard.asOfUnknown': 'ට්‍රැකර් සෞඛ්‍යය කියවීමට නොහැකි විය.',
+
+  /* ---- SCR-FP-007 · live fleet map -------------------------------------- */
+  'fleet.map.title': 'සජීවී සමූහ සිතියම',
+  'fleet.map.region': 'මෙම ආයතනයේ වාහන පෙන්වන සජීවී සිතියම',
+  'fleet.map.count.online': 'සබැඳි {count}',
+  'fleet.map.count.stale': 'පරණ {count}',
+  'fleet.map.count.offline': 'නොබැඳි {count}',
+  'fleet.map.noPositions':
+    'පසුගිය මිනිත්තු {minutes} තුළ මෙම ආයතනයේ කිසිදු වාහනයක් පිහිටීමක් වාර්තා කර නැත.',
+  'fleet.map.noBasemap':
+    'මෙම යෙදවීමට සිතියම් ටයිල් සකසා නොමැත, එබැවින් වාහන යටින් වීදි නොපෙනේ. ඒවායේ පිහිටීම නිවැරදිය.',
+  'fleet.map.zoomIn': 'විශාලනය කරන්න',
+  'fleet.map.zoomOut': 'කුඩා කරන්න',
+  'fleet.map.attribution': 'සිතියම් ණය',
+  'fleet.map.unit.metres': 'මී',
+  'fleet.map.unit.kilometres': 'කිමී',
+
+  'fleet.map.overlay.heading': 'සමූහ සෞඛ්‍ය ආවරණය',
+  'fleet.map.overlay.caption':
+    'මෙම ආයතනයේ සෑම වාහනයක්ම, එහි රියදුරු, වේගය සහ ට්‍රැකරයේ සෞඛ්‍යය',
+  'fleet.map.overlay.empty': 'මෙම ආයතනයේ තවම වාර්තා කරන වාහන නොමැත.',
+  'fleet.map.column.vehicle': 'වාහනය',
+  'fleet.map.column.driver': 'රියදුරු',
+  'fleet.map.column.speed': 'වේගය',
+  'fleet.map.column.battery': 'බැටරිය',
+  'fleet.map.column.health': 'සෞඛ්‍යය',
+  'fleet.map.scoping':
+    'මෙම සිතියමේ ඇත්තේ මෙම ආයතනයේ වාහන පමණි. MageRide ඒවා පෙරහන් කරන්නේ දත්ත ගබඩාවේ මිස මෙම තිරයේ නොවේ.',
+  'fleet.map.windows':
+    'පසුගිය මිනිත්තු {map} තුළ වාර්තා කළේ නම් වාහනයක් සිතියමේ පෙන්වයි. මිනිත්තු {stale} ක් නිහඬ නම් ට්‍රැකරය පරණ වන අතර මිනිත්තු {offline} ක් නම් නොබැඳි වේ, එබැවින් සිතියමේ ලකුණක් නොමැතිව වාහනයක් නොබැඳි ලෙස ලැයිස්තුගත විය හැක.',
+  'fleet.map.truncated':
+    'ට්‍රැකර් ලැයිස්තුව සීමා කර ඇත, එබැවින් සමහර වාහනවල සෞඛ්‍යය නොපෙනෙනු ඇත. ඉහත ගණන් මුළු සමූහයම ආවරණය කරයි.',
+  'fleet.map.asOf': 'පිහිටීම් {time} වන විට',
+  'fleet.map.noDriver': 'රියදුරෙකු පවරා නැත',
+  'fleet.map.noTracker': 'ට්‍රැකරයක් බැඳ නැත',
+  'fleet.map.noPosition': 'මෑත පිහිටීමක් නැත',
+  'fleet.map.speedKmh': '{speed} කිමී/පැ',
+  'fleet.map.batteryPct': '{percent}%',
+  'fleet.map.batteryMv': '{mv} mV',
+  'fleet.map.heading': 'දිශාව',
+  'fleet.map.noHeading': 'වාර්තා වී නැත',
+  'fleet.map.headingDegrees': '{degrees}° {compass}',
+  'fleet.map.lastSample': 'අවසන් පිහිටීම',
+  'fleet.map.signal': 'සංඥා ශක්තිය',
+  'fleet.map.satellites': 'චන්ද්‍රිකා',
+  'fleet.map.compass.n': 'උ',
+  'fleet.map.compass.ne': 'උ.නැ',
+  'fleet.map.compass.e': 'නැ',
+  'fleet.map.compass.se': 'ද.නැ',
+  'fleet.map.compass.s': 'ද',
+  'fleet.map.compass.sw': 'ද.බ',
+  'fleet.map.compass.w': 'බ',
+  'fleet.map.compass.nw': 'උ.බ',
+  'fleet.map.detail.heading': 'තෝරාගත් වාහනය',
+  'fleet.map.detail.close': 'තේරීම ඉවත් කරන්න',
+  'fleet.map.detail.unknown':
+    'එම වාහනය මෙම ආයතනයට අයත් නොවේ, නැතහොත් මෙම තිරයේ එහි වාර්තාවක් නොමැත.',
+
+  /* ---- SCR-FP-009 · trip history & analytics ---------------------------- */
+  'fleet.analytics.title': 'ගමන් ඉතිහාසය සහ විශ්ලේෂණ',
+  'fleet.analytics.exportCsv': 'CSV බාගන්න',
+  'fleet.analytics.exportPdf': 'මුද්‍රණය / PDF',
+  'fleet.analytics.range.legend': 'වාර්තා කාලය',
+  'fleet.analytics.range.from': 'සිට',
+  'fleet.analytics.range.to': 'දක්වා',
+  'fleet.analytics.range.apply': 'යොදන්න',
+  'fleet.analytics.range.hint':
+    'දින දෙකම ඇතුළත් වන අතර ඒවා ශ්‍රී ලංකා දිනයන් වේ. පෙරනිමියෙන් පසුගිය දින {days} පෙන්වයි, එක් වරකට වැඩිම වශයෙන් දින {max} ක් වාර්තා කළ හැක.',
+  'fleet.analytics.rangeAdjusted':
+    'එම කාලය වාර්තා කළ නොහැකි විය — පරාසය පසුපසට දිවේ, නැතහොත් දින {days} ට වඩා දිගුය — එබැවින් පෙරනිමි කාලය පෙන්වයි.',
+  'fleet.analytics.period': '{from} සිට {to} දක්වා · දින {days}',
+  'fleet.analytics.kpi.trips': 'මුළු ගමන්',
+  'fleet.analytics.kpi.distance': 'දුර',
+  'fleet.analytics.kpi.utilisation': 'උපයෝගිතාව',
+  'fleet.analytics.kpi.utilisationDetail': 'වාහන {vehicles} ක් හරහා',
+  'fleet.analytics.kpi.idle': 'දිනකට සාමාන්‍ය නිෂ්ක්‍රීය කාලය',
+  'fleet.analytics.kpi.idleDetail': 'වාහනයකට',
+  'fleet.analytics.table.heading': 'වාහනය අනුව',
+  'fleet.analytics.table.caption':
+    'වාර්තා කාලය තුළ මෙම ආයතනයේ සෑම වාහනයක් සඳහාම ගමන්, දුර, උපයෝගිතාව සහ නිෂ්ක්‍රීය කාලය',
+  'fleet.analytics.table.empty': 'මෙම කාලය සඳහා මෙම ආයතනයේ කිසිදු වාහනයකට වාර්තාවක් නොමැත.',
+  'fleet.analytics.column.vehicle': 'වාහනය',
+  'fleet.analytics.column.trips': 'ගමන්',
+  'fleet.analytics.column.distance': 'දුර',
+  'fleet.analytics.column.utilisation': 'උපයෝගිතාව',
+  'fleet.analytics.column.idle': 'නිෂ්ක්‍රීය',
+  'fleet.analytics.km': '{distance} කිමී',
+  'fleet.analytics.percent': '{percent}%',
+  'fleet.analytics.hours': 'පැය {hours}',
+  'fleet.analytics.distanceNote':
+    'දුර මනිනු ලබන්නේ පිහිටීම් වාර්තා අතර සරල රේඛාවකින් බැවින් වංගු සහිත මාර්ගයක එය තරමක් අඩුවෙන් පෙන්වයි. එය ඕඩෝමීටර කියවීමක් නොවේ.',
+  'fleet.analytics.idleNote':
+    'නිෂ්ක්‍රීය යනු වාහනය ගමනක නොසිටි පැය ගණනයි, එබැවින් රාත්‍රියේ නවතා තැබීමද ගණන් ගනී. ධාවනය වන එන්ජිමක් MageRide මනින්නේ නැත.',
+  'fleet.analytics.earningsNote':
+    'ආදායම් තීරුවක් නොමැත: A සහ B ක්‍රමයේ වාහනවල ගාස්තු MageRide හරහා නොව ඔබ විසින්ම එකතු කරන බැවින් වේදිකාවට වාර්තා කිරීමට අගයක් නැත.',
+  'fleet.analytics.csv.vehicleId': 'වාහන ID',
+  'fleet.analytics.csv.vehicleType': 'වර්ගය',
+  'fleet.analytics.csv.mode': 'ක්‍රමය',
+  'fleet.analytics.csv.distanceKm': 'දුර (කිමී)',
+  'fleet.analytics.csv.activeHours': 'ක්‍රියාකාරී පැය',
+  'fleet.analytics.csv.utilisationPct': 'උපයෝගිතාව (%)',
+  'fleet.analytics.csv.idleHours': 'නිෂ්ක්‍රීය පැය',
+
+  /* ---- Invoice status --------------------------------------------------- */
+  'fleet.billing.status.free': 'ගාස්තුවක් නැත',
+  'fleet.billing.status.due': 'ගෙවිය යුතුයි',
+  'fleet.billing.status.paid': 'ගෙවා ඇත',
+  'fleet.billing.status.overdue': 'කල් ඉකුත්',
+
   /* ---- The shell's placeholder ------------------------------------------ */
   'fleet.screen.pendingTitle': 'මෙම තිරය තවම නිර්මාණය කර නැත',
   'fleet.screen.pendingBody':

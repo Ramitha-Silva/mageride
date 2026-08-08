@@ -182,13 +182,80 @@ export interface HealthThresholds {
   readonly offlineAfterSeconds: number;
 }
 
-/** `fleet-health.yaml#/components/schemas/FleetHealthRollup`, narrowed to SCR-FP-006. */
+/** The same four states as a share of `counts.total`, to one decimal place. */
+export interface TrackerStatePercentages {
+  readonly online: number;
+  readonly stale: number;
+  readonly offline: number;
+  readonly decommissioned: number;
+}
+
+/**
+ * `fleet-health.yaml#/components/schemas/FleetHealthWindow` — the most recent
+ * closed `telemetry.fleet_health_5m` bucket (US-3.16). **Δ C114**, for SCR-FP-003's
+ * alerts card.
+ *
+ * "A different measurement from `counts`, on purpose": `counts` tests each device
+ * against the silence thresholds, and this is a five-minute continuous-aggregate
+ * bucket — `reportingVehicles` is the bucket's distinct-vehicle count and
+ * `expectedVehicles` is the fleet's `ACTIVE` tracker bindings, which the aggregate
+ * cannot know. "A vehicle that reported once at the start of the bucket and then
+ * stopped is *reporting* in `window` and may already be *stale* in `counts`."
+ */
+export interface FleetHealthWindow {
+  readonly start: string;
+  readonly end: string;
+  readonly windowMinutes: number;
+  readonly expectedVehicles: number;
+  readonly reportingVehicles: number;
+  readonly offlineVehicles: number;
+  readonly offlinePct: number;
+  /** `Health:OfflinePct` — the share at or above which an alert is raised. */
+  readonly thresholdPct: number;
+  /** `offlinePct >= thresholdPct` for this window. */
+  readonly alerting: boolean;
+}
+
+/**
+ * `fleet-health.yaml#/components/schemas/FleetHealthAlert` — one device-down
+ * threshold breach (US-3.16). **Δ C114**.
+ *
+ * This is the platform's **only** fleet alert with a producer. US-13.5's
+ * route-deviation and geofence family — `GET /v1/fleets/{id}/alerts` in
+ * `fleet.yaml` — is Phase 3 and returns an empty page by construction, and its
+ * `kind` enum has no value for a device outage.
+ */
+export interface FleetHealthAlert {
+  readonly alertId: string;
+  readonly bucket: string;
+  readonly windowMinutes: number;
+  readonly expectedVehicles: number;
+  readonly reportingVehicles: number;
+  readonly offlineVehicles: number;
+  readonly offlinePct: number;
+  /** The threshold in force when the alert fired, not the current one. */
+  readonly thresholdPct: number;
+  readonly raisedAt: string;
+}
+
+/**
+ * `fleet-health.yaml#/components/schemas/FleetHealthRollup`.
+ *
+ * Δ C114 widened this from SCR-FP-006's narrowing to the whole answer:
+ * `percentages`, `window` and `alert` are what SCR-FP-003's KPI tiles and alerts
+ * card are built from, and re-reading the same route into a second, wider type
+ * would be two shapes for one response.
+ */
 export interface FleetHealthRollup {
   readonly fleetId: string;
   readonly vehiclesOnline: number;
   readonly vehiclesOffline: number;
   readonly counts: TrackerStateCounts;
+  readonly percentages?: TrackerStatePercentages;
   readonly thresholds: HealthThresholds;
+  readonly window?: FleetHealthWindow;
+  /** The most recent device-down alert for this fleet, absent if there is none. */
+  readonly alert?: FleetHealthAlert;
   readonly items: readonly TrackerHealth[];
   /** `items` hit `Health:MaxItems`; the counts still cover the whole fleet. */
   readonly itemsTruncated: boolean;

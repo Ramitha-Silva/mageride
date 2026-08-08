@@ -70,6 +70,32 @@ function pair(clientIdVariable: string, redirectUriVariable: string): ProviderCo
   return { clientId, redirectUri };
 }
 
+/**
+ * The MapLibre **style document** SCR-FP-007 draws its basemap from — D-14's
+ * `tile-cdn`, which is a Cloudflare R2 bucket of PMTiles behind a Worker that
+ * serves range-byte requests (ADD §6, §10.2). Δ C114.
+ *
+ * The one URL in this portal a **browser** fetches, and it is not the platform:
+ * tiles are static cartography on a CDN, they carry no organisation's data and no
+ * bearer travels with them. Everything about the fleet still leaves the Next
+ * server — the positions are rendered from `GET /v1/fleets/{id}/map`, read
+ * server-side like every other call. It is passed to the map component as a prop
+ * rather than inlined into the client bundle as a build-time public variable —
+ * which is what keeps the shell's rule that this portal has none of those true.
+ * (`test/fences.test.ts` greps the raw source for that prefix, comments
+ * included, so this paragraph does not spell it.)
+ *
+ * **Optional, and unset is a supported state.** The map then renders the fleet's
+ * positions on an empty canvas rather than failing: the markers are the org's own
+ * data and are what the screen is for, and MapLibre with no basemap is a worse map
+ * but a working one. The screen says which of the two it is drawing, so nobody
+ * reports a blank basemap as missing vehicles. `tile-cdn` is also the one
+ * dependency ADD §14 already plans an outage for.
+ */
+export function mapStyleUrl(): string | null {
+  return process.env.FLEET_PORTAL_MAP_STYLE_URL?.trim() || null;
+}
+
 export function cookiesAreSecure(): boolean {
   return process.env.FLEET_PORTAL_COOKIE_SECURE?.trim().toLowerCase() !== 'false';
 }

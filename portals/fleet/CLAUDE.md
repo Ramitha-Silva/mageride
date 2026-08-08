@@ -1,4 +1,4 @@
-# Fleet Portal (C111 shell + C112 auth/org/payout + C113 vehicles/drivers/trackers) — `fleet.mageride.lk`
+# Fleet Portal (C111 shell + C112 auth/org/payout + C113 vehicles/drivers/trackers + C114 dashboard/map/analytics) — `fleet.mageride.lk`
 
 Next.js 16 (App Router) + TypeScript + React 19, styled **only** with Tailwind through
 `@mageride/tailwind-preset` (AL-52). npm workspace member `@mageride/fleet-portal` under `portals/`.
@@ -277,11 +277,113 @@ Two more affordances the wireframe draws have **no route on any contract**:
 - **Money crosses the boundary once.** `fareMinorFrom()` in `src/api/vehicles.ts` is the single
   rupees→cents conversion; everything on the wire is integer minor units.
 
+## What C114 is — SCR-FP-003, SCR-FP-007 and SCR-FP-009
+
+Situational awareness: the **dashboard**, the org-scoped **live map** and the **trip/analytics
+report**. `app/(portal)/{dashboard,map,analytics}` + `app/(portal)/analytics/export/route.ts`,
+`src/api/{insights,billing}.ts`, `src/components/{dashboard,map,analytics}/` and
+`src/components/KpiTiles.tsx`. It added no nav entry — C111 declared all three — and one shell
+behaviour: `canReadBilling()`/`billingRefusal()` in `src/server/access.ts`.
+
+### The map is the portal's only browser-side library, and its only browser-side URL
+
+`maplibre-gl` (+ `pmtiles`) is the one runtime dependency beyond React and Next. D2 §FP names it:
+"Single org-scoped MapLibre map (row-level security), fleet-health overlay".
+
+- **It is handed positions and fetches none.** `GET …/map` is read on the server and passed down;
+  the browser holds no bearer and cannot reach the gateway (`src/api/http.ts` is `server-only`), so
+  "only this org's vehicles are visible" is not a filter the component applies — it is the only
+  data it ever receives. The database refuses underneath (`telemetry.positions_fleet`, filtered on
+  `app.fleet_id`, fail-closed).
+- **`FLEET_PORTAL_MAP_STYLE_URL` is the one URL a browser fetches**, and deliberately not the
+  platform: D-14's `tile-cdn` is static cartography on a CDN. It is passed as a **prop**, not
+  published as a build-time public variable, so the shell's "the browser never sees the platform"
+  rule is intact. Unset is supported — the fleet's own positions render on an empty canvas and the
+  screen says so, because a missing basemap must not read as missing vehicles.
+- **Markers are a GeoJSON source and two circle layers, not `Marker` DOM nodes.** A `<div>` per
+  vehicle would need an inline `style` for its colour, which AL-52 forbids and `test/fences.test.ts`
+  fails the build on. The hexes come from `@mageride/tailwind-preset`'s token data, which exists
+  for exactly this; with no basemap MapLibre clears the canvas transparent, so the container's
+  `bg-surface-variant` carries light/dark and no JavaScript reads a theme.
+- **`MapOptions.locale` replaces the library's English UI strings**, and the page keys the
+  component on the locale so a language switch rebuilds it. MapLibre takes them once.
+- `maplibre-gl/dist/maplibre-gl.css` is imported. It is a widget's functional stylesheet compiled
+  at build time by the same PostCSS pipeline — not a pre-styled kit, not runtime CSS-in-JS — and
+  the OSM attribution control it styles is a licence requirement, not a decoration.
+
+### Selecting a vehicle is a URL
+
+`?vehicle={id}` — pushed by a marker click, followed from an overlay row, pasted from a message.
+The drill-in panel is server-rendered from data the page already has, so it cannot disagree with
+the table beside it, and an id from another organisation resolves to "not in this organisation"
+rather than to a marker.
+
+### Two windows, and the overlay is built over the union
+
+fleet-svc drops a position older than `Fleet:MapStaleAfter` (15 min) from the map answer;
+fleet-health-svc calls a tracker `offline` after `Health:OfflineAfter` (30 min). **They do not line
+up and are not meant to** — one is a stale coordinate, the other a silent device. So the overlay is
+the union of both reads: a vehicle can be Offline in the table with no pin on the map, and the
+caption states both windows in the deployment's own numbers.
+
+### Idle is a subtraction, and the screen says what it therefore means
+
+`VehicleAnalytics` has no idle field. fleet-svc defines `utilisationPct` as
+`activeHours × 100 / periodHours`, so idle is that definition's complement over the same period —
+the server's own arithmetic, not a second measurement. It is **calendar** time: nothing measures a
+stationary running engine, so an overnight park is idle, and the caption says so. Two more captions
+carry what the report cannot claim: the kilometres are great-circle hops between samples (not road
+distance, C059 handoff), and there is **no earnings column** because `earningsMinor` is returned
+absent on purpose (BR-23.10 — a fleet's fares never reach MageRide).
+
+### The CSV is written here; the PDF is the browser's
+
+`web_fleet.html` draws "Export CSV / PDF" and **no contract has an analytics export route**
+(`exportFleetInvoice` is fleet-billing-svc's and is an invoice). So `app/(portal)/analytics/export/route.ts`
+re-reads the same org-scoped `GET …/analytics` with the same `from`/`to` and writes the rows —
+no figure that is not on the page. Its path sits under `/analytics`, so `resolveScreenRoute` claims
+it for SCR-FP-009 and `proxy.ts` gates it as that screen. The PDF is `window.print()` over
+`print:hidden` chrome, which is why `PortalChrome`'s rail and topbar carry that class.
+
+### Billing is the one **read** on this portal gated on the seat
+
+`FleetBillingAccessFilter` gates every route in `fleet-billing.yaml` — reads included — on the
+Owner sub-role **and** an APPROVED organisation, which is stricter than fleet-svc and stricter than
+URD §2.3 alone. `canReadBilling()` is that gate on this side and is checked *before* the wallet
+card reads anything: a Manager's dashboard is not a Manager's dashboard with three 403s on it.
+`billingRefusal()` separates "not the Owner" from "still in verification" because an operator does
+two different things about them. `src/api/billing.ts` carries only the two reads the dashboard
+card makes — **C115 owns SCR-FP-010** and the invoice detail, export, receipt, Pay verb and the
+three top-up routes belong in that file when it lands. The card's own "Top up wallet" is a link.
+
+### What SCR-FP-003 cannot do, and says so
+
+1. **Insurance expiring (30 d).** Expiry dates live on a vehicle's own document slots
+   (`GET …/vehicles/{id}/documents`) — one request per vehicle — and no fleet-wide document-expiry
+   route exists. The card carries "vehicles with documents outstanding", which one roster read does
+   answer, and a caption saying where expiry is shown instead.
+2. **A projected next invoice.** Nothing publishes the per-vehicle monthly rate or forecasts a
+   month that has not been run, so the card names the oldest **open** invoice (`OVERDUE` before
+   `DUE`) with `wallet.outstandingMinor` beside it, and says when the next one is raised otherwise.
+3. **Route-deviation and geofence alerts.** US-13.5 is Phase 3 with no producer; `GET …/alerts`
+   answers an empty page "so the Fleet Portal can render an empty state without a later breaking
+   change". The card renders that state as a sentence. **No alerting is built here** — every other
+   row is a count of rows a service already decided about (a `MISSED` schedule, an offline tracker,
+   US-3.16's device-down window).
+
+### One more rule for a screen component
+
+- **A screen renders no `async` child component.** `ProblemPanel` is one and only Next can render
+  it, which is why the dashboard's wallet reads happen in the page and the card is synchronous —
+  a page whose tree contains an unresolved async child renders as nothing under `@testing-library`,
+  and that is a test that cannot be written rather than a test that fails.
+
 ## Configuration
 
 `.env.example` documents every variable. `MAGERIDE_API_BASE_URL` (the C008 gateway origin) is
 required; absent, every request answers 503 rather than 500. The four OIDC variables are optional
 in pairs — unset, that provider's button is not rendered at all rather than rendered and broken.
+`FLEET_PORTAL_MAP_STYLE_URL` (Δ C114) is optional — see the map section above.
 
 `output: 'standalone'`, so the container entrypoint is `node .next/standalone/portals/fleet/server.js`,
 not `next start`.

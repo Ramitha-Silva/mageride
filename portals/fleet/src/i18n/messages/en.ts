@@ -632,6 +632,177 @@ export const fleetEn = {
   'fleet.trackers.error.vehicleRequired': 'Choose the vehicle this tracker is fitted to',
   'fleet.trackers.error.csvRequired': 'Choose a CSV to import',
 
+  /* ---- Money, once ------------------------------------------------------ */
+  // Where the mark goes relative to the number is a property of the language,
+  // not of the amount, so it lives in the resource rather than in the formatter
+  // (`@/i18n/format`, `formatFareMinor`).
+  'fleet.money.rupees': 'Rs {amount}',
+
+  /* ---- SCR-FP-003 · fleet dashboard (Δ C114) --------------------------- */
+  'fleet.dashboard.title': 'Dashboard',
+  'fleet.dashboard.kpi.online': 'Online',
+  'fleet.dashboard.kpi.ofVehicles': 'of {count} vehicles in service',
+  'fleet.dashboard.kpi.ofTrackers': 'of {count} trackers bound',
+  'fleet.dashboard.kpi.stale': 'Stale',
+  'fleet.dashboard.kpi.staleAfter': 'no signal for {minutes} min',
+  'fleet.dashboard.kpi.offline': 'Offline',
+  'fleet.dashboard.kpi.offlineAfter': 'no signal for {minutes} min',
+  'fleet.dashboard.kpi.trips': 'Trips today',
+  'fleet.dashboard.kpi.modeSplit': 'Mode A {a} · Mode B {b}',
+  'fleet.dashboard.kpi.noModeSplit': 'The split by mode needs the vehicle roster.',
+
+  'fleet.dashboard.alerts.heading': 'Alerts',
+  'fleet.dashboard.alert.notStarted': 'Vehicle not started (scheduled)',
+  'fleet.dashboard.alert.trackerOffline': 'Trackers offline',
+  'fleet.dashboard.alert.trackerStale': 'Trackers with a weak signal',
+  'fleet.dashboard.alert.documentsOutstanding': 'Vehicles with documents outstanding',
+  'fleet.dashboard.alert.deviceDown':
+    '{offline} of {expected} trackers reported nothing in the last {minutes} minutes, which is over the {threshold}% MageRide raises a device-down alert at.',
+  // US-13.5 is Phase 3 and nothing on the platform emits a route-deviation or a
+  // geofence alert. `GET …/alerts` exists so this empty state can be drawn now
+  // and gain rows later without a breaking change — so it is drawn, in words.
+  'fleet.dashboard.alerts.phaseThree':
+    'Route-deviation and geofence alerts ({count} right now) start when MageRide turns on boundary monitoring. Your geofences can be defined before then.',
+  // No route on any contract reports document expiry across a fleet: expiry
+  // dates are on a vehicle's own document slots, one request per vehicle. C114
+  // handoff.
+  'fleet.dashboard.alerts.noExpiryRow':
+    'Insurance and revenue-license expiry are shown per vehicle on the Vehicles screen; MageRide cannot count them across the fleet yet.',
+
+  'fleet.dashboard.wallet.heading': 'Wallet & next invoice',
+  'fleet.dashboard.wallet.balance': 'Fleet wallet balance',
+  'fleet.dashboard.wallet.outstanding': 'Invoiced and unpaid',
+  'fleet.dashboard.wallet.available': 'Left after what is owed',
+  'fleet.dashboard.wallet.nextInvoice': 'Next invoice to settle',
+  'fleet.dashboard.wallet.vehicleLines': '{count} Mode B vehicles on this invoice',
+  'fleet.dashboard.wallet.dueAt': 'Payable by {date}',
+  'fleet.dashboard.wallet.nothingDue':
+    'Every invoice is settled. The next one is raised on the first of next month.',
+  'fleet.dashboard.wallet.topUp': 'Top up wallet',
+  'fleet.dashboard.wallet.modeANote':
+    'MageRide invoices one line per Mode B vehicle each month. Mode A vehicles are free.',
+  'fleet.dashboard.wallet.ownerOnly':
+    'The wallet and the monthly invoice are the organisation owner’s. Ask them if you need a figure from here.',
+  'fleet.dashboard.wallet.pendingOrg':
+    'Billing starts when a verification officer approves this organisation. Until then there are no approved vehicles to invoice.',
+  'fleet.dashboard.wallet.unavailable':
+    'The wallet could not be read just now. Everything else on this screen is current.',
+  'fleet.dashboard.asOf': 'Tracker health as of {time}',
+  'fleet.dashboard.asOfUnknown': 'Tracker health could not be read.',
+
+  /* ---- SCR-FP-007 · live fleet map (US-13.3, Δ C114) ------------------- */
+  'fleet.map.title': 'Live fleet map',
+  'fleet.map.region': 'Live map of this organisation’s vehicles',
+  'fleet.map.count.online': '{count} online',
+  'fleet.map.count.stale': '{count} stale',
+  'fleet.map.count.offline': '{count} offline',
+  'fleet.map.noPositions':
+    'No vehicle in this organisation has reported a position in the last {minutes} minutes.',
+  'fleet.map.noBasemap':
+    'This deployment has no map tiles configured, so the vehicles are drawn without streets under them. Their positions are exact.',
+  'fleet.map.zoomIn': 'Zoom in',
+  'fleet.map.zoomOut': 'Zoom out',
+  'fleet.map.attribution': 'Map credits',
+  'fleet.map.unit.metres': 'm',
+  'fleet.map.unit.kilometres': 'km',
+
+  'fleet.map.overlay.heading': 'Fleet-health overlay',
+  'fleet.map.overlay.caption':
+    'Every vehicle in this organisation, its driver, its speed and the health of its tracker',
+  'fleet.map.overlay.empty': 'This organisation has no vehicles reporting yet.',
+  'fleet.map.column.vehicle': 'Vehicle',
+  'fleet.map.column.driver': 'Driver',
+  'fleet.map.column.speed': 'Speed',
+  'fleet.map.column.battery': 'Battery',
+  'fleet.map.column.health': 'Health',
+  'fleet.map.scoping':
+    'Only this organisation’s vehicles are on this map. MageRide filters them in the database, not on this screen.',
+  'fleet.map.windows':
+    'A vehicle is on the map if it reported in the last {map} minutes. A tracker is stale after {stale} minutes of silence and offline after {offline}, so a vehicle can be listed as offline with no pin.',
+  'fleet.map.truncated':
+    'The tracker list is capped, so some vehicles may show no health. The counts above cover the whole fleet.',
+  'fleet.map.asOf': 'Positions as of {time}',
+  'fleet.map.noDriver': 'No driver assigned',
+  'fleet.map.noTracker': 'No tracker bound',
+  'fleet.map.noPosition': 'No recent position',
+  'fleet.map.speedKmh': '{speed} km/h',
+  'fleet.map.batteryPct': '{percent}%',
+  'fleet.map.batteryMv': '{mv} mV',
+  'fleet.map.heading': 'Heading',
+  'fleet.map.noHeading': 'Not reported',
+  'fleet.map.headingDegrees': '{degrees}° {compass}',
+  'fleet.map.lastSample': 'Last position',
+  'fleet.map.signal': 'Signal strength',
+  'fleet.map.satellites': 'Satellites',
+  'fleet.map.compass.n': 'N',
+  'fleet.map.compass.ne': 'NE',
+  'fleet.map.compass.e': 'E',
+  'fleet.map.compass.se': 'SE',
+  'fleet.map.compass.s': 'S',
+  'fleet.map.compass.sw': 'SW',
+  'fleet.map.compass.w': 'W',
+  'fleet.map.compass.nw': 'NW',
+  'fleet.map.detail.heading': 'Selected vehicle',
+  'fleet.map.detail.close': 'Clear selection',
+  'fleet.map.detail.unknown':
+    'That vehicle is not in this organisation, or it has no record on this screen.',
+
+  /* ---- SCR-FP-009 · trip history & analytics (US-13.4, Δ C114) --------- */
+  'fleet.analytics.title': 'Trip history & analytics',
+  'fleet.analytics.exportCsv': 'Export CSV',
+  'fleet.analytics.exportPdf': 'Print / PDF',
+  'fleet.analytics.range.legend': 'Reporting period',
+  'fleet.analytics.range.from': 'From',
+  'fleet.analytics.range.to': 'To',
+  'fleet.analytics.range.apply': 'Apply',
+  'fleet.analytics.range.hint':
+    'Both days are included and are Sri Lanka days. The last {days} days are shown by default, and at most {max} can be reported at once.',
+  'fleet.analytics.rangeAdjusted':
+    'That period could not be reported — the range runs backwards or is longer than {days} days — so the default period is shown instead.',
+  'fleet.analytics.period': '{from} to {to} · {days} days',
+  'fleet.analytics.kpi.trips': 'Total trips',
+  'fleet.analytics.kpi.distance': 'Distance',
+  'fleet.analytics.kpi.utilisation': 'Utilisation',
+  'fleet.analytics.kpi.utilisationDetail': 'across {vehicles} vehicles',
+  'fleet.analytics.kpi.idle': 'Avg idle / day',
+  'fleet.analytics.kpi.idleDetail': 'per vehicle',
+  'fleet.analytics.table.heading': 'Per-vehicle',
+  'fleet.analytics.table.caption':
+    'Trips, distance, utilisation and idle time for every vehicle in this organisation over the reporting period',
+  'fleet.analytics.table.empty': 'No vehicle in this organisation has a record for this period.',
+  'fleet.analytics.column.vehicle': 'Vehicle',
+  'fleet.analytics.column.trips': 'Trips',
+  'fleet.analytics.column.distance': 'Distance',
+  'fleet.analytics.column.utilisation': 'Utilisation',
+  'fleet.analytics.column.idle': 'Idle',
+  'fleet.analytics.km': '{distance} km',
+  'fleet.analytics.percent': '{percent}%',
+  'fleet.analytics.hours': '{hours} h',
+  // The kilometres are great-circle hops between telemetry samples; nothing in
+  // this build map-matches a journey to a road (C059 handoff).
+  'fleet.analytics.distanceNote':
+    'Distance is measured between position reports in a straight line, so it reads a little short on a winding road. It is not an odometer reading.',
+  'fleet.analytics.idleNote':
+    'Idle is the hours of the period a vehicle was not on a journey, so an overnight park counts. MageRide does not measure a running engine.',
+  // `earningsMinor` is offered by the contract and deliberately returned absent:
+  // a bus fare is collected on the bus and a Mode B subscription is paid into
+  // the operator's own bank account (BR-23.10).
+  'fleet.analytics.earningsNote':
+    'There is no earnings column: fares on Mode A and Mode B vehicles are collected by you, not through MageRide, so the platform has no figure to report.',
+  'fleet.analytics.csv.vehicleId': 'Vehicle ID',
+  'fleet.analytics.csv.vehicleType': 'Type',
+  'fleet.analytics.csv.mode': 'Mode',
+  'fleet.analytics.csv.distanceKm': 'Distance (km)',
+  'fleet.analytics.csv.activeHours': 'Active hours',
+  'fleet.analytics.csv.utilisationPct': 'Utilisation (%)',
+  'fleet.analytics.csv.idleHours': 'Idle hours',
+
+  /* ---- Invoice status (fleet-billing.yaml, Δ C114) --------------------- */
+  'fleet.billing.status.free': 'No charge',
+  'fleet.billing.status.due': 'Due',
+  'fleet.billing.status.paid': 'Paid',
+  'fleet.billing.status.overdue': 'Overdue',
+
   /* ---- The shell's placeholder for a screen a later component owns ------ */
   'fleet.screen.pendingTitle': 'This screen is not built yet',
   'fleet.screen.pendingBody':

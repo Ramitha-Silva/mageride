@@ -561,6 +561,163 @@ export const fleetTa: FleetMessages = {
   'fleet.trackers.error.vehicleRequired': 'இந்த ட்ராக்கர் பொருத்தப்பட்ட வாகனத்தைத் தேர்ந்தெடுக்கவும்',
   'fleet.trackers.error.csvRequired': 'இறக்குமதி செய்ய CSV ஐத் தேர்ந்தெடுக்கவும்',
 
+  /* ---- Money ------------------------------------------------------------ */
+  'fleet.money.rupees': 'ரூ. {amount}',
+
+  /* ---- SCR-FP-003 · fleet dashboard ------------------------------------ */
+  'fleet.dashboard.title': 'கட்டுப்பாட்டுப் பலகை',
+  'fleet.dashboard.kpi.online': 'இணைப்பில்',
+  'fleet.dashboard.kpi.ofVehicles': 'சேவையிலுள்ள {count} வாகனங்களில்',
+  'fleet.dashboard.kpi.ofTrackers': 'இணைக்கப்பட்ட {count} ட்ராக்கர்களில்',
+  'fleet.dashboard.kpi.stale': 'பழையது',
+  'fleet.dashboard.kpi.staleAfter': '{minutes} நிமிடங்கள் சமிக்ஞை இல்லை',
+  'fleet.dashboard.kpi.offline': 'இணைப்பில் இல்லை',
+  'fleet.dashboard.kpi.offlineAfter': '{minutes} நிமிடங்கள் சமிக்ஞை இல்லை',
+  'fleet.dashboard.kpi.trips': 'இன்றைய பயணங்கள்',
+  'fleet.dashboard.kpi.modeSplit': 'A முறை {a} · B முறை {b}',
+  'fleet.dashboard.kpi.noModeSplit': 'முறை வாரியான பிரிவுக்கு வாகனப் பட்டியல் தேவை.',
+
+  'fleet.dashboard.alerts.heading': 'எச்சரிக்கைகள்',
+  'fleet.dashboard.alert.notStarted': 'திட்டமிட்டபடி புறப்படாத வாகனங்கள்',
+  'fleet.dashboard.alert.trackerOffline': 'இணைப்பில் இல்லாத ட்ராக்கர்கள்',
+  'fleet.dashboard.alert.trackerStale': 'பலவீனமான சமிக்ஞை உள்ள ட்ராக்கர்கள்',
+  'fleet.dashboard.alert.documentsOutstanding': 'ஆவணங்கள் நிலுவையிலுள்ள வாகனங்கள்',
+  'fleet.dashboard.alert.deviceDown':
+    'கடந்த {minutes} நிமிடங்களில் {expected} ட்ராக்கர்களில் {offline} எதுவும் அறிக்கை செய்யவில்லை. இது MageRide சாதன எச்சரிக்கை வழங்கும் {threshold}% வரம்பை மீறுகிறது.',
+  'fleet.dashboard.alerts.phaseThree':
+    'பாதை விலகல் மற்றும் புவி-வேலி எச்சரிக்கைகள் (தற்போது {count}) MageRide எல்லைக் கண்காணிப்பை இயக்கியதும் தொடங்கும். உங்கள் புவி-வேலிகளை அதற்கு முன்பே வரையறுக்கலாம்.',
+  'fleet.dashboard.alerts.noExpiryRow':
+    'காப்பீடு மற்றும் வருவாய் உரிமக் காலாவதி ஒவ்வொரு வாகனத்திற்கும் வாகனங்கள் திரையில் காட்டப்படும்; தொகுதி முழுவதற்கும் அவற்றை MageRide இன்னும் எண்ண முடியாது.',
+
+  'fleet.dashboard.wallet.heading': 'பணப்பை மற்றும் அடுத்த விலைப்பட்டியல்',
+  'fleet.dashboard.wallet.balance': 'தொகுதி பணப்பை இருப்பு',
+  'fleet.dashboard.wallet.outstanding': 'விலைப்பட்டியல் இடப்பட்டு செலுத்தப்படாதது',
+  'fleet.dashboard.wallet.available': 'செலுத்த வேண்டியதைக் கழித்த பிறகு மீதம்',
+  'fleet.dashboard.wallet.nextInvoice': 'செலுத்த வேண்டிய அடுத்த விலைப்பட்டியல்',
+  'fleet.dashboard.wallet.vehicleLines': 'இந்த விலைப்பட்டியலில் {count} B முறை வாகனங்கள்',
+  'fleet.dashboard.wallet.dueAt': '{date} க்குள் செலுத்த வேண்டும்',
+  'fleet.dashboard.wallet.nothingDue':
+    'அனைத்து விலைப்பட்டியல்களும் செலுத்தப்பட்டுவிட்டன. அடுத்தது அடுத்த மாதம் முதல் தேதி வழங்கப்படும்.',
+  'fleet.dashboard.wallet.topUp': 'பணப்பையை நிரப்பவும்',
+  'fleet.dashboard.wallet.modeANote':
+    'MageRide ஒவ்வொரு மாதமும் ஒரு B முறை வாகனத்திற்கு ஒரு வரி வீதம் விலைப்பட்டியல் இடும். A முறை வாகனங்கள் இலவசம்.',
+  'fleet.dashboard.wallet.ownerOnly':
+    'பணப்பையும் மாதாந்திர விலைப்பட்டியலும் நிறுவன உரிமையாளருக்குரியவை. இங்கிருந்து ஒரு எண் தேவைப்பட்டால் அவர்களிடம் கேளுங்கள்.',
+  'fleet.dashboard.wallet.pendingOrg':
+    'சரிபார்ப்பு அதிகாரி இந்த நிறுவனத்தை அங்கீகரித்ததும் கட்டணம் தொடங்கும். அதுவரை விலைப்பட்டியல் இட அங்கீகரிக்கப்பட்ட வாகனங்கள் இல்லை.',
+  'fleet.dashboard.wallet.unavailable':
+    'பணப்பையை இப்போது படிக்க முடியவில்லை. இந்தத் திரையில் மற்ற அனைத்தும் தற்போதையவை.',
+  'fleet.dashboard.asOf': '{time} நிலவரப்படி ட்ராக்கர் நலன்',
+  'fleet.dashboard.asOfUnknown': 'ட்ராக்கர் நலனைப் படிக்க முடியவில்லை.',
+
+  /* ---- SCR-FP-007 · live fleet map -------------------------------------- */
+  'fleet.map.title': 'நேரடி தொகுதி வரைபடம்',
+  'fleet.map.region': 'இந்த நிறுவனத்தின் வாகனங்களைக் காட்டும் நேரடி வரைபடம்',
+  'fleet.map.count.online': '{count} இணைப்பில்',
+  'fleet.map.count.stale': '{count} பழையது',
+  'fleet.map.count.offline': '{count} இணைப்பில் இல்லை',
+  'fleet.map.noPositions':
+    'கடந்த {minutes} நிமிடங்களில் இந்த நிறுவனத்தின் எந்த வாகனமும் இருப்பிடத்தை அறிவிக்கவில்லை.',
+  'fleet.map.noBasemap':
+    'இந்த நிறுவலில் வரைபடத் தரவு அமைக்கப்படவில்லை, எனவே வாகனங்களுக்குக் கீழே தெருக்கள் தெரியாது. அவற்றின் இருப்பிடங்கள் துல்லியமானவை.',
+  'fleet.map.zoomIn': 'பெரிதாக்கு',
+  'fleet.map.zoomOut': 'சிறிதாக்கு',
+  'fleet.map.attribution': 'வரைபட நன்றி',
+  'fleet.map.unit.metres': 'மீ',
+  'fleet.map.unit.kilometres': 'கிமீ',
+
+  'fleet.map.overlay.heading': 'தொகுதி நல அடுக்கு',
+  'fleet.map.overlay.caption':
+    'இந்த நிறுவனத்தின் ஒவ்வொரு வாகனமும், அதன் ஓட்டுநர், வேகம் மற்றும் ட்ராக்கர் நலன்',
+  'fleet.map.overlay.empty': 'இந்த நிறுவனத்தில் இன்னும் அறிக்கை செய்யும் வாகனங்கள் இல்லை.',
+  'fleet.map.column.vehicle': 'வாகனம்',
+  'fleet.map.column.driver': 'ஓட்டுநர்',
+  'fleet.map.column.speed': 'வேகம்',
+  'fleet.map.column.battery': 'பேட்டரி',
+  'fleet.map.column.health': 'நலன்',
+  'fleet.map.scoping':
+    'இந்த வரைபடத்தில் இந்த நிறுவனத்தின் வாகனங்கள் மட்டுமே உள்ளன. MageRide அவற்றை இந்தத் திரையில் அல்ல, தரவுத்தளத்தில் வடிகட்டுகிறது.',
+  'fleet.map.windows':
+    'கடந்த {map} நிமிடங்களில் அறிவித்திருந்தால் வாகனம் வரைபடத்தில் தெரியும். {stale} நிமிடங்கள் அமைதியாக இருந்தால் ட்ராக்கர் பழையது, {offline} நிமிடங்களுக்குப் பிறகு இணைப்பில் இல்லை — எனவே வரைபடத்தில் குறியின்றி ஒரு வாகனம் இணைப்பில் இல்லை எனப் பட்டியலிடப்படலாம்.',
+  'fleet.map.truncated':
+    'ட்ராக்கர் பட்டியல் வரம்பிடப்பட்டுள்ளது, எனவே சில வாகனங்களுக்கு நலன் தெரியாமல் இருக்கலாம். மேலுள்ள எண்ணிக்கைகள் முழுத் தொகுதியையும் உள்ளடக்கும்.',
+  'fleet.map.asOf': '{time} நிலவரப்படி இருப்பிடங்கள்',
+  'fleet.map.noDriver': 'ஓட்டுநர் நியமிக்கப்படவில்லை',
+  'fleet.map.noTracker': 'ட்ராக்கர் இணைக்கப்படவில்லை',
+  'fleet.map.noPosition': 'சமீபத்திய இருப்பிடம் இல்லை',
+  'fleet.map.speedKmh': '{speed} கிமீ/ம',
+  'fleet.map.batteryPct': '{percent}%',
+  'fleet.map.batteryMv': '{mv} mV',
+  'fleet.map.heading': 'திசை',
+  'fleet.map.noHeading': 'அறிவிக்கப்படவில்லை',
+  'fleet.map.headingDegrees': '{degrees}° {compass}',
+  'fleet.map.lastSample': 'கடைசி இருப்பிடம்',
+  'fleet.map.signal': 'சமிக்ஞை வலிமை',
+  'fleet.map.satellites': 'செயற்கைக்கோள்கள்',
+  'fleet.map.compass.n': 'வ',
+  'fleet.map.compass.ne': 'வ.கி',
+  'fleet.map.compass.e': 'கி',
+  'fleet.map.compass.se': 'தெ.கி',
+  'fleet.map.compass.s': 'தெ',
+  'fleet.map.compass.sw': 'தெ.மே',
+  'fleet.map.compass.w': 'மே',
+  'fleet.map.compass.nw': 'வ.மே',
+  'fleet.map.detail.heading': 'தேர்ந்தெடுக்கப்பட்ட வாகனம்',
+  'fleet.map.detail.close': 'தேர்வை நீக்கு',
+  'fleet.map.detail.unknown':
+    'அந்த வாகனம் இந்த நிறுவனத்தைச் சேர்ந்தது அல்ல, அல்லது இந்தத் திரையில் அதற்குப் பதிவு இல்லை.',
+
+  /* ---- SCR-FP-009 · trip history & analytics ---------------------------- */
+  'fleet.analytics.title': 'பயண வரலாறு மற்றும் பகுப்பாய்வு',
+  'fleet.analytics.exportCsv': 'CSV பதிவிறக்கு',
+  'fleet.analytics.exportPdf': 'அச்சு / PDF',
+  'fleet.analytics.range.legend': 'அறிக்கைக் காலம்',
+  'fleet.analytics.range.from': 'முதல்',
+  'fleet.analytics.range.to': 'வரை',
+  'fleet.analytics.range.apply': 'பயன்படுத்து',
+  'fleet.analytics.range.hint':
+    'இரு நாட்களும் சேர்க்கப்படும், அவை இலங்கை நாட்கள். இயல்பாக கடந்த {days} நாட்கள் காட்டப்படும், ஒரே நேரத்தில் அதிகபட்சம் {max} நாட்கள் அறிக்கையிடலாம்.',
+  'fleet.analytics.rangeAdjusted':
+    'அந்தக் காலத்தை அறிக்கையிட முடியவில்லை — வரம்பு பின்னோக்கிச் செல்கிறது அல்லது {days} நாட்களை விட நீளமானது — எனவே இயல்புக் காலம் காட்டப்படுகிறது.',
+  'fleet.analytics.period': '{from} முதல் {to} வரை · {days} நாட்கள்',
+  'fleet.analytics.kpi.trips': 'மொத்தப் பயணங்கள்',
+  'fleet.analytics.kpi.distance': 'தூரம்',
+  'fleet.analytics.kpi.utilisation': 'பயன்பாடு',
+  'fleet.analytics.kpi.utilisationDetail': '{vehicles} வாகனங்கள் முழுவதும்',
+  'fleet.analytics.kpi.idle': 'நாள் ஒன்றுக்கு சராசரி செயலற்ற நேரம்',
+  'fleet.analytics.kpi.idleDetail': 'ஒரு வாகனத்திற்கு',
+  'fleet.analytics.table.heading': 'வாகன வாரியாக',
+  'fleet.analytics.table.caption':
+    'அறிக்கைக் காலத்தில் இந்த நிறுவனத்தின் ஒவ்வொரு வாகனத்தின் பயணங்கள், தூரம், பயன்பாடு மற்றும் செயலற்ற நேரம்',
+  'fleet.analytics.table.empty': 'இந்தக் காலத்திற்கு இந்த நிறுவனத்தின் எந்த வாகனத்திற்கும் பதிவு இல்லை.',
+  'fleet.analytics.column.vehicle': 'வாகனம்',
+  'fleet.analytics.column.trips': 'பயணங்கள்',
+  'fleet.analytics.column.distance': 'தூரம்',
+  'fleet.analytics.column.utilisation': 'பயன்பாடு',
+  'fleet.analytics.column.idle': 'செயலற்றது',
+  'fleet.analytics.km': '{distance} கிமீ',
+  'fleet.analytics.percent': '{percent}%',
+  'fleet.analytics.hours': '{hours} ம.நே',
+  'fleet.analytics.distanceNote':
+    'தூரம் இருப்பிட அறிக்கைகளுக்கு இடையே நேர்கோட்டில் அளக்கப்படுகிறது, எனவே வளைவான சாலையில் சற்று குறைவாகக் காட்டும். இது ஓடோமீட்டர் அளவீடு அல்ல.',
+  'fleet.analytics.idleNote':
+    'செயலற்ற நேரம் என்பது வாகனம் பயணத்தில் இல்லாத மணிநேரங்கள், எனவே இரவு நிறுத்தமும் கணக்கிடப்படும். இயங்கும் என்ஜினை MageRide அளப்பதில்லை.',
+  'fleet.analytics.earningsNote':
+    'வருவாய்ப் பத்தி இல்லை: A மற்றும் B முறை வாகனங்களின் கட்டணங்கள் MageRide வழியாக அல்லாமல் உங்களால் வசூலிக்கப்படுகின்றன, எனவே தளத்திடம் அறிக்கையிட எந்த எண்ணும் இல்லை.',
+  'fleet.analytics.csv.vehicleId': 'வாகன ID',
+  'fleet.analytics.csv.vehicleType': 'வகை',
+  'fleet.analytics.csv.mode': 'முறை',
+  'fleet.analytics.csv.distanceKm': 'தூரம் (கிமீ)',
+  'fleet.analytics.csv.activeHours': 'செயல்பாட்டு மணிநேரம்',
+  'fleet.analytics.csv.utilisationPct': 'பயன்பாடு (%)',
+  'fleet.analytics.csv.idleHours': 'செயலற்ற மணிநேரம்',
+
+  /* ---- Invoice status --------------------------------------------------- */
+  'fleet.billing.status.free': 'கட்டணம் இல்லை',
+  'fleet.billing.status.due': 'செலுத்த வேண்டியது',
+  'fleet.billing.status.paid': 'செலுத்தப்பட்டது',
+  'fleet.billing.status.overdue': 'தாமதமானது',
+
   /* ---- The shell's placeholder ------------------------------------------ */
   'fleet.screen.pendingTitle': 'இந்தத் திரை இன்னும் உருவாக்கப்படவில்லை',
   'fleet.screen.pendingBody':

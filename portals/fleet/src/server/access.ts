@@ -238,3 +238,44 @@ export function canManageTeam(session: FleetSession): boolean {
     canMutate(session, 'fleet-operations') && satisfiesFleetRole(session.fleetRole, 'owner')
   );
 }
+
+/**
+ * Whether the caller may **read** the fleet wallet and the monthly invoices
+ * (SCR-FP-003's "Wallet & next invoice" card, and SCR-FP-010 entire). Δ C114.
+ *
+ * The second control on this portal gated on the seat as well as on the row, and
+ * the only one where the gate is on a *read*. `FleetBillingAccessFilter` carries
+ * it on the whole `fleet-billing.yaml` group rather than per route, and the
+ * service says why: "unlike fleet-svc, where the map and the analytics sit outside
+ * the role gate, **every** route here carries it — there is no billing read a
+ * Manager is entitled to" (US-13.A5). Approval is checked for the same reason it
+ * is not checked on the map: "a PENDING org has no approved vehicles, so it has no
+ * charges, no invoice and no wallet".
+ *
+ * The URD §2.3 row is checked as well as the sub-role, not instead of it —
+ * `PermissionEvaluator` narrows a Manager out of `write` on `fleet-billing`, and
+ * reading the evaluation is what keeps this from being a rule the portal invented.
+ * Same reasoning as {@link canManageTeam}, applied to the other direction.
+ */
+export function canReadBilling(session: FleetSession): boolean {
+  return (
+    canMutate(session, 'fleet-billing', { requiresApprovedOrg: true }) &&
+    satisfiesFleetRole(session.fleetRole, 'owner')
+  );
+}
+
+/**
+ * Why {@link canReadBilling} said no, so the card can say the useful half.
+ *
+ * Two different facts, and an operator does two different things about them. A
+ * Manager or a Viewer is looking at a card that is never going to be theirs and
+ * should be told whose it is. A pending organisation's Owner is waiting on the
+ * same Verification Officer as everybody else in it — and has no charges yet
+ * either way, which is the part worth saying.
+ */
+export type BillingRefusal = 'not-owner' | 'pending-org' | null;
+
+export function billingRefusal(session: FleetSession): BillingRefusal {
+  if (canReadBilling(session)) return null;
+  return satisfiesFleetRole(session.fleetRole, 'owner') ? 'pending-org' : 'not-owner';
+}

@@ -140,7 +140,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C111 | fleet-portal-shell | 4c | DONE | 2026-08-08 | **114 tests green** in `@mageride/fleet-portal` (9 files); `npm --prefix portals run lint --workspace fleet && … test … && … build …` exits 0, `next build` emits nine routes, `check-bundle.mjs` reports **AL-52: clean — 1 compiled stylesheet, 28.7 kB CSS**, and all six portal workspaces are green (982 tests, 54 files). **There is no Fleet Portal session endpoint**, so the shell composes one from `GET /v1/me/permissions` — the caller's URD §2.3 rows *plus* `fleetId`/`fleetRole` read from `iam.fleet_members` rather than from the token — and `GET /v1/fleets/{id}` for the organisation's `status`, the only route that carries it. **The nav manifest is local because nothing sends one**, but every entry declares what its own routes declare: the URD row and capability (answered by the caller's server-side evaluation, with URD §2.1's sub-model already applied), the `RequireFleetSubRole` the route names, and the `RequireApprovedFleet()` group it sits in — `test/routes.test.ts` parses `FleetEndpoints.cs`, `FleetOpsEndpoints.cs` and `MageRideClaims.cs` and fails when any moves. **The approval gate blocks exactly what fleet-svc blocks:** the vehicle and assignment groups carry it on the *group*, so a pending org loses those screens and the Mode B proxies built on them, while the ops reads (`/map`, `/analytics`, `/schedules`, `/health`) stay open and their individual writes are what get refused. **Two refusals, two pages** — `/denied` is a real 403 about the caller, `/pending` renders inside the chrome about the organisation and lists what *is* open. **A screen never holds an org id** (`read({ org: '/vehicles' })` is scoped from the session) and **every mutation declares the row it needs**, refused locally when the caller holds no `write` there. **Both federated arms are the implicit ID-token flow** — iam-svc takes `{idToken}` and the only code-exchange route forces `app=admin` — so both return by cross-site `form_post`, which is why the OAuth state cookie is the one `SameSite=None` cookie here. 3 wireframe deviations, 10 spec gaps / micro-change-sets — including **no sign-up, no password reset and no identity link/unlink route anywhere on the platform**; no spec, backend or contract file touched |
 | C112 | fleet-portal-auth-org-payout | 4c | DONE | 2026-08-08 | **193 tests green** in `@mageride/fleet-portal` (14 files, was 114/9); the verify command exits 0, `next build` emits **13 routes** (was 9), `check-bundle.mjs` reports **AL-52: clean — 1 compiled stylesheet, 29.7 kB CSS**, and all six portal workspaces are green (**1,061 tests, 59 files**). **SCR-FP-001 is one card with two tabs at two routes** — `/login` and the wireframe's own `/signup`, both public — and the Create-account tab holds **no form, no input and no submit**, because `POST /v1/fleets` needs the caller to already hold `fleet_owner` and nothing on any contract grants it to a stranger; the tab explains the two paths that do exist, and a test asserts the absence so a control cannot be added back without the reason being revisited. **SCR-FP-002 is two screens because an organisation starts existing** — the register form for a `fleet_owner` with no membership row, then the KYC record, the team and the payout link — and `canMutate(…, {allowsNoOrganisation:true})` is the control-level twin of the manifest's own flag, set on `POST /v1/fleets` and nowhere else because it is the one call that creates the membership every other write is scoped to. **SCR-FP-002a is gated three times** (proxy, fleet-svc, and the page's own `forbidden()`), is deliberately **not** approval-gated because AL-49's documents are what the officer reads *before* approving, and warns **before the press** that saving an edit to a verified profile re-enters Pending while subscribers keep paying the approved account (BR-31.1's expensive half). **The AL-49 gate ships as a predicate and a sentence, not as a rule two screens derive** — `canSetPaidServicePayment()` + `PAID_SERVICE_PAYMENT_BLOCKED_KEY` in `src/api/payout.ts`, which C113's SCR-FP-004 imports to disable "Service payment · Paid" and say why. **The statement and the passbook page are one slot with a chooser** (§26 gives them one column), and `apiFetch` gained a `FormData` passthrough for the portal's one multipart route. **112 new resource keys × 3 locales** (96 → 206); 7 wireframe affordances with no route behind them, each stated in words rather than drawn; **2 deviations, 9 spec gaps / micro-change-sets**; no spec, contract, backend or migration file touched |
 | C113 | fleet-portal-vehicles-drivers-trackers | 4c | DONE | 2026-08-08 | **250 tests green** in `@mageride/fleet-portal` (18 files, was 193/14); the verify command exits 0, `next build` emits **17 routes** (was 13), `check-bundle.mjs` reports **AL-52: clean — 1 compiled stylesheet, 30.7 kB CSS**, and all six portal workspaces are green (**1,118 tests, 63 files**). **AL-50 is four cards mounted from a literal list, and that is what makes "no generic dropzone" structural** — `VEHICLE_DOCUMENT_SLOTS` carries the four names and the *wire* kind each posts under, the panel maps that list rather than the server's answer, and `DocumentSlotCard` takes its kind as a prop, so a fifth slot needs a fifth entry and no form control can introduce one; the stored kinds and the wire kinds are two different lists (`registration` ≠ `registration_copy`) and both are pinned against `fleet.yaml`. **Whether a slot is required is the server's field, not `kind`'s** — the route permit is Mode A's — and `canBeApproved()` is US-27.3's rule as one predicate that answers **false** for a vehicle nobody has read the paperwork of, with the panel naming the slots that are holding it rather than colouring a chip. **A document is attached to a vehicle, so `?vehicle=` is the screen's whole state**: the add form navigates there on success, every roster row links to it, and a reload or a pasted link lands on the same slots. **The Paid gate is pre-empted for an Owner and translated for a Manager**, because `GET …/payout-profile` is Owner-only while SCR-FP-004 is Manager-reachable — both are blocked, only one can be told in advance. **A partial CSV import is reported as one** (the good rows land, the report is an HMAC-signed link handed straight to the browser, and the job polls itself to rest). **Three services answer SCR-FP-006 and their gates disagree** — the single bind is approval-gated, provisioning-svc's batch is not, and the health rollup is neither — transcribed rather than smoothed; `decommissioned` is rendered as a **revoked credential** in a column of its own, not as another shade of offline. **`Date.now()` never decides a server fact**: `Assignment.active` is the database's, and the clock only labels a row it already called inactive. **232 new resource keys × 3 locales** (206 → 438); **5 spec gaps / micro-change-set candidates** (headline: T-09's bulk-IMEI route is behind D-30 attestation a browser cannot satisfy, and its only caller is this portal), **4 deliberate wireframe deviations**; no spec, contract, backend or migration file touched |
-| C114 | fleet-portal-dashboard-map-analytics | 4c | PENDING | | |
+| C114 | fleet-portal-dashboard-map-analytics | 4c | DONE | 2026-08-08 | **321 tests green** in `@mageride/fleet-portal` (22 files, was 250/18); the verify command exits 0, `next build` emits **21 routes** (was 17), `check-bundle.mjs` reports **AL-52: clean — 3 compiled stylesheets, 168.9 kB CSS** (Tailwind is 33.2 kB of it; the rest is MapLibre's own widget stylesheet, emitted twice by Turbopack as a chunk and as a media asset and loaded once), and all six portal workspaces are green (**1,189 tests, 67 files**). **The map is handed positions and fetches none** — `GET …/map` is read on the server and passed down, so "only this org's vehicles are visible" is not a filter the component applies but the only data it ever receives; the database refuses underneath (`telemetry.positions_fleet` filtered on `app.fleet_id`, fail-closed) and a vehicle id from another organisation resolves to "not in this organisation" rather than to a marker. **The one URL a browser fetches is the basemap style** (D-14's `tile-cdn`, static cartography), passed as a prop rather than published as a build-time public variable, and **unset is a supported state**: the fleet's own positions render on an empty canvas and the screen says which map it is drawing. **Markers are a GeoJSON source and two circle layers**, because a `Marker` per vehicle would need an inline `style` for its colour, which AL-52 forbids — the hexes come from `@mageride/tailwind-preset`'s token data, which exists for exactly that. **The map window (15 min) and the health thresholds (5/30 min) do not line up and are not meant to**, so the overlay is the union of both reads: a vehicle can be Offline in the table with no pin, and the caption states both windows in the deployment's own numbers. **Idle is a subtraction, not a second measurement** — fleet-svc defines utilisation as `activeHours / periodHours`, so idle is its complement, and the caption says it is therefore calendar time. **The CSV is written by a route handler under `/analytics`** (so `proxy.ts` gates it as SCR-FP-009) from the same org-scoped read the screen made, and the PDF is `window.print()` over `print:hidden` chrome — no contract has an analytics export route. **Billing is the one *read* on this portal gated on the seat**: `canReadBilling()` checks Owner + APPROVED before the wallet card reads anything, so a Manager's dashboard is not a Manager's dashboard with three 403s on it. **123 new resource keys × 3 locales** (438 → 561); **6 spec gaps / micro-change-set candidates**, **4 deliberate wireframe deviations**; three new runtime/type dependencies (`maplibre-gl`, `pmtiles`, `@types/geojson`); no spec, contract, backend or migration file touched |
 | C115 | fleet-portal-scheduling-billing | 4c | PENDING | | |
 | C116 | fleet-portal-subscriptions | 4c | PENDING | | |
 | C117 | web-passenger-subview | 4c | PENDING | | |
@@ -18212,3 +18212,164 @@ _Append 3 lines per completed component (Component / Status / Notes)._
 
   **Build host —** no Docker, no replica, no backend build. `vitest run` takes ~12 s and `next build`
   ~40 s.
+
+---
+
+- **Component:** C114 fleet-portal-dashboard-map-analytics — 2026-08-08
+- **Status:** DONE —
+  `npm --prefix portals run lint --workspace fleet && npm --prefix portals run test --workspace fleet && npm --prefix portals run build --workspace fleet`
+  exits 0. **321 tests, 22 files** (was 250/18); `eslint` + `tsc --noEmit` clean; `next build` emits
+  **21 routes** (the seventeen C113 left, plus `/dashboard`, `/map`, `/analytics` and the CSV route
+  handler at `/analytics/export`), and `check-bundle.mjs` reports **AL-52: clean — 3 compiled
+  stylesheets, 168.9 kB CSS**. All six portal workspaces are green (**1,189 tests, 67 files**) and
+  `npm --prefix portals run lint` passes across all of them, `check-al52.mjs` included. SCR-FP-003,
+  SCR-FP-007 and SCR-FP-009 render for all three sub-roles, approved and pending, in both
+  appearances at 375 / 768 / 1024.
+- **Notes:**
+  **What was built —** the console's situational-awareness half: the dashboard
+  (`app/(portal)/dashboard`), the org-scoped live map (`app/(portal)/map`) and the trip/analytics
+  report (`app/(portal)/analytics`, plus `analytics/export/route.ts`); two model modules
+  (`src/api/{insights,billing}.ts`), eight components under
+  `src/components/{dashboard,map,analytics}/` and one shared tile block
+  (`src/components/KpiTiles.tsx`, used by SCR-FP-003 and SCR-FP-009 because `web_fleet.html` draws
+  the same `.kpis` row on both). **No nav entry was added** — C111's manifest already declared all
+  three, with the declarations transcribed off `FleetOpsEndpoints` (`RequireFleetSubRole(Viewer)`,
+  no approval gate). One shell behaviour was added: `canReadBilling()` / `billingRefusal()` in
+  `src/server/access.ts`, the control-level twin of `FleetBillingAccessFilter`.
+
+  **Three new dependencies, and why each is not optional —** `maplibre-gl` (D2 §FP: "Single
+  org-scoped MapLibre map (row-level security), fleet-health overlay" — the screen is named after
+  the library), `pmtiles` (D-14/D-15 make the platform's tile format PMTiles served range-byte by a
+  Cloudflare Worker; a `pmtiles://` source in the deployment's style needs the protocol registered
+  or the basemap silently never loads) and `@types/geojson` (types only; `tsconfig.json` pins
+  `types` to `node`, so nothing is ambient and the GeoJSON shapes are imported). None is on the
+  AL-52 banned list, `check-al52.mjs` and `check-bundle.mjs` both pass, and MapLibre's chunk is
+  loaded by `/map` alone.
+
+  **The five decisions worth carrying forward —**
+
+  1. **The map is handed positions and fetches none.** Every marker came out of
+     `GET /v1/fleets/{the caller's own id}/map`, read on the server and passed down as props. The
+     browser holds no bearer and cannot reach the gateway (`src/api/http.ts` is `server-only`), so
+     "only this organisation's vehicles are visible" is not a filter the component applies — it is
+     the only data that ever reaches it. `test/insight-screens.test.tsx` asserts both halves: every
+     `read()` the screen makes is `{ org }`-shaped and names no organisation, and a vehicle id from
+     outside resolves to the "not in this organisation" panel rather than to a marker or a panel of
+     facts. The **fence itself** is C059's `RowLevelSecurityTests`, which connects as a real
+     non-superuser login with none of this code in the path — that is where the Definition of Done's
+     "verified against a second org's data" is actually discharged, and this side only makes the
+     attempt unrepresentable.
+  2. **The one URL a browser fetches is the basemap, and it is not the platform.**
+     `FLEET_PORTAL_MAP_STYLE_URL` is D-14's `tile-cdn` — static cartography carrying nobody's data
+     and taking no bearer — and it is passed to the component as a **prop**, not published as a
+     build-time public variable, so C111's "the browser never sees the platform" rule is intact.
+     Unset is a supported state: MapLibre clears the canvas transparent with no basemap, the
+     container's `bg-surface-variant` shows through in either appearance with no JavaScript reading
+     a theme, and the screen says which of the two maps it is drawing so nobody reports a blank
+     basemap as missing vehicles.
+  3. **Markers are a data-driven layer, not DOM elements.** A `Marker` per vehicle is a positioned
+     `<div>` per vehicle needing an inline `style` for its colour — which AL-52 forbids and
+     `test/fences.test.ts` fails the build on. One GeoJSON source and two circle layers put the whole
+     fleet in the WebGL scene, and the colour, the radius and the dimming are expressions over
+     feature properties. The hexes come from `@mageride/tailwind-preset`'s exported token data,
+     keyed on the token's own `vehicleType` field, which is what stops the map legend drifting from
+     `vehicleAccentClass()`'s.
+  4. **The two windows disagree, and the overlay is built over the union.** fleet-svc drops a
+     position older than `Fleet:MapStaleAfter` (15 min) from the map answer; fleet-health-svc calls a
+     tracker `offline` after `Health:OfflineAfter` (30 min). A table built from the pins would lose an
+     offline vehicle entirely and a map built from the health list would draw it at the last place it
+     was ever seen. Both reads are unioned, the caption states both windows in the deployment's own
+     numbers, and a test pins the case.
+  5. **Idle is a subtraction the server's own arithmetic implies.** `VehicleAnalytics` has no idle
+     field; fleet-svc defines `utilisationPct` as `activeHours × 100 / periodHours`, so idle is that
+     definition's complement over the same period. It is therefore **calendar** time — nothing on the
+     platform measures a stationary running engine — and the caption says so, because a column
+     labelled "Idle" with no such sentence reads as the depot metric it is not.
+
+  **Spec gaps and micro-change-set candidates (6) —**
+
+  1. **No fleet-wide document-expiry read.** `web_fleet.html`'s dashboard draws "Insurance expiring
+     (30 d)". Expiry dates live on `VehicleDocumentSlot.expiresAt`, readable only per vehicle
+     (`GET …/vehicles/{id}/documents`) — a hundred-vehicle fleet is a hundred requests to draw one
+     number — and no fleet-wide route exists. The card carries "vehicles with documents
+     outstanding" (`docsStatus`, one roster read) and a caption saying where expiry *is* shown. An
+     `expiringDocuments` count on the roster row, or a `GET …/documents/expiring?withinDays=` , would
+     close it.
+  2. **Nothing projects the next invoice.** The sketch draws "Next monthly invoice Rs 69,000 · 230 ×
+     Rs 300". Nothing on any contract publishes the per-vehicle monthly rate or forecasts a month
+     that has not been run. The card names the oldest **open** invoice (`OVERDUE` before `DUE`, which
+     is the opposite end from the newest-first list the route answers) with `wallet.outstandingMinor`
+     beside it, and says when the next one is raised otherwise. A `nextPeriod` projection on
+     `GET …/wallet`, or a published `perVehicleMonthlyMinor`, would let the card draw the sketch.
+  3. **`GET …/analytics` has no idle, and no earnings it can ever fill.** The idle column is derived
+     (finding above). `earningsMinor` is offered by the contract and returned **absent on purpose** —
+     "zero would be a claim that the operator earned nothing; absent is the truth" (BR-23.10) — so
+     the report has no earnings column and says why. Either drop the field from `VehicleAnalytics` or
+     add `idleHours` beside `activeHours`; carrying a field no producer will ever fill invites a
+     client to render a zero.
+  4. **No analytics export route.** `exportFleetInvoice` is fleet-billing-svc's and is an invoice.
+     The CSV is therefore written by this application from the answer the screen already read, and
+     the PDF is the browser's print renderer. That is honest but it means the file has no server-side
+     definition a second client could reproduce. A `GET …/analytics/export?format=csv|pdf` alongside
+     the invoice one would.
+  5. **`FleetVehiclePosition` carries no `vehicleType`.** The map answer has the plate but not the
+     type, so the marker colour needs the approval-gated roster — and a **pending** organisation's
+     map therefore draws every vehicle in the private-vehicle grey. Adding `vehicleType` to the
+     position (it is on `registry.fleet_vehicles_fleet`, already joined for the plate) would make the
+     MAP-03 legend work without a second read.
+  6. **`routes.ts` marks the Billing screen `requiresApprovedOrg: false` and fleet-billing-svc gates
+     approval.** C111 set it from `FleetEndpoints`/`FleetOpsEndpoints`, which `test/routes.test.ts`
+     parses; `FleetBillingAccessFilter` carries the gate in C# rather than via `RequireApprovedFleet()`
+     and is in neither file. C114 did not change the manifest — the entry is C115's screen and the
+     dashboard's own card gates itself correctly through `canReadBilling()` — but the nav still offers
+     a pending organisation's Owner a Billing screen whose every request answers
+     `403 fleet-not-approved`. **C115 should set the flag and extend `test/routes.test.ts` to parse
+     `FleetBillingEndpoints.cs`.**
+
+  **Deviations from `web_fleet.html`, all deliberate (4) —**
+  - **The dashboard's "Insurance expiring (30 d)" row is replaced** by "vehicles with documents
+    outstanding", with a caption saying where expiry is shown — finding 1.
+  - **"Top up wallet" is a link to `/billing`, not a top-up on the dashboard.** A top-up is a payment
+    session with a 90-second window and a provider callback; it belongs on SCR-FP-010 (C115), and a
+    dashboard card that could spend an organisation's wallet would be a second billing surface
+    nobody reviewed as one.
+  - **The dashboard gains a device-down banner and a "trackers with a weak signal" row.** US-3.16's
+    5-minute threshold breach is the **only** fleet alert on this platform with a producer, and the
+    sketch predates `fleet-health.yaml`'s `window`/`alert`. It is drawn for the current window only —
+    an alert from Tuesday over a fleet that is fine now is history.
+  - **The map's own KPI strip is the wireframe's three pills, and the overlay lists vehicles the map
+    has dropped** — finding/decision 4. The sketch's five overlay columns are unchanged.
+
+  **Files —** new: `app/(portal)/{dashboard,map,analytics}/page.tsx`,
+  `app/(portal)/analytics/export/route.ts`, `src/api/{insights,billing}.ts`,
+  `src/components/KpiTiles.tsx`,
+  `src/components/map/{FleetMap,FleetOverlayTable,VehicleDetailPanel,map-model}.tsx?`,
+  `src/components/dashboard/{AlertsCard,WalletCard,dashboard-model}.tsx?`,
+  `src/components/analytics/{AnalyticsRangeForm,AnalyticsTable,ExportControls,analytics-model}.tsx?`,
+  `test/{insights,billing,analytics-export}.test.ts`, `test/insight-screens.test.tsx`. Changed:
+  `src/api/trackers.ts` (`FleetHealthRollup` widened to `percentages`/`window`/`alert` — the same
+  route, one shape, rather than a second wider type), `src/server/access.ts` (`canReadBilling`,
+  `billingRefusal`), `src/config/env.ts` + `.env.example` (`FLEET_PORTAL_MAP_STYLE_URL`),
+  `src/components/PortalChrome.tsx` (`print:hidden` on the rail and the topbar, so the PDF export is
+  a report rather than a screenshot of the console), `src/i18n/messages/{en,si,ta}.ts`,
+  `package.json`, `portals/fleet/CLAUDE.md`.
+
+  **Files touched outside this component's own tree —** none. **No spec, no contract, no backend, no
+  migration, and no change to any shared portal package.**
+
+  **i18n —** 561 keys × 3 locales, up from 438. No new value is identical across all three beyond
+  the ones that carry no language at all (`{percent}%`, `{degrees}° {compass}`, `{mv} mV`), so
+  `test/i18n.test.ts`'s allow-list is unchanged at four entries. **MapLibre's own UI strings are
+  translated too** — `MapOptions.locale` replaces the zoom buttons, the attribution toggle and the
+  scale bar's units, and the page keys the component on the locale so a language switch rebuilds it,
+  because the library takes them once at construction.
+
+  **One rule this component adds for a later screen —** *a screen renders no `async` child
+  component.* `ProblemPanel` is one and only Next can render it (C112 found the same thing), so the
+  dashboard's two fleet-billing reads happen in the page and the card is synchronous. A page whose
+  tree contains an unresolved async child renders as **nothing** under `@testing-library`, which is a
+  test that cannot be written rather than a test that fails — the first draft of this dashboard had
+  exactly that bug and every assertion on it failed with "unable to find" rather than with an error.
+
+  **Build host —** no Docker, no replica, no backend build. `vitest run` takes ~13 s and
+  `next build` ~45 s. `npm install` reached the registry for the three new packages.

@@ -81,8 +81,16 @@ export function PortalChrome({
         {labels.skipToContent}
       </a>
 
-      {/* Desktop rail. D2 §FP puts sidebar + content at 1024. */}
-      <aside className="hidden w-[240px] shrink-0 flex-col gap-md border-e border-outline bg-background p-sm lg:flex">
+      {/*
+        Desktop rail. D2 §FP puts sidebar + content at 1024.
+
+        Δ C114 — `print:hidden` on the rail and on the topbar below it. SCR-FP-009's
+        "Export CSV / **PDF**" has no export route on any contract, so the PDF is
+        the browser's own print renderer over the same page (see `ExportControls`),
+        and a report that came out with a navigation sidebar down the left of every
+        page would not be one. Nothing else about the chrome changes.
+      */}
+      <aside className="hidden w-[240px] shrink-0 flex-col gap-md border-e border-outline bg-background p-sm lg:flex print:hidden">
         <div className="px-sm py-xs">
           <Brand label={labels.appName} />
         </div>
@@ -90,7 +98,7 @@ export function PortalChrome({
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex h-14 items-center gap-xs border-b border-outline bg-background px-sm">
+        <header className="sticky top-0 z-30 flex h-14 items-center gap-xs border-b border-outline bg-background px-sm print:hidden">
           <MobileNav openLabel={labels.openNav} closeLabel={labels.closeNav}>
             <Brand label={labels.appName} />
             <SideNav groups={groups} navLabel={labels.nav} />
