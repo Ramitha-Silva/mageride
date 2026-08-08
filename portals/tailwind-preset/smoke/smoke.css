@@ -1,0 +1,15 @@
+/*
+ * Smoke-page entry stylesheet.
+ *
+ * This is the exact three-line shape every MageRide web surface uses, which is
+ * the point of the smoke build: if a portal's stylesheet would not compile,
+ * neither does this one. `source(none)` turns off Tailwind's automatic file
+ * discovery so the scanned set is explicit — the generated smoke page (every
+ * token, once) plus the `@mageride/ui` primitives, so the compiled CSS covers
+ * the CTA and the other components as they are actually written.
+ */
+@import "tailwindcss" source(none);
+@import "@mageride/tailwind-preset/theme.css";
+
+@source "./dist/index.html";
+@source "../../ui/src";

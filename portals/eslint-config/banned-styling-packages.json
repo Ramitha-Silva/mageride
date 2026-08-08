@@ -1,0 +1,43 @@
+{
+  "$comment": [
+    "AL-52 (ADD v3.3 §1.15): Tailwind CSS is the sole styling system for every MageRide web",
+    "surface. MUI, Bootstrap, styled-components, Emotion and other runtime CSS-in-JS are",
+    "excluded — CSS is compiled at build time by PostCSS inside `npm run build`.",
+    "",
+    "This file is the ONE place inside portals/ where those package names are spelled. The",
+    "C103 Definition of Done asks that a grep for them across portals/ come back empty; the",
+    "enforcement list is the single expected hit, and `portals/scripts/check-al52.mjs` is the",
+    "executable form of that grep — it skips this file and fails on every other occurrence.",
+    "",
+    "Headless primitives styled with Tailwind (Radix UI, Headless UI) are permitted and are",
+    "deliberately absent from this list; pre-styled component kits are not."
+  ],
+  "packages": [
+    "bootstrap",
+    "react-bootstrap",
+    "bootstrap-icons",
+    "reactstrap",
+    "styled-components",
+    "styled-jsx",
+    "goober",
+    "jss",
+    "react-jss",
+    "aphrodite",
+    "glamor",
+    "@linaria/core",
+    "@linaria/react",
+    "@vanilla-extract/css",
+    "antd",
+    "@chakra-ui/react",
+    "@mantine/core",
+    "semantic-ui-react"
+  ],
+  "prefixes": [
+    "@mui/",
+    "@material-ui/",
+    "@emotion/",
+    "@stitches/",
+    "styled-components/",
+    "bootstrap/"
+  ]
+}

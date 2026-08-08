@@ -6,6 +6,10 @@
 - No login and no app chrome. The share token IS the credential: render nothing before it
   validates, and render nothing at all on an expired/invalid token
 - Served exclusively by public-bff — never call a domain service directly
+- Shared infrastructure (C103) — use it, do not re-implement it:
+  `@mageride/tailwind-preset` (D2 §0.2 tokens; `@import "@mageride/tailwind-preset/theme.css"`),
+  `@mageride/ui` (button/CTA, field, chip, status pill, table, modal, toast, tabs, dropzone),
+  `@mageride/i18n` (si/ta/en resources), `@mageride/eslint-config` (`react` flat config)
 - The driver contact is a plain `tel:` link. No masked number, no /call round-trip,
   no proxy-DID lease (AL-48)
 - Declining a location request transmits NO GPS, and the copy must say so

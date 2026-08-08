@@ -9,7 +9,10 @@
     "npm": ">=11"
   },
   "workspaces": [
+    "eslint-config",
     "tailwind-preset",
+    "i18n",
+    "ui",
     "admin",
     "fleet",
     "web-passenger"
@@ -17,8 +20,17 @@
   "scripts": {
     "build": "npm run build --workspaces --if-present",
     "dev": "npm run dev --workspaces --if-present",
-    "lint": "npm run lint --workspaces --if-present",
+    "lint": "node scripts/check-al52.mjs && npm run lint --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "test": "npm run test --workspaces --if-present"
+    "pretest": "npm run build",
+    "test": "npm run test --workspaces --if-present",
+    "check:al52": "node scripts/check-al52.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "eslint": "^9.39.5",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.10",
+    "@types/node": "^24.10.0"
   }
 }

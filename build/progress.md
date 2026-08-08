@@ -129,7 +129,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C100 | passenger-ios-mode-b-subscriptions | 4b | PARTIAL | 2026-08-07 | SCR-PI-024/025/025a/025b built to `specs/wireframes/passenger_ios.html`; 27 new tests across 7 suites (`SubscriptionFlowTests` + `SubscriptionTestKit`), strings now 393 keys × 3 locales. **PARTIAL only because the verify command is `xcodebuild` and this host cannot run it** — the five `LocalizationTests` rules were run as a script and the generator regenerates cleanly at **146 app sources, 28 test sources**. **AL-49 is the shape of the pay sheet**: `payTo` is minted by `POST …/pay` from a *verified* payout profile and by nothing else, so the chooser is stage one and the owner's account is stage two. **AL-59's OnePay row is absent and Cash takes it** — the wireframe still draws `OnePay · +5 %`, which would route a fleet's money into MageRide's merchant account; `SubscriptionRailsTests` reads all three languages to keep it out. **AL-25's unsubscribe erases the marker on the response**, not on `share.revoked`, and sends nothing to the hub. **Accepted is inferred from the subscription and Rejected cannot be observed at all** — C082's gap, restated. `BankAppHandoff` gained a URL-taking hand-off (Δ C100) and `TripLabels` two `BusinessDate` formatters; **one wireframe divergence** (no OnePay rail) and **three contract gaps restated** — no passenger read of their own access requests, no `GET …/subscriptions/{subscriptionId}`, and no passenger-readable vehicle name |
 | C101 | passenger-ios-settings-addresses | 4b | PARTIAL | 2026-08-07 | SCR-PI-026/026a/027/027b/033 built to `specs/wireframes/passenger_ios.html`; 44 new tests across 5 suites (`SettingsFlowTests` + `SettingsTestKit`), strings now **436 keys × 3 locales**. **PARTIAL only because the verify command is `xcodebuild` and this host cannot run it** — the five `LocalizationTests` rules were run as a script and the generator regenerates cleanly at **160 app sources, 30 test sources**. **`IosSavedAddress.kt` is the cluster's answer to the boxed-`Boolean?` problem**: the `isHome`/`isWork` pair is built, read and copied in Kotlin, so no screen spells an initialiser the C096 finding says this repository disagrees with itself about — and it type-checks here with `:shared:compileKotlinIosArm64`. **Home and Work are the flags, never the label** (a Sinhala *"නිවස"* is a Home). **A reverse geocode is a pre-fill and never a gate** (AL-14). **The language change re-points the bundle and re-creates nothing** (Δ Section C). **`DELETE /v1/users/me` is accepted, not done** (E-06). `AppPreferences.preferredRail` became the one door onto the default rail and C097's/C098's two direct reads now go through it (Δ C101); `PassengerProfileRepository` gained `saveDefaultPaymentMethod` and `deleteAccount`; `PassengerShellModel` gained the identity clear. **Five wireframe divergences** and **three contract gaps** — see the handoff |
 | C102 | passenger-ios-comms-safety-support | 4b | PARTIAL | 2026-08-08 | SCR-PI-028/029/030/030a built to `specs/wireframes/passenger_ios.html` and SCR-PI-031 finished to its frame; **51 new tests across 8 suites** (`CommsFlowTests` + `CommsTestKit`, plus one in `ThemeTokenTests`), strings now **496 keys × 3 locales**. **PARTIAL only because the verify command is `xcodebuild` and this host cannot run it** — the five `LocalizationTests` rules were run as a script, the `.pbxproj` was checked structurally (499 objects, no duplicate or dangling ids, balanced delimiters) and the generator regenerates cleanly and idempotently at **176 app sources, 32 test sources**. **The last three placeholders are gone, so every route in `PassengerDestinations` now draws a real screen** — `PlaceholderScreen` and both `route_placeholder_*` strings went with them, and `UnreachableRoute` (no copy at all) is what an impossible `default:` arm draws. **AL-48 end to end**: SCR-PI-028's signalling half is real and its media half reports `noMediaClient`, which is a **dependency wall** rather than a decision — `livekit/client-sdk-swift` is a remote package where this project resolves one by path, and `NSMicrophoneUsageDescription` is absent on purpose (`CommsFenceTests` pins it). **CallKit is driven by the LINK, never the tap**, and the reported call is ended *before* the fallback dial is offered, because a `tel:` URL on iOS places a call. **safety-svc got its own seam** rather than joining `RideRepository` — one caller of `POST /v1/sos` is one row on the operator's feed — while `reportCallOutcome` went **onto** `RideRepository`, whose comms-svc half already minted the `callId`. **No `:shared` helper was added**: `ticketDescription` (C093) and `fileUploadOf` (C091) were reused. **Three wireframe divergences** and **three contract gaps restated** — see the handoff
-| C103 | tailwind-preset | 4c | PENDING | | |
+| C103 | tailwind-preset | 4c | DONE | 2026-08-08 | **231 tests green** across **four new workspace packages** (`@mageride/tailwind-preset` 124, `@mageride/eslint-config` 41, `@mageride/ui` 36, `@mageride/i18n` 30); `npm --prefix portals run build -w @mageride/tailwind-preset && npm --prefix portals run lint` exits 0. **`src/tokens.ts` is the only place a D2 §0.2 value is spelled on the web** — `dist/theme.css` (the consumption path) and `dist/preset.js` (the preset AL-52 names) are both GENERATED from it, and a test holds them to each other and to the compiled stylesheet. **Tailwind v4 + `theme.css`, not the JS preset alone**: a v4 JS config's `screens` *merges* with the built-in breakpoints, so `sm:` would silently keep meaning 640px — AL-52 says the D2 three *become* the screens config, and only `--breakpoint-*: initial` in CSS makes that true. Semantic colours resolve through `@theme inline` + `--mr-color-*` so one `.dark` class flips the tokens **and** the `dark:` variant together. The DoD grep returns only the AL-52 enforcement itself; `portals/scripts/check-al52.mjs` is its executable, stricter form and runs inside `npm run lint`. 7 spec gaps recorded (line heights, web elevation, status foregrounds, web default locale, font delivery, the 11th vehicle token, three unscaffolded workspace members) |
 | C104 | admin-portal-shell | 4c | PENDING | | |
 | C105 | admin-portal-auth-dashboard | 4c | PENDING | | |
 | C106 | admin-portal-verification | 4c | PENDING | | |
@@ -16396,3 +16396,184 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   Android file and no `:shared` file was touched** — this component found no C084 defect, both
   `iosMain` helpers it needed already existed, and the three divergences above are wireframe
   micro-change-sets rather than code changes on either side.
+
+- **Component:** C103 tailwind-preset — 2026-08-08
+- **Status:** DONE — `npm --prefix portals run build --workspace @mageride/tailwind-preset &&
+  npm --prefix portals run lint` exits 0. **231 tests green** in four new packages
+  (`@mageride/tailwind-preset` 124, `@mageride/eslint-config` 41, `@mageride/ui` 36,
+  `@mageride/i18n` 30); `npm --prefix portals run build | typecheck | test` all clean from a
+  wiped `dist/`. All four DoD items hold, and three of them are checked against build output
+  rather than against source.
+- **Notes:**
+
+  ### What shipped
+
+  Four workspace members under `portals/`, plus one checker:
+
+  | Package | What it is |
+  |---|---|
+  | `@mageride/tailwind-preset` | D2 §0.2 as data → `dist/theme.css` + `dist/preset.js` + a generated smoke page |
+  | `@mageride/ui` | button/CTA, field (+input/textarea/select), chip, status pill, table, modal, toast, tabs, dropzone — Radix where behaviour is involved, Tailwind for every pixel |
+  | `@mageride/i18n` | si/ta/en resources, `createTranslator`, `negotiateLocale` |
+  | `@mageride/eslint-config` | flat config + the two MageRide rules (AL-52 fence, trilingual resources) |
+  | `portals/scripts/check-al52.mjs` | the executable form of the DoD grep; runs inside `npm run lint` |
+
+  `portals/admin`, `portals/fleet` and `portals/web-passenger` are untouched placeholders —
+  C104 / C111 / C117 still own them. Their CLAUDE.md files gained one line naming the four
+  shared packages so those components do not re-implement any of this.
+
+  ### Decisions
+
+  1. **Tailwind v4, with `theme.css` as the consumption path and the JS preset alongside it.**
+     AL-52 names a preset that maps the tokens "into `tailwind.config` `theme.extend`", which is
+     v3 phrasing. v4 does still accept a JS preset — verified end to end, including
+     `theme.extend`, `darkMode: 'class'` and custom `fontSize`/`boxShadow` — with **one
+     exception that matters**: a JS config's `theme.screens` *merges* with v4's built-in
+     breakpoints instead of replacing them, so `sm:` would keep meaning 640px alongside D2's
+     375px. AL-52 says the D2 breakpoints "**become** the Tailwind `screens` config"; the only
+     way to make that true on v4 is `--breakpoint-*: initial` in CSS. So both artefacts ship,
+     both are generated from `src/tokens.ts`, `test/build-output.test.ts` asserts they carry
+     identical values, and the README tells downstream to prefer `theme.css`.
+  2. **One source, two generated outputs.** A design-token package's characteristic failure is a
+     hex typed twice and typed differently. `src/tokens.ts` is the only place a D2 §0.2 value is
+     written in `portals/`; `theme.css`, `preset.js` and the smoke page are all emitted from it.
+     Proven, not asserted: changing one hex in `tokens.ts` and rebuilding turns the compiled
+     stylesheet and one test red.
+  3. **`@theme inline` for the semantic colours — this one is subtle and load-bearing.** The
+     natural spelling, `@theme { --color-primary: var(--mr-color-primary) }`, is *broken*: custom
+     properties resolve at computed-value time on the element that declares them, so
+     `--color-primary` would resolve against `:root`'s light value and every descendant would
+     inherit the resolved light hex — a `.dark` ancestor could never change it. `inline` makes
+     Tailwind emit `var(--mr-color-primary)` **into the utility**, where it resolves on the
+     element. That is why `bg-surface` flips with no `dark:` prefix anywhere.
+  4. **`dark:` is re-pointed at the same class the tokens use.** v4 defaults the variant to
+     `prefers-color-scheme`; left alone, `dark:bg-surface` and `bg-surface` would resolve for
+     different reasons and could disagree. `@custom-variant dark (&:where(.dark, .dark *))` ties
+     them to one class, and the smoke page uses both mechanisms side by side so the agreement is
+     visible.
+  5. **Only the breakpoints replace; everything else extends.** AL-52 says `theme.extend`, so
+     Tailwind's palette and type scale still resolve — D2 §0.2 is the vocabulary you are expected
+     to write in, not a wall. Tailwind's **numeric spacing scale is deliberately intact**,
+     because `--spacing: 0.25rem` *is* D2's 4px base grid: `p-4` and `gap-6` are on-token. The
+     seven named steps are the shorthand for the sizes D2 calls out. `rounded-sm/md/lg` are
+     overridden to the D2 values (8/12/16), not left at Tailwind's 4/6/8.
+  6. **`CTA_CLASS_NAMES` lives in the preset, not in `@mageride/ui`.** The smoke page and
+     `Button` read one declaration, so the compiled stylesheet always contains the rules the
+     component depends on, and the DoD item "the CTA primitive matches the D2 CTA token" is
+     checked twice — the component emits every class (rendered DOM), and the stylesheet resolves
+     each to the D2 value (`height: 56px`, `border-radius: 8px`, `primary`/`onPrimary`,
+     16px/600).
+  7. **No component in `@mageride/ui` has a default user-facing string.** Every label, caption
+     and accessible name (`closeLabel`, `dismissLabel`, `caption`, `busyLabel`, tab `label`) is a
+     **required prop**. An English default would be a string no Sinhala or Tamil user can be
+     shown, and it would be invisible to the lint rule because it lives in a library rather than
+     a screen.
+  8. **The trilingual rule is enforced twice, in the two places it can be.** The type system:
+     `si.ts`/`ta.ts` are annotated `Messages`, so a key in one language and not the others fails
+     `tsc`. The linter: `mageride/no-literal-user-facing-strings` catches JSX text, literal JSX
+     children (`{'Confirm'}` is the same hardcoded string with braces) and literals in
+     user-facing attributes. It is **off in test files** — a test that renders a component and
+     looks for its label has to write that label somewhere, and routing it through a resource
+     file would only prove the resource file works.
+  9. **The DoD grep, honestly.** `grep -rIn -E 'mui|bootstrap|styled-components|@emotion' portals`
+     returns four files and no others: `eslint-config/banned-styling-packages.json` (the ban
+     list), its rule test, `scripts/check-al52.mjs`, and the pre-existing prose line in
+     `tailwind-preset/CLAUDE.md` that states the ban. The names have to be written down for the
+     rule to enforce them, so the check is run properly instead:
+     `portals/scripts/check-al52.mjs` walks every dependency field and every module specifier
+     under `portals/`, skipping those enforcement files by name. It is **stricter** than the
+     grep — it also catches `@material-ui/*`, `@stitches/*`, `@vanilla-extract/css`, pre-styled
+     kits and `<style jsx>`, and it reads dependency declarations the grep pattern would miss.
+     It runs first inside `npm run lint`, and it fails as expected when a banned import is
+     planted.
+  10. **ESLint is pinned to 9.x, not 10.** `eslint-plugin-react` declares `^9.7` and
+      `eslint-plugin-jsx-a11y` declares `^9`; ESLint 10 is `latest` but the React/a11y plugins
+      have not followed. `typescript-eslint` 8.66 also caps TypeScript at `<6.1.0`, so
+      TypeScript is 5.9 rather than the 7.0 that is `latest`. Revisit both when the plugins move.
+  11. **`cx()` teaches `tailwind-merge` the MageRide theme from the preset itself.** A component
+      that accepts `className` has to let the caller win, and Tailwind cannot do that by source
+      order — only stylesheet order counts. Without the theme extension `bg-veh-sedan` and
+      `bg-veh-tuk` read as unrelated classes and both survive. Building the class-group lists
+      from the token tables means a token added to D2 is understood immediately, with nothing to
+      keep in step by hand. This is class-string arithmetic, not CSS-in-JS: nothing is injected
+      at runtime.
+  12. **The smoke page is generated, not hand-written.** A hand-written page drifts — a token is
+      added, nobody adds the swatch, and the "every token is expressed" check quietly stops
+      covering it. Generating it makes the compiled stylesheet a complete inventory, which is
+      what the DoD test reads back. It is also a usable reference sheet:
+      `portals/tailwind-preset/smoke/dist/index.html`, both appearances on one page.
+  13. **"Zero runtime CSS-in-JS in the bundle" is checked in its strongest form.** The smoke
+      bundle contains **no JavaScript at all** — one `<link rel="stylesheet">`, no `<script>`,
+      and no `data-styled` / `data-emotion` / `__jsx-` marker in either file.
+
+  ### Spec gaps
+
+  (a) **D2 §0.2 prints no line heights.** It fixes sizes and weights ("Sizes are the shared
+  design contract") because Compose and SwiftUI derive line height from the platform type scale.
+  The web has no such derivation. Taken from the Material 3 line height for each mapped
+  `androidM3` token, re-quantised onto D2's own 4px grid — 40/28/24/24/24/20/16/16 for
+  display…caption. **D2 §0.2 needs a micro-change-set** if design wants different values; they
+  are marked as this component's addition in `tokens.ts`, not passed off as spec'd.
+
+  (b) **D2 §0.2 gives no web elevation values.** Android is `surfaceColorAtElevation` at M3 dp
+  levels 0/1/3/6/8/12; iOS is "subtle shadows (radius 8, y 2, opacity 0.12) + material blur". The
+  web gets neither. `elevation-3` (the 6dp card level) is set to D2's own iOS recipe outright —
+  `0 2px 8px 0 rgb(0 0 0 / 0.12)` — and the other five scale from it linearly in dp (y = dp/3,
+  blur = 4·dp/3 rounded to even px), which reproduces the stated shadow exactly at 6dp.
+
+  (c) **No `on-` foreground exists for `success` / `warning` / `error`.** D2 gives the three
+  status colours and no readable text colour to pair with them. `StatusPill` uses the status
+  colour at 12% behind the status colour as text, which invents no token and holds its contrast
+  in both appearances where a fixed light tint would not.
+
+  (d) **No spec states a default language for the web surfaces.** D1' §283 and D2 SCR-*-002 give
+  the *apps* "vertical Si/Ta/En (Sinhala first & default)"; §AP/§FP say only "Si/Ta/En". Took
+  `DEFAULT_LOCALE = 'si'` — a Sri Lankan platform whose apps are Sinhala-first should not become
+  English-first because the surface is a browser — with `FALLBACK_LOCALE = 'en'` for resource
+  completeness and `negotiateLocale(acceptLanguage)` where a header is available. **Worth a
+  ruling** before C104/C111 wire their language switchers.
+
+  (e) **D2 names Outfit and Inter but no delivery mechanism**, and a CDN `<link>` is incompatible
+  with the strict-CSP posture AL-52 was chosen for. The font tokens resolve
+  `var(--mr-font-outfit, 'Outfit')` / `var(--mr-font-inter, 'Inter')` so a Next.js surface hands
+  in the self-hosted `next/font` face with no token change, and an unstyled page still falls back
+  to the family name and the system stack. **No font binary is vendored** — C104/C111/C117 add
+  `next/font/google` per the README.
+
+  (f) **The 11th vehicle token is not a vehicle type.** D2's MAP-03 legend lists `vehPrivate`
+  (grey, "Private (Mode B)") beside ten AL-09 canonical types, and `private` is not a value of
+  `registry.vehicles.vehicle_type` (`backend/src/Registry.Api/Domain/VehicleTypes.cs`). It is a
+  Mode B *display* token — a private vehicle is a `sedan` or a `van` whose marker is drawn grey
+  because of its mode. Recorded as `vehicleType: null` and asserted as such.
+
+  (g) **Three workspace members the C001 scaffold did not create.** C001 left four placeholders
+  (`tailwind-preset`, `admin`, `fleet`, `web-passenger`). This component's deliverables name
+  `portals/ui` and "shared i18n scaffolding … with a lint rule", so `ui`, `i18n` and
+  `eslint-config` were added to the `workspaces` array. `eslint-config` is separate because the
+  AL-52 fence is not an i18n concern and a component library is not a linter's home; it is also
+  what every downstream surface's `eslint.config.js` will be two lines of.
+
+  ### For C104 / C111 / C117
+
+  - Read `portals/tailwind-preset/README.md` first — it is the token vocabulary, the two-line
+    stylesheet setup, the `next/font` wiring and the dark-mode contract.
+  - `sm:` is **375px**, not 640px. `xl:` and `2xl:` do not exist. D2 defines three widths.
+  - Dark mode is the `.dark` class on `<html>`, and it must drive both the tokens and `dark:`.
+    Do not add a second mechanism.
+  - Every string goes through `@mageride/i18n`, in all three files, in the same change. The lint
+    rule will stop you otherwise, and it is on by default in the `react` config.
+  - Do not add a `tailwind.config.js` unless you need one; `theme.css` is the whole setup.
+  - `@mageride/ui` is headless by policy: it takes labels, it does not own copy. If a primitive
+    you need is missing, add it there rather than locally, and keep the no-default-strings rule.
+
+  ### Files touched
+
+  New: `portals/tsconfig.base.json`, `portals/scripts/check-al52.mjs`,
+  `portals/eslint-config/` (config, 2 rules, ban list, 2 rule-test suites, CLAUDE.md),
+  `portals/tailwind-preset/{src,test,scripts,smoke}/` + README.md + tsconfigs + eslint.config.js,
+  `portals/ui/` (9 components, `cx`, tests, CLAUDE.md), `portals/i18n/` (3 locale files, the
+  translator, tests, CLAUDE.md). Modified: `portals/package.json` (four new workspace members,
+  the AL-52 step in `lint`, shared devDependencies), `portals/package-lock.json`,
+  `portals/tailwind-preset/{package.json,CLAUDE.md}`, and one line each in
+  `portals/{admin,fleet,web-passenger}/CLAUDE.md`. **No spec file and no backend file was
+  touched** — the seven gaps above are micro-change-sets, not edits.

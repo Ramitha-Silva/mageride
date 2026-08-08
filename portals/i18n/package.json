@@ -1,0 +1,30 @@
+{
+  "name": "@mageride/i18n",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Si/Ta/En resource scaffolding shared by the MageRide web surfaces.",
+  "license": "UNLICENSED",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "clean": "rm -rf dist",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@mageride/eslint-config": "*"
+  }
+}

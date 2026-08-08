@@ -2,6 +2,41 @@
   "name": "@mageride/tailwind-preset",
   "version": "0.0.0",
   "private": true,
-  "description": "Shared Tailwind preset carrying the D2 §A design tokens (AL-52). Scaffold placeholder — C103 owns the implementation.",
-  "license": "UNLICENSED"
+  "type": "module",
+  "description": "Shared Tailwind preset carrying the D2 §0.2 design tokens (AL-52).",
+  "license": "UNLICENSED",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./theme.css": "./dist/theme.css",
+    "./tokens": {
+      "types": "./dist/tokens.d.ts",
+      "default": "./dist/tokens.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && node scripts/build-theme-css.mjs && node scripts/build-smoke.mjs && npm run build:smoke-css",
+    "build:smoke-css": "tailwindcss --input smoke/smoke.css --output smoke/dist/smoke.css",
+    "clean": "rm -rf dist smoke/dist",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "pretest": "npm run build",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "tailwindcss": "^4.3.0"
+  },
+  "devDependencies": {
+    "@mageride/eslint-config": "*",
+    "@tailwindcss/cli": "^4.3.3",
+    "tailwindcss": "^4.3.3"
+  }
 }
