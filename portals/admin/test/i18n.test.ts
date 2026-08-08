@@ -56,8 +56,15 @@ describe('the three tables agree', () => {
     // otherwise ship silently.
     const ALLOWED_IDENTICAL = new Set(['admin.error.reference', 'admin.screen.servedBy']);
 
+    // A template that is only placeholders and separators carries no language at
+    // all — `{index} / {total}` is the same fraction in Sinhala — so identical is
+    // the correct translation of it. The same rule the lint rule uses on JSX:
+    // words are what has letters in them.
+    const isProse = (value: string) => /\p{L}/u.test(value.replaceAll(/\{\w+\}/g, ''));
+
     for (const [key, english] of Object.entries(adminEn)) {
       if (ALLOWED_IDENTICAL.has(key)) continue;
+      if (!isProse(english)) continue;
       if (english.split(' ').length < 3) continue;
 
       for (const locale of ['si', 'ta'] as const) {

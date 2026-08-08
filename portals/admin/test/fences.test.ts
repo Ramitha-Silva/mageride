@@ -103,6 +103,15 @@ describe('AL-02 — nothing here is driver-facing or passenger-facing', () => {
       // set rather than admitting `/v1/admin/**` wholesale.
       '/v1/admin/dashboard/stats',
       '/v1/admin/dashboard/stats.csv',
+      // C106 · SCR-AP-003/003a/003b/003c. The three queues, the subject-agnostic
+      // family (detail, `…/fields/{key}`, `…/approve`, `…/reject`), the org's own
+      // detail, and the audited document viewer.
+      '/v1/admin/verification/queues/driving-license',
+      '/v1/admin/verification/queues/vehicle-registration',
+      '/v1/admin/verification/queues/fleet-org',
+      '/v1/admin/verification',
+      '/v1/admin/verification/org',
+      '/v1/admin/documents',
     ]);
 
     const called = new Set<string>();

@@ -131,6 +131,47 @@ The first screen to land beside the shell, and the template for C106…C110.
   every permitted role; the queue does not. The link comes from the item admin-bff sent, not from
   `routes.ts` — the server's own path is the one its own gate agrees with.
 
+## SCR-AP-003/003a/003b/003c — the Verification Officer's screens (C106)
+
+Four screens and one route handler under `/verification`, all reading C063's AL-39 family.
+
+- **A queue is not filtered here; a queue *is* the filter.** Membership is "a `registry.document_fields`
+  row is still `pending`" — AL-27 as the query it is, decided in admin-bff — so an auto-verified
+  document cannot appear rather than being filtered out by code that could later stop filtering.
+  The status column is the **subject's own** registration status, which is what D2's status filter
+  filters on. Nothing in this portal re-decides membership. Δ the wireframe draws an `Auto-verified ·
+  View` row in the driving-licence queue; no such row can exist. See the C106 handoff.
+- **All three queues are read on every render**, with one search and one status filter. The wireframe
+  puts a count on each tab and their sum in the topbar, and cursor pagination carries no total — so
+  the badge is the number of rows a queue answered, `100+` past a page, and `—` for a queue that
+  failed. A queue that fails does not take the screen with it.
+- **The tabs are links, not `@mageride/ui`'s `Tabs`.** That primitive holds the active tab in state,
+  and an officer who opens a row, decides, and comes back would come back to the first tab. The tab,
+  the search and the status travel on every link the four screens draw (`components/verification/links.ts`).
+- **Every document fetch goes through `/verification/media/{docId}`.** `DocumentRef.thumbUrl` /
+  `fullUrl` are deliberately unused: the browser holds no bearer, so the relay makes the call, and it
+  is built from `docId` so no upstream string reaches an `src`. admin-bff records `DOC_VIEW` and
+  *then* mints the signed object-storage URL it `302`s to; this handler passes that redirect on
+  rather than following it, so the bytes never enter this process. **One view is one row** — rendering
+  a grid of six thumbnails is six rows, which is why they are not lazy-loaded and the response is
+  `no-store`.
+- **Approve is disabled while any flagged field is unconfirmed** (US-2.10a), and the rule is stated
+  three times on purpose: on the button, in `decideSubject` (a disabled button describes a page that
+  may be a minute old), and in admin-bff, which answers `409` and is the only one that is
+  authorization.
+- **Confirm sends no `value`; Edit & confirm sends the officer's.** One route, one optional field, and
+  that difference is what decides whether the extraction stays evidence or the field becomes
+  `manual` with no confidence. A value typed into the box and then abandoned is ignored by Confirm.
+- **`/verification/expiring` is a different screen.** A single dynamic segment out-ranks the shell's
+  catch-all, so `[subjectId]/page.tsx` is the file Next renders for it; it hands any path that
+  resolves to another nav item back to `<ScreenPlaceholder>` (extracted from the catch-all for this).
+  Ids are checked against the `{subjectId:guid}` shape admin-bff routes on before they reach a path
+  this process builds.
+- **The copy deviation:** the Approve button is `Approve driver` / `Approve vehicle` / `Approve
+  organisation` rather than the wireframe's "Confirm all & approve" — it confirms nothing, and it sits
+  disabled for exactly the reason that label would have promised to fix. SCR-AP-003c's own button is
+  the wording followed.
+
 ## Configuration
 
 `.env.example` documents every variable. `MAGERIDE_API_BASE_URL` (the C008 gateway origin) is

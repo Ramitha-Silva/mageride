@@ -132,7 +132,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C103 | tailwind-preset | 4c | DONE | 2026-08-08 | **231 tests green** across **four new workspace packages** (`@mageride/tailwind-preset` 124, `@mageride/eslint-config` 41, `@mageride/ui` 36, `@mageride/i18n` 30); `npm --prefix portals run build -w @mageride/tailwind-preset && npm --prefix portals run lint` exits 0. **`src/tokens.ts` is the only place a D2 §0.2 value is spelled on the web** — `dist/theme.css` (the consumption path) and `dist/preset.js` (the preset AL-52 names) are both GENERATED from it, and a test holds them to each other and to the compiled stylesheet. **Tailwind v4 + `theme.css`, not the JS preset alone**: a v4 JS config's `screens` *merges* with the built-in breakpoints, so `sm:` would silently keep meaning 640px — AL-52 says the D2 three *become* the screens config, and only `--breakpoint-*: initial` in CSS makes that true. Semantic colours resolve through `@theme inline` + `--mr-color-*` so one `.dark` class flips the tokens **and** the `dark:` variant together. The DoD grep returns only the AL-52 enforcement itself; `portals/scripts/check-al52.mjs` is its executable, stricter form and runs inside `npm run lint`. 7 spec gaps recorded (line heights, web elevation, status foregrounds, web default locale, font delivery, the 11th vehicle token, three unscaffolded workspace members) |
 | C104 | admin-portal-shell | 4c | DONE | 2026-08-08 | **119 tests green** (11 files); `npm --prefix portals run lint --workspace admin && … test … && … build …` exits 0 from a clean tree. **The RBAC gate is `proxy.ts`, not a layout** — an App Router layout is reused rather than re-rendered between sibling routes, so a guard there runs once per session; the proxy sees every request including the RSC fetch a client navigation makes, and rewrites a refusal to `/denied` → `forbidden()` for a real **403** on the URL the operator asked for. **The portal never evaluates URD §2.3**: a screen is reachable iff its item is in the menu `GET /v1/admin/session` already filtered, so hiding the nav entry and refusing the route are one act. `src/server/routes.ts` is the single local copy (key → path only) and exists to stop a permitted parent screen leaking a nested one; `test/routes.test.ts` parses `AdminMenu.cs` and `test/support/urd.ts` builds every role's expected menu from the URD's own §2.3 table, so the DoD is asserted against the spec rather than a fixture. Sign-in is iam-svc's and carries no MFA branch (AL-37) while surfacing the `423` lock-out with its remaining minutes. `scripts/check-bundle.mjs` proves the DoD's no-runtime-CSS-in-JS claim about the artefact inside `npm run build`. 8 findings recorded (D2 §AP vs URD §2.3 on the Verification Officer, two `Dockerfile.portal` assumptions fixed portal-side, the proxy matcher, four no-spec choices) |
 | C105 | admin-portal-auth-dashboard | 4c | DONE | 2026-08-08 | **167 tests green** in `@mageride/admin-portal` (14 files, was 119/11) and **39** in `@mageride/ui` (was 36); `npm --prefix portals run lint --workspace admin && … test … && … build …` exits 0, and `npm --prefix portals run lint && … test` is green across all five workspaces (395). **SCR-AP-002 is a server render whose entire state is the URL** — four `<Link>`s and a `method="get"` form, so a comparison survives a reload, a bookmark and the back button, and `src/api/dashboard.ts` builds the one query the screen and its CSV export both send. **Period KPIs recompute and the three live cards do not**, drawn under separate headings because a filter that visibly moves five figures and not three reads as broken (AL-38, D6' §I-28.5). **An absent delta renders `—`, never 0 %** — C061 answers null when the previous period was empty, which is a different fact from no change. **The export relays admin-bff's bytes rather than rendering a second CSV**, through a new `apiDownload`/`download` pair the fences test names beside `apiFetch`; it is a route handler under `/dashboard`, so `resolveRoute` gates it on the same nav item as the page. **SCR-AP-001 keeps its AL-37 absence** and gains the deliverable's forgot-password affordance as a disclosure, because no reset route exists on any contract. **One cross-component fix:** `@mageride/ui`'s `Field` used `createContext`/`useId` without `'use client'`, which — through the barrel — made the whole package unusable from a server component; `portals/ui/test/server-components.test.ts` is now the executable form of that package's own rule. 7 findings recorded (two wireframe tiles and the alerts feed's three rows have no endpoint on any contract, no password-reset route exists anywhere, the riders/drivers tile, the unfiltered dashboard route, rupee rounding, C109's topbar search) |
-| C106 | admin-portal-verification | 4c | PENDING | | |
+| C106 | admin-portal-verification | 4c | DONE | 2026-08-08 | **241 tests green** in `@mageride/admin-portal` (19 files, was 167/14); `npm --prefix portals run lint --workspace admin && … test … && … build …` exits 0, and `npm --prefix portals run lint` is green across all five workspaces. **A queue is not filtered here — a queue *is* the filter**: membership is "a `registry.document_fields` row is still `pending`" (AL-27 as the query C063 made it), so an auto-verified document cannot reach this screen rather than being filtered out by code that could stop filtering; the status column carries the **subject's own** registration status, which is what D2's filter filters on. **All three queues are read on every render** under one search and one status filter, because the wireframe draws a count on each tab and their sum in the topbar and cursor pagination carries no total — the badge is the rows a queue answered, `100+` past a page, `—` for a queue that failed, and a failed queue does not take the screen with it. **The tabs are links, not `@mageride/ui`'s `Tabs`** — that primitive holds the tab in state, and an officer who opens a row, decides and comes back would come back to the first tab. **Every document fetch goes through `/verification/media/{docId}`**, the portal's relay of the audited viewer: `DocumentRef`'s links are deliberately unused (the browser holds no bearer, and building the fetch from `docId` keeps an upstream string out of an `src`), the `302` is passed on rather than followed so the bytes never enter this process, and **one view is one row** — six thumbnails are six `DOC_VIEW` rows, which is why they are not lazy-loaded and the response is `no-store`. **Approve is disabled while any flagged field is unconfirmed** and the rule is stated three times on purpose — button, action, and admin-bff's `409`, which is the only one that is authorization. **Confirm sends no `value` and Edit & confirm sends the officer's**, one boolean that decides whether the extraction stays evidence or the field becomes `manual` with no confidence. `/verification/expiring` is a **different screen** the new dynamic segment out-ranks, so the detail page hands it back to the shell's placeholder. 1 wireframe conflict, 1 copy deviation, 4 spec gaps / micro-change-sets; no spec, backend or contract file touched. |
 | C107 | admin-portal-moderation-support | 4c | PENDING | | |
 | C108 | admin-portal-finance-config-rbac-audit | 4c | PENDING | | |
 | C109 | admin-portal-directories | 4c | PENDING | | |
@@ -16894,4 +16894,153 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   contract was touched**; the findings are micro-change-sets, not edits.
 
   **Build host —** no Docker, no replica, no backend build. `vitest run` takes ~7 s and
+  `next build` ~25 s.
+
+---
+
+- **Component:** C106 admin-portal-verification — 2026-08-08
+- **Status:** DONE —
+  `npm --prefix portals run lint --workspace admin && npm --prefix portals run test --workspace admin && npm --prefix portals run build --workspace admin`
+  exits 0. **241 tests, 19 files** (was 167/14); `eslint` + `tsc --noEmit` clean; `next build`
+  emits six `/verification/**` routes and `check-bundle.mjs` reports **AL-52: clean — 1 compiled
+  stylesheet, 32.2 kB CSS**. `npm --prefix portals run lint` is green across all five workspaces.
+- **Notes:**
+  **What was built —** SCR-AP-003 (the three queues, with search, status filter and per-tab counts),
+  SCR-AP-003a (the entry: document grid, AI-extracted fields with Confirm / Edit & confirm, the
+  per-step decision rail), SCR-AP-003b (the full-size viewer with zoom, rotate and prev/next paging)
+  and SCR-AP-003c (fleet-org KYC, AL-49 payout details and approve/reject with reason) — plus
+  `/verification/media/{docId}`, the portal's relay of C063's audited document route.
+
+  **The four decisions this component is actually about.**
+
+  • **A queue is not filtered on this side; a queue *is* the filter.** The prompt states the fence as
+  a rule to obey ("only PENDING items appear"), and C063 had already made it the query — membership
+  is "a `registry.document_fields` row is still `pending`". So there is no "only pending" condition
+  anywhere in this screen, and an auto-verified document cannot appear rather than being excluded by
+  code that could later stop excluding. What the status column therefore carries is the **subject's
+  own** registration status: a renewal flagged on somebody already approved reads `Approved`, a
+  resubmission after a refusal reads `Rejected`, and that is what D2's status filter filters on.
+
+  • **All three queues are read on every render, under one search and one status filter.** The
+  wireframe puts a count on each tab and their sum in the topbar; cursor pagination carries no total,
+  so the only honest figure is the number of rows a queue answers. Two extra calls buy the officer
+  the thing the three badges exist for — where the work is, right now, under the search they just
+  typed — and one query reaching all three is what makes the badges comparable. A queue that fails
+  gets `—` and its own `<ProblemPanel>`; the two that answered stay workable, which matters because
+  the fleet-org tab is fleet-svc's data behind admin-bff's route. Beyond one page (limit 100, the
+  contract's maximum) the badge says `100+` and the screen says so under the table — **no silent
+  truncation**, and D2 gives this screen a search box and no pager because an officer's answer to a
+  backlog of four hundred is to narrow it.
+
+  • **Every document fetch goes through the portal's own relay, and `DocumentRef`'s links are
+  deliberately unused.** They point at `GET /v1/admin/documents/{docId}`, which the browser cannot
+  call — it holds no bearer and never talks to the gateway. `/verification/media/{docId}` makes that
+  call through the data layer and **passes the `302` on** instead of following it: admin-bff has
+  already written the `DOC_VIEW` row and minted the short-lived signed URL, so the bytes go from
+  object storage to the browser and never through this process. The `src` is built from `docId`
+  rather than from the string upstream supplied, the redirect target is checked to be `http(s)`, and
+  the response is `no-store` with `referrer-policy: no-referrer`. **One view is one row** — a grid of
+  six thumbnails is six looks at six documents, which is C063's own reading, and it is why they are
+  **not** lazy-loaded: with `loading="lazy"` the trail would record what the officer scrolled past
+  rather than what the screen showed them.
+
+  • **Approve is disabled while a flagged field is unconfirmed, and the rule is written three
+  times.** On the button, from the same `approvable` the decision rail beside it is drawn from, so
+  the gate and its explanation cannot disagree; in `decideSubject`, because a disabled button is a
+  statement about a page that may be a minute old and the officer may have a second tab open; and in
+  admin-bff, which answers `409` and is the only one of the three that is authorization (AL-06,
+  US-21.1). The disabled button carries the sentence that says why — a control that is off for an
+  unstated reason reads as broken.
+
+  **Three smaller rules, each with a failure behind it —**
+  • **Confirm sends no `value`; Edit & confirm sends the officer's.** One route, one optional field,
+  and that difference decides whether the extraction stays the model's evidence or the field becomes
+  `source='manual'` with no confidence. A value typed into the box and then abandoned is ignored by
+  Confirm, because the alternative is rewriting a field as a manual entry nobody asked for. Edit is a
+  revealed state rather than a permanent input on every pending row: a row cannot hold a form
+  spanning two cells (`<form>` is not a child a `<tr>` admits), and a box on six rows makes the two
+  buttons ambiguous for the operator who types and then presses Confirm.
+  • **The tabs are links, not `@mageride/ui`'s `Tabs`.** Radix holds the active tab in state, and an
+  officer who opens a row, decides and comes back would come back to the first tab. Tab, search and
+  status travel on every link the four screens draw, so a verdict returns them to the queue they were
+  reading — and a colleague can be sent the exact row under discussion.
+  • **`/verification/expiring` is a different screen.** A single dynamic segment out-ranks the
+  shell's catch-all, so `[subjectId]/page.tsx` is the file Next renders for the *document-expiry*
+  nav item's URL. It hands any path that resolves to another screen straight back to
+  `<ScreenPlaceholder>` — extracted from `app/(portal)/[...screen]/page.tsx` for exactly this — so
+  C110's screen still says it is not built. Ids are checked against the `{subjectId:guid}` shape
+  admin-bff routes the family on before they reach a path this process builds.
+
+  **The one deviation from the wireframe, and the one conflict with it —**
+  1. ⚠ **Copy:** the Approve button is `Approve driver` / `Approve vehicle` / `Approve organisation`,
+  not SCR-AP-003a's **"Confirm all & approve"**. It confirms nothing — it posts
+  `POST …/{id}/approve`, which *refuses* while a field is pending — so the sketch's label names an
+  action the control cannot perform, sitting disabled for exactly the reason it promises to fix.
+  SCR-AP-003c's own button ("Approve organisation") is the wording followed, so the family is
+  internally consistent. **`web_admin.html` should carry the change.**
+  2. ⚠ **The wireframe's driving-licence queue draws an `Auto-verified · View` row**, and its States
+  note says "auto-verified items are viewable read-only". **No such row can exist**: membership is a
+  pending field, so a fully auto-verified subject produces nothing to list (AL-27, C063). The prompt's
+  own fence says the same. Nothing was built for it. **`web_admin.html` and D2 §SCR-AP-003 should drop
+  the row** — or, if a read-only view of settled submissions is wanted, it is a *directory* feature
+  (SCR-AP-011/015, C109) and not this queue.
+
+  **Spec gaps / micro-change-sets raised (4) —**
+  1. ⚠ **The fourth queue tab has no screen.** C063 shipped `GET /v1/admin/verification/queues/driver-payout`,
+  `…/payout/{driverId}` and its approve/reject (AL-58/AL-59) as its own micro-change-set — the routes
+  that close "a driver submits bank details and payout-svc can never pay them". **D2 §SCR-AP-003 and
+  `web_admin.html` still draw three tabs**, and this component's scope, deliverables and DoD all say
+  three, so a fourth was not built: it is a layout deviation and the fence asks for a micro-change-set
+  first. As it stands `POST /v1/admin/verification/payout/{driverId}/approve` **has no caller on any
+  surface**, so no driver's bank account can be verified. **D2 + the wireframe need the fourth tab
+  before a portal can draw one**; the work itself is small (the queue row shape and the detail are
+  both in `admin-bff.yaml`) and reuses everything here.
+  2. ⚠ **`admin-bff.yaml` under-specifies the org detail's `kyc`.** It is typed
+  `{type: object, additionalProperties: true}`, while `OrgKycResponse`
+  (`backend/src/AdminBff/Endpoints/AdminContracts.cs`) answers a fixed record —
+  `orgId, name, registrationNo, contactPhone, contactEmail, address, status, rejectionReason,
+  payoutProfile{bank,branch,accountNo,accountHolderName,status,rejectionReason,verifiedAt}`. A portal
+  built from the contract alone could only render an untranslatable key/value dump. `src/api/verification.ts`
+  transcribes the code. **`admin-bff.yaml` should carry an `OrgKyc` schema.**
+  3. ⚠ **SCR-AP-003c's KYC-document thumbnails do not exist.** The wireframe names four (BR
+  certificate, director NIC, route permit, bank letter) and its States note repeats them; fleet-svc's
+  `FleetVerificationDetail` carries `IReadOnlyList<PayoutDocument>` and nothing else, so an org's
+  `documents[]` is the **AL-49 payout evidence only** (`bank_statement`, `passbook_first_page`,
+  `lankaqr_code`). The grid renders what arrives and says so when nothing has. **Either the wireframe
+  drops the four, or fleet-svc gains an org-KYC document slot** (US-13.A7 asks an officer to verify a
+  business registration they currently cannot see). The same gap removes the wireframe's "Route
+  permits · Mode A · 14 routes" KYC row, which no field on the payload answers.
+  4. ⚠ **`VerificationDetail` carries no verdict.** `{subject, fields, documents, steps, approvable}` —
+  so after Approve or Reject the detail screen re-renders identically and cannot confirm what
+  happened. The verdict returns to the queue instead, with `?decided=` naming the `audit.events` row.
+  For a fleet org the effect *is* visible (the payout pill flips to `Payout verified` on the next
+  read of `…/verification/org/{orgId}`), which is the DoD item; for a driver or a vehicle there is
+  nothing on the payload to show. **A `status` on `VerificationDetail` would let the detail screen
+  show its own outcome** — the queue rows already carry one.
+
+  **Not built here, and named rather than stubbed —** the driver-payout tab (finding 1); the topbar
+  search the wireframe draws across every screen, which is still C109's and which C105 named first
+  (this screen has its own search over its own three queues); pagination past 100 rows, which no
+  wireframe draws and which the search box is D2's answer to; and any re-run of AL-29's extraction,
+  which no route exposes to this surface.
+
+  **Files —** added `portals/admin/src/api/verification.ts`,
+  `src/components/ScreenPlaceholder.tsx`,
+  `src/components/verification/{model.ts,links.ts,QueueFilter.tsx,QueueTabs.tsx,QueueTable.tsx,DocumentGrid.tsx,FieldsTable.tsx,FieldDecisionForm.tsx,DecisionRail.tsx,DocumentViewer.tsx,OrgKycCard.tsx}`,
+  `src/server/verification-actions.ts`,
+  `app/(portal)/verification/{page.tsx,[subjectId]/page.tsx,[subjectId]/doc/[docId]/page.tsx,org/[orgId]/page.tsx,org/[orgId]/doc/[docId]/page.tsx,media/[docId]/route.ts}`
+  and five test files (`verification-model`, `verification-screen`, `verification-actions`,
+  `verification-media`, `verification-query`). Modified `src/i18n/{format.ts,messages/{en,si,ta}.ts}`
+  (~90 keys × 3), `app/(portal)/[...screen]/page.tsx` (now a two-line wrapper over the extracted
+  placeholder), `test/{fences.test.ts,i18n.test.ts}` and `portals/admin/CLAUDE.md`. **No spec file, no
+  backend file, no contract and no other workspace was touched**; the findings above are
+  micro-change-sets, not edits.
+
+  **Two test-file notes —** `fences.test.ts`'s allowed `/v1/**` set gains this component's six paths,
+  which is the point of enumerating it. `i18n.test.ts`'s "actually translates the copy" rule now skips
+  a template with no letters outside its placeholders: `{index} / {total}` is the same fraction in
+  Sinhala, so identical *is* the correct translation of it — the same `isProse` test the lint rule
+  applies to JSX.
+
+  **Build host —** no Docker, no replica, no backend build. `vitest run` takes ~10 s and
   `next build` ~25 s.

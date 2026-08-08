@@ -59,6 +59,41 @@ const dates = memoise(
     }),
 );
 
+/**
+ * An **instant**, in the timezone the platform runs its day in.
+ *
+ * `submittedAt` is a `Timestamp`, not a `BusinessDate`, so this is the opposite
+ * of the rule above: it is a moment, and the moment an officer means is the one
+ * on a Sri Lankan clock (D-38). Pinning the zone rather than taking the
+ * container's is what keeps "17 Jun 08:40" the same string on the operator's
+ * screen wherever the process happens to be scheduled.
+ *
+ * No year: SCR-AP-003 lists a working queue, where the useful comparison is
+ * against this morning.
+ */
+const dateTimes = memoise(
+  (locale) =>
+    new Intl.DateTimeFormat(tag(locale), {
+      day: 'numeric',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+      timeZone: 'Asia/Colombo',
+    }),
+);
+
+/**
+ * An OCR confidence — `0.98` from the wire, as SCR-AP-003a prints it.
+ *
+ * Two decimals, always, so a column of scores stays a column: `0.6` beside
+ * `0.71` reads as the larger number at a glance.
+ */
+const confidences = memoise(
+  (locale) =>
+    new Intl.NumberFormat(tag(locale), { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+);
+
 /** A count, grouped for the locale. */
 export function formatCount(locale: Locale, value: number): string {
   return counts(locale).format(value);
@@ -97,4 +132,26 @@ export function formatMinorUnits(locale: Locale, minor: number): string {
  */
 export function formatDateRange(locale: Locale, from: string, to: string): string {
   return dates(locale).formatRange(new Date(`${from}T00:00:00Z`), new Date(`${to}T00:00:00Z`));
+}
+
+/**
+ * An ISO instant as day, month and time in Asia/Colombo.
+ *
+ * A value that is not a timestamp comes back `null` rather than "Invalid Date":
+ * the field is optional on `VehicleQueueRow`, and a cell that says nothing is
+ * better than a cell that says something wrong.
+ */
+export function formatDateTime(locale: Locale, iso: string | undefined | null): string | null {
+  if (!iso) return null;
+
+  const instant = new Date(iso);
+  if (Number.isNaN(instant.getTime())) return null;
+
+  return dateTimes(locale).format(instant);
+}
+
+/** A `0`–`1` OCR confidence, or `null` when the field carries none. */
+export function formatConfidence(locale: Locale, value: number | undefined | null): string | null {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+  return confidences(locale).format(value);
 }
