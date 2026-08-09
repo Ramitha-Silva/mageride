@@ -13,6 +13,17 @@ e2e/
 
 **Verify:** `bash e2e/walking-skeleton/run.sh`
 
+**`tests/E2E` is the other one, and they are not rivals.** C120's Mode C suite, C121's Mode A/B,
+tracker-plane and fleet suite, and C122's proxy/package/web-subview suite live there because the
+manifest names `dotnet test tests/E2E` as their verify target and because they are a .NET test
+assembly rather than a scripted run: they start five, nine and ten services in-process over
+Testcontainers, which is what lets them drive the whole §11.12 matrix, a hundred accept races, four
+last-will graces, real GT06/JT808/H02/NMEA frames on real sockets, and an AL-45 share token followed
+out of an SMS into the browser page it was minted for — in a few minutes each. What is **only** here
+is the property those suites cannot have — the platform driven through `:shared`, so a wiring mistake
+between an app and a contract fails in CI rather than in somebody's hands — and that is worth keeping
+whatever else exists.
+
 ## Rules
 
 - **Drive the platform through `:shared`, not through curl.** The whole value of an e2e here is that

@@ -49,7 +49,19 @@ public sealed record TrackerBinding(Guid BindingId, string Imei, Guid VehicleId)
 /// </remarks>
 public interface ITrackerBindingService
 {
-    Task<TrackerBinding> BindAsync(
+    /// <summary>Forwards US-13.12's bind to provisioning-svc under the caller's own bearer.</summary>
+    /// <remarks>
+    /// <b>Not <c>BindAsync</c>, and the name is load-bearing.</b> Minimal APIs treat any parameter
+    /// type carrying a method called <c>BindAsync</c> as custom-bound, so a handler taking this
+    /// interface makes <c>RequestDelegateFactory</c> look for
+    /// <c>ValueTask&lt;ITrackerBindingService?&gt; BindAsync(HttpContext, ParameterInfo)</c>, find
+    /// this instead, and <b>throw while building the route table</b> — fleet-svc does not start at
+    /// all. It is invisible until <c>Fleet:ProvisioningBaseUrl</c> is set, because that is what maps
+    /// the only route with this parameter; C059's own suite leaves it unset, so the failure first
+    /// appeared when C121's fleet configured the hop. The same trap C030 hit with
+    /// <c>ITrackerService</c> and records at <c>TrackerService</c>.
+    /// </remarks>
+    Task<TrackerBinding> BindTrackerAsync(
         Guid fleetId, string bearer, BindTrackerCommand command, CancellationToken cancellationToken);
 }
 
@@ -63,7 +75,7 @@ internal sealed class TrackerBindingService(
     /// <summary>The named client, so the base address and the timeout live in one place.</summary>
     public const string HttpClientName = "provisioning-svc";
 
-    public async Task<TrackerBinding> BindAsync(
+    public async Task<TrackerBinding> BindTrackerAsync(
         Guid fleetId, string bearer, BindTrackerCommand command, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(command);

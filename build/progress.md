@@ -146,10 +146,10 @@ After completing a component, set its Status and append the 3-line handoff under
 | C117 | web-passenger-subview | 4c | DONE | 2026-08-09 | **138 tests green** in `@mageride/web-passenger` (10 files); `npm --prefix portals run lint --workspace web-passenger && … test … && … build …` exits 0, `next build` emits **7 routes** (`/`, `/track`, `/t/[token]`, `/p/[token]`, the SSE proxy at `/api/live/[token]`, `/_not-found`, `/icon.svg`), and `check-bundle.mjs` reports **AL-52: clean — 3 compiled stylesheets, 166.6 kB CSS** plus a second assertion this surface needs — **no client chunk names a server-only variable**. All seven portal workspaces are green (**1,455 tests, 82 files**). **The token is redeemed on the server before a tree exists**, so "render nothing before it validates" is where the `await` is rather than a check anybody remembers: `<DeadEnd>` takes a translator, a locale, a path and a store URL and **no snapshot**, so SCR-WT-006 cannot hold a ride — asserted on the prop list *and* by grepping the rendered document for the driver, the plate, the number, the sender and the code. **Nothing redirects**, and that is the spinner's fault: `loading.tsx` streams D2's ≤1 s gate while the token is being redeemed, after which Next can only finish a `redirect()` as a meta refresh — a spinner, a blank and a second spinner for a rider whose car is moving — so all three routes call one `trackScreen` and every scope renders in place. **One `EventSource` per screen, read through context** by the map and by the SOS button's D6' I-29.4 fallback, because two hooks would be two connections against a per-token bucket and the server-rendered snapshot would hand a panic button a fix from whenever the tab was opened; reconnecting is the browser's own (`Last-Event-ID` → the cursor public-bff writes into every `id:`), so the only thing tested is that the proxy forwards it, and the `?since` fallback exists for an intermediary that buffers SSE rather than for old browsers. **Declining transmits no GPS as four properties of four components**, one of which is that the Geolocation API is never called until the reader presses the button that says so. **No cookie, no localStorage** (D6' I-29.1), so the language switch is `?lang=` and three links inside a `<details>` — no JavaScript at all. 137 resource keys × 3 locales; **7 spec gaps** (headline: `GET …/receipt` has no PDF behind its contract, so Download is `window.print()`), **7 deliberate wireframe deviations**; no spec, contract, backend or migration file touched, and no new dependency beyond the three the Fleet Portal's map already introduced |
 | C118 | contract-test-suite | 5 | PARTIAL | 2026-08-09 | **82 tests green** in a new `tests/Contract` (`MageRide.Contract.Tests`, 1 skipped by design); `dotnet test tests/Contract -c Release` exits 0 and `dotnet build backend/MageRide.sln -c Release` is clean with the project in the solution, so CI's existing `dotnet test backend/MageRide.sln` leg runs it. **What landed:** the contract model (26 documents, `$ref` resolved *across* files, 382 operations), a schema validator whose supported keyword set is asserted to cover everything the directory uses, the four convention suites, the error-registry equality `.spectral.yaml` promises C118 would assert, two-way route conformance over **24 composed services**, and eleven deliberately-drifted payloads that must fail. **What is PARTIAL:** every operation is reached *structurally* (its route is matched against the running service's own `EndpointDataSource`), not yet driven over HTTP with its body validated; the Redpanda event-schema layer and the KMP live-stack tests are not built. **`docker-compose.dev.yml` cannot be brought up at all** — `app-services`, `hot-path` and `fanout` have no Dockerfile — so the CI clause of the DoD is blocked on C124/C125, and services are composed by their own `XApplication.Build` instead, which covers all twenty-four rather than the nine that have images. **12 real drift findings**, each ratcheted in `RouteDrift` so the list cannot grow and cannot hide a fix — headline: **fleet-svc does not start when `Fleet:ProvisioningBaseUrl` is configured** (mapping `POST …/trackers/bind` throws because `ITrackerBindingService` has an instance `BindAsync` and no `[FromServices]`), which is every production deployment; **subscription-svc still serves the OnePay Mode B webhook AL-59 removed**; and `POST /v1/admin/transit/gtfs-import` is declared by a contract nothing maps. **2 contract typos fixed** (`validation-error` → `validation-failed`, three operations). No service, spec or migration file was changed |
 | C119 | observability-stack | 5 | DONE | 2026-08-09 | **114/114 verify checks green** — `docker compose -f infra/observability/docker-compose.yml config && bash infra/scripts/verify-observability.sh` exits 0. Prometheus + Alertmanager + Loki + Promtail + Tempo + Grafana + OTel Collector + blackbox and pg/redis exporters on the dev network; **49 alert rules, 30 recording rules, 11 dashboards, 24 runbooks**. Every ADD §13.3 SLO, all eight §13.3.1 stuck-state rows (R-20) and all seven §13.4 bullets are alertable at the spec's own thresholds, and the verify asserts each threshold literally. The simulated stuck ride is `promtool test rules` over the real rule files. **Three code changes made the DoD reachable:** an end-to-end position histogram in fanout-svc (D-19 was not measurable — two half-path histograms cannot be added), an SOS dispatch histogram in safety-svc (D-33 pages on a single 5-minute window and a database column cannot page), and the two §13.3.1 rows that are not about a ride as gauges on fare-svc and registry-svc, through a new kernel `ScrapedGauges`. **Redpanda v24.2 publishes no consumer-lag metric** — computed from the committed offset and the high watermark. OTLP is proved end to end by running a real service against the collector and finding its trace in Tempo. Seven real defects found and fixed on the way, four of them pre-existing |
-| C120 | e2e-mode-c-ride | 5 | PENDING | | |
-| C121 | e2e-mode-ab-fleet | 5 | PENDING | | |
-| C122 | e2e-proxy-package | 5 | PENDING | | |
-| C123 | e2e-money-flows | 5 | PENDING | | |
+| C120 | e2e-mode-c-ride | 5 | DONE | 2026-08-09 | **50 tests green** in a new `tests/E2E` (`MageRide.E2E.Tests`); `dotnet test tests/E2E -c Release --filter Category=ModeC` exits 0 in **1 m 45 s**, twice in a row against fresh containers, and `dotnet build backend/MageRide.sln -c Release` is clean with the project in the solution so CI's existing solution leg runs it. **Five services actually running** — ride-svc, reputation-svc, dispatch-svc, fare-svc and fanout-svc on real Kestrel sockets over real Postgres/Redis/Redpanda/EMQX, **every background worker on**: outbox dispatchers, the `ride.events` consumer, both R-04 sweeps, both EMQX last-will subscriptions and fanout's projection. No scenario calls `IDispatchService` or `IRideCancellationService`; a booking becomes an offer because dispatch-svc consumed it. **All 32 cells of the §11.12 matrix** are theory cases derived from `RideCancellationMatrix.All` — 31 driven end to end, 1 recorded in a ratcheted `Unreachable` ledger with a test that it is *still* unreachable. **The D-05 Rs 50 crosses four services and two rides**; AL-16's three-cancel disable and its consecutive-run reset are both asserted. **100 accept races, 100 single winners.** R-16's four windows, the flap and the re-plan run on a real last will published by the broker. DT-02 filtering and both halves of DT-06. **Three findings**, all against dispatch-svc/ride-svc and none fixed here: nothing calls `POST /v1/fare/calculate`, so every completed ride stops at `PaymentPending` with no payment row; a driver who comes online while a ride waits in `Matching` is never offered it, contrary to dispatch-svc's own note; and `(DriverArrived, DriverNoShow)` has no producer. No service, spec, contract or migration file was changed |
+| C121 | e2e-mode-ab-fleet | 5 | DONE | 2026-08-09 | **30 tests green** in `tests/E2E` (5 new scenario files, 80 in the assembly with C120's); `dotnet test tests/E2E -c Release --filter Category=ModeAB` exits 0 in **2 m 35 s**, twice consecutively, and `dotnet build backend/MageRide.sln -c Release` is clean. **Nine services actually running** — trip-state-svc, tcp-adapter, provisioning-svc, fleet-svc, subscription-svc, fanout-svc, mqtt-bridge-svc, position-processor-svc and persistence-writer-svc — with every worker on. **The tracker plane is driven by real protocol frames on real sockets** (the C121 fence): all four of D6' §4.1's adapters carry a fix from a socket to `telemetry.positions` with the right coordinates, speed and family code, and the frames are assembled from the published layouts rather than by the codec that decodes them — `Gt06Frame` is pinned against the documented acknowledgement `78 78 05 01 00 01 D9 DC 0D 0A`. **A GT06 fix crosses nine services to become US-5.3's idle clock and US-5.4's arrival fence**; the grace restart, D-03's mutex and R-01's refusal are all driven. **AL-32 is symmetric in both directions** — the key opens and closes a journey, a dashboard End overrides the device and records it, an ACC-off leaves a dashboard-started journey alone. **T-12 closes a revoked socket inside a second, T-08 quarantines both records, T-04's last will ends a journey.** Fleet: US-13.A7's gate holds writes and lets monitoring through, AL-50's slots hold a vehicle out of APPROVED with `documents-incomplete`, an assignment is what lets a driver take the bus out, and the map and analytics are drawn from real telemetry. **DoD 2: a cross-org read is refused by Postgres**, asserted as a real non-superuser login holding only `mageride_fleet_reader`. Epic 23's grant → visibility on a passenger's own WebSocket → unsubscribe → D-22's `ShareRevoked` → rejoin. **One defect fixed: fleet-svc could not start at all with `Fleet:ProvisioningBaseUrl` set** (`ITrackerBindingService.BindAsync` made Minimal APIs treat the interface as custom-bound). **One gap recorded and ratcheted:** no route in this fleet can approve a fleet vehicle |
+| C122 | e2e-proxy-package | 5 | DONE | 2026-08-09 | **20 tests green** in `tests/E2E` (5 new scenario files, **100 in the assembly** with C120's and C121's); `dotnet test tests/E2E -c Release --filter Category=ProxyPackage` exits 0 in **~50 s**, twice consecutively against fresh containers, and the full assembly passes 100/100 in 7 m 54 s. **Ten services actually running** — ride-svc, iam-svc, dispatch-svc, reputation-svc, fare-svc, fanout-svc, content-svc, notification-svc, public-bff and safety-svc — with every worker on. **iam-svc is in this fleet for P-03, not for its bearers**: `GET /v1/users/lookup` is the registration oracle that chooses between the FCM round-trip and AL-45's SMS. **Both no-app paths are driven from the message the platform actually sent**: a `SmsGateway` speaking D6' §7.3's Notify.lk REST shape captures it, the token is parsed out of the `{{link}}` content-svc rendered, and the browser opens SCR-WT-003 and SCR-WT-002 with nothing else — a share token is mint-and-SMS (AL-44/AL-45), so reading `safety.trip_share_tokens` would have been asserting about a page no recipient could reach. §11.15's registered branch ends on the booker's real WebSocket; **the decline stores no coordinates in the row, the outbox payload or the socket frame**, asserted across all three plus a whole-table check; the 300 s window is asserted before `issued_at` is aged and ride-svc's own sweep expires it. Package: both P-07 gates, a correct code that spends no attempt, the five-attempt lockout with `package.otp_locked` and the photo-proof way out of it, P-10's `file://` artefact with its sha256 and captured geo. COD: P-08's tap settles and a second is refused, **P-14's 24 h clock lands the ride in `Disputed` with no penalty**, and the same clock correctly does nothing to a parcel still in transit. Web: all six SCR-WT screens, AL-48's unmasked `tel:` number, P-09's fare block with no instrument, a token-only SOS that reaches the booker through the real gateway, and **SCR-WT-006 asserted on the body — ride id, plate, driver, both numbers, state and coordinates all absent from the 410**. **One finding, ratcheted:** nothing writes `fares.ride_payments.CashOnDeliveryCollected`, so a COD receipt carries no figure. No service, spec, contract or migration file was changed |
+| C123 | e2e-money-flows | 5 | DONE | 2026-08-09 | **36 tests green** in `tests/E2E` (5 new scenario files, **136 in the assembly** with C120/C121/C122's); `dotnet test tests/E2E -c Release --filter Category=Money` exits 0 in **~1 m**, twice consecutively, and the full assembly passes 136/136 in 8 m 20 s with `dotnet build backend/MageRide.sln -c Release` clean. **Seven services actually running** — wallet-svc, subscription-svc, fare-svc, ride-svc, dispatch-svc, reputation-svc and fleet-svc — plus an `AcquirerGateway` speaking D6' §7.1's create-session shape and signing its own callbacks, which is the only honest way to reach the two rails AL-05 leaves. **The double-entry ledger is asserted balanced after every scenario**, by `MoneyScenario.RunAsync` rather than by the scenarios, in three statements: every entry sums to zero, every posting on the platform sums to zero, and every `billing.accounts`/`billing.wallets` balance equals the sum of its own legs. **Every rupee arrives through a rail the platform has** — drivers start empty and top up through OnePay or LankaQR with a signed callback. D-13's free first trip, the Rs 100 charged before the second, the single flat charge, **D-08's gate withholding an offer from a driver who could not pay**, and the Colombo-day key proved in both directions. R-19's two idempotency guards, the unsigned and the mis-valued callback, US-9.19's voucher at face value, US-9.13's transfer at par with a two-leg entry the database has no kind to add a fee to (AL-01), and `ck_topups_method` refusing a bank transfer (AL-05). D-10's three rails with cash and driver-QR asserted to move **no ledger at all** against a reachable wallet-svc, AL-47's claim/confirm/dispute with the Finance ticket carrying its evidence, E-10's tip. Epic 23's five methods end to end — the owner's own LankaQR on a signed link, the slip and the owner's confirm, US-23.6's cash — with **not one posting** and no column that could hold one (§18b). **Four findings, each asserted as a gap with a test that fails when it is fixed:** AL-57's passenger wallet has no funding route; `Overpaid` is unreachable since AL-57/AL-59 removed the ride callbacks; **E-05's reversal is refused by wallet-svc's own `kind` whitelist and answers 503 after committing the refund row**; and nothing calls `charge-before-trip`. No service, spec, contract or migration file was changed |
 | C124 | cicd-full-pipeline | 5 | PENDING | | |
 | C125 | replica-deployment | 5 | PENDING | | |
 | C126 | gtfs-day0-load | 5 | PENDING | | |
@@ -19223,3 +19223,528 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   **Build host —** slim stack (~5.9 GB) + observability (~1.6 GB) ran together beside the build with
   ~12 GB free. The lightweight production replica stayed down throughout. **Take observability down
   before `dev-down.sh`** — compose will not remove a network that still has endpoints attached.
+
+- **Component:** C120 e2e-mode-c-ride — 2026-08-09
+- **Status:** DONE —
+  `dotnet test tests/E2E -c Release --filter Category=ModeC` exits 0. **50 tests, 7 scenario files**,
+  1 m 45 s of test time on top of container start-up, run twice consecutively against fresh
+  containers with no failures and no flakes. The project is in `backend/MageRide.sln`, so CI's
+  existing `dotnet test backend/MageRide.sln` leg runs it with no workflow change, and
+  `dotnet build backend/MageRide.sln -c Release` is clean. All four deliverables and all three
+  definition-of-done items are met; the three things this suite could not do are **findings about
+  the platform**, not gaps in the suite, and each is asserted as a finding rather than skipped.
+- **Notes:**
+  **The stack is composed, not deployed — same call C118 made, same reasons.**
+  `infra/docker-compose.dev.yml` still cannot be brought up (`app-services`, `hot-path` and `fanout`
+  have no Dockerfile; `dev-up.sh full` refuses with the list) and the root `CLAUDE.md` forbids
+  running the ~17–20 GB replica beside a build on this host. So `ModeCFleet` starts **five services
+  through their own `XApplication.Build`** on real Kestrel sockets — ride-svc, reputation-svc,
+  dispatch-svc, fare-svc, fanout-svc — against the TestKit's real Postgres, Redis, Redpanda and
+  EMQX, and turns **every background worker on**: ride-svc's outbox dispatcher, its R-04 timer sweep
+  and its `veh/+/status` subscription; dispatch-svc's `ride.events` consumer, offer backstop, timer
+  sweep, Redis keyspace listener and last-will subscription; fanout-svc's consumers. What is missing
+  is the container boundary. Every seam that matters — broker, socket, transaction, consumer group,
+  gRPC channel — is the real one, and **nothing in the assembly calls a service type to move a ride
+  along**: a booking becomes an offer because dispatch-svc consumed `ride.requested` off Redpanda.
+  The CI-against-compose clause is C124/C125's, exactly as it is for C118.
+
+  **The matrix is derived from the matrix.** `CancellationMatrixScenario`'s theory data comes from
+  `RideCancellationMatrix.All`, so each of the **32 cells** is its own named test case and a row
+  added to the table appears as a case on its own. Each case books a ride, lets the real dispatch
+  loop carry it to the cell's state, and then makes the trigger *happen* — a passenger or driver
+  tapping Cancel, an operator calling `system-cancel`, a vehicle's EMQX session ending on its last
+  will, or a durable timer coming due — then asserts the whole row: terminal state, `terminal_at`,
+  the audit row's `from_state`/`reason_code`/`actor_type`, the event the "Events emitted" column
+  names, the Penalty column (Rs 50 / Rs 100 / `full_fare` as a rule with `settledOn: next-trip`),
+  the Reputation column, and that every timer **ride-svc owns** was retired. `MatrixCoverage` is the
+  C118 ratchet applied to a second table: a cell that is neither driven nor listed in `Unreachable`
+  with a reason fails the build, **and an entry that becomes reachable and is left there fails too**.
+
+  **`Requested` is raced, deliberately, and the retry is the honest part.** dispatch-svc moves a
+  booking to `Matching` within milliseconds of the commit and there is no configuration that holds it
+  in `Requested` without switching the dispatcher off — which is the mock the fence forbids. So the
+  three pre-acceptance cells book and cancel in the same breath, check the audit row's `from_state`,
+  and try again with fresh actors if the dispatcher won; eight attempts, and the failure message says
+  what it would mean if all eight lost. `Matching`, by contrast, is fully deterministic: a ride with
+  nobody on standby rests there until the 120 s deadline.
+
+  **D-05 end to end is the longest chain in the platform and none of it is a call the test makes.**
+  A passenger cancels after acceptance; ride-svc accrues `cancellation.penalty.accrued`;
+  dispatch-svc's consumer turns it into a `dispatch.cancellation_penalties` row; the same passenger's
+  next ride completes, and fare-svc settles the debt over dispatch-svc's internal plane and adds it
+  to the fare. The assertion is `fare.TripMinor + 5 000 == fare.AmountMinor`, where `TripMinor` is
+  recomputed from the breakdown fare-svc returned **using fare-svc's own `FareFormula`** —
+  `fares.ride_payments` has no column separating the trip from the debt, and reproducing D5' §1.1 by
+  hand would be a second formula that could drift. A second pricing call collects nothing more,
+  which is C035 decision 9's property.
+
+  **AL-16 is asserted from both sides.** Three consecutive post-acceptance cancellations and the
+  fourth booking is `403 booking-disabled`; four cancellations with a *completed and settled* ride in
+  the middle and booking is still open — because "consecutive" is the difference between a rule about
+  a habit and a rule about a lifetime.
+
+  **100 races, 100 single winners** (`MAGERIDE_E2E_RACE_RUNS` shortens it locally; the default is the
+  DoD's hundred). Each round puts one driver on standby, lets dispatch-svc reserve and offer to them,
+  then releases three callers holding the same `offerId` through a semaphore. Every round also checks
+  that the row agrees with the HTTP answer, that exactly one `ride.accepted` reached the outbox, that
+  the loser left no audit row, and that they were told `offer-already-accepted` rather than something
+  the driver app would render as "Expired". The whole hundred takes ~60 s.
+
+  **R-15/R-16 run on a real last will.** `DeviceSession` connects as the vehicle (EMQX's
+  `verify_claims` refuses any other identity), registers `veh/{id}/status = offline` retained at QoS 1
+  as its **will**, and ends the session with MQTT 5's `DisconnectWithWillMessage` — so what ride-svc's
+  subscription sees is the broker publishing a will, not a test publishing a string. All four windows
+  are asserted (60 s / 120 s / 5 min / 10 min), plus the flap (coming back retires the grace and the
+  ride can still be driven to the end) and the **re-plan**: a driver who goes dark while `Accepted`
+  and then taps Arrive gets `DriverArrived`'s 120 s computed from the instant they went away, not
+  from the tap.
+
+  **Bringing a deadline forward is a clock, not a state fix**, and `e2e/CLAUDE.md`'s rule is held.
+  The two `PullForward*TimerAsync` helpers update exactly one column — `fire_at` on the platform's
+  own record of when something is due — and **every caller asserts first that the platform armed the
+  window the spec gives**. What fires is the real worker and what it does is the real matrix. Nothing
+  else in the suite writes: no scenario UPDATEs a ride, an offer, a presence row or a penalty. The
+  alternative is a no-show case that takes five minutes and a COD case that takes a day.
+
+  **Two deliberate deviations from a spec value, both argued in `tests/E2E/CLAUDE.md`.**
+  (a) The fleet runs a **60 s offer window** rather than D5' §3.5's 15 s, so a §11.12 cell applied to
+  a ride sitting in `Offered` is not racing the R-04 backstop on a loaded build host; the *mechanism*
+  is asserted exactly (`HappyPathScenario` checks that `dispatch.offers.expires_at` and
+  `rides.rides.offer_expires_at` are the same instant and that it is the window dispatch asked for),
+  and the **value** stays pinned in dispatch-svc's own suite. (b) Each ride gets its own square of a
+  32 × 19 grid over Sri Lanka at 0.12° (~13 km), because the candidate pool is global and the
+  TestKit's Postgres is shared across the whole run — two rides at one pickup share a pool and "the
+  ride went to the driver I put online" stops being a property of the scenario. The grid **throws
+  when exhausted** rather than wrapping.
+
+  **DoD 3 — "a failure prints the ride's transition history".** `RideJournal` renders the ride's
+  transitions with actor and reason, its outbox with what was published and what was not, live and
+  fired timers on **both** sides, and dispatch's offers. Every wait and every timer assertion in
+  `ModeCFleet` appends it automatically; `AroundAsync` wraps each scenario body for the ordinary
+  `Assert` failures. It was earning its keep within the first hour — every schema mismatch found
+  while writing the suite was diagnosed off it rather than off a stack trace.
+
+  **Three findings, none fixed here.**
+  1. **Nothing calls `POST /v1/fare/calculate`.** ride-svc's `CompleteAsync` says so at the line that
+     would make the call ("fare-svc's `POST /v1/fare/calculate` is C049/C050 — until then this event
+     is the entire hand-off"), and C049 landed the route without a caller. **Every completed ride in
+     production therefore stops at `PaymentPending` with no `fares.ride_payments` row to pay**, which
+     is also the R-20 stuck-state alert C119 wired. This suite stands in for the missing hop through
+     the same internal route ride-svc would use, which is the only way to reach the R-05 terminals at
+     all; `ModeCFleet.PriceAsync` says so at the method. **Owner: whoever wires ride-svc → fare-svc
+     on completion** (C050's other half, or a micro-change-set on C032). It is the single most
+     consequential thing this component found.
+  2. **A driver who comes online while a ride waits in `Matching` is never offered it.** dispatch-svc's
+     `CLAUDE.md` says the opposite in as many words — "An empty round is not the end of the ride… a
+     driver who comes online inside the remaining window is still a candidate" — but only three things
+     start a round (`ride.requested`, a decline, an offer expiring) and going on standby is none of
+     them; `RunGlobalTimeoutAsync` reschedules only when there is a **live offer**, and with none it
+     goes straight to `system-cancel`. So the ride expires at 120 s with an eligible driver standing
+     at the pickup. Asserted as the current behaviour in
+     `DispatchTimeoutScenario.A_driver_who_comes_online_while_a_ride_waits_is_not_offered_it`, so the
+     day somebody fixes it the test fails and is deleted. Two candidate fixes named there: dispatch a
+     round when a driver enters the pool with rides waiting nearby, or have the global deadline re-run
+     the cascade once before giving up. **Owner: dispatch-svc (C034).**
+  3. **`(DriverArrived, DriverNoShow)` has no producer.** The only thing that raises the trigger is
+     the `arrival_grace` timer, and `RideStateWriter` retires that kind on the move *into*
+     `DriverArrived` (correctly — a driver who has arrived has not failed to arrive); `system-cancel`
+     declares four reasons and `driver_no_show` is not one. The row is defensive. Recorded in
+     `MatrixCoverage.Unreachable` and asserted as still-a-gap by `The_recorded_gap_is_still_a_gap`,
+     which drives a ride to `DriverArrived`, shows the timer is gone and shows `system-cancel` refuses
+     the reason. **Owner: nobody yet** — it is a spec question (should an operator be able to report a
+     no-show driver after arrival?) rather than a defect.
+
+  **Two schema notes for whoever reads the tables next.** `fares.driver_earnings` is a per-driver
+  per-Colombo-day rollup (`trips`, `gross_minor`), not a row per ride — a fact worth knowing before
+  writing `count(*)`. And `rides.rides` has no `requested_at`: the request instant is `created_at`,
+  and `requested_at` is what fare-svc's repository calls it after mapping.
+
+  **Files —** new `tests/E2E/`: `MageRide.E2E.Tests.csproj`, `CLAUDE.md`, `Infrastructure/` (8 files
+  — `ModeCFleet`, `ModeCScenario`, `ModeCCollection`, `RideJournal`, `DeviceSession`,
+  `LiveConnection`, `Actors`, `TestTokenIssuer`) and `Scenarios/` (7 files). Outside it, three lines:
+  `backend/MageRide.sln` gains the project (and `tests/Contract` is nested into the same solution
+  folder for consistency), and `e2e/CLAUDE.md` gains a paragraph saying why both directories exist
+  and what only the walking skeleton can prove — it drives the platform through `:shared`, so a
+  wiring mistake between an app and a contract fails in CI rather than in somebody's hands, and this
+  suite cannot replace that. **No service, spec, contract or migration file was changed.**
+
+  **Build host —** Docker only, no replica, no observability stack. The four containers plus five
+  in-process services peak at well under 4 GB; the lightweight production replica stayed down
+  throughout, as Waves 0–4 require.
+
+- **Component:** C121 e2e-mode-ab-fleet — 2026-08-09
+- **Status:** DONE —
+  `dotnet test tests/E2E -c Release --filter Category=ModeAB` exits 0. **30 tests, 5 new scenario
+  files**, 2 m 35 s of test time on top of container start-up, run twice consecutively with no
+  failures and no flakes. C120's 50 still pass beside them (80 in the assembly), and
+  `dotnet build backend/MageRide.sln -c Release` is clean.
+- **Notes:**
+
+  **What is running.** Nine services, each through its own composition root on a real socket:
+  trip-state-svc, tcp-adapter, provisioning-svc, fleet-svc, subscription-svc, fanout-svc,
+  mqtt-bridge-svc, position-processor-svc and persistence-writer-svc, against a real Postgres, Redis,
+  Redpanda and EMQX. Every worker is on — the trip-state sweep and its `telemetry.normalized`
+  consumer, four outbox dispatchers, the bridge's two shared subscriptions, the processor's whole
+  pipeline with every D-17/D-18 gate at its default, the writer's COPY batches, fanout's consumers,
+  control plane and pumps, and the adapter's four listeners on ephemeral ports. **No scenario calls
+  `ISessionService`, `IModeBAccessService` or any other service type**: a session ends because a
+  sweep found it, a marker appears on a passenger's map because a device sent a frame.
+
+  **The fence, and how it is held.** "Tracker scenarios drive real protocol frames through
+  tcp-adapter, not synthetic MQTT" is `TrackerDevice`: a TCP or UDP socket on the adapter's own
+  listener carrying bytes assembled from D6' §4.1's layouts. **`Gt06Codec.BuildFrame` was available
+  and is deliberately not used** — a device that encodes with the decoder's own arithmetic can only
+  ever agree with it — so the device and the service share only the algorithm the format names
+  (`Wire.Crc16X25`, `Wire.Xor8`), and `The_GT06_login_is_acknowledged_with_the_documented_frame`
+  pins both sides against `78 78 05 01 00 01 D9 DC 0D 0A`. The other fence, R-01, is structural:
+  ride-svc and dispatch-svc are not in this fleet and no `rides.*` row appears in any assertion.
+
+  **DoD 1 — every scenario passes repeatably against a clean stack.** Two consecutive full runs, no
+  flakes. DoD 2 — `A_cross_org_read_is_refused_by_the_database` connects as `c121_fleet_reader`, a
+  real login holding nothing but `mageride_fleet_reader`'s grants, and asks for another
+  organisation's rows **by primary key** across four relations; it also asserts that an *unscoped*
+  reader sees nothing, which is what makes a forgotten `app.fleet_id` an empty page rather than the
+  platform. DoD 3 — `Every_protocol_adapter_carries_a_fix_to_the_hypertable` is a theory over all
+  four families, and asserts the decoded coordinates (within 2 m), the decoded speed (each format
+  spells it differently — whole km/h, tenths of km/h, knots twice) and D6' §4.1's `source` code,
+  because a row count would not notice a decoder that was wrong about a hemisphere bit or a knot.
+
+  **Three decisions worth knowing about.** (a) **A drive steps 40 m every 2 s and derives its step
+  count from the distance.** position-processor refuses a sample whose implied speed exceeds ADD
+  §12.6's ceiling and a refused sample never becomes the position the next one is measured against,
+  so one over-long step poisons every step behind it — the symptom is a session that never saw a
+  single fix, not a failed assertion about speed. (b) **Nothing that depends on where a vehicle is
+  runs before `WaitForFixAsync`.** Frames still in flight when a journey ends land on whatever
+  session is live when they arrive; that is how an inbound journey was found to have ended at its
+  destination one second after it started, on its predecessor's last four fixes. (c) **US-5.4 needs
+  the bus to move between journeys, and the deadhead is not a contrivance** — `end_geo` is copied
+  from the session's last position, so the fence is always centred exactly where the vehicle is
+  standing when the previous journey ends. The scenario drives the deadhead with no session live
+  (US-3.22: a tracker publishes regardless) and drains it through Timescale before arming anything.
+
+  **The clocks that are moved, and the rule they follow.** Three helpers move `last_movement_at`,
+  `ended_at` and `offline_since` — the platform's own record of *when* something happened, each
+  written by a real fix or a real last will — and **every one asserts the window first**, read off
+  the running service's `TripStateOptions`: US-5.3's 30 minutes, US-5.4's 100 metres, US-5.10's
+  5 minutes. What fires is the real sweep. No scenario writes a session's state, reason, actor or
+  position. `TripState:SweepInterval` is 2 s rather than the deployed minute — a cadence, not a
+  window.
+
+  **One defect found and fixed, in fleet-svc.** `ITrackerBindingService.BindAsync` made Minimal APIs
+  treat the interface as a custom-bound parameter type, so `RequestDelegateFactory` threw while
+  **building the route table** and **fleet-svc did not start at all**. It is invisible until
+  `Fleet:ProvisioningBaseUrl` is set — that setting is what maps the only route taking the
+  interface, and C059's own suite leaves it unset — so the first deployment to configure US-13.12's
+  tracker bind would have found a service that would not boot. Renamed to `BindTrackerAsync`, which
+  is the fix C030 already made for the identical trap on `ITrackerService` and records at
+  `TrackerService`; the comment on the interface now says why the name matters. Two files, three
+  lines, and `Fleet.Api.Tests` is unaffected.
+
+  **One gap recorded and ratcheted: no route in this fleet can approve a fleet vehicle.** The chain
+  is AL-50's gate needs every required slot `verified` → a slot is verified only when its document
+  has fields and none is `pending` → fleet-svc writes `auto_verified` only above
+  `Fleet:OcrConfidenceThreshold` → ocr-svc caps its on-prem Tesseract path *below* that threshold by
+  its own option validator. **So without a reachable Gemini every extracted field is `pending`, in
+  any deployment, and the only surface that can confirm one by hand is admin-bff's
+  `PUT /v1/admin/verification/{subjectId}/fields/{fieldKey}` (C062).** The reachable half is asserted
+  — a fully documented Mode A bus is refused with `documents-incomplete` naming its outstanding
+  slots, and the vehicle cannot carry a journey — and `FleetOperationsScenario.Unreachable` asserts
+  the gap is *still* a gap, so the day approval becomes reachable that test fails and is replaced by
+  the positive path. `ModeAbFleet.MarkVehicleApprovedAsync` is the one write in this suite that no
+  route could make, and it says so at the method. **Owner: whoever wires the Verification Officer's
+  fleet-vehicle field decision** — C062's screen, or ocr-svc's Gemini leg.
+
+  **Two smaller findings, neither fixed here.** (1) **tcp-adapter never reports the first ACC-off of
+  a socket**, by design and correctly — it is the state the device was already in, and reporting it
+  would auto-end a session the dashboard had just started. The consequence is worth writing down:
+  a tracker that reconnects with the engine already off will not end a device-started session until
+  the key is turned on and off again, so that session leans on the idle timer or the last-will grace
+  instead. Asserted as current behaviour in `Ignition_off_leaves_a_dashboard_started_journey_alone`,
+  which drives the real key-on-then-key-off sequence. (2) **C120's
+  `OfflineGraceScenario.A_ride_that_moves_while_the_driver_is_dark_gets_the_new_window_from_the_same_instant`
+  failed once in three full `Category=ModeC` runs** (`Assert.Single` saw two timers) and passed
+  alone and on re-run. Nothing in C121 touches ride-svc; recorded here so the next person to see it
+  knows it has been seen. **Owner: C120/C034.**
+
+  **Three things this suite does not do, and why.** **ocr-svc** is absent and its absence is load
+  bearing rather than incidental — see the gap above. **admin-bff** is absent; both the org approval
+  and the vehicle decision are driven through fleet-svc's own `/v1/internal/fleets/**`, which is the
+  plane admin-bff calls. **notification-svc and wallet-svc** are absent, so
+  `Fleet:ScheduleAlarmsEnabled` and `Subscription:ModeBBillingEnabled` are off: US-13.11's alarm and
+  the C047 daily fee are on neither a Mode A/B journey nor an Epic 23 pass-through, and leaving them
+  on would have them fail into a socket nobody is listening on.
+
+  **One assembly-wide change.** `[assembly: CollectionBehavior(DisableTestParallelization = true)]`.
+  Each fleet resets global state in its own containers at start-up — C120 flushes Redis, C121
+  truncates the tracker and session planes — and the two collections running in parallel would look
+  like a passenger losing an entitlement mid-scenario rather than like a race. It also keeps eight
+  containers and thirteen services off this host at once.
+
+  **Files —** new in `tests/E2E`: `Infrastructure/` (`ModeAbFleet`, `ModeAbScenario`,
+  `ModeAbCollection`, `ModeAbActors`, `TrackerDevice`, `SessionJournal` — six files) and
+  `Scenarios/` (`ModeAJourneyScenario`, `TrackerPlaneScenario`, `IgnitionScenario`,
+  `FleetOperationsScenario`, `ModeBEntitlementScenario` — five). Extended in place:
+  `MageRide.E2E.Tests.csproj` (seven project references and the C121 half of the header comment),
+  `TestTokenIssuer` (the AL-03 fleet claim pair), `LiveConnection` (`VehiclePositions`,
+  `ShareRevoked`, `JoinGeocells`) and `CLAUDE.md`. Outside it, one defect fix in fleet-svc
+  (`TrackerBindingService`, `FleetOpsEndpoints`). **No spec, contract or migration file was
+  changed.**
+
+  **Build host —** Docker only, no replica, no observability stack. Four containers plus nine
+  in-process services peak at ~6 GB; the lightweight production replica stayed down throughout, as
+  Waves 0–4 require.
+
+- **Component:** C122 e2e-proxy-package — 2026-08-09
+- **Status:** DONE —
+  `dotnet test tests/E2E -c Release --filter Category=ProxyPackage` exits 0. **20 tests, 5 new
+  scenario files**, ~50 s of test time on top of container start-up, run twice consecutively against
+  fresh containers with no failures and no flakes. **The whole assembly passes 100/100 in 7 m 54 s**
+  (C120's 50 + C121's 30 + these 20), which is the number that matters — three fleets, twenty-four
+  in-process services and four containers coexisting. All three deliverables and all three
+  definition-of-done items are met. **No service, spec, contract or migration file was changed.**
+- **Notes:**
+  **Ten services, and each one is load bearing.** ride-svc, iam-svc, dispatch-svc, reputation-svc,
+  fare-svc, fanout-svc, content-svc, notification-svc, public-bff and safety-svc, each through its
+  own `XApplication.Build` on a real socket, every background worker on. Three containers, not
+  C120's four: nothing on the proxy round-trip, the package handover or the six SCR-WT pages touches
+  a broker, so EMQX is out of the collection and `Ride:VehicleStatusEnabled`,
+  `Dispatch:LastWillEnabled` and `Fanout:PresenceEnabled` are off rather than pointed at one.
+
+  **iam-svc is in this fleet, and not for the reason C120 and C121 leave it out.** Their reason —
+  a bearer is not what the component is about — still holds here, and the tokens are still
+  `TestTokenIssuer`'s. What iam-svc is here *for* is P-03: `GET /v1/users/lookup` is the
+  registration oracle that decides between the FCM round-trip and AL-45's SMS, and ride-svc answers
+  the whole `/v1/location-requests` family `503` when it cannot reach one — deliberately, because a
+  null object guessing "unregistered" would SMS a stranger. The branch every proxy scenario turns on
+  does not exist without it. Same for content-svc: `Notification:ContentBaseUrl` unset means nothing
+  with a body is ever sent, so no `{{link}}`, so no SCR-WT-002 and no SCR-WT-003.
+
+  **The two no-app paths are driven from the message, and that is the whole design of this suite.**
+  `SmsGateway` is a real HTTP endpoint speaking D6' §7.3's Notify.lk REST shape — the same class of
+  thing as C121's `TrackerDevice`, a stand-in for the *outside* of the platform and never for a part
+  of it. It is the only honest way in: AL-44/AL-45 make a share token mint-and-SMS,
+  notification-svc's `MintedLink` has no token member and no contract in that assembly can carry one
+  out, so a scenario that read `safety.trip_share_tokens` to open a page would be asserting about a
+  page no recipient could have reached. Every token in these tests is parsed out of a body
+  content-svc rendered, addressed to the number it was composed for. **The delivery OTP is the same
+  story from the other end** — ride-svc keeps only a digest and mints the plaintext at the pickup,
+  so the SMS deliberately carries no code and the unregistered recipient reads it off SCR-WT-002,
+  which is asserted to be the code that then opens the door.
+
+  **The privacy half is asserted at least as hard as the happy path.** A decline is checked in the
+  request row, in the `location.request.declined` payload that leaves ride-svc, in the frame that
+  arrives on the booker's socket, and with a whole-table count of rows carrying a `resolved_geo` —
+  because P-02's fence is that three components have no way to carry a coordinate, and a test of
+  only the first would not notice the other two growing one. `A_web_decline_carrying_coordinates_
+  still_transmits_and_stores_none` posts a coordinate from the browser anyway. P-05 is asserted on
+  the driver's response **text** and on every `ride.events` payload the ride produced, not on a
+  named field: "the booker's number is not in the counterparty field" is a much weaker claim than
+  "it is not there at all". SCR-WT-006 is asserted the same way — nine strings checked for absence
+  from the 410 body, which is C122's third definition-of-done item.
+
+  **Two clocks are moved and both windows are asserted off the running service first.**
+  `AgeLocationRequestAsync` moves `issued_at`, because ADD §11.15's 300 s **cannot** be a
+  `rides.timers` row at all — that table's `ride_id` is `NOT NULL` with an FK onto `rides.rides` and
+  the request is issued before the ride, which is why `rides.location_requests.ride_id` is nullable
+  (ride-svc's own C037 note). `PullForwardRideTimerAsync` moves P-14's `cod_uncollected`, whose 24 h
+  is checked against `Ride:CodUncollectedGrace` first. Neither touches a state, a resolution or a
+  geo; what fires in both cases is ride-svc's real sweep resolving the real §11.12 cell.
+
+  **This fleet resets nothing, and that is what C120's reset forces.** The three fleets are never
+  disposed, so a truncate performed by whichever collection xUnit happens to run second would pull
+  the floor out from under services that are still running. What C122 needs instead is that its
+  rides never share a candidate pool with anybody else's, and it takes that from the **same** static
+  grid C120 walks — `ModeCFleet.NextPlaces()`, one square per ride across the whole assembly.
+
+  **One finding, recorded as a ratcheted gap rather than a softened assertion.**
+  **`fares.ride_payments` never reaches `CashOnDeliveryCollected`.** ride-svc's `cod-collected`
+  says at the line that it writes no payment row ("no `fares.ride_payments` row exists yet —
+  fare-svc is C049/C050") and publishes `payment.cod_collected` and `ride.settled` instead;
+  **fare-svc has no consumer at all** — it is called, it does not listen — so the row
+  `POST /v1/fare/calculate` opened stays at its booking-time state for ever. D4' declares the state,
+  public-bff's `SettledPaymentStates` names it, and P-08 says it "posts driver earning identically
+  to `CashSettled`". Nothing writes it, so **SCR-WT-005's receipt for a COD parcel carries no
+  figure** — correctly omitting `totalMinor` rather than printing `Rs 0.00`, but omitting the number
+  the recipient opened it for. `SCR_WT_005_reports_the_payment_on_a_parcel_that_was_also_
+  photographed` asserts the gap in both directions and **fails the day somebody closes it**.
+  **Owner: fare-svc (C049/C050), or ride-svc if the row belongs on the tap.**
+
+  **Three smaller things, none of them defects, each worth the next reader's minute.**
+  (1) **fare-svc's quote vocabulary is two-valued where ride-svc's `kind` is three-valued** —
+  `GET /v1/fare/estimate?kind=proxy` is a 400 by name. That is right rather than a mismatch: D5' §10
+  gives a proxy booking the existing tariff untouched and what proxy changes is the *payer* (P-04),
+  so a proxy ride is quoted as the passenger ride it is. A client reading D3's three kinds would
+  send `proxy` and be refused; worth a line in the contract. (2) **`resolved_at` is stamped on an
+  expiry and on a decline**, which reads at a glance like a leak and is not: it records when the
+  *request* closed, and the three columns that could describe a position stay empty — asserted.
+  (3) **An AL-45 request produces two `safety.location_request_audit` rows**, `NotRegistered` on
+  arrival and then the browser's answer. Correct, and P-12's pattern needs both; a naive reader
+  expects one row per request.
+
+  **P-03 beats AL-48 in exactly one cell, and this suite drives it.** A proxy ride whose rider is
+  unregistered has no number to hand the driver, so `counterpartyPhone` is absent — never the
+  booker's, which P-05 forbids outright. Already raised in the C037 handoff; asserted here on a real
+  ride booked at a pin that arrived from a browser.
+
+  **Files —** new in `tests/E2E`: `Infrastructure/` (`ProxyPackageFleet`, `ProxyPackageScenario`,
+  `ProxyPackageCollection`, `ProxyPackageActors`, `SmsGateway`, `WebSubview` — six files) and
+  `Scenarios/` (`ProxyBookingScenario`, `WebPickupConfirmScenario`, `PackageDeliveryScenario`,
+  `CashOnDeliveryScenario`, `WebSubviewScenario` — five). Extended in place:
+  `MageRide.E2E.Tests.csproj` (five project references and the C122 half of the header comment),
+  `LiveConnection` (`LocationRequestResolved`, `SubscribeLocRequest`) and both `CLAUDE.md` files
+  (`tests/E2E` and `e2e`).
+
+  **Build host —** Docker only, no replica, no observability stack. Three containers plus ten
+  in-process services peak at ~5 GB; the full assembly's four containers and twenty-four services
+  peak at ~7 GB. The lightweight production replica stayed down throughout, as Waves 0–4 require.
+
+- **Component:** C123 e2e-money-flows — 2026-08-09
+- **Status:** DONE —
+  `dotnet test tests/E2E -c Release --filter Category=Money` exits 0. **36 tests, 5 new scenario
+  files**, ~1 m of test time on top of container start-up, run twice consecutively with no failures
+  and no flakes. **The whole assembly passes 136/136 in 8 m 20 s** (C120's 50 + C121's 30 + C122's
+  20 + these 36) and `dotnet build backend/MageRide.sln -c Release` is clean. All four deliverables
+  are driven and all three definition-of-done items are met. **No service, spec, contract or
+  migration file was changed.**
+- **Notes:**
+  **Seven services, and each one is load bearing.** wallet-svc (the only writer of
+  `billing.journal_postings` on this platform), subscription-svc (D-13's rule and Epic 23's money),
+  fare-svc (D-10's machine, AL-47's attestation pair, E-05's refund), ride-svc and dispatch-svc (a
+  fare is charged for a journey somebody took, and a *trip* is an `ACCEPTED` row in
+  `dispatch.offers`), reputation-svc (dispatch's gate fails open, so a fleet without it reports every
+  candidate as passing a gate never asked) and fleet-svc (AL-49's verified payout profile, which
+  nothing else on the platform can produce). Three containers, not four: nothing on a money path
+  touches a broker, so EMQX is out and `Ride:VehicleStatusEnabled` / `Dispatch:LastWillEnabled` are
+  off rather than pointed at one.
+
+  **This fleet is the first to set `Fare:WalletBaseUrl`.** C120 and C121 leave it unset — "a
+  documented refusal rather than a stub that always agrees" — which is why every ride in those suites
+  pays cash. Setting it is what makes C123 a different component: the `wallet` rail exists, the D-05
+  penalty collected into a fare can be forwarded, and E-05's reversal is attempted for real. It is
+  also how the third finding below was found.
+
+  **The fence is structural, and it runs in a `finally`.** "After every scenario the double-entry
+  ledger must balance to zero" is enforced by `MoneyScenario.RunAsync`, so a test added to this suite
+  next year is covered without its author writing a line, and no scenario can opt out because there
+  is no parameter that would let it. It runs *even when the body failed* — a debit posted and its
+  credit lost is exactly what a half-finished money path looks like — and when both fail the author's
+  own assertion is what is reported, with the fence's appended. "Balanced" is three statements, not
+  one: every entry sums to zero (`trg_balanced` should make that impossible, so a violation is a row
+  that reached the table without the trigger firing), every posting on the platform sums to zero, and
+  **every `billing.accounts` and `billing.wallets` balance equals the sum of that account's own
+  legs** — the last is the one the trigger cannot see, and it is a wallet screen and a D-08 gate
+  reading a number nobody posted.
+
+  **Drivers start with an empty wallet, and that is the whole component.** C120 seeds Rs 5,000 so its
+  scenarios never fail on a balance rule they did not come to assert; here the balance *is* the
+  assertion, so every rupee arrives through a rail the platform actually has — an OnePay session or
+  an AL-15 LankaQR hand-off settled by a signed callback, a bulk voucher, or another driver's
+  transfer. `AcquirerGateway` is a real socket speaking D6' §7.1's create-session shape and signing
+  its callbacks with the deployment's own secret: C122's `SmsGateway` for money, standing for a party
+  outside the platform rather than between two parts of it. **It decides nothing** — first delivery,
+  redelivery, second transaction for one session and an amount that disagrees with it are four
+  distinct R-19 behaviours and each scenario chooses which it is sending.
+
+  **Four findings, each asserted as a gap with a test that fails the day it is fixed.**
+
+  **(1) AL-57's passenger wallet has no way to be funded. Owner: wallet-svc (C046).** AL-57 retired
+  D-11's per-driver merchant and moved card acceptance one step earlier — "a passenger tops up their
+  MageRide wallet (OnePay, MageRide legitimately the payee) and pays the ride with the new method
+  `wallet`". The paying half works and is driven here. The topping-up half does not exist: both
+  top-up rails are `.RequireMageRideRole(Driver, FleetOwner)`, so a passenger's bearer is `403`; and
+  the internal credit seam resolves accounts with `EnsureDriverAccountAsync`, so a passenger id
+  posted there opens an `owner_type='driver'` account — real money, on an account the fare will never
+  spend from, because `ux_accounts_owner` is over `(owner_type, owner_id, currency)` and the fare
+  debits the `passenger` row. **So the `wallet` rail can only ever answer `402` on today's platform
+  and card acceptance does not work end to end.** `No_route_on_this_platform_can_put_money_in_a_
+  passengers_wallet` asserts all three halves of that. `MoneyFleet.OpenPassengerBalanceAsync` is what
+  this suite has to do instead — it writes exactly what a top-up callback would have written, one
+  balanced `topup` entry against the platform plus both balances, the mirror and the history line, so
+  the fence stays true of it. Same shape and same reason as C121's `MarkVehicleApprovedAsync`.
+
+  **(2) E-05's refund commits its workflow row and cannot post its ledger leg, and answers 503.
+  Owner: fare-svc (C050), with a one-line choice for wallet-svc.** `RefundService.PostReversalAsync`
+  posts the reversal through `POST /v1/internal/wallet/{driverId}/`**`debit`** with
+  `kind = "payment_refund"` — and `payment_refund` is in wallet-svc's `InternalCreditKinds`, not its
+  debit whitelist. wallet-svc answers `400`; fare-svc's client turns any non-`402` failure into
+  `dependency-unavailable`; the route answers `503` — **after** `fares.ride_payments` has moved to
+  `PartiallyRefunded`/`Refunded` and a `Requested` row has landed on the Finance queue. Finance is
+  told the request failed while the payment says it succeeded and no money has moved in either
+  direction. The fix is a choice rather than a bug hunt: either `payment_refund` joins
+  `InternalDebitKinds`, or the reversal *credits* the party being refunded — and §11.14 draws the
+  second (`DR platform_account / CR passenger`), which also matches what a refund means now that a
+  passenger holds a wallet. Asserted by `A_refund_raises_the_finance_queue_row_and_its_ledger_leg_
+  cannot_post`, which names both fixes in its failure message.
+
+  **(3) R-19's late payment callback has no door left to arrive through. Owner: nobody yet — it is a
+  spec reconciliation.** ADD §11.14 is a complete workflow (a provider `Succeeded` after a cash
+  settlement → `Overpaid` → `overpaid_reversal` on the Finance queue → refund), and AL-57/AL-59
+  removed the only thing that starts it: both ride-side provider callbacks were deleted with the ride
+  gateways, "REMOVED, do not re-add" at the line, because no ride fare reaches an acquirer any more.
+  `Overpaid` and `overpaid_reversal` are therefore unreachable, and fare-svc's own CLAUDE.md already
+  says so about the states. What is *not* recorded anywhere is that **§11.14 is now unreachable as a
+  workflow** — the D5' §8.1 diagram, the `ck_ride_payments_state` value and the `ck_refunds_kind`
+  value all still describe it. `A_late_gateway_callback_cannot_reach_a_settled_cash_fare_because_no_
+  ride_rail_has_one` asserts three things that are all true today and would each break differently if
+  the rail came back: the edges are still in `PaymentStateMachine`, no route on `/v1/fare/pay/**`
+  accepts a callback, and a cash-settled payment is closed against a refund
+  (`payment-already-settled`). **Micro-change-set: D5' §8.1 and ADD §11.14 should say that the
+  late-callback branch is retired with the ride gateways, or name what would deliver one.**
+
+  **(4) Nothing on this platform calls the daily-fee charge. Owner: ride-svc (C036/C037).**
+  Re-raised rather than found — subscription-svc's own route documentation states it: "D3' §325 has
+  ride-svc call it during offer acceptance, immediately after the conditional `UPDATE … AND version =
+  :v` that wins the offer". ride-svc has no subscription client, no fee options and no such hop, so
+  **the platform's only per-driver revenue line is never collected**, on any deployment. Every fee
+  scenario here drives `POST /v1/internal/fees/{driverId}/charge-before-trip` through the same
+  internal route ride-svc would use, with the accepted ride excluded from the count exactly as that
+  route requires — the same standing-in C120 does for `POST /v1/fare/calculate`, which is still
+  uncalled and is still what every ride here has to be priced with.
+
+  **D-08's gate is real, and it fired before this suite could ask it to.** The insufficient-balance
+  test was first written the obvious way — take a second trip, watch the charge fail — and spent sixty
+  seconds waiting for an offer the platform was right not to make: dispatch-svc read Rs 50 against a
+  Rs 100 fee and withheld the ride, which rested in `Matching`. The test now asserts both refusals in
+  the order they happen, which is a better statement of US-9.1 than either alone.
+
+  **The Colombo-day boundary is asserted through the ledger's key, not by moving a clock.**
+  `DailyFeeService` stamps the fee date from its own `TimeProvider` and no route lets a caller name
+  one, so the choice was between replacing the service's clock — making it a stub of the component
+  under test — and posting the key the service itself would have composed on another day. The second
+  is what happens: `DailyFeeRule.LedgerKey` and `BusinessCalendar` are the platform's own, so today's
+  key replayed on the seam subscription-svc uses reports `replayed` and moves nothing, and yesterday's
+  is a distinct entry. A change to either spelling breaks this rather than silently taking a second
+  fee.
+
+  **`FinishTripAsync` waits for the presence row, not for `released_at`, and the difference is a
+  race.** ADD §11.12 gives dispatch-svc three duties on a terminal event and `ReturnToPoolAsync` does
+  them in order — release the accepted offer, drop the R-10 reservation, restore the presence row and
+  the GEO entry. `released_at` is stamped first, so going on standby the moment it appears has the
+  fresh GEO entry removed by a release still catching up, and the next ride finds an empty candidate
+  pool. Waiting on the *last* of the three cannot be true until the other two have happened. Found by
+  two intermittently-failing fee scenarios.
+
+  **Three smaller things worth the next reader's minute.** (1) `POST /v1/wallet/topup/bank-transfer`
+  answers **405, not 404** — the `GET /v1/wallet/topup/{topupId}` template matches the segment. AL-05
+  still holds and the database still refuses the row (`ck_topups_method`, asserted by rejection), but
+  a client probing for the removed rail gets the less obvious code. (2) `mark-cash` and the
+  subscriber routes take the **grant** id, not the passenger id — right, because Epic 23's access is
+  per vehicle and a passenger who left and rejoined keeps one roster slot, but `subscriberId` reads
+  like a user id and `subscription.yaml` could say which. (3) A Mode B **OnePay** pay sheet returns no
+  redirect and never will until a per-org merchant binding exists in some schema; the callback half
+  is complete and settles a session opened elsewhere. Already in the C048 handoff; asserted here so
+  it fails when that changes.
+
+  **Files —** new in `tests/E2E`: `Infrastructure/` (`MoneyFleet`, `MoneyScenario`, `MoneyCollection`,
+  `MoneyActors`, `AcquirerGateway`, `LedgerJournal` — six files) and `Scenarios/`
+  (`DailyFeeScenario`, `WalletMoneyScenario`, `RidePaymentScenario`,
+  `ModeBSubscriptionPaymentScenario`, `MoneyLedgerCoverage` — five). Extended in place:
+  `MageRide.E2E.Tests.csproj` (the Wallet.Api reference and the C123 half of the header comment) and
+  `tests/E2E/CLAUDE.md`. `MoneyLedgerCoverage` is the ratchet: it reads
+  `ck_journal_entries_kind` off the constraint and fails if a kind appears that is neither driven
+  here nor written down with the component that owns it, fails if a kind is in both lists, and fails
+  if a kind this suite *claims* to drive is one a full run does not actually post.
+
+  **Build host —** Docker only, no replica, no observability stack. Three containers plus seven
+  in-process services peak at ~4 GB; the full assembly's four containers and thirty-one services peak
+  at ~8 GB. The lightweight production replica stayed down throughout, as Waves 0–4 require.

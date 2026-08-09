@@ -562,7 +562,7 @@ public static class FleetOpsEndpoints
         var bearer = context.Request.Headers.Authorization.ToString();
         var token = bearer.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) ? bearer[7..] : bearer;
 
-        var bound = await trackers.BindAsync(
+        var bound = await trackers.BindTrackerAsync(
             scope.FleetId,
             token,
             new BindTrackerCommand(body?.Imei, body?.VehicleId?.Trim(), body?.AutoStartSession ?? true),

@@ -1,0 +1,177 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    Four verify targets, one assembly:
+      C120  `dotnet test tests/E2E -c Release`, filtered to `Category=ModeC`   (the Mode C ride)
+      C121  the same command filtered to `Category=ModeAB`                     (Mode A/B, the
+                                                                                tracker plane and
+                                                                                fleet operations)
+      C122  the same command filtered to `Category=ProxyPackage`               (proxy booking,
+                                                                                package delivery
+                                                                                and the six SCR-WT
+                                                                                web pages)
+      C123  the same command filtered to `Category=Money`                      (the daily fee, the
+                                                                                wallet, the fare
+                                                                                and the Mode B
+                                                                                subscription — with
+                                                                                the double-entry
+                                                                                ledger asserted
+                                                                                balanced after every
+                                                                                one of them)
+
+    Every scenario in here drives the real platform: real Postgres, real Redis, real Redpanda, real
+    EMQX, real TCP and UDP sockets carrying real tracker frames, and a real SignalR socket — with
+    every service on the path running and all of their background workers on. Nothing about ride
+    state, session state, dispatch or entitlement is stubbed: a scenario acts, and then waits for
+    the platform to do what the platform does.
+
+    `Microsoft.NET.Sdk.Web`, not `Microsoft.NET.Sdk`: the three fleets build twenty-three
+    WebApplications between them (tcp-adapter is the one worker host), and C122 stands up two more
+    of its own — the SMS gateway and the browser, neither of which is a MageRide component.
+
+    **Why the services are composed here rather than pulled from a compose file.** C118 settled
+    this and the reasoning is unchanged: `infra/docker-compose.dev.yml` cannot be brought up —
+    `app-services`, `hot-path` and `fanout` have no Dockerfile, and `dev-up.sh full` says so — and
+    the root CLAUDE.md forbids running the ~17-20 GB replica beside a build on this host. Each
+    service here is started through its own `XApplication.Build`, which is the composition root its
+    `Program.cs` calls, listening on a real Kestrel socket and talking to its neighbours over real
+    HTTP, real gRPC, real Kafka and a real broker. The seam under test is the same one a container
+    would exercise; what is missing is the container boundary, and that is C124/C125's.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.E2E</RootNamespace>
+    <AssemblyName>MageRide.E2E.Tests</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <OutputType>Exe</OutputType>
+    <!--
+      xUnit1041: collection-fixture ctor args are consumed through the primary constructor.
+      xUnit1051: every request is bounded by the fleet's own lifetime.
+    -->
+    <NoWarn>$(NoWarn);xUnit1041;xUnit1051</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Confluent.Kafka" />
+    <PackageReference Include="Dapper" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" />
+    <PackageReference Include="MQTTnet" />
+    <PackageReference Include="Npgsql" />
+    <PackageReference Include="StackExchange.Redis" />
+  </ItemGroup>
+
+  <!--
+    C120's five: the services a Mode C ride passes through, and no more. reputation-svc is here for
+    the same reason DispatchHarness runs it — D5' §3.2's block-state gate is a gRPC call that fails
+    *open*, so a fleet without it would report every candidate build as passing a gate that was
+    never asked.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\backend\src\Dispatch.Api\Dispatch.Api.csproj" />
+    <ProjectReference Include="..\..\backend\src\Fanout.Api\Fanout.Api.csproj" />
+    <ProjectReference Include="..\..\backend\src\Fare.Api\Fare.Api.csproj" />
+    <ProjectReference Include="..\..\backend\src\Reputation.Api\Reputation.Api.csproj" />
+    <ProjectReference Include="..\..\backend\src\Ride.Api\Ride.Api.csproj" />
+    <ProjectReference Include="..\..\backend\src\MageRide.TestKit\MageRide.TestKit.csproj" />
+  </ItemGroup>
+
+  <!--
+    C121's eight, and why each one has to be running rather than stood in for:
+
+      trip-state-svc         the Mode A/B session itself (R-01: never ride-svc)
+      tcp-adapter            the fence: real GT06, JT808, H02 and NMEA frames on real sockets, not
+                             synthetic MQTT
+      provisioning-svc       the IMEI binding a frame is resolved through (T-02/T-03). Priming
+                             `imei:{imei}` by hand would authenticate the device against the test
+      fleet-svc              the org, the roster, the assignment, the map, the analytics, the RLS
+      subscription-svc       Epic 23's grant, unsubscribe and rejoin (D-22)
+      fanout-svc             where the D-22 revocation and the D-23 entitlement are *observed* —
+                             on a passenger's own socket
+      mqtt-bridge-svc        EMQX to telemetry.raw; without it a tracker frame stops at the broker
+      position-processor-svc telemetry.raw to telemetry.normalized, veh:meta and the cell
+                             streams; the idle clock, the arrival fence and the Mode B map are all
+                             downstream of it
+      persistence-writer-svc the Timescale sink (T-06). The fleet map and the fleet analytics read
+                             telemetry.positions, and this is its only writer
+
+    So a scenario writes bytes to a socket and asserts on a session ending or a marker appearing,
+    with eight services and four containers in between doing the real work.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\backend\src\Fleet.Api\Fleet.Api.csproj" />
+    <ProjectReference Include="..\..\backend\src\HotPath.MqttBridge\HotPath.MqttBridge.csproj" />
+    <ProjectReference Include="..\..\backend\src\HotPath.PersistenceWriter\HotPath.PersistenceWriter.csproj" />
+    <ProjectReference Include="..\..\backend\src\HotPath.PositionProcessor\HotPath.PositionProcessor.csproj" />
+    <ProjectReference Include="..\..\backend\src\Provisioning.Api\Provisioning.Api.csproj" />
+    <ProjectReference Include="..\..\backend\src\Subscription.Api\Subscription.Api.csproj" />
+    <ProjectReference Include="..\..\backend\src\TcpAdapter\TcpAdapter.csproj" />
+    <ProjectReference Include="..\..\backend\src\TripState.Api\TripState.Api.csproj" />
+  </ItemGroup>
+
+  <!--
+    C122's five more, and why each one has to be running rather than stood in for. The other five
+    on the proxy/package path — ride-svc, dispatch-svc, reputation-svc, fare-svc, fanout-svc — are
+    C120's, already referenced above, and this fleet starts the same processes.
+
+      iam-svc          P-03's registration oracle. `GET /v1/users/lookup` is what decides between
+                       the FCM round-trip and AL-45's SMS, and `Ride:IamBaseUrl` unset makes the
+                       whole `/v1/location-requests` family answer 503 — so the branch every proxy
+                       scenario turns on cannot be reached without it. Note what this does *not*
+                       make it: the bearers are still `TestTokenIssuer`'s, exactly as in C120/C121
+      content-svc      every SMS body (D-26). `Notification:ContentBaseUrl` unset means "nothing
+                       with a body is ever sent" — no link, so no SCR-WT-002 and no SCR-WT-003
+      notification-svc mints the `pickup_confirm` and `package_recipient` tokens and puts them in
+                       an SMS. **It is the only component that ever holds a token in the clear**,
+                       and AL-44's fence is that it reaches a client through no API at all — so a
+                       suite that seeded one would be testing a path the platform does not have
+      public-bff       the six SCR-WT pages, whose only credential is that token
+      safety-svc       the web SOS's one writer (US-25.5, D-33) — public-bff forwards and never
+                       writes `safety.sos_events` itself
+
+    ocr-svc, support-svc, wallet-svc, voip-svc and admin-bff stay out for C120's reasons, and the
+    C122 fences are recorded in tests/E2E/CLAUDE.md.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\backend\src\Content.Api\Content.Api.csproj" />
+    <ProjectReference Include="..\..\backend\src\Iam.Api\Iam.Api.csproj" />
+    <ProjectReference Include="..\..\backend\src\Notification.Api\Notification.Api.csproj" />
+    <ProjectReference Include="..\..\backend\src\PublicBff\PublicBff.csproj" />
+    <ProjectReference Include="..\..\backend\src\Safety.Api\Safety.Api.csproj" />
+  </ItemGroup>
+
+  <!--
+    C123's one more, and it is the only service in this repository that writes
+    `billing.journal_postings`:
+
+      wallet-svc  the double-entry ledger (D-09). Every other money component here is a *reason* to
+                  write an entry — subscription-svc's D-13 daily fee, fare-svc's AL-57 wallet fare,
+                  its D-05 penalty settlement and its E-05 refund — and each of them reaches it over
+                  a real HTTP hop to `/v1/internal/wallet/**`. It also owns the only two rails by
+                  which real money enters the platform at all (AL-05: OnePay and LankaQR, and there
+                  is no third), both of which credit on a signed provider callback rather than on the
+                  initiate. A suite that stubbed it would be asserting its own arithmetic
+
+    The other six services on the money path — ride-svc, dispatch-svc, reputation-svc, fare-svc,
+    subscription-svc and fleet-svc — are C120's and C121's, already referenced above, and this fleet
+    starts the same processes. wallet-svc is deliberately absent from C120 and C121 (`Fare:WalletBaseUrl`
+    unset makes every ride there pay cash, which is a documented refusal rather than a stub that always
+    agrees); C123 is the component that sets it.
+
+    C122's SMS gateway has a counterpart here: `AcquirerGateway` is a real socket speaking OnePay's
+    create-session shape and signing the callbacks it makes, and it stands for a party outside the
+    platform rather than between two parts of it.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\backend\src\Wallet.Api\Wallet.Api.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>
