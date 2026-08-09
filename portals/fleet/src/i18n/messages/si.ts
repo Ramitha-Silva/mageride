@@ -896,6 +896,173 @@ export const fleetSi: FleetMessages = {
   'fleet.error.railUnavailable':
     'එම ගෙවීම් ක්‍රමය දැන් නොමැත. අනෙක් ක්‍රමය උත්සාහ කරන්න — MageRide පිළිගන්නේ කාඩ්පත් සහ LankaQR ගෙවීම් පමණි.',
 
+  /* ---- SCR-FP-011 · B ක්‍රමයේ දායකත්ව හා ඉල්ලීම් (Epic 23, Δ C116) ------ */
+  'fleet.subscriptions.title': 'B ක්‍රමයේ දායකත්ව',
+  'fleet.subscriptions.scope.legend': 'කළමනාකරණය කරන වාහනය තෝරන්න',
+  'fleet.subscriptions.scope.vehicle': 'වාහනය',
+  'fleet.subscriptions.scope.subscriber': 'දායකයා',
+  'fleet.subscriptions.scope.apply': 'පෙන්වන්න',
+  'fleet.subscriptions.vehicleOption': '{plate} · {service}',
+  'fleet.subscriptions.noModeBVehicles':
+    'මෙම සංවිධානය තවම B ක්‍රමයේ වාහනයක් ධාවනය නොකරයි. ඉල්ලීම් පෝලිමක් සහ දායක ලැයිස්තුවක් අයත් වන්නේ වාහනයකට නිසා, පළමුව වාහන තිරයෙන් එකක් එක් කරන්න.',
+  'fleet.subscriptions.unknownVehicle':
+    'එම වාහනය මෙම සංවිධානයේ B ක්‍රමයේ වාහනයක් නොවේ. ඉහත ලැයිස්තුවෙන් එකක් තෝරන්න.',
+  'fleet.subscriptions.passengerUnnamed': 'මගියා',
+  'fleet.subscriptions.noMobile': 'අංකයක් සටහන් වී නැත',
+  'fleet.subscriptions.column.passenger': 'මගියා',
+  'fleet.subscriptions.column.contact': 'දුරකථනය / හැඳුනුම',
+  'fleet.subscriptions.column.requested': 'ඉල්ලූ දිනය',
+  'fleet.subscriptions.column.action': 'ක්‍රියාව',
+  'fleet.subscriptions.column.fare': 'මාසික ගාස්තුව',
+  'fleet.subscriptions.column.cycle': 'බිල්පත් චක්‍රය',
+  'fleet.subscriptions.column.thisMonth': 'මෙම මාසය',
+  'fleet.subscriptions.column.actions': 'ක්‍රියා',
+  'fleet.subscriptions.requests.heading': 'එන ඉල්ලීම් · {vehicle}',
+  'fleet.subscriptions.requests.caption':
+    'මෙම වාහනයට ප්‍රවේශය බලාපොරොත්තුවෙන් සිටින මගීන්, පැරණිතම ඉල්ලීම මුලින්',
+  'fleet.subscriptions.requests.pending': 'ඉල්ලීම් {count}ක්',
+  'fleet.subscriptions.requests.empty': 'මෙම වාහනයට ප්‍රවේශය බලා සිටින කිසිවෙක් නැත.',
+  'fleet.subscriptions.requests.note':
+    'සෑම B ක්‍රමයේ වාහනයකටම තමන්ගේම ඉල්ලීම් පෝලිමක් ඇත. පිළිගැනීම ලුහුබැඳීමේ ප්‍රවේශය ලබා දී මෙම වාහනයේ බිල්පත් චක්‍රය අනුව දායකත්වය ආරම්භ කරයි; ප්‍රතික්ෂේප කිරීම අවසන් වන අතර මගියාට නැවත ඉල්ලීමට සිදු වේ. එම ඉල්ලීම්ම රියදුරු යෙදුමෙන් පවරා ඇති රියදුරාටද පිළිගැනීමට හෝ ප්‍රතික්ෂේප කිරීමට හැකිය.',
+  'fleet.subscriptions.requests.readOnly':
+    'ඔබේ භූමිකාවට මෙම පෝලිම කියවිය හැකි නමුත් තීරණය කළ නොහැක.',
+  'fleet.subscriptions.accept': 'පිළිගන්න',
+  'fleet.subscriptions.accepting': 'පිළිගනිමින්…',
+  'fleet.subscriptions.reject': 'ප්‍රතික්ෂේප',
+  'fleet.subscriptions.rejecting': 'ප්‍රතික්ෂේප කරමින්…',
+  'fleet.subscriptions.confirmReject': 'ඉල්ලීම ප්‍රතික්ෂේප කරන්න',
+  'fleet.subscriptions.reason': 'හේතුව (අවශ්‍ය නැත)',
+  'fleet.subscriptions.reasonHint': 'ඉල්ලීම සමඟ තබා ගැනේ. මගියාට යවන්නේ නැත.',
+  'fleet.subscriptions.request.accepted':
+    '{passenger} හට දැන් මෙම වාහනයට ප්‍රවේශය ඇති අතර ඔවුන්ගේ දායකත්වය ආරම්භ වී ඇත.',
+  'fleet.subscriptions.request.rejected':
+    '{passenger} හට ප්‍රවේශය ලබා දුන්නේ නැත. කිසිවක් නිර්මාණය වූයේ නැති අතර ඔවුන්ට නැවත ඉල්ලිය හැක.',
+  'fleet.subscriptions.roster.heading': 'දායකයෝ · {vehicle}',
+  'fleet.subscriptions.roster.caption':
+    'මෙම වාහනයට දායක වූ සියල්ලෝ, ඔවුන් ගෙවන මුදල සහ මෙම මාසයේ තත්ත්වය සමඟ',
+  'fleet.subscriptions.roster.paid': 'ගෙවුම් සේවාව · දායකයෝ {count}ක්',
+  'fleet.subscriptions.roster.paidWithDefault': 'ගෙවුම් සේවාව · පෙරනිමිය මසකට රු. {amount}',
+  'fleet.subscriptions.roster.free': 'නොමිලේ සේවාව · ගාස්තුවක් අය නොකෙරේ',
+  'fleet.subscriptions.roster.empty': 'තවම කිසිවෙක් මෙම වාහනයට දායක වී නැත.',
+  'fleet.subscriptions.roster.truncated':
+    'මුල් දායකයෝ {rows} දෙනා පමණක් ලැයිස්තුගත වේ, තවද පත්‍රිකාවක් බලා සිටින මුල් {slips} දෙනාට පමණක් මෙතැනින් තහවුරු කළ හැක. සෙසු අය සඳහා දායකයාගේ ගෙවීම් විවෘත කරන්න.',
+  'fleet.subscriptions.paymentsLink': 'ගෙවීම්',
+  'fleet.subscriptions.farePerMonth': 'රු. {amount}/මසකට',
+  'fleet.subscriptions.fare.edit': 'වෙනස් කරන්න',
+  'fleet.subscriptions.fare.label': 'මාසික ගාස්තුව (රු.)',
+  'fleet.subscriptions.fare.hint': 'මෙම දායකයාට පමණි. අනෙක් අය තම ගාස්තුවේම රැඳේ.',
+  'fleet.subscriptions.fare.save': 'ගාස්තුව සුරකින්න',
+  'fleet.subscriptions.fare.saving': 'සුරකිමින්…',
+  'fleet.subscriptions.fare.saved': 'මෙම දායකයාට දැන් මසකට {amount}කි.',
+  'fleet.subscriptions.fare.none': 'ගාස්තුවක් නැත',
+  'fleet.subscriptions.cycle.monthFirst': 'සෑම මසකම 1 වැනිදා සිට',
+  'fleet.subscriptions.cycle.anniversary': 'ඔවුන් එක් වූ දිනයේ සිට',
+  'fleet.subscriptions.cycleNote':
+    'ඊළඟ ගෙවීම් දිනය චක්‍රයෙන් ගණනය වන අතර එය මගියාගේම දායකත්ව කාඩ්පතේ පෙන්වයි; එය සමූහ දායක ලැයිස්තුවේ නොපවතී.',
+  'fleet.subscriptions.status.paid': 'ගෙවා ඇත',
+  'fleet.subscriptions.status.verify': 'මාරු කිරීම — පත්‍රිකාව පරීක්ෂා කරන්න',
+  'fleet.subscriptions.status.due': 'ගෙවිය යුතුයි',
+  'fleet.subscriptions.status.free': 'නොමිලේ',
+  'fleet.subscriptions.status.unsubscribed': 'දායකත්වය අවසන්',
+  'fleet.subscriptions.cash.open': 'ලැබුණු බව සලකුණු කරන්න',
+  'fleet.subscriptions.cash.amount': 'ලැබුණු මුදල (රු.)',
+  'fleet.subscriptions.cash.amountHint':
+    'වෙනත් මුදලක් දුන්නේ නම් මිස, ඔවුන්ගේ මාසික ගාස්තුව.',
+  'fleet.subscriptions.cash.submit': 'ගෙවීම සටහන් කරන්න',
+  'fleet.subscriptions.cash.submitting': 'සටහන් කරමින්…',
+  'fleet.subscriptions.cash.received':
+    '{month} සඳහා {amount} සටහන් විය. මගියාගේ යෙදුමේ දැන් මෙම මාසය ගෙවා ඇති බව පෙනේ.',
+  'fleet.subscriptions.slip.confirm': 'තහවුරු කරන්න',
+  'fleet.subscriptions.slip.confirming': 'තහවුරු කරමින්…',
+  'fleet.subscriptions.slip.view': 'පත්‍රිකාව බලන්න',
+  'fleet.subscriptions.slip.confirmed':
+    '{month} සඳහා {amount} ලැබුණු බව තහවුරු විය. මගියාගේ යෙදුමේ දැන් එය ගෙවා ඇති බව පෙනේ.',
+  'fleet.subscriptions.delete.open': 'මකන්න',
+  'fleet.subscriptions.delete.confirm': 'දායකයා මකන්න',
+  'fleet.subscriptions.delete.confirming': 'මකමින්…',
+  'fleet.subscriptions.delete.warning':
+    'මෙය පේළිය සදහටම ඉවත් කරයි. ඔවුන්ගේ ගෙවීම් ඉතිහාසයද එය සමඟ යන අතර, නැවත එක් වීමට ඔවුන්ට යළි ප්‍රවේශය ඉල්ලීමට සිදු වේ.',
+  'fleet.subscriptions.subscriber.deleted': '{passenger} මෙම වාහනයෙන් ඉවත් කර ඇත.',
+  'fleet.subscriptions.rosterNote':
+    'එක් එක් දායකයාට වෙනස් මාසික ගාස්තුවක් තිබිය හැක. මුදල් මෙතැනින් “ලැබුණු බව සලකුණු කරන්න” මගින් සටහන් වේ; බැංකු මාරු කිරීමක් ඔබ තහවුරු කරන තුරු පත්‍රිකාවක් ලෙස රැඳේ; LankaQR තනිවම සිදු වේ. දායකත්වය අවසන් කරන මගියෙක් ඔබ මකන තුරු අඳුරු කර මෙම ලැයිස්තුවේ රැඳේ.',
+  'fleet.subscriptions.passThroughNote':
+    'මෙම මුදල ඔබේය. දායකයෝ ඔබේම තහවුරු කළ බැංකු ගිණුමට ගෙවති; MageRide එය රඳවා නොගන්නා අතර කොටසක්ද නොගනී — MageRide අය කරන එකම ගාස්තුව බිල්පත් තිරයේ ඇති මාසික වාහන ගාස්තුවයි.',
+  'fleet.subscriptions.dueSummary': 'මෙම මාසය සඳහා දායකයෝ {count} දෙනෙකුගෙන් තවම {amount}ක් ලැබිය යුතුය.',
+  'fleet.subscriptions.freeVehicleNote':
+    'මෙම වාහනය නොමිලේ සේවාවක් බැවින් ගාස්තුවක් අය නොකරන අතර ගෙවීම් තීරු නොමැත.',
+  'fleet.subscriptions.ownerOnly':
+    'ගාස්තු, මුදල්, මාරු කිරීමේ පත්‍රිකා සහ දායකයෙකු මැකීම සංවිධානයේ හිමිකරුට අයත් වේ. ඔබට ඉල්ලීම් පිළිගැනීමට හා ප්‍රතික්ෂේප කිරීමට හැකිය.',
+  'fleet.subscriptions.error.requestMissing':
+    'එම ඉල්ලීම හඳුනාගත නොහැකි විය. පෝලිම නැවත පූරණය කර උත්සාහ කරන්න.',
+  'fleet.subscriptions.error.requestDecided':
+    'එම ඉල්ලීම දැනටමත් තීරණය කර ඇත. එය කොතැනට ගියේදැයි බැලීමට පෝලිම නැවත පූරණය කරන්න.',
+  'fleet.subscriptions.error.subscriberMissing':
+    'එම දායකයා හඳුනාගත නොහැකි විය. ලැයිස්තුව නැවත පූරණය කර උත්සාහ කරන්න.',
+  'fleet.subscriptions.error.fareInvalid': 'මාසික ගාස්තුව රුපියල් වලින් දෙන්න.',
+  'fleet.subscriptions.error.fareNotCollectable':
+    'මෙම දායකයාට තැබීමට ගාස්තුවක් නැත. නොමිලේ සේවාවකට ගාස්තුවක් නොමැති අතර, අවසන් වූ දායකත්වයකට තවදුරටත් බිල් කළ නොහැක.',
+  'fleet.subscriptions.error.amountInvalid': 'ලැබුණු මුදල රුපියල් වලින් දෙන්න.',
+  'fleet.subscriptions.error.cashNotDue':
+    'මෙම මාසයට මුදල් ගෙවීමක් බාර ගත නොහැක: එය දැනටමත් ගෙවා ඇත, නොමිලේ සේවාවක් වේ, නැතහොත් දායකත්වය අවසන් වී ඇත.',
+  'fleet.subscriptions.error.paymentMissing':
+    'එම ගෙවීම හඳුනාගත නොහැකි විය. දායකයාගේ ගෙවීම් විවෘත කර එතැනින් උත්සාහ කරන්න.',
+  'fleet.subscriptions.error.slipNotPending':
+    'තහවුරු කළ හැක්කේ මගියා උඩුගත කළ පත්‍රිකාවක් පමණි, මෙම ගෙවීම එවැන්නක් බලා නොසිටියි.',
+  'fleet.subscriptions.error.stillSubscribed':
+    'මෙම දායකයා තවමත් සක්‍රියයි. තමන්ගේ දායකත්වය අවසන් කළ හැක්කේ මගියාට පමණි; ඔවුන් එසේ කළ පසු පේළිය මැකිය හැකි වේ.',
+
+  /* ---- SCR-FP-012 · දායක ගෙවීම් ලේඛනය (item 16i, Δ C116) --------------- */
+  'fleet.payments.title': 'දායක ගෙවීම්',
+  'fleet.payments.ownerOnly':
+    'දායක ගෙවීම් සංවිධානයේ හිමිකරුට අයත් වේ. ලේඛනය හෝ එහි පිටපතක් ඔවුන්ගෙන් ඉල්ලන්න.',
+  'fleet.payments.exportCsv': 'CSV බාගන්න',
+  'fleet.payments.scope.legend': 'වාහනය සහ දායකයා තෝරන්න',
+  'fleet.payments.scope.mutedOption': '{passenger} — දායකත්වය අවසන්',
+  'fleet.payments.noSubscribers':
+    'තවම කිසිවෙක් මෙම වාහනයට දායක වී නැත, එබැවින් පෙන්වීමට ලේඛනයක් නැත.',
+  'fleet.payments.kpi.collected': 'මෙම මාසයේ ගෙවා ඇත',
+  'fleet.payments.kpi.collectedDetail': 'දායකයෝ {count}ක් · {vehicle}',
+  'fleet.payments.kpi.pending': 'පරීක්ෂා කිරීමට ඇත',
+  'fleet.payments.kpi.pendingDetail': 'පරීක්ෂා කළ යුතු මාරු පත්‍රිකා {count}ක්',
+  'fleet.payments.kpi.due': 'තවම ලැබිය යුතුයි',
+  'fleet.payments.kpi.dueDetail': 'දායකයෝ {count}ක්',
+  'fleet.payments.kpi.subscribers': 'දායකයෝ',
+  'fleet.payments.kpi.subscribersDetail': 'දායකත්වය අවසන් {muted} · නොමිලේ සේවාවේ {free}',
+  'fleet.payments.kpiNote':
+    'මෙම හතර මෙම වාහනයේ දායකයන් ඔවුන්ගේ වත්මන් මාසයේ තත්ත්වය අනුව, එක් එක් අයගේ ගාස්තුවෙන් ගණන් කරයි. සැබවින්ම ලැබුණු මුදල පහත ලේඛනයේ ඇත — මුදල් ඕනෑම ප්‍රමාණයකට සලකුණු කළ හැක. නොගෙවූ මාසයක් කෙසේ ගෙවේදැයි මෙහි කිසිවක් නොකියයි: ඔබ ලැබුණු බව සලකුණු කළ විට පමණක් මුදල් ගෙවීමක් බවට පත් වේ.',
+  'fleet.payments.ledger.heading': 'ලේඛනය · {subscriber} · {vehicle}',
+  'fleet.payments.ledger.caption': 'මෙම දායකයාගේ සෑම දායකත්ව ගෙවීමක්ම, අලුත්ම එක මුලින්',
+  'fleet.payments.ledger.empty': 'මෙම දායකයා සඳහා තවම ගෙවීමක් සටහන් වී නැත.',
+  'fleet.payments.ledger.truncated':
+    'මෑතම මාස {rows} පෙන්වයි. පැරණි ගෙවීම් තබා ගෙන ඇති අතර ඒවා බාගැනීමේ ගොනුවේ ඇත.',
+  'fleet.payments.column.month': 'මාසය',
+  'fleet.payments.column.date': 'දිනය',
+  'fleet.payments.column.method': 'ක්‍රමය',
+  'fleet.payments.column.amount': 'මුදල',
+  'fleet.payments.column.status': 'තත්ත්වය',
+  'fleet.payments.notPaidYet': 'තවම ගෙවා නැත',
+  'fleet.payments.ledgerNote':
+    'මාරු කිරීමක් තහවුරු කිරීම හෝ මුදල් ලැබුණු බව සලකුණු කිරීම මගියාගේ යෙදුමට සහ ඔවුන්ගේ ඉතිහාසයට කෙළින්ම “ගෙවා ඇත” යවයි. LankaQR ගෙවීම් තනිවම සිදු වේ.',
+  'fleet.payments.status.paid': 'ගෙවා ඇත',
+  'fleet.payments.status.verify': 'පත්‍රිකාව පරීක්ෂා කරන්න',
+  'fleet.payments.status.initiated': 'ආරම්භ කර ඇත',
+  'fleet.payments.status.failed': 'අසාර්ථකයි',
+  'fleet.payments.method.lankaqrDeeplink': 'LankaQR (බැංකු යෙදුම)',
+  'fleet.payments.method.lankaqrScan': 'LankaQR (ස්කෑන් කළ)',
+  'fleet.payments.method.onepay': 'OnePay (ඉවත් කර ඇත)',
+  'fleet.payments.method.onlineTransfer': 'මාර්ගගත මාරු කිරීම (පත්‍රිකාව)',
+  'fleet.payments.method.cash': 'මුදල්',
+  'fleet.payments.csv.vehicle': 'වාහනය',
+  'fleet.payments.csv.subscriber': 'දායකයා',
+  'fleet.payments.csv.month': 'කාල මාසය',
+  'fleet.payments.csv.paidAt': 'ගෙවූ වේලාව',
+  'fleet.payments.csv.method': 'ක්‍රමය',
+  'fleet.payments.csv.amount': 'මුදල (රු.)',
+  'fleet.payments.csv.amountMinor': 'මුදල (සත)',
+  'fleet.payments.csv.currency': 'මුදල් ඒකකය',
+  'fleet.payments.csv.status': 'තත්ත්වය',
+  'fleet.payments.csv.paymentId': 'ගෙවීම් හැඳුනුම',
+
   /* ---- The shell's placeholder ------------------------------------------ */
   'fleet.screen.pendingTitle': 'මෙම තිරය තවම නිර්මාණය කර නැත',
   'fleet.screen.pendingBody':

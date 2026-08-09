@@ -283,7 +283,16 @@ export const FLEET_NAV: readonly FleetNavGroup[] = [
         key: 'payments',
         labelKey: 'fleet.nav.payments',
         path: '/payments',
-        area: 'fleet-billing',
+        // Δ **C116 — this was `fleet-billing`, and the row means the other
+        // money.** `FeatureAreas` labels it "Fleet billing — monthly
+        // per-Mode-B-vehicle invoice, fleet wallet", which is what *MageRide*
+        // charges this organisation (SCR-FP-010). A subscriber's fare is the
+        // **owner's**, collected from their own passengers into their own
+        // verified bank account and never on MageRide's books (AL-24, AL-49,
+        // BR-23.10) — so this screen is `fleet-operations` and the Owner-only
+        // half is the sub-role below, which is where fleet-svc puts it too. The
+        // gate is unchanged either way; what changes is which fact it reads.
+        area: 'fleet-operations',
         needs: 'write',
         // `…/subscribers/{id}/payments` and `…/payments/{id}/confirm` are both
         // `RequireFleetSubRole(Owner)` — US-23.6, "only the fleet Owner can mark

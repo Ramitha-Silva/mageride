@@ -142,7 +142,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C113 | fleet-portal-vehicles-drivers-trackers | 4c | DONE | 2026-08-08 | **250 tests green** in `@mageride/fleet-portal` (18 files, was 193/14); the verify command exits 0, `next build` emits **17 routes** (was 13), `check-bundle.mjs` reports **AL-52: clean — 1 compiled stylesheet, 30.7 kB CSS**, and all six portal workspaces are green (**1,118 tests, 63 files**). **AL-50 is four cards mounted from a literal list, and that is what makes "no generic dropzone" structural** — `VEHICLE_DOCUMENT_SLOTS` carries the four names and the *wire* kind each posts under, the panel maps that list rather than the server's answer, and `DocumentSlotCard` takes its kind as a prop, so a fifth slot needs a fifth entry and no form control can introduce one; the stored kinds and the wire kinds are two different lists (`registration` ≠ `registration_copy`) and both are pinned against `fleet.yaml`. **Whether a slot is required is the server's field, not `kind`'s** — the route permit is Mode A's — and `canBeApproved()` is US-27.3's rule as one predicate that answers **false** for a vehicle nobody has read the paperwork of, with the panel naming the slots that are holding it rather than colouring a chip. **A document is attached to a vehicle, so `?vehicle=` is the screen's whole state**: the add form navigates there on success, every roster row links to it, and a reload or a pasted link lands on the same slots. **The Paid gate is pre-empted for an Owner and translated for a Manager**, because `GET …/payout-profile` is Owner-only while SCR-FP-004 is Manager-reachable — both are blocked, only one can be told in advance. **A partial CSV import is reported as one** (the good rows land, the report is an HMAC-signed link handed straight to the browser, and the job polls itself to rest). **Three services answer SCR-FP-006 and their gates disagree** — the single bind is approval-gated, provisioning-svc's batch is not, and the health rollup is neither — transcribed rather than smoothed; `decommissioned` is rendered as a **revoked credential** in a column of its own, not as another shade of offline. **`Date.now()` never decides a server fact**: `Assignment.active` is the database's, and the clock only labels a row it already called inactive. **232 new resource keys × 3 locales** (206 → 438); **5 spec gaps / micro-change-set candidates** (headline: T-09's bulk-IMEI route is behind D-30 attestation a browser cannot satisfy, and its only caller is this portal), **4 deliberate wireframe deviations**; no spec, contract, backend or migration file touched |
 | C114 | fleet-portal-dashboard-map-analytics | 4c | DONE | 2026-08-08 | **321 tests green** in `@mageride/fleet-portal` (22 files, was 250/18); the verify command exits 0, `next build` emits **21 routes** (was 17), `check-bundle.mjs` reports **AL-52: clean — 3 compiled stylesheets, 168.9 kB CSS** (Tailwind is 33.2 kB of it; the rest is MapLibre's own widget stylesheet, emitted twice by Turbopack as a chunk and as a media asset and loaded once), and all six portal workspaces are green (**1,189 tests, 67 files**). **The map is handed positions and fetches none** — `GET …/map` is read on the server and passed down, so "only this org's vehicles are visible" is not a filter the component applies but the only data it ever receives; the database refuses underneath (`telemetry.positions_fleet` filtered on `app.fleet_id`, fail-closed) and a vehicle id from another organisation resolves to "not in this organisation" rather than to a marker. **The one URL a browser fetches is the basemap style** (D-14's `tile-cdn`, static cartography), passed as a prop rather than published as a build-time public variable, and **unset is a supported state**: the fleet's own positions render on an empty canvas and the screen says which map it is drawing. **Markers are a GeoJSON source and two circle layers**, because a `Marker` per vehicle would need an inline `style` for its colour, which AL-52 forbids — the hexes come from `@mageride/tailwind-preset`'s token data, which exists for exactly that. **The map window (15 min) and the health thresholds (5/30 min) do not line up and are not meant to**, so the overlay is the union of both reads: a vehicle can be Offline in the table with no pin, and the caption states both windows in the deployment's own numbers. **Idle is a subtraction, not a second measurement** — fleet-svc defines utilisation as `activeHours / periodHours`, so idle is its complement, and the caption says it is therefore calendar time. **The CSV is written by a route handler under `/analytics`** (so `proxy.ts` gates it as SCR-FP-009) from the same org-scoped read the screen made, and the PDF is `window.print()` over `print:hidden` chrome — no contract has an analytics export route. **Billing is the one *read* on this portal gated on the seat**: `canReadBilling()` checks Owner + APPROVED before the wallet card reads anything, so a Manager's dashboard is not a Manager's dashboard with three 403s on it. **123 new resource keys × 3 locales** (438 → 561); **6 spec gaps / micro-change-set candidates**, **4 deliberate wireframe deviations**; three new runtime/type dependencies (`maplibre-gl`, `pmtiles`, `@types/geojson`); no spec, contract, backend or migration file touched |
 | C115 | fleet-portal-scheduling-billing | 4c | DONE | 2026-08-08 | **380 tests green** in `@mageride/fleet-portal` (24 files, was 321/22); the verify command exits 0, `next build` emits **24 routes** (was 21), `check-bundle.mjs` reports **AL-52: clean — 3 compiled stylesheets, 169.1 kB CSS**, and all six portal workspaces are green (**1,248 tests, 69 files**). **The departure clock is Colombo's, and that is the one bug this screen could not survive**: a `datetime-local` value has no zone on it and the server action reading it runs in a UTC container, so `departAtFrom()` resolves the wall clock against `Asia/Colombo` (D-13) — the difference between the 06:00 from the depot and 11:30 — reading the offset out of `Intl`'s zone rules rather than writing `+05:30` down. **Whose app rings is worked out the way `ScheduleAlarmWorker` works it out**: `driversCovering()` is `DriversCoveringAsync`'s predicate transcribed (vehicle, revoked, and the window evaluated *at the booked departure*), so the Vehicle cell names the recipient — or says **nobody is assigned over this departure**, the case the worker otherwise discovers at alarm time and logs as "there is nobody to tell". **Three things SCR-FP-008 cannot do and says so**: a booked departure cannot be changed or cancelled (the contract declares list and create and nothing else, though 0314 admits a `CANCELLED` status it attributes to the operator), the alarm has no off state (`NOT NULL` with a 1…120 CHECK, so the sketch's toggle has nothing to write), and a route cannot be named or chosen (`routeId` is a `spatial.routes` id and transit-svc's route read takes a GTFS string — a different id space). **The Mode A row is on the billing card and is not on the invoice**: a line exists only for a charge `billing.monthly_subscriptions` raised and that table is Mode B only (AL-03), so the count is today's roster, contributes nothing to the total, and the caption says which of the two it is; `invoiceSummary()` compares Σ lines against `lineSumMinor` **and** `invoice.amountMinor` and the card warns rather than picking one. **SCR-FP-010 reads nothing until `canReadBilling()` has said the caller may** — a Manager gets one sentence, not four 403s. **The invoice CSV/PDF is fleet-billing-svc's document, streamed** through a new `download()` on the data layer (the browser holds no bearer, so a link to the API would download a 401), which is the opposite call to SCR-FP-009's analytics CSV — there, no contract has an export route at all. **The sketch's three top-up rows are two rails**: OnePay *is* the card rail, and bank transfer is refused by `ck_fleet_topups_method` rather than by a code review (AL-05). **128 new resource keys × 3 locales** (561 → 689); **5 spec gaps / micro-change-set candidates**, **4 deliberate wireframe deviations**, **1 defect found in C113's shipped screens and fixed** — SCR-FP-004/005/006 passed function label props to client components, which React refuses to serialise across the server boundary, so all three threw at render time; the nine call sites now take sentences composed in the actions and `test/fences.test.ts` asserts the rule over every `'use client'` component's props. No new dependency, and no spec, contract, backend or migration file touched |
-| C116 | fleet-portal-subscriptions | 4c | PENDING | | |
+| C116 | fleet-portal-subscriptions | 4c | DONE | 2026-08-09 | **449 tests green** in `@mageride/fleet-portal` (27 files, was 380/24); the verify command exits 0, `next build` emits **27 routes** (was 24), `check-bundle.mjs` reports **AL-52: clean — 3 compiled stylesheets, 169.2 kB CSS**, and all six portal workspaces are green (**1,317 tests, 72 files**). **AL-23 is the shape of the code, not a rule in it**: eight of the nine Epic 23 proxies are `…/vehicles/{vehicleId}/…` and no contract has a fleet-wide queue or roster, so `?vehicle=` is what both screens *are* and `test/subscriptions.test.ts` asserts every target against `fleet.yaml`. **The proxies split Owner from Manager mid-screen** — the queue and roster are `RequireFleetSubRole(Manager)`, the fare override, cash mark, slip confirmation and AL-25 delete are `RequireFleetSubRole(Owner)` — so `canManageSubscribers()` was added as the portal's third seat-gated control, parsed back out of `FleetOpsEndpoints.cs` by test. **SCR-FP-012's manifest entry moved off `fleet-billing`**: that row is MageRide's monthly invoice to the fleet, and a subscriber's fare is the owner's (AL-24/AL-49/BR-23.10) — same gate, right fact. **AL-59 drift recorded rather than papered over**: `subscription.yaml` has four Mode B methods and `fleet.yaml`'s proxy copy still has five, so the portal's union is the wider one (a pre-AL-59 row renders as a historic method, not a blank cell) and nothing here offers a method at all. **SCR-FP-012's KPIs are one roster read**, and the caption says what they are not: "cash due" is *due* (nothing knows a month will be cash until the owner marks it) and "collected" is the fares of the paid subscribers, not the sum of what arrived. **A muted row is rendered, never filtered** (US-23.12) and Delete is drawn on it alone. **5 spec gaps / micro-change-set candidates**, **6 deliberate wireframe deviations**; 143 new resource keys × 3 locales (689 → 832). No new dependency, and no spec, contract, backend or migration file touched |
 | C117 | web-passenger-subview | 4c | PENDING | | |
 | C118 | contract-test-suite | 5 | PENDING | | |
 | C119 | observability-stack | 5 | PENDING | | |
@@ -18554,3 +18554,135 @@ _Append 3 lines per completed component (Component / Status / Notes)._
 
   **Build host —** no Docker, no replica, no backend build. `vitest run` takes ~16 s and
   `next build` ~40 s. `npm install` reached nothing: there is no new dependency.
+
+- **Component:** C116 fleet-portal-subscriptions — 2026-08-09
+- **Status:** DONE —
+  `npm --prefix portals run lint --workspace fleet && npm --prefix portals run test --workspace fleet && npm --prefix portals run build --workspace fleet`
+  exits 0. **449 tests, 27 files** (was 380/24); `eslint` + `tsc --noEmit` clean; `next build` emits
+  **27 routes** (the twenty-four C115 left, plus `/subscriptions`, `/payments` and the document route
+  handler at `/payments/export`), and `check-bundle.mjs` reports **AL-52: clean — 3 compiled
+  stylesheets, 169.2 kB CSS**. All six portal workspaces are green (**1,317 tests, 72 files**).
+  SCR-FP-011 and SCR-FP-012 render for all three sub-roles, approved and pending, in both appearances
+  at 375 / 768 / 1024.
+- **Notes:**
+  **What was built —** the Passengers (Mode B) group's two screens: the **per-vehicle request queue
+  and subscriber roster** (`app/(portal)/subscriptions`) and the **per-subscriber payment ledger with
+  its summary KPIs and CSV export** (`app/(portal)/payments`, plus `payments/export/route.ts`). One
+  new model module (`src/api/subscriptions.ts`), one action module
+  (`src/server/subscription-actions.ts`) and eight components under `src/components/subscriptions/`.
+  **No nav entry was added** — C111's manifest already declared both. One shell behaviour was added:
+  **`canManageSubscribers()`** in `src/server/access.ts`.
+
+  **AL-23 is the shape of the code rather than a rule written on top of it —** `subscription.grants`
+  and `subscription.access_requests` carry a `vehicle_id`, and **no contract has a fleet-wide queue or
+  a fleet-wide roster**: eight of the nine Epic 23 proxies are `…/vehicles/{vehicleId}/…`, and
+  subscription-svc holds the same fence in its own repository ("there is no method on this interface
+  that takes a fleet, an owner or an account"). So a vehicle is not a filter these screens apply to a
+  larger answer — it is the only address at which an answer exists, `?vehicle=` is what the pages
+  *are*, and `test/subscriptions.test.ts` asserts every target this component builds against the paths
+  `fleet.yaml` declares. `confirmFleetTransferSlip` is the one route addressed by payment instead, and
+  the fence is held on the far side: subscription-svc resolves the payment's own vehicle.
+
+  **The proxies split Owner from Manager in the middle of one screen —** `FleetOpsEndpoints` gives the
+  queue and the roster `RequireFleetSubRole(Manager)` and everything from `DELETE …/subscribers/{id}`
+  down `RequireFleetSubRole(Owner)`, with US-23.6 quoted on the line above it. URD §2.3's
+  `fleet-operations` row does not separate the two seats, so **`canManageSubscribers()`** is the
+  portal's third seat-gated control after `canManageTeam` and `canReadBilling`, and
+  `test/subscriptions.test.ts` parses the C# for the split rather than trusting a comment. A Manager
+  therefore gets SCR-FP-011 with Accept and Reject and one sentence in place of the fare, the cash
+  mark, the slip confirmation and the delete — and SCR-FP-012 reads **nothing at all** for them, which
+  is the shape SCR-FP-010 took for the same reason.
+
+  **One manifest entry changed, and it is this component's own screen —** SCR-FP-012 was declared
+  `area: 'fleet-billing'` by C111. `FeatureAreas` labels that row "Fleet billing — monthly
+  per-Mode-B-vehicle invoice, fleet wallet", which is what **MageRide** charges the organisation; a
+  subscriber's fare is the **owner's**, collected into their own verified account and never on
+  MageRide's books (AL-24, AL-49, BR-23.10). Filing this screen under that row would put a
+  pass-through under the platform's revenue, so it is now `fleet-operations` +
+  `minimumFleetRole: 'owner'`. The gate is unchanged for every seat and every org status
+  (`test/payments-export.test.ts` pins all four); what changed is which fact it reads.
+
+  **Spec gaps / micro-change-set candidates —**
+  (1) **`SubscriberRow` carries no next-due date.** US-23.8 asks for "the cycle **and** next-due date
+  … shown to both the subscriber and the owner" and `web_fleet.html` writes "Joined 5 Jun · due
+  6 Jul". `SubscriberRosterRow` reads `next_due` out of the database and `SubscriberRowResponse.From`
+  does not send it, so the value exists one hop away and on no contract; the passenger's own card
+  (`GET /v1/mode-b/subscriptions/{passengerId}`, not a fleet route) does carry `nextDue`. **Add
+  `nextDue` and `joinDay` to `SubscriberRow` in `subscription.yaml` and `fleet.yaml` and to
+  `SubscriberRowResponse`.** Meanwhile the column names the cycle and the caption says where the date
+  is; `test/subscriptions.test.ts` asserts the absence on one contract and the presence on the other,
+  so the gap closing is a failing test.
+  (2) **`fleet.yaml` still lists `onepay` as a Mode B payment method.** AL-59 removed it from
+  `subscription.yaml` because "`payTo` is the fleet OWNER's verified account and OnePay has one
+  merchant account per merchant". The proxy's copy of the enum was not updated, and fleet-svc streams
+  subscription-svc's body back untouched. **Drop `onepay` from
+  `SubscriptionPaymentRow.method`.** The portal's union is deliberately the wider of the two so a row
+  written before AL-59 renders as a historic method rather than a blank cell, and the test fails when
+  the two converge — at which point the union loses a member in the same change.
+  (3) **`SubscriberRow` carries no payment id**, so the wireframe's roster-level **Confirm** cannot be
+  addressed: `confirmFleetTransferSlip` takes a `paymentId`. **Add `thisMonthPaymentId` (and the
+  slip's signed URL) to `SubscriberRow`** and the extra reads disappear. Meanwhile the id and the slip
+  are looked up on the subscriber's own ledger, for `pending_verification` rows only, for an Owner
+  only (the ledger route is Owner-gated) and for at most `SLIP_LOOKUP_LIMIT` = 20 of them; past that
+  the row keeps its **Payments** link and the table says so rather than dropping the control silently.
+  (4) **No subscription-payment export route exists on any contract.** `fleet.yaml`'s Epic 23 block is
+  eight proxies and none renders a document; subscription-svc's only document route is the signed
+  slip/QR file. So `/payments/export` is written in this repo, exactly as SCR-FP-009's analytics CSV is
+  and for the same reason — and deliberately unlike SCR-FP-010's invoice, which fleet-billing-svc
+  renders and the portal streams.
+  (5) **There is no reject-a-slip verb.** No route sets a payment back or marks one bad, so a slip
+  that does not check out is left unconfirmed and the month stays open. Stated on the screen. Related:
+  **D2 §FP and this component's own deliverable line still name OnePay** as a Mode B rail, which
+  AL-59 retired — worth a wording pass in the same change as (2).
+
+  **Deliberate wireframe deviations —**
+  (a) the KPI the sketch calls **"Cash due"** is **"Still due"**: nothing on the platform knows in
+  advance how a subscriber will settle, because a `cash` row is written by the owner's own mark and a
+  passenger who has chosen no rail has no row at all — which `ThisMonthStatusOf` reports as `unpaid`
+  exactly like one who opened the pay sheet and walked away.
+  (b) **"Collected · June"** is **"Paid this month"** and is the sum of the *fares* of the subscribers
+  the roster marks paid, over one request; a cash mark takes an `amountMinor` of its own, so the exact
+  amounts are the ledger's and the caption says which is which. (The sketch's own three figures do not
+  reconcile with each other, so it is illustrative rather than arithmetic.)
+  (c) the **Billing cycle** column names the cycle rather than "Joined 5 Jun · due 6 Jul" — gap (1).
+  (d) the vehicle and subscriber **pickers are a `method="get"` form under the title**, not a topbar
+  dropdown: same control as SCR-FP-009's date filter, and for the same three reasons (the selection is
+  a URL, the export link takes the same two values, and no client state can disagree with the figures
+  beside it).
+  (e) the muted row is **`opacity-60`**, not the sketch's `.45` — the Delete button inside it has to
+  stay legible in both appearances.
+  (f) the roster's **Confirm carries a "View slip" link** the sketch draws only on SCR-FP-012.
+  Confirming a slip you have not looked at is the wrong default, and the read that finds the payment
+  id brings the signed URL with it anyway.
+
+  **Nothing here is presented as MageRide's money —** AL-24 makes these payments a pass-through,
+  BR-23.10 keeps them off MageRide's books and AL-49 makes the passenger's `payTo` the owner's own
+  verified account. `SUBSCRIPTION_MONEY_IS_PASS_THROUGH` is a constant rather than a habit so that
+  removing the caption is a diff somebody has to justify, and both screens carry it. The only MageRide
+  charge in this console is SCR-FP-010's monthly per-Mode-B-vehicle invoice, which is a different
+  screen about different money.
+
+  **Two decisions in the writes —** `mark-cash` deliberately sends **no `periodMonth`**:
+  `MarkCashAsync` defaults it to `DuePeriodOf(subscription, now)`, and a portal computing a month from
+  a browser clock would settle the wrong one either side of a Colombo month boundary (C113's rule —
+  `Date.now()` never decides a server fact). And the three `409`s `mark-cash` can answer (already
+  paid, no live subscription, Free service payment) get **one** sentence, because `_shared.yaml` makes
+  the service's English `detail` unshowable and a sentence that guessed which of the three it was
+  would be wrong a third of the time.
+
+  **Files —** new: `app/(portal)/subscriptions/page.tsx`, `app/(portal)/payments/page.tsx`,
+  `app/(portal)/payments/export/route.ts`, `src/api/subscriptions.ts`,
+  `src/server/subscription-actions.ts`,
+  `src/components/subscriptions/{RequestQueue,RequestDecision,SubscriberRoster,FareCell,MarkCashForm,ConfirmSlipForm,DeleteSubscriberForm,PaymentLedger,ScopeForm,subscription-model}.tsx?`,
+  `test/{subscriptions.test.ts,subscriber-screens.test.tsx,payments-export.test.ts}`. Changed:
+  `src/server/access.ts` (`canManageSubscribers`), `src/server/routes.ts` (SCR-FP-012's row),
+  `src/i18n/messages/{en,si,ta}.ts`, `portals/fleet/CLAUDE.md`. **No spec, no contract, no backend, no
+  migration, no new dependency, no change to any shared portal package and no change to any other
+  component's screens.** `.env.example` is unchanged — this component reads no new variable.
+
+  **i18n —** 832 keys × 3 locales, up from 689. `test/i18n.test.ts`'s allow-list is unchanged at four
+  entries: every new value that is identical across the three carries no language at all
+  (`{plate} · {service}`).
+
+  **Build host —** no Docker, no replica, no backend build. `vitest run` takes ~20 s and `next build`
+  ~40 s. `npm install` reached nothing: there is no new dependency.

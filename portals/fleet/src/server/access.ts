@@ -240,6 +240,39 @@ export function canManageTeam(session: FleetSession): boolean {
 }
 
 /**
+ * Whether the caller may act on a **subscriber's money or their place on the
+ * roster** — the fare override, the cash mark, the slip confirmation and AL-25's
+ * hard delete (SCR-FP-011 and SCR-FP-012). Δ C116.
+ *
+ * The third control on this portal gated on the seat as well as on the row, and
+ * the same shape as {@link canManageTeam}: `FleetOpsEndpoints` splits the Epic 23
+ * proxies in half — the request queue and the roster carry
+ * `RequireFleetSubRole(Manager)`, and everything from `DELETE …/subscribers/{id}`
+ * down carries `RequireFleetSubRole(Owner)` with the reason on the line above it
+ * ("US-23.6 is explicit — *only the fleet Owner can mark it received* — and US-23.7
+ * and item 17 put the fare override and the hard delete in the same hands").
+ *
+ * URD §2.3's `fleet-operations` row does not separate an Owner from a Manager —
+ * the sub-model narrows a Manager out of billing and nothing else — so the row
+ * alone cannot answer this and the seat is read as well. The seat compared against
+ * is the *route's* own declaration, transcribed, which is a different thing from
+ * re-deriving the matrix.
+ *
+ * **Not `fleet-billing`.** That row is "Fleet billing — monthly
+ * per-Mode-B-vehicle invoice, fleet wallet", which is what MageRide charges this
+ * organisation. Epic 23 money is the **owner's**, collected from their own
+ * passengers into their own bank account (AL-24, AL-49, BR-23.10), and reaching
+ * for the billing row because it happens to be Owner-only would file a
+ * pass-through under the platform's revenue.
+ */
+export function canManageSubscribers(session: FleetSession): boolean {
+  return (
+    canMutate(session, 'fleet-operations', { requiresApprovedOrg: true }) &&
+    satisfiesFleetRole(session.fleetRole, 'owner')
+  );
+}
+
+/**
  * Whether the caller may **read** the fleet wallet and the monthly invoices
  * (SCR-FP-003's "Wallet & next invoice" card, and SCR-FP-010 entire). Δ C114.
  *

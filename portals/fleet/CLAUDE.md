@@ -487,6 +487,100 @@ invoice is deliberately left open, and the operator has to be able to try. Settl
 by construction (`fleet_invoice:{invoiceId}` is UNIQUE in `billing.journal_entries`), so the
 `Idempotency-Key` is a fresh one rather than a second, weaker guard over the same money.
 
+## What C116 is — SCR-FP-011 and SCR-FP-012
+
+The owner's side of **Mode B** (Epic 23): the per-vehicle request queue, the subscriber roster with
+per-subscriber fares, and the per-subscriber payment ledger.
+`app/(portal)/{subscriptions,payments}` + `app/(portal)/payments/export/route.ts`,
+`src/api/subscriptions.ts`, `src/server/subscription-actions.ts` and
+`src/components/subscriptions/`. It added no nav entry — C111 declared both — and one shell
+behaviour: `canManageSubscribers()` in `src/server/access.ts`.
+
+### AL-23 is why `?vehicle=` is what the screens *are*
+
+`subscription.access_requests` and `subscription.grants` carry a `vehicle_id`, and **no contract has
+a fleet-wide queue or a fleet-wide roster**: eight of the nine Epic 23 proxies are
+`…/vehicles/{vehicleId}/…`, and subscription-svc holds the same fence in its repository ("there is no
+method on this interface that takes a fleet, an owner or an account"). A vehicle is therefore not a
+filter these screens apply to a larger answer — it is the only address at which an answer exists, and
+`test/subscriptions.test.ts` asserts the shape of every target. The picker is `web_fleet.html`'s own
+topbar control and is a plain `method="get"` form, like SCR-FP-009's date filter and for the same
+reasons.
+
+`confirmFleetTransferSlip` is the one exception and the contract makes it: it hangs off the fleet
+group and subscription-svc resolves the payment's own vehicle, so the fence is held on the far side.
+
+### The proxies split Owner from Manager mid-screen, and `canManageSubscribers()` is that line
+
+`FleetOpsEndpoints` gives the queue and the roster `RequireFleetSubRole(Manager)` and everything from
+`DELETE …/subscribers/{id}` down `RequireFleetSubRole(Owner)`. So a Manager gets SCR-FP-011 with
+Accept and Reject and a sentence in place of the fare, the cash mark, the slip confirmation and the
+delete — and SCR-FP-012 reads **nothing at all** for them, the shape SCR-FP-010 has. URD §2.3's
+`fleet-operations` row does not separate the two seats, so this is the third control on this portal
+gated on the seat as well as the row (after `canManageTeam` and `canReadBilling`), and the test parses
+the C# for the split.
+
+Δ **SCR-FP-012's manifest entry moved off `fleet-billing`.** That row is "Fleet billing — monthly
+per-Mode-B-vehicle invoice, fleet wallet", which is what *MageRide* charges the organisation. A
+subscriber's fare is the **owner's**, so the screen is `fleet-operations` + `minimumFleetRole: owner`.
+Same gate, read off the right fact.
+
+### This money is the owner's, and both screens say so
+
+AL-24 makes subscription payments a pass-through, BR-23.10 keeps them off MageRide's books, and AL-49
+makes the passenger's `payTo` the owner's own verified account. `SUBSCRIPTION_MONEY_IS_PASS_THROUGH`
+is the caption both screens carry, as a constant rather than a habit so removing it is a diff somebody
+has to justify. The only MageRide charge in this console is SCR-FP-010's.
+
+**AL-59 removed `onepay` from Mode B** — it would have landed subscriber money in MageRide's account —
+and `subscription.yaml` has four methods where `fleet.yaml`'s proxy copy still has five. The union
+here is the **wider** one so a row written before AL-59 renders as a historic method rather than a
+blank cell; nothing on this portal offers a method at all (a payment is initiated by the passenger,
+SCR-PA-025a), so the drift costs a label. `test/subscriptions.test.ts` pins both enums and fails when
+they converge.
+
+### SCR-FP-012's KPIs are one read, and the caption says what they are not
+
+The four tiles come from `GET …/subscribers` over `thisMonthStatus` — subscription-svc's own verdict
+on the current Colombo month — at the fare each subscriber is on. Two things they are therefore not,
+and the caption carries both: "Cash due" is **due**, because nothing knows in advance how a subscriber
+will pay (a `cash` row is written by the owner's mark, and a passenger who has chosen no rail has no
+row, which `ThisMonthStatusOf` reports as `unpaid` either way); and "Collected" is the **fares** of the
+subscribers marked paid, not the sum of what arrived, because a cash mark takes an `amountMinor` of its
+own. The exact amounts are the ledger's, one screen down.
+
+### The CSV is written here; the invoice CSV was fleet-billing-svc's
+
+No contract exports subscription payments, so `/payments/export` re-reads the same org-scoped ledger
+and writes the rows — SCR-FP-009's arrangement, and the opposite of SCR-FP-010's. The amount is
+printed twice, rupees and integer minor units, which is the convention fleet-billing-svc's own CSV set.
+
+### What SCR-FP-011 and SCR-FP-012 cannot do, and say so
+
+1. **Show a next-due date.** US-23.8 asks for "the cycle **and** next-due date … shown to both the
+   subscriber and the owner", and the wireframe writes "Joined 5 Jun · due 6 Jul". `SubscriberRow`
+   carries neither `nextDue` nor `joinDay` — `SubscriberRosterRow` reads `next_due` and
+   `SubscriberRowResponse.From` does not send it — so the value exists one hop away and on no
+   contract. The passenger's own card (`GET /v1/mode-b/subscriptions/{passengerId}`, not a fleet
+   route) does carry it. The column names the cycle and the caption says where the date is.
+2. **Confirm a slip from the roster without a second read.** `confirmFleetTransferSlip` is addressed
+   *by payment* and `SubscriberRow` carries no payment id, so the id (and the slip's own signed URL)
+   is looked up on the subscriber's ledger — for `pending_verification` rows only, for an Owner only,
+   and for at most `SLIP_LOOKUP_LIMIT` of them. Past that the row keeps its **Payments** link, and the
+   table says so rather than dropping the control silently.
+3. **Reject a slip.** No route sets a payment back or marks it bad. A slip that does not check out is
+   left unconfirmed and the month stays open.
+4. **Delete an active subscriber.** AL-25 puts the order the other way round — the passenger
+   unsubscribes, the row goes muted, and only then is it the owner's to remove. `canDelete` draws the
+   button on a muted row alone and the service answers `409 conflict` for any other.
+
+### One more rule for a screen component
+
+- **A muted row is rendered, never filtered.** US-23.12 keeps an unsubscribed passenger "visible but
+  muted in the Fleet Portal until the owner deletes that subscriber". `muted` is the server's flag
+  (`subscription.grants.status = 'unsubscribed'`), the portal never decides it, and nothing on either
+  screen removes a row except the owner's own press.
+
 ## Configuration
 
 `.env.example` documents every variable. `MAGERIDE_API_BASE_URL` (the C008 gateway origin) is

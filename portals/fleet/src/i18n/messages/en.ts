@@ -981,6 +981,173 @@ export const fleetEn = {
   'fleet.error.railUnavailable':
     'That payment method is not available just now. Try the other one — MageRide takes card and LankaQR payments only.',
 
+  /* ---- SCR-FP-011 · Mode B subscriptions & requests (Epic 23, Δ C116) --- */
+  'fleet.subscriptions.title': 'Mode B subscriptions',
+  'fleet.subscriptions.scope.legend': 'Choose the vehicle to manage',
+  'fleet.subscriptions.scope.vehicle': 'Vehicle',
+  'fleet.subscriptions.scope.subscriber': 'Subscriber',
+  'fleet.subscriptions.scope.apply': 'Show',
+  'fleet.subscriptions.vehicleOption': '{plate} · {service}',
+  'fleet.subscriptions.noModeBVehicles':
+    'This organisation runs no Mode B vehicle yet. A request queue and a subscriber roster belong to a vehicle, so add one on the Vehicles screen first.',
+  'fleet.subscriptions.unknownVehicle':
+    'That vehicle is not one of this organisation’s Mode B vehicles. Choose one from the list above.',
+  'fleet.subscriptions.passengerUnnamed': 'Passenger',
+  'fleet.subscriptions.noMobile': 'No number on file',
+  'fleet.subscriptions.column.passenger': 'Passenger',
+  'fleet.subscriptions.column.contact': 'Mobile / ID',
+  'fleet.subscriptions.column.requested': 'Requested',
+  'fleet.subscriptions.column.action': 'Action',
+  'fleet.subscriptions.column.fare': 'Monthly fare',
+  'fleet.subscriptions.column.cycle': 'Billing cycle',
+  'fleet.subscriptions.column.thisMonth': 'This month',
+  'fleet.subscriptions.column.actions': 'Actions',
+  'fleet.subscriptions.requests.heading': 'Incoming requests · {vehicle}',
+  'fleet.subscriptions.requests.caption':
+    'Passengers waiting for access to this vehicle, oldest request first',
+  'fleet.subscriptions.requests.pending': '{count} pending',
+  'fleet.subscriptions.requests.empty': 'Nobody is waiting for access to this vehicle.',
+  'fleet.subscriptions.requests.note':
+    'Each Mode B vehicle has its own request queue. Accept grants tracking access and starts the subscription on this vehicle’s billing cycle; Reject is final and the passenger has to ask again. The assigned driver can accept or reject the same requests in the Driver App.',
+  'fleet.subscriptions.requests.readOnly':
+    'Your seat can read this queue but not decide it.',
+  'fleet.subscriptions.accept': 'Accept',
+  'fleet.subscriptions.accepting': 'Accepting…',
+  'fleet.subscriptions.reject': 'Reject',
+  'fleet.subscriptions.rejecting': 'Rejecting…',
+  'fleet.subscriptions.confirmReject': 'Reject request',
+  'fleet.subscriptions.reason': 'Reason (optional)',
+  'fleet.subscriptions.reasonHint': 'Kept with the request. The passenger is not sent it.',
+  'fleet.subscriptions.request.accepted':
+    '{passenger} now has access to this vehicle and their subscription has started.',
+  'fleet.subscriptions.request.rejected':
+    '{passenger} was not given access. Nothing was created, and they can ask again.',
+  'fleet.subscriptions.roster.heading': 'Subscribers · {vehicle}',
+  'fleet.subscriptions.roster.caption':
+    'Everybody subscribed to this vehicle, with what they pay and where this month stands',
+  'fleet.subscriptions.roster.paid': 'Paid service · {count} subscribers',
+  'fleet.subscriptions.roster.paidWithDefault': 'Paid service · default Rs {amount}/mo',
+  'fleet.subscriptions.roster.free': 'Free service · no fare is collected',
+  'fleet.subscriptions.roster.empty': 'Nobody subscribes to this vehicle yet.',
+  'fleet.subscriptions.roster.truncated':
+    'Only the first {rows} subscribers are listed, and a slip can be confirmed here for the first {slips} awaiting one. Open a subscriber’s Payments for the rest.',
+  'fleet.subscriptions.paymentsLink': 'Payments',
+  'fleet.subscriptions.farePerMonth': 'Rs {amount}/mo',
+  'fleet.subscriptions.fare.edit': 'Change',
+  'fleet.subscriptions.fare.label': 'Monthly fare (Rs)',
+  'fleet.subscriptions.fare.hint': 'This subscriber only. Others keep the fare they are on.',
+  'fleet.subscriptions.fare.save': 'Save fare',
+  'fleet.subscriptions.fare.saving': 'Saving…',
+  'fleet.subscriptions.fare.saved': 'Now {amount} a month for this subscriber.',
+  'fleet.subscriptions.fare.none': 'No fare',
+  'fleet.subscriptions.cycle.monthFirst': 'From the 1st of each month',
+  'fleet.subscriptions.cycle.anniversary': 'From the day they joined',
+  'fleet.subscriptions.cycleNote':
+    'The next due date is worked out from the cycle and is shown on the passenger’s own subscription card; it is not carried on the fleet roster.',
+  'fleet.subscriptions.status.paid': 'Paid',
+  'fleet.subscriptions.status.verify': 'Transfer — verify slip',
+  'fleet.subscriptions.status.due': 'Due',
+  'fleet.subscriptions.status.free': 'Free',
+  'fleet.subscriptions.status.unsubscribed': 'Unsubscribed',
+  'fleet.subscriptions.cash.open': 'Mark received',
+  'fleet.subscriptions.cash.amount': 'Cash received (Rs)',
+  'fleet.subscriptions.cash.amountHint':
+    'Their monthly fare, unless they handed over something else.',
+  'fleet.subscriptions.cash.submit': 'Record payment',
+  'fleet.subscriptions.cash.submitting': 'Recording…',
+  'fleet.subscriptions.cash.received':
+    '{amount} recorded for {month}. The passenger’s app now shows this month as paid.',
+  'fleet.subscriptions.slip.confirm': 'Confirm',
+  'fleet.subscriptions.slip.confirming': 'Confirming…',
+  'fleet.subscriptions.slip.view': 'View slip',
+  'fleet.subscriptions.slip.confirmed':
+    '{amount} for {month} is confirmed as received. The passenger’s app now shows it as paid.',
+  'fleet.subscriptions.delete.open': 'Delete',
+  'fleet.subscriptions.delete.confirm': 'Delete subscriber',
+  'fleet.subscriptions.delete.confirming': 'Deleting…',
+  'fleet.subscriptions.delete.warning':
+    'This removes the row for good. Their payment history goes with it, and they have to request access again to rejoin.',
+  'fleet.subscriptions.subscriber.deleted': '{passenger} has been removed from this vehicle.',
+  'fleet.subscriptions.rosterNote':
+    'Each subscriber can be on a different monthly fare. Cash is recorded here with Mark received; a bank transfer waits as a slip until you confirm it; LankaQR settles by itself. A passenger who unsubscribes stays on this list, greyed out, until you delete them.',
+  'fleet.subscriptions.passThroughNote':
+    'This money is yours. Subscribers pay into your own verified bank account, and MageRide neither holds it nor takes a share — the only MageRide charge is the monthly vehicle fee on the Billing screen.',
+  'fleet.subscriptions.dueSummary': '{amount} is still owed for this month, by {count} subscribers.',
+  'fleet.subscriptions.freeVehicleNote':
+    'This vehicle is a free service, so it collects no fare and has no payment columns.',
+  'fleet.subscriptions.ownerOnly':
+    'Fares, cash, transfer slips and deleting a subscriber are the organisation’s Owner’s. You can accept and reject requests.',
+  'fleet.subscriptions.error.requestMissing':
+    'That request could not be identified. Reload the queue and try again.',
+  'fleet.subscriptions.error.requestDecided':
+    'That request has already been decided. Reload the queue to see where it went.',
+  'fleet.subscriptions.error.subscriberMissing':
+    'That subscriber could not be identified. Reload the roster and try again.',
+  'fleet.subscriptions.error.fareInvalid': 'Give the monthly fare in rupees.',
+  'fleet.subscriptions.error.fareNotCollectable':
+    'There is no fare to set for this subscriber. A free service carries none, and an ended subscription can no longer be billed.',
+  'fleet.subscriptions.error.amountInvalid': 'Give the amount received, in rupees.',
+  'fleet.subscriptions.error.cashNotDue':
+    'This month cannot take a cash payment: it is either paid already, on a free service, or the subscription has ended.',
+  'fleet.subscriptions.error.paymentMissing':
+    'That payment could not be identified. Open the subscriber’s payments and try there.',
+  'fleet.subscriptions.error.slipNotPending':
+    'Only a slip the passenger has uploaded can be confirmed, and this payment is not waiting on one.',
+  'fleet.subscriptions.error.stillSubscribed':
+    'This subscriber is still active. Only the passenger can end their own subscription; the row becomes deletable once they have.',
+
+  /* ---- SCR-FP-012 · Per-subscriber payment ledger (item 16i, Δ C116) ---- */
+  'fleet.payments.title': 'Subscriber payments',
+  'fleet.payments.ownerOnly':
+    'Subscriber payments belong to the organisation’s Owner. Ask them for the ledger, or for a copy of it.',
+  'fleet.payments.exportCsv': 'Export CSV',
+  'fleet.payments.scope.legend': 'Choose the vehicle and subscriber',
+  'fleet.payments.scope.mutedOption': '{passenger} — unsubscribed',
+  'fleet.payments.noSubscribers':
+    'Nobody subscribes to this vehicle yet, so there is no ledger to show.',
+  'fleet.payments.kpi.collected': 'Paid this month',
+  'fleet.payments.kpi.collectedDetail': '{count} subscribers · {vehicle}',
+  'fleet.payments.kpi.pending': 'Pending verify',
+  'fleet.payments.kpi.pendingDetail': '{count} transfer slips to check',
+  'fleet.payments.kpi.due': 'Still due',
+  'fleet.payments.kpi.dueDetail': '{count} subscribers',
+  'fleet.payments.kpi.subscribers': 'Subscribers',
+  'fleet.payments.kpi.subscribersDetail': '{muted} unsubscribed · {free} on a free service',
+  'fleet.payments.kpiNote':
+    'These four count this vehicle’s subscribers by where their current month stands, at the fare each is on. What actually arrived is on the ledger below — cash can be marked for any amount. Nothing here says how an unpaid month will be paid: cash becomes a payment only when you mark it received.',
+  'fleet.payments.ledger.heading': 'Ledger · {subscriber} · {vehicle}',
+  'fleet.payments.ledger.caption': 'Every subscription payment for this subscriber, newest first',
+  'fleet.payments.ledger.empty': 'No payment has been recorded for this subscriber yet.',
+  'fleet.payments.ledger.truncated':
+    'The most recent {rows} months are shown. Older payments are kept and are on the export.',
+  'fleet.payments.column.month': 'Month',
+  'fleet.payments.column.date': 'Date',
+  'fleet.payments.column.method': 'Method',
+  'fleet.payments.column.amount': 'Amount',
+  'fleet.payments.column.status': 'Status',
+  'fleet.payments.notPaidYet': 'Not paid yet',
+  'fleet.payments.ledgerNote':
+    'Confirming a transfer or marking cash received pushes Paid straight to the passenger’s app and their own history. LankaQR payments settle by themselves.',
+  'fleet.payments.status.paid': 'Paid',
+  'fleet.payments.status.verify': 'Verify slip',
+  'fleet.payments.status.initiated': 'Started',
+  'fleet.payments.status.failed': 'Failed',
+  'fleet.payments.method.lankaqrDeeplink': 'LankaQR (bank app)',
+  'fleet.payments.method.lankaqrScan': 'LankaQR (scanned)',
+  'fleet.payments.method.onepay': 'OnePay (withdrawn)',
+  'fleet.payments.method.onlineTransfer': 'Online transfer (slip)',
+  'fleet.payments.method.cash': 'Cash',
+  'fleet.payments.csv.vehicle': 'Vehicle',
+  'fleet.payments.csv.subscriber': 'Subscriber',
+  'fleet.payments.csv.month': 'Period month',
+  'fleet.payments.csv.paidAt': 'Paid at',
+  'fleet.payments.csv.method': 'Method',
+  'fleet.payments.csv.amount': 'Amount (Rs)',
+  'fleet.payments.csv.amountMinor': 'Amount (cents)',
+  'fleet.payments.csv.currency': 'Currency',
+  'fleet.payments.csv.status': 'Status',
+  'fleet.payments.csv.paymentId': 'Payment ID',
+
   /* ---- The shell's placeholder for a screen a later component owns ------ */
   'fleet.screen.pendingTitle': 'This screen is not built yet',
   'fleet.screen.pendingBody':

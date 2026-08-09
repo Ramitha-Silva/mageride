@@ -902,6 +902,173 @@ export const fleetTa: FleetMessages = {
   'fleet.error.railUnavailable':
     'அந்தக் கட்டண முறை இப்போது கிடைக்கவில்லை. மற்றொன்றை முயற்சிக்கவும் — MageRide அட்டை மற்றும் LankaQR கட்டணங்களை மட்டுமே ஏற்கிறது.',
 
+  /* ---- SCR-FP-011 · B முறை சந்தாக்கள் & கோரிக்கைகள் (Epic 23, Δ C116) -- */
+  'fleet.subscriptions.title': 'B முறை சந்தாக்கள்',
+  'fleet.subscriptions.scope.legend': 'நிர்வகிக்க வேண்டிய வாகனத்தைத் தேர்ந்தெடுக்கவும்',
+  'fleet.subscriptions.scope.vehicle': 'வாகனம்',
+  'fleet.subscriptions.scope.subscriber': 'சந்தாதாரர்',
+  'fleet.subscriptions.scope.apply': 'காட்டு',
+  'fleet.subscriptions.vehicleOption': '{plate} · {service}',
+  'fleet.subscriptions.noModeBVehicles':
+    'இந்த நிறுவனம் இன்னும் B முறை வாகனம் எதையும் இயக்கவில்லை. கோரிக்கை வரிசையும் சந்தாதாரர் பட்டியலும் ஒரு வாகனத்திற்கே உரியவை, எனவே முதலில் வாகனங்கள் திரையில் ஒன்றைச் சேர்க்கவும்.',
+  'fleet.subscriptions.unknownVehicle':
+    'அந்த வாகனம் இந்த நிறுவனத்தின் B முறை வாகனம் அல்ல. மேலே உள்ள பட்டியலிலிருந்து ஒன்றைத் தேர்ந்தெடுக்கவும்.',
+  'fleet.subscriptions.passengerUnnamed': 'பயணி',
+  'fleet.subscriptions.noMobile': 'எண் பதிவில் இல்லை',
+  'fleet.subscriptions.column.passenger': 'பயணி',
+  'fleet.subscriptions.column.contact': 'கைபேசி / அடையாளம்',
+  'fleet.subscriptions.column.requested': 'கோரிய நாள்',
+  'fleet.subscriptions.column.action': 'செயல்',
+  'fleet.subscriptions.column.fare': 'மாதக் கட்டணம்',
+  'fleet.subscriptions.column.cycle': 'கட்டண சுழற்சி',
+  'fleet.subscriptions.column.thisMonth': 'இந்த மாதம்',
+  'fleet.subscriptions.column.actions': 'செயல்கள்',
+  'fleet.subscriptions.requests.heading': 'வரும் கோரிக்கைகள் · {vehicle}',
+  'fleet.subscriptions.requests.caption':
+    'இந்த வாகனத்தில் இடம் பெற காத்திருக்கும் பயணிகள், பழைய கோரிக்கை முதலில்',
+  'fleet.subscriptions.requests.pending': '{count} நிலுவையில்',
+  'fleet.subscriptions.requests.empty': 'இந்த வாகனத்தில் இடம் பெற யாரும் காத்திருக்கவில்லை.',
+  'fleet.subscriptions.requests.note':
+    'ஒவ்வொரு B முறை வாகனத்திற்கும் தனித் கோரிக்கை வரிசை உண்டு. ஏற்றல் கண்காணிப்பு அணுகலை வழங்கி, இந்த வாகனத்தின் கட்டண சுழற்சியில் சந்தாவைத் தொடங்குகிறது; நிராகரிப்பு இறுதியானது, பயணி மீண்டும் கோர வேண்டும். அதே கோரிக்கைகளை ஓட்டுநர் செயலியில் நியமிக்கப்பட்ட ஓட்டுநரும் ஏற்கவோ நிராகரிக்கவோ முடியும்.',
+  'fleet.subscriptions.requests.readOnly':
+    'உங்கள் பாத்திரம் இந்த வரிசையைப் படிக்கலாம், ஆனால் முடிவெடுக்க முடியாது.',
+  'fleet.subscriptions.accept': 'ஏற்கவும்',
+  'fleet.subscriptions.accepting': 'ஏற்கிறது…',
+  'fleet.subscriptions.reject': 'நிராகரி',
+  'fleet.subscriptions.rejecting': 'நிராகரிக்கிறது…',
+  'fleet.subscriptions.confirmReject': 'கோரிக்கையை நிராகரி',
+  'fleet.subscriptions.reason': 'காரணம் (விருப்பத்திற்குரியது)',
+  'fleet.subscriptions.reasonHint': 'கோரிக்கையுடன் வைக்கப்படும். பயணிக்கு அனுப்பப்படாது.',
+  'fleet.subscriptions.request.accepted':
+    '{passenger} இப்போது இந்த வாகனத்தை அணுகலாம், அவர்களின் சந்தா தொடங்கிவிட்டது.',
+  'fleet.subscriptions.request.rejected':
+    '{passenger} க்கு அணுகல் வழங்கப்படவில்லை. எதுவும் உருவாக்கப்படவில்லை, அவர்கள் மீண்டும் கோரலாம்.',
+  'fleet.subscriptions.roster.heading': 'சந்தாதாரர்கள் · {vehicle}',
+  'fleet.subscriptions.roster.caption':
+    'இந்த வாகனத்தில் சந்தா கொண்ட அனைவரும், அவர்கள் செலுத்துவதும் இந்த மாதத்தின் நிலையும் உடன்',
+  'fleet.subscriptions.roster.paid': 'கட்டணச் சேவை · {count} சந்தாதாரர்கள்',
+  'fleet.subscriptions.roster.paidWithDefault': 'கட்டணச் சேவை · இயல்பு மாதம் ரூ. {amount}',
+  'fleet.subscriptions.roster.free': 'இலவசச் சேவை · கட்டணம் வசூலிக்கப்படுவதில்லை',
+  'fleet.subscriptions.roster.empty': 'இந்த வாகனத்தில் இன்னும் யாரும் சந்தா கொள்ளவில்லை.',
+  'fleet.subscriptions.roster.truncated':
+    'முதல் {rows} சந்தாதாரர்கள் மட்டுமே பட்டியலிடப்பட்டுள்ளனர், சீட்டுக்குக் காத்திருப்பவர்களில் முதல் {slips} பேருக்கே இங்கிருந்து உறுதி செய்ய முடியும். மற்றவர்களுக்கு அந்தச் சந்தாதாரரின் கொடுப்பனவுகளைத் திறக்கவும்.',
+  'fleet.subscriptions.paymentsLink': 'கொடுப்பனவுகள்',
+  'fleet.subscriptions.farePerMonth': 'ரூ. {amount}/மாதம்',
+  'fleet.subscriptions.fare.edit': 'மாற்று',
+  'fleet.subscriptions.fare.label': 'மாதக் கட்டணம் (ரூ.)',
+  'fleet.subscriptions.fare.hint': 'இந்தச் சந்தாதாரருக்கு மட்டும். மற்றவர்கள் தங்கள் கட்டணத்திலேயே இருப்பர்.',
+  'fleet.subscriptions.fare.save': 'கட்டணத்தைச் சேமி',
+  'fleet.subscriptions.fare.saving': 'சேமிக்கிறது…',
+  'fleet.subscriptions.fare.saved': 'இந்தச் சந்தாதாரருக்கு இப்போது மாதம் {amount}.',
+  'fleet.subscriptions.fare.none': 'கட்டணம் இல்லை',
+  'fleet.subscriptions.cycle.monthFirst': 'ஒவ்வொரு மாதமும் 1ஆம் தேதி முதல்',
+  'fleet.subscriptions.cycle.anniversary': 'அவர்கள் இணைந்த நாள் முதல்',
+  'fleet.subscriptions.cycleNote':
+    'அடுத்த கட்டண நாள் சுழற்சியிலிருந்து கணக்கிடப்பட்டு பயணியின் சந்தா அட்டையில் காட்டப்படுகிறது; அது தொகுதிப் பட்டியலில் வருவதில்லை.',
+  'fleet.subscriptions.status.paid': 'செலுத்தப்பட்டது',
+  'fleet.subscriptions.status.verify': 'பரிமாற்றம் — சீட்டைச் சரிபார்',
+  'fleet.subscriptions.status.due': 'செலுத்த வேண்டும்',
+  'fleet.subscriptions.status.free': 'இலவசம்',
+  'fleet.subscriptions.status.unsubscribed': 'சந்தா நீக்கப்பட்டது',
+  'fleet.subscriptions.cash.open': 'பெற்றதாகக் குறி',
+  'fleet.subscriptions.cash.amount': 'பெற்ற பணம் (ரூ.)',
+  'fleet.subscriptions.cash.amountHint':
+    'வேறு தொகை தந்திருந்தால் தவிர, அவர்களின் மாதக் கட்டணம்.',
+  'fleet.subscriptions.cash.submit': 'கொடுப்பனவைப் பதிவு செய்',
+  'fleet.subscriptions.cash.submitting': 'பதிவு செய்கிறது…',
+  'fleet.subscriptions.cash.received':
+    '{month} க்கு {amount} பதிவு செய்யப்பட்டது. பயணியின் செயலியில் இந்த மாதம் செலுத்தியதாகக் காட்டும்.',
+  'fleet.subscriptions.slip.confirm': 'உறுதிப்படுத்து',
+  'fleet.subscriptions.slip.confirming': 'உறுதிப்படுத்துகிறது…',
+  'fleet.subscriptions.slip.view': 'சீட்டைப் பார்',
+  'fleet.subscriptions.slip.confirmed':
+    '{month} க்கான {amount} பெறப்பட்டதாக உறுதி செய்யப்பட்டது. பயணியின் செயலியில் இது செலுத்தியதாகக் காட்டும்.',
+  'fleet.subscriptions.delete.open': 'நீக்கு',
+  'fleet.subscriptions.delete.confirm': 'சந்தாதாரரை நீக்கு',
+  'fleet.subscriptions.delete.confirming': 'நீக்குகிறது…',
+  'fleet.subscriptions.delete.warning':
+    'இது வரிசையை நிரந்தரமாக அகற்றும். அவர்களின் கொடுப்பனவு வரலாறும் உடன் போகும், மீண்டும் இணைய அவர்கள் மறுபடியும் அணுகல் கோர வேண்டும்.',
+  'fleet.subscriptions.subscriber.deleted': '{passenger} இந்த வாகனத்திலிருந்து அகற்றப்பட்டார்.',
+  'fleet.subscriptions.rosterNote':
+    'ஒவ்வொரு சந்தாதாரரும் வெவ்வேறு மாதக் கட்டணத்தில் இருக்கலாம். பணம் இங்கே “பெற்றதாகக் குறி” மூலம் பதிவாகிறது; வங்கிப் பரிமாற்றம் நீங்கள் உறுதி செய்யும் வரை சீட்டாகக் காத்திருக்கும்; LankaQR தானாகவே முடிகிறது. சந்தாவை நீக்கும் பயணி, நீங்கள் அவரை நீக்கும் வரை மங்கலாக இந்தப் பட்டியலில் இருப்பார்.',
+  'fleet.subscriptions.passThroughNote':
+    'இந்தப் பணம் உங்களுடையது. சந்தாதாரர்கள் உங்கள் சரிபார்க்கப்பட்ட வங்கிக் கணக்கிற்கே செலுத்துகிறார்கள்; MageRide அதை வைத்திருப்பதுமில்லை, பங்கு எடுப்பதுமில்லை — MageRide விதிக்கும் ஒரே கட்டணம் கட்டணத் திரையில் உள்ள மாதாந்திர வாகனக் கட்டணம் மட்டுமே.',
+  'fleet.subscriptions.dueSummary': 'இந்த மாதத்திற்கு {count} சந்தாதாரர்களிடமிருந்து இன்னும் {amount} பெற வேண்டும்.',
+  'fleet.subscriptions.freeVehicleNote':
+    'இந்த வாகனம் இலவசச் சேவை, எனவே கட்டணம் வசூலிக்கப்படுவதில்லை, கொடுப்பனவு நெடுவரிசைகளும் இல்லை.',
+  'fleet.subscriptions.ownerOnly':
+    'கட்டணங்கள், பணம், பரிமாற்றச் சீட்டுகள், சந்தாதாரரை நீக்குதல் ஆகியவை நிறுவனத்தின் உரிமையாளருக்குரியவை. நீங்கள் கோரிக்கைகளை ஏற்கவும் நிராகரிக்கவும் முடியும்.',
+  'fleet.subscriptions.error.requestMissing':
+    'அந்தக் கோரிக்கையை அடையாளம் காண முடியவில்லை. வரிசையை மீளேற்றி மீண்டும் முயற்சிக்கவும்.',
+  'fleet.subscriptions.error.requestDecided':
+    'அந்தக் கோரிக்கை ஏற்கெனவே முடிவு செய்யப்பட்டுவிட்டது. எங்கே சென்றது என்பதைப் பார்க்க வரிசையை மீளேற்றவும்.',
+  'fleet.subscriptions.error.subscriberMissing':
+    'அந்தச் சந்தாதாரரை அடையாளம் காண முடியவில்லை. பட்டியலை மீளேற்றி மீண்டும் முயற்சிக்கவும்.',
+  'fleet.subscriptions.error.fareInvalid': 'மாதக் கட்டணத்தை ரூபாயில் தரவும்.',
+  'fleet.subscriptions.error.fareNotCollectable':
+    'இந்தச் சந்தாதாரருக்கு அமைக்கக் கட்டணம் எதுவும் இல்லை. இலவசச் சேவைக்குக் கட்டணம் இல்லை, முடிந்த சந்தாவுக்கு இனி கட்டணம் விதிக்க முடியாது.',
+  'fleet.subscriptions.error.amountInvalid': 'பெற்ற தொகையை ரூபாயில் தரவும்.',
+  'fleet.subscriptions.error.cashNotDue':
+    'இந்த மாதம் பணக் கொடுப்பனவை ஏற்க முடியாது: ஏற்கெனவே செலுத்தப்பட்டுள்ளது, இலவசச் சேவை, அல்லது சந்தா முடிந்துவிட்டது.',
+  'fleet.subscriptions.error.paymentMissing':
+    'அந்தக் கொடுப்பனவை அடையாளம் காண முடியவில்லை. சந்தாதாரரின் கொடுப்பனவுகளைத் திறந்து அங்கே முயற்சிக்கவும்.',
+  'fleet.subscriptions.error.slipNotPending':
+    'பயணி பதிவேற்றிய சீட்டை மட்டுமே உறுதி செய்ய முடியும், இந்தக் கொடுப்பனவு அதற்குக் காத்திருக்கவில்லை.',
+  'fleet.subscriptions.error.stillSubscribed':
+    'இந்தச் சந்தாதாரர் இன்னும் செயலில் உள்ளார். தன் சந்தாவை முடிக்க பயணியால் மட்டுமே முடியும்; அவர்கள் முடித்த பிறகு வரிசையை நீக்கலாம்.',
+
+  /* ---- SCR-FP-012 · சந்தாதாரர் கொடுப்பனவுப் பதிவேடு (item 16i, Δ C116) - */
+  'fleet.payments.title': 'சந்தாதாரர் கொடுப்பனவுகள்',
+  'fleet.payments.ownerOnly':
+    'சந்தாதாரர் கொடுப்பனவுகள் நிறுவனத்தின் உரிமையாளருக்குரியவை. பதிவேட்டையோ அதன் நகலையோ அவர்களிடம் கேளுங்கள்.',
+  'fleet.payments.exportCsv': 'CSV பதிவிறக்கு',
+  'fleet.payments.scope.legend': 'வாகனத்தையும் சந்தாதாரரையும் தேர்ந்தெடுக்கவும்',
+  'fleet.payments.scope.mutedOption': '{passenger} — சந்தா நீக்கப்பட்டது',
+  'fleet.payments.noSubscribers':
+    'இந்த வாகனத்தில் இன்னும் யாரும் சந்தா கொள்ளவில்லை, எனவே காட்ட பதிவேடு இல்லை.',
+  'fleet.payments.kpi.collected': 'இந்த மாதம் செலுத்தியது',
+  'fleet.payments.kpi.collectedDetail': '{count} சந்தாதாரர்கள் · {vehicle}',
+  'fleet.payments.kpi.pending': 'சரிபார்க்க வேண்டியது',
+  'fleet.payments.kpi.pendingDetail': 'சரிபார்க்க வேண்டிய {count} பரிமாற்றச் சீட்டுகள்',
+  'fleet.payments.kpi.due': 'இன்னும் பாக்கி',
+  'fleet.payments.kpi.dueDetail': '{count} சந்தாதாரர்கள்',
+  'fleet.payments.kpi.subscribers': 'சந்தாதாரர்கள்',
+  'fleet.payments.kpi.subscribersDetail': '{muted} சந்தா நீக்கம் · {free} இலவசச் சேவையில்',
+  'fleet.payments.kpiNote':
+    'இந்த நான்கும் இந்த வாகனத்தின் சந்தாதாரர்களை அவர்களின் நடப்பு மாத நிலைப்படி, ஒவ்வொருவரின் கட்டணத்தில் எண்ணுகின்றன. உண்மையில் வந்த தொகை கீழே உள்ள பதிவேட்டில் உள்ளது — பணத்தை எந்தத் தொகைக்கும் குறிக்கலாம். செலுத்தாத மாதம் எப்படிச் செலுத்தப்படும் என்பதை இங்கே எதுவும் சொல்லவில்லை: நீங்கள் பெற்றதாகக் குறித்தால் மட்டுமே பணம் ஒரு கொடுப்பனவாகிறது.',
+  'fleet.payments.ledger.heading': 'பதிவேடு · {subscriber} · {vehicle}',
+  'fleet.payments.ledger.caption': 'இந்தச் சந்தாதாரரின் ஒவ்வொரு சந்தாக் கொடுப்பனவும், புதியது முதலில்',
+  'fleet.payments.ledger.empty': 'இந்தச் சந்தாதாரருக்கு இன்னும் கொடுப்பனவு எதுவும் பதிவாகவில்லை.',
+  'fleet.payments.ledger.truncated':
+    'சமீபத்திய {rows} மாதங்கள் காட்டப்படுகின்றன. பழைய கொடுப்பனவுகள் வைக்கப்பட்டுள்ளன, அவை பதிவிறக்கக் கோப்பில் உள்ளன.',
+  'fleet.payments.column.month': 'மாதம்',
+  'fleet.payments.column.date': 'நாள்',
+  'fleet.payments.column.method': 'முறை',
+  'fleet.payments.column.amount': 'தொகை',
+  'fleet.payments.column.status': 'நிலை',
+  'fleet.payments.notPaidYet': 'இன்னும் செலுத்தவில்லை',
+  'fleet.payments.ledgerNote':
+    'பரிமாற்றத்தை உறுதி செய்வதோ பணம் பெற்றதாகக் குறிப்பதோ பயணியின் செயலிக்கும் அவர்களின் வரலாற்றுக்கும் நேரடியாக “செலுத்தப்பட்டது” எனச் செலுத்தும். LankaQR கொடுப்பனவுகள் தாமாகவே முடிகின்றன.',
+  'fleet.payments.status.paid': 'செலுத்தப்பட்டது',
+  'fleet.payments.status.verify': 'சீட்டைச் சரிபார்',
+  'fleet.payments.status.initiated': 'தொடங்கியது',
+  'fleet.payments.status.failed': 'தோல்வி',
+  'fleet.payments.method.lankaqrDeeplink': 'LankaQR (வங்கிச் செயலி)',
+  'fleet.payments.method.lankaqrScan': 'LankaQR (ஸ்கேன் செய்தது)',
+  'fleet.payments.method.onepay': 'OnePay (திரும்பப் பெறப்பட்டது)',
+  'fleet.payments.method.onlineTransfer': 'இணையப் பரிமாற்றம் (சீட்டு)',
+  'fleet.payments.method.cash': 'பணம்',
+  'fleet.payments.csv.vehicle': 'வாகனம்',
+  'fleet.payments.csv.subscriber': 'சந்தாதாரர்',
+  'fleet.payments.csv.month': 'கால மாதம்',
+  'fleet.payments.csv.paidAt': 'செலுத்திய நேரம்',
+  'fleet.payments.csv.method': 'முறை',
+  'fleet.payments.csv.amount': 'தொகை (ரூ.)',
+  'fleet.payments.csv.amountMinor': 'தொகை (சதம்)',
+  'fleet.payments.csv.currency': 'நாணயம்',
+  'fleet.payments.csv.status': 'நிலை',
+  'fleet.payments.csv.paymentId': 'கொடுப்பனவு அடையாளம்',
+
   /* ---- The shell's placeholder ------------------------------------------ */
   'fleet.screen.pendingTitle': 'இந்தத் திரை இன்னும் உருவாக்கப்படவில்லை',
   'fleet.screen.pendingBody':
