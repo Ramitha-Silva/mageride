@@ -1,0 +1,83 @@
+/*
+ * The passenger web subview's entire stylesheet.
+ *
+ * AL-52: Tailwind is the sole styling system, the D2 §0.2 tokens arrive through
+ * the shared preset, and CSS is compiled at build time by PostCSS inside
+ * `npm run build`. There is no second stylesheet, no CSS module and no runtime
+ * style injection anywhere in this application.
+ *
+ * The two imports are the whole setup — no `tailwind.config.js`, because a v4 JS
+ * config *merges* `screens` instead of replacing them and D2's 375px `sm:` would
+ * quietly go back to being Tailwind's 640px one
+ * (`portals/tailwind-preset/README.md`). On a surface whose primary width IS
+ * 375px, that is the one breakpoint that must not move.
+ */
+
+@import 'tailwindcss';
+@import '@mageride/tailwind-preset/theme.css';
+
+/*
+ * `@mageride/ui` ships from `dist/`, which the root `.gitignore` ignores, so
+ * Tailwind's automatic source detection skips it and every shared primitive would
+ * render unstyled. Pointed at `src/` rather than `dist/` deliberately: the class
+ * strings are identical in both, and `src/` is tracked — so this line does not
+ * depend on a build having already run.
+ */
+@source '../../ui/src/**/*.tsx';
+
+@layer base {
+  /*
+   * Tells the browser which palette its own controls, scrollbars and form widgets
+   * should use. Not a D2 token and not a colour — a hint, and the one thing that
+   * stops a dark page from drawing a white scrollbar down its side.
+   */
+  :root {
+    color-scheme: light;
+  }
+
+  :root:has(.dark),
+  .dark {
+    color-scheme: dark;
+  }
+
+  body {
+    @apply bg-background text-on-surface font-body antialiased;
+  }
+
+  /*
+   * The focus ring is the same everywhere. This page is opened on a phone, but it
+   * is also opened on a laptop from a forwarded message, and a per-component ring
+   * is how one control ends up without one.
+   */
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-primary;
+  }
+}
+
+@layer utilities {
+  /*
+   * SCR-WT-005's "Download receipt" is `window.print()`, because **public-bff has
+   * no PDF**: `public-bff.yaml` offers the receipt as HTML and PDF, and the
+   * implemented route answers `application/json` only (`ReceiptAsync` returns
+   * `Ok<ReceiptResponse>`). Rather than compose a second document about the same
+   * delivery, the page prints itself — the same call the Fleet Portal makes for
+   * SCR-FP-009's PDF, and for the same reason.
+   *
+   * These two rules are what make the printed page a receipt rather than a
+   * screenshot: the chrome, the map and the buttons come off, and the card is laid
+   * out for paper. Recorded as a spec gap in the C117 handoff.
+   */
+  .print-hidden {
+    @media print {
+      display: none !important;
+    }
+  }
+
+  .print-plain {
+    @media print {
+      border: 0 !important;
+      box-shadow: none !important;
+      background: transparent !important;
+    }
+  }
+}

@@ -2,6 +2,41 @@
   "name": "@mageride/web-passenger",
   "version": "0.0.0",
   "private": true,
-  "description": "Passenger web subview at passenger.mageride.lk, SCR-WT-001…006 (Next.js). Scaffold placeholder — C117 owns the application.",
-  "license": "UNLICENSED"
+  "type": "module",
+  "description": "Passenger web subview at passenger.mageride.lk — the six no-login SCR-WT pages, served from public-bff (Next.js, AL-04/AL-44/AL-52).",
+  "license": "UNLICENSED",
+  "scripts": {
+    "predev": "node ../scripts/ensure-workspace-deps.mjs",
+    "dev": "next dev",
+    "prebuild": "node ../scripts/ensure-workspace-deps.mjs",
+    "build": "next build && node scripts/check-bundle.mjs",
+    "start": "next start",
+    "prelint": "node ../scripts/ensure-workspace-deps.mjs",
+    "lint": "eslint . && tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "pretest": "node ../scripts/ensure-workspace-deps.mjs",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@mageride/i18n": "*",
+    "@mageride/tailwind-preset": "*",
+    "@mageride/ui": "*",
+    "maplibre-gl": "^6.2.0",
+    "next": "^16.3.0",
+    "pmtiles": "^4.4.1",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@mageride/eslint-config": "*",
+    "@tailwindcss/postcss": "^4.3.3",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/react": "^16.3.2",
+    "@types/geojson": "^7946.0.16",
+    "@types/node": "^24.10.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "jsdom": "^30.0.1",
+    "tailwindcss": "^4.3.3"
+  }
 }

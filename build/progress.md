@@ -142,8 +142,8 @@ After completing a component, set its Status and append the 3-line handoff under
 | C113 | fleet-portal-vehicles-drivers-trackers | 4c | DONE | 2026-08-08 | **250 tests green** in `@mageride/fleet-portal` (18 files, was 193/14); the verify command exits 0, `next build` emits **17 routes** (was 13), `check-bundle.mjs` reports **AL-52: clean — 1 compiled stylesheet, 30.7 kB CSS**, and all six portal workspaces are green (**1,118 tests, 63 files**). **AL-50 is four cards mounted from a literal list, and that is what makes "no generic dropzone" structural** — `VEHICLE_DOCUMENT_SLOTS` carries the four names and the *wire* kind each posts under, the panel maps that list rather than the server's answer, and `DocumentSlotCard` takes its kind as a prop, so a fifth slot needs a fifth entry and no form control can introduce one; the stored kinds and the wire kinds are two different lists (`registration` ≠ `registration_copy`) and both are pinned against `fleet.yaml`. **Whether a slot is required is the server's field, not `kind`'s** — the route permit is Mode A's — and `canBeApproved()` is US-27.3's rule as one predicate that answers **false** for a vehicle nobody has read the paperwork of, with the panel naming the slots that are holding it rather than colouring a chip. **A document is attached to a vehicle, so `?vehicle=` is the screen's whole state**: the add form navigates there on success, every roster row links to it, and a reload or a pasted link lands on the same slots. **The Paid gate is pre-empted for an Owner and translated for a Manager**, because `GET …/payout-profile` is Owner-only while SCR-FP-004 is Manager-reachable — both are blocked, only one can be told in advance. **A partial CSV import is reported as one** (the good rows land, the report is an HMAC-signed link handed straight to the browser, and the job polls itself to rest). **Three services answer SCR-FP-006 and their gates disagree** — the single bind is approval-gated, provisioning-svc's batch is not, and the health rollup is neither — transcribed rather than smoothed; `decommissioned` is rendered as a **revoked credential** in a column of its own, not as another shade of offline. **`Date.now()` never decides a server fact**: `Assignment.active` is the database's, and the clock only labels a row it already called inactive. **232 new resource keys × 3 locales** (206 → 438); **5 spec gaps / micro-change-set candidates** (headline: T-09's bulk-IMEI route is behind D-30 attestation a browser cannot satisfy, and its only caller is this portal), **4 deliberate wireframe deviations**; no spec, contract, backend or migration file touched |
 | C114 | fleet-portal-dashboard-map-analytics | 4c | DONE | 2026-08-08 | **321 tests green** in `@mageride/fleet-portal` (22 files, was 250/18); the verify command exits 0, `next build` emits **21 routes** (was 17), `check-bundle.mjs` reports **AL-52: clean — 3 compiled stylesheets, 168.9 kB CSS** (Tailwind is 33.2 kB of it; the rest is MapLibre's own widget stylesheet, emitted twice by Turbopack as a chunk and as a media asset and loaded once), and all six portal workspaces are green (**1,189 tests, 67 files**). **The map is handed positions and fetches none** — `GET …/map` is read on the server and passed down, so "only this org's vehicles are visible" is not a filter the component applies but the only data it ever receives; the database refuses underneath (`telemetry.positions_fleet` filtered on `app.fleet_id`, fail-closed) and a vehicle id from another organisation resolves to "not in this organisation" rather than to a marker. **The one URL a browser fetches is the basemap style** (D-14's `tile-cdn`, static cartography), passed as a prop rather than published as a build-time public variable, and **unset is a supported state**: the fleet's own positions render on an empty canvas and the screen says which map it is drawing. **Markers are a GeoJSON source and two circle layers**, because a `Marker` per vehicle would need an inline `style` for its colour, which AL-52 forbids — the hexes come from `@mageride/tailwind-preset`'s token data, which exists for exactly that. **The map window (15 min) and the health thresholds (5/30 min) do not line up and are not meant to**, so the overlay is the union of both reads: a vehicle can be Offline in the table with no pin, and the caption states both windows in the deployment's own numbers. **Idle is a subtraction, not a second measurement** — fleet-svc defines utilisation as `activeHours / periodHours`, so idle is its complement, and the caption says it is therefore calendar time. **The CSV is written by a route handler under `/analytics`** (so `proxy.ts` gates it as SCR-FP-009) from the same org-scoped read the screen made, and the PDF is `window.print()` over `print:hidden` chrome — no contract has an analytics export route. **Billing is the one *read* on this portal gated on the seat**: `canReadBilling()` checks Owner + APPROVED before the wallet card reads anything, so a Manager's dashboard is not a Manager's dashboard with three 403s on it. **123 new resource keys × 3 locales** (438 → 561); **6 spec gaps / micro-change-set candidates**, **4 deliberate wireframe deviations**; three new runtime/type dependencies (`maplibre-gl`, `pmtiles`, `@types/geojson`); no spec, contract, backend or migration file touched |
 | C115 | fleet-portal-scheduling-billing | 4c | DONE | 2026-08-08 | **380 tests green** in `@mageride/fleet-portal` (24 files, was 321/22); the verify command exits 0, `next build` emits **24 routes** (was 21), `check-bundle.mjs` reports **AL-52: clean — 3 compiled stylesheets, 169.1 kB CSS**, and all six portal workspaces are green (**1,248 tests, 69 files**). **The departure clock is Colombo's, and that is the one bug this screen could not survive**: a `datetime-local` value has no zone on it and the server action reading it runs in a UTC container, so `departAtFrom()` resolves the wall clock against `Asia/Colombo` (D-13) — the difference between the 06:00 from the depot and 11:30 — reading the offset out of `Intl`'s zone rules rather than writing `+05:30` down. **Whose app rings is worked out the way `ScheduleAlarmWorker` works it out**: `driversCovering()` is `DriversCoveringAsync`'s predicate transcribed (vehicle, revoked, and the window evaluated *at the booked departure*), so the Vehicle cell names the recipient — or says **nobody is assigned over this departure**, the case the worker otherwise discovers at alarm time and logs as "there is nobody to tell". **Three things SCR-FP-008 cannot do and says so**: a booked departure cannot be changed or cancelled (the contract declares list and create and nothing else, though 0314 admits a `CANCELLED` status it attributes to the operator), the alarm has no off state (`NOT NULL` with a 1…120 CHECK, so the sketch's toggle has nothing to write), and a route cannot be named or chosen (`routeId` is a `spatial.routes` id and transit-svc's route read takes a GTFS string — a different id space). **The Mode A row is on the billing card and is not on the invoice**: a line exists only for a charge `billing.monthly_subscriptions` raised and that table is Mode B only (AL-03), so the count is today's roster, contributes nothing to the total, and the caption says which of the two it is; `invoiceSummary()` compares Σ lines against `lineSumMinor` **and** `invoice.amountMinor` and the card warns rather than picking one. **SCR-FP-010 reads nothing until `canReadBilling()` has said the caller may** — a Manager gets one sentence, not four 403s. **The invoice CSV/PDF is fleet-billing-svc's document, streamed** through a new `download()` on the data layer (the browser holds no bearer, so a link to the API would download a 401), which is the opposite call to SCR-FP-009's analytics CSV — there, no contract has an export route at all. **The sketch's three top-up rows are two rails**: OnePay *is* the card rail, and bank transfer is refused by `ck_fleet_topups_method` rather than by a code review (AL-05). **128 new resource keys × 3 locales** (561 → 689); **5 spec gaps / micro-change-set candidates**, **4 deliberate wireframe deviations**, **1 defect found in C113's shipped screens and fixed** — SCR-FP-004/005/006 passed function label props to client components, which React refuses to serialise across the server boundary, so all three threw at render time; the nine call sites now take sentences composed in the actions and `test/fences.test.ts` asserts the rule over every `'use client'` component's props. No new dependency, and no spec, contract, backend or migration file touched |
-| C116 | fleet-portal-subscriptions | 4c | DONE | 2026-08-09 | **449 tests green** in `@mageride/fleet-portal` (27 files, was 380/24); the verify command exits 0, `next build` emits **27 routes** (was 24), `check-bundle.mjs` reports **AL-52: clean — 3 compiled stylesheets, 169.2 kB CSS**, and all six portal workspaces are green (**1,317 tests, 72 files**). **AL-23 is the shape of the code, not a rule in it**: eight of the nine Epic 23 proxies are `…/vehicles/{vehicleId}/…` and no contract has a fleet-wide queue or roster, so `?vehicle=` is what both screens *are* and `test/subscriptions.test.ts` asserts every target against `fleet.yaml`. **The proxies split Owner from Manager mid-screen** — the queue and roster are `RequireFleetSubRole(Manager)`, the fare override, cash mark, slip confirmation and AL-25 delete are `RequireFleetSubRole(Owner)` — so `canManageSubscribers()` was added as the portal's third seat-gated control, parsed back out of `FleetOpsEndpoints.cs` by test. **SCR-FP-012's manifest entry moved off `fleet-billing`**: that row is MageRide's monthly invoice to the fleet, and a subscriber's fare is the owner's (AL-24/AL-49/BR-23.10) — same gate, right fact. **AL-59 drift recorded rather than papered over**: `subscription.yaml` has four Mode B methods and `fleet.yaml`'s proxy copy still has five, so the portal's union is the wider one (a pre-AL-59 row renders as a historic method, not a blank cell) and nothing here offers a method at all. **SCR-FP-012's KPIs are one roster read**, and the caption says what they are not: "cash due" is *due* (nothing knows a month will be cash until the owner marks it) and "collected" is the fares of the paid subscribers, not the sum of what arrived. **A muted row is rendered, never filtered** (US-23.12) and Delete is drawn on it alone. **5 spec gaps / micro-change-set candidates**, **6 deliberate wireframe deviations**; 143 new resource keys × 3 locales (689 → 832). No new dependency, and no spec, contract, backend or migration file touched |
-| C117 | web-passenger-subview | 4c | PENDING | | |
+| C116 | fleet-portal-subscriptions | 4c | DONE | 2026-08-09 | **449 tests green** in `@mageride/fleet-portal` (27 files, was 380/24); the verify command exits 0, `next build` emits **27 routes** (was 24), `check-bundle.mjs` reports **AL-52: clean — 3 compiled stylesheets, 169.2 kB CSS**, and all six portal workspaces are green (**1,317 tests, 72 files**). **AL-23 is the shape of the code, not a rule in it**: eight of the nine Epic 23 proxies are `…/vehicles/{vehicleId}/…` and no contract has a fleet-wide queue or roster, so `?vehicle=` is what both screens *are* and `test/subscriptions.test.ts` asserts every target against `fleet.yaml`. **The proxies split Owner from Manager mid-screen** — the queue and roster are `RequireFleetSubRole(Manager)`, the fare override, cash mark, slip confirmation and AL-25 delete are `RequireFleetSubRole(Owner)` — so `canManageSubscribers()` was added as the portal's third seat-gated control, parsed back out of `FleetOpsEndpoints.cs` by test. **SCR-FP-012's manifest entry moved off `fleet-billing`**: that row is MageRide's monthly invoice to the fleet, and a subscriber's fare is the owner's (AL-24/AL-49/BR-23.10) — same gate, right fact. **AL-59 drift recorded rather than papered over**: `subscription.yaml` has four Mode B methods and `fleet.yaml`'s proxy copy still has five, so the portal's union is the wider one (a pre-AL-59 row renders as a historic method, not a blank cell) and nothing here offers a method at all. **SCR-FP-012's KPIs are one roster read**, and the caption says what they are not: "cash due" is *due* (nothing knows a month will be cash until the owner marks it) and "collected" is the fares of the paid subscribers, not the sum of what arrived. **A muted row is rendered, never filtered** (US-23.12) and Delete is drawn on it alone. **5 spec gaps / micro-change-set candidates**, **7 deliberate wireframe deviations**; 143 new resource keys × 3 locales (689 → 832). No new dependency, and no spec, contract, backend or migration file touched |
+| C117 | web-passenger-subview | 4c | DONE | 2026-08-09 | **138 tests green** in `@mageride/web-passenger` (10 files); `npm --prefix portals run lint --workspace web-passenger && … test … && … build …` exits 0, `next build` emits **7 routes** (`/`, `/track`, `/t/[token]`, `/p/[token]`, the SSE proxy at `/api/live/[token]`, `/_not-found`, `/icon.svg`), and `check-bundle.mjs` reports **AL-52: clean — 3 compiled stylesheets, 166.6 kB CSS** plus a second assertion this surface needs — **no client chunk names a server-only variable**. All seven portal workspaces are green (**1,455 tests, 82 files**). **The token is redeemed on the server before a tree exists**, so "render nothing before it validates" is where the `await` is rather than a check anybody remembers: `<DeadEnd>` takes a translator, a locale, a path and a store URL and **no snapshot**, so SCR-WT-006 cannot hold a ride — asserted on the prop list *and* by grepping the rendered document for the driver, the plate, the number, the sender and the code. **Nothing redirects**, and that is the spinner's fault: `loading.tsx` streams D2's ≤1 s gate while the token is being redeemed, after which Next can only finish a `redirect()` as a meta refresh — a spinner, a blank and a second spinner for a rider whose car is moving — so all three routes call one `trackScreen` and every scope renders in place. **One `EventSource` per screen, read through context** by the map and by the SOS button's D6' I-29.4 fallback, because two hooks would be two connections against a per-token bucket and the server-rendered snapshot would hand a panic button a fix from whenever the tab was opened; reconnecting is the browser's own (`Last-Event-ID` → the cursor public-bff writes into every `id:`), so the only thing tested is that the proxy forwards it, and the `?since` fallback exists for an intermediary that buffers SSE rather than for old browsers. **Declining transmits no GPS as four properties of four components**, one of which is that the Geolocation API is never called until the reader presses the button that says so. **No cookie, no localStorage** (D6' I-29.1), so the language switch is `?lang=` and three links inside a `<details>` — no JavaScript at all. 137 resource keys × 3 locales; **7 spec gaps** (headline: `GET …/receipt` has no PDF behind its contract, so Download is `window.print()`), **7 deliberate wireframe deviations**; no spec, contract, backend or migration file touched, and no new dependency beyond the three the Fleet Portal's map already introduced |
 | C118 | contract-test-suite | 5 | PENDING | | |
 | C119 | observability-stack | 5 | PENDING | | |
 | C120 | e2e-mode-c-ride | 5 | PENDING | | |
@@ -18686,3 +18686,171 @@ _Append 3 lines per completed component (Component / Status / Notes)._
 
   **Build host —** no Docker, no replica, no backend build. `vitest run` takes ~20 s and `next build`
   ~40 s. `npm install` reached nothing: there is no new dependency.
+
+- **Component:** C117 web-passenger-subview — 2026-08-09
+- **Status:** DONE —
+  `npm --prefix portals run lint --workspace web-passenger && npm --prefix portals run test --workspace web-passenger && npm --prefix portals run build --workspace web-passenger`
+  exits 0. **138 tests, 10 files**; `eslint` + `tsc --noEmit` clean; `next build` emits **7 routes**
+  and `check-bundle.mjs` reports **AL-52: clean — 3 compiled stylesheets, 166.6 kB CSS**. All seven
+  portal workspaces are green (**1,455 tests, 82 files**), and the root `check-al52.mjs` is clean.
+  All six screens were additionally driven end-to-end against a stub public-bff on this host: every
+  scope routes to its own screen, the SSE proxy streams a frame and answers `?since` with a batch,
+  and a dead token renders SCR-WT-006 with none of the driver, the plate, the number, the sender, the
+  code or a coordinate anywhere in the document.
+- **Notes:**
+  **What was built —** `portals/web-passenger`, a new Next.js 16 workspace: the six SCR-WT pages at
+  `passenger.mageride.lk`, served from public-bff and styled with the shared preset. `app/` (four
+  page routes, three `loading.tsx` gates, one SSE proxy route handler, error/not-found/global-error),
+  `src/api/{http,track,problem,types}.ts`, `src/server/{screen,render,track-actions}.ts?`,
+  `src/i18n/**` (137 keys × 3 locales), `src/live/useLiveTrack.ts`, `src/lib/polyline.ts`, thirteen
+  components, and `scripts/check-bundle.mjs`. **No spec, contract, backend or migration file was
+  touched, and no shared portal package was changed.** The three runtime dependencies
+  (`maplibre-gl`, `pmtiles`, `@types/geojson`) are the ones C114 already introduced for the fleet map;
+  `npm install` resolved everything from the existing lockfile.
+
+  **The reason the browser never reaches the platform is different here, and it matters —** the share
+  token is in the visitor's address bar, so hiding a credential is not the point. Keeping the
+  *platform* out of the browser is: `passenger.mageride.lk` is the only host a phone opened from an
+  SMS talks to, which means one origin, one TLS handshake, no gateway address in a shipped script, no
+  CORS policy to widen on a no-login endpoint, and nothing for a captive portal or a corporate proxy
+  to break separately. So there is **no `NEXT_PUBLIC_*` variable** — and because a value inlined into
+  a chunk is invisible in review (the source still reads `process.env.MAGERIDE_API_BASE_URL`),
+  `check-bundle.mjs` gained a second assertion beside the AL-52 one: **no emitted client chunk names
+  a server-only variable**.
+
+  **"No data before validation" and D2's ≤1 s spinner are one mechanism, and that is why nothing
+  redirects.** `loading.tsx` is Next's Suspense fallback for each route, so a branded frame streams
+  immediately while the server redeems the token and the first byte about a ride is written only
+  after public-bff has said the token is live. The first shape of this component sent the two proxy
+  scopes to `/p/{token}` with `redirect()`; the smoke test showed it arriving as a **meta refresh**,
+  because once the spinner has streamed the headers are gone. For a rider whose car is already moving
+  that is a spinner, a blank and a second spinner. All three routes now call one **`trackScreen`**
+  (`src/server/screen.tsx`) and every scope renders in place — `test/fences.test.ts` fails the build
+  on a `redirect(`. The wireframe's two URL shapes (`/t/…` parcel, `/p/…` proxy) survive as real
+  routes; the path never decides the screen, the token's scope does.
+
+  **SCR-WT-006 cannot hold a ride, as a property of a signature —** `<DeadEnd>` takes a translator, a
+  locale, a path and a store URL. There is no snapshot parameter, so there is nothing it *could*
+  render, and public-bff holds the other half (its 404/410 is produced before any ride row is read).
+  Both halves are asserted: `test/fences.test.ts` parses the component's whole prop list, and
+  `test/screens.test.tsx` greps the rendered document for the driver's name, the plate, the MSISDN,
+  the sender and the delivery code. The same page answers a token that was never minted — refused on
+  shape before it costs a Redis round trip — because telling "expired" from "never existed" apart
+  would make the surface an oracle over which links are live.
+
+  **One live feed per screen, read through context.** Two things on SCR-WT-004 need the vehicle's
+  current position: the map draws it and SOS falls back to it when the browser refuses the reader's
+  own (D6' I-29.4). Two `useLiveTrack` calls would be two `EventSource` connections against a
+  per-token rate bucket, and handing SOS the server-rendered snapshot instead would give a panic
+  button a fix from whenever the tab was opened — fifteen minutes ago on a ride somebody has been
+  watching. `LiveFeed` opens it once; the children stay server-rendered and pass straight through.
+  **Reconnecting is the browser's** (`EventSource` reopens and sends `Last-Event-ID`; public-bff
+  writes the cursor into every frame's `id:` and honours the header identically to `?since`), so the
+  only thing this component can break is the proxy dropping the header — which is what
+  `test/live.test.ts` asserts. A dropped stream is the *normal* case here (`StreamMaxDuration` closes
+  every connection after five minutes so a revocation reaches an open tab), so a page that treated one
+  as a failure would show an error every five minutes on a perfect delivery. The `?since` fallback is
+  not for old browsers: it is for an intermediary that buffers a response body and turns SSE into a
+  feed that arrives once, when it ends, which no header of public-bff's can reach.
+
+  **P-02 is four properties of four components** — the copy says "declining never shares your GPS"
+  before the reader has decided anything; `declinePickupLocation(token)` and `declinePickup(token)`
+  have no parameter for a coordinate; the request carries no body; ride-svc's statement has no
+  `resolved_geo`. A fifth was added on this side: **the Geolocation API is not called until the reader
+  presses the button that says so**. A page that prompted on mount would have taken a position before
+  the reader had read the sentence promising it would not — on the phone of somebody with no MageRide
+  account, at the moment they opened an SMS. `test/pickup.test.ts` proves Decline never touches it.
+
+  **No cookie, no `localStorage`** (D6' I-29.1), which decided two things. The language switch is
+  **`?lang=` on the URL** — three links inside a `<details>` disclosure, no JavaScript, no client
+  component, no state — and appearance follows the OS alone. There is also no third language source:
+  the other two portals read the signed-in member's `iam.users.language`, but nobody is signed in
+  here, and resolving a language off the ride would mean reading the *booker's* preference to somebody
+  who is not the booker. `Accept-Language`, then `si` (D1' §283).
+
+  **Seven spec gaps —**
+  (1) **`GET /public/track/{token}/receipt` has no PDF behind its contract.** `public-bff.yaml` offers
+  the receipt as JSON, HTML *and* `application/pdf`; `ReceiptAsync` returns `Ok<ReceiptResponse>`,
+  does no content negotiation, and nothing in that assembly renders a document. A button that fetched
+  the PDF would download a JSON body with the wrong extension. SCR-WT-005's **Download receipt** is
+  therefore `window.print()` over `print-hidden` chrome — the arrangement C114 already reached for
+  SCR-FP-009's PDF — and every figure on the paper is one public-bff returned. Either add the two
+  representations to the service or drop them from the contract.
+  (2) **`startOtp` is absent on every proxy ride** and cannot be otherwise: `ride.yaml` and ride-svc's
+  own `RideContracts` say a rider start OTP is "accepted and ignored in this build: no endpoint issues
+  one", and `rides.rides`' two OTP columns are package-only. C066 recorded it; SCR-WT-004's
+  deliverable still names the control, so the card renders one sentence rather than four empty boxes,
+  and draws the real card the moment a code exists.
+  (3) **A package snapshot has no ETA and no parcel size**, so two of the wireframe landing card's
+  three rows have no source — `etaMin` is on the `proxy_rider` variant only, and nothing in
+  `rides.rides` records a size. The card carries From / Status / Driver instead.
+  (4) **`dropoff` is omitted on every parcel** (a `dropoff_geo` and no address), so SCR-WT-002 has
+  neither a line to print nor a point to draw and the map carries the vehicle alone.
+  (5) **No public snapshot carries a driver rating**, though the wireframe draws ★4.7 and ★4.8.
+  (6) **No app-store URL exists anywhere in the platform's configuration** — the only two on the
+  platform are `Gateway:VersionGate` settings for the *apps*. Two optional variables were added; with
+  neither set the control is not drawn rather than drawn and dead.
+  (7) **Lighthouse mobile could not be run**: this build host has no Chrome and none of Playwright,
+  Puppeteer or Lighthouse is installed. The measurable half of that DoD item is therefore **not
+  verified on this host**. Its structural half is: `test/fences.test.ts` fails the build on any fixed
+  width above 375 px and on `w-screen`, `overflow-x-clip` (not `-hidden`, which would silently break
+  the sticky brand bar) is the backstop, MapLibre is behind a `next/dynamic` boundary so the three
+  screens without a map never request it, and every screen is server-rendered — a recipient's delivery
+  code is in the first byte of HTML rather than behind a bundle. **Worth running on a machine with a
+  browser before this ships.**
+
+  **Seven deliberate wireframe deviations —**
+  (a) the landing card is **From / Status / Driver**, not From / Size / ETA (gap 3);
+  (b) **no ★ rating** on either driver card (gap 5);
+  (c) SCR-WT-002's driver row shows the **plate and vehicle type**, not "· ETA 12 min" (gap 3);
+  (d) **SCR-WT-004's driver card carries no call control** — the wireframe puts "📞 Call driver" in
+  the button row beside SOS, and two controls dialling the same number would be one redundant thing
+  to find in an emergency and the same accessible name twice on one page;
+  (e) **SOS asks twice.** The sketch draws it a thumb's width from "Call driver", on a phone, in a
+  moving vehicle; a single press that SMSed somebody would be pressed by accident, and a false alert
+  on a dual-gateway rail costs two messages, an admin live-feed entry and the booker's attention. The
+  dialog says what pressing it does before it is pressed, and all three of safety-svc's outcomes get
+  their own sentence — `NoContact` means the alert is on a console in an office and nowhere else,
+  which on a panic button is the whole difference;
+  (f) **SCR-WT-005 also answers a finished proxy ride**, which the sketch draws only for a parcel.
+  D2 heads the screen "Delivered / Trip Summary" and public-bff's receipt is kind-agnostic (its own
+  handoff records that `disputed` and `cod_collected` are genuine on a ride and `otp_verified`
+  degenerates to "the journey ended the ordinary way"), so a rider whose link outlives the trip gets a
+  summary rather than a tracker watching a vehicle that has stopped. The **receipt itself decides**:
+  six of D5' §6's ten terminals are cancellations and no-shows, `Receiptable` excludes them, and a
+  `null` falls through to the tracker's own "This ride has ended" rather than to a summary claiming a
+  trip that never ran. In practice safety-svc closes a trip-scoped token at trip end, so the usual
+  destination is still SCR-WT-006;
+  (g) a **live indicator** sits under the map on SCR-WT-002/004. Not in the sketch, and the reconnect
+  requirement is invisible without it: a page that quietly stopped updating looks exactly like a
+  vehicle that stopped moving.
+
+  **AL-48 is held by name on this side too.** public-bff's start-up guard refuses any route whose path
+  contains `/call`, because several pre-AL-48 spec lines still describe the proxy-DID lease;
+  `test/fences.test.ts` is the same guard on the client, and it also pins the `tel:` links to exactly
+  the two screens D2 Δ 2026-07-05 #2 names.
+
+  **No `Idempotency-Key` is sent on any write, deliberately.** public-bff derives a better one from
+  the business fact — `pickup:{verb}:{token}` is stable for ever, because a location request can be
+  answered exactly once and a retried tap should replay rather than read a refusal, while
+  `sos:{window}:{token}` is *windowed*, so a second genuine emergency twenty minutes later is not a
+  replay of the first. A fresh UUID per attempt would replace both with a key that dedupes nothing.
+  `test/actions.test.ts` asserts the header's absence.
+
+  **i18n —** 137 keys × 3 locales, all new. `test/i18n.test.ts` carries the usual four checks plus the
+  allow-list, which has four entries: the brand, its letterform, `SOS` (the international distress
+  signal, written the same way on every emergency control in the country — transliterating it would
+  produce a button nobody recognises in the one second they have to find it) and a template that is
+  two placeholders and a separator.
+
+  **Files —** new workspace `portals/web-passenger`: `package.json` (rewritten from the C103
+  placeholder), `next.config.ts`, `tsconfig.json`, `eslint.config.js`, `postcss.config.mjs`,
+  `vitest.config.ts`, `.env.example`, `next-env.d.ts`, `public/robots.txt`, `scripts/check-bundle.mjs`,
+  `app/**` (14 files), `src/**` (33 files), `test/**` (10 test files + 2 support), and this
+  component's `CLAUDE.md`. Outside `portals/web-passenger/`, only this file and
+  `portals/package-lock.json` changed — and the lockfile diff is the workspace's own dependency
+  declarations and nothing else: `npm install` resolved no new package, because every one of them was
+  already there for the Fleet Portal.
+
+  **Build host —** no Docker, no replica, no backend build. `vitest run` takes ~7 s and `next build`
+  ~25 s. `npm install` added nothing: every dependency was already in the lockfile from C114.

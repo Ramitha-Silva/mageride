@@ -1,0 +1,10 @@
+# passenger.mageride.lk serves nothing that is not somebody's live share token
+# (AL-44, P-09). A crawler that indexed one of these URLs would publish a
+# credential, and a crawler that merely *followed* one would spend that token's
+# rate budget — and on a `pickup_confirm` link, burn it, so the rider it was minted
+# for could no longer answer.
+#
+# The same instruction is served as a `robots` meta tag from `app/layout.tsx`, for
+# the crawlers that ignore this file.
+User-agent: *
+Disallow: /
