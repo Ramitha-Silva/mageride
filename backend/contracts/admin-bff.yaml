@@ -527,7 +527,7 @@ paths:
         '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
         '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
-      x-error-codes: [validation-error, unauthorized, forbidden, payout-profile-not-found, conflict]
+      x-error-codes: [validation-failed, unauthorized, forbidden, payout-profile-not-found, conflict]
 
   /v1/admin/verification/org/{orgId}:
     get:

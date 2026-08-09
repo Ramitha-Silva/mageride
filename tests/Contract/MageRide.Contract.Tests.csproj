@@ -1,0 +1,83 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    C118 verify target: dotnet test tests/Contract -c Release
+
+    The suite asserts that every running service matches the OpenAPI document C007 derived from
+    D3', and that every event matches its D6' §2.2 schema. It therefore references **every service
+    that owns a contract file** — twenty-five of them — and boots them in-process on real Kestrel
+    sockets over the same Testcontainers infrastructure the per-service suites use.
+
+    `Microsoft.NET.Sdk.Web`, not `Microsoft.NET.Sdk`: the fleet builds twenty-five WebApplications.
+
+    Referencing the services rather than calling a deployed stack is a deliberate choice and it is
+    argued in CLAUDE.md. The short version: `infra/docker-compose.dev.yml` is not buildable —
+    `app-services`, `hot-path` and `fanout` have no Dockerfile — so a suite that required it would
+    not run at all today, and a suite that ran against a *subset* stack would silently stop
+    covering whatever was left out. Every service here is composed by its own
+    `XApplication.Build`, which is the same composition root `Program.cs` runs.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.Contract.Tests</RootNamespace>
+    <AssemblyName>MageRide.Contract.Tests</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <OutputType>Exe</OutputType>
+    <!--
+      xUnit1041: collection-fixture ctor args are consumed through the primary constructor.
+      xUnit1051: every request is bounded by the fleet's own lifetime.
+    -->
+    <NoWarn>$(NoWarn);xUnit1041;xUnit1051</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="YamlDotNet" />
+    <PackageReference Include="Confluent.Kafka" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+    <PackageReference Include="Npgsql" />
+    <PackageReference Include="StackExchange.Redis" />
+  </ItemGroup>
+
+  <!--
+    Every service that owns a document in backend/contracts/. `ApiGateway` is here because
+    `version-check.yaml` is the one contract the edge serves itself (C008) rather than proxying —
+    there is no `version-check-svc` cluster.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\backend\src\AdminBff\AdminBff.csproj" />
+    <ProjectReference Include="..\..\backend\src\ApiGateway\ApiGateway.csproj" />
+    <ProjectReference Include="..\..\backend\src\Content.Api\Content.Api.csproj" />
+    <ProjectReference Include="..\..\backend\src\Dispatch.Api\Dispatch.Api.csproj" />
+    <ProjectReference Include="..\..\backend\src\Fare.Api\Fare.Api.csproj" />
+    <ProjectReference Include="..\..\backend\src\Fleet.Api\Fleet.Api.csproj" />
+    <ProjectReference Include="..\..\backend\src\FleetBilling\FleetBilling.csproj" />
+    <ProjectReference Include="..\..\backend\src\FleetHealth\FleetHealth.csproj" />
+    <ProjectReference Include="..\..\backend\src\Iam.Api\Iam.Api.csproj" />
+    <ProjectReference Include="..\..\backend\src\Notification.Api\Notification.Api.csproj" />
+    <ProjectReference Include="..\..\backend\src\Ocr.Api\Ocr.Api.csproj" />
+    <ProjectReference Include="..\..\backend\src\Payout.Api\Payout.Api.csproj" />
+    <ProjectReference Include="..\..\backend\src\Provisioning.Api\Provisioning.Api.csproj" />
+    <ProjectReference Include="..\..\backend\src\PublicBff\PublicBff.csproj" />
+    <ProjectReference Include="..\..\backend\src\Query.Api\Query.Api.csproj" />
+    <ProjectReference Include="..\..\backend\src\Registry.Api\Registry.Api.csproj" />
+    <ProjectReference Include="..\..\backend\src\Reputation.Api\Reputation.Api.csproj" />
+    <ProjectReference Include="..\..\backend\src\Ride.Api\Ride.Api.csproj" />
+    <ProjectReference Include="..\..\backend\src\Safety.Api\Safety.Api.csproj" />
+    <ProjectReference Include="..\..\backend\src\Subscription.Api\Subscription.Api.csproj" />
+    <ProjectReference Include="..\..\backend\src\Support.Api\Support.Api.csproj" />
+    <ProjectReference Include="..\..\backend\src\Transit.Api\Transit.Api.csproj" />
+    <ProjectReference Include="..\..\backend\src\TripState.Api\TripState.Api.csproj" />
+    <ProjectReference Include="..\..\backend\src\Voip.Api\Voip.Api.csproj" />
+    <ProjectReference Include="..\..\backend\src\Wallet.Api\Wallet.Api.csproj" />
+    <ProjectReference Include="..\..\backend\src\MageRide.TestKit\MageRide.TestKit.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

@@ -133,6 +133,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PublicBff", "src\PublicBff\
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PublicBff.Tests", "src\PublicBff.Tests\PublicBff.Tests.csproj", "{60EC1347-F789-4F96-BC33-081D6E9996A5}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MageRide.Contract.Tests", "..\tests\Contract\MageRide.Contract.Tests.csproj", "{8C6C0590-89ED-44AE-9F5E-1DC3C440C7CD}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -911,6 +913,18 @@ Global
 		{60EC1347-F789-4F96-BC33-081D6E9996A5}.Release|x64.Build.0 = Release|Any CPU
 		{60EC1347-F789-4F96-BC33-081D6E9996A5}.Release|x86.ActiveCfg = Release|Any CPU
 		{60EC1347-F789-4F96-BC33-081D6E9996A5}.Release|x86.Build.0 = Release|Any CPU
+		{8C6C0590-89ED-44AE-9F5E-1DC3C440C7CD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8C6C0590-89ED-44AE-9F5E-1DC3C440C7CD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8C6C0590-89ED-44AE-9F5E-1DC3C440C7CD}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{8C6C0590-89ED-44AE-9F5E-1DC3C440C7CD}.Debug|x64.Build.0 = Debug|Any CPU
+		{8C6C0590-89ED-44AE-9F5E-1DC3C440C7CD}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{8C6C0590-89ED-44AE-9F5E-1DC3C440C7CD}.Debug|x86.Build.0 = Debug|Any CPU
+		{8C6C0590-89ED-44AE-9F5E-1DC3C440C7CD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8C6C0590-89ED-44AE-9F5E-1DC3C440C7CD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8C6C0590-89ED-44AE-9F5E-1DC3C440C7CD}.Release|x64.ActiveCfg = Release|Any CPU
+		{8C6C0590-89ED-44AE-9F5E-1DC3C440C7CD}.Release|x64.Build.0 = Release|Any CPU
+		{8C6C0590-89ED-44AE-9F5E-1DC3C440C7CD}.Release|x86.ActiveCfg = Release|Any CPU
+		{8C6C0590-89ED-44AE-9F5E-1DC3C440C7CD}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

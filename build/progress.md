@@ -144,7 +144,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C115 | fleet-portal-scheduling-billing | 4c | DONE | 2026-08-08 | **380 tests green** in `@mageride/fleet-portal` (24 files, was 321/22); the verify command exits 0, `next build` emits **24 routes** (was 21), `check-bundle.mjs` reports **AL-52: clean — 3 compiled stylesheets, 169.1 kB CSS**, and all six portal workspaces are green (**1,248 tests, 69 files**). **The departure clock is Colombo's, and that is the one bug this screen could not survive**: a `datetime-local` value has no zone on it and the server action reading it runs in a UTC container, so `departAtFrom()` resolves the wall clock against `Asia/Colombo` (D-13) — the difference between the 06:00 from the depot and 11:30 — reading the offset out of `Intl`'s zone rules rather than writing `+05:30` down. **Whose app rings is worked out the way `ScheduleAlarmWorker` works it out**: `driversCovering()` is `DriversCoveringAsync`'s predicate transcribed (vehicle, revoked, and the window evaluated *at the booked departure*), so the Vehicle cell names the recipient — or says **nobody is assigned over this departure**, the case the worker otherwise discovers at alarm time and logs as "there is nobody to tell". **Three things SCR-FP-008 cannot do and says so**: a booked departure cannot be changed or cancelled (the contract declares list and create and nothing else, though 0314 admits a `CANCELLED` status it attributes to the operator), the alarm has no off state (`NOT NULL` with a 1…120 CHECK, so the sketch's toggle has nothing to write), and a route cannot be named or chosen (`routeId` is a `spatial.routes` id and transit-svc's route read takes a GTFS string — a different id space). **The Mode A row is on the billing card and is not on the invoice**: a line exists only for a charge `billing.monthly_subscriptions` raised and that table is Mode B only (AL-03), so the count is today's roster, contributes nothing to the total, and the caption says which of the two it is; `invoiceSummary()` compares Σ lines against `lineSumMinor` **and** `invoice.amountMinor` and the card warns rather than picking one. **SCR-FP-010 reads nothing until `canReadBilling()` has said the caller may** — a Manager gets one sentence, not four 403s. **The invoice CSV/PDF is fleet-billing-svc's document, streamed** through a new `download()` on the data layer (the browser holds no bearer, so a link to the API would download a 401), which is the opposite call to SCR-FP-009's analytics CSV — there, no contract has an export route at all. **The sketch's three top-up rows are two rails**: OnePay *is* the card rail, and bank transfer is refused by `ck_fleet_topups_method` rather than by a code review (AL-05). **128 new resource keys × 3 locales** (561 → 689); **5 spec gaps / micro-change-set candidates**, **4 deliberate wireframe deviations**, **1 defect found in C113's shipped screens and fixed** — SCR-FP-004/005/006 passed function label props to client components, which React refuses to serialise across the server boundary, so all three threw at render time; the nine call sites now take sentences composed in the actions and `test/fences.test.ts` asserts the rule over every `'use client'` component's props. No new dependency, and no spec, contract, backend or migration file touched |
 | C116 | fleet-portal-subscriptions | 4c | DONE | 2026-08-09 | **449 tests green** in `@mageride/fleet-portal` (27 files, was 380/24); the verify command exits 0, `next build` emits **27 routes** (was 24), `check-bundle.mjs` reports **AL-52: clean — 3 compiled stylesheets, 169.2 kB CSS**, and all six portal workspaces are green (**1,317 tests, 72 files**). **AL-23 is the shape of the code, not a rule in it**: eight of the nine Epic 23 proxies are `…/vehicles/{vehicleId}/…` and no contract has a fleet-wide queue or roster, so `?vehicle=` is what both screens *are* and `test/subscriptions.test.ts` asserts every target against `fleet.yaml`. **The proxies split Owner from Manager mid-screen** — the queue and roster are `RequireFleetSubRole(Manager)`, the fare override, cash mark, slip confirmation and AL-25 delete are `RequireFleetSubRole(Owner)` — so `canManageSubscribers()` was added as the portal's third seat-gated control, parsed back out of `FleetOpsEndpoints.cs` by test. **SCR-FP-012's manifest entry moved off `fleet-billing`**: that row is MageRide's monthly invoice to the fleet, and a subscriber's fare is the owner's (AL-24/AL-49/BR-23.10) — same gate, right fact. **AL-59 drift recorded rather than papered over**: `subscription.yaml` has four Mode B methods and `fleet.yaml`'s proxy copy still has five, so the portal's union is the wider one (a pre-AL-59 row renders as a historic method, not a blank cell) and nothing here offers a method at all. **SCR-FP-012's KPIs are one roster read**, and the caption says what they are not: "cash due" is *due* (nothing knows a month will be cash until the owner marks it) and "collected" is the fares of the paid subscribers, not the sum of what arrived. **A muted row is rendered, never filtered** (US-23.12) and Delete is drawn on it alone. **5 spec gaps / micro-change-set candidates**, **7 deliberate wireframe deviations**; 143 new resource keys × 3 locales (689 → 832). No new dependency, and no spec, contract, backend or migration file touched |
 | C117 | web-passenger-subview | 4c | DONE | 2026-08-09 | **138 tests green** in `@mageride/web-passenger` (10 files); `npm --prefix portals run lint --workspace web-passenger && … test … && … build …` exits 0, `next build` emits **7 routes** (`/`, `/track`, `/t/[token]`, `/p/[token]`, the SSE proxy at `/api/live/[token]`, `/_not-found`, `/icon.svg`), and `check-bundle.mjs` reports **AL-52: clean — 3 compiled stylesheets, 166.6 kB CSS** plus a second assertion this surface needs — **no client chunk names a server-only variable**. All seven portal workspaces are green (**1,455 tests, 82 files**). **The token is redeemed on the server before a tree exists**, so "render nothing before it validates" is where the `await` is rather than a check anybody remembers: `<DeadEnd>` takes a translator, a locale, a path and a store URL and **no snapshot**, so SCR-WT-006 cannot hold a ride — asserted on the prop list *and* by grepping the rendered document for the driver, the plate, the number, the sender and the code. **Nothing redirects**, and that is the spinner's fault: `loading.tsx` streams D2's ≤1 s gate while the token is being redeemed, after which Next can only finish a `redirect()` as a meta refresh — a spinner, a blank and a second spinner for a rider whose car is moving — so all three routes call one `trackScreen` and every scope renders in place. **One `EventSource` per screen, read through context** by the map and by the SOS button's D6' I-29.4 fallback, because two hooks would be two connections against a per-token bucket and the server-rendered snapshot would hand a panic button a fix from whenever the tab was opened; reconnecting is the browser's own (`Last-Event-ID` → the cursor public-bff writes into every `id:`), so the only thing tested is that the proxy forwards it, and the `?since` fallback exists for an intermediary that buffers SSE rather than for old browsers. **Declining transmits no GPS as four properties of four components**, one of which is that the Geolocation API is never called until the reader presses the button that says so. **No cookie, no localStorage** (D6' I-29.1), so the language switch is `?lang=` and three links inside a `<details>` — no JavaScript at all. 137 resource keys × 3 locales; **7 spec gaps** (headline: `GET …/receipt` has no PDF behind its contract, so Download is `window.print()`), **7 deliberate wireframe deviations**; no spec, contract, backend or migration file touched, and no new dependency beyond the three the Fleet Portal's map already introduced |
-| C118 | contract-test-suite | 5 | PENDING | | |
+| C118 | contract-test-suite | 5 | PARTIAL | 2026-08-09 | **82 tests green** in a new `tests/Contract` (`MageRide.Contract.Tests`, 1 skipped by design); `dotnet test tests/Contract -c Release` exits 0 and `dotnet build backend/MageRide.sln -c Release` is clean with the project in the solution, so CI's existing `dotnet test backend/MageRide.sln` leg runs it. **What landed:** the contract model (26 documents, `$ref` resolved *across* files, 382 operations), a schema validator whose supported keyword set is asserted to cover everything the directory uses, the four convention suites, the error-registry equality `.spectral.yaml` promises C118 would assert, two-way route conformance over **24 composed services**, and eleven deliberately-drifted payloads that must fail. **What is PARTIAL:** every operation is reached *structurally* (its route is matched against the running service's own `EndpointDataSource`), not yet driven over HTTP with its body validated; the Redpanda event-schema layer and the KMP live-stack tests are not built. **`docker-compose.dev.yml` cannot be brought up at all** — `app-services`, `hot-path` and `fanout` have no Dockerfile — so the CI clause of the DoD is blocked on C124/C125, and services are composed by their own `XApplication.Build` instead, which covers all twenty-four rather than the nine that have images. **12 real drift findings**, each ratcheted in `RouteDrift` so the list cannot grow and cannot hide a fix — headline: **fleet-svc does not start when `Fleet:ProvisioningBaseUrl` is configured** (mapping `POST …/trackers/bind` throws because `ITrackerBindingService` has an instance `BindAsync` and no `[FromServices]`), which is every production deployment; **subscription-svc still serves the OnePay Mode B webhook AL-59 removed**; and `POST /v1/admin/transit/gtfs-import` is declared by a contract nothing maps. **2 contract typos fixed** (`validation-error` → `validation-failed`, three operations). No service, spec or migration file was changed |
 | C119 | observability-stack | 5 | PENDING | | |
 | C120 | e2e-mode-c-ride | 5 | PENDING | | |
 | C121 | e2e-mode-ab-fleet | 5 | PENDING | | |
@@ -18854,3 +18854,169 @@ _Append 3 lines per completed component (Component / Status / Notes)._
 
   **Build host —** no Docker, no replica, no backend build. `vitest run` takes ~7 s and `next build`
   ~25 s. `npm install` added nothing: every dependency was already in the lockfile from C114.
+
+- **Component:** C118 contract-test-suite — 2026-08-09
+- **Status:** PARTIAL —
+  `dotnet test tests/Contract -c Release` exits 0. **82 tests, 6 files** (81 passed, 1 skipped by
+  design: `version-check.yaml` is served by the edge itself and is `ApiGateway.Tests`'). The project
+  is in `backend/MageRide.sln`, so CI's existing `dotnet test backend/MageRide.sln` leg runs it with
+  no workflow change; `dotnet build backend/MageRide.sln -c Release` is clean in 58 s and the suite
+  itself runs in **under 15 seconds** with no Docker at all.
+
+  Three of the four deliverables are partly or wholly outstanding and are named under **What is not
+  built** below, with the reason each is where it is. The headline reason is not effort: **the stack
+  the definition of done names cannot be started.**
+- **Notes:**
+  **`infra/docker-compose.dev.yml` is not buildable, and that reshaped the component.** The DoD asks
+  for a suite that "runs in CI against docker-compose.dev.yml". That file's own header says
+  `app-services`, `hot-path`, `fanout` and `tcp-adapter` are "NOT YET BUILDABLE", and it is still
+  true: `find backend infra -name Dockerfile*` returns four templates and three service Dockerfiles,
+  none of them the composed application containers, and `infra/scripts/dev-up.sh full` refuses with
+  the list. A suite that required that stack would not run today; one that ran against
+  `docker-compose.skeleton.yml` instead would cover **nine** services and silently stop covering the
+  other fifteen. So the suite composes each service **in-process through its own
+  `XApplication.Build`** — the same composition root `Program.cs` calls — which reaches all
+  twenty-four and gives a stronger structural guarantee than a container does. The CI clause is
+  blocked on **C124 (cicd-full-pipeline) / C125 (replica-deployment)** landing the images; when they
+  do, the runtime layer gains a second transport and no assertion changes.
+
+  **What landed, and what each layer is for —**
+  `Model/` is a reader for the whole directory: 26 documents, 382 operations, `$ref` resolved **across
+  files**. That last word is the load-bearing one. A response in `iam.yaml` references
+  `./_shared.yaml#/components/schemas/Money`, whose own `currency` property references
+  `#/components/schemas/Currency` — a *same-file* pointer, and the file is now `_shared.yaml`. A
+  reader that kept resolving in `iam.yaml` finds nothing, reports an empty schema, and **every
+  assertion then passes**, because an empty schema constrains nothing. That bug was in the first
+  version of this reader and was caught by a convention test failing on two fields it should have
+  passed; `ContractSchema` now carries the document a node was *written* in and the document it
+  *resolved* in as two separate values.
+
+  `Conventions/` asserts the four platform rules over the whole set, and each test says which half it
+  owns that Spectral cannot: the lint runs over YAML and cannot see that the header name in the
+  contract is the one `MageRideHeaders` spells, that the pagination envelope is the shape
+  `CursorPage<T>` serialises to, or that a schema uses a keyword this suite's validator would silently
+  ignore (`No_schema_uses_a_keyword_the_response_validator_ignores` is what stops a bespoke validator
+  becoming a rubber stamp the day a contract grows a constraint).
+
+  `Conventions/ErrorRegistryTests` is the promise `.spectral.yaml` makes in writing and cannot keep:
+  "the registry … mirrored at runtime by `MageRide.Shared.Errors.MageRideErrors` (C002); **C118
+  asserts the two agree**". They now agree exactly in both directions, over `MageRideErrors.All`
+  rather than over reflection — the registry is *open* (a service may `Register` its own at start-up),
+  so the field list is the declared half and the registry is the whole.
+
+  `Runtime/RouteTableTests` is the first DoD item at its structural floor: **every operation is
+  matched against the running service's own `EndpointDataSource`**, and every route a service serves
+  is matched back against the union of the documents. The reverse direction is the one a
+  request-driven sweep cannot give at all — you cannot send a request to an endpoint you do not know
+  exists — and it is where four of the twelve findings came from.
+
+  `Runtime/DriftTests` is the second DoD item: eleven payloads and paths built to fail, against
+  schemas taken out of the real documents. Money as a decimal, money in USD, a `status` that became a
+  string, a `cursor` that went missing, a nineteenth ride state, a renamed path segment, a changed
+  verb. A conformance suite's one unfalsifiable failure mode is a validator that passes everything,
+  and every other test here is written to go green.
+
+  **A document is not a service, and the join had to allow for it —** `fleet.yaml` declares the Epic
+  23 Mode B paths *subscription-svc* answers, and `fleet-health.yaml` / `fleet-billing.yaml` say the
+  same of theirs in their own headers. The first version of the route check joined 1:1 on the file
+  name and reported ten false findings against fleet-svc. It now asks "is this operation mapped by
+  **some** service in the fleet", which is the question the edge actually answers.
+
+  **Every optional upstream is configured, and that is a finding in itself —** several services map a
+  proxy route only when its upstream is set (fleet-svc's Mode B family is behind
+  `if (!string.IsNullOrWhiteSpace(settings.SubscriptionBaseUrl))`). A contract declares those
+  operations unconditionally, so a suite that left the settings unset would read a route table with
+  ten operations missing from it. Worth stating as a platform observation: **a route whose existence
+  depends on configuration is a route the contract cannot describe honestly.**
+
+  **12 drift findings, ratcheted in `Runtime/RouteDrift.cs`.** The list fails the build if it grows
+  *and* if an entry is fixed and left in it, so it is a ledger of debt rather than a suppression.
+  Five operations a contract declares that nothing maps:
+  (1) **`bindFleetTracker` — fleet-svc does not start when `Fleet:ProvisioningBaseUrl` is set.** This
+  is the one to act on. Mapping `POST /v1/fleets/{fleetId}/trackers/bind` throws
+  `InvalidOperationException: BindAsync method found on ITrackerBindingService with incorrect format`:
+  the handler takes `ITrackerBindingService` with no `[FromServices]`, and that interface declares an
+  instance `BindAsync`, which minimal APIs read as a custom parameter binder and refuse. **Any
+  deployment that configures the provisioning upstream — which production must — has a fleet-svc that
+  does not boot.** Nothing caught it because every existing harness leaves the setting unset, so the
+  route is never mapped in a test. One attribute fixes it; the fix belongs in a change that also has
+  `Fleet.Api.Tests` configure the upstream, which is why this component recorded it instead.
+  (2) **`listRideHistory`** and (3) **`disputeRide`** — `ride.yaml` declares `GET /v1/rides/history`
+  and `POST /v1/rides/{rideId}/dispute`; ride-svc maps neither and nothing else picks them up. The
+  history read is a query-svc-shaped operation in ride-svc's document; the dispute has a sibling in
+  fare-svc (`POST /v1/fare/pay/driver-qr/dispute`, AL-47) that may have superseded it.
+  (4) **`bindVehicleDevice`** — the contract says `POST /v1/vehicles/{vehicleId}/device`, registry-svc
+  serves `POST /v1/vehicles/{vehicleId}/select-live`. A rename that reached one side.
+  (5) **`importGtfsFeed`** — `POST /v1/admin/transit/gtfs-import`, which AL-54 superseded with the
+  versioned set and transit-svc has already removed. C007's own rule is that "a superseded endpoint
+  is deleted, not deprecated", so the **contract** is behind here.
+  Seven routes served with no contract:
+  (6–9) **admin-bff's four `/v1/admin/transit/gtfs/{…}` verbs** — the C110 handoff records that the
+  gateway routes `/v1/admin/transit/**` *past* admin-bff to transit-svc at Order 20, so this is a
+  proxy family nothing is on the path for.
+  (10) **`registry POST /v1/vehicles/{}/select-live`** — the other half of (4).
+  (11) **`registry POST /v1/dev/vehicles/{}/approve`** — a development shortcut, listed rather than
+  filtered by prefix, because a `/v1/dev/**` approval endpoint that reached a production image is
+  exactly what a prefix filter would hide.
+  (12) **`subscription POST /v1/mode-b/pay/onepay/webhook`** — **AL-59 removed OnePay from Mode B**
+  because "it would have landed subscriber money in MageRide's account", and `subscription.yaml` no
+  longer declares it. subscription-svc still serves it: a live, undocumented payment webhook on a rail
+  the platform decided not to have.
+
+  **2 contract typos fixed, and one piece of stale prose left alone —** three operations declared
+  `x-error-codes: [validation-error, …]` and the registry has no such code (`validation-failed` is the
+  one the kernel emits); a client branching on it would have seen `unknown`. Corrected in
+  `registry.yaml` and `admin-bff.yaml`, which is the contract being made consistent with its own
+  registry rather than with an implementation. **Not** corrected: `_shared.yaml` §0 reads "The only
+  exemptions are the six payment-provider callbacks" and the directory carries **nineteen** — the
+  extra thirteen are internal-plane routes whose natural key is a business fact (`(vehicleId,
+  periodMonth)`, `(driverId, vehicleId, feeDate)` in Asia/Colombo, a cache purge that "drops an
+  already-empty cache") and each states its reason. The documents are right and the prose is stale,
+  but §0 is D3'-derived, so correcting it is a **micro-change-set against
+  `specs/D3_mageride_api_contracts.md` §0**, raised here rather than taken. The suite asserts the rule
+  the reasons actually share and which is stronger than a count: **a bearer-authenticated route is
+  never exempt** — the replay key exists for the second tap only a person can send. One documented
+  exception (`acknowledgeNotification`, which races E-01's 3 s offer-fallback deadline and is
+  idempotent by construction) is named in the test.
+
+  **Two more spec observations.** `iam-svc` serves `GET /.well-known/jwks.json` and `iam.yaml` does not
+  declare it — treated here as a well-known URI rather than an operation (RFC 8615; its shape is RFC
+  7517's, not this platform's), but it is a public endpoint on the edge and is worth a line in the
+  contract. And three `operationId`s appear in two documents each (`approveDriverPayoutProfile`,
+  `rejectDriverPayoutProfile`, `listWalletTransactions`, all admin-bff proxying registry/wallet) —
+  harmless because the KMP client is hand-written rather than generated, pinned so a **fourth**
+  collision between two *domain* services has to be justified.
+
+  **What is not built, and what each needs —**
+  (a) **The response sweep.** Every operation is reached structurally; none is yet driven over HTTP
+  with its body validated against the declared response schema. The two hard pieces are done —
+  `ServiceComposition.Compose` already takes a live Postgres/Redis, and the validator is written and
+  proven by `DriftTests` — what is missing is a `ServiceFleet` that starts the composed apps on port 0
+  over TestKit containers, and a request recipe per operation. The cheap first pass is an
+  **unauthenticated sweep**: every operation answers its declared `401` (or, for a `security: []`
+  operation, does not), which needs no seed data, covers all 382, and asserts deny-by-default (AL-06)
+  on the way. Authorization runs *before* the idempotency middleware in `UseMageRideDefaults`, so that
+  sweep is uniform.
+  (b) **Redpanda event-schema conformance** for `telemetry.raw`/`normalized`, `ride.events`,
+  `dispatch.events`, `trip.events` and `audit.events` (D6' §2.2). `RedpandaFixture` and
+  `EventTopics.All` exist; the envelopes need transcribing from §2.2 into the same `ContractSchema`
+  shape the HTTP side uses, and the events should be **captured from a real outbox dispatch** rather
+  than synthesised, or the test proves only that the fixture matches itself.
+  (c) **KMP client contract tests against the live stack.** `e2e/walking-skeleton` is the pattern —
+  "drive the platform through `:shared`, not through curl" — and `infra/docker-compose.skeleton.yml`
+  is the only stack that builds. Note that this belongs in Gradle, not in `dotnet test`, so it needs
+  its own verify line.
+
+  **Files —** new: `tests/Directory.Build.props` and `tests/Directory.Packages.props` (each a
+  one-line import of `backend/`'s, so the repository keeps one build-settings list and one package
+  version list), `tests/Contract/MageRide.Contract.Tests.csproj`, `Model/{ContractSet,
+  ContractOperation,ContractSchema}.cs`, `Conventions/{ConventionTests,ErrorRegistryTests}.cs`,
+  `Runtime/{ServiceCatalog,ServiceComposition,ServiceRoutes,RouteTableTests,RouteDrift,DriftTests}.cs`,
+  `tests/Contract/CLAUDE.md`. Changed: `backend/MageRide.sln` (one project), `backend/contracts/
+  {registry,admin-bff}.yaml` (the three-word typo fix), this file. **No service, spec, migration or
+  infrastructure file was changed, and no new dependency was added** — YamlDotNet was already pinned
+  for `ApiGateway.Tests`, which reads the same directory.
+
+  **Build host —** no Docker, no containers, no replica. The suite is deliberately Docker-free at this
+  stage, which is also why it fits the DoD's fifteen minutes with three orders of magnitude to spare;
+  the parts that need containers are the parts that are not built.

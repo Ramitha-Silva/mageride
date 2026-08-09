@@ -1,0 +1,18 @@
+<Project>
+
+  <!--
+    MageRide — cross-cutting test suites (C118 and the wave-5 e2e components).
+
+    `tests/` sits beside `backend/` rather than inside it because what lives here is not a
+    service's own suite: a contract test asserts that TWENTY-FIVE services match the documents in
+    `backend/contracts/`, and filing that under any one of them would make it look like that
+    service's business. `build/manifest.yaml` names the verify target `tests/Contract`.
+
+    MSBuild walks up from a project for the nearest `Directory.Build.props`, and `backend/` is not
+    an ancestor of this directory — so the shared properties are imported explicitly. One list of
+    build settings for the whole repository, not two that drift.
+  -->
+
+  <Import Project="../backend/Directory.Build.props" />
+
+</Project>

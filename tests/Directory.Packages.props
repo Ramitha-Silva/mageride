@@ -1,0 +1,15 @@
+<Project>
+
+  <!--
+    Central package management for `tests/`, which is `backend/`'s list and not a second one.
+
+    A contract suite that pinned its own versions would be testing services built against
+    different packages than the ones it references — and with `CentralPackageTransitivePinningEnabled`
+    on, two lists would produce NU1008 the first time they disagreed. The import is the whole file
+    on purpose: adding a dependency here means adding a `<PackageVersion>` to
+    `backend/Directory.Packages.props`, exactly as it does for a service.
+  -->
+
+  <Import Project="../backend/Directory.Packages.props" />
+
+</Project>

@@ -1027,7 +1027,7 @@ paths:
         '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
         '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
-      x-error-codes: [validation-error, unauthorized, payout-profile-not-found, conflict]
+      x-error-codes: [validation-failed, unauthorized, payout-profile-not-found, conflict]
 
   /v1/internal/drivers/{driverId}/payout-profile/reject:
     post:
@@ -1076,7 +1076,7 @@ paths:
         '404': { $ref: './_shared.yaml#/components/responses/NotFound' }
         '409': { $ref: './_shared.yaml#/components/responses/Conflict' }
         '500': { $ref: './_shared.yaml#/components/responses/InternalError' }
-      x-error-codes: [validation-error, unauthorized, payout-profile-not-found, conflict]
+      x-error-codes: [validation-failed, unauthorized, payout-profile-not-found, conflict]
 
   /v1/internal/vehicles/{vehicleId}/onboarding/recompute:
     post:
