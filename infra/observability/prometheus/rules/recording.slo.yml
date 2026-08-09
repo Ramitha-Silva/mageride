@@ -1,0 +1,291 @@
+# =====================================================================================
+# MageRide — SLI recording rules (C119)
+#
+# One recorded series per ADD §13.3 SLO, so the alert rules read a name instead of a
+# quantile expression and every dashboard, alert and runbook is looking at the same number.
+#
+# --- WHY `..._error_ratio` AND NOT A LATENCY QUANTILE -----------------------------------
+# A burn-rate alert needs a **ratio of bad events to all events**, because the budget is
+# "1% of windows may be bad" and 14× that budget over an hour has to mean something
+# arithmetic. `histogram_quantile` gives a latency, not a ratio, and cannot be burned
+# against a budget. So each latency SLO is recorded twice:
+#
+#   mageride:<slo>:error_ratio<window>   the SLI — the share of events OUTSIDE the target
+#   mageride:<slo>:p95 / :p99            the human number, for dashboards and for the page
+#
+# The ratio comes straight out of the histogram bucket that matches the target, which is
+# exact rather than interpolated — `le="5"` on a seconds histogram IS "how many were under
+# five seconds". Where no bucket boundary matches the target the rule says so.
+#
+# --- WHY NOTHING HERE CLAMPS ITS DENOMINATOR ---------------------------------------------
+# Every ratio below divides two rates and does NOT guard the denominator. That looks unsafe
+# and is the opposite: `clamp_min(denominator, 1e-9)` was here for one commit and it turned
+# **silence into a 100% error rate**. When a histogram's series still exist but have stopped
+# incrementing — a quiet night, a paused fleet, a service between deployments — numerator
+# and denominator are both 0; clamping makes that `0 / 1e-9 = 0`, the rule records
+# `1 - 0 = 1`, and `PositionE2ELatencyBudgetBurning` pages with "100% of positions took
+# longer than 5 s" over a platform that is simply idle.
+#
+# Unguarded, PromQL evaluates `0/0` to NaN, `1 - NaN` to NaN, and every `NaN > threshold`
+# comparison to false. The rule goes quiet, which is the truth: an SLO measured over no
+# events has no value. **The case where traffic genuinely stops has its own alert**
+# (`PositionPipelineSilent`), because that is a different fact from "the events were slow".
+# `slo.test.yml` pins both.
+#
+# Naming: `mageride:<sli>:<measure><window>`, the Prometheus convention of
+# `level:metric:operation` with the level namespaced to the platform.
+# =====================================================================================
+
+groups:
+
+  # ===================================================================================
+  # Position E2E latency — ADD §13.3 row 1, D-19, NFR-01.
+  # p95 < 5 s, p99 < 8 s. 99% of 5-minute windows. Burn alert: 14× over 1 h.
+  #
+  # `mageride_positions_e2e_latency_milliseconds` is recorded by fanout-svc at the moment a
+  # frame leaves for a subscriber, against the sample's own GNSS instant — the whole path
+  # in one histogram, which is what makes a quantile over it meaningful. Adding
+  # p95(ingest) to p95(fanout) would not be.
+  # ===================================================================================
+  - name: mageride.slo.position_e2e
+    interval: 15s
+    rules:
+      - record: mageride:position_e2e:p95
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (rate(mageride_positions_e2e_latency_milliseconds_bucket[5m]))
+          ) / 1000
+
+      - record: mageride:position_e2e:p99
+        expr: |
+          histogram_quantile(
+            0.99,
+            sum by (le) (rate(mageride_positions_e2e_latency_milliseconds_bucket[5m]))
+          ) / 1000
+
+      # The SLI. "Bad" is a position that took longer than the p95 target of 5 s — the
+      # tighter of the two targets, so the budget is spent by whichever breaches first.
+      # 5000 ms is a default OTel histogram bucket boundary, so this is a count and not an
+      # interpolation.
+      - record: mageride:position_e2e:error_ratio5m
+        expr: |
+          1 - (
+            sum(rate(mageride_positions_e2e_latency_milliseconds_bucket{le="5000"}[5m]))
+            /
+            sum(rate(mageride_positions_e2e_latency_milliseconds_count[5m]))
+          )
+
+      - record: mageride:position_e2e:error_ratio1h
+        expr: |
+          1 - (
+            sum(rate(mageride_positions_e2e_latency_milliseconds_bucket{le="5000"}[1h]))
+            /
+            sum(rate(mageride_positions_e2e_latency_milliseconds_count[1h]))
+          )
+
+      - record: mageride:position_e2e:error_ratio6h
+        expr: |
+          1 - (
+            sum(rate(mageride_positions_e2e_latency_milliseconds_bucket{le="5000"}[6h]))
+            /
+            sum(rate(mageride_positions_e2e_latency_milliseconds_count[6h]))
+          )
+
+      # The two halves, for the runbook: they say WHERE the five seconds went. Ingest is
+      # device → Redis cell stream (position-processor-svc); fanout is cell stream → group
+      # (fanout-svc). Neither is an SLI — they are diagnostics.
+      - record: mageride:position_ingest:p95
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (rate(mageride_positions_ingest_latency_milliseconds_bucket[5m]))
+          ) / 1000
+
+      - record: mageride:position_fanout:p95
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (rate(mageride_fanout_latency_milliseconds_bucket[5m]))
+          ) / 1000
+
+  # ===================================================================================
+  # SOS dispatch latency — ADD §13.3 row 2, D-33.
+  # p99 ≤ 5 s, 99.9% monthly. "Any 5-min window > 5 s p99 pages on-call immediately."
+  #
+  # Computed over `outcome="dispatched"` alone: an alert that failed at the gateway in
+  # 200 ms is a worse outcome than one that took six seconds and arrived, and letting
+  # failures into the latency figure would make a gateway outage look like an improvement.
+  # The failures have their own alert (SosDispatchFailing).
+  # ===================================================================================
+  - name: mageride.slo.sos
+    interval: 15s
+    rules:
+      - record: mageride:sos_dispatch:p99
+        expr: |
+          histogram_quantile(
+            0.99,
+            sum by (le) (rate(mageride_sos_dispatch_latency_milliseconds_bucket{outcome="dispatched"}[5m]))
+          ) / 1000
+
+      - record: mageride:sos_dispatch:error_ratio5m
+        expr: |
+          1 - (
+            sum(rate(mageride_sos_dispatch_latency_milliseconds_bucket{outcome="dispatched",le="5000"}[5m]))
+            /
+            sum(rate(mageride_sos_dispatch_latency_milliseconds_count{outcome="dispatched"}[5m]))
+          )
+
+      # Alerts that reached no gateway at all, as a share of every alert raised. Not a
+      # latency problem and not on the same budget — this is the panic button not working.
+      - record: mageride:sos_dispatch:failure_ratio5m
+        expr: |
+          sum(rate(mageride_sos_raised_total{outcome!="dispatched"}[5m]))
+          /
+          sum(rate(mageride_sos_raised_total[5m]))
+
+  # ===================================================================================
+  # Availability — ADD §13.3 rows 5 and 6.
+  # Tracking plane 99.5% monthly (2% budget in 6 h); registry/trips API 99.9% monthly
+  # (2% budget in 6 h).
+  #
+  # "Bad" is a 5xx. A 4xx is the caller being wrong and does not spend the platform's
+  # budget; `deny-by-default` (AL-06) means a healthy platform serves a steady stream of
+  # 401s and counting them would make authentication look like an outage.
+  # ===================================================================================
+  - name: mageride.slo.availability
+    interval: 15s
+    rules:
+      - record: mageride:api:error_ratio5m
+        expr: |
+          sum by (service) (rate(http_server_request_duration_seconds_count{http_response_status_code=~"5..",service!=""}[5m]))
+          /
+          sum by (service) (rate(http_server_request_duration_seconds_count{service!=""}[5m]))
+
+      - record: mageride:api:error_ratio1h
+        expr: |
+          sum by (service) (rate(http_server_request_duration_seconds_count{http_response_status_code=~"5..",service!=""}[1h]))
+          /
+          sum by (service) (rate(http_server_request_duration_seconds_count{service!=""}[1h]))
+
+      - record: mageride:api:error_ratio6h
+        expr: |
+          sum by (service) (rate(http_server_request_duration_seconds_count{http_response_status_code=~"5..",service!=""}[6h]))
+          /
+          sum by (service) (rate(http_server_request_duration_seconds_count{service!=""}[6h]))
+
+      # The tracking plane is the three services a moving map depends on. Named as a set
+      # because §13.3 gives it one availability number, not three.
+      - record: mageride:tracking:error_ratio6h
+        expr: |
+          sum(rate(http_server_request_duration_seconds_count{http_response_status_code=~"5..",plane=~"position|edge"}[6h]))
+          /
+          sum(rate(http_server_request_duration_seconds_count{plane=~"position|edge"}[6h]))
+
+      - record: mageride:api:p95
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le, service) (rate(http_server_request_duration_seconds_bucket{service!=""}[5m]))
+          )
+
+      - record: mageride:api:requests5m
+        expr: sum by (service) (rate(http_server_request_duration_seconds_count{service!=""}[5m]))
+
+  # ===================================================================================
+  # Dispatch — ADD §13.3 rows 8 and 9.
+  # Offer push p95 < 2 s / p99 < 4 s; atomic accept p95 < 300 ms / p99 < 800 ms.
+  #
+  # Both are dispatch-svc's (C023/C034). Neither histogram exists yet — see the C119
+  # handoff — so these rules are written against the names the instruments will carry and
+  # record `NaN` until then. That is deliberate: an SLO with no rule is forgotten, and a
+  # rule with no data is a "No data" panel somebody has to explain.
+  # ===================================================================================
+  - name: mageride.slo.dispatch
+    interval: 15s
+    rules:
+      - record: mageride:offer_push:p95
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (rate(mageride_dispatch_offer_push_latency_milliseconds_bucket[5m]))
+          ) / 1000
+
+      - record: mageride:offer_push:error_ratio5m
+        expr: |
+          1 - (
+            sum(rate(mageride_dispatch_offer_push_latency_milliseconds_bucket{le="2000"}[5m]))
+            /
+            sum(rate(mageride_dispatch_offer_push_latency_milliseconds_count[5m]))
+          )
+
+      - record: mageride:accept_resolution:p95
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (rate(mageride_ride_accept_resolution_latency_milliseconds_bucket[5m]))
+          ) / 1000
+
+      - record: mageride:accept_resolution:error_ratio5m
+        expr: |
+          1 - (
+            sum(rate(mageride_ride_accept_resolution_latency_milliseconds_bucket{le="300"}[5m]))
+            /
+            sum(rate(mageride_ride_accept_resolution_latency_milliseconds_count[5m]))
+          )
+
+  # ===================================================================================
+  # Payments — ADD §13.3 row 3. Initiated → terminal p95 < 30 s, p99 < 90 s, 99% monthly,
+  # 2% budget over 1 h. fare-svc's (C045/C046).
+  #
+  # Also not instrumented yet; same reasoning as the dispatch group above.
+  # ===================================================================================
+  - name: mageride.slo.payments
+    interval: 15s
+    rules:
+      - record: mageride:payment_callback:p95
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (rate(mageride_payments_resolve_latency_milliseconds_bucket[5m]))
+          ) / 1000
+
+      - record: mageride:payment_callback:error_ratio1h
+        expr: |
+          1 - (
+            sum(rate(mageride_payments_resolve_latency_milliseconds_bucket{le="30000"}[1h]))
+            /
+            sum(rate(mageride_payments_resolve_latency_milliseconds_count[1h]))
+          )
+
+  # ===================================================================================
+  # WebSocket connection success — ADD §13.3 row 7. 99%, alert on 5% failure over 5 min.
+  #
+  # A SignalR negotiate is an ordinary HTTP request through the gateway, so the SLI comes
+  # from the golden signals rather than from a bespoke counter: `/hubs/{**remainder}` is
+  # the route C008 proxies to fanout-svc.
+  # ===================================================================================
+  - name: mageride.slo.websocket
+    interval: 15s
+    rules:
+      - record: mageride:ws_connect:failure_ratio5m
+        expr: |
+          sum(rate(http_server_request_duration_seconds_count{http_route=~"/hubs.*",http_response_status_code=~"[45].."}[5m]))
+          /
+          sum(rate(http_server_request_duration_seconds_count{http_route=~"/hubs.*"}[5m]))
+
+  # ===================================================================================
+  # VoIP call setup — ADD §13.3 row 4, "when Phase 1 voip-svc shipped". p95 < 4 s.
+  # voip-svc (C055) exists; the signalling-to-first-audio-frame histogram does not, because
+  # the first audio frame is observed by the SFU and not by the service. Recorded here so
+  # the SLO has a home; see the C119 handoff.
+  # ===================================================================================
+  - name: mageride.slo.voip
+    interval: 15s
+    rules:
+      - record: mageride:voip_setup:p95
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (rate(mageride_voip_call_setup_latency_milliseconds_bucket[5m]))
+          ) / 1000

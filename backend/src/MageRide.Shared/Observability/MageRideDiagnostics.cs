@@ -277,6 +277,67 @@ public static class MageRideDiagnostics
             "Time from a cell stream entry being written to it being pushed to a group.");
 
     /// <summary>
+    /// GNSS capture instant to the frame reaching a passenger's group, in milliseconds — the whole
+    /// of ADD §13.3's position SLO (D-19: p95 &lt; 5 s, p99 &lt; 8 s) in one histogram.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// C119 added this because the SLO was not measurable before it.
+    /// <see cref="PositionIngestLatencyMs"/> ends where <see cref="FanoutLatencyMs"/> begins and
+    /// the two together do cover the path — but a p95 is not additive, so
+    /// <c>p95(ingest) + p95(fanout)</c> is a number with no defined relationship to the p95 an SLO
+    /// is written about. Only a histogram over the *same* observation can answer it, and this is
+    /// the only point in the platform that holds both ends: the sample carries its own capture
+    /// instant all the way to the push.
+    /// </para>
+    /// <para>
+    /// Measured against the device's clock, like <see cref="PositionIngestLatencyMs"/> and for the
+    /// same reason — it is the delay the passenger experiences, and a handset with a wrong clock is
+    /// one of the ways that delay goes wrong. ADD §13.2's synthetic probe (a probe vehicle
+    /// publishing to a probe passenger) is the clock-independent counterpart and is what
+    /// <c>infra/observability</c>'s blackbox job is for.
+    /// </para>
+    /// </remarks>
+    public static readonly Histogram<double> PositionEndToEndLatencyMs =
+        Meter.CreateHistogram<double>("mageride.positions.e2e.latency", "ms",
+            "Device GNSS instant to the position reaching a subscribed client (D-19).");
+
+    /// <summary>The three ways a position reaches a person, as the <c>surface</c> tag's closed set.</summary>
+    public static class PositionSurfaces
+    {
+        /// <summary>The public map's geocell groups.</summary>
+        public const string Geocell = "geocell";
+
+        /// <summary>A passenger watching their own ride.</summary>
+        public const string Ride = "ride";
+
+        /// <summary>An entitled Mode B watcher following one vehicle (D-23).</summary>
+        public const string Vehicle = "vehicle";
+    }
+
+    /// <summary>
+    /// Records one D-19 observation. The single implementation of the clamp, the tag and the
+    /// null-guard, because three call sites across two pumps measure the same journey.
+    /// </summary>
+    /// <param name="captured">
+    /// The sample's own GNSS instant. <c>null</c> contributes nothing rather than a zero, which
+    /// would drag the quantile down.
+    /// </param>
+    /// <param name="delivered">When the frame left for the subscriber.</param>
+    /// <param name="surface">One of <see cref="PositionSurfaces"/>.</param>
+    public static void RecordPositionE2E(DateTimeOffset? captured, DateTimeOffset delivered, string surface)
+    {
+        if (captured is not { } stamped)
+        {
+            return;
+        }
+
+        PositionEndToEndLatencyMs.Record(
+            Math.Max(0, (delivered - stamped).TotalMilliseconds),
+            new KeyValuePair<string, object?>("surface", surface));
+    }
+
+    /// <summary>
     /// Frames the D-22/D-23 visibility filter kept off the public geocell groups, by reason
     /// (<c>engaged</c> | <c>stale</c> | <c>offline</c> | <c>private</c>).
     /// </summary>
@@ -409,4 +470,60 @@ public static class MageRideDiagnostics
     public static readonly Counter<long> QueryReplicaReads =
         Meter.CreateCounter<long>("mageride.query.replica_reads", "{query}",
             "Read queries routed to a Postgres read replica, by whether read-after-write forced the primary.");
+
+    // --- safety-svc (C052): the one SLO that pages on a single window (D-33) ----------------------
+
+    /// <summary>
+    /// Button tap to the alert being handed to a gateway, in milliseconds, tagged <c>outcome</c> —
+    /// ADD §13.3's SOS dispatch SLO (D-33: p99 ≤ 5 s, and any 5-minute window over it pages).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// C119 added this. safety-svc already measured the interval — <c>safety.sos_events.ts</c> is
+    /// the tap and <c>dispatched_at</c> is the gateway, deliberately two columns so the SLO
+    /// survives the request — but a column is queryable *after* an incident and D-33's alert has to
+    /// fire *during* one. The row stays the system of record; this is the same interval where
+    /// Prometheus can watch it.
+    /// </para>
+    /// <para>
+    /// The <c>outcome</c> tag carries <c>dispatched</c>, <c>failed</c> or <c>no_contact</c> and the
+    /// SLO is computed over <c>dispatched</c> alone: an alert that failed at the gateway in 200 ms
+    /// is a worse outcome than one that took six seconds and arrived, and averaging them together
+    /// would let a rising failure rate pull the latency graph *down*. The failures have their own
+    /// alert.
+    /// </para>
+    /// </remarks>
+    public static readonly Histogram<double> SosDispatchLatencyMs =
+        Meter.CreateHistogram<double>("mageride.sos.dispatch.latency", "ms",
+            "SOS button tap to the alert being handed to the primary SMS gateway (D-33).");
+
+    // --- The two §13.3.1 rows that are not about a ride (C119) -------------------------------
+    // Each is published by the service that owns the table, through the kernel's ScrapedGauges —
+    // fare-svc's OverpaidGauge and registry-svc's ExpiredDocumentsGauge. Both were briefly in the
+    // analytics read model on the theory that they spanned two bounded contexts; neither does, and
+    // that read model's only host (admin-bff) is not a scrape target in the deployment shape the
+    // code is actually built in, so the pages would have been silent there.
+
+    /// <summary>
+    /// Payments sitting in <c>Overpaid</c>. ADD §13.3.1 pages when this is non-zero for over an
+    /// hour — a late-callback storm, or OnePay reconciliation stalled (R-19, ADD §11.14).
+    /// </summary>
+    public const string PaymentsOverpaidGauge = "mageride.payments.overpaid";
+
+    /// <summary>
+    /// Vehicles past a document's expiry whose <c>registry.vehicles.dispatch_state</c> is still
+    /// <c>ACTIVE</c>. ADD §13.3.1's last row; the cause it names is "doc-expiry job not running",
+    /// and that column is the one the job writes.
+    /// </summary>
+    public const string ExpiredDocumentsDispatchingGauge = "mageride.registry.expired_documents_dispatching";
+
+    /// <summary>SOS alerts raised, tagged <c>outcome</c> and <c>source</c>.</summary>
+    /// <remarks>
+    /// The denominator D-33's 99.9% is measured against, and the one number that says the panic
+    /// button is reaching anybody at all — safety-svc's own CLAUDE.md puts it plainly: an SOS that
+    /// goes nowhere looks exactly like one that worked.
+    /// </remarks>
+    public static readonly Counter<long> SosRaised =
+        Meter.CreateCounter<long>("mageride.sos.raised", "{alert}",
+            "SOS alerts recorded, by dispatch outcome and by where they were raised from.");
 }

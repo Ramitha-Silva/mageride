@@ -51,7 +51,25 @@ mapfile -t ONE_SHOTS < <(
 
 is_one_shot() {
   local svc="$1" s
-  for s in "${ONE_SHOTS[@]}"; do [[ "$s" == "$svc" ]] && return 0; done
+  for s in "${ONE_SHOTS[@]-}"; do [[ "$s" == "$svc" ]] && return 0; done
+  return 1
+}
+
+# Δ C119: the services THIS file declares, so a row belonging to another file in the same
+# compose project is skipped rather than judged.
+#
+# `docker compose ps` filters by project, not by file, and every stack in this repository
+# declares `name: mageride` on purpose — the observability stack is more containers on one
+# network, not a second copy of anything. So waiting on `infra/observability/…` used to see
+# the slim stack's `migrate`, `minio-init` and `redpanda-init` sitting at `exited 0`, decide
+# they were long-running services that had died, and fail. Filtering here rather than
+# widening the one-shot rule keeps the contract right: this script waits for the containers
+# the file it was given declares.
+mapfile -t DECLARED < <(dc config --services)
+
+is_declared() {
+  local svc="$1" s
+  for s in "${DECLARED[@]-}"; do [[ "$s" == "$svc" ]] && return 0; done
   return 1
 }
 
@@ -73,6 +91,7 @@ while :; do
     health=$(jq -r '.Health // ""' <<<"$row")
     exit_code=$(jq -r '.ExitCode // 0' <<<"$row")
     [[ -n "$svc" ]] || continue
+    is_declared "$svc" || continue
 
     if is_one_shot "$svc"; then
       case "$state" in

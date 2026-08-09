@@ -1,0 +1,353 @@
+# =====================================================================================
+# MageRide — OBSERVABILITY stack (C119)
+#
+# ADD §13.1's MVP tooling, with the one substitution the same table sanctions: Tempo in
+# place of Jaeger, because §13.1's "Scale Tool" column names Tempo and D7' §12 names it
+# outright ("Loki + Tempo (OTLP)"). Running Jaeger now and Tempo later would mean two
+# trace stores, two query APIs and two Grafana datasources for the same spans.
+#
+#   bash infra/scripts/observability-up.sh          # up, waits for healthy
+#   bash infra/scripts/observability-down.sh        # down (add --volumes to drop history)
+#   bash infra/scripts/verify-observability.sh      # the C119 definition of done
+#
+# --- HOW IT ATTACHES TO THE PLATFORM --------------------------------------------------
+# Same compose project (`mageride`) and same network (`mageride_mr`) as the dev stacks, so
+# this file is to `docker-compose.dev.slim.yml` what `docker-compose.dev.yml` is: more
+# containers on one network, never a second copy of anything. It does NOT `include` the
+# slim file — observability has to be able to come up against a stack that is already
+# running, against the replica, or against nothing at all while a rule is being written.
+#
+# A target that is not running is a target that is DOWN, which is the correct reading and
+# is what `up` alerts fire on. Nothing here fails to start because the platform is absent.
+#
+# **NEVER pass `--remove-orphans` to a compose command that names only this file.** It
+# operates on the PROJECT, so every container the dev stacks declare and this file does not
+# is an orphan of `mageride` — one `down --remove-orphans` deleted Postgres, Redis,
+# Redpanda, EMQX, MinIO, PgBouncer and the network. Use `infra/scripts/observability-down.sh`,
+# which exists to make that impossible, and run it BEFORE `dev-down.sh` (compose will not
+# remove a network that still has endpoints attached).
+#
+# --- FOOTPRINT ------------------------------------------------------------------------
+# ~1.6 GB of limits against the slim stack's ~5.9 GB, so slim + observability fits on the
+# 24 GB build box beside a `dotnet build` (root CLAUDE.md "Build Host"). Retention is
+# deliberately short here — 15 days of metrics, 7 of logs and traces — because this is a
+# dev/replica configuration. Production (DOKS) is Thanos-backed per §13.1's scale column.
+#
+# Every published port is bound to 127.0.0.1, like every other port in this repository:
+# this box has a public IP, and an unauthenticated Prometheus is a map of the platform.
+# =====================================================================================
+
+name: mageride
+
+networks:
+  mr:
+    name: mageride_mr
+
+volumes:
+  prometheusdata:
+  lokidata:
+  tempodata:
+  grafanadata:
+  alertmanagerdata:
+
+services:
+
+  # -----------------------------------------------------------------------------------
+  # Prometheus — metrics and the whole of §13.3/§13.3.1/§13.4's alerting.
+  #
+  # `--web.enable-lifecycle` is what lets `verify-observability.sh` reload rules without a
+  # restart; it is bound to loopback like everything else.
+  # -----------------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    user: "65534:65534"
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+      - "--web.enable-lifecycle"
+      # Tempo's metrics-generator remote-writes span metrics and the service graph back
+      # here (tempo/tempo.yml). Without this the writes are 404s in Tempo's log and the
+      # RED metrics for anything that is only traced never appear.
+      - "--web.enable-remote-write-receiver"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/rules:/etc/prometheus/rules:ro
+      - prometheusdata:/prometheus
+    ports:
+      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:9090/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+    mem_limit: 1g
+    cpus: 0.5
+    networks: [mr]
+    restart: unless-stopped
+
+  # -----------------------------------------------------------------------------------
+  # Alertmanager — §13.1's alerting row. Routes are in alertmanager/alertmanager.yml; the
+  # receivers are webhooks in dev and PagerDuty in production (D7' §12).
+  # -----------------------------------------------------------------------------------
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    user: "65534:65534"
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+      - "--storage.path=/alertmanager"
+      # Written into every notification, so an operator can reach the silence button from
+      # the page. Overridden per deployment.
+      - "--web.external-url=${ALERTMANAGER_EXTERNAL_URL:-http://127.0.0.1:9093}"
+    volumes:
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - ./alertmanager/templates:/etc/alertmanager/templates:ro
+      - alertmanagerdata:/alertmanager
+    ports:
+      - "127.0.0.1:${ALERTMANAGER_PORT:-9093}:9093"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:9093/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+    mem_limit: 256m
+    cpus: 0.25
+    networks: [mr]
+    restart: unless-stopped
+
+  # -----------------------------------------------------------------------------------
+  # Loki — logs. Every service already writes structured JSON through Serilog and exports
+  # it over OTLP (C002's `Otel__LoggingEnabled`), so the collector is the primary path and
+  # Promtail below is the belt-and-braces one for container stdout.
+  # -----------------------------------------------------------------------------------
+  loki:
+    image: grafana/loki:3.2.1
+    user: "10001:10001"
+    command: ["-config.file=/etc/loki/loki.yml"]
+    volumes:
+      - ./loki/loki.yml:/etc/loki/loki.yml:ro
+      - lokidata:/loki
+    ports:
+      - "127.0.0.1:${LOKI_PORT:-3100}:3100"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:3100/ready | grep -q ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    mem_limit: 512m
+    cpus: 0.5
+    networks: [mr]
+    restart: unless-stopped
+
+  # -----------------------------------------------------------------------------------
+  # Promtail — container stdout into Loki.
+  #
+  # Reads the docker socket READ-ONLY for container labels. That is a real privilege and
+  # it is why this container publishes no port and runs nothing else: a log shipper with
+  # the docker socket is a container escape if it is also reachable.
+  # -----------------------------------------------------------------------------------
+  promtail:
+    image: grafana/promtail:3.2.1
+    command: ["-config.file=/etc/promtail/promtail.yml"]
+    volumes:
+      - ./promtail/promtail.yml:/etc/promtail/promtail.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      loki: { condition: service_healthy }
+    mem_limit: 256m
+    cpus: 0.25
+    networks: [mr]
+    restart: unless-stopped
+
+  # -----------------------------------------------------------------------------------
+  # Tempo — traces. Trace ids propagate across MQTT payloads, stream messages and HTTP
+  # calls (ADD §13.1), so one ride is one trace from the driver's tap to the outbox row.
+  #
+  # Spans arrive from the collector only. Services never write to Tempo directly: the
+  # collector is where sampling, batching and the resource attributes are applied, and a
+  # service that bypassed it would be missing all three.
+  # -----------------------------------------------------------------------------------
+  tempo:
+    image: grafana/tempo:2.6.1
+    user: "10001:10001"
+    command: ["-config.file=/etc/tempo/tempo.yml"]
+    volumes:
+      - ./tempo/tempo.yml:/etc/tempo/tempo.yml:ro
+      - tempodata:/var/tempo
+    ports:
+      - "127.0.0.1:${TEMPO_PORT:-3200}:3200"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:3200/ready | grep -q ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    mem_limit: 512m
+    cpus: 0.5
+    networks: [mr]
+    restart: unless-stopped
+
+  # -----------------------------------------------------------------------------------
+  # OpenTelemetry Collector — §13.1's "Collector" row and the single OTLP door.
+  #
+  # `Otel__Endpoint=http://otel-collector:4317` is what every .NET service sends traces,
+  # metrics and logs to (D7' §4.1). It fans them out: spans to Tempo, logs to Loki,
+  # metrics onto :8889 for Prometheus to scrape.
+  #
+  # The metrics leg matters for the ONE component that cannot be scraped: tcp-adapter runs
+  # on `runtime:10.0-alpine` with no HTTP surface at all (D7' §5.1 gives it a TCP-socket
+  # liveness probe for exactly that reason), so its meter reaches Prometheus only by being
+  # pushed here first.
+  # -----------------------------------------------------------------------------------
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.114.0
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./otel-collector/config.yaml:/etc/otelcol/config.yaml:ro
+    ports:
+      # OTLP gRPC and HTTP. Published on loopback so a `dotnet test` or a verify script on
+      # the host can push a span without joining the docker network.
+      - "127.0.0.1:${OTLP_GRPC_PORT:-4317}:4317"
+      - "127.0.0.1:${OTLP_HTTP_PORT:-4318}:4318"
+    depends_on:
+      tempo: { condition: service_healthy }
+      loki:  { condition: service_healthy }
+    # NO healthcheck: this image has no shell and no wget — it is the collector binary and
+    # nothing else. Its `health_check` extension answers on :13133 and Prometheus watches
+    # it from the outside (`up{job="otel-collector"}`), which is a better test anyway: a
+    # collector that cannot be reached across the network is down whatever it thinks.
+    mem_limit: 512m
+    cpus: 0.5
+    networks: [mr]
+    restart: unless-stopped
+
+  # -----------------------------------------------------------------------------------
+  # Grafana — §13.1's dashboards row. Datasources and dashboards are provisioned from
+  # files, never from the UI: a dashboard edited in the browser lives in this container's
+  # volume and dies with it.
+  # -----------------------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:11.3.1
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-mageride_dev}
+      # Anonymous read-only viewing on loopback. An on-call engineer reading a dashboard at
+      # 03:00 should not be blocked on a password manager; nothing here is writable and the
+      # port is not routable.
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_USERS_DEFAULT_THEME: dark
+      # Explore is how a trace id from an alert becomes a flame graph.
+      GF_EXPLORE_ENABLED: "true"
+      GF_FEATURE_TOGGLES_ENABLE: traceToMetrics
+      # No phone-home from a box that hosts the replica, and no plugin downloads at boot:
+      # Grafana 11.3 pre-installs the Loki Explore app from grafana.com on first start, which
+      # makes start-up depend on the internet and on a third party's CDN. Nothing here needs it.
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_NEWS_NEWS_FEED_ENABLED: "false"
+      GF_PLUGINS_PREINSTALL_DISABLED: "true"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafanadata:/var/lib/grafana
+    ports:
+      - "127.0.0.1:${GRAFANA_PORT:-3000}:3000"
+    depends_on:
+      prometheus: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:3000/api/health | grep -q ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    mem_limit: 512m
+    cpus: 0.5
+    networks: [mr]
+    restart: unless-stopped
+
+  # -----------------------------------------------------------------------------------
+  # Blackbox exporter — §13.1's "Synthetic" row, the half that probes over HTTP and TCP.
+  #
+  # This is what says the edge is answering when no user happens to be asking. §13.1's
+  # other half, the custom MQTT probe vehicle, is NOT built — see the block at the foot of
+  # this file and the C119 handoff.
+  # -----------------------------------------------------------------------------------
+  blackbox:
+    image: prom/blackbox-exporter:v0.25.0
+    command: ["--config.file=/etc/blackbox/blackbox.yml"]
+    volumes:
+      - ./blackbox/blackbox.yml:/etc/blackbox/blackbox.yml:ro
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:9115/-/healthy"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    mem_limit: 128m
+    cpus: 0.25
+    networks: [mr]
+    restart: unless-stopped
+
+  # -----------------------------------------------------------------------------------
+  # postgres-exporter — ADD §13.2's Postgres row: TPS, replication lag, long-running
+  # queries, vacuum lag, connection pool saturation.
+  #
+  # Points at Postgres DIRECTLY and not through PgBouncer. `pg_stat_*` is per backend and
+  # a transaction-pooled connection would report whichever server connection the pooler
+  # happened to hand over — which is a different set of numbers every scrape.
+  # -----------------------------------------------------------------------------------
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.16.0
+    environment:
+      DATA_SOURCE_NAME: "postgresql://${PG_USER:-postgres}:${PG_PASSWORD:-mageride_dev}@postgres:5432/${PG_DATABASE:-mageride}?sslmode=disable"
+      PG_EXPORTER_AUTO_DISCOVER_DATABASES: "false"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:9187/"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+    mem_limit: 128m
+    cpus: 0.25
+    networks: [mr]
+    restart: unless-stopped
+
+  # -----------------------------------------------------------------------------------
+  # redis-exporter — ADD §13.2's Redis row: cmds/s, evictions, memory%, slowlog,
+  # replication lag. `Redis evictions > 0` is a §13.4 page and there is no other source
+  # for it; the platform's own code never observes an eviction, by definition.
+  # -----------------------------------------------------------------------------------
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.66.0
+    environment:
+      REDIS_ADDR: "redis://redis:6379"
+    # NO healthcheck, same as the collector: this image is the exporter binary on `scratch`
+    # with no shell and no wget. `up{job="redis"}` is the health signal.
+    mem_limit: 128m
+    cpus: 0.25
+    networks: [mr]
+    restart: unless-stopped
+
+# -------------------------------------------------------------------------------------
+# Deliberately NOT here
+#
+#   Jaeger        — §13.1's MVP trace store, superseded by Tempo in the same table's scale
+#                   column and by D7' §12. One trace store, not two.
+#   node-exporter — host metrics need /proc, /sys and the host PID namespace. That is a
+#                   host-level concern for the replica box (C125), not a per-stack one,
+#                   and ADD §13.2's golden-signal table asks for none of it.
+#   haproxy       — HAProxy's Prometheus endpoint needs `http-request use-service
+#                   prometheus-exporter` in infra/deploy/haproxy.cfg, which is C009's file.
+#                   §13.2 does not list the edge among the golden signals; raised as a
+#                   micro-change-set in the C119 handoff instead of edited here.
+#   pgbouncer     — the pooler's own SHOW STATS needs a separate exporter and an admin
+#                   connection the stack does not open. Pool saturation is visible from the
+#                   Postgres side (`pg_stat_activity`), which is what §13.2 names.
+#   Thanos        — §13.1's scale column, production only.
+# -------------------------------------------------------------------------------------

@@ -1,0 +1,203 @@
+{
+  "uid": "mageride-position-plane",
+  "title": "MageRide — Position plane (EMQX → Redpanda → Redis → SignalR)",
+  "description": "ADD §13.2's position-processor and End-to-end rows, plus the tcp-adapter and mqtt-bridge stages either side of them. This is the path a GNSS fix takes from a device to a passenger's map, stage by stage, so a breached D-19 SLO can be attributed rather than merely observed.",
+  "tags": ["mageride", "position", "add-13.2", "d-19"],
+  "timezone": "Asia/Colombo",
+  "editable": false,
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-3h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "End-to-end p95",
+      "description": "Device GNSS instant → frame pushed to a subscriber. The D-19 SLO in one number.",
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s", "decimals": 2, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 4 }, { "color": "red", "value": 5 }] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "background", "graphMode": "area" },
+      "targets": [{ "refId": "A", "expr": "mageride:position_e2e:p95", "instant": true }]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Bridge → telemetry.raw",
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "cps", "decimals": 1 }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "none", "graphMode": "area" },
+      "targets": [{ "refId": "A", "expr": "sum(rate(mageride_mqtt_bridge_forwarded_total[5m]))", "instant": true }]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Samples indexed/s",
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "cps", "decimals": 1 }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "none", "graphMode": "area" },
+      "targets": [{ "refId": "A", "expr": "sum(rate(mageride_positions_processed_total[5m]))", "instant": true }]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Implausible/s (D-18, T-07)",
+      "description": "Refused by the plausibility filter. A steady low rate is the filter working; a step change on one fleet is a spoofer or a wrongly-typed vehicle.",
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "cps", "decimals": 2 }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "none", "graphMode": "area" },
+      "targets": [{ "refId": "A", "expr": "sum(rate(mageride_positions_implausible_total[5m]))", "instant": true }]
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Telemetry rows written/s",
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "cps", "decimals": 1 }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "none", "graphMode": "area" },
+      "targets": [{ "refId": "A", "expr": "sum(rate(mageride_telemetry_rows_written_total[5m]))", "instant": true }]
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Writer backlog",
+      "description": "Rows buffered awaiting a flush. Deliberate back-pressure: the writer stops consuming rather than growing without bound, so the buffer of record is Redpanda.",
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 1 }] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "value", "graphMode": "area" },
+      "targets": [{ "refId": "A", "expr": "max(mageride_telemetry_writer_backlog)", "instant": true }]
+    },
+
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Where the five seconds go",
+      "description": "The end-to-end histogram beside its two halves. Ingest is device → Redis cell stream (position-processor-svc); fan-out is cell stream → group (fanout-svc). They do not sum to the total — a p95 is not additive — but the one that moves is the one to look at.",
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "lineWidth": 2, "fillOpacity": 0, "showPoints": "never", "thresholdsStyle": { "mode": "dashed" } },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "transparent", "value": null }, { "color": "red", "value": 5 }] }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        { "refId": "A", "expr": "mageride:position_e2e:p95", "legendFormat": "end-to-end p95" },
+        { "refId": "B", "expr": "mageride:position_ingest:p95", "legendFormat": "ingest p95" },
+        { "refId": "C", "expr": "mageride:position_fanout:p95", "legendFormat": "fan-out p95" }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "End-to-end latency by surface",
+      "description": "geocell is the public map, ride is a passenger watching their own trip, vehicle is an entitled Mode B watcher. The SLO pools them, because it is about a position reaching a person; a divergence between them is a bug in one pump.",
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s", "custom": { "lineWidth": 1, "fillOpacity": 5, "showPoints": "never" } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [{ "refId": "A", "expr": "histogram_quantile(0.95, sum by (le, surface) (rate(mageride_positions_e2e_latency_milliseconds_bucket[$__rate_interval]))) / 1000", "legendFormat": "{{surface}} p95" }]
+    },
+
+    {
+      "id": 20,
+      "type": "timeseries",
+      "title": "Throughput along the pipeline",
+      "description": "Four stages of the same stream. A step down between two adjacent lines is where samples are being lost, and the drop counters below say why.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 13 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "cps", "custom": { "lineWidth": 1, "fillOpacity": 5, "showPoints": "never" } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        { "refId": "A", "expr": "sum(rate(mageride_mqtt_bridge_forwarded_total[$__rate_interval]))", "legendFormat": "1. bridge → telemetry.raw" },
+        { "refId": "B", "expr": "sum(rate(mageride_positions_processed_total[$__rate_interval]))", "legendFormat": "2. normalised + indexed" },
+        { "refId": "C", "expr": "sum(rate(mageride_telemetry_rows_written_total[$__rate_interval]))", "legendFormat": "3. written to the hypertable" },
+        { "refId": "D", "expr": "sum(rate(mageride_fanout_frames_total[$__rate_interval]))", "legendFormat": "4. pushed to a group" }
+      ]
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "Where samples are dropped",
+      "description": "Every reason a fix does not reach a map. `implausible` by check (accuracy, speed, jump, clock, satellites) is the interesting one: 'positions are being dropped' is not actionable, 'every drop on this fleet is accuracy' is a coverage problem.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 13 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "cps", "custom": { "lineWidth": 1, "fillOpacity": 20, "showPoints": "never", "stacking": { "mode": "normal" } } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        { "refId": "A", "expr": "sum by (check) (rate(mageride_positions_implausible_total[$__rate_interval]))", "legendFormat": "implausible · {{check}}" },
+        { "refId": "B", "expr": "sum by (reason) (rate(mageride_positions_dropped_total[$__rate_interval]))", "legendFormat": "dropped · {{reason}}" },
+        { "refId": "C", "expr": "sum(rate(mageride_mqtt_bridge_failures_total[$__rate_interval]))", "legendFormat": "bridge failure" },
+        { "refId": "D", "expr": "sum(rate(mageride_telemetry_rows_dead_lettered_total[$__rate_interval]))", "legendFormat": "dead-lettered by Postgres" }
+      ]
+    },
+
+    {
+      "id": 30,
+      "type": "timeseries",
+      "title": "Rate limiting and replay throttling (D-17, T-05)",
+      "description": "The bridge observes the broker's 5 msg/s per-vehicle ceiling and drops nothing; position-processor enforces the second line at 10 and does drop. A sustained replay throttle is a fleet draining a backlog, which is the state R-09 exists to keep off the live path.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 21 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "cps", "custom": { "lineWidth": 1, "fillOpacity": 10, "showPoints": "never" } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        { "refId": "A", "expr": "sum(rate(mageride_mqtt_bridge_rate_violations_total[$__rate_interval]))", "legendFormat": "broker ceiling observed (5/s)" },
+        { "refId": "B", "expr": "sum(rate(mageride_positions_rate_violations_total[$__rate_interval]))", "legendFormat": "second line enforced (10/s)" },
+        { "refId": "C", "expr": "sum(rate(mageride_mqtt_bridge_replay_throttled_total[$__rate_interval]))", "legendFormat": "replay throttled (T-05)" },
+        { "refId": "D", "expr": "sum(rate(mageride_mqtt_bridge_replay_shed_total[$__rate_interval]))", "legendFormat": "replay shed" }
+      ]
+    },
+    {
+      "id": 31,
+      "type": "timeseries",
+      "title": "The R-08 candidate pool",
+      "description": "Drivers added to, moved within and removed from the hot geo index. A sustained `removed` with no matching `added` is drivers ageing out faster than they are put back — which a passenger sees as 'no drivers available' with a full car park outside.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 21 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "cps", "custom": { "lineWidth": 1, "fillOpacity": 10, "showPoints": "never" } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [{ "refId": "A", "expr": "sum by (change) (rate(mageride_dispatch_pool_changes_total[$__rate_interval]))", "legendFormat": "{{change}}" }]
+    },
+
+    {
+      "id": 40,
+      "type": "timeseries",
+      "title": "Tracker plane — tcp-adapter (T-01, T-03, T-08)",
+      "description": "GT06 / JT808 / H02 / NMEA-UDP. tcp-adapter has no HTTP surface to scrape, so everything here arrives through the OTLP collector — an empty panel with sockets open means the push path, not the adapter, has broken.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 29 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "cps", "custom": { "lineWidth": 1, "fillOpacity": 5, "showPoints": "never" } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        { "refId": "A", "expr": "sum by (protocol) (rate(mageride_tracker_frames_decoded_total[$__rate_interval]))", "legendFormat": "decoded · {{protocol}}" },
+        { "refId": "B", "expr": "sum by (reason) (rate(mageride_tracker_frames_rejected_total[$__rate_interval]))", "legendFormat": "rejected · {{reason}}" },
+        { "refId": "C", "expr": "sum(rate(mageride_tracker_samples_published_total[$__rate_interval]))", "legendFormat": "published to MQTT" },
+        { "refId": "D", "expr": "sum(mageride_tracker_sockets_open)", "legendFormat": "open sockets" }
+      ]
+    },
+    {
+      "id": 41,
+      "type": "timeseries",
+      "title": "Device health (US-3.13, US-3.16)",
+      "description": "Devices per health state, from fleet-health-svc's transition sweep. A whole fleet arriving in `offline` at once is the SIM-provider outage US-3.16 exists to catch, and it is visible here a window before the alert fires.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 29 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "lineWidth": 1, "fillOpacity": 20, "showPoints": "never", "stacking": { "mode": "normal" } } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        { "refId": "A", "expr": "sum by (state) (mageride_fleet_device_health)", "legendFormat": "{{state}}" },
+        { "refId": "B", "expr": "sum(rate(mageride_fleet_health_alerts_total[$__rate_interval])) * 3600", "legendFormat": "fleet device-down alerts/h" }
+      ]
+    }
+  ]
+}

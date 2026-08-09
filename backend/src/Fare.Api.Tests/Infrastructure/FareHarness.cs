@@ -70,6 +70,9 @@ internal sealed class FareHarness : IAsyncDisposable
 
     public FareSeed Seed { get; }
 
+    /// <summary>The composed host's container, for a seam with no HTTP surface (C119's gauges).</summary>
+    public IServiceProvider Services => _app.Services;
+
     public static async Task<FareHarness> StartAsync(
         PostgresFixture postgres,
         IDictionary<string, string?>? settings = null,
@@ -364,7 +367,11 @@ internal sealed class FareHarness : IAsyncDisposable
         await connection.ExecuteAsync(
             """
             TRUNCATE fares.ride_payments, fares.refunds, fares.driver_earnings, fares.command_log CASCADE;
-            TRUNCATE support.tickets, registry.driver_payouts CASCADE;
+            -- `registry.driver_payouts` was here until migration 1010 dropped it: AL-57/AL-59
+            -- retired D-11's OnePay merchant binding, no ride fare reaches an acquirer any more,
+            -- and the harness kept truncating a table that no longer exists — which made every
+            -- test in this project fail at start-up with `42P01`. Found by C119.
+            TRUNCATE support.tickets CASCADE;
             TRUNCATE rides.rides, registry.vehicles CASCADE;
             DELETE FROM telemetry.positions;
 

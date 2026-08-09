@@ -1,0 +1,159 @@
+{
+  "uid": "mageride-stuck-states",
+  "title": "MageRide — Stuck-state business SLOs (R-20)",
+  "description": "ADD §13.3.1, all eight rows. Unlike the latency SLOs there is no budget here: every one of these counts rides or people that the platform has left in a state it should have moved them out of, and any sustained non-zero reading pages. The board exists because a number on a screen and a page are different things — R-20 requires both.",
+  "tags": ["mageride", "business-slo", "r-20", "add-13.3.1"],
+  "timezone": "Asia/Colombo",
+  "editable": false,
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Matching > 60 s",
+      "description": "§13.3.1 row 1. Dispatch starvation, empty candidate pool, geo index drift. The passenger is looking at a spinner.",
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "background", "graphMode": "area" },
+      "targets": [{ "refId": "A", "expr": "max(mageride_rides_stuck{state=\"Matching\"})", "instant": true }]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Offered > 20 s",
+      "description": "§13.3.1 row 2. The offer TTL is 15 s (D5' §3.5), so anything here is a timer fault rather than a slow driver.",
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "background", "graphMode": "area" },
+      "targets": [{ "refId": "A", "expr": "max(mageride_rides_stuck{state=\"Offered\"})", "instant": true }]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Accepted, driver dark > 60 s",
+      "description": "§13.3.1 row 3. APPROXIMATED: ride-svc holds no positions (R-01), so this is time-in-state — a superset that includes rides which are merely slow. Cross-check the driver's MQTT session.",
+      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 1 }] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "background", "graphMode": "area" },
+      "targets": [{ "refId": "A", "expr": "max(mageride_rides_stuck{state=\"Accepted\"})", "instant": true }]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "DriverArrived > 10 min",
+      "description": "§13.3.1 row 4, pages after 12. The driver is at the kerb earning nothing; the rider no-show timer has not fired.",
+      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "background", "graphMode": "area" },
+      "targets": [{ "refId": "A", "expr": "max(mageride_rides_stuck{state=\"DriverArrived\"})", "instant": true }]
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "InProgress, no GPS > 5 min",
+      "description": "§13.3.1 row 5, pages after 7. APPROXIMATED as time-in-state, so a long journey through traffic is counted too.",
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 5 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 1 }] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "background", "graphMode": "area" },
+      "targets": [{ "refId": "A", "expr": "max(mageride_rides_stuck{state=\"InProgress\"})", "instant": true }]
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Completed + PaymentPending > 10 min",
+      "description": "§13.3.1 row 6, exact. Each is a passenger who cannot book their next ride — PaymentPending is not exempt from ux_rides_open_passenger.",
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 5 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "background", "graphMode": "area" },
+      "targets": [{ "refId": "A", "expr": "max(mageride_rides_stuck{state=\"PaymentPending\"})", "instant": true }]
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "Overpaid > 1 h",
+      "description": "§13.3.1 row 7. A late gateway callback on an already cash-settled ride (R-19, ADD §11.14). Money the platform owes back, waiting on a Finance decision.",
+      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 5 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "background", "graphMode": "area" },
+      "targets": [{ "refId": "A", "expr": "max(mageride_payments_overpaid)", "instant": true }]
+    },
+    {
+      "id": 8,
+      "type": "stat",
+      "title": "Lapsed documents still dispatchable",
+      "description": "§13.3.1 row 8. The E-03 doc-expiry job is not running: a document past its expiry on a vehicle whose registry.vehicles.dispatch_state is still ACTIVE. Counted by vehicle, because a vehicle is what dispatch offers and what a passenger gets into.",
+      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 5 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "background", "graphMode": "area" },
+      "targets": [{ "refId": "A", "expr": "max(mageride_registry_expired_documents_dispatching)", "instant": true }]
+    },
+
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Rides past their §13.3.1 window, by state",
+      "description": "The whole table over time. A single spike is a slow minute; a plateau is a stalled machine.",
+      "gridPos": { "h": 9, "w": 16, "x": 0, "y": 10 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "lineWidth": 2, "fillOpacity": 15, "showPoints": "never", "stacking": { "mode": "none" } } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["max", "lastNotNull"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [{ "refId": "A", "expr": "max by (state) (mageride_rides_stuck)", "legendFormat": "{{state}}" }]
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "The durable backstop — timers fired and rides rescued",
+      "description": "R-04's lease-poll over rides.timers. A rising rescue rate with the gauges at zero means rides are being stuck and recovered faster than a scrape can see them, which is fine and is also what a flapping dispatch loop looks like.",
+      "gridPos": { "h": 9, "w": 8, "x": 16, "y": 10 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "lineWidth": 1, "fillOpacity": 10, "showPoints": "never" } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        { "refId": "A", "expr": "sum by (kind) (rate(mageride_rides_timers_fired_total[$__rate_interval])) * 60", "legendFormat": "fired/min · {{kind}}" },
+        { "refId": "B", "expr": "sum by (state) (rate(mageride_rides_stuck_detected_total[$__rate_interval])) * 60", "legendFormat": "rescued/min · {{state}}" }
+      ]
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Overdue ride timers (§13.4 pages above 100)",
+      "description": "fired_at IS NULL AND fire_at < now()-30s. This is the cause of the Offered and DriverArrived stalls above, which is why Alertmanager inhibits those two when this one fires.",
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 19 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "lineWidth": 2, "fillOpacity": 10, "showPoints": "never", "thresholdsStyle": { "mode": "dashed" } },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "transparent", "value": null }, { "color": "red", "value": 100 }] }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
+      "targets": [{ "refId": "A", "expr": "max(mageride_rides_timer_backlog)", "legendFormat": "overdue timers" }]
+    },
+    {
+      "id": 13,
+      "type": "table",
+      "title": "Stuck-state pages firing now",
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 19 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "custom": { "align": "auto" } }, "overrides": [] },
+      "options": { "showHeader": true },
+      "targets": [{ "refId": "A", "expr": "ALERTS{alertstate=\"firing\", business_slo=\"true\"}", "instant": true, "format": "table" }],
+      "transformations": [
+        { "id": "organize", "options": { "excludeByName": { "Time": true, "Value": true, "__name__": true, "alertstate": true, "instance": true, "job": true, "environment": true, "platform": true, "business_slo": true }, "renameByName": { "alertname": "Alert", "stuck_state": "State", "severity": "Severity", "plane": "Plane", "approximated": "Approximated" } } }
+      ]
+    }
+  ]
+}

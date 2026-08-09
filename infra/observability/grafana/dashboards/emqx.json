@@ -1,0 +1,155 @@
+{
+  "uid": "mageride-emqx",
+  "title": "MageRide — EMQX (MQTT plane)",
+  "description": "ADD §13.2's EMQX row, literally: connections, msgs/s in, msgs/s out, dropped, queue depth, auth failures. Scraped from the broker's own /api/v5/prometheus/stats on the dashboard listener, which never leaves the docker network.",
+  "tags": ["mageride", "mqtt", "emqx", "add-13.2"],
+  "timezone": "Asia/Colombo",
+  "editable": false,
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-3h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Connections",
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "none", "graphMode": "area" },
+      "targets": [{ "refId": "A", "expr": "emqx_connections_count", "instant": true }]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Messages in/s",
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "cps", "decimals": 1 }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "none", "graphMode": "area" },
+      "targets": [{ "refId": "A", "expr": "rate(emqx_messages_received[5m])", "instant": true }]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Messages out/s",
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "cps", "decimals": 1 }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "none", "graphMode": "area" },
+      "targets": [{ "refId": "A", "expr": "rate(emqx_messages_sent[5m])", "instant": true }]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Dropped/s",
+      "description": "A dropped publish is invisible to the device (QoS 1 was acked by the broker) and invisible downstream (it never arrived). Any non-zero reading pages.",
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "cps", "decimals": 2, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 0.001 }] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "value", "graphMode": "area" },
+      "targets": [{ "refId": "A", "expr": "rate(emqx_messages_dropped[5m])", "instant": true }]
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Auth failure rate",
+      "description": "ADD §13.4: over 1% is a possible credential spray and triggers a security alert. A device JWT is minted per vehicle (E-02), so a healthy fleet's failure rate is a rounding error.",
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "decimals": 3, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 0.01 }] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "background", "graphMode": "area" },
+      "targets": [{ "refId": "A", "expr": "sum(rate(emqx_authentication_failure[5m])) / clamp_min(sum(rate(emqx_authentication_failure[5m])) + sum(rate(emqx_authentication_success[5m])), 1e-9)", "instant": true }]
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Retained messages",
+      "description": "D6' §3.1's `veh/+/status` retained presence. A number that grows without bound is devices being provisioned and never cleaned up.",
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "none", "graphMode": "area" },
+      "targets": [{ "refId": "A", "expr": "emqx_messages_retained", "instant": true }]
+    },
+
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Throughput in and out",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "cps", "custom": { "lineWidth": 1, "fillOpacity": 10, "showPoints": "never" } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        { "refId": "A", "expr": "rate(emqx_messages_received[$__rate_interval])", "legendFormat": "received" },
+        { "refId": "B", "expr": "rate(emqx_messages_sent[$__rate_interval])", "legendFormat": "sent" },
+        { "refId": "C", "expr": "rate(emqx_messages_delivered[$__rate_interval])", "legendFormat": "delivered" },
+        { "refId": "D", "expr": "rate(emqx_messages_acked[$__rate_interval])", "legendFormat": "acked" }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Everything the broker threw away",
+      "description": "ADD §13.2's 'dropped' and 'queue depth' in one panel. `delivery_dropped_queue_full` IS the queue depth signal that matters: a subscriber too slow to keep up loses messages rather than slowing the publisher.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "cps", "custom": { "lineWidth": 1, "fillOpacity": 20, "showPoints": "never", "stacking": { "mode": "normal" } } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        { "refId": "A", "expr": "rate(emqx_messages_dropped_no_subscribers[$__rate_interval])", "legendFormat": "no subscribers" },
+        { "refId": "B", "expr": "rate(emqx_messages_dropped_expired[$__rate_interval])", "legendFormat": "expired" },
+        { "refId": "C", "expr": "rate(emqx_delivery_dropped_queue_full[$__rate_interval])", "legendFormat": "delivery queue full" },
+        { "refId": "D", "expr": "rate(emqx_delivery_dropped_too_large[$__rate_interval])", "legendFormat": "payload too large" },
+        { "refId": "E", "expr": "rate(emqx_delivery_dropped_qos[$__rate_interval])", "legendFormat": "qos mismatch" }
+      ]
+    },
+
+    {
+      "id": 20,
+      "type": "timeseries",
+      "title": "Authentication and authorization",
+      "description": "Two different refusals. Authentication is 'this JWT is not valid'; authorization is acl.conf refusing a topic — a device publishing to another vehicle's topic (D6' §3.1), which is the T-02 fence being enforced.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "cps", "custom": { "lineWidth": 1, "fillOpacity": 10, "showPoints": "never" } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        { "refId": "A", "expr": "rate(emqx_authentication_success[$__rate_interval])", "legendFormat": "auth success" },
+        { "refId": "B", "expr": "rate(emqx_authentication_failure[$__rate_interval])", "legendFormat": "auth failure" },
+        { "refId": "C", "expr": "rate(emqx_authorization_deny[$__rate_interval])", "legendFormat": "topic denied (acl.conf)" },
+        { "refId": "D", "expr": "rate(emqx_authorization_nomatch[$__rate_interval])", "legendFormat": "no ACL rule matched" }
+      ]
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "Sessions and connection churn",
+      "description": "A driver's MQTT session is decoupled from their 30-minute API token (E-02) and lives at least four hours, so disconnects should be rare and mostly mean coverage. A churn spike is R-15/R-16 grace timers about to start firing.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "custom": { "lineWidth": 1, "fillOpacity": 5, "showPoints": "never" } }, "overrides": [{ "matcher": { "id": "byRegexp", "options": ".*/s" }, "properties": [{ "id": "unit", "value": "cps" }, { "id": "custom.axisPlacement", "value": "right" }] }] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        { "refId": "A", "expr": "emqx_connections_count", "legendFormat": "connections" },
+        { "refId": "B", "expr": "emqx_live_connections_count", "legendFormat": "live connections" },
+        { "refId": "C", "expr": "rate(emqx_client_connected[$__rate_interval])", "legendFormat": "connects/s" },
+        { "refId": "D", "expr": "rate(emqx_client_disconnected[$__rate_interval])", "legendFormat": "disconnects/s" }
+      ]
+    },
+
+    {
+      "id": 30,
+      "type": "timeseries",
+      "title": "MQTT plane reachability (synthetic)",
+      "description": "8883 is TCP passthrough at HAProxy and never routed through the API gateway, so there is no HTTP surface to ask. A blackbox TCP probe is the only thing that says the listener is accepting when no vehicle happens to be publishing.",
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 20 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "max": 1, "min": 0, "custom": { "lineWidth": 2, "fillOpacity": 20, "showPoints": "never" } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [{ "refId": "A", "expr": "probe_success{service=\"emqx\"}", "legendFormat": "{{probe}}" }]
+    }
+  ]
+}

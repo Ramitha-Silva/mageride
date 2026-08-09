@@ -1,0 +1,170 @@
+# =====================================================================================
+# MageRide — Alertmanager (C119). ADD §13.1's alerting row; D7' §12 names PagerDuty as the
+# destination in production ("→ PagerDuty + runbook").
+#
+# --- WHAT THIS FILE DECIDES -------------------------------------------------------------
+# Not *whether* something is wrong — that is a Prometheus rule — but who hears about it and
+# how often. Three receivers, by `severity`:
+#
+#   page    wakes somebody         repeats every 4 h until resolved or silenced
+#   ticket  goes in the queue      repeats daily
+#   watch   the default            grouped, quiet, for anything unlabelled
+#
+# --- WHY THE RECEIVERS ARE WEBHOOKS IN THIS FILE ------------------------------------------
+# A PagerDuty routing key is a secret and infra/CLAUDE.md is unambiguous: `.env*` is
+# gitignored and no secret is committed. So every receiver below points at a webhook whose
+# URL comes from the environment, with a dev default that goes nowhere harmful, and the
+# PagerDuty configuration production uses is the commented block at the foot of the file.
+# =====================================================================================
+
+global:
+  # How long after the last firing evaluation an alert is declared resolved. Longer than
+  # the 15 s scrape and evaluation interval by a wide margin, so a single missed scrape
+  # does not send a spurious resolution.
+  resolve_timeout: 5m
+
+# --- Templates -------------------------------------------------------------------------
+# Every alert in this platform carries `runbook_url` and `summary`; the templates below put
+# both in the notification, because a page with neither is a page somebody has to research
+# before they can start.
+templates:
+  - /etc/alertmanager/templates/*.tmpl
+
+route:
+  # Group by what an operator would treat as one incident. `alertname` alone would merge a
+  # Matching stall with an Offered stall; adding `plane` keeps the ride plane and the
+  # position plane apart, which is usually the first question asked.
+  group_by: ["alertname", "plane", "service"]
+
+  # 30 s before the first notification of a new group, so a cascade (Redis down → three
+  # planes degraded) arrives as one page rather than six.
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 24h
+
+  receiver: watch
+
+  routes:
+    # ---------------------------------------------------------------------------------
+    # SOS first, and on its own. D-33's alert is the only one on the platform whose
+    # subject is a person in danger, and §13.3 says it "pages on-call immediately" — so it
+    # must not wait behind another group's `group_wait`, and it must not be grouped with
+    # anything that could delay it.
+    # ---------------------------------------------------------------------------------
+    - matchers:
+        - slo = "sos-dispatch-latency"
+      receiver: page
+      group_wait: 0s
+      group_interval: 1m
+      repeat_interval: 15m
+      continue: false
+
+    # ---------------------------------------------------------------------------------
+    # The R-20 stuck-state pages. Grouped by the state so an operator sees "nine rides are
+    # stuck in Matching" as one page, and re-notified hourly — a ride that has been stuck
+    # for an hour is a ride nobody has rescued.
+    # ---------------------------------------------------------------------------------
+    - matchers:
+        - business_slo = "true"
+        - severity = "page"
+      receiver: page
+      group_by: ["alertname", "stuck_state"]
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 1h
+
+    # A credential spray and an inert visibility filter are security findings that happen
+    # to be expressed as metrics; they go to the same place as a page but are labelled so
+    # the receiver can fan them out to whoever owns security.
+    - matchers:
+        - security = "true"
+      receiver: page
+      repeat_interval: 4h
+
+    - matchers:
+        - severity = "page"
+      receiver: page
+      repeat_interval: 4h
+
+    - matchers:
+        - severity = "ticket"
+      receiver: ticket
+      repeat_interval: 24h
+
+# --- Inhibition --------------------------------------------------------------------------
+# What NOT to send. Every rule here exists because one failure produces several true alerts
+# and only one of them is the thing to act on.
+inhibit_rules:
+  # A service that is down will also be failing its probe and burning its availability
+  # budget. One page.
+  - source_matchers: [alertname = "ServiceDown"]
+    target_matchers: [alertname =~ "SyntheticProbeFailing|SyntheticProbeSlow|ApiAvailabilityBudgetBurning"]
+    equal: ["service"]
+
+  # Redis down evicts nothing and saturates nothing; it just stops.
+  - source_matchers: [alertname = "RedisDown"]
+    target_matchers: [alertname =~ "RedisEvictions|RedisMemoryHigh"]
+
+  # Postgres down makes every gauge that counts rows report zero and every query long.
+  - source_matchers: [alertname = "PostgresDown"]
+    target_matchers: [alertname =~ "PostgresLongRunningQuery|PostgresConnectionSaturation|StuckStateMetricsMissing"]
+
+  # The timer sweep being stalled is the CAUSE of Offered and DriverArrived stalling.
+  # Send the cause; the effects are in the runbook.
+  - source_matchers: [alertname = "RideTimerBacklogHigh"]
+    target_matchers: [alertname =~ "RideStuckOffered|RideStuckDriverArrived"]
+
+  # A position pipeline that has stopped makes every latency quantile meaningless, and the
+  # burn-rate alerts will follow it down.
+  - source_matchers: [alertname = "PositionPipelineSilent"]
+    target_matchers: [alertname =~ "PositionE2ELatency.*"]
+
+  # A page always supersedes a ticket about the same thing.
+  - source_matchers: [severity = "page"]
+    target_matchers: [severity = "ticket"]
+    equal: ["alertname", "plane", "service"]
+
+receivers:
+  # -------------------------------------------------------------------------------------
+  # dev: a webhook that accepts and discards. The point of naming a URL rather than an
+  # empty receiver is that Alertmanager's own `alertmanager_notifications_failed_total`
+  # then tells you the pipeline is wired, which an empty receiver cannot.
+  # -------------------------------------------------------------------------------------
+  - name: page
+    webhook_configs:
+      - url: http://alertmanager:9093/api/v2/alerts
+        send_resolved: true
+        max_alerts: 0
+
+  - name: ticket
+    webhook_configs:
+      - url: http://alertmanager:9093/api/v2/alerts
+        send_resolved: true
+        max_alerts: 0
+
+  - name: watch
+    webhook_configs:
+      - url: http://alertmanager:9093/api/v2/alerts
+        send_resolved: false
+        max_alerts: 0
+
+# =====================================================================================
+# Production (D7' §12: "→ PagerDuty + runbook"). The routing key is a secret and comes
+# from Vault through the External Secrets Operator (D7' §13), never from this file.
+#
+# receivers:
+#   - name: page
+#     pagerduty_configs:
+#       - routing_key_file: /etc/alertmanager/secrets/pagerduty-routing-key
+#         severity: critical
+#         description: '{{ .CommonAnnotations.summary }}'
+#         details:
+#           runbook: '{{ .CommonAnnotations.runbook_url }}'
+#           firing:  '{{ .Alerts.Firing | len }}'
+#           plane:   '{{ .CommonLabels.plane }}'
+#   - name: ticket
+#     pagerduty_configs:
+#       - routing_key_file: /etc/alertmanager/secrets/pagerduty-routing-key
+#         severity: warning
+#         description: '{{ .CommonAnnotations.summary }}'
+# =====================================================================================

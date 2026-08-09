@@ -1,0 +1,140 @@
+{
+  "uid": "mageride-fanout",
+  "title": "MageRide — fanout-svc (WebSocket fan-out)",
+  "description": "ADD §13.2's fanout row: WS sessions, group join rate, send latency p99, send backlog, reconnects/s. Plus the D-22/D-23/US-7.16 visibility filter, which is the part of this service that can fail without anything looking wrong.",
+  "tags": ["mageride", "fanout", "add-13.2"],
+  "timezone": "Asia/Colombo",
+  "editable": false,
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-3h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Open connections",
+      "description": "Kestrel's live connection count on fanout-svc. Every one is a passenger, driver or booker with a map open.",
+      "gridPos": { "h": 4, "w": 5, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "none", "graphMode": "area" },
+      "targets": [{ "refId": "A", "expr": "sum(kestrel_active_connections{service=\"fanout-svc\"})", "instant": true }]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Frames pushed/s",
+      "gridPos": { "h": 4, "w": 5, "x": 5, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "cps", "decimals": 1 }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "none", "graphMode": "area" },
+      "targets": [{ "refId": "A", "expr": "sum(rate(mageride_fanout_frames_total[5m]))", "instant": true }]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Send latency p99",
+      "description": "Cell stream entry → pushed to a group. The batch interval is 2 s (signalr-hub.md §3), so this sitting near 2 s is the pump working, not the pump slow.",
+      "gridPos": { "h": 4, "w": 5, "x": 10, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ms", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 3000 }, { "color": "red", "value": 5000 }] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "value", "graphMode": "area" },
+      "targets": [{ "refId": "A", "expr": "histogram_quantile(0.99, sum by (le) (rate(mageride_fanout_latency_milliseconds_bucket[5m])))", "instant": true }]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Frames withheld/s",
+      "description": "The D-22/D-23/US-7.16 filter doing its job. Zero here on a platform with rides in progress is the alarm, not the good news.",
+      "gridPos": { "h": 4, "w": 4, "x": 15, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "cps", "decimals": 2 }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "none", "graphMode": "area" },
+      "targets": [{ "refId": "A", "expr": "sum(rate(mageride_fanout_filtered_total[5m]))", "instant": true }]
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Revocation p95 (D-22 budget 200 ms)",
+      "description": "share.revoked arriving → the passenger being out of the vehicle's group. Over budget means somebody keeps seeing a van they were unshared from.",
+      "gridPos": { "h": 4, "w": 5, "x": 19, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ms", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 200 }] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "value", "graphMode": "area" },
+      "targets": [{ "refId": "A", "expr": "histogram_quantile(0.95, sum by (le) (rate(mageride_fanout_revocation_milliseconds_bucket[5m])))", "instant": true }]
+    },
+
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Sessions and reconnects",
+      "description": "ADD §13.2's 'WS sessions' and 'reconnects/s'. A reconnect storm with flat sessions is clients cycling — usually a token expiry or a proxy timeout, not a capacity problem.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "custom": { "lineWidth": 1, "fillOpacity": 10, "showPoints": "never" } }, "overrides": [{ "matcher": { "id": "byName", "options": "connections opened/s" }, "properties": [{ "id": "unit", "value": "cps" }] }] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        { "refId": "A", "expr": "sum(kestrel_active_connections{service=\"fanout-svc\"})", "legendFormat": "active connections" },
+        { "refId": "B", "expr": "sum(rate(kestrel_connection_duration_seconds_count{service=\"fanout-svc\"}[$__rate_interval]))", "legendFormat": "connections opened/s" },
+        { "refId": "C", "expr": "sum(rate(http_server_request_duration_seconds_count{http_route=~\"/hubs.*\"}[$__rate_interval]))", "legendFormat": "negotiates/s" }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Send latency and send volume",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ms", "custom": { "lineWidth": 1, "fillOpacity": 0, "showPoints": "never" } }, "overrides": [{ "matcher": { "id": "byName", "options": "frames/s" }, "properties": [{ "id": "unit", "value": "cps" }, { "id": "custom.axisPlacement", "value": "right" }] }] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        { "refId": "A", "expr": "histogram_quantile(0.99, sum by (le) (rate(mageride_fanout_latency_milliseconds_bucket[$__rate_interval])))", "legendFormat": "p99" },
+        { "refId": "B", "expr": "histogram_quantile(0.50, sum by (le) (rate(mageride_fanout_latency_milliseconds_bucket[$__rate_interval])))", "legendFormat": "p50" },
+        { "refId": "C", "expr": "sum(rate(mageride_fanout_frames_total[$__rate_interval]))", "legendFormat": "frames/s" }
+      ]
+    },
+
+    {
+      "id": 20,
+      "type": "timeseries",
+      "title": "The visibility filter, by reason",
+      "description": "US-7.16 engaged · US-7.17 stale and offline · D-22/D-23 private. A working filter and an ABSENT one look identical from a passenger's map — vehicles appear, positions move, nothing errors — so this panel is the only place the difference shows before somebody sees a vehicle they should not.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "cps", "custom": { "lineWidth": 1, "fillOpacity": 20, "showPoints": "never", "stacking": { "mode": "normal" } } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "lastNotNull"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [{ "refId": "A", "expr": "sum by (reason) (rate(mageride_fanout_filtered_total[$__rate_interval]))", "legendFormat": "{{reason}}" }]
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "The snapshot path agrees with the socket path",
+      "description": "GET /v1/nearby and the hub apply one rule (VehicleVisibilityRules). Their engaged/stale/offline/private rates should move together; diverging is one plane reading state the other is not. `unknown` and `out_of_radius` belong to the snapshot alone.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "cps", "custom": { "lineWidth": 1, "fillOpacity": 5, "showPoints": "never" } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        { "refId": "A", "expr": "sum by (reason) (rate(mageride_query_nearby_filtered_total[$__rate_interval]))", "legendFormat": "snapshot · {{reason}}" },
+        { "refId": "B", "expr": "sum(rate(mageride_query_nearby_vehicles_total[$__rate_interval]))", "legendFormat": "snapshot · shown" },
+        { "refId": "C", "expr": "sum(rate(mageride_query_nearby_limited_live_total[$__rate_interval]))", "legendFormat": "degraded limited_live (Redis unreachable)" }
+      ]
+    },
+
+    {
+      "id": 30,
+      "type": "timeseries",
+      "title": "Directed signals across replicas",
+      "description": "ShareRevoked, RideStateChanged, LocationRequestResolved and PackageStatus travel the Redis control channel because they must cross replicas; the per-cell batches deliberately do not (there is no SignalR backplane, or every passenger would get one copy per replica).",
+      "gridPos": { "h": 7, "w": 24, "x": 0, "y": 20 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "cps", "custom": { "lineWidth": 1, "fillOpacity": 10, "showPoints": "never" } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        { "refId": "A", "expr": "sum by (signal) (rate(mageride_fanout_signals_total[$__rate_interval]))", "legendFormat": "{{signal}}" },
+        { "refId": "B", "expr": "histogram_quantile(0.95, sum by (le) (rate(mageride_fanout_revocation_milliseconds_bucket[$__rate_interval])))", "legendFormat": "revocation p95 (ms)" }
+      ]
+    }
+  ]
+}

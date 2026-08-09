@@ -128,6 +128,29 @@ internal sealed class FareSeed(PostgresFixture postgres)
         return new SeededRide(rideId, passenger, driverId, vehicleId);
     }
 
+    /// <summary>One <c>fares.ride_payments</c> attempt in a given state (D-10's retry chain).</summary>
+    public async Task PaymentAsync(
+        Guid rideId, string state, string method = "onepay", long amountMinor = 40_000, int attemptNo = 1)
+    {
+        await using var connection = await postgres.OpenAsync();
+
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO fares.ride_payments
+                (ride_id, state, method, amount_minor, attempt_no, created_at, updated_at)
+            VALUES (@RideId, @State, @Method, @AmountMinor::int, @AttemptNo::smallint, @CreatedAt, @CreatedAt);
+            """,
+            new
+            {
+                RideId = rideId,
+                State = state,
+                Method = method,
+                AmountMinor = amountMinor,
+                AttemptNo = attemptNo,
+                CreatedAt = FareHarness.DefaultNow,
+            });
+    }
+
     /// <summary>D-11's OnePay merchant binding, as registry-svc leaves it on vehicle approval.</summary>
     public async Task MerchantAsync(Guid driverId, string merchantId)
     {

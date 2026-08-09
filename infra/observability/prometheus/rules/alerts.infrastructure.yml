@@ -1,0 +1,473 @@
+# =====================================================================================
+# MageRide — infrastructure alerts (C119)
+#
+# ADD §13.4 "Alerting Runbooks (Key)" is seven bullets and every one of them is a rule
+# here, in order, with the bullet quoted. D7' §12 adds the consumer-lag thresholds
+# ("warn > 10k / page > 100k") and they are both below.
+#
+# The rest of the file is ADD §13.2's golden signals for the four infrastructure planes,
+# turned into the alerts that make them worth collecting — a queue depth nobody is paged
+# on is a graph.
+# =====================================================================================
+
+groups:
+
+  # ===================================================================================
+  # §13.4 bullet 1 — "Consumer lag > 5 s sustained 2 min: scale position-processor
+  # replicas immediately."
+  #
+  # Two shapes, because the spec gives two units. ADD §13.2 says "alert > 5 s" (a time)
+  # and D7' §12 says "warn > 10k / page > 100k" (a message count). Both read the recorded
+  # `mageride:consumer_lag:*` series — see recording.stream.yml for why this broker's lag
+  # has to be computed rather than scraped.
+  # ===================================================================================
+  - name: mageride.infra.stream
+    rules:
+      - alert: ConsumerLagSecondsHigh
+        expr: mageride:consumer_lag:seconds > 5
+        for: 2m
+        labels:
+          severity: page
+          plane: stream
+        annotations:
+          summary: "{{ $labels.redpanda_group }} is {{ $value | printf \"%.0f\" }}s behind on {{ $labels.redpanda_topic }}"
+          description: >-
+            ADD §13.4: "Consumer lag > 5 s sustained 2 min — scale position-processor
+            replicas immediately." On telemetry.normalized this is the live map falling
+            behind; on ride.events it is dispatch reacting to offers that have expired.
+          runbook_url: https://github.com/mageride/mageride/blob/main/docs/runbooks/consumer-lag.md
+
+      - alert: ConsumerLagMessagesWarning
+        expr: mageride:consumer_lag:messages > 10000
+        for: 5m
+        labels:
+          severity: ticket
+          plane: stream
+        annotations:
+          summary: "{{ $labels.redpanda_group }} is {{ $value | printf \"%.0f\" }} messages behind on {{ $labels.redpanda_topic }}"
+          description: "D7' §12: consumer lag warn > 10k."
+          runbook_url: https://github.com/mageride/mageride/blob/main/docs/runbooks/consumer-lag.md
+
+      - alert: ConsumerLagMessagesCritical
+        expr: mageride:consumer_lag:messages > 100000
+        for: 2m
+        labels:
+          severity: page
+          plane: stream
+        annotations:
+          summary: "{{ $labels.redpanda_group }} is {{ $value | printf \"%.0f\" }} messages behind on {{ $labels.redpanda_topic }}"
+          description: >-
+            D7' §12: consumer lag page > 100k. telemetry.normalized is retained seven days,
+            so nothing is lost yet — but the fence that a slow write must not affect the
+            live map only holds for as long as that retention does.
+          runbook_url: https://github.com/mageride/mageride/blob/main/docs/runbooks/consumer-lag.md
+
+      - alert: RedpandaPartitionsUnavailable
+        expr: sum(redpanda_cluster_unavailable_partitions) > 0
+        for: 5m
+        labels:
+          severity: page
+          plane: stream
+        annotations:
+          summary: "{{ $value }} Redpanda partition(s) are unavailable"
+          description: >-
+            ADD §13.2's stream row. The MVP runs a single broker at RF=1 (ADD §14), so an
+            unavailable partition here is the event backbone down rather than degraded.
+          runbook_url: https://github.com/mageride/mageride/blob/main/docs/runbooks/redpanda-partitions.md
+
+      # §13.2 names "under-replicated partitions" separately, and at RF=3 (production) it
+      # is the one that arrives first: a partition can be under-replicated for hours and
+      # still be serving, right up until the leader is lost.
+      - alert: RedpandaUnderReplicatedPartitions
+        expr: sum(redpanda_kafka_under_replicated_replicas{redpanda_namespace="kafka"}) > 0
+        for: 10m
+        labels:
+          severity: ticket
+          plane: stream
+        annotations:
+          summary: "{{ $value }} Redpanda replica(s) are under-replicated"
+          description: >-
+            ADD §13.2's stream row. Always zero on the single-broker MVP (RF=1 has nothing
+            to under-replicate); on the 3-node production cluster this is the warning that
+            precedes an unavailable partition.
+          runbook_url: https://github.com/mageride/mageride/blob/main/docs/runbooks/redpanda-partitions.md
+
+      # The DLQs D6' §2.3 declares. Anything arriving on one is a message the platform
+      # could not process — silent by construction, because the producer's write succeeded.
+      - alert: DeadLetterTopicReceiving
+        expr: |
+          sum by (redpanda_topic) (
+            rate(redpanda_kafka_records_produced_total{redpanda_namespace="kafka",redpanda_topic=~".*\\.dlq"}[10m])
+          ) > 0
+        for: 10m
+        labels:
+          severity: ticket
+          plane: stream
+        annotations:
+          summary: "Messages are arriving on {{ $labels.redpanda_topic }}"
+          description: >-
+            A dead letter is a message no consumer could handle. Nothing retries it and no
+            other alert covers it — the producer's write succeeded.
+          runbook_url: https://github.com/mageride/mageride/blob/main/docs/runbooks/dead-letter-queue.md
+
+  # ===================================================================================
+  # §13.4 bullet 2 — "EMQX auth failure rate > 1%: possible credential spray; trigger
+  # security alert."
+  # ===================================================================================
+  - name: mageride.infra.mqtt
+    rules:
+      # The denominator is authentication ATTEMPTS, not connections. EMQX counts a
+      # connection that never presented a credential under `emqx_client_connect`, so
+      # dividing by that would dilute a spray with every probe and health check on the
+      # listener — and `blackbox-tcp` above is one of those.
+      # The `> 0` on the denominator rather than a clamp, for the reason recording.slo.yml's
+      # header sets out at length: a clamped zero denominator turns a broker with no traffic
+      # into a ratio, and `RedisMemoryHigh` already fired permanently once on that mistake.
+      - alert: EmqxAuthFailureRateHigh
+        expr: |
+          sum(rate(emqx_authentication_failure[5m]))
+          /
+          (sum(rate(emqx_authentication_failure[5m])) + sum(rate(emqx_authentication_success[5m])) > 0)
+          > 0.01
+        for: 5m
+        labels:
+          severity: page
+          plane: mqtt
+          security: "true"
+        annotations:
+          summary: "{{ $value | humanizePercentage }} of MQTT connections are failing authentication"
+          description: >-
+            ADD §13.4: "possible credential spray; trigger security alert." A device JWT is
+            minted per vehicle (E-02) and a healthy fleet's failure rate is a rounding
+            error — a percent of them failing is somebody trying identities they do not have.
+          runbook_url: https://github.com/mageride/mageride/blob/main/docs/runbooks/emqx-auth-failures.md
+
+      # ADD §13.2's EMQX row: dropped messages and queue depth. A broker that drops is a
+      # position that never reaches a map, and nothing downstream can tell.
+      - alert: EmqxMessagesDropped
+        expr: sum(rate(emqx_messages_dropped[5m])) > 0
+        for: 5m
+        labels:
+          severity: page
+          plane: mqtt
+        annotations:
+          summary: "EMQX is dropping {{ $value | printf \"%.1f\" }} messages/s"
+          description: >-
+            ADD §13.2's EMQX golden signals. A dropped publish is invisible to the device
+            (QoS 1 was acked by the broker) and invisible downstream (it never arrived).
+          runbook_url: https://github.com/mageride/mageride/blob/main/docs/runbooks/emqx-dropped-messages.md
+
+      # The bridge is the only path from EMQX to the event backbone. Its failure counter
+      # rising means payloads are not being acknowledged and EMQX is redelivering them.
+      - alert: MqttBridgeFailing
+        expr: sum(rate(mageride_mqtt_bridge_failures_total[5m])) > 0
+        for: 5m
+        labels:
+          severity: page
+          plane: position
+        annotations:
+          summary: "The MQTT bridge is failing to forward {{ $value | printf \"%.1f\" }} payloads/s"
+          description: >-
+            Payloads are not reaching telemetry.raw. They are not acknowledged, so EMQX
+            still holds them and nothing is lost yet — but the live map is behind by
+            whatever the redelivery costs.
+          runbook_url: https://github.com/mageride/mageride/blob/main/docs/runbooks/position-e2e-latency.md
+
+  # ===================================================================================
+  # §13.4 bullet 3 — "Redis evictions > 0: memory undersized; emergency scale or eviction
+  # policy review."
+  #
+  # The dev and replica stacks run `--maxmemory-policy noeviction`, so an eviction is not
+  # merely undersizing — it means the policy was changed. Either way the consequence is
+  # the same: `geo:live`, `veh:meta` and the cell streams are the live map, and a key
+  # evicted from any of them is a vehicle that vanishes.
+  # ===================================================================================
+  - name: mageride.infra.redis
+    rules:
+      - alert: RedisEvictions
+        expr: sum(rate(redis_evicted_keys_total[5m])) > 0
+        for: 2m
+        labels:
+          severity: page
+          plane: cache
+        annotations:
+          summary: "Redis is evicting keys ({{ $value | printf \"%.1f\" }}/s)"
+          description: >-
+            ADD §13.4: "memory undersized; emergency scale or eviction policy review." The
+            stack runs noeviction, so this also means the policy is not what the compose
+            file says. An evicted veh:meta is a vehicle that disappears from every map.
+          runbook_url: https://github.com/mageride/mageride/blob/main/docs/runbooks/redis-evictions.md
+
+      # `> 0` on the denominator and not `clamp_min`, because `maxmemory 0` means UNLIMITED
+      # in Redis, not "one byte". Clamping produced a ratio of used-bytes-to-one — a number
+      # in the hundreds of millions — and this alert fired permanently on the dev stack,
+      # which ships no `maxmemory` at all. The comparison filters the series away instead,
+      # so a Redis with no limit configured has no memory ratio, which is the truth.
+      - alert: RedisMemoryHigh
+        expr: |
+          redis_memory_used_bytes / (redis_memory_max_bytes > 0) > 0.85
+        for: 10m
+        labels:
+          severity: ticket
+          plane: cache
+        annotations:
+          summary: "Redis is at {{ $value | humanizePercentage }} of its memory limit"
+          description: >-
+            ADD §13.2's Redis row. Under `noeviction` the next write past the limit is an
+            error, not an eviction — position-processor stops indexing rather than the map
+            losing its oldest vehicle.
+          runbook_url: https://github.com/mageride/mageride/blob/main/docs/runbooks/redis-evictions.md
+
+      # The other half of the same problem: a Redis with no `maxmemory` cannot be watched
+      # by the rule above at all, and `noeviction` without a limit means the container's
+      # `mem_limit` is the only ceiling — so the failure is an OOM kill rather than a write
+      # error, and the AOF write buffer goes with it.
+      - alert: RedisNoMemoryLimit
+        expr: redis_memory_max_bytes == 0
+        for: 30m
+        labels:
+          severity: ticket
+          plane: cache
+        annotations:
+          summary: "Redis has no maxmemory configured"
+          description: >-
+            RedisMemoryHigh cannot evaluate without a limit, so nothing warns before the
+            container's own mem_limit is reached and the kernel kills it. Expected on the
+            slim dev stack; not on the replica or in production.
+          runbook_url: https://github.com/mageride/mageride/blob/main/docs/runbooks/redis-evictions.md
+
+      - alert: RedisDown
+        expr: redis_up == 0
+        for: 2m
+        labels:
+          severity: page
+          plane: cache
+        annotations:
+          summary: "Redis is not answering"
+          description: >-
+            The live map degrades to ADD §12's limited_live (query-svc serves an empty or
+            partial snapshot with a flag rather than an error), dispatch has no candidate
+            pool, and every rate limiter fails open or closed depending on its policy.
+          runbook_url: https://github.com/mageride/mageride/blob/main/docs/runbooks/redis-evictions.md
+
+  # ===================================================================================
+  # §13.4 bullet 4 — "Postgres replication lag > 30 s: failover risk; page on-call DBA."
+  # Plus ADD §13.2's Postgres row: TPS, long-running queries, vacuum lag, pool saturation.
+  # ===================================================================================
+  - name: mageride.infra.postgres
+    rules:
+      # §13.4's 30 s, literally. `pg_replication_lag_seconds` is derived from
+      # `pg_last_xact_replay_timestamp()`, which only means anything on a standby — hence
+      # the `pg_replication_is_replica` guard. On the single-Postgres MVP (ADD §14) both
+      # are 0 and this rule is armed and silent; it becomes live with the first standby.
+      - alert: PostgresReplicationLag
+        expr: |
+          max(pg_replication_lag_seconds and on (instance) pg_replication_is_replica == 1) > 30
+        for: 5m
+        labels:
+          severity: page
+          plane: database
+        annotations:
+          summary: "A Postgres replica is {{ $value | humanizeDuration }} behind"
+          description: >-
+            ADD §13.4: "failover risk; page on-call DBA." Read-heavy queries routed to the
+            replica (ADD §9.3) are answering from stale data, and a promotion now would lose
+            whatever has not been replayed.
+          runbook_url: https://github.com/mageride/mageride/blob/main/docs/runbooks/postgres-replication-lag.md
+
+      - alert: PostgresConnectionSaturation
+        expr: |
+          sum(pg_stat_activity_count) / (max(pg_settings_max_connections) > 0) > 0.85
+        for: 10m
+        labels:
+          severity: ticket
+          plane: database
+        annotations:
+          summary: "Postgres is at {{ $value | humanizePercentage }} of max_connections"
+          description: >-
+            ADD §13.2's "connection pool saturation". Every service reaches Postgres through
+            PgBouncer in transaction mode (M-5, ADD §9.3); this being high with the pooler in
+            front means either a pool sized past the server or sessions that are not being
+            returned — the E-09 outbox LISTEN holds one per replica by design.
+          runbook_url: https://github.com/mageride/mageride/blob/main/docs/runbooks/postgres-saturation.md
+
+      - alert: PostgresLongRunningQuery
+        expr: max(pg_stat_activity_max_tx_duration{state="active"}) > 300
+        for: 5m
+        labels:
+          severity: ticket
+          plane: database
+        annotations:
+          summary: "A query has been running for {{ $value | humanizeDuration }}"
+          description: >-
+            ADD §13.2's "long-running queries". A transaction open for five minutes also
+            holds back vacuum across every table it touched, so this alert and vacuum lag
+            usually arrive together.
+          runbook_url: https://github.com/mageride/mageride/blob/main/docs/runbooks/postgres-saturation.md
+
+      - alert: PostgresDown
+        expr: pg_up == 0
+        for: 2m
+        labels:
+          severity: page
+          plane: database
+        annotations:
+          summary: "Postgres is not answering the exporter"
+          description: >-
+            The system of record. Every write path stops; the live map keeps running from
+            Redis until the position writer's buffer fills (ADD §12's degradation ladder).
+          runbook_url: https://github.com/mageride/mageride/blob/main/docs/runbooks/postgres-saturation.md
+
+  # ===================================================================================
+  # §13.4 bullet 5 — "`rides.timers` backlog > 100 fired_at IS NULL AND fire_at <
+  # now()-30s: Quartz cluster member partitioned or job-store ill; restart scheduler,
+  # validate `qrtz_*` tables."
+  #
+  # ride-svc publishes exactly that count as `mageride_rides_timer_backlog`. (There are no
+  # `qrtz_*` tables — C022/C023 built a lease-poll over `rides.timers` instead, argued in
+  # ride-svc's CLAUDE.md — so the runbook's second half is "validate rides.timers".)
+  # ===================================================================================
+  - name: mageride.infra.timers
+    rules:
+      - alert: RideTimerBacklogHigh
+        expr: max(mageride_rides_timer_backlog) > 100
+        for: 2m
+        labels:
+          severity: page
+          plane: ride
+        annotations:
+          summary: "{{ $value }} ride timers are more than 30 s overdue"
+          description: >-
+            ADD §13.4 bullet 5. R-04's durable timers are what move a ride when nobody taps
+            anything — offer expiry, arrival grace, no-show, the offline graces. A backlog
+            means the sweep is not claiming rows, and the stuck-state pages follow within a
+            minute or two.
+          runbook_url: https://github.com/mageride/mageride/blob/main/docs/runbooks/ride-timer-backlog.md
+
+  # ===================================================================================
+  # §13.4 bullet 6 — "`outbox` lag > 1 s p95: LISTEN/NOTIFY listener dead; restart
+  # outbox-dispatcher, replay from `last_published_id` watermark."
+  #
+  # E-09 budgets a median under 50 ms. The p95 target here is §13.4's.
+  # ===================================================================================
+  - name: mageride.infra.outbox
+    rules:
+      - alert: OutboxDispatchLagHigh
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (rate(mageride_outbox_dispatch_latency_milliseconds_bucket[5m]))
+          ) > 1000
+        for: 5m
+        labels:
+          severity: page
+          plane: events
+        annotations:
+          summary: "Outbox commit-to-publish p95 is {{ $value | printf \"%.0f\" }} ms"
+          description: >-
+            ADD §13.4 bullet 6. The transactional outbox is the ONLY way state changes cross
+            a service boundary (CLAUDE.md universal rule), so lag here is every consumer on
+            the platform reacting late — dispatch to a new ride, fanout to a revoked share,
+            notifications to an SOS.
+          runbook_url: https://github.com/mageride/mageride/blob/main/docs/runbooks/outbox-lag.md
+
+      - alert: OutboxPublishFailing
+        expr: sum(rate(mageride_outbox_publish_failures_total[5m])) > 0
+        for: 5m
+        labels:
+          severity: page
+          plane: events
+        annotations:
+          summary: "Outbox publishes are failing ({{ $value | printf \"%.2f\" }}/s)"
+          description: >-
+            Rows stay undispatched and are retried, so nothing is lost — but the LISTEN
+            fast path has degraded to the 250 ms poll at best and to nothing at worst.
+          runbook_url: https://github.com/mageride/mageride/blob/main/docs/runbooks/outbox-lag.md
+
+  # ===================================================================================
+  # ADD §13.2's fanout row, and §13.1's synthetic probes. Neither has a §13.4 bullet; both
+  # are golden signals that only mean something as an alert.
+  # ===================================================================================
+  - name: mageride.infra.fanout
+    rules:
+      - alert: FanoutVisibilityFilterInert
+        expr: |
+          sum(rate(mageride_fanout_filtered_total{reason="engaged"}[30m])) == 0
+          and
+          sum(rate(mageride_fanout_frames_total[30m])) > 0
+        for: 30m
+        labels:
+          severity: ticket
+          plane: position
+          security: "true"
+        annotations:
+          summary: "No vehicle has been hidden for being on hire in 30 minutes"
+          description: >-
+            US-7.16's engagement filter. A working filter and an ABSENT one look identical
+            from a passenger's map — vehicles appear, positions move, nothing errors — and
+            the difference only shows when somebody sees a vehicle they should not. Frames
+            are being sent and none has been withheld as engaged; check
+            Fanout:EventsEnabled and the ride.events projection.
+          runbook_url: https://github.com/mageride/mageride/blob/main/docs/runbooks/fanout-visibility.md
+
+  - name: mageride.infra.synthetic
+    rules:
+      - alert: SyntheticProbeFailing
+        expr: probe_success == 0
+        for: 3m
+        labels:
+          severity: page
+          plane: edge
+        annotations:
+          summary: "The {{ $labels.probe }} probe has been failing for three minutes"
+          description: >-
+            ADD §13.1's synthetic row. This is what says the platform is unreachable when no
+            user happens to be asking — an availability SLO computed from traffic cannot
+            distinguish "no errors" from "no traffic".
+          runbook_url: https://github.com/mageride/mageride/blob/main/docs/runbooks/service-down.md
+
+      - alert: SyntheticProbeSlow
+        expr: probe_duration_seconds > 2
+        for: 10m
+        labels:
+          severity: ticket
+          plane: edge
+        annotations:
+          summary: "The {{ $labels.probe }} probe is taking {{ $value | humanizeDuration }}"
+          description: "A readiness probe is a database ping and a Redis ping (D7' §5.1). Two seconds is a dependency in trouble."
+          runbook_url: https://github.com/mageride/mageride/blob/main/docs/runbooks/service-down.md
+
+  # ===================================================================================
+  # The observability stack watching itself. Everything above is silent if this is broken,
+  # and a silent alerting pipeline reads as a healthy platform.
+  # ===================================================================================
+  - name: mageride.infra.observability
+    rules:
+      - alert: ObservabilityComponentDown
+        expr: up{job=~"prometheus|alertmanager|loki|tempo|grafana|otel-collector"} == 0
+        for: 5m
+        labels:
+          severity: page
+          plane: observability
+        annotations:
+          summary: "{{ $labels.service }} is down"
+          description: >-
+            Part of the observability stack has stopped. With the collector down, traces and
+            tcp-adapter's metrics stop; with Alertmanager down, every rule in this directory
+            fires into nothing.
+          runbook_url: https://github.com/mageride/mageride/blob/main/docs/runbooks/observability-down.md
+
+      - alert: TargetDown
+        expr: up == 0
+        for: 15m
+        labels:
+          severity: ticket
+          plane: observability
+        annotations:
+          summary: "Scrape target {{ $labels.job }}/{{ $labels.instance }} has been down for 15 minutes"
+          description: >-
+            Warning-only and deliberately slow, because both deployment shapes are in the
+            scrape config and the one that is not running is legitimately down (see the
+            header of prometheus.yml). ServiceDown is the paging version, scoped to the
+            targets that must always be up.
+          runbook_url: https://github.com/mageride/mageride/blob/main/docs/runbooks/service-down.md

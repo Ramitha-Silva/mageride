@@ -1,0 +1,227 @@
+{
+  "uid": "mageride-platform",
+  "title": "MageRide — Platform golden signals",
+  "description": "ADD §13.2's per-service row for every service on the platform: traffic, errors, latency and saturation. The C119 definition of done — 'every service reports the golden signals and appears on a dashboard' — is this board. A service missing from the table is a service missing from prometheus.yml.",
+  "tags": ["mageride", "golden-signals", "add-13.2"],
+  "timezone": "Asia/Colombo",
+  "editable": false,
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "service",
+        "label": "Service",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "query": { "query": "label_values(up{job=~\"platform-.*\"}, service)", "refId": "A" },
+        "includeAll": true,
+        "multi": true,
+        "current": { "text": "All", "value": "$__all" },
+        "refresh": 2,
+        "sort": 1
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Services reporting",
+      "description": "Scrape targets answering. Both deployment shapes are in prometheus.yml (one container per service, and the D7' §2.1 composition hosts), so the one that is not running reads as down — see the header of prometheus.yml.",
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "value", "graphMode": "none" },
+      "targets": [{ "refId": "A", "expr": "count(up{job=~\"platform-.*\"} == 1)", "instant": true }]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Requests/s",
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "reqps", "decimals": 1 }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "none", "graphMode": "area" },
+      "targets": [{ "refId": "A", "expr": "sum(mageride:api:requests5m{service=~\"$service\"})", "instant": true }]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "5xx share",
+      "description": "4xx is excluded on purpose. Deny-by-default (AL-06) means a healthy platform answers a steady stream of 401s, and counting them would make authentication look like an outage.",
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 3,
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 0.001 }, { "color": "red", "value": 0.0024 }] }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "value", "graphMode": "area" },
+      "targets": [{ "refId": "A", "expr": "sum(mageride:api:error_ratio5m{service=~\"$service\"} * mageride:api:requests5m{service=~\"$service\"}) / clamp_min(sum(mageride:api:requests5m{service=~\"$service\"}), 1e-9)", "instant": true }]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Firing alerts",
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "background", "graphMode": "none" },
+      "targets": [{ "refId": "A", "expr": "sum(ALERTS{alertstate=\"firing\", severity=\"page\"}) or vector(0)", "instant": true }]
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Outbox p95",
+      "description": "ADD §13.4's 1 s trigger. The transactional outbox is the only way state crosses a service boundary, so this is the platform's reaction time.",
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 50 }, { "color": "red", "value": 1000 }] }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "value", "graphMode": "area" },
+      "targets": [{ "refId": "A", "expr": "histogram_quantile(0.95, sum by (le) (rate(mageride_outbox_dispatch_latency_milliseconds_bucket[5m])))", "instant": true }]
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Idempotent replays/s",
+      "description": "R-14. A rising rate is clients retrying, which is usually the first visible symptom of latency somewhere else.",
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "reqps", "decimals": 2 }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "none", "graphMode": "area" },
+      "targets": [{ "refId": "A", "expr": "sum(rate(mageride_idempotency_replays_total[5m]))", "instant": true }]
+    },
+
+    {
+      "id": 10,
+      "type": "table",
+      "title": "Every service — traffic, errors, latency, up",
+      "description": "The board's reason to exist. One row per scraped service; a service that is not here is not in prometheus.yml, which is the failure this table is meant to make obvious.",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "custom": { "align": "auto" } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Requests/s" }, "properties": [{ "id": "unit", "value": "reqps" }, { "id": "decimals", "value": 2 }] },
+          { "matcher": { "id": "byName", "options": "5xx ratio" }, "properties": [{ "id": "unit", "value": "percentunit" }, { "id": "custom.cellOptions", "value": { "type": "color-background" } }, { "id": "thresholds", "value": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 0.001 }, { "color": "red", "value": 0.01 }] } }] },
+          { "matcher": { "id": "byName", "options": "p95" }, "properties": [{ "id": "unit", "value": "s" }] },
+          { "matcher": { "id": "byName", "options": "Up" }, "properties": [{ "id": "custom.cellOptions", "value": { "type": "color-background" } }, { "id": "thresholds", "value": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] } }] }
+        ]
+      },
+      "options": { "showHeader": true, "sortBy": [{ "displayName": "5xx ratio", "desc": true }] },
+      "targets": [
+        { "refId": "A", "expr": "mageride:api:requests5m", "instant": true, "format": "table" },
+        { "refId": "B", "expr": "mageride:api:error_ratio5m", "instant": true, "format": "table" },
+        { "refId": "C", "expr": "mageride:api:p95", "instant": true, "format": "table" },
+        { "refId": "D", "expr": "max by (service) (up{job=~\"platform-.*\"})", "instant": true, "format": "table" }
+      ],
+      "transformations": [
+        { "id": "joinByField", "options": { "byField": "service", "mode": "outer" } },
+        { "id": "organize", "options": { "excludeByName": { "Time": true, "Time 1": true, "Time 2": true, "Time 3": true, "Time 4": true, "__name__": true, "job": true, "instance": true, "plane": true }, "renameByName": { "service": "Service", "Value #A": "Requests/s", "Value #B": "5xx ratio", "Value #C": "p95", "Value #D": "Up" } } }
+      ]
+    },
+
+    {
+      "id": 20,
+      "type": "timeseries",
+      "title": "Traffic — requests/s by service",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 14 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "reqps", "custom": { "lineWidth": 1, "fillOpacity": 10, "showPoints": "never" } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["mean", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [{ "refId": "A", "expr": "mageride:api:requests5m{service=~\"$service\"}", "legendFormat": "{{service}}" }]
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "Errors — 5xx/s by service",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 14 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "reqps", "custom": { "lineWidth": 1, "fillOpacity": 20, "showPoints": "never" } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["mean", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [{ "refId": "A", "expr": "sum by (service) (rate(http_server_request_duration_seconds_count{http_response_status_code=~\"5..\", service=~\"$service\"}[$__rate_interval]))", "legendFormat": "{{service}}" }]
+    },
+    {
+      "id": 22,
+      "type": "timeseries",
+      "title": "Latency — p95 by service",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 14 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s", "custom": { "lineWidth": 1, "fillOpacity": 0, "showPoints": "never" } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["mean", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [{ "refId": "A", "expr": "mageride:api:p95{service=~\"$service\"}", "legendFormat": "{{service}}" }]
+    },
+
+    {
+      "id": 30,
+      "type": "timeseries",
+      "title": "Saturation — .NET working set",
+      "description": "ADD §13.2's fourth golden signal. The compose files cap each container (mem_limit); a working set climbing towards its cap is the shape of a leak.",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 22 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "bytes", "custom": { "lineWidth": 1, "fillOpacity": 10, "showPoints": "never" } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [{ "refId": "A", "expr": "dotnet_process_memory_working_set_bytes{service=~\"$service\"}", "legendFormat": "{{service}}" }]
+    },
+    {
+      "id": 31,
+      "type": "timeseries",
+      "title": "Saturation — thread pool queue",
+      "description": "A queue that does not drain is a process whose work is arriving faster than it can be started. It shows here before it shows as latency.",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 22 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "lineWidth": 1, "fillOpacity": 10, "showPoints": "never" } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [{ "refId": "A", "expr": "dotnet_thread_pool_queue_length_total{service=~\"$service\"}", "legendFormat": "{{service}}" }]
+    },
+    {
+      "id": 32,
+      "type": "timeseries",
+      "title": "Rate-limit rejections and version-gate refusals",
+      "description": "D-32/P-12 token buckets and the edge's minimum-app-version gate. Both are the platform refusing on purpose; a spike is either an incident or a release.",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 22 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "reqps", "custom": { "lineWidth": 1, "fillOpacity": 10, "showPoints": "never" } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        { "refId": "A", "expr": "sum by (service) (rate(mageride_ratelimit_rejections_total{service=~\"$service\"}[$__rate_interval]))", "legendFormat": "rate limit · {{service}}" },
+        { "refId": "B", "expr": "sum(rate(mageride_gateway_version_gate_rejections_total[$__rate_interval]))", "legendFormat": "version gate" }
+      ]
+    },
+
+    {
+      "id": 40,
+      "type": "logs",
+      "title": "Errors and warnings across the selected services",
+      "description": "Loki. Serilog's structured JSON carries the trace id, and the Loki datasource's derived field turns it into a link into Tempo — which is how a log line becomes a flame graph.",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 30 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "options": { "showTime": true, "wrapLogMessage": true, "sortOrder": "Descending", "enableLogDetails": true },
+      "targets": [{ "refId": "A", "expr": "{service=~\"$service\"} |~ \"(?i)\\\"level\\\"\\\\s*:\\\\s*\\\"(error|fatal|warning)\\\"|\\\\b(err|fail|error|warn)\\\\b\"" }]
+    }
+  ]
+}

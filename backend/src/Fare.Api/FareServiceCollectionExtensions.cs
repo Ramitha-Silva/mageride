@@ -1,16 +1,30 @@
 using MageRide.Fare.Configuration;
 using MageRide.Fare.Estimates;
 using MageRide.Fare.Gateways;
+using MageRide.Fare.Observability;
 using MageRide.Fare.Payments;
 using MageRide.Fare.Persistence;
 using MageRide.Fare.Pricing;
 using MageRide.Fare.Settlement;
+using MageRide.Shared.Observability;
 
 namespace MageRide.Fare;
 
 /// <summary>fare-svc's own registrations. The cross-cutting half is <c>AddMageRideDefaults</c>.</summary>
 public static class FareServiceCollectionExtensions
 {
+    /// <summary>The service's scrape-time gauges (C119). One meter, disposed with the host.</summary>
+    private static ScrapedGauges Gauges(IServiceProvider services)
+    {
+        var gauges = new ScrapedGauges(
+            services.GetRequiredService<IServiceScopeFactory>(),
+            services.GetRequiredService<ILoggerFactory>().CreateLogger<ScrapedGauges>());
+
+        OverpaidGauge.Publish(gauges);
+
+        return gauges;
+    }
+
     public static IServiceCollection AddFareServices(this IServiceCollection services, IConfiguration configuration)
     {
         ArgumentNullException.ThrowIfNull(services);
@@ -52,6 +66,12 @@ public static class FareServiceCollectionExtensions
         services.AddScoped<RefundService>();
 
         services.AddHostedService<QrNudgeSweeper>();
+
+        // Δ C119 (R-20). ADD §13.3.1 row 7 as a gauge on the platform meter. A singleton with its
+        // own Meter, started as a hosted service so the gauge exists from the first scrape rather
+        // than from the first request — nothing else resolves it, because a scrape reads the meter.
+        services.AddSingleton(sp => Gauges(sp));
+        services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<ScrapedGauges>());
 
         var settings = configuration.GetSection(FareOptions.SectionName).Get<FareOptions>() ?? new FareOptions();
 

@@ -1,0 +1,325 @@
+# =====================================================================================
+# MageRide — SLO burn-rate alerts (C119)
+#
+# ADD §13.3, row by row, with the "Burn-Rate Alert" column taken literally. **These are
+# the targets in the spec and nothing here is softer than what §13.3 prints** (C119 fence).
+#
+# --- WHAT A BURN RATE IS ----------------------------------------------------------------
+# An SLO of 99% over a month grants an error budget of 1%. Burn rate is how fast that
+# budget is being spent relative to spending it evenly: 1× uses it all in exactly a month,
+# 14× uses it all in about two days. §13.3 gives the multiplier per row and this file
+# turns each into `error_ratio > multiplier × (1 - objective)`.
+#
+# --- WHY TWO WINDOWS --------------------------------------------------------------------
+# A single one-hour window alerts on an hour-long blip that has already ended by the time
+# anybody reads the page, and it keeps firing for an hour after the incident is fixed. Each
+# page is therefore `long window AND short window`: the long one says the budget is really
+# being burned, the short one says it is still happening now. This is the standard
+# multi-window burn-rate shape and it is why the `for:` durations are short — the windows
+# do the smoothing, not the `for`.
+#
+# Every alert carries `runbook_url`; `verify-observability.sh` fails if the file it names
+# does not exist, so a page can never arrive with nothing to do behind it.
+# =====================================================================================
+
+groups:
+
+  # ===================================================================================
+  # Position E2E latency — §13.3 row 1 (D-19, NFR-01).
+  # Target: p95 < 5 s, p99 < 8 s, 99% of 5-minute windows. Burn: 14× over 1 h.
+  # Budget = 1%; 14 × 1% = 14% of positions slower than 5 s.
+  # ===================================================================================
+  - name: mageride.slo.position_e2e.alerts
+    rules:
+      - alert: PositionE2ELatencyBudgetBurning
+        expr: |
+          mageride:position_e2e:error_ratio1h > (14 * 0.01)
+          and
+          mageride:position_e2e:error_ratio5m > (14 * 0.01)
+        for: 2m
+        labels:
+          severity: page
+          slo: position-e2e-latency
+          plane: position
+        annotations:
+          summary: "Position latency is burning its error budget 14× (ADD §13.3, D-19)"
+          description: >-
+            {{ $value | humanizePercentage }} of positions took longer than 5 s to reach a
+            subscriber over the last hour, and it is still happening. The SLO is p95 < 5 s
+            for 99% of 5-minute windows. Current p95 is
+            {{ with query "mageride:position_e2e:p95" }}{{ . | first | value | humanizeDuration }}{{ end }}.
+          runbook_url: https://github.com/mageride/mageride/blob/main/docs/runbooks/position-e2e-latency.md
+
+      # The slower burn §13.3 does not name but the budget implies: 6× over 6 h exhausts a
+      # month's budget in five days. Ticket, not a page — nobody should be woken for a
+      # degradation that takes days to matter.
+      - alert: PositionE2ELatencyBudgetBurningSlowly
+        expr: |
+          mageride:position_e2e:error_ratio6h > (6 * 0.01)
+          and
+          mageride:position_e2e:error_ratio1h > (6 * 0.01)
+        for: 15m
+        labels:
+          severity: ticket
+          slo: position-e2e-latency
+          plane: position
+        annotations:
+          summary: "Position latency has been over budget for six hours"
+          description: >-
+            {{ $value | humanizePercentage }} of positions over 5 s across six hours. Not
+            an outage; the month's budget is being spent in about five days.
+          runbook_url: https://github.com/mageride/mageride/blob/main/docs/runbooks/position-e2e-latency.md
+
+      # The p99 leg. §13.3 gives the position SLO two targets and the ratio above is
+      # written against the tighter one, so an 8-second tail that stays under 14% of
+      # traffic would otherwise never be said out loud.
+      - alert: PositionE2ELatencyP99Breached
+        expr: mageride:position_e2e:p99 > 8
+        for: 10m
+        labels:
+          severity: ticket
+          slo: position-e2e-latency
+          plane: position
+        annotations:
+          summary: "Position p99 is {{ $value | humanizeDuration }}, over the 8 s target"
+          description: >-
+            ADD §13.3 sets p99 < 8 s alongside the 5 s p95. The tail is out even if the
+            budget is not yet burning.
+          runbook_url: https://github.com/mageride/mageride/blob/main/docs/runbooks/position-e2e-latency.md
+
+      # The one signal a latency SLO cannot give: no positions at all. A histogram with no
+      # observations has no quantile and no error ratio, so every rule above goes quiet at
+      # exactly the moment the tracking plane has stopped.
+      - alert: PositionPipelineSilent
+        expr: |
+          sum(rate(mageride_positions_processed_total[5m])) == 0
+          and
+          sum(rate(mageride_mqtt_bridge_forwarded_total[15m])) > 0
+        for: 5m
+        labels:
+          severity: page
+          slo: position-e2e-latency
+          plane: position
+        annotations:
+          summary: "position-processor has stopped, but the bridge is still forwarding"
+          description: >-
+            Payloads are reaching telemetry.raw and nothing is being normalised. Every map
+            on the platform is frozen and no latency alert will fire, because there are no
+            observations to be slow.
+          runbook_url: https://github.com/mageride/mageride/blob/main/docs/runbooks/position-e2e-latency.md
+
+  # ===================================================================================
+  # SOS dispatch — §13.3 row 2 (D-33).
+  # Target: p99 ≤ 5 s, 99.9% monthly.
+  # §13.3's burn column: "Any 5-min window > 5 s p99 pages on-call immediately."
+  #
+  # Taken literally: no long window, no multi-window smoothing, `for: 0s`. This is the one
+  # SLO on the platform where a single bad window is the alert, because the event being
+  # measured is somebody pressing a panic button.
+  # ===================================================================================
+  - name: mageride.slo.sos.alerts
+    rules:
+      - alert: SosDispatchLatencyBreached
+        expr: mageride:sos_dispatch:p99 > 5
+        for: 0s
+        labels:
+          severity: page
+          slo: sos-dispatch-latency
+          plane: safety
+        annotations:
+          summary: "SOS p99 is {{ $value | humanizeDuration }} — over D-33's 5 s, paging now"
+          description: >-
+            ADD §13.3: any 5-minute window over 5 s p99 pages on-call immediately. Somebody
+            pressed a panic button and the alert took longer than the platform promises.
+          runbook_url: https://github.com/mageride/mageride/blob/main/docs/runbooks/sos-dispatch-latency.md
+
+      - alert: SosDispatchFailing
+        expr: mageride:sos_dispatch:failure_ratio5m > 0
+        for: 0s
+        labels:
+          severity: page
+          slo: sos-dispatch-latency
+          plane: safety
+        annotations:
+          summary: "{{ $value | humanizePercentage }} of SOS alerts reached no gateway"
+          description: >-
+            An SOS that goes nowhere looks exactly like one that worked — the button
+            animates, the row is written and the response is a 200. Any non-zero reading
+            here is a page.
+          runbook_url: https://github.com/mageride/mageride/blob/main/docs/runbooks/sos-dispatch-latency.md
+
+  # ===================================================================================
+  # Availability — §13.3 rows 5 and 6.
+  #   Tracking plane: 99.5% monthly, 2% budget consumed in 6 h
+  #   API (registry, trips): 99.9% monthly, 2% budget consumed in 6 h
+  #
+  # "2% of the budget in 6 h" is a burn rate of 0.02 / (6/730) ≈ 2.43×, where 730 h is a
+  # month. Budget 0.5% and 0.1% respectively.
+  # ===================================================================================
+  - name: mageride.slo.availability.alerts
+    rules:
+      - alert: TrackingPlaneAvailabilityBudgetBurning
+        expr: |
+          mageride:tracking:error_ratio6h > (2.43 * 0.005)
+        for: 10m
+        labels:
+          severity: page
+          slo: tracking-availability
+          plane: position
+        annotations:
+          summary: "The tracking plane is returning {{ $value | humanizePercentage }} 5xx over six hours"
+          description: >-
+            ADD §13.3 sets 99.5% monthly for the tracking plane and pages at 2% of the
+            budget in 6 h. 4xx is excluded — deny-by-default (AL-06) means a healthy
+            platform answers a steady stream of 401s.
+          runbook_url: https://github.com/mageride/mageride/blob/main/docs/runbooks/api-availability.md
+
+      - alert: ApiAvailabilityBudgetBurning
+        expr: |
+          mageride:api:error_ratio6h > (2.43 * 0.001)
+          and
+          mageride:api:error_ratio1h > (2.43 * 0.001)
+        for: 10m
+        labels:
+          severity: page
+          slo: api-availability
+        annotations:
+          summary: "{{ $labels.service }} is burning its 99.9% availability budget"
+          description: >-
+            {{ $value | humanizePercentage }} of requests to {{ $labels.service }} answered
+            5xx over six hours, against a 99.9% monthly objective.
+          runbook_url: https://github.com/mageride/mageride/blob/main/docs/runbooks/api-availability.md
+
+      # A service that has stopped answering entirely. Distinct from the ratio above: zero
+      # requests is zero errors, so a dead service has a perfect error ratio.
+      #
+      # **`max_over_time(...) > 0` is what makes this deployment-shape agnostic, and it is not
+      # optional.** `prometheus.yml` lists both shapes — one container per service, and D7'
+      # §2.1's composition hosts — so `up{job=~"platform-.*"} == 0` alone matched *both*
+      # `platform-services` and `platform-composed`, and whichever shape was running, the
+      # other's targets paged after two minutes, for ever. Nine spurious pages in one shape
+      # and three in the other, and the summaries were actively misleading because `fanout`
+      # (composed) and `fanout-svc` (skeleton) carry the same `service` label — so it read
+      # "fanout-svc has not answered a scrape" while fanout-svc was up.
+      #
+      # The guard says: page for a target that WAS serving and has stopped. A target that has
+      # never come up in the retention window is a shape that is not deployed, and it is
+      # `TargetDown` (ticket, 15 min) that covers it — which is exactly the division of labour
+      # the header of prometheus.yml describes.
+      - alert: ServiceDown
+        expr: |
+          up{job=~"platform-.*"} == 0
+          and
+          max_over_time(up{job=~"platform-.*"}[6h]) > 0
+        for: 2m
+        labels:
+          severity: page
+          slo: api-availability
+        annotations:
+          summary: "{{ $labels.service }} ({{ $labels.instance }}) has not answered a scrape for two minutes"
+          description: >-
+            It was serving within the last six hours and has stopped. The target is down or the
+            process has stopped serving /metrics; a service with no requests has no error ratio,
+            so no availability alert can cover this.
+          runbook_url: https://github.com/mageride/mageride/blob/main/docs/runbooks/service-down.md
+
+  # ===================================================================================
+  # WebSocket connection success — §13.3 row 7.
+  # Target 99%; §13.3's burn column is "5% failure rate over 5 min".
+  # ===================================================================================
+  - name: mageride.slo.websocket.alerts
+    rules:
+      - alert: WebSocketConnectFailureRateHigh
+        expr: mageride:ws_connect:failure_ratio5m > 0.05
+        for: 5m
+        labels:
+          severity: page
+          slo: websocket-connect
+          plane: position
+        annotations:
+          summary: "{{ $value | humanizePercentage }} of hub connections are failing"
+          description: >-
+            ADD §13.3: 5% failure over 5 minutes. Passengers and drivers are not getting a
+            live map; the REST snapshot (GET /v1/nearby) still works, so this is degraded
+            rather than dark.
+          runbook_url: https://github.com/mageride/mageride/blob/main/docs/runbooks/websocket-connect-failures.md
+
+  # ===================================================================================
+  # Dispatch — §13.3 rows 8 and 9.
+  #   Offer push (ride.requested → device push ack): p95 < 2 s, 99% monthly, 5% over 1 h
+  #   Atomic accept (tap → 200/409): p95 < 300 ms, 99% monthly, 5% over 1 h
+  #
+  # 5% of a 1% budget in an hour is a burn rate of 0.05 / (1/730) = 36.5×.
+  # Neither histogram is instrumented yet (see recording.slo.yml and the C119 handoff), so
+  # these are armed and silent rather than absent.
+  # ===================================================================================
+  - name: mageride.slo.dispatch.alerts
+    rules:
+      - alert: OfferPushLatencyBudgetBurning
+        expr: mageride:offer_push:error_ratio5m > (36.5 * 0.01)
+        for: 5m
+        labels:
+          severity: page
+          slo: offer-push-latency
+          plane: ride
+        annotations:
+          summary: "{{ $value | humanizePercentage }} of ride offers took over 2 s to reach a driver"
+          description: >-
+            ADD §13.3 row 8. An offer that arrives late is an offer whose 15-second window
+            (D5' §3.5) has already been spent in flight, so it expires in the driver's hand.
+          runbook_url: https://github.com/mageride/mageride/blob/main/docs/runbooks/offer-push-latency.md
+
+      - alert: AcceptResolutionLatencyBudgetBurning
+        expr: mageride:accept_resolution:error_ratio5m > (36.5 * 0.01)
+        for: 5m
+        labels:
+          severity: page
+          slo: accept-resolution-latency
+          plane: ride
+        annotations:
+          summary: "{{ $value | humanizePercentage }} of accepts took over 300 ms to resolve"
+          description: >-
+            ADD §13.3 row 9. The accept is one conditional UPDATE (ADD §11.11); a slow
+            resolution means Postgres contention on rides.rides, not application work.
+          runbook_url: https://github.com/mageride/mageride/blob/main/docs/runbooks/accept-resolution-latency.md
+
+  # ===================================================================================
+  # Payment callback resolve — §13.3 row 3.
+  # p95 < 30 s, p99 < 90 s, 99% monthly, 2% budget over 1 h → 0.02 / (1/730) = 14.6×.
+  # ===================================================================================
+  - name: mageride.slo.payments.alerts
+    rules:
+      - alert: PaymentCallbackResolveBudgetBurning
+        expr: mageride:payment_callback:error_ratio1h > (14.6 * 0.01)
+        for: 10m
+        labels:
+          severity: page
+          slo: payment-callback-resolve
+          plane: money
+        annotations:
+          summary: "{{ $value | humanizePercentage }} of payments took over 30 s to reach a terminal state"
+          description: >-
+            ADD §13.3 row 3. A ride cannot leave PaymentPending until fare-svc settles it,
+            and a passenger cannot book again while it sits there — so this SLO burning
+            becomes the Completed+PaymentPending stuck-state page (§13.3.1) within ten
+            minutes.
+          runbook_url: https://github.com/mageride/mageride/blob/main/docs/runbooks/payment-callback-latency.md
+
+  # ===================================================================================
+  # VoIP call setup — §13.3 row 4, "when Phase 1 voip-svc shipped". p95 < 4 s.
+  # ===================================================================================
+  - name: mageride.slo.voip.alerts
+    rules:
+      - alert: VoipCallSetupSlow
+        expr: mageride:voip_setup:p95 > 4
+        for: 10m
+        labels:
+          severity: ticket
+          slo: voip-call-setup
+          plane: voip
+        annotations:
+          summary: "VoIP call setup p95 is {{ $value | humanizeDuration }}, over the 4 s target"
+          description: >-
+            Signalling to first audio frame. A slow setup is usually ICE failing over to
+            the TURN relay, which is a network path problem rather than an SFU one.
+          runbook_url: https://github.com/mageride/mageride/blob/main/docs/runbooks/voip-call-setup.md

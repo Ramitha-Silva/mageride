@@ -1,0 +1,24 @@
+# =====================================================================================
+# MageRide — Grafana dashboard provisioning (C119)
+#
+# Every dashboard in grafana/dashboards/ is loaded from disk and is READ-ONLY in the UI.
+# `allowUiUpdates: false` is the important line: an edit made in the browser would live in
+# the container's volume, survive nothing, and diverge from the file everyone else sees.
+# The way to change a panel is to change the JSON.
+# =====================================================================================
+
+apiVersion: 1
+
+providers:
+  - name: mageride
+    orgId: 1
+    folder: MageRide
+    type: file
+    disableDeletion: false
+    allowUiUpdates: false
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards
+      # The dashboards are grouped in one folder rather than by sub-directory: nine
+      # dashboards is a list somebody reads, not a tree they navigate.
+      foldersFromFilesStructure: false

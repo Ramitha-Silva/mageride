@@ -1,0 +1,374 @@
+# =====================================================================================
+# MageRide — stuck-state alert unit tests (C119)
+#
+#   docker run --rm -v "$PWD:/w" -w /w/prometheus/tests --entrypoint /bin/promtool \
+#     prom/prometheus:v2.55.1 test rules stuck-state.test.yml
+#
+# This file is the C119 definition-of-done item "a simulated stuck ride fires the correct
+# business alert within its window", executed rather than asserted: each case feeds
+# `mageride_rides_stuck` the series ride-svc's StuckStateObserver would publish for a ride
+# that has gone past its ADD §13.3.1 threshold, and checks that the right alert is silent
+# before its window and firing after it.
+#
+# It runs with no Docker stack, no database and no platform — which is why it can be a
+# verify step rather than a manual exercise, and why a rule that would never have fired
+# cannot reach main.
+# =====================================================================================
+
+rule_files:
+  - ../rules/alerts.business.yml
+
+evaluation_interval: 15s
+
+tests:
+
+  # ===================================================================================
+  # `state='Matching'` age > 60 s → page. §13.3.1 row 1.
+  #
+  # The gauge already applies the 60 s, so the series going to 1 IS a ride that has been
+  # Matching for over a minute. `for: 1m` is §13.3.1's "sustained" / "rolling 1 min".
+  # ===================================================================================
+  - name: a ride stuck in Matching pages after its window
+    interval: 15s
+    input_series:
+      - series: 'mageride_rides_stuck{state="Matching",service="ride-svc",job="platform-services"}'
+        values: "0 0 0 0 1+0x40"
+
+    alert_rule_test:
+      # t=1m: the gauge has just gone non-zero (t=1m is sample 4). `for: 1m` not yet met.
+      - eval_time: 1m
+        alertname: RideStuckMatching
+        exp_alerts: []
+
+      - eval_time: 3m
+        alertname: RideStuckMatching
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              stuck_state: Matching
+              plane: ride
+              business_slo: "true"
+              state: Matching
+            exp_annotations:
+              summary: "1 ride(s) have been Matching for over 60 s"
+              description: "ADD §13.3.1 row 1. Dispatch starvation, an empty candidate pool, or geo index drift. The passenger is looking at a spinner; nothing will time out on its own."
+              runbook_url: "https://github.com/mageride/mageride/blob/main/docs/runbooks/ride-stuck.md"
+
+      # No other stuck-state alert is fired by a Matching stall. A rule matching on the
+      # metric rather than on the state label would light the whole board.
+      - eval_time: 3m
+        alertname: RideStuckOffered
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: RideStuckPaymentPending
+        exp_alerts: []
+
+  # ===================================================================================
+  # Two ride-svc replicas report the same count. `max by (state)` and not `sum`, or the
+  # page says "six rides" when three are stuck.
+  # ===================================================================================
+  - name: replicas reporting the same count do not multiply the alert
+    interval: 15s
+    input_series:
+      - series: 'mageride_rides_stuck{state="Matching",service="ride-svc",instance="a"}'
+        values: "3+0x40"
+      - series: 'mageride_rides_stuck{state="Matching",service="ride-svc",instance="b"}'
+        values: "3+0x40"
+
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: RideStuckMatching
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              stuck_state: Matching
+              plane: ride
+              business_slo: "true"
+              state: Matching
+            exp_annotations:
+              summary: "3 ride(s) have been Matching for over 60 s"
+              description: "ADD §13.3.1 row 1. Dispatch starvation, an empty candidate pool, or geo index drift. The passenger is looking at a spinner; nothing will time out on its own."
+              runbook_url: "https://github.com/mageride/mageride/blob/main/docs/runbooks/ride-stuck.md"
+
+  # ===================================================================================
+  # `state='Offered'` age > 20 s → page. §13.3.1 row 2.
+  # ===================================================================================
+  - name: a ride stuck in Offered pages after its window
+    interval: 15s
+    input_series:
+      - series: 'mageride_rides_stuck{state="Offered",service="ride-svc"}'
+        values: "0 0 2+0x40"
+
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: RideStuckOffered
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: RideStuckOffered
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              stuck_state: Offered
+              plane: ride
+              business_slo: "true"
+              state: Offered
+            exp_annotations:
+              summary: "2 ride(s) have been Offered for over 20 s"
+              description: "ADD §13.3.1 row 2. The offer TTL is 15 s, so this is a timer fault — the offer_expiry sweep is not firing. Check RideTimerBacklogHigh, which usually fires with it."
+              runbook_url: "https://github.com/mageride/mageride/blob/main/docs/runbooks/ride-stuck.md"
+
+  # ===================================================================================
+  # `state='Accepted'` with no live position > 60 s → page. §13.3.1 row 3.
+  # Carries `approximated="true"`: ride-svc publishes time-in-state, which is a superset.
+  # ===================================================================================
+  - name: an accepted ride whose driver has gone dark pages
+    interval: 15s
+    input_series:
+      - series: 'mageride_rides_stuck{state="Accepted",service="ride-svc"}'
+        values: "0 1+0x40"
+
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: RideStuckAccepted
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              stuck_state: Accepted
+              plane: ride
+              business_slo: "true"
+              approximated: "true"
+              state: Accepted
+            exp_annotations:
+              summary: "1 accepted ride(s) have not moved for over 60 s"
+              description: "ADD §13.3.1 row 3 — driver app killed, or a network black hole. Approximated as time-in-state: ride-svc holds no positions, so this counts every ride that has been Accepted for 60 s, not only those whose driver has gone dark. Cross-check the driver's MQTT session before treating it as an outage."
+              runbook_url: "https://github.com/mageride/mageride/blob/main/docs/runbooks/ride-stuck.md"
+
+  # ===================================================================================
+  # `state='DriverArrived'` age > 10 min, "Page: Yes (after 12 min)". §13.3.1 row 4.
+  #
+  # The gauge carries the 10 minutes and the rule carries the extra 2, so the alert must
+  # still be silent a minute after the gauge goes non-zero and firing three minutes after.
+  # This is the case that would silently regress if somebody "tidied" the `for:` durations.
+  # ===================================================================================
+  - name: a driver waiting at the kerb pages only after the extra two minutes
+    interval: 15s
+    input_series:
+      - series: 'mageride_rides_stuck{state="DriverArrived",service="ride-svc"}'
+        values: "0 0 0 0 1+0x60"
+
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: RideStuckDriverArrived
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: RideStuckDriverArrived
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              stuck_state: DriverArrived
+              plane: ride
+              business_slo: "true"
+              state: DriverArrived
+            exp_annotations:
+              summary: "1 ride(s) have had a driver waiting for over 12 minutes"
+              description: "ADD §13.3.1 row 4 — the rider no-show timer has not fired, or the app is stuck. The driver is sitting at the kerb earning nothing. 10 min in the gauge plus the 2 min §13.3.1 adds before paging."
+              runbook_url: "https://github.com/mageride/mageride/blob/main/docs/runbooks/ride-stuck.md"
+
+  # ===================================================================================
+  # `state='InProgress'` with no GPS > 5 min, "Page: Yes (after 7 min)". §13.3.1 row 5.
+  # ===================================================================================
+  - name: a ride in progress with no GPS pages only after the extra two minutes
+    interval: 15s
+    input_series:
+      - series: 'mageride_rides_stuck{state="InProgress",service="ride-svc"}'
+        values: "0 0 0 0 1+0x60"
+
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: RideStuckInProgress
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: RideStuckInProgress
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              stuck_state: InProgress
+              plane: ride
+              business_slo: "true"
+              approximated: "true"
+              state: InProgress
+            exp_annotations:
+              summary: "1 ride(s) in progress have not moved for over 7 minutes"
+              description: "ADD §13.3.1 row 5 — foreground service killed; recovery is an FCM high-priority wake plus the local replay buffer. Approximated as time-in-state, so a long journey through traffic is also counted; check the vehicle's last sample."
+              runbook_url: "https://github.com/mageride/mageride/blob/main/docs/runbooks/ride-stuck.md"
+
+  # ===================================================================================
+  # `Completed` + `PaymentPending` > 10 min → page. §13.3.1 row 6. The exact row: this is
+  # ride-svc's own PaymentPending.
+  # ===================================================================================
+  - name: a completed ride awaiting payment pages
+    interval: 15s
+    input_series:
+      - series: 'mageride_rides_stuck{state="PaymentPending",service="ride-svc"}'
+        values: "0 4+0x40"
+
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: RideStuckPaymentPending
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              stuck_state: PaymentPending
+              plane: money
+              business_slo: "true"
+              state: PaymentPending
+            exp_annotations:
+              summary: "4 completed ride(s) have been awaiting payment for over 10 minutes"
+              description: "ADD §13.3.1 row 6 — a provider callback is stuck; check OnePay webhook health. PaymentPending is not exempt from ux_rides_open_passenger, so each of these is a passenger who cannot book their next ride."
+              runbook_url: "https://github.com/mageride/mageride/blob/main/docs/runbooks/payment-callback-latency.md"
+
+  # ===================================================================================
+  # A platform with nothing stuck fires nothing. The case that makes every other case
+  # meaningful: a rule with an inverted comparison would pass all of them and this one.
+  # ===================================================================================
+  - name: a healthy platform fires no stuck-state alert
+    interval: 15s
+    input_series:
+      - series: 'mageride_rides_stuck{state="Matching",service="ride-svc"}'
+        values: "0+0x40"
+      - series: 'mageride_rides_stuck{state="Offered",service="ride-svc"}'
+        values: "0+0x40"
+      - series: 'mageride_rides_stuck{state="Accepted",service="ride-svc"}'
+        values: "0+0x40"
+      - series: 'mageride_rides_stuck{state="DriverArrived",service="ride-svc"}'
+        values: "0+0x40"
+      - series: 'mageride_rides_stuck{state="InProgress",service="ride-svc"}'
+        values: "0+0x40"
+      - series: 'mageride_rides_stuck{state="PaymentPending",service="ride-svc"}'
+        values: "0+0x40"
+      - series: 'mageride_payments_overpaid{service="admin-bff"}'
+        values: "0+0x40"
+      - series: 'mageride_registry_expired_documents_dispatching{service="admin-bff"}'
+        values: "0+0x40"
+
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: RideStuckMatching
+        exp_alerts: []
+      - eval_time: 9m
+        alertname: RideStuckOffered
+        exp_alerts: []
+      - eval_time: 9m
+        alertname: RideStuckAccepted
+        exp_alerts: []
+      - eval_time: 9m
+        alertname: RideStuckDriverArrived
+        exp_alerts: []
+      - eval_time: 9m
+        alertname: RideStuckInProgress
+        exp_alerts: []
+      - eval_time: 9m
+        alertname: RideStuckPaymentPending
+        exp_alerts: []
+      - eval_time: 9m
+        alertname: ExpiredDocumentsStillDispatching
+        exp_alerts: []
+      - eval_time: 9m
+        alertname: StuckStateMetricsMissing
+        exp_alerts: []
+
+  # ===================================================================================
+  # `documents.expires_at < now()` AND driver still dispatchable. §13.3.1 row 8.
+  # ===================================================================================
+  - name: a vehicle dispatching on a lapsed document pages
+    interval: 15s
+    input_series:
+      - series: 'mageride_registry_expired_documents_dispatching{service="admin-bff"}'
+        values: "0 0 7+0x60"
+
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: ExpiredDocumentsStillDispatching
+        exp_alerts: []
+      - eval_time: 8m
+        alertname: ExpiredDocumentsStillDispatching
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              stuck_state: DocumentExpiry
+              plane: registry
+              business_slo: "true"
+            exp_annotations:
+              summary: "7 vehicle(s) are still dispatchable on a lapsed document"
+              description: "ADD §13.3.1 row 8 — the E-03 doc-expiry job is not running. Counted by vehicle, because a vehicle is what dispatch offers and what a passenger gets into; every one of these is a car whose insurance, permit or licence the platform should already have taken off the road."
+              runbook_url: "https://github.com/mageride/mageride/blob/main/docs/runbooks/document-expiry-job.md"
+
+  # ===================================================================================
+  # `payment.state='Overpaid'` count > 0 for > 1 h. §13.3.1 row 7 — the one row with an
+  # hour in it, so this case runs on a 1-minute interval to keep the series short.
+  # ===================================================================================
+  - name: an overpaid payment pages only after a full hour
+    interval: 1m
+    input_series:
+      - series: 'mageride_payments_overpaid{service="admin-bff"}'
+        values: "1+0x90"
+
+    alert_rule_test:
+      - eval_time: 45m
+        alertname: PaymentsOverpaidBacklog
+        exp_alerts: []
+      - eval_time: 70m
+        alertname: PaymentsOverpaidBacklog
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              stuck_state: Overpaid
+              plane: money
+              business_slo: "true"
+            exp_annotations:
+              summary: "1 payment(s) have been Overpaid for over an hour"
+              description: "ADD §13.3.1 row 7 — a late-callback storm; check OnePay reconciliation. Each row is money the platform owes back and a Finance decision nobody has taken (SCR-AP-006)."
+              runbook_url: "https://github.com/mageride/mageride/blob/main/docs/runbooks/payments-overpaid.md"
+
+  # ===================================================================================
+  # The meta-alert: ride-svc is serving traffic and the gauges have stopped.
+  #
+  # This is the failure every rule above shares — StuckStateObserver reports 0 rather than
+  # failing the scrape when its query throws, so a broken observer and a healthy platform
+  # look identical. Here the series is absent entirely, which is the harder case: nothing
+  # to compare against zero.
+  # ===================================================================================
+  - name: gauges that stop being published on a live service page
+    interval: 1m
+    input_series:
+      - series: 'http_server_request_duration_seconds_count{service="ride-svc",job="platform-services"}'
+        values: "0+60x30"
+
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: StuckStateMetricsMissing
+        exp_alerts: []
+      - eval_time: 25m
+        alertname: StuckStateMetricsMissing
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              plane: ride
+              business_slo: "true"
+            exp_annotations:
+              summary: "The R-20 stuck-state gauges have stopped being published"
+              description: "ride-svc is serving requests and no mageride_rides_stuck series is being scraped, so all eight §13.3.1 pages are silent. Either Ride:StuckStateMetricsEnabled was turned off or the service is not in the scrape config."
+              runbook_url: "https://github.com/mageride/mageride/blob/main/docs/runbooks/ride-stuck.md"
+
+  # A service that is not running is not the same failure, and must not page: the whole
+  # platform being down has its own alert.
+  - name: gauges absent on a service that is also absent do not page
+    interval: 1m
+    input_series:
+      - series: 'http_server_request_duration_seconds_count{service="ride-svc",job="platform-services"}'
+        values: "100+0x30"
+
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: StuckStateMetricsMissing
+        exp_alerts: []

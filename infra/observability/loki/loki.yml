@@ -1,0 +1,79 @@
+# =====================================================================================
+# MageRide — Loki (C119). ADD §13.1's logs pillar; D7' §12 "Loki + Tempo (OTLP); structured JSON".
+#
+# Single-binary, filesystem-backed, no object store — this is the dev and replica shape.
+# Production (DOKS) points `storage_config` at Spaces/S3 and runs the read/write split.
+# =====================================================================================
+
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+  grpc_listen_port: 9096
+  # Structured JSON log lines from twenty-odd services are not small, and the OTLP push
+  # path batches them.
+  grpc_server_max_recv_msg_size: 8388608
+  grpc_server_max_send_msg_size: 8388608
+  log_level: warn
+
+common:
+  instance_addr: 127.0.0.1
+  path_prefix: /loki
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+
+schema_config:
+  configs:
+    - from: 2026-01-01
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+limits_config:
+  # 7 days. The platform's audit trail is `audit.events` in Postgres and Redpanda
+  # (D6' §2.1), not Loki — logs here are for reading during and just after an incident.
+  retention_period: 168h
+  # PII: a log line can carry a phone number even though nothing intends it to. Short
+  # retention is the mitigation that does not depend on every service being careful.
+  reject_old_samples: true
+  reject_old_samples_max_age: 168h
+  # Trace-id lookups from an alert are the main query, and they are cheap; a dashboard
+  # panel over a day of one service is the expensive one.
+  max_query_series: 10000
+  max_query_parallelism: 8
+  volume_enabled: true
+  # OTLP resource attributes worth indexing. Everything else stays in the line — a label
+  # per request id would make one stream per request, which is how Loki falls over.
+  otlp_config:
+    resource_attributes:
+      attributes_config:
+        - action: index_label
+          attributes:
+            - service.name
+            - service.namespace
+            - deployment.environment
+
+compactor:
+  working_directory: /loki/compactor
+  retention_enabled: true
+  delete_request_store: filesystem
+
+ruler:
+  # No Loki alert rules: every alert on this platform is a Prometheus rule with a runbook
+  # (C119), and two alerting engines would mean two places to look when a page arrives.
+  storage:
+    type: local
+    local:
+      directory: /loki/rules
+
+analytics:
+  reporting_enabled: false

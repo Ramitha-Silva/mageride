@@ -1,0 +1,83 @@
+# =====================================================================================
+# MageRide — consumer lag recording rules (C119)
+#
+# --- WHY THIS FILE EXISTS ----------------------------------------------------------------
+# ADD §13.2 asks for "consumer lag per partition (alert > 5 s)" and D7' §12 for "consumer
+# lag warn > 10k / page > 100k". **Redpanda v24.2 publishes no lag metric.** Verified
+# against the pinned broker (`redpandadata/redpanda:v24.2.26`, the image
+# `docker-compose.dev.slim.yml` runs): `/public_metrics` carries
+# `redpanda_kafka_consumer_group_committed_offset` and `redpanda_kafka_max_offset`, and
+# nothing named `..._lag_...` at all.
+#
+# So lag is computed here, once, and every alert and dashboard reads the recorded series.
+# Writing the join into eight places would be eight chances to get the vector matching
+# wrong, and the failure mode of getting it wrong is a rule that silently matches nothing.
+#
+# --- THE JOIN ----------------------------------------------------------------------------
+# `redpanda_kafka_max_offset` is per (namespace, topic, partition) — the high watermark.
+# `..._consumer_group_committed_offset` is per (group, topic, partition, shard) — where a
+# group has got to. `group_right()` is the direction that matters: one watermark, many
+# groups reading it, and the result must keep the group.
+#
+# `clamp_min(…, 0)` because the two are scraped from different shards of the same broker
+# and a committed offset can momentarily read one ahead of the watermark. A negative lag is
+# not a fact about anything.
+# =====================================================================================
+
+groups:
+
+  - name: mageride.stream.lag
+    interval: 15s
+    rules:
+
+      # The join, once. Everything below is an aggregation over this series — the file's own
+      # reason for existing is that a `group_right()` match written twice is two chances to
+      # get it wrong, and a wrong match produces an empty result rather than an error.
+      #
+      # It is also the per-partition series ADD §13.2 asks for by name ("consumer lag per
+      # partition"), so recording it is not merely a refactor.
+      - record: mageride:consumer_lag:partition_messages
+        expr: |
+          clamp_min(
+            max by (redpanda_topic, redpanda_partition) (
+              redpanda_kafka_max_offset{redpanda_namespace="kafka"}
+            )
+            - on (redpanda_topic, redpanda_partition) group_right()
+            max by (redpanda_group, redpanda_topic, redpanda_partition) (
+              redpanda_kafka_consumer_group_committed_offset
+            ),
+            0
+          )
+
+      # Lag in messages, per group and topic. D7' §12's unit.
+      - record: mageride:consumer_lag:messages
+        expr: sum by (redpanda_group, redpanda_topic) (mageride:consumer_lag:partition_messages)
+
+      # The worst single partition. ADD §13.2 says "per partition", and a group whose
+      # twelve partitions are level except one that is an hour behind has a healthy sum and
+      # a passenger somewhere whose vehicle has not moved.
+      - record: mageride:consumer_lag:messages_max_partition
+        expr: max by (redpanda_group, redpanda_topic) (mageride:consumer_lag:partition_messages)
+
+      # Throughput per topic. Recorded BEFORE the seconds figure that divides by it: rules
+      # within a group evaluate top to bottom, so a later rule reads an earlier one's output
+      # from this same evaluation rather than recomputing the rate over every topic twice.
+      # Produced and fetched side by side is also what says whether a lag is the consumer
+      # slowing down or the producer speeding up.
+      - record: mageride:stream:records_produced5m
+        expr: sum by (redpanda_topic) (rate(redpanda_kafka_records_produced_total{redpanda_namespace="kafka"}[5m]))
+
+      # Lag in seconds — ADD §13.2's unit, and the one §13.4's "> 5 s sustained 2 min"
+      # sentence is written in. Messages behind divided by messages produced per second on
+      # that topic: how long the consumer would take to catch up if production stopped.
+      #
+      # A topic with no production has no meaningful drain time, so the `> 0` drops it
+      # rather than reporting a lag of several million seconds on an idle topic.
+      - record: mageride:consumer_lag:seconds
+        expr: |
+          mageride:consumer_lag:messages
+          / on (redpanda_topic) group_left()
+          (mageride:stream:records_produced5m > 0)
+
+      - record: mageride:stream:records_fetched5m
+        expr: sum by (redpanda_topic) (rate(redpanda_kafka_records_fetched_total{redpanda_namespace="kafka"}[5m]))

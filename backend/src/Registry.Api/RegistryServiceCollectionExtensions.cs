@@ -1,18 +1,34 @@
 using MageRide.Registry.Configuration;
+using MageRide.Registry.Observability;
 using MageRide.Registry.Onboarding;
 using MageRide.Registry.Persistence;
 using MageRide.Registry.Sharing;
 using MageRide.Registry.Vehicles;
+using MageRide.Shared.Observability;
 using MageRide.Shared.Storage;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 
 namespace MageRide.Registry;
 
 /// <summary>Everything registry-svc owns on top of the shared kernel.</summary>
 public static class RegistryServiceCollectionExtensions
 {
+    /// <summary>The service's scrape-time gauges (C119). One meter, disposed with the host.</summary>
+    private static ScrapedGauges Gauges(IServiceProvider services)
+    {
+        var gauges = new ScrapedGauges(
+            services.GetRequiredService<IServiceScopeFactory>(),
+            services.GetRequiredService<ILoggerFactory>().CreateLogger<ScrapedGauges>());
+
+        ExpiredDocumentsGauge.Publish(gauges);
+
+        return gauges;
+    }
+
     public static IServiceCollection AddRegistryServices(this IServiceCollection services, IConfiguration configuration)
     {
         ArgumentNullException.ThrowIfNull(services);
@@ -28,6 +44,13 @@ public static class RegistryServiceCollectionExtensions
         // E-03's tracker. Registered as a concrete type as well, so a test can drive one sweep
         // deterministically instead of waiting on the ticker (the shape OfferExpiryWorker uses).
         services.AddSingleton<DocumentExpiryWorker>();
+
+        // Δ C119 (R-20). ADD §13.3.1 row 8 as a gauge on the platform meter — "is the worker above
+        // actually running", asked of the column that worker writes. Started as a hosted service so
+        // the gauge exists from the first scrape; nothing else resolves it, because a scrape reads
+        // the meter and not the service.
+        services.AddSingleton(sp => Gauges(sp));
+        services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<ScrapedGauges>());
 
         services.AddSingleton<IVehicleRepository, VehicleRepository>();
         services.AddSingleton<IDriverProfileRepository, DriverProfileRepository>();

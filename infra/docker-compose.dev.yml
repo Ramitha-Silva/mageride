@@ -390,8 +390,20 @@ services:
 #
 #   admin-portal   C104  Next.js, Node 24-alpine, 3001, admin.mageride.lk   (AL-02)
 #   fleet-portal   C111  Next.js, Node 24-alpine, 3002, fleet.mageride.lk   (AL-03)
-#   monitoring     C119  Prometheus + Grafana, 9090 / 3000
 #   nominatim      C056  8 GB — hosted on a SEPARATE VPS, never co-located (D-14)
+#
+# `monitoring` (9090 / 3000) LANDED as C119 and is deliberately not here either: it is
+# `infra/observability/docker-compose.yml`, a file of its own on the same project and the
+# same `mageride_mr` network. Separate because observability has to be able to come up
+# against a running stack, against the lightweight production replica, or against nothing
+# at all — a scrape target that is absent is a target that is DOWN, which is the correct
+# reading and is what its `up` alerts fire on.
+#
+#   bash infra/scripts/observability-up.sh    ·    observability-down.sh [--volumes]
+#
+# Point a service at it with `Otel__Endpoint=http://otel-collector:4317` (D7' §4.1).
+# **Take it down BEFORE this stack** — compose will not remove a network that still has
+# endpoints attached.
 #
 # infra/deploy/haproxy.cfg already carries the admin./fleet. vhost backends and starts
 # cleanly while they are absent, so adding a portal container needs no HAProxy change.

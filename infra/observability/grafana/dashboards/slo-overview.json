@@ -1,0 +1,279 @@
+{
+  "uid": "mageride-slo",
+  "title": "MageRide — SLOs and error budgets",
+  "description": "ADD §13.3, row by row. Every target here is the one the spec prints; C119's fence forbids softening any of them. Each tile is the SLI a burn-rate alert reads, so a green tile and a firing page are contradictory by construction.",
+  "tags": ["mageride", "slo", "add-13.3"],
+  "timezone": "Asia/Colombo",
+  "editable": false,
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-24h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "The two SLOs a page is written against directly",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Position E2E p95 — target < 5 s",
+      "description": "ADD §13.3 row 1 / D-19 / NFR-01. Device GNSS instant to the frame reaching a subscriber, in one histogram — fanout-svc holds both ends. Adding p95(ingest) to p95(fanout) would be a number no SLO is written about.",
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 2,
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 4 }, { "color": "red", "value": 5 }] }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "background", "graphMode": "area" },
+      "targets": [{ "refId": "A", "expr": "mageride:position_e2e:p95", "instant": true }]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Position E2E p99 — target < 8 s",
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 2,
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 6.5 }, { "color": "red", "value": 8 }] }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "background", "graphMode": "area" },
+      "targets": [{ "refId": "A", "expr": "mageride:position_e2e:p99", "instant": true }]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "SOS dispatch p99 — target ≤ 5 s",
+      "description": "ADD §13.3 row 2 / D-33. Button tap to the alert being handed to the primary gateway. Any 5-minute window over 5 s pages immediately — no burn rate, no smoothing: the event being measured is somebody pressing a panic button.",
+      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 2,
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 3 }, { "color": "red", "value": 5 }] }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "background", "graphMode": "area" },
+      "targets": [{ "refId": "A", "expr": "mageride:sos_dispatch:p99", "instant": true }]
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "SOS reaching no gateway — target 0",
+      "description": "Not a latency problem, and faster than a slow success — so the tile beside this one cannot see it. An SOS that goes nowhere looks exactly like one that worked.",
+      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 2,
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 0.0001 }] }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "background", "graphMode": "none" },
+      "targets": [{ "refId": "A", "expr": "mageride:sos_dispatch:failure_ratio5m", "instant": true }]
+    },
+
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Position E2E latency against its targets",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "lineWidth": 2, "fillOpacity": 0, "showPoints": "never", "thresholdsStyle": { "mode": "dashed" } },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "transparent", "value": null }, { "color": "red", "value": 5 }] }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        { "refId": "A", "expr": "mageride:position_e2e:p95", "legendFormat": "end-to-end p95" },
+        { "refId": "B", "expr": "mageride:position_e2e:p99", "legendFormat": "end-to-end p99" },
+        { "refId": "C", "expr": "mageride:position_ingest:p95", "legendFormat": "…of which ingest (device → cell stream)" },
+        { "refId": "D", "expr": "mageride:position_fanout:p95", "legendFormat": "…of which fan-out (cell stream → group)" }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Position error budget burn (14× pages)",
+      "description": "The share of positions slower than the 5 s target, over three windows. §13.3's burn column is 14× a 1% budget, which is the red line at 14%.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": { "lineWidth": 1, "fillOpacity": 5, "showPoints": "never", "thresholdsStyle": { "mode": "dashed" } },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "transparent", "value": null }, { "color": "orange", "value": 0.06 }, { "color": "red", "value": 0.14 }] }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        { "refId": "A", "expr": "mageride:position_e2e:error_ratio5m", "legendFormat": "5 min" },
+        { "refId": "B", "expr": "mageride:position_e2e:error_ratio1h", "legendFormat": "1 hour" },
+        { "refId": "C", "expr": "mageride:position_e2e:error_ratio6h", "legendFormat": "6 hours" }
+      ]
+    },
+
+    {
+      "id": 20,
+      "type": "row",
+      "title": "Availability — §13.3 rows 5, 6 and 7",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "API 5xx ratio by service (99.9% monthly)",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 15 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": { "lineWidth": 1, "fillOpacity": 5, "showPoints": "never", "thresholdsStyle": { "mode": "dashed" } },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "transparent", "value": null }, { "color": "red", "value": 0.00243 }] }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["max"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [{ "refId": "A", "expr": "mageride:api:error_ratio6h", "legendFormat": "{{service}}" }]
+    },
+    {
+      "id": 22,
+      "type": "timeseries",
+      "title": "Tracking plane 5xx ratio (99.5% monthly)",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 15 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": { "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "thresholdsStyle": { "mode": "dashed" } },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "transparent", "value": null }, { "color": "red", "value": 0.01215 }] }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
+      "targets": [{ "refId": "A", "expr": "mageride:tracking:error_ratio6h", "legendFormat": "tracking plane, 6 h" }]
+    },
+    {
+      "id": 23,
+      "type": "timeseries",
+      "title": "WebSocket connect failures (5% over 5 min pages)",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 15 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": { "lineWidth": 1, "fillOpacity": 10, "showPoints": "never", "thresholdsStyle": { "mode": "dashed" } },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "transparent", "value": null }, { "color": "red", "value": 0.05 }] }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
+      "targets": [{ "refId": "A", "expr": "mageride:ws_connect:failure_ratio5m", "legendFormat": "/hubs failure ratio" }]
+    },
+
+    {
+      "id": 30,
+      "type": "row",
+      "title": "Ride and money — §13.3 rows 3, 8, 9 (awaiting instrumentation)",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 23 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 31,
+      "type": "timeseries",
+      "title": "Offer push p95 — target < 2 s",
+      "description": "ADD §13.3 row 8. dispatch-svc does not yet record this histogram, so the panel is empty by design rather than by accident — see the C119 handoff. An SLO with no panel is an SLO nobody notices is unmeasured.",
+      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "lineWidth": 1, "fillOpacity": 0, "showPoints": "never", "thresholdsStyle": { "mode": "dashed" } },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "transparent", "value": null }, { "color": "red", "value": 2 }] },
+          "noValue": "not instrumented yet — C119 handoff"
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
+      "targets": [{ "refId": "A", "expr": "mageride:offer_push:p95", "legendFormat": "offer push p95" }]
+    },
+    {
+      "id": 32,
+      "type": "timeseries",
+      "title": "Atomic accept p95 — target < 300 ms",
+      "description": "ADD §13.3 row 9. Driver tap to 200/409. The accept is one conditional UPDATE (ADD §11.11), so a slow resolution is Postgres contention rather than application work.",
+      "gridPos": { "h": 7, "w": 8, "x": 8, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "lineWidth": 1, "fillOpacity": 0, "showPoints": "never", "thresholdsStyle": { "mode": "dashed" } },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "transparent", "value": null }, { "color": "red", "value": 0.3 }] },
+          "noValue": "not instrumented yet — C119 handoff"
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
+      "targets": [{ "refId": "A", "expr": "mageride:accept_resolution:p95", "legendFormat": "accept resolution p95" }]
+    },
+    {
+      "id": 33,
+      "type": "timeseries",
+      "title": "Payment callback resolve p95 — target < 30 s",
+      "description": "ADD §13.3 row 3. Initiated → terminal. This SLO burning becomes the Completed+PaymentPending stuck-state page within ten minutes, because a ride cannot leave PaymentPending until fare-svc settles it.",
+      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "lineWidth": 1, "fillOpacity": 0, "showPoints": "never", "thresholdsStyle": { "mode": "dashed" } },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "transparent", "value": null }, { "color": "red", "value": 30 }] },
+          "noValue": "not instrumented yet — C119 handoff"
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
+      "targets": [{ "refId": "A", "expr": "mageride:payment_callback:p95", "legendFormat": "payment resolve p95" }]
+    },
+
+    {
+      "id": 40,
+      "type": "table",
+      "title": "Alerts firing now, with their runbooks",
+      "description": "Every alert on this platform carries a runbook_url and verify-observability.sh fails if the file it names does not exist. This table is where an on-call engineer starts.",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 31 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "custom": { "align": "auto" } }, "overrides": [] },
+      "options": { "showHeader": true },
+      "targets": [{ "refId": "A", "expr": "ALERTS{alertstate=\"firing\"}", "instant": true, "format": "table" }],
+      "transformations": [
+        { "id": "organize", "options": { "excludeByName": { "Time": true, "Value": true, "__name__": true, "alertstate": true, "instance": true, "job": true, "environment": true, "platform": true }, "renameByName": { "alertname": "Alert", "severity": "Severity", "plane": "Plane", "service": "Service", "slo": "SLO", "stuck_state": "Stuck state" } } }
+      ]
+    }
+  ]
+}

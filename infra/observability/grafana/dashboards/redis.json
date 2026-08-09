@@ -1,0 +1,136 @@
+{
+  "uid": "mageride-redis",
+  "title": "MageRide — Redis (live geo, locks, caches)",
+  "description": "ADD §13.2's Redis row: cmds/s, evictions, memory%, slowlog count, replication lag. Redis holds the live map — `geo:live`, `veh:meta`, the `cell:{h3}` streams — so an eviction here is a vehicle that disappears from every passenger's screen with nothing logged anywhere.",
+  "tags": ["mageride", "redis", "add-13.2"],
+  "timezone": "Asia/Colombo",
+  "editable": false,
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-3h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Up",
+      "description": "Redis down degrades the map to ADD §12's limited_live, leaves dispatch with no candidate pool, and takes every rate limiter with it.",
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] }, "mappings": [{ "type": "value", "options": { "0": { "text": "DOWN" }, "1": { "text": "UP" } } }] }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "background", "graphMode": "none" },
+      "targets": [{ "refId": "A", "expr": "redis_up", "instant": true }]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Commands/s",
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "cps", "decimals": 0 }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "none", "graphMode": "area" },
+      "targets": [{ "refId": "A", "expr": "rate(redis_commands_processed_total[5m])", "instant": true }]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Evictions/s",
+      "description": "ADD §13.4 pages above zero. The stack runs `--maxmemory-policy noeviction`, so an eviction means both that memory is short AND that the policy is not what the compose file says.",
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "cps", "decimals": 2, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 0.0001 }] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "background", "graphMode": "area" },
+      "targets": [{ "refId": "A", "expr": "rate(redis_evicted_keys_total[5m])", "instant": true }]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Memory used",
+      "description": "Under noeviction the next write past the limit is an ERROR, not an eviction — position-processor stops indexing rather than the map losing its oldest vehicle. Empty when Redis has no maxmemory: 0 means unlimited, and a ratio against it would be meaningless (RedisNoMemoryLimit covers that case).",
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "decimals": 2, "noValue": "no maxmemory set", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 0.85 }, { "color": "red", "value": 0.95 }] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "background", "graphMode": "area" },
+      "targets": [{ "refId": "A", "expr": "redis_memory_used_bytes / (redis_memory_max_bytes > 0)", "instant": true }]
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Slow commands (last 5 min)",
+      "description": "Redis is single-threaded: one slow command is every other command waiting behind it.",
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 1 }] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "value", "graphMode": "area" },
+      "targets": [{ "refId": "A", "expr": "increase(redis_slowlog_length[5m])", "instant": true }]
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Connected clients",
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "none", "graphMode": "area" },
+      "targets": [{ "refId": "A", "expr": "redis_connected_clients", "instant": true }]
+    },
+
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Memory against its ceiling",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "bytes", "custom": { "lineWidth": 1, "fillOpacity": 10, "showPoints": "never" } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        { "refId": "A", "expr": "redis_memory_used_bytes", "legendFormat": "used" },
+        { "refId": "B", "expr": "redis_memory_max_bytes", "legendFormat": "maxmemory" },
+        { "refId": "C", "expr": "redis_memory_used_rss_bytes", "legendFormat": "rss" }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Throughput, hit ratio and rejections",
+      "description": "The keyspace hit ratio is the D-15 geocode cache and D-23's entitlement cache earning their keep; a collapse there puts load straight onto Nominatim and Postgres.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "cps", "custom": { "lineWidth": 1, "fillOpacity": 5, "showPoints": "never" } }, "overrides": [{ "matcher": { "id": "byName", "options": "keyspace hit ratio" }, "properties": [{ "id": "unit", "value": "percentunit" }, { "id": "custom.axisPlacement", "value": "right" }, { "id": "max", "value": 1 }] }] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        { "refId": "A", "expr": "rate(redis_commands_processed_total[$__rate_interval])", "legendFormat": "commands/s" },
+        { "refId": "B", "expr": "rate(redis_keyspace_hits_total[$__rate_interval]) / clamp_min(rate(redis_keyspace_hits_total[$__rate_interval]) + rate(redis_keyspace_misses_total[$__rate_interval]), 1e-9)", "legendFormat": "keyspace hit ratio" },
+        { "refId": "C", "expr": "rate(redis_rejected_connections_total[$__rate_interval])", "legendFormat": "rejected connections/s" },
+        { "refId": "D", "expr": "rate(redis_expired_keys_total[$__rate_interval])", "legendFormat": "expired keys/s" }
+      ]
+    },
+
+    {
+      "id": 20,
+      "type": "timeseries",
+      "title": "Evictions — ADD §13.4's zero threshold",
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 12 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "cps", "decimals": 3, "custom": { "lineWidth": 2, "fillOpacity": 30, "showPoints": "never" } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
+      "targets": [{ "refId": "A", "expr": "rate(redis_evicted_keys_total[$__rate_interval])", "legendFormat": "evicted keys/s" }]
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "Replication lag and persistence",
+      "description": "The MVP is a single node with AOF `everysec`, so a hard kill loses at most a second of writes (ADD §9.4). `rdb_last_bgsave` failing is the backstop failing quietly.",
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 12 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "lineWidth": 1, "fillOpacity": 5, "showPoints": "never" } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        { "refId": "A", "expr": "redis_connected_slaves", "legendFormat": "connected replicas" },
+        { "refId": "B", "expr": "redis_master_repl_offset - ignoring(instance) group_left redis_master_repl_offset", "legendFormat": "replica offset delta" },
+        { "refId": "C", "expr": "redis_rdb_last_bgsave_status", "legendFormat": "last bgsave ok" },
+        { "refId": "D", "expr": "redis_aof_last_write_status", "legendFormat": "last AOF write ok" }
+      ]
+    }
+  ]
+}

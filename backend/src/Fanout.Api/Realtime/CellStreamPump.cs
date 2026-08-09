@@ -162,6 +162,23 @@ internal sealed class CellStreamPump(
     /// <summary>
     /// Splits a cell's frames into what the public map may show and what has to be taken off it.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The D-19 observation is recorded here, in the loop that already holds both of its ends.</b>
+    /// ADD §13.3's position SLO is the sample's own GNSS instant to the moment its frame leaves for
+    /// a subscriber, and <paramref name="now"/> is that moment — the tick's instant, captured once
+    /// by <see cref="TickAsync"/> and used for the send too. Measuring from here rather than after
+    /// the send keeps the return type <see cref="VehicleFrame"/>, which is what the group is
+    /// actually sent: widening it to <see cref="CellFrame"/> to carry the timestamp one line further
+    /// cost a projection and a second pass over every visible frame on the hot path, for a
+    /// bit-identical number.
+    /// </para>
+    /// <para>
+    /// Per frame, not per batch: a batch carries the newest frame per vehicle and those were
+    /// captured at different instants, so one observation per batch would silently sample whichever
+    /// vehicle happened to be last.
+    /// </para>
+    /// </remarks>
     private async Task<IReadOnlyList<VehicleFrame>> FilterAsync(
         string cell, IReadOnlyList<CellFrame> frames, DateTimeOffset now, CancellationToken cancellationToken)
     {
@@ -180,6 +197,10 @@ internal sealed class CellStreamPump(
             {
                 visible.Add(frame.Frame);
                 seen[vehicleId] = now;
+
+                MageRideDiagnostics.RecordPositionE2E(
+                    frame.SampleTs, now, MageRideDiagnostics.PositionSurfaces.Geocell);
+
                 continue;
             }
 

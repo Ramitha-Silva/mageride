@@ -38,6 +38,31 @@ infra/
   scripts/migrate-verify.sh     the C003–C006 definition of done (no compose involved)
 ```
 
+## Observability (C119)
+
+```
+observability/docker-compose.yml   Prometheus · Alertmanager · Loki · Promtail · Tempo ·
+                                   Grafana · OTel Collector · blackbox + pg/redis exporters
+observability/CLAUDE.md            the component's own conventions and known gaps
+scripts/observability-up.sh        up, waits for healthy  ·  observability-down.sh [--volumes]
+scripts/verify-observability.sh    the C119 definition of done
+docs/runbooks/                     one per alert; every runbook_url is checked by the verify
+```
+
+- **Same project (`mageride`) and the same `mageride_mr` network as the dev stacks**, so this is
+  more containers on one network and never a second copy of anything. It does not `include` the
+  slim file: observability has to come up against a running stack, against the replica, or against
+  nothing at all while a rule is being written.
+- **Take observability down BEFORE the platform.** Compose will not remove a network that still
+  has endpoints attached, so `dev-down.sh` first leaves an error and a dangling network.
+- **Never pass `--remove-orphans` to a compose command that names only one of these files.**
+  It operates on the compose *project*, and all three stacks share `mageride` — so
+  `docker compose -f infra/observability/docker-compose.yml down --remove-orphans` deletes
+  Postgres, Redis, Redpanda, EMQX and MinIO. Use the `*-down.sh` scripts, which do not.
+- ~1.6 GB of limits. slim + observability fits beside a `dotnet build`; the full replica does not.
+- Every service reaches the collector at `Otel__Endpoint=http://otel-collector:4317` (D7' §4.1),
+  which is the only path for `tcp-adapter` — it has no HTTP surface to scrape.
+
 ## Working with the dev stacks
 
 - **One compose project, `mageride`.** Both files declare it, share the `mageride_mr`

@@ -1,0 +1,66 @@
+# =====================================================================================
+# MageRide — Blackbox exporter (C119). ADD §13.1's "Synthetic" row.
+#
+# What this answers that no service metric can: **is the platform reachable when nobody
+# happens to be asking?** An availability SLO computed from request counts cannot tell
+# "no errors" from "no traffic", and 03:00 in Colombo is mostly the second one.
+# =====================================================================================
+
+modules:
+
+  # The readiness probe, over HTTP. D7' §5.1's `/health/ready` pings Postgres, Redis and
+  # Kafka, so a 200 here is a real statement about the service's dependencies and not just
+  # about Kestrel being up.
+  http_2xx:
+    prober: http
+    timeout: 5s
+    http:
+      method: GET
+      valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+      valid_status_codes: [200]
+      # IPv4: the compose network hands out v4 and an unresolvable v6 lookup is a probe
+      # failure that looks like an outage.
+      preferred_ip_protocol: ip4
+      ip_protocol_fallback: false
+      fail_if_body_not_matches_regexp:
+        # The kernel's readiness payload. A 200 with a body saying something else is a
+        # proxy answering on the service's behalf, which is the failure this catches.
+        - "(?i)healthy|ready|ok"
+
+  # The edge over TLS, for the replica and production where HAProxy terminates it. Not
+  # scraped in dev — the dev certificate is self-signed by dev-up.sh.
+  https_2xx:
+    prober: http
+    timeout: 5s
+    http:
+      method: GET
+      valid_status_codes: [200]
+      preferred_ip_protocol: ip4
+      tls_config:
+        insecure_skip_verify: false
+
+  # A listener that accepts a connection. This is how the MQTT plane is probed: 8883 is
+  # TCP passthrough at HAProxy and never routed through the API gateway
+  # (infra/CLAUDE.md), so there is no HTTP surface to ask.
+  tcp_connect:
+    prober: tcp
+    timeout: 5s
+    tcp:
+      preferred_ip_protocol: ip4
+      ip_protocol_fallback: false
+
+  # An MQTT CONNECT far enough to see the broker answer. Not a full session — that needs a
+  # signed device JWT (E-02), which a probe cannot hold without being a credential in a
+  # config file. A CONNACK of any kind, including "not authorized", proves the broker is
+  # processing packets rather than merely accepting sockets.
+  mqtt_connect:
+    prober: tcp
+    timeout: 5s
+    tcp:
+      preferred_ip_protocol: ip4
+      query_response:
+        # MQTT 3.1.1 CONNECT: fixed header 0x10, remaining length 0x0c, "MQTT", level 4,
+        # clean session, 60 s keepalive, client id "mr-probe".
+        - send: "\x10\x14\x00\x04MQTT\x04\x02\x00\x3c\x00\x08mr-probe"
+        # CONNACK's first byte. The return code is deliberately not matched.
+        - expect: "\x20"

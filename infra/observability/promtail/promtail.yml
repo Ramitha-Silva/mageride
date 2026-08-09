@@ -1,0 +1,63 @@
+# =====================================================================================
+# MageRide — Promtail (C119). ADD §13.1 pairs Loki with Promtail.
+#
+# The BELT-AND-BRACES log path, not the primary one. Every .NET service already exports
+# its Serilog JSON over OTLP to the collector (C002's `Otel__LoggingEnabled`), which is
+# richer: those lines carry the trace and span ids, so a log jumps to its trace in Grafana.
+#
+# What Promtail adds is everything that is NOT a .NET service and therefore has no OTLP
+# exporter — Postgres, Redis, EMQX, Redpanda, HAProxy, the migrate one-shot — and the
+# lines a service writes before its OTLP pipeline is up, which is exactly where a
+# start-up failure lives.
+# =====================================================================================
+
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+  log_level: warn
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: docker
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 15s
+        filters:
+          # Only this platform's containers. The box also hosts the lightweight production
+          # replica (root CLAUDE.md), and shipping its logs into the dev stack's Loki would
+          # mix two environments that infra/CLAUDE.md says are never mixed.
+          - name: label
+            values: ["com.docker.compose.project=mageride"]
+
+    relabel_configs:
+      # `service` is the same label the Prometheus jobs stamp, so a metric panel and a log
+      # panel on one dashboard filter on one variable.
+      - source_labels: ["__meta_docker_container_label_com_docker_compose_service"]
+        target_label: service
+      - source_labels: ["__meta_docker_container_name"]
+        regex: "/(.*)"
+        target_label: container
+      - target_label: source
+        replacement: docker
+
+    pipeline_stages:
+      # .NET console output is Serilog's JSON when a service is configured for it and
+      # plain text before the logger is built. `json` on a non-JSON line is a no-op with
+      # `drop_malformed` unset, so both survive.
+      - json:
+          expressions:
+            level: level
+            trace_id: TraceId
+            span_id: SpanId
+      - labels:
+          level:
+      # Trace and span id stay in the line, NOT as labels: one stream per trace would be
+      # millions of streams. Grafana's derived field (grafana/provisioning/datasources)
+      # parses them out of the line and links to Tempo.
+      - output:
+          source: output

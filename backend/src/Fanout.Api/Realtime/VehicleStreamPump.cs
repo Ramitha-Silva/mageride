@@ -57,6 +57,18 @@ internal sealed class VehicleStreamPump(
     /// </remarks>
     private readonly ConcurrentDictionary<Guid, DateTimeOffset> _lastSent = new();
 
+    /// <summary>
+    /// ride → the sample instant last counted towards D-19 for it (C119).
+    /// </summary>
+    /// <remarks>
+    /// Separate from <see cref="_lastSent"/> and keyed by ride rather than by vehicle, because the
+    /// ride path deliberately does NOT suppress an unchanged position — a passenger's own vehicle is
+    /// the one marker that must never appear to stall — so the send and the measurement need
+    /// different memories. Entries are dropped with the ride's watchers in
+    /// <see cref="ForgetUnwatched"/>.
+    /// </remarks>
+    private readonly ConcurrentDictionary<Guid, DateTimeOffset> _lastRideSample = new();
+
     /// <summary>Vehicles currently withheld from their own group, so the removal is sent once.</summary>
     private readonly ConcurrentDictionary<Guid, string> _withheld = new();
 
@@ -161,6 +173,10 @@ internal sealed class VehicleStreamPump(
                 .SendAsync(Contract.Events.VehiclePositions, new[] { snapshot.Frame }, cancellationToken);
 
             MageRideDiagnostics.FanoutFramesSent.Add(1);
+            // Reached only when the snapshot is newer than the last one sent (the guard above), so
+            // every observation here is a distinct fix rather than a re-send.
+            MageRideDiagnostics.RecordPositionE2E(
+                snapshot.SampleTs, now, MageRideDiagnostics.PositionSurfaces.Vehicle);
         }
     }
 
@@ -215,6 +231,31 @@ internal sealed class VehicleStreamPump(
                     Contract.Events.DriverPosition,
                     new DriverPositionEvent(rideId, snapshot.Frame.Lat, snapshot.Frame.Lng, snapshot.Frame.Heading),
                     cancellationToken);
+
+            // Only a sample this ride has not already been sent counts towards D-19 (C119).
+            //
+            // **This gate is the difference between measuring the platform and measuring the tick
+            // interval.** Unlike PushVehiclesAsync above, this loop re-sends the current snapshot
+            // every tick whether or not the vehicle has moved — deliberately, because a ride's own
+            // vehicle is the one thing its passenger must never see stall. But a device reports
+            // roughly every 8 s at the blended cadence (D-20) against a 2 s batch interval, so the
+            // same fix would be observed four times, each against an older capture instant: one
+            // 500 ms position recorded as 0.5 s, 2.5 s, 4.5 s, 6.5 s. Three of those four are
+            // manufactured, two of them land past the 5 s bucket the SLI counts, and the D-19 error
+            // budget burns on the pump's own cadence.
+            if (snapshot.SampleTs is { } captured && _lastRideSample.TryGetValue(rideId, out var previous)
+                                                  && previous >= captured)
+            {
+                continue;
+            }
+
+            if (snapshot.SampleTs is { } fresh)
+            {
+                _lastRideSample[rideId] = fresh;
+            }
+
+            MageRideDiagnostics.RecordPositionE2E(
+                snapshot.SampleTs, now, MageRideDiagnostics.PositionSurfaces.Ride);
         }
     }
 
@@ -237,7 +278,7 @@ internal sealed class VehicleStreamPump(
                 Contract.Events.VehicleRemoved, new VehicleRemovedEvent(vehicleId, removal), cancellationToken);
     }
 
-    /// <summary>Drops the per-vehicle memory of vehicles nobody on this replica watches any more.</summary>
+    /// <summary>Drops the per-vehicle and per-ride memory of what nobody on this replica watches.</summary>
     private void Forget()
     {
         var watched = new HashSet<Guid>(connections.WatchedVehicles);
@@ -248,6 +289,19 @@ internal sealed class VehicleStreamPump(
             {
                 _lastSent.TryRemove(vehicleId, out _);
                 _withheld.TryRemove(vehicleId, out _);
+            }
+        }
+
+        // Rides are their own membership: a passenger watching a ride is not watching a vehicle
+        // group, so `WatchedVehicles` says nothing about them. Without this the D-19 memory grows
+        // by one entry per completed ride for the life of the replica.
+        var watchedRides = new HashSet<Guid>(connections.WatchedRides);
+
+        foreach (var rideId in _lastRideSample.Keys)
+        {
+            if (!watchedRides.Contains(rideId))
+            {
+                _lastRideSample.TryRemove(rideId, out _);
             }
         }
     }

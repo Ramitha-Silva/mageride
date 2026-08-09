@@ -145,7 +145,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C116 | fleet-portal-subscriptions | 4c | DONE | 2026-08-09 | **449 tests green** in `@mageride/fleet-portal` (27 files, was 380/24); the verify command exits 0, `next build` emits **27 routes** (was 24), `check-bundle.mjs` reports **AL-52: clean — 3 compiled stylesheets, 169.2 kB CSS**, and all six portal workspaces are green (**1,317 tests, 72 files**). **AL-23 is the shape of the code, not a rule in it**: eight of the nine Epic 23 proxies are `…/vehicles/{vehicleId}/…` and no contract has a fleet-wide queue or roster, so `?vehicle=` is what both screens *are* and `test/subscriptions.test.ts` asserts every target against `fleet.yaml`. **The proxies split Owner from Manager mid-screen** — the queue and roster are `RequireFleetSubRole(Manager)`, the fare override, cash mark, slip confirmation and AL-25 delete are `RequireFleetSubRole(Owner)` — so `canManageSubscribers()` was added as the portal's third seat-gated control, parsed back out of `FleetOpsEndpoints.cs` by test. **SCR-FP-012's manifest entry moved off `fleet-billing`**: that row is MageRide's monthly invoice to the fleet, and a subscriber's fare is the owner's (AL-24/AL-49/BR-23.10) — same gate, right fact. **AL-59 drift recorded rather than papered over**: `subscription.yaml` has four Mode B methods and `fleet.yaml`'s proxy copy still has five, so the portal's union is the wider one (a pre-AL-59 row renders as a historic method, not a blank cell) and nothing here offers a method at all. **SCR-FP-012's KPIs are one roster read**, and the caption says what they are not: "cash due" is *due* (nothing knows a month will be cash until the owner marks it) and "collected" is the fares of the paid subscribers, not the sum of what arrived. **A muted row is rendered, never filtered** (US-23.12) and Delete is drawn on it alone. **5 spec gaps / micro-change-set candidates**, **7 deliberate wireframe deviations**; 143 new resource keys × 3 locales (689 → 832). No new dependency, and no spec, contract, backend or migration file touched |
 | C117 | web-passenger-subview | 4c | DONE | 2026-08-09 | **138 tests green** in `@mageride/web-passenger` (10 files); `npm --prefix portals run lint --workspace web-passenger && … test … && … build …` exits 0, `next build` emits **7 routes** (`/`, `/track`, `/t/[token]`, `/p/[token]`, the SSE proxy at `/api/live/[token]`, `/_not-found`, `/icon.svg`), and `check-bundle.mjs` reports **AL-52: clean — 3 compiled stylesheets, 166.6 kB CSS** plus a second assertion this surface needs — **no client chunk names a server-only variable**. All seven portal workspaces are green (**1,455 tests, 82 files**). **The token is redeemed on the server before a tree exists**, so "render nothing before it validates" is where the `await` is rather than a check anybody remembers: `<DeadEnd>` takes a translator, a locale, a path and a store URL and **no snapshot**, so SCR-WT-006 cannot hold a ride — asserted on the prop list *and* by grepping the rendered document for the driver, the plate, the number, the sender and the code. **Nothing redirects**, and that is the spinner's fault: `loading.tsx` streams D2's ≤1 s gate while the token is being redeemed, after which Next can only finish a `redirect()` as a meta refresh — a spinner, a blank and a second spinner for a rider whose car is moving — so all three routes call one `trackScreen` and every scope renders in place. **One `EventSource` per screen, read through context** by the map and by the SOS button's D6' I-29.4 fallback, because two hooks would be two connections against a per-token bucket and the server-rendered snapshot would hand a panic button a fix from whenever the tab was opened; reconnecting is the browser's own (`Last-Event-ID` → the cursor public-bff writes into every `id:`), so the only thing tested is that the proxy forwards it, and the `?since` fallback exists for an intermediary that buffers SSE rather than for old browsers. **Declining transmits no GPS as four properties of four components**, one of which is that the Geolocation API is never called until the reader presses the button that says so. **No cookie, no localStorage** (D6' I-29.1), so the language switch is `?lang=` and three links inside a `<details>` — no JavaScript at all. 137 resource keys × 3 locales; **7 spec gaps** (headline: `GET …/receipt` has no PDF behind its contract, so Download is `window.print()`), **7 deliberate wireframe deviations**; no spec, contract, backend or migration file touched, and no new dependency beyond the three the Fleet Portal's map already introduced |
 | C118 | contract-test-suite | 5 | PARTIAL | 2026-08-09 | **82 tests green** in a new `tests/Contract` (`MageRide.Contract.Tests`, 1 skipped by design); `dotnet test tests/Contract -c Release` exits 0 and `dotnet build backend/MageRide.sln -c Release` is clean with the project in the solution, so CI's existing `dotnet test backend/MageRide.sln` leg runs it. **What landed:** the contract model (26 documents, `$ref` resolved *across* files, 382 operations), a schema validator whose supported keyword set is asserted to cover everything the directory uses, the four convention suites, the error-registry equality `.spectral.yaml` promises C118 would assert, two-way route conformance over **24 composed services**, and eleven deliberately-drifted payloads that must fail. **What is PARTIAL:** every operation is reached *structurally* (its route is matched against the running service's own `EndpointDataSource`), not yet driven over HTTP with its body validated; the Redpanda event-schema layer and the KMP live-stack tests are not built. **`docker-compose.dev.yml` cannot be brought up at all** — `app-services`, `hot-path` and `fanout` have no Dockerfile — so the CI clause of the DoD is blocked on C124/C125, and services are composed by their own `XApplication.Build` instead, which covers all twenty-four rather than the nine that have images. **12 real drift findings**, each ratcheted in `RouteDrift` so the list cannot grow and cannot hide a fix — headline: **fleet-svc does not start when `Fleet:ProvisioningBaseUrl` is configured** (mapping `POST …/trackers/bind` throws because `ITrackerBindingService` has an instance `BindAsync` and no `[FromServices]`), which is every production deployment; **subscription-svc still serves the OnePay Mode B webhook AL-59 removed**; and `POST /v1/admin/transit/gtfs-import` is declared by a contract nothing maps. **2 contract typos fixed** (`validation-error` → `validation-failed`, three operations). No service, spec or migration file was changed |
-| C119 | observability-stack | 5 | PENDING | | |
+| C119 | observability-stack | 5 | DONE | 2026-08-09 | **114/114 verify checks green** — `docker compose -f infra/observability/docker-compose.yml config && bash infra/scripts/verify-observability.sh` exits 0. Prometheus + Alertmanager + Loki + Promtail + Tempo + Grafana + OTel Collector + blackbox and pg/redis exporters on the dev network; **49 alert rules, 30 recording rules, 11 dashboards, 24 runbooks**. Every ADD §13.3 SLO, all eight §13.3.1 stuck-state rows (R-20) and all seven §13.4 bullets are alertable at the spec's own thresholds, and the verify asserts each threshold literally. The simulated stuck ride is `promtool test rules` over the real rule files. **Three code changes made the DoD reachable:** an end-to-end position histogram in fanout-svc (D-19 was not measurable — two half-path histograms cannot be added), an SOS dispatch histogram in safety-svc (D-33 pages on a single 5-minute window and a database column cannot page), and the two §13.3.1 rows that are not about a ride as gauges on fare-svc and registry-svc, through a new kernel `ScrapedGauges`. **Redpanda v24.2 publishes no consumer-lag metric** — computed from the committed offset and the high watermark. OTLP is proved end to end by running a real service against the collector and finding its trace in Tempo. Seven real defects found and fixed on the way, four of them pre-existing |
 | C120 | e2e-mode-c-ride | 5 | PENDING | | |
 | C121 | e2e-mode-ab-fleet | 5 | PENDING | | |
 | C122 | e2e-proxy-package | 5 | PENDING | | |
@@ -19020,3 +19020,206 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   **Build host —** no Docker, no containers, no replica. The suite is deliberately Docker-free at this
   stage, which is also why it fits the DoD's fifteen minutes with three orders of magnitude to spare;
   the parts that need containers are the parts that are not built.
+
+- **Component:** C119 observability-stack — 2026-08-09
+- **Status:** DONE — `docker compose -f infra/observability/docker-compose.yml config && bash
+  infra/scripts/verify-observability.sh` exits 0 with **114 checks, 0 failures, 0 skipped**. All four
+  definition-of-done items pass, including the two that needed code: a simulated stuck ride fires the
+  correct §13.3.1 alert inside its window (`promtool test rules`, against the real rule files), and a
+  real MageRide service's trace reaches Tempo over OTLP through the collector.
+- **Notes:**
+  **What landed —** `infra/observability/` (Prometheus, Alertmanager, Loki, Promtail, Tempo, Grafana,
+  OpenTelemetry Collector, blackbox exporter, postgres/redis exporters) on the dev stack's own project
+  and network; **49 alert rules, 30 recording rules, 11 dashboards, 24 runbooks, 3 promtool test
+  files**. Every ADD §13.3 SLO, all eight §13.3.1 stuck-state rows (R-20) and all seven §13.4 bullets
+  are alertable, and the verify asserts each threshold against the number the spec prints rather than
+  merely asserting that a rule exists — 5 s and 8 s on position, 5 s p99 with `for: 0s` on SOS, 100
+  overdue timers, 1 s outbox p95, 1% EMQX auth failures, zero Redis evictions, 30 s replication, 5 s
+  and 10k/100k consumer lag.
+
+  **Three code changes, each because the DoD was otherwise unreachable —**
+  (1) **`mageride.positions.e2e.latency`** in fanout-svc (`CellStreamPump`, `VehicleStreamPump`),
+  recorded per frame at the moment it leaves for a subscriber against the sample's own GNSS instant.
+  D-19 was **not measurable** before: `positions.ingest.latency` and `fanout.latency` cover the two
+  halves of the path, and *a p95 is not additive* — `p95(ingest) + p95(fanout)` is a number no SLO is
+  written about. Only a histogram over the same observation can answer it, and fanout-svc is the one
+  place holding both ends. Tagged `surface` (`geocell` | `ride` | `vehicle`) but pooled in the SLO,
+  because the SLO is about a position reaching a person.
+  (2) **`mageride.sos.dispatch.latency`** + **`mageride.sos.raised`** in safety-svc. The interval was
+  already measured — `safety.sos_events.ts` is the tap and `dispatched_at` is the gateway, two columns
+  deliberately — but §13.3 says "any 5-min window > 5 s p99 pages on-call immediately" and **a column
+  cannot page anybody**. The row stays the system of record. The histogram is tagged `outcome` and the
+  SLO reads `dispatched` alone: an alert that failed at the gateway in 200 ms is a worse outcome than
+  one that took six seconds and arrived, and pooling them would let a rising failure rate pull the
+  latency graph *down*. Failures have their own page (`SosDispatchFailing`).
+  (3) **The two §13.3.1 rows that are not facts about a ride**, each published by the service that
+  owns the table: fare-svc's `OverpaidGauge` (`fares.ride_payments`) and registry-svc's
+  `ExpiredDocumentsGauge` (`registry.documents` ⋈ `registry.vehicles`). Both go through a new kernel
+  type, **`MageRide.Shared/Observability/ScrapedGauges`**, which owns the four things a
+  database-backed observable gauge needs and is easy to get wrong: its own disposable `Meter`, a
+  scope per read, a bounded wait, and fail-to-zero-and-log. Eleven new tests across the two services.
+  **These were first written into the analytics read model and that was wrong twice over** — see the
+  corrections below.
+
+  **Two corrections to this component's own first answer, both caught in review —**
+  (i) **`dispatch_active` DOES have a column, and the first predicate measured the wrong thing.**
+  This handoff originally claimed no table in `db/migrations` carried it. It does:
+  `registry.vehicles.dispatch_state` (0303), whose CHECK comment is literally "E-03 doc-expiry
+  auto-suspend", whose only writer is registry-svc's `DocumentExpiryWorker`, and which migration 0310
+  already projects into `is_go_live_eligible`. The first version joined
+  `dispatch.driver_presence` instead, which makes the gauge follow **driver shift patterns** — E-03
+  dying at 02:00 would have been invisible until the morning — and silently dropped AL-50
+  fleet-owned documents, which E-03 does suspend vehicles for. Now counted by *vehicle*, over
+  registry's own two tables. Not a spec gap: a column I had not found.
+  (ii) **Both gauges were in the analytics read model, on the theory that §13.3.1's last two rows
+  each span two bounded contexts.** Neither does — `Overpaid` is one `count(*)` over
+  `fares.ride_payments`, and row 8 is registry-only once (i) is fixed. Worse, the read model is a
+  library hosted **only by admin-bff**, which is neither a container in
+  `docker-compose.skeleton.yml` nor a scrape target — so in the deployment shape the code is
+  actually built in, both pages would have been permanently silent, with no `absent()` meta-alert to
+  notice. fare-svc and registry-svc are containers and scrape targets in both shapes.
+
+  **Spec gaps and resolutions —**
+  (a) **`qrtz_*` does not exist.** §13.4's timer-backlog runbook says "validate `qrtz_*` tables";
+  C022/C023 built a lease-poll over `rides.timers` instead and argued why. The rule is unchanged
+  (backlog > 100); the runbook says `rides.timers`. **Micro-change-set for ADD §13.4.**
+  (b) **§13.1 names Jaeger for MVP and Tempo at scale**, and D7' §12 names Tempo outright. Ran Tempo
+  only — two trace stores for the same spans would be two query APIs and two Grafana datasources.
+  (c) **§13.3.1's `Accepted` and `InProgress` rows are approximated**, as C032 already recorded:
+  ride-svc holds no positions (R-01), so it publishes time-in-state, which is a *superset*. Both
+  alerts carry `approximated="true"`, both runbook sections say how to tell the two apart, and the
+  notification template prints a warning when the label is present.
+  (d) **Redpanda v24.2 publishes no consumer-lag metric.** Verified against the pinned
+  `redpandadata/redpanda:v24.2.26` on the running slim stack: `/public_metrics` carries
+  `redpanda_kafka_consumer_group_committed_offset` and `redpanda_kafka_max_offset` and nothing named
+  `..._lag_...`. `recording.stream.yml` computes it once (high watermark − committed, `group_right`)
+  so eight rules do not each get the vector matching wrong — and a wrong join is a rule that matches
+  nothing, silently. **Micro-change-set for ADD §13.2**, which assumes lag is scraped.
+  (e) **`pg_stat_replication_pg_wal_lsn_diff` does not exist** in postgres_exporter v0.16;
+  `pg_replication_lag_seconds` does, and it is §13.4's own unit. Guarded by
+  `pg_replication_is_replica == 1`, because on a primary the metric reads 0 whatever is happening.
+  Armed and silent until the first standby (C132).
+  (f) **`Otel__ServiceNamespace`** is set in `.env.common.example` and bound by nothing —
+  `TelemetryOptions` has no such property. Left alone; noted for whoever owns C002 next.
+
+  **Seven real defects this component found — three of them only by running the rules against the
+  live stack, which is why the verify does that and not only `promtool` —**
+  (1) **`observability-down.sh` deleted the entire dev stack.** It passed `--remove-orphans`, which
+  operates on the compose **project** rather than on the file — and this stack deliberately shares the
+  `mageride` project with the dev stacks, so every container the observability file does not declare
+  is an orphan of it. One `down` took Postgres, Redis, Redpanda, EMQX, MinIO, PgBouncer *and the
+  network* with it. Removed from the script and from the verify's cleanup trap, and warned about in
+  the compose header, the script and `infra/CLAUDE.md`. **The reverse hazard is real and is left
+  alone because it is C009's file:** `dev-down.sh` passes `--remove-orphans` too, so it removes the
+  observability containers — which is why observability goes down first, and why there is a script
+  rather than a documented one-liner.
+  (2) **`RedisMemoryHigh` fired permanently against the live slim stack.** `maxmemory 0` means
+  *unlimited* in Redis, not "one byte", and `clamp_min(redis_memory_max_bytes, 1)` turned that into a
+  ratio in the hundreds of millions. Fixed to `/ (redis_memory_max_bytes > 0)`, which filters the
+  series away instead, plus a new `RedisNoMemoryLimit` ticket for the case the first rule then cannot
+  see. **Found by running the rules against the real stack**, which is why the verify does that and
+  not only `promtool`.
+  (3) **A `clamp_min` on an SLI denominator turned silence into a 100% error rate.** Every latency
+  ratio was `1 - (good / clamp_min(total, 1e-9))`; when a histogram's series persist but stop
+  incrementing — a quiet night, a parked fleet — both are 0, the clamp makes that `0/1e-9 = 0`, and
+  the rule records `1 - 0 = 1`. `PositionE2ELatencyBudgetBurning` would have paged with "100% of
+  positions took longer than 5 s" over an idle platform. Removed from all thirteen: unguarded, `0/0`
+  is NaN and every comparison against it is false, which is the correct silence. `slo.test.yml` now
+  has the idle case, and `recording.slo.yml`'s header explains it at length because it is
+  counter-intuitive. (The same lesson had already been learned twice in this component — the Redis
+  fix above and `recording.stream.yml`'s `> 0` denominator — and the SLO file still had it.)
+  (4) **`ServiceDown` paged for the deployment shape that was not running.** `prometheus.yml` lists
+  both shapes and the design says only always-expected targets page — but the scoping was
+  `job=~"platform-.*"`, which matches *both* `platform-services` and `platform-composed`. Whichever
+  shape ran, the other's targets paged after two minutes for ever, and the summaries named a service
+  that was up (`fanout` and `fanout-svc` share a `service` label). Now qualified by
+  `max_over_time(up[6h]) > 0` — page for a target that was serving and has stopped, never for a shape
+  that was never deployed — with a promtool case for exactly that.
+  (5) **`Fare.Api.Tests` was red on `main` and nothing had noticed.** Its harness truncates
+  `registry.driver_payouts`, which migration 1010 dropped when AL-57/AL-59 retired D-11's OnePay
+  merchant binding, so all 112 tests failed at start-up with `42P01`. One line; the suite is 118
+  green now.
+  (6) **`wait-healthy.sh` (C009) judged containers it was not asked about.** `docker compose ps`
+  filters by *project*, not by file, and every stack here declares `name: mageride` on purpose — so
+  waiting on the observability file saw the slim stack's `migrate`, `minio-init` and `redpanda-init`
+  at `exited 0`, decided they were long-running services that had died, and failed. Fixed by
+  filtering the rows to `docker compose config --services` for the file it was given, which is what
+  its own contract already claimed; the slim and full stacks are unaffected because they declare
+  every service they wait on. Found by trying to *reuse* the helper instead of copying it, which is
+  also how the copy's own latent NDJSON-shape bug was avoided.
+  (7) A rule reading a **recorded** series can be up to one evaluation interval behind it, because
+  recording and alerting groups are scheduled independently. It surfaced as a promtool expectation
+  that moved whenever a rule group was added anywhere in the directory; the consumer-lag test now
+  holds the lag constant and the reason is written above the case.
+
+  **The verify is nine phases and the first six need no containers** (a few seconds). Phase 5 is the
+  one worth knowing about: it **derives the metric inventory from the C# source at verify time** —
+  `MageRideDiagnostics`, `AdapterDiagnostics`, `GatewayDiagnostics` — applying the same OTel→Prometheus
+  name mangling that `MageRide.Shared.Tests/Observability/PrometheusExpositionTests` pins (dot to
+  underscore, `_total` on counters, `ms` → `milliseconds`, a `{brace}` unit dropped), and fails if any
+  `mageride_*` series named in a rule or dashboard is not one the platform actually emits. A rule
+  against a metric that does not exist loads happily and evaluates to an empty vector for ever;
+  nothing else in this repository would notice. That test is new too, and it exists because **nothing
+  in C# says what an instrument is called once the exporter has renamed it**.
+
+  **Four §13.3 SLOs have rules and no data, deliberately:** offer push (row 8, dispatch-svc), atomic
+  accept (row 9, ride-svc), payment callback resolve (row 3, fare-svc), VoIP call setup (row 4 —
+  voip-svc *cannot* measure it alone: the first audio frame is observed by the SFU, so it needs
+  LiveKit's webhook). An SLO with no rule is one everybody forgets; a rule with no data is a "No data"
+  panel somebody has to explain, and the second is the better failure. The list is an explicit,
+  **self-cleaning** allowlist in the verify — the check fails once an entry is implemented.
+
+  **One more gap the review surfaced and this component did not close —** ride-svc's
+  `StuckStateObserver` (C032) is the third copy of the gauge scaffolding `ScrapedGauges` now owns,
+  and its `Dispose` carries the same inert `_gauges.Clear()` the two new observers were written
+  without: an `Instrument` is unpublished only when its *meter* is, so clearing a local list drops
+  nothing and a disposed host's callbacks keep running against a closed pool. Harmless with one host
+  per process, a real leak in an integration suite that builds several. Left alone because it is
+  C032's file with 314 tests of blast radius; recorded in `infra/observability/CLAUDE.md` too.
+
+  **Not built —** ADD §13.1's *custom MQTT probe*. A probe vehicle publishing to a probe passenger
+  needs a signed device session and a SignalR client, which is a continuously-running e2e test rather
+  than a config file. The blackbox TCP probe covers listener reachability and
+  `mageride_positions_e2e_latency_milliseconds` measures the same journey over real traffic — strictly
+  more informative except when there is none, which is exactly the gap. Also absent: HAProxy metrics
+  (needs `http-request use-service prometheus-exporter` in C009's `haproxy.cfg`; §13.2 does not list
+  the edge) and a PgBouncer exporter (pool saturation is visible from the Postgres side, which is what
+  §13.2 names).
+
+  **Files —** new: `infra/observability/**` (31 files: compose, CLAUDE.md, 5 rule files, 3 promtool
+  test files, prometheus/alertmanager/loki/promtail/tempo/collector/blackbox configs, Grafana
+  provisioning + 11 dashboards), `docs/runbooks/**` (24 runbooks + README, each opening with a **First
+  action**), `infra/scripts/{verify-observability,observability-up,observability-down}.sh`,
+  `MageRide.Shared/Observability/ScrapedGauges.cs`,
+  `MageRide.Shared.Tests/Observability/PrometheusExpositionTests.cs`,
+  `Fare.Api/Observability/OverpaidGauge.cs`, `Registry.Api/Observability/ExpiredDocumentsGauge.cs`,
+  and their two test classes. Changed: `MageRideDiagnostics` (+4 instruments, +2 gauge names, +the
+  shared `RecordPositionE2E` helper and the `PositionSurfaces` set),
+  `Fanout.Api/Realtime/{Cell,Vehicle}StreamPump.cs`, `Safety.Api/Sos/SosService.cs`, the two service
+  registration files, `FareHarness`/`FareSeed` (the container seam, one seed helper and the 1010
+  fix), `infra/scripts/wait-healthy.sh` (C009's — scoped to the file it is given), `infra/CLAUDE.md`, `infra/docker-compose.dev.yml` (the "optional containers" note only),
+  `infra/env/.env.common.example` (the `Otel__Endpoint` comment; the value stays empty so a
+  component's verify does not wait on a collector that is not running). **No spec, migration or
+  contract file was changed, and no new package was added.**
+
+  **Tests —** `MageRide.Shared.Tests` 313 (was 307), `Fare.Api.Tests` 118 (was 112, and red), 
+  `Registry.Api.Tests` 201 (was 196), `Fanout.Api.Tests` 47, `Safety.Api.Tests` 30,
+  `Ride.Api.Tests` 314, `Analytics.Tests` 104 (unchanged — the observer moved out);
+  `dotnet build backend/MageRide.sln -c Release` clean, 0 warnings.
+
+  **Review pass —** `/simplify` over the diff produced 30 findings across reuse, simplification,
+  efficiency and altitude; the six defects above came out of it, along with: recording the D-19
+  observation inside `FilterAsync` instead of widening its return type (which had added a projection
+  and a second pass per cell per 2-second tick on the position hot path); a `_lastRideSample` guard
+  in `VehicleStreamPump.PushRidesAsync`, without which the same fix was observed ~4× at ever-older
+  capture instants and **manufactured** observations past the 5 s bucket the SLI counts; one
+  `RecordPositionE2E` instead of two; the lag join recorded once; `wait-healthy.sh` reused instead of
+  a hand-rolled poll that mis-parsed one of compose's two JSON shapes and would have passed
+  vacuously. Skipped deliberately: folding the OTel name-mangling into one source of truth (it would
+  make the static phases depend on a generated artefact, losing their no-toolchain property), and
+  adopting `ScrapedGauges` in ride-svc's `StuckStateObserver` (correct, but it is C032's file and 314
+  tests of blast radius — recorded here instead).
+
+  **Build host —** slim stack (~5.9 GB) + observability (~1.6 GB) ran together beside the build with
+  ~12 GB free. The lightweight production replica stayed down throughout. **Take observability down
+  before `dev-down.sh`** — compose will not remove a network that still has endpoints attached.

@@ -1,0 +1,30 @@
+{{/*
+  MageRide — notification templates (C119).
+
+  One rule: a page must carry what to DO, not only what is wrong. Every alert in
+  infra/observability/prometheus/rules carries `runbook_url` and verify-observability.sh
+  fails if the file it names does not exist, so `{{ .Annotations.runbook_url }}` is never
+  empty — and it is the first line after the summary for that reason.
+*/}}
+
+{{ define "mageride.title" -}}
+[{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .CommonLabels.alertname }}{{ if .CommonLabels.plane }} ({{ .CommonLabels.plane }}){{ end }}
+{{- end }}
+
+{{ define "mageride.text" -}}
+{{ range .Alerts -}}
+{{ .Annotations.summary }}
+
+Runbook:  {{ .Annotations.runbook_url }}
+Severity: {{ .Labels.severity }}{{ if .Labels.slo }} · SLO: {{ .Labels.slo }}{{ end }}{{ if .Labels.stuck_state }} · state: {{ .Labels.stuck_state }}{{ end }}
+{{ if .Labels.service }}Service:  {{ .Labels.service }}
+{{ end }}Since:    {{ .StartsAt.Format "2006-01-02 15:04:05 MST" }}
+
+{{ .Annotations.description }}
+{{ if .Labels.approximated }}
+NOTE: this signal is approximated. See the rule's comment and the runbook before treating
+the count as exact.
+{{ end }}
+---
+{{ end }}
+{{- end }}

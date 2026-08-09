@@ -1,0 +1,189 @@
+{
+  "uid": "mageride-money-safety",
+  "title": "MageRide — Money and safety",
+  "description": "The two planes where a silent failure costs somebody something irreversible: the payment rail (R-05, R-19, D-10) and the panic button (D-33, AL-13). Both are ADD §13.3 SLOs and both fail in the same way — a 200 to the caller, a row in the database, and nothing reaching anybody.",
+  "tags": ["mageride", "money", "safety", "d-33", "add-13.3"],
+  "timezone": "Asia/Colombo",
+  "editable": false,
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-12h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Safety — D-33, AL-13",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "SOS dispatch p99",
+      "description": "Button tap (safety.sos_events.ts) to the alert being handed to the primary gateway (dispatched_at). The row keeps the same interval — this is where Prometheus can watch it, because §13.3 pages on a single bad 5-minute window and a column cannot page anybody.",
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s", "decimals": 2, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 3 }, { "color": "red", "value": 5 }] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "background", "graphMode": "area" },
+      "targets": [{ "refId": "A", "expr": "mageride:sos_dispatch:p99", "instant": true }]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Alerts raised (12 h)",
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "none", "graphMode": "area" },
+      "targets": [{ "refId": "A", "expr": "sum(increase(mageride_sos_raised_total[12h]))", "instant": true }]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Reached no gateway (12 h)",
+      "description": "Any non-zero value is a page. An SOS that goes nowhere looks exactly like one that worked — the button animates, the row is written and the response is a 200.",
+      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "background", "graphMode": "area" },
+      "targets": [{ "refId": "A", "expr": "sum(increase(mageride_sos_raised_total{outcome!=\"dispatched\"}[12h]))", "instant": true }]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "SOS dispatch latency distribution",
+      "description": "p50, p95 and p99 against the 5 s line. The gap between p50 and p99 is the dual-gateway race (D-33 hands the message to both at once and resolves on whichever answers).",
+      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "lineWidth": 1, "fillOpacity": 0, "showPoints": "never", "thresholdsStyle": { "mode": "dashed" } },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "transparent", "value": null }, { "color": "red", "value": 5 }] }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        { "refId": "A", "expr": "histogram_quantile(0.50, sum by (le) (rate(mageride_sos_dispatch_latency_milliseconds_bucket{outcome=\"dispatched\"}[$__rate_interval]))) / 1000", "legendFormat": "p50" },
+        { "refId": "B", "expr": "histogram_quantile(0.95, sum by (le) (rate(mageride_sos_dispatch_latency_milliseconds_bucket{outcome=\"dispatched\"}[$__rate_interval]))) / 1000", "legendFormat": "p95" },
+        { "refId": "C", "expr": "mageride:sos_dispatch:p99", "legendFormat": "p99" }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "SOS by outcome and source",
+      "description": "`no_contact` means AL-13's emergency contact was missing and the admin live feed was the only channel the alert took. `web` is AL-44/US-25.5's tracking-page button — a caller with no bearer, whose credential is a share token this service re-checks.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "lineWidth": 1, "fillOpacity": 20, "showPoints": "never", "stacking": { "mode": "normal" } } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["sum"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [{ "refId": "A", "expr": "sum by (outcome, source) (increase(mageride_sos_raised_total[$__rate_interval]))", "legendFormat": "{{outcome}} · {{source}}" }]
+    },
+    {
+      "id": 7,
+      "type": "logs",
+      "title": "SOS log lines",
+      "description": "safety-svc logs every raise at Warning and every failed dispatch at Error, with the sos id. This panel is what an operator reads while the page is still open.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "options": { "showTime": true, "wrapLogMessage": true, "sortOrder": "Descending", "enableLogDetails": true },
+      "targets": [{ "refId": "A", "expr": "{service=~\"app-services|safety-svc\"} |~ \"(?i)sos\"" }]
+    },
+
+    {
+      "id": 20,
+      "type": "row",
+      "title": "Money — R-05, R-19, ADD §13.3 row 3",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 21,
+      "type": "stat",
+      "title": "Rides awaiting settlement > 10 min",
+      "description": "§13.3.1 row 6. PaymentPending is not exempt from ux_rides_open_passenger, so each of these is also a passenger who cannot book their next ride.",
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 15 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "background", "graphMode": "area" },
+      "targets": [{ "refId": "A", "expr": "max(mageride_rides_stuck{state=\"PaymentPending\"})", "instant": true }]
+    },
+    {
+      "id": 22,
+      "type": "stat",
+      "title": "Overpaid awaiting a refund decision",
+      "description": "§13.3.1 row 7 — a late gateway callback on an already cash-settled ride (R-19, ADD §11.14). Pages after an hour. Money the platform owes back.",
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 15 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "background", "graphMode": "area" },
+      "targets": [{ "refId": "A", "expr": "max(mageride_payments_overpaid)", "instant": true }]
+    },
+    {
+      "id": 23,
+      "type": "stat",
+      "title": "Payment resolve p95",
+      "description": "§13.3 row 3: Initiated → terminal, target < 30 s. Not instrumented yet (C119 handoff) — the panel is empty by design so the gap is visible rather than assumed absent.",
+      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 15 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s", "noValue": "not instrumented yet", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 30 }] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "value", "graphMode": "area" },
+      "targets": [{ "refId": "A", "expr": "mageride:payment_callback:p95", "instant": true }]
+    },
+    {
+      "id": 24,
+      "type": "stat",
+      "title": "Outbox publish failures/s",
+      "description": "No money moves without an event: the transactional outbox is the only path a settlement takes to fare-svc, reputation-svc and the driver's wallet.",
+      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 15 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "cps", "decimals": 3, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 0.0001 }] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "background", "graphMode": "area" },
+      "targets": [{ "refId": "A", "expr": "sum(rate(mageride_outbox_publish_failures_total[5m]))", "instant": true }]
+    },
+
+    {
+      "id": 30,
+      "type": "timeseries",
+      "title": "The outbox — the only way state crosses a service boundary",
+      "description": "ADD §13.4 pages when p95 passes 1 s; E-09 budgets a median under 50 ms. Lag here is every consumer on the platform reacting late: dispatch to a new ride, fanout to a revoked share, notification-svc to an SOS.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": { "lineWidth": 1, "fillOpacity": 0, "showPoints": "never", "thresholdsStyle": { "mode": "dashed" } },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "transparent", "value": null }, { "color": "orange", "value": 50 }, { "color": "red", "value": 1000 }] }
+        },
+        "overrides": [{ "matcher": { "id": "byRegexp", "options": ".*/s" }, "properties": [{ "id": "unit", "value": "cps" }, { "id": "custom.axisPlacement", "value": "right" }] }]
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        { "refId": "A", "expr": "histogram_quantile(0.50, sum by (le) (rate(mageride_outbox_dispatch_latency_milliseconds_bucket[$__rate_interval])))", "legendFormat": "p50" },
+        { "refId": "B", "expr": "histogram_quantile(0.95, sum by (le) (rate(mageride_outbox_dispatch_latency_milliseconds_bucket[$__rate_interval])))", "legendFormat": "p95" },
+        { "refId": "C", "expr": "sum(rate(mageride_outbox_dispatched_total[$__rate_interval]))", "legendFormat": "events published/s" },
+        { "refId": "D", "expr": "sum(rate(mageride_outbox_publish_failures_total[$__rate_interval]))", "legendFormat": "publish failures/s" }
+      ]
+    },
+    {
+      "id": 31,
+      "type": "timeseries",
+      "title": "Payment and ride terminal states",
+      "description": "Where rides end up. A rising Overpaid or a rising PaymentPending backlog is the same underlying event — a gateway callback that did not arrive when it should have.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "lineWidth": 1, "fillOpacity": 5, "showPoints": "never" } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        { "refId": "A", "expr": "max(mageride_rides_stuck{state=\"PaymentPending\"})", "legendFormat": "awaiting settlement > 10 min" },
+        { "refId": "B", "expr": "max(mageride_payments_overpaid)", "legendFormat": "overpaid" },
+        { "refId": "C", "expr": "sum(rate(mageride_rides_timers_fired_total{kind=\"payment_pending\"}[$__rate_interval])) * 3600", "legendFormat": "payment_pending timers fired/h" }
+      ]
+    }
+  ]
+}

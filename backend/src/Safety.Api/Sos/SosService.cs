@@ -5,6 +5,7 @@ using MageRide.Safety.Persistence;
 using MageRide.Safety.Sharing;
 using MageRide.Shared.Errors;
 using MageRide.Shared.Messaging;
+using MageRide.Shared.Observability;
 using MageRide.Shared.Persistence;
 using Microsoft.Extensions.Options;
 
@@ -273,6 +274,8 @@ internal sealed class SosService(
                 "SOS {SosId} has no emergency contact to reach; the admin live feed is the only channel it took.",
                 raised.Id);
 
+            Measure(raised, SosSmsStatuses.NoContact, clock.GetUtcNow());
+
             return raised with { SmsStatus = SosSmsStatuses.NoContact };
         }
 
@@ -318,6 +321,8 @@ internal sealed class SosService(
                 raised.Id, result.Error);
         }
 
+        Measure(raised, status, now);
+
         return raised with
         {
             SmsStatus = status,
@@ -325,6 +330,34 @@ internal sealed class SosService(
             SecondaryGateway = secondary,
             DispatchedAt = result.Dispatched ? now : null,
         };
+    }
+
+    /// <summary>
+    /// D-33's SLO where Prometheus can watch it: tap (<c>safety.sos_events.ts</c>) to gateway
+    /// (<c>dispatched_at</c>), the same interval the row already keeps (C119).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The columns stay the system of record — they survive the process and an incident review reads
+    /// them — but ADD §13.3 says "any 5-minute window &gt; 5 s p99 pages on-call immediately", and a
+    /// column cannot page anybody. This is the only reason the histogram exists.
+    /// </para>
+    /// <para>
+    /// Recorded on **every** outcome, tagged. The alert is written over <c>outcome="dispatched"</c>
+    /// alone — an alert that failed at the gateway in 200 ms is a worse result than one that took six
+    /// seconds and arrived, and letting failures into the latency figure would make a gateway outage
+    /// look like an improvement.
+    /// </para>
+    /// </remarks>
+    private static void Measure(SosEvent raised, string outcome, DateTimeOffset now)
+    {
+        var tag = new KeyValuePair<string, object?>("outcome", outcome);
+
+        MageRideDiagnostics.SosDispatchLatencyMs.Record(
+            Math.Max(0, (now - raised.Ts).TotalMilliseconds), tag);
+
+        MageRideDiagnostics.SosRaised.Add(
+            1, tag, new KeyValuePair<string, object?>("source", raised.Source));
     }
 
     /// <summary>RFC 5870, which every mobile platform hands to its default map application.</summary>

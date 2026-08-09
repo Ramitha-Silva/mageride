@@ -1,0 +1,373 @@
+# =====================================================================================
+# MageRide — SLO alert unit tests (C119)
+#
+# The two SLOs the C119 definition of done names by hand — "SOS latency and position
+# end-to-end latency are measurable against their SLOs" — plus the availability rules,
+# driven through the real recording rules rather than against hand-written SLI series.
+#
+# The recording rules are loaded here on purpose: a burn-rate alert reading a recorded
+# ratio is only as correct as the recording, and testing the alert against a fabricated
+# `mageride:position_e2e:error_ratio1h` would prove nothing about the histogram it is
+# actually computed from.
+# =====================================================================================
+
+rule_files:
+  - ../rules/recording.slo.yml
+  - ../rules/alerts.slo.yml
+
+evaluation_interval: 15s
+
+tests:
+
+  # ===================================================================================
+  # SOS dispatch latency — ADD §13.3 row 2, D-33.
+  # "Any 5-min window > 5 s p99 pages on-call immediately."
+  #
+  # 10 alerts per scrape interval; 9 land under 5 s and 1 lands between 5 s and 7.5 s, so
+  # the 99th percentile interpolates into that top bucket at 7.25 s. That is one slow
+  # panic button in ten — well inside anything a burn rate would tolerate, and D-33 says
+  # it pages anyway.
+  # ===================================================================================
+  - name: one slow SOS in a five-minute window pages immediately
+    interval: 15s
+    input_series:
+      - series: 'mageride_sos_dispatch_latency_milliseconds_bucket{outcome="dispatched",le="1000",service="app-services"}'
+        values: "0+9x40"
+      - series: 'mageride_sos_dispatch_latency_milliseconds_bucket{outcome="dispatched",le="2500",service="app-services"}'
+        values: "0+9x40"
+      - series: 'mageride_sos_dispatch_latency_milliseconds_bucket{outcome="dispatched",le="5000",service="app-services"}'
+        values: "0+9x40"
+      - series: 'mageride_sos_dispatch_latency_milliseconds_bucket{outcome="dispatched",le="7500",service="app-services"}'
+        values: "0+10x40"
+      - series: 'mageride_sos_dispatch_latency_milliseconds_bucket{outcome="dispatched",le="+Inf",service="app-services"}'
+        values: "0+10x40"
+      - series: 'mageride_sos_dispatch_latency_milliseconds_count{outcome="dispatched",service="app-services"}'
+        values: "0+10x40"
+
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: SosDispatchLatencyBreached
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              slo: sos-dispatch-latency
+              plane: safety
+            exp_annotations:
+              summary: "SOS p99 is 7.25s — over D-33's 5 s, paging now"
+              description: "ADD §13.3: any 5-minute window over 5 s p99 pages on-call immediately. Somebody pressed a panic button and the alert took longer than the platform promises."
+              runbook_url: "https://github.com/mageride/mageride/blob/main/docs/runbooks/sos-dispatch-latency.md"
+
+  # ===================================================================================
+  # Every alert dispatched inside a second: silent. The case that keeps the one above
+  # honest.
+  # ===================================================================================
+  - name: a fast SOS path fires nothing
+    interval: 15s
+    input_series:
+      - series: 'mageride_sos_dispatch_latency_milliseconds_bucket{outcome="dispatched",le="1000",service="app-services"}'
+        values: "0+10x40"
+      - series: 'mageride_sos_dispatch_latency_milliseconds_bucket{outcome="dispatched",le="2500",service="app-services"}'
+        values: "0+10x40"
+      - series: 'mageride_sos_dispatch_latency_milliseconds_bucket{outcome="dispatched",le="5000",service="app-services"}'
+        values: "0+10x40"
+      - series: 'mageride_sos_dispatch_latency_milliseconds_bucket{outcome="dispatched",le="+Inf",service="app-services"}'
+        values: "0+10x40"
+      - series: 'mageride_sos_dispatch_latency_milliseconds_count{outcome="dispatched",service="app-services"}'
+        values: "0+10x40"
+      - series: 'mageride_sos_raised_total{outcome="dispatched",source="app",service="app-services"}'
+        values: "0+10x40"
+
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: SosDispatchLatencyBreached
+        exp_alerts: []
+      - eval_time: 8m
+        alertname: SosDispatchFailing
+        exp_alerts: []
+
+  # ===================================================================================
+  # An SOS that reached no gateway. Not a latency problem — a fast failure is faster than
+  # a slow success, so the latency rule cannot see this at all. Any non-zero share pages.
+  # ===================================================================================
+  - name: an SOS that reaches no gateway pages even though it was fast
+    interval: 15s
+    input_series:
+      - series: 'mageride_sos_raised_total{outcome="dispatched",source="app",service="app-services"}'
+        values: "0+9x40"
+      - series: 'mageride_sos_raised_total{outcome="failed",source="app",service="app-services"}'
+        values: "0+1x40"
+      # Fast, so nothing about the latency is wrong.
+      - series: 'mageride_sos_dispatch_latency_milliseconds_bucket{outcome="dispatched",le="1000",service="app-services"}'
+        values: "0+9x40"
+      - series: 'mageride_sos_dispatch_latency_milliseconds_bucket{outcome="dispatched",le="+Inf",service="app-services"}'
+        values: "0+9x40"
+      - series: 'mageride_sos_dispatch_latency_milliseconds_count{outcome="dispatched",service="app-services"}'
+        values: "0+9x40"
+
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: SosDispatchLatencyBreached
+        exp_alerts: []
+      - eval_time: 8m
+        alertname: SosDispatchFailing
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              slo: sos-dispatch-latency
+              plane: safety
+            exp_annotations:
+              summary: "10% of SOS alerts reached no gateway"
+              description: "An SOS that goes nowhere looks exactly like one that worked — the button animates, the row is written and the response is a 200. Any non-zero reading here is a page."
+              runbook_url: "https://github.com/mageride/mageride/blob/main/docs/runbooks/sos-dispatch-latency.md"
+
+  # ===================================================================================
+  # Position E2E latency — ADD §13.3 row 1, D-19. p95 < 5 s, 99% of windows, 14× burn.
+  #
+  # 20% of positions arriving later than 5 s is a burn rate of 20×, over the 14× the spec
+  # sets. A one-minute interval keeps the 1-hour window to sixty samples.
+  # ===================================================================================
+  - name: a fifth of positions arriving late burns the budget and pages
+    interval: 1m
+    input_series:
+      - series: 'mageride_positions_e2e_latency_milliseconds_bucket{le="1000",surface="geocell",service="fanout-svc"}'
+        values: "0+800x90"
+      - series: 'mageride_positions_e2e_latency_milliseconds_bucket{le="2500",surface="geocell",service="fanout-svc"}'
+        values: "0+800x90"
+      - series: 'mageride_positions_e2e_latency_milliseconds_bucket{le="5000",surface="geocell",service="fanout-svc"}'
+        values: "0+800x90"
+      - series: 'mageride_positions_e2e_latency_milliseconds_bucket{le="7500",surface="geocell",service="fanout-svc"}'
+        values: "0+1000x90"
+      - series: 'mageride_positions_e2e_latency_milliseconds_bucket{le="10000",surface="geocell",service="fanout-svc"}'
+        values: "0+1000x90"
+      - series: 'mageride_positions_e2e_latency_milliseconds_bucket{le="+Inf",surface="geocell",service="fanout-svc"}'
+        values: "0+1000x90"
+      - series: 'mageride_positions_e2e_latency_milliseconds_count{surface="geocell",service="fanout-svc"}'
+        values: "0+1000x90"
+
+    alert_rule_test:
+      - eval_time: 75m
+        alertname: PositionE2ELatencyBudgetBurning
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              slo: position-e2e-latency
+              plane: position
+            exp_annotations:
+              summary: "Position latency is burning its error budget 14× (ADD §13.3, D-19)"
+              description: "20% of positions took longer than 5 s to reach a subscriber over the last hour, and it is still happening. The SLO is p95 < 5 s for 99% of 5-minute windows. Current p95 is 6.875s."
+              runbook_url: "https://github.com/mageride/mageride/blob/main/docs/runbooks/position-e2e-latency.md"
+
+  # ===================================================================================
+  # Inside the budget: 5% late is a 5× burn, under the 14× §13.3 pages at. The slow
+  # ticket at 6× is also silent.
+  # ===================================================================================
+  - name: a small share of late positions is inside the budget
+    interval: 1m
+    input_series:
+      - series: 'mageride_positions_e2e_latency_milliseconds_bucket{le="1000",surface="geocell",service="fanout-svc"}'
+        values: "0+950x90"
+      - series: 'mageride_positions_e2e_latency_milliseconds_bucket{le="5000",surface="geocell",service="fanout-svc"}'
+        values: "0+950x90"
+      - series: 'mageride_positions_e2e_latency_milliseconds_bucket{le="7500",surface="geocell",service="fanout-svc"}'
+        values: "0+1000x90"
+      - series: 'mageride_positions_e2e_latency_milliseconds_bucket{le="+Inf",surface="geocell",service="fanout-svc"}'
+        values: "0+1000x90"
+      - series: 'mageride_positions_e2e_latency_milliseconds_count{surface="geocell",service="fanout-svc"}'
+        values: "0+1000x90"
+
+    alert_rule_test:
+      - eval_time: 75m
+        alertname: PositionE2ELatencyBudgetBurning
+        exp_alerts: []
+      - eval_time: 75m
+        alertname: PositionE2ELatencyBudgetBurningSlowly
+        exp_alerts: []
+      - eval_time: 75m
+        alertname: PositionE2ELatencyP99Breached
+        exp_alerts: []
+
+  # ===================================================================================
+  # A platform that goes quiet is not a platform that is failing.
+  #
+  # This case exists because the first version of the SLI clamped its denominator, and a
+  # histogram whose series persist but stop incrementing then read as a **100% error rate**:
+  # `0 / 1e-9 = 0`, `1 - 0 = 1`, and the 14× burn alert paged over an idle fleet. Unclamped,
+  # `0/0` is NaN and every comparison against it is false.
+  # ===================================================================================
+  - name: an idle position stream is silent, not a hundred percent error rate
+    interval: 1m
+    input_series:
+      # Flat: the series exist, nothing is being added to them.
+      - series: 'mageride_positions_e2e_latency_milliseconds_bucket{le="5000",surface="geocell",service="fanout-svc"}'
+        values: "480000+0x90"
+      - series: 'mageride_positions_e2e_latency_milliseconds_bucket{le="+Inf",surface="geocell",service="fanout-svc"}'
+        values: "600000+0x90"
+      - series: 'mageride_positions_e2e_latency_milliseconds_count{surface="geocell",service="fanout-svc"}'
+        values: "600000+0x90"
+      # And the bridge is quiet too, so this is a parked fleet rather than a stalled
+      # consumer — PositionPipelineSilent must stay silent as well.
+      - series: 'mageride_mqtt_bridge_forwarded_total{service="hot-path"}'
+        values: "500000+0x90"
+      - series: 'mageride_positions_processed_total{service="hot-path"}'
+        values: "500000+0x90"
+
+    # The recorded ratio here is NaN, not absent — the series exist, so `0/0` is evaluated
+    # and `1 - NaN` is stored. There is no `promql_expr_test` for it because promtool's
+    # `value:` field cannot express NaN; what matters is below, and it is the whole point:
+    # every `NaN > threshold` comparison is false, so all four rules stay quiet.
+    alert_rule_test:
+      - eval_time: 75m
+        alertname: PositionE2ELatencyBudgetBurning
+        exp_alerts: []
+      - eval_time: 75m
+        alertname: PositionE2ELatencyBudgetBurningSlowly
+        exp_alerts: []
+      - eval_time: 75m
+        alertname: PositionE2ELatencyP99Breached
+        exp_alerts: []
+      - eval_time: 75m
+        alertname: PositionPipelineSilent
+        exp_alerts: []
+
+  # ===================================================================================
+  # The failure a latency SLO cannot express: nothing to be slow.
+  #
+  # The bridge is still lifting payloads off EMQX and position-processor has stopped
+  # normalising them, so every histogram above goes empty and every burn-rate rule with
+  # it. This is the rule that fires instead.
+  # ===================================================================================
+  - name: a silent position pipeline pages when no latency rule can
+    interval: 1m
+    input_series:
+      - series: 'mageride_mqtt_bridge_forwarded_total{service="hot-path"}'
+        values: "0+600x40"
+      - series: 'mageride_positions_processed_total{service="hot-path"}'
+        values: "0+600x20 12000+0x20"
+
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: PositionPipelineSilent
+        exp_alerts: []
+      - eval_time: 35m
+        alertname: PositionPipelineSilent
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              slo: position-e2e-latency
+              plane: position
+            exp_annotations:
+              summary: "position-processor has stopped, but the bridge is still forwarding"
+              description: "Payloads are reaching telemetry.raw and nothing is being normalised. Every map on the platform is frozen and no latency alert will fire, because there are no observations to be slow."
+              runbook_url: "https://github.com/mageride/mageride/blob/main/docs/runbooks/position-e2e-latency.md"
+
+  # ===================================================================================
+  # Availability — §13.3 rows 5 and 6, and the case they cannot cover.
+  #
+  # 4xx must not spend the budget: AL-06's deny-by-default means a healthy platform
+  # answers a steady stream of 401s, and counting them would make authentication look like
+  # an outage.
+  # ===================================================================================
+  - name: a wall of 401s is not an availability incident
+    interval: 1m
+    input_series:
+      - series: 'http_server_request_duration_seconds_count{service="registry-svc",http_response_status_code="401",plane="api"}'
+        values: "0+500x400"
+      - series: 'http_server_request_duration_seconds_count{service="registry-svc",http_response_status_code="200",plane="api"}'
+        values: "0+500x400"
+
+    alert_rule_test:
+      - eval_time: 380m
+        alertname: ApiAvailabilityBudgetBurning
+        exp_alerts: []
+
+  - name: a service answering 5xx burns its availability budget
+    interval: 1m
+    input_series:
+      - series: 'http_server_request_duration_seconds_count{service="registry-svc",http_response_status_code="500",plane="api"}'
+        values: "0+5x400"
+      - series: 'http_server_request_duration_seconds_count{service="registry-svc",http_response_status_code="200",plane="api"}'
+        values: "0+995x400"
+
+    alert_rule_test:
+      - eval_time: 380m
+        alertname: ApiAvailabilityBudgetBurning
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              slo: api-availability
+              service: registry-svc
+            exp_annotations:
+              summary: "registry-svc is burning its 99.9% availability budget"
+              description: "0.5% of requests to registry-svc answered 5xx over six hours, against a 99.9% monthly objective."
+              runbook_url: "https://github.com/mageride/mageride/blob/main/docs/runbooks/api-availability.md"
+
+  # ===================================================================================
+  # A service with no traffic has a perfect error ratio, which is why ServiceDown exists.
+  #
+  # The second case is the one that caught a live defect: a target belonging to the OTHER
+  # deployment shape has never been up, and must never page. Both shapes are in
+  # prometheus.yml and both jobs are named `platform-*`, so a job regex cannot tell them
+  # apart — `max_over_time(up[6h]) > 0` is what does.
+  # ===================================================================================
+  - name: a service that stops answering scrapes pages
+    interval: 15s
+    input_series:
+      - series: 'up{job="platform-services",service="ride-svc",instance="ride-svc:5000"}'
+        values: "1 1 1 1 0+0x40"
+
+    alert_rule_test:
+      - eval_time: 1m30s
+        alertname: ServiceDown
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: ServiceDown
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              slo: api-availability
+              job: platform-services
+              service: ride-svc
+              instance: ride-svc:5000
+            exp_annotations:
+              summary: "ride-svc (ride-svc:5000) has not answered a scrape for two minutes"
+              description: "It was serving within the last six hours and has stopped. The target is down or the process has stopped serving /metrics; a service with no requests has no error ratio, so no availability alert can cover this."
+              runbook_url: "https://github.com/mageride/mageride/blob/main/docs/runbooks/service-down.md"
+
+  # ===================================================================================
+  # WebSocket connection success — §13.3 row 7, "5% failure rate over 5 min".
+  # ===================================================================================
+  - name: hub connections failing above five percent page
+    interval: 15s
+    input_series:
+      - series: 'http_server_request_duration_seconds_count{http_route="/hubs/{**remainder}",http_response_status_code="200",service="api-gateway"}'
+        values: "0+90x60"
+      - series: 'http_server_request_duration_seconds_count{http_route="/hubs/{**remainder}",http_response_status_code="503",service="api-gateway"}'
+        values: "0+10x60"
+
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: WebSocketConnectFailureRateHigh
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              slo: websocket-connect
+              plane: position
+            exp_annotations:
+              summary: "10% of hub connections are failing"
+              description: "ADD §13.3: 5% failure over 5 minutes. Passengers and drivers are not getting a live map; the REST snapshot (GET /v1/nearby) still works, so this is degraded rather than dark."
+              runbook_url: "https://github.com/mageride/mageride/blob/main/docs/runbooks/websocket-connect-failures.md"
+
+  - name: a target from the deployment shape that is not running never pages
+    interval: 15s
+    input_series:
+      # Never up, not once — this is `app-services` while the skeleton shape is deployed.
+      - series: 'up{job="platform-composed",service="app-services",instance="app-services:5000"}'
+        values: "0+0x200"
+
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ServiceDown
+        exp_alerts: []
+      - eval_time: 45m
+        alertname: ServiceDown
+        exp_alerts: []

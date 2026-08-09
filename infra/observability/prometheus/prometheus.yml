@@ -1,0 +1,222 @@
+# =====================================================================================
+# MageRide — Prometheus scrape configuration (C119)
+#
+# ADD §13.2 "Golden Signals Per Service" is the list of things that must be scraped, and
+# every job below names the row it satisfies. D7' §12: "Prometheus scrape `/metrics`
+# (OpenTelemetry) per service".
+#
+# --- THE `service` LABEL --------------------------------------------------------------
+# The OpenTelemetry Prometheus exporter puts the service identity on `target_info` and on
+# NOTHING else — `service_name` is not a label on `mageride_*` or on `http_server_*`
+# (pinned by MageRide.Shared.Tests/Observability/PrometheusExpositionTests). So every job
+# here stamps its own `service` label, and every rule and dashboard groups by it. A new
+# service that is added to the platform and not added here is invisible, which is why
+# `verify-observability.sh` checks this file against the compose files rather than trusting
+# it.
+#
+# --- THE TWO DEPLOYMENT SHAPES ----------------------------------------------------------
+# The landed code is one container per service (`docker-compose.skeleton.yml`); D7' §2.1
+# and `docker-compose.dev.yml` fold the domain services into one `app-services` process.
+# Both are listed. A target that does not exist in the running shape is DOWN, which is the
+# honest reading — `TargetDown` is warning-only for exactly this reason, and pages only for
+# the targets `job=~"platform-.*"` marks as always-expected.
+# =====================================================================================
+
+global:
+  # 15 s against the 5-second SOS SLO and the 60-second stuck-state windows: fast enough
+  # that a 1-minute `for:` has four samples behind it, slow enough that the observable
+  # gauges (each one an indexed COUNT against Postgres) are not a load source.
+  scrape_interval: 15s
+  scrape_timeout: 10s
+  evaluation_interval: 15s
+  external_labels:
+    platform: mageride
+    # Prometheus does not interpolate this file, so the environment is a literal. Three
+    # environments are never mixed (infra/CLAUDE.md) and each has its own copy of this
+    # stack; the replica (C125) and production set their own value here.
+    environment: dev
+
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
+scrape_configs:
+
+  # ===================================================================================
+  # The platform's own services. `/metrics` is the kernel's (C002
+  # `MapMageRideMetrics`), anonymous like the health probes, and carries:
+  #   * `http_server_request_duration_seconds` + `http_server_active_requests`
+  #     — traffic, errors and latency for every endpoint (ADD §13.2's per-service row)
+  #   * `dotnet_*` runtime and `kestrel_*` connection counters — saturation
+  #   * `mageride_*` — everything the platform measures about itself
+  # ===================================================================================
+
+  # --- One container per service: the shape that is actually built (C025 skeleton) -----
+  - job_name: platform-services
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["iam-svc:5000"]
+        labels: { service: iam-svc, plane: api }
+      - targets: ["registry-svc:5000"]
+        labels: { service: registry-svc, plane: api }
+      - targets: ["fare-svc:5000"]
+        labels: { service: fare-svc, plane: api }
+      - targets: ["ride-svc:5000"]
+        labels: { service: ride-svc, plane: ride }
+      - targets: ["dispatch-svc:5000"]
+        labels: { service: dispatch-svc, plane: ride }
+      - targets: ["mqtt-bridge:5000"]
+        labels: { service: mqtt-bridge, plane: position }
+      - targets: ["position-processor:5000"]
+        labels: { service: position-processor, plane: position }
+      - targets: ["fanout-svc:5001"]
+        labels: { service: fanout-svc, plane: position }
+      - targets: ["api-gateway:5000"]
+        labels: { service: api-gateway, plane: edge }
+
+  # --- The D7' §2.1 composition hosts: app-services, hot-path, fanout, gateway ---------
+  # The same four containers `docker-compose.dev.yml` declares. Whichever shape is running,
+  # the other's targets are simply down.
+  - job_name: platform-composed
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["app-services:5000"]
+        labels: { service: app-services, plane: api }
+      - targets: ["hot-path:5000"]
+        labels: { service: hot-path, plane: position }
+      - targets: ["fanout:5001"]
+        labels: { service: fanout-svc, plane: position }
+
+  # ===================================================================================
+  # ADD §13.2, row by row.
+  # ===================================================================================
+
+  # --- EMQX: connections, msgs/s in-out, dropped, queue depth, auth failures ----------
+  # EMQX 5 serves the exposition on the dashboard listener. It is inside the docker
+  # network and never published past it (infra/deploy/emqx/emqx.conf).
+  - job_name: emqx
+    metrics_path: /api/v5/prometheus/stats
+    static_configs:
+      - targets: ["emqx:18083"]
+        labels: { service: emqx, plane: mqtt }
+
+  # --- Redpanda: consumer lag per partition, produce rate, storage, under-replicated ---
+  # `/public_metrics` is the curated set (it carries `redpanda_kafka_consumer_group_lag_*`,
+  # which the §13.4 consumer-lag page is written against); `/metrics` is the full internal
+  # dump and is an order of magnitude more series for signals no rule here uses.
+  - job_name: redpanda
+    metrics_path: /public_metrics
+    static_configs:
+      - targets: ["redpanda:9644"]
+        labels: { service: redpanda, plane: stream }
+
+  # --- Redis: cmds/s, evictions, memory%, slowlog count, replication lag ---------------
+  - job_name: redis
+    static_configs:
+      - targets: ["redis-exporter:9121"]
+        labels: { service: redis, plane: cache }
+
+  # --- Postgres: TPS, replication lag, long-running queries, vacuum lag, pool ----------
+  - job_name: postgres
+    static_configs:
+      - targets: ["postgres-exporter:9187"]
+        labels: { service: postgres, plane: database }
+
+  # --- End-to-end: the synthetic probes (§13.1 "Synthetic", §13.2 "End-to-end") --------
+  # Blackbox reaches the target; Prometheus scrapes blackbox. The `__param_target`
+  # relabelling below is the exporter's required shape — without it every probe would
+  # report on blackbox itself.
+  - job_name: blackbox-http
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    scrape_interval: 30s
+    static_configs:
+      - targets: ["http://api-gateway:5000/health/ready"]
+        labels: { service: api-gateway, probe: gateway-ready }
+      - targets: ["http://fanout-svc:5001/health/ready"]
+        labels: { service: fanout-svc, probe: fanout-ready }
+      - targets: ["http://app-services:5000/health/ready"]
+        labels: { service: app-services, probe: app-services-ready }
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox:9115
+
+  - job_name: blackbox-tcp
+    metrics_path: /probe
+    params:
+      module: [tcp_connect]
+    scrape_interval: 30s
+    static_configs:
+      # The MQTT plane's reachability. A broker that accepts TCP but refuses every JWT
+      # shows up on `emqx` above, not here — these two answer different questions.
+      - targets: ["emqx:1883"]
+        labels: { service: emqx, probe: mqtt-listener }
+      - targets: ["pgbouncer:6432"]
+        labels: { service: pgbouncer, probe: pooler-listener }
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox:9115
+
+  # ===================================================================================
+  # The observability stack watching itself. An alerting pipeline that fails silently is
+  # worse than none, because the platform then looks healthy.
+  # ===================================================================================
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+        labels: { service: prometheus, plane: observability }
+
+  - job_name: alertmanager
+    static_configs:
+      - targets: ["alertmanager:9093"]
+        labels: { service: alertmanager, plane: observability }
+
+  - job_name: loki
+    static_configs:
+      - targets: ["loki:3100"]
+        labels: { service: loki, plane: observability }
+
+  - job_name: tempo
+    static_configs:
+      - targets: ["tempo:3200"]
+        labels: { service: tempo, plane: observability }
+
+  - job_name: grafana
+    static_configs:
+      - targets: ["grafana:3000"]
+        labels: { service: grafana, plane: observability }
+
+  # The collector's own health, and separately the metrics it has been PUSHED. The second
+  # job is the only path for tcp-adapter, which has no HTTP surface to scrape (D7' §5.1
+  # gives it a TCP-socket liveness probe because there is nothing else to probe).
+  - job_name: otel-collector
+    static_configs:
+      - targets: ["otel-collector:8888"]
+        labels: { service: otel-collector, plane: observability }
+
+  - job_name: otel-forwarded
+    static_configs:
+      - targets: ["otel-collector:8889"]
+        labels: { plane: pushed }
+    # The collector's Prometheus exporter is configured with
+    # `resource_to_telemetry_conversion`, so every OTLP resource attribute arrives as a
+    # label and `service_name` is the pushing service's own. This is the one job whose
+    # target does not know what it is scraping, so the label is copied rather than stamped.
+    metric_relabel_configs:
+      - source_labels: [service_name]
+        target_label: service
+        regex: (.+)

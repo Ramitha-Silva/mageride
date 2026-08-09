@@ -1,0 +1,92 @@
+# =====================================================================================
+# MageRide — Grafana datasources (C119)
+#
+# Provisioned from this file and never from the UI: a datasource created in the browser
+# lives in the container's volume and dies with it, which makes every dashboard in
+# grafana/dashboards/ — all of which reference these by UID — silently blank on the next
+# deployment.
+#
+# The UIDs are stable and hand-written for the same reason. A dashboard JSON refers to
+# `"datasource": {"uid": "prometheus"}`; letting Grafana generate one would mean editing
+# nine dashboards every time the stack is rebuilt.
+# =====================================================================================
+
+apiVersion: 1
+
+datasources:
+
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      httpMethod: POST
+      # Matches `global.scrape_interval` in prometheus.yml. Grafana uses it to pick a
+      # sensible `$__rate_interval`, which is what stops a 15 s rate window over a 15 s
+      # scrape producing sawtooth graphs.
+      timeInterval: 15s
+      manageAlerts: false
+      prometheusType: Prometheus
+      prometheusVersion: 2.55.1
+      exemplarTraceIdDestinations:
+        # Tempo's metrics-generator writes exemplars with the trace id attached, so a spike
+        # on a latency panel is one click from the trace that caused it.
+        - name: trace_id
+          datasourceUid: tempo
+
+  - name: Loki
+    uid: loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    editable: false
+    jsonData:
+      maxLines: 2000
+      derivedFields:
+        # Serilog writes TraceId into the structured payload and OTLP carries it as a
+        # first-class field; both spellings are matched so a line shipped by Promtail and
+        # a line pushed by the collector both link.
+        - name: TraceID
+          matcherRegex: '"?[Tt]race[_]?[Ii][Dd]"?[=:]\s*"?([a-f0-9]{32})"?'
+          url: "$${__value.raw}"
+          datasourceUid: tempo
+
+  - name: Tempo
+    uid: tempo
+    type: tempo
+    access: proxy
+    url: http://tempo:3200
+    editable: false
+    jsonData:
+      # A span in Tempo → the logs of the same trace in Loki.
+      tracesToLogsV2:
+        datasourceUid: loki
+        spanStartTimeShift: -2m
+        spanEndTimeShift: 2m
+        filterByTraceID: true
+        tags:
+          - key: service.name
+            value: service
+      # A span → the RED metrics of the service it ran in.
+      tracesToMetrics:
+        datasourceUid: prometheus
+        spanStartTimeShift: -5m
+        spanEndTimeShift: 5m
+        tags:
+          - key: service.name
+            value: service
+        queries:
+          - name: Request rate
+            query: 'sum(rate(http_server_request_duration_seconds_count{$$__tags}[$$__rate_interval]))'
+          - name: Error rate
+            query: 'sum(rate(http_server_request_duration_seconds_count{$$__tags,http_response_status_code=~"5.."}[$$__rate_interval]))'
+      # The service graph Tempo's metrics-generator remote-writes into Prometheus.
+      serviceMap:
+        datasourceUid: prometheus
+      nodeGraph:
+        enabled: true
+      lokiSearch:
+        datasourceUid: loki

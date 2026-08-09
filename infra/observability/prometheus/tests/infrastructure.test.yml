@@ -1,0 +1,427 @@
+# =====================================================================================
+# MageRide — infrastructure alert unit tests (C119)
+#
+# ADD §13.4's seven bullets. Six are tested here; the seventh ("`stuck_state_*` alert per
+# §13.3.1") is stuck-state.test.yml.
+#
+# The consumer-lag cases carry the most weight, because that lag is COMPUTED — Redpanda
+# v24.2 publishes no lag metric (see recording.stream.yml) — and a vector match that
+# silently produces an empty result is a page that can never fire. These tests feed the
+# two raw offset series the broker really exposes and assert the join.
+# =====================================================================================
+
+rule_files:
+  - ../rules/recording.stream.yml
+  - ../rules/alerts.infrastructure.yml
+
+evaluation_interval: 15s
+
+tests:
+
+  # ===================================================================================
+  # §13.4 bullet 1 — "Consumer lag > 5 s sustained 2 min."
+  #
+  # telemetry.normalized produces 200 records/s on one partition and position-processor is
+  # a steady 15 000 messages behind it — which at 200/s is 75 seconds of drain, well past
+  # the 5 s threshold.
+  #
+  # The lag is held CONSTANT rather than allowed to grow, and that is not cosmetic: an
+  # alert reads a RECORDED series, and a recording group and an alerting group are
+  # evaluated independently, so an alert can be looking at a recorded value up to one
+  # evaluation interval old. With a growing lag the asserted number moved whenever a rule
+  # group was added anywhere in the directory. Worth knowing in its own right — it is why a
+  # burn-rate alert can lag a dashboard panel by a scrape.
+  # ===================================================================================
+  - name: a consumer falling behind pages on seconds and on message count
+    interval: 15s
+    input_series:
+      - series: 'redpanda_kafka_max_offset{redpanda_namespace="kafka",redpanda_topic="telemetry.normalized",redpanda_partition="0"}'
+        values: "15000+3000x60"
+      - series: 'redpanda_kafka_consumer_group_committed_offset{redpanda_group="position-processor-svc",redpanda_topic="telemetry.normalized",redpanda_partition="0",shard="0"}'
+        values: "0+3000x60"
+      - series: 'redpanda_kafka_records_produced_total{redpanda_namespace="kafka",redpanda_topic="telemetry.normalized"}'
+        values: "0+3000x60"
+
+    promql_expr_test:
+      # The join produces a series at all — the thing that silently breaks.
+      #
+      # Evaluated at 10 minutes and not at 5: `rate()` over a 5-minute window whose left
+      # edge is the series' own first sample cannot extrapolate symmetrically, so the
+      # produce rate reads slightly low and the derived seconds figure with it. Real, and
+      # not worth encoding as an expectation.
+      - expr: mageride:consumer_lag:messages
+        eval_time: 10m
+        exp_samples:
+          - labels: 'mageride:consumer_lag:messages{redpanda_group="position-processor-svc", redpanda_topic="telemetry.normalized"}'
+            value: 15000
+      - expr: mageride:consumer_lag:seconds
+        eval_time: 10m
+        exp_samples:
+          - labels: 'mageride:consumer_lag:seconds{redpanda_group="position-processor-svc", redpanda_topic="telemetry.normalized"}'
+            value: 75
+
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ConsumerLagSecondsHigh
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              plane: stream
+              redpanda_group: position-processor-svc
+              redpanda_topic: telemetry.normalized
+            exp_annotations:
+              summary: "position-processor-svc is 75s behind on telemetry.normalized"
+              description: "ADD §13.4: \"Consumer lag > 5 s sustained 2 min — scale position-processor replicas immediately.\" On telemetry.normalized this is the live map falling behind; on ride.events it is dispatch reacting to offers that have expired."
+              runbook_url: "https://github.com/mageride/mageride/blob/main/docs/runbooks/consumer-lag.md"
+
+      # D7' §12's 10k warning threshold.
+      - eval_time: 12m
+        alertname: ConsumerLagMessagesWarning
+        exp_alerts:
+          - exp_labels:
+              severity: ticket
+              plane: stream
+              redpanda_group: position-processor-svc
+              redpanda_topic: telemetry.normalized
+            exp_annotations:
+              summary: "position-processor-svc is 15000 messages behind on telemetry.normalized"
+              description: "D7' §12: consumer lag warn > 10k."
+              runbook_url: "https://github.com/mageride/mageride/blob/main/docs/runbooks/consumer-lag.md"
+
+      # 100k is the page, and 15 000 is not it.
+      - eval_time: 12m
+        alertname: ConsumerLagMessagesCritical
+        exp_alerts: []
+
+  # ===================================================================================
+  # A consumer that is keeping up is silent, and an IDLE topic does not look like an
+  # infinitely lagging one. The second half is the reason `mageride:consumer_lag:seconds`
+  # drops topics with no production instead of dividing by an epsilon.
+  # ===================================================================================
+  - name: a consumer keeping up and an idle topic both fire nothing
+    interval: 15s
+    input_series:
+      - series: 'redpanda_kafka_max_offset{redpanda_namespace="kafka",redpanda_topic="ride.events",redpanda_partition="0"}'
+        values: "0+30x60"
+      - series: 'redpanda_kafka_consumer_group_committed_offset{redpanda_group="dispatch-svc",redpanda_topic="ride.events",redpanda_partition="0",shard="0"}'
+        values: "0+30x60"
+      - series: 'redpanda_kafka_records_produced_total{redpanda_namespace="kafka",redpanda_topic="ride.events"}'
+        values: "0+30x60"
+      # An idle topic with a group parked on it and nothing being written.
+      - series: 'redpanda_kafka_max_offset{redpanda_namespace="kafka",redpanda_topic="audit.events",redpanda_partition="0"}'
+        values: "500+0x60"
+      - series: 'redpanda_kafka_consumer_group_committed_offset{redpanda_group="admin-bff",redpanda_topic="audit.events",redpanda_partition="0",shard="0"}'
+        values: "480+0x60"
+      - series: 'redpanda_kafka_records_produced_total{redpanda_namespace="kafka",redpanda_topic="audit.events"}'
+        values: "500+0x60"
+
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ConsumerLagSecondsHigh
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: ConsumerLagMessagesWarning
+        exp_alerts: []
+
+  # ===================================================================================
+  # §13.4 bullet 2 — "EMQX auth failure rate > 1%: possible credential spray."
+  # ===================================================================================
+  - name: a credential spray on the MQTT listener pages security
+    interval: 15s
+    input_series:
+      - series: 'emqx_authentication_success{service="emqx"}'
+        values: "0+90x60"
+      - series: 'emqx_authentication_failure{service="emqx"}'
+        values: "0+10x60"
+
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: EmqxAuthFailureRateHigh
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              plane: mqtt
+              security: "true"
+            exp_annotations:
+              summary: "10% of MQTT connections are failing authentication"
+              description: "ADD §13.4: \"possible credential spray; trigger security alert.\" A device JWT is minted per vehicle (E-02) and a healthy fleet's failure rate is a rounding error — a percent of them failing is somebody trying identities they do not have."
+              runbook_url: "https://github.com/mageride/mageride/blob/main/docs/runbooks/emqx-auth-failures.md"
+
+  - name: a fleet authenticating normally fires nothing
+    interval: 15s
+    input_series:
+      - series: 'emqx_authentication_success{service="emqx"}'
+        values: "0+1000x60"
+      - series: 'emqx_authentication_failure{service="emqx"}'
+        values: "0+1x60"
+      - series: 'emqx_messages_dropped{service="emqx"}'
+        values: "0+0x60"
+
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: EmqxAuthFailureRateHigh
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: EmqxMessagesDropped
+        exp_alerts: []
+
+  # ===================================================================================
+  # §13.4 bullet 3 — "Redis evictions > 0."
+  # The threshold is literally zero: the stack runs `--maxmemory-policy noeviction`, so an
+  # eviction means both that memory is short AND that the policy is not what the compose
+  # file says.
+  # ===================================================================================
+  - name: a single Redis eviction pages
+    interval: 15s
+    input_series:
+      - series: 'redis_evicted_keys_total{service="redis"}'
+        values: "0 0 0 0 0+1x40"
+
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: RedisEvictions
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: RedisEvictions
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              plane: cache
+            exp_annotations:
+              summary: "Redis is evicting keys (0.1/s)"
+              description: "ADD §13.4: \"memory undersized; emergency scale or eviction policy review.\" The stack runs noeviction, so this also means the policy is not what the compose file says. An evicted veh:meta is a vehicle that disappears from every map."
+              runbook_url: "https://github.com/mageride/mageride/blob/main/docs/runbooks/redis-evictions.md"
+
+  # ===================================================================================
+  # `maxmemory 0` means UNLIMITED in Redis, not "one byte" — and the dev stack ships no
+  # limit at all. This case is here because the first version of RedisMemoryHigh clamped
+  # the denominator to 1 and therefore fired permanently against the real slim stack: a
+  # ratio of used-bytes-to-one, in the hundreds of millions, over a 0.85 threshold. Found
+  # by running the alerts against the live stack, which is why the verify does that.
+  # ===================================================================================
+  - name: redis with no memory limit reports no ratio and is flagged instead
+    interval: 15s
+    input_series:
+      - series: 'redis_memory_used_bytes{service="redis"}'
+        values: "900000+0x160"
+      - series: 'redis_memory_max_bytes{service="redis"}'
+        values: "0+0x160"
+      - series: 'redis_evicted_keys_total{service="redis"}'
+        values: "0+0x160"
+
+    promql_expr_test:
+      - expr: redis_memory_used_bytes / (redis_memory_max_bytes > 0)
+        eval_time: 20m
+        exp_samples: []
+
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: RedisMemoryHigh
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: RedisEvictions
+        exp_alerts: []
+      - eval_time: 40m
+        alertname: RedisNoMemoryLimit
+        exp_alerts:
+          - exp_labels:
+              severity: ticket
+              plane: cache
+              service: redis
+            exp_annotations:
+              summary: "Redis has no maxmemory configured"
+              description: "RedisMemoryHigh cannot evaluate without a limit, so nothing warns before the container's own mem_limit is reached and the kernel kills it. Expected on the slim dev stack; not on the replica or in production."
+              runbook_url: "https://github.com/mageride/mageride/blob/main/docs/runbooks/redis-evictions.md"
+
+  - name: redis over its configured limit warns
+    interval: 15s
+    input_series:
+      - series: 'redis_memory_used_bytes{service="redis"}'
+        values: "460000000+0x80"
+      - series: 'redis_memory_max_bytes{service="redis"}'
+        values: "536870912+0x80"
+
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: RedisMemoryHigh
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: RedisMemoryHigh
+        exp_alerts:
+          - exp_labels:
+              severity: ticket
+              plane: cache
+              service: redis
+            exp_annotations:
+              summary: "Redis is at 85.68% of its memory limit"
+              description: "ADD §13.2's Redis row. Under `noeviction` the next write past the limit is an error, not an eviction — position-processor stops indexing rather than the map losing its oldest vehicle."
+              runbook_url: "https://github.com/mageride/mageride/blob/main/docs/runbooks/redis-evictions.md"
+
+  # ===================================================================================
+  # §13.4 bullet 4 — "Postgres replication lag > 30 s: failover risk; page on-call DBA."
+  #
+  # The guard is what makes this correct on the MVP: a primary reports
+  # `pg_replication_lag_seconds` of 0 whatever is happening, so without
+  # `pg_replication_is_replica == 1` the rule would be reading a number that means nothing.
+  # ===================================================================================
+  - name: a lagging standby pages and a primary never does
+    interval: 15s
+    input_series:
+      - series: 'pg_replication_lag_seconds{service="postgres",instance="postgres-replica-exporter:9187"}'
+        values: "45+0x40"
+      - series: 'pg_replication_is_replica{service="postgres",instance="postgres-replica-exporter:9187"}'
+        values: "1+0x40"
+      # The primary: no lag, not a replica.
+      - series: 'pg_replication_lag_seconds{service="postgres",instance="postgres-exporter:9187"}'
+        values: "0+0x40"
+      - series: 'pg_replication_is_replica{service="postgres",instance="postgres-exporter:9187"}'
+        values: "0+0x40"
+
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: PostgresReplicationLag
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              plane: database
+            exp_annotations:
+              summary: "A Postgres replica is 45s behind"
+              description: "ADD §13.4: \"failover risk; page on-call DBA.\" Read-heavy queries routed to the replica (ADD §9.3) are answering from stale data, and a promotion now would lose whatever has not been replayed."
+              runbook_url: "https://github.com/mageride/mageride/blob/main/docs/runbooks/postgres-replication-lag.md"
+
+  - name: a single primary with no standby fires nothing
+    interval: 15s
+    input_series:
+      - series: 'pg_replication_lag_seconds{service="postgres",instance="postgres-exporter:9187"}'
+        values: "0+0x40"
+      - series: 'pg_replication_is_replica{service="postgres",instance="postgres-exporter:9187"}'
+        values: "0+0x40"
+      - series: 'pg_up{service="postgres",instance="postgres-exporter:9187"}'
+        values: "1+0x40"
+
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: PostgresReplicationLag
+        exp_alerts: []
+      - eval_time: 8m
+        alertname: PostgresDown
+        exp_alerts: []
+
+  # ===================================================================================
+  # §13.4 bullet 5 — "`rides.timers` backlog > 100 fired_at IS NULL AND fire_at <
+  # now()-30s."
+  # ===================================================================================
+  - name: an overdue timer backlog pages
+    interval: 15s
+    input_series:
+      - series: 'mageride_rides_timer_backlog{service="ride-svc"}'
+        values: "0 0 40 90 140+0x40"
+
+    alert_rule_test:
+      - eval_time: 45s
+        alertname: RideTimerBacklogHigh
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: RideTimerBacklogHigh
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              plane: ride
+            exp_annotations:
+              summary: "140 ride timers are more than 30 s overdue"
+              description: "ADD §13.4 bullet 5. R-04's durable timers are what move a ride when nobody taps anything — offer expiry, arrival grace, no-show, the offline graces. A backlog means the sweep is not claiming rows, and the stuck-state pages follow within a minute or two."
+              runbook_url: "https://github.com/mageride/mageride/blob/main/docs/runbooks/ride-timer-backlog.md"
+
+  # A backlog under the threshold is a busy platform, not an incident. §13.4 says 100.
+  - name: a backlog below a hundred is not an incident
+    interval: 15s
+    input_series:
+      - series: 'mageride_rides_timer_backlog{service="ride-svc"}'
+        values: "80+0x40"
+
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: RideTimerBacklogHigh
+        exp_alerts: []
+
+  # ===================================================================================
+  # §13.4 bullet 6 — "`outbox` lag > 1 s p95: LISTEN/NOTIFY listener dead."
+  #
+  # E-09 budgets a median under 50 ms, so the histogram below has most of its mass in the
+  # 50 ms bucket and a tail past a second — the shape of a listener that has died and left
+  # the 250 ms poll doing the work.
+  # ===================================================================================
+  - name: outbox dispatch falling back to the poll pages
+    interval: 15s
+    input_series:
+      - series: 'mageride_outbox_dispatch_latency_milliseconds_bucket{le="50",service="ride-svc"}'
+        values: "0+5x60"
+      - series: 'mageride_outbox_dispatch_latency_milliseconds_bucket{le="250",service="ride-svc"}'
+        values: "0+8x60"
+      - series: 'mageride_outbox_dispatch_latency_milliseconds_bucket{le="1000",service="ride-svc"}'
+        values: "0+9x60"
+      - series: 'mageride_outbox_dispatch_latency_milliseconds_bucket{le="2500",service="ride-svc"}'
+        values: "0+10x60"
+      - series: 'mageride_outbox_dispatch_latency_milliseconds_bucket{le="+Inf",service="ride-svc"}'
+        values: "0+10x60"
+      - series: 'mageride_outbox_dispatch_latency_milliseconds_count{service="ride-svc"}'
+        values: "0+10x60"
+
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: OutboxDispatchLagHigh
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              plane: events
+            exp_annotations:
+              summary: "Outbox commit-to-publish p95 is 1750 ms"
+              description: "ADD §13.4 bullet 6. The transactional outbox is the ONLY way state changes cross a service boundary (CLAUDE.md universal rule), so lag here is every consumer on the platform reacting late — dispatch to a new ride, fanout to a revoked share, notifications to an SOS."
+              runbook_url: "https://github.com/mageride/mageride/blob/main/docs/runbooks/outbox-lag.md"
+
+  - name: an outbox inside its budget fires nothing
+    interval: 15s
+    input_series:
+      - series: 'mageride_outbox_dispatch_latency_milliseconds_bucket{le="50",service="ride-svc"}'
+        values: "0+10x60"
+      - series: 'mageride_outbox_dispatch_latency_milliseconds_bucket{le="+Inf",service="ride-svc"}'
+        values: "0+10x60"
+      - series: 'mageride_outbox_dispatch_latency_milliseconds_count{service="ride-svc"}'
+        values: "0+10x60"
+      - series: 'mageride_outbox_publish_failures_total{service="ride-svc"}'
+        values: "0+0x60"
+
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: OutboxDispatchLagHigh
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: OutboxPublishFailing
+        exp_alerts: []
+
+  # ===================================================================================
+  # ADD §13.1's synthetic row: the platform is unreachable and nobody happens to be asking.
+  # ===================================================================================
+  - name: a failing readiness probe pages even with no traffic
+    interval: 15s
+    input_series:
+      - series: 'probe_success{job="blackbox-http",probe="gateway-ready",service="api-gateway"}'
+        values: "1 1 1 0+0x40"
+
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: SyntheticProbeFailing
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: SyntheticProbeFailing
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              plane: edge
+              job: blackbox-http
+              probe: gateway-ready
+              service: api-gateway
+            exp_annotations:
+              summary: "The gateway-ready probe has been failing for three minutes"
+              description: "ADD §13.1's synthetic row. This is what says the platform is unreachable when no user happens to be asking — an availability SLO computed from traffic cannot distinguish \"no errors\" from \"no traffic\"."
+              runbook_url: "https://github.com/mageride/mageride/blob/main/docs/runbooks/service-down.md"

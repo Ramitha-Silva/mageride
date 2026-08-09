@@ -1,0 +1,151 @@
+{
+  "uid": "mageride-stream",
+  "title": "MageRide — Redpanda (event backbone)",
+  "description": "ADD §13.2's Stream row: consumer lag per partition (alert > 5 s), produce rate, storage, under-replicated partitions. Lag is COMPUTED here — Redpanda v24.2 publishes no lag metric, only a committed offset and a high watermark; see prometheus/rules/recording.stream.yml.",
+  "tags": ["mageride", "redpanda", "kafka", "add-13.2"],
+  "timezone": "Asia/Colombo",
+  "editable": false,
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-3h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Worst consumer lag",
+      "description": "ADD §13.4 pages above 5 s sustained 2 min.",
+      "gridPos": { "h": 4, "w": 5, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s", "decimals": 1, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 2 }, { "color": "red", "value": 5 }] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "background", "graphMode": "area" },
+      "targets": [{ "refId": "A", "expr": "max(mageride:consumer_lag:seconds)", "instant": true }]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Worst lag in messages",
+      "description": "D7' §12: warn > 10k, page > 100k.",
+      "gridPos": { "h": 4, "w": 5, "x": 5, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 10000 }, { "color": "red", "value": 100000 }] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "background", "graphMode": "area" },
+      "targets": [{ "refId": "A", "expr": "max(mageride:consumer_lag:messages)", "instant": true }]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Records produced/s",
+      "gridPos": { "h": 4, "w": 5, "x": 10, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "cps", "decimals": 1 }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "none", "graphMode": "area" },
+      "targets": [{ "refId": "A", "expr": "sum(mageride:stream:records_produced5m)", "instant": true }]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Unavailable partitions",
+      "description": "The MVP runs a single broker at RF=1 (ADD §14), so any non-zero value here is the event backbone down rather than degraded.",
+      "gridPos": { "h": 4, "w": 4, "x": 15, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "background", "graphMode": "none" },
+      "targets": [{ "refId": "A", "expr": "sum(redpanda_cluster_unavailable_partitions)", "instant": true }]
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Under-replicated replicas",
+      "description": "Always zero at RF=1 — nothing to under-replicate. On the 3-node production cluster this is the warning that precedes an unavailable partition.",
+      "gridPos": { "h": 4, "w": 5, "x": 19, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 1 }] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "value", "graphMode": "none" },
+      "targets": [{ "refId": "A", "expr": "sum(redpanda_kafka_under_replicated_replicas{redpanda_namespace=\"kafka\"})", "instant": true }]
+    },
+
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Consumer lag in seconds, per group and topic",
+      "description": "How long each consumer group would take to catch up if production stopped. Topics with no production are dropped rather than reported as infinitely lagging.",
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "lineWidth": 1, "fillOpacity": 5, "showPoints": "never", "thresholdsStyle": { "mode": "dashed" } },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "transparent", "value": null }, { "color": "red", "value": 5 }] }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [{ "refId": "A", "expr": "mageride:consumer_lag:seconds", "legendFormat": "{{redpanda_group}} · {{redpanda_topic}}" }]
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Consumer lag in messages — total and worst partition",
+      "description": "ADD §13.2 says 'per partition' for a reason: a group whose twelve partitions are level except one that is an hour behind has a healthy sum and a passenger somewhere whose vehicle has not moved.",
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "lineWidth": 1, "fillOpacity": 5, "showPoints": "never", "thresholdsStyle": { "mode": "dashed" } },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "transparent", "value": null }, { "color": "orange", "value": 10000 }, { "color": "red", "value": 100000 }] }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["max"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        { "refId": "A", "expr": "mageride:consumer_lag:messages", "legendFormat": "total · {{redpanda_group}}/{{redpanda_topic}}" },
+        { "refId": "B", "expr": "mageride:consumer_lag:messages_max_partition", "legendFormat": "worst partition · {{redpanda_group}}/{{redpanda_topic}}" }
+      ]
+    },
+
+    {
+      "id": 20,
+      "type": "timeseries",
+      "title": "Produced and fetched, per topic",
+      "description": "Side by side, because that is what says whether a lag is the consumer slowing down or the producer speeding up. The D6' §2.1 topics: telemetry.raw, telemetry.normalized, ride.events, dispatch.events, trip.events, audit.events.",
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 13 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "cps", "custom": { "lineWidth": 1, "fillOpacity": 5, "showPoints": "never" } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        { "refId": "A", "expr": "mageride:stream:records_produced5m", "legendFormat": "produced · {{redpanda_topic}}" },
+        { "refId": "B", "expr": "mageride:stream:records_fetched5m", "legendFormat": "fetched · {{redpanda_topic}}" }
+      ]
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "Dead letters (D6' §2.3)",
+      "description": "A dead letter is a message no consumer could handle. Nothing retries it, and no other alert covers it — the producer's write succeeded, so from every other angle the platform looks fine.",
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 13 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "cps", "decimals": 3, "custom": { "lineWidth": 2, "fillOpacity": 20, "showPoints": "never" } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["max"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [{ "refId": "A", "expr": "sum by (redpanda_topic) (rate(redpanda_kafka_records_produced_total{redpanda_namespace=\"kafka\", redpanda_topic=~\".*\\\\.dlq\"}[$__rate_interval]))", "legendFormat": "{{redpanda_topic}}" }]
+    },
+
+    {
+      "id": 30,
+      "type": "timeseries",
+      "title": "Broker health — request latency, memory, partitions",
+      "description": "ADD §13.2's 'storage' row is approximated by available memory and partition count: the single-broker MVP has no tiered storage and the disk is the VPS's, watched at the host level (C125).",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 22 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "custom": { "lineWidth": 1, "fillOpacity": 0, "showPoints": "never" } }, "overrides": [{ "matcher": { "id": "byRegexp", "options": "available memory" }, "properties": [{ "id": "unit", "value": "bytes" }, { "id": "custom.axisPlacement", "value": "right" }] }] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        { "refId": "A", "expr": "histogram_quantile(0.99, sum by (le) (rate(redpanda_kafka_request_latency_seconds_bucket[$__rate_interval])))", "legendFormat": "request latency p99 (s)" },
+        { "refId": "B", "expr": "sum(redpanda_memory_available_memory)", "legendFormat": "available memory" },
+        { "refId": "C", "expr": "sum(redpanda_cluster_partitions)", "legendFormat": "partitions" },
+        { "refId": "D", "expr": "sum(redpanda_cluster_topics)", "legendFormat": "topics" }
+      ]
+    }
+  ]
+}
