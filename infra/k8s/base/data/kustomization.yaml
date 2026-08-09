@@ -1,0 +1,43 @@
+# =====================================================================================
+# The data plane: Postgres (+PgBouncer), Redis, Redpanda, EMQX.
+#
+# All four are single-node here. D7' §8's launch topology — Patroni 1P+2R, Redis Sentinel,
+# Redpanda 3-node RF=3, EMQX 2-node — is C132's deliverable, and the production overlay says
+# so out loud rather than letting a green sync imply high availability.
+#
+# `generatorOptions.disableNameSuffixHash` is on: a hashed ConfigMap name is the usual way to
+# force a rollout when configuration changes, and it is the wrong tool here. The EMQX config
+# is referenced by a StatefulSet whose pods carry PVCs and by the ArgoCD diff, and a new
+# ConfigMap name on every content change makes every sync look like a data-plane change.
+# Configuration changes are rolled out deliberately — `kubectl rollout restart` — and the
+# runbook says so.
+# =====================================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - postgres.yaml
+  - pgbouncer.yaml
+  - redis.yaml
+  - redpanda.yaml
+  - emqx.yaml
+
+generatorOptions:
+  disableNameSuffixHash: true
+
+configMapGenerator:
+  # emqx.conf is authored for Kubernetes; acl.conf is a byte-for-byte copy of
+  # infra/deploy/emqx/acl.conf and infra/scripts/k8s-verify.sh asserts it with `cmp`. The
+  # D6' §3.1 topic tree does not depend on the substrate, so a second authored copy would be
+  # a second thing to get wrong.
+  - name: emqx-config
+    files:
+      - emqx/emqx.conf
+      - emqx/acl.conf
+
+  # Also a byte-for-byte copy, of infra/deploy/redpanda/bootstrap-topics.sh, and also
+  # checked with `cmp`. The script already takes its partition count and replication factor
+  # from the environment, so dev, the replica and DOKS run the same one.
+  - name: redpanda-bootstrap
+    files:
+      - redpanda/bootstrap-topics.sh

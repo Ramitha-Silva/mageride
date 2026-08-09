@@ -1,0 +1,158 @@
+# GENERATED FILE — do not edit.
+# Source: infra/k8s/service-catalog.yaml
+# Regenerate: python3 infra/k8s/tools/generate_manifests.py
+#
+# safety-svc  ·  backend/src/Safety.Api  ·  infra/docker/Dockerfile.service
+#
+# D-33's SOS dispatch SLO is 5 s and pages at p99 > 5 s with `for: 0s` (C119). Its PDB
+# is minAvailable 2 rather than the default maxUnavailable 1: an SOS that arrives during
+# a node drain has to find a pod.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: safety-svc
+  labels:
+    app: safety-svc
+    app.kubernetes.io/name: safety-svc
+    app.kubernetes.io/component: backend
+    app.kubernetes.io/part-of: mageride
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  progressDeadlineSeconds: 600
+  minReadySeconds: 10
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxUnavailable: 0, maxSurge: 1 }
+  selector:
+    matchLabels: { app: safety-svc }
+  template:
+    metadata:
+      labels:
+        app: safety-svc
+        app.kubernetes.io/name: safety-svc
+        app.kubernetes.io/component: backend
+        app.kubernetes.io/part-of: mageride
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "5000"
+        prometheus.io/path: /metrics
+    spec:
+      serviceAccountName: mageride
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1654
+        runAsGroup: 1654
+        fsGroup: 1654
+        seccompProfile: { type: RuntimeDefault }
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: { app: safety-svc }
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: { app: safety-svc }
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: safety-svc
+          image: ghcr.io/mageride/safety-svc:sha-0000000
+          imagePullPolicy: IfNotPresent
+          ports:
+            - { name: http, containerPort: 5000, protocol: TCP }
+          envFrom:
+            # D7' §4.1's non-secret set, and the in-cluster address of every upstream.
+            - configMapRef: { name: common-config }
+            - configMapRef: { name: service-endpoints }
+            # Vault, via the External Secrets Operator (D7' §13). Never a repository file.
+            - secretRef: { name: common-secret }
+            - secretRef: { name: safety-svc-secret }
+          resources:
+            requests: { cpu: "500m", memory: 1Gi }
+            limits: { cpu: "1", memory: 2Gi }
+          # D7' §5.1: /health/ready pings DB + Redis + Kafka; /health/live is liveness only.
+          readinessProbe:
+            httpGet: { path: /health/ready, port: http }
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet: { path: /health/live, port: http }
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 3
+            failureThreshold: 6
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - { name: tmp, emptyDir: {} }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: safety-svc
+  labels:
+    app: safety-svc
+    app.kubernetes.io/name: safety-svc
+    app.kubernetes.io/component: service
+    app.kubernetes.io/part-of: mageride
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  type: ClusterIP
+  selector: { app: safety-svc }
+  ports:
+    - { name: http, port: 80, targetPort: http, protocol: TCP }
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: safety-svc
+  labels:
+    app: safety-svc
+    app.kubernetes.io/name: safety-svc
+    app.kubernetes.io/component: autoscaling
+    app.kubernetes.io/part-of: mageride
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: safety-svc }
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: { type: Utilization, averageUtilization: 70 }
+  behavior:
+    # Scale up fast, down slowly. A dispatch round that lost a pod mid-offer is a
+    # rider watching a spinner; a pod that lived five minutes too long is pennies.
+    scaleUp: { stabilizationWindowSeconds: 30 }
+    scaleDown: { stabilizationWindowSeconds: 300 }
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: safety-svc
+  labels:
+    app: safety-svc
+    app.kubernetes.io/name: safety-svc
+    app.kubernetes.io/component: policy
+    app.kubernetes.io/part-of: mageride
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels: { app: safety-svc }

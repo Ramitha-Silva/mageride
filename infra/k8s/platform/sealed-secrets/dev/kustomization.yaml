@@ -1,0 +1,21 @@
+# =====================================================================================
+# dev SealedSecrets — EMPTY until somebody runs seal.sh against a cluster.
+#
+# It cannot be pre-populated: a SealedSecret is asymmetric ciphertext under the sealing key
+# that the sealed-secrets controller generates INSIDE the target cluster, so the ciphertext
+# does not exist until that cluster does. That is the same property that makes committing the
+# output safe.
+#
+#   bash infra/k8s/platform/sealed-secrets/seal.sh --generate --cert <public.pem>
+#
+# rewrites this file with one entry per Secret. Until then the dev cluster's pods stay in
+# `CreateContainerConfigError`, which is the correct failure — a pod that started with empty
+# credentials would look healthy and answer 401 to everything.
+#
+# See README.md. The Vault + External Secrets Operator path used by staging and production is
+# ../external-secrets/.
+# =====================================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: mageride
+resources: []

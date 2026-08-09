@@ -1,0 +1,152 @@
+# =====================================================================================
+# The public edge — D7' §5's Ingress.
+#
+# THREE Ingress objects rather than one, and the split is not cosmetic: ingress-nginx
+# annotations apply to the whole object, not to a path. The SignalR hub needs a one-hour
+# read timeout and session affinity; the REST API must not have either — a 3600 s read
+# timeout on `/` turns one stuck upstream into an exhausted worker pool, and a sticky cookie
+# on a stateless API pins every client to one gateway pod and defeats the HPA.
+#
+#   mr-ingress          api.mageride.lk/            -> api-gateway   (REST, 262 operations)
+#   mr-ingress-hubs     api.mageride.lk/hubs        -> fanout-svc    (WSS, R-06/D-23)
+#   mr-ingress-portals  admin. / fleet. / passenger.-> the three Next.js surfaces
+#
+# WHAT IS NOT HERE, and must never be: MQTT. 8883 (tracker mTLS) and 8084 (mobile WSS) are
+# L4 and are published by a LoadBalancer Service in the overlay. infra/CLAUDE.md: "MQTT
+# (8883) is TCP passthrough at HAProxy and is never routed through the API gateway." An HTTP
+# ingress cannot terminate a device's mutual-TLS handshake and cannot forward a binary
+# protocol; the failure is not a 502, it is a tracker that connects and delivers nothing.
+#
+# `ingressClassName: nginx` matches D7' §5's annotations. The dev/K3s overlay patches it to
+# `traefik` and says what is lost there.
+# =====================================================================================
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mr-ingress
+  namespace: mageride
+  labels:
+    app.kubernetes.io/part-of: mageride
+  annotations:
+    # Wave 3: last. An Ingress that resolved before its backend Service had endpoints would
+    # answer 503 to real traffic during a first sync.
+    argocd.argoproj.io/sync-wave: "3"
+    # 60 s, not 3600. The REST plane's slowest operation is an OCR extraction and it is
+    # asynchronous; a minute is already generous.
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+    # Driver documents and proof-of-delivery photos are uploaded through this path.
+    nginx.ingress.kubernetes.io/proxy-body-size: 16m
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    # HSTS on the API host as well as the portals: the mobile clients pin nothing, so a
+    # downgrade on first contact is the attack this closes.
+    nginx.ingress.kubernetes.io/hsts: "true"
+    nginx.ingress.kubernetes.io/hsts-max-age: "31536000"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: [api.mageride.lk]
+      secretName: mr-tls
+  rules:
+    - host: api.mageride.lk
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: api-gateway
+                port: { number: 80 }
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mr-ingress-hubs
+  namespace: mageride
+  labels:
+    app.kubernetes.io/part-of: mageride
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+    # D7' §5's `proxy-read-timeout: "3600"`. A WebSocket carries no traffic between
+    # position updates, and a 60 s read timeout closes it mid-ride.
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    # SignalR negotiates before it upgrades, and falls back to long polling where a
+    # WebSocket cannot be established (corporate proxies, some mobile networks). Both
+    # need the follow-up requests to reach the pod that holds the connection state.
+    # The Redis backplane (R-06) makes MESSAGES reach every pod; it does not make a
+    # long-polling client's next poll land on the right one.
+    nginx.ingress.kubernetes.io/affinity: cookie
+    nginx.ingress.kubernetes.io/affinity-mode: persistent
+    nginx.ingress.kubernetes.io/session-cookie-name: mr-hub
+    nginx.ingress.kubernetes.io/session-cookie-max-age: "3600"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: [api.mageride.lk]
+      secretName: mr-tls
+  rules:
+    - host: api.mageride.lk
+      http:
+        paths:
+          - path: /hubs
+            pathType: Prefix
+            backend:
+              service:
+                name: fanout-svc
+                port: { number: 80 }
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mr-ingress-portals
+  namespace: mageride
+  labels:
+    app.kubernetes.io/part-of: mageride
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-body-size: 16m
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/hsts: "true"
+    nginx.ingress.kubernetes.io/hsts-max-age: "31536000"
+spec:
+  ingressClassName: nginx
+  tls:
+    # One certificate per host rather than a wildcard: `passenger.mageride.lk` is
+    # unauthenticated public traffic (AL-44) and the two portals are back-office. A single
+    # certificate and key shared across all three means the key that serves the public page
+    # is the key that serves the admin console.
+    - hosts: [admin.mageride.lk]
+      secretName: mr-tls-admin
+    - hosts: [fleet.mageride.lk]
+      secretName: mr-tls-fleet
+    - hosts: [passenger.mageride.lk]
+      secretName: mr-tls-passenger
+  rules:
+    # AL-02 — back-office for all six internal roles, no MFA anywhere (AL-37).
+    - host: admin.mageride.lk
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service: { name: admin-portal, port: { number: 80 } }
+    # AL-03 — fleet operators.
+    - host: fleet.mageride.lk
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service: { name: fleet-portal, port: { number: 80 } }
+    # AL-44 — the six no-login SCR-WT pages.
+    - host: passenger.mageride.lk
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service: { name: web-passenger, port: { number: 80 } }

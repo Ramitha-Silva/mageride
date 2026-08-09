@@ -1,0 +1,52 @@
+# =====================================================================================
+# `emqx-device-ca` — provisioning-svc's issuing chain, as the 8883 listener's `cacertfile`
+# (T-02).
+#
+# THIS IS ONE OF THE TWO BOOTSTRAP SEAMS, and it is worth understanding before the first
+# deploy. In the dev compose stack, `infra/deploy/device-ca` is a bind mount that
+# provisioning-svc writes and both EMQX and tcp-adapter read. In Kubernetes it cannot be:
+# the CA volume is ReadWriteOnce, provisioning-svc needs write access to mint, and EMQX reads
+# the chain WHEN THE LISTENER STARTS — a missing chain does not degrade 8883, it stops the
+# broker booting.
+#
+# So the chain travels through Vault:
+#
+#   1. provisioning-svc comes up with its own PVC and generates the root and intermediate on
+#      first boot (`EmbeddedStepCa`).
+#   2. An operator copies `certs/ca_chain.crt` out of the pod into Vault, once
+#      (docs/runbooks/deploy.md §5). It is a PUBLIC certificate — the private key never
+#      leaves the volume — so Vault is being used here for distribution, not for secrecy.
+#   3. ESO projects it here, and EMQX's 8883 listener trusts it.
+#
+# Until step 2, the EMQX StatefulSet does not start. That is the correct failure: a broker
+# that came up WITHOUT the chain would accept tracker connections it cannot authenticate, and
+# `enable_authn = false` on that listener means mutual TLS is the only authentication there
+# is.
+#
+# On rotation (step-ca root quarterly, D7' §13): write the NEW chain containing BOTH
+# intermediates before retiring the old one, or every already-provisioned tracker fails its
+# handshake.
+# =====================================================================================
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: emqx-device-ca
+  labels:
+    app: emqx
+    app.kubernetes.io/name: emqx-device-ca
+    app.kubernetes.io/component: secret
+    app.kubernetes.io/part-of: mageride
+spec:
+  refreshInterval: 12h
+  secretStoreRef:
+    name: mageride-vault
+    kind: ClusterSecretStore
+  target:
+    name: emqx-device-ca
+    creationPolicy: Owner
+    deletionPolicy: Retain
+  data:
+    # The file name emqx.conf's `cacertfile` points at.
+    - secretKey: ca_chain.crt
+      remoteRef: { key: provisioning-svc, property: ca_chain_crt }

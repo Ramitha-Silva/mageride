@@ -1,0 +1,214 @@
+# =====================================================================================
+# Redpanda — the event backbone (D6' §2, D7' §9).
+#
+# ONE BROKER at RF=1 in base. D7' §8's launch topology is "Redpanda 3-node RF=3"; the
+# production overlay scales the StatefulSet to 3 and the bootstrap Job to RF=3, which is a
+# replica count and a Job argument rather than a different manifest — but the seed-server
+# and rack-awareness work that makes a 3-node cluster survive a node loss is C132's.
+#
+# --- Two corrections carried from the dev stack (infra/CLAUDE.md) --------------------
+#   1. `redpandadata/redpanda:v24.2.26`, not `:v24.2`. Redpanda publishes only full patch
+#      tags and the bare minor tag D7' §2.1/§9 prints does not exist.
+#   2. `rpk redpanda mode production` BEFORE `start`. The image ships
+#      `developer_mode: true`, and rpk then silently appends `--unsafe-bypass-fsync=true` —
+#      an acked write is not necessarily on disk. Neither `--mode` (it accepts only
+#      `dev-container`) nor `--set redpanda.developer_mode=false` fixes it: rpk computes the
+#      broker flags before applying `--set`. "0 data loss on process kill" is only true with
+#      this line.
+#
+# `--advertise-kafka-addr` uses the POD's stable DNS name, which is why this has to be a
+# StatefulSet with a headless Service: a client's second (metadata-driven) connection goes
+# to whatever the broker advertised, so advertising a ClusterIP would send every producer
+# back through the load balancer and break partition leadership.
+# =====================================================================================
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redpanda
+  namespace: mageride
+  labels:
+    app: redpanda
+    app.kubernetes.io/name: redpanda
+    app.kubernetes.io/component: data
+    app.kubernetes.io/part-of: mageride
+spec:
+  clusterIP: None
+  # Brokers must resolve each other before they are Ready, or a forming cluster deadlocks.
+  publishNotReadyAddresses: true
+  selector: { app: redpanda }
+  ports:
+    - { name: kafka, port: 9092, targetPort: kafka, protocol: TCP }
+    - { name: admin, port: 9644, targetPort: admin, protocol: TCP }
+    - { name: schema, port: 8081, targetPort: schema, protocol: TCP }
+    - { name: proxy, port: 8082, targetPort: proxy, protocol: TCP }
+    - { name: rpc, port: 33145, targetPort: rpc, protocol: TCP }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redpanda
+  namespace: mageride
+  labels:
+    app: redpanda
+    app.kubernetes.io/name: redpanda
+    app.kubernetes.io/component: data
+    app.kubernetes.io/part-of: mageride
+spec:
+  serviceName: redpanda
+  replicas: 1
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels: { app: redpanda }
+  template:
+    metadata:
+      labels:
+        app: redpanda
+        app.kubernetes.io/name: redpanda
+        app.kubernetes.io/component: data
+        app.kubernetes.io/part-of: mageride
+      annotations:
+        # C119's `redpanda` job scrapes /public_metrics on the admin port.
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9644"
+        prometheus.io/path: /public_metrics
+    spec:
+      terminationGracePeriodSeconds: 90
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        runAsGroup: 101
+        fsGroup: 101
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: redpanda
+          image: redpandadata/redpanda:v24.2.26
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              set -euo pipefail
+              # See correction (2) in the header. This is not optional.
+              rpk redpanda mode production
+              ordinal="${POD_NAME##*-}"
+              exec /usr/bin/rpk redpanda start \
+                --smp=1 \
+                --overprovisioned \
+                --node-id="${ordinal}" \
+                --memory=1G \
+                --reserve-memory=0M \
+                --check=false \
+                --kafka-addr=internal://0.0.0.0:9092 \
+                --advertise-kafka-addr="internal://${POD_NAME}.redpanda.${POD_NAMESPACE}.svc.cluster.local:9092" \
+                --pandaproxy-addr=internal://0.0.0.0:8082 \
+                --advertise-pandaproxy-addr="internal://${POD_NAME}.redpanda.${POD_NAMESPACE}.svc.cluster.local:8082" \
+                --schema-registry-addr=internal://0.0.0.0:8081 \
+                --rpc-addr=0.0.0.0:33145 \
+                --advertise-rpc-addr="${POD_NAME}.redpanda.${POD_NAMESPACE}.svc.cluster.local:33145" \
+                --seeds="redpanda-0.redpanda.${POD_NAMESPACE}.svc.cluster.local:33145" \
+                --set redpanda.auto_create_topics_enabled=true
+          env:
+            - name: POD_NAME
+              valueFrom: { fieldRef: { fieldPath: metadata.name } }
+            - name: POD_NAMESPACE
+              valueFrom: { fieldRef: { fieldPath: metadata.namespace } }
+          ports:
+            - { name: kafka, containerPort: 9092, protocol: TCP }
+            - { name: admin, containerPort: 9644, protocol: TCP }
+            - { name: schema, containerPort: 8081, protocol: TCP }
+            - { name: proxy, containerPort: 8082, protocol: TCP }
+            - { name: rpc, containerPort: 33145, protocol: TCP }
+          resources:
+            requests: { cpu: 500m, memory: 1Gi }
+            limits: { cpu: "1", memory: 1536Mi }
+          readinessProbe:
+            # `rpk cluster health` exits 0 while the cluster is still forming, so the check
+            # has to read the verdict rather than the exit code.
+            exec:
+              command: ["/bin/sh", "-c", "rpk cluster health | grep -E 'Healthy:.+true'"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 10
+          livenessProbe:
+            tcpSocket: { port: kafka }
+            initialDelaySeconds: 40
+            periodSeconds: 15
+            failureThreshold: 6
+          securityContext:
+            allowPrivilegeEscalation: false
+            # rpk rewrites /etc/redpanda/redpanda.yaml on every start (`mode production`),
+            # so this one container cannot have a read-only root. The config directory is
+            # the only writable path and it is an emptyDir.
+            readOnlyRootFilesystem: false
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: redpandadata, mountPath: /var/lib/redpanda/data }
+  volumeClaimTemplates:
+    - metadata:
+        name: redpandadata
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 20Gi
+---
+# --- The D6' §2.1 topic registry ------------------------------------------------------
+# Auto-create stays on to match D7' §3, but a topic nobody declared then appears with one
+# partition and the default retention — which is a bug better surfaced as a wrong topic
+# than as a producer error. This Job declares every topic with its §2.1 partition count and
+# retention and its §2.3 DLQ, and it is idempotent: creating a topic that exists is not an
+# error and the script re-applies the configuration of every topic it finds.
+#
+# Sync wave 1: after the broker (wave 0, the default) and BEFORE the consumers (wave 2). That
+# order is the point — mqtt-bridge-svc and position-processor-svc starting against a broker with
+# `auto_create_topics_enabled` would each conjure a 1-partition `telemetry.raw` with the default
+# retention, and a partition count can be raised but never lowered.
+#
+# Same `Replace=true` reasoning as the migration Job: a Job template is immutable, so it is
+# recreated on every sync. Idempotent by construction — creating a topic that exists is not an
+# error and the script re-applies the configuration of every topic it finds.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: redpanda-topics
+  namespace: mageride
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+    argocd.argoproj.io/sync-options: Replace=true,Force=true
+spec:
+  backoffLimit: 6
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels: { app: redpanda-topics }
+    spec:
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        runAsGroup: 101
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: topics
+          image: redpandadata/redpanda:v24.2.26
+          command: ["/bin/sh", "/opt/mageride/bootstrap-topics.sh"]
+          env:
+            - { name: REDPANDA_BROKERS, value: "redpanda-0.redpanda:9092" }
+            - { name: REDPANDA_PARTITIONS, value: "3" }
+            # RF=1 in base because base is one broker. The production overlay sets 3, which
+            # D7' §8 requires and which a 1-broker cluster cannot satisfy.
+            - { name: REDPANDA_REPLICAS, value: "1" }
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 256Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: script, mountPath: /opt/mageride }
+      volumes:
+        - name: script
+          configMap:
+            name: redpanda-bootstrap
+            defaultMode: 0555

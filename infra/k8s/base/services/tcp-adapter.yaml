@@ -1,0 +1,157 @@
+# GENERATED FILE — do not edit.
+# Source: infra/k8s/service-catalog.yaml
+# Regenerate: python3 infra/k8s/tools/generate_manifests.py
+#
+# tcp-adapter  ·  backend/src/TcpAdapter  ·  backend/src/TcpAdapter/Dockerfile
+#
+# A StatefulSet for the reason D7' §5 lists it as one — stable identity. Trackers are
+# configured with a host and port and hold one long-lived TCP connection; a pod name
+# that changes on every rollout makes a device-side connection log unreadable and makes
+# per-pod IMEI affinity impossible to reason about. No HTTP surface at all, so the
+# liveness probe is a socket connect on 5023 (D7' §5.1). No HPA: the connection count is
+# set by how many trackers exist, and rebalancing 100k devices to relieve CPU would
+# disconnect them all. THE PSK KEY IS A SECRET HERE, NOT A SHARED VOLUME, and that is
+# the one place these manifests cannot mirror the compose stack. Dev bind-mounts
+# `deploy/device-ca` into provisioning-svc (which generates `secrets/psk_signing_key`)
+# and into this container read-only. In Kubernetes that volume is ReadWriteOnce, so two
+# workloads cannot share it across nodes — and provisioning-svc has to keep write access
+# to mint CA material. So this container gets a Secret projected at the same path the
+# code reads (`<Adapter:PskKeyDirectory>/secrets/psk_signing_key`,
+# PskCredentials.SigningKeyFile) and the value is copied into Vault once, after
+# provisioning-svc's first boot. Until it is, `PskCredentials.CanVerify` is false and
+# the adapter serves the protocols that carry no credential — which the code was written
+# to allow. The copy is one step in docs/runbooks/deploy.md §5 and it is on T-02's
+# 90-day rotation.
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: tcp-adapter
+  labels:
+    app: tcp-adapter
+    app.kubernetes.io/name: tcp-adapter
+    app.kubernetes.io/component: backend
+    app.kubernetes.io/part-of: mageride
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  serviceName: tcp-adapter
+  podManagementPolicy: Parallel
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels: { app: tcp-adapter }
+  template:
+    metadata:
+      labels:
+        app: tcp-adapter
+        app.kubernetes.io/name: tcp-adapter
+        app.kubernetes.io/component: backend
+        app.kubernetes.io/part-of: mageride
+      annotations:
+        # No /metrics: this process has no HTTP surface. Its telemetry is OTLP to the
+        # collector (Otel__Endpoint), which is the only path it has (C119).
+        prometheus.io/scrape: "false"
+    spec:
+      serviceAccountName: mageride
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1654
+        runAsGroup: 1654
+        fsGroup: 1654
+        seccompProfile: { type: RuntimeDefault }
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: { app: tcp-adapter }
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: { app: tcp-adapter }
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: tcp-adapter
+          image: ghcr.io/mageride/tcp-adapter:sha-0000000
+          imagePullPolicy: IfNotPresent
+          ports:
+            - { name: gt06, containerPort: 5023, protocol: TCP }
+            - { name: jt808, containerPort: 5024, protocol: TCP }
+            - { name: h02, containerPort: 5025, protocol: TCP }
+            - { name: nmea-udp, containerPort: 5026, protocol: UDP }
+          envFrom:
+            # D7' §4.1's non-secret set, and the in-cluster address of every upstream.
+            - configMapRef: { name: common-config }
+            - configMapRef: { name: service-endpoints }
+            # Vault, via the External Secrets Operator (D7' §13). Never a repository file.
+            - secretRef: { name: common-secret }
+            - secretRef: { name: tcp-adapter-secret }
+          resources:
+            requests: { cpu: "500m", memory: 512Mi }
+            limits: { cpu: "1", memory: 1Gi }
+          # D7' §5.1's tcp-adapter row. There is no HTTP surface in this process at all
+          # (mqtt-topics.md §7), so a socket connect is the only probe there can be.
+          readinessProbe:
+            tcpSocket: { port: gt06 }
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 5
+          livenessProbe:
+            tcpSocket: { port: gt06 }
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 5
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+            - { name: psk-signing-key, mountPath: /var/step/secrets, readOnly: true }
+      volumes:
+        - { name: tmp, emptyDir: {} }
+        - name: psk-signing-key
+          secret:
+            secretName: tcp-adapter-psk
+            defaultMode: 0400
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tcp-adapter
+  labels:
+    app: tcp-adapter
+    app.kubernetes.io/name: tcp-adapter
+    app.kubernetes.io/component: service
+    app.kubernetes.io/part-of: mageride
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  clusterIP: None
+  type: ClusterIP
+  selector: { app: tcp-adapter }
+  ports:
+    - { name: gt06, port: 5023, targetPort: gt06, protocol: TCP }
+    - { name: jt808, port: 5024, targetPort: jt808, protocol: TCP }
+    - { name: h02, port: 5025, targetPort: h02, protocol: TCP }
+    - { name: nmea-udp, port: 5026, targetPort: nmea-udp, protocol: UDP }
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: tcp-adapter
+  labels:
+    app: tcp-adapter
+    app.kubernetes.io/name: tcp-adapter
+    app.kubernetes.io/component: policy
+    app.kubernetes.io/part-of: mageride
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels: { app: tcp-adapter }

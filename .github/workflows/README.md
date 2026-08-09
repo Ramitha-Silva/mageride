@@ -5,8 +5,8 @@ component's definition of done, and it is the same command CI runs — a compone
 "green in CI" by some separate standard. This file says which job runs which shape of
 command, and what to do when you add a component whose `verify_cmd` does not fit one.
 
-`ci.yml` is the entry point only. Full CD — ArgoCD, promotion by image SHA, rollback — is
-**C124** (D7' §7's `deploy` job), and nothing here deploys anything.
+`ci.yml` is the entry point only, and it still deploys nothing. Full CD — ArgoCD, promotion by image
+SHA, rollback — **landed in C124** and is the six workflows in [Delivery](#delivery) below.
 
 ## Jobs
 
@@ -37,7 +37,21 @@ The 135 `verify_cmd` entries in the manifest come in seven shapes. Six already h
 The seventh shape is **wave 5 and 6**: `bash infra/replica/deploy.sh`, `bash chaos/run-drills.sh`,
 `k6 run load/…`, `kubectl apply --dry-run -k infra/k8s/…`, `bash acceptance/sg/run.sh`. None of
 these belong on a PR runner — they need the deployed replica, a Singapore region, or a load
-generator. They are **C124's** to schedule, not `ci.yml`'s.
+generator. C124 gave them two homes:
+
+| `verify_cmd` | Job |
+|---|---|
+| `kubectl apply --dry-run=client -k infra/k8s/overlays/staging` (C124) | `k8s-validate.yml`, on every PR that touches `infra/k8s/` — against a kind cluster, because `--dry-run=client` still needs one for discovery |
+| `kubectl apply --dry-run=client -k infra/k8s/overlays/production` (C132) | the same job, alongside staging and dev |
+| `bash infra/replica/deploy.sh --dry-run` (C125) | `nightly.yml`, probing |
+| `bash security/run-asvs-checks.sh` (C127/C128) | `nightly.yml`, probing |
+| `k6 run load/…` (C129) | `nightly.yml`, probing |
+| `bash chaos/run-drills.sh` (C130) | `nightly.yml`, probing |
+| `bash acceptance/sg/run.sh` (C131) | `nightly.yml`, probing — and it warns that a GitHub runner is not in Singapore |
+
+"Probing" means the job checks for its own script and skips with a `::notice::` when the component
+that owns it has not landed — the same pattern the `android` leg uses for the wave-1 Gradle modules,
+so `nightly.yml` needs no edit as waves 5 and 6 complete.
 
 ### Adding a component
 
@@ -46,7 +60,72 @@ generator. They are **C124's** to schedule, not `ci.yml`'s.
    project is in `backend/MageRide.sln`, `settings.gradle.kts` or `portals/package.json`.
 2. If it is a new script under `infra/scripts/`, add a job. Give it an explicit `runs-on`,
    a `timeout-minutes`, and a comment naming the component it verifies.
-3. If it needs a deployed environment, it is C124's, not this file's.
+3. If it needs a deployed environment, add a probing job to `nightly.yml`.
+
+---
+
+## Delivery
+
+Six workflows, none of which holds a cluster credential. The only write any of them makes is a commit
+to `infra/k8s/overlays/<env>/images/`; ArgoCD, inside the cluster, is the only thing that talks to an
+API server. Full walkthrough: `docs/runbooks/deploy.md`.
+
+| Workflow | Trigger | What it does |
+|---|---|---|
+| `images.yml` | called by `cd.yml`; `workflow_dispatch` | 34 images: build, push `sha-<7>`, **cosign keyless sign the digest**, SBOM, build provenance. The matrix comes from `infra/k8s/service-catalog.yaml`, so a new service needs no edit here. |
+| `deploy.yml` | called | migration gate → write the tag → commit → verify. Reusable, one environment per call. |
+| `cd.yml` | `ci` completed on `main` | the automatic path: images → dev → staging. Refuses to start unless that CI run SUCCEEDED. |
+| `promote.yml` | `workflow_dispatch` | staging → production. Requires the `production` environment's reviewer, and refuses a SHA staging is not running. |
+| `rollback.yml` | `workflow_dispatch` | writes a previous tag. The same mechanism as a deploy, deliberately. `docs/runbooks/rollback.md`. |
+| `k8s-validate.yml` | PRs touching `infra/k8s/` or a workflow | `k8s-verify.sh`, kubeconform, actionlint, and the printed C124 verify command against a kind cluster. |
+| `nightly.yml` | 18:30 UTC (00:00 Asia/Colombo) | signature verification of what is deployed, ArgoCD drift, and the wave-5/6 suites above. |
+
+### The migration gate
+
+Twice, checking different things:
+
+1. **`deploy.yml`, before the promotion commit exists.** `infra/scripts/migration-gate.sh` diffs the
+   migrations against the SHA that environment is *currently running* (read from the overlay — the
+   repository is the record of what is deployed), refuses a modified or deleted released script,
+   refuses anything that is not expand-only, and applies the set twice to a throwaway
+   `timescale/timescaledb-ha:pg16`. **A failure means no commit, so ArgoCD has nothing to sync and the
+   previous version keeps serving.**
+2. **ArgoCD sync wave 1, in the cluster.** The same image, the real database. A Job is Healthy only
+   when it completes, and wave 2 is every service — so a failed migration leaves them all on the image
+   they were already running. This half catches a hand-run `argocd app sync`.
+
+Backward compatibility is not optional because the rollout is `maxUnavailable: 0, maxSurge: 1`: old
+and new pods serve against one schema for the length of the rollout, which across 34 workloads is
+minutes.
+
+### Verifying an image signature
+
+```bash
+cosign verify ghcr.io/mageride/ride-svc:sha-1a2b3c4 \
+  --certificate-identity-regexp '^https://github.com/Ramitha-Silva/mageride/' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+
+cosign verify-attestation --type spdxjson ghcr.io/mageride/ride-svc:sha-1a2b3c4 \
+  --certificate-identity-regexp '^https://github.com/Ramitha-Silva/mageride/' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+Keyless, so there is no key to store or rotate: the signature's certificate names the workflow, the
+repository and the commit that built the image. `nightly.yml` runs this over every deployed image, and
+it is the only check that would notice an image pushed by hand.
+
+### Repository configuration the delivery path needs
+
+| | | |
+|---|---|---|
+| environment | `dev`, `staging` | no protection |
+| environment | `production` | **required reviewers** — this is the deploy gate |
+| variable | `IMAGE_NAMESPACE` | `ghcr.io/<owner>` unless a `mageride` organisation exists |
+| variable | `ARGOCD_SERVER` | optional; enables `argocd app wait` instead of a health probe |
+| secret | `ARGOCD_AUTH_TOKEN` | with it |
+
+`GITHUB_TOKEN` covers the rest: `packages: write` to push, `id-token: write` to sign, `contents:
+write` to commit the promotion.
 
 ## Rules this workflow enforces
 

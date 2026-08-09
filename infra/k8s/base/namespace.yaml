@@ -1,0 +1,42 @@
+# =====================================================================================
+# The namespace every MageRide workload lives in (D7' §5: `namespace: mageride`), and the
+# one ServiceAccount they all run as.
+# =====================================================================================
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mageride
+  annotations:
+    # Everything else is relative to this: ArgoCD applies waves in ascending order and waits
+    # for each to be Healthy, so the namespace and the ServiceAccount exist before any
+    # workload references them. See platform/argocd/README.md for the whole ordering.
+    argocd.argoproj.io/sync-wave: "-2"
+  labels:
+    app.kubernetes.io/part-of: mageride
+    # Pod Security Admission, enforced rather than audited. Every image in this platform is
+    # non-root with a read-only root filesystem and no capabilities (C010's templates), so
+    # `restricted` costs nothing and makes a future privileged sidecar a rejected pod
+    # instead of a quiet escalation.
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/warn: restricted
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: mageride
+  namespace: mageride
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+# No service reads the Kubernetes API, so no pod needs a token in its filesystem. This is
+# the one place it can be said once for all thirty-four workloads.
+automountServiceAccountToken: false
+imagePullSecrets:
+  # ghcr.io packages are private by default. The secret is an ExternalSecret
+  # (platform/external-secrets/base/ghcr-pull.yaml) — never a repository file.
+  #
+  # If the packages are made public this reference can stay: a missing imagePullSecret is a
+  # kubelet warning and an anonymous pull, not a failed pod. What it must never become is a
+  # committed `.dockerconfigjson`.
+  - name: ghcr-pull

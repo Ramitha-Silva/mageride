@@ -1,0 +1,292 @@
+# =====================================================================================
+# Promote one commit's images into one environment (C124).
+#
+# Reusable. cd.yml calls it for dev then staging; promote.yml calls it for production behind an
+# environment approval; rollback.yml calls it with an older SHA.
+#
+# --- WHAT THIS WORKFLOW DOES NOT HAVE: CLUSTER CREDENTIALS -----------------------------
+# There is no kubeconfig, no service-account token and no `kubectl apply` anywhere in this file,
+# and that is the design. The pipeline's only write is a COMMIT to
+# `infra/k8s/overlays/<env>/images/`; ArgoCD, running inside the cluster, is the only thing that
+# talks to the API server. So a compromised Actions runner can propose a deploy and cannot
+# perform one, a rollback is a revert rather than an incident-time `kubectl`, and what is
+# deployed is always readable from the repository.
+#
+# The optional ARGOCD_* secrets are read-only-ish (an `app wait`) and only make the pipeline
+# report the outcome; without them the deploy still happens and the workflow says how it checked.
+#
+# --- THE MIGRATION GATE ---------------------------------------------------------------
+# The C124 fence: "DB migrations are gated pre-deploy and must be backward-compatible with the
+# running version." That is enforced twice, and the two halves check different things:
+#
+#   HERE, before the promotion commit exists:
+#     * which scripts are new relative to the SHA this environment is currently running;
+#     * that each new script is BACKWARD-COMPATIBLE — it must not break the version still
+#       serving during the rollout, because maxUnavailable 0 / maxSurge 1 means old and new pods
+#       run against one schema at the same time. `infra/scripts/migration-gate.sh` refuses a
+#       `DROP COLUMN`, a type change, a rename or a blocking `NOT NULL` unless it is explicitly
+#       marked as the contract half of an expand/contract pair;
+#     * that they actually apply, twice, to a throwaway Postgres 16 (the C003-C006 discipline).
+#     If any of that fails there is NO COMMIT, so ArgoCD has nothing new to sync and the
+#     previous version keeps serving. That is the definition-of-done sentence.
+#
+#   IN THE CLUSTER, at ArgoCD sync wave 1 (infra/k8s/base/jobs/migrate.yaml):
+#     the same image applies the same scripts to the real database, and wave 2 — every service
+#     and portal — is not applied unless that Job completes. This is the half that catches a
+#     hand-run `argocd app sync` and a self-heal.
+# =====================================================================================
+
+name: deploy
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: dev | staging | production
+        required: true
+        type: string
+      sha:
+        description: The full commit SHA whose images are promoted.
+        required: true
+        type: string
+      reason:
+        description: Shown in the promotion commit message. "rollback from <sha>", etc.
+        required: false
+        default: ""
+        type: string
+
+concurrency:
+  # One promotion per environment at a time. Two concurrent runs would both read the old tag,
+  # both write, and the second push would be rejected — or worse, retried into a mixed state.
+  group: deploy-${{ inputs.environment }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  # ===================================================================================
+  # The gate. Runs before anything is written anywhere.
+  # ===================================================================================
+  migration-gate:
+    name: migration gate (${{ inputs.environment }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      deployed: ${{ steps.deployed.outputs.sha }}
+    services:
+      # The same image the platform runs (T-06), so the gate exercises TimescaleDB and PostGIS
+      # rather than a plain postgres:16 that would accept DDL the real database rejects.
+      postgres:
+        image: timescale/timescaledb-ha:pg16
+        env:
+          POSTGRES_PASSWORD: gate
+          POSTGRES_USER: postgres
+          POSTGRES_DB: mageride
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres -d mageride"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The whole history: the gate diffs the new SHA's migrations against the ones the
+          # environment is already running, and that commit may be far behind.
+          fetch-depth: 0
+          ref: ${{ inputs.sha }}
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      # What is this environment running right now? The image tag in the overlay IS the answer —
+      # the repository is the record of what is deployed, which is the property GitOps is for.
+      - name: read the deployed SHA
+        id: deployed
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet pyyaml
+          deployed=$(python3 infra/k8s/tools/set_image_tag.py "$ENVIRONMENT" --print)
+          echo "sha=$deployed" >> "$GITHUB_OUTPUT"
+          echo "::notice::$ENVIRONMENT is running $deployed; promoting sha-${SHA::7}"
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+          SHA: ${{ inputs.sha }}
+
+      - name: gate
+        run: |
+          bash infra/scripts/migration-gate.sh \
+            --deployed "${{ steps.deployed.outputs.sha }}" \
+            --target "${{ inputs.sha }}" \
+            --connection "Host=127.0.0.1;Port=5432;Database=mageride;Username=postgres;Password=gate"
+
+  # ===================================================================================
+  # The promotion: one commit, and nothing in it but image tags.
+  # ===================================================================================
+  promote:
+    name: promote to ${{ inputs.environment }}
+    needs: migration-gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # The GitHub environment. For `production` this is where the required reviewer lives — the
+    # job does not start until somebody approves it. See platform/argocd/README.md for why the
+    # gate is here and not on the ArgoCD sync.
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.write.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # `main`, not the promoted SHA: the promotion commit has to land on the branch ArgoCD
+          # tracks. Promoting an old SHA (a rollback) writes its TAG into today's main, which is
+          # exactly right — the manifests move forward, the image moves back.
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: write the image tag
+        id: write
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet pyyaml
+          tag="sha-${SHA::7}"
+          python3 infra/k8s/tools/set_image_tag.py "$ENVIRONMENT" "$tag"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          git diff --stat
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+          SHA: ${{ inputs.sha }}
+
+      # The generated manifests and the catalog must still agree AFTER the tag is written: the
+      # only difference `set_image_tag.py` is allowed to make is the tag itself, and the script
+      # asserts that the image list matches the catalog before it writes.
+      - name: nothing but tags changed
+        run: |
+          set -euo pipefail
+          changed=$(git diff --name-only)
+          for f in $changed; do
+            case "$f" in
+              infra/k8s/overlays/*/images/kustomization.yaml) ;;
+              *) echo "::error::$f is not an image list — the promotion must touch nothing else"; exit 1 ;;
+            esac
+          done
+          # Every line of the diff is a tag line.
+          if git diff -U0 | grep -E '^[+-]' | grep -vE '^(\+\+\+|---)' | grep -vqE '^[+-] *newTag: '; then
+            echo "::error::the diff contains something other than a newTag line"
+            git diff
+            exit 1
+          fi
+          test -n "$changed" || echo "::notice::already at this tag — nothing to commit"
+
+      - name: commit and push
+        run: |
+          set -euo pipefail
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "::notice::$ENVIRONMENT is already at $TAG; ArgoCD has nothing to do"
+            exit 0
+          fi
+          git config user.name "mageride-deploy[bot]"
+          git config user.email "mageride-deploy@users.noreply.github.com"
+          git add infra/k8s/overlays
+          # Separate -m flags rather than one multi-line string: a YAML block scalar would carry
+          # this file's indentation into the commit body, and `git log` in an incident is not the
+          # place to be reading indented prose.
+          git commit \
+            -m "deploy($ENVIRONMENT): $TAG${REASON:+ — $REASON}" \
+            -m "Promoted by ${{ github.workflow }} run ${{ github.run_id }}." \
+            -m "Source commit: ${{ inputs.sha }}" \
+            -m "Previous:      ${{ needs.migration-gate.outputs.deployed }}"
+          # Rebase rather than force: another environment's promotion may have landed while the
+          # gate was running, and both commits belong on main.
+          for attempt in 1 2 3; do
+            if git push origin HEAD:main; then exit 0; fi
+            echo "push rejected (attempt $attempt) — rebasing onto main"
+            git pull --rebase origin main
+          done
+          echo "::error::could not push the promotion commit after three attempts"
+          exit 1
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+          TAG: ${{ steps.write.outputs.tag }}
+          REASON: ${{ inputs.reason }}
+
+  # ===================================================================================
+  # Did it land? Two ways, depending on what credentials exist.
+  # ===================================================================================
+  verify:
+    name: verify ${{ inputs.environment }}
+    needs: [migration-gate, promote]
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      # (a) The authoritative check, if an ArgoCD token exists. `app wait` blocks until the
+      # Application is both Synced and Healthy, which for the platform Application means every
+      # wave completed — INCLUDING the wave-1 migration Job.
+      - name: argocd app wait
+        if: ${{ vars.ARGOCD_SERVER != '' }}
+        env:
+          ARGOCD_SERVER: ${{ vars.ARGOCD_SERVER }}
+          ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}
+          APP: mageride-${{ inputs.environment }}
+        run: |
+          set -euo pipefail
+          curl -sSL -o /usr/local/bin/argocd \
+            "https://${ARGOCD_SERVER}/download/argocd-linux-amd64"
+          chmod +x /usr/local/bin/argocd
+          # `--sync` first: ArgoCD polls the repository every three minutes by default, so the
+          # commit may not have been noticed yet.
+          argocd app wait "$APP" --sync --health --timeout 900
+          argocd app get "$APP" -o wide
+
+      # (b) No token: prove it from the outside. The gateway's readiness endpoint pings its
+      # dependencies, so a 200 means the edge and what it fronts are up. It does NOT prove the
+      # new SHA is what answered — nothing on the public surface reports a build SHA — so the
+      # step says so rather than implying more than it checked.
+      - name: probe the public edge
+        if: ${{ vars.ARGOCD_SERVER == '' }}
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+        run: |
+          set -euo pipefail
+          case "$ENVIRONMENT" in
+            production) host=api.mageride.lk ;;
+            *)          host="api.${ENVIRONMENT}.mageride.lk" ;;
+          esac
+          echo "::notice::no ARGOCD_SERVER variable — falling back to a health probe of https://$host"
+          ok=0
+          for attempt in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "https://$host/health/ready" || true)
+            if [ "$code" = "200" ]; then
+              ok=$((ok + 1))
+              # Three consecutive successes: one 200 can come from an old pod that has not been
+              # terminated yet, mid-rollout.
+              [ "$ok" -ge 3 ] && break
+            else
+              ok=0
+            fi
+            sleep 15
+          done
+          test "$ok" -ge 3 || { echo "::error::$host/health/ready did not settle at 200"; exit 1; }
+          echo "::warning::the edge is healthy, but this probe cannot confirm WHICH revision is\
+           serving. Set the ARGOCD_SERVER variable and the ARGOCD_AUTH_TOKEN secret for an\
+           authoritative check (see .github/workflows/README.md)."
+
+      - name: summary
+        if: always()
+        run: |
+          {
+            echo "### deploy → ${{ inputs.environment }}"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| tag | \`${{ needs.promote.outputs.tag }}\` |"
+            echo "| source commit | \`${{ inputs.sha }}\` |"
+            echo "| previous | \`${{ needs.migration-gate.outputs.deployed }}\` |"
+            echo "| reason | ${{ inputs.reason || '—' }} |"
+            echo
+            echo "Rollback: \`gh workflow run rollback.yml -f environment=${{ inputs.environment }} -f tag=${{ needs.migration-gate.outputs.deployed }}\`"
+            echo "See \`docs/runbooks/rollback.md\`."
+          } >> "$GITHUB_STEP_SUMMARY"

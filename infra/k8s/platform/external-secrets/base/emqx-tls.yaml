@@ -1,0 +1,43 @@
+# =====================================================================================
+# `emqx-tls` — the broker's server certificate, for the 8883 (tracker mTLS) and 8084 (mobile
+# WSS) listeners.
+#
+# --- WHY VAULT AND NOT cert-manager ---------------------------------------------------
+# The Ingress certificates come from cert-manager and ACME, which is right for them: a browser
+# and a mobile HTTP client both trust the public roots, and a 90-day renewal is invisible.
+#
+# The broker is not that. A hardware tracker verifies the broker against a trust store that
+# was flashed into it, and there are 100k of them at the §11 ceiling with no remote
+# configuration channel for the CA set. An ACME certificate rotating every 90 days behind
+# a chain those devices do not carry takes the whole tracker fleet offline at once, with no
+# way back except a physical visit. So the server certificate is a long-lived one issued from
+# Vault's PKI (D7' §13 already puts Vault PKI in the platform for the step-ca intermediates),
+# rotated deliberately and with the device fleet's trust store in the same change.
+#
+# `tls.crt` / `tls.key` are the conventional key names, so the Secret is also usable as a
+# `kubernetes.io/tls` type if a future ingress-nginx TCP passthrough wants it.
+# =====================================================================================
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: emqx-tls
+  labels:
+    app: emqx
+    app.kubernetes.io/name: emqx-tls
+    app.kubernetes.io/component: secret
+    app.kubernetes.io/part-of: mageride
+spec:
+  refreshInterval: 12h
+  secretStoreRef:
+    name: mageride-vault
+    kind: ClusterSecretStore
+  target:
+    name: emqx-tls
+    creationPolicy: Owner
+    deletionPolicy: Retain
+  data:
+    - secretKey: tls.crt
+      remoteRef: { key: emqx, property: tls_crt }
+    - secretKey: tls.key
+      remoteRef: { key: emqx, property: tls_key }

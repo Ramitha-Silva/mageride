@@ -65,3 +65,15 @@ do**.
 | [dead-letter-queue.md](dead-letter-queue.md) | `DeadLetterTopicReceiving` |
 | [fanout-visibility.md](fanout-visibility.md) | `FanoutVisibilityFilterInert` |
 | [observability-down.md](observability-down.md) | `ObservabilityComponentDown` |
+
+### Delivery (C124) — not alert-driven
+
+No alert points at these three. They are here because every runbook above can end in one of them,
+and because `verify-observability.sh` only requires that an alert's `runbook_url` exists — it does not
+forbid a runbook with no alert.
+
+| Runbook | When |
+|---|---|
+| [deploy.md](deploy.md) | bootstrapping a cluster, and understanding the path a commit takes. Nothing needs doing for a normal deploy. |
+| [rollback.md](rollback.md) | the answer to a page is "the release we just shipped". **Never `kubectl rollout undo` — ArgoCD's selfHeal reverts it.** |
+| [secret-rotation.md](secret-rotation.md) | D7' §13's schedule, as procedures. The JWT key needs a 30-minute overlap; the MQTT session secret has none and is a brief total outage. |

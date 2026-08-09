@@ -1,0 +1,139 @@
+# =====================================================================================
+# production — DigitalOcean Kubernetes, SINGAPORE (hosting decision 2026-07-05, D7' §8).
+#
+# NOTHING REACHES THIS DIRECTORY WITHOUT A HUMAN. ArgoCD syncs it automatically — `selfHeal`
+# reverting a `kubectl edit` in production is worth more than a Sync button — but the only thing
+# that writes `images/` is `.github/workflows/promote.yml`, and that job runs in the GitHub
+# `production` environment and waits for a named reviewer. A commit reaches staging on its own;
+# it reaches this because somebody approved it. The reasoning is in
+# platform/argocd/README.md §"Sync policies".
+#
+# --- WHAT THIS OVERLAY IS NOT ---------------------------------------------------------
+# It is NOT the launch topology. D7' §8's P1-P2 row reads:
+#
+#   EMQX 2-node, Redpanda 3-node RF=3, Redis **Sentinel**, Postgres **Patroni 1P+2R** +
+#   PgBouncer, HAProxy + **Keepalived**, LiveKit + coturn pinned SGP
+#
+# Four of those are replica counts and configuration, and they are set below. Three are
+# different software — Patroni, Sentinel and Keepalived each need an operator or a failover
+# controller, plus a restore procedure and a drill — and they are **C132
+# (production-readiness-doks)**, whose first deliverable is exactly that list and whose verify
+# command is `kubectl apply --dry-run=client -k infra/k8s/overlays/production`. This file is
+# what C132 grows; the data plane it inherits is single-instance, and saying so here is the
+# point. A green ArgoCD sync on this overlay does not mean the database survives a node loss.
+#
+# LiveKit and coturn are likewise absent: their media plane is host UDP (D6' §6) and cannot be
+# a normal Deployment behind a Service.
+# =====================================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: mageride
+
+resources:
+  - ../../base
+  - loadbalancers.yaml
+
+components:
+  - images
+
+commonAnnotations:
+  mageride.lk/environment: production
+
+patches:
+  # --- storage ---------------------------------------------------------------------
+  - target:
+      kind: StatefulSet
+      labelSelector: app.kubernetes.io/component=data
+    patch: |
+      - op: add
+        path: /spec/volumeClaimTemplates/0/spec/storageClassName
+        value: do-block-storage
+
+  # --- the two data-plane replica counts §8 gives, and that are only a number -------
+  # EMQX 2-node: a real cluster, because discovery is DNS over the headless Service and the
+  # Erlang cookie is shared. E-08's shared subscription only distributes across a group that
+  # is genuinely clustered, so this is also what makes mqtt-bridge-svc's HPA meaningful.
+  - target: { kind: StatefulSet, name: emqx }
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 2
+  # Redpanda 3-node. RF=3 is the topic Job's business (below) — three brokers with RF=1
+  # topics is three brokers and no durability.
+  - target: { kind: StatefulSet, name: redpanda }
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 3
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests
+        value: { cpu: "1", memory: 2Gi }
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits
+        value: { cpu: "2", memory: 3Gi }
+  - target: { kind: Job, name: redpanda-topics }
+    patch: |
+      - op: replace
+        path: /spec/template/spec/containers/0/env/2/value
+        value: "3"
+      # Six partitions, not three: D6' §2.1's count is sized for the replica. The position
+      # plane at the §11 launch target (10k vehicles at 0.12 msg/s blended) is the topic that
+      # needs the parallelism, and a partition count can only be raised, never lowered.
+      - op: replace
+        path: /spec/template/spec/containers/0/env/1/value
+        value: "6"
+
+  # --- Postgres: the size, not the topology ----------------------------------------
+  # More disk and more memory than staging, because the WAL, the Timescale hypertable and 90
+  # days of positions live here (T-06, T-10). The TOPOLOGY is still one instance — see the
+  # header. `pg_dump` to Wasabi and WAL archiving are C132's (RPO 5 min / RTO 30 min,
+  # NFR-12/13), and until they exist this volume is the only copy of the platform's data.
+  - target: { kind: StatefulSet, name: postgres }
+    patch: |
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests
+        value: { cpu: "2", memory: 6Gi }
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits
+        value: { cpu: "3", memory: 8Gi }
+      - op: replace
+        path: /spec/volumeClaimTemplates/0/spec/resources/requests/storage
+        value: 200Gi
+
+  # --- the edge --------------------------------------------------------------------
+  # Hostnames are already the production ones in base (D7' §5 writes `api.mageride.lk`), so
+  # only the certificate issuer is added here.
+  - target: { kind: Ingress }
+    patch: |
+      - op: add
+        path: /metadata/annotations/cert-manager.io~1cluster-issuer
+        value: letsencrypt-prod-dns
+
+  # --- configuration deltas --------------------------------------------------------
+  - target: { kind: ConfigMap, name: common-config }
+    patch: |
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: common-config
+      data:
+        # Cloudflare R2 (D7' §8, D-14). `auto` is R2's only region.
+        Storage__S3__Endpoint: https://mageride.r2.cloudflarestorage.com
+        Storage__S3__ForcePathStyle: "false"
+        Storage__S3__Region: auto
+        # D-36 asks for SSE-KMS, and UNSET IS NOT UNENCRYPTED — it is SSE-S3 with the
+        # provider's own key. The difference is a key you control, rotate and audit access
+        # to. R2 has no KMS integration, so this is the gap C127's ASVS review inherits:
+        #   Storage__KmsKeyId: <set where the provider supports it>
+        Jwt__Issuer: https://iam.mageride.lk
+        # Empty until an OTLP collector is deployed to this cluster — see the staging
+        # overlay's note. For tcp-adapter this is the ONLY telemetry path, because that
+        # process has no /metrics to scrape (C119), so production without a collector is
+        # production with a blind tracker plane. Raised in the C124 handoff.
+        Otel__Endpoint: ""
+
+# --- what production adds that no other environment has -----------------------------
+# A resource quota is deliberately NOT set: the HPAs' maxReplicas already bound the platform,
+# and a namespace quota that a scale-up hits is an outage that looks like a scheduling bug.
+# The bound worth having is on the node pool, which is a cluster-level decision (C132).

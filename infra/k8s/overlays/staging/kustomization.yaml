@@ -1,0 +1,126 @@
+# =====================================================================================
+# staging — DigitalOcean Kubernetes (D7' §8's "Prod P1-P2" substrate, a smaller node pool).
+#
+# THE ONLY ENVIRONMENT A COMMIT REACHES WITHOUT A HUMAN. `.github/workflows/cd.yml` promotes
+# every green commit on `main` into `overlays/staging/images/` and ArgoCD syncs it
+# automatically (platform/argocd/applications/staging.yaml). Production is the same manifests
+# with a manual sync and an environment approval.
+#
+# This is the overlay the C124 verify builds:
+#   kubectl apply --dry-run=client -k infra/k8s/overlays/staging
+#
+# Same shape as production, deliberately: staging is only useful if the thing it proves is the
+# thing that ships. The differences are the hostnames, the node pool's size and the fact that
+# its data is disposable.
+# =====================================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: mageride
+
+resources:
+  - ../../base
+  # The L4 edge. MQTT and the tracker protocols are not HTTP and never touch the Ingress.
+  - loadbalancers.yaml
+
+components:
+  - images
+
+commonAnnotations:
+  mageride.lk/environment: staging
+
+patches:
+  # --- storage class ---------------------------------------------------------------
+  # DOKS's CSI. Named rather than left to the cluster default, because the default is
+  # whatever the cluster was created with and a StatefulSet's
+  # `volumeClaimTemplates[].storageClassName` is immutable after the first apply — the wrong
+  # value here is a delete-and-restore, not an edit.
+  # Selected by label, not by kind: tcp-adapter is a StatefulSet with NO volumeClaimTemplates
+  # (it is one for stable identity, not for storage — see the catalog), and a JSON patch
+  # against a path that does not exist fails the whole build.
+  - target:
+      kind: StatefulSet
+      labelSelector: app.kubernetes.io/component=data
+    patch: |
+      - op: add
+        path: /spec/volumeClaimTemplates/0/spec/storageClassName
+        value: do-block-storage
+
+  # --- hostnames -------------------------------------------------------------------
+  - target: { kind: Ingress, name: mr-ingress }
+    patch: |
+      - op: add
+        path: /metadata/annotations/cert-manager.io~1cluster-issuer
+        value: letsencrypt-staging-dns
+      - op: replace
+        path: /spec/tls/0/hosts/0
+        value: api.staging.mageride.lk
+      - op: replace
+        path: /spec/rules/0/host
+        value: api.staging.mageride.lk
+  - target: { kind: Ingress, name: mr-ingress-hubs }
+    patch: |
+      - op: add
+        path: /metadata/annotations/cert-manager.io~1cluster-issuer
+        value: letsencrypt-staging-dns
+      - op: replace
+        path: /spec/tls/0/hosts/0
+        value: api.staging.mageride.lk
+      - op: replace
+        path: /spec/rules/0/host
+        value: api.staging.mageride.lk
+  - target: { kind: Ingress, name: mr-ingress-portals }
+    patch: |
+      - op: add
+        path: /metadata/annotations/cert-manager.io~1cluster-issuer
+        value: letsencrypt-staging-dns
+      - op: replace
+        path: /spec/tls/0/hosts/0
+        value: admin.staging.mageride.lk
+      - op: replace
+        path: /spec/tls/1/hosts/0
+        value: fleet.staging.mageride.lk
+      - op: replace
+        path: /spec/tls/2/hosts/0
+        value: passenger.staging.mageride.lk
+      - op: replace
+        path: /spec/rules/0/host
+        value: admin.staging.mageride.lk
+      - op: replace
+        path: /spec/rules/1/host
+        value: fleet.staging.mageride.lk
+      - op: replace
+        path: /spec/rules/2/host
+        value: passenger.staging.mageride.lk
+
+  # --- configuration deltas --------------------------------------------------------
+  - target: { kind: ConfigMap, name: common-config }
+    patch: |
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: common-config
+      data:
+        # Cloudflare R2 (D7' §8), virtual-hosted addressing. A SEPARATE bucket set from
+        # production's — the same credentials against the same buckets would let a staging
+        # test delete a real driver's identity document.
+        Storage__S3__Endpoint: https://mageride-staging.r2.cloudflarestorage.com
+        Storage__S3__ForcePathStyle: "false"
+        Storage__S3__Region: auto
+        Jwt__Issuer: https://iam.staging.mageride.lk
+        # The OTLP collector, in its own namespace. C119 built the collector for the compose
+        # stack; a Kubernetes deployment of it is not in these manifests, so this stays
+        # EMPTY until one exists — an endpoint pointed at nothing makes every exporter retry
+        # on a timeout, which shows up as start-up latency in services that have nothing to
+        # do with telemetry. When it lands:
+        #   Otel__Endpoint: http://otel-collector.observability.svc.cluster.local:4317
+        Otel__Endpoint: ""
+  - target: { kind: ConfigMap, name: portal-config }
+    patch: |
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: portal-config
+      data:
+        NEXT_PUBLIC_API_BASE_URL: https://api.staging.mageride.lk
+        NEXT_PUBLIC_HUB_URL: wss://api.staging.mageride.lk/hubs

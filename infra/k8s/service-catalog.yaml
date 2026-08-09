@@ -1,0 +1,667 @@
+# =====================================================================================
+# MageRide deployable catalog (C124) — the ONE list every generated artifact derives from.
+#
+# Read by:
+#   infra/k8s/tools/generate_manifests.py  -> base/services/*.yaml, base/portals/*.yaml,
+#                                            platform/external-secrets/base/*.yaml
+#   .github/workflows/images.yml           -> the build/push/sign matrix (via `--matrix`)
+#   infra/scripts/k8s-verify.sh            -> the drift check and the secret-coverage check
+#
+# Adding a service is ONE entry here plus `python3 infra/k8s/tools/generate_manifests.py`.
+# Nothing about a new service is edited in a workflow file or in a manifest.
+#
+# --- Why per-service and not the co-located `app-services` container ------------------
+# D7' §2.1's canonical layout co-locates 21 domain services in one container, and that is
+# the LIGHTWEIGHT REPLICA's layout (single VPS, C125). D7' §2 says the opposite of
+# production — "All services 2 GB / 1 vCPU in production pods" — and D7' §5 prints a
+# Deployment *per stateless service*. Every service in backend/src is its own
+# `Microsoft.NET.Sdk.Web` host with its own `Program.cs`, so the per-service split is what
+# the repository actually builds; the composed `app-services` / `hot-path` images have no
+# project and no Dockerfile (see the C118 handoff). This catalog is therefore the D7' §5
+# shape, and the capacity consequence is written out in infra/k8s/README.md §Capacity.
+#
+# --- Fields ---------------------------------------------------------------------------
+#   name        k8s Service + Deployment name. The platform's canonical service id: the
+#               API gateway's cluster names (C008) and D7' §4.2's rows use these exact
+#               strings, and so does the C119 Prometheus scrape config.
+#   project     directory under backend/src — the SERVICE build arg, and what `dotnet
+#               publish` is pointed at.
+#   dockerfile  which of the four templates builds it (D7' §2.2 + C054's deviation).
+#   workload    Deployment | StatefulSet.
+#   port        container port. 5000 everywhere except fanout-svc (5001, D7' §2.1) and
+#               tcp-adapter (5023-5026, T-01).
+#   probe       http  -> /health/live + /health/ready (D7' §5.1 row 1)
+#               tcp   -> a socket probe (D7' §5.1's tcp-adapter row)
+#   extraPorts  additional named container/service ports (reputation-svc's gRPC, T-01's
+#               protocol listeners).
+#   replicas    base replica count. D7' §5's template says 2.
+#   autoscale   {min, max} -> an autoscaling/v2 HPA at 70% CPU (D7' §5). Absent = none,
+#               and every absence carries a `why`.
+#   resources   overrides the D7' §5 default (500m/1Gi requests, 1/2Gi limits).
+#   secrets     the §4.2 rows whose Secret column is yes, spelled as the OPTIONS CLASS
+#               binds them. One ExternalSecret per service is generated from this list and
+#               infra/scripts/k8s-verify.sh fails if a key here is missing from it.
+#   volumes     extra mounts (provisioning-svc's step-ca root, T-02).
+#   why         a per-entry note. Written where the entry is not the default shape.
+# =====================================================================================
+
+registry: ghcr.io/mageride
+namespace: mageride
+
+# The three substrates of D7' §8, in promotion order. The generator writes one
+# `overlays/<env>/images/` component per entry — the image list every promotion rewrites —
+# and infra/scripts/k8s-verify.sh builds every one of them.
+#
+# `production`, not `prod`: C132's verify_cmd is
+# `kubectl apply --dry-run=client -k infra/k8s/overlays/production`, and a directory name is
+# an interface.
+environments: [dev, staging, production]
+
+# The placeholder tag in base. Overlays set the real one with `images: [{newTag: sha-xxxxxxx}]`,
+# which is the promotion mechanism (D7' §7: "dev->staging->prod promotion by image SHA tag").
+# It is deliberately unpullable: an overlay that was never promoted must fail to pull, not
+# silently run whatever `latest` happens to be.
+placeholderTag: sha-0000000
+
+# Everything the generator applies unless an entry overrides it.
+defaults:
+  workload: Deployment
+  dockerfile: infra/docker/Dockerfile.service
+  port: 5000
+  probe: http
+  replicas: 2
+  runAsUser: 1654 # the `app` user the .NET 10 images ship (APP_UID). See `why` on runAsUser below.
+  resources:
+    requests: { cpu: 500m, memory: 1Gi }
+    limits: { cpu: "1", memory: 2Gi }
+  autoscale: { min: 2, max: 10 }
+
+services:
+  # --- the edge --------------------------------------------------------------------
+  - name: api-gateway
+    project: ApiGateway
+    dockerfile: backend/src/ApiGateway/Dockerfile
+    autoscale: { min: 2, max: 12 }
+    resources:
+      requests: { cpu: 250m, memory: 512Mi }
+      limits: { cpu: "1", memory: 1Gi }
+    secrets:
+      - Gateway__Attestation__PlayIntegrity__ServiceAccountJson
+      - Gateway__Attestation__AppAttest__AppId
+    why: >-
+      The only service the Ingress routes `/` to. Its own Dockerfile rather than the shared
+      template (C008). D7' §4.2 has no api-gateway row at all — the 22 cluster addresses are
+      in base/config/service-endpoints.yaml, which is this deployment's real configuration.
+
+  - name: fanout-svc
+    project: Fanout.Api
+    port: 5001
+    autoscale: { min: 2, max: 20 }
+    resources:
+      requests: { cpu: 500m, memory: 1Gi }
+      limits: { cpu: "1", memory: 2Gi }
+    terminationGracePeriodSeconds: 120
+    why: >-
+      Port 5001 (D7' §2.1) and the only workload the Ingress gives a second path (`/hubs`,
+      D7' §5). WebSockets are long-lived, so the grace period is 120 s rather than 30: a
+      rolling update that killed a hub connection at 30 s would drop every passenger's live
+      map mid-ride instead of letting the client reconnect to the new pod. maxReplicas 20
+      because this is the workload the 1M-WSS ceiling (D7' §11) lands on first.
+
+  # --- 21 domain services (D7' §2.1's app-services, split per D7' §5) --------------
+  - name: iam-svc
+    project: Iam.Api
+    secrets:
+      - Sms__NotifyLkUserId
+      - Sms__NotifyLkApiKey
+      - Sms__SecondaryApiKey
+      - Jwt__SigningKeyPem
+      # The 90-day JWKS overlap slot (D7' §13). Seeded EMPTY at bootstrap and written by the
+      # rotation procedure, so a token minted by the retiring key still validates for its
+      # remaining 30 minutes. Wired even when empty: an unwired key means the rotation
+      # procedure has to edit a manifest, and a rotation that needs a deploy is a rotation
+      # that gets skipped.
+      - Jwt__RetiredSigningKeyPems__0
+      - Jwt__RefreshTokenKey
+      - Auth__PhoneHashKey
+      - Auth__InternalApiKey
+      - Oidc__Google__ClientSecret
+    why: >-
+      Holds the RS256 signing key every other service validates against, so its rotation is
+      the one with a JWKS overlap window (D7' §13, docs/runbooks/secret-rotation.md §1).
+
+  - name: registry-svc
+    project: Registry.Api
+    secrets: [Registry__InternalApiKey, Registry__OcrInternalApiKey]
+
+  - name: provisioning-svc
+    project: Provisioning.Api
+    secrets: [Provisioning__InternalApiKey, Provisioning__ErrorReportSigningKey]
+    volumes:
+      - name: provisioning-ca-data
+        mountPath: /var/step
+        claim: provisioning-ca-data
+    why: >-
+      T-02's embedded step-ca. `provisioning-ca-data` is the PVC D7' §5 names, and it holds
+      the device-CA root key — which is why this is the one service with a
+      ReadWriteOnce volume and therefore `strategy: Recreate` at ONE replica rather than a
+      RollingUpdate at two. maxUnavailable 0 with a RWO volume deadlocks — the new pod cannot
+      attach until the old one detaches, and the old one is not evicted until the new one is
+      Ready — and two replicas cannot both mount it once they land on different nodes.
+
+      The cost is real and is the reason this entry exists: provisioning-svc is briefly down
+      during a rollout, so a tracker cannot be provisioned for those seconds. Nothing already
+      bound is affected (tcp-adapter verifies a presented PSK itself) and the alternative —
+      two pods sharing a CA root key over ReadWriteMany, which DO block storage does not offer
+      — is worse. D7' §13 gives the forward path: Vault PKI for the step-ca intermediates,
+      which removes the volume. That is C132's to take.
+    strategy: Recreate
+    replicas: 1
+    autoscale: null
+
+  - name: query-svc
+    project: Query.Api
+    extraPorts:
+      - { name: grpc, port: 5006, protocol: TCP }
+    secrets: [Query__InternalApiKey]
+    why: >-
+      Second listener on 5006 for its gRPC surface — 5006 and not 5005 because
+      reputation-svc owns that number in D7' §4.2 and both used to share one container.
+
+  - name: trip-state-svc
+    project: TripState.Api
+    # Also absent from .env.app.example, and it cannot be: tcp-adapter's
+    # `Adapter__TripStateInternalApiKey` is documented "Must equal trip-state-svc's
+    # TripState:InternalApiKey", so the far side of that sentence has to be configured.
+    secrets: [TripState__InternalApiKey]
+    why: >-
+      Mode A/B sessions. D7' §4.2 gives it only timeouts; the internal key above is what the
+      tracker plane presents when it opens a session.
+
+  - name: ride-svc
+    project: Ride.Api
+    secrets:
+      - Otp__PepperKey
+      - Ride__InternalApiKey
+      # Not in .env.app.example — a gap raised in the C124 handoff. RideOptions.IamInternalApiKey
+      # is documented "Must equal iam-svc's Auth:InternalApiKey, or every lookup is a 404 (C027)",
+      # and a per-service deployment is the first arrangement where the two are different pods.
+      - Ride__IamInternalApiKey
+      # Shared with fare-svc, and shared is the whole point: fare-svc signs a quote with this
+      # HMAC and ride-svc verifies it. Two different values = every booking is a 400.
+      - Fare__EstimateTokenKey
+    why: >-
+      Needs `ConnectionStrings__PostgresDirect` (in common-secret): E-09's outbox LISTEN is
+      session-scoped and PgBouncer's transaction pooling drops it. Without the direct DSN
+      the sub-50 ms dispatch path silently degrades to a 250 ms poll.
+
+  - name: dispatch-svc
+    project: Dispatch.Api
+    autoscale: { min: 2, max: 12 }
+    secrets:
+      # Dispatch__InternalApiKey and Dispatch__ReputationInternalKey are both absent from
+      # .env.app.example (C124 handoff): fare-svc already carries
+      # `Fare__DispatchInternalApiKey`, so the key dispatch-svc VALIDATES has to exist, and
+      # DispatchOptions documents the reputation one as "must equal reputation-svc's".
+      - Dispatch__InternalApiKey
+      - Dispatch__RideServiceInternalKey
+      - Dispatch__ReputationInternalKey
+    why: Same PostgresDirect requirement as ride-svc (E-09).
+
+  - name: reputation-svc
+    project: Reputation.Api
+    extraPorts:
+      - { name: grpc, port: 5005, protocol: TCP }
+    secrets: [Reputation__InternalApiKey]
+    why: >-
+      Two listeners, and they cannot be one: cleartext HTTP has no ALPN, so an endpoint
+      serving the admin routes answers a gRPC client with GOAWAY HTTP_1_1_REQUIRED. 5000 is
+      HTTP/1.1, 5005 is HTTP/2-only (D7' §4.2 `Grpc__ListenPort`, C033).
+
+  - name: fare-svc
+    project: Fare.Api
+    secrets:
+      - Fare__EstimateTokenKey
+      - Onepay__ApiKey
+      - Onepay__WebhookSecret
+      - LankaQr__MerchantId
+      - Fare__InternalApiKey
+      - Fare__DispatchInternalApiKey
+      - Fare__WalletInternalApiKey
+      - Fare__RideInternalApiKey
+    why: >-
+      `Fare__EstimateTokenKey` MUST be the same value here and in ride-svc — fare-svc signs
+      the quote and ride-svc verifies it, so two different values reject every booking. Both
+      ExternalSecrets read the one Vault property (see platform/external-secrets).
+
+  - name: wallet-svc
+    project: Wallet.Api
+    secrets: [Onepay__WebhookSecret, ComBankIpg__WebhookSecret, Wallet__InternalApiKey]
+    why: >-
+      The only writer of billing.journal_postings (D-09). Its webhook secrets are on the
+      180-day rotation (D7' §13) and rotating them is the one procedure with a live payment
+      rail on the other side.
+
+  - name: subscription-svc
+    project: Subscription.Api
+    secrets:
+      - Subscription__InternalApiKey
+      # Absent from .env.app.example. SubscriptionOptions validates WalletBaseUrl +
+      # WalletInternalApiKey together at start-up: this service moves money only through
+      # wallet-svc's internal plane (D-09) and cannot start without the credential for it.
+      - Subscription__WalletInternalApiKey
+      - Subscription__LankaQrWebhookSecret
+      - Subscription__FileLinkSigningKey
+    why: >-
+      `Subscription__FileLinkSigningKey` must be ONE value across replicas — a link minted
+      by one pod does not verify on another — which is exactly why it comes from Vault and
+      is never generated per pod. AL-59 removed OnePay from Mode B, so
+      `Subscription__OnepayWebhookSecret` is deliberately NOT wired: subscription-svc still
+      serves that webhook route (C118 drift finding 12) and giving it a live secret would
+      arm a rail the platform decided not to have.
+
+  - name: notification-svc
+    project: Notification.Api
+    autoscale: { min: 2, max: 12 }
+    secrets:
+      - Fcm__ServiceAccountJson
+      - Apns__P8Key
+      - Apns__KeyId
+      - Apns__TeamId
+      # Both gateways, and this service binds the same `Sms` section iam-svc does: D-33's dual
+      # SMS is the primary AND the secondary, so an SOS that fails on Notify.lk still goes out.
+      - Sms__NotifyLkUserId
+      - Sms__NotifyLkApiKey
+      - Sms__SecondaryApiKey
+      - Notification__InternalApiKey
+      - Notification__ContentInternalApiKey
+    why: E-01's offer push has a 3 s fallback deadline, so this scales with dispatch-svc.
+
+  - name: safety-svc
+    project: Safety.Api
+    secrets: [Safety__InternalApiKey, Safety__NotificationInternalApiKey, Safety__ReputationInternalKey]
+    why: >-
+      D-33's SOS dispatch SLO is 5 s and pages at p99 > 5 s with `for: 0s` (C119). Its PDB
+      is minAvailable 2 rather than the default maxUnavailable 1: an SOS that arrives during
+      a node drain has to find a pod.
+    pdb: { minAvailable: 2 }
+
+  - name: support-svc
+    project: Support.Api
+    secrets: [Support__InternalApiKey, Support__FileLinkSigningKey]
+
+  - name: content-svc
+    project: Content.Api
+    secrets: [Content__InternalApiKey]
+
+  - name: transit-svc
+    project: Transit.Api
+    secrets: [Transit__Gtfs__DownloadSigningKey]
+    why: >-
+      Owns the AL-54 GTFS activation, which takes a Postgres advisory lock and swaps a
+      schema in one transaction. Safe across replicas; the lock is the serialiser.
+
+  - name: fleet-svc
+    project: Fleet.Api
+    secrets:
+      - Fleet__InternalApiKey
+      - Fleet__OcrInternalApiKey
+      - Fleet__NotificationInternalApiKey
+      - Fleet__ErrorReportSigningKey
+    why: >-
+      C118 finding (1): with `Fleet__ProvisioningBaseUrl` set — which service-endpoints.yaml
+      does set, because production must — mapping `POST /v1/fleets/{fleetId}/trackers/bind`
+      throws at start-up. THIS DEPLOYMENT WILL CRASHLOOP UNTIL THAT FIX LANDS. It is left
+      configured rather than quietly unset: an unset upstream hides the defect and silently
+      drops ten operations from the route table.
+
+  - name: fleet-billing-svc
+    project: FleetBilling
+    secrets:
+      - FleetBilling__WalletInternalApiKey
+      - FleetBilling__OnepayApiKey
+      - FleetBilling__OnepayWebhookSecret
+      - FleetBilling__LankaQrMerchantId
+      - FleetBilling__LankaQrWebhookSecret
+      - FleetBilling__NotificationInternalApiKey
+      - FleetBilling__InternalApiKey
+
+  - name: payout-svc
+    project: Payout.Api
+    autoscale: null
+    replicas: 2
+    secrets: [Payout__WalletInternalApiKey, Payout__BankApiKey, Payout__InternalApiKey]
+    why: >-
+      No HPA: the weekly sweep (AL-58) is bounded by the driver count, not by request load,
+      and an HPA would scale on the CPU of a service that is idle six days a week. Two
+      replicas for availability — the run is idempotent on the Colombo business date and
+      claims rows FOR UPDATE SKIP LOCKED, so both can sweep.
+
+  - name: voip-svc
+    project: Voip.Api
+    autoscale: { min: 2, max: 6 }
+    secrets: [Voip__LiveKit__ApiKey, Voip__LiveKit__ApiSecret]
+    why: >-
+      Mints LiveKit tokens only — it carries no media. The SFU and coturn are host-UDP and
+      are NOT in these manifests (D6' §6, and C132 owns "LiveKit+coturn pinned SGP").
+
+  - name: ocr-svc
+    project: Ocr.Api
+    dockerfile: infra/docker/Dockerfile.ocr
+    autoscale: { min: 2, max: 6 }
+    resources:
+      requests: { cpu: "1", memory: 2Gi }
+      limits: { cpu: "2", memory: 3Gi }
+    secrets: [Ocr__InternalApiKey, Ocr__Gemini__ApiKey]
+    why: >-
+      The one service on the Debian base, not alpine: OpenCvSharp's native half is a glibc
+      build and will not load under musl (C054). Bigger requests because the D-36 redaction
+      pre-pass runs OpenCV and tesseract in-process, and this service FAILS CLOSED — under
+      memory pressure it keeps serving while sending nothing to Gemini, which looks
+      identical to working from the outside.
+
+  - name: admin-bff
+    project: AdminBff
+    autoscale: { min: 2, max: 6 }
+    secrets:
+      - AdminBff__Documents__SigningKey
+      - AdminBff__Upstreams__Registry__InternalApiKey
+      - AdminBff__Upstreams__Wallet__InternalApiKey
+      - AdminBff__Upstreams__Fleet__InternalApiKey
+      - AdminBff__Upstreams__Safety__InternalApiKey
+      - AdminBff__Upstreams__Support__InternalApiKey
+
+  - name: public-bff
+    project: PublicBff
+    secrets: [PublicBff__Ride__InternalApiKey, PublicBff__Safety__InternalApiKey]
+    why: The no-login Passenger Web surface (AL-44). Unauthenticated traffic, so it scales on its own HPA.
+
+  # --- the hot path (D7' §2.1's Container 6, split per D7' §5) ---------------------
+  - name: mqtt-bridge-svc
+    project: HotPath.MqttBridge
+    autoscale: { min: 2, max: 8 }
+    why: >-
+      E-08's `$share/posGroup/...` shared subscription is what makes this horizontally
+      scalable at all: EMQX distributes across the group, so adding a pod adds throughput
+      instead of duplicating every position.
+
+  - name: position-processor-svc
+    project: HotPath.PositionProcessor
+    autoscale: { min: 2, max: 12 }
+    why: >-
+      T-10's scale-out lever ("+2 position-processor pods" per 100k trackers). A Kafka
+      consumer group, so a rebalance is the cost of a scale event — which is why the HPA
+      lives here and not on the writer below.
+
+  - name: persistence-writer-svc
+    project: HotPath.PersistenceWriter
+    autoscale: null
+    replicas: 2
+    why: >-
+      No HPA on purpose. This is the batching Timescale writer (1000 rows / 500 ms, T-06);
+      its cost is DATABASE write concurrency, not its own CPU, so a CPU-triggered scale-up
+      would relieve the one resource that is not the bottleneck and add load to the one that
+      is. Scale it by hand alongside a Timescale tablespace (T-10).
+
+  - name: fleet-health-svc
+    project: FleetHealth
+    autoscale: { min: 2, max: 6 }
+    why: Rollups and device-down alerts (T-04). Serves `GET /v1/fleets/{id}/health` (US-3.13).
+
+  # --- hardware tracker ingest (T-01) ---------------------------------------------
+  - name: tcp-adapter
+    project: TcpAdapter
+    dockerfile: backend/src/TcpAdapter/Dockerfile
+    workload: StatefulSet
+    port: 5023
+    probe: tcp
+    replicas: 2
+    autoscale: null
+    resources:
+      requests: { cpu: 500m, memory: 512Mi }
+      limits: { cpu: "1", memory: 1Gi }
+    extraPorts:
+      - { name: jt808, port: 5024, protocol: TCP }
+      - { name: h02, port: 5025, protocol: TCP }
+      - { name: nmea-udp, port: 5026, protocol: UDP }
+    secrets: [Adapter__ProvisioningInternalApiKey, Adapter__TripStateInternalApiKey]
+    volumes:
+      - name: psk-signing-key
+        mountPath: /var/step/secrets
+        secret: tcp-adapter-psk
+        readOnly: true
+    why: >-
+      A StatefulSet for the reason D7' §5 lists it as one — stable identity. Trackers are
+      configured with a host and port and hold one long-lived TCP connection; a pod name
+      that changes on every rollout makes a device-side connection log unreadable and makes
+      per-pod IMEI affinity impossible to reason about. No HTTP surface at all, so the
+      liveness probe is a socket connect on 5023 (D7' §5.1). No HPA: the connection count
+      is set by how many trackers exist, and rebalancing 100k devices to relieve CPU would
+      disconnect them all.
+
+      THE PSK KEY IS A SECRET HERE, NOT A SHARED VOLUME, and that is the one place these
+      manifests cannot mirror the compose stack. Dev bind-mounts `deploy/device-ca` into
+      provisioning-svc (which generates `secrets/psk_signing_key`) and into this container
+      read-only. In Kubernetes that volume is ReadWriteOnce, so two workloads cannot share it
+      across nodes — and provisioning-svc has to keep write access to mint CA material. So
+      this container gets a Secret projected at the same path the code reads
+      (`<Adapter:PskKeyDirectory>/secrets/psk_signing_key`, PskCredentials.SigningKeyFile) and
+      the value is copied into Vault once, after provisioning-svc's first boot. Until it is,
+      `PskCredentials.CanVerify` is false and the adapter serves the protocols that carry no
+      credential — which the code was written to allow. The copy is one step in
+      docs/runbooks/deploy.md §5 and it is on T-02's 90-day rotation.
+
+# --- Next.js surfaces (D7' §2.1's optional containers, AL-02/03/44) ----------------
+# `npm run build` output, `node:24-alpine`, non-root `node` (uid 1000). Each is also
+# deployable to Vercel/Cloudflare Pages instead (D7' §6) — these manifests are the
+# container option, and the Ingress host is the same either way.
+portals:
+  - name: admin-portal
+    portal: admin
+    port: 3001
+    host: admin.mageride.lk
+    replicas: 2
+    autoscale: { min: 2, max: 4 }
+    resources:
+      requests: { cpu: 100m, memory: 256Mi }
+      limits: { cpu: 500m, memory: 512Mi }
+    why: AL-02. Back-office for all six internal roles; no MFA anywhere (AL-37).
+
+  - name: fleet-portal
+    portal: fleet
+    port: 3002
+    host: fleet.mageride.lk
+    replicas: 2
+    autoscale: { min: 2, max: 4 }
+    resources:
+      requests: { cpu: 100m, memory: 256Mi }
+      limits: { cpu: 500m, memory: 512Mi }
+    why: AL-03.
+
+  - name: web-passenger
+    portal: web-passenger
+    port: 3003
+    host: passenger.mageride.lk
+    replicas: 2
+    autoscale: { min: 2, max: 6 }
+    resources:
+      requests: { cpu: 100m, memory: 256Mi }
+      limits: { cpu: 500m, memory: 512Mi }
+    why: >-
+      AL-44's six no-login SCR-WT pages, served in front of public-bff. Port 3003 is a
+      choice, not a spec value: D7' §2.1's table predates AL-44 and lists only 3001/3002.
+
+# --- The one-shot migration runner (D7' §3, gated pre-deploy per D7' §7) -----------
+# Not a service: a Job. Its image is built by the same pipeline and promoted by the same
+# SHA, because a migration that does not match the code it is gating is not a gate.
+migrator:
+  name: migrate
+  project: MageRide.Migrations
+  dockerfile: backend/src/MageRide.Migrations/Dockerfile
+  runAsUser: 1654
+
+# =====================================================================================
+# Where each secret comes from.
+#
+# A service's `secrets:` entry resolves, by default, to the Vault property of the SAME NAME
+# under the path named after the service. `aliases` below is every case where that default
+# is wrong — which is every credential with MORE THAN ONE NAME.
+#
+# THIS TABLE IS THE ONLY THING THAT KEEPS "must equal" TRUE. Twenty options in
+# backend/src/*/Configuration/*.cs carry an XML doc that says "Must equal <other service>'s
+# <key>", and until now the only enforcement was that both sides read one flat env file
+# (infra/env/.env.app.example) where the same placeholder text appeared twice. Split into
+# separate pods reading separate Secrets, nothing makes them agree — and the failures are
+# quiet and specific: a mismatched `Fare__EstimateTokenKey` is "every booking is a 400", a
+# mismatched `Ride__InternalApiKey` is "no offer is ever placed", a mismatched
+# `Registry__OcrInternalApiKey` is "every extraction is a 404". Here, both names read ONE
+# Vault property, so they cannot drift.
+#
+# The .env.app.example placeholders disagree on three of these — `_ride_internal_api_key`
+# vs `_ride_internal_service_key` vs `_ride_internal_key` are the same credential under
+# three spellings — which is a micro-change-set raised in the C124 handoff.
+# =====================================================================================
+aliases:
+  # --- internal-keys/<owner>: one value per service that VALIDATES the key ------------
+  Auth__InternalApiKey: { path: internal-keys, property: iam }
+  Ride__IamInternalApiKey: { path: internal-keys, property: iam }
+
+  Registry__InternalApiKey: { path: internal-keys, property: registry }
+  AdminBff__Upstreams__Registry__InternalApiKey: { path: internal-keys, property: registry }
+
+  Provisioning__InternalApiKey: { path: internal-keys, property: provisioning }
+  Adapter__ProvisioningInternalApiKey: { path: internal-keys, property: provisioning }
+
+  TripState__InternalApiKey: { path: internal-keys, property: trip-state }
+  Adapter__TripStateInternalApiKey: { path: internal-keys, property: trip-state }
+
+  Ride__InternalApiKey: { path: internal-keys, property: ride }
+  Dispatch__RideServiceInternalKey: { path: internal-keys, property: ride }
+  Fare__RideInternalApiKey: { path: internal-keys, property: ride }
+  PublicBff__Ride__InternalApiKey: { path: internal-keys, property: ride }
+
+  Dispatch__InternalApiKey: { path: internal-keys, property: dispatch }
+  Fare__DispatchInternalApiKey: { path: internal-keys, property: dispatch }
+
+  Reputation__InternalApiKey: { path: internal-keys, property: reputation }
+  Dispatch__ReputationInternalKey: { path: internal-keys, property: reputation }
+  Safety__ReputationInternalKey: { path: internal-keys, property: reputation }
+
+  Fare__InternalApiKey: { path: internal-keys, property: fare }
+
+  Wallet__InternalApiKey: { path: internal-keys, property: wallet }
+  Fare__WalletInternalApiKey: { path: internal-keys, property: wallet }
+  Subscription__WalletInternalApiKey: { path: internal-keys, property: wallet }
+  FleetBilling__WalletInternalApiKey: { path: internal-keys, property: wallet }
+  Payout__WalletInternalApiKey: { path: internal-keys, property: wallet }
+  AdminBff__Upstreams__Wallet__InternalApiKey: { path: internal-keys, property: wallet }
+
+  Subscription__InternalApiKey: { path: internal-keys, property: subscription }
+
+  Notification__InternalApiKey: { path: internal-keys, property: notification }
+  Safety__NotificationInternalApiKey: { path: internal-keys, property: notification }
+  Fleet__NotificationInternalApiKey: { path: internal-keys, property: notification }
+  FleetBilling__NotificationInternalApiKey: { path: internal-keys, property: notification }
+
+  Safety__InternalApiKey: { path: internal-keys, property: safety }
+  AdminBff__Upstreams__Safety__InternalApiKey: { path: internal-keys, property: safety }
+  PublicBff__Safety__InternalApiKey: { path: internal-keys, property: safety }
+
+  Support__InternalApiKey: { path: internal-keys, property: support }
+  AdminBff__Upstreams__Support__InternalApiKey: { path: internal-keys, property: support }
+
+  Content__InternalApiKey: { path: internal-keys, property: content }
+  Notification__ContentInternalApiKey: { path: internal-keys, property: content }
+
+  Ocr__InternalApiKey: { path: internal-keys, property: ocr }
+  Registry__OcrInternalApiKey: { path: internal-keys, property: ocr }
+  Fleet__OcrInternalApiKey: { path: internal-keys, property: ocr }
+
+  Fleet__InternalApiKey: { path: internal-keys, property: fleet }
+  AdminBff__Upstreams__Fleet__InternalApiKey: { path: internal-keys, property: fleet }
+
+  FleetBilling__InternalApiKey: { path: internal-keys, property: fleet-billing }
+  Payout__InternalApiKey: { path: internal-keys, property: payout }
+  Query__InternalApiKey: { path: internal-keys, property: query }
+
+  # --- providers/: an EXTERNAL party's credential, held once ---------------------------
+  # Two services holding one provider's key is not duplication to be removed — OnePay
+  # issues one merchant credential and both fare-svc (D-10) and fleet-billing-svc (AL-03)
+  # transact on it. Rotating it is one Vault write and two rollouts.
+  Sms__NotifyLkUserId: { path: providers, property: notify_lk_user_id }
+  Sms__NotifyLkApiKey: { path: providers, property: notify_lk_api_key }
+  Sms__SecondaryApiKey: { path: providers, property: sms_secondary_api_key }
+
+  Onepay__ApiKey: { path: providers, property: onepay_api_key }
+  FleetBilling__OnepayApiKey: { path: providers, property: onepay_api_key }
+  Onepay__WebhookSecret: { path: providers, property: onepay_webhook_secret }
+  FleetBilling__OnepayWebhookSecret: { path: providers, property: onepay_webhook_secret }
+
+  LankaQr__MerchantId: { path: providers, property: lankaqr_merchant_id }
+  FleetBilling__LankaQrMerchantId: { path: providers, property: lankaqr_merchant_id }
+  ComBankIpg__WebhookSecret: { path: providers, property: combank_ipg_webhook_secret }
+  FleetBilling__LankaQrWebhookSecret: { path: providers, property: combank_ipg_webhook_secret }
+
+  Fcm__ServiceAccountJson: { path: providers, property: fcm_service_account_json }
+  Apns__P8Key: { path: providers, property: apns_p8_key }
+  Apns__KeyId: { path: providers, property: apns_key_id }
+  Apns__TeamId: { path: providers, property: apns_team_id }
+
+  Voip__LiveKit__ApiKey: { path: providers, property: livekit_api_key }
+  Voip__LiveKit__ApiSecret: { path: providers, property: livekit_api_secret }
+  Ocr__Gemini__ApiKey: { path: providers, property: gemini_api_key }
+  Payout__BankApiKey: { path: providers, property: bank_api_key }
+
+  Gateway__Attestation__PlayIntegrity__ServiceAccountJson:
+    { path: providers, property: play_integrity_service_account_json }
+  Gateway__Attestation__AppAttest__AppId:
+    { path: providers, property: app_attest_app_id }
+
+  # --- one credential, two services, no external party --------------------------------
+  # fare-svc holds it, ride-svc verifies with it. Both resolve to fare-svc's property so a
+  # rotation cannot land on one side only.
+  Fare__EstimateTokenKey: { path: fare-svc, property: Fare__EstimateTokenKey }
+
+# Every service reads these, so they are one ExternalSecret (`common-secret`) rather than a
+# copy per service. Hand-written: platform/external-secrets/base/common-secret.yaml.
+commonSecrets:
+  - ConnectionStrings__Postgres
+  - ConnectionStrings__PostgresDirect
+  - Storage__S3__AccessKey
+  - Storage__S3__SecretKey
+  # PRODUCTION NEEDS THIS, and infra/CLAUDE.md says it should not.
+  #
+  # "The replica and production use JWKS instead (D-21)" is the intent, and the RS256/JWKS
+  # authenticator is written out — commented — in infra/deploy/emqx/emqx.conf. But nothing
+  # implements it: MageRide.Shared.Mqtt.MqttSessionTokens signs with
+  # `SecurityAlgorithms.HmacSha256` and no service serves an MQTT JWKS document. iam-svc
+  # mints the mobile session token and mqtt-bridge-svc, tcp-adapter, fanout-svc and
+  # fleet-health-svc each mint their own service token from the SAME shared secret, which is
+  # also what the broker validates with. So it is a production credential today, it is held
+  # in Vault, it is on the 90-day rotation, and rotating it is the one procedure that touches
+  # the broker and five services at once (docs/runbooks/secret-rotation.md §4). Raised as a
+  # gap in the C124 handoff; closing it is a code change, not a manifest change.
+  - Mqtt__SessionTokenSecret
+
+# =====================================================================================
+# Secret-shaped keys in infra/env/*.example that are DELIBERATELY not wired.
+#
+# infra/scripts/k8s-verify.sh reads both env templates, and every credential in them must
+# be either granted to a service above or listed here with a reason. A secret that is
+# simply forgotten is the failure mode this list exists to prevent — the symptom of a
+# missing internal key is a 401 or a 404 in one direction of one call, which is exactly the
+# kind of thing that reaches production.
+# =====================================================================================
+unwiredSecrets:
+  Subscription__OnepayWebhookSecret: >-
+    AL-59 removed OnePay from Mode B — it would have landed subscriber money in MageRide's
+    account. subscription.yaml no longer declares the route and subscription-svc still
+    serves it (C118 drift finding 12); giving it a live secret would arm a payment rail the
+    platform decided not to have. The route is what needs deleting, not the secret wiring.
+  Gemini__ApiKey: >-
+    C009's §4.2-verbatim spelling, superseded by `Ocr__Gemini__ApiKey` when C054 landed the
+    options class. Nothing binds it.
+  LiveKit__ApiKey: >-
+    Same: superseded by `Voip__LiveKit__ApiKey` (C055). Nothing binds it.
+  LiveKit__Secret: >-
+    Same: superseded by `Voip__LiveKit__ApiSecret` (C055). Nothing binds it.

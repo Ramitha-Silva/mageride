@@ -1,0 +1,113 @@
+# =====================================================================================
+# Redis — live geo, dispatch/ride locks, caches and the SignalR backplane (D7' §9, ADD §9.4).
+#
+# ONE NODE, and D7' §8's launch topology says "Redis Sentinel". Sentinel is C132's, for the
+# same reason Patroni is: it needs a failover topology, not a replica count. The production
+# overlay states it rather than leaving a single Redis looking like the intended shape.
+#
+# Three settings that are not defaults and are each load-bearing:
+#   * `appendonly yes` + `appendfsync everysec` — a hard kill loses at most 1 s of writes
+#     (ADD §9.4). Without it, a pod eviction loses every live vehicle position.
+#   * `maxmemory-policy noeviction` — Redis holds the dispatch and ride LOCKS. An eviction
+#     policy that dropped one would hand two drivers the same ride. C119 alerts on any
+#     eviction at all for exactly this reason, so the policy makes the alert impossible
+#     rather than merely loud.
+#   * `notify-keyspace-events Ex` — D-07's other half: dispatch-svc subscribes to
+#     `__keyevent@0__:expired` so an `offer:{rideId}` key lapsing reassigns the offer
+#     without waiting for the durable sweep (C023). Redis publishes nothing by default and
+#     CONFIG SET needs an admin connection no service opens.
+# =====================================================================================
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: mageride
+  labels:
+    app: redis
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/component: data
+    app.kubernetes.io/part-of: mageride
+spec:
+  clusterIP: None
+  selector: { app: redis }
+  ports:
+    - { name: redis, port: 6379, targetPort: redis, protocol: TCP }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+  namespace: mageride
+  labels:
+    app: redis
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/component: data
+    app.kubernetes.io/part-of: mageride
+spec:
+  serviceName: redis
+  replicas: 1
+  selector:
+    matchLabels: { app: redis }
+  template:
+    metadata:
+      labels:
+        app: redis
+        app.kubernetes.io/name: redis
+        app.kubernetes.io/component: data
+        app.kubernetes.io/part-of: mageride
+      annotations:
+        # C119 scrapes redis through redis_exporter, not the server itself.
+        prometheus.io/scrape: "false"
+    spec:
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          args:
+            - redis-server
+            - --appendonly
+            - "yes"
+            - --appendfsync
+            - everysec
+            - --maxmemory-policy
+            - noeviction
+            - --notify-keyspace-events
+            - Ex
+          ports:
+            - { name: redis, containerPort: 6379, protocol: TCP }
+          resources:
+            requests: { cpu: 500m, memory: 1Gi }
+            limits: { cpu: "1", memory: 1536Mi }
+          readinessProbe:
+            exec: { command: ["redis-cli", "ping"] }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 10
+          livenessProbe:
+            exec: { command: ["redis-cli", "ping"] }
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 6
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: redisdata, mountPath: /data }
+  volumeClaimTemplates:
+    - metadata:
+        name: redisdata
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 10Gi

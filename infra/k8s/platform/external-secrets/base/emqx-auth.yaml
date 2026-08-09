@@ -1,0 +1,50 @@
+# =====================================================================================
+# `emqx-auth` — the broker's two secrets.
+#
+#   session_token_secret  The HMAC EMQX validates every MQTT session JWT with. THE SAME VAULT
+#                         PROPERTY as every service's `Mqtt__SessionTokenSecret` in
+#                         `common-secret`, and that is the point: iam-svc mints the mobile
+#                         token, mqtt-bridge-svc / tcp-adapter / fanout-svc / fleet-health-svc
+#                         each mint their own service token, and the broker validates all of
+#                         them. A broker holding a different value is a platform where no
+#                         device can connect — and it is not detectable from either side
+#                         alone, because both look correctly configured.
+#
+#                         D-21 specifies RS256 over a JWKS document and the authenticator is
+#                         written out (commented) in infra/deploy/emqx/emqx.conf. Nothing
+#                         implements it: MageRide.Shared.Mqtt.MqttSessionTokens signs with
+#                         HmacSha256 and no service serves an MQTT JWKS. So this is a
+#                         production credential on the 90-day rotation, and anything holding
+#                         it can mint a session token for ANY vehicle. Raised in the C124
+#                         handoff; closing it is a code change.
+#
+#   erlang_cookie         The Erlang distribution cookie. Two EMQX nodes only form a cluster
+#                         if they share it, and E-08's shared subscription only distributes
+#                         across a group that is genuinely clustered — so a wrong cookie is
+#                         not a clustering error, it is two brokers each delivering every
+#                         position to its own mqtt-bridge replicas.
+# =====================================================================================
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: emqx-auth
+  labels:
+    app: emqx
+    app.kubernetes.io/name: emqx-auth
+    app.kubernetes.io/component: secret
+    app.kubernetes.io/part-of: mageride
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: mageride-vault
+    kind: ClusterSecretStore
+  target:
+    name: emqx-auth
+    creationPolicy: Owner
+    deletionPolicy: Retain
+  data:
+    - secretKey: session_token_secret
+      remoteRef: { key: common, property: mqtt_session_token_secret }
+    - secretKey: erlang_cookie
+      remoteRef: { key: common, property: emqx_erlang_cookie }

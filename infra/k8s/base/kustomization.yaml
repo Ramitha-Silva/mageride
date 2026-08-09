@@ -1,0 +1,42 @@
+# =====================================================================================
+# MageRide base — the whole platform, at the D7' §5 shape and with no environment in it.
+#
+# Nothing here is applied directly. Every environment is an overlay
+# (infra/k8s/overlays/{dev,staging,production}) and every overlay sets, at minimum, the
+# promoted image tag. Base carries `sha-0000000`, which is deliberately unpullable: an
+# overlay that was never promoted must fail to pull rather than quietly run `latest`.
+#
+# NO CUSTOM RESOURCES LIVE IN THIS TREE. ExternalSecrets, SecretStores and ArgoCD
+# Applications are under infra/k8s/platform/, applied by the platform bootstrap and by the
+# app-of-apps. That split is what lets `kubectl apply --dry-run=client -k overlays/staging`
+# — the C124 verify — run against ANY cluster: `--dry-run=client` still needs a REST mapping
+# for every kind, so one `ExternalSecret` in this tree would make the verify depend on
+# whether ESO happened to be installed.
+#
+# `commonLabels` is deliberately NOT used. It writes into `spec.selector.matchLabels`, which
+# is immutable on a Deployment: adding a label later would need every workload deleted and
+# recreated. `labels[].includeSelectors: false` is the safe form, and the generator already
+# stamps the app.kubernetes.io set.
+# =====================================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: mageride
+
+resources:
+  - namespace.yaml
+  - config/common-config.yaml
+  - config/service-endpoints.yaml
+  - config/portal-config.yaml
+  - data
+  - services
+  - portals
+  - ingress/ingress.yaml
+  - jobs/migrate.yaml
+  - jobs/osm-pipeline.yaml
+
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/managed-by: argocd
+      app.kubernetes.io/part-of: mageride

@@ -1,0 +1,133 @@
+# GENERATED FILE — do not edit.
+# Source: infra/k8s/service-catalog.yaml
+# Regenerate: python3 infra/k8s/tools/generate_manifests.py
+#
+# payout-svc  ·  backend/src/Payout.Api  ·  infra/docker/Dockerfile.service
+#
+# No HPA: the weekly sweep (AL-58) is bounded by the driver count, not by request load,
+# and an HPA would scale on the CPU of a service that is idle six days a week. Two
+# replicas for availability — the run is idempotent on the Colombo business date and
+# claims rows FOR UPDATE SKIP LOCKED, so both can sweep.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payout-svc
+  labels:
+    app: payout-svc
+    app.kubernetes.io/name: payout-svc
+    app.kubernetes.io/component: backend
+    app.kubernetes.io/part-of: mageride
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  progressDeadlineSeconds: 600
+  minReadySeconds: 10
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxUnavailable: 0, maxSurge: 1 }
+  selector:
+    matchLabels: { app: payout-svc }
+  template:
+    metadata:
+      labels:
+        app: payout-svc
+        app.kubernetes.io/name: payout-svc
+        app.kubernetes.io/component: backend
+        app.kubernetes.io/part-of: mageride
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "5000"
+        prometheus.io/path: /metrics
+    spec:
+      serviceAccountName: mageride
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1654
+        runAsGroup: 1654
+        fsGroup: 1654
+        seccompProfile: { type: RuntimeDefault }
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: { app: payout-svc }
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: { app: payout-svc }
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: payout-svc
+          image: ghcr.io/mageride/payout-svc:sha-0000000
+          imagePullPolicy: IfNotPresent
+          ports:
+            - { name: http, containerPort: 5000, protocol: TCP }
+          envFrom:
+            # D7' §4.1's non-secret set, and the in-cluster address of every upstream.
+            - configMapRef: { name: common-config }
+            - configMapRef: { name: service-endpoints }
+            # Vault, via the External Secrets Operator (D7' §13). Never a repository file.
+            - secretRef: { name: common-secret }
+            - secretRef: { name: payout-svc-secret }
+          resources:
+            requests: { cpu: "500m", memory: 1Gi }
+            limits: { cpu: "1", memory: 2Gi }
+          # D7' §5.1: /health/ready pings DB + Redis + Kafka; /health/live is liveness only.
+          readinessProbe:
+            httpGet: { path: /health/ready, port: http }
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet: { path: /health/live, port: http }
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 3
+            failureThreshold: 6
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - { name: tmp, emptyDir: {} }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: payout-svc
+  labels:
+    app: payout-svc
+    app.kubernetes.io/name: payout-svc
+    app.kubernetes.io/component: service
+    app.kubernetes.io/part-of: mageride
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  type: ClusterIP
+  selector: { app: payout-svc }
+  ports:
+    - { name: http, port: 80, targetPort: http, protocol: TCP }
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: payout-svc
+  labels:
+    app: payout-svc
+    app.kubernetes.io/name: payout-svc
+    app.kubernetes.io/component: policy
+    app.kubernetes.io/part-of: mageride
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels: { app: payout-svc }

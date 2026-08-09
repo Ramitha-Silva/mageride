@@ -1,0 +1,103 @@
+# =====================================================================================
+# The migration gate (C124's first fence: "DB migrations are gated pre-deploy and must be
+# backward-compatible with the running version").
+#
+# THE GATE EXISTS TWICE, ON PURPOSE.
+#
+#   1. In the pipeline. `.github/workflows/deploy.yml` runs `infra/scripts/migration-gate.sh`
+#      BEFORE it writes the new image tag into the overlay. A failure there means no commit,
+#      so ArgoCD has nothing new to sync and THE PREVIOUS VERSION KEEPS SERVING — which is
+#      the definition-of-done sentence, and it can only be delivered by a gate that runs
+#      before the desired state changes.
+#   2. Here, as SYNC WAVE 1. This one catches the paths the pipeline is not on: a hand-run
+#      `argocd app sync`, a self-heal after a manual `kubectl edit`, a cluster rebuilt from
+#      git. ArgoCD applies one wave at a time and waits for it to be Healthy, and a Job is
+#      Healthy only once it has completed successfully — so a failed migration leaves wave 2
+#      (every service and portal) UNAPPLIED and the running pods untouched.
+#
+# --- Why a wave and not a PreSync hook ------------------------------------------------
+# A PreSync hook runs before EVERYTHING, including the namespace and the Postgres
+# StatefulSet. On a first sync there would be no database for it to migrate and no
+# `common-secret` for it to read the DSN from, so it would fail on a healthy cluster — which
+# is the worst kind of gate: one that cries wolf on the day it is installed. Wave 1 runs after
+# the data plane (wave 0) and before the applications (wave 2), which is exactly the window a
+# migration gate wants.
+#
+# Running twice is free: DbUp records every script in `public.schema_versions` and the second
+# pass applies nothing. `infra/scripts/migrate-verify.sh` exists to prove exactly that, and
+# it fails the build if a second apply executes anything.
+#
+# --- Why this points at Postgres and not at PgBouncer ---------------------------------
+# Every service reaches the database through PgBouncer in transaction mode. This Job must
+# not: DbUp gives each script its own transaction, migration 1804 needs CREATEROLE, and
+# `COMMENT ON ROLE` needs superuser — none of which survive a pooler that hands the server
+# connection back at COMMIT. So it takes `ConnectionStrings__PostgresDirect` and puts it in
+# the variable the runner reads.
+# =====================================================================================
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: migrate
+  namespace: mageride
+  labels:
+    app: migrate
+    app.kubernetes.io/name: migrate
+    app.kubernetes.io/component: job
+    app.kubernetes.io/part-of: mageride
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+    # A Job's `spec.template` is immutable, so a new image SHA cannot be patched in — the
+    # apply fails with "field is immutable" and the sync stops on the gate itself rather than
+    # on the migration. `Replace=true` makes ArgoCD delete and recreate it instead.
+    # `Force=true` is what lets that deletion happen while the previous Job object still
+    # exists.
+    #
+    # The consequence is deliberate: the Job runs on EVERY sync, not only when a migration
+    # changed. That is the gate working — DbUp records each script in
+    # `public.schema_versions` and a no-op pass takes seconds (`migrate-verify.sh` exists to
+    # prove the second pass applies nothing), and a gate that only runs when somebody
+    # remembered to change something is not a gate.
+    argocd.argoproj.io/sync-options: Replace=true,Force=true
+spec:
+  # One retry, for a connection that was refused while the database was still starting — the
+  # runner already waits `--wait` seconds for that, so a second failure is a real failure.
+  # Not 6: retrying a broken migration six times delays the red status by minutes.
+  backoffLimit: 1
+  activeDeadlineSeconds: 1800
+  template:
+    metadata:
+      labels: { app: migrate }
+    spec:
+      restartPolicy: Never
+      serviceAccountName: mageride
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1654
+        runAsGroup: 1654
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: migrate
+          # Promoted by the same SHA as every service. A migration that does not match the
+          # code it is gating is not a gate — the overlay's `images:` block sets both.
+          image: ghcr.io/mageride/migrate:sha-0000000
+          imagePullPolicy: IfNotPresent
+          args: ["--wait", "120"]
+          env:
+            # The runner reads `ConnectionStrings__Postgres`; the value is the DIRECT DSN.
+            # See the header.
+            - name: ConnectionStrings__Postgres
+              valueFrom:
+                secretKeyRef: { name: common-secret, key: ConnectionStrings__PostgresDirect }
+            - { name: TZ, value: Asia/Colombo }
+          resources:
+            requests: { cpu: 250m, memory: 256Mi }
+            limits: { cpu: "1", memory: 512Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - { name: tmp, emptyDir: {} }

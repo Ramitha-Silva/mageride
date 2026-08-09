@@ -38,6 +38,43 @@ infra/
   scripts/migrate-verify.sh     the C003–C006 definition of done (no compose involved)
 ```
 
+## Kubernetes (C124)
+
+```
+k8s/service-catalog.yaml       the ONE list — 34 images, every credential, where each comes from
+k8s/tools/                     generate_manifests.py · set_image_tag.py · check_fences.py
+k8s/base/                      the platform at the D7' §5 shape, no environment in it
+k8s/overlays/{dev,staging,production}   D7' §8's three substrates
+k8s/platform/argocd/           AppProject · app-of-apps · per-env Applications  (README.md)
+k8s/platform/external-secrets/ Vault -> Secret (staging, production)
+k8s/platform/sealed-secrets/   the K3s/MVP path (README.md, seal.sh) — dev
+k8s/README.md                  the map, the capacity tension, what is C132's
+scripts/k8s-verify.sh          the C124 definition of done — 39 checks, no cluster needed
+scripts/migration-gate.sh      the pre-deploy migration gate (expand/contract + apply twice)
+docs/runbooks/{deploy,rollback,secret-rotation}.md
+```
+
+- **Nothing is applied by hand.** Two `kubectl apply`s bootstrap a cluster (the AppProject and its
+  root Application); after that the cluster's contents are whatever `main` says. `kubectl apply`,
+  `kubectl set image` and `kubectl rollout undo` are all reverted by ArgoCD's `selfHeal` within three
+  minutes — see `docs/runbooks/rollback.md`.
+- **The pipeline holds no cluster credential.** Its only write is a commit to
+  `infra/k8s/overlays/<env>/images/`.
+- **`service-catalog.yaml` is the source of truth** for the manifests, the ExternalSecrets AND the CI
+  image matrix. Adding a service is one entry plus `generate_manifests.py`; never hand-edit a file
+  whose first line says GENERATED.
+- **`production`, not `prod`** — C132's verify command names the directory.
+- **The per-service split is not the replica's layout.** D7' §2.1 co-locates 21 services in one
+  container because one VPS has to; D7' §5 and D7' §2 describe a Deployment per service, and that is
+  what the repository builds (there is no `app-services` project). `k8s/README.md` has the capacity
+  arithmetic this creates, which is C132's to resolve.
+- **MQTT is a LoadBalancer, never the Ingress** — the same fence as HAProxy's, and `check_fences.py`
+  enforces it: an HTTP ingress cannot terminate a tracker's mutual-TLS handshake, and the failure is
+  a device that connects and delivers nothing.
+- **Two bootstrap copies.** provisioning-svc generates the device CA chain and the PSK signing key on
+  its own ReadWriteOnce volume; EMQX and tcp-adapter cannot share it, so both values are copied into
+  Vault once (`docs/runbooks/deploy.md` §5) and are on T-02's 90-day rotation.
+
 ## Observability (C119)
 
 ```

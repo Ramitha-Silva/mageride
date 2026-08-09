@@ -1,0 +1,75 @@
+# =====================================================================================
+# dev: the platform itself — every workload, at app-of-apps wave 1.
+#
+# The first stop in the promotion chain (D7' §7: "dev->staging->prod promotion by image SHA
+# tag"). `.github/workflows/cd.yml` writes the new tag into `infra/k8s/overlays/dev/images/`
+# before it writes staging's, so a manifest change that only breaks on a real cluster breaks
+# here first. There is no `kubectl` in the pipeline and no cluster credential in GitHub: the
+# only thing the pipeline does is commit, and ArgoCD does the rest.
+#
+# This is also the environment whose secrets are SealedSecrets rather than Vault
+# (D7' §13, ../dev/secrets.yaml), so a fresh cluster's pods wait for a `seal.sh` run before
+# any of them start. That is expected on day one and it is not a deploy failure.
+#
+# --- The sync waves inside this Application -------------------------------------------
+#   -2  Namespace, ServiceAccount
+#   -1  ConfigMaps (common-config, service-endpoints, portal-config)
+#    0  the data plane — Postgres, PgBouncer, Redis, Redpanda, EMQX (0 is the default wave)
+#    1  the migration gate (Job) and the Redpanda topic registry (Job)
+#    2  every service, worker and portal, with their Services, HPAs and PDBs
+#    3  the Ingresses and the suspended osm-pipeline CronJob
+#
+# ArgoCD applies one wave at a time and waits for the wave to be Healthy. A Job is Healthy only
+# when it has completed successfully, so **A FAILED MIGRATION LEAVES WAVE 2 UNAPPLIED AND THE
+# PREVIOUS VERSION SERVING** — which is C124's definition-of-done sentence, delivered by the
+# ordering rather than by a check somebody has to remember to run.
+# =====================================================================================
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: mageride-dev
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: mageride
+  source:
+    repoURL: https://github.com/Ramitha-Silva/mageride.git
+    targetRevision: main
+    path: infra/k8s/overlays/dev
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: mageride
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      # The namespace is a manifest in base, with a sync wave and a Pod Security Admission
+      # label on it. Letting ArgoCD create it implicitly would create it WITHOUT those.
+      - CreateNamespace=false
+      - ApplyOutOfSyncOnly=true
+      # Prune last, so a resource being removed is deleted only after everything that replaces
+      # it is healthy. Renaming a Service otherwise deletes the old one before the new one has
+      # endpoints.
+      - PruneLast=true
+      # A resource ArgoCD would have to delete-and-recreate is refused instead of destroyed.
+      # `Replace=true` is opted into per resource — the two Jobs — and nowhere else.
+      - Prune=confirm
+    retry:
+      limit: 5
+      backoff: { duration: 30s, factor: 2, maxDuration: 10m }
+  ignoreDifferences:
+    # THE HPA OWNS `replicas`. Base declares a number because a Deployment must have one, and
+    # the moment an HPA scales, git and the cluster disagree — with `selfHeal: true` ArgoCD
+    # would scale it back, the HPA would scale it up again, and the two would fight for ever.
+    # Ignoring the field is what lets both mechanisms be correct: git sets the initial size,
+    # the HPA owns it afterwards.
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas
+  revisionHistoryLimit: 10

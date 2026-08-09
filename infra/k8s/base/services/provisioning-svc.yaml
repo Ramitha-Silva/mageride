@@ -1,0 +1,117 @@
+# GENERATED FILE — do not edit.
+# Source: infra/k8s/service-catalog.yaml
+# Regenerate: python3 infra/k8s/tools/generate_manifests.py
+#
+# provisioning-svc  ·  backend/src/Provisioning.Api  ·  infra/docker/Dockerfile.service
+#
+# T-02's embedded step-ca. `provisioning-ca-data` is the PVC D7' §5 names, and it holds
+# the device-CA root key — which is why this is the one service with a ReadWriteOnce
+# volume and therefore `strategy: Recreate` at ONE replica rather than a RollingUpdate
+# at two. maxUnavailable 0 with a RWO volume deadlocks — the new pod cannot attach until
+# the old one detaches, and the old one is not evicted until the new one is Ready — and
+# two replicas cannot both mount it once they land on different nodes. The cost is real
+# and is the reason this entry exists: provisioning-svc is briefly down during a
+# rollout, so a tracker cannot be provisioned for those seconds. Nothing already bound
+# is affected (tcp-adapter verifies a presented PSK itself) and the alternative — two
+# pods sharing a CA root key over ReadWriteMany, which DO block storage does not offer —
+# is worse. D7' §13 gives the forward path: Vault PKI for the step-ca intermediates,
+# which removes the volume. That is C132's to take.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: provisioning-svc
+  labels:
+    app: provisioning-svc
+    app.kubernetes.io/name: provisioning-svc
+    app.kubernetes.io/component: backend
+    app.kubernetes.io/part-of: mageride
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  replicas: 1
+  revisionHistoryLimit: 5
+  progressDeadlineSeconds: 600
+  minReadySeconds: 10
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: { app: provisioning-svc }
+  template:
+    metadata:
+      labels:
+        app: provisioning-svc
+        app.kubernetes.io/name: provisioning-svc
+        app.kubernetes.io/component: backend
+        app.kubernetes.io/part-of: mageride
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "5000"
+        prometheus.io/path: /metrics
+    spec:
+      serviceAccountName: mageride
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1654
+        runAsGroup: 1654
+        fsGroup: 1654
+        seccompProfile: { type: RuntimeDefault }
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: provisioning-svc
+          image: ghcr.io/mageride/provisioning-svc:sha-0000000
+          imagePullPolicy: IfNotPresent
+          ports:
+            - { name: http, containerPort: 5000, protocol: TCP }
+          envFrom:
+            # D7' §4.1's non-secret set, and the in-cluster address of every upstream.
+            - configMapRef: { name: common-config }
+            - configMapRef: { name: service-endpoints }
+            # Vault, via the External Secrets Operator (D7' §13). Never a repository file.
+            - secretRef: { name: common-secret }
+            - secretRef: { name: provisioning-svc-secret }
+          resources:
+            requests: { cpu: "500m", memory: 1Gi }
+            limits: { cpu: "1", memory: 2Gi }
+          # D7' §5.1: /health/ready pings DB + Redis + Kafka; /health/live is liveness only.
+          readinessProbe:
+            httpGet: { path: /health/ready, port: http }
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet: { path: /health/live, port: http }
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 3
+            failureThreshold: 6
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+            - { name: provisioning-ca-data, mountPath: /var/step }
+      volumes:
+        - { name: tmp, emptyDir: {} }
+        - name: provisioning-ca-data
+          persistentVolumeClaim:
+            claimName: provisioning-ca-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: provisioning-svc
+  labels:
+    app: provisioning-svc
+    app.kubernetes.io/name: provisioning-svc
+    app.kubernetes.io/component: service
+    app.kubernetes.io/part-of: mageride
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  type: ClusterIP
+  selector: { app: provisioning-svc }
+  ports:
+    - { name: http, port: 80, targetPort: http, protocol: TCP }

@@ -1,0 +1,140 @@
+# =====================================================================================
+# Postgres — D7' §5's StatefulSet, `timescale/timescaledb-ha:pg16` (T-06).
+#
+# THIS IS ONE NODE. D7' §8's launch topology is "Postgres Patroni 1P+2R + PgBouncer", and
+# a Patroni cluster needs an operator, a DCS and a failover story that is C132's
+# ("DOKS manifests for the launch topology"). What is here is the single-instance form the
+# spec's §5 template describes, which is correct for dev/K3s and is what staging runs; the
+# production overlay says in writing that it is not the launch topology yet, so nobody can
+# read a green ArgoCD sync as "the database is highly available".
+#
+# --- Two settings that are corrections, not preferences ------------------------------
+# Both were found by running D7' §3's own values and are recorded in infra/CLAUDE.md:
+#
+#   1. PGDATA is /home/postgres/pgdata, NOT /var/lib/postgresql/data. The spec path is the
+#      OFFICIAL postgres image's; this image is timescaledb-ha, runs as a non-root
+#      `postgres` user, and mounting an empty volume over the spec's path gives
+#      "mkdir: cannot create directory '.../pgdata': Permission denied" on first boot and a
+#      restart loop.
+#   2. shared_preload_libraries=timescaledb ONLY. PostGIS is a plain extension with no
+#      preloadable library in this image, so naming it makes the postmaster refuse to start.
+#
+# --- Why the superuser -----------------------------------------------------------------
+# The migration runner needs CREATEROLE for migration 1804 and COMMENT ON ROLE needs
+# superuser, so it cannot be de-privileged without splitting that script out (C006
+# handoff). The DSN is in `common-secret`, from Vault; nothing here knows the password.
+# =====================================================================================
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: mageride
+  labels:
+    app: postgres
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/component: data
+    app.kubernetes.io/part-of: mageride
+spec:
+  # Headless: a StatefulSet's stable per-pod DNS is the whole point, and it is what a
+  # Patroni replica set will need when C132 replaces this.
+  clusterIP: None
+  selector: { app: postgres }
+  ports:
+    - { name: postgres, port: 5432, targetPort: postgres, protocol: TCP }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: mageride
+  labels:
+    app: postgres
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/component: data
+    app.kubernetes.io/part-of: mageride
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels: { app: postgres }
+  template:
+    metadata:
+      labels:
+        app: postgres
+        app.kubernetes.io/name: postgres
+        app.kubernetes.io/component: data
+        app.kubernetes.io/part-of: mageride
+      annotations:
+        # Scraped by the postgres_exporter, not by the postmaster (C119's `postgres` job).
+        prometheus.io/scrape: "false"
+    spec:
+      # 120 s: a `pg_ctl stop -m fast` has to finish its checkpoint. SIGKILL mid-checkpoint
+      # is a crash recovery on the next boot, which is minutes of downtime instead of ten
+      # seconds of shutdown.
+      terminationGracePeriodSeconds: 120
+      securityContext:
+        # The image's own `postgres` user. `fsGroup` is what makes the mounted volume
+        # writable by it; `runAsUser` is left to the image, which switches users in its
+        # entrypoint and must be allowed to.
+        fsGroup: 1000
+      containers:
+        - name: postgres
+          image: timescale/timescaledb-ha:pg16
+          args:
+            - "-c"
+            - "shared_preload_libraries=timescaledb"
+            - "-c"
+            - "max_connections=200"
+          ports:
+            - { name: postgres, containerPort: 5432, protocol: TCP }
+          env:
+            - { name: POSTGRES_DB, value: mageride }
+            - { name: POSTGRES_USER, value: postgres }
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: postgres-superuser, key: password }
+            # See the header. This is the image's PGDATA and the spec's path is wrong for it.
+            - { name: PGDATA, value: /home/postgres/pgdata/data }
+          resources:
+            requests: { cpu: "1", memory: 4Gi }
+            limits: { cpu: "2", memory: 6Gi }
+          # D7' §5.1: pg_isready, 5 s interval, failure threshold 10. `start_period 40s`
+          # becomes a startupProbe — a liveness probe with a long initial delay would also
+          # give a RUNNING postmaster 40 s of grace on every later restart.
+          startupProbe:
+            exec: { command: ["pg_isready", "-U", "postgres", "-d", "mageride"] }
+            periodSeconds: 5
+            failureThreshold: 30
+          readinessProbe:
+            exec: { command: ["pg_isready", "-U", "postgres", "-d", "mageride"] }
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 10
+          livenessProbe:
+            exec: { command: ["pg_isready", "-U", "postgres"] }
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          securityContext:
+            allowPrivilegeEscalation: false
+            # The one container in the platform with a writable root. The timescaledb-ha
+            # entrypoint writes outside PGDATA — it generates configuration, a socket directory
+            # and its own log files — and locking the root filesystem down makes it fail at boot
+            # with a permission error rather than anything that names the cause. The two things
+            # that matter are still true: no privilege escalation and no capabilities.
+            readOnlyRootFilesystem: false
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: pgdata, mountPath: /home/postgres/pgdata }
+            - { name: run, mountPath: /var/run/postgresql }
+      volumes:
+        - { name: run, emptyDir: {} }
+  volumeClaimTemplates:
+    - metadata:
+        name: pgdata
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 50Gi

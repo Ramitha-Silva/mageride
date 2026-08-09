@@ -1,0 +1,96 @@
+# =====================================================================================
+# `osm-pipeline` — D7' §10's weekly tile/geocoder refresh (D-15).
+#
+# SUSPENDED, and it has to be: **no component in build/manifest.yaml builds this image.**
+# D7' §10 prints `ghcr.io/mageride/osm-pipeline:latest` and the pipeline stages
+# (download-sl-osm-diff, osm2pgsql, tippecanoe, pmtiles, `aws s3 sync`) have no source
+# anywhere in this repository, so there is nothing for `.github/workflows/images.yml` to
+# build and nothing for a promotion to tag. An unsuspended CronJob would be a weekly
+# ImagePullBackOff and a weekly page.
+#
+# It is committed rather than omitted because the manifest is the thing that is missing, and
+# a suspended CronJob with this comment is discoverable; a gap in the manifest set is not.
+# Raised in the C124 handoff. To enable: build the image, then
+# `kubectl -n mageride patch cronjob osm-pipeline -p '{"spec":{"suspend":false}}'` — or
+# better, drop the `suspend` patch from the overlay in the same change that lands the image.
+#
+# The OTHER §10 jobs are deliberately NOT here, and that is the more important half:
+#
+#   document-expiry (E-03)      registry-svc's `DocumentExpiryWorker` (BackgroundService)
+#   credential-rotation (T-02)  provisioning-svc's `CredentialRotationWorker`
+#   daily-fee-reset (D-13)      subscription-svc's daily-fee path
+#   pdpa-fulfillment (E-06)     admin-bff
+#   gtfs-import (AL-54)         transit-svc's `GtfsActivationService`, on an advisory lock
+#
+# Every one of them landed in waves 2-3 as an IN-PROCESS worker, not as a CronJob. Adding the
+# CronJobs D7' §10 lists would run the work twice: two sets of document-expiry notices, two
+# daily-fee charges. The ledgers and unique business keys make a double run converge rather
+# than corrupt (registry.document_notices, `(driverId, vehicleId, feeDate)` in Asia/Colombo),
+# so the symptom would be duplicate driver notifications rather than duplicate money — but
+# duplicate notifications on a document expiry are what drivers act on. §10's CronJob framing
+# is superseded by the implementation; recorded in the C124 handoff.
+# =====================================================================================
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: osm-pipeline
+  namespace: mageride
+  annotations:
+    # Wave 3, with the Ingress: a suspended CronJob has no ordering requirement, and putting it
+    # last keeps it out of the way of the gate at wave 1.
+    argocd.argoproj.io/sync-wave: "3"
+  labels:
+    app: osm-pipeline
+    app.kubernetes.io/name: osm-pipeline
+    app.kubernetes.io/component: job
+    app.kubernetes.io/part-of: mageride
+spec:
+  # D7' §10: weekly, Sunday 03:00. Asia/Colombo, not UTC — D-38 applies to a job that
+  # refreshes what riders see the next morning as much as to a business date.
+  schedule: "0 3 * * 0"
+  timeZone: Asia/Colombo
+  suspend: true
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 3600
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 21600
+      template:
+        metadata:
+          labels: { app: osm-pipeline }
+        spec:
+          restartPolicy: OnFailure
+          serviceAccountName: mageride
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1654
+            runAsGroup: 1654
+            seccompProfile: { type: RuntimeDefault }
+          containers:
+            - name: osm-pipeline
+              image: ghcr.io/mageride/osm-pipeline:sha-0000000
+              envFrom:
+                - configMapRef: { name: common-config }
+                - secretRef: { name: common-secret }
+              resources:
+                # D7' §10's requests. osm2pgsql and tippecanoe over a national extract are
+                # the two heavy stages; the limit is what keeps a weekly batch from evicting
+                # the ride path on a 3-node cluster.
+                requests: { cpu: "1", memory: 2Gi }
+                limits: { cpu: "2", memory: 4Gi }
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities: { drop: [ALL] }
+              volumeMounts:
+                - { name: work, mountPath: /work }
+                - { name: tmp, mountPath: /tmp }
+          volumes:
+            # An extract, an osm2pgsql import and a tile build need real scratch space.
+            - name: work
+              emptyDir: { sizeLimit: 20Gi }
+            - { name: tmp, emptyDir: {} }

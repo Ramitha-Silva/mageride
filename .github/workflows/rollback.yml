@@ -1,0 +1,194 @@
+# =====================================================================================
+# Roll one environment back to a previous image tag (C124).
+#
+#   gh workflow run rollback.yml -f environment=production -f tag=sha-1a2b3c4
+#
+# The C124 definition of done: "a rollback to the previous SHA completes and is documented step
+# by step." The steps are docs/runbooks/rollback.md; this is the button.
+#
+# --- WHY IT IS THE SAME MECHANISM AS A DEPLOY ------------------------------------------
+# A rollback here is a promotion of an older tag: it writes that tag into
+# `overlays/<env>/images/`, commits, and ArgoCD reconciles. Nothing special happens, and that is
+# the property worth having — the rollback path is the path that is exercised on every deploy, so
+# it cannot be the thing that is broken when it is needed. A bespoke `kubectl rollout undo` would
+# be a second mechanism, used once a quarter, in an incident.
+#
+# It also keeps the repository true. `kubectl rollout undo` changes the cluster and not the
+# manifests, so ArgoCD's `selfHeal` puts the bad version straight back — a rollback that undoes
+# itself within three minutes, at the worst possible time.
+#
+# --- WHAT IS DELIBERATELY NOT CHECKED --------------------------------------------------
+# The migration gate does NOT run. A rollback moves the image backwards while the schema stays
+# where it is, and that is exactly what the gate's forward rule is FOR: every migration must be
+# backward-compatible with the running version, so the previous image can read the current
+# schema. Re-running the gate would compare the old scripts against a newer database and refuse,
+# blocking the one operation that must never be blocked.
+#
+# The consequence, stated plainly: **rolling back the code does not roll back the schema.** If a
+# release contained a migration that the previous code genuinely cannot tolerate, the gate should
+# have refused it — and if it slipped through, this workflow will not save you. That case is a
+# forward fix, and the runbook says so.
+# =====================================================================================
+
+name: rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Which environment to roll back
+        required: true
+        type: choice
+        options: [dev, staging, production]
+      tag:
+        description: The image tag to return to (sha-xxxxxxx). Empty = the previous one in git history.
+        required: false
+        type: string
+      reason:
+        description: What went wrong — goes in the commit message and the incident record
+        required: true
+        type: string
+
+concurrency:
+  group: deploy-${{ inputs.environment }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  resolve:
+    name: find the target
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      tag: ${{ steps.pick.outputs.tag }}
+      current: ${{ steps.pick.outputs.current }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - name: pick the tag
+        id: pick
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet pyyaml
+          file="infra/k8s/overlays/${ENVIRONMENT}/images/kustomization.yaml"
+          current=$(python3 infra/k8s/tools/set_image_tag.py "$ENVIRONMENT" --print)
+          echo "current=$current" >> "$GITHUB_OUTPUT"
+
+          if [ -n "${INPUT_TAG:-}" ]; then
+            tag="$INPUT_TAG"
+          else
+            # The previous DISTINCT tag this file held. `git log -p` over one file is the whole
+            # deploy history of one environment, which is the other half of what makes the
+            # repository the record of what is deployed.
+            tag=$(git log --follow -p --format='' -- "$file" \
+                  | grep -oE '^\+ *newTag: sha-[0-9a-f]{7}' \
+                  | grep -oE 'sha-[0-9a-f]{7}' \
+                  | awk '!seen[$0]++' \
+                  | grep -v "^${current}$" \
+                  | head -1 || true)
+            test -n "$tag" || {
+              echo "::error::no previous tag in the history of $file — pass -f tag=sha-xxxxxxx"
+              exit 1
+            }
+            echo "::notice::no tag given; the previous one in git history is $tag"
+          fi
+
+          echo "$tag" | grep -qE '^sha-[0-9a-f]{7}$' || {
+            echo "::error::'$tag' is not a sha-xxxxxxx tag. Rolling back to a moving tag (main,\
+             latest) is not a rollback — it cannot be reasoned about afterwards."
+            exit 1
+          }
+          test "$tag" != "$current" || {
+            echo "::error::$ENVIRONMENT is already at $tag"
+            exit 1
+          }
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+          INPUT_TAG: ${{ inputs.tag }}
+
+  # ===================================================================================
+  # Write it. Deliberately NOT via deploy.yml: that workflow runs the migration gate, and a
+  # rollback must not be gated (see the header). This is the same three steps without it.
+  # ===================================================================================
+  rollback:
+    name: roll ${{ inputs.environment }} back to ${{ needs.resolve.outputs.tag }}
+    needs: resolve
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: write the previous tag
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet pyyaml
+          python3 infra/k8s/tools/set_image_tag.py "$ENVIRONMENT" "$TAG"
+          git diff --stat
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+          TAG: ${{ needs.resolve.outputs.tag }}
+
+      - name: commit and push
+        run: |
+          set -euo pipefail
+          test -n "$(git status --porcelain)" || { echo "::error::nothing changed"; exit 1; }
+          git config user.name "mageride-deploy[bot]"
+          git config user.email "mageride-deploy@users.noreply.github.com"
+          git add infra/k8s/overlays
+          git commit \
+            -m "rollback($ENVIRONMENT): $FROM -> $TAG" \
+            -m "$REASON" \
+            -m "Rolled back by ${{ github.actor }} via ${{ github.workflow }} run ${{ github.run_id }}." \
+            -m "The schema is NOT rolled back — see docs/runbooks/rollback.md §4."
+          for attempt in 1 2 3; do
+            if git push origin HEAD:main; then exit 0; fi
+            git pull --rebase origin main
+          done
+          echo "::error::could not push the rollback commit"
+          exit 1
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+          TAG: ${{ needs.resolve.outputs.tag }}
+          FROM: ${{ needs.resolve.outputs.current }}
+          REASON: ${{ inputs.reason }}
+
+      - name: wait for the cluster to agree
+        if: ${{ vars.ARGOCD_SERVER != '' }}
+        env:
+          ARGOCD_SERVER: ${{ vars.ARGOCD_SERVER }}
+          ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}
+          APP: mageride-${{ inputs.environment }}
+        run: |
+          set -euo pipefail
+          curl -sSL -o /usr/local/bin/argocd "https://${ARGOCD_SERVER}/download/argocd-linux-amd64"
+          chmod +x /usr/local/bin/argocd
+          argocd app wait "$APP" --sync --health --timeout 900
+
+      - name: summary
+        if: always()
+        run: |
+          {
+            echo "### rollback → ${{ inputs.environment }}"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| from | \`${{ needs.resolve.outputs.current }}\` |"
+            echo "| to | \`${{ needs.resolve.outputs.tag }}\` |"
+            echo "| reason | ${{ inputs.reason }} |"
+            echo
+            echo "**The database schema was not changed.** If the release being rolled back"
+            echo "included a migration the previous code cannot tolerate, this is not enough —"
+            echo "\`docs/runbooks/rollback.md\` §4 covers that case."
+          } >> "$GITHUB_STEP_SUMMARY"

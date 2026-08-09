@@ -4218,7 +4218,13 @@ components:
     - a failed migration blocks the deploy and leaves the previous version serving
     - a rollback to the previous SHA completes and is documented step by step
     - no secret value exists in the repository
-  verify_cmd: "python3 -c \"import yaml,glob;[yaml.safe_load(open(f)) for f in glob.glob('.github/workflows/*.yml')+glob.glob('infra/k8s/**/*.yaml',recursive=True)]\" && kubectl apply --dry-run=client -k infra/k8s/overlays/staging"
+  # `safe_load_all` wrapped in `list()`, not `safe_load` (Δ C124). `safe_load` parses ONE document
+  # and raises ComposerError on a second, and 43 of the 107 YAML files under infra/k8s are
+  # multi-document — a Kubernetes manifest is conventionally a Deployment, its Service, its HPA and
+  # its PDB in one file separated by `---`. The `list()` is load-bearing too: `safe_load_all`
+  # returns a lazy generator, so without it the comprehension builds 107 generators and parses
+  # nothing at all.
+  verify_cmd: "python3 -c \"import yaml,glob;[list(yaml.safe_load_all(open(f))) for f in glob.glob('.github/workflows/*.yml')+glob.glob('infra/k8s/**/*.yaml',recursive=True)]\" && kubectl apply --dry-run=client -k infra/k8s/overlays/staging"
   est_sessions: 2
 
 - id: C125

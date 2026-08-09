@@ -1,0 +1,192 @@
+# =====================================================================================
+# dev — K3s single node (D7' §8's "Dev / replica" row: 24 GB / 6 vCPU Contabo VPS-30,
+# "Docker Compose **or K3s single-node**").
+#
+# The same images and the same manifests as production. What changes is what one node can
+# hold and what one node can offer.
+#
+# THIS IS NOT THE DEV COMPOSE STACK. `infra/docker-compose.dev.slim.yml` is what a component's
+# verify runs against and it is not going anywhere; this overlay is for the K3s option in the
+# same row of §8 — the one that proves the manifests before staging does. Bringing it up on
+# the build host at the same time as a build does not fit (root CLAUDE.md, "Build Host").
+# =====================================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: mageride
+
+resources:
+  - ../../base
+  # Dev only. Production's object storage is Cloudflare R2 (D7' §8), which is an endpoint and
+  # a credential rather than a workload — see the file's header.
+  - minio.yaml
+
+components:
+  - images
+
+# `-dev` on every hostname. The Ingress hosts are patched below; this is for anything that
+# names itself.
+commonAnnotations:
+  mageride.lk/environment: dev
+
+patches:
+  # --- one node, one replica -------------------------------------------------------
+  # A blanket patch by kind, not thirty-four named ones: on a single node a second replica
+  # buys nothing (it lands on the same kubelet) and costs a full set of requests.
+  - target: { kind: Deployment }
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 1
+  - target: { kind: StatefulSet }
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 1
+
+  # --- requests down, limits untouched ---------------------------------------------
+  # THE IMPORTANT LINE IN THIS FILE. D7' §5's template requests 500m CPU and 1Gi per
+  # service; forty pods at that size want 20 vCPU and 40 GB, and this is one 6-vCPU box.
+  # Requests are a SCHEDULING claim, not a ceiling — lowering them makes the pods fit while
+  # every limit still caps what any one of them can take. A dev cluster that cannot schedule
+  # the platform tells you nothing about the manifests.
+  - target: { kind: Deployment }
+    patch: |
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests
+        value: { cpu: 50m, memory: 128Mi }
+  - target: { kind: StatefulSet, name: tcp-adapter }
+    patch: |
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests
+        value: { cpu: 50m, memory: 128Mi }
+  # Postgres, Redis, Redpanda and EMQX keep enough of a request to be scheduled first and to
+  # be the last thing evicted under pressure. They are the four that cannot be restarted
+  # cheaply.
+  - target: { kind: StatefulSet, name: postgres }
+    patch: |
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests
+        value: { cpu: 500m, memory: 1Gi }
+  - target: { kind: StatefulSet, name: redpanda }
+    patch: |
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests
+        value: { cpu: 250m, memory: 768Mi }
+  - target: { kind: StatefulSet, name: emqx }
+    patch: |
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests
+        value: { cpu: 250m, memory: 768Mi }
+  - target: { kind: StatefulSet, name: redis }
+    patch: |
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests
+        value: { cpu: 100m, memory: 256Mi }
+
+  # --- no autoscaling on one node --------------------------------------------------
+  # An HPA whose minReplicas is 2 fights the `replicas: 1` above and wins, so it has to go
+  # rather than be tuned down. K3s also ships no metrics-server API by default in the
+  # single-binary install, which would leave every HPA reporting `<unknown>/70%` for ever.
+  - target: { kind: HorizontalPodAutoscaler }
+    patch: |
+      $patch: delete
+      apiVersion: autoscaling/v2
+      kind: HorizontalPodAutoscaler
+      metadata:
+        name: PLACEHOLDER
+
+  # --- one node cannot satisfy a disruption budget ---------------------------------
+  # `minAvailable: 1` at one replica means the node can never be drained: every eviction is
+  # refused, so `kubectl drain` hangs and a K3s upgrade blocks. PDBs belong where there is
+  # more than one replica to protect.
+  - target: { kind: PodDisruptionBudget }
+    patch: |
+      $patch: delete
+      apiVersion: policy/v1
+      kind: PodDisruptionBudget
+      metadata:
+        name: PLACEHOLDER
+
+  # --- Traefik, not ingress-nginx --------------------------------------------------
+  # K3s ships Traefik. THE nginx ANNOTATIONS IN base ARE THEN INERT — including
+  # `proxy-read-timeout: 3600` on /hubs, which is the one that matters: Traefik's default
+  # `respondingTimeouts.readTimeout` is 0 (no timeout) for the router, so a hub connection
+  # survives by luck rather than by configuration here. On K3s the equivalent knob is static
+  # Traefik configuration (a HelmChartConfig for the packaged install), not a per-Ingress
+  # annotation, and it is out of this overlay's scope. Say it rather than let a green
+  # `kubectl get ingress` imply the timeout was applied.
+  - target: { kind: Ingress }
+    patch: |
+      - op: replace
+        path: /spec/ingressClassName
+        value: traefik
+  - target: { kind: Ingress, name: mr-ingress }
+    patch: |
+      - op: replace
+        path: /spec/tls/0/hosts/0
+        value: api.dev.mageride.lk
+      - op: replace
+        path: /spec/rules/0/host
+        value: api.dev.mageride.lk
+  - target: { kind: Ingress, name: mr-ingress-hubs }
+    patch: |
+      - op: replace
+        path: /spec/tls/0/hosts/0
+        value: api.dev.mageride.lk
+      - op: replace
+        path: /spec/rules/0/host
+        value: api.dev.mageride.lk
+  - target: { kind: Ingress, name: mr-ingress-portals }
+    patch: |
+      - op: replace
+        path: /spec/tls/0/hosts/0
+        value: admin.dev.mageride.lk
+      - op: replace
+        path: /spec/tls/1/hosts/0
+        value: fleet.dev.mageride.lk
+      - op: replace
+        path: /spec/tls/2/hosts/0
+        value: passenger.dev.mageride.lk
+      - op: replace
+        path: /spec/rules/0/host
+        value: admin.dev.mageride.lk
+      - op: replace
+        path: /spec/rules/1/host
+        value: fleet.dev.mageride.lk
+      - op: replace
+        path: /spec/rules/2/host
+        value: passenger.dev.mageride.lk
+
+  # --- configuration deltas ---------------------------------------------------------
+  # A strategic-merge patch, not a `configMapGenerator` with `behavior: merge`: base declares
+  # these ConfigMaps as plain resources, and a generator can only merge into something it
+  # generated. Merging `data` adds and overwrites keys, so a new key in base reaches this
+  # environment with no edit here.
+  - target: { kind: ConfigMap, name: common-config }
+    patch: |
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: common-config
+      data:
+        # MinIO in-cluster, not Cloudflare R2: a dev cluster has no R2 bucket, and
+        # path-style addressing is what MinIO serves.
+        Storage__S3__Endpoint: http://minio:9000
+        Storage__S3__ForcePathStyle: "true"
+        # Still Production. A K3s cluster is a deployment target, not a laptop —
+        # Development would turn on developer exception pages on something with a DNS name.
+        ASPNETCORE_ENVIRONMENT: Production
+        # TLS is a self-signed certificate here, so the JWKS fetch cannot require a chain
+        # the cluster does not trust. THE ONLY ENVIRONMENT WHERE THIS IS FALSE.
+        Jwt__RequireHttpsMetadata: "false"
+        Jwt__Issuer: https://iam.dev.mageride.lk
+  - target: { kind: ConfigMap, name: portal-config }
+    patch: |
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: portal-config
+      data:
+        NEXT_PUBLIC_API_BASE_URL: https://api.dev.mageride.lk
+        NEXT_PUBLIC_HUB_URL: wss://api.dev.mageride.lk/hubs

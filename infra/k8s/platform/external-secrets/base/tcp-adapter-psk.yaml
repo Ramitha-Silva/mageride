@@ -1,0 +1,53 @@
+# =====================================================================================
+# `tcp-adapter-psk` — the PSK signing key tcp-adapter verifies tracker credentials with
+# (T-03, D6' §4.2).
+#
+# The second bootstrap seam, and the same shape as `emqx-device-ca` for the same reason. What
+# differs is that this one IS secret: it is a symmetric signing key, so a holder can mint a
+# credential as well as verify one.
+#
+#   1. provisioning-svc generates `secrets/psk_signing_key` on its PVC on first boot
+#      (`EmbeddedStepCa.LoadOrCreatePskKey`).
+#   2. An operator copies it into Vault once (docs/runbooks/deploy.md §5).
+#   3. ESO projects it as a FILE at the exact path the code reads:
+#      `<Adapter:PskKeyDirectory>/secrets/psk_signing_key`, i.e. /var/step/secrets/, mounted
+#      0400. `PskCredentials.SigningKeyFile` is that constant.
+#
+# Between (1) and (2) the adapter starts with `CanVerify == false` and serves the protocols
+# that carry no credential at all — which `PskCredentials` was written to allow ("a pod that
+# starts before it has been populated must come up"). So a fresh cluster ingests from GT06 and
+# NMEA devices immediately and from credential-bearing JT/T 808 devices after the copy. That is
+# a documented degraded state rather than a crash, and the deploy runbook checks for it.
+#
+# ROTATION (T-02, 90 days): provisioning-svc rotates the key on its own volume; the copy into
+# Vault has to follow, or the adapter verifies against the retired key and every credential
+# minted after the rotation is rejected. That is the step the runbook exists for.
+# =====================================================================================
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: tcp-adapter-psk
+  labels:
+    app: tcp-adapter
+    app.kubernetes.io/name: tcp-adapter-psk
+    app.kubernetes.io/component: secret
+    app.kubernetes.io/part-of: mageride
+spec:
+  # 1 h rather than 12: this is the one secret whose value the platform generates rather than
+  # an operator, so a shorter window shortens the gap between the copy into Vault and the
+  # adapter honouring it. It still needs no restart — the key is read at construction, so the
+  # rotation procedure restarts the StatefulSet.
+  refreshInterval: 1h
+  secretStoreRef:
+    name: mageride-vault
+    kind: ClusterSecretStore
+  target:
+    name: tcp-adapter-psk
+    creationPolicy: Owner
+    deletionPolicy: Retain
+  data:
+    # The file name, not a variable name. `PskCredentials` opens
+    # `Path.Combine(PskKeyDirectory, "secrets/psk_signing_key")`.
+    - secretKey: psk_signing_key
+      remoteRef: { key: provisioning-svc, property: psk_signing_key }

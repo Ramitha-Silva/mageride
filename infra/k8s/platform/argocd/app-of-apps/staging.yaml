@@ -1,0 +1,55 @@
+# =====================================================================================
+# The root Application for the STAGING cluster — D7' §7's "ArgoCD app-of-apps".
+#
+# The only thing applied by hand, ever:
+#
+#   kubectl apply -f infra/k8s/platform/argocd/project.yaml
+#   kubectl apply -f infra/k8s/platform/argocd/app-of-apps/staging.yaml
+#
+# From then on the cluster's contents are whatever `main` says they are, and adding a child
+# Application is a commit rather than a `kubectl apply`.
+#
+# --- One ArgoCD per cluster, not one ArgoCD for three ----------------------------------
+# `applications/staging/` holds only the Applications that belong in THIS cluster, and every
+# one of them targets `https://kubernetes.default.svc` — the cluster ArgoCD is running in. The
+# alternative (a single ArgoCD in production with registered credentials for the other two) is
+# fewer moving parts and one much larger consequence: that instance holds admin credentials for
+# production, so compromising the dev pipeline's Git path reaches production's cluster. Three
+# instances cost three bootstraps and cannot do that.
+#
+# The child Applications carry `argocd.argoproj.io/sync-wave` so that the credentials converge
+# before the workloads: wave 0 is `mageride-secrets`, wave 1 is `mageride-staging`. ArgoCD
+# waits for wave 0 to be Healthy first, which is what stops thirty-four Deployments from
+# starting against Secrets that do not exist yet.
+# =====================================================================================
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: mageride-root
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: mageride
+  source:
+    repoURL: https://github.com/Ramitha-Silva/mageride.git
+    targetRevision: main
+    path: infra/k8s/platform/argocd/applications/staging
+    directory:
+      # Flat, and only the two files in that directory. `recurse: true` would sweep up the
+      # other environments' Applications the moment somebody reorganised the tree, and this
+      # cluster would start deploying production.
+      recurse: false
+      include: "*.yaml"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      limit: 5
+      backoff: { duration: 30s, factor: 2, maxDuration: 10m }
+  revisionHistoryLimit: 10

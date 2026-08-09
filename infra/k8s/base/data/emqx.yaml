@@ -1,0 +1,159 @@
+# =====================================================================================
+# EMQX — the MQTT plane (D6' §3, D7' §5's StatefulSet, D7' §9).
+#
+# ONE NODE in base; D7' §8's launch topology is "EMQX 2-node" and the production overlay
+# sets replicas: 2. Two nodes is a real cluster here rather than two independent brokers,
+# because discovery is DNS over the headless Service and the Erlang cookie is shared — a
+# shared subscription (E-08) only distributes across a group that is actually clustered.
+#
+# TWO SERVICES, and the split is the fence in infra/CLAUDE.md: `emqx` is a ClusterIP on 1883
+# for in-cluster clients, and 8883/8084 are published by a LoadBalancer that the OVERLAY
+# adds. MQTT is never routed through the Ingress or the API gateway — an L7 HTTP proxy has
+# nothing to proxy on a binary protocol, and the failure mode of trying is not an error but
+# a device that connects and never delivers.
+# =====================================================================================
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: emqx
+  namespace: mageride
+  labels:
+    app: emqx
+    app.kubernetes.io/name: emqx
+    app.kubernetes.io/component: data
+    app.kubernetes.io/part-of: mageride
+spec:
+  # Headless: DNS discovery needs the per-pod records, and every node must resolve its peers
+  # before it is Ready or a forming cluster deadlocks.
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector: { app: emqx }
+  ports:
+    - { name: mqtt, port: 1883, targetPort: mqtt, protocol: TCP }
+    - { name: mqtts, port: 8883, targetPort: mqtts, protocol: TCP }
+    - { name: wss, port: 8084, targetPort: wss, protocol: TCP }
+    - { name: dashboard, port: 18083, targetPort: dashboard, protocol: TCP }
+    - { name: ekka, port: 4370, targetPort: ekka, protocol: TCP }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: emqx
+  namespace: mageride
+  labels:
+    app: emqx
+    app.kubernetes.io/name: emqx
+    app.kubernetes.io/component: data
+    app.kubernetes.io/part-of: mageride
+spec:
+  serviceName: emqx
+  replicas: 1
+  # OrderedReady, not Parallel: the second node joins the cluster the first one formed.
+  podManagementPolicy: OrderedReady
+  selector:
+    matchLabels: { app: emqx }
+  template:
+    metadata:
+      labels:
+        app: emqx
+        app.kubernetes.io/name: emqx
+        app.kubernetes.io/component: data
+        app.kubernetes.io/part-of: mageride
+      annotations:
+        # C119's `emqx` job scrapes /api/v5/prometheus/stats on the dashboard port.
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "18083"
+        prometheus.io/path: /api/v5/prometheus/stats
+    spec:
+      # A device that is disconnected reconnects, but doing it to every tracker at once is
+      # R-09's reconnect storm. 120 s lets EMQX drain and hand sessions over.
+      terminationGracePeriodSeconds: 120
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: emqx
+          image: emqx/emqx:5.8
+          env:
+            # --- node identity and clustering ------------------------------------------
+            # Not in emqx.conf on purpose (see that file's header): only the pod knows these.
+            - name: POD_IP
+              valueFrom: { fieldRef: { fieldPath: status.podIP } }
+            - name: POD_NAMESPACE
+              valueFrom: { fieldRef: { fieldPath: metadata.namespace } }
+            - { name: EMQX_NODE__NAME, value: "emqx@$(POD_IP)" }
+            - name: EMQX_NODE__COOKIE
+              valueFrom:
+                secretKeyRef: { name: emqx-auth, key: erlang_cookie }
+            - { name: EMQX_CLUSTER__NAME, value: mageride }
+            - { name: EMQX_CLUSTER__DISCOVERY_STRATEGY, value: dns }
+            - { name: EMQX_CLUSTER__DNS__NAME, value: "emqx.$(POD_NAMESPACE).svc.cluster.local" }
+            # `a`, not `srv`: the headless Service's A records are the pod IPs, which is what
+            # `emqx@<ip>` node names are built from. An SRV lookup returns hostnames and the
+            # two would not match, so the second node would form its own cluster of one.
+            - { name: EMQX_CLUSTER__DNS__RECORD_TYPE, value: a }
+            # --- the one secret in the broker's configuration ---------------------------
+            # Reads the SAME Vault property as every service's `Mqtt__SessionTokenSecret`.
+            - name: EMQX_AUTHENTICATION__1__SECRET
+              valueFrom:
+                secretKeyRef: { name: emqx-auth, key: session_token_secret }
+          ports:
+            - { name: mqtt, containerPort: 1883, protocol: TCP }
+            - { name: mqtts, containerPort: 8883, protocol: TCP }
+            - { name: wss, containerPort: 8084, protocol: TCP }
+            - { name: dashboard, containerPort: 18083, protocol: TCP }
+            - { name: ekka, containerPort: 4370, protocol: TCP }
+          resources:
+            requests: { cpu: "1", memory: 2Gi }
+            limits: { cpu: "2", memory: 3Gi }
+          startupProbe:
+            # 40 s in compose. The broker loads the ACL file and both listeners' TLS
+            # material before it answers, and a failed listener is a boot failure, not a
+            # slow start — so this has to be generous enough to tell them apart.
+            exec: { command: ["emqx", "ctl", "status"] }
+            periodSeconds: 10
+            failureThreshold: 18
+          readinessProbe:
+            # "listener up" (D7' §5.1). A socket connect on 1883, because `ctl status` says
+            # the NODE is running even while a listener has failed to bind.
+            tcpSocket: { port: mqtt }
+            periodSeconds: 10
+            failureThreshold: 6
+          livenessProbe:
+            exec: { command: ["emqx", "ctl", "status"] }
+            periodSeconds: 15
+            timeoutSeconds: 10
+            failureThreshold: 6
+          securityContext:
+            allowPrivilegeEscalation: false
+            # The image writes generated configuration under /opt/emqx/data at boot.
+            readOnlyRootFilesystem: false
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: emqxdata, mountPath: /opt/emqx/data }
+            - { name: config, mountPath: /opt/emqx/etc/emqx.conf, subPath: emqx.conf, readOnly: true }
+            - { name: config, mountPath: /opt/emqx/etc/mageride-acl.conf, subPath: acl.conf, readOnly: true }
+            - { name: tls, mountPath: /opt/emqx/etc/tls, readOnly: true }
+            - { name: device-ca, mountPath: /opt/emqx/etc/device-ca, readOnly: true }
+      volumes:
+        - name: config
+          configMap:
+            name: emqx-config
+        - name: tls
+          secret:
+            secretName: emqx-tls
+        - name: device-ca
+          secret:
+            secretName: emqx-device-ca
+  volumeClaimTemplates:
+    - metadata:
+        name: emqxdata
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 5Gi

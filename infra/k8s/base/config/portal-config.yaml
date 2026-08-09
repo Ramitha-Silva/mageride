@@ -1,0 +1,33 @@
+# =====================================================================================
+# `portal-config` — the only configuration a Next.js surface gets.
+#
+# `NEXT_PUBLIC_*` ONLY, and that is a security boundary rather than a convention: a portal
+# is a browser bundle, so anything it can read a user can read. No Secret is mounted into
+# a portal pod anywhere in these manifests, and infra/scripts/k8s-verify.sh fails the build
+# if one ever is.
+#
+# The API base URL is the public edge, not a ClusterIP: the request is made by the browser,
+# from outside the cluster. The overlay sets the hostname; base carries the shape.
+# =====================================================================================
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: portal-config
+  namespace: mageride
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+    app.kubernetes.io/part-of: mageride
+data:
+  NEXT_TELEMETRY_DISABLED: "1"
+  NODE_ENV: production
+  TZ: Asia/Colombo
+  # Overwritten per environment. `https://api.mageride.lk` is production's (D7' §5).
+  NEXT_PUBLIC_API_BASE_URL: https://api.mageride.lk
+  # SignalR (R-06, D-23) connects to the same host on the `/hubs` path the Ingress routes
+  # to fanout-svc. wss, never ws — the hub carries a bearer token.
+  NEXT_PUBLIC_HUB_URL: wss://api.mageride.lk/hubs
+  # Si / Ta / En, in the order the language switcher offers them (trilingual, CLAUDE.md).
+  NEXT_PUBLIC_LOCALES: si,ta,en
+  NEXT_PUBLIC_DEFAULT_LOCALE: en

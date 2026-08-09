@@ -1,0 +1,70 @@
+# =====================================================================================
+# The `mageride` AppProject — the blast radius of everything ArgoCD is allowed to do here.
+#
+# Applied once per cluster by the bootstrap (docs/runbooks/deploy.md §2), before the
+# app-of-apps. An Application naming a project that does not exist is rejected, which is the
+# right order of failure.
+#
+# A project rather than `default`, because `default` permits every source repo, every
+# destination and every resource kind. The three restrictions below are each a specific thing
+# that cannot then happen by accident:
+#
+#   sourceRepos      only this repository. An Application pointed at a fork or a personal
+#                    branch cannot deploy into the cluster.
+#   destinations     only the `mageride` namespace, plus `external-secrets` for the operator's
+#                    own SecretStore. A manifest that grew a `namespace: kube-system` is
+#                    refused rather than applied.
+#   clusterResource  Namespace and ClusterSecretStore, and nothing else. No
+#     Whitelist        ClusterRole, no CRD, no webhook — this platform installs none of those,
+#                    and the day a manifest does, it should have to be argued for here first.
+# =====================================================================================
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: mageride
+  namespace: argocd
+spec:
+  description: MageRide platform (D7' §5 manifests, C124)
+
+  sourceRepos:
+    - https://github.com/Ramitha-Silva/mageride.git
+
+  destinations:
+    - namespace: mageride
+      server: https://kubernetes.default.svc
+    # The ClusterSecretStore is cluster-scoped but ESO's ServiceAccount lives here.
+    - namespace: external-secrets
+      server: https://kubernetes.default.svc
+
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+    - group: external-secrets.io
+      kind: ClusterSecretStore
+
+  namespaceResourceWhitelist:
+    - group: ""
+      kind: "*"
+    - group: apps
+      kind: "*"
+    - group: batch
+      kind: "*"
+    - group: autoscaling
+      kind: "*"
+    - group: policy
+      kind: "*"
+    - group: networking.k8s.io
+      kind: "*"
+    - group: external-secrets.io
+      kind: "*"
+    - group: bitnami.com
+      kind: SealedSecret
+
+  # An operator can roll back nine deploys without a git revert. Ten is plenty of history and
+  # keeps the Application object small.
+  orphanedResources:
+    # Warn, do not delete. An orphan is usually a resource somebody created by hand during an
+    # incident, and deleting it automatically turns "we left something behind" into a second
+    # incident. `prune` on the Applications handles what git actually removed.
+    warn: true

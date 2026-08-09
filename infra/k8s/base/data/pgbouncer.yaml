@@ -1,0 +1,127 @@
+# =====================================================================================
+# PgBouncer — transaction-mode pooler (D7' §9, ADD §9.3, M-5).
+#
+# Every service reaches Postgres through :6432. The ONE exception is the E-09 outbox
+# LISTEN, which needs a session that survives a COMMIT and therefore uses
+# `ConnectionStrings__PostgresDirect` straight to :5432 (C002).
+#
+# A Deployment rather than a StatefulSet: it holds no state and every replica is
+# interchangeable. Two replicas so a rollout does not close every pooled connection at
+# once — a client sees a reset connection and reconnects, but doing it to all of them
+# simultaneously turns a deploy into a thundering herd against Postgres.
+# =====================================================================================
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pgbouncer
+  namespace: mageride
+  labels:
+    app: pgbouncer
+    app.kubernetes.io/name: pgbouncer
+    app.kubernetes.io/component: data
+    app.kubernetes.io/part-of: mageride
+spec:
+  type: ClusterIP
+  selector: { app: pgbouncer }
+  ports:
+    - { name: pgbouncer, port: 6432, targetPort: pgbouncer, protocol: TCP }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pgbouncer
+  namespace: mageride
+  labels:
+    app: pgbouncer
+    app.kubernetes.io/name: pgbouncer
+    app.kubernetes.io/component: data
+    app.kubernetes.io/part-of: mageride
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxUnavailable: 0, maxSurge: 1 }
+  selector:
+    matchLabels: { app: pgbouncer }
+  template:
+    metadata:
+      labels:
+        app: pgbouncer
+        app.kubernetes.io/name: pgbouncer
+        app.kubernetes.io/component: data
+        app.kubernetes.io/part-of: mageride
+    spec:
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70
+        runAsGroup: 70
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: pgbouncer
+          # Pinned rather than :latest — a pooler that silently changed its default pool
+          # mode would be a very quiet outage.
+          image: edoburu/pgbouncer:v1.23.1-p3
+          ports:
+            - { name: pgbouncer, containerPort: 6432, protocol: TCP }
+          env:
+            - { name: DB_HOST, value: postgres }
+            - { name: DB_PORT, value: "5432" }
+            - { name: DB_USER, value: postgres }
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: postgres-superuser, key: password }
+            - { name: DB_NAME, value: mageride }
+            - { name: POOL_MODE, value: transaction }
+            - { name: AUTH_TYPE, value: scram-sha-256 }
+            - { name: ADMIN_USERS, value: postgres }
+            - { name: LISTEN_PORT, value: "6432" }
+            # 500 client connections onto 25 server connections. That ratio is the reason
+            # the pooler exists: thirty-odd services at 20 pooled connections each would
+            # otherwise want 600+ backends against max_connections=200.
+            - { name: MAX_CLIENT_CONN, value: "500" }
+            - { name: DEFAULT_POOL_SIZE, value: "25" }
+          resources:
+            requests: { cpu: 100m, memory: 64Mi }
+            limits: { cpu: 500m, memory: 128Mi }
+          # A real query THROUGH the pooler, not a socket probe: a PgBouncer that is
+          # listening but cannot reach Postgres is not ready, and that is exactly the state
+          # a socket check calls healthy.
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - PGPASSWORD=$DB_PASSWORD psql -h 127.0.0.1 -p 6432 -U $DB_USER -d $DB_NAME -tAc 'select 1' > /dev/null
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            tcpSocket: { port: pgbouncer }
+            initialDelaySeconds: 20
+            periodSeconds: 15
+            failureThreshold: 6
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            # The image writes its generated userlist and pgbouncer.ini at start-up.
+            - { name: etc, mountPath: /etc/pgbouncer }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - { name: etc, emptyDir: {} }
+        - { name: tmp, emptyDir: {} }
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: pgbouncer
+  namespace: mageride
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels: { app: pgbouncer }

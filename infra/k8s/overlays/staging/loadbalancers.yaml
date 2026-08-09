@@ -1,0 +1,108 @@
+# =====================================================================================
+# The L4 edge — MQTT and the four tracker protocols.
+#
+# THIS IS THE FENCE FROM infra/CLAUDE.md, EXPRESSED AS TWO SERVICES: "MQTT (8883) is TCP
+# passthrough at HAProxy and is never routed through the API gateway." The Ingress terminates
+# TLS and speaks HTTP; neither of these can go through it.
+#
+#   emqx-ingest   8883  tracker mTLS   — the device presents a client certificate whose CN is
+#                                        its vehicleId, and EMQX itself must verify it. An
+#                                        HTTP ingress that terminated TLS would strip exactly
+#                                        the thing that authenticates the device (T-02).
+#                 8084  mobile WSS     — a WebSocket carrying MQTT. ingress-nginx could in
+#                                        principle proxy it, but then the broker's own
+#                                        `max_conn_rate` (R-09) and `messages_rate` (D-17)
+#                                        would count the PROXY's connection rather than the
+#                                        device's, and both limits are per-connection.
+#   tracker-ingest 5023-5025 TCP       — GT06 / JT/T 808 / H02. Binary protocols.
+#                  5026      UDP       — NMEA. HAProxy has no UDP forwarder either, which is
+#                                        why the dev compose publishes it from the container.
+#
+# TWO SERVICES AND NOT ONE, because a Service may not mix TCP and UDP ports on most cloud load
+# balancers, and because these two have different owners and different lifetimes: the broker
+# scales with mobile clients, the adapter with hardware.
+#
+# --- proxy protocol is deliberately OFF ------------------------------------------------
+# DO's LB can prepend the PROXY protocol header so the backend sees the client IP. Neither
+# EMQX's listeners nor tcp-adapter's parsers are configured to expect it here, and a listener
+# that is not expecting it reads the header as the first bytes of the protocol — a GT06 login
+# packet becomes a parse error on every device at once. Turning it on is two changes, made
+# together: the annotation and the listener's `proxy_protocol` setting.
+# =====================================================================================
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: emqx-ingest
+  namespace: mageride
+  labels:
+    app: emqx
+    app.kubernetes.io/name: emqx
+    app.kubernetes.io/component: edge
+    app.kubernetes.io/part-of: mageride
+  annotations:
+    # A plain L4 pass-through. `tcp` and not `https`: the DO LB must not terminate TLS —
+    # 8883's handshake is mutual and only the broker holds the device CA.
+    service.beta.kubernetes.io/do-loadbalancer-protocol: tcp
+    service.beta.kubernetes.io/do-loadbalancer-name: mageride-staging-mqtt
+    # The health check is a TCP connect to the plaintext listener, because a health check
+    # against 8883 would have to present a client certificate to succeed.
+    service.beta.kubernetes.io/do-loadbalancer-healthcheck-protocol: tcp
+    service.beta.kubernetes.io/do-loadbalancer-healthcheck-port: "1883"
+spec:
+  type: LoadBalancer
+  # `Local`, so the broker sees the device's address rather than a node's. It also stops a
+  # node with no EMQX pod from accepting and then forwarding a connection — with 2 nodes and
+  # 1 broker replica that second hop is most of the traffic.
+  externalTrafficPolicy: Local
+  selector: { app: emqx }
+  ports:
+    - { name: mqtts, port: 8883, targetPort: mqtts, protocol: TCP }
+    - { name: wss, port: 8084, targetPort: wss, protocol: TCP }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tracker-ingest
+  namespace: mageride
+  labels:
+    app: tcp-adapter
+    app.kubernetes.io/name: tcp-adapter
+    app.kubernetes.io/component: edge
+    app.kubernetes.io/part-of: mageride
+  annotations:
+    service.beta.kubernetes.io/do-loadbalancer-protocol: tcp
+    service.beta.kubernetes.io/do-loadbalancer-name: mageride-staging-trackers
+    service.beta.kubernetes.io/do-loadbalancer-healthcheck-protocol: tcp
+    service.beta.kubernetes.io/do-loadbalancer-healthcheck-port: "5023"
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: Local
+  selector: { app: tcp-adapter }
+  ports:
+    - { name: gt06, port: 5023, targetPort: gt06, protocol: TCP }
+    - { name: jt808, port: 5024, targetPort: jt808, protocol: TCP }
+    - { name: h02, port: 5025, targetPort: h02, protocol: TCP }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tracker-ingest-udp
+  namespace: mageride
+  labels:
+    app: tcp-adapter
+    app.kubernetes.io/name: tcp-adapter
+    app.kubernetes.io/component: edge
+    app.kubernetes.io/part-of: mageride
+  annotations:
+    service.beta.kubernetes.io/do-loadbalancer-name: mageride-staging-trackers-udp
+spec:
+  # Its own Service because a cloud load balancer will not mix protocols on one. NMEA over UDP
+  # is T-01's fourth adapter and it is the one with no connection to lose — a datagram that
+  # reaches the wrong replica is simply a sample the wrong pod writes, which is why UDP needs
+  # no affinity here.
+  type: LoadBalancer
+  externalTrafficPolicy: Local
+  selector: { app: tcp-adapter }
+  ports:
+    - { name: nmea-udp, port: 5026, targetPort: nmea-udp, protocol: UDP }

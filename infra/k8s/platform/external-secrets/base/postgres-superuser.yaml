@@ -1,0 +1,42 @@
+# =====================================================================================
+# `postgres-superuser` — the raw password, for the two workloads that need it as a password
+# rather than as a DSN: the Postgres container's own `POSTGRES_PASSWORD` and PgBouncer's
+# `DB_PASSWORD`.
+#
+# Reads the SAME Vault property `common-secret` renders its DSNs from. That is the whole
+# reason this is a separate ExternalSecret and not a second copy of the value: rotate
+# `common/postgres_superuser_password` and all three — the server, the pooler and every
+# service's connection string — follow from one write.
+#
+# --- Why the superuser at all ---------------------------------------------------------
+# Migration 1804 needs CREATEROLE and `COMMENT ON ROLE` needs superuser, so the migration
+# runner cannot be de-privileged without splitting that script out (C006 handoff). The
+# services then inherit it, which is more privilege than any of them uses. Narrowing it is a
+# real task and it is C132's, in the same change that points migrations at a managed or
+# Patroni-managed instance.
+# =====================================================================================
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: postgres-superuser
+  labels:
+    app: postgres
+    app.kubernetes.io/name: postgres-superuser
+    app.kubernetes.io/component: secret
+    app.kubernetes.io/part-of: mageride
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: mageride-vault
+    kind: ClusterSecretStore
+  target:
+    name: postgres-superuser
+    creationPolicy: Owner
+    # Retain matters more here than anywhere else: this Secret is what the Postgres container
+    # reads on boot. Losing it while the volume still holds a database initialised with the
+    # old password is a StatefulSet that cannot start and a `pg_hba` reset to recover from.
+    deletionPolicy: Retain
+  data:
+    - secretKey: password
+      remoteRef: { key: common, property: postgres_superuser_password }

@@ -1,0 +1,43 @@
+# GENERATED FILE — do not edit.
+# Source: infra/k8s/service-catalog.yaml
+# Regenerate: python3 infra/k8s/tools/generate_manifests.py
+#
+# One ExternalSecret per service that has a D7' §4.2 secret, plus the hand-written ones
+# that belong to no single service: the platform-wide set, the data plane's own
+# credentials and the registry pull secret.
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - admin-bff.yaml
+  - api-gateway.yaml
+  - common-secret.yaml
+  - content-svc.yaml
+  - dispatch-svc.yaml
+  - emqx-auth.yaml
+  - emqx-device-ca.yaml
+  - emqx-tls.yaml
+  - fare-svc.yaml
+  - fleet-billing-svc.yaml
+  - fleet-svc.yaml
+  - ghcr-pull.yaml
+  - iam-svc.yaml
+  - notification-svc.yaml
+  - ocr-svc.yaml
+  - payout-svc.yaml
+  - postgres-superuser.yaml
+  - provisioning-svc.yaml
+  - public-bff.yaml
+  - query-svc.yaml
+  - registry-svc.yaml
+  - reputation-svc.yaml
+  - ride-svc.yaml
+  - safety-svc.yaml
+  - subscription-svc.yaml
+  - support-svc.yaml
+  - tcp-adapter-psk.yaml
+  - tcp-adapter.yaml
+  - transit-svc.yaml
+  - trip-state-svc.yaml
+  - voip-svc.yaml
+  - wallet-svc.yaml

@@ -1,0 +1,130 @@
+# =====================================================================================
+# Validate the manifests on every pull request that touches them (C124).
+#
+# This is where the C124 verify command actually runs:
+#
+#   python3 -c "import yaml,glob; [yaml.safe_load(open(f)) for f in
+#               glob.glob('.github/workflows/*.yml') + glob.glob('infra/k8s/**/*.yaml', recursive=True)]"
+#   kubectl apply --dry-run=client -k infra/k8s/overlays/staging
+#
+# The second half needs a REACHABLE API SERVER even though it is a client-side dry-run: kubectl
+# builds a RESTMapper from the server's discovery document to turn a `kind` into a resource, so
+# without a cluster it fails with "connection refused" before it looks at a single manifest.
+# That is why this job creates a kind cluster — three minutes, and it makes the verify a real
+# gate on every pull request instead of something that only ever ran once on a laptop.
+#
+# `infra/scripts/k8s-verify.sh` is the offline superset and runs first: it builds all three
+# overlays, checks the generated manifests against the catalog, and asserts the fences (no secret
+# values, RollingUpdate with maxUnavailable 0, every container has probes and limits, no `latest`,
+# no MQTT through the Ingress). It needs no cluster, so it is also what a developer runs.
+# =====================================================================================
+
+name: k8s-validate
+
+on:
+  pull_request:
+    paths:
+      - infra/k8s/**
+      - infra/scripts/k8s-verify.sh
+      - infra/scripts/migration-gate.sh
+      - .github/workflows/*.yml
+  push:
+    branches: [main]
+    paths:
+      - infra/k8s/**
+      - .github/workflows/*.yml
+  workflow_dispatch:
+
+concurrency:
+  group: k8s-validate-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+jobs:
+  offline:
+    name: manifests (offline)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: pyyaml
+        run: python3 -m pip install --quiet pyyaml
+
+      # Schema validation against the real Kubernetes API schemas, offline. kubeconform is what
+      # catches a typo in a field name — `readinesProbe` is valid YAML, is silently ignored by
+      # `kubectl apply`, and gives you a workload with no readiness gate.
+      - name: install kubeconform
+        run: |
+          set -euo pipefail
+          curl -sSL -o /tmp/kubeconform.tar.gz \
+            https://github.com/yannh/kubeconform/releases/download/v0.7.0/kubeconform-linux-amd64.tar.gz
+          tar -xzf /tmp/kubeconform.tar.gz -C /usr/local/bin kubeconform
+          kubeconform -v
+
+      - name: k8s-verify.sh
+        run: bash infra/scripts/k8s-verify.sh
+
+      # actionlint reads the expressions and the shell in every workflow. A `${{ }}` that
+      # references a context which does not exist is silently empty at run time, which in this
+      # pipeline means promoting the tag `sha-` to production.
+      - name: actionlint
+        run: |
+          set -euo pipefail
+          bash <(curl -sSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash) 1.7.7
+          ./actionlint -color
+
+  # ===================================================================================
+  # The verify command from build/prompts/C124.md, exactly as printed, against a real API
+  # server.
+  # ===================================================================================
+  dry-run:
+    name: kubectl apply --dry-run=client
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: pyyaml
+        run: python3 -m pip install --quiet pyyaml
+
+      # A throwaway API server. No workload is ever created — `--dry-run=client` does not send
+      # anything — so the cluster exists only to answer discovery.
+      - uses: helm/kind-action@v1
+        with:
+          cluster_name: mageride-validate
+          wait: 120s
+
+      # `safe_load_all`, not `safe_load`, and it is a correction rather than a preference.
+      # build/prompts/C124.md prints `yaml.safe_load`, which parses ONE document and raises
+      # ComposerError on a second — and 43 of the 107 files here are multi-document, because a
+      # Kubernetes manifest is conventionally a Deployment, its Service, its HPA and its PDB in one
+      # file with `---` between them. The printed form can therefore never pass over a manifest
+      # directory, whatever the manifests look like; the only way to satisfy it would be one
+      # resource per file, ~200 files, which makes the manifests worse to read during an incident.
+      # Recorded as a one-word micro-change-set for the manifest's verify_cmd in the C124 handoff.
+      - name: the C124 verify
+        run: |
+          python3 -c "import yaml,glob;[list(yaml.safe_load_all(open(f))) for f in glob.glob('.github/workflows/*.yml')+glob.glob('infra/k8s/**/*.yaml',recursive=True)]" \
+            && kubectl apply --dry-run=client -k infra/k8s/overlays/staging
+
+      # The other two overlays are held to the same standard. C132's verify command is the
+      # production one, so it must not be allowed to rot in the meantime.
+      - name: dev and production too
+        run: |
+          set -euo pipefail
+          kubectl apply --dry-run=client -k infra/k8s/overlays/dev
+          kubectl apply --dry-run=client -k infra/k8s/overlays/production
+
+      # SERVER-side dry-run is the stronger check: it runs admission, so it catches an immutable
+      # field, a bad `securityContext` against the namespace's Pod Security Admission level, and
+      # a quota violation. It needs the CRDs the platform tree uses, which a bare kind cluster
+      # does not have — so the workload overlays are checked and the platform tree is left to
+      # the offline job. Non-blocking: a kind cluster's admission is not DOKS's.
+      - name: server-side dry-run (advisory)
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          kubectl apply --dry-run=server -k infra/k8s/overlays/staging

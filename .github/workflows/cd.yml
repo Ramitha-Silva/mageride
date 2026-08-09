@@ -1,0 +1,163 @@
+# =====================================================================================
+# Continuous delivery (C124) — the whole path from a commit on main to a running staging.
+#
+# D7' §7's `deploy` job, decomposed so each stage is a gate rather than a step:
+#
+#   ci.yml (must already be green)  ->  images  ->  deploy dev  ->  deploy staging
+#                                        build      migration       migration gate
+#                                        sign       gate           promote by SHA
+#                                        SBOM       promote        verify
+#
+# Production is NOT here. It is `promote.yml`, which takes a SHA that already reached staging and
+# waits for a reviewer in the GitHub `production` environment.
+#
+# --- "a commit to main produces signed images and a staging deploy without manual steps" ----
+# That is C124's first definition-of-done item, and this file is it. The only human action in the
+# path is merging the pull request. Everything after that — build, sign, attest, gate the
+# migration, write the image tag, verify — happens here, and the deploy itself is ArgoCD
+# reconciling the commit this workflow pushed.
+#
+# --- Why it waits for ci.yml rather than repeating it -----------------------------------
+# `workflow_run` fires when ci.yml completes on main, and this workflow refuses to start unless
+# that run SUCCEEDED. Re-running the tests here would double the cost and, worse, would let a
+# commit deploy on a second opinion — two runs of a flaky test where the first was red.
+# =====================================================================================
+
+name: cd
+
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
+  # By hand, for a commit whose CI was green before this workflow existed, or to re-drive a
+  # deploy after fixing something outside the repository (a registry outage, a Vault policy).
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Commit SHA to deliver (defaults to the tip of main)
+        required: false
+        type: string
+
+concurrency:
+  # NOT cancel-in-progress. Every commit on main is a release candidate and each one's images
+  # must exist — cancelling the first would leave a tag nothing built, and a later rollback to
+  # that SHA would find no image.
+  group: cd-main
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  # ===================================================================================
+  # Which commit are we delivering, and is it allowed to be delivered?
+  # ===================================================================================
+  gate:
+    name: ci was green
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      sha: ${{ steps.resolve.outputs.sha }}
+    steps:
+      - name: resolve the commit
+        id: resolve
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = "workflow_run" ]; then
+            test "$CONCLUSION" = "success" || {
+              echo "::notice::ci concluded '$CONCLUSION' — nothing is delivered"
+              exit 1
+            }
+            sha="$RUN_SHA"
+          else
+            sha="${INPUT_SHA:-$GITHUB_SHA}"
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "::notice::delivering $sha"
+        env:
+          EVENT: ${{ github.event_name }}
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+          INPUT_SHA: ${{ inputs.sha }}
+
+  # ===================================================================================
+  # Build, push, sign every image at sha-<7>.
+  # ===================================================================================
+  images:
+    name: images
+    needs: gate
+    uses: ./.github/workflows/images.yml
+    with:
+      sha: ${{ needs.gate.outputs.sha }}
+      push: true
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    secrets: inherit
+
+  # ===================================================================================
+  # dev first. Same manifests, same images, one node — so a manifest that only breaks on a
+  # real cluster breaks here and not in staging.
+  # ===================================================================================
+  dev:
+    name: dev
+    needs: [gate, images]
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: dev
+      sha: ${{ needs.gate.outputs.sha }}
+      reason: automatic on main
+    permissions:
+      contents: write
+    secrets: inherit
+
+  # ===================================================================================
+  # staging. The last stop a commit reaches on its own.
+  #
+  # `needs: dev` makes it sequential on purpose: promoting both at once would mean a broken
+  # manifest lands in two environments before anybody sees the first failure, and the two
+  # promotion commits would race for the same branch.
+  # ===================================================================================
+  staging:
+    name: staging
+    needs: [gate, images, dev]
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: staging
+      sha: ${{ needs.gate.outputs.sha }}
+      reason: automatic on main
+    permissions:
+      contents: write
+    secrets: inherit
+
+  # ===================================================================================
+  # What a person needs in order to decide about production.
+  # ===================================================================================
+  ready-for-production:
+    name: ready for production
+    needs: [gate, staging]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: summary
+        run: |
+          {
+            echo "### \`${SHA::7}\` is on staging"
+            echo
+            echo "Images are signed (cosign keyless, over the digest) and carry an SBOM and"
+            echo "build provenance. Verification command: \`.github/workflows/README.md\`."
+            echo
+            echo "**To promote to production** — needs an approval in the \`production\` environment:"
+            echo
+            echo '```bash'
+            echo "gh workflow run promote.yml -f sha=$SHA"
+            echo '```'
+            echo
+            echo "Run the acceptance suites against staging first if this touches money, safety"
+            echo "or the tracker plane: \`gh workflow run nightly.yml -f environment=staging\`."
+          } >> "$GITHUB_STEP_SUMMARY"
+        env:
+          SHA: ${{ needs.gate.outputs.sha }}

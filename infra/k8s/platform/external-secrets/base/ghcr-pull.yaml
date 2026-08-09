@@ -1,0 +1,49 @@
+# =====================================================================================
+# `ghcr-pull` — the registry credential the `mageride` ServiceAccount pulls with.
+#
+# A `.dockerconfigjson` is just a base64 JSON document with a token in it, which is exactly
+# the kind of thing that ends up committed "temporarily". It is rendered here from a Vault
+# token instead, so the repository holds the SHAPE and Vault holds the value.
+#
+# `type: kubernetes.io/dockerconfigjson` on the target is required — kubelet ignores an
+# `Opaque` secret named in `imagePullSecrets`, silently, and falls back to an anonymous pull.
+# The symptom is an ImagePullBackOff on a private package with a message about authentication
+# that reads like the token is wrong.
+#
+# If the ghcr.io packages are made public this whole file can be deleted along with the
+# `imagePullSecrets` reference in base/namespace.yaml. What it must never become is a
+# committed credential.
+# =====================================================================================
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: ghcr-pull
+  labels:
+    app.kubernetes.io/name: ghcr-pull
+    app.kubernetes.io/component: secret
+    app.kubernetes.io/part-of: mageride
+spec:
+  refreshInterval: 12h
+  secretStoreRef:
+    name: mageride-vault
+    kind: ClusterSecretStore
+  target:
+    name: ghcr-pull
+    creationPolicy: Owner
+    deletionPolicy: Retain
+    template:
+      engineVersion: v2
+      type: kubernetes.io/dockerconfigjson
+      data:
+        # `auth` is base64("<username>:<token>"), which is what the docker config format wants.
+        # A read-only `packages:read` PAT or a GitHub App installation token — never a token
+        # that can push, because a pull secret is readable by anything that can read Secrets in
+        # this namespace.
+        .dockerconfigjson: |
+          {"auths":{"ghcr.io":{"username":"{{ .username }}","password":"{{ .token }}","auth":"{{ printf "%s:%s" .username .token | b64enc }}"}}}
+  data:
+    - secretKey: username
+      remoteRef: { key: common, property: ghcr_username }
+    - secretKey: token
+      remoteRef: { key: common, property: ghcr_read_token }

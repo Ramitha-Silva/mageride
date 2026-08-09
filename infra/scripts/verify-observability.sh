@@ -262,10 +262,20 @@ for f in "$RUNBOOKS"/*.md; do
 done
 check "every runbook opens with a First action" "" "$no_first_action"
 
+# Δ C124: runbooks that are DELIVERY procedures rather than alert responses. No alert points at
+# them and none should — nothing pages when somebody needs to roll a deploy back or rotate the JWT
+# signing key — but they belong beside the alert runbooks, because every alert runbook above can end
+# in one of them and an on-call person looks in one directory.
+#
+# A named list rather than a pattern: the check's teeth are that a NEW alert runbook nobody linked
+# is a failure, and a pattern like `deploy*` would let one hide.
+NOT_ALERT_DRIVEN="deploy.md rollback.md secret-rotation.md"
+
 orphaned=""
 for f in "$RUNBOOKS"/*.md; do
   base=$(basename "$f")
   [[ "$base" == "README.md" ]] && continue
+  [[ " $NOT_ALERT_DRIVEN " == *" $base "* ]] && continue
   echo "$alerts_json" | jq -r '.[].runbook' | grep -q "/$base$" || orphaned="$orphaned $base"
 done
 check "no runbook is orphaned (nothing links to it)" "" "$orphaned"

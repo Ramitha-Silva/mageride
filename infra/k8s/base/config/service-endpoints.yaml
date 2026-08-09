@@ -1,0 +1,133 @@
+# =====================================================================================
+# `service-endpoints` — where each service finds the others.
+#
+# This ConfigMap is the whole difference between the composed `app-services` container and
+# a per-service deployment. In infra/env/.env.app.example every one of these points at
+# `http://app-services:5000`, because that file was written for a single process; here each
+# one is a ClusterIP Service in this namespace.
+#
+# Every service `envFrom`s the whole map. That is safe because each key is prefixed with
+# the OWNING service's options section (`Fare__WalletBaseUrl` is only ever read by
+# fare-svc), and it is the reason there is one file to change when a service moves rather
+# than thirty Deployment patches.
+#
+# WHAT IS DELIBERATELY ABSENT, AND WHY THERE IS NO PER-SERVICE ConfigMap
+#
+# `Outbox__Schema` / `Outbox__Channel` / `Outbox__Topic` and `CommandLog__Schema` are NOT
+# set anywhere in these manifests, and must not be. They are the keys whose name means
+# something different to each bounded context — ride-svc's are `rides` / `ride_outbox` /
+# `ride.events`, dispatch-svc's are `dispatch` / `dispatch_outbox` / `dispatch.events` —
+# and infra/env/.env.app.example is ONE FLAT MAP that happens to carry ride-svc's, so every
+# other service inherits them (the C025 header spells this out; the skeleton compose exists
+# partly to undo it). Each service instead calls `Configure<OutboxOptions>` in its own
+# `Application.Build` BEFORE `AddMageRideDefaults`, so its own values apply and an operator
+# can still override. Setting nothing here is therefore the CORRECT configuration, and
+# setting a shared value would be the bug: dispatch-svc publishing `offer.created` onto
+# `ride.events` and waking ride-svc's own dispatcher.
+#
+# For the same reason the worker switches (`Dispatch__ConsumerEnabled`,
+# `ExpiryWorkerEnabled`, `KeyspaceNotificationsEnabled`, `Outbox__DispatcherEnabled`) are
+# absent: every one of them defaults to true in code. An explicit `"true"` here would read
+# as "this needs enabling", which invites someone to think the opposite is safe.
+#
+# Service ports are 80 (the D7' §5 Service shape), so no port appears in a URL here except
+# where the target is a second listener on the same pod: reputation-svc's gRPC endpoint is
+# 5005 and query-svc's is 5006, because cleartext HTTP has no ALPN and one socket cannot
+# serve both HTTP/1.1 and h2c (C033).
+#
+# `/v1/internal/**` is NOT reachable through the API gateway (C008 refuses to proxy it), so
+# every address below is a direct pod-to-pod call across the cluster network.
+# =====================================================================================
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: service-endpoints
+  namespace: mageride
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+    app.kubernetes.io/part-of: mageride
+data:
+  # --- ride / dispatch / fare / wallet: the Mode C money and state path ---------------
+  Dispatch__RideServiceBaseUrl: http://ride-svc
+  Dispatch__ReputationGrpcAddress: http://reputation-svc:5005
+  Ride__IamBaseUrl: http://iam-svc
+  Fare__RideBaseUrl: http://ride-svc/
+  Fare__DispatchBaseUrl: http://dispatch-svc/
+  Fare__WalletBaseUrl: http://wallet-svc/
+  Subscription__WalletBaseUrl: http://wallet-svc/
+  Payout__WalletBaseUrl: http://wallet-svc
+
+  # --- registration and documents ----------------------------------------------------
+  Registry__OcrBaseUrl: http://ocr-svc/
+  # D7' §4.2's `registry-svc | Ocr__Endpoint` row. A full path, not a base address.
+  Ocr__Endpoint: http://ocr-svc/v1/internal/ocr
+
+  # --- comms ------------------------------------------------------------------------
+  Notification__ContentBaseUrl: http://content-svc
+  Safety__NotificationBaseUrl: http://notification-svc
+  Safety__ReputationGrpcAddress: http://reputation-svc:5005
+
+  # --- fleet (AL-03) -----------------------------------------------------------------
+  Fleet__OcrBaseUrl: http://ocr-svc
+  Fleet__NotificationBaseUrl: http://notification-svc
+  Fleet__SubscriptionBaseUrl: http://subscription-svc
+  # C118 finding (1), and the reason this line is not quietly omitted: with this set,
+  # fleet-svc maps `POST /v1/fleets/{fleetId}/trackers/bind` and THROWS at start-up —
+  # `ITrackerBindingService` declares an instance `BindAsync`, which minimal APIs read as a
+  # custom parameter binder. Unset, the service boots and ten contract operations silently
+  # disappear from its route table. A crashloop with a stack trace is the better failure,
+  # and the fix is one `[FromServices]` attribute in Fleet.Api.
+  Fleet__ProvisioningBaseUrl: http://provisioning-svc
+  FleetBilling__WalletBaseUrl: http://wallet-svc
+  FleetBilling__NotificationBaseUrl: http://notification-svc
+
+  # --- the read side and the two BFFs -------------------------------------------------
+  Query__TransitBaseUrl: http://transit-svc/
+  Query__FareBaseUrl: http://fare-svc/
+  PublicBff__Ride__BaseUrl: http://ride-svc
+  PublicBff__Safety__BaseUrl: http://safety-svc
+  AdminBff__Upstreams__Registry__BaseUrl: http://registry-svc
+  AdminBff__Upstreams__Wallet__BaseUrl: http://wallet-svc
+  AdminBff__Upstreams__Fare__BaseUrl: http://fare-svc
+  AdminBff__Upstreams__Fleet__BaseUrl: http://fleet-svc
+  AdminBff__Upstreams__Safety__BaseUrl: http://safety-svc
+  AdminBff__Upstreams__Support__BaseUrl: http://support-svc
+  AdminBff__Upstreams__Content__BaseUrl: http://content-svc
+  AdminBff__Upstreams__Transit__BaseUrl: http://transit-svc
+
+  # --- the tracker plane (T-01, T-03) -------------------------------------------------
+  Adapter__ProvisioningBaseUrl: http://provisioning-svc
+  Adapter__TripStateBaseUrl: http://trip-state-svc
+  # step-ca is embedded in provisioning-svc, so this stays empty: setting it points the
+  # service at an EXTERNAL CA instead of its own (C030). Deliberate, like the §4.2 row.
+  StepCa__Url: ""
+  StepCa__RootKeyPath: /var/step
+
+  # --- the edge: the API gateway's 22 clusters (C008) --------------------------------
+  # In the compose stack all 21 domain clusters resolve to one container. Here each one is
+  # its own Service, which is the arrangement D7' §5 describes and the only one where the
+  # gateway's per-cluster health checks and load balancing mean anything.
+  ReverseProxy__Clusters__iam-svc__Destinations__primary__Address: http://iam-svc/
+  ReverseProxy__Clusters__registry-svc__Destinations__primary__Address: http://registry-svc/
+  ReverseProxy__Clusters__provisioning-svc__Destinations__primary__Address: http://provisioning-svc/
+  ReverseProxy__Clusters__query-svc__Destinations__primary__Address: http://query-svc/
+  ReverseProxy__Clusters__trip-state-svc__Destinations__primary__Address: http://trip-state-svc/
+  ReverseProxy__Clusters__ride-svc__Destinations__primary__Address: http://ride-svc/
+  ReverseProxy__Clusters__dispatch-svc__Destinations__primary__Address: http://dispatch-svc/
+  ReverseProxy__Clusters__reputation-svc__Destinations__primary__Address: http://reputation-svc/
+  ReverseProxy__Clusters__fare-svc__Destinations__primary__Address: http://fare-svc/
+  ReverseProxy__Clusters__wallet-svc__Destinations__primary__Address: http://wallet-svc/
+  ReverseProxy__Clusters__subscription-svc__Destinations__primary__Address: http://subscription-svc/
+  ReverseProxy__Clusters__notification-svc__Destinations__primary__Address: http://notification-svc/
+  ReverseProxy__Clusters__safety-svc__Destinations__primary__Address: http://safety-svc/
+  ReverseProxy__Clusters__support-svc__Destinations__primary__Address: http://support-svc/
+  ReverseProxy__Clusters__content-svc__Destinations__primary__Address: http://content-svc/
+  ReverseProxy__Clusters__transit-svc__Destinations__primary__Address: http://transit-svc/
+  ReverseProxy__Clusters__fleet-svc__Destinations__primary__Address: http://fleet-svc/
+  ReverseProxy__Clusters__fleet-billing-svc__Destinations__primary__Address: http://fleet-billing-svc/
+  ReverseProxy__Clusters__voip-svc__Destinations__primary__Address: http://voip-svc/
+  ReverseProxy__Clusters__admin-bff__Destinations__primary__Address: http://admin-bff/
+  ReverseProxy__Clusters__public-bff__Destinations__primary__Address: http://public-bff/
+  ReverseProxy__Clusters__fanout-svc__Destinations__primary__Address: http://fanout-svc/

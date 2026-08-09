@@ -1,0 +1,70 @@
+# =====================================================================================
+# production: the platform on DOKS Singapore, at app-of-apps wave 1.
+#
+# --- WHERE THE HUMAN GATE IS, AND WHY IT IS NOT HERE ----------------------------------
+# The sync policy below is automated, the same as staging. That is deliberate, and it is worth
+# defending because "manual sync in production" is the more common instinct.
+#
+# The gate is on CHANGING THE DESIRED STATE, not on applying it:
+# `.github/workflows/promote.yml` writes a new image tag into
+# `infra/k8s/overlays/production/images/` and that job runs in the GitHub `production`
+# environment, which requires a named reviewer's approval before it starts. Nothing else edits
+# that directory. So a person still decides what production runs — they just decide it in the
+# pull-request/approval layer, where the decision is recorded, rather than by clicking Sync.
+#
+# What automation buys in exchange:
+#
+#   * `selfHeal: true`. A `kubectl edit` or a `kubectl scale` made during an incident is
+#     reverted, so production cannot silently diverge from the thing staging tested. With
+#     manual sync, that divergence persists until somebody happens to sync — and the next
+#     deploy then applies a change nobody reviewed alongside the one they did.
+#   * A rollback is one commit. `rollback.yml` writes the previous SHA and ArgoCD applies it,
+#     which is the documented path in docs/runbooks/rollback.md. With manual sync, a rollback
+#     needs a cluster credential in the pipeline or a human at a terminal during the incident.
+#
+# The migration gate is unchanged and is what makes automation safe here: wave 1 must complete
+# before wave 2 is applied, so a failed migration leaves the previous version serving.
+# =====================================================================================
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: mageride-production
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: mageride
+  source:
+    repoURL: https://github.com/Ramitha-Silva/mageride.git
+    targetRevision: main
+    path: infra/k8s/overlays/production
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: mageride
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      # The one setting that differs from staging. If somebody force-pushes `main` backwards,
+      # `allowEmpty: false` stops ArgoCD from applying an empty manifest set — which it would
+      # otherwise treat as "delete the platform".
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=false
+      - ApplyOutOfSyncOnly=true
+      - PruneLast=true
+      - Prune=confirm
+    retry:
+      limit: 5
+      backoff: { duration: 30s, factor: 2, maxDuration: 10m }
+  ignoreDifferences:
+    # The HPA owns `replicas` — see the staging Application for the full reasoning. Without
+    # this and with `selfHeal: true`, ArgoCD and the autoscaler fight over every scale event.
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas
+  revisionHistoryLimit: 10

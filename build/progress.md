@@ -50,7 +50,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C022 | ws-ride-svc-happy-path ⭑ | 2 | DONE | 2026-07-28 | 109 tests green; 1 rides migration added (0608) + 2 internal contract routes — 5 micro-change-sets raised |
 | C023 | ws-dispatch-stub ⭑ | 2 | DONE | 2026-07-28 | 78 tests green; 1 dispatch migration added (0710) + 1 internal contract route — 11 micro-change-sets raised |
 | C024 | ws-realtime-pipeline ⭑ | 2 | DONE | 2026-07-28 | 35 tests green (3 new services + EMQX fixture); p95 EMQX→SignalR 2.1 s; H3 grid + Kafka consumer promoted to the kernel; 4 micro-change-sets raised |
-| C025 | ws-e2e-android-slice ⭑ | 3 | DONE | 2026-07-28 | **WALKING SKELETON REACHED** — one booked ride end to end on the real stack; 2 Android shells assemble; `:shared` gained a jvm() target; wave-1 gate repaired |
+| C025 | ws-e2e-android-slice ⭑ | 2 | DONE | 2026-07-28 | **WALKING SKELETON REACHED** — one booked ride end to end on the real stack; 2 Android shells assemble; `:shared` gained a jvm() target; wave-1 gate repaired |
 | C026 | iam-svc-auth | 2 | DONE | 2026-07-28 | 209 tests green (118 new); 1 iam migration added (0107) — 4 micro-change-sets raised; `POST /v1/auth/mqtt-token` closes C025 gap (c) |
 | C027 | iam-svc-profile-rbac | 2 | DONE | 2026-07-28 | 330 tests green (121 new); 1 iam migration added (0108); 8 routes D3' does not carry raised as micro-change-sets; URD §2.3 matrix parsed from `specs/` by the test |
 | C028 | registry-svc-vehicles | 2 | DONE | 2026-08-01 | 145 tests green (53 new); 3 registry migrations (0309–0311) + a 7th Redpanda topic; 0308's composite FK relaxed for US-13.9; dispatch-svc now reads the eligibility projection. **Δ 2026-08-01 (AL-57/58/59)**: D-11's merchant binding removed and `registry.driver_payouts` dropped (1010); the driver bank & payout profile put in its place — **175 tests green (+9)** |
@@ -150,7 +150,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C121 | e2e-mode-ab-fleet | 5 | DONE | 2026-08-09 | **30 tests green** in `tests/E2E` (5 new scenario files, 80 in the assembly with C120's); `dotnet test tests/E2E -c Release --filter Category=ModeAB` exits 0 in **2 m 35 s**, twice consecutively, and `dotnet build backend/MageRide.sln -c Release` is clean. **Nine services actually running** — trip-state-svc, tcp-adapter, provisioning-svc, fleet-svc, subscription-svc, fanout-svc, mqtt-bridge-svc, position-processor-svc and persistence-writer-svc — with every worker on. **The tracker plane is driven by real protocol frames on real sockets** (the C121 fence): all four of D6' §4.1's adapters carry a fix from a socket to `telemetry.positions` with the right coordinates, speed and family code, and the frames are assembled from the published layouts rather than by the codec that decodes them — `Gt06Frame` is pinned against the documented acknowledgement `78 78 05 01 00 01 D9 DC 0D 0A`. **A GT06 fix crosses nine services to become US-5.3's idle clock and US-5.4's arrival fence**; the grace restart, D-03's mutex and R-01's refusal are all driven. **AL-32 is symmetric in both directions** — the key opens and closes a journey, a dashboard End overrides the device and records it, an ACC-off leaves a dashboard-started journey alone. **T-12 closes a revoked socket inside a second, T-08 quarantines both records, T-04's last will ends a journey.** Fleet: US-13.A7's gate holds writes and lets monitoring through, AL-50's slots hold a vehicle out of APPROVED with `documents-incomplete`, an assignment is what lets a driver take the bus out, and the map and analytics are drawn from real telemetry. **DoD 2: a cross-org read is refused by Postgres**, asserted as a real non-superuser login holding only `mageride_fleet_reader`. Epic 23's grant → visibility on a passenger's own WebSocket → unsubscribe → D-22's `ShareRevoked` → rejoin. **One defect fixed: fleet-svc could not start at all with `Fleet:ProvisioningBaseUrl` set** (`ITrackerBindingService.BindAsync` made Minimal APIs treat the interface as custom-bound). **One gap recorded and ratcheted:** no route in this fleet can approve a fleet vehicle |
 | C122 | e2e-proxy-package | 5 | DONE | 2026-08-09 | **20 tests green** in `tests/E2E` (5 new scenario files, **100 in the assembly** with C120's and C121's); `dotnet test tests/E2E -c Release --filter Category=ProxyPackage` exits 0 in **~50 s**, twice consecutively against fresh containers, and the full assembly passes 100/100 in 7 m 54 s. **Ten services actually running** — ride-svc, iam-svc, dispatch-svc, reputation-svc, fare-svc, fanout-svc, content-svc, notification-svc, public-bff and safety-svc — with every worker on. **iam-svc is in this fleet for P-03, not for its bearers**: `GET /v1/users/lookup` is the registration oracle that chooses between the FCM round-trip and AL-45's SMS. **Both no-app paths are driven from the message the platform actually sent**: a `SmsGateway` speaking D6' §7.3's Notify.lk REST shape captures it, the token is parsed out of the `{{link}}` content-svc rendered, and the browser opens SCR-WT-003 and SCR-WT-002 with nothing else — a share token is mint-and-SMS (AL-44/AL-45), so reading `safety.trip_share_tokens` would have been asserting about a page no recipient could reach. §11.15's registered branch ends on the booker's real WebSocket; **the decline stores no coordinates in the row, the outbox payload or the socket frame**, asserted across all three plus a whole-table check; the 300 s window is asserted before `issued_at` is aged and ride-svc's own sweep expires it. Package: both P-07 gates, a correct code that spends no attempt, the five-attempt lockout with `package.otp_locked` and the photo-proof way out of it, P-10's `file://` artefact with its sha256 and captured geo. COD: P-08's tap settles and a second is refused, **P-14's 24 h clock lands the ride in `Disputed` with no penalty**, and the same clock correctly does nothing to a parcel still in transit. Web: all six SCR-WT screens, AL-48's unmasked `tel:` number, P-09's fare block with no instrument, a token-only SOS that reaches the booker through the real gateway, and **SCR-WT-006 asserted on the body — ride id, plate, driver, both numbers, state and coordinates all absent from the 410**. **One finding, ratcheted:** nothing writes `fares.ride_payments.CashOnDeliveryCollected`, so a COD receipt carries no figure. No service, spec, contract or migration file was changed |
 | C123 | e2e-money-flows | 5 | DONE | 2026-08-09 | **36 tests green** in `tests/E2E` (5 new scenario files, **136 in the assembly** with C120/C121/C122's); `dotnet test tests/E2E -c Release --filter Category=Money` exits 0 in **~1 m**, twice consecutively, and the full assembly passes 136/136 in 8 m 20 s with `dotnet build backend/MageRide.sln -c Release` clean. **Seven services actually running** — wallet-svc, subscription-svc, fare-svc, ride-svc, dispatch-svc, reputation-svc and fleet-svc — plus an `AcquirerGateway` speaking D6' §7.1's create-session shape and signing its own callbacks, which is the only honest way to reach the two rails AL-05 leaves. **The double-entry ledger is asserted balanced after every scenario**, by `MoneyScenario.RunAsync` rather than by the scenarios, in three statements: every entry sums to zero, every posting on the platform sums to zero, and every `billing.accounts`/`billing.wallets` balance equals the sum of its own legs. **Every rupee arrives through a rail the platform has** — drivers start empty and top up through OnePay or LankaQR with a signed callback. D-13's free first trip, the Rs 100 charged before the second, the single flat charge, **D-08's gate withholding an offer from a driver who could not pay**, and the Colombo-day key proved in both directions. R-19's two idempotency guards, the unsigned and the mis-valued callback, US-9.19's voucher at face value, US-9.13's transfer at par with a two-leg entry the database has no kind to add a fee to (AL-01), and `ck_topups_method` refusing a bank transfer (AL-05). D-10's three rails with cash and driver-QR asserted to move **no ledger at all** against a reachable wallet-svc, AL-47's claim/confirm/dispute with the Finance ticket carrying its evidence, E-10's tip. Epic 23's five methods end to end — the owner's own LankaQR on a signed link, the slip and the owner's confirm, US-23.6's cash — with **not one posting** and no column that could hold one (§18b). **Four findings, each asserted as a gap with a test that fails when it is fixed:** AL-57's passenger wallet has no funding route; `Overpaid` is unreachable since AL-57/AL-59 removed the ride callbacks; **E-05's reversal is refused by wallet-svc's own `kind` whitelist and answers 503 after committing the refund row**; and nothing calls `charge-before-trip`. No service, spec, contract or migration file was changed |
-| C124 | cicd-full-pipeline | 5 | PENDING | | |
+| C124 | cicd-full-pipeline | 5 | DONE | 2026-08-09 | **`bash infra/scripts/k8s-verify.sh` → 39 passed, 0 failed, 0 skipped** (with a throwaway kind cluster for the `kubectl` clause; 36/0/1 without one), `actionlint` clean over all 8 workflows, `kubeconform -strict` clean over all three overlays, and **`kubectl apply --dry-run=client -k` passes for `overlays/{dev,staging,production}`**. All four DoD items are met by construction and the mechanisms are checked rather than asserted. **118 files under `infra/k8s/`, 65 of them generated from one catalog** — `service-catalog.yaml` is the single source for the 34 workloads, the 26 per-service ExternalSecrets, the three per-environment image lists AND the CI image matrix, so adding a service is one entry and never a workflow edit. **Seven new workflows**, none holding a cluster credential: the only write any of them makes is a commit to `overlays/<env>/images/` and ArgoCD does the rest. **The migration gate exists twice** — statically before the promotion commit exists (expand/contract rules over the delta against the SHA that environment is *running*, plus apply-twice against a real timescaledb-ha) and as ArgoCD sync wave 1, where a failed Job leaves wave 2 (every service) unapplied. **Images are cosign-keyless-signed over the digest** with an SBOM and provenance, and `nightly.yml` re-verifies every deployed image's signature against this repository's OIDC identity. **The internal-plane credential mesh is now enforced**: 20 options carry a "Must equal <other service>'s <key>" doc comment and the only thing keeping them equal was one flat env file with a repeated placeholder — the catalog's `aliases` table maps every name to one Vault property. **Findings: the printed verify command's `yaml.safe_load` cannot pass over any Kubernetes manifest directory** (43 of 107 files are multi-document; `safe_load_all` is the one-word fix); D7' §5's per-pod requests × 34 workloads need ~20 vCPU/40 GB against §8's 12 vCPU/24 GB pool (C132's capacity plan); **D-21's RS256/JWKS MQTT authenticator is not implemented**, so the shared HMAC `infra/CLAUDE.md` says "does not survive out of dev" is a production credential; D7' §10's five CronJobs are all in-process workers and adding them would double-run the work; six credentials the options classes require are absent from `.env.app.example`; `osm-pipeline` has no image and no component builds it |
 | C125 | replica-deployment | 5 | PENDING | | |
 | C126 | gtfs-day0-load | 5 | PENDING | | |
 | C127 | security-review-asvs | 6 | PENDING | | |
@@ -19748,3 +19748,291 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   **Build host —** Docker only, no replica, no observability stack. Three containers plus seven
   in-process services peak at ~4 GB; the full assembly's four containers and thirty-one services peak
   at ~8 GB. The lightweight production replica stayed down throughout, as Waves 0–4 require.
+
+- **Component:** C124 cicd-full-pipeline — 2026-08-09
+- **Status:** DONE — `bash infra/scripts/k8s-verify.sh` exits 0 with **39 passed, 0 failed, 0 skipped**
+  (with a throwaway kind cluster for the `kubectl` clause; **36 / 0 / 1** without one, the skip being
+  that clause). `actionlint` is clean over all eight workflows, `kubeconform -strict` is clean over all
+  three overlays, and **`kubectl apply --dry-run=client -k` passes for `overlays/dev`,
+  `overlays/staging` and `overlays/production`**. All four definition-of-done items hold, and each one
+  holds because of a mechanism that is itself checked — see **The four DoD items** below.
+
+  **The printed verify command needed a correction, and it is now landed in the manifest.**
+  `build/manifest.yaml`'s C124 `verify_cmd` was changed from `yaml.safe_load(open(f))` to
+  `list(yaml.safe_load_all(open(f)))` and `build/tools/generate_build_plan.py` was re-run, so
+  `build/prompts/C124.md` carries the corrected command — a one-line diff, and no other prompt moved.
+  **The `list()` is load-bearing as much as the `_all`:** `safe_load_all` returns a lazy generator, so
+  `[yaml.safe_load_all(open(f)) for f in ...]` builds 107 generators and parses nothing at all, which
+  would be a verify command that passes over a directory of broken YAML. Why the original could not
+  work: `yaml.safe_load`
+  parses one document and raises `ComposerError` on a second; **43 of the 107 YAML files here are
+  multi-document**, because a Kubernetes manifest is conventionally a Deployment, its Service, its HPA
+  and its PDB in one file separated by `---`. So the printed clause cannot pass over a manifest
+  directory whatever the manifests contain — the only way to satisfy it literally would be one resource
+  per file, about 200 of them, which makes the set worse to read in an incident for no gain.
+  `safe_load_all` is the fix; it is what `infra/scripts/k8s-verify.sh` and
+  `.github/workflows/k8s-validate.yml` run, and it is a **micro-change-set for the manifest's
+  `verify_cmd`**. The `kubectl` half needed a different accommodation: `--dry-run=client` still needs a
+  reachable API server, because kubectl builds a RESTMapper from the server's discovery document before
+  it looks at a manifest. `k8s-validate.yml` stands up a kind cluster on every pull request and runs it
+  verbatim, so it is a real gate rather than something that only ever ran on a laptop.
+- **Notes:**
+  **What landed —** `infra/k8s/` (118 files, **65 of them generated**), seven workflows, two scripts,
+  three runbooks, four READMEs/CLAUDE.md files.
+
+  **One catalog, five artefacts.** `infra/k8s/service-catalog.yaml` is the only list: the 31 backend
+  workloads, 3 portals and the migrator; each one's port, probe shape, replica count, resources, HPA
+  range and secret set; the Vault `aliases` table; and the credentials deliberately not wired.
+  `tools/generate_manifests.py` renders `base/services/*`, `base/portals/*`,
+  `platform/external-secrets/base/*` and `overlays/*/images/*` from it, and `--matrix` prints the CI
+  image matrix from the same file. **Adding a service is one catalog entry** — its image gets built,
+  signed, promoted and deployed with no workflow edit, and a Deployment whose image nothing builds
+  cannot exist. `--check` makes drift a red build. D7' §7 writes the build as a hard-coded
+  `for s in iam registry ride ...`, which is the version of this that goes stale on the first new
+  service.
+
+  **Why a generator at all.** Thirty-four images share one shape and the parts that differ — a port, a
+  probe, a secret list, a replica count — are exactly the parts worth reading side by side. Written by
+  hand, the difference between two services would be invisible in a diff and drift between them
+  undetectable. Same convention as `build/tools/generate_build_plan.py`: the output is not edited and
+  every generated file says so on its first line.
+
+  **The four DoD items, and what makes each true —**
+  (1) *"a commit to main produces signed images and a staging deploy without manual steps."*
+  `cd.yml` fires on `ci` completing on `main`, refuses to start unless that run **succeeded** (a commit
+  must not deploy on a second opinion), then `images.yml` → `deploy.yml dev` → `deploy.yml staging`.
+  Images are **cosign keyless over the digest, never the tag** — a signature over a tag is a signature
+  over whatever that tag points at next — plus an SPDX SBOM and a build-provenance attestation, both
+  pushed to the registry so `cosign verify-attestation` works on a pulled image with no access to this
+  repository. There is no `kubectl` in any workflow.
+  (2) *"a failed migration blocks the deploy and leaves the previous version serving."* Twice, checking
+  different things. `infra/scripts/migration-gate.sh` runs **before the promotion commit exists**, so a
+  failure means ArgoCD has nothing new to sync — that is the only construction that can deliver this
+  sentence. Then ArgoCD **sync wave 1**: a Job is Healthy only when it completes, and wave 2 is every
+  service and portal, so a failed Job leaves all 34 on the image they were already running. The second
+  half catches the paths the pipeline is not on (a hand-run `argocd app sync`, a self-heal, a cluster
+  rebuilt from git).
+  (3) *"a rollback to the previous SHA completes and is documented step by step."* `rollback.yml` +
+  `docs/runbooks/rollback.md`. It is the **same mechanism as a deploy** — write the previous tag,
+  commit, let ArgoCD reconcile — deliberately, so the path needed in an incident is the path that was
+  exercised an hour ago. With no `-f tag=` it finds the previous distinct tag by reading
+  `git log -p` over that one file, which is also the deploy history of that environment.
+  (4) *"no secret value exists in the repository."* No `kind: Secret` exists anywhere under
+  `infra/k8s/` and the verify fails if one appears — checked against the *files* as well as the
+  rendered output, because a Secret in a directory no kustomization references would not show up in a
+  build. §6 of the verify checks the harder direction: **every credential in `infra/env/*.example` is
+  either delivered by an ExternalSecret or listed under `unwiredSecrets:` with a reason** (78
+  credentials; 74 wired, 4 explicitly not). A forgotten internal key does not fail a build — it fails
+  one direction of one call with a 401, in production, weeks later.
+
+  **THE CREDENTIAL MESH WAS THE REAL WORK, and it was a defect waiting to happen.** Twenty options
+  across `backend/src/*/Configuration/*.cs` carry an XML doc that says "Must equal <other service>'s
+  <key>", and until now the only thing keeping them equal was that both sides read **one flat env
+  file** where the same `CHANGEME_*` placeholder appeared twice. Split into separate pods reading
+  separate Secrets, nothing makes them agree, and the failures are quiet and specific: a mismatched
+  `Fare__EstimateTokenKey` is *every booking is a 400*; a mismatched `Ride__InternalApiKey` is *no offer
+  is ever placed*; a mismatched `Registry__OcrInternalApiKey` is *every extraction is a 404*. The
+  catalog's `aliases` table maps every name to one Vault path and property, so `internal-keys/wallet`
+  is one value under six env-var names in six services and cannot drift. **The env template disagrees
+  with itself on three of them** — `_ride_internal_api_key` vs `_ride_internal_service_key` vs
+  `_ride_internal_key` are the same credential under three placeholder spellings, and safety, wallet
+  and provisioning have the same problem. A deployment that set them from the placeholders would have
+  been a 401 wall. **Micro-change-set for `infra/env/.env.app.example`.**
+
+  **Six credentials the code requires are absent from the env template**, found by writing the mesh
+  down: `Ride__IamInternalApiKey` ("Must equal iam-svc's Auth:InternalApiKey, or every lookup is a
+  404"), `Dispatch__InternalApiKey` (fare-svc already carries `Fare__DispatchInternalApiKey`, so the key
+  dispatch-svc *validates* has to exist), `Dispatch__ReputationInternalKey`, `TripState__InternalApiKey`
+  (tcp-adapter's `Adapter__TripStateInternalApiKey` is documented as equalling it),
+  `Subscription__WalletInternalApiKey` (validated at start-up together with `WalletBaseUrl` — this
+  service moves money only through wallet-svc's internal plane) and `Jwt__RetiredSigningKeyPems__0`.
+  All six are wired here; the verify reports them as a template gap rather than a wiring gap.
+  **Micro-change-set for `.env.app.example` / D7' §4.2.**
+
+  **D-21's MQTT authenticator does not exist, and `infra/CLAUDE.md` is wrong about it.** That file says
+  the dev broker's shared HMAC "does not survive into the replica" because "the replica and production
+  use JWKS instead (D-21)", and the RS256 block is written out — commented — in
+  `infra/deploy/emqx/emqx.conf`. Nothing implements it: `MageRide.Shared.Mqtt.MqttSessionTokens` signs
+  with `SecurityAlgorithms.HmacSha256` and no service serves an MQTT JWKS document. iam-svc mints the
+  mobile session token and mqtt-bridge-svc, tcp-adapter, fanout-svc and fleet-health-svc each mint
+  their own service token from the same secret, which is what the broker validates. So it is wired here
+  as a production credential from Vault, on the 90-day rotation, and
+  `docs/runbooks/secret-rotation.md` §4 states plainly that **there is no overlap mechanism and a
+  partial rotation is a total MQTT outage**.
+
+  **KNOWN GAP — D-21's MQTT JWKS authenticator, assigned to C132 (production-readiness-doks).**
+  Deferred deliberately rather than fixed here. Two reasons: it is a **code** change and not a
+  manifest one (`MageRide.Shared.Mqtt.MqttSessionTokens` has to sign RS256, and some service has to
+  serve an MQTT JWKS document, which is a new endpoint and a new key ring), and it changes how every
+  device authenticates — so it wants its own test pass rather than riding along inside a delivery
+  pipeline. What C132 inherits, precisely:
+  * the shared HMAC is held in Vault at `common/mqtt_session_token_secret` and read under two names
+    (`Mqtt__SessionTokenSecret` for the five minting services, `EMQX_AUTHENTICATION__1__SECRET` for
+    the broker) — one property, so today's arrangement cannot drift;
+  * the RS256 authenticator block is already written out, commented, in
+    `infra/deploy/emqx/emqx.conf` and in `infra/k8s/base/data/emqx/emqx.conf` — including D-21's
+    15-minute `refresh_interval`, which is the JWKS cache with JIT lookup on miss;
+  * the rotation procedure that exists today is the one to DELETE when it lands, because JWKS gives
+    the overlap `secret-rotation.md` §4 currently says does not exist;
+  * `infra/CLAUDE.md`'s claim that the secret "does not survive into the replica" becomes true only
+    after this, and is left as-is until then rather than made aspirational.
+  Note that C132's stated scope is HA topology, capacity, backup/DR and the go-live checklist, so this
+  is an ADDITION to it — worth confirming it belongs there rather than in a micro-change-set of its
+  own, since a production-readiness reviewer will not expect to be editing token signing.
+
+  **The capacity arithmetic does not close, and both numbers are in the spec.** D7' §5's template
+  requests `cpu: 500m, memory: 1Gi` per service; 34 workloads plus the data plane want roughly
+  **20 vCPU and 40 GB of requests**, and D7' §8's P1–P2 substrate is **3 × 4 vCPU / 8 GB = 12 vCPU /
+  24 GB**. Neither is wrong — §2.1 avoids the problem by co-locating 21 services in one container,
+  which is what a single VPS has to do. Handled visibly: base carries §5's template verbatim,
+  `overlays/dev` drops *requests* to 50m/128Mi and leaves every limit alone (requests are a scheduling
+  claim, not a ceiling — that is what makes forty pods fit on one 6-vCPU box), and the production
+  overlay says in writing that it still over-subscribes a 3-node pool. **This is the input to C132's
+  capacity plan**, whose second deliverable is exactly that.
+
+  **Per-service, not the composed `app-services` container, and the repository settles it.** D7' §2.1
+  co-locates 21 domain services; D7' §2 says "All services 2 GB / 1 vCPU in production pods" and D7' §5
+  prints a Deployment *per stateless service*. Every service under `backend/src` is its own
+  `Microsoft.NET.Sdk.Web` host with its own `Program.cs`, and the composed `app-services` / `hot-path` /
+  `fanout` images **have no project and no Dockerfile** (the C118 and C025 handoffs both record this).
+  So the per-service split is the only shape that builds and it is the one §5 describes.
+
+  **D7' §10's CronJobs would run the work twice.** `document-expiry` (E-03), `credential-rotation`
+  (T-02), `daily-fee-reset` (D-13), `pdpa-fulfillment` (E-06) and `gtfs-import` (AL-54) all landed in
+  waves 2–3 as **in-process `BackgroundService`s**, not as CronJobs. The ledgers and unique business
+  keys make a double run converge rather than corrupt (`registry.document_notices`,
+  `(driverId, vehicleId, feeDate)` in Asia/Colombo), so the symptom would be duplicate driver
+  notifications on a document expiry rather than duplicate money — which is still what drivers act on.
+  Only `osm-pipeline` is here, and **suspended: no component builds that image.** D7' §10 prints
+  `ghcr.io/mageride/osm-pipeline:latest` and the stages (osm2pgsql, tippecanoe, pmtiles, `aws s3 sync`)
+  have no source anywhere in this repository, so there is nothing to build and nothing to promote. An
+  unsuspended CronJob would be a weekly ImagePullBackOff and a weekly page. **§10's CronJob framing is
+  superseded by the implementation; the missing thing is the osm-pipeline image.**
+
+  **Decisions worth arguing with —**
+  (a) **Sync waves, not a `PreSync` hook, for the migration gate.** A PreSync hook runs before
+  *everything*, including the namespace and Postgres: on a first sync there would be no database to
+  migrate and no `common-secret` to read the DSN from, so the gate would fail on a healthy cluster —
+  the worst kind of gate, one that cries wolf on the day it is installed. Wave 1 runs after the data
+  plane and before the applications. Both Jobs carry `Replace=true` because a Job's template is
+  immutable and a new SHA cannot be patched in; the consequence is that the gate runs on *every* sync,
+  which is the gate working.
+  (b) **Production syncs automatically, and the human gate is on changing the desired state.** Only
+  `promote.yml` writes `overlays/production/images/`, and that job runs in the GitHub `production`
+  environment behind a required reviewer. In exchange, `selfHeal` reverts a `kubectl edit` made during
+  an incident — with manual sync that divergence persists until somebody syncs, and the next deploy
+  then applies a change nobody reviewed alongside the one they did — and a rollback is one commit
+  rather than a cluster credential in the pipeline.
+  (c) **No cluster credentials in GitHub at all.** The pipeline's only write is a commit. A compromised
+  runner can propose a deploy and cannot perform one, and what is deployed is always readable from the
+  repository — which is what `deploy.yml` reads to decide which migrations are new and what
+  `promote.yml` reads to refuse a SHA staging is not running.
+  (d) **The DSNs are rendered by ESO, not stored.** Vault holds the Postgres password; `common-secret`'s
+  template composes both connection strings from it. One credential in one place, and the host, port,
+  pooling mode and pool sizes stay in the manifest where they are reviewable — `Maximum Pool Size=20`
+  through PgBouncer and `=5` on the direct connection is a capacity decision that would be invisible
+  inside an opaque Vault string.
+  (e) **No custom resource under `base/` or `overlays/`.** ExternalSecrets, SecretStores and ArgoCD
+  Applications live in `platform/`. That split is what lets the C124 verify run against a cluster that
+  has never had ESO installed: `--dry-run=client` still needs a REST mapping for every kind.
+  (f) **`Outbox__*` and `CommandLog__Schema` are set nowhere**, and that is the correct configuration.
+  Each service calls `Configure<OutboxOptions>` in its own `Application.Build` before
+  `AddMageRideDefaults`; a shared value would have dispatch-svc publishing `offer.created` onto
+  `ride.events` and waking ride-svc's own dispatcher. The flat env file carries ride-svc's values,
+  which is why the skeleton compose exists to undo them.
+  (g) **The expand/contract scan is statement-aware, not a grep.** A `CHECK` written inline in a
+  `CREATE TABLE IF NOT EXISTS` is free — the table is new and nothing writes to it — while the same
+  constraint added by `ALTER TABLE` validates every row under an ACCESS EXCLUSIVE lock. A grep cannot
+  tell them apart and would flag almost all 138 existing scripts, which is a gate people disable. The
+  scanner collects the objects each file creates first and only fires on pre-existing targets. It is
+  Python rather than `grep -E` because half the rules are "X without Y" and a negative lookahead is not
+  in POSIX ERE — written with `grep -E` those rules silently match nothing, which is the worst outcome
+  for a gate.
+  (h) **`runAsUser` is numeric everywhere.** Every image ends on `USER app` or `USER node` — a *name* —
+  and kubelet refuses a pod with `runAsNonRoot: true` whose image user it cannot prove is non-root.
+  1654 is `APP_UID` in the .NET 10 images, 1000 is `node`. This would have been a platform that does
+  not start, at admission, with a message about verifying a user.
+
+  **Two bootstrap seams that cannot be designed away.** provisioning-svc generates the device CA chain
+  and the PSK signing key on first boot onto its own **ReadWriteOnce** volume. EMQX reads the chain
+  when its 8883 listener starts (a missing chain does not degrade the listener — it stops the broker
+  booting) and tcp-adapter reads the PSK key from `<PskKeyDirectory>/secrets/psk_signing_key`; neither
+  can share a RWO volume with a service that needs write access to it. So both values are copied into
+  Vault once (`docs/runbooks/deploy.md` §5) and projected by ESO — the chain is a public certificate, so
+  Vault is distribution there rather than secrecy. Between provisioning-svc's first boot and the copy,
+  **tcp-adapter runs with `CanVerify == false`** and serves the protocols that carry no credential,
+  which `PskCredentials` was written to allow. Both are on T-02's 90-day rotation and the rotation
+  runbook covers the direction that bites: provisioning-svc rotates the key on its own volume, and if
+  the copy does not follow, every credential minted after the rotation is rejected.
+
+  **C118's fleet-svc defect is reproduced here on purpose.** `service-endpoints` sets
+  `Fleet__ProvisioningBaseUrl`, which makes fleet-svc map `POST /v1/fleets/{fleetId}/trackers/bind` and
+  throw at start-up (`ITrackerBindingService` declares an instance `BindAsync`, which minimal APIs read
+  as a custom parameter binder). **Any deployment that configures the provisioning upstream — which
+  production must — has a fleet-svc that does not boot.** Leaving it unset hides the defect and
+  silently drops ten contract operations from the route table, so a crashloop with a stack trace is the
+  better failure. C121's handoff says it fixed this ("One defect fixed: fleet-svc could not start at
+  all with `Fleet:ProvisioningBaseUrl` set"); the manifest and the runbook both name it either way,
+  because the failure is a first-deploy symptom somebody will meet.
+
+  **What is not built, and what each needs —**
+  (a) **The launch topology.** D7' §8's Patroni 1P+2R, Redis Sentinel, Redpanda seed/rack awareness,
+  HAProxy+Keepalived and LiveKit+coturn are **C132's first deliverable**. The data plane here is
+  single-instance; the production overlay says so out loud rather than letting a green ArgoCD sync imply
+  the database survives a node loss. EMQX 2-node and Redpanda 3-node RF=3 *are* set, because those two
+  are a replica count and a Job argument.
+  (b) **An OTLP collector in the cluster.** `Otel__Endpoint` is empty in every overlay, because an
+  endpoint pointed at a collector that is not running makes every exporter retry on a timeout — the
+  same reasoning `.env.common.example` gives. C119 built the observability stack for the *compose*
+  project. **For tcp-adapter that is its only telemetry path** (no HTTP surface, nothing to scrape), so
+  production without a collector is production with a blind tracker plane. The k8s Prometheus would
+  also discover by pod annotation rather than by C119's static target list, whose names are the compose
+  ones (`mqtt-bridge`, not `mqtt-bridge-svc`).
+  (c) **NetworkPolicies.** Not in the deliverables, and a default-deny across 34 workloads and the data
+  plane is a change that wants its own review — it belongs with **C127**'s ASVS pass.
+  (d) **Mobile release signing.** C067 and C076 both point at C124 for `google-services.json`, and D7'
+  §13's CI/CD secret list has `ANDROID_KEYSTORE`, `KEYSTORE_PASSWORD` and `APPLE_API_KEY`. None of them
+  can be produced here: they need a Firebase project, a signing keystore and an Apple developer account.
+  The pipeline slot is `ci.yml`'s existing android/ios legs, not these workflows — nothing in the
+  dev→staging→prod image promotion touches an APK. **Still open, and now with a named home.**
+  (e) **`argocd app wait` in the pipeline** is behind the optional `ARGOCD_SERVER` variable. Without it
+  `deploy.yml` probes the public `/health/ready` three times and **says in a warning that it cannot
+  confirm which revision answered** — nothing on the public surface reports a build SHA. Worth adding
+  one: the gateway's `version-check` surface would make the fallback authoritative.
+  (f) **The gate cannot prove the previous release's *code* tolerates the new schema.** It matches DDL
+  patterns; a rename expressed as add-backfill-drop across two files in one release, or a `DROP` inside
+  a `DO $$ … $$` block, gets through. Running the previous image's test suite against the new schema is
+  the check that would close it.
+
+  **One file outside this component was changed.** `infra/scripts/verify-observability.sh` gained a
+  three-name allowlist (`deploy.md`, `rollback.md`, `secret-rotation.md`) in its "no runbook is
+  orphaned" check: those three are delivery procedures, no alert points at them, and none should — but
+  they belong beside the alert runbooks because every one of those can end in one of them. A named list
+  rather than a pattern, so a new *alert* runbook nobody linked is still a failure. With it,
+  **`bash infra/scripts/verify-observability.sh` is green again on this tree — 93 checks, 0 failures, 3
+  skipped, exit 0.** Two intermediate runs showed failures and neither was caused by anything here:
+  the first flagged the three new runbooks as orphaned (fixed by the allowlist), and a second showed
+  `the collector accepts an OTLP/HTTP trace` / `the trace is queryable in Tempo`, which **also fail on
+  a pristine `HEAD` worktree** — that is the interference `infra/CLAUDE.md` warns about, since all
+  three stacks share the `mageride` compose project and two overlapping runs fight over the same
+  containers. Run alone, it passes.
+
+  **Files —** new: `infra/k8s/` (118 files: `service-catalog.yaml`; `tools/generate_manifests.py`,
+  `set_image_tag.py`, `check_fences.py`; `base/` = namespace + 3 ConfigMaps + 5 data-plane workloads +
+  2 verbatim copies of the dev EMQX ACL and Redpanda topic script + 31 services + 3 portals + 3
+  Ingresses + 2 Jobs; `overlays/{dev,staging,production}`; `platform/argocd/` = AppProject + 3 root
+  Applications + 6 child Applications + README; `platform/external-secrets/` = 26 generated + 7
+  hand-written + 2 per-env stores; `platform/sealed-secrets/` = README + `seal.sh` + an empty dev
+  kustomization; `README.md`; `CLAUDE.md`), `.github/workflows/{images,deploy,cd,promote,rollback,
+  k8s-validate,nightly}.yml`, `infra/scripts/{k8s-verify.sh,migration-gate.sh}`,
+  `docs/runbooks/{deploy,rollback,secret-rotation}.md`. Changed: `.github/workflows/README.md` (the
+  Delivery section and the wave-5/6 verify_cmd homes C010 left open), `infra/CLAUDE.md` (a Kubernetes
+  section), `docs/runbooks/README.md` (the three new entries),
+  `infra/scripts/verify-observability.sh` (the allowlist above), `build/progress.md`. **No service,
+  spec, contract or migration file was changed, and no application dependency was added.**
+
+  **Build host —** no cluster and no replica for most of it. A throwaway **kind** cluster (one
+  container, ~1 GB, deleted afterwards) was created solely so the printed `kubectl apply
+  --dry-run=client` clause could be run for real against all three overlays; `kubeconform` and
+  `actionlint` were fetched to the scratchpad rather than installed. The observability stack was brought
+  up twice by C119's verify and taken down; the lightweight production replica stayed down throughout.

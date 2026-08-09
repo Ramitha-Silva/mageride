@@ -1,0 +1,40 @@
+# GENERATED FILE — do not edit.
+# Source: infra/k8s/service-catalog.yaml
+# Regenerate: python3 infra/k8s/tools/generate_manifests.py
+#
+# provisioning-svc-secret — the D7' §4.2 rows whose Secret column is yes.
+#
+# Vault is the only source (D7' §13). `key` is the path INSIDE the KV mount the
+# ClusterSecretStore points at, and the mount is what differs per environment — so this
+# file is identical in dev, staging and production and no environment name appears in it.
+#
+# A `key` that is not this service's own name is a SHARED credential — see `aliases` in
+# service-catalog.yaml for which sentence in which options class requires it.
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: provisioning-svc-secret
+  labels:
+    app: provisioning-svc
+    app.kubernetes.io/name: provisioning-svc
+    app.kubernetes.io/component: secret
+    app.kubernetes.io/part-of: mageride
+spec:
+  # 1 h, and rotation does not wait for it: the rotation procedure restarts the
+  # Deployment, which re-reads the Secret ESO has already updated
+  # (docs/runbooks/secret-rotation.md).
+  refreshInterval: 1h
+  secretStoreRef:
+    name: mageride-vault
+    kind: ClusterSecretStore
+  target:
+    name: provisioning-svc-secret
+    creationPolicy: Owner
+    # Retain: deleting the ExternalSecret must not delete the running pods' credentials.
+    deletionPolicy: Retain
+  data:
+    - secretKey: Provisioning__InternalApiKey
+      remoteRef: { key: internal-keys, property: provisioning }
+    - secretKey: Provisioning__ErrorReportSigningKey
+      remoteRef: { key: provisioning-svc, property: Provisioning__ErrorReportSigningKey }

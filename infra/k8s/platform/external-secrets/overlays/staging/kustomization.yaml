@@ -1,0 +1,23 @@
+# =====================================================================================
+# staging secrets — the ClusterSecretStore plus every ExternalSecret, unchanged from base.
+#
+# A SEPARATE ArgoCD Application from the workloads, at a lower sync wave
+# (platform/argocd/applications/staging.yaml). Two reasons, and the first is the one that
+# matters:
+#
+#   1. A Secret that does not exist yet is a pod stuck in `CreateContainerConfigError`, not a
+#      pod that starts with an empty credential. So the secrets Application has to converge
+#      first, and modelling it as its own Application is how "first" is expressed to ArgoCD.
+#   2. These are CUSTOM RESOURCES. Keeping them out of infra/k8s/base is what lets
+#      `kubectl apply --dry-run=client -k infra/k8s/overlays/staging` run against a cluster
+#      that has never heard of the External Secrets Operator: client-side dry-run still needs
+#      a REST mapping for every kind in the set.
+# =====================================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: mageride
+
+resources:
+  - ../../base
+  - secret-store.yaml

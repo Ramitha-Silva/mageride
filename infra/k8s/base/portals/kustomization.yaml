@@ -1,0 +1,12 @@
+# GENERATED FILE — do not edit.
+# Source: infra/k8s/service-catalog.yaml
+# Regenerate: python3 infra/k8s/tools/generate_manifests.py
+#
+# The three Next.js surfaces (AL-02 / AL-03 / AL-44).
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - admin-portal.yaml
+  - fleet-portal.yaml
+  - web-passenger.yaml

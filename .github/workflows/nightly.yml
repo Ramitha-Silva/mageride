@@ -1,0 +1,290 @@
+# =====================================================================================
+# The scheduled suites (C124) — the seventh `verify_cmd` shape from
+# .github/workflows/README.md, the one that "needs the deployed replica, a Singapore region, or
+# a load generator" and that the C010 README left to this component.
+#
+# None of these belong on a pull request: each needs a deployed environment, minutes to hours,
+# or a region this repository's runners are not in. So they run at night against staging, and
+# every one of them PROBES FOR ITS OWN SCRIPT and skips with a notice when the component that
+# owns it has not landed. That is the same pattern ci.yml uses for the wave-1 Gradle modules, and
+# it means this file needs no edit as waves 5 and 6 complete:
+#
+#   verify-deployment    C124  signatures, attestations and drift — runs TODAY
+#   replica-smoke        C125  infra/replica/deploy.sh --dry-run && smoke.sh
+#   security             C127  security/run-asvs-checks.sh && dotnet test tests/Security
+#   load                 C129  k6 run load/ingest.js, load/dispatch.js
+#   chaos                C130  chaos/run-drills.sh --env replica
+#   acceptance-sg        C131  acceptance/sg/run.sh — SINGAPORE, not the EU replica
+#
+# The four E2E suites (C120-C123) are deliberately NOT here: they compose every service in
+# process over Testcontainers, so `dotnet test backend/MageRide.sln` in ci.yml already runs them
+# on every commit. Running them again nightly would buy nothing but flakiness.
+# =====================================================================================
+
+name: nightly
+
+on:
+  schedule:
+    # 18:30 UTC = 00:00 Asia/Colombo. D-38: this platform's day boundary is Colombo's, and a
+    # suite that asserts a daily-fee reset or a business date should run at the start of a
+    # business day rather than in the middle of one.
+    - cron: "30 18 * * *"
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Which deployment to exercise
+        required: false
+        default: staging
+        type: choice
+        options: [dev, staging]
+      suites:
+        description: Comma-separated subset (deployment,replica,security,load,chaos,acceptance). Empty = all.
+        required: false
+        type: string
+
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  ENVIRONMENT: ${{ inputs.environment || 'staging' }}
+  SUITES: ${{ inputs.suites || 'deployment,replica,security,load,chaos,acceptance' }}
+
+jobs:
+  # ===================================================================================
+  # What is actually deployed, and is it what we think it is? This one needs no component that
+  # does not exist yet, and it is the only check that would notice a manually-pushed image.
+  # ===================================================================================
+  verify-deployment:
+    name: verify what is deployed
+    if: contains(github.event.inputs.suites || 'deployment', 'deployment')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+
+      - run: python3 -m pip install --quiet pyyaml
+
+      - uses: sigstore/cosign-installer@v3
+
+      # Every image the environment is running must carry a cosign signature whose certificate
+      # names THIS repository's workflow. An image that was pushed by hand, or built from a fork,
+      # fails here — which is the only place in the pipeline where that is detectable after the
+      # fact.
+      - name: every deployed image is signed by this pipeline
+        env:
+          IMAGE_NAMESPACE: ${{ vars.IMAGE_NAMESPACE || 'mageride' }}
+        run: |
+          set -euo pipefail
+          tag=$(python3 infra/k8s/tools/set_image_tag.py "$ENVIRONMENT" --print)
+          echo "::notice::$ENVIRONMENT is running $tag"
+          images=$(python3 infra/k8s/tools/generate_manifests.py --matrix \
+                   | python3 -c 'import json,sys; print("\n".join(i["image"] for i in json.load(sys.stdin)))')
+          failed=""
+          for image in $images; do
+            ref="ghcr.io/${IMAGE_NAMESPACE}/${image}:${tag}"
+            if cosign verify "$ref" \
+                 --certificate-identity-regexp "^https://github.com/${GITHUB_REPOSITORY}/" \
+                 --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+                 > /dev/null 2>&1; then
+              echo "  ok   $image"
+            else
+              echo "  FAIL $image"
+              failed="$failed $image"
+            fi
+          done
+          test -z "$failed" || { echo "::error::unsigned or unverifiable:$failed"; exit 1; }
+
+      # Does the cluster agree with the repository? `selfHeal` should make this impossible, so an
+      # OutOfSync Application at midnight means selfHeal is off, the repo is unreachable, or
+      # something is fighting the reconciler.
+      - name: no drift
+        if: ${{ vars.ARGOCD_SERVER != '' }}
+        env:
+          ARGOCD_SERVER: ${{ vars.ARGOCD_SERVER }}
+          ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}
+        run: |
+          set -euo pipefail
+          curl -sSL -o /usr/local/bin/argocd "https://${ARGOCD_SERVER}/download/argocd-linux-amd64"
+          chmod +x /usr/local/bin/argocd
+          for app in "mageride-secrets" "mageride-${ENVIRONMENT}"; do
+            status=$(argocd app get "$app" -o json | python3 -c 'import json,sys; a=json.load(sys.stdin)["status"]; print(a["sync"]["status"], a["health"]["status"])')
+            echo "$app: $status"
+            case "$status" in
+              "Synced Healthy") ;;
+              *) echo "::warning::$app is '$status' — see platform/argocd/README.md"; ;;
+            esac
+          done
+          argocd app diff "mageride-${ENVIRONMENT}" || true
+
+  # ===================================================================================
+  # C125 — the lightweight production replica.
+  # ===================================================================================
+  replica-smoke:
+    name: replica smoke (C125)
+    if: contains(github.event.inputs.suites || 'replica', 'replica')
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: run, or say why not
+        run: |
+          set -euo pipefail
+          if [ ! -f infra/replica/deploy.sh ]; then
+            echo "::notice::infra/replica/ does not exist yet (C125) — skipped"
+            exit 0
+          fi
+          # `--dry-run` only. The replica lives on the Contabo VPS that also hosts the build, and
+          # the root CLAUDE.md forbids bringing it up beside one; a GitHub runner cannot deploy
+          # to that box from here anyway. The real smoke run is C125's own scheduled job on that
+          # host.
+          bash infra/replica/deploy.sh --dry-run
+
+  # ===================================================================================
+  # C127 / C128 — the security suites.
+  # ===================================================================================
+  security:
+    name: security (C127)
+    if: contains(github.event.inputs.suites || 'security', 'security')
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: run, or say why not
+        env:
+          MAGERIDE_REQUIRE_CONTAINERS: "1"
+        run: |
+          set -euo pipefail
+          ran=0
+          if [ -f security/run-asvs-checks.sh ]; then bash security/run-asvs-checks.sh; ran=1; fi
+          if [ -d tests/Security ]; then dotnet test tests/Security -c Release; ran=1; fi
+          test "$ran" = 1 || echo "::notice::no security suite yet (C127/C128) — skipped"
+
+  # ===================================================================================
+  # C129 — load. Against a DEPLOYED environment: the numbers D7' §11 states (0.12 msg/s per
+  # vehicle blended, +20k msg/s sustained with hardware trackers, p95 < 5 s device to passenger)
+  # are about a network and a broker, and an in-process harness measures neither.
+  # ===================================================================================
+  load:
+    name: load (C129)
+    if: contains(github.event.inputs.suites || 'load', 'load')
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - name: run, or say why not
+        run: |
+          set -euo pipefail
+          if [ ! -d load ]; then
+            echo "::notice::load/ does not exist yet (C129) — skipped"
+            exit 0
+          fi
+          curl -sSL https://github.com/grafana/k6/releases/download/v0.55.0/k6-v0.55.0-linux-amd64.tar.gz \
+            | tar -xz --strip-components=1 -C /usr/local/bin k6-v0.55.0-linux-amd64/k6
+          mkdir -p load/out
+          K6_BASE_URL="https://api.${ENVIRONMENT}.mageride.lk" k6 run load/ingest.js --summary-export=load/out/ingest.json
+          K6_BASE_URL="https://api.${ENVIRONMENT}.mageride.lk" k6 run load/dispatch.js
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: k6-${{ github.run_id }}
+          path: load/out
+          if-no-files-found: ignore
+
+  # ===================================================================================
+  # C130 — chaos. Kills a broker, a database, a pod, a network path, and asserts the platform
+  # comes back within its stated RTO.
+  # ===================================================================================
+  chaos:
+    name: chaos drills (C130)
+    if: contains(github.event.inputs.suites || 'chaos', 'chaos')
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - name: run, or say why not
+        run: |
+          set -euo pipefail
+          if [ ! -f chaos/run-drills.sh ]; then
+            echo "::notice::chaos/ does not exist yet (C130) — skipped"
+            exit 0
+          fi
+          mkdir -p chaos/out
+          bash chaos/run-drills.sh --env "$ENVIRONMENT" --report chaos/out/report.md
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chaos-${{ github.run_id }}
+          path: chaos/out
+          if-no-files-found: ignore
+
+  # ===================================================================================
+  # C131 — VoIP and tracker acceptance, from SINGAPORE.
+  #
+  # The one suite whose location is part of the test. Production is DOKS Singapore (D7' §8) and
+  # the media plane is pinned there; a LiveKit round trip measured from a GitHub runner in
+  # us-east tells you about that runner's path, not about a Colombo handset's. Whether this can
+  # run in Actions at all is C131's to decide — it may need a Singapore droplet as a
+  # self-hosted runner. Left probing rather than assumed.
+  # ===================================================================================
+  acceptance-sg:
+    name: acceptance — Singapore (C131)
+    if: contains(github.event.inputs.suites || 'acceptance', 'acceptance')
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: run, or say why not
+        run: |
+          set -euo pipefail
+          if [ ! -f acceptance/sg/run.sh ]; then
+            echo "::notice::acceptance/sg/ does not exist yet (C131) — skipped"
+            exit 0
+          fi
+          echo "::warning::this runner is not in Singapore. C131's verify says the suite runs\
+           against the Singapore region, not the EU replica — check acceptance/sg/README before\
+           trusting a latency number from here."
+          mkdir -p acceptance/sg/out
+          bash acceptance/sg/run.sh --report acceptance/sg/out/report.md
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: acceptance-sg-${{ github.run_id }}
+          path: acceptance/sg/out
+          if-no-files-found: ignore
+
+  summary:
+    name: nightly summary
+    needs: [verify-deployment, replica-smoke, security, load, chaos, acceptance-sg]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: write it
+        run: |
+          {
+            echo "### nightly — ${ENVIRONMENT}"
+            echo
+            echo "| suite | result |"
+            echo "|---|---|"
+            echo "| verify what is deployed | ${{ needs.verify-deployment.result }} |"
+            echo "| replica smoke (C125) | ${{ needs.replica-smoke.result }} |"
+            echo "| security (C127) | ${{ needs.security.result }} |"
+            echo "| load (C129) | ${{ needs.load.result }} |"
+            echo "| chaos (C130) | ${{ needs.chaos.result }} |"
+            echo "| acceptance SG (C131) | ${{ needs.acceptance-sg.result }} |"
+            echo
+            echo "A \`success\` on a suite whose component has not landed means it SKIPPED with a"
+            echo "notice — open the job to see which."
+          } >> "$GITHUB_STEP_SUMMARY"

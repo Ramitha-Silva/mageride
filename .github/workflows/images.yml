@@ -1,0 +1,265 @@
+# =====================================================================================
+# Image build, push and signing (C124) — D7' §7's per-service loop, as a reusable workflow.
+#
+# Called by cd.yml on every push to main. Also callable by hand (workflow_dispatch) to rebuild
+# a SHA whose images were pruned from the registry.
+#
+# --- The matrix comes from the catalog, not from this file ----------------------------
+# `infra/k8s/tools/generate_manifests.py --matrix` prints one entry per image, read from
+# infra/k8s/service-catalog.yaml — the same file the Deployments and the ExternalSecrets are
+# generated from. Adding a service is ONE catalog entry: its image gets built, signed, promoted
+# and deployed with no workflow edit, and it is impossible to add a Deployment whose image
+# nothing builds. D7' §7 writes the loop as a hard-coded `for s in iam registry ride ...`, which
+# is the version of this that goes stale on the first new service.
+#
+# --- Tagging (D7' §7's promotion contract) -------------------------------------------
+#   sha-<7>   the immutable identity. THE ONLY TAG ANY MANIFEST EVER NAMES.
+#   main      a moving convenience tag for humans and for `docker pull`; never deployed.
+# There is deliberately no `latest`: `infra/scripts/k8s-verify.sh` fails the build if a manifest
+# references one, because `latest` makes a rollback unprovable — two clusters pulling the same
+# tag at different times can be running different code with nothing to show it.
+#
+# --- Signing ------------------------------------------------------------------------
+# cosign keyless, over the GitHub OIDC token. No key to store, rotate or leak: the signature's
+# certificate names the workflow, the repository and the commit that produced the image, so
+# "signed" here means "built by this pipeline from this commit" rather than "somebody with the
+# key said so". `.github/workflows/README.md` has the verification command.
+# =====================================================================================
+
+name: images
+
+on:
+  workflow_call:
+    inputs:
+      sha:
+        description: The full commit SHA to build. Images are tagged sha-<first 7>.
+        required: true
+        type: string
+      push:
+        description: Push and sign. False builds only, which is what a PR wants.
+        required: false
+        default: true
+        type: boolean
+    outputs:
+      tag:
+        description: The image tag every manifest will be promoted to.
+        value: ${{ jobs.matrix.outputs.tag }}
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Commit SHA to (re)build
+        required: true
+        type: string
+      push:
+        # Declared for the dispatch trigger too, and defaulted TRUE. Without it `inputs.push` is
+        # empty on a manual run, every `if: inputs.push` step skips, and the workflow reports
+        # success having pushed nothing — which is exactly the wrong answer when the reason for
+        # running it by hand is "the registry pruned this tag".
+        description: Push and sign (turn off to build only)
+        required: false
+        default: true
+        type: boolean
+
+concurrency:
+  # Per SHA, not per branch: two runs building the same commit would push the same tag twice.
+  group: images-${{ inputs.sha }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  # The manifests name `ghcr.io/mageride/<service>` (D7' §5). GHCR namespaces follow the
+  # repository OWNER, so unless a `mageride` organisation exists this has to be overridden —
+  # set the `IMAGE_NAMESPACE` repository variable and re-run the generator's registry field.
+  # Kept as a variable rather than hard-coded so the two cannot silently disagree.
+  IMAGE_NAMESPACE: ${{ vars.IMAGE_NAMESPACE || 'mageride' }}
+
+permissions:
+  contents: read
+
+jobs:
+  # ===================================================================================
+  # One job, so the 34-entry matrix is computed once and both the build and the promotion
+  # read the same list.
+  # ===================================================================================
+  matrix:
+    name: matrix (from service-catalog.yaml)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      images: ${{ steps.build.outputs.images }}
+      tag: ${{ steps.build.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.sha }}
+
+      - name: read the catalog
+        id: build
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet pyyaml
+          images=$(python3 infra/k8s/tools/generate_manifests.py --matrix)
+          echo "images=$images" >> "$GITHUB_OUTPUT"
+          echo "tag=sha-${SHA::7}" >> "$GITHUB_OUTPUT"
+          echo "::notice::$(echo "$images" | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))') images at tag sha-${SHA::7}"
+        env:
+          SHA: ${{ inputs.sha }}
+
+      # The generated manifests must match the catalog before anything is built from it —
+      # otherwise the promotion writes a tag for an image list nobody deployed.
+      - name: the generated manifests are current
+        run: python3 infra/k8s/tools/generate_manifests.py --check
+
+  # ===================================================================================
+  # Build, push, sign, attest. One job per image, 34 of them, in parallel.
+  # ===================================================================================
+  build:
+    name: ${{ matrix.image }}
+    needs: matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      # Every image is built even when one fails: a red build should say which of the
+      # thirty-four is broken, not the first one alphabetically.
+      fail-fast: false
+      max-parallel: 8
+      matrix:
+        include: ${{ fromJson(needs.matrix.outputs.images) }}
+    permissions:
+      contents: read
+      packages: write
+      # cosign keyless and the SLSA provenance attestation both need the OIDC token.
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.sha }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: log in to ghcr.io
+        if: inputs.push
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # --- build ---------------------------------------------------------------------
+      # The build context is the REPOSITORY ROOT for all four templates: restore needs
+      # global.json and backend/Directory.*.props from above the project directory (C010).
+      #
+      # `--build-arg` is expanded from the catalog's `build_arg` field, which is a
+      # space-separated `K=V` list — SERVICE=<dir> for a .NET image, PORTAL=<name> PORT=<n> for
+      # a portal.
+      - name: build and push
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          build-args: ${{ matrix.build_arg }}
+          push: ${{ inputs.push }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ matrix.image }}:${{ needs.matrix.outputs.tag }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ matrix.image }}:main
+          # A registry cache, shared across runs, keyed per image. The .NET restore layer is
+          # the expensive one and a source-only change reuses it (C010's Dockerfiles order the
+          # COPY steps for exactly this).
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ matrix.image }}:buildcache
+          cache-to: ${{ inputs.push && format('type=registry,ref={0}/{1}/{2}:buildcache,mode=max', env.REGISTRY, env.IMAGE_NAMESPACE, matrix.image) || '' }}
+          provenance: false # supplied by attest-build-provenance below, which is verifiable
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ inputs.sha }}
+            org.opencontainers.image.title=${{ matrix.image }}
+
+      # --- the structural promises C010's templates make -----------------------------
+      # Asserted on every image on every build, because they are the properties the k8s
+      # manifests depend on and cannot check for themselves: `runAsNonRoot: true` with a
+      # non-numeric image user is a pod kubelet REFUSES to start, and it refuses at deploy
+      # time rather than at build time.
+      - name: non-root, and a healthcheck
+        if: inputs.push
+        run: |
+          set -euo pipefail
+          ref="${REGISTRY}/${IMAGE_NAMESPACE}/${IMAGE}:${TAG}"
+          docker pull -q "$ref"
+          user=$(docker image inspect "$ref" --format '{{.Config.User}}')
+          case "$user" in
+            app|node) ;;
+            *) echo "::error::$IMAGE runs as '${user:-root}', not app or node"; exit 1 ;;
+          esac
+          # The migration runner is a batch job with no HTTP surface, so it has no HEALTHCHECK
+          # by design (C003) — every other image must have one.
+          if [ "$IMAGE" != "migrate" ]; then
+            hc=$(docker image inspect "$ref" --format '{{json .Config.Healthcheck}}')
+            test "$hc" != "null" || { echo "::error::$IMAGE has no HEALTHCHECK"; exit 1; }
+          fi
+        env:
+          IMAGE: ${{ matrix.image }}
+          TAG: ${{ needs.matrix.outputs.tag }}
+
+      # --- sign --------------------------------------------------------------------
+      - name: install cosign
+        if: inputs.push
+        uses: sigstore/cosign-installer@v3
+
+      - name: sign the digest
+        if: inputs.push
+        run: |
+          # The DIGEST, never the tag. A signature over a tag is a signature over whatever that
+          # tag points at next.
+          cosign sign --yes "${REGISTRY}/${IMAGE_NAMESPACE}/${IMAGE}@${DIGEST}"
+        env:
+          IMAGE: ${{ matrix.image }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+
+      # SBOM and provenance: what is in the image, and what built it. Both are attached to the
+      # digest in the registry, so `cosign verify-attestation` works on a pulled image with no
+      # access to this repository.
+      - name: SBOM
+        if: inputs.push
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ matrix.image }}@${{ steps.build.outputs.digest }}
+          format: spdx-json
+          upload-artifact: false
+          output-file: sbom.spdx.json
+
+      - name: attach the SBOM
+        if: inputs.push
+        run: |
+          cosign attest --yes --predicate sbom.spdx.json --type spdxjson \
+            "${REGISTRY}/${IMAGE_NAMESPACE}/${IMAGE}@${DIGEST}"
+        env:
+          IMAGE: ${{ matrix.image }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+
+      - name: build provenance
+        if: inputs.push
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ matrix.image }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+  # ===================================================================================
+  # One place to look for "did every image build and get signed", so the caller has a single
+  # `needs:` and a failed leg cannot be mistaken for a skipped one.
+  # ===================================================================================
+  complete:
+    name: all images signed
+    needs: [matrix, build]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: assert
+        run: |
+          test "${{ needs.build.result }}" = "success" || {
+            echo "::error::at least one image failed to build or sign — nothing will be promoted"
+            exit 1
+          }
+          echo "::notice::every image is built and signed at ${{ needs.matrix.outputs.tag }}"

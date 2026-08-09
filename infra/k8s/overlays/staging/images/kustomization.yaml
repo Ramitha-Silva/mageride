@@ -1,0 +1,85 @@
+# GENERATED FILE — do not edit.
+# Source: infra/k8s/service-catalog.yaml
+# Regenerate: python3 infra/k8s/tools/generate_manifests.py
+#
+# staging: the promoted image tag for all 34 images (D7' §7 —
+# "dev->staging->prod promotion by image SHA tag").
+#
+# Every image carries the SAME tag, because a deploy is one commit's worth of
+# platform and not a per-service version matrix. `sha-0000000` is unpullable on
+# purpose: an environment that has never been promoted must fail to pull rather
+# than quietly run `latest`.
+#
+# Written by: python3 infra/k8s/tools/set_image_tag.py staging sha-<7>
+---
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+images:
+  - name: ghcr.io/mageride/api-gateway
+    newTag: sha-0000000
+  - name: ghcr.io/mageride/fanout-svc
+    newTag: sha-0000000
+  - name: ghcr.io/mageride/iam-svc
+    newTag: sha-0000000
+  - name: ghcr.io/mageride/registry-svc
+    newTag: sha-0000000
+  - name: ghcr.io/mageride/provisioning-svc
+    newTag: sha-0000000
+  - name: ghcr.io/mageride/query-svc
+    newTag: sha-0000000
+  - name: ghcr.io/mageride/trip-state-svc
+    newTag: sha-0000000
+  - name: ghcr.io/mageride/ride-svc
+    newTag: sha-0000000
+  - name: ghcr.io/mageride/dispatch-svc
+    newTag: sha-0000000
+  - name: ghcr.io/mageride/reputation-svc
+    newTag: sha-0000000
+  - name: ghcr.io/mageride/fare-svc
+    newTag: sha-0000000
+  - name: ghcr.io/mageride/wallet-svc
+    newTag: sha-0000000
+  - name: ghcr.io/mageride/subscription-svc
+    newTag: sha-0000000
+  - name: ghcr.io/mageride/notification-svc
+    newTag: sha-0000000
+  - name: ghcr.io/mageride/safety-svc
+    newTag: sha-0000000
+  - name: ghcr.io/mageride/support-svc
+    newTag: sha-0000000
+  - name: ghcr.io/mageride/content-svc
+    newTag: sha-0000000
+  - name: ghcr.io/mageride/transit-svc
+    newTag: sha-0000000
+  - name: ghcr.io/mageride/fleet-svc
+    newTag: sha-0000000
+  - name: ghcr.io/mageride/fleet-billing-svc
+    newTag: sha-0000000
+  - name: ghcr.io/mageride/payout-svc
+    newTag: sha-0000000
+  - name: ghcr.io/mageride/voip-svc
+    newTag: sha-0000000
+  - name: ghcr.io/mageride/ocr-svc
+    newTag: sha-0000000
+  - name: ghcr.io/mageride/admin-bff
+    newTag: sha-0000000
+  - name: ghcr.io/mageride/public-bff
+    newTag: sha-0000000
+  - name: ghcr.io/mageride/mqtt-bridge-svc
+    newTag: sha-0000000
+  - name: ghcr.io/mageride/position-processor-svc
+    newTag: sha-0000000
+  - name: ghcr.io/mageride/persistence-writer-svc
+    newTag: sha-0000000
+  - name: ghcr.io/mageride/fleet-health-svc
+    newTag: sha-0000000
+  - name: ghcr.io/mageride/tcp-adapter
+    newTag: sha-0000000
+  - name: ghcr.io/mageride/admin-portal
+    newTag: sha-0000000
+  - name: ghcr.io/mageride/fleet-portal
+    newTag: sha-0000000
+  - name: ghcr.io/mageride/web-passenger
+    newTag: sha-0000000
+  - name: ghcr.io/mageride/migrate
+    newTag: sha-0000000

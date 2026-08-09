@@ -1,0 +1,101 @@
+# =====================================================================================
+# `common-config` — D7' §5's ConfigMap, holding D7' §4.1's non-secret set.
+#
+# The counterpart of infra/env/.env.common.example, and the same values wherever the two
+# can agree. Where they differ it is because the flat compose file is written for one
+# `app-services` process and these manifests are not (see the C025 header) — every such
+# line says so.
+#
+# THE SECRET HALF OF §4.1 IS NOT HERE. `ConnectionStrings__Postgres` is marked Secret in
+# §4.1 and lives in `common-secret`, from Vault. A DSN with a password in a ConfigMap is a
+# password in `kubectl get cm -o yaml`, which is a wider audience than it looks.
+#
+# Anything environment-specific — the object-store endpoint, the public hostnames, the
+# OTLP collector — is patched by the overlay, not defaulted here.
+# =====================================================================================
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: common-config
+  namespace: mageride
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+    app.kubernetes.io/part-of: mageride
+data:
+  # --- Runtime -----------------------------------------------------------------------
+  ASPNETCORE_ENVIRONMENT: Production
+  DOTNET_gcServer: "1"
+
+  # --- Redis / Redpanda --------------------------------------------------------------
+  # In-namespace DNS. StackExchange.Redis parses its own configuration-string form, not a
+  # URI, which is why this is not the `redis://redis:6379` §4.1 prints (C002).
+  ConnectionStrings__Redis: redis:6379
+  Kafka__BootstrapServers: redpanda:9092
+
+  # --- Auth --------------------------------------------------------------------------
+  # iam-svc's own well-known URI, not the `/v1/internal/iam/...` path §4.1 prints: that
+  # prefix is the gateway's route to the composed process, and iam-svc serves RFC 8615's
+  # path directly (C020). `.env.common.example` has the same value wrong and flags it as a
+  # micro-change-set; the skeleton compose already carries the corrected form.
+  Jwt__JwksUrl: http://iam-svc/.well-known/jwks.json
+  Jwt__Issuer: https://iam.mageride.lk
+  Jwt__RequireHttpsMetadata: "true"
+
+  # --- Telemetry ---------------------------------------------------------------------
+  # DELIBERATELY EMPTY, exactly as in .env.common.example. An endpoint pointed at a
+  # collector that is not running makes every exporter retry on a timeout, which shows up
+  # as start-up latency in services that have nothing to do with telemetry. Set it in the
+  # overlay once an OTLP collector exists in the cluster — for tcp-adapter it is the ONLY
+  # telemetry path, because that process has no /metrics to scrape (C119).
+  Otel__Endpoint: ""
+  Otel__ServiceNamespace: mageride
+  Otel__PrometheusEnabled: "true"
+
+  # --- Region ------------------------------------------------------------------------
+  # D-38: every business date is computed in Asia/Colombo, never in UTC and never in the
+  # node's zone. Both spellings, because .NET reads the first and the base image's tzdata
+  # the second.
+  Region__Timezone: Asia/Colombo
+  TZ: Asia/Colombo
+
+  # --- MQTT (EMQX) -------------------------------------------------------------------
+  # The in-cluster plaintext listener. 8883 (mTLS trackers) and 8084 (WSS mobile) are
+  # published by a LoadBalancer Service and never routed through the Ingress or the API
+  # gateway (infra/CLAUDE.md); nothing inside the cluster dials them.
+  Mqtt__Host: emqx
+  Mqtt__Port: "1883"
+  Mqtt__UseTls: "false"
+  Mqtt__Issuer: mageride-provisioning
+  # E-02: the MQTT session JWT is decoupled from the 30-minute API access token, so a
+  # refresh that fails in poor coverage does not stop a ride's position stream.
+  Mqtt__SessionTokenMinimumTtl: "04:00:00"
+  Mqtt__SessionTokenRideGrace: "02:00:00"
+
+  # --- Object storage ----------------------------------------------------------------
+  # Bucket names are the same everywhere; the endpoint and credentials are not. Production
+  # is Cloudflare R2 (D7' §8) — the overlay sets `Storage__S3__Endpoint` and the two keys
+  # come from Vault.
+  Storage__DocumentsBucket: mageride-documents
+  Storage__ProofsBucket: mageride-proofs
+  Storage__ProfileBucket: mageride-profile
+  Storage__ScreenshotBucket: mageride-screenshots
+  Storage__EnsureBucket: "true"
+  Storage__UrlTtl: "00:05:00"
+  # NFR-28's 90 days, applied as a lifecycle rule scoped to the `ephemeral/` prefix — a
+  # bucket-wide rule would also delete every driver's own LankaQR image (AL-59), which is
+  # what a passenger scans to pay them, and the payment rail would break one driver at a
+  # time with nothing to see.
+  Storage__RawRetention: 90.00:00:00
+
+  # --- Kernel defaults, spelled out because they are load-bearing --------------------
+  # `Json` keeps a replayed response body byte-for-byte, which is what R-14 and ADD §11.13
+  # require; `Jsonb` reorders keys. Migration 0603 landed the column as `json` to match.
+  CommandLog__BodyStorage: Json
+  Idempotency__ReservationTimeoutSec: "60"
+
+  # PgBouncer is in transaction mode in front of every service (ADD §9.3), so the kernel
+  # must not assume a session it does not have. The E-09 outbox LISTEN uses
+  # `ConnectionStrings__PostgresDirect` instead, which bypasses the pooler.
+  Postgres__PgBouncerTransactionMode: "true"

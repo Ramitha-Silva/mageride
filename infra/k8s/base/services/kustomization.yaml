@@ -1,0 +1,39 @@
+# GENERATED FILE — do not edit.
+# Source: infra/k8s/service-catalog.yaml
+# Regenerate: python3 infra/k8s/tools/generate_manifests.py
+#
+# 30 backend workloads (D7' §5). One file per service, generated from the catalog.
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - admin-bff.yaml
+  - api-gateway.yaml
+  - content-svc.yaml
+  - dispatch-svc.yaml
+  - fanout-svc.yaml
+  - fare-svc.yaml
+  - fleet-billing-svc.yaml
+  - fleet-health-svc.yaml
+  - fleet-svc.yaml
+  - iam-svc.yaml
+  - mqtt-bridge-svc.yaml
+  - notification-svc.yaml
+  - ocr-svc.yaml
+  - payout-svc.yaml
+  - persistence-writer-svc.yaml
+  - position-processor-svc.yaml
+  - provisioning-svc.yaml
+  - public-bff.yaml
+  - query-svc.yaml
+  - registry-svc.yaml
+  - reputation-svc.yaml
+  - ride-svc.yaml
+  - safety-svc.yaml
+  - subscription-svc.yaml
+  - support-svc.yaml
+  - tcp-adapter.yaml
+  - transit-svc.yaml
+  - trip-state-svc.yaml
+  - voip-svc.yaml
+  - wallet-svc.yaml

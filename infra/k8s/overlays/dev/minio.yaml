@@ -1,0 +1,119 @@
+# =====================================================================================
+# MinIO — object storage, DEV ONLY.
+#
+# Not in base, because production has no MinIO: D7' §8 puts documents, proofs, profile
+# pictures and support screenshots on **Cloudflare R2**, which is an external endpoint and a
+# pair of credentials rather than a workload. A dev cluster has no R2 bucket, so it gets the
+# S3-compatible server the dev compose stack already uses (Container 10).
+#
+# ONE CONTAINER, ONE PVC, no erasure coding. This is the single-drive `server /data` form —
+# a dev cluster's object store is allowed to be a single point of failure, and pretending
+# otherwise with four drives on one node would only make the failure slower to diagnose.
+#
+# --- MINIO_KMS_SECRET_KEY is not optional -------------------------------------------
+# Without it MinIO refuses EVERY encrypted upload, including plain SSE-S3 (`AES256`) —
+# because MinIO implements SSE-S3 through its own KMS. D-36 requires encryption at rest and
+# the kernel's object store always asks for it, so an unconfigured MinIO answers "Server side
+# encryption specified but KMS is not configured" to every PUT and every document upload
+# fails with a 500 (C063). The same line is in infra/docker-compose.dev.slim.yml for the same
+# reason.
+# =====================================================================================
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio
+  namespace: mageride
+  labels:
+    app: minio
+    app.kubernetes.io/name: minio
+    app.kubernetes.io/component: data
+    app.kubernetes.io/part-of: mageride
+spec:
+  type: ClusterIP
+  selector: { app: minio }
+  ports:
+    - { name: s3, port: 9000, targetPort: s3, protocol: TCP }
+    - { name: console, port: 9001, targetPort: console, protocol: TCP }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: minio
+  namespace: mageride
+  labels:
+    app: minio
+    app.kubernetes.io/name: minio
+    app.kubernetes.io/component: data
+    app.kubernetes.io/part-of: mageride
+spec:
+  serviceName: minio
+  replicas: 1
+  selector:
+    matchLabels: { app: minio }
+  template:
+    metadata:
+      labels:
+        app: minio
+        app.kubernetes.io/name: minio
+        app.kubernetes.io/component: data
+        app.kubernetes.io/part-of: mageride
+    spec:
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: minio
+          image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+          args: ["server", "/data", "--console-address", ":9001"]
+          env:
+            # The SAME two values every service reads as `Storage__S3__AccessKey` /
+            # `Storage__S3__SecretKey`. One credential, two names, one Vault property — a
+            # separate root password here would be an object store nothing can write to.
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef: { name: common-secret, key: Storage__S3__AccessKey }
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: common-secret, key: Storage__S3__SecretKey }
+            # See the header. Not optional.
+            - name: MINIO_KMS_SECRET_KEY
+              valueFrom:
+                secretKeyRef: { name: minio-kms, key: kms_secret_key }
+          ports:
+            - { name: s3, containerPort: 9000, protocol: TCP }
+            - { name: console, containerPort: 9001, protocol: TCP }
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { cpu: "1", memory: 1Gi }
+          readinessProbe:
+            httpGet: { path: /minio/health/ready, port: s3 }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 6
+          livenessProbe:
+            httpGet: { path: /minio/health/live, port: s3 }
+            initialDelaySeconds: 20
+            periodSeconds: 15
+            failureThreshold: 6
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: miniodata, mountPath: /data }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - { name: tmp, emptyDir: {} }
+  volumeClaimTemplates:
+    - metadata:
+        name: miniodata
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 20Gi

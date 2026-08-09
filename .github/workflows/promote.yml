@@ -1,0 +1,131 @@
+# =====================================================================================
+# Promote a SHA that is already on staging to production (C124).
+#
+#   gh workflow run promote.yml -f sha=<full commit sha>
+#
+# The only thing that writes `infra/k8s/overlays/production/images/`. The approval lives in the
+# GitHub `production` environment on `deploy.yml`'s promote job, so this workflow cannot be made
+# to skip it — the reviewer is a property of the environment, not of this file.
+#
+# --- The one precondition, and why it is checked here -----------------------------------
+# A SHA can only go to production if the SAME SHA is what staging is running. Not "was running",
+# not "passed CI" — is running, right now, according to the repository. That closes the two ways
+# an untested revision reaches production:
+#
+#   * promoting a commit whose CI was green but which was never deployed anywhere;
+#   * promoting a commit that staging had, but that a later staging promotion has since replaced
+#     (so what was actually exercised is a different revision).
+#
+# The check reads `overlays/staging/images/`, which is the repository's record of what is
+# deployed. That is the same source `deploy.yml` reads to decide which migrations are new, and
+# using one source for both is what keeps the promotion chain honest.
+# =====================================================================================
+
+name: promote
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Full commit SHA to promote (must be the one staging is running)
+        required: true
+        type: string
+      reason:
+        description: Why now — a release name, a ticket, "hotfix for <x>"
+        required: false
+        type: string
+      allow-not-on-staging:
+        description: >-
+          Break the "must be on staging" rule. For a hotfix during an incident where staging is
+          itself broken. Says so in the commit message and in the summary.
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: promote-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  precondition:
+    name: this SHA is on staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - name: check
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet pyyaml
+          staging=$(python3 infra/k8s/tools/set_image_tag.py staging --print)
+          want="sha-${SHA::7}"
+          echo "staging is running $staging; asked to promote $want"
+
+          if [ "$staging" = "$want" ]; then
+            echo "::notice::$want is what staging is running"
+            exit 0
+          fi
+
+          if [ "$OVERRIDE" = "true" ]; then
+            echo "::warning::$want is NOT what staging is running ($staging), and\
+             allow-not-on-staging was set. This revision has not been exercised on staging."
+            exit 0
+          fi
+
+          echo "::error::refusing to promote $want — staging is running $staging.\
+           Deliver it to staging first (push to main, or 'gh workflow run cd.yml -f sha=$SHA'),\
+           or set allow-not-on-staging for an incident hotfix."
+          exit 1
+        env:
+          SHA: ${{ inputs.sha }}
+          OVERRIDE: ${{ inputs.allow-not-on-staging }}
+
+      # The images have to still exist. A registry retention policy that pruned them turns a
+      # promotion into 34 ImagePullBackOffs, and the pods that are already running stay up — so
+      # the symptom is a deploy that reports success and changes nothing.
+      - name: the images are still in the registry
+        run: |
+          set -euo pipefail
+          tag="sha-${SHA::7}"
+          ns="${IMAGE_NAMESPACE}"
+          # Through the environment, never interpolated into the command line: a secrets expression
+          # inside a `run:` string ends up in the process arguments, which `ps` can read and which any
+          # `set -x` would print. (Note that Actions expands those expressions even inside a shell
+          # comment, which is a second reason not to write one here.)
+          token=$(curl -s -u "${GH_ACTOR}:${GH_TOKEN}" \
+            "https://ghcr.io/token?scope=repository:${ns}/api-gateway:pull&service=ghcr.io" \
+            | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])')
+          code=$(curl -s -o /dev/null -w '%{http_code}' \
+            -H "Authorization: Bearer $token" \
+            -H 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.v2+json' \
+            "https://ghcr.io/v2/${ns}/api-gateway/manifests/${tag}")
+          test "$code" = "200" || {
+            echo "::error::ghcr.io/${ns}/api-gateway:${tag} is not in the registry (HTTP $code).\
+             Rebuild it: gh workflow run images.yml -f sha=${SHA}"
+            exit 1
+          }
+          echo "::notice::api-gateway:${tag} is present — a spot check, not all 34"
+        env:
+          SHA: ${{ inputs.sha }}
+          IMAGE_NAMESPACE: ${{ vars.IMAGE_NAMESPACE || 'mageride' }}
+          GH_ACTOR: ${{ github.actor }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  production:
+    name: production
+    needs: precondition
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: production
+      sha: ${{ inputs.sha }}
+      reason: ${{ inputs.reason || 'manual promotion' }}${{ inputs.allow-not-on-staging && ' (NOT VERIFIED ON STAGING)' || '' }}
+    permissions:
+      contents: write
+    secrets: inherit
