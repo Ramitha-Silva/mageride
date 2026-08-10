@@ -116,6 +116,11 @@ step "1. docker compose config"
 # Compose the RUNNERS have, so this check was red in CI and green on the build host for weeks
 # with no way to tell from the log why (C124's CI repair). It also prints the version, because
 # that turned out to be the whole story.
+# EMQX will not boot without infra/deploy/device-ca/certs/ca_chain.crt, and that directory is
+# gitignored — so a fresh checkout (every CI runner) has none. Generate it before anything is
+# brought up. Idempotent; shared with dev-up.sh (Δ C124).
+bash "$REPO_ROOT/infra/scripts/ensure-device-ca.sh" >/dev/null
+
 docker compose version --short 2>/dev/null | sed 's/^/       docker compose /'
 for f in "$SLIM" "$FULL"; do
   if err=$(docker compose -f "$f" config 2>&1 >/dev/null); then s=ok; else s=fail; fi
