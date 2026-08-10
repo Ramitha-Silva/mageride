@@ -1,0 +1,55 @@
+# The portal images' build context, kept separate from the root `.dockerignore`.
+#
+# BuildKit reads `<path-to-dockerfile>.dockerignore` in preference to the root one, which is the
+# only reason this file exists. The root `.dockerignore` excludes `portals/` — "nothing outside
+# backend/ and db/ contributes to a .NET image", which is true of the 31 .NET images and fatal for
+# these three. Building a portal from the repository root under the root ignore file fails at
+#
+#   ERROR: failed to calculate checksum of ref ...: "/portals": not found
+#
+# and it failed that way from the day Dockerfile.portal was written (C010): the compose stack
+# cannot build the portals until Wave 2, and nothing else invoked this template, so the first run
+# of it was cd's images job on 2026-08-10.
+
+# Build output — 100+ MB of it, and it must never leak into an image layer.
+# node_modules is rebuilt by `npm ci` in the deps stage; copying the host's would defeat the
+# lockfile and can carry the wrong platform's binaries.
+**/node_modules/
+**/.next/
+**/out/
+**/bin/
+**/obj/
+**/build/
+**/.gradle/
+
+.git/
+.github/
+
+# Nothing outside portals/ contributes to a portal image.
+apps/
+backend/
+db/
+docs/
+infra/
+specs/
+shared/
+gradle/
+gradlew
+gradlew.bat
+*.gradle.kts
+gradle.properties
+global.json
+
+# Never copy a real environment file into an image (infra/CLAUDE.md). A portal bundle is served to
+# a browser, so this matters more here than anywhere else: `.env.local` in a Next.js build is
+# inlined into client JavaScript for every NEXT_PUBLIC_ key and shipped to every visitor.
+.env
+.env.*
+!*.env.example
+!.env.*.example
+
+**/*.user
+**/.vs/
+**/.vscode/
+**/.idea/
+**/*.log
