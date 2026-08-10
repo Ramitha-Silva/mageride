@@ -93,6 +93,11 @@ jobs:
     outputs:
       images: ${{ steps.build.outputs.images }}
       tag: ${{ steps.build.outputs.tag }}
+      # Whether GitHub's attestation store will accept this repository. Asked of the API rather
+      # than read from `github.event.repository.private`, because this workflow is called from
+      # three different events (workflow_run, schedule, workflow_dispatch) and a payload key that
+      # is absent makes `!private` true — which is the direction that reproduces the bug.
+      attestable: ${{ steps.visibility.outputs.attestable }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -109,6 +114,22 @@ jobs:
           echo "::notice::$(echo "$images" | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))') images at tag sha-${SHA::7}"
         env:
           SHA: ${{ inputs.sha }}
+
+      - name: can provenance be attested?
+        id: visibility
+        run: |
+          set -euo pipefail
+          private=$(gh api "repos/$GITHUB_REPOSITORY" --jq '.private')
+          owner=$(gh api "repos/$GITHUB_REPOSITORY" --jq '.owner.type')
+          # The store rejects exactly one combination: a private repository owned by a User.
+          if [ "$private" = "true" ] && [ "$owner" = "User" ]; then
+            echo "attestable=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::build provenance will be skipped — private repository owned by a User"
+          else
+            echo "attestable=true" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
 
       # The generated manifests must match the catalog before anything is built from it —
       # otherwise the promotion writes a tag for an image list nobody deployed.
@@ -242,13 +263,41 @@ jobs:
           IMAGE: ${{ matrix.image }}
           DIGEST: ${{ steps.build.outputs.digest }}
 
+      # GitHub's attestation store refuses user-owned private repositories outright — "Feature not
+      # available for user-owned private repositories. To enable this feature, please make this
+      # repository public." No flag changes it, and nothing about the image is wrong: the
+      # attestation has nowhere to go. This failed all 28 legs on 2026-08-10 AFTER every image had
+      # built, pushed and been signed, which is the worst place to fail — the work was done and
+      # thrown away.
+      #
+      # What is lost is GitHub's provenance record, not the image's verifiability: the cosign
+      # signature and the SPDX SBOM attestation both live in the registry beside the digest and
+      # neither depends on this step. Moving the repository to an organisation, or making it
+      # public, restores it with no change here.
       - name: build provenance
-        if: inputs.push
+        if: inputs.push && needs.matrix.outputs.attestable == 'true'
         uses: actions/attest-build-provenance@v2
         with:
           subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ matrix.image }}
           subject-digest: ${{ steps.build.outputs.digest }}
           push-to-registry: true
+
+      # A supply-chain control that is skipped in silence reads afterwards as one that ran.
+      - name: provenance was not attested
+        if: inputs.push && needs.matrix.outputs.attestable != 'true'
+        run: |
+          echo "::warning::${IMAGE}: no build provenance — GitHub's attestation store rejects" \
+               "user-owned private repositories. The digest is still cosign-signed and carries" \
+               "an SPDX SBOM attestation."
+          {
+            printf '### %s — no build provenance\n\n' "$IMAGE"
+            echo "\`actions/attest-build-provenance\` is unavailable to user-owned private"
+            echo "repositories. This image **is** signed (\`cosign verify\`) and **does** carry an"
+            echo "SPDX SBOM attestation; only GitHub's provenance record is missing. Move the"
+            echo "repository to an organisation, or make it public, to restore it."
+          } >> "$GITHUB_STEP_SUMMARY"
+        env:
+          IMAGE: ${{ matrix.image }}
 
   # ===================================================================================
   # One place to look for "did every image build and get signed", so the caller has a single

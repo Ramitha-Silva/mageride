@@ -35,6 +35,11 @@ RUN test -n "$SERVICE" || (echo "error: --build-arg SERVICE=<project directory n
 COPY ["global.json", "./"]
 COPY ["backend/Directory.Build.props", "backend/Directory.Packages.props", "backend/"]
 COPY ["backend/src/", "backend/src/"]
+# The four gRPC services (query, reputation, dispatch, safety) declare <Protobuf Include=
+# "..\..\contracts\proto\*.proto">, which resolves OUTSIDE backend/src/. Without this the
+# publish fails at `Could not make proto path relative` — so those four images had never once
+# been built, in CI or anywhere else, until cd first reached the images job on 2026-08-10.
+COPY ["backend/contracts/", "backend/contracts/"]
 # MageRide.Migrations globs db/migrations/*.sql as embedded resources; anything that
 # references it — directly or through MageRide.TestKit — needs them present to restore.
 COPY ["db/migrations/", "db/migrations/"]
