@@ -82,6 +82,68 @@
         "Match": { "Path": "/v1/drivers/profile" },
         "Metadata": { "RateLimit": "write" }
       },
+
+      "registry-driver-payout-profile": {
+        "ClusterId": "registry-svc",
+        "Order": 10,
+        "AuthorizationPolicy": "anonymous",
+        "//": [
+          "AL-58's payout plane (C133), added in C124's CI repair. payout.yaml and registry.yaml",
+          "declared seven public operations when payout-svc landed in wave 3 and the gateway was",
+          "never given the cluster: four were unrouted 404s and three fell through to admin-bff,",
+          "which does not serve them. The gateway is the only way a driver or an admin reaches",
+          "them, so payout-svc was deployed and unreachable — RouteTableTests had been red on main",
+          "since 2026-08-01 saying exactly that.",
+          "",
+          "The profile lives on registry-svc (its contract is registry.yaml) while the payouts",
+          "themselves live on payout-svc. Two services under one /v1/drivers/payout* prefix, which",
+          "is why these are literal Order-10 routes rather than one wildcard."
+        ],
+        "Match": { "Path": "/v1/drivers/payout-profile" },
+        "Metadata": { "RateLimit": "write" }
+      },
+      "registry-driver-payout-documents": {
+        "ClusterId": "registry-svc",
+        "Order": 10,
+        "AuthorizationPolicy": "anonymous",
+        "//": [
+          "Its own route rather than payout-profile/{**remainder}, so a future sub-resource is not",
+          "swallowed without anybody choosing to.",
+          "",
+          "'write', not an upload-specific policy: Gateway.RateLimits.Policies defines admin, auth,",
+          "default, geo, public-track, realtime, sos and write, and every other document upload in",
+          "this table uses write. A dedicated upload bucket may be worth having — a multipart POST",
+          "is not the same load as a JSON PUT — but inventing a policy inside a routing fix is how",
+          "a rate limit ends up with no thought behind it."
+        ],
+        "Match": { "Path": "/v1/drivers/payout-profile/documents" },
+        "Metadata": { "RateLimit": "write" }
+      },
+      "payout-driver-payouts": {
+        "ClusterId": "payout-svc",
+        "Order": 10,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/drivers/payouts" },
+        "Metadata": { "RateLimit": "default" }
+      },
+      "payout-admin": {
+        "ClusterId": "payout-svc",
+        "Order": 20,
+        "AuthorizationPolicy": "anonymous",
+        "//": [
+          "Order 20, like every other /v1/admin/<domain> carve-out: the admin-bff catch-all is at",
+          "Order 90 and would otherwise swallow both of these."
+        ],
+        "Match": { "Path": "/v1/admin/payouts" },
+        "Metadata": { "RateLimit": "admin" }
+      },
+      "payout-admin-batches": {
+        "ClusterId": "payout-svc",
+        "Order": 20,
+        "AuthorizationPolicy": "anonymous",
+        "Match": { "Path": "/v1/admin/payouts/{**remainder}" },
+        "Metadata": { "RateLimit": "admin" }
+      },
       "provisioning-fleet-tracker-bulk": {
         "ClusterId": "provisioning-svc",
         "Order": 10,
@@ -514,6 +576,7 @@
     "Clusters": {
       "iam-svc": { "Destinations": { "primary": { "Address": "http://iam-svc:5000/" } } },
       "registry-svc": { "Destinations": { "primary": { "Address": "http://registry-svc:5000/" } } },
+      "payout-svc": { "Destinations": { "primary": { "Address": "http://payout-svc:5000/" } } },
       "provisioning-svc": { "Destinations": { "primary": { "Address": "http://provisioning-svc:5000/" } } },
       "trip-state-svc": { "Destinations": { "primary": { "Address": "http://trip-state-svc:5000/" } } },
       "ride-svc": { "Destinations": { "primary": { "Address": "http://ride-svc:5000/" } } },

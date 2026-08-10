@@ -111,6 +111,11 @@ data:
   # gateway's per-cluster health checks and load balancing mean anything.
   ReverseProxy__Clusters__iam-svc__Destinations__primary__Address: http://iam-svc/
   ReverseProxy__Clusters__registry-svc__Destinations__primary__Address: http://registry-svc/
+  # AL-58's payout plane. Absent until C124's CI repair: `payout.yaml` declared four public
+  # operations when C133 landed payout-svc in wave 3, the gateway had no cluster for them, and this
+  # map mirrors the gateway — so these manifests deployed payout-svc and gave nothing a way to reach
+  # it. `RouteTableTests` had been red on main since 2026-08-01 saying so.
+  ReverseProxy__Clusters__payout-svc__Destinations__primary__Address: http://payout-svc/
   ReverseProxy__Clusters__provisioning-svc__Destinations__primary__Address: http://provisioning-svc/
   ReverseProxy__Clusters__query-svc__Destinations__primary__Address: http://query-svc/
   ReverseProxy__Clusters__trip-state-svc__Destinations__primary__Address: http://trip-state-svc/

@@ -192,11 +192,22 @@ public sealed class PersistenceWriterTests(PostgresFixture postgres)
     {
         await RequireAsync();
 
-        var journey = await WriterParts.CreateJourneyAsync(postgres, mode: "A");
+        // RELATIVE, not an absolute literal, and the session opens BEFORE the sampled minute.
+        // `OperationalSampler` drops a fix earlier than its session's `started_at` ("a sample from
+        // before its session started is dropped"), and `CreateJourneyAsync` defaults the session to
+        // now(). A hard-coded `2026-07-30 08:15` was in the present on the day this was written and
+        // has been in the past on every day since, so the sampler correctly discarded all twelve
+        // fixes and `Sampled` came back 0 — the failure took 35 ms because nothing reached the
+        // database. Every other test in this file was already UtcNow-relative; these two were the
+        // outliers, and they are why CI's backend leg went red around C040 and stayed red.
+        var startedAt = DateTimeOffset.UtcNow.AddMinutes(-10);
+        var journey = await WriterParts.CreateJourneyAsync(postgres, mode: "A", startedAt: startedAt);
         var writer = WriterParts.Writer(postgres);
 
         // Twelve fixes at a five-second cadence — one minute of D5' §5.2 Mode A standby reporting.
-        var minute = new DateTimeOffset(2026, 7, 30, 8, 15, 0, TimeSpan.Zero);
+        // Truncated to a minute boundary because the assertion below is that the stored row is
+        // stamped at one, which is what makes the write idempotent with no per-vehicle memory.
+        var minute = Minute(DateTimeOffset.UtcNow.AddMinutes(-5));
         var batch = WriterParts.Rows(
             [.. Enumerable.Range(0, 12).Select(i =>
                 WriterParts.Fix(
@@ -236,10 +247,12 @@ public sealed class PersistenceWriterTests(PostgresFixture postgres)
     {
         await RequireAsync();
 
-        var journey = await WriterParts.CreateJourneyAsync(postgres, mode: "B");
+        // Relative, and the session opens first — same reason as the test above.
+        var journey = await WriterParts.CreateJourneyAsync(
+            postgres, mode: "B", startedAt: DateTimeOffset.UtcNow.AddMinutes(-10));
         var writer = WriterParts.Writer(postgres);
 
-        var minute = new DateTimeOffset(2026, 7, 30, 9, 0, 0, TimeSpan.Zero);
+        var minute = Minute(DateTimeOffset.UtcNow.AddMinutes(-5));
 
         // Two batches whose fixes fall in the same minute but carry different sequences — which is
         // what a rebalance mid-minute produces, and the case an in-process "last written minute"
@@ -442,6 +455,18 @@ public sealed class PersistenceWriterTests(PostgresFixture postgres)
         Assert.SkipWhen(!postgres.IsAvailable, postgres.SkipReason ?? string.Empty);
         await postgres.EnsureMigratedAsync();
     }
+
+    /// <summary>
+    /// <paramref name="instant"/> truncated to its minute boundary, in UTC.
+    /// </summary>
+    /// <remarks>
+    /// The operational sample is stamped at the minute boundary — that is what makes the write
+    /// idempotent against <c>ux_possample_session_minute</c> with no per-vehicle memory — so a test
+    /// that asserts the stored timestamp has to hand the writer a clean minute. Truncating a relative
+    /// `UtcNow` gives that without an absolute literal, which is what went stale here.
+    /// </remarks>
+    private static DateTimeOffset Minute(DateTimeOffset instant) =>
+        new(instant.Year, instant.Month, instant.Day, instant.Hour, instant.Minute, 0, TimeSpan.Zero);
 
     private sealed record StoredPosition(
         Guid VehicleId,

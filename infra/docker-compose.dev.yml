@@ -154,9 +154,11 @@ services:
       - path: env/.env.app
         required: false
     environment:
-      # 21 domain clusters -> the co-located app-services process.
+      # 22 domain clusters -> the co-located app-services process.
       ReverseProxy__Clusters__iam-svc__Destinations__primary__Address:          http://app-services:5000/
       ReverseProxy__Clusters__registry-svc__Destinations__primary__Address:     http://app-services:5000/
+      # AL-58's payout plane (C133), added with the gateway cluster in C124's CI repair.
+      ReverseProxy__Clusters__payout-svc__Destinations__primary__Address:       http://app-services:5000/
       ReverseProxy__Clusters__provisioning-svc__Destinations__primary__Address: http://app-services:5000/
       ReverseProxy__Clusters__query-svc__Destinations__primary__Address:        http://app-services:5000/
       ReverseProxy__Clusters__trip-state-svc__Destinations__primary__Address:   http://app-services:5000/
@@ -409,8 +411,19 @@ services:
 # cleanly while they are absent, so adding a portal container needs no HAProxy change.
 # -------------------------------------------------------------------------------------
 
-volumes:
-  # C030 replaced the `provisioning-ca-data` named volume with a bind mount of
-  # infra/deploy/device-ca (gitignored): EMQX loads the same CA as its 8883 cacertfile and
-  # a named volume is not readable by the host script that has to create it first. See the
-  # app-services `volumes:` block above and infra/scripts/dev-up.sh.
+# --- No top-level `volumes:` key here, and it must stay absent -------------------------
+# C030 replaced the `provisioning-ca-data` named volume with a bind mount of
+# infra/deploy/device-ca (gitignored): EMQX loads the same CA as its 8883 cacertfile and
+# a named volume is not readable by the host script that has to create it first. See the
+# app-services `volumes:` block above and infra/scripts/dev-up.sh. The five volumes this
+# stack does use are declared in docker-compose.dev.slim.yml, which this file `include`s.
+#
+# The KEY was left here with only comments under it, which makes its YAML value `null`
+# rather than a map. Docker Compose v5.3.1 then PANICS in the include loader
+# (`importResource`: "interface conversion: interface {} is nil, not
+# map[string]interface {}") — a hard crash, not a validation error, so
+# `docker compose -f infra/docker-compose.dev.yml config` exited 2 and took eight of
+# slim-verify.sh's checks down with it: the project-name comparison, wait-healthy, "emqx is
+# healthy", and all five MQTT ACL assertions, which reported "refused" because there was no
+# broker rather than because the ACL denied anything. Found in C124's CI repair; an older
+# Compose tolerated the null and this one does not.

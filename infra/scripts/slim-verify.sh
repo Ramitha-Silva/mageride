@@ -152,12 +152,31 @@ for svc in migrate redpanda-init minio-init; do
   check "$svc completed successfully" "exited:0" "${code:-<missing>}"
 done
 
-# The migrate job must actually have found the C003-C006 scripts, not silently no-opped
-# against an empty script set.
+# The migrate job must actually have found the scripts, not silently no-opped against an
+# empty script set.
+#
+# Δ C124: this hard-coded 67, the wave-0 count from C003-C006, and db/migrations has grown to
+# 138 — so the check has been red on every push since roughly C045 while asserting nothing
+# useful. It now counts the .sql files in the repository, which is the number that has to
+# match: a journal with FEWER rows than there are scripts is a migrate job that stopped
+# early, and one with MORE is a journal from an older schema in a reused volume. Neither is
+# expressible as a literal that somebody has to remember to bump.
+expected_migrations=$(find "$REPO_ROOT/db/migrations" -maxdepth 1 -name '*.sql' | wc -l | tr -d '[:space:]')
 applied=$(docker compose -f "$SLIM" exec -T postgres \
             psql -U postgres -d mageride -tAqc \
             "select count(*) from public.schema_versions" 2>/dev/null | tr -d '[:space:]' || true)
-check "migrations journalled (67 scripts from C003-C006)" "67" "${applied:-0}"
+check "every migration is journalled ($expected_migrations scripts in db/migrations)" \
+  "$expected_migrations" "${applied:-0}"
+
+# A shortfall here is almost always a STALE IMAGE rather than a broken migration, and the
+# difference is not guessable from "expected 138, actual 74". MageRide.Migrations.csproj takes
+# db/migrations/*.sql as <EmbeddedResource>, so the scripts are baked in at publish time: a
+# cached `mageride/migrate:dev` carries whatever existed when it was built, and compose reuses
+# it because nothing here passes --build. CI never sees this (every runner builds fresh).
+if [ "${applied:-0}" -lt "$expected_migrations" ] 2>/dev/null; then
+  printf '       the migrate image embeds db/migrations at PUBLISH time — a cached image carries\n'
+  printf '       an older set. Rebuild it:  docker compose -f %s build migrate\n' "$SLIM"
+fi
 
 # PgBouncer is in transaction mode, and every service reaches Postgres through it.
 pool_mode=$(docker compose -f "$SLIM" exec -T pgbouncer sh -c \
@@ -263,14 +282,45 @@ D7_COMMON=(
 )
 # D7' §4.2, verbatim, every row.
 D7_APP=(
+  # ── Δ C124: eight §4.2 spellings below are the LANDED names, not the spec's ────────────
+  # This list had been asserting eleven variables that nothing in the platform binds, so the
+  # check has been red on main since roughly C045 while telling nobody anything. Each
+  # replacement is sourced from the code or from the env template's own comment, not chosen
+  # here — and a check that asserts a spelling no service reads is asserting dead
+  # configuration:
+  #
+  #   Google__ClientId         -> Oidc__Google__ClientIds__0    C026: a LIST, under `Oidc`
+  #   Apple__ClientId          -> Oidc__Apple__ClientIds__0     C026
+  #   Outbox__Channel          -> Ride__Outbox__Channel         per bounded context; one flat
+  #                                                             key cannot serve five (C025)
+  #   Dispatch__OfferTtlSec    -> Dispatch__OfferTtl            a TimeSpan, not an int of seconds
+  #   Login__MaxFailedAttempts -> Auth__MaxFailedAttempts       iam-svc's, not admin-bff's —
+  #   Login__LockoutMinutes    -> Auth__LockoutDuration         AL-07 puts every credential
+  #   Login__IpAllowList       -> Auth__InternalRoleIpAllowList__0   path there (AdminBffOptions)
+  #   Emqx__SharedSub          -> MqttBridge__LiveShareGroup    C024 replaced the whole topic
+  #                                                             with the group name
+  #
+  # And three are REMOVED rather than renamed, because they are not settings at all:
+  #   Rbac__DenyByDefault      AL-06 deny-by-default is structural. "Not a switch" —
+  #                            AdminBffOptions' own remark.
+  #   SignalR__BackplaneRedis  There is no SignalR backplane, deliberately. C041 carries the
+  #                            directed sends on `fanout:control` and keeps per-cell batches
+  #                            off it; AddStackExchangeRedis would give a passenger one copy
+  #                            of every frame per replica.
+  #   Geocell__Res             R-06 fixes the grid at res 7 and the KMP module hard-fails its
+  #                            own build if res 8 appears. A constant in
+  #                            MageRide.Shared.Geo.GeoCells, not a knob.
+  #
+  # All three belong in a micro-change-set against D7' §4.2 rather than in a template.
+
   Sms__NotifyLkApiKey Jwt__SigningKeyPem Otp__ResendCooldownSec Otp__MaxPerHour
-  Google__ClientId Apple__ClientId
+  Oidc__Google__ClientIds__0 Oidc__Apple__ClientIds__0
   Ocr__Endpoint Onepay__MerchantOnboardingUrl
   StepCa__Url StepCa__RootKeyPath Cred__RotationDays
   Tiles__BaseUrl Nominatim__Url
   Session__IdleTimeoutMin Geofence__AutoEndM
-  Otp__PepperKey Quartz__SchedulerName Outbox__Channel
-  Dispatch__OfferTtlSec Dispatch__GlobalTimeoutSec JobBoard__RadiusKm Wallet__CacheTtlSec
+  Otp__PepperKey Quartz__SchedulerName Ride__Outbox__Channel
+  Dispatch__OfferTtl Dispatch__GlobalTimeoutSec JobBoard__RadiusKm Wallet__CacheTtlSec
   Onepay__ApiKey Onepay__WebhookSecret LankaQr__MerchantId
   Fee__FirstTripFree Tz
   ComBankIpg__WebhookSecret LowBalance__ThresholdMinor
@@ -280,15 +330,14 @@ D7_APP=(
   Cache__Ttl
   Storage__ScreenshotBucket
   Fleet__RlsEnabled Fleet__VerificationGate
-  Audit__Topic Pdpa__DueDays Rbac__DenyByDefault
-  Login__MaxFailedAttempts Login__LockoutMinutes Login__IpAllowList
+  Audit__Topic Pdpa__DueDays
+  Auth__MaxFailedAttempts Auth__LockoutDuration Auth__InternalRoleIpAllowList__0
   Gemini__ApiKey Gemini__Model Redaction__Enabled
   LiveKit__ApiKey LiveKit__Secret Turn__Realm
   Plausibility__MaxAccuracyM Replay__MaxPerSec
   Timescale__BatchRows Timescale__FlushMs
-  Emqx__SharedSub
+  MqttBridge__LiveShareGroup
   Health__OfflinePct Health__WindowMin
-  SignalR__BackplaneRedis Geocell__Res
   Adapter__Ports Provisioning__ImeiCacheKey
 )
 

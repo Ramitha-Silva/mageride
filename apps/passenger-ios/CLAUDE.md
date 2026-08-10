@@ -718,6 +718,19 @@ constraint, and each is called out at its call site.
 - **`SWIFT_STRICT_CONCURRENCY` is `minimal`**, deliberately, for C085's reason. The three `actor`s
   here (`HubSubscriptions`, `LiveHubInbox`, `PassengerDatabase`) each hold a non-`Sendable` Kotlin
   collaborator, which is what raising it will surface first.
+- **`firebase-ios-sdk` is pinned to `upToNextMinorVersion` from `11.13.0`, and the bound matters.**
+  It was `upToNextMajorVersion` from `11.0.0` with no committed `Package.resolved`, so every CI run
+  resolved fresh — and **11.14.0 is the first release that needs Swift 6**: `FIRAllocatedUnfairLock`
+  uses the `sending` parameter modifier and `HeartbeatsPayload` uses access-level imports, neither of
+  which Swift 5.10 can parse. `macos-14` ships Xcode 15 / Swift 5.10, so the `build (ios)` leg failed
+  in `** ARCHIVE FAILED **` inside the SDK's own sources, with nothing in this repository at fault.
+  11.13.0 is the last release that compiles; the boundary was established by reading
+  `FIRAllocatedUnfairLock.swift` at each tag (C124's CI repair), not guessed.
+  **Two follow-ups, both for whoever has the Mac:** commit a `Package.resolved` so resolution stops
+  being a moving target at all, and decide whether to move the leg to a runner with Xcode 16 — which
+  is the only way past 11.13.x, and which will also raise every Swift 6 concurrency diagnostic that
+  `SWIFT_STRICT_CONCURRENCY = minimal` is currently holding back. **Neither the pin nor the archive
+  has been compiled: this host has no Xcode** (root `CLAUDE.md`).
 - **`FirebaseApp.configure()` is guarded on `GoogleService-Info.plist` being present**, and it is not
   in this repository (C124 owns the Firebase project). Calling it without one raises an Objective-C
   exception, which Swift cannot catch. Push registration therefore answers `nil` on every build

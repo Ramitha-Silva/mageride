@@ -446,9 +446,27 @@ internal sealed class SupportHarness : IAsyncDisposable
     /// Empties what this service owns, plus the rows its tests create in other schemas.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// <b>`content.faq_articles` is deliberately not truncated.</b> Migration 1902's twelve rows are
     /// the day-0 FAQ and are exactly what the language tests assert against — emptying them would
     /// leave this suite testing fixtures of its own making.
+    /// </para>
+    /// <para>
+    /// <b>But rows a TEST inserted are removed, and that is not optional.</b>
+    /// `A_language_with_no_article_falls_back_and_says_which_one_it_served` authors an English-only
+    /// article, and the list endpoint's fallback chain (requested → en → si → ta) then serves that
+    /// article to `?lang=si` and `?lang=ta` as well — so
+    /// `Each_language_is_served_in_its_own_script` counts five where the seed has four. Which of the
+    /// two runs first is not defined by xUnit and is not stable: this suite passed on the build host
+    /// and failed on a GitHub runner for that reason alone (the C124 session's CI diagnosis).
+    /// Deleting by category keeps the seed as the fixture while making the count deterministic.
+    /// </para>
+    /// <para>
+    /// The four categories are 1902's own (`wallet`, `daily_fee`, `vehicle_registration`,
+    /// `booking`). If a later migration seeds a fifth topic this list has to grow — and so does the
+    /// `Assert.Equal(4, …)` in `FaqTests`, because that assertion is *about* the seed. Coupling them
+    /// is the point: both change in the same commit or neither is right.
+    /// </para>
     /// </remarks>
     private static async Task ResetAsync(PostgresFixture postgres)
     {
@@ -459,6 +477,9 @@ internal sealed class SupportHarness : IAsyncDisposable
             TRUNCATE support.ticket_events, support.tickets, support.command_log CASCADE;
             TRUNCATE docs.uploads CASCADE;
             TRUNCATE iam.users CASCADE;
+
+            DELETE FROM content.faq_articles
+             WHERE category NOT IN ('wallet', 'daily_fee', 'vehicle_registration', 'booking');
             """);
     }
 }
