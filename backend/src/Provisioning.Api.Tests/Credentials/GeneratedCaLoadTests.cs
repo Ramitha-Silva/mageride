@@ -14,7 +14,7 @@ namespace MageRide.Provisioning.Tests.Credentials;
 /// </summary>
 /// <remarks>
 /// <para>
-/// There are two of them and neither is <c>EmbeddedStepCa</c>: <c>infra/scripts/dev-up.sh</c>
+/// There are two of them and neither is <c>EmbeddedStepCa</c>: <c>infra/scripts/ensure-device-ca.sh</c>
 /// writes the CA with <c>openssl</c> before the dev stack comes up, and
 /// <c>MageRide.TestKit.DeviceCa</c> writes it before <c>EmqxFixture</c>'s broker starts. Both exist
 /// for the same hard reason — EMQX reads its <c>cacertfile</c> when the 8883 listener starts, and
@@ -44,28 +44,23 @@ public sealed class GeneratedCaLoadTests : IDisposable
     /// "PKCS#8" is not evidence that `openssl` wrote one.
     /// </summary>
     [Fact]
-    public void Dev_up_writes_a_ca_the_service_loads_and_mints_from()
+    public void The_device_ca_script_writes_a_ca_the_service_loads_and_mints_from()
     {
-        var script = RepositoryFile("infra/scripts/dev-up.sh");
-        Assert.SkipWhen(script is null, "infra/scripts/dev-up.sh was not found from the test output directory.");
+        // Δ C124: this used to read `infra/scripts/dev-up.sh`, slice out the lines between the
+        // device-CA comment and the next bare `fi`, and run the fragment. The generation moved to
+        // its own script when it turned out slim-verify.sh needed it too — CI brings the slim stack
+        // up without dev-up.sh, so it had no CA and EMQX never booted — and the extraction then
+        // found nothing and this test went red. Running the REAL script is both the fix and a
+        // better test: a reconstructed fragment can pass while the script it came from is broken.
+        var script = RepositoryFile("infra/scripts/ensure-device-ca.sh");
+        Assert.SkipWhen(script is null, "infra/scripts/ensure-device-ca.sh was not found from the test output directory.");
         Assert.SkipWhen(!HasOpenssl(), "openssl is not on PATH.");
 
-        // Only the device-CA block: the rest of the script talks to Docker and refuses to run
-        // beside the replica.
-        var block = string.Join(
-            '\n',
-            File.ReadLines(script!)
-                .SkipWhile(line => !line.StartsWith("# --- Device CA for the hardware-tracker plane", StringComparison.Ordinal))
-                .TakeWhile(line => line != "fi")
-                .Append("fi"));
-
-        Assert.Contains("DEVICE_CA_DIR", block, StringComparison.Ordinal);
-
-        var runner = Path.Combine(_directory, "device-ca.sh");
         Directory.CreateDirectory(_directory);
-        File.WriteAllText(runner, "set -e\nstep() { :; }\n" + block + '\n');
 
-        Run("bash", runner, ("REPO_ROOT", _directory));
+        // REPO_ROOT is honoured by the script when it is already set, so this writes into the
+        // throwaway tree rather than the working copy.
+        Run("bash", script!, ("REPO_ROOT", _directory));
 
         // The script writes into $REPO_ROOT/infra/deploy/device-ca; that is what a deployment
         // mounts at StepCa:RootKeyPath.

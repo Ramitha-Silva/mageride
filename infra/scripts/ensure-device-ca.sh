@@ -19,7 +19,9 @@
 # =====================================================================================
 set -euo pipefail
 
-REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
+# An existing REPO_ROOT wins, so a test can point this at a throwaway tree and assert on what
+# it writes. Provisioning.Api.Tests does exactly that (GeneratedCaLoadTests).
+REPO_ROOT="${REPO_ROOT:-$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)}"
 
 step() { printf '\n\033[1m==> %s\033[0m\n' "$*"; }
 
