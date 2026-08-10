@@ -36,16 +36,25 @@ include:
 services:
 
   # -----------------------------------------------------------------------------------
-  # EMQX — override the slim stack's host port publication.
+  # NO `emqx:` BLOCK HERE, and there must not be one.
   #
-  # In the full stack HAProxy owns 8883 and 8084 on the host (D7' §2.1), and two
-  # publishers cannot share a port. The broker keeps 1883 and the dashboard on loopback
-  # for in-cluster work and for a host-side integration test.
+  # This file used to carry `emqx: ports: !override` to take 8883/8084 off the broker so
+  # HAProxy could own them on the host. **`include:` does not permit overriding an imported
+  # service.** Docker Compose v2 rejects the whole file with
+  #
+  #     services.emqx conflicts with imported resource
+  #
+  # so `docker compose -f infra/docker-compose.dev.yml config` has been exiting 1 on every CI
+  # runner — which took eight of slim-verify.sh's checks with it, including all five MQTT ACL
+  # assertions, because they report "refused" when there is no broker to refuse them. It passed
+  # on the build host only because Compose v5.3.1 relaxed that rule. Found in C124's CI repair.
+  #
+  # The clash is resolved where it belongs instead: HAProxy's MQTTS/WSS defaults below move
+  # aside rather than the broker's, which is what `${VAR:-default}` on every published port is
+  # for (infra/CLAUDE.md). The slim stack keeps 8883/8084 on the broker; nothing asserts either
+  # number, every port here is loopback-only, and the replica (C125, its own file) still
+  # publishes the real 8883 as the public edge.
   # -----------------------------------------------------------------------------------
-  emqx:
-    ports: !override
-      - "127.0.0.1:${EMQX_MQTT_PORT:-1883}:1883"
-      - "127.0.0.1:${EMQX_DASHBOARD_PORT:-18083}:18083"
 
   # -----------------------------------------------------------------------------------
   # Container 6 — hot-path: mqtt-bridge + position-processor + persistence-writer +
@@ -311,8 +320,12 @@ services:
       - ./deploy/certs:/usr/local/etc/haproxy/certs:ro
     ports:
       - "127.0.0.1:${HAPROXY_HTTPS_PORT:-443}:443"
-      - "127.0.0.1:${HAPROXY_MQTTS_PORT:-8883}:8883"
-      - "127.0.0.1:${HAPROXY_MQTT_WSS_PORT:-8084}:8084"
+      # 18883/18084, not 8883/8084: the broker publishes those in the slim file this one
+      # includes, and two containers cannot bind one host port. See the note where the
+      # `emqx:` override used to be. Set HAPROXY_MQTTS_PORT=8883 to put it back if the
+      # broker's own publication is moved aside instead.
+      - "127.0.0.1:${HAPROXY_MQTTS_PORT:-18883}:8883"
+      - "127.0.0.1:${HAPROXY_MQTT_WSS_PORT:-18084}:8084"
       - "127.0.0.1:${HAPROXY_GT06_PORT:-5023}:5023"
       - "127.0.0.1:${HAPROXY_JT808_PORT:-5024}:5024"
       - "127.0.0.1:${HAPROXY_H02_PORT:-5025}:5025"

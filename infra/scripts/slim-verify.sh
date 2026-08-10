@@ -110,10 +110,18 @@ mqtt_sub() {
 # =====================================================================================
 step "1. docker compose config"
 # =====================================================================================
-if docker compose -f "$SLIM" config >/dev/null 2>&1; then s=ok; else s=fail; fi
-check "docker-compose.dev.slim.yml parses" "ok" "$s"
-if docker compose -f "$FULL" config >/dev/null 2>&1; then s=ok; else s=fail; fi
-check "docker-compose.dev.yml parses" "ok" "$s"
+# The reason is printed, not swallowed. `docker compose config` failing with its stderr sent
+# to /dev/null gives "expected ok, actual fail" and nothing else — and the reason can be
+# version-specific: `services.emqx conflicts with imported resource` reproduced only under the
+# Compose the RUNNERS have, so this check was red in CI and green on the build host for weeks
+# with no way to tell from the log why (C124's CI repair). It also prints the version, because
+# that turned out to be the whole story.
+docker compose version --short 2>/dev/null | sed 's/^/       docker compose /'
+for f in "$SLIM" "$FULL"; do
+  if err=$(docker compose -f "$f" config 2>&1 >/dev/null); then s=ok; else s=fail; fi
+  check "$(basename "$f") parses" "ok" "$s"
+  if [ "$s" = fail ]; then printf '       %s\n' "$(printf '%s' "$err" | head -3)"; fi
+done
 
 # No unset-variable warnings: compose interpolates env_file values too, so an unescaped
 # `$` in a template silently becomes an empty string in the container (Emqx__SharedSub).

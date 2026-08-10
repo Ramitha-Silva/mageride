@@ -633,12 +633,14 @@ Every one of these is D2' §C or a platform constraint, and each is called out a
   Turning it up is C103's, and the actor annotations are already written.
 - **`firebase-ios-sdk` is pinned to `upToNextMinorVersion` from `11.13.0`, and the bound matters.**
   It was `upToNextMajorVersion` from `11.0.0` with no committed `Package.resolved`, so every CI run
-  resolved fresh — and **11.14.0 is the first release that needs Swift 6**: `FIRAllocatedUnfairLock`
-  uses the `sending` parameter modifier and `HeartbeatsPayload` uses access-level imports, neither of
-  which Swift 5.10 can parse. `macos-14` ships Xcode 15 / Swift 5.10, so the `build (ios)` leg failed
-  in `** ARCHIVE FAILED **` inside the SDK's own sources, with nothing in this repository at fault.
-  11.13.0 is the last release that compiles; the boundary was established by reading
-  `FIRAllocatedUnfairLock.swift` at each tag (C124's CI repair), not guessed.
+  resolved fresh — and the SDK adopted Swift 6 syntax mid-11.x, which `macos-14`'s Xcode 15.4 /
+  Swift 5.10 cannot parse. The leg failed in `** ARCHIVE FAILED **` inside the SDK's own sources,
+  with nothing in this repository at fault. **Two independent markers, and they arrived in different
+  releases — checking only one is how a first attempt at this pin still failed:**
+  `HeartbeatsPayload` takes access-level imports (`public import`) in **11.12.0**, and
+  `FIRAllocatedUnfairLock` takes the `sending` parameter modifier in **11.14.0**. So **11.11.0 is the
+  last release that compiles under Swift 5.10**, and that is the pin. Both boundaries were
+  established by reading those two files at each tag (C124's CI repair), not guessed.
   **Two follow-ups, both for whoever has the Mac:** commit a `Package.resolved` so resolution stops
   being a moving target at all, and decide whether to move the leg to a runner with Xcode 16 — which
   is the only way past 11.13.x, and which will also raise every Swift 6 concurrency diagnostic that
