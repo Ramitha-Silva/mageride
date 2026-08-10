@@ -128,9 +128,16 @@ public sealed class DailyFeeChargeTests(PostgresFixture postgres, RedisFixture r
         var attempts = await Task.WhenAll(
             Enumerable.Range(0, 6).Select(_ => harness.ChargeAsync(driver.Id, vehicle.Id)));
 
+        // The BODY, not just the status — the same courtesy `SubscriptionHarness.ChargeOkAsync`
+        // already extends. A bare `Assert.Equal(OK, actual)` on a six-way race reports
+        // "Expected: OK, Actual: InternalServerError" and throws the RFC 7807 problem details
+        // away, which is the one thing that says which of the concurrent paths lost.
         foreach (var attempt in attempts)
         {
-            Assert.Equal(HttpStatusCode.OK, attempt.StatusCode);
+            var body = await attempt.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+            Assert.True(
+                attempt.StatusCode == HttpStatusCode.OK,
+                $"one of six concurrent charges returned {(int)attempt.StatusCode}: {body}");
             attempt.Dispose();
         }
 

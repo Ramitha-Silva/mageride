@@ -180,8 +180,30 @@ internal sealed class DailyFeeRepository(INpgsqlConnectionFactory connections) :
     /// service may rewrite the amount that was actually taken, because that amount is what
     /// <c>billing.journal_entries</c> already moved and what every revenue rollup sums. Without the
     /// guard a late redelivery of the *first* trip's waiver would overwrite a paid row with a zero and
-    /// the money and the record would disagree. <c>DO UPDATE</c> with no matching row still returns the
-    /// existing one via the <c>RETURNING</c>-less read below.
+    /// the money and the record would disagree.
+    /// </para>
+    /// <para>
+    /// <b>Δ C124: the in-statement fallback cannot stand alone, and a re-read is why.</b> This method
+    /// used to say that "<c>DO UPDATE</c> with no matching row still returns the existing one via the
+    /// <c>RETURNING</c>-less read below", and under concurrency that is not true. Both branches can
+    /// come back empty at once:
+    /// <list type="number">
+    /// <item>B's <c>INSERT</c> conflicts with the row A committed a moment earlier. Conflict detection
+    /// re-reads, so it finds A's row — but A set <c>status = 'PAID'</c>, the <c>DO UPDATE</c> guard is
+    /// false, nothing is updated and nothing is <c>RETURNING</c>ed. <c>upserted</c> is empty.</item>
+    /// <item>The <c>UNION ALL</c> branch is a plain <c>SELECT</c> in the SAME statement, so it reads the
+    /// statement's snapshot — taken before A committed. A's row is invisible to it.</item>
+    /// </list>
+    /// Zero rows, <c>QuerySingleAsync</c> throws, and the caller gets a 500. Six concurrent charges hit
+    /// it about three runs in five, which is what
+    /// <c>DailyFeeChargeTests.Concurrent_charges_for_one_colombo_day_take_the_fee_once</c> had been
+    /// reporting intermittently as <c>Expected OK, Actual InternalServerError</c>.
+    /// <para>
+    /// So the fallback is a SECOND STATEMENT. A new statement takes a new snapshot in READ COMMITTED
+    /// and does see the committed row. The in-statement branch is kept because it serves the ordinary
+    /// redelivery — a row already PAID before this statement began — in one round trip; the re-read
+    /// costs a second one only in the genuine race.
+    /// </para>
     /// </para>
     /// </remarks>
     public async Task<DailyFeeCharge> UpsertAsync(DailyFeeCharge charge, CancellationToken cancellationToken)
@@ -190,7 +212,7 @@ internal sealed class DailyFeeRepository(INpgsqlConnectionFactory connections) :
 
         await using var connection = await connections.OpenAsync(cancellationToken);
 
-        var stored = await connection.QuerySingleAsync<DailyFeeCharge>(
+        var stored = await connection.QueryFirstOrDefaultAsync<DailyFeeCharge>(
             new CommandDefinition(
                 $"""
                 WITH upserted AS (
@@ -218,7 +240,24 @@ internal sealed class DailyFeeRepository(INpgsqlConnectionFactory connections) :
                 charge,
                 cancellationToken: cancellationToken));
 
-        return stored;
+        if (stored is not null)
+        {
+            return stored;
+        }
+
+        // The race in the remark: another transaction inserted and PAID this (driver, vehicle, day)
+        // after our statement's snapshot was taken, so the guard blocked the update and the snapshot
+        // hid the row. A new statement sees it. Not `QueryFirstOrDefault` — by now the row must exist,
+        // and a null here would mean the composite key stopped being the idempotency mechanism.
+        return await connection.QuerySingleAsync<DailyFeeCharge>(
+            new CommandDefinition(
+                $"""
+                SELECT {SelectColumns}
+                  FROM billing.daily_fee_charges
+                 WHERE driver_id = @DriverId AND vehicle_id = @VehicleId AND fee_date = @FeeDate;
+                """,
+                charge,
+                cancellationToken: cancellationToken));
     }
 
     /// <remarks>
