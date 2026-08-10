@@ -113,7 +113,25 @@ internal sealed class FleetHealthHarness : IAsyncDisposable
 
         // A whole 5-minute bucket boundary, so a test that reasons about "the window that just closed"
         // is not also reasoning about where inside a bucket the run happened to start.
-        var clock = new FakeTimeProvider(now ?? new DateTimeOffset(2026, 7, 30, 9, 0, 0, TimeSpan.Zero));
+        //
+        // RELATIVE, where it used to be `new DateTimeOffset(2026, 7, 30, 9, 0, 0, TimeSpan.Zero)`.
+        // That literal had THREE properties and only two of them were written down. It was a 5-minute
+        // boundary (above), it carried no sub-second component, and it was a fixed date — and the
+        // fixed date is what broke the one test in this suite that talks to a real broker:
+        //
+        //   `MqttSessionTokenIssuer` mints the session JWT's `exp` from the INJECTED TimeProvider, so
+        //   a clock frozen on 2026-07-30 produces a token that expired at 13:00 that day. EMQX
+        //   validates `exp` against the WALL clock, refuses the CONNECT with `BadUserNameOrPassword`,
+        //   and `DevicePlaneWorker` retries for ever — so `IsSubscribed` never turns true and the test
+        //   times out with no visible cause. It passed on the day it was written and has failed every
+        //   day since. HotPath's mqtt-bridge suite does the same 30 s subscription wait against the
+        //   same fixture and passes precisely because it injects no fake clock at all.
+        //
+        // So: drop the date, keep the alignment. Flooring `UtcNow` to a 5-minute boundary preserves
+        // both of the properties the literal was actually relied on for — the bucket edge that the
+        // AlertThreshold and AggregateMaintenance suites reason about, and whole-second precision,
+        // without which a `>=` wait against a value read back from Postgres can never be satisfied.
+        var clock = new FakeTimeProvider(now ?? FloorToBucket(DateTimeOffset.UtcNow));
 
         var overrides = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
         {
@@ -417,6 +435,21 @@ internal sealed class FleetHealthHarness : IAsyncDisposable
                 bearer.TokenValidationParameters.IssuerSigningKey = tokens.PublicKey;
                 bearer.TokenValidationParameters.IssuerSigningKeyResolver = null;
             });
+    }
+
+    /// <summary>The 5-minute bucket <paramref name="instant"/> falls in, at its start.</summary>
+    /// <remarks>
+    /// Two properties in one, both of which the old absolute literal had by construction and neither
+    /// of which was stated: a rollup bucket edge, and no sub-second component. Timestamps written
+    /// through this service come back from Postgres at second precision, and several waits here are
+    /// `>=` comparisons against a value captured from this clock — a fractional start makes them
+    /// unsatisfiable for ever ("waiting for the ping clock to reach 06:53:53.3675242; the row was
+    /// 06:53:53"). Flooring to the bucket gives both.
+    /// </remarks>
+    private static DateTimeOffset FloorToBucket(DateTimeOffset instant)
+    {
+        var bucket = TimeSpan.TicksPerMinute * 5;
+        return new DateTimeOffset(instant.Ticks - (instant.Ticks % bucket), instant.Offset);
     }
 
     private static void Merge(Dictionary<string, string?> into, IDictionary<string, string?>? from)

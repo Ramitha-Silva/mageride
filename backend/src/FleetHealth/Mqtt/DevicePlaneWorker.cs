@@ -73,11 +73,26 @@ public sealed class DevicePlaneWorker(
         healthOptions?.Value ?? throw new ArgumentNullException(nameof(healthOptions));
 
     private bool _subscribed;
+
+    /// <summary>
+    /// What the last session died of, or <see langword="null"/> while one is healthy.
+    /// </summary>
+    /// <remarks>
+    /// The retry loop below swallows every exception into <c>logger.LogError</c>, which is right —
+    /// a broker that went away must not take the worker with it. But it makes the failure
+    /// undiagnosable anywhere the log is not visible, and a test harness is exactly such a place:
+    /// xUnit captures console output, so `IsSubscribed` staying false looks like a timeout with no
+    /// cause. Keeping the exception on the worker gives the one channel that always works.
+    /// </remarks>
+    private volatile Exception? _lastError;
     private long _statusApplied;
     private long _diagnosticsApplied;
 
     /// <summary>True once both subscriptions are live, so a test can wait rather than sleep.</summary>
     public bool IsSubscribed => Volatile.Read(ref _subscribed);
+
+    /// <summary>What the last session died of. See the field's remark.</summary>
+    public Exception? LastError => _lastError;
 
     /// <summary>Presence messages this replica has applied.</summary>
     public long StatusApplied => Interlocked.Read(ref _statusApplied);
@@ -97,6 +112,7 @@ public sealed class DevicePlaneWorker(
             {
                 await RunSessionAsync(stoppingToken);
                 attempt = 0;
+                _lastError = null;
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -105,6 +121,7 @@ public sealed class DevicePlaneWorker(
             catch (Exception exception)
             {
                 attempt++;
+                _lastError = exception;
                 logger.LogError(exception, "Device-plane subscription session {Attempt} ended; reconnecting", attempt);
             }
             finally

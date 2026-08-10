@@ -234,7 +234,11 @@ public sealed class IngestTests(PostgresFixture postgres, RedpandaFixture redpan
         var fleet = await harness.CreateFleetAsync();
         var tracker = await harness.CreateTrackerAsync(fleet.FleetId, lastPingAt: harness.Clock.GetUtcNow());
 
-        await WaitForAsync(() => harness.DevicePlane.IsSubscribed, "the device-plane subscription");
+        await WaitForAsync(
+            () => harness.DevicePlane.IsSubscribed,
+            "the device-plane subscription",
+            () => harness.DevicePlane.LastError?.ToString() ?? "The worker recorded no error at all, "
+                + "which means it never ran: check that the DevicePlaneEnabled hosted service was registered.");
 
         // Published as the vehicle itself, so the acl.conf rule that actually authorises this
         // (`veh/${username}/status`, `sys/diag/${username}`) is the one under test.
@@ -435,7 +439,12 @@ public sealed class IngestTests(PostgresFixture postgres, RedpandaFixture redpan
         Assert.Fail($"Timed out after {Patience.TotalSeconds:F0} s waiting for binding_state = {state}.");
     }
 
-    private static async Task WaitForAsync(Func<bool> condition, string what)
+    /// <param name="diagnose">
+    /// Optional. Called only on timeout, and its answer goes in the failure message — because
+    /// "timed out waiting for the device-plane subscription" on its own is not a diagnosis, and the
+    /// worker's own log is captured by xUnit and reaches nobody.
+    /// </param>
+    private static async Task WaitForAsync(Func<bool> condition, string what, Func<string?>? diagnose = null)
     {
         var deadline = DateTime.UtcNow + Patience;
 
@@ -447,6 +456,11 @@ public sealed class IngestTests(PostgresFixture postgres, RedpandaFixture redpan
             }
 
             await Task.Delay(100);
+        }
+
+        if (diagnose?.Invoke() is { Length: > 0 } detail)
+        {
+            Assert.Fail($"Timed out after {Patience.TotalSeconds:F0} s waiting for {what}. {detail}");
         }
 
         Assert.Fail($"Timed out after {Patience.TotalSeconds:F0} s waiting for {what}.");
