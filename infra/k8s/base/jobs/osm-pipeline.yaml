@@ -2,7 +2,7 @@
 # `osm-pipeline` — D7' §10's weekly tile/geocoder refresh (D-15).
 #
 # SUSPENDED, and it has to be: **no component in build/manifest.yaml builds this image.**
-# D7' §10 prints `ghcr.io/mageride/osm-pipeline:latest` and the pipeline stages
+# D7' §10 prints `ghcr.io/ramitha-silva/osm-pipeline:latest` and the pipeline stages
 # (download-sl-osm-diff, osm2pgsql, tippecanoe, pmtiles, `aws s3 sync`) have no source
 # anywhere in this repository, so there is nothing for `.github/workflows/images.yml` to
 # build and nothing for a promotion to tag. An unsuspended CronJob would be a weekly
@@ -72,7 +72,7 @@ spec:
             seccompProfile: { type: RuntimeDefault }
           containers:
             - name: osm-pipeline
-              image: ghcr.io/mageride/osm-pipeline:sha-0000000
+              image: ghcr.io/ramitha-silva/osm-pipeline:sha-0000000
               envFrom:
                 - configMapRef: { name: common-config }
                 - secretRef: { name: common-secret }

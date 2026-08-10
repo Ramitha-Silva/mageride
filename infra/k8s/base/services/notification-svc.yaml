@@ -60,7 +60,7 @@ spec:
       terminationGracePeriodSeconds: 30
       containers:
         - name: notification-svc
-          image: ghcr.io/mageride/notification-svc:sha-0000000
+          image: ghcr.io/ramitha-silva/notification-svc:sha-0000000
           imagePullPolicy: IfNotPresent
           ports:
             - { name: http, containerPort: 5000, protocol: TCP }

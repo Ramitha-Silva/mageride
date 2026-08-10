@@ -76,7 +76,7 @@ spec:
       terminationGracePeriodSeconds: 30
       containers:
         - name: tcp-adapter
-          image: ghcr.io/mageride/tcp-adapter:sha-0000000
+          image: ghcr.io/ramitha-silva/tcp-adapter:sha-0000000
           imagePullPolicy: IfNotPresent
           ports:
             - { name: gt06, containerPort: 5023, protocol: TCP }

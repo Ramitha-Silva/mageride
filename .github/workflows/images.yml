@@ -67,11 +67,16 @@ concurrency:
 
 env:
   REGISTRY: ghcr.io
-  # The manifests name `ghcr.io/mageride/<service>` (D7' §5). GHCR namespaces follow the
-  # repository OWNER, so unless a `mageride` organisation exists this has to be overridden —
-  # set the `IMAGE_NAMESPACE` repository variable and re-run the generator's registry field.
-  # Kept as a variable rather than hard-coded so the two cannot silently disagree.
-  IMAGE_NAMESPACE: ${{ vars.IMAGE_NAMESPACE || 'mageride' }}
+  # A GHCR namespace is a GitHub account, and the built-in GITHUB_TOKEN can write to exactly one of
+  # them: the repository owner's. D7' §5 named `ghcr.io/mageride`; `mageride` turned out to be a
+  # user account that is not this owner, so every push was refused until the Δ 2026-08-10
+  # micro-change-set moved the namespace here. An organisation account sets IMAGE_NAMESPACE.
+  #
+  # This value has a twin: `registry:` in infra/k8s/service-catalog.yaml, which is what the
+  # Deployments PULL. Being a variable does not keep them in step — nothing generates one from the
+  # other, and when they drift the pipeline stays green and a cluster hits ImagePullBackOff after
+  # the deploy has reported success. `infra/scripts/k8s-verify.sh` §8 is what keeps them in step.
+  IMAGE_NAMESPACE: ${{ vars.IMAGE_NAMESPACE || 'ramitha-silva' }}
 
 permissions:
   contents: read

@@ -518,4 +518,33 @@ All in-scope items ✅ — **document NOT `[INCOMPLETE]`.**
 No other runtime, image, manifest, or resource-budget changes. Mirrored the same day in
 `lightweight-production-replica.md` (portal image rows) and `phase_c_step_by_step_guide.md` (Step 0 toolchain).
 
+---
+
+## Δ Addendum — 2026-08-10 (micro-change-set: the image namespace is the repository owner's)
+
+| Item | Change |
+|---|---|
+| Image namespace (§5, §7, §12) | `ghcr.io/mageride/<service>` → **`ghcr.io/<repository owner>/<service>`**, which is `ghcr.io/ramitha-silva` for `Ramitha-Silva/mageride`. Overridable by the `IMAGE_NAMESPACE` repository variable, which is what a future organisation account sets. |
+
+**Why the spec's namespace cannot be used.** `mageride` is an existing GitHub **user** account and is
+not this repository's owner. A workflow's built-in `GITHUB_TOKEN` is scoped to its own owner's GHCR
+namespace and to nothing else, so `docker push ghcr.io/mageride/...` is refused — not misconfigured,
+refused — with `denied: permission_denied: The requested installation does not exist`. §7's push step
+was therefore unrunnable as written from the first commit that had it. It surfaced on 2026-08-10, the
+first time `ci` went green and `cd` reached the `images` job: all 28 images built, all 28 pushes failed.
+
+Reaching `ghcr.io/mageride` would need a long-lived personal access token belonging to that account,
+held as an Actions secret and rotated by hand — the opposite of §13's Vault/ESO discipline, for no
+gain over a namespace the built-in token already owns.
+
+**One value, two trees.** The manifests carry `<registry>/<service>` rendered from
+`infra/k8s/service-catalog.yaml`; the workflows push to `${IMAGE_NAMESPACE}/<service>`. Nothing
+generates one from the other, so they can disagree while every check is green — the push succeeds, the
+promotion commit lands, the deploy reports success, and the first symptom is `ImagePullBackOff` in a
+cluster. `infra/scripts/k8s-verify.sh` §8 now fails when the catalog's `registry:` and the workflow
+fallbacks name different namespaces.
+
+Unchanged: the Kubernetes namespace is still `mageride` (§5's `kubectl -n mageride`) and the Compose
+project is still `mageride`. Only the registry namespace moves.
+
 *End of D7′. 0 `[INCOMPLETE]` markers; all in-scope ADD critique items ✅.*

@@ -62,7 +62,7 @@ spec:
       terminationGracePeriodSeconds: 30
       containers:
         - name: position-processor-svc
-          image: ghcr.io/mageride/position-processor-svc:sha-0000000
+          image: ghcr.io/ramitha-silva/position-processor-svc:sha-0000000
           imagePullPolicy: IfNotPresent
           ports:
             - { name: http, containerPort: 5000, protocol: TCP }

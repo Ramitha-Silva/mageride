@@ -108,7 +108,7 @@ DDL path that runs for the first time during an incident.
    service is isolated and the release contained a schema change, rolling back one service is
    possible:
    ```bash
-   kubectl -n mageride set image deploy/<svc> <svc>=ghcr.io/mageride/<svc>:<old-tag>
+   kubectl -n mageride set image deploy/<svc> <svc>=ghcr.io/ramitha-silva/<svc>:<old-tag>
    kubectl -n mageride annotate deploy/<svc> argocd.argoproj.io/compare-options=IgnoreExtraneous
    ```
    **This diverges the cluster from the repository and selfHeal will revert it.** Do it only with a

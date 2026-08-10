@@ -62,7 +62,7 @@ spec:
       terminationGracePeriodSeconds: 30
       containers:
         - name: api-gateway
-          image: ghcr.io/mageride/api-gateway:sha-0000000
+          image: ghcr.io/ramitha-silva/api-gateway:sha-0000000
           imagePullPolicy: IfNotPresent
           ports:
             - { name: http, containerPort: 5000, protocol: TCP }

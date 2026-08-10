@@ -15,71 +15,71 @@
 apiVersion: kustomize.config.k8s.io/v1alpha1
 kind: Component
 images:
-  - name: ghcr.io/mageride/api-gateway
+  - name: ghcr.io/ramitha-silva/api-gateway
     newTag: sha-0000000
-  - name: ghcr.io/mageride/fanout-svc
+  - name: ghcr.io/ramitha-silva/fanout-svc
     newTag: sha-0000000
-  - name: ghcr.io/mageride/iam-svc
+  - name: ghcr.io/ramitha-silva/iam-svc
     newTag: sha-0000000
-  - name: ghcr.io/mageride/registry-svc
+  - name: ghcr.io/ramitha-silva/registry-svc
     newTag: sha-0000000
-  - name: ghcr.io/mageride/provisioning-svc
+  - name: ghcr.io/ramitha-silva/provisioning-svc
     newTag: sha-0000000
-  - name: ghcr.io/mageride/query-svc
+  - name: ghcr.io/ramitha-silva/query-svc
     newTag: sha-0000000
-  - name: ghcr.io/mageride/trip-state-svc
+  - name: ghcr.io/ramitha-silva/trip-state-svc
     newTag: sha-0000000
-  - name: ghcr.io/mageride/ride-svc
+  - name: ghcr.io/ramitha-silva/ride-svc
     newTag: sha-0000000
-  - name: ghcr.io/mageride/dispatch-svc
+  - name: ghcr.io/ramitha-silva/dispatch-svc
     newTag: sha-0000000
-  - name: ghcr.io/mageride/reputation-svc
+  - name: ghcr.io/ramitha-silva/reputation-svc
     newTag: sha-0000000
-  - name: ghcr.io/mageride/fare-svc
+  - name: ghcr.io/ramitha-silva/fare-svc
     newTag: sha-0000000
-  - name: ghcr.io/mageride/wallet-svc
+  - name: ghcr.io/ramitha-silva/wallet-svc
     newTag: sha-0000000
-  - name: ghcr.io/mageride/subscription-svc
+  - name: ghcr.io/ramitha-silva/subscription-svc
     newTag: sha-0000000
-  - name: ghcr.io/mageride/notification-svc
+  - name: ghcr.io/ramitha-silva/notification-svc
     newTag: sha-0000000
-  - name: ghcr.io/mageride/safety-svc
+  - name: ghcr.io/ramitha-silva/safety-svc
     newTag: sha-0000000
-  - name: ghcr.io/mageride/support-svc
+  - name: ghcr.io/ramitha-silva/support-svc
     newTag: sha-0000000
-  - name: ghcr.io/mageride/content-svc
+  - name: ghcr.io/ramitha-silva/content-svc
     newTag: sha-0000000
-  - name: ghcr.io/mageride/transit-svc
+  - name: ghcr.io/ramitha-silva/transit-svc
     newTag: sha-0000000
-  - name: ghcr.io/mageride/fleet-svc
+  - name: ghcr.io/ramitha-silva/fleet-svc
     newTag: sha-0000000
-  - name: ghcr.io/mageride/fleet-billing-svc
+  - name: ghcr.io/ramitha-silva/fleet-billing-svc
     newTag: sha-0000000
-  - name: ghcr.io/mageride/payout-svc
+  - name: ghcr.io/ramitha-silva/payout-svc
     newTag: sha-0000000
-  - name: ghcr.io/mageride/voip-svc
+  - name: ghcr.io/ramitha-silva/voip-svc
     newTag: sha-0000000
-  - name: ghcr.io/mageride/ocr-svc
+  - name: ghcr.io/ramitha-silva/ocr-svc
     newTag: sha-0000000
-  - name: ghcr.io/mageride/admin-bff
+  - name: ghcr.io/ramitha-silva/admin-bff
     newTag: sha-0000000
-  - name: ghcr.io/mageride/public-bff
+  - name: ghcr.io/ramitha-silva/public-bff
     newTag: sha-0000000
-  - name: ghcr.io/mageride/mqtt-bridge-svc
+  - name: ghcr.io/ramitha-silva/mqtt-bridge-svc
     newTag: sha-0000000
-  - name: ghcr.io/mageride/position-processor-svc
+  - name: ghcr.io/ramitha-silva/position-processor-svc
     newTag: sha-0000000
-  - name: ghcr.io/mageride/persistence-writer-svc
+  - name: ghcr.io/ramitha-silva/persistence-writer-svc
     newTag: sha-0000000
-  - name: ghcr.io/mageride/fleet-health-svc
+  - name: ghcr.io/ramitha-silva/fleet-health-svc
     newTag: sha-0000000
-  - name: ghcr.io/mageride/tcp-adapter
+  - name: ghcr.io/ramitha-silva/tcp-adapter
     newTag: sha-0000000
-  - name: ghcr.io/mageride/admin-portal
+  - name: ghcr.io/ramitha-silva/admin-portal
     newTag: sha-0000000
-  - name: ghcr.io/mageride/fleet-portal
+  - name: ghcr.io/ramitha-silva/fleet-portal
     newTag: sha-0000000
-  - name: ghcr.io/mageride/web-passenger
+  - name: ghcr.io/ramitha-silva/web-passenger
     newTag: sha-0000000
-  - name: ghcr.io/mageride/migrate
+  - name: ghcr.io/ramitha-silva/migrate
     newTag: sha-0000000

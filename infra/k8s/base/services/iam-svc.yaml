@@ -61,7 +61,7 @@ spec:
       terminationGracePeriodSeconds: 30
       containers:
         - name: iam-svc
-          image: ghcr.io/mageride/iam-svc:sha-0000000
+          image: ghcr.io/ramitha-silva/iam-svc:sha-0000000
           imagePullPolicy: IfNotPresent
           ports:
             - { name: http, containerPort: 5000, protocol: TCP }

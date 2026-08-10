@@ -60,7 +60,7 @@ spec:
       terminationGracePeriodSeconds: 30
       containers:
         - name: fleet-health-svc
-          image: ghcr.io/mageride/fleet-health-svc:sha-0000000
+          image: ghcr.io/ramitha-silva/fleet-health-svc:sha-0000000
           imagePullPolicy: IfNotPresent
           ports:
             - { name: http, containerPort: 5000, protocol: TCP }

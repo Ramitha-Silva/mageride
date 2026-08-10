@@ -81,7 +81,7 @@ jobs:
       # fact.
       - name: every deployed image is signed by this pipeline
         env:
-          IMAGE_NAMESPACE: ${{ vars.IMAGE_NAMESPACE || 'mageride' }}
+          IMAGE_NAMESPACE: ${{ vars.IMAGE_NAMESPACE || 'ramitha-silva' }}
         run: |
           set -euo pipefail
           tag=$(python3 infra/k8s/tools/set_image_tag.py "$ENVIRONMENT" --print)

@@ -80,7 +80,7 @@ spec:
         - name: migrate
           # Promoted by the same SHA as every service. A migration that does not match the
           # code it is gating is not a gate — the overlay's `images:` block sets both.
-          image: ghcr.io/mageride/migrate:sha-0000000
+          image: ghcr.io/ramitha-silva/migrate:sha-0000000
           imagePullPolicy: IfNotPresent
           args: ["--wait", "120"]
           env:

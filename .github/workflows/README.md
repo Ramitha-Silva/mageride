@@ -126,11 +126,11 @@ minutes.
 ### Verifying an image signature
 
 ```bash
-cosign verify ghcr.io/mageride/ride-svc:sha-1a2b3c4 \
+cosign verify ghcr.io/ramitha-silva/ride-svc:sha-1a2b3c4 \
   --certificate-identity-regexp '^https://github.com/Ramitha-Silva/mageride/' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 
-cosign verify-attestation --type spdxjson ghcr.io/mageride/ride-svc:sha-1a2b3c4 \
+cosign verify-attestation --type spdxjson ghcr.io/ramitha-silva/ride-svc:sha-1a2b3c4 \
   --certificate-identity-regexp '^https://github.com/Ramitha-Silva/mageride/' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```

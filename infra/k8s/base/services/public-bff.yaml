@@ -61,7 +61,7 @@ spec:
       terminationGracePeriodSeconds: 30
       containers:
         - name: public-bff
-          image: ghcr.io/mageride/public-bff:sha-0000000
+          image: ghcr.io/ramitha-silva/public-bff:sha-0000000
           imagePullPolicy: IfNotPresent
           ports:
             - { name: http, containerPort: 5000, protocol: TCP }

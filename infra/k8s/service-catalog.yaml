@@ -45,7 +45,7 @@
 #   why         a per-entry note. Written where the entry is not the default shape.
 # =====================================================================================
 
-registry: ghcr.io/mageride
+registry: ghcr.io/ramitha-silva
 namespace: mageride
 
 # The three substrates of D7' §8, in promotion order. The generator writes one

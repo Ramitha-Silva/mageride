@@ -57,7 +57,7 @@ spec:
       terminationGracePeriodSeconds: 30
       containers:
         - name: web-passenger
-          image: ghcr.io/mageride/web-passenger:sha-0000000
+          image: ghcr.io/ramitha-silva/web-passenger:sha-0000000
           imagePullPolicy: IfNotPresent
           ports:
             - { name: http, containerPort: 3003, protocol: TCP }

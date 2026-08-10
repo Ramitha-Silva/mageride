@@ -62,7 +62,7 @@ spec:
       terminationGracePeriodSeconds: 30
       containers:
         - name: reputation-svc
-          image: ghcr.io/mageride/reputation-svc:sha-0000000
+          image: ghcr.io/ramitha-silva/reputation-svc:sha-0000000
           imagePullPolicy: IfNotPresent
           ports:
             - { name: http, containerPort: 5000, protocol: TCP }

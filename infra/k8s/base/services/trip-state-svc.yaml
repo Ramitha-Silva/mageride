@@ -61,7 +61,7 @@ spec:
       terminationGracePeriodSeconds: 30
       containers:
         - name: trip-state-svc
-          image: ghcr.io/mageride/trip-state-svc:sha-0000000
+          image: ghcr.io/ramitha-silva/trip-state-svc:sha-0000000
           imagePullPolicy: IfNotPresent
           ports:
             - { name: http, containerPort: 5000, protocol: TCP }

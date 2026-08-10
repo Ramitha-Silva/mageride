@@ -318,7 +318,53 @@ if compgen -G "infra/k8s/platform/sealed-secrets/*/[!k]*.yaml" >/dev/null; then
 fi
 
 # -------------------------------------------------------------------------------------
-head_ "8. the printed verify command's kubectl clause"
+head_ "8. the image namespace is one value and not two"
+# -------------------------------------------------------------------------------------
+# The manifests carry `<registry>/<service>` rendered from the catalog; the workflows push to
+# `${IMAGE_NAMESPACE}/<service>`. Those are two spellings of one fact living in two trees that no
+# generator connects — C124 made the workflow side a repository variable and left the manifest side
+# a literal, so setting the variable alone moves the push and not the pull.
+#
+# Nothing about that failure is visible in CI. Every image builds, every image pushes, `ci` and `cd`
+# are green, the promotion commit lands, and the first symptom is ImagePullBackOff in a cluster —
+# after the deploy has been reported as successful.
+catalog_ns=$(sed -n 's#^registry: *ghcr\.io/##p' infra/k8s/service-catalog.yaml | head -1)
+if [ -z "$catalog_ns" ]; then
+  bad "could not read \`registry: ghcr.io/<namespace>\` from infra/k8s/service-catalog.yaml"
+else
+  ok "the catalog renders images into 'ghcr.io/$catalog_ns'"
+  for wf in images promote nightly; do
+    f=".github/workflows/$wf.yml"
+    [ -f "$f" ] || continue
+    # `IMAGE_NAMESPACE: ${{ vars.IMAGE_NAMESPACE || 'x' }}` — the fallback is what a fresh clone
+    # runs with, so it is the value that has to agree, not whatever a variable happens to hold.
+    wf_ns=$(sed -n "s/.*IMAGE_NAMESPACE *|| *'\([^']*\)'.*/\1/p" "$f" | head -1)
+    if [ -z "$wf_ns" ]; then
+      skip "$f names no IMAGE_NAMESPACE fallback"
+    elif [ "$wf_ns" = "$catalog_ns" ]; then
+      ok "$wf.yml falls back to the same namespace"
+    else
+      bad "$wf.yml pushes to 'ghcr.io/$wf_ns' but the manifests pull 'ghcr.io/$catalog_ns' —
+      the images land in one namespace and the Deployments name the other"
+    fi
+  done
+
+  # Not every manifest under base/ comes from the generator: base/jobs/ is authored by hand, so
+  # `--check` passes straight over it and the namespace there is a literal nobody rewrites. Both
+  # job manifests were missed by the Δ 2026-08-10 change for exactly that reason, and `migrate` is
+  # the one image whose absence stops a deploy before it starts. Scan the tree, not the catalog.
+  strays=$(grep -rn 'image: *ghcr\.io/' infra/k8s --include=*.yaml \
+    | grep -v "image: *ghcr\.io/$catalog_ns/" || true)
+  if [ -n "$strays" ]; then
+    bad "manifests name an image outside 'ghcr.io/$catalog_ns' — nothing pushes these:"
+    printf '%s\n' "$strays" | sed 's/^/      /' >&2
+  else
+    ok "every image: in infra/k8s/ is in 'ghcr.io/$catalog_ns', authored files included"
+  fi
+fi
+
+# -------------------------------------------------------------------------------------
+head_ "9. the printed verify command's kubectl clause"
 # -------------------------------------------------------------------------------------
 if ! command -v kubectl >/dev/null; then
   skip "kubectl is not installed — the printed clause cannot run here"

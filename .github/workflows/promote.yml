@@ -114,7 +114,7 @@ jobs:
           echo "::notice::api-gateway:${tag} is present — a spot check, not all 34"
         env:
           SHA: ${{ inputs.sha }}
-          IMAGE_NAMESPACE: ${{ vars.IMAGE_NAMESPACE || 'mageride' }}
+          IMAGE_NAMESPACE: ${{ vars.IMAGE_NAMESPACE || 'ramitha-silva' }}
           GH_ACTOR: ${{ github.actor }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

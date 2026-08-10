@@ -58,7 +58,7 @@ spec:
       terminationGracePeriodSeconds: 30
       containers:
         - name: registry-svc
-          image: ghcr.io/mageride/registry-svc:sha-0000000
+          image: ghcr.io/ramitha-silva/registry-svc:sha-0000000
           imagePullPolicy: IfNotPresent
           ports:
             - { name: http, containerPort: 5000, protocol: TCP }

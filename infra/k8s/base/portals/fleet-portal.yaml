@@ -56,7 +56,7 @@ spec:
       terminationGracePeriodSeconds: 30
       containers:
         - name: fleet-portal
-          image: ghcr.io/mageride/fleet-portal:sha-0000000
+          image: ghcr.io/ramitha-silva/fleet-portal:sha-0000000
           imagePullPolicy: IfNotPresent
           ports:
             - { name: http, containerPort: 3002, protocol: TCP }
