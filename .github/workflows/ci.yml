@@ -123,17 +123,21 @@ jobs:
         if: matrix.target == 'backend'
         run: |
           set -euo pipefail
+          # The tag is quoted at every use (SC2086). `${GITHUB_SHA::7}` cannot word-split in
+          # practice — a commit SHA is hex — but an unquoted expansion in a `-t` argument is the
+          # habit that breaks the day a variable holds something else, and `k8s-validate.yml` runs
+          # actionlint with shellcheck over every workflow, so it is also a red build.
           docker build -f infra/docker/Dockerfile.service \
-            --build-arg SERVICE=ApiGateway -t mageride/api-gateway:${GITHUB_SHA::7} .
+            --build-arg SERVICE=ApiGateway -t "mageride/api-gateway:${GITHUB_SHA::7}" .
           docker build -f infra/docker/Dockerfile.worker \
             --build-arg SERVICE=MageRide.Migrations --build-arg HEALTH_PORT=none \
-            -t mageride/migrate:${GITHUB_SHA::7} .
+            -t "mageride/migrate:${GITHUB_SHA::7}" .
           # Structural assertions the templates promise: non-root, and a healthcheck.
           for image in mageride/api-gateway mageride/migrate; do
             user=$(docker image inspect "$image:${GITHUB_SHA::7}" --format '{{.Config.User}}')
             test "$user" = "app" || { echo "::error::$image runs as '${user:-root}', not app"; exit 1; }
           done
-          hc=$(docker image inspect mageride/api-gateway:${GITHUB_SHA::7} --format '{{json .Config.Healthcheck}}')
+          hc=$(docker image inspect "mageride/api-gateway:${GITHUB_SHA::7}" --format '{{json .Config.Healthcheck}}')
           test "$hc" != "null" || { echo "::error::the service image has no HEALTHCHECK"; exit 1; }
 
       # --- android -------------------------------------------------------------------

@@ -257,7 +257,9 @@ jobs:
           esac
           echo "::notice::no ARGOCD_SERVER variable — falling back to a health probe of https://$host"
           ok=0
-          for attempt in $(seq 1 60); do
+          # `_`, not a named counter: this polls sixty times and printing an attempt number sixty
+          # times is noise, so the variable would be unused (SC2034).
+          for _ in $(seq 1 60); do
             code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "https://$host/health/ready" || true)
             if [ "$code" = "200" ]; then
               ok=$((ok + 1))

@@ -59,21 +59,32 @@ jobs:
     timeout-minutes: 5
     outputs:
       sha: ${{ steps.resolve.outputs.sha }}
+      proceed: ${{ steps.resolve.outputs.proceed }}
     steps:
       - name: resolve the commit
         id: resolve
+        # DECLINING IS NOT FAILING. This job used to `exit 1` when ci was red, which skipped every
+        # downstream job correctly but marked the whole `cd` run as failed — so a red ci produced
+        # TWO red runs, and the second one was a lie: nothing was broken, delivery simply had
+        # nothing to deliver. On a repository where ci is red, that noise is what stops people
+        # reading either result. It now sets an output and every downstream job is gated on it, so
+        # the run reports success with skipped jobs and the only red is the one worth fixing.
         run: |
           set -euo pipefail
+          if [ "$EVENT" = "workflow_run" ] && [ "$CONCLUSION" != "success" ]; then
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            echo "sha=$RUN_SHA" >> "$GITHUB_OUTPUT"
+            echo "::notice::ci concluded '$CONCLUSION' for $RUN_SHA — nothing is delivered. \
+            Fix ci first; this run is not a delivery failure."
+            exit 0
+          fi
           if [ "$EVENT" = "workflow_run" ]; then
-            test "$CONCLUSION" = "success" || {
-              echo "::notice::ci concluded '$CONCLUSION' — nothing is delivered"
-              exit 1
-            }
             sha="$RUN_SHA"
           else
             sha="${INPUT_SHA:-$GITHUB_SHA}"
           fi
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "proceed=true" >> "$GITHUB_OUTPUT"
           echo "::notice::delivering $sha"
         env:
           EVENT: ${{ github.event_name }}
@@ -87,6 +98,7 @@ jobs:
   images:
     name: images
     needs: gate
+    if: needs.gate.outputs.proceed == 'true'
     uses: ./.github/workflows/images.yml
     with:
       sha: ${{ needs.gate.outputs.sha }}
@@ -105,6 +117,7 @@ jobs:
   dev:
     name: dev
     needs: [gate, images]
+    if: needs.gate.outputs.proceed == 'true'
     uses: ./.github/workflows/deploy.yml
     with:
       environment: dev
@@ -124,6 +137,7 @@ jobs:
   staging:
     name: staging
     needs: [gate, images, dev]
+    if: needs.gate.outputs.proceed == 'true'
     uses: ./.github/workflows/deploy.yml
     with:
       environment: staging
@@ -139,6 +153,7 @@ jobs:
   ready-for-production:
     name: ready for production
     needs: [gate, staging]
+    if: needs.gate.outputs.proceed == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

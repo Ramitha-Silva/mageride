@@ -178,11 +178,27 @@ docker build -f infra/docker/Dockerfile.service --build-arg SERVICE=ApiGateway -
 Keep the lightweight production replica **down** while they run — this box hosts both
 (root `CLAUDE.md`, "Build Host").
 
-## Linting this workflow
+## Linting these workflows
 
-`ci.yml` is checked two ways, and both are cheap enough to run before pushing:
+Every workflow is checked two ways, and both are cheap enough to run before pushing:
 
 ```bash
 python3 -c "import yaml; yaml.safe_load(open('.github/workflows/ci.yml'))"   # the C010 verify
-actionlint .github/workflows/ci.yml                                          # expressions, contexts, shell
+actionlint                                                                   # ALL workflows
 ```
+
+**Install `shellcheck` first, or `actionlint` is much weaker than CI's.** actionlint shells out to
+shellcheck for every `run:` block *when shellcheck is on PATH*, and **says nothing when it is not** —
+so a local run without it reports clean while the identical version in CI reports shell findings and
+fails. That is exactly how three unquoted `${GITHUB_SHA::7}` expansions in this file's
+`backend — container templates` step survived from C010 to C124: the build host has no shellcheck,
+and until `k8s-validate.yml` started running actionlint over the whole directory on a GitHub runner
+(which ships shellcheck), nothing ever ran the shell checks at all.
+
+```bash
+sudo apt-get install -y shellcheck
+shellcheck --version && actionlint     # now equivalent to what the k8s-validate job runs
+```
+
+`actionlint` with no arguments lints every file in this directory, which is what CI does — linting
+one file by name is how a finding in another one goes unnoticed.

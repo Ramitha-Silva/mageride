@@ -154,9 +154,13 @@ jobs:
             -m "The schema is NOT rolled back — see docs/runbooks/rollback.md §4."
           for attempt in 1 2 3; do
             if git push origin HEAD:main; then exit 0; fi
+            # Says which attempt, like deploy.yml's equivalent loop. A rollback that took two
+            # tries to land is worth seeing in the log, and it is also what makes `attempt` used
+            # rather than dead (SC2034).
+            echo "push rejected (attempt $attempt) — rebasing onto main"
             git pull --rebase origin main
           done
-          echo "::error::could not push the rollback commit"
+          echo "::error::could not push the rollback commit after three attempts"
           exit 1
         env:
           ENVIRONMENT: ${{ inputs.environment }}
