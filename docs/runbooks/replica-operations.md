@@ -175,14 +175,57 @@ guardrail follows. The core 11 come to **16.625 GiB**, which is the spec's own ~
 
 ---
 
-## 6. Geocoding is on another box
+## 6. Geocoding — Nominatim on its own VPS
 
-Nominatim needs 8 GB and the spec says to host it separately ("too heavy to co-locate"). It is **not**
-in this compose file. With `Transit__NominatimBaseUrl` unset, `transit-svc`'s `/geo/parse-maps-link`
-and reverse geocoding answer **503 by design** rather than silently guessing a location.
+**In scope and deployed.** `45.77.37.208` (Ubuntu 26.04, 7.2 GiB RAM, 4 cores, 8 GiB swap) runs
+`mediagis/nominatim:4.4` against the Sri Lanka OSM extract, and the replica reaches it through
+`Transit__NominatimBaseUrl`.
 
-**Deploying it was deferred, not descoped.** The C125 session was told to leave it ("Nominatim on
-45.77.37.208 is out of scope for this session — no Docker on host", 2026-08-11), and the host still has
-no Docker installed. The spec lists it as an optional container of this replica and the C125 prompt's
-fences name it, so it remains outstanding work with a known home: install Docker on that box, load an
-extract, and set `Transit__NominatimBaseUrl` in `.env.replica`.
+```bash
+NOMINATIM_SSH_PASSWORD=... bash infra/replica/nominatim/deploy-nominatim.sh --dry-run
+NOMINATIM_SSH_PASSWORD=... bash infra/replica/nominatim/deploy-nominatim.sh
+NOMINATIM_SSH_PASSWORD=... bash infra/replica/nominatim/deploy-nominatim.sh --status
+NOMINATIM_SSH_PASSWORD=... bash infra/replica/nominatim/deploy-nominatim.sh --reimport   # discards the DB
+```
+
+Run it **from the replica box**. It installs Docker if absent, copies
+`docker-compose.nominatim.yml` to `/opt/mageride-nominatim`, generates the geocoder's internal
+Postgres password *on the target* (mode 600, never copied off it), starts the import, restricts 8080
+to the replica's address, and writes `Transit__NominatimBaseUrl` into `.env.replica`.
+
+Prefer a key — `ssh-copy-id root@45.77.37.208` once — and the script uses it automatically and stops
+needing `NOMINATIM_SSH_PASSWORD`.
+
+### Why a separate box, and why it is not in the replica's budget
+
+The spec is explicit: Nominatim wants 8 GB for the Sri Lanka extract, "which is a third of the 24 GB
+budget… **Recommended for light replica: host Nominatim on a separate cheap VPS**". Co-locating it
+would leave the eleven core containers about 8 GB and `guardrail.sh` would refuse the deploy.
+`budget.py` lists `nominatim` under `ELSEWHERE`, so its 8 GB row is **not** counted against the
+replica — that is deliberate, and the first version of that parser got it wrong and refused a deploy
+that fits.
+
+### The first boot is the whole job
+
+`mediagis/nominatim` imports on first boot when the data volume is empty, then serves. The extract is
+~137 MB and the import takes **tens of minutes**; the container stays `health: starting` throughout,
+which is why `start_period` is 90 minutes. A shorter one makes compose kill and restart a healthy
+import, which then never finishes.
+
+The imported database is the expensive artefact. **`--reimport` is the only thing that should ever
+discard that volume**, and it costs the whole import again.
+
+### When it is wrong
+
+| Symptom | Cause | What to do |
+|---|---|---|
+| `docker compose … ps` prints an interpolation error instead of a status | `NOMINATIM_PASSWORD` is `${VAR:?}`, so every compose subcommand needs `--env-file .env.nominatim` | use the script's `--status`, which passes it |
+| container restarts repeatedly, import never completes | OOM during the import — its peak is far above steady state | the box needs swap (it has 8 GiB); check `NOMINATIM_SHARED_BUFFERS` and `MAINTENANCE_WORK_MEM` are not larger than the box |
+| `/status` refuses the connection | the import has not finished. Refused-then-500-then-OK is the normal sequence | wait; follow the log with `--status` or the log command the script prints |
+| `transit-svc` still answers 503 for `/geo/parse-maps-link` | it reads `Transit__NominatimBaseUrl` at start-up | `docker compose -f infra/replica/docker-compose.light-replica.yml up -d --force-recreate app-services` |
+| the geocoder answers strangers | the ufw rule did not apply | `ssh root@45.77.37.208 'ufw status'`; only the replica's address should reach 8080 |
+
+`osm-pipeline` is **not** deployed. The spec makes it a weekly one-shot (diff → osm2pgsql →
+tippecanoe → PMTiles → R2 sync) that "is NOT part of the always-on container set", so it belongs in a
+cron entry. `--reimport` covers the geocoder half; the tile half needs an R2 bucket nobody has
+provisioned.
