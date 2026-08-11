@@ -181,4 +181,8 @@ Nominatim needs 8 GB and the spec says to host it separately ("too heavy to co-l
 in this compose file. With `Transit__NominatimBaseUrl` unset, `transit-svc`'s `/geo/parse-maps-link`
 and reverse geocoding answer **503 by design** rather than silently guessing a location.
 
-Deploying it is not part of C125.
+**Deploying it was deferred, not descoped.** The C125 session was told to leave it ("Nominatim on
+45.77.37.208 is out of scope for this session — no Docker on host", 2026-08-11), and the host still has
+no Docker installed. The spec lists it as an optional container of this replica and the C125 prompt's
+fences name it, so it remains outstanding work with a known home: install Docker on that box, load an
+extract, and set `Transit__NominatimBaseUrl` in `.env.replica`.
