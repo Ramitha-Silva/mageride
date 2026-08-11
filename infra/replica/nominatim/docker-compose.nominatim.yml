@@ -51,7 +51,8 @@ services:
       NOMINATIM_WORK_MEM: ${NOMINATIM_WORK_MEM:-64MB}
       NOMINATIM_PASSWORD: ${NOMINATIM_PASSWORD:?the geocoder needs an internal postgres password}
 
-      # No address search UI, no reverse-proxy assumptions. transit-svc calls /search and /reverse.
+      # No address search UI, no reverse-proxy assumptions. QUERY-SVC calls /search and /reverse —
+      # not transit-svc, whose /v1/geo/parse-maps-link touches no geocoder at all.
       NOMINATIM_IMPORT_STYLE: ${NOMINATIM_IMPORT_STYLE:-address}
 
     ports:

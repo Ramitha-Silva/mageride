@@ -243,6 +243,17 @@ discard that volume**, and it costs the whole import again.
 | `/status` refuses the connection | the import has not finished. Refused-then-500-then-OK is the normal sequence | wait; follow the log with `--status` or the log command the script prints |
 | `/v1/geo/reverse` still answers 503 | **query-svc** owns the geocoder and reads `Query__NominatimBaseUrl` at start-up. (`/v1/geo/parse-maps-link` is transit-svc's and touches no geocoder — same URL prefix, different service, and the trap that made the first version of `deploy-nominatim.sh` write a key nothing reads) | `docker compose -f infra/replica/docker-compose.light-replica.yml up -d --force-recreate app-services` |
 | the geocoder answers strangers | the ufw rule did not apply | `ssh root@45.77.37.208 'ufw status'`; only the replica's address should reach 8080 |
+| `/v1/geo/reverse` answers **503** and `/v1/geo/search` answers **500** with `BrokenCircuitException`, while `Query__NominatimBaseUrl` is correct **and** in the container's environment | **the geocoder VPS is refusing 8080** — this is not a wiring fault. `Connection refused` (not a timeout) means nothing is listening: the container is down, or the import was OOM-killed and is looping. The 500 is Polly's circuit breaker opening after the refusals. **Open question for C042:** the documented degradation for *unset* is that search falls back to the caller's saved and recent places, and a geocoder that is *down* looks the same to a passenger — so a 500 on the search box during an outage is arguably a defect rather than a design | check from the replica first: `bash -c '</dev/tcp/45.77.37.208/8080'`. Ping and port 22 answering while 8080 refuses confirms the box is up and the container is not. Then `NOMINATIM_SSH_PASSWORD=… bash infra/replica/nominatim/deploy-nominatim.sh --status`, which follows the import log and says which of the two it is |
+| `--status` says `cannot reach root@45.77.37.208: no ssh key works and NOMINATIM_SSH_PASSWORD is unset` | the credential lives with the operator, not in the repository — correctly | export `NOMINATIM_SSH_PASSWORD` for the command, or install an ssh key on the geocoder box so the script needs no secret at all |
+
+> [!IMPORTANT]
+> **A correct `Query__NominatimBaseUrl` is not the same as a working geocoder, and the difference was
+> invisible until C126.** Every request to `/v1/geo/*` carries a bearer, and until the JWKS route was
+> fixed *every* authenticated request answered 500 — so no check in this repository had ever reached
+> the geocoder to find out whether it answers. As of 2026-08-11 the key is right, query-svc holds it,
+> and **8080 on the geocoder VPS refuses connections**: the wiring is proven, the box is not serving.
+> `/v1/geo/reverse` returning 200 for `lat=6.9355&lng=79.8487` is the only check that means anything
+> here — see the two rows above.
 
 `osm-pipeline` is **not** deployed. The spec makes it a weekly one-shot (diff → osm2pgsql →
 tippecanoe → PMTiles → R2 sync) that "is NOT part of the always-on container set", so it belongs in a

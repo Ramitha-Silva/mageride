@@ -246,7 +246,7 @@ else
   ok "added Query__NominatimBaseUrl=${base_url} to ${REPLICA_ENV}"
 fi
 
-note "transit-svc reads this at start-up, so app-services needs a restart to pick it up:
+note "QUERY-SVC reads this at start-up (not transit-svc), so app-services needs a restart to pick it up:
       docker compose -f infra/replica/docker-compose.light-replica.yml up -d --force-recreate app-services"
 
 # =====================================================================================

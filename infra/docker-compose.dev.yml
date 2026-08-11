@@ -405,7 +405,9 @@ services:
 #
 #   admin-portal   C104  Next.js, Node 24-alpine, 3001, admin.mageride.lk   (AL-02)
 #   fleet-portal   C111  Next.js, Node 24-alpine, 3002, fleet.mageride.lk   (AL-03)
-#   nominatim      C056  8 GB — hosted on a SEPARATE VPS, never co-located (D-14)
+#   nominatim      C042  8 GB — hosted on a SEPARATE VPS, never co-located (D-14). QUERY-SVC's
+#                        geocoder (`Query__NominatimBaseUrl`), not transit-svc's — C056 owns
+#                        /v1/geo/parse-maps-link, which touches no geocoder
 #
 # `monitoring` (9090 / 3000) LANDED as C119 and is deliberately not here either: it is
 # `infra/observability/docker-compose.yml`, a file of its own on the same project and the
