@@ -20036,3 +20036,98 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   --dry-run=client` clause could be run for real against all three overlays; `kubeconform` and
   `actionlint` were fetched to the scratchpad rather than installed. The observability stack was brought
   up twice by C119's verify and taken down; the lightweight production replica stayed down throughout.
+
+  **Δ 2026-08-10/11 — what happened the first time any of this ran.** The pipeline landed green on a
+  tree whose CI was red, and turning it green surfaced **seven defects that all predate C124**. None
+  was caused by this component; every one was invisible because nothing had ever executed the path it
+  lived on. That is the single most useful thing for C125 to inherit: *the delivery pipeline was the
+  missing test harness for a large part of this repository, not just a deployment mechanism.*
+
+  | What | Since | Why nobody knew | Fixed |
+  |---|---|---|---|
+  | `ghcr.io/mageride` is unreachable — `mageride` is a real GitHub **user** that is not this repo's owner, and `GITHUB_TOKEN` can write to exactly one namespace: its own owner's | C124, i.e. as written | no image had ever been pushed | `66dcb29` |
+  | `backend/contracts/` was never in the Docker build context, so **query, reputation, dispatch and safety had never once built** (`<Protobuf Include="..\..\contracts\proto\*">` resolves outside `backend/src/`) | C010 | the compose leg builds no images, and nothing else invoked `Dockerfile.service` | `e4fdcd6` |
+  | `portals/` is excluded by the root `.dockerignore` ("nothing outside backend/ and db/ contributes to a .NET image" — true, and fatal for the portal image), so **all three portals had never built** | C010 | `dev-up.sh full` refuses before Wave 2, so `Dockerfile.portal` had never run anywhere | `64bb4e5` |
+  | `docker/build-push-action` takes `build-args` one `K=V` per **line**; the matrix emitted `PORTAL=admin PORT=3001` space-separated, so `PORTAL` became the literal string `"admin PORT=3001"` | C124 | only the portals carry two pairs, and they could not get far enough to run npm until the line above was fixed | `ace6046` |
+  | `actions/attest-build-provenance` refuses a **private repository owned by a User**. It failed all 28 legs *after* every image had built, pushed and been signed | C124 | no attestation had ever been attempted | `e4fdcd6` |
+  | `infra/deploy/device-ca/` is gitignored, so EMQX never booted in CI and **the compose leg had been vacuous since C009** | C009 | a leg that starts nothing still goes green | earlier the same day |
+  | `apps/driver-ios/` has **67 unique Swift compile errors across 15 files** | C085–C102 | this host cannot compile Swift | still open, #15 |
+
+  **Two of those hid behind a comment that asserted an invariant nothing checked.** `images.yml` said
+  the namespace was "kept as a variable rather than hard-coded so the two cannot silently disagree" —
+  nothing compared it to the catalog's `registry:`, which is what the Deployments *pull*. And
+  `DriveAsync`'s docstring said the drive is "72 km/h, comfortably under every ADD §12.6 ceiling",
+  which was true from step two onward and **never true of step one**. `infra/scripts/k8s-verify.sh` §8
+  now checks the first (and immediately caught two authored `base/jobs/` manifests that
+  `generate_manifests.py --check` passes straight over, because they are not generated). A comment is
+  not a check; where one states an invariant, something should enforce it.
+
+  **The `ModeBEntitlementScenario` flake, because the shape of it generalises.** It failed ~50% in CI
+  and **0/7 locally**, including the full assembly pinned to two CPUs. Four candidate causes were
+  eliminated by reading (the speed gate, sub-second truncation, the 500 ms flush, the
+  `(vehicle_id, seq, sample_ts)` identity) and none was it. What solved it was making the failure
+  self-diagnosing: `SessionJournal` now prints position-processor-svc's own verdict from Redis, and
+  because `veh:meta` is written **only** for an accepted sample it splits the pipeline exactly at that
+  service. One CI failure later the answer was unambiguous — last accepted sample still the **depot**
+  at 02:35:28 while the wait was after 02:35:30, and `telemetry.positions` holding precisely that one
+  row, which cleared persistence-writer-svc in a line. Cause: `DriveAsync` reported its first frame
+  immediately, so that frame's implied speed was 40 m ÷ *however long the previous scenario step took*,
+  and the step before a drive is HTTP against localhost. A grant flow that finished inside a second
+  made step one 144 km/h — refused — and a refused sample never becomes the position the next one is
+  measured against, so step two was measured from the depot too and was also 144 km/h. Fixed in
+  `409493f` by waiting the cadence *before* every frame. **Proven, not argued:** with the short gap
+  injected, the old ordering fails and the new one passes; `Category=ModeAB` is 30/30.
+
+  **That diagnostic pattern is now 4-for-4 on this repository** — `DevicePlaneWorker.LastError`,
+  `slim-verify.sh` printing the compose error *and the compose version*, `DailyFeeChargeTests`
+  reporting the RFC 7807 body, and the journal's Redis verdict. Every one of those bugs was
+  unfindable until a swallowed failure was made to speak, and none of the four was found by reading
+  the code that contained it.
+
+  **Five pre-existing test failures were fixed to get CI green**, and one is a production bug rather
+  than a test bug: `Subscription.Api/Persistence/DailyFeeRepository.UpsertAsync` used
+  `QuerySingleAsync` over an `ON CONFLICT … WHERE status <> 'PAID'` whose `UNION ALL` fallback shares
+  the statement snapshot and so cannot see a row committed mid-statement — zero rows, an exception, a
+  500. **Roughly a third of concurrent charges for one driver-day returned 500, so dispatch saw a
+  failed fee check on real rides and D-08 withheld the offer.** The others: the ApiGateway route table
+  had no `payout-svc` cluster since C133 (deployed and unreachable), two `PersistenceWriterTests`
+  hard-coded `2026-07-30`, `FaqTests` was order-dependent through the language fallback chain, and
+  `FleetHealth`'s frozen clock expired every MQTT session JWT.
+
+  **Two measurement errors of mine, both worth not repeating.** `gh api …/actions/runs/<id>/jobs`
+  **pages at 30**, and `cd` has 40 jobs — every job count reported before this was first-page-only,
+  which is why `all images signed` never appeared in any of them. Use `--paginate`. And a
+  `workflow_run`-triggered run's `head_sha` is **the branch tip at dispatch time, not the SHA of the
+  run that triggered it** — two `cd` runs that looked like duplicates for one commit were gating two
+  different commits. `cd.yml`'s gate already resolves the SHA from the event payload for exactly this
+  reason; the run list does not.
+
+  **The promotion cannot loop, but not because anything here prevents it.** `deploy.yml` pushes a
+  `deploy(<env>): sha-xxxxxxx` commit to `main`, and `ci.yml` triggers on every push to `main` — the
+  only thing stopping promote→ci→cd→promote is that **GitHub does not raise workflow events for
+  commits pushed with `GITHUB_TOKEN`**. Verified: `edeebd3` triggered zero runs. If that push ever
+  moves to a PAT, a deploy key or a GitHub App, the loop becomes real and nothing in the repository
+  will stop it. A `paths-ignore: [infra/k8s/overlays/**]` on `ci.yml`, or `[skip ci]` in the message,
+  would make the safety local.
+
+  **Where the pipeline actually stops.** On `409493f`: `ci` 7/7 → all 34 images built, pushed,
+  cosign-signed and SBOM-attested → **`all images signed` passed for the first time** → migration gate
+  ✓ → `promote to dev` ✓ (`edeebd3`) → **`verify dev` ✗**, because it probes
+  `api.dev.mageride.lk/health/ready` and there is no dev cluster; `staging` and `ready for production`
+  skipped correctly. 39 jobs green, one honest failure. Everything inside the repository works; the
+  first step that needs something outside it is where it ends. **C125 inherits exactly four external
+  prerequisites:** a cluster (or `ARGOCD_SERVER`, which replaces the fallback probe with
+  `argocd app wait`), the Vault seeding of `docs/runbooks/deploy.md` §2.2, reviewers on the
+  `production` environment, and a Mac for #15.
+
+  **Costs, since they shaped two decisions.** The repo is private, so every Actions minute is billed
+  against GitHub Pro's 3 000/month. The iOS leg was `advisory: true` for one day: `macos-14` bills at a
+  **10× multiplier**, and 11 runs × ~15 min came to roughly **1 690 billed minutes in a day** to
+  re-answer a question whose answer had not changed — which contributed to the spending limit that
+  stopped `cd` mid-afternoon on the 10th (every job in every workflow, zero steps, "the job was not
+  started"). It is now **on demand**: the `run-ios` label on a pull request, or `Run workflow` with
+  `ios: true`, and **binding when requested** — the only reason to ask is to learn whether the Swift
+  compiles, and an advisory leg answers that with a green tick. A full green push cycle is ~115 Linux
+  job-minutes (`ci` 45 + `cd` 70). Nothing prunes GHCR: every push adds 34 tags permanently, and
+  `rollback.yml` depends on old tags existing, so a retention policy is a design decision rather than
+  a quick edit.
