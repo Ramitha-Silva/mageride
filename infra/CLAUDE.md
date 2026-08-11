@@ -86,6 +86,8 @@ replica/gtfs-corridors.json    the six-corridor sample set; hard checks vs hinte
 replica/gtfs_shape.py          does a returned polyline belong to the corridor that produced it
 replica/gtfs/                  where the provider's zip is dropped — GITIGNORED, never committed
 docs/runbooks/gtfs-day0-load.md   the runbook, the rollback timings and the refresh checklist
+replica/contract-live-verify.sh   the OTHER half of the wave-5 gate: drives all 382 contract
+                               operations through the edge with a real bearer (tests/Contract/Live)
 ```
 
 - **The feed is an externally provided file (AL-56).** Neither script authors, edits or generates

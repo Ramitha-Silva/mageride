@@ -20442,3 +20442,92 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   then `bash infra/replica/gtfs-day0-load.sh` and `bash infra/replica/gtfs-day0-verify.sh`, and fill
   in the runbook's §6 timing table from the journal. Nothing else about C126 is outstanding.
   **C133's go-live gate stays closed until that runs** — it is gated on the day-0 feed being active.
+
+- **Component:** C126 addendum — the wave-5 gate's live half — 2026-08-11
+- **Status:** the deployed-replica contract sweep LANDED and is green with a ledger:
+  `bash infra/replica/contract-live-verify.sh` → **304 passed, 17 skipped, 0 failed** over 321 live
+  cases. The in-process suite is untouched: `dotnet test tests/Contract -c Release` → 81 passed,
+  1 by-design skip, the 321 live cases skipping cleanly with no target.
+- **Notes:**
+  **What landed.** `tests/Contract/Live/` is the second transport C118's CLAUDE.md said the
+  `Runtime/` sweep would gain "when the Dockerfiles land (C124/C125)". Every contract operation is
+  driven over HTTPS through HAProxy with a real Admin bearer, and asserted for: **no 5xx**, a status
+  **the platform is entitled to answer**, and **2xx bodies validated against the declared response
+  schema**. Two extra facts get their own tests: the mTLS-only `/v1/internal/**` plane answers 404 at
+  the edge for **every** operation the contracts declare (C125's smoke checks one), and the JWKS is
+  published — the endpoint no contract declares and every bearer depends on.
+
+  **`bash` owns the credential, C# owns the assertions.** The runner signs in as the C126 day-0
+  operator via `gtfs-lib.sh` (`require_token`), exports `MAGERIDE_LIVE_{EDGE,HOST,TOKEN}`, and tells
+  the suite which optional profiles are **absent** so a 503 from an undeployed voip-svc is skipped
+  rather than ledgered as drift. Without `MAGERIDE_LIVE_EDGE` every live theory skips, so CI and the
+  C118 verify are unaffected.
+
+  **FIVE findings, none of them visible in-process, each ratcheted in `Live/LiveDrift.cs`** — the
+  ledger asserts the symptom is STILL there, so a fix fails the suite until the entry is deleted (the
+  discipline `RouteDrift` already applies).
+  1. **`GET /v1/fleets/{fleetId}/health` has never worked on any deployment.** fleet-health-svc binds
+     **127.0.0.1:5202** inside hot-path (`HotPath/Program.cs` passes `bindAddress: "127.0.0.1"` for
+     all four co-located services), so no other container can reach it on any port — and the
+     replica's cluster address names **5203** while `docker-compose.dev.yml`'s comment names **5000**.
+     Three places, three ports, none right. **Same root cause as the JWKS defect: a co-located
+     service bound to loopback cannot be a cluster destination.** US-3.13 is dead until both halves
+     are fixed. OWNER: C125.
+  2. **`GET /v1/drivers/{driverId}/level` and `…/stats` answer 500 on an unknown driver.** They are
+     "refresh-then-read", and the refresh does `INSERT INTO dispatch.driver_levels … ON CONFLICT DO
+     NOTHING`, which violates `driver_levels_driver_id_fkey` (23503) and returns a raw Npgsql
+     exception. `dispatch.yaml` declares only 200 and 401, so there is no 404 to return either:
+     contract **and** service need the micro-change-set. OWNER: C047 + C007.
+  3. **`GET /v1/admin/audit-log` is non-conforming on every page containing a system event.**
+     `actorId` is `required` in `admin-bff.yaml` and absent whenever the actor is a job — which
+     migration 1305 makes explicit ("a system-initiated action … has no actor") and
+     `GtfsAuditActions` calls "actor-less by construction". Found because C126's own
+     `GTFS_FEED_VALIDATED` rows are the actor-less ones. The fix is a nullable `actorId`, not an
+     invented actor. OWNER: C062/C065 + C007.
+  4. **`GET /v1/users/me` and `GET /v1/me/bootstrap` serve `phone: ""`** for a web-only internal
+     account, against `pattern: ^\+947\d{8}$` with no nullable branch — so **every** Admin/Fleet
+     Portal profile read is non-conforming. OWNER: C026/C027 + C007.
+  5. **`Fleet__NotificationBaseUrl=http://app-services:8080`, where nothing listens** (the gateway is
+     5000, as `Safety__NotificationBaseUrl` says two hundred lines up). **Fixed** in
+     `.env.app.example`; fleet-svc's departure reminders would have failed on connection refused.
+
+  **And one finding worth more than the five, for C127.** `ASPNETCORE_ENVIRONMENT=Development` on the
+  replica — set deliberately in `infra/env/.env.common.example` for the *dev* compose ("relaxes the
+  kernel's config validation, which is what a dev compose wants"), and the replica loads that same
+  file with nothing overriding it. Consequences, both observed: `ProblemDetailsExceptionHandler` adds
+  the **full exception** to any 5xx in Development, so a **publicly bound** edge serves stack traces
+  and SQL — that is how the JWKS and FK defects above were diagnosed, straight off HTTP; and every
+  `required outside Development` guard is switched **off**, which is how
+  `Transit__Gtfs__DownloadSigningKey=CHANGEME_…` survived. The list those guards cover includes
+  `Otp:PepperKey`, `Auth:PhoneHashKey`, `Jwt:SigningKeyPem` and notification-svc's PII logging.
+  **The one-line fix is `ASPNETCORE_ENVIRONMENT=Production` in `.env.replica.example`, and it is NOT
+  applied here**: flipping it turns those guards on, and a deployment missing any of them refuses to
+  start. Enumerating and generating them is C132's, with C127 judging the disclosure. (Checked and
+  **not** a hole: registry-svc's Development-only `POST /v1/dev/vehicles/{id}/approve` is not routed
+  at the edge.)
+
+  **Two mistakes of mine, both caught by the sweep itself.**
+  (a) The first version asserted "a 404 without problem+json means unrouted" — and **the gateway's
+  own 404 is problem+json too** (`/v1/definitely-not-a-route-anywhere` proves it), so the check could
+  never fire. An assertion that cannot fail reads as coverage; it is gone, and route existence is
+  named as `RouteTableTests`' job, which also gets the reverse direction.
+  (b) **The sweep changed state on its first run, which it had promised not to.** The kernel's
+  `Idempotency-Key` requirement covers POST only, so three no-id PUTs were accepted
+  (`/v1/users/me`, `/v1/admin/dispatch/directional-config`, `/v1/admin/drivers/level-config` — both
+  config rows were rewritten with the values they already held, which is luck: they were at their
+  migration defaults), and two idempotency-exempt POSTs filed **real PDPA obligations** against the
+  operator account (an erasure and an export, 30-day clocks, `PDPA_REQUESTED` in `audit.events`).
+  Both rows were deleted; the audit trail was left, being append-only and true. `LiveRequestPlan`
+  now drives PUT/PATCH/DELETE **only where the template carries an id**, and the PDPA family is in
+  the exclusion list. The class remark says plainly that the list was incomplete by inspection.
+
+  **Still open, and deliberately not started:** porting the four E2E fleets to a deployed target.
+  They configure `Jwt:JwksUrl` at a black hole and mint their own tokens, and some scenarios assert
+  on broker internals and ledger rows that only in-process composition can reach. That is a
+  component-sized piece of work, not a flag, and it should get its own slot rather than be
+  half-built here.
+
+  **Files —** new: `tests/Contract/Live/{LiveEdge,LiveRequestPlan,LiveConformanceTests,LiveDrift}.cs`,
+  `infra/replica/contract-live-verify.sh`. Changed: `backend/contracts/transit.yaml` (the three
+  nullable history fields, `oneOf` + `'null'` as this directory already spells it),
+  `infra/env/.env.app.example` (finding 5), `tests/Contract/CLAUDE.md`, `infra/CLAUDE.md`.
