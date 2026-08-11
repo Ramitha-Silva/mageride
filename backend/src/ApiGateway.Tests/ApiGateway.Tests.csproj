@@ -34,6 +34,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\ApiGateway\ApiGateway.csproj" />
+    <!-- Container7CoLocationTests asserts the replica's Container 7 against this gateway's
+         own route table. The reference is one-way: AppServices already references ApiGateway. -->
+    <ProjectReference Include="..\AppServices\AppServices.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,0 +1,83 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    AppServices (C125) — the lightweight production replica's Container 7.
+
+    `specs/lightweight-production-replica.md` §"Container 7 — app-services" co-locates the domain
+    services and the YARP gateway in ONE .NET process to stay inside the 24 GB VPS budget. This
+    project is that process and contains no domain logic: every service is built by its own
+    `XApplication.Build`, exactly as in production, and this host only decides where each listens,
+    what order they start in, and which loopback address the gateway is told to route to.
+
+    TWENTY-TWO, NOT THE SPEC'S TWENTY-ONE. The spec's table predates two services that now exist and
+    have no other container to live in: `payout-svc` (C061) and `fleet-billing-svc` (C060). The dev
+    compose already says "the 22 domain services", so the count here follows the code rather than the
+    table. `ocr-svc` is in the spec's list and is here, which is why this container needs its own
+    Dockerfile — see infra/docker/Dockerfile.appservices for the native Tesseract/OpenCV story.
+
+    THREE OF THE GATEWAY'S CLUSTERS ARE NOT IN THIS CONTAINER and must not be overridden here:
+    `fanout-svc` is Container 8, `fleet-health-svc` is inside Container 6, and `voip-svc` is the
+    optional Container 11. Their addresses come from the compose environment. Overriding them here
+    would point the gateway at a port in this process that nothing is listening on.
+
+    WHY IT EXISTS AT ALL, AND WHY SO LATE. `infra/docker-compose.dev.yml` has referenced
+    `backend/src/AppServices/Dockerfile` since C009 and nothing created it. C118 went PARTIAL because
+    the dev stack could not be brought up without it and deferred it to "C124/C125"; C124 then built
+    34 per-service images for the D7' §5 Kubernetes layout, where each of these 22 IS its own
+    Deployment. The co-located form the replica needs had never existed.
+
+    THE REPLICA'S LAYOUT IS NOT PRODUCTION'S, AND THAT IS THE SPEC'S CHOICE. The spec's own note is
+    the reason this host can be so thin: "Each service is a separate class library with its own DI
+    registration, so extracting to individual containers for production is a configuration change,
+    not a code change." In this repository each is a separate ASP.NET application with its own
+    `Build`, which makes that even more true than the note claims.
+
+    Verify: `infra/replica/deploy.sh` with the dry-run flag. (Written out rather than pasted: an XML
+    comment cannot carry a double hyphen.)
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.AppServices</RootNamespace>
+    <AssemblyName>MageRide.AppServices</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <UserSecretsId>mageride-appservices-host</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The edge. Started last, so every cluster it fronts is already listening. -->
+    <ProjectReference Include="..\ApiGateway\ApiGateway.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The 22 domain services of Container 7, in the spec's own order where it gives one. -->
+    <ProjectReference Include="..\Iam.Api\Iam.Api.csproj" />
+    <ProjectReference Include="..\Registry.Api\Registry.Api.csproj" />
+    <ProjectReference Include="..\Provisioning.Api\Provisioning.Api.csproj" />
+    <ProjectReference Include="..\Query.Api\Query.Api.csproj" />
+    <ProjectReference Include="..\TripState.Api\TripState.Api.csproj" />
+    <ProjectReference Include="..\Ride.Api\Ride.Api.csproj" />
+    <ProjectReference Include="..\Dispatch.Api\Dispatch.Api.csproj" />
+    <ProjectReference Include="..\Fare.Api\Fare.Api.csproj" />
+    <ProjectReference Include="..\Subscription.Api\Subscription.Api.csproj" />
+    <ProjectReference Include="..\Wallet.Api\Wallet.Api.csproj" />
+    <ProjectReference Include="..\Notification.Api\Notification.Api.csproj" />
+    <ProjectReference Include="..\Safety.Api\Safety.Api.csproj" />
+    <ProjectReference Include="..\Reputation.Api\Reputation.Api.csproj" />
+    <ProjectReference Include="..\Content.Api\Content.Api.csproj" />
+    <ProjectReference Include="..\Support.Api\Support.Api.csproj" />
+    <ProjectReference Include="..\Fleet.Api\Fleet.Api.csproj" />
+    <ProjectReference Include="..\AdminBff\AdminBff.csproj" />
+    <ProjectReference Include="..\Ocr.Api\Ocr.Api.csproj" />
+    <ProjectReference Include="..\Transit.Api\Transit.Api.csproj" />
+    <ProjectReference Include="..\PublicBff\PublicBff.csproj" />
+    <ProjectReference Include="..\Payout.Api\Payout.Api.csproj" />
+    <ProjectReference Include="..\FleetBilling\FleetBilling.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The co-location mechanics are HotPath's; sharing them is what keeps the two containers' -->
+    <!-- start-up, shutdown and port-assignment behaviour identical. -->
+    <ProjectReference Include="..\HotPath\HotPath.csproj" />
+  </ItemGroup>
+
+</Project>

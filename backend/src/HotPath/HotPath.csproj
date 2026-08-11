@@ -1,0 +1,52 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    HotPath (C125) — the lightweight production replica's Container 6.
+
+    `specs/lightweight-production-replica.md` §"Container 6 — hot-path" co-locates four logical
+    services in ONE .NET process to stay inside the 24 GB VPS budget: mqtt-bridge,
+    position-processor-svc, persistence-writer-svc and fleet-health-svc. This project is that
+    process, and it contains no domain logic of its own — every one of the four is built by its own
+    `XApplication.Build`, exactly as it is in production, and this host only decides where they
+    listen and in what order they start and stop.
+
+    WHY IT EXISTS AT ALL, AND WHY SO LATE. `infra/docker-compose.dev.yml` has referenced
+    `backend/src/HotPath/Dockerfile` since C009 and nothing ever created it — the C040 handoff
+    records it as "still nobody's". C118 went PARTIAL because the dev stack could not be brought up
+    without it and deferred it to "C124/C125"; C124 then built 34 per-service images for the D7' §5
+    Kubernetes layout, where each of these four IS its own Deployment. So the co-located form the
+    replica needs has never existed, and C125 is the first component that cannot proceed without it.
+
+    THE REPLICA'S LAYOUT IS NOT PRODUCTION'S, AND THAT IS THE SPEC'S CHOICE. The same four services
+    are four independently-scaled pods under `infra/k8s/base/services/`. The spec's own warning is
+    worth repeating here because this file is what implements the trade: co-locating them shares one
+    thread pool and one GC heap, so a stall in any one — position-processor on a slow anti-spoof
+    check, persistence-writer blocking on a Postgres write spike — pauses the entire hot path.
+    Backpressure isolation is sacrificed deliberately, and ADD §3.2's SLOs should be validated on
+    the replica under a simulated Postgres slowdown before treating it as launch-equivalent.
+
+    Verify: `infra/replica/deploy.sh` with the dry-run flag. (Written out rather than pasted: an XML
+    comment cannot carry a double hyphen, the same reason HotPath.PositionProcessor.csproj spells its
+    test filter out. The runnable form is in build/prompts/C125.md and infra/replica/README.md.)
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.HotPath.Host</RootNamespace>
+    <AssemblyName>MageRide.HotPath</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <UserSecretsId>mageride-hotpath-host</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      The four services of Container 6. No MageRide.Shared reference: each of these already carries
+      it, and naming it here would let this host drift onto a different version of the kernel than
+      the services it starts.
+    -->
+    <ProjectReference Include="..\HotPath.MqttBridge\HotPath.MqttBridge.csproj" />
+    <ProjectReference Include="..\HotPath.PositionProcessor\HotPath.PositionProcessor.csproj" />
+    <ProjectReference Include="..\HotPath.PersistenceWriter\HotPath.PersistenceWriter.csproj" />
+    <ProjectReference Include="..\FleetHealth\FleetHealth.csproj" />
+  </ItemGroup>
+
+</Project>

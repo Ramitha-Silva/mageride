@@ -1,0 +1,94 @@
+# =====================================================================================
+# MageRide — app-services image (C125): the lightweight production replica's Container 7.
+#
+#   docker build -f infra/docker/Dockerfile.appservices -t mageride/app-services:dev .
+#
+# Build context is the REPOSITORY ROOT, as with every other template.
+#
+# WHY THIS CONTAINER HAS ITS OWN DOCKERFILE rather than using Dockerfile.service with
+# SERVICE=AppServices:
+#
+#   `ocr-svc` is one of the 22 services co-located in this container (the spec's Container 7
+#   table lists it), and it drags two OS-level requirements in with it. `Dockerfile.service`
+#   publishes onto `aspnet:10.0-alpine`, and OpenCvSharp's native half
+#   (`libOpenCvSharpExtern.so`) is a glibc build that will not load under musl — so on that base
+#   the D-36 face blur is permanently unavailable and ocr-svc runs fail-closed for ever, which
+#   from the outside is indistinguishable from working. `Dockerfile.ocr` already made exactly
+#   this deviation for exactly this reason; this file inherits its base and its apt layer, for
+#   the whole container, because co-location means one image carries every service's
+#   dependencies.
+#
+# The rest deliberately matches `Dockerfile.service`: non-root `app`, the resolved entry point,
+# and a healthcheck on the one published port. An orchestrator cannot tell the templates apart.
+# =====================================================================================
+
+ARG DOTNET_SDK_IMAGE=mcr.microsoft.com/dotnet/sdk:10.0
+# Debian, not Alpine — ocr-svc's native OpenCV is glibc-only.
+ARG DOTNET_RUNTIME_IMAGE=mcr.microsoft.com/dotnet/aspnet:10.0
+
+# ---- build --------------------------------------------------------------------------
+FROM ${DOTNET_SDK_IMAGE} AS build
+ARG BUILD_CONFIGURATION=Release
+
+WORKDIR /src
+
+COPY ["global.json", "./"]
+COPY ["backend/Directory.Build.props", "backend/Directory.Packages.props", "backend/"]
+COPY ["backend/src/", "backend/src/"]
+# The four gRPC services (query, reputation, dispatch, safety) resolve their .proto files from
+# outside backend/src/, and all four are co-located here. Δ 2026-08-10 — without this the publish
+# dies on `Could not make proto path relative`.
+COPY ["backend/contracts/", "backend/contracts/"]
+# MageRide.Migrations globs db/migrations/*.sql as embedded resources; anything that references
+# it — directly or through MageRide.TestKit — needs them present to restore.
+COPY ["db/migrations/", "db/migrations/"]
+
+RUN dotnet restore "backend/src/AppServices/AppServices.csproj"
+
+RUN dotnet publish "backend/src/AppServices/AppServices.csproj" \
+      -c ${BUILD_CONFIGURATION} \
+      -o /app \
+      --no-restore \
+      /p:UseAppHost=false
+
+# ---- runtime ------------------------------------------------------------------------
+FROM ${DOTNET_RUNTIME_IMAGE} AS runtime
+
+# tesseract-ocr          D6' §7.5's fallback + ADD §12.5's bounding boxes
+# libgtk-3-0 libatomic1  what libOpenCvSharpExtern.so links
+# opencv-data            haarcascade_frontalface_default.xml, probed by OpenCvFaceDetector
+# curl                   the healthcheck below; the Debian base ships no wget either
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      tesseract-ocr \
+      tesseract-ocr-eng \
+      libgtk-3-0 \
+      libatomic1 \
+      opencv-data \
+      curl \
+ && rm -rf /var/lib/apt/lists/*
+
+# The Debian base ships no `app` user, unlike the Alpine one Dockerfile.service guards for.
+RUN getent group app >/dev/null 2>&1 || groupadd -r app; \
+    getent passwd app >/dev/null 2>&1 || useradd -r -g app app
+
+WORKDIR /app
+COPY --from=build /app .
+
+# provisioning-svc's embedded step-ca writes its root and intermediate keys here (T-02), and the
+# compose file mounts the device CA over it so EMQX can read the same chain.
+RUN mkdir -p /var/step && chown -R app:app /var/step /app
+
+USER app
+
+# Only the gateway's port is published. The 22 services listen on 127.0.0.1:5101-5122 and are
+# unreachable from outside the container by design — the spec's Container 7 table exposes 5000.
+EXPOSE 5000
+
+# The gateway is the last service to start, so its readiness is the container's readiness: if it
+# answers, all 22 behind it are already listening. `start-period` is generous because 23 pipelines
+# compose here, not one.
+HEALTHCHECK --interval=15s --timeout=5s --start-period=120s --retries=5 \
+  CMD curl -fsS http://127.0.0.1:5000/health/ready || exit 1
+
+ENTRYPOINT ["dotnet", "MageRide.AppServices.dll"]

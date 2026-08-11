@@ -28,6 +28,27 @@ public static class GatewayApplication
         // (ReverseProxy__Clusters__ride-svc__Destinations__primary__Address).
         builder.Configuration.AddJsonFile("gateway-routes.json", optional: false, reloadOnChange: true);
 
+        // Δ C125: and the two lines below are what makes the sentence above TRUE. `CreateBuilder` has
+        // already added the environment and the command line, and the last source added wins — so the
+        // file we just added outranked both, and every
+        // `ReverseProxy__Clusters__*__Destinations__primary__Address` in the repository was silently
+        // ignored. Two deployment descriptors depended on it and both were dead: the replica's compose
+        // pointed all 24 clusters at `http://app-services:5000/` (correct, since the 22 domain
+        // services are co-located there) and Kubernetes pointed them at `http://iam-svc/` (correct,
+        // since the generated Service listens on port 80). Neither took effect, so both would have
+        // used the file's `http://iam-svc:5000/` — a host that does not exist in compose, and a port
+        // the Kubernetes Service does not expose. Every route, 502.
+        //
+        // Re-adding both, in `CreateBuilder`'s own order, restores the conventional precedence:
+        // file < environment < command line < whatever `configure` adds. `ClusterAddressPrecedenceTests`
+        // pins all four.
+        builder.Configuration.AddEnvironmentVariables();
+
+        if (options.Args is { Length: > 0 })
+        {
+            builder.Configuration.AddCommandLine(options.Args);
+        }
+
         configure?.Invoke(builder);
 
         var stateStore = builder.Configuration.GetValue(
