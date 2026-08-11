@@ -196,14 +196,51 @@ curl -sk -X POST -H "Host: $REPLICA_HOSTNAME" -H "Authorization: Bearer $TOKEN" 
 
 ### Timings
 
-Filled in from `infra/replica/gtfs-day0-journal.json` by the run itself. **Not yet measured on this
-replica — the provider's file has not arrived** (see §9).
+Filled in from `infra/replica/gtfs-day0-journal.json` by the run itself. **The national feed has not
+been loaded yet** (see §9), so the real column is still open:
 
 | | Swap (HTTP) | Cache reload | Bound |
 |---|---|---|---|
 | day-0 activation | *(pending)* | *(pending)* | ≤ 60 s (US-28.2) |
 | rollback to the previous release | *(pending)* | *(pending)* | ≤ 60 s |
 | restore of the day-0 feed | *(pending)* | *(pending)* | ≤ 60 s |
+
+**Measured on a rehearsal, 2026-08-11 — a SYNTHETIC fixture, not a feed.** Two generated
+Gampaha-district datasets (15 halts, 3 vs 4 routes, 288 vs 408 `stop_times`) were driven through the
+whole pipeline to exercise the paths a feed-less run cannot reach. Read these as mechanics, not as a
+forecast:
+
+| | Swap (HTTP) | Cache reload |
+|---|---|---|
+| activate v1 over an empty database | 1.3 s | — |
+| activate v2 over v1 (the "day-0" swap) | **0.2 s** | **4.3 s** |
+| roll back to v1 | **0.3 s** | **4.3 s** |
+| restore v2 | 0.2 s | 4.3 s |
+
+**What that does and does not predict.** The swap is `ALTER TABLE … SET SCHEMA` — a catalogue update
+that rewrites no row — so 0.2 s is roughly what a national feed will cost too. The two phases that
+*do* grow are the **staging load** before it (minutes for a national feed; nothing is visible while
+it runs) and the **cache rebuild** after it: `Loaded GTFS feed … in 00:00:00.018` for 15 halts
+becomes seconds-to-tens-of-seconds for ~7 600, and the 4.3 s above is dominated by the poll interval
+rather than the work. That is exactly what the ≤ 60 s bound is for.
+
+**What the rehearsal proved** (34 of 35 verify checks green — the miss is the empty state, which
+belongs to the real run's journal): the staging load, the three-way schema rename, `NOTIFY` inside
+the swap transaction, the cache reload, corridor matching with correct shapes, rollback in both
+directions, the one-active-row index, audit attribution, and stored-zip retention across the volume.
+
+**The strongest single check was a discriminator, not a timing.** Route 224 exists in v2 and not in
+v1, so `Gampaha → Mirigama` must answer differently either side of a swap. It did:
+
+| | direct options | `transit.gtfs_routes` |
+|---|---|---|
+| v2 live | `224` | 4 |
+| after rollback to v1 | *(none)* — and `coverage: active`, not `no_feed` | 3 |
+| after restoring v2 | `224` | 4 |
+
+That is the swap replacing the *dataset* rather than flipping a ledger row — and the middle row is
+AL-55's distinction on a real deployment: "no bus serves this corridor" is `active` with an empty
+list, which is not the same answer as "there is no feed".
 
 What to expect and why: the swap is `ALTER TABLE … SET SCHEMA`, a catalogue update that rewrites no
 row, so it does not grow with the feed. The **staging load** before it does — that is where the
@@ -270,12 +307,29 @@ non-empty history table.
 | | |
 |---|---|
 | **Pre-first-import empty state** | recorded, 2026-08-11 (§2) |
-| **Day-0 feed** | **not loaded.** No national GTFS file exists in this repository or on this box, and AL-56 forbids manufacturing one. The load, the corridor verification and the rollback rehearsal all run the moment the provider's zip is dropped at `infra/replica/gtfs/` |
+| **Day-0 feed** | **not loaded.** No national GTFS file exists in this repository or on this box, and AL-56 forbids manufacturing one. The load, the corridor verification and the rollback rehearsal all run the moment the provider's zip is dropped at `infra/replica/gtfs/` — or the moment it is uploaded through SCR-AP-016 in the Admin Portal, which is behind `--profile portals` and is not running by default |
+| **Pipeline rehearsal** | **done, on a synthetic fixture** (2026-08-11): activate → cache reload → roll back → restore, plus the corridor and shape checks. See the rehearsal tables in §6. `/root/gtfs-fixtures/` holds the two zips and the generator that made them; they are deliberately NOT in `infra/replica/gtfs/`, where `gtfs-day0-load.sh` would pick one up as the day-0 feed |
 | **Operator** | `gtfs-day0@replica.invalid`, role `admin`, password generated into `.env.replica` (gitignored). Synthetic, replica-only |
 | **Retention** | `gtfsdata` volume mounted at `/var/lib/mageride` in app-services, proven to survive a container recreate |
 | **Download signing key** | generated per deployment by `deploy.sh`; the repository's `CHANGEME_…` placeholder is no longer live here |
 
-**There is one `FAILED` row in the history table, and it is not a feed.** The upload path had never
+**The history table currently holds three rows, none of them a feed.** A synthetic Gampaha fixture is
+**ACTIVE** (`SYNTHETIC-gampaha-v2-2026-08-11`), its v1 is **ARCHIVED**, and a malformed probe is
+**FAILED**. Uploading the provider's file archives the synthetic one automatically — the pipeline
+needs no cleaning up first — but if you would rather start from a bare history, the rows and their
+stored zips go together:
+
+```sql
+-- the fixtures and the probe; audit.events keeps its record of them either way (append-only)
+DELETE FROM transit.gtfs_feed_versions
+ WHERE file_name IN ('gampaha-SYNTHETIC-v1.zip','gampaha-SYNTHETIC-v2.zip','malformed-not-a-feed.zip');
+```
+
+Do that **only while no fixture is active** — deleting the active row leaves `transit.gtfs_*` holding
+its dataset with nothing in the ledger pointing at it, which reads as a feed nobody activated. Roll
+forward to the real feed first, or accept the synthetic row being archived beneath it.
+
+**One `FAILED` row is a malformed-input probe, not a feed.** The upload path had never
 executed against a deployment, so it was exercised with a zip containing a single README saying what
 it is — no GTFS file, so BR-32.1 refused it with five `missing_file` errors and it can never be
 activated. What that proved, end to end through HAProxy and the gateway: the multipart upload
