@@ -37,6 +37,17 @@ head_(){ printf '\n\033[1m%s\033[0m\n' "$*"; }
 check_running=0
 [ "${1:-}" = "--running" ] && check_running=1
 
+# The compose file marks four values `${VAR:?}`, so EVERY `docker compose` call in this script needs
+# them — including `ps`. Without this the --running check reported "nothing is running under the
+# mageride-replica project" while all eleven containers were healthy: a false negative in the one
+# check whose job is to notice the stack outgrowing its budget.
+if [ -f infra/replica/.env.replica ]; then
+  set -a
+  # shellcheck disable=SC1091
+  . infra/replica/.env.replica
+  set +a
+fi
+
 # -------------------------------------------------------------------------------------
 head_ "1. is a heavy build running?"
 # -------------------------------------------------------------------------------------
@@ -109,14 +120,24 @@ else
     drift_out=$(python3 infra/replica/budget.py drift "$COMPOSE" 2>&1)
     drift_status=$?
 
+    real_drift=$(printf '%s\n' "$drift_out" | grep -v '^DEVIATION ' | grep -v '^$' || true)
+    deviations=$(printf '%s\n' "$drift_out" | grep '^DEVIATION ' || true)
+
     if [ "$drift_status" -ne 0 ]; then
       bad "the compose file could not be checked against the spec:"
       printf '%s\n' "$drift_out" | tail -3 | sed 's/^/      /' >&2
-    elif [ -n "$drift_out" ]; then
+    elif [ -n "$real_drift" ]; then
       bad "the compose file and the spec disagree:"
-      printf '%s\n' "$drift_out" | sed 's/^/      /' >&2
+      printf '%s\n' "$real_drift" | sed 's/^/      /' >&2
     else
-      ok "every container's memory limit equals its row in the spec"
+      ok "every container's limit matches the spec, or is a declared deviation"
+    fi
+
+    # Reported every run, never silent: an accepted deviation nobody sees again is drift.
+    if [ -n "$deviations" ]; then
+      while IFS= read -r line; do
+        [ -n "$line" ] && warn "${line#DEVIATION }"
+      done <<< "$deviations"
     fi
   fi
 fi
@@ -159,8 +180,10 @@ else
       (infra/scripts/ensure-device-ca.sh). EMQX cannot start its TLS listener without it."
 fi
 
-if [ -f infra/deploy/certs/mageride.pem ] || compgen -G "infra/deploy/certs/*.pem" >/dev/null; then
-  ok "an edge certificate exists for HAProxy"
+if [ -f infra/deploy/certs/replica.pem ]; then
+  # Named explicitly rather than globbed: the dev stack's mageride-dev.pem sitting in the same
+  # directory would satisfy a glob and is not the file haproxy.replica.cfg names.
+  ok "infra/deploy/certs/replica.pem exists (the file haproxy.replica.cfg binds)"
 else
   warn "no certificate in infra/deploy/certs — deploy.sh generates a self-signed one. It is a
       REPLICA certificate: nothing trusts it, and nothing should."

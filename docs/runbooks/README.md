@@ -77,3 +77,4 @@ forbid a runbook with no alert.
 | [deploy.md](deploy.md) | bootstrapping a cluster, and understanding the path a commit takes. Nothing needs doing for a normal deploy. |
 | [rollback.md](rollback.md) | the answer to a page is "the release we just shipped". **Never `kubectl rollout undo` — ArgoCD's selfHeal reverts it.** |
 | [secret-rotation.md](secret-rotation.md) | D7' §13's schedule, as procedures. The JWT key needs a 30-minute overlap; the MQTT session secret has none and is a brief total outage. |
+| [replica-operations.md](replica-operations.md) | the lightweight production replica (C125): bring up, bring down, back up, restore, and the eight failures it actually produces. **Synthetic data only**, and the box it runs on is the box that builds the repository. |

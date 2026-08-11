@@ -151,7 +151,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C122 | e2e-proxy-package | 5 | DONE | 2026-08-09 | **20 tests green** in `tests/E2E` (5 new scenario files, **100 in the assembly** with C120's and C121's); `dotnet test tests/E2E -c Release --filter Category=ProxyPackage` exits 0 in **~50 s**, twice consecutively against fresh containers, and the full assembly passes 100/100 in 7 m 54 s. **Ten services actually running** — ride-svc, iam-svc, dispatch-svc, reputation-svc, fare-svc, fanout-svc, content-svc, notification-svc, public-bff and safety-svc — with every worker on. **iam-svc is in this fleet for P-03, not for its bearers**: `GET /v1/users/lookup` is the registration oracle that chooses between the FCM round-trip and AL-45's SMS. **Both no-app paths are driven from the message the platform actually sent**: a `SmsGateway` speaking D6' §7.3's Notify.lk REST shape captures it, the token is parsed out of the `{{link}}` content-svc rendered, and the browser opens SCR-WT-003 and SCR-WT-002 with nothing else — a share token is mint-and-SMS (AL-44/AL-45), so reading `safety.trip_share_tokens` would have been asserting about a page no recipient could reach. §11.15's registered branch ends on the booker's real WebSocket; **the decline stores no coordinates in the row, the outbox payload or the socket frame**, asserted across all three plus a whole-table check; the 300 s window is asserted before `issued_at` is aged and ride-svc's own sweep expires it. Package: both P-07 gates, a correct code that spends no attempt, the five-attempt lockout with `package.otp_locked` and the photo-proof way out of it, P-10's `file://` artefact with its sha256 and captured geo. COD: P-08's tap settles and a second is refused, **P-14's 24 h clock lands the ride in `Disputed` with no penalty**, and the same clock correctly does nothing to a parcel still in transit. Web: all six SCR-WT screens, AL-48's unmasked `tel:` number, P-09's fare block with no instrument, a token-only SOS that reaches the booker through the real gateway, and **SCR-WT-006 asserted on the body — ride id, plate, driver, both numbers, state and coordinates all absent from the 410**. **One finding, ratcheted:** nothing writes `fares.ride_payments.CashOnDeliveryCollected`, so a COD receipt carries no figure. No service, spec, contract or migration file was changed |
 | C123 | e2e-money-flows | 5 | DONE | 2026-08-09 | **36 tests green** in `tests/E2E` (5 new scenario files, **136 in the assembly** with C120/C121/C122's); `dotnet test tests/E2E -c Release --filter Category=Money` exits 0 in **~1 m**, twice consecutively, and the full assembly passes 136/136 in 8 m 20 s with `dotnet build backend/MageRide.sln -c Release` clean. **Seven services actually running** — wallet-svc, subscription-svc, fare-svc, ride-svc, dispatch-svc, reputation-svc and fleet-svc — plus an `AcquirerGateway` speaking D6' §7.1's create-session shape and signing its own callbacks, which is the only honest way to reach the two rails AL-05 leaves. **The double-entry ledger is asserted balanced after every scenario**, by `MoneyScenario.RunAsync` rather than by the scenarios, in three statements: every entry sums to zero, every posting on the platform sums to zero, and every `billing.accounts`/`billing.wallets` balance equals the sum of its own legs. **Every rupee arrives through a rail the platform has** — drivers start empty and top up through OnePay or LankaQR with a signed callback. D-13's free first trip, the Rs 100 charged before the second, the single flat charge, **D-08's gate withholding an offer from a driver who could not pay**, and the Colombo-day key proved in both directions. R-19's two idempotency guards, the unsigned and the mis-valued callback, US-9.19's voucher at face value, US-9.13's transfer at par with a two-leg entry the database has no kind to add a fee to (AL-01), and `ck_topups_method` refusing a bank transfer (AL-05). D-10's three rails with cash and driver-QR asserted to move **no ledger at all** against a reachable wallet-svc, AL-47's claim/confirm/dispute with the Finance ticket carrying its evidence, E-10's tip. Epic 23's five methods end to end — the owner's own LankaQR on a signed link, the slip and the owner's confirm, US-23.6's cash — with **not one posting** and no column that could hold one (§18b). **Four findings, each asserted as a gap with a test that fails when it is fixed:** AL-57's passenger wallet has no funding route; `Overpaid` is unreachable since AL-57/AL-59 removed the ride callbacks; **E-05's reversal is refused by wallet-svc's own `kind` whitelist and answers 503 after committing the refund row**; and nothing calls `charge-before-trip`. No service, spec, contract or migration file was changed |
 | C124 | cicd-full-pipeline | 5 | DONE | 2026-08-09 | **`bash infra/scripts/k8s-verify.sh` → 39 passed, 0 failed, 0 skipped** (with a throwaway kind cluster for the `kubectl` clause; 36/0/1 without one), `actionlint` clean over all 8 workflows, `kubeconform -strict` clean over all three overlays, and **`kubectl apply --dry-run=client -k` passes for `overlays/{dev,staging,production}`**. All four DoD items are met by construction and the mechanisms are checked rather than asserted. **118 files under `infra/k8s/`, 65 of them generated from one catalog** — `service-catalog.yaml` is the single source for the 34 workloads, the 26 per-service ExternalSecrets, the three per-environment image lists AND the CI image matrix, so adding a service is one entry and never a workflow edit. **Seven new workflows**, none holding a cluster credential: the only write any of them makes is a commit to `overlays/<env>/images/` and ArgoCD does the rest. **The migration gate exists twice** — statically before the promotion commit exists (expand/contract rules over the delta against the SHA that environment is *running*, plus apply-twice against a real timescaledb-ha) and as ArgoCD sync wave 1, where a failed Job leaves wave 2 (every service) unapplied. **Images are cosign-keyless-signed over the digest** with an SBOM and provenance, and `nightly.yml` re-verifies every deployed image's signature against this repository's OIDC identity. **The internal-plane credential mesh is now enforced**: 20 options carry a "Must equal <other service>'s <key>" doc comment and the only thing keeping them equal was one flat env file with a repeated placeholder — the catalog's `aliases` table maps every name to one Vault property. **Findings: the printed verify command's `yaml.safe_load` cannot pass over any Kubernetes manifest directory** (43 of 107 files are multi-document; `safe_load_all` is the one-word fix); D7' §5's per-pod requests × 34 workloads need ~20 vCPU/40 GB against §8's 12 vCPU/24 GB pool (C132's capacity plan); **D-21's RS256/JWKS MQTT authenticator is not implemented**, so the shared HMAC `infra/CLAUDE.md` says "does not survive out of dev" is a production credential; D7' §10's five CronJobs are all in-process workers and adding them would double-run the work; six credentials the options classes require are absent from `.env.app.example`; `osm-pipeline` has no image and no component builds it |
-| C125 | replica-deployment | 5 | PENDING | | |
+| C125 | replica-deployment | 5 | DONE | 2026-08-11 | **`bash infra/replica/deploy.sh --dry-run && bash infra/replica/smoke.sh` → dry run clean, smoke 23 passed 0 failed 0 skipped**, with all **eleven core containers healthy** on this box. Every DoD item is demonstrated rather than asserted: the smoke suite drives the golden paths **through the edge** (HAProxy 443, self-signed) — a Mode C ride, the Mode A session surface and the package sub-kind each reach their service and are refused by its own AL-06 authorization (401), which is the proof the request arrived; the three tracker ports and MQTTS accept connections through L4 passthrough; the `s3.` vhost reaches MinIO; and the edge returns **404** for `/health/*`, `/metrics` and `/v1/internal/**`. **`backup.sh --verify-restore`: dump 676 K / 193 tables → object store → restored into a throwaway database, `iam.users` 14 rows in the source and 14 in the restore.** The guardrail refuses to start while a heavy build is running (negative-tested) and reads its budget **from the spec's own resource table** rather than hardcoding a figure — the prompt's DoD says ~18.9 GB and the spec's totals are 16.7/19.7, so there is no number to copy. Live usage **1 305 MiB against 17 280 MiB**. **Two umbrella containers had to be built first** — `backend/src/AppServices` (22 services + YARP) and `backend/src/HotPath` (4) — referenced by docker-compose.dev.yml since C009 and never created; C118 went PARTIAL because of it. **Findings: ten defects the bring-up was the first thing ever to execute**, incl. a gateway config-precedence bug that would have 502'd every route in production, `Dockerfile.worker` unable to host any project in the repo, `Jwt__SigningKeyPem`'s placeholder crashing iam-svc, `Username=mageride` against a database with no such role, and `Jwt__RequireHttpsMetadata` missing beside an http JwksUrl. One spec conflict recorded as a visible deviation: redpanda's 1 GB row is unsatisfiable with `mode production`. Nominatim (its own VPS) is out of scope and named |
 | C126 | gtfs-day0-load | 5 | PENDING | | |
 | C127 | security-review-asvs | 6 | PENDING | | |
 | C128 | anti-spoof-hardening | 6 | PENDING | | |
@@ -20194,3 +20194,90 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   `paths-ignore: [infra/k8s/overlays/**]` on `ci.yml` would make the safety local. And **nothing prunes
   GHCR**: every push adds 34 tags for ever, while `rollback.yml` depends on old tags existing, so a
   retention policy is a design decision rather than a cleanup script.
+
+---
+
+- **Component:** C125 replica-deployment — 2026-08-11
+- **Status:** DONE
+- **Notes:** the verify command passes on this box — `bash infra/replica/deploy.sh --dry-run` clean and
+  `bash infra/replica/smoke.sh` **23 passed, 0 failed, 0 skipped** — with all eleven core containers
+  healthy, synthetic data seeded, and `backup.sh --verify-restore` proving a dump restores (676 K, 193
+  tables, `iam.users` 14 rows in the source and 14 in the restore). Live usage is **1 305 MiB against
+  the 17 280 MiB the spec budgets**. Nominatim is out of scope by instruction (its own 8 GB VPS at
+  45.77.37.208, which has no Docker installed).
+
+  **Two containers had to be built before anything else could happen.** The replica's Container 6 and
+  Container 7 are `backend/src/HotPath/` and `backend/src/AppServices/` — 4 and 22 co-located services
+  in one process each. `docker-compose.dev.yml` has referenced both since C009 and neither had ever
+  existed; C118 went PARTIAL *because* of it and deferred to "C124/C125", and C124 built 34
+  per-service images for the Kubernetes layout instead. Both hosts are thin: all 29 services expose
+  the same `Build(WebApplicationOptions, Action<WebApplicationBuilder>?)`, so co-location is a hosting
+  decision exactly as the spec's Container 7 note claims. `CoLocatedHost` holds the shared mechanics
+  and **exits non-zero naming which service failed** — "N of 23 services started; the next one
+  failed" is what turned every one of the failures below into one look instead of a bisect. Four fence
+  tests in `ApiGateway.Tests` tie Container 7's list to the gateway's route table so a rename cannot
+  become a 502 inside a container that still reports healthy.
+
+  **TEN defects, and the bring-up was the first thing ever to execute any of these paths.** The order
+  matters: each one hid the next, so they came out one redeploy at a time.
+
+  | # | What | Whose | Why nobody knew |
+  |---|---|---|---|
+  | 1 | `gateway-routes.json` was added AFTER the environment and command line, so every `ReverseProxy__Clusters__*__Address` in the repo was silently ignored — **502 on every gateway route in the replica AND in production** | C124's, i.e. mine | no deployment had ever resolved a cluster address |
+  | 2 | `Dockerfile.worker` publishes onto `runtime:10.0-alpine`, which lacks `Microsoft.AspNetCore.App`. **It cannot host any project in this repository** — every service is `Microsoft.NET.Sdk.Web` | C010 | `ci.yml` BUILDS an image from it and never starts it |
+  | 3 | `Jwt__SigningKeyPem=CHANGEME_rs256_private_key_pem` — a non-empty non-PEM is **strictly worse than empty**, because `SigningKeyRing` mints an ephemeral key only when the value is empty. Crashed iam-svc at construction, service 1 of 23 | C009/C010 | nothing had started iam-svc from these files |
+  | 4 | `Jwt__RequireHttpsMetadata` set nowhere, beside a `Jwt__JwksUrl` that is `http://`. Every JWT-validating service answered **500 on `/health/ready`** | C009 | same |
+  | 5 | `ConnectionStrings__Postgres` hardcodes `Username=mageride` while the container initialises `POSTGRES_USER=postgres`. **The role never existed** — `28P01` for all 22 services | C009 | same |
+  | 6 | `AddMageRideObjectStore` constructs `FileSystemObjectStore` eagerly even with S3 configured, and its constructor `CreateDirectory`s `/var/lib/mageride` — denied to a non-root container | C002/C063 | same |
+  | 7 | `Storage__S3__*` points at MinIO with the **dev** credentials, which the replica's generated root password does not match. **Would have passed this bring-up** and failed at the first document upload | C009 | found by reading, not by running |
+  | 8 | redpanda's spec row is **1 GB and `mode production` refuses to start below a 1 GiB floor** while seastar sizes its arena against the cgroup. Both directions fail; the dev slim file escapes only by setting no limit at all | the spec | no limit had ever been applied |
+  | 9 | `infra/deploy/haproxy.cfg` binds `crt <directory>`, which makes HAProxy look for `<file>.key` beside every file, and its pem was `600 root` while the image runs as uid 99. **The dev edge could never have started**, for two independent reasons | C009 | the dev stack cannot come up without an app-services image |
+  | 10 | `tcp-adapter` has no HTTP surface — its own Dockerfile healthchecks `nc -z 5023` — and `fanout` listens on 5000 unless `ASPNETCORE_URLS` overrides it to 5001, which three other places already assumed | mine, in the new compose | — |
+
+  **The shape of it.** Nine of the ten are invisible to reading; #7 is the reverse and would have
+  survived the deploy. Three of them (#3, #4, #5) mean the **dev stack has never started
+  `app-services` either** — the same root cause as the compose leg that was vacuous from C009 to
+  2026-08-10. Every fix is at the source (`infra/env/*.example`, the Dockerfiles, the gateway) rather
+  than papered over in the replica's own files, so the dev stack inherits all of them.
+
+  **Deliberate deviations, each recorded where it is made.** (a) **22 services, not the spec's 21** —
+  `payout-svc` and `fleet-billing-svc` postdate the table and the dev compose already says 22.
+  (b) `ocr-svc` is co-located with **no gateway cluster** because it is queue-driven, asserted as an
+  exception in `Container7CoLocationTests`. (c) `Dockerfile.appservices` is **Debian, not Alpine**,
+  because ocr-svc's OpenCV native is glibc-only and on musl it would fail closed for ever,
+  indistinguishably from working. (d) **redpanda gets 1280 MiB against the spec's 1024** —
+  declared in `budget.py`'s `ACCEPTED_DEVIATIONS` and **printed on every guardrail run**, because an
+  accepted deviation nobody sees again is drift. Closing it properly is a micro-change-set against
+  `lightweight-production-replica.md` by whoever owns the resource budget.
+
+  **The guardrail derives its budget from the spec** (`budget.py` parses the Resource Summary table)
+  rather than hardcoding one, and that is not fastidiousness: the prompt's DoD says "~18.9 GB" while
+  the spec's own totals are 16.7 (core 11) and 19.7 (with the optional set), so **there is no single
+  figure to copy**. It refuses to start while a `dotnet build`/`docker build`/gradle is running,
+  excludes its own process tree (the first version flagged its invoking shell), and is negative-tested
+  in both directions.
+
+  **Three of my own bugs, caught before shipping, worth naming because two were false passes.** The
+  drift check piped JSON into a `python3 - <<'PY'` heredoc, so stdin was the script and `json.load`
+  got nothing — the exception was swallowed and the empty output **printed a green tick without ever
+  running**. `budget.py` read every table in the spec and invented a 12th core container from
+  "| Geocoding (Nominatim) | Dedicated 8 GB Postgres |", putting the budget at 24.6 GiB against a
+  24 GiB box and refusing a deploy that fits. And `guardrail.sh --running` reported "nothing is
+  running" while eleven containers were healthy, because it never sourced `.env.replica` and so every
+  `docker compose` call it made failed the `${VAR:?}` requirement.
+
+  **Files —** new: `infra/replica/` (`docker-compose.light-replica.yml`, `deploy.sh`, `down.sh`,
+  `seed.sh`, `seed.sql`, `smoke.sh`, `backup.sh`, `restore.sh`, `guardrail.sh`, `budget.py`,
+  `haproxy.replica.cfg`, `.env.replica.example`), `backend/src/AppServices/` (host + `Container7.cs`),
+  `backend/src/HotPath/` (host + `CoLocatedHost.cs`), `infra/docker/Dockerfile.appservices`,
+  `docs/runbooks/replica-operations.md`, `backend/src/ApiGateway.Tests/{ClusterAddressPrecedenceTests,
+  Container7CoLocationTests}.cs`. Changed: `backend/src/ApiGateway/GatewayApplication.cs` (the
+  precedence fix), `infra/env/.env.common.example` + `.env.app.example` (#3, #4, #5), `infra/docker/
+  Dockerfile.{service,worker}` (deterministic entry point; the worker warning), `infra/deploy/
+  haproxy.cfg` + `infra/scripts/dev-up.sh` (#9), `infra/scripts/verify-observability.sh` +
+  `docs/runbooks/README.md` (the new runbook), `backend/MageRide.sln`.
+
+  **Still open for C132 or whoever owns it:** the redpanda budget micro-change-set; Nominatim on its
+  own VPS; and the seven `Storage__S3__*`-shaped pairings — anything the replica GENERATES needs both
+  ends wired, and #7 shows one was missed while the other was found only by reading. Assume there are
+  more until each shared secret is checked from both sides.

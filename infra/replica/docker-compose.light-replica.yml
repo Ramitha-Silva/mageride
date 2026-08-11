@@ -87,13 +87,13 @@ services:
     environment:
       POSTGRES_PASSWORD: ${PG_PASSWORD:-mageride_replica}
       POSTGRES_DB: ${PG_DATABASE:-mageride}
-      POSTGRES_USER: ${PG_USER:-postgres}
+      POSTGRES_USER: ${PG_USER:-mageride}
     volumes:
       # `/home/postgres/pgdata`, which is timescaledb-ha's PGDATA. The spec's
       # /var/lib/postgresql/data is the official postgres image's path and makes first boot fail.
       - pgdata:/home/postgres/pgdata
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${PG_USER:-postgres} -d ${PG_DATABASE:-mageride}"]
+      test: ["CMD-SHELL", "pg_isready -U ${PG_USER:-mageride} -d ${PG_DATABASE:-mageride}"]
       interval: 10s
       timeout: 5s
       retries: 12
@@ -113,12 +113,12 @@ services:
     environment:
       DB_HOST: postgres
       DB_PORT: "5432"
-      DB_USER: ${PG_USER:-postgres}
+      DB_USER: ${PG_USER:-mageride}
       DB_PASSWORD: ${PG_PASSWORD:-mageride_replica}
       DB_NAME: ${PG_DATABASE:-mageride}
       POOL_MODE: transaction
       AUTH_TYPE: scram-sha-256
-      ADMIN_USERS: ${PG_USER:-postgres}
+      ADMIN_USERS: ${PG_USER:-mageride}
       LISTEN_PORT: "6432"
       MAX_CLIENT_CONN: "500"
       DEFAULT_POOL_SIZE: "25"
@@ -169,10 +169,34 @@ services:
     image: redpandadata/redpanda:v24.2.26
     # `rpk redpanda mode production` BEFORE start: the image ships developer_mode: true and rpk
     # then adds --unsafe-bypass-fsync, which is not what "production replica" should mean.
+    # The ENTRYPOINT OVERRIDE is what makes the command below a script rather than rpk's arguments,
+    # and it is not optional. The image's own /entrypoint.sh ends in `exec /usr/bin/rpk $@` —
+    # unquoted — so anything passed as `command` is word-split into rpk arguments, the first of which
+    # here would be the literal word `rpk`. rpk then prints its help and the container restarts for
+    # ever, naming neither the cause nor the file. infra/docker-compose.dev.slim.yml has always set
+    # this; copying its `command` without its `entrypoint` is the mistake this comment exists to stop
+    # the next person repeating.
+    entrypoint: ["/bin/bash", "-c"]
     command:
-      - /bin/sh
-      - -c
       - |
+        # Seastar gets 1G and the CONTAINER is given 1280M — a deliberate, recorded deviation from the
+        # spec's 1 GB row, because the two cannot both be satisfied:
+        #
+        #   `rpk redpanda mode production` turns OFF developer mode, and redpanda's syschecks then
+        #   refuse to start below a 1 GiB floor: "Memory: '939524096' below recommended:
+        #   '1073741824'". `--check=false` does not relax it. But seastar allocates its arena up front
+        #   against the CGROUP, so a container limited to exactly 1 GiB cannot hand the process 1 GiB
+        #   — the first attempt died with "insufficient physical memory: needed 1073741824 available
+        #   1004535808".
+        #
+        # So: 1 GB container + production mode is impossible. The dev slim file asks for 1G and gets
+        # away with it only because it sets NO memory limit and seastar sizes against the host's
+        # 24 GB. Dropping production mode would be the other way out and is worse — the image ships
+        # developer_mode: true and rpk then adds --unsafe-bypass-fsync, which is not what a
+        # "production replica" should mean, and the spec asks for fsync explicitly.
+        #
+        # The 256 MiB is declared in infra/replica/budget.py's ACCEPTED_DEVIATIONS so the guardrail
+        # reports it every run instead of drifting silently.
         rpk redpanda mode production
         exec /usr/bin/rpk redpanda start \
           --smp=1 \
@@ -182,7 +206,10 @@ services:
           --reserve-memory=0M \
           --check=false \
           --kafka-addr=internal://0.0.0.0:9092 \
-          --advertise-kafka-addr=internal://redpanda:9092
+          --advertise-kafka-addr=internal://redpanda:9092 \
+          --rpc-addr=redpanda:33145 \
+          --advertise-rpc-addr=redpanda:33145 \
+          --set redpanda.auto_create_topics_enabled=true
     volumes:
       - redpandadata:/var/lib/redpanda/data
       - ../deploy/redpanda/bootstrap-topics.sh:/opt/mageride/bootstrap-topics.sh:ro
@@ -194,7 +221,7 @@ services:
       start_period: 30s
     deploy:
       resources:
-        limits: { memory: 1G, cpus: "0.5" }
+        limits: { memory: 1280M, cpus: "0.5" }
     networks: [internal]
 
   redpanda-init:
@@ -296,7 +323,7 @@ services:
     environment:
       # Straight to :5432, not through the pooler: DbUp takes an advisory lock for the run and a
       # transaction-mode pooler can hand the next statement to a different backend.
-      ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=${PG_DATABASE:-mageride};Username=${PG_USER:-postgres};Password=${PG_PASSWORD:-mageride_replica}"
+      ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=${PG_DATABASE:-mageride};Username=${PG_USER:-mageride};Password=${PG_PASSWORD:-mageride_replica}"
       MIGRATE_WAIT_SECONDS: "120"
     depends_on:
       postgres: { condition: service_healthy }
@@ -312,7 +339,14 @@ services:
     <<: [*restart, *app-env]
     build:
       context: ../..
-      dockerfile: infra/docker/Dockerfile.worker
+      # Dockerfile.SERVICE, not Dockerfile.worker. All four co-located services are
+      # `Microsoft.NET.Sdk.Web` projects — they expose /health/live and /health/ready like every other
+      # service — so they need Microsoft.AspNetCore.App. Dockerfile.worker publishes onto
+      # `runtime:10.0-alpine`, which does not carry it, and the container dies at launch with
+      # "No frameworks were found ... framework=Microsoft.AspNetCore.App". The BUILD succeeds, which
+      # is why CI's container-template step has been building that image happily without ever running
+      # it. infra/docker-compose.skeleton.yml already carries the same conclusion in a comment.
+      dockerfile: infra/docker/Dockerfile.service
       args:
         SERVICE: HotPath
     image: mageride/hot-path:replica
@@ -391,6 +425,13 @@ services:
         # ever created it. The C124 catalog builds fanout-svc from the shared template, so this does.
         SERVICE: Fanout.Api
     image: mageride/fanout:replica
+    environment:
+      # 5001, overriding Dockerfile.service's ASPNETCORE_URLS=http://+:5000. Three things already
+      #name 5001 — this container's healthcheck, haproxy.replica.cfg's `fanout` backend, and the
+      # gateway's fanout-svc cluster address — and docker-compose.dev.yml sets the same override.
+      # Without it fanout listens on 5000, every one of those three points at a closed port, and the
+      # container is reported unhealthy while the service itself is fine.
+      ASPNETCORE_URLS: http://+:5001
     depends_on:
       redis: { condition: service_healthy }
       redpanda: { condition: service_healthy }
@@ -427,7 +468,12 @@ services:
       pgbouncer: { condition: service_healthy }
       migrate: { condition: service_completed_successfully }
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:5000/health/ready >/dev/null 2>&1 || exit 1"]
+      # `nc -z` on the GT06 port, NOT an HTTP probe. tcp-adapter has no HTTP surface at all — its own
+      # Dockerfile and docker-compose.dev.yml both healthcheck it this way, and the service's remarks
+      # explain why the LISTENER is the right liveness signal: a device that connects while EMQX is
+      # away is still served. My first version probed :5000/health/ready and reported the container
+      # unhealthy while all four protocol listeners were up and working.
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 5023 || exit 1"]
       interval: 15s
       timeout: 10s
       retries: 10
@@ -493,7 +539,7 @@ services:
       redis: { condition: service_healthy }
     deploy:
       resources:
-        limits: { memory: 1G, cpus: "0.5" }
+        limits: { memory: 1280M, cpus: "0.5" }
     networks: [internal]
 
   # Optional — admin-portal (admin.mageride.lk, AL-02).       512 MB / 0.25 vCPU

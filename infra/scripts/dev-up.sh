@@ -61,6 +61,11 @@ if [[ ! -f "$CERT_PEM" ]]; then
   # HAProxy wants one PEM with the key and the certificate concatenated.
   cat "$CERT_DIR/mageride-dev.key" "$CERT_DIR/mageride-dev.crt" > "$CERT_PEM"
   chmod 600 "$CERT_PEM" "$CERT_DIR/mageride-dev.key"
+  # Δ C125: readable by the haproxy container's user, which is uid 99 in haproxy:2.9-alpine — a
+  # 600 root-owned pem is unreadable to it and the edge exits with "cannot open the file". Nothing
+  # had ever noticed because the dev stack could not come up at all without an app-services image,
+  # so its haproxy container had never started.
+  chown 99:99 "$CERT_PEM" 2>/dev/null || true
 fi
 
 # The device CA (T-02). Shared with slim-verify.sh, which needs it for the same reason: EMQX will

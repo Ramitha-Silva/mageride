@@ -31,6 +31,23 @@ SPEC = "specs/lightweight-production-replica.md"
 # box. Named rather than pattern-matched, so adding one is a decision.
 ELSEWHERE = {"nominatim"}
 
+# Containers whose compose limit intentionally differs from the spec's row, with the reason. Every
+# entry is REPORTED on every guardrail run rather than hidden: an accepted deviation that nobody sees
+# again is indistinguishable from drift.
+#
+# The alternative — editing the spec's table — would be a micro-change-set against
+# lightweight-production-replica.md, which is the right move once somebody with authority over the
+# resource budget agrees. Until then the code deviates visibly and the spec stays as written.
+ACCEPTED_DEVIATIONS = {
+    "redpanda": (
+        1280,
+        "1 GB is impossible with `rpk redpanda mode production`: redpanda's syschecks refuse to "
+        "start below a 1 GiB floor, and seastar allocates its arena against the cgroup, so a "
+        "container limited to exactly 1 GiB cannot hand the process 1 GiB. Dropping production mode "
+        "would re-enable --unsafe-bypass-fsync, which the spec explicitly does not want.",
+    ),
+}
+
 
 def rows() -> dict[str, dict]:
     """Every container row in the spec's resource table.
@@ -89,8 +106,16 @@ def totals() -> dict:
         k: v for k, v in table.items() if v["optional"] and not v["elsewhere"]
     }
 
+    deviation_delta = sum(
+        ACCEPTED_DEVIATIONS[name][0] - core[name]["mib"]
+        for name in core
+        if name in ACCEPTED_DEVIATIONS
+    )
+
     return {
-        "core_mib": int(sum(v["mib"] for v in core.values())),
+        "core_mib": int(sum(v["mib"] for v in core.values()) + deviation_delta),
+        "core_mib_per_spec": int(sum(v["mib"] for v in core.values())),
+        "deviation_mib": int(deviation_delta),
         "core_containers": sorted(core),
         "optional_mib": int(sum(v["mib"] for v in optional_here.values())),
         "optional_containers": sorted(optional_here),
@@ -142,7 +167,18 @@ def drift(compose: str) -> list[str]:
 
         if row is None:
             problems.append(f"{name}: {mib:.0f} MiB in compose, no row in the spec's table")
-        elif abs(row["mib"] - mib) > 1:
+            continue
+
+        if abs(row["mib"] - mib) <= 1:
+            continue
+
+        accepted = ACCEPTED_DEVIATIONS.get(name)
+        if accepted and abs(accepted[0] - mib) <= 1:
+            # Not drift. Printed with a DEVIATION prefix so the caller can report it as a note.
+            problems.append(
+                f"DEVIATION {name}: {mib:.0f} MiB in compose vs {row['mib']:.0f} MiB in the spec — "
+                f"{accepted[1]}")
+        else:
             problems.append(
                 f"{name}: {mib:.0f} MiB in compose, {row['mib']:.0f} MiB in the spec")
 

@@ -269,7 +269,7 @@ check "every runbook opens with a First action" "" "$no_first_action"
 #
 # A named list rather than a pattern: the check's teeth are that a NEW alert runbook nobody linked
 # is a failure, and a pattern like `deploy*` would let one hide.
-NOT_ALERT_DRIVEN="deploy.md rollback.md secret-rotation.md"
+NOT_ALERT_DRIVEN="deploy.md rollback.md secret-rotation.md replica-operations.md"
 
 orphaned=""
 for f in "$RUNBOOKS"/*.md; do

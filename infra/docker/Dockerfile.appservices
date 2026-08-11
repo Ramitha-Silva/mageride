@@ -77,7 +77,13 @@ COPY --from=build /app .
 
 # provisioning-svc's embedded step-ca writes its root and intermediate keys here (T-02), and the
 # compose file mounts the device CA over it so EMQX can read the same chain.
-RUN mkdir -p /var/step && chown -R app:app /var/step /app
+#
+# /var/lib/mageride is the FILESYSTEM FALLBACK root for the object store. Even with
+# Storage__S3__Endpoint pointed at MinIO, `AddMageRideObjectStore` constructs FileSystemObjectStore as
+# well, and its constructor calls Directory.CreateDirectory eagerly — so a non-root container without
+# this directory dies with "Access to the path '/var/lib/mageride' is denied" before service 3 of 23
+# starts. Six env keys across payout, support, ocr and fleet name paths beneath it.
+RUN mkdir -p /var/step /var/lib/mageride && chown -R app:app /var/step /var/lib/mageride /app
 
 USER app
 

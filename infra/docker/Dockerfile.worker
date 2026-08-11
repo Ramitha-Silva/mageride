@@ -1,4 +1,25 @@
 # =====================================================================================
+
+# =====================================================================================
+# ⚠ Δ C125 — THIS TEMPLATE CANNOT HOST ANY PROJECT IN THIS REPOSITORY TODAY.
+#
+# It publishes onto `runtime:10.0-alpine`, which does not carry Microsoft.AspNetCore.App. Every
+# service here — including the four "workers" (mqtt-bridge, position-processor, persistence-writer,
+# fleet-health) and their co-located HotPath host — is a `Microsoft.NET.Sdk.Web` project, because each
+# exposes /health/live and /health/ready. An image built from this template BUILDS FINE and then dies
+# at launch with:
+#
+#   No frameworks were found.
+#   framework=Microsoft.AspNetCore.App&framework_version=10.0.0 ... rid=linux-musl-x64
+#
+# `.github/workflows/ci.yml` builds an image from this file and never starts it, so CI has been
+# proving that it compiles rather than that it runs. `infra/k8s/service-catalog.yaml` uses it for
+# nothing; tcp-adapter has its own Dockerfile; C125's hot-path uses Dockerfile.service, and
+# infra/docker-compose.skeleton.yml already recorded that choice in a comment.
+#
+# USE infra/docker/Dockerfile.service. Leave this here only until somebody decides whether a
+# genuinely non-web worker will ever exist — at which point this base becomes correct again.
+# =====================================================================================
 # MageRide — background-worker image (C010, D7' §2.2).
 #
 # For the .NET services that have no HTTP surface: `tcp-adapter` (GT06 / JT808 / H02 /
