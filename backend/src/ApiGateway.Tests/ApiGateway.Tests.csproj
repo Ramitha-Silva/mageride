@@ -43,4 +43,25 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
+  <!--
+    Δ C126 — THE SUBJECT UNDER TEST HAS TO WIN THE OUTPUT DIRECTORY.
+
+    Both referenced projects ship an `appsettings.json` and the copy into this test's output is
+    last-one-wins, so AppServices' file — Logging and AllowedHosts, no `Gateway` section at all —
+    was landing on top of the gateway's. Everything that reads gateway configuration from
+    AppContext.BaseDirectory therefore read the wrong file: RouteConfigurationTests threw
+    KeyNotFoundException in its static initialiser (all ten cases), and the harness's gateway came
+    up with NO attestation list and NO rate-limit policies, so 16 more cases in
+    AttestationEnforcementTests and RateLimitTests asserted a 401 and got a 200. The suite has been
+    failing 18 of 605 since C125 added the AppServices reference for Container7CoLocationTests.
+
+    Copied after Build rather than declared as Content: a second Content item with the same target
+    name is the same race in a different place, whereas this runs once everything else has been
+    copied. Container7CoLocationTests reads Container7's static list and starts no host, so nothing
+    in this project wants AppServices' settings.
+  -->
+  <Target Name="GatewaySettingsWinTheOutputDirectory" AfterTargets="Build">
+    <Copy SourceFiles="..\ApiGateway\appsettings.json" DestinationFolder="$(OutDir)" />
+  </Target>
+
 </Project>

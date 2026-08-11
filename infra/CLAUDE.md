@@ -75,6 +75,31 @@ docs/runbooks/{deploy,rollback,secret-rotation}.md
   its own ReadWriteOnce volume; EMQX and tcp-adapter cannot share it, so both values are copied into
   Vault once (`docs/runbooks/deploy.md` §5) and are on T-02's 90-day rotation.
 
+## The day-0 GTFS load (C126)
+
+```
+replica/gtfs-day0-load.sh      the operation — obtain/upload/validate/preview/activate/roll back,
+                               driven through the edge exactly as SCR-AP-016 drives it
+                               `--observe-empty-state` records the pre-first-import baseline alone
+replica/gtfs-day0-verify.sh    the C126 definition of done  ·  replica/gtfs-lib.sh  shared helpers
+replica/gtfs-corridors.json    the six-corridor sample set; hard checks vs hinted route numbers
+replica/gtfs_shape.py          does a returned polyline belong to the corridor that produced it
+replica/gtfs/                  where the provider's zip is dropped — GITIGNORED, never committed
+docs/runbooks/gtfs-day0-load.md   the runbook, the rollback timings and the refresh checklist
+```
+
+- **The feed is an externally provided file (AL-56).** Neither script authors, edits or generates
+  feed content, and neither reads anything out of the zip beyond its first two bytes — server-side
+  validation (BR-32.1) is the only quality gate MageRide has. A feed that fails is fixed at the
+  provider.
+- **The rollback rehearsal needs a SECOND, different feed file.** The upload dedupes on sha256, so a
+  feed cannot be rolled back to itself; `--previous` takes the prior national release.
+- **The empty state has to be recorded before the first activation** and cannot be reconstructed
+  after it. That is what `--observe-empty-state` is for, and the journal is not overwritten.
+- **Stored feed zips must be on a volume.** A rollback re-imports from the archived version's zip,
+  and `Transit__Gtfs__StorageRoot` was on the container's writable layer until C126 added the
+  `gtfsdata` volume — every `deploy.sh` was deleting every rollback target.
+
 ## Observability (C119)
 
 ```

@@ -391,6 +391,15 @@ services:
       # provisioning-svc's embedded step-ca (T-02). A bind mount rather than a named volume because
       # EMQX reads the same certs/ca_chain.crt as its 8883 cacertfile.
       - ../deploy/device-ca:/var/step
+      # Δ C126 — the filesystem root every service writes bytes to when object storage is not the
+      # destination. `Transit__Gtfs__StorageRoot=/var/lib/mageride/gtfs` is the one that has to
+      # survive a container recreate: a ROLLBACK re-imports from the archived version's stored zip
+      # (BR-32.3), so a lost zip is a version that can no longer be rolled back to — and on the
+      # writable layer the next `deploy.sh` loses every one of them silently. Mounted at the ROOT
+      # rather than at `…/gtfs` because the root is what `Dockerfile.appservices` creates as
+      # `app:app`, and a volume mounted onto a path the image does not have is created root-owned
+      # and unwritable by a non-root container (C125's defect #6, one layer down).
+      - gtfsdata:/var/lib/mageride
     depends_on:
       pgbouncer: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -606,6 +615,9 @@ volumes:
   redpandadata:
   emqxdata:
   miniodata:
+  # Δ C126 — /var/lib/mageride inside app-services: the stored GTFS feed zips a rollback re-imports
+  # from (BR-32.3's ≥ 12-month retention), plus whatever else lands on the filesystem fallback.
+  gtfsdata:
 
 networks:
   # One bridge network, as the spec's service map says. No container is on the host network.

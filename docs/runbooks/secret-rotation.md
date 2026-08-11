@@ -67,8 +67,13 @@ kubectl -n mageride annotate externalsecret iam-svc-secret force-sync=$(date +%s
 kubectl -n mageride rollout restart deploy/iam-svc
 kubectl -n mageride rollout status deploy/iam-svc --timeout=5m
 
-# 4. Both keys are published
-curl -sf https://api.mageride.lk/v1/internal/iam/.well-known/jwks.json | python3 -m json.tool | grep -c '"kid"'
+# 4. Both keys are published. Δ C126 — read it from INSIDE the cluster, at the address the services
+#    themselves use (infra/k8s/base/config/common-config.yaml). `/v1/internal/**` is refused at the
+#    edge by the gateway (mTLS-only, D3' §0), so the URL this step used to name answered 404 and the
+#    check could never have passed. The compose stacks reach the same endpoint through the gateway's
+#    `iam-jwks` route at /v1/.well-known/jwks.json.
+kubectl -n mageride run jwks-check --rm -i --restart=Never --image=curlimages/curl:latest -- \
+  -sf http://iam-svc/.well-known/jwks.json | python3 -m json.tool | grep -c '"kid"'
 #   -> 2
 
 # 5. WAIT. The access-token TTL is 30 minutes (D-29). Sooner than that and you sign somebody out

@@ -81,6 +81,10 @@ else
   sed -i "s|CHANGEME_MINIO_ROOT|$(gen)|"  "$ENV_FILE"
   # MinIO's SSE-KMS key must be exactly 32 bytes, base64-encoded — not the URL-safe variant.
   sed -i "s|CHANGEME_MINIO_KMS_BASE64|$(openssl rand -base64 32 | tr -d '\n')|" "$ENV_FILE"
+  # Δ C126. The signature on SCR-AP-016's feed-zip download link is the whole credential on that
+  # route (`security: []` in contracts/transit.yaml), and env/.env.app.example's placeholder is a
+  # published constant that TransitOptions happily accepts.
+  sed -i "s|CHANGEME_GTFS_SIGNING|$(gen)|" "$ENV_FILE"
 
   # A real RS256 signing key, per deployment. Not ephemeral: SigningKeyRing's own comment says an
   # ephemeral key "would invalidate every live token on restart and give each replica a different

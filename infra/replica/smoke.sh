@@ -116,6 +116,27 @@ case "$version_code" in
 esac
 
 # =====================================================================================
+step "1a. the signing key every service validates a bearer against is reachable (Δ C126)"
+# =====================================================================================
+# Every check in this suite is deliberately unauthenticated — a 401 proves the request reached the
+# service. The gap that leaves is the JWT path itself: `Jwt__JwksUrl` pointed at
+# `/v1/internal/iam/.well-known/jwks.json`, which the gateway refuses ahead of routing and never had
+# a route for, so every JWT-validating service answered 500 to every authenticated request while
+# passing all 23 of these checks and every healthcheck. The fetch happens on the first request that
+# CARRIES a token, which is why nothing here had ever triggered it.
+#
+# So: fetch the key the way a service does. It needs no credential — that is the point of a JWKS.
+jwks=$(body_of "/v1/.well-known/jwks.json")
+jwks_code=$(code_of "/v1/.well-known/jwks.json")
+
+if [ "$jwks_code" = "200" ] && printf '%s' "$jwks" | grep -q '"kid"'; then
+  ok "the JWKS answers 200 with $(printf '%s' "$jwks" | grep -o '"kid"' | wc -l | tr -d ' ') key(s) — authenticated requests can be validated"
+else
+  bad "GET /v1/.well-known/jwks.json → ${jwks_code}. Every service that validates a bearer will answer
+      500 to every authenticated request. Check Jwt__JwksUrl and the gateway's iam-jwks route."
+fi
+
+# =====================================================================================
 step "2. the edge refuses what it must refuse"
 # =====================================================================================
 # Not decoration. /health/ready names every dependency a service probes and /metrics is the internal

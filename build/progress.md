@@ -152,7 +152,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C123 | e2e-money-flows | 5 | DONE | 2026-08-09 | **36 tests green** in `tests/E2E` (5 new scenario files, **136 in the assembly** with C120/C121/C122's); `dotnet test tests/E2E -c Release --filter Category=Money` exits 0 in **~1 m**, twice consecutively, and the full assembly passes 136/136 in 8 m 20 s with `dotnet build backend/MageRide.sln -c Release` clean. **Seven services actually running** — wallet-svc, subscription-svc, fare-svc, ride-svc, dispatch-svc, reputation-svc and fleet-svc — plus an `AcquirerGateway` speaking D6' §7.1's create-session shape and signing its own callbacks, which is the only honest way to reach the two rails AL-05 leaves. **The double-entry ledger is asserted balanced after every scenario**, by `MoneyScenario.RunAsync` rather than by the scenarios, in three statements: every entry sums to zero, every posting on the platform sums to zero, and every `billing.accounts`/`billing.wallets` balance equals the sum of its own legs. **Every rupee arrives through a rail the platform has** — drivers start empty and top up through OnePay or LankaQR with a signed callback. D-13's free first trip, the Rs 100 charged before the second, the single flat charge, **D-08's gate withholding an offer from a driver who could not pay**, and the Colombo-day key proved in both directions. R-19's two idempotency guards, the unsigned and the mis-valued callback, US-9.19's voucher at face value, US-9.13's transfer at par with a two-leg entry the database has no kind to add a fee to (AL-01), and `ck_topups_method` refusing a bank transfer (AL-05). D-10's three rails with cash and driver-QR asserted to move **no ledger at all** against a reachable wallet-svc, AL-47's claim/confirm/dispute with the Finance ticket carrying its evidence, E-10's tip. Epic 23's five methods end to end — the owner's own LankaQR on a signed link, the slip and the owner's confirm, US-23.6's cash — with **not one posting** and no column that could hold one (§18b). **Four findings, each asserted as a gap with a test that fails when it is fixed:** AL-57's passenger wallet has no funding route; `Overpaid` is unreachable since AL-57/AL-59 removed the ride callbacks; **E-05's reversal is refused by wallet-svc's own `kind` whitelist and answers 503 after committing the refund row**; and nothing calls `charge-before-trip`. No service, spec, contract or migration file was changed |
 | C124 | cicd-full-pipeline | 5 | DONE | 2026-08-09 | **`bash infra/scripts/k8s-verify.sh` → 39 passed, 0 failed, 0 skipped** (with a throwaway kind cluster for the `kubectl` clause; 36/0/1 without one), `actionlint` clean over all 8 workflows, `kubeconform -strict` clean over all three overlays, and **`kubectl apply --dry-run=client -k` passes for `overlays/{dev,staging,production}`**. All four DoD items are met by construction and the mechanisms are checked rather than asserted. **118 files under `infra/k8s/`, 65 of them generated from one catalog** — `service-catalog.yaml` is the single source for the 34 workloads, the 26 per-service ExternalSecrets, the three per-environment image lists AND the CI image matrix, so adding a service is one entry and never a workflow edit. **Seven new workflows**, none holding a cluster credential: the only write any of them makes is a commit to `overlays/<env>/images/` and ArgoCD does the rest. **The migration gate exists twice** — statically before the promotion commit exists (expand/contract rules over the delta against the SHA that environment is *running*, plus apply-twice against a real timescaledb-ha) and as ArgoCD sync wave 1, where a failed Job leaves wave 2 (every service) unapplied. **Images are cosign-keyless-signed over the digest** with an SBOM and provenance, and `nightly.yml` re-verifies every deployed image's signature against this repository's OIDC identity. **The internal-plane credential mesh is now enforced**: 20 options carry a "Must equal <other service>'s <key>" doc comment and the only thing keeping them equal was one flat env file with a repeated placeholder — the catalog's `aliases` table maps every name to one Vault property. **Findings: the printed verify command's `yaml.safe_load` cannot pass over any Kubernetes manifest directory** (43 of 107 files are multi-document; `safe_load_all` is the one-word fix); D7' §5's per-pod requests × 34 workloads need ~20 vCPU/40 GB against §8's 12 vCPU/24 GB pool (C132's capacity plan); **D-21's RS256/JWKS MQTT authenticator is not implemented**, so the shared HMAC `infra/CLAUDE.md` says "does not survive out of dev" is a production credential; D7' §10's five CronJobs are all in-process workers and adding them would double-run the work; six credentials the options classes require are absent from `.env.app.example`; `osm-pipeline` has no image and no component builds it |
 | C125 | replica-deployment | 5 | DONE | 2026-08-11 | **`bash infra/replica/deploy.sh --dry-run && bash infra/replica/smoke.sh` → dry run clean, smoke 23 passed 0 failed 0 skipped**, with all **eleven core containers healthy** on this box. Every DoD item is demonstrated rather than asserted: the smoke suite drives the golden paths **through the edge** (HAProxy 443, self-signed) — a Mode C ride, the Mode A session surface and the package sub-kind each reach their service and are refused by its own AL-06 authorization (401), which is the proof the request arrived; the three tracker ports and MQTTS accept connections through L4 passthrough; the `s3.` vhost reaches MinIO; and the edge returns **404** for `/health/*`, `/metrics` and `/v1/internal/**`. **`backup.sh --verify-restore`: dump 676 K / 193 tables → object store → restored into a throwaway database, `iam.users` 14 rows in the source and 14 in the restore.** The guardrail refuses to start while a heavy build is running (negative-tested) and reads its budget **from the spec's own resource table** rather than hardcoding a figure — the prompt's DoD says ~18.9 GB and the spec's totals are 16.7/19.7, so there is no number to copy. Live usage **1 305 MiB against 17 280 MiB**. **Two umbrella containers had to be built first** — `backend/src/AppServices` (22 services + YARP) and `backend/src/HotPath` (4) — referenced by docker-compose.dev.yml since C009 and never created; C118 went PARTIAL because of it. **Findings: ten defects the bring-up was the first thing ever to execute**, incl. a gateway config-precedence bug that would have 502'd every route in production, `Dockerfile.worker` unable to host any project in the repo, `Jwt__SigningKeyPem`'s placeholder crashing iam-svc, `Username=mageride` against a database with no such role, and `Jwt__RequireHttpsMetadata` missing beside an http JwksUrl. One spec conflict recorded as a visible deviation: redpanda's 1 GB row is unsatisfiable with `mode production`. **Nominatim is deployed** on its own VPS (45.77.37.208, Ubuntu 26.04, 7.2 GiB / 4 cores / 8 GiB swap): Docker installed from nothing, `mediagis/nominatim:4.4` importing the Sri Lanka extract, 8080 restricted by ufw to the replica's address, and `Query__NominatimBaseUrl` written into `.env.replica`. `infra/replica/nominatim/` holds the compose file and `deploy-nominatim.sh` (`--dry-run` / `--status` / `--reimport`), so it is reproducible from the repository rather than from a shell session |
-| C126 | gtfs-day0-load | 5 | PENDING | | |
+| C126 | gtfs-day0-load | 5 | PARTIAL | 2026-08-11 | **The pipeline, the runbook and the verify are built and exercised against the running replica; the feed itself has not been handed over, so the load is not done.** `bash infra/replica/gtfs-day0-verify.sh` exits 2 naming exactly what is missing. **Done and demonstrated:** the pre-first-import empty state is **observed and recorded** (`coverage: no_feed`, five live tables at 0, an empty history table — it cannot be reconstructed after the first activation, so `--observe-empty-state` captures it before the file arrives); the upload half of SCR-AP-016 is proven end to end through HAProxy and the gateway with a real Admin bearer (multipart `202`, the `Idempotency-Key` requirement, the validation stepper, the capped five-error summary, the CSV row-level report, the sha256 duplicate refusal, both audit rows); a runbook covering obtain → upload → report → preview → activate → verify → roll back, with the refresh checklist; a six-corridor sample set whose shape check decodes the polyline, holds it to the validator's own Sri Lanka bounding box and requires it to pass within 1200 m of both ends of its corridor. **Not done:** validate/activate/corridor-verify/rollback of a real feed — blocked on the externally provided file (AL-56 forbids synthesising one; there is no Sri Lanka feed in the Mobility Database catalogue either). **Findings: `Jwt__JwksUrl` pointed at `/v1/internal/iam/.well-known/jwks.json`, a path the gateway refuses ahead of routing and never had a route for — every JWT-validating service in BOTH compose stacks answered 500 to every authenticated request**, invisible until C126 became the first thing in this repository to present a real bearer to a deployed service. Also: `ApiGateway.Tests` has been failing 18 of 605 since C125 (AppServices' `appsettings.json` overwriting the gateway's in the test output — now 605/605); GTFS feed zips were stored on the container's writable layer, so every `deploy.sh` deleted every rollback target; and the feed-download HMAC was the repository's published `CHANGEME_…` constant |
 | C127 | security-review-asvs | 6 | PENDING | | |
 | C128 | anti-spoof-hardening | 6 | PENDING | | |
 | C129 | load-test-suite | 6 | PENDING | | |
@@ -20297,3 +20297,148 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   own VPS; and the seven `Storage__S3__*`-shaped pairings — anything the replica GENERATES needs both
   ends wired, and #7 shows one was missed while the other was found only by reading. Assume there are
   more until each shared secret is checked from both sides.
+
+- **Component:** C126 gtfs-day0-load — 2026-08-11
+- **Status:** PARTIAL — `bash infra/replica/gtfs-day0-verify.sh` exits **2**, and says why: the
+  pre-first-import baseline is recorded and green, and no feed has been activated because no feed has
+  been handed over. Four of the five definition-of-done items are blocked on an external input; the
+  pipeline that satisfies them is built, and every part of it that can be exercised without a feed has
+  been exercised against the running replica.
+- **Notes:**
+  **Why it is PARTIAL, and why that is the honest outcome.** The day-0 operation's input is the
+  national GTFS file, which AL-56 makes an **externally provided file** — the launch release and every
+  refresh alike, with no in-house sourcing or authoring workstream. It is not in this repository, not
+  on this box, and not in the Mobility Database catalogue (checked: zero Sri Lanka entries in 1.1 MB
+  of `sources.csv`). Manufacturing one would have turned "the full national feed validates, activates
+  and serves direct routes" into a statement about a fixture I had written, which is the one thing
+  this component's fences forbid. So the pipeline was built to run on the provider's file, and
+  everything that does not depend on that file was completed.
+
+  **What is done, and demonstrated rather than asserted.**
+  (a) **The pre-first-import empty state is observed and recorded** — the definition-of-done item that
+  had to be met *before* anything else, because it stops existing at the first activation:
+  `GET /v1/transit/options` answered **`coverage: no_feed`** with 0 options, `transit.gtfs_routes`
+  `_trips` `_stops` `_stop_times` `_shapes` were all 0, and the version ledger was empty (SCR-AP-016's
+  empty state). `--observe-empty-state` exists for exactly this: the file may arrive days later, and
+  the baseline has to be captured while it is still true. `AL-55` is why it is worth capturing — after
+  day-0 an empty options list means "no bus serves this corridor", and only the discriminator
+  separates that from "we cannot tell".
+  (b) **The upload half of SCR-AP-016 works end to end on a deployment**, which nothing had ever
+  shown. Driven through HAProxy → gateway → transit-svc with a real Admin bearer: multipart upload
+  → `202` + `feedVersionId`, the kernel's `Idempotency-Key` requirement, the status stepper polled at
+  the screen's own 2 s cadence, the five-error cap, the CSV row-level report, `409 feed-duplicate`
+  naming the existing version on a re-upload, and both audit rows — `GTFS_FEED_UPLOADED` with an
+  actor and `GTFS_FEED_VALIDATED` **without** one, which is `GtfsAuditActions`' documented shape
+  (a queued job reached the verdict, not a person). The input was a zip holding a single README
+  saying what it is; it contains no GTFS file, so BR-32.1 refused it and it can never be activated.
+  That is a malformed-input probe, not a feed, and the `FAILED` row it left is documented in the
+  runbook §9 with the SQL to remove it and the reason not to.
+  (c) **The runbook** — `docs/runbooks/gtfs-day0-load.md`: obtain → upload → read the report →
+  preview → activate → verify → roll back, the rollback timing table the run fills in, the
+  every-refresh checklist, and a symptom table whose rows are the failures this surface actually
+  produces.
+  (d) **The corridor sample set** — six real corridors chosen to fail for *different* reasons: the two
+  Colombo trunks, one leaving the district, one in Kandy (so a Colombo-only feed is caught — the exact
+  failure the retired corridor-first plan would have produced), one in the deep south (so the bounding
+  box is exercised near its floor), and Colombo–Kandy, which is a rail corridor as well as a bus one.
+  (e) **The shape check is a real check.** `gtfs_shape.py` decodes the polyline at the same 1e5
+  precision `EncodedPolyline` encodes at, holds every point to the same Sri Lanka bounding box BR-32.1
+  applies to *stops*, and requires the line to pass within 1200 m of both ends of the corridor that
+  produced it — which is what distinguishes a correct shape from a valid, well-formed, wrong one.
+  Negative-tested in all three directions (lat/lng transposition, a shape from the wrong corridor,
+  garbage).
+
+  **FINDING 1 — every authenticated request to either compose stack answered 500, and nothing knew.**
+  `infra/env/.env.common.example` set
+  `Jwt__JwksUrl=http://app-services:5000/v1/internal/iam/.well-known/jwks.json`. The
+  `/v1/internal/**` prefix is refused **ahead of routing** by the gateway's `BlockedPathMiddleware`
+  (mTLS-only, D3' §0) and no route of that shape had ever existed, so `JwksConfigurationManager`'s
+  fetch 404'd and every JWT-validating service threw `HttpRequestException` on **every request
+  carrying a bearer** — dev as much as the replica. It survived C125's ten fixes because the fetch
+  happens on the first *authenticated* request rather than at start-up or readiness, and because both
+  smoke suites assert **401s**, which need no key: C126's day-0 load is the first thing in this
+  repository's history to present a real token to a deployed service. Fixed at the source: a new
+  `iam-jwks` route in `gateway-routes.json` matching `/v1/.well-known/jwks.json`, exempt from the
+  D-31 version gate (a service fetching a key sends none of its headers) and **rewriting the path**
+  onto the root the JWKS specification expects — the /v1 prefix is required because
+  `RouteConfigurationTests` holds the edge to `/v1`, `/public` and `/hubs`. `.env.common.example` now
+  names it, `docs/runbooks/secret-rotation.md`'s step-4 verification (which used the same dead URL and
+  could never have passed) reads it from inside the cluster instead, and
+  `The_jwks_route_is_reachable_exempt_and_rewritten` pins all three properties. Production is
+  unaffected — `infra/k8s/base/config/common-config.yaml` uses per-pod Service DNS.
+  **And the gap that hid it is closed:** `smoke.sh` gained step 1a, which fetches the JWKS the way a
+  service does (no credential — that is the point of a JWKS) and fails if it is not 200 with a `kid`.
+  C125's suite is now **24 passed, 0 failed**. Everything else in it is deliberately unauthenticated,
+  so this is the one check that exercises the JWT path at all.
+  **Micro-change-set owed:** `GET /.well-known/jwks.json` is served by iam-svc (C020/C026), is now
+  routed at the edge, and is declared in **neither** D3' nor `backend/contracts/iam.yaml`. Every
+  service's own `appsettings.json` already points at `https://api.mageride.lk/.well-known/jwks.json`,
+  so the intent was always a public edge path; C007's contract set should say so.
+
+  **FINDING 2 — `ApiGateway.Tests` has been failing 18 of 605 since C125.** Both projects it
+  references ship an `appsettings.json` and the copy into the test output is last-one-wins, so
+  AppServices' file (Logging and AllowedHosts, no `Gateway` section) landed on top of the gateway's.
+  `RouteConfigurationTests` threw in its static initialiser (all ten cases) and the harness's gateway
+  came up with **no attestation list and no rate-limit policies**, so sixteen more cases in
+  `AttestationEnforcementTests` and `RateLimitTests` asserted a 401 and got a 200 — i.e. the tests that
+  prove D-30 enforcement and D6' §8.2 limiting were vacuous. Verified pre-existing by stashing my diff
+  and re-running (16 of 31 failed on pristine files). One root cause, one fix: a `Copy` target after
+  Build so the subject under test wins its own output directory. **605/605 now pass.**
+
+  **FINDING 3 — every `deploy.sh` was deleting every rollback target.** A rollback re-imports from the
+  archived version's stored zip (BR-32.3), `Transit__Gtfs__StorageRoot=/var/lib/mageride/gtfs`, and
+  nothing mounted it — so the zips lived on the container's writable layer and a recreate took them.
+  Now the `gtfsdata` volume, mounted at `/var/lib/mageride` and **not** at the storage root itself:
+  that is the directory `Dockerfile.appservices` creates as `app:app`, and a volume mounted onto a
+  path the image does not have is created root-owned and unwritable by a non-root container — C125's
+  defect #6, one layer down. Proven by writing a file, forcing a recreate, and reading it back.
+  `gtfs-day0-verify.sh` §6 now checks the mount *and* counts the stored zips against the number of
+  versions, so a lost rollback target is a failure rather than a surprise.
+
+  **FINDING 4 — the feed-download HMAC was a published constant.** `Transit__Gtfs__DownloadSigningKey`
+  was `CHANGEME_gtfs_download_signing_key_base64` on a publicly reachable edge. `TransitOptions`
+  accepts it (it only requires non-empty), and that signature **is** the whole credential on
+  `GET /v1/admin/transit/gtfs/objects/{id}` — the route a browser follows after the 302, carrying no
+  bearer. `deploy.sh` now generates it like `MQTT_JWT_SECRET`, and this deployment's has been
+  regenerated. This is the fifth instance of C125's own closing warning about generated values needing
+  both ends wired; assume there are more.
+
+  **Decisions.** (1) **The rollback rehearsal needs a second, genuinely different feed file**, and the
+  scripts take `--previous` for it: the upload dedupes on sha256 (BR-32.1), so a feed cannot be rolled
+  back to itself, and the rehearsal's target must be `archived`, which means it must have been active.
+  The sequence is therefore *previous → current → back → forward*, which is also the real one. Without
+  it the rehearsal is reported **NOT REHEARSED** and the verify fails — never silently skipped.
+  (2) **`expectRoutes` is a soft check.** "138 should appear on Pettah → Kottawa" is reported loudly
+  and is not fatal: route numbering is the feed's to state, not ours to require (AL-56), and a verify
+  that failed because a provider renamed 138 to 138/1 would be asserting against the wrong thing. The
+  hard checks are structural — a direct option exists, and its shape is geometrically possible.
+  (3) **The day-0 operator is provisioned into `.env.replica`, not into `seed.sql`.** The replica's
+  seed has no internal account at all (every synthetic actor is a passenger, driver or fleet owner),
+  so SCR-AP-016 had nobody who could open it; a committed seed would mean a committed PBKDF2 verifier
+  for a known password on a box with a public IP. `gtfs-lib.sh` derives the verifier exactly as
+  `Iam.Api/Auth/PasswordHasher` does (PBKDF2-HMAC-SHA256, 600 000 iterations, PHC-encoded) and signs
+  in through `POST /v1/admin/auth/login` — the same route the screen uses, so RBAC and the audit actor
+  are real. **Every other Wave 5/6 component that needs an admin bearer can `. gtfs-lib.sh` and call
+  `require_token`.**
+  (4) **The journal holds only what cannot be re-derived** — the empty state and the swap timings. The
+  verify re-asks the deployment for everything else, so a journal that claimed a corridor worked would
+  not make it pass.
+  (5) **Two script bugs worth naming**, because both produce false passes. `body=$(api …)` runs the
+  function in a **subshell**, so its assignment to `API_STATUS` was discarded and the caller branched
+  on whatever the last non-substituted call had left there — a stale 401 that made a successful
+  sign-in look like a refusal; `api` now returns through `API_BODY`/`API_STATUS` and is never
+  substituted. And psql performs **no** variable interpolation in a `-c` string (its own documentation
+  says so), which surfaces as a bare `syntax error at or near ":"` that reads like broken SQL;
+  `psql_v` feeds SQL on stdin with `-f -`.
+
+  **Files —** new: `infra/replica/{gtfs-lib.sh,gtfs-day0-load.sh,gtfs-day0-verify.sh,gtfs-corridors.json,gtfs_shape.py}`,
+  `docs/runbooks/gtfs-day0-load.md`. Changed: `backend/src/ApiGateway/gateway-routes.json` (the
+  `iam-jwks` route), `backend/src/ApiGateway.Tests/{ApiGateway.Tests.csproj,RouteConfigurationTests.cs}`,
+  `infra/env/.env.common.example` (the JwksUrl), `infra/replica/{docker-compose.light-replica.yml,deploy.sh,.env.replica.example}`,
+  `docs/runbooks/{README.md,secret-rotation.md}`, `infra/CLAUDE.md`, `.gitignore`.
+
+  **What the next session does when the file arrives:**
+  `cp <current>.zip infra/replica/gtfs/national.zip && cp <prior>.zip infra/replica/gtfs/national-previous.zip`
+  then `bash infra/replica/gtfs-day0-load.sh` and `bash infra/replica/gtfs-day0-verify.sh`, and fill
+  in the runbook's §6 timing table from the journal. Nothing else about C126 is outstanding.
+  **C133's go-live gate stays closed until that runs** — it is gated on the day-0 feed being active.

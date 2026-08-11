@@ -13,6 +13,9 @@ namespace MageRide.ApiGateway.Tests;
 public sealed class RouteConfigurationTests
 {
     private static readonly JsonElement Routes = Load("gateway-routes.json").GetProperty("ReverseProxy");
+    // The gateway's own appsettings.json, which the csproj's GatewaySettingsWinTheOutputDirectory
+    // target guarantees is the one in this directory — two referenced projects ship a file by that
+    // name, and until C126 the other one was winning.
     private static readonly JsonElement Settings = Load("appsettings.json").GetProperty(GatewayOptions.SectionName);
 
     private static readonly string[] KnownMetadataKeys =
@@ -160,6 +163,43 @@ public sealed class RouteConfigurationTests
                     $"Cluster '{cluster.Name}' destination '{destination.Name}' has address '{address}'.");
             }
         }
+    }
+
+    /// <summary>
+    /// Δ C126. The one route the whole platform's authentication depends on, pinned in all three of
+    /// the ways it can be broken.
+    /// </summary>
+    /// <remarks>
+    /// Every service fetches the public signing key over this route to validate a bearer (D-29,
+    /// D-21). It did not exist until C126's day-0 load became the first thing in this repository to
+    /// present a real token to a deployed service and got <c>500 internal-error</c> from
+    /// <c>JwksConfigurationManager</c>: <c>env/.env.common.example</c> named
+    /// <c>/v1/internal/iam/.well-known/jwks.json</c>, which BlockedPathMiddleware refuses ahead of
+    /// routing. Nothing else catches this — the fetch happens on the first authenticated request,
+    /// not at readiness, and the smoke suites assert 401s, which need no key.
+    /// </remarks>
+    [Fact]
+    public void The_jwks_route_is_reachable_exempt_and_rewritten()
+    {
+        var route = Route("iam-jwks");
+
+        Assert.Equal("iam-svc", route.GetProperty("ClusterId").GetString());
+
+        // Reachable: /v1, because RouteConfigurationTests holds the edge to three prefixes and
+        // `/v1/internal/**` — the address this used to name — is blocked before routing.
+        Assert.Equal("/v1/.well-known/jwks.json", route.GetProperty("Match").GetProperty("Path").GetString());
+
+        // Rewritten: iam-svc serves the root path the JWKS specification expects, and the /v1 prefix
+        // the edge requires has to come off somewhere. Without this the fetch is a 404 from iam-svc
+        // instead of a 404 from the gateway — the same outage, one hop later.
+        var transforms = route.GetProperty("Transforms").EnumerateArray().ToArray();
+        Assert.Contains(transforms, t => t.TryGetProperty("PathSet", out var p) && p.GetString() == "/.well-known/jwks.json");
+
+        // Exempt: a service fetching a key sends none of D-31's client headers, and a 426 here would
+        // break authentication platform-wide rather than ask anybody to upgrade.
+        Assert.Equal(
+            GatewayOptions.ExemptValue,
+            route.GetProperty("Metadata").GetProperty(GatewayOptions.MetadataKeys.VersionGate).GetString());
     }
 
     [Fact]
