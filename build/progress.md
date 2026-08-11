@@ -19,7 +19,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | 4a | C067–C084 (18) | both Android apps build and every owned SCR-* screen matches its wireframe |
 | 4b | C085–C102 (18) | both iOS apps build and test **on macOS**; parity with 4a confirmed screen-for-screen |
 | 4c | C103–C117 (15) | all three web surfaces lint + test + build; zero runtime CSS-in-JS in any bundle |
-| 5 | C118–C126 (9) | contract + E2E suites green against the deployed replica; day-0 GTFS feed active |
+| 5 | C118–C126 (9) | contract suite green against the deployed replica — **E2E in-process by exception** (2026-08-12, see Planner findings); day-0 GTFS feed active |
 | 6 | C127–C132 (6) | no open high/critical security findings; load, chaos and SG acceptance reports signed off |
 
 ## Components
@@ -166,6 +166,27 @@ After completing a component, set its Status and append the 3-line handoff under
 through real EMQX, Redpanda, Redis and SignalR, using the KMP module the two Android apps use.
 
 ## Planner findings — spec gaps & conflicts (from C000)
+
+**Δ 2026-08-12 — wave-5 gate exception (granted by the project owner).** The gate read "contract +
+E2E suites green **against the deployed replica**". Half of it is now literally true: C126 built
+`tests/Contract/Live` and `infra/replica/contract-live-verify.sh`, and the sweep is green against the
+running replica (304 passed, 17 skipped, 0 failed, five findings ratcheted in `Live/LiveDrift.cs`).
+
+The **E2E half stays in-process** and the gate is met with that stated exception, so wave 6 is not
+blocked on it. The reason it is not a flag: all four fleets in `tests/E2E` mint their own tokens
+against a black-hole `Jwt:JwksUrl`, and several scenarios assert on Redpanda internals and ledger rows
+that only in-process composition can reach. Porting them is component-sized work.
+
+**Owed: a wave-6 slot for "E2E against the deployed replica."** Not created here, because adding a
+manifest entry means re-running `build/tools/generate_build_plan.py`, and that **resets the Status
+column and erases the Session Handoffs log** — 126 components' worth of record. Whoever schedules
+wave 6 should add it to the manifest and regenerate deliberately, moving the handoffs aside first.
+
+**Still open on the gate, and NOT covered by this exception: "day-0 GTFS feed active."** C126 is
+PARTIAL until the provider's file is uploaded through SCR-AP-016 (the owner is doing that directly).
+C127 remains blocked on that item unless it too is granted an exception — the E2E exception does not
+reach it.
+
 
 Recorded by the build planner. Each is already encoded as a fence in the affected prompts;
 the ones marked **micro-change-set** should be fixed in `specs/` rather than worked around.
@@ -20531,3 +20552,48 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   `infra/replica/contract-live-verify.sh`. Changed: `backend/contracts/transit.yaml` (the three
   nullable history fields, `oneOf` + `'null'` as this directory already spells it),
   `infra/env/.env.app.example` (finding 5), `tests/Contract/CLAUDE.md`, `infra/CLAUDE.md`.
+
+- **Component:** C126 addendum 2 — fleet-health reachability, and the wave-5 gate exception — 2026-08-12
+- **Status:** finding 1 of the live ledger is **FIXED** and its entry deleted (the ratchet made that
+  mandatory): `GET /v1/fleets/{fleetId}/health` answers `404 "No such fleet organisation."` for an
+  absent id instead of `503 dependency-unavailable`. Live sweep still green — 304 passed, 17 skipped,
+  0 failed, now with **four** ledger entries instead of five. `ApiGateway.Tests` 605/605.
+- **Notes:**
+  **The defect was one word's worth of conflation.** `HotPath/Program.cs` bound all four co-located
+  services to `127.0.0.1` because "Container 6 exposes NO ports — the spec's table says None (internal
+  consumers only)". But *publishing no host port* and *binding loopback* are different things, and
+  fleet-health-svc is not a consumer: it serves US-3.13 and the gateway reaches it **from another
+  container**. `gateway-routes.json` had said so all along, in its own words — "the gateway reaches it
+  over the compose network, which is why `hot-path` still declares no `ports:`" — and named
+  `http://hot-path:5000/`. So the route had never worked on any deployment, and three documents each
+  named a different port (5000 in the gateway's default and the dev compose's comment, 5203 in the
+  replica's override, 5202 where it actually listened).
+
+  **Fixed so that one place says it.** `CoLocatedHost.Addresses`/`RunAsync` take an optional
+  `published` map; `HotPath` passes `fleet-health-svc -> http://0.0.0.0:5000`, which is the gateway's
+  existing default, so **the replica's override was deleted rather than corrected** — three numbers
+  became one. The other three services stay loopback-only, `hot-path` still publishes no host port,
+  and the compose healthcheck (which curls 5200, persistence-writer) is untouched. Verified: hot-path
+  logs `0.0.0.0:5000`, `curl http://hot-path:5000/health/live` from app-services answers 200, and the
+  edge route answers 404-for-absent-fleet.
+
+  **Wave-5 gate: met with a stated exception, granted by the owner** — contract suite live and green,
+  E2E in-process only. Recorded in the gate text itself (both in
+  `build/tools/generate_build_plan.py`, which is where the gates actually live, and in the generated
+  table in this file) plus a Planner-findings entry with the reasoning and what is owed.
+  **The generator was deliberately NOT re-run:** it resets the Status column and erases the Session
+  Handoffs log. Whoever adds the owed E2E slot to the manifest must move this log aside first.
+
+  **What the exception does not cover.** "day-0 GTFS feed active" is still open, so C127 is still
+  blocked on the feed upload unless that item is separately excepted. The E2E exception does not reach
+  it, and this addendum does not pretend otherwise.
+
+  **Geocoder re-confirmed** (2026-08-12, ~2 h after the import finished): `/v1/geo/reverse` →
+  "D. R. Wijewardene Mawatha, Suduwella, Slave Island, Colombo … 00200", `/v1/geo/search?q=Fort
+  Railway Station` → "Colombo Fort Railway Station halt, Olcott Mawatha, Fort … 01100", both
+  `source: nominatim`, `/status` → OK, container healthy.
+
+  **Files —** changed: `backend/src/HotPath/{CoLocatedHost,Program}.cs`,
+  `infra/replica/docker-compose.light-replica.yml` (override removed),
+  `tests/Contract/Live/LiveDrift.cs` (entry deleted, with a note saying what it was),
+  `build/tools/generate_build_plan.py` + `build/progress.md` (the gate).

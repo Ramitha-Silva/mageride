@@ -385,7 +385,10 @@ services:
       # The three clusters that are NOT in this container. Everything co-located here is pointed at
       # its own loopback port by the host itself — see backend/src/AppServices/Container7.cs.
       ReverseProxy__Clusters__fanout-svc__Destinations__primary__Address: http://fanout:5001/
-      ReverseProxy__Clusters__fleet-health-svc__Destinations__primary__Address: http://hot-path:5203/
+      # Δ C126 — fleet-health-svc's override is GONE, not corrected. It said `:5203`; the service
+      # listens on 5000 (HotPath/Program.cs publishes it there deliberately) and that is already
+      # gateway-routes.json's default, so the right number of places to say it is one. The old value
+      # was unreachable twice over — wrong port, and the service was bound to loopback.
       ReverseProxy__Clusters__voip-svc__Destinations__primary__Address: http://voip:5000/
     volumes:
       # provisioning-svc's embedded step-ca (T-02). A bind mount rather than a named volume because

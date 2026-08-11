@@ -150,7 +150,7 @@ gates = {
     "4a": "both Android apps build and every owned SCR-* screen matches its wireframe",
     "4b": "both iOS apps build and test **on macOS**; parity with 4a confirmed screen-for-screen",
     "4c": "all three web surfaces lint + test + build; zero runtime CSS-in-JS in any bundle",
-    "5": "contract + E2E suites green against the deployed replica; day-0 GTFS feed active",
+    "5": "contract suite green against the deployed replica — **E2E in-process by exception** (2026-08-12, see Planner findings); day-0 GTFS feed active",
     "6": "no open high/critical security findings; load, chaos and SG acceptance reports signed off",
 }
 wave_order = ["0", "1", "2", "3", "4a", "4b", "4c", "5", "6"]

@@ -22,6 +22,11 @@ internal static class LiveDrift
     /// <summary>
     /// Operations that answer a 5xx, keyed <c>METHOD /template</c>, with the status they answer.
     /// </summary>
+    // Δ FIXED 2026-08-12 and removed from this list: GET /v1/fleets/{fleetId}/health (503). It was
+    // unreachable because HotPath bound every co-located service to 127.0.0.1 while the gateway
+    // had to reach fleet-health-svc from another container. It now publishes 0.0.0.0:5000 — the
+    // address gateway-routes.json had named all along — and the route answers 404 for an absent
+    // fleet. The replica's `:5203` override is gone rather than corrected.
     public static readonly IReadOnlyDictionary<string, (int Status, string Why)> ServerErrors =
         new Dictionary<string, (int, string)>(StringComparer.Ordinal)
         {
@@ -36,15 +41,6 @@ internal static class LiveDrift
             ["GET /v1/drivers/{driverId}/stats"] = (500,
                 "the same INSERT, reached through GetStatsAsync -> RefreshAsync. One fix covers both."),
 
-            ["GET /v1/fleets/{fleetId}/health"] = (503,
-                "fleet-health-svc is UNREACHABLE from the gateway, two ways at once. It listens on "
-                + "127.0.0.1:5202 inside the hot-path container (HotPath/Program.cs passes "
-                + "bindAddress \"127.0.0.1\" for all four co-located services), so no other container "
-                + "can reach it on any port — and the replica's cluster address names port 5203, "
-                + "while docker-compose.dev.yml's comment names 5000. Three places, three ports, none "
-                + "of them right, and US-3.13 has never worked on a deployment. Same root cause as "
-                + "C126's JWKS finding: a co-located service bound to loopback cannot be a cluster "
-                + "destination. OWNER: C125 (the replica's compose + the HotPath host)."),
         };
 
     /// <summary>
