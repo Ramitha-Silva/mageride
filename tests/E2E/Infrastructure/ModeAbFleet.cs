@@ -157,7 +157,12 @@ internal sealed class ModeAbFleet : IAsyncDisposable
         SubscriptionClient = NewClient(subscription);
         ProvisioningClient = NewClient(provisioning);
         FanoutBaseAddress = new Uri(BaseAddressOf(fanout));
-        Journal = new SessionJournal(postgres);
+        // The Redis half is a lambda, not the IDatabase: the journal is built here in the
+        // constructor, and `Cache` resolves through _fanout's provider, which is not safe to touch
+        // until every host has started. Deferring the resolution to the moment a failure is being
+        // described also means a torn-down fleet degrades to "unreadable" rather than throwing
+        // inside a diagnostic.
+        Journal = new SessionJournal(postgres, () => Cache);
     }
 
     /// <summary>Talks to trip-state-svc — Start/End/Restart Journey and the internal ignition route.</summary>

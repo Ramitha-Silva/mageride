@@ -1,7 +1,9 @@
 using System.Globalization;
 using System.Text;
 using Dapper;
+using MageRide.Shared.Caching;
 using MageRide.TestKit;
+using StackExchange.Redis;
 
 namespace MageRide.E2E.Infrastructure;
 
@@ -23,7 +25,7 @@ namespace MageRide.E2E.Infrastructure;
 /// ordinary <c>Assert</c> calls.
 /// </para>
 /// </remarks>
-internal sealed class SessionJournal(PostgresFixture postgres)
+internal sealed class SessionJournal(PostgresFixture postgres, Func<IDatabase>? cache = null)
 {
     /// <summary>Marks a message as already carrying a history, so it is not appended twice.</summary>
     private const string Marker = "\n── vehicle history ──";
@@ -145,6 +147,8 @@ internal sealed class SessionJournal(PostgresFixture postgres)
                 $"  telemetry.positions: {telemetry.Rows} row(s)"
                 + $"{(telemetry.Newest is null ? " — nothing reached Timescale" : $", newest {telemetry.Newest:HH:mm:ss.fff}")}\n");
 
+            await AppendProcessorVerdictAsync(report, vehicleId);
+
             report.Append("  prov.tracker_bindings (T-03):\n");
             foreach (var (imei, state, boundAt) in
                      await connection.QueryAsync<(string, string, DateTimeOffset)>(
@@ -179,6 +183,82 @@ internal sealed class SessionJournal(PostgresFixture postgres)
             // A diagnostic that throws would replace the real failure with its own, which is the one
             // outcome worse than no diagnostic at all.
             return $"\n{Marker} vehicle {vehicleId}: the history could not be read ({diagnosis.Message})\n";
+        }
+    }
+
+    /// <summary>
+    /// position-processor-svc's own verdict on this vehicle, read out of Redis.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The row count above says whether a fix reached Timescale. It cannot say <em>why</em> one did
+    /// not, and the two answers need opposite fixes: a sample position-processor-svc REFUSED (a
+    /// D-18 gate, the T-05 replay watermark) is a scenario driving the platform wrongly, while a
+    /// sample it ACCEPTED that has no row is persistence-writer-svc, its consumer group, or the
+    /// database. `veh:meta` is written only for an accepted sample and `veh:seq` only advances for
+    /// one, so the pair splits the pipeline exactly at position-processor-svc.
+    /// </para>
+    /// <para>
+    /// Added while chasing the intermittent ModeB telemetry timeout of 2026-08-10, which reproduced
+    /// in CI twice and never once on the build host — 6/6 alone and 136/136 in the full suite pinned
+    /// to two CPUs. Without this the failure says only "no row arrived", which is equally true of
+    /// every cause.
+    /// </para>
+    /// <para>
+    /// `sampleTs` is an ISO-8601 instant, and `seq` is <b>not</b> independent of it: tcp-adapter sets
+    /// `seq = CapturedAt.ToUnixTimeMilliseconds()` (`Ingest/TrackerSamples.cs`) and all four protocols
+    /// stamp to the whole second, so seq always ends in `000` and carries second resolution. Both are
+    /// printed raw because that relationship is the useful thing to see — a watermark equal to the
+    /// awaited fix means the T-05 replay check, not a plausibility gate, is what refused it.
+    /// </para>
+    /// </remarks>
+    private async Task AppendProcessorVerdictAsync(StringBuilder report, Guid vehicleId)
+    {
+        if (cache is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var db = cache();
+            var meta = await db.HashGetAllAsync(RedisKeys.VehicleMeta(vehicleId));
+            var seq = await db.StringGetAsync(RedisKeys.VehicleSeq(vehicleId));
+
+            report.Append("  position-processor verdict (Redis):\n");
+
+            if (meta.Length == 0)
+            {
+                report.Append(
+                    "    veh:meta absent — position-processor-svc accepted NO sample for this vehicle,\n"
+                    + "      or the 10-minute VehicleMetaTtl has expired since it did. If a fix was sent,\n"
+                    + "      it was refused or never arrived: the gap is UPSTREAM of persistence-writer.\n");
+            }
+            else
+            {
+                var fields = meta.ToDictionary(e => e.Name.ToString(), e => e.Value.ToString());
+                var stamp = fields.GetValueOrDefault("sampleTs");
+                var when = DateTimeOffset.TryParse(
+                    stamp, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsed)
+                    ? parsed.ToString("HH:mm:ss", CultureInfo.InvariantCulture)
+                    : stamp ?? "-";
+
+                report.Append(CultureInfo.InvariantCulture,
+                    $"    last ACCEPTED sample {when}, seq {fields.GetValueOrDefault("seq") ?? "-"}, "
+                    + $"at {fields.GetValueOrDefault("lat") ?? "-"},{fields.GetValueOrDefault("lng") ?? "-"}\n");
+                report.Append(
+                    "      If this matches the fix the wait was after, position-processor-svc ACCEPTED it\n"
+                    + "      and the missing row is persistence-writer-svc's — its consumer group, its\n"
+                    + "      batch, or Postgres. If it is older, the fix was refused or never arrived.\n");
+            }
+
+            report.Append(CultureInfo.InvariantCulture,
+                $"    veh:seq watermark: {(seq.HasValue ? seq.ToString() : "absent")}\n");
+        }
+        catch (Exception diagnosis) when (diagnosis is not OperationCanceledException)
+        {
+            report.Append(CultureInfo.InvariantCulture,
+                $"  position-processor verdict: unreadable ({diagnosis.Message})\n");
         }
     }
 }

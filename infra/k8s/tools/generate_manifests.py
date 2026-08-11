@@ -600,7 +600,15 @@ def build(cat: dict) -> dict[Path, str]:
 
 
 def matrix(cat: dict) -> str:
-    """The CI build/push/sign matrix — one entry per image, from the same list."""
+    """The CI build/push/sign matrix — one entry per image, from the same list.
+
+    `build_arg` is NEWLINE-separated, not space-separated. `docker/build-push-action`'s `build-args`
+    input takes one `K=V` per LINE and treats a space as part of the value, so the portals' two pairs
+    arrived as a single arg named PORTAL whose value was `admin PORT=3001` — `npm run build
+    --workspace "admin PORT=3001"` then failed with `No workspaces found`. The .NET images have one
+    pair each and were unaffected, which is why only the three portals broke, and why nothing noticed
+    until the portal build context was fixed and they got far enough to run npm at all.
+    """
     d = cat["defaults"]
     out = []
     for svc in cat["services"]:
@@ -618,7 +626,7 @@ def matrix(cat: dict) -> str:
                 "image": p["name"],
                 "project": f"portals/{p['portal']}",
                 "dockerfile": "infra/docker/Dockerfile.portal",
-                "build_arg": f"PORTAL={p['portal']} PORT={p['port']}",
+                "build_arg": f"PORTAL={p['portal']}\nPORT={p['port']}",
             }
         )
     m = cat["migrator"]
