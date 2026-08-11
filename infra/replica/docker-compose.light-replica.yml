@@ -586,8 +586,12 @@ services:
   # NOT HERE, and named rather than stubbed:
   #
   #   nominatim   — 8 GB, "Host on separate VPS" (the spec's own instruction). It is deployed by
-  #                 infra/replica/nominatim/deploy-nominatim.sh onto its own box; app-services
-  #                 reaches it over the network through Transit__NominatimBaseUrl.
+  #                 infra/replica/nominatim/deploy-nominatim.sh onto its own box at
+  #                 http://45.77.37.208:8080 (a bare IP — that host has no domain name), and
+  #                 QUERY-SVC reaches it over the network through Query__NominatimBaseUrl. Not
+  #                 transit-svc, and not Transit__NominatimBaseUrl, which does not exist in the code:
+  #                 transit-svc's /v1/geo/parse-maps-link resolves a Google-Maps short link and
+  #                 touches no geocoder at all.
   #   osm-pipeline — a weekly one-shot, not steady state. `infra/replica/osm-refresh.sh`.
   #   monitoring   — C119 already owns the whole stack (Prometheus, Alertmanager, Loki, Promtail,
   #                 Tempo, Grafana, OTel Collector, exporters) in infra/observability/. Repeating it
