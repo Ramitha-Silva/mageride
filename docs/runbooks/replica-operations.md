@@ -178,8 +178,9 @@ guardrail follows. The core 11 come to **16.625 GiB**, which is the spec's own ~
 ## 6. Geocoding — Nominatim on its own VPS
 
 **In scope and deployed.** `45.77.37.208` (Ubuntu 26.04, 7.2 GiB RAM, 4 cores, 8 GiB swap) runs
-`mediagis/nominatim:4.4` against the Sri Lanka OSM extract, and the replica reaches it through
-`Transit__NominatimBaseUrl`.
+`mediagis/nominatim:4.4` against the Sri Lanka OSM extract, and **query-svc** reaches it through
+`Query__NominatimBaseUrl` — the key overrides `env/.env.app.example`'s `http://nominatim:8080/`, which
+names a container that does not exist on this stack.
 
 ```bash
 NOMINATIM_SSH_PASSWORD=... bash infra/replica/nominatim/deploy-nominatim.sh --dry-run
@@ -191,7 +192,7 @@ NOMINATIM_SSH_PASSWORD=... bash infra/replica/nominatim/deploy-nominatim.sh --re
 Run it **from the replica box**. It installs Docker if absent, copies
 `docker-compose.nominatim.yml` to `/opt/mageride-nominatim`, generates the geocoder's internal
 Postgres password *on the target* (mode 600, never copied off it), starts the import, restricts 8080
-to the replica's address, and writes `Transit__NominatimBaseUrl` into `.env.replica`.
+to the replica's address, and writes `Query__NominatimBaseUrl` into `.env.replica`.
 
 Prefer a key — `ssh-copy-id root@45.77.37.208` once — and the script uses it automatically and stops
 needing `NOMINATIM_SSH_PASSWORD`.
@@ -222,7 +223,7 @@ discard that volume**, and it costs the whole import again.
 | `docker compose … ps` prints an interpolation error instead of a status | `NOMINATIM_PASSWORD` is `${VAR:?}`, so every compose subcommand needs `--env-file .env.nominatim` | use the script's `--status`, which passes it |
 | container restarts repeatedly, import never completes | OOM during the import — its peak is far above steady state | the box needs swap (it has 8 GiB); check `NOMINATIM_SHARED_BUFFERS` and `MAINTENANCE_WORK_MEM` are not larger than the box |
 | `/status` refuses the connection | the import has not finished. Refused-then-500-then-OK is the normal sequence | wait; follow the log with `--status` or the log command the script prints |
-| `transit-svc` still answers 503 for `/geo/parse-maps-link` | it reads `Transit__NominatimBaseUrl` at start-up | `docker compose -f infra/replica/docker-compose.light-replica.yml up -d --force-recreate app-services` |
+| `/v1/geo/reverse` still answers 503 | **query-svc** owns the geocoder and reads `Query__NominatimBaseUrl` at start-up. (`/v1/geo/parse-maps-link` is transit-svc's and touches no geocoder — same URL prefix, different service, and the trap that made the first version of `deploy-nominatim.sh` write a key nothing reads) | `docker compose -f infra/replica/docker-compose.light-replica.yml up -d --force-recreate app-services` |
 | the geocoder answers strangers | the ufw rule did not apply | `ssh root@45.77.37.208 'ufw status'`; only the replica's address should reach 8080 |
 
 `osm-pipeline` is **not** deployed. The spec makes it a weekly one-shot (diff → osm2pgsql →
