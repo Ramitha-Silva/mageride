@@ -156,6 +156,33 @@ public sealed class LivePositionIndex(
     /// script is still atomic because that guarantee lapses for a few seconds during a consumer
     /// group rebalance, and a lost-update there would let a replayed sample overwrite a live one.
     ///
+    /// <para>
+    /// <b>The comparison is <c>&gt;=</c>, and <c>seq</c> has SECOND resolution — so one sample per
+    /// vehicle per second is a ceiling, not a guideline.</b> tcp-adapter sets
+    /// <c>seq = CapturedAt.ToUnixTimeMilliseconds()</c> (<c>Ingest/TrackerSamples.cs</c>) and all four
+    /// protocol families of D6' §4.1 stamp to the whole second, so every seq ends in <c>000</c>. Two
+    /// genuinely distinct fixes captured inside one second therefore carry the *same* seq, and this
+    /// script cannot tell the second one from the replay it exists to discard: it returns 0 and the
+    /// sample is refused. That is correct for a replay and lossy for a burst, and nothing downstream
+    /// can recover it — <c>veh:meta</c> is not updated, so the refused fix does not even become the
+    /// position the next one is measured against. Note the D-18 plausibility gate runs BEFORE this
+    /// (see the pipeline order in this project's <c>CLAUDE.md</c>), so its deliberate handling of a
+    /// same-second burst — <c>MinStepInterval</c> is a clamp, not a skip — cannot save the sample:
+    /// whatever the gate lets through arrives here and is dropped anyway.
+    /// </para>
+    /// <para>
+    /// <b>This is lower than the rate limits either side of it.</b> AL-12's fastest scheduled cadence is
+    /// 1 call/s, which is safe — but it is bounded by ADD §12.4's 5 msg/s/vehicle broker ceiling, and
+    /// this service's own D-17 line admits 10 msg/s over 10 s. A vehicle publishing 2–5 msg/s is inside
+    /// both and loses every fix but each second's first, counted <c>replayed</c> rather than dropped as
+    /// anything an operator would look at.
+    /// Raising the ceiling means giving seq resolution the timestamp does not have — a device frame
+    /// counter, which <c>TcpAdapter/CLAUDE.md</c> explains was rejected for good reasons (16 bits,
+    /// wraps in hours, survives neither a reboot nor a pod move) — so it is a spec question, not an
+    /// edit here. Found 2026-08-11 while diagnosing an E2E scenario that was itself publishing two
+    /// fixes in one second; the harness was at fault, not this.
+    /// </para>
+    ///
     /// KEYS[1] = veh:seq:{vehicleId}   ARGV[1] = seq   ARGV[2] = ttl seconds
     /// </remarks>
     private const string AdvanceWatermarkScript =

@@ -54,6 +54,16 @@ D7' §2.1's Container 9.
   which `veh:seq:{vehicleId}` outlives. The GNSS instant is monotonic per vehicle, is *identical* for a
   sample sent live and the same sample re-sent from flash, and makes the R-17/T-05 backlog dedupe fall
   out of the comparison position-processor already makes.
+  **The cost of that choice, which nothing stated until 2026-08-11: `seq` inherits the timestamp's
+  resolution, and all four families stamp to the whole SECOND** — so every seq ends in `000`, two
+  distinct fixes captured inside one second carry the same seq, and position-processor's watermark
+  discards the later one as a replay (`Redis/LivePositionIndex.cs`, `>=`). One sample per vehicle per
+  second is therefore a ceiling — and **it is lower than the rate limits the platform advertises**:
+  AL-12's fastest scheduled cadence is 1 call/s (safe), but it is "bounded by the 5 msg/s/vehicle
+  broker ceiling (§12.4)" and position-processor's D-17 line is 10 msg/s over 10 s. A tracker
+  publishing anywhere between 2 and 5 msg/s is inside both limits and silently loses every fix but the
+  first of each second. Giving seq real resolution means the frame counter this bullet rejects, so
+  closing it is a spec question rather than a change here.
 - **Two sources for an IMEI, in this order.** `imei:{imei}` first — present means ACTIVE (C030's rule;
   there is no cached "revoked"), so a hit is the whole answer and a fleet keeps publishing through a
   provisioning-svc restart. A miss goes to `GET /v1/internal/trackers/{imei}/validate`. A presented

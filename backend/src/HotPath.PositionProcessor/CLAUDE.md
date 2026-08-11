@@ -75,6 +75,24 @@ pool** → `seq` watermark + live indexes → `telemetry.normalized`.
   already guaranteed (`telemetry.raw` is keyed by vehicleId, so one consumer owns a vehicle) — the
   Lua compare-and-set exists because that guarantee lapses for seconds during a group rebalance, and
   a lost update there would let a replayed sample overwrite a live one.
+- **`seq` has SECOND resolution, so one sample per vehicle per second is a ceiling.** tcp-adapter sets
+  `seq = CapturedAt.ToUnixTimeMilliseconds()` and all four families of D6' §4.1 stamp to the whole
+  second, so every seq ends in `000`. **Two genuinely distinct fixes captured inside one second carry
+  the same seq, and the watermark cannot tell the second one from a replay — it is discarded, counted
+  `replayed`, and does not even become the position the next sample is measured against.**
+  **This is a genuine gap, not a documented ceiling.** AL-12's fastest *scheduled* cadence is 1 call/s
+  (the near-pickup burst), which lands every sample in its own second and is safe — but that same
+  entry is "bounded by the 5 msg/s/vehicle broker ceiling (§12.4)", and the D-17 table below sets this
+  service's own line at 10 msg/s over 10 s. So both rate limits deliberately tolerate a vehicle
+  publishing several samples a second, while the watermark keeps one per second and counts the rest as
+  replays. Nothing sizes the ceilings to what the storage path can actually keep. **Read it together
+  with the `MinStepInterval` rule below, which on its own reads as though a same-second burst
+  survives.** It does not, and the order above is why: the plausibility gate genuinely does judge such
+  a burst rather than skipping it — that rule is accurate — but the seq watermark runs *after* the
+  gate, so everything the gate carefully let through except the second's first sample is discarded
+  immediately afterwards. Closing it means giving seq resolution the timestamp does not have, and
+  `TcpAdapter/CLAUDE.md` records why the device frame counter was rejected — a spec question, not an
+  edit here.
 - **A bad sample is dropped, never retried.** Redelivering an unparseable payload produces the same
   nothing forever, and one misbehaving handset must not stall the partition every other vehicle in
   its shard shares. Drops are counted by reason (`undecodable`, `malformed`, `rate_limited`,

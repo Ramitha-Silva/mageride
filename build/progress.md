@@ -20131,3 +20131,35 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   job-minutes (`ci` 45 + `cd` 70). Nothing prunes GHCR: every push adds 34 tags permanently, and
   `rollback.yml` depends on old tags existing, so a retention policy is a design decision rather than
   a quick edit.
+
+  **One finding worth its own paragraph, because it is a spec gap and not a bug in anything.**
+  `seq` has **second** resolution — tcp-adapter sets `seq = CapturedAt.ToUnixTimeMilliseconds()` and
+  all four families of D6' §4.1 stamp to the whole second, so every seq ends in `000`. The R-17/T-05
+  watermark compares `>=` (`HotPath.PositionProcessor/Redis/LivePositionIndex.cs`), so **two genuinely
+  distinct fixes captured inside one second are indistinguishable from a replay and the later one is
+  discarded** — counted `replayed`, and not even kept as the position the next sample is measured
+  against. Both design decisions behind that are sound in isolation and are already argued at their
+  declarations: `TcpAdapter/CLAUDE.md` explains why the device frame counter was rejected for the
+  capture instant (16 bits, wraps in hours, survives neither a reboot nor a pod move), and the
+  watermark's `>=` is exactly right for the replay it exists to discard.
+
+  **What nobody had put together is that the effective ceiling of 1 sample/vehicle/second is LOWER
+  than the rate limits either side of it.** AL-12's fastest *scheduled* cadence is 1 call/s — the
+  near-pickup burst — which lands every sample in its own second and is safe. But that same AL-12
+  entry is "bounded by the **5 msg/s/vehicle** broker ceiling (ADD §12.4)", and position-processor's
+  own D-17 line admits **10 msg/s over 10 s**. A tracker publishing 2–5 msg/s is inside both limits and
+  silently loses every fix but each second's first. Nothing sizes those ceilings against what the
+  storage path can keep. Closing it needs a spec decision — give seq resolution the timestamp does not
+  have, make the watermark comparison `(seq, sample_ts)`-aware, or lower the advertised ceilings to the
+  1/s the pipeline actually honours — so it is recorded here rather than patched.
+
+  Documented at all three sites that were silent about it: the Lua script's own remarks,
+  `HotPath.PositionProcessor/CLAUDE.md`'s watermark rule, and `TcpAdapter/CLAUDE.md`'s `seq` rule.
+  The position-processor entry also cross-references its `MinStepInterval` rule, which on its own reads
+  as though a same-second burst survives: the plausibility gate genuinely does judge such a burst
+  rather than skipping it — that rule is accurate — but the pipeline order in that file puts the
+  watermark **after** the gate, so everything the gate let through is dropped immediately afterwards.
+
+  Found 2026-08-11 while diagnosing the ModeB flake, whose harness was publishing two fixes in one
+  second. **The harness was at fault there and the platform was not**, which is why this is a separate
+  finding and not part of that fix.
