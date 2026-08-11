@@ -103,16 +103,33 @@ public abstract class ModeAbScenario(
 
         for (var step = 1; step <= steps; step++)
         {
+            // The cadence is waited out BEFORE every frame, the first one included, and that is the
+            // whole fix for the intermittent ModeB telemetry timeout of 2026-08-10.
+            //
+            // position-processor-svc measures a sample's implied speed from the last fix it ACCEPTED
+            // — not from the start of this drive. So the first step's implied speed was
+            // 40 m ÷ (however long the scenario's previous step happened to take), and the scenario
+            // before a drive is HTTP against localhost. ModeB's grant flow sometimes finished inside
+            // one second, which made the first step 40 m in ~1 s = 144 km/h, over a bus's 120 ceiling
+            // (ADD §12.6). Refused — and `a refused sample never becomes the position the next one is
+            // measured against`, so step two was then measured from the depot as well: 80 m over 2 s,
+            // 144 km/h, refused too. Nothing landed, and the wait timed out having never seen a fix.
+            //
+            // Waiting first makes the gap at least `wait` no matter what preceded, so every step is
+            // 40 m / 2 s = 72 km/h — the figure tests/E2E/CLAUDE.md already claims this drive has, and
+            // which was only ever true of the second step onward.
+            //
+            // It also keeps the device inside D5' §5.2/AL-12's 1-sample-per-second cadence. Two frames
+            // inside one second collide on `seq` (tcp-adapter sets it to the captured whole second in
+            // Unix millis) and the later one is discarded by the T-05 replay watermark — see the
+            // separate finding on seq's resolution.
+            await Task.Delay(wait, TestContext.Current.CancellationToken);
+
             at = new GeoPoint(
                 from.Latitude + ((to.Latitude - from.Latitude) * step / steps),
                 from.Longitude + ((to.Longitude - from.Longitude) * step / steps));
 
             capturedAt = await device.ReportAsync(at);
-
-            if (step < steps)
-            {
-                await Task.Delay(wait, TestContext.Current.CancellationToken);
-            }
         }
 
         return new ReportedFix(at, capturedAt);
