@@ -21,6 +21,13 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      ios:
+        description: >-
+          Also build the iOS leg. Off by default: it runs on macos-14, which GitHub bills at a
+          10x multiplier, and it is known to fail (see the `plan` job's summary).
+        type: boolean
+        default: false
 
 # A second push to the same branch supersedes the first. main is excluded: every commit
 # there is a release candidate and must have its own result.
@@ -41,6 +48,60 @@ env:
   TZ: Asia/Colombo
 
 jobs:
+  # ===================================================================================
+  # Which legs run. Only ios is ever in question, and only because of what it costs.
+  #
+  # A job-level `if` cannot reference the `matrix` context, so a leg cannot be skipped by
+  # condition once it is in the matrix — GitHub provisions the runner and starts billing before
+  # any step is evaluated. The only way not to pay for a macOS runner is for the matrix not to
+  # name it, which is why this job exists rather than an `if:` on the leg.
+  # ===================================================================================
+  plan:
+    name: which legs
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      targets: ${{ steps.pick.outputs.targets }}
+    steps:
+      - name: pick the legs
+        id: pick
+        run: |
+          set -euo pipefail
+          legs='[{"target":"backend","runner":"ubuntu-latest","advisory":false},
+                 {"target":"android","runner":"ubuntu-latest","advisory":false},
+                 {"target":"portal","runner":"ubuntu-latest","advisory":false}]'
+
+          # Requested by hand, or by putting the `run-ios` label on a pull request. NOT on a
+          # schedule and NOT on push: the leg's answer is currently known ("fails"), so paying
+          # 10x for it on every commit buys nothing.
+          #
+          # When it IS requested it is BINDING, not advisory. The only reason to ask for it is to
+          # find out whether the Swift compiles, and an advisory leg answers that question with a
+          # green tick.
+          if [ "$DISPATCH_IOS" = "true" ] || [ "$HAS_LABEL" = "true" ]; then
+            legs=$(printf '%s' "$legs" | sed 's/\]$/,{"target":"ios","runner":"macos-14","advisory":false}]/')
+            echo "::notice::the ios leg is included and is binding"
+          else
+            {
+              echo "### iOS leg not built"
+              echo
+              echo "\`apps/driver-ios/\` has **67 unique Swift compile errors across 15 files**"
+              echo "(C085-C102's Swift was authored on a host that cannot compile it). The leg runs"
+              echo "on \`macos-14\`, which GitHub bills at a **10x multiplier** for ~15 minutes, and"
+              echo "its answer does not change between commits — so it is off by default."
+              echo
+              echo "To run it: the **\`run-ios\`** label on a pull request, or"
+              echo "**Run workflow** with \`ios: true\`. It is binding when requested."
+              echo
+              echo "Closing it needs a Mac session: fix the 67 errors, commit \`Package.resolved\`."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          printf 'targets={"include":%s}\n' "$(printf '%s' "$legs" | tr -d '\n ')" >> "$GITHUB_OUTPUT"
+        env:
+          DISPATCH_IOS: ${{ github.event_name == 'workflow_dispatch' && inputs.ios }}
+          HAS_LABEL: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'run-ios') }}
+
 
   # ===================================================================================
   # D7' §7's matrix. `runs-on` is a literal per leg rather than the spec's inline
@@ -57,44 +118,36 @@ jobs:
     timeout-minutes: 45
 
     # PER-LEG, and it has to be: `continue-on-error: true` written plainly here would apply to
-    # all four legs and quietly stop backend, android and portal failures from failing the
-    # build. `matrix.advisory` is declared on every entry so a reader can see which legs are
-    # binding, and only `ios` is not.
+    # every leg and quietly stop backend, android and portal failures from failing the build.
+    # `advisory` is declared on every entry the `plan` job emits, so a reader can see which legs
+    # are binding. As of Δ 2026-08-11 none of them are advisory — see below.
     continue-on-error: ${{ matrix.advisory }}
+    needs: plan
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - target: backend
-            runner: ubuntu-latest
-            advisory: false
-          - target: android
-            runner: ubuntu-latest
-            advisory: false
-          # macos-14 is a literal and must stay one — see the comment above the job.
-          #
-          # ADVISORY as of C124's CI repair, and this is debt with a specific shape. The
-          # Firebase pin is fixed and the SDK compiles; what remains is **67 unique compile
-          # errors across 15 files of MageRide's own Swift** in apps/driver-ios/. The headline
-          # class: `BusinessDate` is a Kotlin `typealias` in :shared, and a Kotlin typealias
-          # does NOT survive into an XCFramework's Obj-C/Swift interop — Swift never sees that
-          # name. C085-C093's code was authored on a host that cannot compile Swift (root
-          # CLAUDE.md; apps/driver-ios/CLAUDE.md sets SWIFT_STRICT_CONCURRENCY minimal for the
-          # same reason), so nothing ever told the author.
-          #
-          # It is advisory rather than removed because the leg still earns its keep: it
-          # resolves the SPM graph, assembles the XCFramework, and is the only thing that
-          # would notice the Firebase pin drifting past 11.11.0 again.
-          #
-          # WHAT CLOSES THIS: a session on a Mac that fixes those 67 errors, commits a
-          # Package.resolved, and flips `advisory` back to false. Until then a red X on this
-          # leg does not block delivery — which is a deliberate trade, not an oversight.
-          - target: ios
-            runner: macos-14
-            advisory: true
-          - target: portal
-            runner: ubuntu-latest
-            advisory: false
+      # Computed, not literal: the `plan` job decides whether `ios` is here at all. `macos-14`
+      # is still a literal inside that job's JSON and must stay one — see the iOS fence below.
+      #
+      # --- why ios is not in the default matrix ---------------------------------------
+      # `apps/driver-ios/` has 67 unique compile errors across 15 files of MageRide's own Swift.
+      # The headline class: `BusinessDate` is a Kotlin `typealias` in :shared, and a Kotlin
+      # typealias does NOT survive into an XCFramework's Obj-C/Swift interop — Swift never sees
+      # that name. C085-C102's code was authored on a host that cannot compile Swift (root
+      # CLAUDE.md; apps/driver-ios/CLAUDE.md sets SWIFT_STRICT_CONCURRENCY minimal for the same
+      # reason), so nothing ever told the author.
+      #
+      # It was `advisory: true` for one day. That kept CI green, which was the point, but it also
+      # ran a macos-14 runner for ~15 minutes on every push — billed at a 10x multiplier — to
+      # re-answer a question whose answer had not changed, and it emitted a warning no one could
+      # act on without a Mac. ~1690 billed minutes in a day, for no information after the first
+      # run. On-demand costs nothing per push and loses nothing: the errors are tracked, and the
+      # leg still resolves the SPM graph and would still notice the Firebase pin drifting past
+      # 11.11.0 whenever it is asked to.
+      #
+      # WHAT CLOSES THIS: a Mac session that fixes the 67 errors and commits a Package.resolved.
+      # Then put `ios` back in the default list in `plan`. It is already binding when requested,
+      # so nothing else needs flipping.
+      matrix: ${{ fromJSON(needs.plan.outputs.targets) }}
 
     steps:
       - uses: actions/checkout@v4
@@ -248,35 +301,37 @@ jobs:
             fi
           done
 
-      # An advisory leg that goes red silently becomes an advisory leg nobody looks at. This
-      # always runs and says, in the run summary, that the archive failed and what closes it.
-      - name: ios — say plainly that this leg is advisory
+      # This leg only runs when somebody asked for it, so the summary's job is no longer to stop a
+      # silent red X being ignored — it is to say what was learned, since the asking cost 10x.
+      - name: ios — what this run established
         if: ${{ always() && matrix.target == 'ios' }}
         run: |
           set -euo pipefail
           if [ "${{ job.status }}" = "success" ]; then
-            echo "::notice::the ios archive succeeded — if this holds, flip matrix.advisory to false"
+            echo "::notice::the ios archive succeeded — put ios back in the default matrix in the plan job"
             {
               echo "### ios: archive succeeded"
               echo ""
-              echo "This leg is still marked advisory. If it keeps passing, set \`advisory: false\`"
-              echo "on the ios matrix entry in \`.github/workflows/ci.yml\`."
+              echo "This is the outcome that closes the debt. Add"
+              echo "\`{\"target\":\"ios\",\"runner\":\"macos-14\",\"advisory\":false}\` to the default"
+              echo "\`legs\` list in the \`plan\` job of \`.github/workflows/ci.yml\` so it runs on every"
+              echo "push again, and commit the \`Package.resolved\` this run resolved."
             } >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "::warning::the ios archive FAILED and this leg is advisory (continue-on-error), so it did not block delivery. See the summary."
+            echo "::error::the ios archive FAILED. This leg was requested, so it is binding and blocks this run."
             {
-              echo "### ios: archive failed — advisory, did not block"
+              echo "### ios: archive failed"
               echo ""
-              echo "C085-C102's Swift has never been compiled: it was authored on a Linux host"
-              echo "that cannot build it (root \`CLAUDE.md\`). At the last count that is **67 unique"
-              echo "compile errors across 15 files** under \`apps/driver-ios/\`, the largest class being"
+              echo "C085-C102's Swift has never compiled: it was authored on a Linux host that"
+              echo "cannot build it (root \`CLAUDE.md\`). At the last count that is **67 unique compile"
+              echo "errors across 15 files** under \`apps/driver-ios/\`, the largest class being"
               echo "\`cannot find type 'BusinessDate'\` — a Kotlin \`typealias\` in \`:shared\`, which does"
               echo "not survive into the XCFramework's Obj-C/Swift interop."
               echo ""
               echo "**This is not the Firebase pin** — that is fixed, and the SDK compiles."
               echo ""
-              echo "To close: fix those errors on a Mac, commit a \`Package.resolved\`, and set"
-              echo "\`advisory: false\` on the ios matrix entry."
+              echo "This leg is not in the default matrix, so this failure does not affect any other"
+              echo "branch or push. Fix the errors on a Mac and commit a \`Package.resolved\`."
             } >> "$GITHUB_STEP_SUMMARY"
           fi
 

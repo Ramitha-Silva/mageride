@@ -14,36 +14,50 @@ SHA, rollback — **landed in C124** and is the six workflows in [Delivery](#del
 |---|---|---|---|
 | `build (backend)` | `ubuntu-latest` | `dotnet build` + `dotnet test` over `backend/MageRide.sln`, then the container templates | C001 C002 C008 C010, and every `dotnet test …` component from wave 2 on |
 | `build (android)` | `ubuntu-latest` | `./gradlew` — `projects` today, the wave-1 and wave-4a commands as those modules land | C001, C011–C019, C067–C084 |
-| `build (ios)` | **`macos-14`** | `:shared:assembleXCFramework` then `xcodebuild` — **advisory, `continue-on-error`** | C085–C102 |
+| `build (ios)` | **`macos-14`** | `:shared:assembleXCFramework` then `xcodebuild` — **on demand only, see below** | C085–C102 |
 | `build (portal)` | `ubuntu-latest` | `npm --prefix portals ci && … run lint && … run build` | C001, C103–C117 |
 | `contracts` | `ubuntu-latest` | `spectral lint backend/contracts/*.yaml` | C007 |
 | `migrations` | `ubuntu-latest` | `infra/scripts/migrate-verify.sh` — apply, re-apply, re-apply without the journal | C003–C006 |
 | `compose` | `ubuntu-latest` | `infra/scripts/slim-verify.sh` | C009 |
+| `plan` | `ubuntu-latest` | decides whether `ios` is in the matrix at all | — |
 
-## The `ios` leg is advisory
+## The `ios` leg runs on demand
 
-`continue-on-error` is set **per leg** — `continue-on-error: ${{ matrix.advisory }}`, with
-`advisory` declared `false` on backend, android and portal. Written plainly as `true` it would
-apply to the whole matrix and quietly stop the other three from failing the build.
+**It is not in the default matrix.** Request it one of two ways:
 
-It is advisory because **C085–C102's Swift has never been compiled.** The code was authored on a
-Linux host that cannot build it (root `CLAUDE.md`), and at the last count the archive reports **67
-unique compile errors across 15 files** under `apps/driver-ios/`. The largest class is
-`cannot find type 'BusinessDate'`: that is a Kotlin `typealias` in `:shared`, and a Kotlin
-typealias does not survive into an XCFramework's Obj-C/Swift interop, so Swift never sees the
-name.
+- put the **`run-ios`** label on a pull request, or
+- **Run workflow** on `ci` with `ios: true`.
+
+When requested it is **binding** (`advisory: false`) — the only reason to ask is to find out
+whether the Swift compiles, and an advisory leg answers that with a green tick.
+
+A job-level `if` cannot see the `matrix` context, so a leg cannot be skipped by condition once it
+is in the matrix: GitHub provisions the runner and starts billing before any step is evaluated.
+That is why the `plan` job computes the matrix instead.
+
+### Why it is off by default
+
+**C085–C102's Swift has never compiled.** The code was authored on a Linux host that cannot build
+it (root `CLAUDE.md`), and at the last count the archive reports **67 unique compile errors across
+15 files** under `apps/driver-ios/`. The largest class is `cannot find type 'BusinessDate'`: that
+is a Kotlin `typealias` in `:shared`, and a Kotlin typealias does not survive into an
+XCFramework's Obj-C/Swift interop, so Swift never sees the name.
 
 **This is not the Firebase pin.** That is fixed — 11.11.0 is the last release that compiles under
 Xcode 15.4's Swift 5.10 (`public import` lands in 11.12.0, `sending` in 11.14.0) and the SDK
 builds cleanly.
 
-The leg still runs, and still earns its keep: it resolves the SPM graph, assembles the
-XCFramework, and is the only thing that would catch the Firebase pin drifting again. A step that
-`always()` runs writes a warning and a step summary saying the archive failed and did not block —
-an advisory leg that goes red silently is one nobody looks at.
+For one day (Δ 2026-08-10) the leg was `advisory: true` instead. That kept CI green, which was the
+point, but it also ran a `macos-14` runner for ~15 minutes on **every push** — billed at a **10x
+multiplier** — to re-answer a question whose answer had not changed, and emitted a warning nobody
+could act on without a Mac. That came to roughly **1690 billed minutes in a day** for no
+information after the first run, and contributed to the spending limit that stopped `cd` on
+2026-08-10. On demand costs nothing per push and loses nothing: the leg still resolves the SPM
+graph and would still catch the Firebase pin drifting, whenever it is asked to.
 
-**To close it:** fix those errors on a Mac, commit a `Package.resolved`, and set
-`advisory: false`.
+**To close it:** fix those errors on a Mac, commit a `Package.resolved`, and add
+`{"target":"ios","runner":"macos-14","advisory":false}` back to the default `legs` list in the
+`plan` job. It is already binding when requested, so nothing else needs flipping.
 
 ## Mapping a `verify_cmd`
 
