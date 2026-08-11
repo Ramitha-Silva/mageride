@@ -243,17 +243,49 @@ discard that volume**, and it costs the whole import again.
 | `/status` refuses the connection | the import has not finished. Refused-then-500-then-OK is the normal sequence | wait; follow the log with `--status` or the log command the script prints |
 | `/v1/geo/reverse` still answers 503 | **query-svc** owns the geocoder and reads `Query__NominatimBaseUrl` at start-up. (`/v1/geo/parse-maps-link` is transit-svc's and touches no geocoder — same URL prefix, different service, and the trap that made the first version of `deploy-nominatim.sh` write a key nothing reads) | `docker compose -f infra/replica/docker-compose.light-replica.yml up -d --force-recreate app-services` |
 | the geocoder answers strangers | the ufw rule did not apply | `ssh root@45.77.37.208 'ufw status'`; only the replica's address should reach 8080 |
-| `/v1/geo/reverse` answers **503** and `/v1/geo/search` answers **500** with `BrokenCircuitException`, while `Query__NominatimBaseUrl` is correct **and** in the container's environment | **the geocoder VPS is refusing 8080** — this is not a wiring fault. `Connection refused` (not a timeout) means nothing is listening: the container is down, or the import was OOM-killed and is looping. The 500 is Polly's circuit breaker opening after the refusals. **Open question for C042:** the documented degradation for *unset* is that search falls back to the caller's saved and recent places, and a geocoder that is *down* looks the same to a passenger — so a 500 on the search box during an outage is arguably a defect rather than a design | check from the replica first: `bash -c '</dev/tcp/45.77.37.208/8080'`. Ping and port 22 answering while 8080 refuses confirms the box is up and the container is not. Then `NOMINATIM_SSH_PASSWORD=… bash infra/replica/nominatim/deploy-nominatim.sh --status`, which follows the import log and says which of the two it is |
-| `--status` says `cannot reach root@45.77.37.208: no ssh key works and NOMINATIM_SSH_PASSWORD is unset` | the credential lives with the operator, not in the repository — correctly | export `NOMINATIM_SSH_PASSWORD` for the command, or install an ssh key on the geocoder box so the script needs no secret at all |
+| `/v1/geo/reverse` answers **503** and `/v1/geo/search` answers **500** with `BrokenCircuitException`, while `Query__NominatimBaseUrl` is correct **and** in the container's environment | **the geocoder is not serving yet — almost always the import, not a fault.** `Connection refused` from the replica and `Recv failure: connection reset` on the box are the *same* state seen down two paths: the DOCKER chain DNATs 8080 into the container, whose kernel RSTs a closed port (⇒ refused), while docker-proxy on the box accepts and then cannot reach upstream (⇒ reset). Neither is a firewall and neither is a crash. The 500 is Polly's circuit opening after the refusals. **Open question for C042:** the documented degradation for *unset* is that search falls back to saved and recent places, and a geocoder that is *down* looks the same to a passenger — so a 500 on the search box during an outage is arguably a defect | **Read the import log before touching anything** (below). Only if the log is NOT advancing is something actually wrong |
+| the container says **`unhealthy`** and 8080 refuses | by itself this means nothing: `start_period` bounds how long `starting` lasts, and an import that outruns it is reported unhealthy while working perfectly. Measured 2026-08-11: still indexing at **2 h 08 m**, `restarts=0`, `OOMKilled=false`. (`start_period` was 90 min then, and is 3 h now for exactly this reason) | the three facts that separate a slow import from a broken one — all from `docker inspect`/`docker logs` on the box: **`restarts=0`**, **`OOMKilled=false`**, and **the log advancing**: `docker logs --tail 2` twice, six seconds apart, must show the object counter moving |
+| `--status` says `cannot reach root@45.77.37.208: no ssh key works and NOMINATIM_SSH_PASSWORD is unset` | the credential lives with the operator, not in the repository — correctly | export `NOMINATIM_SSH_PASSWORD` for the command, or `ssh-copy-id root@45.77.37.208` once so the script never needs the secret again |
+
+**The three questions, in order, when `/v1/geo/*` degrades:**
+
+```bash
+# 1. is the key right, and does query-svc hold it?   (a wiring fault)
+docker exec mageride-replica-app-services-1 printenv Query__NominatimBaseUrl
+docker logs mageride-replica-app-services-1 2>&1 | grep -c 'Query:NominatimBaseUrl is not set'   # 0 = configured
+
+# 2. is the geocoder serving?                        (an import or a crash)
+curl -sS --max-time 10 http://45.77.37.208:8080/status        # "OK" once the import has finished
+
+# 3. if not: is the import ALIVE or STUCK?           (wait, or intervene)
+export SSHPASS=…   # or use a key
+sshpass -e ssh root@45.77.37.208 'docker inspect mageride-nominatim-nominatim-1 \
+  --format "restarts={{.RestartCount}} oom={{.State.OOMKilled}}"; docker logs --tail 2 mageride-nominatim-nominatim-1'
+# restarts=0, oom=false, counter advancing  ->  it is working. Wait.
+# restarts climbing, oom=true               ->  the OOM loop above; it will never finish.
+```
 
 > [!IMPORTANT]
 > **A correct `Query__NominatimBaseUrl` is not the same as a working geocoder, and the difference was
 > invisible until C126.** Every request to `/v1/geo/*` carries a bearer, and until the JWKS route was
 > fixed *every* authenticated request answered 500 — so no check in this repository had ever reached
-> the geocoder to find out whether it answers. As of 2026-08-11 the key is right, query-svc holds it,
-> and **8080 on the geocoder VPS refuses connections**: the wiring is proven, the box is not serving.
-> `/v1/geo/reverse` returning 200 for `lat=6.9355&lng=79.8487` is the only check that means anything
-> here — see the two rows above.
+> the geocoder to find out whether it answers. `/v1/geo/reverse` returning 200 for
+> `lat=6.9355&lng=79.8487` is the only check that means anything here.
+>
+> **`ufw status` probably overstates how private 8080 is.** `ufw-user-input` ACCEPTs
+> `169.58.43.92/32` and DROPs everything else, and it demonstrably worked *before the container
+> existed*: 61 `[UFW BLOCK] … DPT=8080` entries from internet scanners, the last at **11:26:44**. The
+> container started at **13:08:41**, and there have been **zero** blocks since — while a connection
+> from the allowed replica gets a RST *from the container* (ECONNREFUSED), not a DROP. Both point the
+> same way: `-A DOCKER ! -i br-… --dport 8080 -j DNAT --to 172.18.0.2:8080` sits in the **nat** table,
+> which runs before the filter chain ufw owns, and `DOCKER-USER` — the one hook that filters ahead of
+> it — is **empty**.
+>
+> What is *proven* is that the rule stopped catching anything the moment the port was published. What
+> is **not** proven from here is that a stranger now gets through, because this box is the allowed
+> address and cannot test as a third party. **C127: verify from an unrelated host, and if the port
+> must stay private, put the rule in `DOCKER-USER` or bind the publish to a private interface** —
+> `ufw status` looking correct is not evidence either way.
 
 `osm-pipeline` is **not** deployed. The spec makes it a weekly one-shot (diff → osm2pgsql →
 tippecanoe → PMTiles → R2 sync) that "is NOT part of the always-on container set", so it belongs in a

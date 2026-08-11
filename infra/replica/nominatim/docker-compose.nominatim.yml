@@ -76,9 +76,19 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
-      # The import, not the service. Sri Lanka takes tens of minutes on four cores; a smaller value
-      # makes compose kill and restart a healthy import, which never finishes.
-      start_period: 5400s
+      # The import, not the service.
+      #
+      # Δ measured 2026-08-11: the Sri Lanka import on this box (4 cores, 7.4 GiB) was still indexing
+      # at **2 h 08 m** — rank 26 of ~30 at a steady 150 objects/second — with `restarts=0`,
+      # `OOMKilled=false` and no OOM in dmesg. The old 5400 s (90 min) came from the spec's "tens of
+      # minutes" and is simply short of reality, so compose flipped a HEALTHY import to `unhealthy`
+      # (failing streak 76) an hour before it could possibly pass.
+      #
+      # That is cosmetic — Docker does not kill an unhealthy container, and nothing here watches the
+      # status — but it is expensive in the other currency: `--status` reported "unhealthy" and
+      # port 8080 refused connections, which reads exactly like a crashed geocoder and cost a full
+      # investigation to rule out. Three hours, so the honest states are `starting` then `healthy`.
+      start_period: 10800s
 
     deploy:
       resources:
