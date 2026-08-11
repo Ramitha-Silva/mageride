@@ -20163,3 +20163,34 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   Found 2026-08-11 while diagnosing the ModeB flake, whose harness was publishing two fixes in one
   second. **The harness was at fault there and the platform was not**, which is why this is a separate
   finding and not part of that fix.
+
+  **State at the close of the 2026-08-10/11 sessions.** `main` is at `d1fd5a1`. `ci` is green — seven
+  jobs, no macOS leg — and `cd` runs the whole path: 34 images built, pushed, cosign-signed and
+  SBOM-attested; **`all images signed` passing**; the migration gate; the promotion commit
+  (`edeebd3 deploy(dev): sha-409493f`). It stops at `verify dev`, which probes
+  `api.dev.mageride.lk/health/ready` and correctly refuses to pass because there is no dev cluster —
+  so `staging` and `ready for production` skip. 39 jobs green and one honest failure. **Every step that
+  lives inside this repository now works; the first step that needs something outside it is where it
+  ends, and that boundary is C125's.**
+
+  The twelve commits, oldest first: `e4ebeaa` (the daily-fee 500), `833f8f9` and later `4d9fc8d` (the
+  iOS leg: advisory, then on demand), `87a0dbb` (the device-CA test), `66dcb29` (the GHCR namespace and
+  the drift fence), `e4fdcd6` (`backend/contracts/` in the build context; provenance gated),
+  `64bb4e5` (the portal build context), `ace6046` (the portal build args; the ModeB diagnostic),
+  `409493f` (the ModeB root cause), `bd316c6` and `d1fd5a1` (these findings).
+
+  **What C125 inherits, in the order it will hit them.** (1) No cluster, so `verify dev` fails and
+  nothing promotes past dev — a cluster, or `ARGOCD_SERVER` to swap the fallback probe for
+  `argocd app wait`. (2) **Vault is not seeded** (`docs/runbooks/deploy.md` §2.2); the manifests are
+  correct and nothing will start without it. (3) No reviewers on the `production` environment, so
+  `promote.yml` cannot be exercised. (4) `apps/driver-ios/`'s 67 Swift errors — **deferred by the
+  owner to a Mac session**, and the leg is on demand until then (`run-ios` label, or `Run workflow`
+  with `ios: true`; binding when requested). Put `ios` back in the `plan` job's default `legs` list
+  once it compiles.
+
+  **Two live traps that are not failures today.** The promotion commit cannot loop *only* because
+  GitHub raises no workflow events for `GITHUB_TOKEN` pushes — move that push to a PAT, a deploy key
+  or a GitHub App and promote→ci→cd→promote becomes real with nothing in the repository to stop it; a
+  `paths-ignore: [infra/k8s/overlays/**]` on `ci.yml` would make the safety local. And **nothing prunes
+  GHCR**: every push adds 34 tags for ever, while `rollback.yml` depends on old tags existing, so a
+  retention policy is a design decision rather than a cleanup script.
