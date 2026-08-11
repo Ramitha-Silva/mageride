@@ -10,7 +10,20 @@ var addresses = CoLocatedHost.Addresses(
     Container7.Services, Container7.FirstServicePort, "127.0.0.1");
 
 // The gateway starts last, so every cluster it fronts is already listening.
-var all = Container7.Services.Append(Container7.Gateway).ToArray();
+//
+// It is in this container by default because that is the replica's Container 7 — "YARP gateway + 21
+// domain services". `infra/docker-compose.dev.yml` runs the gateway as its OWN container beside this
+// one, and two gateways both binding 5000 in one process is a start-up failure, so that file sets
+// AppServices__IncludeGateway=false. The switch exists so one image serves both shapes; the default
+// follows the spec.
+var includeGateway = !string.Equals(
+    Environment.GetEnvironmentVariable("AppServices__IncludeGateway"),
+    "false",
+    StringComparison.OrdinalIgnoreCase);
+
+var all = includeGateway
+    ? Container7.Services.Append(Container7.Gateway).ToArray()
+    : Container7.Services.ToArray();
 
 CoLocatedHost.Configure = (name, builder) =>
 {

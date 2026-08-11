@@ -58,11 +58,33 @@ RUN dotnet publish "backend/src/${SERVICE}/${SERVICE}.csproj" \
 # one `dotnet` can launch. A class library publishes none; the fallback keeps the template
 # usable for the library build the C010 verify does, and such an image is structurally
 # complete (non-root, port, healthcheck) but has no Main to start.
+# Resolve the entry assembly DETERMINISTICALLY, and refuse to guess.
+#
+# This used to be `ls *.runtimeconfig.json | head -1`, which is correct only while the publish output
+# contains exactly one. C125's co-located containers reference many web projects, so `hot-path`
+# published five and the alphabetically-first won: the image ran MageRide.FleetHealth.dll — ONE of
+# its four services — and mqtt-bridge, position-processor and persistence-writer never started. The
+# container was healthy, the topics were subscribed by nobody, and no telemetry was persisted.
+#
+# So: prefer the assembly the published PROJECT produces, fall back to the sole runtimeconfig when
+# there is exactly one, and fail loudly when neither holds rather than picking a file by name.
 RUN set -eu; \
     cd /app; \
-    entry="$(ls *.runtimeconfig.json 2>/dev/null | head -1 | sed 's/\.runtimeconfig\.json$/.dll/')"; \
-    [ -n "$entry" ] || entry="${SERVICE}.dll"; \
-    test -f "$entry" || (echo "error: ${SERVICE} published no assembly named $entry" >&2; exit 1); \
+    entry=""; \
+    for candidate in "MageRide.${SERVICE}.dll" "${SERVICE}.dll"; do \
+      if [ -f "$candidate" ]; then entry="$candidate"; break; fi; \
+    done; \
+    if [ -z "$entry" ]; then \
+      count="$(ls *.runtimeconfig.json 2>/dev/null | wc -l)"; \
+      if [ "$count" = "1" ]; then \
+        entry="$(ls *.runtimeconfig.json | sed 's/\.runtimeconfig\.json$/.dll/')"; \
+      else \
+        echo "error: ${SERVICE} published $count runtimeconfig files and none of" >&2; \
+        echo "       MageRide.${SERVICE}.dll or ${SERVICE}.dll exists - refusing to guess:" >&2; \
+        ls *.runtimeconfig.json >&2; \
+        exit 1; \
+      fi; \
+    fi; \
     printf '%s' "$entry" > /app/.entrypoint; \
     echo "entry point: $entry"
 

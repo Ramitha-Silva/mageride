@@ -80,4 +80,34 @@
     <ProjectReference Include="..\HotPath\HotPath.csproj" />
   </ItemGroup>
 
+  <!--
+    Five of the referenced projects ship an appsettings.json (api-gateway, iam-svc, registry-svc,
+    provisioning-svc, trip-state-svc); the other seventeen ship none and configure themselves from
+    the environment. Publishing all of them into one directory is NETSDK1152 - "multiple publish
+    output files with the same relative path" - and suppressing that error would be worse than the
+    error: one of the five would win arbitrarily and the other four would silently read its values.
+
+    Co-location makes that unavoidable rather than accidental. Every service in this container shares
+    one content root, so `appsettings.json` can only ever hold ONE service's settings whatever the
+    build does. The honest resolution is that this container is configured from the environment - which
+    is exactly how it is deployed: infra/replica/ and infra/docker-compose.dev.yml both load
+    env/.env.common.example and env/.env.app.example into it, and every service's option validator
+    fails loudly at start-up if something it needs is absent.
+
+    So the referenced copies are dropped and this project's own appsettings.json is the only one. It
+    carries the shared defaults; anything service-specific belongs in the environment. gateway-routes.json
+    is NOT an appsettings file and is deliberately untouched - the gateway reads it by name.
+  -->
+  <Target Name="DropCoLocatedAppSettings" AfterTargets="ComputeResolvedFilesToPublishList">
+    <ItemGroup>
+      <_ForeignAppSettings
+        Include="@(ResolvedFileToPublish)"
+        Condition="$([System.String]::Copy('%(RelativePath)').StartsWith('appsettings'))
+                   and !$([System.String]::Copy('%(Identity)').Contains('$(MSBuildProjectName)'))" />
+      <ResolvedFileToPublish Remove="@(_ForeignAppSettings)" />
+    </ItemGroup>
+    <Message Importance="high"
+             Text="AppServices: dropped @(_ForeignAppSettings->Count()) appsettings file(s) from referenced projects; this container is configured from the environment." />
+  </Target>
+
 </Project>
