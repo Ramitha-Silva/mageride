@@ -20636,3 +20636,115 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   feed.** C129's load figures for `/v1/transit/options` specifically must be re-run against the real
   feed — the pattern index a national feed builds is orders of magnitude larger, and the in-memory
   matcher's cost is a function of exactly that.
+
+- **Component:** C127 security-review-asvs — 2026-08-12
+- **Status:** **PARTIAL.** The review ran end to end and produced nine findings; **eight are closed**
+  (two fixed and verified live, four accepted with an owner and a date, plus two low fixes). The
+  ninth — **C127-01, the one open HIGH** — is fixed in the repository and open **at deployment**: the
+  cutover is one connection string plus PgBouncer's client auth, owned by C133 and due at go-live.
+  `bash security/run-asvs-checks.sh` is C127's closure check and stays red until it is done, exactly
+  as `gtfs-day0-verify.sh` is C126's. `dotnet test tests/Security -c Release` is **85/85 green**;
+  `ApiGateway.Tests` 605/605; `tests/Contract` green; `infra/replica/smoke.sh` 24/24.
+- **Notes:**
+  **Two HIGH findings, and both were invisible from inside the process.** That is the whole argument
+  for the shape this component took — a suite that reads what the assemblies *declare*, plus a
+  harness that asks a *deployment* what it is actually doing.
+
+  **C127-02 (HIGH, FIXED, verified live) — the edge shipped with no rate limit and an empty
+  attestation policy.** The gateway's entire `Gateway` configuration section was absent from the
+  deployed `app-services` image, so every value fell back to its compiled default:
+  `Attestation:SensitiveOperations` was `[]` (nothing marked D-30 sensitive, while
+  `Mode` defaults to `Enforce` — so a deployment believing it enforced attestation would enforce it
+  on **zero** operations, with the rejection metric sitting at zero, which reads exactly like "no
+  attacker has tried"), and `RateLimits:Policies` was `{}`, so all **seventy** routes logged
+  `policy 'admin' is not configured; applying no limit` at start-up. That defeats four ADD §12.6 rows
+  outright — geo scraping, trip-share link abuse, the auth bucket and the SOS bucket.
+
+  The cause is a name collision. `AppServices` (C125) co-locates the edge with twenty-two services in
+  one process, and one content root cannot hold twenty-three files called `appsettings.json`, so its
+  `DropCoLocatedAppSettings` target removes every referenced project's — including api-gateway's,
+  which is not a service's configuration but the edge's own policy. **The identical collision had
+  already been found once and patched in the *test* project** (`GatewaySettingsWinTheOutputDirectory`,
+  Δ C126), which is precisely what made it less likely anybody would look at the deployment. Every
+  one of api-gateway's 605 tests passed throughout, because they compose the gateway from its source
+  directory where the file was present.
+
+  Fixed by moving the section to `backend/src/ApiGateway/gateway-policy.json` — its own file with a
+  name nothing else ships, loaded by `GatewayApplication.Build` with `optional: false` (a gateway
+  that cannot find its policy must refuse to start, not fall back to a permissive default) and pinned
+  to the output directory by the csproj. The same two lines `gateway-routes.json` has always had.
+  Rebuilt and redeployed: zero `policy not configured` lines, and 70 reads of a dead share token gave
+  **67 × 404 then 3 × 429** — the `public-track` bucket enforcing for the first time.
+
+  **C127-01 (HIGH, open at deployment) — every service connects to Postgres as a superuser.** On the
+  replica the connecting role is `mageride`, `usesuper = t`, and the owner of every table. Two shipped
+  controls are therefore inert, both observed rather than inferred: `audit.events` accepted a `DELETE`
+  from the server (D-35's immutable log is writable by the credential that appends to it), and
+  `row_security_active()` answered **false** for all nine policy-bearing tables — every fleet-scoping
+  policy migrations 1806/1807 ship was doing nothing. A table owner bypasses RLS without `FORCE`; a
+  superuser bypasses it unconditionally. **Migration 1305's own comment predicted this in as many
+  words** — *"Real immutability is the deployment's job"* — and no deployment had done that job.
+
+  `db/migrations/2001__least_privilege_roles.sql` lands the mechanism: `mageride_app` (DML on the
+  twenty-two business schemas; `SELECT`+`INSERT` and **only** those on `audit.events`),
+  `mageride_migrate`, `mageride_readonly`, and `FORCE ROW LEVEL SECURITY` on every policy-bearing
+  table. Applied twice to the replica (re-runnable) and verified under `SET ROLE mageride_app`: the
+  `telemetry.positions` hypertable insert works (chunk privileges propagate), the audit insert works,
+  update/delete/truncate are refused, and `row_security_active('registry.fleets')` is **true**.
+
+  **The cutover was deliberately not performed here.** PgBouncer on the replica carries a single
+  credential for both client auth and its server connection, so switching the application user is a
+  change to C125's deployment wiring — and C128–C132 all depend on that replica staying up.
+  `docs/runbooks/database-roles.md` is the procedure, `security/checks/40-database-privileges.sh` is
+  what fails until it happens, and the finding is HIGH on production and LOW as it stands, because the
+  only deployment that exists is the synthetic-data replica. **It is a go-live blocker, which C133's
+  own fence already expresses.**
+
+  **C127-03 (MEDIUM, FIXED) — three mTLS-only operations were published to the internet.**
+  `backend/contracts/` marks 49 operations `security: [{ mtls: [] }]`; forty-six carry the
+  `/v1/internal` prefix and were refused at the edge, three do not and were routed by an ordinary
+  per-service rule: `calculateFinalFare`, `renderNotificationTemplate`, `lookupUserByPhone`. Each
+  failed closed on its own shared-secret filter, so nothing was exploitable — what was missing is the
+  second, independent control that makes a shared secret tolerable on the other forty-six.
+
+  **The cause is a convention standing in for a declaration.** The gateway's blocked-path list and
+  *both* test suites keyed on the path prefix; the contract's `security` block is what actually says
+  which plane an operation is on. iam-svc's CLAUDE.md had flagged the lookup route in passing since
+  C027 and nothing acted on it, because nothing joined the two facts. Fixed in
+  `Gateway:BlockedPathPrefixes`, with three regression tests at three layers —
+  and `IsInternalPlane` now reads **either** signal in both suites, because neither is complete
+  (twelve prefixed operations declare no `security` block at all, C127-08).
+
+  **The RBAC probe (the DoD's hard item) is green: 444 endpoints across 24 services, `Open` = 0.**
+  63 name a URD §2.3 (area, capability) pair, 93 a role or fleet sub-role, 147 are anonymous with a
+  reviewed compensating credential, 141 rely on the kernel fallback plus a handler ownership check.
+  It reads the **composed pipeline** rather than the source, so a group-level policy and a
+  loop-mapped route are both seen, and it reports the built `FeaturePermissionRequirement` by name —
+  the evidence is the policy the server applies. An endpoint filter leaves no metadata, so the
+  anonymous surface is a **reviewed ledger** (`AnonymousSurface`) ratcheted in both directions.
+
+  **Three exceptions were investigated rather than excused, and each asserts its compensating
+  control.** `ocr` clears the deny-by-default fallback (no auth scheme, so it could never be
+  satisfied and every unmatched path would 500) — the price is a theory asserting nothing but health
+  probes and the key-gated plane may be mapped there. `public-bff` registers no bearer handler at all
+  (AL-44). And `/v1/pdpa/**` is authenticated and not feature-gated, correctly: URD §2.3's
+  account-management row is about operating on *other people's* accounts, so gating an own-account
+  statutory right on it would refuse every data subject their own data — the test asserts the
+  **boundary**, exactly those three routes, so the exception cannot spread.
+
+  **Spec gaps recorded, not closed.** (a) ADD §12.6 asks for RLS on "PII tables" and `iam.users`
+  (phone, email, emergency contact) and `registry.driver_profiles` (NIC) have none — defensible,
+  since a passenger's row has no tenant key to scope by, and the control that does exist is
+  admin-bff's audited `PII_READ`; written up under threat-matrix row 10 rather than quietly counted.
+  (b) ASVS V5 (output encoding, HTML sanitisation) and §12.6's portal XSS/CSRF row were **not
+  re-driven** — they need a DAST pass against a deployed portal, which the replica does not serve.
+  Owner C133, before go-live, named rather than counted as covered.
+
+  **Files —** new: `security/{README,asvs-l2-checklist,threat-matrix-coverage,remediation-backlog}.md`,
+  `security/{run-asvs-checks.sh,asvs-lib.sh}`, `security/checks/{10,20,30,40}-*.sh`,
+  `tests/Security/**` (+ `CLAUDE.md`), `backend/src/ApiGateway/gateway-policy.json`,
+  `db/migrations/2001__least_privilege_roles.sql`, `docs/runbooks/database-roles.md`.
+  Changed: `backend/src/ApiGateway/{appsettings.json,GatewayApplication.cs,ApiGateway.csproj}`,
+  `backend/src/ApiGateway.Tests/{Infrastructure/ContractCatalog.cs,RouteTableTests.cs,RouteConfigurationTests.cs}`,
+  `tests/Contract/{Model/ContractOperation.cs,MageRide.Contract.Tests.csproj}` (InternalsVisibleTo),
+  `.gitignore`, `backend/MageRide.sln`.

@@ -28,6 +28,23 @@ public static class GatewayApplication
         // (ReverseProxy__Clusters__ride-svc__Destinations__primary__Address).
         builder.Configuration.AddJsonFile("gateway-routes.json", optional: false, reloadOnChange: true);
 
+        // Δ C127: and so is the edge's security policy — the D-30 sensitive-operation set, the
+        // D-31 version floor, the rate-limit buckets and the blocked prefixes.
+        //
+        // It used to be a `Gateway` section of appsettings.json, which is fine for a gateway that
+        // is its own process and silently empty for one that is not. The replica co-locates the
+        // edge with the 22 domain services in a single host (AppServices, C125) whose
+        // `DropCoLocatedAppSettings` target removes every referenced project's appsettings.json,
+        // because one content root cannot hold twenty-three files of that name. The section went
+        // with it, the compiled defaults applied, and the edge ran with **no rate limit on any of
+        // its seventy routes and nothing marked D-30 sensitive**. Loading it the way the route
+        // table has always been loaded is what makes the policy travel with the gateway.
+        //
+        // `optional: false` deliberately: a gateway that cannot find its policy must refuse to
+        // start rather than fall back to a permissive default, which is the whole failure being
+        // fixed here.
+        builder.Configuration.AddJsonFile("gateway-policy.json", optional: false, reloadOnChange: true);
+
         // Δ C125: and the two lines below are what makes the sentence above TRUE. `CreateBuilder` has
         // already added the environment and the command line, and the last source added wins — so the
         // file we just added outranked both, and every

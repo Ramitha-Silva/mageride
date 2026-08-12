@@ -1,0 +1,61 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    C127 verify target: dotnet test tests/Security -c Release
+
+    The OWASP ASVS L2 review's executable half. What it asserts is not "does this feature work"
+    — every service's own suite owns that — but the four questions ADD §12 asks of the platform as
+    a whole, and which therefore have no single service to live in:
+
+      · deny-by-default RBAC, read off EVERY endpoint of EVERY service (AL-06)
+      · the edge's D-30 attestation and D-31 minimum-version gates
+      · token security — RS256-only, JWKS rotation overlap, refresh reuse, MQTT and share scoping
+      · the PII path — the D-36 redaction pre-pass and the signed-link credentials
+
+    `Microsoft.NET.Sdk.Web`, not `Microsoft.NET.Sdk`: the RBAC probe builds twenty-five
+    WebApplications to read their route tables.
+
+    **It references `tests/Contract` rather than re-listing the fleet.** `ServiceCatalog` is four
+    hundred lines of per-service start-up settings transcribed from twenty-four integration
+    harnesses; a second copy would drift the first time a service gained a required option, and a
+    security probe that silently stopped composing a service would report it as having no endpoints
+    at all — the exact failure mode a coverage denominator exists to prevent. C118 exposes the
+    types to this assembly with an `InternalsVisibleTo`, and `RbacProbeTests` asserts the
+    denominator (25 services, every contract document) before it asserts anything about them.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>MageRide.Security.Tests</RootNamespace>
+    <AssemblyName>MageRide.Security.Tests</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <OutputType>Exe</OutputType>
+    <!--
+      xUnit1041: collection-fixture ctor args are consumed through the primary constructor.
+      xUnit1051: every request this suite makes is bounded by its own timeout.
+    -->
+    <NoWarn>$(NoWarn);xUnit1041;xUnit1051</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="YamlDotNet" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+    <PackageReference Include="Npgsql" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      The fleet, and the one project that knows how to compose it. ApiGateway comes in through this
+      reference too — C118 keeps it for `version-check.yaml`, and D-30/D-31 live nowhere else.
+    -->
+    <ProjectReference Include="..\Contract\MageRide.Contract.Tests.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

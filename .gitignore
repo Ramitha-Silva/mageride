@@ -89,6 +89,10 @@ Carthage/Build/
 *.keystore
 keystore.properties
 *.pem
+# Δ C127: `*.key` was the one extension missing from this list, so an `openssl genrsa -out
+# jwt-signing.key` — the exact command docs/runbooks/secret-rotation.md §1 tells an operator to
+# run — produced a file `git add .` would have staged.
+*.key
 *.p12
 *.pfx
 secrets.*.json

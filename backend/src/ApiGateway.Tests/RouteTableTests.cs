@@ -36,7 +36,7 @@ public sealed class RouteTableTests : IAsyncLifetime
 
         foreach (var operation in ContractCatalog.Operations)
         {
-            if (operation.Cluster is null || operation.Template.StartsWith(ContractCatalog.InternalPrefix, StringComparison.Ordinal))
+            if (operation.Cluster is null || operation.IsInternalPlane)
             {
                 continue;
             }
@@ -65,7 +65,7 @@ public sealed class RouteTableTests : IAsyncLifetime
 
         foreach (var operation in ContractCatalog.Operations)
         {
-            if (operation.Cluster is null || operation.Template.StartsWith(ContractCatalog.InternalPrefix, StringComparison.Ordinal))
+            if (operation.Cluster is null || operation.IsInternalPlane)
             {
                 continue;
             }
@@ -88,14 +88,31 @@ public sealed class RouteTableTests : IAsyncLifetime
             "No contract path resolves to these clusters, so nothing routes to them: " + string.Join(", ", unreachable));
     }
 
+    /// <summary>
+    /// Δ C127. Every operation the contracts put on the mTLS plane is refused at the edge —
+    /// <b>read from its declared <c>security</c>, not from its path</b>.
+    /// </summary>
+    /// <remarks>
+    /// The distinction is the whole finding. Keying on <c>/v1/internal/**</c> covered forty-six of
+    /// the forty-nine mTLS operations and published the other three (<c>calculateFinalFare</c>,
+    /// <c>renderNotificationTemplate</c>, <c>lookupUserByPhone</c>), each of which then had a shared
+    /// secret as its only control. `Gateway:BlockedPathPrefixes` names all three; this is what fails
+    /// if a fourth is written, because the contract says which plane it is on and the path does not.
+    /// </remarks>
     [Fact]
-    public async Task Internal_paths_are_refused_at_the_edge()
+    public async Task Every_operation_the_contract_puts_on_the_mtls_plane_is_refused_at_the_edge()
     {
         var internalOperations = ContractCatalog.Operations
-            .Where(static o => o.Template.StartsWith(ContractCatalog.InternalPrefix, StringComparison.Ordinal))
+            .Where(static o => o.IsInternalPlane)
             .ToArray();
 
         Assert.NotEmpty(internalOperations);
+
+        // The three that motivated this, named so a change that quietly stopped classifying them
+        // fails here rather than passing over a smaller set.
+        Assert.Contains(internalOperations, static o => o.OperationId == "calculateFinalFare");
+        Assert.Contains(internalOperations, static o => o.OperationId == "renderNotificationTemplate");
+        Assert.Contains(internalOperations, static o => o.OperationId == "lookupUserByPhone");
 
         foreach (var operation in internalOperations)
         {
@@ -104,7 +121,9 @@ public sealed class RouteTableTests : IAsyncLifetime
 
             Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
             Assert.False(response.Headers.Contains(GatewayTransforms.UpstreamHeaderName),
-                $"{operation.Template} was forwarded; /v1/internal/** is mTLS-only (D3' §0).");
+                $"{operation.Method} {operation.Template} was forwarded. The contract declares it "
+                + "`security: [{ mtls: [] }]`, so the edge must refuse it (D3' §0) — add its path to "
+                + "Gateway:BlockedPathPrefixes.");
 
             var problem = await ProblemDocument.ReadAsync(response);
             Assert.Equal("not-found", problem.Code);
