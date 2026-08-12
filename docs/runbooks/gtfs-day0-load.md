@@ -308,6 +308,7 @@ non-empty history table.
 |---|---|
 | **Pre-first-import empty state** | recorded, 2026-08-11 (§2) |
 | **Day-0 feed** | **not loaded.** No national GTFS file exists in this repository or on this box, and AL-56 forbids manufacturing one. The load, the corridor verification and the rollback rehearsal all run the moment the provider's zip is dropped at `infra/replica/gtfs/` — or the moment it is uploaded through SCR-AP-016 in the Admin Portal, which is behind `--profile portals` and is not running by default |
+| **Wave-5 gate** | the "day-0 GTFS feed active" clause was **excepted on 2026-08-12** — the feed is an external dependency, so wave 6 (C127–C132) is not blocked on it. **C133's go-live gate is not excepted and still requires an active feed**, which is the point of AL-55: no-coverage is a safety net, not a launch condition |
 | **Pipeline rehearsal** | **done, on a synthetic fixture** (2026-08-11): activate → cache reload → roll back → restore, plus the corridor and shape checks. See the rehearsal tables in §6. `/root/gtfs-fixtures/` holds the two zips and the generator that made them; they are deliberately NOT in `infra/replica/gtfs/`, where `gtfs-day0-load.sh` would pick one up as the day-0 feed |
 | **Operator** | `gtfs-day0@replica.invalid`, role `admin`, password generated into `.env.replica` (gitignored). Synthetic, replica-only |
 | **Retention** | `gtfsdata` volume mounted at `/var/lib/mageride` in app-services, proven to survive a container recreate |

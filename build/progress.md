@@ -19,7 +19,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | 4a | C067–C084 (18) | both Android apps build and every owned SCR-* screen matches its wireframe |
 | 4b | C085–C102 (18) | both iOS apps build and test **on macOS**; parity with 4a confirmed screen-for-screen |
 | 4c | C103–C117 (15) | all three web surfaces lint + test + build; zero runtime CSS-in-JS in any bundle |
-| 5 | C118–C126 (9) | contract suite green against the deployed replica — **E2E in-process by exception** (2026-08-12, see Planner findings); day-0 GTFS feed active |
+| 5 | C118–C126 (9) | contract suite green against the deployed replica — **two exceptions granted 2026-08-12**: E2E in-process only, and the day-0 GTFS feed is an external dependency (see Planner findings). **C133's go-live gate still requires the feed.** |
 | 6 | C127–C132 (6) | no open high/critical security findings; load, chaos and SG acceptance reports signed off |
 
 ## Components
@@ -182,10 +182,25 @@ manifest entry means re-running `build/tools/generate_build_plan.py`, and that *
 column and erases the Session Handoffs log** — 126 components' worth of record. Whoever schedules
 wave 6 should add it to the manifest and regenerate deliberately, moving the handoffs aside first.
 
-**Still open on the gate, and NOT covered by this exception: "day-0 GTFS feed active."** C126 is
-PARTIAL until the provider's file is uploaded through SCR-AP-016 (the owner is doing that directly).
-C127 remains blocked on that item unless it too is granted an exception — the E2E exception does not
-reach it.
+**Δ Second exception, same date, also granted by the owner: "day-0 GTFS feed active."** The feed is
+an externally provided file (AL-56) and its arrival is not an engineering task, so wave 6 is not
+blocked on it either. **C126 stays PARTIAL** until the file is uploaded through SCR-AP-016 and
+`bash infra/replica/gtfs-day0-verify.sh` passes; that command remains the closure check and needs no
+re-running of anything else.
+
+With both exceptions, **C127–C132 are unblocked.** Two boundaries this exception does NOT cross:
+
+- **C133's go-live gate still requires the feed**, in its own fences: "Go-live is gated on the day-0
+  GTFS feed being active (C126) and on no open high/critical security findings." That is a different
+  gate and is left alone deliberately — going live without a feed means Mode A route matching is dead
+  for every passenger, and AL-55 makes the no-coverage state a safety net rather than a launch
+  condition. Of C127–C132, none names GTFS at all; only C133 does.
+- **A synthetic fixture is active on the replica right now** (`SYNTHETIC-gampaha-v2-2026-08-11`, 15
+  halts, 4 routes), which is why transit routing answers `coverage: active` rather than `no_feed`
+  during wave-6 work. That lowers the risk of this exception and creates one of its own: **any wave-6
+  number derived from transit routing describes a 15-halt fixture, not a national feed.** C129's
+  load figures for `/v1/transit/options` in particular have to be re-run against the real feed before
+  they mean anything — the pattern index a national feed builds is three orders of magnitude larger.
 
 
 Recorded by the build planner. Each is already encoded as a fence in the affected prompts;
@@ -20597,3 +20612,27 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   `infra/replica/docker-compose.light-replica.yml` (override removed),
   `tests/Contract/Live/LiveDrift.cs` (entry deleted, with a note saying what it was),
   `build/tools/generate_build_plan.py` + `build/progress.md` (the gate).
+
+- **Component:** C126 addendum 3 — the second wave-5 gate exception — 2026-08-12
+- **Status:** the gate's "day-0 GTFS feed active" clause is excepted alongside the E2E one, both
+  granted by the project owner. **C127–C132 are unblocked. C126 stays PARTIAL** and
+  `bash infra/replica/gtfs-day0-verify.sh` remains its closure check.
+- **Notes:**
+  Recorded in the gate text itself (`build/tools/generate_build_plan.py`, where the gates live), in
+  the generated table in this file, in the Planner-findings entry beside the E2E exception, and in
+  `docs/runbooks/gtfs-day0-load.md` §9 — which is where an operator looks for what is true of the
+  replica rather than of the build plan. The generator was again **not** re-run.
+
+  **Two boundaries the exception does not cross, both checked rather than assumed.**
+  (a) Of C127–C132, **none** names GTFS in its scope, fences or definition of done — only **C133**
+  does, in its own fences: "Go-live is gated on the day-0 GTFS feed being active (C126) and on no
+  open high/critical security findings." That gate is left alone deliberately. Going live without a
+  feed means Mode A route matching is dead for every passenger, and AL-55 makes the no-coverage state
+  a safety net rather than a launch condition — excepting it would invert the premise Epic 28 exists
+  to serve.
+  (b) A **synthetic fixture is active** on the replica, so transit routing answers `coverage: active`
+  during wave-6 work rather than `no_feed`. That lowers this exception's risk and adds one:
+  **any wave-6 measurement taken through transit routing describes a 15-halt fixture, not a national
+  feed.** C129's load figures for `/v1/transit/options` specifically must be re-run against the real
+  feed — the pattern index a national feed builds is orders of magnitude larger, and the in-memory
+  matcher's cost is a function of exactly that.
