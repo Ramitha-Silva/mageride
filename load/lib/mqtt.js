@@ -165,6 +165,13 @@ function decode(buffer) {
  * @param {function} options.onAck    called with the packet id of each PUBACK
  * @param {function} options.onError  called with a message for any refusal or socket failure
  * @param {function} options.onMessage called with ({topic, payload}) for a delivered PUBLISH
+ * @param {object} [options.will]     Δ C130 — the Last Will and Testament: `{topic, payload,
+ *                                    qos = 1, retain = true}`. The broker publishes it when the
+ *                                    session ends WITHOUT a DISCONNECT, which is what
+ *                                    `abort()` produces and what R-15's `veh/{id}/status=offline`
+ *                                    depends on. `retain` defaults to true because
+ *                                    `MqttTopics.cs` calls the presence payload "the retained LWT
+ *                                    payload (R-15, T-04)".
  */
 export function MqttClient(options) {
   const self = this;
@@ -202,17 +209,35 @@ export function MqttClient(options) {
   socket.onopen = () => {
     const keepAlive = options.keepAlive === undefined ? 60 : options.keepAlive;
 
-    const body = []
+    // 0xc2 = username | password | clean session. Δ C130 — a will adds the will flag (0x04), its
+    // QoS in bits 4-3 and the retain bit (0x20), and its topic and payload go between the client
+    // id and the username. Order is not negotiable: 3.1.1 §3.1.3 fixes it as clientId, willTopic,
+    // willMessage, username, password, and a CONNECT with them in any other order is answered
+    // `CONNACK 2` or simply dropped.
+    const will = options.will;
+    let flags = 0xc2;
+
+    if (will) {
+      const willQos = will.qos === undefined ? 1 : will.qos;
+      const willRetain = will.retain === undefined ? true : will.retain;
+      flags |= 0x04 | ((willQos & 0x03) << 3) | (willRetain ? 0x20 : 0x00);
+    }
+
+    let body = []
       .concat(mqttString('MQTT'))
       .concat([
         0x04, // protocol level 4 = MQTT 3.1.1
-        0xc2, // username + password + clean session
+        flags,
         (keepAlive >> 8) & 0xff,
         keepAlive & 0xff,
       ])
-      .concat(mqttString(options.clientId))
-      .concat(mqttString(options.username))
-      .concat(mqttString(options.password));
+      .concat(mqttString(options.clientId));
+
+    if (will) {
+      body = body.concat(mqttString(will.topic)).concat(mqttString(will.payload));
+    }
+
+    body = body.concat(mqttString(options.username)).concat(mqttString(options.password));
 
     socket.send(packet(CONNECT, body));
 
@@ -324,6 +349,32 @@ export function MqttClient(options) {
     packetId = (packetId % 65535) + 1;
     const body = [(packetId >> 8) & 0xff, packetId & 0xff].concat(mqttString(topic), [0x00]);
     socket.send(packet(SUBSCRIBE, body));
+  };
+
+  /**
+   * Δ C130 — drops the socket WITHOUT sending DISCONNECT, so the broker publishes the will.
+   *
+   * This is the whole difference between a driver closing their app and a driver's phone losing
+   * signal, and MQTT 3.1.1 §3.14 makes it explicit: a DISCONNECT is the client saying the will
+   * must NOT be published. `close()` below sends one, which is correct for a load run tidying up
+   * and useless for a last-will drill — chaos/drills/62 needs the other half.
+   *
+   * `closing` is still set, for `close()`'s reason: a socket we are tearing down reports
+   * `close 1005 (no status)` through onerror, and counting that as a broker error would put one
+   * failure per session into the run summary.
+   */
+  this.abort = function abort() {
+    closing = true;
+    if (pinger !== null) {
+      clearInterval(pinger);
+      pinger = null;
+    }
+    try {
+      socket.close();
+    } catch (error) {
+      // Already gone. The will is the broker's business now.
+    }
+    self.connected = false;
   };
 
   this.close = function close() {

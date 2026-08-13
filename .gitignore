@@ -129,6 +129,18 @@ load/env.json
 load/out/
 
 # ---------------------------------------------------------------------------
+# The chaos drill suite (C130)
+# ---------------------------------------------------------------------------
+# Same shape and the same reasons as load/'s two entries above: env.json carries EMQX's shared
+# MQTT secret plus live 30-minute bearers AND the opaque refresh tokens the Redis drill probes
+# with, written at 0600 by chaos/configure.sh.
+chaos/env.json
+# One run's report and its raw samples. `chaos/run-drills.sh --report chaos/out/report.md` is
+# the manifest's verify command, so this directory is written on every run; the transcribed
+# findings live in chaos/report.md, which IS committed.
+chaos/out/
+
+# ---------------------------------------------------------------------------
 # Tooling
 # ---------------------------------------------------------------------------
 __pycache__/

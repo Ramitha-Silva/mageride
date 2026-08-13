@@ -156,7 +156,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C127 | security-review-asvs | 6 | PARTIAL | 2026-08-12 | **The review ran end to end and produced nine findings; eight are closed** (two fixed and verified live, four accepted with an owner and a date, two low fixes). The ninth — **C127-01, the one open HIGH** — is fixed in the repository and open **at deployment**: the cutover is one connection string plus PgBouncer's client auth, owned by C133 and due at go-live, and `bash security/run-asvs-checks.sh` stays red until it is done exactly as `gtfs-day0-verify.sh` is C126's closure check. `dotnet test tests/Security -c Release` **85/85**; `ApiGateway.Tests` 605/605; `tests/Contract` green; `infra/replica/smoke.sh` 24/24. **Two HIGH findings, and both were invisible from inside the process** — which is the argument for the shape this component took: a suite that reads what the assemblies *declare*, plus a harness that asks a *deployment* what it is actually doing. **C127-02 (HIGH, FIXED, verified live) — the edge shipped with no rate limit and an empty attestation policy.** The whole `Gateway` section was absent from the deployed `app-services` image, so every value fell back to its compiled default: `Attestation:SensitiveOperations` was `[]` while `Mode` defaults to `Enforce` — a deployment believing it enforced attestation would enforce it on **zero** operations, with the rejection metric at zero, which reads exactly like "nobody has tried" — and `RateLimits:Policies` was `{}`, so all **seventy** routes logged `policy … is not configured; applying no limit` at start-up, defeating four ADD §12.6 rows outright. The cause is a name collision: `AppServices` co-locates the edge with 22 services and one content root cannot hold 23 files called `appsettings.json`, so `DropCoLocatedAppSettings` removed api-gateway's — which is not a service's configuration but the edge's own policy. **The identical collision had already been found and patched in the *test* project**, which is what made it less likely anybody would look at the deployment; all 605 gateway tests passed throughout because they compose from the source directory. Fixed by moving it to `gateway-policy.json`, loaded `optional: false` so a gateway that cannot find its policy refuses to start. Redeployed: zero `policy not configured` lines, and 70 reads of a dead share token gave **67 × 404 then 3 × 429**. **C127-01 (HIGH, open at deployment) — every service connects to Postgres as a superuser.** Observed rather than inferred: `audit.events` accepted a `DELETE` from the server, and `row_security_active()` answered **false** for all nine policy-bearing tables — every fleet-scoping policy 1806/1807 ships was doing nothing. Migration 1305's own comment predicted it: *"Real immutability is the deployment's job"*. `2001__least_privilege_roles.sql` lands the mechanism (`mageride_app` with `SELECT`+`INSERT` and only those on `audit.events`, plus `FORCE ROW LEVEL SECURITY`), applied twice and verified under `SET ROLE`. **The cutover was deliberately not performed** — PgBouncer carries one credential for both client auth and its server connection, so it is a change to C125's wiring and C128–C132 all depend on that replica staying up. **C127-03 (MEDIUM, FIXED) — three mTLS-only operations were published to the internet**: 46 of the 49 `security: [{ mtls: [] }]` operations carry the `/v1/internal` prefix and were refused at the edge; `calculateFinalFare`, `renderNotificationTemplate` and `lookupUserByPhone` do not. Each failed closed on its own shared secret, so nothing was exploitable — what was missing is the second control that makes a shared secret tolerable on the other 46. The cause is a convention standing in for a declaration: the blocked-path list and both suites keyed on the prefix, while the contract's `security` block is what says which plane an operation is on. **The RBAC probe (the DoD's hard item) is green: 444 endpoints across 24 services, `Open` = 0**, read off the composed pipeline rather than the source, with the anonymous surface kept as a reviewed ledger ratcheted in both directions |
 | C128 | anti-spoof-hardening | 6 | PARTIAL | 2026-08-12 | **Three of the four DoD items are met and measured; the fourth is met on one path and the other is a HIGH that cannot be closed here.** `dotnet test tests/Security -c Release --filter Category=AntiSpoof` → **96 passed, 0 failed, 5 skipped** (180/6 with C127's), `dotnet build backend/MageRide.sln -c Release` clean, `security/run-asvs-checks.sh` unchanged at 41/3 (all three are C127-01). **DoD 1 — the corpus measures clean:** 35 labelled tracks, 1,051 samples, 17 hostile families, driven through `PlausibilityFilter` itself with thresholds bound from `.env.app.example` rather than the class initialisers — **828 honest samples 0 refused (0.000 % against a 1 % bound), 158 hostile 0 escaped**, on every one of the eight tiers. **No threshold was changed, and that is the finding**; `ThresholdConfigurationTests` mistunes each knob in turn so a corpus that cannot fail is not mistaken for a passing one. One modelling decision carries the number: receiver error is a **bounded random walk**, not an independent draw per fix — an earlier draft's 30 m disc was 216 km/h of pure noise and made the 80 km/h three-wheeler ceiling look unusable. **Four attacks the gate cannot see are named as ratchets rather than counted as covered** (a slow walk inside the tier ceiling, a reappearance past `VehicleMetaTtl`, a teleport inside a `pos/replay` backlog, a handset rewinding its clock); replaying a recorded track live **is** caught, 18 of 20. **DoD 2 — a cross-vehicle publish is refused on all three live listeners**, and **8084/WSS had never been driven by any suite** — the one a driver's handset actually connects to. `EmqxFixture` now publishes it; `BrokerPolicyTests` reads the deployed `.conf` files **with comments stripped**, which is exactly how C128-01 had hidden. D-17's ceiling is demonstrated to be paced rather than dropped, and one credential over four sessions beats it. **DoD 3 — a cloned IMEI quarantines both bindings** with `imei-duplicate`, stops the incumbent's credential validating and deletes the `imei:{imei}` cache entry (left behind, a 60 s budget quietly becomes the cache's 24 h); the window is asserted at the deployed 24 h from both sides by ageing the sighting trail rather than shortening the setting. **DoD 4 — revocation inside 60 s on the TCP path, NOT on the MQTT one (C128-01, HIGH, owner C133, before go-live):** a revoked certificate still completes the mutual-TLS handshake and the device goes on publishing. Everything platform-side works — binding REVOKED, `validate` refusing, the Redis signal inside ADD §7.7.3's one second, the serial on the CRL in budget — and what is missing is the broker reading it. **It cannot simply be switched on:** EMQX locates a CRL through the peer certificate's distribution-point extension, `EmbeddedStepCa` writes that only when `StepCa:CrlDistributionPoint` is set, and no environment sets it — so `enable_crl_check = true` before a fleet-wide re-mint takes the whole tracker plane off the air rather than tightening it. **C128-02 (MEDIUM, owner admin-bff/C061):** against a 39-pair synthetic month, `repeat_pair` recall 100 % / precision 67 % — a farming pair rides *less* than a commuter, so no threshold separates them, but correlating `repeat_pair` with `shared_device` names exactly the six farming pairs and nothing else; the detector computes all three signals and does not correlate them, so `PairRideThreshold` is left at 8 deliberately. **C128-03 (LOW):** ADD §12.6 prices `flex` at 200 km/h, above `sedan`'s 180, for a tier D5' §1 places below it. Two configuration gaps closed (`PositionProcessor__VehicleMetaTtl`, six `Reputation__Collusion__*`). The `tests/Security` no-container rule takes one scoped exception, argued in that project's CLAUDE.md, because C128-01 is the demonstration that every in-process assertion about revocation stayed green while a real broker accepted a revoked certificate |
 | C129 | load-test-suite | 6 | PARTIAL | 2026-08-13 | **The suite is built and runs against the deployed replica; three deliverables are blocked behind the defect it found, and no production target is reported as met.** `bash load/configure.sh` then `k6 run load/ingest.js --summary-export=load/out/ingest.json && k6 run load/dispatch.js`. **The ingest chain carries ~10 msg/s against ADD §3.2's 3,000.** A rate sweep at 20/40/80/160 msg/s carried 30.8 / 23.3 / 15.5 / 5.7 % — EMQX delivers a flat 12–14 msg/s to mqtt-bridge-svc at every step and discards the rest as `delivery.dropped.queue_full`, **after PUBACKing the publisher**, so k6 reported "99.5 % of target, 0 broker errors" while nine in ten samples were thrown away. Neither broker nor stream is the cause: a QoS-0 `svc-` subscriber on the same filter took **97.2 % at 100 msg/s**, Redpanda's produce latency is **16.9 ms over 13,693 requests**, and nothing was CPU-bound. EMQX's session view shows `inflight=32` permanently full — the bridge takes **2.5–4 s per acknowledgement against a 17 ms produce**, and `max_inflight`/`max_mqueue_len`/`retry_interval` are all EMQX defaults `emqx.conf` never sets. **D-19 misses by 7× at a thirtieth of the rate: p95 36.6 s, p99 36.9 s.** **The ride plane fails silently with it** — only `telemetry.normalized` advances `driver_presence.last_seen_at`, so drivers leave the candidate pool inside 60 s and `dispatch.candidate_scores` took 0 rows. **Three deployment defects, two fixed:** `Dispatch__RideServiceBaseUrl` was the NXDOMAIN placeholder `dispatch-needs-ride-svc`, so **no Mode C ride was ever dispatched** while the contract sweep stayed green (fixed); `fanout`/`tcp-adapter` were still on the pre-C126 `Jwt__JwksUrl` and answered **500 to every `/hubs/live` connection** (fixed); and the gateway's rate limiter **buckets every caller on the platform together** because `KnownProxies` is a hostname `IPAddress.TryParse` rejects — 40 distinct `X-Forwarded-For` values, 39 refused — leaving `/v1/rides/**` at 2 req/s platform-wide (C008/C125's). **Four spec findings:** §16.4 omits the hypertable write path (18× understated), A3's 80–120 B payload is 227 B, `mageride.fanout.frames` is not §16.3's send unit, and no budget exists for request → offer (E-09's outbox hop measured at 116 ms median against its 50 ms). Container logs are unbounded and ~1.6 GB/day of `Npgsql.Command`. Stock k6 throughout — MQTT and SignalR are implemented in `load/lib/` so the verify command needs no xk6 build |
-| C130 | chaos-drills | 6 | PENDING | | |
+| C130 | chaos-drills | 6 | DONE | 2026-08-13 | **Twelve drills, 89 assertions, 0 failures, 14 findings, 14 m 22 s** — `bash chaos/run-drills.sh --env replica --report chaos/out/report.md` exits 0 with every fault rolled back and the stack healthy. **Most of ADD §14.1 holds and is now measured**: R-04's durable backstop survives a `FLUSHALL` (`rides.timers` fired **765 ms** after the deadline against a **305 ms** control, ride back to `Matching`, offer `EXPIRED`) — the DoD's headline item; `limited_live` is raised on a Redis outage and **clears itself 2.3 s** after Redis returns; "tracking continues" through a Postgres outage is true (map served from Redis, GT06 listener accepting, and both refusals came back in **under 100 ms**, which is what stops a database outage becoming an every-request one); the transactional outbox loses nothing across a broker outage (booking commits in **734 ms**, event held, drained **1.0 s** after recovery, ride `Offered` **211 ms** later); R-09's split costs the live lane **zero** acknowledgements under a **132–137 msg/s** replay flood and a **1,200-session** storm (delivery holds; the ack-latency tail reaches **4.3 s**, so timeliness does not); D-08 holds on both halves. **Five findings change how this platform is operated.** **(1) SOS reaches nobody** — `POST /v1/sos` answers `200 {smsStatus:"Failed"}` **with nothing broken** (both D-33 gateways absent: `Sms__SecondaryGateway` empty, notification-svc's log transport off outside Development), and **under a Redis or Postgres outage it is refused outright** — 503 in 91 ms, 500 in 83 ms. ADD §14.1 has **no SOS row at all**. **(2) R-15 is not wired anywhere:** `Dispatch__LastWillEnabled` appears in no env file, no compose file and no k8s overlay and defaults to `false`, so production would deploy with it off. EMQX does its half perfectly — **150/150** sockets dropped without DISCONNECT produced retained `offline` wills, median **811 ms** — and **0** `offer_release_grace` timers were armed. DT-04's filter clearing, T-04's stalled-tracker path and **R-16's four post-accept graces** take their input from the same fact, so **R-16 is recorded as untested rather than passing**. **(3) ADD §14.1's `data_age` does not exist** on any surface — `NearbyResponse` is `{vehicles, asOf, limitedLive}` and the SignalR `VehicleFrame` carries no timestamp at all, so under lag the map shows stale markers with a current clock. **(4) RPO is one backup interval, not §15's 5 minutes** — no pgBackRest and no WAL archive; the probe row and the ride booked after the backup were both gone. **RTO is met at 1 m 11 s** against 30 minutes (1 m 11 s / 1 m 25 s over three runs), on a 1.5–1.8 MB dump. **(5) `infra/replica/restore.sh` could never restore** — `psql -c "DROP DATABASE …; CREATE DATABASE …;"` is one query and one implicit transaction; it died there having already stopped five containers, leaving the platform down with the database intact. **Fixed here** (two `-c` flags), and `backup.sh --verify-restore` never caught it because it only ever runs `CREATE DATABASE` on a fresh scratch database. **Three failures produce no operator signal at all**: a wedged outbox dispatcher (`/health/ready` 200, and *neither* outbox alert can fire — `OutboxPublishFailing` needs a throw that never comes and `OutboxDispatchLagHigh` is a p95 over a histogram that goes quiet), a flushed-but-running Redis (`limitedLive:false` over an empty map), and a partitioned container (reports itself READY with every socket black-holed — on DOKS it keeps taking traffic). Plus `mageride.rides.timers_fired` declared and incremented nowhere while **two Grafana panels chart it**. **Two further defects came out of driving one ride all the way to completion**, which nothing else in this repository does against a deployment (`load/dispatch.js` cancels pre-acceptance by design): a **completed cash ride cannot be settled** (`POST /v1/fare/pay` answers `404 no computed fare yet` for a ride that has completed) so it sits in `PaymentPending`, which `ux_rides_open_passenger` does not exempt — the passenger *and* the driver are out of service permanently, a hazard `ride.yaml`'s own `/complete` description names verbatim; and the driver's next accept is then answered **`500` with a full stack trace, the constraint name and absolute build paths in the response body**, because `ux_rides_driver_busy`'s violation is uncaught where the contract documents `409`. `docs/runbooks/chaos-drills.md` gives each drill a detection signal and a first action |
 | C131 | voip-tracker-acceptance-sg | 6 | PENDING | | |
 | C132 | production-readiness-doks | 6 | PENDING | | |
 
@@ -20993,4 +20993,162 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   `fanout.js`, `lib/{mqtt,cbor,jwt,config,fleet,signalr,probe-subscriber}.js`).
   Changed: `.gitignore` (`load/env.json`, `load/out/`),
   `infra/replica/docker-compose.light-replica.yml` (C129-03's one-line topology override).
+  **No service, spec, contract or migration file was changed.**
+
+### C130 — chaos-drills
+
+- **Component:** C130 chaos-drills
+- **Status:** DONE — `bash chaos/run-drills.sh --env replica --report chaos/out/report.md` →
+  **12 drills, 89 assertions passed, 0 failed, 14 findings, 14 m 22 s, exit 0**, every fault rolled
+  back and the stack healthy at the end. Prerequisite: `bash chaos/configure.sh` (the bearers live
+  30 minutes and the suite refuses to start on an expired one).
+- **Notes:**
+
+  **The DoD's headline item holds, with a control beside it.** A `FLUSHALL` mid-offer takes the
+  Redis `offer:{rideId}` hint away in the fifteen seconds it is supposed to matter, and R-04's
+  durable backstop fires anyway: `rides.timers` marked fired **765 ms** after the deadline against a
+  **305 ms** control with Redis intact, the ride returned to `Matching` and the offer row settled
+  `EXPIRED`. **Both inside R-04's 1 s.** The control is not decoration — an expiry measured only
+  under a flush is a number nobody can read, and the same discipline caught a false HIGH earlier in
+  the session when a spent single-use refresh token was probed twice.
+
+  **Most of ADD §14.1 is true, and is now measured rather than asserted.** `limited_live` is raised
+  on a Redis outage and **clears itself 2.3 s** after Redis returns with no restart. "Tracking
+  continues" through a Postgres outage holds — the map serves from Redis, the GT06 listener keeps
+  accepting, and registration and history refuse in **under 100 ms**, which is what stops a database
+  outage becoming an every-request outage. The transactional outbox loses nothing across a broker
+  outage: the booking commits (**734 ms**, 202), the `ride.requested` waits in `rides.outbox`, the
+  ride parks in `Requested`, and on recovery the outbox drains **1.0 s** later with the held ride
+  reaching `Offered` **211 ms** after that. R-09's live/replay split costs the live lane **zero**
+  acknowledgements under a **132 msg/s** replay flood, and a **1,200-session** reconnect storm costs
+  the incumbent publisher zero. D-08 holds on both halves — first trip of the Colombo day offered
+  with a zero balance and no cache, second refused.
+
+  **Five findings change how this platform is operated.**
+
+  **SOS reaches nobody, and a Redis or Postgres outage refuses it outright.** With nothing broken,
+  `POST /v1/sos` answers `200 {smsStatus:"Failed"}` — which `safety.yaml` defines as *"every gateway
+  refused; the admin console has the alert and nobody has been SMSed"*. Both D-33 gateways are
+  absent (`Sms__SecondaryGateway` empty, notification-svc's log transport off by
+  `AllowLogTransportOutsideDevelopment=false`), so the dual path is one path that is not connected;
+  the five-second SLO is met and what it measures is the time to give up. Under fault it is worse:
+  **503 in 91 ms** with Redis stopped, **500 in 83 ms** with Postgres stopped. **ADD §14.1 has no
+  SOS row at all** — no queue, no retry, no documented degradation for the one request with a person
+  on the other end of it.
+
+  **R-15 is not wired in any environment.** `Dispatch__LastWillEnabled` appears in no environment
+  file, no compose file and no Kubernetes overlay, and `DispatchOptions` defaults it to `false` — so
+  **production would deploy with it off as well**. The drill separates the halves, which is what
+  makes it actionable: EMQX did its part exactly as R-15 and T-04 describe (**150 of 150** sockets
+  dropped without a DISCONNECT produced a retained `offline` on `veh/{vehicleId}/status`, median
+  **811 ms**), and **0** `offer_release_grace` timers were armed. dispatch-svc says so itself at
+  start-up. Three more mechanisms take their input from the same fact: DT-04's filter clearing,
+  T-04's stalled-tracker detection, and **R-16's four post-accept grace windows** — which is why
+  **R-16 is recorded as untested rather than passing**.
+
+  **ADD §14.1's only client-visible degradation signal does not exist.** The stream-lag row promises
+  *"Payload includes `data_age` field; app shows 'updating...' indicator"*. `NearbyResponse` is
+  `{vehicles, asOf, limitedLive}` and `VehicleFrame` — the SignalR frame — is
+  `{VehicleId, Lat, Lng, Heading, Speed, Type, Mode}`. Neither carries a sample timestamp, and
+  `asOf` is when query-svc *answered*, so under lag the map renders stale markers with a current
+  clock beside them and the client has nothing to compute an age from.
+
+  **RPO is one backup interval, not five minutes.** The drill wrote a probe row and booked a ride
+  after the backup and before the disaster; neither survived. There is no pgBackRest and no WAL
+  archive here — `backup.sh` is a `pg_dump -Fc` snapshot, which has no point-in-time component at
+  all — so on the runbook's nightly `15 2 * * *` schedule the real RPO is up to **24 hours**, and no
+  improvement in restore speed moves it. **RTO is met: 1 m 11 s** against §15's 30 minutes, end to
+  end from the drop to a passenger booking again — on a **1.5 MB** dump of a 13,000-row telemetry
+  table, a figure that is linear in that table and does not extrapolate.
+
+  **`infra/replica/restore.sh` could never restore, and is fixed here.**
+  `psql -c "DROP DATABASE …; CREATE DATABASE …;"` sends both statements as one query, which the
+  server wraps in an implicit transaction, and `DROP DATABASE` cannot run in one. It died there
+  having already stopped app-services, hot-path, fanout, tcp-adapter and pgbouncer — **the platform
+  down with the database intact**, the worst of both outcomes, and its step 4 never ran.
+  `backup.sh --verify-restore` never caught it because it restores into a *fresh scratch* database
+  and therefore only ever runs `CREATE DATABASE` on its own: that script's header says "a dump
+  nobody has restored is not a backup", and the corollary is that a restore script nobody has run is
+  not a recovery plan. Two `-c` flags now; the drill then completed end to end. **This is the only
+  file outside `chaos/` whose behaviour was changed, and the DoD it blocked could not be met around
+  it.**
+
+  **Three failures produce no operator signal at all**, which is the pattern running through the
+  report. A **wedged outbox dispatcher**: `/health/ready` 200, every container healthy, no log line,
+  and *neither* outbox alert can fire — `OutboxPublishFailing` needs a throw that never comes
+  (the drain returns zero rows because it lost the leader election) and `OutboxDispatchLagHigh` is a
+  p95 over a histogram that only takes an observation when a row *is* dispatched, so it goes quiet
+  rather than tall. A **flushed-but-running Redis**: `200 {limitedLive:false, vehicles:[]}`, because
+  `LiveVehicleIndex` raises the flag on `RedisException`/`TimeoutException` and an empty `GEOSEARCH`
+  is neither. A **partitioned container**: app-services answered its own `/health/ready` with 200
+  while every socket to Postgres, Redis, Redpanda, EMQX and MinIO was black-holed, and Docker's
+  health state never moved — on DOKS that pod keeps taking traffic. Related:
+  **`mageride.rides.timers_fired` is declared in the kernel and incremented by nothing** while two
+  Grafana panels chart it, so R-04's backlog is visible and its drain is not; and a stopped broker
+  produces no publish-failure signal for **19 s** (`Kafka:MessageTimeoutMs` is 15 s and each delivery
+  is awaited in turn).
+
+  **What the drills could not reach, stated rather than implied.** `max_conn_rate = "500/s"` was
+  never approached — the generator reached ~38 connections/s, sharing eight vCPU with the broker —
+  though what it *did* measure is worth having: CONNACK latency went from **404 ms** at rest to a
+  **5.4 s median / 8.4 s p95** under the storm, long enough for a client timeout to re-queue.
+  R-09's per-ASN guardrail cannot be observed where every connection has one source address.
+  **R-09's replay throttle is still untested**: `replay_throttled`/`replay_shed` did not move under
+  the flood because EMQX's `delivery.dropped.queue_full` moved by **4,543** first — load/report.md's
+  ~10 msg/s ceiling seen from a second angle, and the throttle cannot be exercised until it is
+  raised. Patroni, a second EMQX node and a Redpanda quorum do not exist on a stack ADD §14's MVP
+  column calls single-node by design; each drill says which half of its §14.1 row it could answer.
+
+  **Two further defects came out of driving one ride all the way to completion**, which nothing
+  else in this repository does against a deployment — `load/dispatch.js` cancels pre-acceptance by
+  design and `load/accept-race.sh` stops at the accept. Drill 70 had to go further because D-08's
+  second-trip rule only applies once `tripsToday >= 1`, and `DailyFeeRepository` counts that as
+  `dispatch.offers` rows that reached **ACCEPTED**, not offers sent. **A completed cash ride cannot
+  be settled here:** `POST /v1/fare/pay {method:"cash"}` answers `404 — Ride … has no computed fare
+  yet. It is priced when the ride completes` for a ride that has completed, `fares.ride_payments` is
+  empty, and all six `ride.events` including `ride.completed` were published — so the ride never
+  leaves `PaymentPending`, which `ux_rides_open_passenger` **does not exempt**. `ride.yaml`'s own
+  `/complete` description names that hazard verbatim ("a passenger who books a new ride inside that
+  window can wedge the old one"); the passenger and the driver are both out of service permanently.
+  **And the driver's next accept is answered `500`:** `ux_rides_driver_busy` — the O2
+  one-accepted-ride invariant — is violated and uncaught, so `POST /…/offer/{driverId}/accept`
+  returns `Npgsql.PostgresException … 23505` where `ride.yaml` documents `409`, with the ORM, the
+  schema and table names, the constraint name and absolute build paths
+  (`/src/backend/src/Ride.Api/Rides/RideService.cs:line 380`) in the response body. Wrong code and a
+  disclosure, on a path C127's ASVS suite does not reach.
+
+  **One measurement in this component was the generator's own fault and is recorded rather than
+  quietly fixed.** A run reported "the live lane lost 5 of 40 acknowledgements under the flood" and
+  raised a HIGH about R-09; it had not failed — the control session closed its socket on the heels
+  of its last publish and five in-flight PUBACKs never landed. `replay-flood.js` now drains for six
+  seconds before closing, and four runs since have kept every acknowledgement. That is the third
+  time a control caught an unearned finding here: the first was a spent single-use refresh token
+  read as "a Redis flush signs every user out", the second was drill 70 twice blaming D-08 for a
+  booking `ux_rides_open_passenger` had refused. The rule the suite is built on is in its CLAUDE.md:
+  **before recording a finding, check the thing that would make the observation innocent.**
+
+  **How the suite is built.** Bash, with the rollback **armed before the fault** and one trap
+  running the stack in reverse on any exit path — so a Ctrl-C leaves the replica as it was found,
+  and every rollback is idempotent because `drill_end` runs it on the happy path too. `drill_end`
+  also waits for health and records the recovery, because "we broke it and it came back" is a claim
+  about a duration. The surgical lever in drill 50 is the dispatcher's own leader election —
+  `pg_advisory_lock(FNV-1a("rides.outbox"))` held from outside makes every drain return "another
+  replica is draining" for ever, with no container touched and no data destroyed, and it self-heals
+  because the holder is a `psql` running `pg_sleep`. Client-side drills are stock k6 importing
+  C129's `load/lib/{mqtt,jwt,cbor}.js` rather than copying them; two additive changes were made
+  there — a `will` option on CONNECT and `abort()`, which drops the socket *without* a DISCONNECT,
+  because MQTT 3.1.1 §3.14 makes that the whole difference between a driver closing their app and a
+  driver losing coverage. Only `chaos/k6/lib/config.js` is chaos's own, because k6 resolves `open()`
+  against the calling module's directory. `--env replica` is a fence with no other accepted value,
+  and `replica.synthetic_marker` is re-checked at start-up and again immediately before the DR
+  drill's `DROP DATABASE`.
+
+  **Files —** new: `chaos/` (`README.md`, `CLAUDE.md`, `report.md`, `run-drills.sh`, `configure.sh`,
+  `lib/{common,drill,fixture}.sh`, `drills/{10-redis-flush,11-redis-loss,20-postgres-loss,
+  30-redpanda-loss,40-emqx-loss,50-outbox-stall,60-reconnect-storm,61-replay-flood,62-mass-lwt,
+  63-network-partition,70-wallet-degraded,90-dr-restore}.sh`,
+  `k6/{storm,replay-flood,lwt}.js`, `k6/lib/config.js`), `docs/runbooks/chaos-drills.md`.
+  Changed: `infra/replica/restore.sh` (the `DROP DATABASE` fix — the one behavioural change),
+  `load/lib/mqtt.js` (`will` + `abort()`, additive), `.gitignore` (`chaos/env.json`, `chaos/out/`),
+  `infra/CLAUDE.md` and `docs/runbooks/README.md` (a section and an index row).
   **No service, spec, contract or migration file was changed.**

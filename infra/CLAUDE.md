@@ -116,6 +116,33 @@ its edge. `load/report.md` is what it measured; two things there change how this
   `ReverseProxy__Clusters__*` ones and for the same reason: it is topology, and Container 7 does not
   rewrite a service-to-service address the way it rewrites a gateway cluster.
 
+## Chaos and recovery (C130)
+
+`chaos/` at the repository root holds the drill suite — twelve documented failures injected on
+purpose against this replica, each with a blast radius, a rollback armed *before* the fault, and a
+measured recovery. `chaos/report.md` is what it found; `docs/runbooks/chaos-drills.md` is the
+detection signal and first action for each one when it is real. Four things there change how this
+stack is operated:
+
+- **`infra/replica/restore.sh` could never restore, and is fixed.** `psql -c "DROP DATABASE …;
+  CREATE DATABASE …;"` sends both statements as one query, which the server wraps in a transaction,
+  and `DROP DATABASE` cannot run in one. It died there having already stopped five containers —
+  the platform down with the database intact. Two `-c` flags now. `backup.sh --verify-restore`
+  never caught it because it restores into a *fresh scratch* database and only ever runs
+  `CREATE DATABASE` alone.
+- **The RPO is one backup interval, not ADD §15's 5 minutes.** There is no pgBackRest and no WAL
+  archive here: `backup.sh` is a `pg_dump -Fc` snapshot. On the runbook's nightly `15 2 * * *`
+  schedule that is up to 24 hours. The **RTO is 1 m 11 s** against §15's 30 minutes, on a 1.5 MB
+  dump — a figure that is linear in the telemetry table and does not extrapolate.
+- **`Dispatch__LastWillEnabled` is in no environment file, no compose file and no k8s overlay**, and
+  defaults to `false` — so R-15's last-will path is off *everywhere, including production*. EMQX
+  publishes the wills correctly (150/150, median 918 ms); nothing consumes them. R-16's post-accept
+  graces and DT-04's filter clearing take their input from the same fact.
+- **Three failures produce no signal at all** while they are happening: a wedged outbox dispatcher
+  (`/health/ready` 200, both outbox alerts structurally unable to fire), a flushed-but-running Redis
+  (`limitedLive:false` over an empty map), and a network-partitioned container (reports itself
+  READY with every socket black-holed — on DOKS it would keep taking traffic).
+
 ## Observability (C119)
 
 ```
