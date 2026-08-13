@@ -127,6 +127,25 @@
     <!-- C010: the TestKit's Redpanda fixture, so a service's integration tests get the same
          broker the dev stack runs instead of a hand-rolled container. -->
     <PackageVersion Include="Testcontainers.Redpanda" Version="4.13.0" />
+    <!-- TRANSITIVE PIN, not a dependency anything here uses directly. Testcontainers 4.13.0
+         brings in SSH.NET (its remote-Docker-over-SSH support), and 2025.1.0 is covered by
+         GHSA-q939-rpr3-3284 — "ScpClient recursive download allows arbitrary file write via
+         server-controlled SCP filenames", high, affected `<= 2025.1.0`, first patched 2026.0.0.
+         `NuGetAudit` raises NU1903 and Directory.Build.props' `TreatWarningsAsErrors` makes it
+         an error, so RESTORE fails for every project that references MageRide.TestKit — nothing
+         is compiled and the message names a package no .csproj mentions. It broke CI the day
+         the advisory was published, on commits that had built green the day before.
+
+         `CentralPackageTransitivePinningEnabled` (top of this file) is what makes one line here
+         enough; without it a `PackageVersion` for a package nothing references directly is
+         ignored. Testcontainers 4.13.0 is already the latest, so there is no version of it that
+         resolves a patched SSH.NET on its own.
+
+         The exposure was never real — this is test-only infrastructure and Testcontainers does
+         not perform recursive SCP downloads from untrusted servers — but the gate is doing
+         exactly what a supply-chain gate is for, and suppressing NU1903 would turn off the next
+         one too. Remove this line when Testcontainers depends on 2026.0.0 or later itself. -->
+    <PackageVersion Include="SSH.NET" Version="2026.0.0" />
     <PackageVersion Include="xunit.v3" Version="3.2.2" />
     <!-- C010: MageRide.TestKit is a library, not a test project — it needs IAsyncLifetime and
          [CollectionDefinition] but no runner, so it takes the extensibility package alone. -->
