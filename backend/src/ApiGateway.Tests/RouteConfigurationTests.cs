@@ -13,10 +13,18 @@ namespace MageRide.ApiGateway.Tests;
 public sealed class RouteConfigurationTests
 {
     private static readonly JsonElement Routes = Load("gateway-routes.json").GetProperty("ReverseProxy");
-    // The gateway's own appsettings.json, which the csproj's GatewaySettingsWinTheOutputDirectory
-    // target guarantees is the one in this directory — two referenced projects ship a file by that
-    // name, and until C126 the other one was winning.
-    private static readonly JsonElement Settings = Load("appsettings.json").GetProperty(GatewayOptions.SectionName);
+    // Δ C127: `gateway-policy.json`, not `appsettings.json`. The `Gateway` section moved into a
+    // file of its own with a name nothing else ships, which retires the collision the csproj's
+    // GatewaySettingsWinTheOutputDirectory target was patching — two referenced projects shipped an
+    // `appsettings.json` and until C126 the wrong one won here.
+    //
+    // The same collision was never fixed for the DEPLOYMENT. AppServices (C125) co-locates the edge
+    // with twenty-two services and drops every referenced project's appsettings.json, because one
+    // content root cannot hold twenty-three files of that name — so the replica's edge ran with the
+    // compiled defaults: nothing marked D-30 sensitive and no rate limit on any of its seventy
+    // routes. A test target that fixed the collision here made it less likely anybody would look
+    // there. See the C127 handoff, finding 02.
+    private static readonly JsonElement Settings = Load("gateway-policy.json").GetProperty(GatewayOptions.SectionName);
 
     private static readonly string[] KnownMetadataKeys =
     [
@@ -74,7 +82,7 @@ public sealed class RouteConfigurationTests
 
         Assert.True(
             Settings.GetProperty("RateLimits").GetProperty("Policies").TryGetProperty(policy.GetString()!, out _),
-            $"Route '{routeId}' names rate-limit policy '{policy.GetString()}', which appsettings.json does not define.");
+            $"Route '{routeId}' names rate-limit policy '{policy.GetString()}', which gateway-policy.json does not define.");
     }
 
     [Theory]

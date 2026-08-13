@@ -561,6 +561,24 @@ def build(cat: dict) -> dict[Path, str]:
     all_images += [p["name"] for p in cat["portals"]]
     all_images.append(cat["migrator"]["name"])
     for env in cat["environments"]:
+        # THE TAG ALREADY IN THE FILE WINS (C132). `sha-0000000` means "never promoted", not
+        # "reset on every regeneration" — and writing the placeholder unconditionally made
+        # `generate_manifests.py` un-deploy an environment as a side effect of adding a service
+        # somewhere else. It did exactly that in the C132 session: dev was on `sha-409493f`, one
+        # regeneration reverted it to the placeholder, and `--check` then reported the CORRECT,
+        # promoted file as stale — so CI would have demanded the revert.
+        #
+        # The placeholder is still what a brand-new environment gets, and still what a NEW image
+        # gets in an environment that has one (it cannot have been promoted; nothing has built
+        # it), which keeps the "must fail to pull" property exactly where it belongs.
+        existing: dict[str, str] = {}
+        existing_path = K8S / "overlays" / env / "images" / "kustomization.yaml"
+        if existing_path.exists():
+            doc = yaml.safe_load(existing_path.read_text(encoding="utf-8")) or {}
+            for entry in doc.get("images") or []:
+                if entry.get("name") and entry.get("newTag"):
+                    existing[entry["name"]] = entry["newTag"]
+
         body = (
             BANNER + "#\n"
             f"# {env}: the promoted image tag for all {len(all_images)} images (D7' §7 —\n"
@@ -571,6 +589,9 @@ def build(cat: dict) -> dict[Path, str]:
             "# purpose: an environment that has never been promoted must fail to pull rather\n"
             "# than quietly run `latest`.\n"
             "#\n"
+            "# Regenerating this file PRESERVES the tag that is already in it — see the note in\n"
+            "# generate_manifests.py. Only a promotion changes it.\n"
+            "#\n"
             "# Written by: python3 infra/k8s/tools/set_image_tag.py " + env + " sha-<7>\n"
             "---\n"
             "apiVersion: kustomize.config.k8s.io/v1alpha1\n"
@@ -578,8 +599,9 @@ def build(cat: dict) -> dict[Path, str]:
             "images:\n"
         )
         for image in all_images:
-            body += f"  - name: {cat['registry']}/{image}\n    newTag: {cat['placeholderTag']}\n"
-        files[K8S / "overlays" / env / "images" / "kustomization.yaml"] = body
+            name = f"{cat['registry']}/{image}"
+            body += f"  - name: {name}\n    newTag: {existing.get(name, cat['placeholderTag'])}\n"
+        files[existing_path] = body
 
     files[K8S / "platform" / "external-secrets" / "base" / "kustomization.yaml"] = kustomization(
         "One ExternalSecret per service that has a D7' §4.2 secret, plus the hand-written ones\n"
@@ -587,6 +609,9 @@ def build(cat: dict) -> dict[Path, str]:
         "# credentials and the registry pull secret.",
         es_files
         + [
+            # C132 added backup-s3: the Wasabi credential the pgBackRest archive and the
+            # nightly pg_dump both read. It belongs to no service, like the four below it.
+            "backup-s3.yaml",
             "common-secret.yaml",
             "emqx-auth.yaml",
             "emqx-device-ca.yaml",

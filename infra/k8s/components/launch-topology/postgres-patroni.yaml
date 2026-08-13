@@ -1,0 +1,449 @@
+# =====================================================================================
+# Postgres — Patroni 1 primary + 2 replicas (D7' §8's launch row, ADD §10.2, ADD §14).
+#
+# This REPLACES the single-instance StatefulSet in base/data/postgres.yaml, which says in its
+# own header that the topology is C132's. `retire-single-instance-data` removes that one; this
+# file is what takes its place, and both are pulled in by the staging and production overlays.
+#
+# --- WHY PATRONI IN THE IMAGE AND NOT AN OPERATOR --------------------------------------
+# `timescale/timescaledb-ha:pg16` — the image D7' §9 already pins, and the only one that
+# carries the T-06 hypertable and PostGIS — SHIPS Patroni and pgBackRest:
+#
+#     $ docker run --rm --entrypoint /bin/bash timescale/timescaledb-ha:pg16 \
+#         -lc 'patroni --version; pgbackrest version'
+#     patroni 4.1.3
+#     pgBackRest 2.58.0
+#
+# So the launch topology is a StatefulSet and a ConfigMap, not a second image and not a
+# controller. That matters beyond taste: CloudNativePG and the Zalando operator both express a
+# cluster as a CUSTOM RESOURCE, and infra/k8s/CLAUDE.md forbids one under base/ or overlays/
+# for a concrete reason — `kubectl apply --dry-run=client` builds a RESTMapper from the
+# server's discovery document, so a `kind: Cluster` here would make **C132's own printed verify
+# command** depend on whether the operator's CRD happened to be installed on the machine
+# running it. An operator would also put the database's failover logic outside the repository,
+# where `git log` cannot answer why a primary moved.
+#
+# --- THE DCS IS KUBERNETES ITSELF, NOT ETCD ---------------------------------------------
+# `kubernetes.use_endpoints: false`, so the distributed configuration store is four ConfigMaps
+# (`mageride-pg-{leader,config,failover,sync}`) and the leader is published as a POD LABEL,
+# `role: primary`. Three consequences worth knowing before an incident:
+#
+#   * There is no etcd cluster to run, back up or lose. The DCS is as available as the
+#     Kubernetes API, which is DOKS's problem and is already the thing every other workload
+#     depends on.
+#   * `Service/postgres` selects `role: primary`, so the DSN hostname never changes and
+#     PgBouncer needs no failover awareness at all. Patroni relabels the pod on promotion and
+#     kube-proxy repoints the ClusterIP within a scrape.
+#   * **The Endpoints API is deprecated as of Kubernetes 1.33.** Patroni's other mode writes
+#     Endpoints objects directly; this one does not touch them.
+#
+# --- WHY SYNCHRONOUS REPLICATION IS ON ---------------------------------------------------
+# `synchronous_mode: true` with one synchronous standby. Async failover promotes a replica
+# that may be a few hundred milliseconds behind, and what is behind is whatever committed
+# last — on this platform that is `billing.journal_postings` (D-09's double-entry ledger),
+# `fares.ride_payments` and `wallet` movements. A failover that silently drops a committed
+# ledger posting produces an unbalanced ledger with no error anywhere, which is the one
+# failure mode this schema is built to make impossible.
+#
+# The cost is one network round trip to a pod in the same region on every COMMIT — sub-
+# millisecond on DOKS — and it is bounded: `synchronous_mode_strict: false` means that if the
+# last standby is gone, Patroni degrades to async and keeps taking writes rather than blocking
+# the platform. That is the correct direction for a ride-hailing system; the alarm for it is
+# `PostgresSynchronousStandbyLost` (alerts.capacity.yml).
+#
+# --- WHAT MUST NOT CHANGE -----------------------------------------------------------------
+#   * `shared_preload_libraries: timescaledb` and NOT `timescaledb,postgis-3` — PostGIS has no
+#     preloadable library and the postmaster refuses to start (infra/CLAUDE.md's deviation
+#     table, found by running D7' §3's own value).
+#   * `PGDATA` is under /home/postgres/pgdata — this image's path, not the official postgres
+#     image's. `data_dir` below is the same directory base/data/postgres.yaml uses.
+#   * `wal_log_hints: on` and `data-checksums`. Without them `pg_rewind` cannot rejoin a
+#     demoted primary and every failover becomes a full `pg_basebackup` of a 200 GB volume.
+#   * `runAsNonRoot: true` + `seccompProfile`. The namespace is `pod-security…/enforce:
+#     restricted` and a pod that omits either is REFUSED — see C132-01 in the readiness report.
+# =====================================================================================
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: postgres
+  namespace: mageride
+  labels:
+    app: postgres
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/component: data
+    app.kubernetes.io/part-of: mageride
+# The ONE workload in this platform that reads and writes the Kubernetes API, which is why it
+# does not use the shared `mageride` ServiceAccount — that one sets
+# `automountServiceAccountToken: false` and says "no service reads the Kubernetes API". Patroni
+# does: the DCS is the API server.
+automountServiceAccountToken: true
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: postgres-patroni
+  namespace: mageride
+  labels:
+    app: postgres
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/component: data
+    app.kubernetes.io/part-of: mageride
+rules:
+  # The DCS. `mageride-pg-leader` holds the leader key and its TTL; `-config` holds the
+  # cluster-wide Patroni configuration a `patronictl edit-config` writes; `-failover` and
+  # `-sync` are written during a switchover and by the synchronous-standby election.
+  - apiGroups: [""]
+    resources: [configmaps]
+    verbs: [create, get, list, patch, update, watch, delete]
+  # `patch` on pods is how the leader is PUBLISHED: Patroni sets `role: primary` on itself and
+  # `role: replica` on the others, and Service/postgres selects on it.
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list, patch, update, watch]
+  # Nothing else. Patroni does not create Services, does not exec into pods and — with
+  # `use_endpoints: false` — never touches the Endpoints API. This Role was cut down until the
+  # cluster stopped forming and then given back exactly what it asked for.
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: postgres-patroni
+  namespace: mageride
+  labels:
+    app: postgres
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/component: data
+    app.kubernetes.io/part-of: mageride
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: postgres-patroni
+subjects:
+  - kind: ServiceAccount
+    name: postgres
+    namespace: mageride
+---
+# =====================================================================================
+# THE LEADER SERVICE. `Host=postgres` in both DSNs (common-secret.yaml) and `DB_HOST=postgres`
+# in PgBouncer resolve here, and here always means the current primary.
+#
+# A ClusterIP and NOT the headless Service base had: a headless record is a set of pod IPs
+# handed to the client, and a client that cached one would keep writing to a demoted primary
+# until its own resolver expired the answer. A ClusterIP is one stable address whose backing
+# endpoint kube-proxy repoints, and a connection to the old primary is RESET rather than
+# quietly accepted — which is what makes a driver's app reconnect instead of hanging.
+# =====================================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: mageride
+  labels:
+    app: postgres
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/component: data
+    app.kubernetes.io/part-of: mageride
+spec:
+  type: ClusterIP
+  selector:
+    app: postgres
+    role: primary
+  ports:
+    - { name: postgres, port: 5432, targetPort: postgres, protocol: TCP }
+---
+# The replicas, for ADD §9.3's read scaling. Nothing is pointed at it yet — no service in this
+# platform opens a read-only connection — and it exists so that when one does, the address is
+# already there and already correct. `PostgresReplicationLag` (C119) is what says whether it is
+# safe to read from.
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-replicas
+  namespace: mageride
+  labels:
+    app: postgres
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/component: data
+    app.kubernetes.io/part-of: mageride
+spec:
+  type: ClusterIP
+  selector:
+    app: postgres
+    role: replica
+  ports:
+    - { name: postgres, port: 5432, targetPort: postgres, protocol: TCP }
+---
+# The StatefulSet's governing Service — stable per-pod DNS (`postgres-0.postgres-peers`), which
+# is how Patroni members reach each other's REST API and how a replica streams from the leader.
+# `publishNotReadyAddresses: true` is not optional: a member that is still bootstrapping is by
+# definition not Ready, and Patroni has to be able to talk to it to bootstrap it.
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-peers
+  namespace: mageride
+  labels:
+    app: postgres
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/component: data
+    app.kubernetes.io/part-of: mageride
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector: { app: postgres }
+  ports:
+    - { name: postgres, port: 5432, targetPort: postgres, protocol: TCP }
+    - { name: patroni, port: 8008, targetPort: patroni, protocol: TCP }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: mageride
+  labels:
+    app: postgres
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/component: data
+    app.kubernetes.io/part-of: mageride
+spec:
+  serviceName: postgres-peers
+  # 1 primary + 2 replicas (D7' §8). Patroni decides which is which; nothing here does.
+  replicas: 3
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels: { app: postgres }
+  template:
+    metadata:
+      labels:
+        app: postgres
+        app.kubernetes.io/name: postgres
+        app.kubernetes.io/component: data
+        app.kubernetes.io/part-of: mageride
+        # WITHOUT THIS LABEL THE MEMBERS CANNOT SEE EACH OTHER, and the way that fails is the
+        # reason it gets its own paragraph. Patroni's Kubernetes DCS builds its pod selector as
+        #
+        #     self._labels[config.get('scope_label', 'cluster-name')] = config['scope']
+        #
+        # — i.e. `kubernetes.labels` PLUS a scope label it adds itself, so the real selector is
+        # `app=postgres,cluster-name=mageride-pg`. A pod that carries only `app=postgres`
+        # matches nothing, and each member's cluster view then contains exactly one member:
+        # itself.
+        #
+        # What that looks like from outside is a cluster that WORKS. One member wins the
+        # leader key, initialises the database, labels itself `role: primary`, answers
+        # /readiness 200, and serves every query. The other two loop for ever on
+        #
+        #     INFO: trying to bootstrap from leader 'postgres-0'
+        #     ERROR: failed to bootstrap from leader 'postgres-0'
+        #
+        # 1 ms apart, with no mention of pg_basebackup: the leader is known from the leader
+        # ConfigMap, but its `conn_url` comes from the MEMBER list, the member list is empty,
+        # and `create_replica` drops every method that needs a replication connection — leaving
+        # nothing to run. A one-node database wearing a three-node topology, and nothing in
+        # `kubectl get statefulset` says so.
+        #
+        # Found on a real cluster; the value must equal `scope:` in patroni.yml.
+        cluster-name: mageride-pg
+      annotations:
+        prometheus.io/scrape: "false"
+    spec:
+      serviceAccountName: postgres
+      # 120 s for a `pg_ctl stop -m fast` checkpoint, as base had, plus Patroni's own shutdown:
+      # a leader that is stopping hands the leader key back rather than letting it expire, and
+      # the difference is a 5 s switchover instead of a 30 s TTL wait.
+      terminationGracePeriodSeconds: 120
+      securityContext:
+        # The image's `postgres` user, verified: uid=1000(postgres) gid=1000(postgres).
+        # Numeric and not a name — kubelet cannot prove a NAMED user is non-root and refuses
+        # the pod (infra/k8s/README.md, "things that will bite").
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      affinity:
+        podAntiAffinity:
+          # REQUIRED, not preferred. Two members of a three-member cluster on one node means a
+          # node drain takes the quorum with it, and DOKS drains a node on every version
+          # upgrade. The launch node pool has to have at least three nodes for this to
+          # schedule — that is stated in docs/production/capacity-plan.md and is the reason
+          # the pool is sized the way it is.
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels: { app: postgres }
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: postgres
+          image: timescale/timescaledb-ha:pg16
+          # Patroni owns the postmaster: it runs initdb, writes postgresql.conf, starts and
+          # stops Postgres and promotes. The image's own entrypoint would start a postmaster
+          # underneath it and the two would fight over PGDATA.
+          command: ["patroni", "/etc/patroni/patroni.yml"]
+          ports:
+            - { name: postgres, containerPort: 5432, protocol: TCP }
+            - { name: patroni, containerPort: 8008, protocol: TCP }
+          env:
+            # --- identity: who this member is, and where the others can reach it ----------
+            - name: PATRONI_NAME
+              valueFrom: { fieldRef: { fieldPath: metadata.name } }
+            - name: POD_IP
+              valueFrom: { fieldRef: { fieldPath: status.podIP } }
+            - name: PATRONI_KUBERNETES_NAMESPACE
+              valueFrom: { fieldRef: { fieldPath: metadata.namespace } }
+            - name: PATRONI_KUBERNETES_POD_IP
+              value: "$(POD_IP)"
+            # `$(POD_IP)` is expanded by kubelet from an env var declared EARLIER in this
+            # list. Declared later, it stays the literal string and every member advertises
+            # an address none of the others can reach.
+            - name: PATRONI_POSTGRESQL_CONNECT_ADDRESS
+              value: "$(POD_IP):5432"
+            - name: PATRONI_RESTAPI_CONNECT_ADDRESS
+              value: "$(POD_IP):8008"
+            # --- credentials ---------------------------------------------------------------
+            # Vault -> ESO -> Secret. Patroni CREATES these roles at bootstrap and then
+            # authenticates as them, so the same value has to be here and in every DSN;
+            # `postgres-superuser` is the one the DSN template in common-secret.yaml reads.
+            - name: PATRONI_SUPERUSER_USERNAME
+              value: postgres
+            - name: PATRONI_SUPERUSER_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: postgres-superuser, key: password }
+            - name: PATRONI_REPLICATION_USERNAME
+              value: replicator
+            - name: PATRONI_REPLICATION_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: postgres-superuser, key: replication-password }
+            # `pg_rewind` runs as its own role so that rejoining a demoted primary does not
+            # need a superuser connection (PostgreSQL 11+).
+            - name: PATRONI_REWIND_USERNAME
+              value: rewind
+            - name: PATRONI_REWIND_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: postgres-superuser, key: rewind-password }
+            # --- pgBackRest: three variables the IMAGE already sets, and gets wrong for us ---
+            # `docker run --rm --entrypoint /bin/bash timescale/timescaledb-ha:pg16 -lc env`:
+            #
+            #     PGBACKREST_STANZA=poddb
+            #     PGBACKREST_CONFIG=/home/postgres/pgdata/backup/pgbackrest.conf
+            #
+            # The image is built for Timescale's own orchestration and points pgBackRest at a
+            # file INSIDE PGDATA. Left alone, /etc/pgbackrest/pgbackrest.conf — the ConfigMap
+            # two lines below this — is never read, and every `archive_command` fails with
+            #
+            #     ERROR: [055]: unable to open missing file
+            #            '/home/postgres/pgdata/backup/pgbackrest.conf' for read
+            #
+            # which is a platform with `archive_mode = on`, a green `/readiness`, and NO WAL
+            # ARCHIVE AT ALL. Found by `infra/scripts/dr-rehearsal.sh` on its first run, which
+            # is the entire reason that script executes the committed configuration instead of
+            # describing it.
+            #
+            # A file inside PGDATA would also be destroyed by the restore that needs it.
+            - name: PGBACKREST_CONFIG
+              value: /etc/pgbackrest/pgbackrest.conf
+            - name: PGBACKREST_CONFIG_INCLUDE_PATH
+              value: /etc/pgbackrest/conf.d
+            - name: PGBACKREST_STANZA
+              value: mageride
+          resources:
+            # The production overlay raises these to 2/6Gi and 3/8Gi, and the staging overlay
+            # lowers them — the same two patches that used to target base's single instance,
+            # unchanged, because this StatefulSet kept the name and the container name.
+            requests: { cpu: "1", memory: 4Gi }
+            limits: { cpu: "2", memory: 6Gi }
+          startupProbe:
+            # Patroni's own liveness: the REST API is up and the state machine is running.
+            # A bootstrapping replica takes as long as `pg_basebackup` of the primary takes,
+            # which at 200 GB is minutes — hence 60 × 10 s rather than base's 30 × 5 s.
+            httpGet: { path: /liveness, port: patroni }
+            periodSeconds: 10
+            failureThreshold: 60
+          readinessProbe:
+            # `/readiness` is 200 on the leader and on a streaming replica, and 503 on a member
+            # that is in maintenance, still bootstrapping or has lost replication. This is what
+            # keeps a half-restored replica out of Service/postgres-replicas.
+            httpGet: { path: /readiness, port: patroni }
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            # Deliberately NOT /readiness. A replica that has fallen behind is not ready, and
+            # restarting it is the one action guaranteed to make it fall further behind.
+            httpGet: { path: /liveness, port: patroni }
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          securityContext:
+            allowPrivilegeEscalation: false
+            # As in base: the timescaledb-ha image writes outside PGDATA at start-up and a
+            # read-only root makes it fail at boot with a permission error that names nothing.
+            # The two properties that matter are still true.
+            readOnlyRootFilesystem: false
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: pgdata, mountPath: /home/postgres/pgdata }
+            - { name: patroni-config, mountPath: /etc/patroni, readOnly: true }
+            - { name: pgbackrest-config, mountPath: /etc/pgbackrest, readOnly: true }
+            - { name: backup-s3, mountPath: /etc/pgbackrest/conf.d, readOnly: true }
+            - { name: pgbackrest-spool, mountPath: /var/spool/pgbackrest }
+            - { name: pgbackrest-log, mountPath: /var/log/pgbackrest }
+            - { name: run, mountPath: /var/run/postgresql }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: patroni-config
+          configMap: { name: patroni-config }
+        - name: pgbackrest-config
+          configMap: { name: pgbackrest-config }
+        - name: backup-s3
+          secret:
+            secretName: backup-s3
+            # ONLY the pgBackRest fragment is projected here. The same Secret also carries the
+            # raw key and secret for the pg_dump CronJob, and pgBackRest reads every *.conf in
+            # this directory — projecting the whole Secret would put two more files beside it
+            # whose names happen not to end in .conf today.
+            items:
+              - { key: s3.conf, path: s3.conf, mode: 0400 }
+            # The pod starts without it: archiving then fails loudly and says so on every
+            # segment, which is a visible degraded state rather than a database that will not
+            # boot. `PostgresWalArchiveFailing` is the alert and it fires within two minutes.
+            optional: true
+        - name: pgbackrest-spool
+          # `archive-async=y` writes here before the S3 PUT. An emptyDir and not the PVC: it is
+          # a queue, not data, and a pod that is rescheduled re-pushes from pg_wal anyway.
+          emptyDir: { sizeLimit: 2Gi }
+        - name: pgbackrest-log
+          emptyDir: { sizeLimit: 512Mi }
+        - name: run
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: pgdata
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            # The overlays raise this (production: 200 Gi). It is per member now rather than
+            # once, which is the arithmetic in docs/production/capacity-plan.md §4.
+            storage: 50Gi
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: postgres
+  namespace: mageride
+  labels:
+    app: postgres
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/component: data
+    app.kubernetes.io/part-of: mageride
+spec:
+  # Two of three. A drain may take one member; taking a second at the same time would leave a
+  # single node holding the whole database with no failover target, which is exactly the state
+  # this topology exists to prevent. DOKS node upgrades honour a PDB, so this is what turns a
+  # rolling node-pool upgrade into a sequence of switchovers rather than an outage.
+  minAvailable: 2
+  selector:
+    matchLabels: { app: postgres }

@@ -21,16 +21,30 @@ base/                           the platform, at the spec's shape, with no envir
   ingress/                      api. / api./hubs / admin. fleet. passenger.
   jobs/                         the migration gate; the suspended osm-pipeline CronJob
 
+components/                     D7' §8's launch topology (C132), listed by both DOKS overlays
+  retire-single-instance-data/  removes base's single Postgres and Redis — a component of its
+                                own, because kustomize accumulates a component's `resources`
+                                BEFORE its `patches` and the names have to be free first
+  launch-topology/              Patroni 1P+2R (Kubernetes as the DCS), pgBackRest WAL archiving,
+                                Redis Sentinel ×3, and the client-side connection-string change
+                                in the same component as the topology it depends on
+
 overlays/dev|staging|production one per D7' §8 substrate. `production`, not `prod` — C132's verify
-                                command names the directory.
+                                command names the directory. dev keeps base's single-instance
+                                data plane; both DOKS overlays take the launch topology.
 
 platform/                       cluster prerequisites and custom resources
   argocd/                       AppProject, app-of-apps, per-env Applications  (README.md)
   external-secrets/             Vault -> Secret, staging + production
+  ingress-nginx/                the HTTP edge's Helm values (C132) — what D7' §8's
+                                "HAProxy + Keepalived" becomes on DOKS, with the argument
   sealed-secrets/               the K3s/MVP path (README.md), dev
 ```
 
-**Verify:** `bash infra/scripts/k8s-verify.sh` — 39 checks, no cluster needed.
+**Verify:** `bash infra/scripts/k8s-verify.sh` — the manifests, no cluster needed.
+**Readiness:** `bash infra/k8s/verify-readiness.sh` — C132's definition of done. **Exit 2 means
+the manifests are correct and go-live is blocked on something outside this repository**; it names
+what. Exit 1 is a broken manifest.
 **Deploy:** you don't. `docs/runbooks/deploy.md`.
 
 ---
@@ -77,9 +91,15 @@ How it is handled here, visibly rather than quietly:
   template. **That still over-subscribes a 3-node pool**, so the launch node pool has to be bigger
   than §8's row, or the request figures have to come down with measurements behind them.
 
-That is a capacity decision with money attached, and it is **C132's** — its second deliverable is
-"capacity plan for 10k vehicles / 100k passengers with the documented scale-out triggers". The
-arithmetic above is the input.
+**C132 answered it: `docs/production/capacity-plan.md`.** The rendered production overlay asks for
+**43.45 vCPU and 97.8 GiB of requests** at every HPA's floor (147.75 / 306.8 at every ceiling),
+against D7' §8's 12 vCPU / 24 GB — so the launch pool is **9 nodes in two pools**, 3 × `g-8vcpu-32gb`
+for the data plane (Postgres's anti-affinity needs three, and an 8 GiB member needs a node that can
+hold it) and 6 × `s-8vcpu-16gb` for everything else. The plan also prices the other answer: the
+`500m/1Gi` requests are D7' §5's template and nothing has ever measured them — the replica runs all
+21 domain services in one process at **324 MiB** — and right-sizing them roughly halves both the
+pool and the bill. That measurement needs the services under load per service, which needs C129's
+ingest defect fixed first.
 
 ---
 
@@ -87,8 +107,9 @@ arithmetic above is the input.
 
 | | Why |
 |---|---|
-| **Patroni, Redis Sentinel, HAProxy+Keepalived** | D7' §8's launch topology. Each needs an operator or a failover controller, plus a restore procedure and a drill. **C132.** The data plane here is single-instance and the production overlay says so out loud. |
-| **LiveKit + coturn** | Host UDP (D6' §6) — a media plane cannot be a Deployment behind a Service. C132 ("LiveKit+coturn pinned SGP"). |
+| ~~**Patroni, Redis Sentinel**~~ | **Landed in C132** — `components/launch-topology/`, included by the staging and production overlays. Patroni 1P+2R with Kubernetes itself as the DCS (no etcd, no operator, no CRD — which matters because C132's verify command is `kubectl apply --dry-run=client`, and a CRD would make it depend on what happened to be installed), and three Redis nodes each with a sentinel sidecar. Both proven to fail over on a real cluster: `docs/production/readiness-report.md` §2. |
+| **HAProxy + Keepalived** | **Cannot run on DOKS** and is replaced rather than deferred: VRRP needs L2 adjacency, multicast and an ARP-movable floating IP, and a pod has none of the three. ADD §10.5's own table already substitutes "Envoy / NGINX Ingress + cloud NLB" at the K8s row — `platform/ingress-nginx/values.production.yaml`. Deviation and argument: readiness-report.md §3.1. |
+| **LiveKit + coturn** | Host UDP (D6' §6) — a media plane cannot be a Deployment behind a Service. C131 built them as `infra/sg/`; the cutover is `docs/production/go-live-checklist.md` §A1. |
 | **Nominatim** | A separate 8 GB VPS (D-14), not a cluster workload. |
 | **MinIO** | Production storage is Cloudflare R2 (D7' §8) — an endpoint and a credential. The dev overlay adds a single-node MinIO because a dev cluster has no R2 bucket. |
 | **An OTLP collector / Prometheus / Grafana** | C119 built the observability stack for the compose project. `Otel__Endpoint` is empty in every overlay until one exists in-cluster, because an endpoint pointed at nothing makes every exporter retry on a timeout. **For tcp-adapter that is its only telemetry path** — it has no `/metrics` to scrape. Raised in the C124 handoff. |

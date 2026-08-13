@@ -89,6 +89,10 @@ Carthage/Build/
 *.keystore
 keystore.properties
 *.pem
+# Δ C127: `*.key` was the one extension missing from this list, so an `openssl genrsa -out
+# jwt-signing.key` — the exact command docs/runbooks/secret-rotation.md §1 tells an operator to
+# run — produced a file `git add .` would have staged.
+*.key
 *.p12
 *.pfx
 secrets.*.json
@@ -110,6 +114,31 @@ infra/replica/gtfs/
 # about a box, not a description of the platform — the transcribed record lives in
 # docs/runbooks/gtfs-day0-load.md.
 infra/replica/gtfs-day0-journal.json
+
+# ---------------------------------------------------------------------------
+# The load and capacity suite (C129)
+# ---------------------------------------------------------------------------
+# env.json carries EMQX's shared MQTT secret and a dozen live 30-minute bearers. It is written
+# by load/configure.sh at 0600 and is never a template — there is nothing in it a second
+# deployment could reuse.
+load/env.json
+# Raw run output: k6 summaries, container samples, before/after row counts. Evidence about one
+# box on one afternoon; the transcribed figures live in load/report.md, which IS committed.
+# (`out/` is already matched by the Node rule above — named here so the intent is not an
+# accident of where a Next.js build happens to put its files.)
+load/out/
+
+# ---------------------------------------------------------------------------
+# The chaos drill suite (C130)
+# ---------------------------------------------------------------------------
+# Same shape and the same reasons as load/'s two entries above: env.json carries EMQX's shared
+# MQTT secret plus live 30-minute bearers AND the opaque refresh tokens the Redis drill probes
+# with, written at 0600 by chaos/configure.sh.
+chaos/env.json
+# One run's report and its raw samples. `chaos/run-drills.sh --report chaos/out/report.md` is
+# the manifest's verify command, so this directory is written on every run; the transcribed
+# findings live in chaos/report.md, which IS committed.
+chaos/out/
 
 # ---------------------------------------------------------------------------
 # Tooling
@@ -135,3 +164,18 @@ venv/
 .DS_Store
 desktop.ini
 Thumbs.db
+
+# --- C131 acceptance/sg -------------------------------------------------------------
+# Same shape and the same reasons as load/'s and chaos/'s entries above. env.json carries the
+# TURN shared secret, a live bearer and the MQTT credential the downlink probe publishes with;
+# it is written at 0600 by acceptance/sg/configure.sh and is never a template.
+acceptance/sg/env.json
+# One run's raw JSON and its generated report — a snapshot of one region on one afternoon,
+# and every figure in it is region-specific by construction. The findings and the transcribed
+# numbers live in acceptance/sg/report.md, which IS committed.
+acceptance/sg/out/
+# Deployment secrets and the TLS material for 5349, written on the target by
+# infra/sg/deploy-media-sg.sh and never here.
+infra/sg/secrets/
+infra/sg/certs/
+infra/sg/.env

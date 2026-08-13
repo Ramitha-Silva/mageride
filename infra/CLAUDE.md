@@ -102,6 +102,128 @@ replica/contract-live-verify.sh   the OTHER half of the wave-5 gate: drives all 
   and `Transit__Gtfs__StorageRoot` was on the container's writable layer until C126 added the
   `gtfsdata` volume — every `deploy.sh` was deleting every rollback target.
 
+## Load and capacity (C129)
+
+`load/` at the repository root holds the capacity suite — stock k6, pointed at this replica through
+its edge. `load/report.md` is what it measured; two things there change how this stack is read:
+
+- **The ingest chain carries ~10 msg/s, not ADD §3.2's 3,000, and the loss is silent.** EMQX PUBACKs
+  the publisher and then discards what it cannot hand to mqtt-bridge-svc, counted only as
+  `delivery.dropped.queue_full`. Anything that depends on telemetry — the live map *and* the
+  dispatch candidate pool — degrades with it and reports nothing.
+- **`Dispatch__RideServiceBaseUrl` was the NXDOMAIN placeholder from `.env.app.example`**, so no
+  Mode C ride was ever dispatched here. The override is now in the compose file beside the three
+  `ReverseProxy__Clusters__*` ones and for the same reason: it is topology, and Container 7 does not
+  rewrite a service-to-service address the way it rewrites a gateway cluster.
+
+## Chaos and recovery (C130)
+
+`chaos/` at the repository root holds the drill suite — twelve documented failures injected on
+purpose against this replica, each with a blast radius, a rollback armed *before* the fault, and a
+measured recovery. `chaos/report.md` is what it found; `docs/runbooks/chaos-drills.md` is the
+detection signal and first action for each one when it is real. Four things there change how this
+stack is operated:
+
+- **`infra/replica/restore.sh` could never restore, and is fixed.** `psql -c "DROP DATABASE …;
+  CREATE DATABASE …;"` sends both statements as one query, which the server wraps in a transaction,
+  and `DROP DATABASE` cannot run in one. It died there having already stopped five containers —
+  the platform down with the database intact. Two `-c` flags now. `backup.sh --verify-restore`
+  never caught it because it restores into a *fresh scratch* database and only ever runs
+  `CREATE DATABASE` alone.
+- **The RPO is one backup interval, not ADD §15's 5 minutes.** There is no pgBackRest and no WAL
+  archive here: `backup.sh` is a `pg_dump -Fc` snapshot. On the runbook's nightly `15 2 * * *`
+  schedule that is up to 24 hours. The **RTO is 1 m 11 s** against §15's 30 minutes, on a 1.5 MB
+  dump — a figure that is linear in the telemetry table and does not extrapolate.
+- **`Dispatch__LastWillEnabled` is in no environment file, no compose file and no k8s overlay**, and
+  defaults to `false` — so R-15's last-will path is off *everywhere, including production*. EMQX
+  publishes the wills correctly (150/150, median 918 ms); nothing consumes them. R-16's post-accept
+  graces and DT-04's filter clearing take their input from the same fact.
+- **Three failures produce no signal at all** while they are happening: a wedged outbox dispatcher
+  (`/health/ready` 200, both outbox alerts structurally unable to fire), a flushed-but-running Redis
+  (`limitedLive:false` over an empty map), and a network-partitioned container (reports itself
+  READY with every socket black-holed — on DOKS it would keep taking traffic).
+
+## The Singapore media plane (C131)
+
+```
+sg/livekit.sg.yaml            the SFU, with the three changes a relayed call actually needs
+sg/turnserver.sg.conf         coturn, with a relay range sized against D-24's 500 calls
+sg/docker-compose.media-sg.yml   both on host networking — D6' §6, and it is not negotiable
+sg/deploy-media-sg.sh         deploys it onto the Singapore media host (--dry-run / --status)
+```
+
+- **Not in the DOKS manifests, and both `k8s/README.md` and `service-catalog.yaml` already say
+  so.** A relay needs 1,200 UDP ports reachable as themselves; an Ingress terminates HTTP and a
+  LoadBalancer Service enumerating them is a 1,200-entry port list. Same reasoning as MQTT's, one
+  layer further out.
+- **The SFU never told any client the relay existed** (C131-01). `infra/deploy/livekit/livekit.yaml`
+  has `turn.enabled: false` and no `rtc.turn_servers`, and voip-svc's token response carries no ICE
+  servers — so LiveKit fell back to its documented default, Google's public STUN, and coturn was
+  deployed, hardened and offered to nobody. The failure is a call that rings and has no audio on
+  exactly the CGNAT handsets the relay exists for. `livekit.sg.yaml` declares it.
+- **101 relay ports is 50 concurrent relayed calls, against a target of 500** (C131-02). D6' §6
+  pins `50000-50100`; one allocation is one port and a both-ends-relayed call is two.
+  Demonstrated: the 51st call is refused `508 Cannot create socket` while the 50 already up carry
+  on at 0 % loss. `turnserver.sg.conf` widens the range, which is a **deviation from D6' §6** and
+  is recorded as one in `acceptance/sg/report.md`.
+- **`livekit.yaml` and `turnserver.conf` currently claim the same 50000-50100 range on the same
+  host, both on `network_mode: host`.** turnserver.conf's comment says they must match; they must
+  not — two processes contending for one 101-port range in one namespace. The SFU gets its own
+  range in `livekit.sg.yaml`.
+- **5349 has never listened anywhere.** `tls-listening-port` is set, no `cert=`/`pkey=` is, and
+  coturn says so at start-up on every boot. `TURN_SECRET` is likewise named in a comment and set
+  in no compose file, env file or overlay, so `use-auth-secret` has nothing to verify against.
+- **The replica's `voip` profile cannot start**: it bind-mounts `./livekit.replica.yaml`, which
+  does not exist, and Compose creates a missing bind source as a **directory**. It also runs no
+  coturn container at all and publishes the relay range through docker-proxy. C125/C132's.
+
+## Production readiness — DOKS Singapore (C132)
+
+```
+k8s/components/retire-single-instance-data/   removes base's single Postgres and Redis
+k8s/components/launch-topology/               Patroni 1P+2R + pgBackRest, Redis Sentinel x3,
+                                              and the client-side connection string
+k8s/overlays/production/pg-dump-wasabi.yaml   D7' §8's nightly logical dump
+k8s/platform/ingress-nginx/values.production.yaml   the HTTP edge
+k8s/verify-readiness.sh                       the C132 definition of done — 0 ready, 1 broken
+                                              manifest, **2 blocked outside this repository**
+scripts/dr-rehearsal.sh                       the restore, executed and timed
+docs/production/{capacity-plan,go-live-checklist,readiness-report}.md
+docs/runbooks/{postgres-failover,redis-sentinel-failover,dr-restore,capacity-scale-out,oncall}.md
+```
+
+- **The launch topology is TWO components and they are listed as a pair, retire first.** Kustomize
+  accumulates a component's `resources` before its `patches`, so one component cannot delete
+  `Service/postgres` and add its own.
+- **Patroni is in the image already.** `timescale/timescaledb-ha:pg16` carries `patroni 4.1.3` and
+  `pgBackRest 2.58.0`, so the launch topology is a StatefulSet and a ConfigMap — no operator, no
+  CRD, no etcd. The DCS is the Kubernetes API (four ConfigMaps) and the leader is a POD LABEL, so
+  `Service/postgres` follows the primary and the DSN hostname never changes. Measured on a real
+  cluster: **6 s** from `delete pod` to the Service pointing at the new leader.
+- **A Patroni pod must carry `cluster-name: <scope>`.** Without it every member sees only itself:
+  a leader is elected, the database serves, `/readiness` is 200 — and no replica can EVER be
+  built. There is no error that names the cause.
+- **`PGBACKREST_CONFIG` must be overridden.** The image bakes it to a path inside PGDATA, so the
+  mounted `pgbackrest.conf` is never read and every `archive_command` fails — `archive_mode = on`
+  and no WAL archive at all.
+- **Redis Sentinel needed no C# at all**, only `serviceName=` plus the sentinel endpoints in
+  `ConnectionStrings__Redis`; StackExchange.Redis 3.0.17 follows a failover with no restart
+  (measured). The topology change and the connection string ship in the SAME component, because
+  either one alone is a platform writing to a demoted replica.
+- **`min-replicas-to-write 1` on Redis is deliberate.** An isolated primary must refuse writes
+  rather than keep handing out `lock:driver:{driverId}` while a quorum promotes another one. The
+  visible symptom of that alert is dispatch failing, not Redis being down.
+- **The base namespace enforces `restricted` PSA, and PSA is enforced when the CONTROLLER creates
+  the pod.** A violating workload applies cleanly, syncs green, creates its PVC and never produces
+  a pod. The production Postgres was in that state until C132; `verify-readiness.sh` §3 is the
+  check.
+- **`archive-push-queue-max` is deliberately unset.** Past the limit pgBackRest DROPS the segment
+  and returns success — the backup silently stops being recoverable. Unset, a failing S3 fills
+  `pg_wal` and stops the database, which is loud and recoverable.
+- **The rehearsed RTO does not extrapolate.** 122 s for 7.7 MB is per-file cost against the object
+  store, not throughput, and `--process-max=8` bought 12 %. The RTO of record is the one measured
+  against the real Wasabi repository, and taking it is a go-live checklist item.
+
 ## Observability (C119)
 
 ```

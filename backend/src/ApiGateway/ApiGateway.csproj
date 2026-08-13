@@ -31,6 +31,14 @@
          (ReverseProxy__Clusters__ride-svc__Destinations__primary__Address). The Web SDK already
          globs *.json as Content; this only pins it to the output directory. -->
     <Content Update="gateway-routes.json" CopyToOutputDirectory="PreserveNewest" />
+
+    <!-- Δ C127. The edge's security policy, pinned for the same reason and with more at stake: it
+         carries the D-30 sensitive-operation set, the D-31 version floor and the rate-limit
+         buckets, and as a section of appsettings.json it did not survive into the co-located
+         AppServices image (C125) — which ran with no rate limit on any route and nothing marked
+         sensitive. `PreserveNewest` on Content is what carries it into every publish output,
+         including a referencing project's. -->
+    <Content Update="gateway-policy.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

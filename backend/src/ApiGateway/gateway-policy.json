@@ -1,0 +1,316 @@
+{
+  "//": [
+    "The edge's SECURITY POLICY, and its own file for the same reason gateway-routes.json is:",
+    "so it can be reviewed and diffed on its own, and so it travels with the gateway wherever the",
+    "gateway is hosted.",
+    "",
+    "\u0394 C127 \u2014 it was a `Gateway` section of appsettings.json, and that is where finding 02 came",
+    "from. The lightweight replica co-locates the edge and the 22 domain services in ONE process",
+    "(AppServices, C125), whose `DropCoLocatedAppSettings` target removes every referenced",
+    "project's appsettings.json \u2014 one content root cannot hold twenty-three files of that name.",
+    "So on every replica deployment the whole section was absent and the CODE DEFAULTS applied:",
+    "  \u00b7 Attestation:SensitiveOperations fell back to [] \u2014 D-30 marked NOTHING sensitive, so",
+    "    Mode=Enforce would have enforced attestation on zero operations, silently.",
+    "  \u00b7 RateLimits:Policies fell back to {} \u2014 all 70 routes logged 'policy not configured;",
+    "    applying no limit', so the edge had no rate limit at all (ADD \u00a712.6 geo scraping,",
+    "    trip-share abuse, the auth and sos buckets).",
+    "  \u00b7 BlockedPathPrefixes fell back to its compiled ['/v1/internal'].",
+    "Nothing in any test noticed, because every in-process suite composes the gateway from THIS",
+    "directory, where the file was present.",
+    "",
+    "GatewayApplication.Build loads it explicitly and ApiGateway.csproj pins it to the output",
+    "directory, which is what makes it survive into the co-located image \u2014 the same two lines",
+    "gateway-routes.json has always had."
+  ],
+  "Gateway": {
+    "StateStore": "Redis",
+    "EmitUpstreamHeader": false,
+    "RewriteTraceParent": true,
+    "//BlockedPathPrefixes": [
+      "D3' \u00a70 puts the service-to-service plane on mesh mTLS, and the prefix convention for it is",
+      "/v1/internal. Three routes are service-to-service and are NOT under that prefix, so before",
+      "C127 the edge routed all three to the public internet under an ordinary per-service rule:",
+      "  \u00b7 POST /v1/fare/calculate       \u2014 prices a completed ride (`fare` route, Order 50)",
+      "  \u00b7 GET  /v1/content/templates/*  \u2014 notification-svc's D-26 render path (`content`, Order 50)",
+      "  \u00b7 GET  /v1/users/lookup         \u2014 P-03 registration oracle (`iam-users`, Order 50)",
+      "Each fails closed on its own shared-secret filter, so this is defence in depth rather than a",
+      "hole being closed \u2014 except for the template render, whose filter degrades to *open* when",
+      "Content:InternalApiKey is unset, which is a deliberate availability trade argued in that",
+      "service. Every caller of all three uses a direct service address (Fare__RideBaseUrl,",
+      "Notification__ContentBaseUrl, Ride__IamBaseUrl), never the gateway, so refusing them at the",
+      "edge costs nothing. C042 replaces the whole arrangement with a SPIFFE peer identity.",
+      "Matching is StartsWithSegments, so /v1/users/lookup does not block /v1/users/me."
+    ],
+    "BlockedPathPrefixes": [
+      "/v1/internal",
+      "/v1/fare/calculate",
+      "/v1/content/templates",
+      "/v1/users/lookup"
+    ],
+    "ForwardedHeaders": {
+      "//": "C009 / C125 must add the HAProxy address here, or every caller shares one rate-limit bucket.",
+      "ForwardLimit": 1,
+      "KnownProxies": [],
+      "KnownNetworks": []
+    },
+    "VersionGate": {
+      "//": [
+        "D-31. MinimumVersion is the hard floor: below it every proxied request is answered 426.",
+        "RecommendedVersion is the soft floor: at or above the hard floor but below this,",
+        "GET /v1/version/check reports updateRequired with isMandatory:false so the app can show a",
+        "dismissible prompt (US-17.1 soft vs US-17.2 mandatory).",
+        "The values below are placeholders for the first store builds; Wave 4a/4b set the real ones."
+      ],
+      "Enabled": true,
+      "RequirePlatformHeader": false,
+      "Platforms": {
+        "android": {
+          "MinimumVersion": "1.0.0",
+          "RecommendedVersion": "1.0.0",
+          "LatestVersion": "1.0.0",
+          "UpdateUrl": "https://play.google.com/store/apps/details?id=lk.mageride.passenger"
+        },
+        "ios": {
+          "MinimumVersion": "1.0.0",
+          "RecommendedVersion": "1.0.0",
+          "LatestVersion": "1.0.0",
+          "UpdateUrl": "https://apps.apple.com/lk/app/mageride/id0000000000"
+        }
+      }
+    },
+    "Attestation": {
+      "//": [
+        "D-30. SensitiveOperations is exactly the set of operations carrying the X-Attestation",
+        "parameter in backend/contracts/*.yaml \u2014 auth, payments, ride accept, wallet and SOS",
+        "(D3' \u00a70). ApiGateway.Tests asserts the two sets are equal, so an endpoint that becomes",
+        "sensitive in the contract fails the build until it is listed here."
+      ],
+      "Mode": "Enforce",
+      "PlatformModes": {},
+      "MaxTokenLength": 8192,
+      "PlayIntegrity": {
+        "PackageName": "",
+        "Endpoint": "https://playintegrity.googleapis.com",
+        "RequiredAppVerdicts": [
+          "PLAY_RECOGNIZED"
+        ],
+        "RequiredDeviceVerdicts": [
+          "MEETS_DEVICE_INTEGRITY"
+        ],
+        "RequiredLicensingVerdicts": [],
+        "MaxTokenAge": "00:05:00",
+        "VerdictCacheDuration": "00:05:00",
+        "RequestTimeout": "00:00:05"
+      },
+      "AppAttest": {
+        "AppId": "",
+        "MaxAssertionBytes": 4096,
+        "RequireCounterIncrease": true
+      },
+      "SensitiveOperations": [
+        {
+          "Methods": [
+            "POST"
+          ],
+          "Path": "/v1/auth/otp/request"
+        },
+        {
+          "Methods": [
+            "POST"
+          ],
+          "Path": "/v1/auth/otp/verify"
+        },
+        {
+          "Methods": [
+            "POST"
+          ],
+          "Path": "/v1/fare/pay"
+        },
+        {
+          "Methods": [
+            "POST"
+          ],
+          "Path": "/v1/fare/pay/scan-driver-qr"
+        },
+        {
+          "Methods": [
+            "POST"
+          ],
+          "Path": "/v1/fare/pay/driver-qr/claim"
+        },
+        {
+          "Methods": [
+            "POST"
+          ],
+          "Path": "/v1/fare/pay/driver-qr/confirm"
+        },
+        {
+          "Methods": [
+            "POST"
+          ],
+          "Path": "/v1/wallet/topup/onepay"
+        },
+        {
+          "Methods": [
+            "POST"
+          ],
+          "Path": "/v1/wallet/topup/lankaqr"
+        },
+        {
+          "Methods": [
+            "POST"
+          ],
+          "Path": "/v1/wallet/credit-transfer/initiate"
+        },
+        {
+          "Methods": [
+            "POST"
+          ],
+          "Path": "/v1/wallet/credit-transfer/request"
+        },
+        {
+          "Methods": [
+            "POST"
+          ],
+          "Path": "/v1/wallet/credit-transfer/{transferId}/approve"
+        },
+        {
+          "Methods": [
+            "POST"
+          ],
+          "Path": "/v1/wallet/voucher/purchase"
+        },
+        {
+          "Methods": [
+            "POST"
+          ],
+          "Path": "/v1/subscriptions/credit-transfer/{transferId}/approve"
+        },
+        {
+          "Methods": [
+            "POST"
+          ],
+          "Path": "/v1/transfers/driver"
+        },
+        {
+          "Methods": [
+            "POST"
+          ],
+          "Path": "/v1/vouchers/purchase"
+        },
+        {
+          "Methods": [
+            "POST"
+          ],
+          "Path": "/v1/rides/request"
+        },
+        {
+          "Methods": [
+            "POST"
+          ],
+          "Path": "/v1/rides/{rideId}/offer/{driverId}/accept"
+        },
+        {
+          "Methods": [
+            "POST"
+          ],
+          "Path": "/v1/rides/{rideId}/cod-collected"
+        },
+        {
+          "Methods": [
+            "POST"
+          ],
+          "Path": "/v1/location-requests"
+        },
+        {
+          "Methods": [
+            "POST"
+          ],
+          "Path": "/v1/rides/schedule"
+        },
+        {
+          "Methods": [
+            "POST"
+          ],
+          "Path": "/v1/sos"
+        },
+        {
+          "Methods": [
+            "POST"
+          ],
+          "Path": "/v1/voip/token"
+        },
+        {
+          "Methods": [
+            "POST"
+          ],
+          "Path": "/v1/vehicles"
+        },
+        {
+          "Methods": [
+            "POST"
+          ],
+          "Path": "/v1/trackers/bind"
+        },
+        {
+          "Methods": [
+            "POST"
+          ],
+          "Path": "/v1/fleets/{fleetId}/trackers/bulk"
+        }
+      ]
+    },
+    "RateLimits": {
+      "//": [
+        "Coarse edge ceilings per route and caller address (D6' \u00a78.2). The named business limits",
+        "stay in the services that own them \u2014 OTP 5/h + 60 s cooldown (D-32) keys on a phone number",
+        "and proxy location requests 5/h + 30/d (P-12) key on a booker id, neither of which the",
+        "edge can see. Capacity is the burst; RefillTokens per RefillPeriod is the sustained rate."
+      ],
+      "Enabled": true,
+      "FailOpen": true,
+      "Policies": {
+        "default": {
+          "Capacity": 300,
+          "RefillTokens": 300,
+          "RefillPeriod": "00:01:00"
+        },
+        "write": {
+          "Capacity": 120,
+          "RefillTokens": 120,
+          "RefillPeriod": "00:01:00"
+        },
+        "auth": {
+          "Capacity": 30,
+          "RefillTokens": 30,
+          "RefillPeriod": "00:01:00"
+        },
+        "admin": {
+          "Capacity": 600,
+          "RefillTokens": 600,
+          "RefillPeriod": "00:01:00"
+        },
+        "geo": {
+          "Capacity": 120,
+          "RefillTokens": 120,
+          "RefillPeriod": "00:01:00"
+        },
+        "public-track": {
+          "Capacity": 60,
+          "RefillTokens": 60,
+          "RefillPeriod": "00:01:00"
+        },
+        "realtime": {
+          "Capacity": 60,
+          "RefillTokens": 60,
+          "RefillPeriod": "00:01:00"
+        },
+        "sos": {
+          "Capacity": 20,
+          "RefillTokens": 20,
+          "RefillPeriod": "00:01:00"
+        }
+      }
+    }
+  }
+}

@@ -72,7 +72,18 @@ internal sealed record ContractOperation(
     public bool IsPublic => Security.Count == 0;
 
     /// <summary>Whether the operation is on the mTLS-only internal plane (D3' §0).</summary>
-    public bool IsInternal => Template.StartsWith("/v1/internal/", StringComparison.Ordinal);
+    /// <remarks>
+    /// <b>Δ C127: two signals, because neither alone is complete.</b> The <c>/v1/internal</c> prefix
+    /// is the convention and covers forty-six of the forty-nine mTLS operations; the declaration
+    /// <c>security: [{ mtls: [] }]</c> is what the contract actually says, and three operations
+    /// carry it without the prefix — <c>calculateFinalFare</c>, <c>renderNotificationTemplate</c>
+    /// and <c>lookupUserByPhone</c>. Reading only the prefix is how all three came to be published
+    /// at the public edge; reading only the declaration would drop the twelve prefixed operations
+    /// that write no <c>security</c> block. `Gateway:BlockedPathPrefixes` names the union.
+    /// </remarks>
+    public bool IsInternal =>
+        Template.StartsWith("/v1/internal/", StringComparison.Ordinal)
+        || (Security.Count > 0 && Security.All(static scheme => string.Equals(scheme, "mtls", StringComparison.Ordinal)));
 
     /// <summary>The declared response for a status, or <see langword="null"/> if it is undocumented.</summary>
     public ContractResponse? ResponseFor(int status) =>

@@ -49,6 +49,37 @@ metadata:
   labels:
     app.kubernetes.io/part-of: mageride
 data:
+  # --- who is in front of the gateway (C132) -----------------------------------------
+  # WITHOUT THESE THREE KEYS EVERY CALLER ON THE PLATFORM SHARES ONE RATE-LIMIT BUCKET.
+  #
+  # `GatewayRateLimitMiddleware` buckets on `context.Connection.RemoteIpAddress`, and behind an
+  # ingress that is the ingress controller's pod address — the same value for the whole
+  # internet. `UseForwardedHeaders` fixes it only for hops it has been told to trust, and
+  # `gateway-policy.json` ships `KnownProxies: []` / `KnownNetworks: []` because the addresses
+  # depend on the deployment. Nothing in these manifests set them, so on DOKS the `auth`
+  # bucket (30/min) would have been THIRTY LOGINS A MINUTE FOR ALL 100,000 PASSENGERS, and
+  # C127-02's whole remediation would have been inert here. That is C132-02.
+  #
+  # NETWORKS, NOT PROXIES, and this is the load-bearing part: an ingress-nginx pod's IP changes
+  # every time it is rescheduled, and `IPAddress.TryParse` — which is what the gateway calls —
+  # rejects a hostname SILENTLY, discarding the entry. That is exactly how C129-04 happened on
+  # the replica (`KnownProxies__0=haproxy`, a name, dropped without a log line). A CIDR cannot
+  # go stale and cannot be a name.
+  #
+  # RFC 1918 in full rather than one cluster's pod CIDR: DOKS defaults to 10.244.0.0/16 and K3s
+  # to 10.42.0.0/16, and a value that is right for one substrate and silently wrong for another
+  # reproduces the bug it fixes. Trusting all private space is sound here because the ONLY path
+  # to :5000 is through the ingress — the Service is ClusterIP, no LoadBalancer points at it —
+  # so the immediate peer is always a pod. `ForwardLimit: 1` then takes exactly one hop, and
+  # ingress-nginx is deployed with `use-forwarded-headers: false`
+  # (platform/ingress-nginx/values.production.yaml), which REPLACES any client-supplied
+  # X-Forwarded-For with the real remote address instead of appending to it. Both halves are
+  # needed: without the second, a client could forge a header and pick its own bucket.
+  Gateway__ForwardedHeaders__ForwardLimit: "1"
+  Gateway__ForwardedHeaders__KnownNetworks__0: 10.0.0.0/8
+  Gateway__ForwardedHeaders__KnownNetworks__1: 172.16.0.0/12
+  Gateway__ForwardedHeaders__KnownNetworks__2: 192.168.0.0/16
+
   # --- ride / dispatch / fare / wallet: the Mode C money and state path ---------------
   Dispatch__RideServiceBaseUrl: http://ride-svc
   Dispatch__ReputationGrpcAddress: http://reputation-svc:5005
