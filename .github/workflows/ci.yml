@@ -188,6 +188,46 @@ jobs:
         if: matrix.target == 'backend'
         run: dotnet build backend/MageRide.sln -c Release
 
+      # Pull the fixtures' images HERE rather than letting Testcontainers do it inline, for two
+      # reasons that are both about what the failure looks like.
+      #
+      # Testcontainers pulls on first use and, when the pull yields nothing, the daemon answers
+      # the *create* call — so the error is `No such image: timescale/timescaledb-ha:pg16` and
+      # the reason the pull failed is nowhere in the log. That is what took 136 tests down on
+      # PR #1: every collection fixture that needs Postgres, one indistinguishable message, and
+      # no way to tell throttling from a disk that filled. Pulling in its own step puts the
+      # daemon's own words on the screen.
+      #
+      # And it retries. timescaledb-ha:pg16 is ~3.4 GB and these are anonymous Docker Hub pulls
+      # from a shared runner address, which is exactly the shape of a transient 429.
+      #
+      # The list is `MageRide.TestKit/*Fixture.cs`, and it has to stay that way — a fixture
+      # whose image is missing from here still works, just without the retry and the clear
+      # error, which is the failure this step exists to prevent.
+      - name: backend — pre-pull the test fixtures' images
+        if: matrix.target == 'backend'
+        run: |
+          set -uo pipefail
+          images="timescale/timescaledb-ha:pg16 redis:7-alpine redpandadata/redpanda:v24.2.26 emqx/emqx:5.8 minio/minio:latest"
+          df -h / | tail -1
+          for image in $images; do
+            for attempt in 1 2 3; do
+              if docker pull --quiet "$image"; then
+                echo "::notice::pulled $image"
+                break
+              fi
+              if [ "$attempt" = "3" ]; then
+                echo "::error::could not pull $image after 3 attempts — the integration tests cannot run"
+                exit 1
+              fi
+              echo "attempt $attempt failed, retrying in 30s"
+              sleep 30
+            done
+          done
+          echo "--- disk and images after pulling ---"
+          df -h / | tail -1
+          docker images --format '{{.Repository}}:{{.Tag}} {{.Size}}'
+
       - name: backend — test
         if: matrix.target == 'backend'
         # Containers are mandatory here. Without this the Testcontainers fixtures fall back
