@@ -157,7 +157,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C128 | anti-spoof-hardening | 6 | PARTIAL | 2026-08-12 | **Three of the four DoD items are met and measured; the fourth is met on one path and the other is a HIGH that cannot be closed here.** `dotnet test tests/Security -c Release --filter Category=AntiSpoof` → **96 passed, 0 failed, 5 skipped** (180/6 with C127's), `dotnet build backend/MageRide.sln -c Release` clean, `security/run-asvs-checks.sh` unchanged at 41/3 (all three are C127-01). **DoD 1 — the corpus measures clean:** 35 labelled tracks, 1,051 samples, 17 hostile families, driven through `PlausibilityFilter` itself with thresholds bound from `.env.app.example` rather than the class initialisers — **828 honest samples 0 refused (0.000 % against a 1 % bound), 158 hostile 0 escaped**, on every one of the eight tiers. **No threshold was changed, and that is the finding**; `ThresholdConfigurationTests` mistunes each knob in turn so a corpus that cannot fail is not mistaken for a passing one. One modelling decision carries the number: receiver error is a **bounded random walk**, not an independent draw per fix — an earlier draft's 30 m disc was 216 km/h of pure noise and made the 80 km/h three-wheeler ceiling look unusable. **Four attacks the gate cannot see are named as ratchets rather than counted as covered** (a slow walk inside the tier ceiling, a reappearance past `VehicleMetaTtl`, a teleport inside a `pos/replay` backlog, a handset rewinding its clock); replaying a recorded track live **is** caught, 18 of 20. **DoD 2 — a cross-vehicle publish is refused on all three live listeners**, and **8084/WSS had never been driven by any suite** — the one a driver's handset actually connects to. `EmqxFixture` now publishes it; `BrokerPolicyTests` reads the deployed `.conf` files **with comments stripped**, which is exactly how C128-01 had hidden. D-17's ceiling is demonstrated to be paced rather than dropped, and one credential over four sessions beats it. **DoD 3 — a cloned IMEI quarantines both bindings** with `imei-duplicate`, stops the incumbent's credential validating and deletes the `imei:{imei}` cache entry (left behind, a 60 s budget quietly becomes the cache's 24 h); the window is asserted at the deployed 24 h from both sides by ageing the sighting trail rather than shortening the setting. **DoD 4 — revocation inside 60 s on the TCP path, NOT on the MQTT one (C128-01, HIGH, owner C133, before go-live):** a revoked certificate still completes the mutual-TLS handshake and the device goes on publishing. Everything platform-side works — binding REVOKED, `validate` refusing, the Redis signal inside ADD §7.7.3's one second, the serial on the CRL in budget — and what is missing is the broker reading it. **It cannot simply be switched on:** EMQX locates a CRL through the peer certificate's distribution-point extension, `EmbeddedStepCa` writes that only when `StepCa:CrlDistributionPoint` is set, and no environment sets it — so `enable_crl_check = true` before a fleet-wide re-mint takes the whole tracker plane off the air rather than tightening it. **C128-02 (MEDIUM, owner admin-bff/C061):** against a 39-pair synthetic month, `repeat_pair` recall 100 % / precision 67 % — a farming pair rides *less* than a commuter, so no threshold separates them, but correlating `repeat_pair` with `shared_device` names exactly the six farming pairs and nothing else; the detector computes all three signals and does not correlate them, so `PairRideThreshold` is left at 8 deliberately. **C128-03 (LOW):** ADD §12.6 prices `flex` at 200 km/h, above `sedan`'s 180, for a tier D5' §1 places below it. Two configuration gaps closed (`PositionProcessor__VehicleMetaTtl`, six `Reputation__Collusion__*`). The `tests/Security` no-container rule takes one scoped exception, argued in that project's CLAUDE.md, because C128-01 is the demonstration that every in-process assertion about revocation stayed green while a real broker accepted a revoked certificate |
 | C129 | load-test-suite | 6 | PARTIAL | 2026-08-13 | **The suite is built and runs against the deployed replica; three deliverables are blocked behind the defect it found, and no production target is reported as met.** `bash load/configure.sh` then `k6 run load/ingest.js --summary-export=load/out/ingest.json && k6 run load/dispatch.js`. **The ingest chain carries ~10 msg/s against ADD §3.2's 3,000.** A rate sweep at 20/40/80/160 msg/s carried 30.8 / 23.3 / 15.5 / 5.7 % — EMQX delivers a flat 12–14 msg/s to mqtt-bridge-svc at every step and discards the rest as `delivery.dropped.queue_full`, **after PUBACKing the publisher**, so k6 reported "99.5 % of target, 0 broker errors" while nine in ten samples were thrown away. Neither broker nor stream is the cause: a QoS-0 `svc-` subscriber on the same filter took **97.2 % at 100 msg/s**, Redpanda's produce latency is **16.9 ms over 13,693 requests**, and nothing was CPU-bound. EMQX's session view shows `inflight=32` permanently full — the bridge takes **2.5–4 s per acknowledgement against a 17 ms produce**, and `max_inflight`/`max_mqueue_len`/`retry_interval` are all EMQX defaults `emqx.conf` never sets. **D-19 misses by 7× at a thirtieth of the rate: p95 36.6 s, p99 36.9 s.** **The ride plane fails silently with it** — only `telemetry.normalized` advances `driver_presence.last_seen_at`, so drivers leave the candidate pool inside 60 s and `dispatch.candidate_scores` took 0 rows. **Three deployment defects, two fixed:** `Dispatch__RideServiceBaseUrl` was the NXDOMAIN placeholder `dispatch-needs-ride-svc`, so **no Mode C ride was ever dispatched** while the contract sweep stayed green (fixed); `fanout`/`tcp-adapter` were still on the pre-C126 `Jwt__JwksUrl` and answered **500 to every `/hubs/live` connection** (fixed); and the gateway's rate limiter **buckets every caller on the platform together** because `KnownProxies` is a hostname `IPAddress.TryParse` rejects — 40 distinct `X-Forwarded-For` values, 39 refused — leaving `/v1/rides/**` at 2 req/s platform-wide (C008/C125's). **Four spec findings:** §16.4 omits the hypertable write path (18× understated), A3's 80–120 B payload is 227 B, `mageride.fanout.frames` is not §16.3's send unit, and no budget exists for request → offer (E-09's outbox hop measured at 116 ms median against its 50 ms). Container logs are unbounded and ~1.6 GB/day of `Npgsql.Command`. Stock k6 throughout — MQTT and SignalR are implemented in `load/lib/` so the verify command needs no xk6 build |
 | C130 | chaos-drills | 6 | DONE | 2026-08-13 | **Twelve drills, 89 assertions, 0 failures, 14 findings, 14 m 22 s** — `bash chaos/run-drills.sh --env replica --report chaos/out/report.md` exits 0 with every fault rolled back and the stack healthy. **Most of ADD §14.1 holds and is now measured**: R-04's durable backstop survives a `FLUSHALL` (`rides.timers` fired **765 ms** after the deadline against a **305 ms** control, ride back to `Matching`, offer `EXPIRED`) — the DoD's headline item; `limited_live` is raised on a Redis outage and **clears itself 2.3 s** after Redis returns; "tracking continues" through a Postgres outage is true (map served from Redis, GT06 listener accepting, and both refusals came back in **under 100 ms**, which is what stops a database outage becoming an every-request one); the transactional outbox loses nothing across a broker outage (booking commits in **734 ms**, event held, drained **1.0 s** after recovery, ride `Offered` **211 ms** later); R-09's split costs the live lane **zero** acknowledgements under a **132–137 msg/s** replay flood and a **1,200-session** storm (delivery holds; the ack-latency tail reaches **4.3 s**, so timeliness does not); D-08 holds on both halves. **Five findings change how this platform is operated.** **(1) SOS reaches nobody** — `POST /v1/sos` answers `200 {smsStatus:"Failed"}` **with nothing broken** (both D-33 gateways absent: `Sms__SecondaryGateway` empty, notification-svc's log transport off outside Development), and **under a Redis or Postgres outage it is refused outright** — 503 in 91 ms, 500 in 83 ms. ADD §14.1 has **no SOS row at all**. **(2) R-15 is not wired anywhere:** `Dispatch__LastWillEnabled` appears in no env file, no compose file and no k8s overlay and defaults to `false`, so production would deploy with it off. EMQX does its half perfectly — **150/150** sockets dropped without DISCONNECT produced retained `offline` wills, median **811 ms** — and **0** `offer_release_grace` timers were armed. DT-04's filter clearing, T-04's stalled-tracker path and **R-16's four post-accept graces** take their input from the same fact, so **R-16 is recorded as untested rather than passing**. **(3) ADD §14.1's `data_age` does not exist** on any surface — `NearbyResponse` is `{vehicles, asOf, limitedLive}` and the SignalR `VehicleFrame` carries no timestamp at all, so under lag the map shows stale markers with a current clock. **(4) RPO is one backup interval, not §15's 5 minutes** — no pgBackRest and no WAL archive; the probe row and the ride booked after the backup were both gone. **RTO is met at 1 m 11 s** against 30 minutes (1 m 11 s / 1 m 25 s over three runs), on a 1.5–1.8 MB dump. **(5) `infra/replica/restore.sh` could never restore** — `psql -c "DROP DATABASE …; CREATE DATABASE …;"` is one query and one implicit transaction; it died there having already stopped five containers, leaving the platform down with the database intact. **Fixed here** (two `-c` flags), and `backup.sh --verify-restore` never caught it because it only ever runs `CREATE DATABASE` on a fresh scratch database. **Three failures produce no operator signal at all**: a wedged outbox dispatcher (`/health/ready` 200, and *neither* outbox alert can fire — `OutboxPublishFailing` needs a throw that never comes and `OutboxDispatchLagHigh` is a p95 over a histogram that goes quiet), a flushed-but-running Redis (`limitedLive:false` over an empty map), and a partitioned container (reports itself READY with every socket black-holed — on DOKS it keeps taking traffic). Plus `mageride.rides.timers_fired` declared and incremented nowhere while **two Grafana panels chart it**. **Two further defects came out of driving one ride all the way to completion**, which nothing else in this repository does against a deployment (`load/dispatch.js` cancels pre-acceptance by design): a **completed cash ride cannot be settled** (`POST /v1/fare/pay` answers `404 no computed fare yet` for a ride that has completed) so it sits in `PaymentPending`, which `ux_rides_open_passenger` does not exempt — the passenger *and* the driver are out of service permanently, a hazard `ride.yaml`'s own `/complete` description names verbatim; and the driver's next accept is then answered **`500` with a full stack trace, the constraint name and absolute build paths in the response body**, because `ux_rides_driver_busy`'s violation is uncaught where the contract documents `409`. `docs/runbooks/chaos-drills.md` gives each drill a detection signal and a first action |
-| C131 | voip-tracker-acceptance-sg | 6 | PENDING | | |
+| C131 | voip-tracker-acceptance-sg | 6 | PARTIAL | 2026-08-13 | **The harness, the Singapore media plane and the report are built, self-tested and rehearsed; the acceptance run has not happened, because the Singapore region does not exist yet.** `bash acceptance/sg/run.sh --report acceptance/sg/out/report.md` exits **2** naming all five missing things — C126's shape, where a component blocked on something outside the repository states it in its exit code. Production is DOKS Singapore and **C132 builds it**, and C132 depends on C131, so there is no cluster, no media host, no Colombo client and no tracker bound in Sri Lanka; the build host is the Contabo box in Germany and **EU numbers are not acceptance evidence**, so nothing was run against the replica and reported as a region. **`selftest.py` is 100 checks and a hard gate** ahead of any probe, pinning every calculation against something true independently of this repository — G.107's published values, RFC 3550, RFC 5389's worked message types, and **GT06's documented login acknowledgement `78 78 05 01 00 01 D9 DC 0D 0A` reproduced byte for byte** — for C130's reason: this code meets something real exactly once. **Seven findings, six of them defects in the media plane, all region-independent, which is the argument for building the instrument before the region existed.** **C131-01 (HIGH): the SFU never tells any client the relay exists** — `livekit.yaml` has `turn.enabled: false` and no `rtc.turn_servers`, voip-svc's token response carries no ICE servers, and LiveKit's documented fallback is Google's public STUN, so coturn is deployed, hardened and offered to nobody; the failure is a call that rings and has no audio on exactly the CGNAT handsets the replica spec calls "the common case on Sri Lankan mobile carriers" — **and it would have made this component's own headline metric read 0 % relay share, which reads as "peer-to-peer works" and means the opposite**. **C131-02 (HIGH): 101 relay ports is 50 concurrent relayed calls against a target of 500** — D6' §6 pins `50000-50100`, one allocation is one port, a both-ends-relayed call is two; **demonstrated**, not derived: the 51st call was refused `508 Cannot create socket` while the 50 already up carried on at 0 % loss. That same range is claimed by both `livekit.yaml`'s `rtc.port_range` and `turnserver.conf` with both containers on host networking. **C131-03: 5349 has never listened anywhere** (no `cert=`/`pkey=`, and coturn says so every boot), **C131-04: `TURN_SECRET` is set nowhere** and `Turn__Realm` binds nothing, **C131-05: the replica's `voip` profile cannot start** — it bind-mounts a `livekit.replica.yaml` that does not exist, and Compose creates a missing bind source as a **directory** — and has no coturn container at all, **C131-06: the downlink command plane has no producer in any deployment** (`TripState__PublishCadenceHints` defaults false and is set nowhere — C130's `LastWillEnabled` shape; three of the five commands have no producer at all), **C131-07: C131 and C132 both own the SGP media plane** per `service-catalog.yaml`. The fence is structural with no override: `lib/region.sh` layers a refusal, a declaration and a **light-speed check** that refutes a claimed location (a Colombo client reaching a target in 40 ms is not reaching Europe). **Colombo TURN: recommended, on capacity and failure mode rather than geography** — the delay budget allows a 170 ms Colombo↔Singapore RTT before MOS 4.3, against a 28.8 ms floor |
 | C132 | production-readiness-doks | 6 | PENDING | | |
 
 ⭑ = walking-skeleton milestone (C020–C025): one booked ride end to end on Docker Compose.
@@ -21152,3 +21152,154 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   `load/lib/mqtt.js` (`will` + `abort()`, additive), `.gitignore` (`chaos/env.json`, `chaos/out/`),
   `infra/CLAUDE.md` and `docs/runbooks/README.md` (a section and an index row).
   **No service, spec, contract or migration file was changed.**
+
+### C131 — voip-tracker-acceptance-sg
+
+- **Component:** C131 voip-tracker-acceptance-sg — 2026-08-13
+- **Status:** **PARTIAL** — the harness, the media plane and the report are built, self-tested and
+  rehearsed; **the acceptance run itself has not happened, because the Singapore region does not
+  exist yet.** `bash acceptance/sg/run.sh --report acceptance/sg/out/report.md` exits **2** naming
+  all five missing things (no `env.json`, no TURN host, no tracker ingest host, no platform base
+  URL, no declared Colombo client). That is `infra/replica/gtfs-day0-verify.sh`'s shape and C126's
+  precedent: a component blocked on something outside the repository states the blockage in its
+  exit code, not in a paragraph a reader can skip. Production is DOKS Singapore and **C132 is what
+  builds it** — C132 depends on C131, so at the point this component runs there is no cluster, no
+  media host, no Colombo-side client and no tracker bound in Sri Lanka. The build host is the
+  Contabo box in Germany and **EU numbers are not acceptance evidence** (fence 1), so nothing was
+  run against the replica and reported as a region.
+- **Notes:**
+  **What was built.** `acceptance/sg/` — a python3 + bash suite (no k6: it speaks neither raw UDP
+  with STUN framing nor a binary tracker protocol). `selftest.py` is **100 checks and a hard gate**
+  that runs before any probe, pinning every calculation against something true independently of
+  this repository — ITU-T G.107's published values and the fixed points its formulae are
+  continuous at, RFC 3550's estimator on streams whose jitter and burst structure are known by
+  construction, RFC 5389's own worked message-type values and a hand-computed MESSAGE-INTEGRITY,
+  and **GT06's documented login acknowledgement `78 78 05 01 00 01 D9 DC 0D 0A` reproduced byte
+  for byte**. It is a gate for C130's reason: this code meets something real exactly once, and
+  `infra/replica/restore.sh` is what a script looks like when its own verification never exercises
+  the path that matters. Plus `infra/sg/` — LiveKit + coturn for Singapore, deployable from the
+  repository the way `deploy-nominatim.sh` made the geocoder reproducible.
+
+  **Seven findings, six of them defects in the media plane as it stands, and all region-independent
+  — which is the argument for having built the instrument before the region existed.**
+
+  **C131-01 (HIGH, owner C132) — the SFU never tells any client that the relay exists.**
+  `infra/deploy/livekit/livekit.yaml` sets `turn.enabled: false` and declares **no
+  `rtc.turn_servers`**; voip-svc's `VoipTokenResponse(RoomName, Token, WsUrl, Callee)` carries no
+  ICE servers either. LiveKit's documented fallback with neither configured is **Google's public
+  STUN**, so coturn is deployed, hardened with a full denied-peer list, given a shared-secret
+  scheme and a host UDP range — and offered to nobody. The failure is not an error: it is a call
+  that rings and then has no audio, on exactly the handsets `turnserver.conf`'s own header was
+  written for ("symmetric NAT, which on Sri Lankan mobile carriers is a large minority of them"),
+  and which the replica spec calls "the common case". **It also makes C131's own headline metric
+  meaningless** — "TURN relay share" would have read 0 % and 0 % would have been read as
+  "peer-to-peer works, no Colombo relay needed", the exact opposite of what it means. A relay share
+  of zero and a relay nothing can reach are indistinguishable from the client side, which is why
+  `collect.sh` reads the SFU's own declaration off the deployed file and says so in its output.
+
+  **C131-02 (HIGH, owner C132) — the relay range is 101 ports against a 500-call target, and it was
+  demonstrated rather than argued.** D6' §6 pins `50000-50100`; one allocation is one port and a
+  both-ends-relayed call (the CGNAT case) is two, so **101 ÷ 2 = 50 concurrent relayed calls**
+  against ADD §3.2's and D-24's **500** — a 10x shortfall. Driving 60 calls at a 101-port coturn:
+  **50 established and the 51st was refused `508 Cannot create socket`**, with the 50 already up
+  unaffected at 0 % loss and 399/399 packets returned each. The ceiling is hard and arrives without
+  warning; a sweep watching only quality would have seen a perfectly healthy relay. `livekit.yaml`'s
+  own comment noticed the range binds ("this is a guard rail, not the capacity plan") and did not do
+  the arithmetic against 500. **No document in `specs/` reconciles the two.** Separately, that same
+  `50000-50100` is claimed by **both** `livekit.yaml`'s `rtc.port_range` and `turnserver.conf`'s
+  `min-port`/`max-port` with both containers on `network_mode: host` — turnserver.conf's comment
+  says they must match; they must not, and two processes contend for one range in one namespace.
+
+  **C131-03 (MEDIUM) — coturn's TLS listener has no certificate and has never listened anywhere.**
+  `tls-listening-port=5349` is set and the comment says the certificate is "mounted from
+  infra/deploy/certs"; there is no `cert=`/`pkey=` line and nothing mounted. Running the deployed
+  file verbatim: *"cannot start TLS and DTLS listeners because certificate file is not set
+  properly"*. So the fallback for carriers that block plain UDP 3478 is absent, coturn starts
+  successfully, and it says so once at INFO. No compose file publishes 5349 either.
+
+  **C131-04 (MEDIUM) — `TURN_SECRET` is set nowhere**, so `use-auth-secret` has nothing to verify
+  against; its only occurrence in the repository is the comment naming it. Related and the same
+  shape as C127's dead-configuration findings: **`Turn__Realm` binds nothing** — it is in
+  `.env.app.example`, checked by `slim-verify.sh`'s D7' §4.2 list, absent from
+  `service-catalog.yaml`'s `unwiredSecrets` (where `LiveKit__ApiKey`/`Secret` are correctly
+  recorded), `VoipOptions` has no `Turn` section at all, and its value disagrees with the realm
+  coturn uses.
+
+  **C131-05 (MEDIUM, owner C125/C132) — the replica's `voip` profile cannot start and has no coturn
+  in it.** It bind-mounts `./livekit.replica.yaml`, **which does not exist** — and Compose creates a
+  missing bind source as a **directory** (verified: the container sees `/etc/livekit.yaml` as
+  `directory`), so LiveKit cannot read its configuration. There is no coturn container despite the
+  spec entry, the compose comment and the published `3478/udp`. And the relay range is published
+  **through docker-proxy on a bridge network**, which `docs/runbooks/voip-call-setup.md`
+  §"What not to do" forbids outright.
+
+  **C131-06 (MEDIUM, owner C132) — the downlink command plane has no producer in any deployment**,
+  which directly blocks one of this component's own deliverables. `tcp-adapter` subscribes
+  `veh/+/cmd` and translates all five commands; the only publisher anywhere is trip-state-svc's
+  `CadencePublisher` (`setPosRate`, R-07), behind `TripState:PublishCadenceHints`, which **defaults
+  to false and appears in no environment file, no compose file and no k8s overlay** — the same shape
+  as C130's `Dispatch__LastWillEnabled`. `pingNow`, `reboot` and `setGeofence` have **no producer at
+  all**. So `tracker/rtt_probe.py` offers two paths and labels them apart: `--downlink platform` is
+  the whole path and needs the flag on; `--downlink broker` publishes the envelope directly and every
+  figure it produces is stamped `leg: broker-to-device`, because publishing on a topic a platform
+  service owns stands in for a component rather than for the outside world — the line
+  `tests/E2E`'s fence draws.
+
+  **C131-07 (LOW, planner) — C131 and C132 both own the Singapore media plane.**
+  `service-catalog.yaml` and the production overlay both record that **C132** owns "LiveKit+coturn
+  pinned SGP"; C131's first deliverable is that same deployment, and C132 depends on C131. Resolved
+  by building it as artefacts under `infra/sg/` — the thing under test — and leaving host
+  provisioning and the voip-svc cutover to C132; `deploy-media-sg.sh` stops short of both and prints
+  them as next steps.
+
+  **Design decisions worth carrying forward.** (a) **The fence is structural and has no override.**
+  Every other suite refuses to run anywhere *but* the replica; this one refuses to record a figure
+  unless the target is Singapore, which is harder because "not the replica" is not "Singapore" and a
+  config declaration is evidence of nothing. `lib/region.sh` layers a refusal, a declaration and a
+  **physics check** — light in fibre bounds a round trip by great-circle distance, so a Colombo
+  client reaching a target in 40 ms proves it is **not** in Europe (Colombo→Frankfurt floor is
+  79 ms). It cannot prove a location; it refutes one, which is the direction that matters. A run
+  that does not clear it is titled `NOT EVIDENCE`, carries `evidence: not-evidence` in every
+  payload, and exits 2. (b) **A TURN client rather than a WebRTC endpoint**: a WebRTC stack would
+  measure its own jitter buffer and hand the E-model its own output, and would connect
+  peer-to-peer whenever it could — exercising the relay only by accident. (c) **MOS is computed and
+  every approximation travels with it**: no document in `specs/` gives a MOS floor, a jitter budget
+  or a loss budget, so the figure is G.107's; G.113 has no Opus row so the parameters are
+  G.711+PLC's, and the advantage factor is **0** rather than §B.2's 10 for "mobile in a moving
+  vehicle" — `A` is the one term that exists to excuse a bad connection. (d) **The probe's echo path
+  is two traversals of the call's one-way path**, so the network term is **half** the measured RTT;
+  the factor lives in one function and is pinned by the self-test, because getting it wrong in
+  either direction moves the Colombo-TURN recommendation across its own threshold.
+
+  **The Colombo TURN recommendation: yes — but on capacity and failure mode, not on geography.**
+  The E-model puts the delay budget at a Colombo↔Singapore RTT of **170 ms** before a relayed call
+  drops below MOS 4.3 (the full table is in report.md §5, reproducible from `emodel.delay_budget_ms`),
+  against a great-circle floor of 28.8 ms. Geography is comfortable and this component declines to
+  argue otherwise. What argues for Colombo is C131-02 — splitting the pool doubles a ceiling that is
+  currently a tenth of the target — and that a domestic relay removes the `2L` term entirely, buying
+  the whole budget back for loss and jitter, which are the terms a mobile network actually moves.
+  **The in-region run must fix C131-01 before measuring relay share**, or it will measure a
+  confident zero and draw the opposite conclusion.
+
+  **One limit of the instrument, found by running it.** The probe's send loop is single-threaded and
+  enters its own tail at concurrency: at 5 calls the p50 RTT was 4.7 ms and the p95 58 ms on a path
+  where both should be sub-millisecond. The p50 is trustworthy; the high-concurrency tail is partly
+  the probe's. **The 500-call target must be spread across several Colombo-side clients**, stated in
+  report.md §4 rather than discovered mid-run — `chaos/CLAUDE.md`'s rule about its own storm
+  generator.
+
+  **Verify:** `bash acceptance/sg/run.sh --report acceptance/sg/out/report.md` → **exit 2**, naming
+  the five blockers. `python3 acceptance/sg/selftest.py` → **100 checks passed**, exit 0.
+  Rehearsed end to end against a real coturn on this box (`--rehearse`, stamped NOT EVIDENCE,
+  exit 2): 5/5 calls established, 399/399 packets returned each, 0 % loss, jitter 6.8 ms,
+  MOS-CQE 4.409 — the unimpaired ceiling, which is the right answer for a same-box path and confirms
+  the model bottoms out where it should.
+
+  New: `acceptance/sg/**` (`run.sh`, `configure.sh`, `collect.sh`, `selftest.py`,
+  `lib/{emodel,rtpstats,turn,frames}.py`, `lib/region.sh`, `voip/{media,fallback}_probe.py`,
+  `tracker/rtt_probe.py`, `CLAUDE.md`, `README.md`, `report.md`), `infra/sg/**`
+  (`livekit.sg.yaml`, `turnserver.sg.conf`, `docker-compose.media-sg.yml`, `deploy-media-sg.sh`).
+  Changed: `.gitignore` (five entries), `infra/CLAUDE.md` (one section).
+  **No service, spec, contract or migration file was changed, and neither `infra/deploy/livekit/`,
+  `infra/deploy/coturn/` nor the replica compose was patched** — all six defects are recorded with
+  an owner instead.

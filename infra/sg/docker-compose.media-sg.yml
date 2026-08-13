@@ -1,0 +1,75 @@
+# =====================================================================================
+# infra/sg/docker-compose.media-sg.yml — the VoIP media plane, Singapore (C131).
+#
+# Deployed by `deploy-media-sg.sh` onto the Singapore media host. NOT part of the DOKS
+# manifests and deliberately so: `infra/k8s/overlays/production/kustomization.yaml` says
+# outright that "LiveKit and coturn are likewise absent: their media plane is host UDP
+# (D6' §6) and cannot be a normal Deployment behind a Service", and
+# `infra/k8s/service-catalog.yaml` records the same against voip-svc. A relay needs 1,200
+# UDP ports reachable as themselves; an Ingress cannot carry that and a LoadBalancer Service
+# enumerating them is a 1,200-entry port list.
+#
+# BOTH CONTAINERS ARE ON HOST NETWORKING, and D6' §6 is the reason:
+#
+#   "TURN media relay (coturn) on host UDP range (3478 + 50000-50100), NOT via HAProxy/L7
+#    (HAProxy cannot relay UDP)."
+#
+# What goes through a proxy is the signalling websocket (7880) alone. Publishing the relay
+# range through docker-proxy instead would put a userland hop on every media packet — the
+# thing `docs/runbooks/voip-call-setup.md` §"What not to do" names.
+#
+# NOTE the replica's own `voip` profile does neither of these things: it publishes
+# `50000-50100/udp` through docker-proxy on a bridge network, runs no coturn container at
+# all, and bind-mounts `./livekit.replica.yaml`, which does not exist in the repository — so
+# Docker creates it as a DIRECTORY and LiveKit cannot read its configuration. All three are
+# findings in `acceptance/sg/report.md` with C125/C132 as the owner; none is patched here.
+# =====================================================================================
+name: mageride-media-sg
+
+services:
+
+  livekit:
+    image: livekit/livekit-server:v1.8
+    command: ["--config", "/etc/livekit.yaml"]
+    network_mode: host
+    volumes:
+      - ./livekit.sg.yaml:/etc/livekit.yaml:ro
+      - ./secrets/turn_shared_secret:/run/secrets/turn_shared_secret:ro
+    environment:
+      # Must equal voip-svc's Voip__LiveKit__ApiKey / Voip__LiveKit__ApiSecret. A mismatch is
+      # a refused join rather than a slow one — an error rate, not a latency.
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
+      LIVEKIT_NODE_IP: "${MEDIA_PUBLIC_IP}"
+      TURN_PUBLIC_HOST: "${TURN_PUBLIC_HOST}"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:7880/ >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    mem_limit: 4g
+    cpus: 2.0
+    restart: unless-stopped
+
+  coturn:
+    image: coturn/coturn:4.6
+    command: ["-c", "/etc/coturn/turnserver.conf"]
+    network_mode: host
+    volumes:
+      - ./turnserver.sg.conf:/etc/coturn/turnserver.conf:ro
+      - ./certs:/etc/coturn/certs:ro
+      - ./secrets/turn_shared_secret:/run/secrets/turn_shared_secret:ro
+    environment:
+      TURN_PUBLIC_IP: "${MEDIA_PUBLIC_IP}"
+      TURN_LISTEN_IP: "${MEDIA_LISTEN_IP}"
+    healthcheck:
+      # A TURN server's liveness is that it answers a STUN Binding request, not that a
+      # process exists. `turnutils_stunclient` ships in the image.
+      test: ["CMD-SHELL", "turnutils_stunclient -p 3478 127.0.0.1 >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 15s
+    mem_limit: 2g
+    cpus: 1.0
+    restart: unless-stopped

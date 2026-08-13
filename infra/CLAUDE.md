@@ -143,6 +143,40 @@ stack is operated:
   (`limitedLive:false` over an empty map), and a network-partitioned container (reports itself
   READY with every socket black-holed — on DOKS it would keep taking traffic).
 
+## The Singapore media plane (C131)
+
+```
+sg/livekit.sg.yaml            the SFU, with the three changes a relayed call actually needs
+sg/turnserver.sg.conf         coturn, with a relay range sized against D-24's 500 calls
+sg/docker-compose.media-sg.yml   both on host networking — D6' §6, and it is not negotiable
+sg/deploy-media-sg.sh         deploys it onto the Singapore media host (--dry-run / --status)
+```
+
+- **Not in the DOKS manifests, and both `k8s/README.md` and `service-catalog.yaml` already say
+  so.** A relay needs 1,200 UDP ports reachable as themselves; an Ingress terminates HTTP and a
+  LoadBalancer Service enumerating them is a 1,200-entry port list. Same reasoning as MQTT's, one
+  layer further out.
+- **The SFU never told any client the relay existed** (C131-01). `infra/deploy/livekit/livekit.yaml`
+  has `turn.enabled: false` and no `rtc.turn_servers`, and voip-svc's token response carries no ICE
+  servers — so LiveKit fell back to its documented default, Google's public STUN, and coturn was
+  deployed, hardened and offered to nobody. The failure is a call that rings and has no audio on
+  exactly the CGNAT handsets the relay exists for. `livekit.sg.yaml` declares it.
+- **101 relay ports is 50 concurrent relayed calls, against a target of 500** (C131-02). D6' §6
+  pins `50000-50100`; one allocation is one port and a both-ends-relayed call is two.
+  Demonstrated: the 51st call is refused `508 Cannot create socket` while the 50 already up carry
+  on at 0 % loss. `turnserver.sg.conf` widens the range, which is a **deviation from D6' §6** and
+  is recorded as one in `acceptance/sg/report.md`.
+- **`livekit.yaml` and `turnserver.conf` currently claim the same 50000-50100 range on the same
+  host, both on `network_mode: host`.** turnserver.conf's comment says they must match; they must
+  not — two processes contending for one 101-port range in one namespace. The SFU gets its own
+  range in `livekit.sg.yaml`.
+- **5349 has never listened anywhere.** `tls-listening-port` is set, no `cert=`/`pkey=` is, and
+  coturn says so at start-up on every boot. `TURN_SECRET` is likewise named in a comment and set
+  in no compose file, env file or overlay, so `use-auth-secret` has nothing to verify against.
+- **The replica's `voip` profile cannot start**: it bind-mounts `./livekit.replica.yaml`, which
+  does not exist, and Compose creates a missing bind source as a **directory**. It also runs no
+  coturn container at all and publishes the relay range through docker-proxy. C125/C132's.
+
 ## Observability (C119)
 
 ```

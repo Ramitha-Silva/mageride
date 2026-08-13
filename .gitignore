@@ -164,3 +164,18 @@ venv/
 .DS_Store
 desktop.ini
 Thumbs.db
+
+# --- C131 acceptance/sg -------------------------------------------------------------
+# Same shape and the same reasons as load/'s and chaos/'s entries above. env.json carries the
+# TURN shared secret, a live bearer and the MQTT credential the downlink probe publishes with;
+# it is written at 0600 by acceptance/sg/configure.sh and is never a template.
+acceptance/sg/env.json
+# One run's raw JSON and its generated report — a snapshot of one region on one afternoon,
+# and every figure in it is region-specific by construction. The findings and the transcribed
+# numbers live in acceptance/sg/report.md, which IS committed.
+acceptance/sg/out/
+# Deployment secrets and the TLS material for 5349, written on the target by
+# infra/sg/deploy-media-sg.sh and never here.
+infra/sg/secrets/
+infra/sg/certs/
+infra/sg/.env
