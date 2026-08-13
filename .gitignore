@@ -116,6 +116,19 @@ infra/replica/gtfs/
 infra/replica/gtfs-day0-journal.json
 
 # ---------------------------------------------------------------------------
+# The load and capacity suite (C129)
+# ---------------------------------------------------------------------------
+# env.json carries EMQX's shared MQTT secret and a dozen live 30-minute bearers. It is written
+# by load/configure.sh at 0600 and is never a template — there is nothing in it a second
+# deployment could reuse.
+load/env.json
+# Raw run output: k6 summaries, container samples, before/after row counts. Evidence about one
+# box on one afternoon; the transcribed figures live in load/report.md, which IS committed.
+# (`out/` is already matched by the Node rule above — named here so the intent is not an
+# accident of where a Next.js build happens to put its files.)
+load/out/
+
+# ---------------------------------------------------------------------------
 # Tooling
 # ---------------------------------------------------------------------------
 __pycache__/

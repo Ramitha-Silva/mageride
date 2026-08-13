@@ -155,7 +155,7 @@ After completing a component, set its Status and append the 3-line handoff under
 | C126 | gtfs-day0-load | 5 | PARTIAL | 2026-08-11 | **The pipeline, the runbook and the verify are built and exercised against the running replica; the feed itself has not been handed over, so the load is not done.** `bash infra/replica/gtfs-day0-verify.sh` exits 2 naming exactly what is missing. **Done and demonstrated:** the pre-first-import empty state is **observed and recorded** (`coverage: no_feed`, five live tables at 0, an empty history table — it cannot be reconstructed after the first activation, so `--observe-empty-state` captures it before the file arrives); the upload half of SCR-AP-016 is proven end to end through HAProxy and the gateway with a real Admin bearer (multipart `202`, the `Idempotency-Key` requirement, the validation stepper, the capped five-error summary, the CSV row-level report, the sha256 duplicate refusal, both audit rows); a runbook covering obtain → upload → report → preview → activate → verify → roll back, with the refresh checklist; a six-corridor sample set whose shape check decodes the polyline, holds it to the validator's own Sri Lanka bounding box and requires it to pass within 1200 m of both ends of its corridor. **Not done:** validate/activate/corridor-verify/rollback of a real feed — blocked on the externally provided file (AL-56 forbids synthesising one; there is no Sri Lanka feed in the Mobility Database catalogue either). **Findings: `Jwt__JwksUrl` pointed at `/v1/internal/iam/.well-known/jwks.json`, a path the gateway refuses ahead of routing and never had a route for — every JWT-validating service in BOTH compose stacks answered 500 to every authenticated request**, invisible until C126 became the first thing in this repository to present a real bearer to a deployed service. Also: `ApiGateway.Tests` has been failing 18 of 605 since C125 (AppServices' `appsettings.json` overwriting the gateway's in the test output — now 605/605); GTFS feed zips were stored on the container's writable layer, so every `deploy.sh` deleted every rollback target; and the feed-download HMAC was the repository's published `CHANGEME_…` constant |
 | C127 | security-review-asvs | 6 | PENDING | | |
 | C128 | anti-spoof-hardening | 6 | PENDING | | |
-| C129 | load-test-suite | 6 | PENDING | | |
+| C129 | load-test-suite | 6 | PARTIAL | 2026-08-13 | **The suite is built and runs against the deployed replica; three deliverables are blocked behind the defect it found, and no production target is reported as met.** `bash load/configure.sh` then `k6 run load/ingest.js --summary-export=load/out/ingest.json && k6 run load/dispatch.js`. **The ingest chain carries ~10 msg/s against ADD §3.2's 3,000.** A rate sweep at 20/40/80/160 msg/s carried 30.8 / 23.3 / 15.5 / 5.7 % — EMQX delivers a flat 12–14 msg/s to mqtt-bridge-svc at every step and discards the rest as `delivery.dropped.queue_full`, **after PUBACKing the publisher**, so k6 reported "99.5 % of target, 0 broker errors" while nine in ten samples were thrown away. Neither broker nor stream is the cause: a QoS-0 `svc-` subscriber on the same filter took **97.2 % at 100 msg/s**, Redpanda's produce latency is **16.9 ms over 13,693 requests**, and nothing was CPU-bound. EMQX's session view shows `inflight=32` permanently full — the bridge takes **2.5–4 s per acknowledgement against a 17 ms produce**, and `max_inflight`/`max_mqueue_len`/`retry_interval` are all EMQX defaults `emqx.conf` never sets. **D-19 misses by 7× at a thirtieth of the rate: p95 36.6 s, p99 36.9 s.** **The ride plane fails silently with it** — only `telemetry.normalized` advances `driver_presence.last_seen_at`, so drivers leave the candidate pool inside 60 s and `dispatch.candidate_scores` took 0 rows. **Three deployment defects, two fixed:** `Dispatch__RideServiceBaseUrl` was the NXDOMAIN placeholder `dispatch-needs-ride-svc`, so **no Mode C ride was ever dispatched** while the contract sweep stayed green (fixed); `fanout`/`tcp-adapter` were still on the pre-C126 `Jwt__JwksUrl` and answered **500 to every `/hubs/live` connection** (fixed); and the gateway's rate limiter **buckets every caller on the platform together** because `KnownProxies` is a hostname `IPAddress.TryParse` rejects — 40 distinct `X-Forwarded-For` values, 39 refused — leaving `/v1/rides/**` at 2 req/s platform-wide (C008/C125's). **Four spec findings:** §16.4 omits the hypertable write path (18× understated), A3's 80–120 B payload is 227 B, `mageride.fanout.frames` is not §16.3's send unit, and no budget exists for request → offer (E-09's outbox hop measured at 116 ms median against its 50 ms). Container logs are unbounded and ~1.6 GB/day of `Npgsql.Command`. Stock k6 throughout — MQTT and SignalR are implemented in `load/lib/` so the verify command needs no xk6 build |
 | C130 | chaos-drills | 6 | PENDING | | |
 | C131 | voip-tracker-acceptance-sg | 6 | PENDING | | |
 | C132 | production-readiness-doks | 6 | PENDING | | |
@@ -20889,4 +20889,108 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   `backend/src/MageRide.TestKit/EmqxFixture.cs` (publishes 8084),
   `infra/env/.env.app.example` (`PositionProcessor__VehicleMetaTtl`, six `Reputation__Collusion__*`),
   `security/{README.md,remediation-backlog.md,threat-matrix-coverage.md}`.
+  **No service, spec, contract or migration file was changed.**
+
+- **Component:** C129 load-test-suite — 2026-08-13
+- **Status:** PARTIAL — the suite is built and runs (`bash load/configure.sh`, then
+  `k6 run load/ingest.js --summary-export=load/out/ingest.json && k6 run load/dispatch.js`), and it
+  measured ingest, the D-19 latency SLO and the database write path against the deployed replica.
+  **Three of the deliverables could not be measured, and the reason is the finding**: the ingest
+  chain carries **~10 msg/s against ADD §3.2's 3,000**, so fan-out at §16.3's subscriber scale, the
+  offer-latency distribution and the atomic-accept race are all blocked behind it. Their profiles
+  are written, committed and unblocked by the fix. **No production target is reported as met.**
+- **Notes:**
+
+  **The headline, and it is a defect rather than a sizing shortfall.** A rate sweep
+  (`load/step.sh`) offered 20 / 40 / 80 / 160 msg/s and EMQX delivered a flat **360–420 messages per
+  30 s to mqtt-bridge-svc at every step** — 12–14 msg/s — carrying **30.8 % / 23.3 % / 15.5 % /
+  5.7 %** of what was published. The rest is `delivery.dropped.queue_full`: QoS-1 messages the broker
+  accepted, PUBACKed to the device, and then discarded. **The publisher is told nothing.** k6
+  reported `achieved 99.5 msg/s (99.5 % of target), 0 broker errors` while nine in ten samples were
+  being thrown away. Reproduced from a cold start after restarting `hot-path`: 3,000 published,
+  **329 forwarded**, 2,048 dropped.
+
+  **It is neither EMQX nor Redpanda, and both were ruled out by measurement rather than by
+  argument.** A second `svc-` subscriber on the same filter at **QoS 0**
+  (`load/lib/probe-subscriber.js`) took **2,971 of 3,057 — 97.2 % at 100 msg/s**, so the broker
+  routes fine. Redpanda's own `kafka_request_latency_seconds` is **16.9 ms mean over 13,693 produce
+  requests**. Nothing was CPU-bound. What EMQX's session view shows is `inflight=32,
+  enqueued_msgs=796, dropped_msgs=2048` — **the QoS-1 window is full and stays full**, so the bridge
+  is taking **2.5–4 s per acknowledgement against a 17 ms produce**. `mqtt.max_inflight` (32),
+  `max_mqueue_len` (1000) and `retry_interval` (infinity) are all EMQX defaults; `emqx.conf` sets
+  none of them, and `HotPath.MqttBridge/CLAUDE.md`'s acknowledge-after-produce rule — which is
+  correct — is what makes the window the ceiling. **The signal is
+  `delivery.dropped.queue_full`, and it is the only one there is**; `infra/observability` does not
+  scrape EMQX at all.
+
+  **D-19 fails by 7× at a thirtieth of the target rate: p95 36,558 ms, p99 36,903 ms against
+  5,000 / 8,000**, measured at 100 msg/s over 111 correlated observations from a real `/hubs/live`
+  subscriber. That is the §1 backlog, not the fan-out path — correlation was 100 %, and the 2 s
+  `Fanout:BatchInterval` accounts for at most 2 s of it. The platform's own
+  `mageride.positions.ingest.latency` agrees at a **115 s mean**.
+
+  **The ride plane fails silently with the telemetry plane, which is the consequence nobody had
+  written down.** After go-online, the only thing that advances
+  `dispatch.driver_presence.last_seen_at` is `telemetry.normalized`; D5' §3.2's freshness gate then
+  drops the driver within `Dispatch:PresenceTtl` and the ride rests in `Matching` for ever.
+  `dispatch.candidate_scores` took **0 rows** — and R-11 records one per candidate *considered* — so
+  the candidate set was empty before any eligibility gate ran. A platform losing 90 % of its
+  telemetry does not degrade to a stale map; it stops dispatching rides.
+
+  **Three deployment defects found, two fixed.**
+  **C129-03 (HIGH, fixed):** `Dispatch__RideServiceBaseUrl` was `http://dispatch-needs-ride-svc:8080`
+  — `.env.app.example`'s deliberate placeholder, never overridden, and **NXDOMAIN**. dispatch-svc
+  could not reach ride-svc to place an offer, so its `ride.events` consumer sat `Stable` with
+  `CURRENT-OFFSET -` and `TOTAL-LAG 8` while `reputation-svc` in the same container on the same topic
+  was at lag 0. **Every Mode C ride ever booked on this replica stayed in `Requested`.** The wave-5
+  contract sweep is green over it because `POST /v1/rides/request` still answers 202. Fixed in
+  `docker-compose.light-replica.yml` (`http://127.0.0.1:5106`, ride-svc's loopback port in
+  Container 7); the consumer drained to lag 0 and the stranded rides moved to `Matching` at once.
+  **C129-05 (MEDIUM, fixed):** `fanout` and `tcp-adapter` were still running the pre-C126
+  `Jwt__JwksUrl`, so **every authenticated `/hubs/live` connection answered 500** — C126 corrected
+  the file and only `app-services` was recreated. `/hubs/**` is routed by HAProxy straight to fanout
+  and is not one of the 382 contract operations, so nothing else would have found it.
+  `load/configure.sh` now asserts the value before a run.
+  **C129-04 (HIGH, not fixed — it is C008/C125's call):** the gateway's rate limiter buckets
+  **every caller on the platform together**. `Gateway__ForwardedHeaders__KnownProxies__0=haproxy` is
+  a hostname and `IPAddress.TryParse` rejects it silently, so `X-Forwarded-For` is ignored and the
+  bucket key is `route|HAProxy's address`. Proven: **40 requests with 40 distinct
+  `X-Forwarded-For` values, 39 refused with 429.** `auth` is then 30 requests/min and `write` —
+  which covers `/v1/rides/**` for **every method**, `/v1/fare/**` and `/v1/standby/**` — is
+  120/min, i.e. **2 requests/s for the whole platform**, or ~0.4 rides/s. The setting's own comment
+  states the failure mode exactly; the value set is not an address.
+
+  **Four spec/instrument findings.** ADD **§16.4 models the wrong write path** — it prices only the
+  1/min operational downsample and omits the `telemetry.positions` hypertable that takes *every*
+  sample, understating the launch write load by ~18× (167 WPS against 3,000). **§3.4 A3's 80–120 byte
+  wire payload is 227 bytes as landed** (a 36-char UUID and a 28-char ISO instant are 64 bytes of
+  text before a key is written), so every bandwidth and retention figure derived from it roughly
+  doubles. **`mageride.fanout.frames` counts frames per *group send*, not per-subscriber sends**, so
+  it cannot be divided by D-40's 10k sends/pod/s to size anything — the counter an operator would
+  scale on is not the quantity §16.3 is written in. And **no documented latency budget exists for
+  request → offer**: E-09's "< 50 ms" is the outbox hop alone (measured at **116 ms median, 676 ms
+  p95** — over it), and §13.3.1's 60 s is a stuck-state alarm.
+
+  **Also measured:** the replica's container logs are **unbounded and mostly SQL** — `app-services`
+  reached 2.2 GB in 1.4 days at idle, ~1.6 GB/day, almost entirely `info: Npgsql.Command`, with no
+  `logging:` options anywhere in the compose file. It is slow enough to matter: `docker compose logs
+  --since` takes **95 seconds** on that file and broke this suite's own account provisioning until it
+  was changed to `docker logs --tail`.
+
+  **How the suite is built.** Stock k6, no xk6 extension: MQTT 3.1.1 over the 8084 WSS listener and
+  the SignalR JSON hub protocol are both implemented in `load/lib/`, because a bespoke k6 binary
+  would make the manifest's verify command fail on a stock one with a message about a JavaScript
+  module. The CBOR encoder is the deployed codec's, so payload sizes are the real ones. Vehicle ids
+  are a pure function of an index (`10ad10ad-…`), so a VU, a shell script and a psql query name the
+  same vehicle without sharing state. **The res-7 cell is read back out of `veh:meta` rather than
+  computed**, so no H3 implementation here can disagree with the platform's. The fleet orbits in a
+  closed ~191 m circle at a 10 m step, which reads as 36 km/h at the anti-spoof filter's 1 s floor
+  whatever the publish rate and keeps every vehicle in the cell its subscriber joined. Bearers come
+  from the real OTP routes, read out of the dev SMS sender's log; `env.json` is gitignored at 0600.
+
+  **Files —** new: `load/` (`README.md`, `CLAUDE.md`, `report.md`, `configure.sh`, `run.sh`,
+  `step.sh`, `collect.sh`, `accept-race.sh`, `probe.js`, `warmup.js`, `ingest.js`, `dispatch.js`,
+  `fanout.js`, `lib/{mqtt,cbor,jwt,config,fleet,signalr,probe-subscriber}.js`).
+  Changed: `.gitignore` (`load/env.json`, `load/out/`),
+  `infra/replica/docker-compose.light-replica.yml` (C129-03's one-line topology override).
   **No service, spec, contract or migration file was changed.**

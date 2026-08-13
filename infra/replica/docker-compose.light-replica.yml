@@ -390,6 +390,20 @@ services:
       # gateway-routes.json's default, so the right number of places to say it is one. The old value
       # was unreachable twice over — wrong port, and the service was bound to loopback.
       ReverseProxy__Clusters__voip-svc__Destinations__primary__Address: http://voip:5000/
+      # Δ C129 — dispatch-svc's own call to ride-svc, which is NOT a gateway cluster and which
+      # `Container7` therefore does not rewrite. `.env.app.example` ships the deliberate
+      # placeholder `http://dispatch-needs-ride-svc:8080`, and nothing here overrode it: the name
+      # is NXDOMAIN, so every attempt to place an offer failed, the `ride.events` consumer never
+      # committed an offset, and **every Mode C ride on this replica stayed in `Requested` for
+      # ever**. `POST /v1/rides/request` still answers 202 and `GET .../state` still answers 200,
+      # which is why the wave-5 contract sweep is green over a dispatch plane that dispatches
+      # nothing — C129 found it by waiting for an offer that never came.
+      #
+      # 5106 is ride-svc's loopback port in this container: `Container7.FirstServicePort` is 5101
+      # and ride-svc is sixth in `Container7.Services`. It is a position in a list, so it moves if
+      # that list is reordered — `Container7Tests` is what makes such a move a failing test rather
+      # than a silent 502, and the same reordering would move this line.
+      Dispatch__RideServiceBaseUrl: http://127.0.0.1:5106
     volumes:
       # provisioning-svc's embedded step-ca (T-02). A bind mount rather than a named volume because
       # EMQX reads the same certs/ca_chain.crt as its 8883 cacertfile.

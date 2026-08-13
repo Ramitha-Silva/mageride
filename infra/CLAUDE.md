@@ -102,6 +102,20 @@ replica/contract-live-verify.sh   the OTHER half of the wave-5 gate: drives all 
   and `Transit__Gtfs__StorageRoot` was on the container's writable layer until C126 added the
   `gtfsdata` volume — every `deploy.sh` was deleting every rollback target.
 
+## Load and capacity (C129)
+
+`load/` at the repository root holds the capacity suite — stock k6, pointed at this replica through
+its edge. `load/report.md` is what it measured; two things there change how this stack is read:
+
+- **The ingest chain carries ~10 msg/s, not ADD §3.2's 3,000, and the loss is silent.** EMQX PUBACKs
+  the publisher and then discards what it cannot hand to mqtt-bridge-svc, counted only as
+  `delivery.dropped.queue_full`. Anything that depends on telemetry — the live map *and* the
+  dispatch candidate pool — degrades with it and reports nothing.
+- **`Dispatch__RideServiceBaseUrl` was the NXDOMAIN placeholder from `.env.app.example`**, so no
+  Mode C ride was ever dispatched here. The override is now in the compose file beside the three
+  `ReverseProxy__Clusters__*` ones and for the same reason: it is topology, and Container 7 does not
+  rewrite a service-to-service address the way it rewrites a gateway cluster.
+
 ## Observability (C119)
 
 ```
