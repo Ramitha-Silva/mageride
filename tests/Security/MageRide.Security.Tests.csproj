@@ -44,6 +44,10 @@
     <PackageReference Include="YamlDotNet" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
     <PackageReference Include="Npgsql" />
+    <!-- Δ C128: the AntiSpoof category connects to a real broker (EMQX ACL, D-17 ceiling). -->
+    <PackageReference Include="MQTTnet" />
+    <PackageReference Include="Dapper" />
+    <PackageReference Include="StackExchange.Redis" />
   </ItemGroup>
 
   <ItemGroup>
@@ -52,6 +56,23 @@
       reference too — C118 keeps it for `version-check.yaml`, and D-30/D-31 live nowhere else.
     -->
     <ProjectReference Include="..\Contract\MageRide.Contract.Tests.csproj" />
+
+    <!--
+      Δ C128. The D-18/T-07 gate is position-processor-svc's and is not a service that owns a
+      contract document, so it does not arrive through the fleet. The corpus drives
+      `PlausibilityFilter` itself — the class the consumer calls — rather than a transcription of
+      its rules, because a corpus measured against a copy measures the copy.
+    -->
+    <ProjectReference Include="..\..\backend\src\HotPath.PositionProcessor\HotPath.PositionProcessor.csproj" />
+  </ItemGroup>
+
+  <!--
+    Δ C128. The corpus is data, not code: it is reviewed by people who tune thresholds, and a
+    threshold argued about in a C# initialiser is one nobody outside this repository can read.
+  -->
+  <ItemGroup>
+    <!-- `Update`, not `Include`: the Web SDK already globs .json as Content (NETSDK1022). -->
+    <Content Update="AntiSpoof\Corpus\*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

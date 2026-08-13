@@ -20748,3 +20748,145 @@ _Append 3 lines per completed component (Component / Status / Notes)._
   `backend/src/ApiGateway.Tests/{Infrastructure/ContractCatalog.cs,RouteTableTests.cs,RouteConfigurationTests.cs}`,
   `tests/Contract/{Model/ContractOperation.cs,MageRide.Contract.Tests.csproj}` (InternalsVisibleTo),
   `.gitignore`, `backend/MageRide.sln`.
+
+- **Component:** C128 anti-spoof-hardening — 2026-08-12
+- **Status:** **PARTIAL.** Three of the four DoD items are met and measured; the fourth is met on one
+  of its two paths and the other is a **HIGH finding that cannot be closed here** — the MQTT half of
+  T-12 does not exist in any deployed configuration and turning it on requires a fleet-wide
+  credential re-mint first (C128-01, owner C133, due before go-live).
+  `dotnet test tests/Security -c Release --filter Category=AntiSpoof` is **96 passed, 0 failed,
+  5 skipped** — the skips are the four documented gaps, which are asserted by their own ratchet test
+  instead, plus the opt-in evidence dump. The whole suite is **180 passed / 6 skipped** with C127's;
+  `dotnet build backend/MageRide.sln -c Release` is clean;
+  `bash security/run-asvs-checks.sh` is unchanged at 41 passed / 3 failed (all three are C127-01).
+- **Notes:**
+  **DoD 1 — the corpus is rejected with a measured false-positive rate below the agreed bound.**
+  `tests/Security/AntiSpoof/Corpus/position-corpus.json`: 35 labelled tracks (16 honest, 19 hostile
+  across 17 families), 1 051 samples, driven
+  through `HotPath.PositionProcessor.PlausibilityFilter` itself with thresholds bound from
+  `infra/env/.env.app.example` rather than from the class initialisers — the fence says tuning is
+  configuration, so the class initialisers are the one place a measurement must not read.
+  **828 honest samples, 0 refused (0.000 %) against a 1 % bound; 158 hostile samples, 0 escaped
+  against a 0 % bound.** Zero on every one of the eight vehicle types and seventeen families.
+
+  **The number rests on one modelling decision and it is worth carrying forward.** Receiver error is
+  a **bounded random walk** (`CorpusLeg.JitterDriftM`), not an independent draw per fix, because GNSS
+  error is strongly autocorrelated. An earlier draft drew each fix independently from a 30 m disc —
+  up to 60 m of displacement per second, 216 km/h of pure noise — and reported a false-positive rate
+  on the three-wheeler tier that does not exist in the field. **The 80 km/h three-wheeler ceiling
+  looks unusable under the wrong error model and is comfortable under the right one.** Any future
+  retune should check which model a claimed false positive came from before changing a threshold.
+
+  **No threshold was changed, and that is the finding rather than the absence of one.** ADD §12.6's
+  table, D-18's 200 m and the 1 km/s jump backstop all measure clean against a corpus built to stress
+  them — the hardest honest track is the lowest ceiling (80 km/h), the fastest cadence AL-12 asks for
+  (1 sample/s inside 150 m of pickup) and the worst receiver on the platform (a GT06 in the Pettah
+  canyon), and it loses nothing. **A green corpus that cannot fail proves nothing**, so
+  `ThresholdConfigurationTests` mistunes each knob in turn and asserts the corpus notices.
+
+  **Four attacks the gate cannot see are named, not counted as covered**, and each is a ratchet that
+  fails when it is closed: a slow walk at a speed the tier allows (nothing in D-18/T-07 can see it —
+  the controls are identity, not physics); a reappearance past `VehicleMetaTtl` (the gate's own
+  horizon; dispatch's T-11 30 s freshness rule is what bounds it); a teleport inside a `pos/replay`
+  backlog (T-05's pacer and the `seq` watermark are the control); and a handset rewinding its clock
+  while driving plausibly (the clock gate is hardware-only by design — `seq` is the control, and the
+  residual is exactly `tierCeiling × MinStepInterval`, 50 m for a sedan). One good result worth
+  pinning: **replaying a recorded track live from a handset IS caught**, 18 of 20 samples, because a
+  replay rewinds position as well as time.
+
+  **DoD 2 — a cross-vehicle publish is refused in every tested configuration, and "every" now means
+  three.** The deployment has three live listeners sharing an ACL file and nothing else; the
+  principal comes from a verified JWT claim on two and from a certificate CN on the third.
+  **8084/WSS had never been driven by any suite** — `EmqxAuthTests` (C024) covers 1883 and
+  `EmqxDeviceCertificateTests` (C030) covers 8883, and the listener with no coverage is the one a
+  driver's handset connects to while 1883 is documented as never published past the docker network.
+  `EmqxFixture` now publishes 8084 and the matrix runs six assertions per plane against a real
+  broker; all refuse the cross-vehicle publish, the out-of-tree publish, the foreign command topic
+  and the `$share/posGroup` subscription, and all still allow a device its own two topics.
+  `BrokerPolicyTests` reads the deployed `.conf` files **with comment lines stripped** — a control
+  that exists only inside a commented-out block cannot satisfy an assertion, which is exactly how
+  C128-01 hid.
+
+  **D-17's ceiling is paced, not dropped, and one credential over four sessions beats it.** That is
+  not a failure — a listener limiter sees a socket, not a principal — but it is the entire reason the
+  bridge's and the processor's per-vehicle lines exist, and it is invisible from either of them
+  alone, so it is now demonstrated rather than argued.
+
+  **DoD 3 — a cloned IMEI holds both devices, well inside the budget.** Both bindings QUARANTINED
+  with reason `imei-duplicate`, the incumbent's legitimately-issued credential stops validating, and
+  the `imei:{imei}` cache entry is deleted (left behind, a reconnecting device would be resolved from
+  it for the cache's 24 h TTL without ever asking `validate` — which is how a 60 s budget quietly
+  becomes a day). **The window is asserted from both sides at the deployed 24 h** — 23 h apart is a
+  clone, 25 h apart supersedes — by ageing the sighting trail rather than shortening
+  `Provisioning:AntiCloneWindow`, because a test that redefined the window to two seconds would prove
+  the mechanism while saying nothing about D6' §4.3's number. Both detection paths are covered: the
+  bind-time collision and the adapter's report of two sockets under one identity.
+
+  **DoD 4 — revocation within 60 s on both paths: the TCP path yes, the MQTT path NO (C128-01,
+  HIGH).** `A_revoked_tracker_certificate_still_completes_the_mutual_tls_handshake` mints a
+  certificate from the CA the broker trusts, connects, revokes it, and connects again — **the second
+  handshake succeeds and the device goes on publishing positions for its vehicle.** Everything on the
+  platform side works: the binding goes REVOKED, `validate` refuses, the `prov:tracker` signal
+  reaches Redis inside ADD §7.7.3's one second with the right field names, and the serial is on the
+  CRL inside the budget. What is missing is the broker reading it — `enable_crl_check` and
+  `crl_cache.refresh_interval` are commented out in `infra/deploy/emqx/emqx.conf`.
+  **Two suites each proved their own half and neither owned the join**, the same shape as C127-03.
+
+  **It cannot simply be switched on, and that is why it is open rather than fixed.** EMQX locates a
+  CRL through the *CRL distribution point extension in the peer certificate*, and `EmbeddedStepCa`
+  writes that extension only when `StepCa:CrlDistributionPoint` is set — which **no environment
+  sets**. So every certificate the platform has ever minted carries no distribution point, and a
+  broker with `enable_crl_check = true` refuses a certificate whose CRL it cannot locate: turning it
+  on before re-minting the fleet does not tighten the tracker plane, it takes the whole of it off the
+  air. `emqx.conf`'s own comment warns about the ordering and gives the wrong reason (a start-up race
+  with provisioning-svc, real but secondary). The four-step order, the compensating controls in force
+  today and the owner are in `security/remediation-backlog.md`. **Both the measurement and the policy
+  assertion pin the current, wrong state**, so the day the control lands the suite fails and asks for
+  the entry to be deleted.
+
+  **E-07 — the deliverable, and the finding it produced.** Against a 39-pair synthetic population
+  shaped like a Sri Lankan ride-hailing month: **recall 100 % (asserted), `repeat_pair` precision
+  67 %** — nine flags, three of them honest commuters. **Raising the threshold is not the fix,
+  because a farming pair rides LESS than a commuter**: a passenger keeping one three-wheeler driver
+  on call, twice a day on weekdays, is 34 rides with one counterparty, over any threshold that would
+  still catch farming at 12–27. What separates them is the cross-check ADD §12.6 already names —
+  correlating `repeat_pair` with `shared_device` named **exactly the six farming pairs and nothing
+  else, 100 %**. The detector already computes all three signals; what it does not do is correlate
+  them, so the admin surface is three queues rather than one ranked one. Recorded as **C128-02**
+  (MEDIUM, owner admin-bff/C061) and `PairRideThreshold` left at 8 deliberately, because tightening
+  it would remove the very rows the correlation needs. The fence held throughout: every test that
+  raises a flag asserts `reputation.block_states` did not move, including the worst case where all
+  three detectors fire on one cluster.
+
+  **Two configuration gaps found and fixed, both instances of fence 1.**
+  `PositionProcessor__VehicleMetaTtl` had no line in `.env.app.example` although it is the step
+  gate's *horizon* — the setting that decides how long a spoofer must stay quiet to relocate for
+  free. All **six** `Reputation__Collusion__*` thresholds had none either, so a detector whose entire
+  output is a human review queue could not have its volume changed without a build.
+
+  **One spec gap recorded, not closed (C128-03).** ADD §12.6 prices `flex` at **200 km/h, the highest
+  in the table and above `sedan`'s 180**, for what D5' §1 lists as a passenger tier between
+  `three_wheeler` and `sedan`; nothing on a Sri Lankan road legally approaches it, and
+  `DefaultMaxSpeedKph` inherits the same value for the three types the table omits. The jump backstop
+  still applies, so LOW. Micro-change-set rather than an invented number — the corpus measures what
+  is deployed.
+
+  **The `tests/Security` container rule now has one scoped exception, and it is argued in that
+  project's CLAUDE.md.** C127's suite is docker-free because everything it asserts is a property of
+  composed code. Three of C128's four DoD items are not, and C128-01 is the demonstration: every
+  in-process assertion about revocation was green while a real broker accepted a revoked certificate.
+  So `Category=AntiSpoof` may take a fixture — the corpus, the threshold fences and the broker-policy
+  assertions still need nothing, every container-backed test **skips loudly**, and no C127 class may
+  take one.
+
+  **Files —** new: `security/anti-spoof-tuning.md`, `security/anti-spoof-{corpus,collusion}-run.md`
+  (GENERATED, `MAGERIDE_ANTISPOOF_DUMP=1`), `tests/Security/AntiSpoof/**` (corpus + model +
+  expansion + `position-corpus.json`, `DeployedConfiguration`, `AntiSpoofCollection`,
+  `Mqtt/{BrokerPolicy,BrokerPolicyTests,MqttDevice,CrossVehiclePublishTests,PublishCeilingTests}`,
+  `Trackers/{TrackerPlane,ImeiCloneTests,RevocationPropagationTests}`,
+  `Collusion/{CollusionPlane,RideFarmingTests}`).
+  Changed: `tests/Security/{MageRide.Security.Tests.csproj,CLAUDE.md}`,
+  `backend/src/MageRide.TestKit/EmqxFixture.cs` (publishes 8084),
+  `infra/env/.env.app.example` (`PositionProcessor__VehicleMetaTtl`, six `Reputation__Collusion__*`),
+  `security/{README.md,remediation-backlog.md,threat-matrix-coverage.md}`.
+  **No service, spec, contract or migration file was changed.**

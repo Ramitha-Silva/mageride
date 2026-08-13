@@ -16,15 +16,15 @@ Column key: **Test** names the assertion that would fail if the control were rem
 
 | # | Threat (ADD §12.6) | Control as built | Test | State |
 |---|---|---|---|---|
-| 1 | Spoofed GPS positions | Per-vehicle-type max speed (D-18), 1 km/s jump gate, accuracy > 200 m discarded, mTLS device identity | `HotPath.Tests` plausibility suite | **covered** — mTLS half is C128's |
-| 2 | Replay of MQTT messages | Monotonic timestamp per `vehicleId`; processor rejects older-than-last-seen | `HotPath.Tests` replay suite | **covered** |
-| 3 | Publish above the per-vehicle ceiling | EMQX rule-engine 5 msg/s server-side; position-processor second line at 10 msg/s | `MageRide.TestKit` EMQX fixture asserts the deployed `emqx.conf` | **covered** |
+| 1 | Spoofed GPS positions | Per-vehicle-type max speed (D-18), 1 km/s jump gate, accuracy > 200 m discarded, mTLS device identity | `HotPath.Tests` plausibility suite; **`SEC` `PlausibilityCorpusTests`** (Δ C128 — 35-track corpus, 0/828 honest samples refused, 0/158 attacks escaped) | **covered**, and **measured**; four attacks the gate cannot see are named in `anti-spoof-tuning.md` |
+| 2 | Replay of MQTT messages | Monotonic timestamp per `vehicleId`; processor rejects older-than-last-seen | `HotPath.Tests` replay suite; **`SEC` corpus `replayed-track` family** (Δ C128) | **covered** — the clock gate is hardware-only by design; on the mobile plane `seq` is the control, and C128 measures which catches what |
+| 3 | Publish above the per-vehicle ceiling | EMQX rule-engine 5 msg/s server-side; position-processor second line at 10 msg/s | **`SEC` `PublishCeilingTests` + `BrokerPolicyTests`** (Δ C128 — pacing measured; the ceiling asserted on *every* listener) | **covered** — the broker's limit is per **connection**, so several sessions under one credential beat it; that is what the two server-side lines are for, and C128 demonstrates it |
 | 4 | Account takeover | Phone-OTP + D-32 bucket (60 s resend, 5/h, **fails closed**), durable failed-attempt lock-out, device binding, Play Integrity / App Attest | `Iam.Api.Tests` OTP + lock-out; `SEC` `BearerValidationTests`; `CHK` 20.1 | **covered** — no MFA is AL-37, argued |
 | 5 | Tampered / cracked APK or IPA | YARP `AttestationMiddleware`, 22 sensitive operations, fails closed on an unconfigured verifier | `ApiGateway.Tests/AttestationEnforcementTests`; `CHK` 20.1 | **partial** — see C127-05 |
 | 6 | Outdated client app | `X-App-Version` against a per-platform floor → `426` | `ApiGateway.Tests/VersionGateTests`; `CHK` 30.4 (**driven live**) | **covered** |
 | 7 | Passenger sees a private vehicle | Sharing grants server-side; `fanout-svc` validates entitlement at SignalR group join, Redis `share:{userId}` pub/sub-invalidated | `Fanout.Api.Tests` group-join suite | **covered** |
-| 8 | MQTT broker DoS via publish flood | EMQX per-client publish limit + QoS inflight cap, 1 KB max payload | EMQX fixture against the deployed `emqx.conf` | **covered** |
-| 9 | Tracker IMEI cloning | IMEI bound to first provisioned cert; two sockets in 24 h force-closed and quarantined | `Provisioning.Api.Tests`, `TcpAdapter.Tests` | **covered** |
+| 8 | MQTT broker DoS via publish flood | EMQX per-client publish limit + QoS inflight cap, 1 KB max payload | **`SEC` `PublishCeilingTests`** (Δ C128 — 40 publishes on one connection are paced, not refused) | **covered** |
+| 9 | Tracker IMEI cloning | IMEI bound to first provisioned cert; two sockets in 24 h force-closed and quarantined | `Provisioning.Api.Tests`, `TcpAdapter.Tests`; **`SEC` `ImeiCloneTests`** (Δ C128 — both detection paths, the 24 h boundary from both sides, timing) | **covered** |
 | 10 | **Insider DB access** | Postgres RLS on fleet-scoped tables; Vault ephemeral creds; audit log | `CHK` 40.1–40.4 | **PARTIAL — C127-01 open** |
 | 11 | Daily-fee bypass | Idempotent charge keyed `(driverId, vehicleId, fee_date)`, enforced before second-trip dispatch; first trip free | `Subscription.Api.Tests` fee suite | **covered** |
 | 12 | Driver online on two vehicles | Redis `lock:driver:{id}` SETNX + Postgres partial unique index on `trips.sessions` | `TripState.Api.Tests` | **covered** |
@@ -36,7 +36,7 @@ Column key: **Test** names the assertion that would fail if the control were rem
 | 18 | Credit-transfer / voucher abuse | Transfers move exact value, no commission; discount tiers server-side and admin-configured; double-entry + idempotency + audit | `Subscription.Api.Tests` voucher suite | **covered** |
 | 19 | Admin / Fleet Portal XSS + CSRF | CSP headers, CSRF tokens, input sanitisation, HttpOnly cookies | portal suites | **partial** — portal-side, not re-driven by C127; see below |
 | 20 | Privileged admin misuse | `admin-bff` interceptor writes `audit.events` for every mutation; the service refuses to start if a mutating route is outside the audited group | `AdminBff.Tests` audit suite; `SEC` `RbacProbeTests` (every `/v1/admin/**` route names a matrix cell) | **covered** — immutability is C127-01 |
-| 21 | Ride-farming / collusion (E-07) | reputation-svc pair-frequency detector, device-binding and IP/ASN clustering, `fraud.suspected`, Tier-2 auto-suspend | `Reputation.Api.Tests` detector suite | **covered** |
+| 21 | Ride-farming / collusion (E-07) | reputation-svc pair-frequency detector, device-binding and IP/ASN clustering, `fraud.suspected`; the auto-suspend is an admin decision, never the detector's | `Reputation.Api.Tests` detector suite; **`SEC` `RideFarmingTests`** (Δ C128 — 39-pair population: recall 100 %, `repeat_pair` precision 67 %, correlated with the device cross-check 100 %) | **covered**, precision **PARTIAL — C128-02 open** |
 | 22 | Concurrent ride double-acceptance | Conditional `UPDATE … WHERE state IN … AND version=:v` + partial unique index + Redis Lua reservation | `Ride.Api.Tests` concurrency suite | **covered** |
 | 23 | Replay of a mutating ride command | Mandatory `Idempotency-Key`; `rides.command_log(idempotency_key UNIQUE)` replays the stored response | kernel `IdempotencyMiddleware` suite; contract conventions | **covered** |
 | 24 | Late payment callback after cash fallback | Provider transaction id UNIQUE; `payment.overpaid` reconciliation queue + refund workflow | `Fare.Api.Tests`, `AdminBff.Tests` refund queue | **covered** |
@@ -105,4 +105,19 @@ refuses before any handler.
 **Three rows depend on infrastructure this deployment does not have.** Rows 1, 3 and 8 are enforced
 by EMQX and by the hardware plane; the replica's EMQX runs the deployed `emqx.conf` and the TestKit
 fixture asserts against that same file, which is the strongest statement available without a
-hardware tracker on the bench. C128 (anti-spoof hardening) owns the rest.
+hardware tracker on the bench.
+
+**Δ C128 closed the part of that C127 deferred, and opened one row it could not.** The anti-spoof
+hardening pass drove rows 1, 2, 3, 8, 9 and 21 against a real broker and a real database rather than
+against a file: a 35-track adversarial corpus through the deployed D-18/T-07 thresholds, a
+cross-vehicle publish refused on all **three** listeners rather than the one earlier suites dialled,
+a cloned IMEI held at the 24 h boundary from both sides, and E-07's precision measured against a
+population shaped like a Sri Lankan ride-hailing month. `security/anti-spoof-tuning.md` is the
+write-up.
+
+**What it found is row 9's other half.** T-12 says a revoked credential stops authenticating within
+60 s "on both MQTT and TCP paths". The TCP path meets it. The MQTT path **does not exist in any
+deployed configuration** — `enable_crl_check` is commented out in `infra/deploy/emqx/emqx.conf`, so a
+revoked tracker certificate still completes the mutual-TLS handshake and still publishes. Measured
+rather than inferred, recorded as **C128-01**, and blocked on a fleet-wide credential re-mint before
+it can be switched on. Owner C133, before go-live.

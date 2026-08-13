@@ -1,12 +1,17 @@
-# `security/` — the OWASP ASVS L2 review (C127)
+# `security/` — the OWASP ASVS L2 review (C127) and the anti-spoof hardening pass (C128)
 
-**Verify:** `bash security/run-asvs-checks.sh && dotnet test tests/Security -c Release`
+**Verify:**
+- C127 — `bash security/run-asvs-checks.sh && dotnet test tests/Security -c Release`
+- C128 — `dotnet test tests/Security -c Release --filter Category=AntiSpoof`
 
 | File | What it is |
 |---|---|
 | [`asvs-l2-checklist.md`](asvs-l2-checklist.md) | ASVS 4.0.3 L2, chapter by chapter, with per-item evidence |
 | [`threat-matrix-coverage.md`](threat-matrix-coverage.md) | every ADD §12.6 row → a tested control or an accepted risk with an owner |
-| [`remediation-backlog.md`](remediation-backlog.md) | the nine findings, with severity, state, owner and date |
+| [`remediation-backlog.md`](remediation-backlog.md) | every finding, with severity, state, owner and date |
+| [`anti-spoof-tuning.md`](anti-spoof-tuning.md) | **C128** — what the adversarial corpus, the ACL matrix, the clone/revocation timings and the E-07 population measured, and the three findings they opened |
+| [`anti-spoof-corpus-run.md`](anti-spoof-corpus-run.md) | C128 evidence appendix — per-vehicle-type and per-family rates (GENERATED) |
+| [`anti-spoof-collusion-run.md`](anti-spoof-collusion-run.md) | C128 evidence appendix — E-07 precision on a realistic population (GENERATED) |
 | `run-asvs-checks.sh` | the runner; `--strict` makes a skipped check a failure |
 | `asvs-lib.sh` | the four marks, the counters, the optional live targets |
 | `checks/10-repository-secrets.sh` | ignore rules, tracked key material, filled-in placeholders, ESO, rotation |
@@ -15,8 +20,13 @@
 | `checks/40-database-privileges.sh` | the **connecting database role** — the one finding no file can answer |
 
 The executable half lives in [`tests/Security`](../tests/Security/CLAUDE.md): the deny-by-default
-RBAC probe over all 444 endpoints, bearer validation across the fleet, and the D-36 redaction
-perimeter.
+RBAC probe over all 444 endpoints, bearer validation across the fleet, the D-36 redaction perimeter,
+and — under `Category=AntiSpoof` — the D-18/T-07 position corpus, the MQTT ACL matrix over all three
+listeners, and the T-08/T-12/E-07 measurements.
+
+The two GENERATED appendices are rewritten by
+`MAGERIDE_ANTISPOOF_DUMP=1 dotnet test tests/Security -c Release --filter Category=AntiSpoof`. Do not
+hand-edit them; change the corpus or the population and re-run.
 
 ---
 

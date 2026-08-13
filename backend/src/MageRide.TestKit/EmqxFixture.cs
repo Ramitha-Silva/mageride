@@ -44,6 +44,7 @@ public sealed class EmqxFixture : ContainerFixture
 
     private const int MqttPort = 1883;
     private const int MqttsPort = 8883;
+    private const int MqttWssPort = 8084;
 
     private IContainer? _container;
 
@@ -70,6 +71,35 @@ public sealed class EmqxFixture : ContainerFixture
         ?? throw new InvalidOperationException($"EMQX container is not running: {SkipReason ?? "not started"}");
 
     /// <summary>
+    /// Host port the container's 8084 is published on — MQTT over WSS, the <b>mobile</b> plane.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Δ C128. This is the listener a driver's handset actually connects to
+    /// (<c>lightweight-production-replica.md</c> Container 2, HAProxy L4 passthrough), and 1883 —
+    /// which every earlier MQTT test drives — is explicitly "in-cluster only, never published to
+    /// the host". They share the JWT authenticator and the ACL file but not their listener blocks,
+    /// so a rate limit or a TLS setting can be right on one and absent on the other.
+    /// </para>
+    /// <para>
+    /// Same JWT credential as <see cref="Port"/>: <c>enable_authn</c> is only switched off on the
+    /// mutual-TLS tracker listener.
+    /// </para>
+    /// </remarks>
+    public int WebSocketTlsPort => _container?.GetMappedPublicPort(MqttWssPort)
+        ?? throw new InvalidOperationException($"EMQX container is not running: {SkipReason ?? "not started"}");
+
+    /// <summary>
+    /// The <c>wss://</c> endpoint an MQTT-over-WebSocket client dials.
+    /// </summary>
+    /// <remarks>
+    /// The scheme is part of it: MQTTnet parses this with <c>new Uri(...)</c> and a bare
+    /// <c>host:port/path</c> throws <c>UriFormatException</c> before any connection is attempted.
+    /// The path is <c>emqx.conf</c>'s <c>websocket.mqtt_path</c>.
+    /// </remarks>
+    public string WebSocketUri => $"wss://{Host}:{WebSocketTlsPort}/mqtt";
+
+    /// <summary>
     /// The device CA this broker trusts — <c>StepCa:RootKeyPath</c> for a provisioning-svc under
     /// test.
     /// </summary>
@@ -90,6 +120,7 @@ public sealed class EmqxFixture : ContainerFixture
         _container = new ContainerBuilder(Image)
             .WithPortBinding(MqttPort, assignRandomHostPort: true)
             .WithPortBinding(MqttsPort, assignRandomHostPort: true)
+            .WithPortBinding(MqttWssPort, assignRandomHostPort: true)
             .WithEnvironment("EMQX_AUTHENTICATION__1__SECRET", SessionTokenSecret)
             // A fixed node name keeps the Erlang cookie/nodename pair stable across the container's
             // own restarts; the compose file sets the same one.
@@ -102,6 +133,7 @@ public sealed class EmqxFixture : ContainerFixture
             .WithWaitStrategy(Wait.ForUnixContainer()
                 .UntilInternalTcpPortIsAvailable(MqttPort)
                 .UntilInternalTcpPortIsAvailable(MqttsPort)
+                .UntilInternalTcpPortIsAvailable(MqttWssPort)
                 .UntilCommandIsCompleted("emqx", "ctl", "status"))
             .Build();
 

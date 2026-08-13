@@ -1,7 +1,8 @@
-# C127 — remediation backlog
+# Security remediation backlog
 
-The OWASP ASVS L2 review's findings, 2026-08-12. **Every entry is fixed or explicitly risk-accepted
-with an owner and a date. "Noted" is not a resolution** (C127 fence).
+The OWASP ASVS L2 review's findings (C127) and the anti-spoof hardening pass's (C128), 2026-08-12.
+**Every entry is fixed or explicitly risk-accepted with an owner and a date. "Noted" is not a
+resolution** (C127 fence).
 
 Severity is CVSS-shaped but argued rather than scored: what an attacker gets, and what they need to
 get it. Where a finding is severe in production and not on the replica, both are stated — the only
@@ -10,6 +11,9 @@ qualification would be as misleading as saying "LOW".
 
 | # | Finding | Severity | State | Owner | Date |
 |---|---|---|---|---|---|
+| C128-01 | A revoked tracker certificate still authenticates to EMQX — no deployed broker checks the CRL | **HIGH** (prod) / LOW (replica) | **open**; blocked on a fleet re-mint | C133 | due at go-live |
+| C128-02 | E-07 raises three uncorrelated flags; the correlation is what carries the precision | MEDIUM | **open** | admin-bff (C061) | 2026-08-12 |
+| C128-03 | ADD §12.6 prices `flex` above `sedan` in the anti-spoof table | LOW | micro-change-set | spec owner | 2026-08-12 |
 | C127-01 | Services connect to Postgres as a superuser: `audit.events` is mutable and every RLS policy is inert | **HIGH** | mechanism landed; **deployment cutover open** | C133 | cutover due at go-live |
 | C127-02 | The co-located edge shipped with no rate limit on any route and nothing marked D-30 sensitive | **HIGH** | **FIXED** and verified live | C127 | 2026-08-12 |
 | C127-03 | Three mTLS-only operations were published to the public internet | MEDIUM | **FIXED** and verified live | C127 | 2026-08-12 |
@@ -233,3 +237,122 @@ never right are asserted separately and exhaustively: every `/v1/admin/**` route
 a matrix cell or a role, and the only un-gated family on that service is the three `/v1/pdpa` data
 subject routes (scoped by `sub`, 404 for a request that is not yours). The count itself is pinned by
 `AuthenticatedOnlyLedger`, so it fails if it grows.
+
+---
+
+## C128-01 — a revoked tracker certificate still authenticates to EMQX · **HIGH** · open
+
+**What was found.** `RevocationPropagationTests.A_revoked_tracker_certificate_still_completes_the_mutual_tls_handshake`
+mints a device certificate from the CA the broker trusts, connects on 8883, decommissions the
+tracker, and connects again. **The second handshake succeeds, and the device goes on publishing
+positions for its vehicle.** Measured against the deployed broker policy — `EmqxFixture` bind-mounts
+`infra/deploy/emqx/emqx.conf` and `acl.conf`, the same two files the replica mounts.
+
+Every platform-side half of T-12 works. The binding goes `REVOKED`; `validate` answers no, which
+closes the TCP path within its budget; the serial reaches the CRL provisioning-svc publishes at
+`/v1/internal/trackers/crl.pem`, well inside 60 s. What is missing is the broker reading it:
+`enable_crl_check` and `crl_cache.refresh_interval` are **commented out** in `emqx.conf`.
+
+**Why nothing caught it.** Two suites each proved their own half and neither owned the join.
+`Provisioning.Api.Tests.RevocationTests` asserts the serial is on "the CRL the broker fetches", and
+`HotPath.Tests.EmqxAuthTests` asserts the broker's ACL — but nothing asked whether the broker
+fetches anything, and the file that decides says so only inside a comment. The same shape as C127-03:
+a convention standing in for a declaration.
+
+**Severity.** HIGH on production. A decommissioned, sold, stolen or quarantined tracker keeps
+publishing under its vehicle's topic until its certificate expires — up to the 90-day T-02 rotation
+period — and the positions it writes are indistinguishable from the real vehicle's. LOW as it stands,
+because no hardware fleet exists and the only deployment is the synthetic-data replica.
+
+**Why it cannot simply be switched on**, and this is the whole reason it is open rather than fixed.
+EMQX locates a CRL through the **CRL distribution point extension in the peer certificate**.
+`EmbeddedStepCa.Issue` writes that extension only when `StepCa:CrlDistributionPoint` is configured
+(`EmbeddedStepCa.cs`, the `if (!string.IsNullOrWhiteSpace(...))` around the CDP builder), and **no
+environment sets it** — not `.env.app.example`, not the replica, not the k8s overlays. So every
+certificate the platform has ever minted carries no distribution point, and a broker with
+`enable_crl_check = true` refuses a certificate whose CRL it cannot locate. Turning the check on
+first does not tighten the tracker plane; it takes the whole of it off the air. `emqx.conf`'s own
+comment warns about the ordering and gives the wrong reason for it — it describes a start-up race
+with provisioning-svc, which is real but secondary.
+
+**The order it has to happen in.**
+
+1. Set `StepCa__CrlDistributionPoint` to an address the broker can reach — for the replica, the
+   internal base URL app-services serves `/v1/internal/trackers/crl.der` on; for DOKS, the
+   provisioning-svc Service address. It must be reachable **from the broker's network namespace**,
+   not from the edge.
+2. Re-mint every device credential so the extension is present. `CredentialRotationWorker` already
+   does this on the T-02 90-day schedule; a fleet-wide rotation is `Provisioning:RotationEnabled`
+   with the window brought forward, and every device must have **collected** its replacement before
+   step 3 — the overlap is what stops a rotation from being a revocation.
+3. Uncomment `ssl_options.enable_crl_check = true` and `crl_cache.refresh_interval = 60s` in
+   `infra/deploy/emqx/emqx.conf`. The refresh interval is what puts the number on T-12's 60 s for
+   the MQTT path.
+4. Delete this entry, and invert the two assertions that pin the current state:
+   `BrokerPolicyTests.The_broker_does_not_yet_check_the_revocation_list_and_that_is_recorded` and
+   `RevocationPropagationTests.A_revoked_tracker_certificate_still_completes_the_mutual_tls_handshake`.
+   Both name this finding in their failure messages.
+
+**Owner: C133, before the first production tracker is provisioned.** It is a go-live blocker on the
+hardware plane specifically — C133's fence already gates go-live on no open high findings — and it is
+*not* a blocker for the mobile plane, where the MQTT session JWT's own TTL bounds the exposure
+(`disconnect_after_expire = true`, `max(active-ride + 2h, 4h)`).
+
+**Interim compensating controls, in force today.** The TCP path is unaffected and is the one the
+adapters use. A revoked device's `imei:{imei}` cache entry is deleted and `validate` refuses it, so
+anything that resolves through provisioning-svc stops. A quarantined or revoked vehicle is not
+dispatchable (T-11). And the positions a revoked tracker publishes still pass through the D-18/T-07
+gate, so it cannot teleport — it can only lie plausibly, which is C128's documented `slow-walk` gap.
+
+---
+
+## C128-02 — E-07 raises three uncorrelated flags · MEDIUM · open
+
+**What was found.** Against a 39-pair synthetic population shaped like a Sri Lankan ride-hailing
+month, `repeat_pair` at the deployed threshold of 8 rides / 30 days has **67 % precision**: nine
+flags, of which three are honest commuters. Correlating it with the `shared_device` cross-check on
+the same population names **exactly the six farming pairs and nothing else** — 100 %.
+
+**Why raising the threshold is not the fix.** A farming pair rides *less* than a commuter. A
+passenger keeping one three-wheeler driver on call — twice a day on weekdays — is 34 completed rides
+with one counterparty in thirty days, which is over any threshold that would still catch farming at
+12–27. No value of `PairRideThreshold` separates them; raising it drops both.
+
+ADD §12.6 already says the right thing — the detector "cross-checks device-binding hashes and IP/ASN
+clustering" — and `CollusionDetector` already computes all three signals in one pass. What it does
+not do is correlate them: it writes `repeat_pair`, `shared_device` and `network_cluster` as three
+independent rows, so `GET /v1/admin/reputation/flags` is three queues rather than one ranked one.
+
+**Severity.** MEDIUM, and it is a *precision* finding rather than an exposure — nothing is missed
+(recall is 100 % and asserted), and nothing is blocked, because the fence holds: a flag is a review
+signal and `reputation.block_states` never moves. What it costs is reviewer attention, and a queue
+where two of every three items is a loyal customer is a queue that stops being read.
+
+**Accepted as open, admin-bff (C061), 2026-08-12.** Not changed here: the information is all present
+in `reputation.fraud_flags` and what is missing is a ranking on the admin surface, which C128's own
+fence puts out of scope — anti-collusion output is a review signal, and the review surface is not
+this component's to redesign. `Reputation__Collusion__PairRideThreshold` is left at **8**
+deliberately, so the corroborating signal is present to correlate against; tightening it would remove
+the very rows the correlation needs.
+
+The measurement is `RideFarmingTests.The_deployed_thresholds_catch_every_farming_pair_in_a_realistic_population`
+and it asserts the correlation isolates exactly the farming pairs — so if the correlation ever stops
+working, this finding's premise fails loudly rather than quietly.
+
+---
+
+## C128-03 — ADD §12.6 prices `flex` above `sedan` · LOW · micro-change-set
+
+ADD §12.6's anti-spoof table gives `flex` a **200 km/h** ceiling — the highest in the table, above
+`sedan`'s 180 — for what D5' §1's enumeration lists as a passenger tier between `three_wheeler` and
+`sedan`. Nothing on a Sri Lankan road legally approaches it; the expressway limit is 100 km/h.
+
+Two consequences. The `flex` tier's per-type ceiling is effectively no ceiling, and because
+`DefaultMaxSpeedKph` is deliberately set to the most permissive value *in* the table, the three
+registry types §12.6 omits (`truck`, `mini_truck`, `train`) inherit the same 200. The 1 km/s jump
+backstop still applies to all four, which is why this is LOW rather than MEDIUM.
+
+**Raised as a micro-change-set, not changed.** The corpus measures what is deployed, and inventing a
+number for a tier the spec priced would be exactly the thing `DefaultMaxSpeedKph`'s own remarks warn
+against. `honest-flex-expressway-and-town` drives the tier at 105 km/h so the ceiling is exercised
+and the finding stays visible.

@@ -1,13 +1,17 @@
-# Security suite (C127) — `tests/Security`
+# Security suite (C127, C128) — `tests/Security`
 
-.NET 10 + xUnit v3. Docker-free, network-free. References `tests/Contract`, which composes every
-service with its own `XApplication.Build`.
+.NET 10 + xUnit v3. References `tests/Contract`, which composes every service with its own
+`XApplication.Build`, and `HotPath.PositionProcessor` for the D-18/T-07 gate.
 
-**Verify:** `dotnet test tests/Security -c Release`. The other half of C127's verify command is
-`bash security/run-asvs-checks.sh` — see [`security/README.md`](../../security/README.md) for where
-the line between them is.
+**Verify:**
+- C127 — `dotnet test tests/Security -c Release`, plus `bash security/run-asvs-checks.sh`; see
+  [`security/README.md`](../../security/README.md) for where the line between them is.
+- C128 — `dotnet test tests/Security -c Release --filter Category=AntiSpoof`, written up in
+  [`security/anti-spoof-tuning.md`](../../security/anti-spoof-tuning.md).
 
 ## What it asserts
+
+### C127 — the ASVS L2 review. Docker-free, network-free.
 
 | Layer | File | Question |
 |---|---|---|
@@ -18,6 +22,19 @@ the line between them is.
 | Bearer validation | `Tokens/BearerValidationTests.cs` | RS256-only, lifetime, issuer, skew — per service; algorithm confusion and `alg: none` driven |
 | Redaction perimeter | `Pii/RedactionPerimeterTests.cs` | is `PerimeterGuardHandler` still on ocr-svc's Gemini client (D-36) |
 | Evidence appendix | `Rbac/InventoryDump.cs` | writes the whole inventory for `security/asvs-l2-checklist.md` |
+
+### C128 — `Category=AntiSpoof`. The first three need nothing; the rest need Docker.
+
+| Layer | File | Question |
+|---|---|---|
+| Position corpus | `AntiSpoof/PlausibilityCorpusTests.cs` | what the D-18/T-07 gate does to 35 labelled tracks — measured FP and escape rates |
+| Threshold fences | `AntiSpoof/ThresholdConfigurationTests.cs` | is every threshold deployable, is it ADD §12.6's, and does changing it change the verdicts |
+| Broker policy | `AntiSpoof/Mqtt/BrokerPolicyTests.cs` | what the deployed `emqx.conf` / `acl.conf` say about the listeners nobody dialled |
+| ACL matrix | `AntiSpoof/Mqtt/CrossVehiclePublishTests.cs` | is a cross-vehicle publish refused on **all three** listeners (JWT, WSS, mTLS) |
+| Publish ceiling | `AntiSpoof/Mqtt/PublishCeilingTests.cs` | does the broker enforce D-17's 5 msg/s, and where does the per-connection limit stop |
+| IMEI cloning | `AntiSpoof/Trackers/ImeiCloneTests.cs` | are both devices held, inside the documented 24 h window, on both detection paths (T-08) |
+| Revocation | `AntiSpoof/Trackers/RevocationPropagationTests.cs` | does revocation bite within 60 s on the TCP path, and on the MQTT one (T-12) |
+| Anti-collusion | `AntiSpoof/Collusion/RideFarmingTests.cs` | E-07's recall and precision on a realistic population, and that nothing is auto-blocked |
 
 ## The decisions
 
@@ -79,18 +96,52 @@ not know the answer. What must not happen is the number growing quietly, so it i
 `Tolerance` is small, because tightening five endpoints is worth recording and losing a service is
 worth failing on.
 
+### Δ C128 — the container rule, and why it now has one exception
+
+C127's rule was **"do not add a test that needs a socket, a container or a replica"**, and it was
+right for what C127 asserts: route tables, bearer options and gateway policy are properties of
+composed code, and a probe over them runs on a bare agent in under ten seconds.
+
+Three of C128's four definition-of-done items are not properties of composed code. *"A cross-vehicle
+publish attempt is refused by EMQX"*, *"a cloned IMEI quarantines both devices"* and *"revocation
+takes effect within 60 s"* are claims about a broker and a database doing something, and a version of
+them that ran without either would be asserting the test double. The C128-01 finding is the
+demonstration: every in-process assertion about revocation was green, and a real broker accepted a
+revoked certificate.
+
+So the exception is **scoped to `Category=AntiSpoof`, and inside it to the classes that say so**:
+
+- The corpus, the threshold fences and `BrokerPolicyTests` need **nothing** — no socket, no
+  container — and are deliberately the larger half. `dotnet test --filter Category=AntiSpoof` still
+  answers the headline false-positive number on a bare agent.
+- `AntiSpoofCollection` carries the EMQX, Postgres and Redis fixtures for the rest, and every test in
+  it opens with `Assert.SkipWhen(!fixture.IsAvailable, fixture.SkipReason)` — the platform's existing
+  idiom. Without Docker they skip loudly; they never fail for its absence and never pass by
+  pretending.
+- **The C127 classes stay docker-free.** Nothing outside `AntiSpoof/` may take a fixture.
+
+`security/checks/` is still where a test that needs a *deployment* goes. The line is: a throwaway
+container the suite starts and owns is in scope; the running replica is not.
+
 ## Rules for adding to this suite
 
 - **Assert the observed thing.** `BearerValidationTests` reads each service's final
   `JwtBearerOptions` off its own composed container rather than asserting the kernel once — a
   service that added a `Configure<JwtBearerOptions>` of its own would replace a decision nobody
-  would look for again, and the options monitor applies every configurator in order.
+  would look for again, and the options monitor applies every configurator in order. C128's
+  equivalent: the corpus binds `infra/env/.env.app.example` rather than
+  `new PositionProcessorOptions()`, because the class initialisers are the one place tuning is not
+  supposed to happen.
 - **Never soften an assertion to make it pass.** Add the finding to
   `security/remediation-backlog.md` with an owner and a date, or fix the platform. "Noted" is not a
   resolution (C127 fence).
 - **A new anonymous endpoint needs an `AnonymousSurface` entry in the same change**, naming the
   credential — and if that credential is a shared secret, the path also needs a
   `Gateway:BlockedPathPrefixes` entry or `InternalPlaneExposureTests` fails.
-- **Do not add a test that needs a socket, a container or a replica.** This project must run on a
-  bare build agent in under ten seconds. Anything needing a deployment belongs in
-  `security/checks/`, which skips loudly when there is nothing to ask.
+- **A gap the platform cannot close is a ratchet, not a comment.** C128's `knownGap` tracks and the
+  two assertions that pin C128-01 all assert the *current, wrong* state, so closing the gap fails the
+  suite and asks for the ledger entry to be deleted. Same idiom as `LiveDrift` (C118) and
+  `AnonymousSurface`. A finding recorded only in a document outlives its fix.
+- **A measurement that cannot fail is not a measurement.** A corpus reporting zero false positives
+  proves nothing on its own; `ThresholdConfigurationTests` mistunes each threshold in turn and
+  asserts the corpus notices. Any new corpus needs the same.
