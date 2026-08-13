@@ -269,7 +269,15 @@ check "every runbook opens with a First action" "" "$no_first_action"
 #
 # A named list rather than a pattern: the check's teeth are that a NEW alert runbook nobody linked
 # is a failure, and a pattern like `deploy*` would let one hide.
-NOT_ALERT_DRIVEN="deploy.md rollback.md secret-rotation.md replica-operations.md"
+# C132 added `oncall.md`, which is the one runbook that is ABOUT the alerts rather than behind
+# one: the rota, the three PagerDuty services and their escalation, and the status page. No alert
+# can point at it and none should.
+#
+# `chaos-drills.md`, `gtfs-day0-load.md` and `database-roles.md` are also not alert-driven and are
+# NOT added here — they are C126's, C127's and C130's, they have been failing this check and the
+# First-action check since they landed, and quietly half-fixing another component's regression is
+# how the other half stops being visible. Recorded in the C132 handoff.
+NOT_ALERT_DRIVEN="deploy.md rollback.md secret-rotation.md replica-operations.md oncall.md"
 
 orphaned=""
 for f in "$RUNBOOKS"/*.md; do

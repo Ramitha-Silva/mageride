@@ -25,6 +25,13 @@ resources:
 
 components:
   - images
+  # D7' §8's launch topology — Patroni 1P+2R and a Redis Sentinel group, the same two
+  # components production uses and in the same order. Staging runs them at a smaller size and
+  # not at a smaller SHAPE: a failover drill against a single-instance staging would prove
+  # nothing about production, and the Sentinel connection string is a platform-wide change
+  # that has to be exercised somewhere before it is exercised on paying customers.
+  - ../../components/retire-single-instance-data
+  - ../../components/launch-topology
 
 commonAnnotations:
   mageride.lk/environment: staging
@@ -45,6 +52,53 @@ patches:
       - op: add
         path: /spec/volumeClaimTemplates/0/spec/storageClassName
         value: do-block-storage
+
+  # --- the launch topology, at staging's size ---------------------------------------
+  # The four D7' §8 rows that are only a number. These were production-only until C132 and
+  # that made staging the wrong shape to prove anything with: a 1-node EMQX does not
+  # distribute E-08's shared subscription, a 1-node Redpanda cannot have RF=3, and a failover
+  # drill against either proves nothing about the cluster that ships. This overlay's own
+  # header is the argument — "staging is only useful if the thing it proves is the thing that
+  # ships". The SIZE stays smaller; the SHAPE does not.
+  - target: { kind: StatefulSet, name: emqx }
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 2
+  - target: { kind: StatefulSet, name: redpanda }
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 3
+  - target: { kind: Job, name: redpanda-topics }
+    patch: |
+      - op: replace
+        path: /spec/template/spec/containers/0/env/2/value
+        value: "3"
+      # Six partitions, as production: a consumer group cannot have more useful members than
+      # partitions, so a staging run of the HPA against three would hit a ceiling production
+      # does not have.
+      - op: replace
+        path: /spec/template/spec/containers/0/env/1/value
+        value: "6"
+
+  # Three Postgres members and three Redis members, because that is the shape under test.
+  # A third of production's memory and half its disk, because what staging holds is a
+  # synthetic dataset and a week of it.
+  - target: { kind: StatefulSet, name: postgres }
+    patch: |
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests
+        value: { cpu: 500m, memory: 3Gi }
+      # 4 Gi and not less: `shared_buffers` is 1 GB and it is a cluster-wide DCS parameter,
+      # so it is the same number here as in production. patroni.yml says which direction that
+      # asymmetry was resolved in and why.
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits
+        value: { cpu: "1", memory: 4Gi }
+      - op: replace
+        path: /spec/volumeClaimTemplates/0/spec/resources/requests/storage
+        value: 40Gi
 
   # --- hostnames -------------------------------------------------------------------
   - target: { kind: Ingress, name: mr-ingress }

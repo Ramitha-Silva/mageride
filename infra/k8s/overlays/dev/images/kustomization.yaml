@@ -10,6 +10,9 @@
 # purpose: an environment that has never been promoted must fail to pull rather
 # than quietly run `latest`.
 #
+# Regenerating this file PRESERVES the tag that is already in it — see the note in
+# generate_manifests.py. Only a promotion changes it.
+#
 # Written by: python3 infra/k8s/tools/set_image_tag.py dev sha-<7>
 ---
 apiVersion: kustomize.config.k8s.io/v1alpha1

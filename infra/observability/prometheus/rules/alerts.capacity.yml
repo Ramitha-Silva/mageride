@@ -1,0 +1,364 @@
+# =====================================================================================
+# MageRide — capacity and launch-topology alerts (C132)
+#
+# TWO GROUPS, and they answer two different questions.
+#
+#   mageride.capacity.scale_out   ADD §10.2's "Scale-out plan — add nodes when these signals
+#                                 fire", row by row. These are not failures. Each one is the
+#                                 moment a documented, planned action becomes due, and the
+#                                 C132 definition of done is that they are ALERTS AND NOT
+#                                 PROSE: a trigger table in a document is a table nobody reads
+#                                 at 40k vehicles.
+#
+#   mageride.launch_topology      the Patroni cluster, the Sentinel group and the backup path
+#                                 that C132 added. Everything here is a failure of something
+#                                 that exists so that a failure is survivable, which is the
+#                                 class of thing that fails silently — a standby that is not
+#                                 streaming costs nothing until the day it is needed.
+#
+# --- SEVERITY, AND WHY MOST OF THIS IS `ticket` -----------------------------------------
+# "Add an EMQX node" is not a 3 a.m. action. Waking somebody to do capacity work they cannot
+# safely do while half asleep is how a rota stops trusting its pager. So the scale-out group is
+# `ticket` (daily digest) EXCEPT where the headroom is already gone, and the topology group is
+# `page` where the platform has lost its redundancy.
+#
+# --- WHAT IS NOT HERE, AND WHY --------------------------------------------------------------
+# Three of ADD §10.2's own signals have no metric on this platform and are written as commented
+# expressions with the reason. That is deliberate: a rule against a series nothing publishes
+# loads happily and evaluates to an empty vector for ever (C119's phase 5 exists because of
+# exactly this). Naming the gap in the file that would contain the rule is the only way the
+# next person finds it.
+# =====================================================================================
+
+groups:
+
+  # ===================================================================================
+  # ADD §10.2 — "Scale-out plan: add nodes when these signals fire"
+  # ===================================================================================
+  - name: mageride.capacity.scale_out
+    rules:
+
+      # ---------------------------------------------------------------------------------
+      # §10.2 row 1 — "EMQX CPU > 60% sustained, or > 8k clients/node" -> add an EMQX node.
+      #
+      # `emqx_vm_cpu_use` is the BEAM's own view, a percentage of the whole VM, exposed on
+      # EMQX's Prometheus endpoint. It is the broker's number rather than the container's,
+      # which is the right one here: the trigger is about the broker's ability to route, and
+      # the cgroup number would also count the ACL cache and the listener's TLS handshakes.
+      # ---------------------------------------------------------------------------------
+      - alert: EmqxCpuAtScaleOutThreshold
+        expr: emqx_vm_cpu_use > 60
+        for: 15m
+        labels: { severity: ticket, plane: ingest, capacity_trigger: "add-emqx-node" }
+        annotations:
+          summary: "EMQX CPU {{ $value | printf \"%.0f\" }}% sustained for 15 minutes"
+          description: >-
+            ADD §10.2's first scale-out signal. Add an EMQX node; the cluster rebalances
+            itself and E-08's shared subscription redistributes across the group. This is a
+            planned action, not an incident — but it stops being planned if it is ignored,
+            because the next thing to give is `delivery.dropped.queue_full` and that loses
+            telemetry silently (C129 §1).
+          runbook_url: https://github.com/mageride/mageride/blob/main/docs/runbooks/capacity-scale-out.md
+
+      - alert: EmqxClientsAtScaleOutThreshold
+        # 8,000 clients per node. `emqx_connections_count` is per broker instance, so no
+        # aggregation: the threshold in §10.2 is per node and so is the series.
+        expr: emqx_connections_count > 8000
+        for: 10m
+        labels: { severity: ticket, plane: ingest, capacity_trigger: "add-emqx-node" }
+        annotations:
+          summary: "{{ $value }} MQTT clients on one EMQX node (§10.2 threshold: 8,000)"
+          description: >-
+            ADD §10.2 row 1, the second half. At the 10k-vehicle launch target a 2-node
+            cluster carries 5k each; this fires at 8k, which is the point where losing one
+            node would put the survivor over its own limit rather than merely under strain.
+          runbook_url: https://github.com/mageride/mageride/blob/main/docs/runbooks/capacity-scale-out.md
+
+      # ---------------------------------------------------------------------------------
+      # §10.2 row 2 — "Redpanda consumer lag > 5 s sustained" -> add position-processor pods.
+      #
+      # The same signal ADD §13.4 bullet 1 already pages on (`ConsumerLagSecondsHigh`, in
+      # alerts.infrastructure.yml). It is here too, at a LOWER severity and a LONGER window,
+      # because the two mean different things: 5 s for two minutes is an incident, 5 s for
+      # thirty is a fleet that has grown. The inhibition in alertmanager.production.yml stops
+      # the pair from arriving together.
+      # ---------------------------------------------------------------------------------
+      - alert: ConsumerLagAtScaleOutThreshold
+        expr: mageride:consumer_lag:seconds > 5
+        for: 30m
+        labels: { severity: ticket, plane: stream, capacity_trigger: "add-position-processor" }
+        annotations:
+          summary: "consumer lag has been over 5 s for half an hour"
+          description: >-
+            ADD §10.2 row 2. Raise `position-processor-svc`'s HPA floor — the partition count
+            is 6 in production (overlays/production), so replicas beyond six buy nothing and
+            the next step after that is a partition increase, which can only ever go up.
+          runbook_url: https://github.com/mageride/mageride/blob/main/docs/runbooks/capacity-scale-out.md
+
+      # ---------------------------------------------------------------------------------
+      # §10.2 row 3 — "Fanout-svc CPU > 60% or > 30k WS sessions/pod" -> add fanout replicas.
+      #
+      # NEITHER HALF HAS A METRIC, and this is a real gap rather than an omission:
+      #   * container CPU needs cAdvisor or node-exporter, and C119 scrapes neither — the
+      #     compose stack has no node metrics at all and the DOKS cluster has no Prometheus
+      #     yet (C132-05).
+      #   * fanout-svc publishes `mageride.fanout.{frames,filtered,latency,signals}` and NO
+      #     connection gauge. There is no series that counts WebSocket sessions per pod.
+      #
+      # What is used instead is the throughput the sessions produce, which ADD §16.3 prices
+      # the pod count in anyway: "~10-25k WebSocket sends per pod per second", launch sizing
+      # derived from the lower bound. 10k sends/s/pod is therefore the same wall §10.2's
+      # session count is a proxy for, and it is measurable today.
+      #
+      # When fanout-svc publishes a session gauge, this rule should become §10.2's own —
+      # `max by (pod)` of that gauge, `> 30000`. The metric name is deliberately not written
+      # out here: `verify-observability.sh` phase 5 derives the metric inventory from the C#
+      # and fails on any `mageride_*` series a rule file names that no instrument declares,
+      # which is exactly the check that keeps a rule from evaluating an empty vector for ever.
+      # ---------------------------------------------------------------------------------
+      - alert: FanoutSendRateAtScaleOutThreshold
+        expr: >-
+          sum by (service) (rate(mageride_fanout_frames_total[5m])) / count by (service) (up{job=~"platform-.*", service="fanout-svc"} == 1) > 10000
+        for: 15m
+        labels: { severity: ticket, plane: fanout, capacity_trigger: "add-fanout-replicas" }
+        annotations:
+          summary: "fanout is sending {{ $value | printf \"%.0f\" }} frames/s/pod (ADD §16.3 lower bound: 10,000)"
+          description: >-
+            ADD §10.2 row 3, measured as sends per pod per second because no session gauge
+            exists (see the note in this file). §16.3 sizes the launch pod count from a
+            10k sends/s/pod floor, so a pod at that rate is a pod at the number the plan was
+            built on. Raise the HPA's `maxReplicas`; the HPA's own CPU target will do the rest.
+          runbook_url: https://github.com/mageride/mageride/blob/main/docs/runbooks/capacity-scale-out.md
+
+      # ---------------------------------------------------------------------------------
+      # §10.2 row 4 — "Redis memory > 70% or ops/s > 50k" -> move Sentinel to Cluster 3M+3R.
+      #
+      # 70% and not 90%: `maxmemory-policy noeviction` means the ceiling is not a slow
+      # degradation, it is a hard write error, and Redis holds the dispatch and ride LOCKS.
+      # `RedisMemoryHigh` in alerts.infrastructure.yml is the incident version at 90%.
+      # ---------------------------------------------------------------------------------
+      - alert: RedisMemoryAtScaleOutThreshold
+        expr: redis_memory_max_bytes > 0 and (redis_memory_used_bytes / redis_memory_max_bytes) > 0.70
+        for: 30m
+        labels: { severity: ticket, plane: cache, capacity_trigger: "redis-cluster" }
+        annotations:
+          summary: "Redis at {{ $value | humanizePercentage }} of maxmemory for 30 minutes"
+          description: >-
+            ADD §10.2 row 4. The documented action is the architectural one — Sentinel to
+            Cluster (3M+3R) — and it is not a small change: the platform's Lua locks and its
+            `notify-keyspace-events` consumers both assume one keyspace. Read the runbook
+            before agreeing to it; growing the member is usually the right first move.
+          runbook_url: https://github.com/mageride/mageride/blob/main/docs/runbooks/capacity-scale-out.md
+
+      - alert: RedisOpsAtScaleOutThreshold
+        expr: rate(redis_commands_processed_total[5m]) > 50000
+        for: 15m
+        labels: { severity: ticket, plane: cache, capacity_trigger: "redis-cluster" }
+        annotations:
+          summary: "Redis at {{ $value | printf \"%.0f\" }} ops/s (§10.2 threshold: 50,000)"
+          description: >-
+            ADD §10.2 row 4, the second half. A single Redis primary takes every write on the
+            platform: the geo index, the SignalR backplane, every lock. This is the number
+            that says one thread is no longer enough.
+          runbook_url: https://github.com/mageride/mageride/blob/main/docs/runbooks/capacity-scale-out.md
+
+      # ---------------------------------------------------------------------------------
+      # §10.2 row 5 — "Postgres replication lag > 10 s, or replica CPU > 70%" -> add a read
+      # replica.
+      #
+      # The lag half becomes live with the Patroni cluster: `pg_replication_is_replica` was 1
+      # on nothing before C132, which is why `PostgresReplicationLag` in
+      # alerts.infrastructure.yml has never fired (infra/observability/CLAUDE.md says so).
+      # The replica-CPU half has no metric, same reason as fanout's.
+      # ---------------------------------------------------------------------------------
+      - alert: PostgresReplicaLagAtScaleOutThreshold
+        expr: pg_replication_is_replica == 1 and pg_replication_lag_seconds > 10
+        for: 20m
+        labels: { severity: ticket, plane: data, capacity_trigger: "add-read-replica" }
+        annotations:
+          summary: "a Postgres replica has been over 10 s behind for 20 minutes"
+          description: >-
+            ADD §10.2 row 5. Sustained lag on a launch-topology replica means the primary is
+            producing WAL faster than a standby can replay it. Note the ordering constraint
+            that is specific to this platform: with `synchronous_mode: true` the SYNCHRONOUS
+            standby falling behind applies backpressure to every COMMIT, so this alert can be
+            the cause of a latency incident rather than a symptom of one.
+          runbook_url: https://github.com/mageride/mageride/blob/main/docs/runbooks/capacity-scale-out.md
+
+      # ---------------------------------------------------------------------------------
+      # §10.2 row 6 — "Sustained > 50k vehicles" -> Redpanda 3 -> 5 brokers, ClickHouse.
+      #
+      # Measured as ingest rate rather than as a vehicle count, because the platform has no
+      # "active vehicles" gauge and D-20 gives the conversion exactly: 0.12 msg/s per vehicle
+      # blended. 50,000 x 0.12 = 6,000 msg/s.
+      #
+      # READ C129 BEFORE TRUSTING THE HEADROOM THIS IMPLIES. The measured ingest ceiling of
+      # the deployed chain is ~10 msg/s, not 1,200 — this rule can only fire on a platform
+      # where that defect has been fixed, and until it is, its silence means nothing.
+      # ---------------------------------------------------------------------------------
+      - alert: IngestRateAtRedpandaScaleOutThreshold
+        expr: sum(rate(redpanda_kafka_records_produced_total{redpanda_topic="telemetry.raw"}[10m])) > 6000
+        for: 1h
+        labels: { severity: ticket, plane: stream, capacity_trigger: "redpanda-5-brokers" }
+        annotations:
+          summary: "telemetry ingest is {{ $value | printf \"%.0f\" }} msg/s — about 50k vehicles (D-20's 0.12 msg/s blended)"
+          description: >-
+            ADD §10.2 row 6. Scale Redpanda from 3 to 5 brokers and start the ClickHouse
+            conversation. One hour, because a rush-hour peak is not a fleet.
+          runbook_url: https://github.com/mageride/mageride/blob/main/docs/runbooks/capacity-scale-out.md
+
+  # ===================================================================================
+  # The launch topology itself (C132)
+  # ===================================================================================
+  - name: mageride.launch_topology
+    rules:
+
+      # ---------------------------------------------------------------------------------
+      # No leader. `patroni_cluster_unlocked` is 1 when the leader key in the DCS is not held
+      # by anybody — during a failover that is true for seconds, so `for: 1m` is the line
+      # between "a failover happened" and "a failover is not completing".
+      #
+      # While it is 1, EVERY write on the platform fails: Service/postgres selects
+      # `role: primary` and no pod carries that label.
+      # ---------------------------------------------------------------------------------
+      - alert: PatroniClusterHasNoLeader
+        expr: max(patroni_cluster_unlocked) > 0
+        for: 1m
+        labels: { severity: page, plane: data }
+        annotations:
+          summary: "the Patroni cluster has no leader"
+          description: >-
+            No pod is labelled `role: primary`, so `Service/postgres` has no endpoint and
+            every write is refused. A failover normally clears this within the 30 s DCS TTL.
+          runbook_url: https://github.com/mageride/mageride/blob/main/docs/runbooks/postgres-failover.md
+
+      - alert: PatroniTooFewMembers
+        # 1 primary + 2 replicas. Two members is a cluster that can still fail over exactly
+        # once; one is a single instance with a failover controller attached to it.
+        expr: count(patroni_postgres_running == 1) < 3
+        for: 10m
+        labels: { severity: page, plane: data }
+        annotations:
+          summary: "only {{ $value }} of 3 Postgres members are running"
+          description: >-
+            The launch topology is 1P+2R (D7' §8). Below three, the PodDisruptionBudget will
+            also block the next node drain — which is the intended behaviour and will look
+            like a stuck DOKS upgrade until this is fixed.
+          runbook_url: https://github.com/mageride/mageride/blob/main/docs/runbooks/postgres-failover.md
+
+      - alert: PostgresSynchronousStandbyLost
+        # `synchronous_mode_strict: false` means the platform KEEPS TAKING WRITES when the
+        # last synchronous standby is gone — deliberately, because refusing every write is
+        # worse for a ride-hailing platform than a window of asynchronous commits. The cost is
+        # that the zero-data-loss property is silently off, so it has to be loud here.
+        expr: count(patroni_sync_standby == 1) < 1 and max(patroni_primary) == 1
+        for: 5m
+        labels: { severity: page, plane: data }
+        annotations:
+          summary: "no synchronous standby — commits are no longer guaranteed to survive a failover"
+          description: >-
+            Patroni has degraded to asynchronous replication (`synchronous_mode_strict:
+            false`). Writes continue, and a failover from here CAN lose the most recent
+            commits — including `billing.journal_postings`, which is the one table whose
+            balance is the point.
+          runbook_url: https://github.com/mageride/mageride/blob/main/docs/runbooks/postgres-failover.md
+
+      - alert: PatroniPendingRestart
+        expr: max by (name) (patroni_pending_restart) > 0
+        for: 6h
+        labels: { severity: ticket, plane: data }
+        annotations:
+          summary: "{{ $labels.name }} is running a configuration it has not restarted into"
+          description: >-
+            A parameter that needs a restart was changed — in patroni.yml and applied, or by
+            `patronictl edit-config`. Until the member restarts, the cluster is running
+            something no file describes. Six hours, because the restart should be scheduled
+            rather than immediate.
+          runbook_url: https://github.com/mageride/mageride/blob/main/docs/runbooks/postgres-failover.md
+
+      # ---------------------------------------------------------------------------------
+      # WAL archiving. This is the RPO, and it is the definition of a control that fails
+      # quietly: nothing degrades, no request is slower, and the backup simply stops being
+      # able to recover anything after the last successful push.
+      # ---------------------------------------------------------------------------------
+      - alert: PostgresWalArchiveFailing
+        expr: rate(pg_stat_archiver_failed_count[10m]) > 0
+        for: 5m
+        labels: { severity: page, plane: data }
+        annotations:
+          summary: "pgBackRest is failing to archive WAL"
+          description: >-
+            `archive_command` is returning non-zero. The RPO is now "the last segment that
+            reached Wasabi" and it is getting older every minute. pg_wal will also grow until
+            the volume fills, which is deliberate — see pgbackrest.conf on why
+            `archive-push-queue-max` is unset.
+          runbook_url: https://github.com/mageride/mageride/blob/main/docs/runbooks/dr-restore.md
+
+      - alert: PostgresWalArchiveStalled
+        # The other direction, and the one a failure count cannot see: archiving that is not
+        # failing because it is not happening. `archive_timeout: 60` guarantees a segment
+        # every minute on a live platform, so ten minutes of silence is broken.
+        #
+        # `-1` is "no segment has EVER been archived" (see queries.yaml) and it must fire too:
+        # a cluster whose archiving has never worked is the worst case, not an exempt one.
+        expr: pg_stat_archiver_seconds_since_last_archive > 600 or pg_stat_archiver_seconds_since_last_archive == -1
+        for: 5m
+        labels: { severity: page, plane: data }
+        annotations:
+          summary: "no WAL segment has been archived for over 10 minutes"
+          description: >-
+            `archive_timeout` is 60 s, so a healthy primary archives at least once a minute
+            whatever the write rate. Ten minutes of nothing means the archiver is stuck rather
+            than failing — check whether the postmaster still has an archiver process at all.
+          runbook_url: https://github.com/mageride/mageride/blob/main/docs/runbooks/dr-restore.md
+
+      - alert: PgDumpJobFailing
+        # D7' §8's nightly logical dump. A CronJob that fails is invisible: the Job object goes
+        # Failed and nothing looks at it.
+        expr: kube_job_status_failed{job_name=~"pg-dump-wasabi.*"} > 0
+        for: 15m
+        labels: { severity: ticket, plane: data }
+        annotations:
+          summary: "the nightly pg_dump to Wasabi failed"
+          description: >-
+            The physical backup (pgBackRest) is unaffected and is what the RPO rests on. What
+            is lost is the logical copy — the one that survives a corrupted page and the only
+            one a single table can be restored from.
+          runbook_url: https://github.com/mageride/mageride/blob/main/docs/runbooks/dr-restore.md
+        # NOTE: `kube_job_status_failed` comes from kube-state-metrics, which is not deployed
+        # (C132-05). This rule is correct and inert until it is.
+
+      # ---------------------------------------------------------------------------------
+      # Redis Sentinel. The client follows the group through the sentinels, so a quorum that
+      # cannot form is a platform that cannot fail over — and, because `min-replicas-to-write`
+      # is 1, a primary that loses both replicas stops accepting writes entirely.
+      #
+      # `redis_sentinel_*` needs the redis_exporter pointed at :26379. It is not, today, on
+      # either substrate — the compose stack has one exporter on the single Redis and the DOKS
+      # cluster has none at all (C132-05). Both rules below are written against the exporter's
+      # documented series so that deploying it is the only remaining step.
+      # ---------------------------------------------------------------------------------
+      - alert: RedisSentinelQuorumAtRisk
+        expr: min(redis_sentinel_known_sentinels) < 2
+        for: 5m
+        labels: { severity: page, plane: cache }
+        annotations:
+          summary: "a sentinel can see fewer than 2 others — the quorum cannot authorise a failover"
+          description: >-
+            Quorum is 2 of 3. Below it the group can detect a dead primary and do nothing
+            about it, which is indistinguishable from a healthy platform right up until the
+            primary dies.
+          runbook_url: https://github.com/mageride/mageride/blob/main/docs/runbooks/redis-sentinel-failover.md
+
+      - alert: RedisPrimaryHasNoReplica
+        expr: min(redis_connected_slaves) < 1
+        for: 5m
+        labels: { severity: page, plane: cache }
+        annotations:
+          summary: "the Redis primary has no connected replica — it will refuse writes"
+          description: >-
+            `min-replicas-to-write 1` is set deliberately (redis-entrypoint.sh): a primary
+            that cannot see a replica must not keep handing out `lock:driver:{driverId}`,
+            because a sentinel quorum on the other side of the partition may already have
+            promoted one. The visible symptom is dispatch failing, not Redis being down.
+          runbook_url: https://github.com/mageride/mageride/blob/main/docs/runbooks/redis-sentinel-failover.md

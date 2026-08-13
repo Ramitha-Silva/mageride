@@ -66,6 +66,15 @@ do**.
 | [fanout-visibility.md](fanout-visibility.md) | `FanoutVisibilityFilterInert` |
 | [observability-down.md](observability-down.md) | `ObservabilityComponentDown` |
 
+### ADD §10.2 / §15 — the launch topology and capacity (C132)
+
+| Runbook | Alerts |
+|---|---|
+| [postgres-failover.md](postgres-failover.md) | `PatroniClusterHasNoLeader`, `PatroniTooFewMembers`, `PostgresSynchronousStandbyLost`, `PatroniPendingRestart` |
+| [redis-sentinel-failover.md](redis-sentinel-failover.md) | `RedisSentinelQuorumAtRisk`, `RedisPrimaryHasNoReplica` |
+| [dr-restore.md](dr-restore.md) | `PostgresWalArchiveFailing`, `PostgresWalArchiveStalled`, `PgDumpJobFailing` |
+| [capacity-scale-out.md](capacity-scale-out.md) | ADD §10.2's six scale-out triggers — `EmqxCpu…`, `EmqxClients…`, `ConsumerLag…`, `FanoutSendRate…`, `RedisMemory…`, `RedisOps…`, `PostgresReplicaLag…`, `IngestRate…AtScaleOutThreshold` |
+
 ### Delivery (C124) — not alert-driven
 
 No alert points at these three. They are here because every runbook above can end in one of them,
@@ -79,4 +88,5 @@ forbid a runbook with no alert.
 | [secret-rotation.md](secret-rotation.md) | D7' §13's schedule, as procedures. The JWT key needs a 30-minute overlap; the MQTT session secret has none and is a brief total outage. |
 | [replica-operations.md](replica-operations.md) | the lightweight production replica (C125): bring up, bring down, back up, restore, and the eight failures it actually produces. **Synthetic data only**, and the box it runs on is the box that builds the repository. |
 | [gtfs-day0-load.md](gtfs-day0-load.md) | the national GTFS feed goes live, or comes back off (C126): obtain → upload through SCR-AP-016 → read the report → activate → verify the corridors → roll back. **The feed is an externally provided file (AL-56)** — the same pipeline serves day-0 and every refresh, and nothing anywhere authors feed content. |
+| [oncall.md](oncall.md) | who hears an alert and what they are promised (C132): the three PagerDuty services and their escalation, the rota and its handover, when to escalate beyond engineering, and the status page — **which must be hosted somewhere that shares nothing with DOKS, Wasabi or R2**, because a status page that goes down with the cluster is one at the only moment it exists for. |
 | [chaos-drills.md](chaos-drills.md) | the twelve failures C130 injects on purpose (`chaos/run-drills.sh`), each with the **detection signal** and the **first action** for when it is real, and the measured behaviour of this platform beside ADD §14.1's documented one. Three of them have **no detection signal at all** and the runbook says which. |

@@ -307,6 +307,12 @@ services:
     environment:
       DATA_SOURCE_NAME: "postgresql://${PG_USER:-postgres}:${PG_PASSWORD:-mageride_dev}@postgres:5432/${PG_DATABASE:-mageride}?sslmode=disable"
       PG_EXPORTER_AUTO_DISCOVER_DATABASES: "false"
+      # C132: v0.16.0 has no collector for `pg_stat_archiver`, and the two alerts that watch
+      # the RPO have nothing to evaluate against without one. queries.yaml's header says why
+      # that particular gap could not be left open.
+      PG_EXPORTER_EXTEND_QUERY_PATH: /etc/postgres-exporter/queries.yaml
+    volumes:
+      - ./postgres-exporter/queries.yaml:/etc/postgres-exporter/queries.yaml:ro
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:9187/"]
       interval: 15s

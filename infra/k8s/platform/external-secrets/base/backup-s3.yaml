@@ -1,0 +1,64 @@
+# =====================================================================================
+# `backup-s3` — the Wasabi credential the two backup paths share (C132; ADD §15, D7' §8).
+#
+# ONE credential, TWO shapes, because the two consumers read it differently and neither
+# should have to know about the other's format:
+#
+#   s3.conf      an INI fragment for pgBackRest, projected into /etc/pgbackrest/conf.d/ in
+#                the Postgres pod. pgBackRest's own configuration (pgbackrest.conf) is a
+#                ConfigMap and is safe to read; the two keys are here and only here.
+#   access-key   plain values for the nightly `pg_dump` CronJob, which signs its own
+#   secret-key   PUT with `curl --aws-sigv4`.
+#
+# --- WHY THE KEYS ARE NOT ENVIRONMENT VARIABLES ON THE POSTGRES POD ---------------------
+# pgBackRest reads `PGBACKREST_REPO1_S3_KEY` too, and it would be one less mount. But the
+# Postgres container is the one an operator `kubectl exec`s into during an incident — that is
+# what docs/runbooks/postgres-failover.md tells them to do — and an environment variable is
+# visible to every command run in that shell and to anything that reads /proc/1/environ. A
+# file mounted at 0400 into one directory is the narrower surface for the same value.
+#
+# --- SEPARATE FROM `common-secret`'s S3 KEYS -------------------------------------------
+# `Storage__S3__AccessKey` is Cloudflare R2 and holds driver documents that the platform
+# SERVES (D-14, D7' §8). This one is Wasabi and holds the backups. Different provider,
+# different blast radius, and a single key that could read the documents AND delete the
+# backups is the credential an attacker most wants. They are rotated on the same 90-day
+# schedule (D7' §13) and never share a value.
+# =====================================================================================
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: backup-s3
+  labels:
+    app: postgres
+    app.kubernetes.io/name: backup-s3
+    app.kubernetes.io/component: secret
+    app.kubernetes.io/part-of: mageride
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: mageride-vault
+    kind: ClusterSecretStore
+  target:
+    name: backup-s3
+    creationPolicy: Owner
+    # Retain: deleting this Secret stops WAL archiving, and WAL that is not archived is an
+    # RPO that silently becomes "the last base backup" — see pgbackrest.conf's note on
+    # archive-push-queue-max.
+    deletionPolicy: Retain
+    template:
+      engineVersion: v2
+      data:
+        # `[global]` and not `[mageride]`: the repository credential is repository-wide, and
+        # a stanza-scoped key would have to be repeated for a second stanza later.
+        s3.conf: |
+          [global]
+          repo1-s3-key={{ .accessKey }}
+          repo1-s3-key-secret={{ .secretKey }}
+        access-key: "{{ .accessKey }}"
+        secret-key: "{{ .secretKey }}"
+  data:
+    - secretKey: accessKey
+      remoteRef: { key: common, property: wasabi_access_key }
+    - secretKey: secretKey
+      remoteRef: { key: common, property: wasabi_secret_key }

@@ -1,0 +1,225 @@
+# =====================================================================================
+# Patroni — the static half of the configuration (C132).
+#
+# Rendered into `patroni-config` by kustomize's configMapGenerator, so the ConfigMap name
+# carries a content hash and EDITING THIS FILE ROLLS THE STATEFULSET. A Patroni configuration
+# that changed without a restart would leave a cluster running settings no file describes.
+#
+# The per-member half — this pod's name, its IP, and the three passwords — is environment, set
+# in postgres-patroni.yaml. Patroni's `PATRONI_*` variables override anything here, which is
+# why the identity fields are absent below rather than wrong below.
+#
+# Two of these settings are runtime-changeable through `patronictl edit-config`, which writes
+# to the `mageride-pg-config` ConfigMap and NOT to this file. That is the one way the cluster
+# and the repository can disagree; `verify-readiness.sh` §7 is what compares them.
+# =====================================================================================
+
+scope: mageride-pg
+# The four DCS ConfigMaps are `mageride-pg-{leader,config,failover,sync}`. Named for the
+# cluster and not for the namespace, because `mageride-leader` in namespace `mageride` reads
+# like a platform-wide object and this one is only ever about Postgres.
+
+restapi:
+  listen: 0.0.0.0:8008
+  # `connect_address` is PATRONI_RESTAPI_CONNECT_ADDRESS, from the pod IP.
+
+kubernetes:
+  # The DCS is four ConfigMaps and a pod label. See postgres-patroni.yaml's header for why
+  # this rather than etcd, and why not the Endpoints form.
+  use_endpoints: false
+  # How Patroni finds the other members: every pod of the StatefulSet carries `app: postgres`.
+  labels:
+    app: postgres
+  # The label Service/postgres selects on. Spelled out rather than defaulted: the default
+  # value has changed between Patroni major versions, and a default that moved would leave a
+  # correct cluster with an empty Service — a total outage whose cause is invisible from
+  # anything Postgres logs.
+  role_label: role
+  leader_label_value: primary
+  follower_label_value: replica
+  standby_leader_label_value: standby_leader
+  tmp_role_label: tmp_role
+
+bootstrap:
+  # Written to the DCS ONCE, when the cluster is first initialised. Editing it afterwards
+  # changes nothing — `patronictl edit-config` is what changes a running cluster, and
+  # docs/runbooks/postgres-failover.md §6 says so where somebody would look for it.
+  dcs:
+    # 30 s leader TTL, refreshed every 10 s. A leader that dies is detected and replaced in
+    # 30 s at worst, which is the number ADD §14.1 already promises passengers: "Patroni
+    # promotes replica within 30 s".
+    ttl: 30
+    loop_wait: 10
+    retry_timeout: 10
+    # A replica more than 1 MB of WAL behind is not a failover candidate.
+    maximum_lag_on_failover: 1048576
+    # See the header of postgres-patroni.yaml: the ledger is why this is on, and
+    # `_strict: false` is why a lost standby degrades to async instead of blocking writes.
+    synchronous_mode: true
+    synchronous_mode_strict: false
+    synchronous_node_count: 1
+    postgresql:
+      use_pg_rewind: true
+      use_slots: true
+      parameters:
+        # --- the two settings that are corrections, not preferences (infra/CLAUDE.md) -----
+        # PostGIS has NO preloadable library; naming it here makes the postmaster refuse to
+        # start. TimescaleDB's is required for the T-06 hypertable.
+        shared_preload_libraries: timescaledb
+        max_connections: 200
+
+        # --- replication ---------------------------------------------------------------
+        wal_level: replica
+        hot_standby: "on"
+        max_wal_senders: 10
+        max_replication_slots: 10
+        # Required by pg_rewind. Without it a demoted primary can only rejoin by copying the
+        # whole volume, so every failover would be a 200 GB `pg_basebackup` against a cluster
+        # that has just lost a node.
+        wal_log_hints: "on"
+
+        # --- WAL archiving: this is the RPO (ADD §15 — 5 minutes) ------------------------
+        # `archive_timeout: 60` forces a segment switch every 60 s even when the platform is
+        # idle, so the worst case between the last archived WAL and a lost primary is ONE
+        # MINUTE of writes, against §15's five. Without it the bound is "whenever 16 MB of
+        # WAL happens to accumulate", which at 03:00 on a quiet night is hours.
+        # `archive_command` is asynchronous (pgbackrest's own spool) so a slow S3 PUT applies
+        # backpressure to the spool rather than to COMMIT.
+        archive_mode: "on"
+        archive_timeout: 60
+        archive_command: "pgbackrest --stanza=mageride archive-push %p"
+
+        # --- memory, sized for the SMALLEST member this file is deployed to --------------
+        # One file serves both DOKS clusters: production at ADD §10.2's 8 GB member and
+        # staging at 4 GB. Patroni's DCS parameters are cluster-wide by design, and the two
+        # errors are not symmetrical — `shared_buffers` too large for the member is a
+        # postmaster the kubelet OOM-kills on every boot, and `shared_buffers` too small is a
+        # lower cache hit rate on a platform ADD §16.4 prices at 167 writes/s. So these are
+        # staging's numbers, and production runs under-tuned on purpose.
+        #
+        # The trigger for raising them is in docs/production/capacity-plan.md §6
+        # (`pg_stat_database` cache hit ratio below 0.98 sustained), and raising them is
+        # `patronictl edit-config` plus the same edit here — verify-readiness.sh §7 compares
+        # the two so the cluster and this file cannot drift apart unnoticed.
+        shared_buffers: 1GB
+        effective_cache_size: 4GB
+        maintenance_work_mem: 256MB
+        work_mem: 8MB
+        wal_buffers: 16MB
+        min_wal_size: 1GB
+        max_wal_size: 4GB
+        checkpoint_completion_target: "0.9"
+        random_page_cost: "1.1"          # DO block storage is SSD-backed
+        effective_io_concurrency: 200
+        # T-06's hypertable and the D-18 plausibility gate both run short indexed queries;
+        # a statement that runs for 30 s on this platform is a bug, not a report.
+        statement_timeout: 30s
+        idle_in_transaction_session_timeout: 60s
+        # C119's postgres_exporter reads these.
+        track_io_timing: "on"
+        track_functions: pl
+        log_min_duration_statement: 1000
+        log_checkpoints: "on"
+        log_lock_waits: "on"
+        log_line_prefix: "%m [%p] %q%u@%d "
+        timezone: UTC
+
+  initdb:
+    - encoding: UTF8
+    - locale: C.UTF-8
+    # Not optional here: pg_rewind refuses to run against a cluster without checksums, and
+    # a corrupted page on a replica that is a failover target should be an error rather than
+    # a promotion.
+    - data-checksums
+
+  pg_hba:
+    # Peer authentication over the unix socket, which is how pgBackRest, patronictl and the
+    # probes connect from inside the pod. No password anywhere in the pod's filesystem.
+    - local all all peer
+    # Everything else is scram over TCP, from private address space only. The Service is
+    # ClusterIP and never leaves the cluster, so this is a second boundary rather than the
+    # first — the first is that nothing routes to 5432 from outside. A default-deny
+    # NetworkPolicy is the third and is a C127 gap (infra/k8s/README.md).
+    - host replication replicator 10.0.0.0/8 scram-sha-256
+    - host replication replicator 172.16.0.0/12 scram-sha-256
+    - host replication replicator 192.168.0.0/16 scram-sha-256
+    - host all all 10.0.0.0/8 scram-sha-256
+    - host all all 172.16.0.0/12 scram-sha-256
+    - host all all 192.168.0.0/16 scram-sha-256
+
+postgresql:
+  listen: 0.0.0.0:5432
+  # This image's PGDATA, not the official postgres image's — base/data/postgres.yaml's header
+  # explains what the spec's path does on first boot.
+  data_dir: /home/postgres/pgdata/data
+  bin_dir: /usr/lib/postgresql/16/bin
+  # The root filesystem is writable but $HOME is not somewhere to leave a credential file;
+  # /tmp is an emptyDir and dies with the pod, which is the right lifetime for one.
+  pgpass: /tmp/pgpass
+  # Patroni will not start with a `parameters` block that contradicts the DCS, so the tuning
+  # lives in bootstrap.dcs.postgresql.parameters above and this one holds only what is
+  # per-member.
+  parameters:
+    unix_socket_directories: /var/run/postgresql
+
+  # ONE METHOD, AND IT IS `basebackup`. This was `[pgbackrest, basebackup]` — restore from the
+  # object store first, so that rebuilding a 200 GB replica does not take its bytes from the
+  # primary that is already carrying production alone — and it was changed after watching it on
+  # a real cluster. **Patroni does not fall through.** With Patroni 4.1.3, a first method that
+  # exits non-zero ends the attempt:
+  #
+  #   ERROR: Error creating replica using method pgbackrest: … exited with code=37
+  #   ERROR: failed to bootstrap from leader 'postgres-2'
+  #   INFO: Removing data directory: /home/postgres/pgdata/data
+  #
+  # — 4 ms apart, with `basebackup` never invoked, repeating for ever. Listing pgbackrest first
+  # therefore does not buy a cheaper rebuild with a safety net; it makes EVERY rebuild
+  # impossible whenever the repository is unreachable, misconfigured, or simply empty — which
+  # it is on day one, before the first backup has been taken. A cluster that cannot build its
+  # replicas is a cluster with no standby, which is the thing this whole topology exists for.
+  #
+  # `basebackup` always works, because the source is the leader and the leader is by definition
+  # present when a replica is being built.
+  #
+  # The cheap rebuild is still available and is now an OPERATOR action rather than a default —
+  # one that is taken deliberately, with the repository confirmed healthy first:
+  #
+  #   kubectl -n mageride exec postgres-2 -c postgres -- \
+  #     pgbackrest --stanza=mageride --delta restore
+  #   kubectl -n mageride exec postgres-0 -c postgres -- \
+  #     patronictl -c /etc/patroni/patroni.yml reinit mageride-pg postgres-2
+  #
+  # docs/runbooks/postgres-failover.md §5 has the whole procedure and the size at which it
+  # stops being optional.
+  create_replica_methods:
+    - basebackup
+
+  # Defined but NOT in create_replica_methods above, so Patroni never runs it on its own. It is
+  # here so that the operator procedure in docs/runbooks/postgres-failover.md §5 has one place
+  # to read the exact command from, and so that adding `pgbackrest` back to the list — once
+  # somebody has decided a 200 GB basebackup is worse than the failure mode above — is a
+  # one-line change rather than a rewrite.
+  #
+  # `no_leader`, NOT `no_master`: Patroni 4 renamed it, and the rename is not cosmetic.
+  # `create_replica` strips exactly `no_params`, `no_leader` and `keep_data` from the method
+  # options and turns EVERYTHING ELSE into a command-line flag, so an entry still spelled
+  # `no_master` is appended to the command as `--no_master=1` and pgBackRest refuses an option
+  # it does not know. That was this file's first version, and the symptom was a replica that
+  # never joined with no mention of pgbackrest anywhere in the log.
+  pgbackrest:
+    command: "pgbackrest --stanza=mageride --delta restore"
+    keep_data: true
+    no_params: true
+    no_leader: 1
+
+  basebackup:
+    max-rate: "100M"
+    checkpoint: fast
+
+# `patronictl` inside the pod talks to the same DCS with no further configuration:
+#   kubectl -n mageride exec -it postgres-0 -c postgres -- patronictl list
+tags:
+  nofailover: false
+  noloadbalance: false
+  clonefrom: false
+  nosync: false

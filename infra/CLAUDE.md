@@ -177,6 +177,53 @@ sg/deploy-media-sg.sh         deploys it onto the Singapore media host (--dry-ru
   does not exist, and Compose creates a missing bind source as a **directory**. It also runs no
   coturn container at all and publishes the relay range through docker-proxy. C125/C132's.
 
+## Production readiness — DOKS Singapore (C132)
+
+```
+k8s/components/retire-single-instance-data/   removes base's single Postgres and Redis
+k8s/components/launch-topology/               Patroni 1P+2R + pgBackRest, Redis Sentinel x3,
+                                              and the client-side connection string
+k8s/overlays/production/pg-dump-wasabi.yaml   D7' §8's nightly logical dump
+k8s/platform/ingress-nginx/values.production.yaml   the HTTP edge
+k8s/verify-readiness.sh                       the C132 definition of done — 0 ready, 1 broken
+                                              manifest, **2 blocked outside this repository**
+scripts/dr-rehearsal.sh                       the restore, executed and timed
+docs/production/{capacity-plan,go-live-checklist,readiness-report}.md
+docs/runbooks/{postgres-failover,redis-sentinel-failover,dr-restore,capacity-scale-out,oncall}.md
+```
+
+- **The launch topology is TWO components and they are listed as a pair, retire first.** Kustomize
+  accumulates a component's `resources` before its `patches`, so one component cannot delete
+  `Service/postgres` and add its own.
+- **Patroni is in the image already.** `timescale/timescaledb-ha:pg16` carries `patroni 4.1.3` and
+  `pgBackRest 2.58.0`, so the launch topology is a StatefulSet and a ConfigMap — no operator, no
+  CRD, no etcd. The DCS is the Kubernetes API (four ConfigMaps) and the leader is a POD LABEL, so
+  `Service/postgres` follows the primary and the DSN hostname never changes. Measured on a real
+  cluster: **6 s** from `delete pod` to the Service pointing at the new leader.
+- **A Patroni pod must carry `cluster-name: <scope>`.** Without it every member sees only itself:
+  a leader is elected, the database serves, `/readiness` is 200 — and no replica can EVER be
+  built. There is no error that names the cause.
+- **`PGBACKREST_CONFIG` must be overridden.** The image bakes it to a path inside PGDATA, so the
+  mounted `pgbackrest.conf` is never read and every `archive_command` fails — `archive_mode = on`
+  and no WAL archive at all.
+- **Redis Sentinel needed no C# at all**, only `serviceName=` plus the sentinel endpoints in
+  `ConnectionStrings__Redis`; StackExchange.Redis 3.0.17 follows a failover with no restart
+  (measured). The topology change and the connection string ship in the SAME component, because
+  either one alone is a platform writing to a demoted replica.
+- **`min-replicas-to-write 1` on Redis is deliberate.** An isolated primary must refuse writes
+  rather than keep handing out `lock:driver:{driverId}` while a quorum promotes another one. The
+  visible symptom of that alert is dispatch failing, not Redis being down.
+- **The base namespace enforces `restricted` PSA, and PSA is enforced when the CONTROLLER creates
+  the pod.** A violating workload applies cleanly, syncs green, creates its PVC and never produces
+  a pod. The production Postgres was in that state until C132; `verify-readiness.sh` §3 is the
+  check.
+- **`archive-push-queue-max` is deliberately unset.** Past the limit pgBackRest DROPS the segment
+  and returns success — the backup silently stops being recoverable. Unset, a failing S3 fills
+  `pg_wal` and stops the database, which is loud and recoverable.
+- **The rehearsed RTO does not extrapolate.** 122 s for 7.7 MB is per-file cost against the object
+  store, not throughput, and `--process-max=8` bought 12 %. The RTO of record is the one measured
+  against the real Wasabi repository, and taking it is a go-live checklist item.
+
 ## Observability (C119)
 
 ```
