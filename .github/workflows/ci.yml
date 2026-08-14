@@ -19,6 +19,29 @@ name: ci
 on:
   push:
     branches: [main]
+    # THE LOOP GUARD. Without it, delivery feeds itself:
+    #
+    #   push to main -> ci -> cd -> images -> deploy.yml writes `sha-<7>` into
+    #   overlays/<env>/images/ and PUSHES THAT COMMIT TO MAIN -> ci -> cd -> ...
+    #
+    # and it does not converge, because the tag is `sha-${SHA::7}` of the commit being
+    # delivered: every cycle has a new sha, so a new tag, so a real diff, so another commit.
+    # deploy.yml's "already at $TAG; ArgoCD has nothing to do" early-exit never fires, and
+    # each iteration builds and pushes 34 images. cd runs dev AND staging, so it is
+    # potentially two promotion commits per turn, and cd's concurrency group is
+    # `cancel-in-progress: false` — runs queue rather than cancel, so stopping it means
+    # disabling a workflow rather than cancelling a run.
+    #
+    # A promotion commit touches nothing but these files, so it skips ci and the chain
+    # stops. `paths-ignore` only skips when EVERY changed path matches, so an ordinary
+    # commit that happens to touch an image list as well as code still runs in full.
+    #
+    # This never fired before 2026-08-14 for the same reason C124's TRUNCATE false positive
+    # never fired: cd had never once got past its own gate — GitHub Actions billing killed
+    # the 2026-08-12 runs, and before and after that ci on main was red, so the gate
+    # correctly declined every time.
+    paths-ignore:
+      - infra/k8s/overlays/*/images/**
   pull_request:
   workflow_dispatch:
     inputs:

@@ -278,7 +278,20 @@ def scan(name: str, raw: str) -> None:
             table = target_of(st, "ALTER TABLE")
             if pre_existing(table, created):
                 flag("RENAME", f"on `{table}` — the old name disappears atomically. Add the new one, backfill, and drop in a later release.")
-        if "TRUNCATE" in upper:
+        # A TRUNCATE STATEMENT, not the word. `TRUNCATE` is also a PostgreSQL privilege, so a
+        # substring match — which this was until 2026-08-14 — reads
+        #
+        #     REVOKE UPDATE, DELETE, TRUNCATE ON audit.events FROM mageride_app, …
+        #
+        # as data removal. That line is migration 2001's, it is C127-01's remediation, and its
+        # whole purpose is to make `audit.events` append-only: the gate was blocking delivery of
+        # the statement that takes the privilege AWAY. It is also the only occurrence of the word
+        # in any migration, so this check had never matched anything else.
+        #
+        # `^TRUNCATE` or `TRUNCATE TABLE|ONLY` covers every form the statement takes
+        # (`TRUNCATE t`, `TRUNCATE TABLE t`, `TRUNCATE ONLY t`) and none of the privilege's.
+        # Anchored like every other check in this block; this was the one that was not.
+        if re.search(r"^\s*TRUNCATE\b|\bTRUNCATE\s+(?:TABLE|ONLY)\b", st, re.IGNORECASE):
             flag("TRUNCATE", "this is a migration, not a fixture — every environment applies it, production included. Data removal belongs in a reviewed one-off.")
 
         # --- a break only against something that already existed ---------------------
