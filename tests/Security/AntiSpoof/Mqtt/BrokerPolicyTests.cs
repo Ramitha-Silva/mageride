@@ -18,6 +18,13 @@ public sealed class BrokerPolicyTests
     /// <summary>D-17's per-vehicle publish ceiling, ADD §12.6 and D5' §5.3.</summary>
     private const string PublishCeiling = "5/s";
 
+    /// <summary>
+    /// The in-cluster listener's ceiling. Not D-17's: 1883 carries the platform's own connections,
+    /// so a per-connection limit there is a per-fleet limit on ingest. Above ADD §3.2's 15,000
+    /// msg/s burst budget, so it is a guard rail and never a constraint.
+    /// </summary>
+    private const string ServiceCeiling = "20000/s";
+
     [Fact]
     public void The_deployment_has_exactly_the_listeners_it_is_meant_to_have()
     {
@@ -35,23 +42,60 @@ public sealed class BrokerPolicyTests
     }
 
     /// <summary>
-    /// D-17's ceiling is on every live listener, not just the one the tests happen to dial.
+    /// D-17's ceiling is on every listener a DEVICE can reach, not just the one the tests dial —
+    /// and it is deliberately NOT on the one only the platform reaches.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This asserted `5/s` on all three listeners until 2026-08-14, and the `tcp` one was the
+    /// ~10 msg/s ingest ceiling C129 measured against a 1,200 msg/s launch target. 1883 is
+    /// in-cluster only — the LoadBalancers publish 8883 and 8084, `Mqtt__Port=1883` is every
+    /// platform service, and what holds a connection there is mqtt-bridge-svc carrying E-08's
+    /// shared subscription for the whole fleet. A per-connection message limit on that listener is
+    /// a per-FLEET limit on ingest, and 5/s is one vehicle's rate.
+    /// </para>
+    /// <para>
+    /// So the property is split rather than dropped. D-17 is per vehicle and is asserted where
+    /// vehicles are; the service listener still carries a ceiling, because "every live listener
+    /// carries one" is worth keeping if 1883 is ever exposed by mistake — it is just not allowed
+    /// to be a per-vehicle one.
+    /// </para>
+    /// </remarks>
     [Fact]
-    public void Every_live_listener_carries_the_five_messages_a_second_ceiling()
+    public void Every_device_listener_carries_the_five_messages_a_second_ceiling()
     {
-        var without = BrokerPolicy.Listeners
-            .Where(listener => !string.Equals(listener.Key, "ws", StringComparison.Ordinal))
+        // ssl = 8883 trackers, wss = 8084 mobile. `ws` is disabled; `tcp` is the service plane.
+        var deviceListeners = BrokerPolicy.Listeners
+            .Where(listener => listener.Key is "ssl" or "wss");
+
+        var without = deviceListeners
             .Where(listener => !BrokerPolicy.Declares(listener.Value, "messages_rate", PublishCeiling))
             .Select(listener => $"listeners.{listener.Key}.default")
             .ToList();
 
         Assert.True(
             without.Count == 0,
-            $"D-17 sets a 5 msg/s publish ceiling and these listeners do not carry it: "
+            $"D-17 sets a 5 msg/s publish ceiling and these DEVICE listeners do not carry it: "
             + string.Join(", ", without)
             + ". A device that connects to an unlimited listener is not rate-limited by the broker "
             + "at all, and position-processor-svc's second line is at twice the rate.");
+
+        // The service listener has a ceiling, and it must not be a per-vehicle one.
+        var serviceListener = BrokerPolicy.Listeners["tcp"];
+
+        Assert.False(
+            BrokerPolicy.Declares(serviceListener, "messages_rate", PublishCeiling),
+            "listeners.tcp.default carries D-17's per-VEHICLE 5 msg/s ceiling. No device reaches "
+            + "1883 — it is in-cluster only, and what holds a connection there is mqtt-bridge-svc "
+            + "with E-08's shared subscription for the whole fleet — so this caps the platform's "
+            + "entire ingest at one vehicle's publish rate. It is the ~10 msg/s ceiling C129 "
+            + "measured against a 1,200 msg/s target; load/report.md opens with the correction.");
+
+        Assert.True(
+            BrokerPolicy.Declares(serviceListener, "messages_rate", ServiceCeiling),
+            $"listeners.tcp.default must still carry a ceiling, and it must be {ServiceCeiling} — "
+            + "above ADD §3.2's 15,000 msg/s burst budget, so it bounds a runaway service without "
+            + "ever binding on legitimate traffic.");
 
         // R-09's reconnect-storm control, same argument.
         var withoutConnRate = BrokerPolicy.Listeners
