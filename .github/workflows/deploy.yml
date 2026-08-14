@@ -246,6 +246,7 @@ jobs:
       # new SHA is what answered — nothing on the public surface reports a build SHA — so the
       # step says so rather than implying more than it checked.
       - name: probe the public edge
+        id: probe
         if: ${{ vars.ARGOCD_SERVER == '' }}
         env:
           ENVIRONMENT: ${{ inputs.environment }}
@@ -255,6 +256,34 @@ jobs:
             production) host=api.mageride.lk ;;
             *)          host="api.${ENVIRONMENT}.mageride.lk" ;;
           esac
+
+          # AN ENVIRONMENT THAT DOES NOT EXIST IS NOT A FAILED DEPLOY. Same idiom as cd.yml's
+          # gate — "declining is not failing" — and for the same reason: this job used to end a
+          # green delivery in red because it probed a host that has never had a DNS record. Every
+          # image built, the migration gate passed, the promotion commit landed, and the run was
+          # marked failed for the absence of a cluster nobody has created yet (go-live checklist
+          # item 8). Red for that is noise, and noise is what stops the real red being read.
+          #
+          # DNS is the discriminator, not a variable somebody has to remember to set: an
+          # environment that has been deployed has a record, one that has never existed has none.
+          # It is also self-healing — the day the cluster and its DNS exist, this starts probing
+          # again with nobody editing anything, which an opt-in flag would not.
+          #
+          # Retried, because a single resolver blip must not turn a real outage into a skip.
+          resolved=0
+          for _ in 1 2 3; do
+            if getent hosts "$host" >/dev/null 2>&1; then resolved=1; break; fi
+            sleep 5
+          done
+
+          if [ "$resolved" -eq 0 ]; then
+            echo "verified=none" >> "$GITHUB_OUTPUT"
+            echo "::notice::$host does not resolve — there is no $ENVIRONMENT environment to \
+            verify. Nothing was checked: the images are built and the promotion commit is on main, \
+            and that is all this run establishes."
+            exit 0
+          fi
+
           echo "::notice::no ARGOCD_SERVER variable — falling back to a health probe of https://$host"
           ok=0
           # `_`, not a named counter: this polls sixty times and printing an attempt number sixty
@@ -272,6 +301,7 @@ jobs:
             sleep 15
           done
           test "$ok" -ge 3 || { echo "::error::$host/health/ready did not settle at 200"; exit 1; }
+          echo "verified=probe" >> "$GITHUB_OUTPUT"
           echo "::warning::the edge is healthy, but this probe cannot confirm WHICH revision is\
            serving. Set the ARGOCD_SERVER variable and the ARGOCD_AUTH_TOKEN secret for an\
            authoritative check (see .github/workflows/README.md)."
@@ -288,6 +318,16 @@ jobs:
             echo "| source commit | \`${{ inputs.sha }}\` |"
             echo "| previous | \`${{ needs.migration-gate.outputs.deployed }}\` |"
             echo "| reason | ${{ inputs.reason || '—' }} |"
+            # What was actually VERIFIED, so a green run cannot be read as more than it is. The
+            # skip path is the one that needs saying out loud: images built and a commit written
+            # is not a deploy, and without this row the summary of a run that verified nothing
+            # looks exactly like the summary of one that verified everything.
+            case "${{ vars.ARGOCD_SERVER != '' && 'argocd' || steps.probe.outputs.verified }}" in
+              argocd) echo "| verified | ArgoCD reports the app Synced and Healthy |" ;;
+              probe)  echo "| verified | the public edge answers 200 (revision not confirmed) |" ;;
+              none)   echo "| verified | **NOTHING — the environment does not exist.** The images are built and the promotion commit is on \`main\`; nothing is running them |" ;;
+              *)      echo "| verified | — |" ;;
+            esac
             echo
             echo "Rollback: \`gh workflow run rollback.yml -f environment=${{ inputs.environment }} -f tag=${{ needs.migration-gate.outputs.deployed }}\`"
             echo "See \`docs/runbooks/rollback.md\`."
