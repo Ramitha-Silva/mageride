@@ -352,9 +352,17 @@ timed** (§2.3), and **the scale-out triggers are wired to alerts, not left as p
 
 ## 6. The one thing to read if you read nothing else
 
-The launch topology now survives a node loss, and that is worth having. It does not make the
-platform ready, because **the ingest chain carries about ten messages a second against a launch
-target of twelve hundred** (C129 §1), and a live-vehicle-tracking platform that silently discards
-99 % of its positions is not a product with a capacity problem — it is a product that does not
-work yet. Every node count in `capacity-plan.md` is correct arithmetic against the day that is
-fixed.
+The launch topology now survives a node loss, and that is worth having.
+
+**And the ingest ceiling is closed** (2026-08-14). C129 measured the chain at ~10 msg/s against a
+1,200 msg/s launch target and handed the cause to the bridge's acknowledgement path; the cause was
+`messages_rate = "5/s"` on EMQX's in-cluster **1883** listener — D-17's per-vehicle publish ceiling,
+applied to a listener no device reaches and the fleet's whole shared subscription does. C129's
+control subscriber was QoS 0 and the limiter is charged for QoS-1 delivery, which is exactly why the
+broker was cleared and the search went somewhere nothing was wrong. **240 msg/s now carried with
+zero drops on the replica**, and `MqttBridgeThroughputTests` is the regression test C129 §1.4 says
+nobody had.
+
+What is left is ordinary: 1,200 msg/s sustained is not yet demonstrated (240 is), and the levers are
+`mqtt.max_inflight`, replica count and a load generator that is not on the box under test. That is a
+capacity gap. It is not the same kind of thing as a platform that discards nine positions in ten.

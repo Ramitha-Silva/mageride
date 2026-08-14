@@ -18,14 +18,24 @@ namespace MageRide.HotPath.Tests.Integration;
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>The deployed broker paces a single connection at exactly 5 msg/s</b> — <c>emqx.conf</c> sets
-/// <c>messages_rate = "5/s"</c> on every listener and the fixture mounts that file, so a handset
-/// cannot push 20 samples/s through one socket however hard the test tries. Two consequences run
-/// through this class: a device that exceeds D-17's <i>per-vehicle</i> ceiling has to do it over
-/// several connections (which is exactly the gap the bridge-side counter exists to close, since the
-/// broker's limiter is per connection), and a test of the throttle <i>mechanism</i> has to configure
-/// a rate the broker will let a device beat. <see cref="RateLimitPolicies.MqttReplay"/> carries the
-/// spec'd 20/s and <see cref="The_spec_default_for_the_backlog_rate_is_twenty_a_second"/> pins it.
+/// <b>The deployed broker paces a device connection at exactly 5 msg/s</b> — <c>emqx.conf</c> sets
+/// <c>messages_rate = "5/s"</c> on the listeners devices reach (8883 trackers, 8084 mobile) and the
+/// fixture mounts that file, so a handset cannot push 20 samples/s through one socket however hard
+/// it tries. Two consequences run through this class: a device that exceeds D-17's
+/// <i>per-vehicle</i> ceiling has to do it over several connections (which is exactly the gap the
+/// bridge-side counter exists to close, since the broker's limiter is per connection), and a test of
+/// the throttle <i>mechanism</i> has to configure a rate the broker will let a device beat.
+/// <see cref="RateLimitPolicies.MqttReplay"/> carries the spec'd 20/s and
+/// <see cref="The_spec_default_for_the_backlog_rate_is_twenty_a_second"/> pins it.
+/// </para>
+/// <para>
+/// <b>The fixture's own listener is 1883, and that one no longer carries the limit.</b> It was
+/// removed there because 1883 is the in-cluster listener — no device reaches it, and what does is
+/// mqtt-bridge-svc holding the whole fleet's shared subscription, so a per-connection message limit
+/// on it was a per-FLEET limit on ingest and is what capped the platform at ~10 msg/s (C129 §1;
+/// <c>emqx.conf</c> has the measurements). Nothing in this class depended on that pacing — the
+/// several-connections shape above is what the tests already did, for the per-vehicle reason — but
+/// a test written here in future cannot assume the broker will slow its publisher down.
 /// </para>
 /// </remarks>
 [Collection<HotPathCollection>]

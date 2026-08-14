@@ -23,7 +23,10 @@ namespace MageRide.Security.Tests.AntiSpoof.Mqtt;
 [Trait("Category", "AntiSpoof")]
 public sealed class PublishCeilingTests(EmqxFixture emqx)
 {
-    /// <summary>D-17's ceiling, per connection, as <c>emqx.conf</c> sets it on every listener.</summary>
+    /// <summary>
+    /// D-17's ceiling, per connection, as <c>emqx.conf</c> sets it on every listener a DEVICE can
+    /// reach — 8883 (trackers) and 8084 (mobile).
+    /// </summary>
     private const int CeilingPerSecond = 5;
 
     /// <summary>
@@ -42,9 +45,19 @@ public sealed class PublishCeilingTests(EmqxFixture emqx)
     /// case that matters: the ceiling not being applied at all, which would let this finish in
     /// milliseconds.
     /// </para>
+    /// <para>
+    /// <b><see cref="MqttPlane.InClusterTcp"/> is not in this theory, and its absence is the
+    /// assertion.</b> It was, until 2026-08-14, and 1883's 5 msg/s was the ~10 msg/s ingest ceiling
+    /// C129 measured against a 1,200 msg/s launch target: no device reaches 1883, mqtt-bridge-svc
+    /// holds E-08's shared subscription there for the whole fleet, and a per-connection limit on
+    /// that listener is a per-FLEET limit on ingest. D-17 is a per-vehicle ceiling and is proved
+    /// here on the plane a driver's handset actually uses.
+    /// <see cref="BrokerPolicyTests.Every_device_listener_carries_the_five_messages_a_second_ceiling"/>
+    /// is what keeps 1883 from silently acquiring one again — it asserts the service listener has a
+    /// ceiling AND that it is not D-17's.
+    /// </para>
     /// </remarks>
     [Theory]
-    [InlineData(MqttPlane.InClusterTcp)]
     [InlineData(MqttPlane.MobileWebSocket)]
     public async Task One_connection_cannot_publish_faster_than_the_configured_ceiling(MqttPlane plane)
     {

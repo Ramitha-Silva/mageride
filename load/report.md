@@ -14,6 +14,49 @@ replica's own edge with `load/` (stock k6, `bash load/run.sh`). Raw output is in
 
 ---
 
+## Correction — 2026-08-14, the cause was found and fixed
+
+**§1 below identified the ceiling correctly and diagnosed it wrongly.** The loss, the `queue_full`
+drops and the 33.6 s p95 are all real and reproduced. The cause was not the bridge's acknowledgement
+path: it was **`messages_rate = "5/s"` on EMQX's 1883 listener** — D-17's per-vehicle publish
+ceiling, applied to a listener no device connects to and mqtt-bridge-svc does, so the whole fleet's
+ingest was capped at one vehicle's publish rate.
+
+§1.2's control is exactly what hid it. "A second `svc-` subscriber received 97.2 % at 100 msg/s" was
+taken at **QoS 0**, and the limiter is charged for **QoS-1 delivery**. Same broker, same publishers,
+same config, one variable changed:
+
+| subscriber | `messages_rate = "5/s"` | raised to `10000/s` |
+|---|---|---|
+| QoS 1, manual ack (the bridge's shape) | 3.6 msg/s | 913 msg/s |
+| QoS 1, auto ack | 5.0 msg/s | 1,005 msg/s |
+| QoS 0 (§1.2's control) | 89.4 msg/s | 700 msg/s |
+
+Stage timings inside `TelemetryForwarder.CompleteAsync` under load, which §1.3 handed to C038 as
+"2.5-4 s unexplained": produce **8-31 ms**, offset record **0 ms**, PUBACK **0-36 ms**, and the
+forwarder's own in-flight count at **1-12** against a window of 32 — starved, not saturated. There
+was nothing wrong in the bridge. `inflight=32` in §1.3's session dump is EMQX holding a full window
+it was not permitted to drain.
+
+**Measured on this replica after the fix**, same suite, same profiles:
+
+| offered | achieved | delivered to the bridge | dropped |
+|---|---|---|---|
+| 100 msg/s | 99.4 msg/s | 3,198 | **0** |
+| 240 msg/s | 239.1 msg/s | 14,798 | **0** |
+| 1,000 msg/s | 513 msg/s (the generator, on this box) | — | 7,189 |
+
+So one replica carries **at least 240 msg/s with no loss** here, against ~10 before. ADD §3.2's
+3,000 msg/s sustained is still not demonstrated and is now a capacity question — `mqtt.max_inflight`
+(§1.5's second recommendation still stands), replica count, and a box that is not also the load
+generator — rather than a defect. §1.5's first recommendation is withdrawn; its third and fourth
+stand.
+
+Fixed in `infra/deploy/emqx/emqx.conf`, which carries the argument and the numbers.
+`MqttBridgeThroughputTests` is the regression test §1.4 says nobody had.
+
+---
+
 ## The headline
 
 **The ingest chain carries ~10 messages per second. ADD §3.2's launch target is 3,000 msg/s

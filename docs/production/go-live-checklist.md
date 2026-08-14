@@ -1,7 +1,10 @@
 # Go-live checklist — MageRide production, DOKS Singapore
 
-C132 · prepared 2026-08-13 · **status: NOT READY.** Nine blockers open, four of them HIGH
-security findings that C132's own fence gates go-live on.
+C132 · prepared 2026-08-13, updated 2026-08-14 · **status: NOT READY.** Fifteen items open, four
+of them HIGH security findings that C132's own fence gates go-live on. **Item 5 — the ingest
+ceiling that made the platform not work — was closed on 2026-08-14**, and item 5a is what is left
+of it: a capacity gap rather than a defect. Item 5 stays in the table, struck through, because a
+blocker that disappears is a blocker nobody can check.
 
 ---
 
@@ -62,9 +65,10 @@ Every other C127/C128 finding is FIXED or risk-accepted with an owner and a date
 
 | # | Item | State | Owner | Gate |
 |---|---|---|---|---|
-| 5 | **The ingest chain carries ~10 msg/s against a 1,200 msg/s launch target** (C129 §1). Everything above the ceiling is discarded inside EMQX and every publisher is acknowledged anyway | **OPEN** | C038 (mqtt-bridge-svc) | **hard blocker.** A live map that silently drops 99 % of positions is not a product |
-| 6 | **End-to-end position latency is 33.6 s p95 against D-19's 5 s**, measured at 1/30th of the launch rate | **OPEN** — a consequence of #5 | C038 | re-measure after #5; do not launch on the model |
-| 7 | `delivery.dropped.queue_full` is not scraped. It is the ONLY symptom of #5 | **OPEN** — EMQX's Prometheus endpoint is not a target in the DOKS cluster | C132/C119 | with #12 |
+| 5 | ~~The ingest chain carries ~10 msg/s against a 1,200 msg/s launch target~~ | **FIXED 2026-08-14.** The cause was `messages_rate = "5/s"` on EMQX's in-cluster 1883 listener — D-17's per-vehicle ceiling applied to the connection carrying the whole fleet's shared subscription. **240 msg/s now carried with zero drops** on the replica, up from ~10. `MqttBridgeThroughputTests` is the regression test | C132 | met |
+| 5a | **1,200 msg/s sustained is not yet demonstrated** — 240 is. The remaining levers are `mqtt.max_inflight` 32 → 512, more bridge replicas, and a load generator that is not on the box under test | **OPEN** | infrastructure owner | measure on staging before go-live; this is capacity, not a defect |
+| 6 | **End-to-end position latency at the launch rate** — the 33.6 s p95 was the backlog behind #5's cap and has not been re-measured since it was lifted | **OPEN** | C132 → infrastructure owner | re-measure with the subscriber half (`LOAD_WATCH=1`) before go-live |
+| 7 | `delivery.dropped.queue_full` is not scraped. It is the ONLY symptom of an ingest ceiling, and #5 proved it can be non-zero for weeks with nothing else showing | **OPEN** — EMQX's Prometheus endpoint is not a target in the DOKS cluster | C132/C119 | with #12 |
 
 ### A3 — Operability
 

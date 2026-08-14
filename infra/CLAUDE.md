@@ -107,10 +107,16 @@ replica/contract-live-verify.sh   the OTHER half of the wave-5 gate: drives all 
 `load/` at the repository root holds the capacity suite — stock k6, pointed at this replica through
 its edge. `load/report.md` is what it measured; two things there change how this stack is read:
 
-- **The ingest chain carries ~10 msg/s, not ADD §3.2's 3,000, and the loss is silent.** EMQX PUBACKs
-  the publisher and then discards what it cannot hand to mqtt-bridge-svc, counted only as
-  `delivery.dropped.queue_full`. Anything that depends on telemetry — the live map *and* the
-  dispatch candidate pool — degrades with it and reports nothing.
+- **The ingest chain carried ~10 msg/s against ADD §3.2's 3,000, and the loss was silent — FIXED
+  2026-08-14, and the cause was not where the report looked.** `messages_rate = "5/s"` was set on
+  EMQX's **1883** listener, which no device reaches and mqtt-bridge-svc does: D-17's per-vehicle
+  ceiling applied to the connection carrying the whole fleet's shared subscription. C129's control
+  subscriber was QoS 0 and the limiter is charged for **QoS-1 delivery**, which is why the broker was
+  exonerated and the search went into the bridge, where nothing was wrong (produce 8-31 ms, PUBACK
+  0-36 ms, in-flight 1-12 of a window of 32 — starved, not saturated). D-17 is still enforced on 8883
+  and 8084 where devices actually connect. **Measured after: 240 msg/s carried with zero drops**, up
+  from ~10. `emqx.conf` carries the argument and the numbers; `load/report.md` opens with the
+  correction. 3,000 msg/s sustained is now a capacity question, not a defect.
 - **`Dispatch__RideServiceBaseUrl` was the NXDOMAIN placeholder from `.env.app.example`**, so no
   Mode C ride was ever dispatched here. The override is now in the compose file beside the three
   `ReverseProxy__Clusters__*` ones and for the same reason: it is topology, and Container 7 does not
