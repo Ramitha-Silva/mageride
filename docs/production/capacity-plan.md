@@ -3,10 +3,10 @@
 C132 · 2026-08-13 · inputs: ADD §10.2, §16, D7' §8, §11, and the measurements in `load/report.md`
 (C129), `chaos/report.md` (C130) and `infra/k8s/README.md`'s capacity note (C124).
 
-> **Read §1 before sizing anything.** The launch target assumes an ingest chain that carries
-> 1,200 messages a second. The one that exists carries about ten. Every node count below is
-> correct arithmetic against a platform that does not work yet, and the plan says so rather than
-> quietly averaging it away.
+> **Updated 2026-08-14.** §1's ceiling is fixed: the chain carried ~10 msg/s because
+> `messages_rate = "5/s"` was set on EMQX's in-cluster 1883 listener, which no device reaches and
+> mqtt-bridge-svc does. Measured after the fix on the replica: **240 msg/s carried with zero drops**,
+> against 1,200 msg/s needed at launch. That is a defect closed and a capacity gap still open.
 
 ---
 
@@ -24,16 +24,34 @@ position-processor-svc → Redis — at **~10 msg/s**, with everything above tha
 EMQX (`delivery.dropped.queue_full`) and every publisher acknowledged anyway. End-to-end position
 latency was 33.6 s p95 against D-19's 5 s, at one thirtieth of the launch rate.
 
-The cause is not size. It is `mqtt.max_inflight = 32` against an acknowledgement path inside the
-bridge that takes 2.5–4 s per message where the Redpanda produce takes 17 ms. **More brokers,
-more processor replicas and bigger nodes do not move it**, which is why this plan does not
-attempt to buy around it:
+**The cause was configuration, and it is fixed.** `messages_rate = "5/s"` — D-17's per-vehicle
+publish ceiling — was set on EMQX's **1883** listener. No device connects to 1883; the production
+LoadBalancer publishes 8883 and 8084 and names 1883 only as a health-check target, and
+`Mqtt__Port=1883` is every platform service. So a per-connection message limit there was a
+per-FLEET limit on ingest, charged against the one connection holding E-08's shared subscription.
+The limiter is charged for **QoS-1 delivery**, which is why C129's QoS-0 control subscriber cleared
+EMQX and sent the search into the bridge, where the stage timings were 8–31 ms produce, 0–36 ms
+PUBACK and an in-flight count of 1–12 against a window of 32 — starved, not saturated.
 
-* the node counts in §4 are sized for the D-20 model, because that is what the platform will need
-  the day the defect is fixed and provisioning a cluster twice is worse than provisioning it once;
-* **the ingest fix is go-live blocker #1** (`go-live-checklist.md` item 1), owned by C038;
-* and the first number to re-measure after the fix is not throughput but `queue_full`, because
-  the loss is silent and there is no other symptom.
+Measured on the replica after the fix, same suite:
+
+| offered | achieved | delivered to the bridge | dropped |
+|---|---|---|---|
+| 100 msg/s | 99.4 msg/s | 3,198 | **0** |
+| 240 msg/s | 239.1 msg/s | 14,798 | **0** |
+| 1,000 msg/s | 513 msg/s (the load generator, on this box) | — | 7,189 |
+
+**So one replica carries at least 240 msg/s cleanly, against the ~10 it did, and against 1,200
+needed at launch.** What remains is capacity rather than a defect, and it is the ordinary kind:
+
+* `mqtt.max_inflight = 32` still bounds a QoS-1 session — C129 §1.5's second recommendation stands,
+  and 32 → 512 is the next lever;
+* more bridge replicas: E-08's shared subscription is what they are for, and `telemetry.raw` has six
+  partitions in production;
+* a box that is not also running the load generator — at 1,000 msg/s offered, k6 itself only
+  achieved 513 on this VPS.
+* **`queue_full` is still the number to watch**, because the loss is silent and there is no other
+  symptom. `EmqxMessagesDropped` (C119) is the alert.
 
 ---
 
@@ -214,9 +232,9 @@ alert is for, or when the launch fleet is actually connected — whichever is fi
 
 | Measurement | When | Why it cannot be done now |
 |---|---|---|
-| ingest at 1,200 msg/s sustained, `queue_full` at zero | after the C038 fix, before go-live | the chain carries ~10 msg/s (§1) |
-| per-service CPU and memory under the C129 profile | after the ingest fix | the services are co-located on the replica; per-service attribution needs the per-service deployment under load |
-| p95/p99 position latency at launch rate | before go-live | currently 33.6 s p95 at 1/30th of the rate |
+| ingest at 1,200 msg/s sustained, `queue_full` at zero | before go-live | 240 msg/s is proven clean (§1); 1,200 needs `max_inflight`, more replicas and a box that is not the generator |
+| per-service CPU and memory under the C129 profile | now unblocked | the services are co-located on the replica; per-service attribution needs the per-service deployment under load |
+| p95/p99 position latency at launch rate | before go-live | the 33.6 s p95 was the backlog behind the 5/s cap; re-measure now that the cap is gone |
 | DR restore against the real Wasabi repository | before go-live | the rehearsed 122 s is on 7.7 MB against MinIO and does not extrapolate (`dr-restore.md` §6) |
 | fanout sends/pod/s at 100k subscribers | first month | needs real clients; §16.3's model is the input until then |
 | the right-sizing in §3 | first month after launch | needs a month of production working-set data |
