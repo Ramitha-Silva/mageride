@@ -79,10 +79,38 @@ public sealed class OutboxPipelineTests(PostgresFixture postgres, RedisFixture r
         var outboxId = long.Parse(Encoding.UTF8.GetString(outboxIdBytes), CultureInfo.InvariantCulture);
 
         await using var connection = await harness.OpenAsync();
-        var dispatchedAt = await connection.QuerySingleAsync<DateTimeOffset?>(
-            "SELECT dispatched_at FROM trips.outbox WHERE id = @Id;", new { Id = outboxId });
 
-        Assert.NotNull(dispatchedAt);
+        // POLLED, because arriving on the topic does not mean the row has been stamped yet.
+        // The dispatcher produces first and marks `dispatched_at` after the delivery report —
+        // it must, or a crash between the two would lose an event the broker never took — so
+        // between this test consuming the message and the UPDATE committing there is a window of
+        // milliseconds in which the column is legitimately still NULL. Reading once landed inside
+        // it on CI (2026-08-15, `main` @ 92d7b50: "Assert.NotNull() Failure: Value of type
+        // 'Nullable<DateTimeOffset>' does not have a value").
+        //
+        // The assertion is unchanged in substance: a dispatcher that never stamps the row still
+        // fails, five seconds later and with a message that says which row.
+        DateTimeOffset? dispatchedAt = null;
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+
+        while (DateTime.UtcNow < deadline)
+        {
+            dispatchedAt = await connection.QuerySingleAsync<DateTimeOffset?>(
+                "SELECT dispatched_at FROM trips.outbox WHERE id = @Id;", new { Id = outboxId });
+
+            if (dispatchedAt is not null)
+            {
+                break;
+            }
+
+            await Task.Delay(100, TestContext.Current.CancellationToken);
+        }
+
+        Assert.True(
+            dispatchedAt is not null,
+            $"trips.outbox row {outboxId} reached Redpanda but was never marked dispatched. "
+            + "The drain produces and then stamps; a row that stays NULL is a drain that "
+            + "published and did not record it, which redelivers the event on the next sweep.");
     }
 
     private async Task<ConsumeResult<string, string>> ConsumeAsync(Func<ConsumeResult<string, string>, bool> match)
