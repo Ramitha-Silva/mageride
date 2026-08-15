@@ -46,11 +46,35 @@ it was not permitted to drain.
 | 240 msg/s | 239.1 msg/s | 14,798 | **0** |
 | 1,000 msg/s | 513 msg/s (the generator, on this box) | — | 7,189 |
 
-So one replica carries **at least 240 msg/s with no loss** here, against ~10 before. ADD §3.2's
-3,000 msg/s sustained is still not demonstrated and is now a capacity question — `mqtt.max_inflight`
-(§1.5's second recommendation still stands), replica count, and a box that is not also the load
-generator — rather than a defect. §1.5's first recommendation is withdrawn; its third and fourth
-stand.
+So one replica carries **at least 240 msg/s with no loss** here, against ~10 before. §1.5's first
+recommendation is withdrawn; its third and fourth stand.
+
+### The second lever, applied — 2026-08-15
+
+§1.5's second recommendation — `mqtt.max_inflight` 32 → 512 — is now set, on a `services` zone
+bound to 1883 so device sessions keep EMQX's defaults. A QoS-1 subscriber's throughput is
+`max_inflight / ack-latency`, and the bridge's ack path measures 8-31 ms, so 32 in flight was the
+next constraint after the `messages_rate` cap came off. Same run, same generator, before and after:
+
+| offered (250 connections × ~4/s) | achieved | delivered | dropped |
+|---|---|---|---|
+| `max_inflight = 32` | 513 msg/s | — | **7,189** |
+| `max_inflight = 512` | 524 msg/s | 32,956 | **0** |
+
+At 400 and 500 connections: 546.7 msg/s / 0 dropped, and 491.2 msg/s / 0 dropped. **The platform
+now carries everything this box can offer, cleanly.**
+
+**ADD §3.2's 1,200 msg/s sustained is still NOT demonstrated, and cannot be here.** k6 plateaus at
+490-550 msg/s whatever the connection count, on the same 8 vCPU that runs the entire replica —
+`load/CLAUDE.md`'s own note that "the generator runs on the same box as the system under test" is
+now the binding constraint rather than a caveat. `lib/mqtt.js` publishes over the 8084 WSS
+listener, which correctly keeps D-17's 5 msg/s per connection, so offered rate scales with
+CONNECTIONS and not with a per-connection rate — and connections are exactly what k6 cannot add
+more of here.
+
+That is go-live checklist item 5a, and what it needs is a generator that is not on the box under
+test. `max_mqueue_len` was deliberately left at its default: raising it would convert loss into
+latency, and §2's 33.6 s p95 is what that looks like.
 
 Fixed in `infra/deploy/emqx/emqx.conf`, which carries the argument and the numbers.
 `MqttBridgeThroughputTests` is the regression test §1.4 says nobody had.
