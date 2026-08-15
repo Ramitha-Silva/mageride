@@ -2,7 +2,7 @@
 
 DOKS Singapore · 2026-08-13 · **status: the package is complete; the launch is blocked.**
 
-`bash infra/k8s/verify-readiness.sh` exits **2** and names fifteen open items.
+`bash infra/k8s/verify-readiness.sh` exits **2** and names sixteen open items.
 `docs/production/go-live-checklist.md` is the list somebody signs.
 
 ---
@@ -342,7 +342,7 @@ done items that need one are not met:
   is not DOKS: it does not exercise `do-block-storage`, the DO load balancer annotations,
   cert-manager against the real DNS, or ESO against a real Vault.
 * *"the go-live checklist is signed off"* — it is written, with an owner against every item and
-  fifteen of them open. A signature would be a fiction.
+  sixteen of them open. A signature would be a fiction.
 
 The two that could be done, were: **the DR restore procedure is executed once end to end and
 timed** (§2.3), and **the scale-out triggers are wired to alerts, not left as prose** (17 rules,

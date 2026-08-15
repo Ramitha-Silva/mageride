@@ -27,6 +27,7 @@ import { WebSocket } from 'k6/websockets';
 const RS = String.fromCharCode(0x1e);
 
 const INVOCATION = 1;
+const COMPLETION = 3;
 const PING = 6;
 const CLOSE = 7;
 
@@ -38,6 +39,7 @@ const CLOSE = 7;
  * @param {string} options.token     the API access token
  * @param {function} options.onReady called once the handshake completes
  * @param {function} options.onEvent called with (target, args) for every server invocation
+ * @param {function} options.onJoined called with the cell count the hub CONFIRMED
  * @param {function} options.onError called with a message
  */
 export function LiveHubClient(options) {
@@ -47,6 +49,16 @@ export function LiveHubClient(options) {
   this.received = 0; // WebSocket messages carrying a hub invocation — §16.3's "SignalR send".
   this.frames = 0; // Vehicle frames inside them.
   this.errors = 0;
+  this.joined = 0; // cells this connection is actually subscribed to, per the hub's own answer.
+
+  // Every invocation carries an id, so the hub sends a completion back and a REFUSAL IS VISIBLE.
+  // Without one, SignalR treats the call as non-blocking and answers nothing at all: a
+  // `JoinGeocells` that threw — an invalid resolution, a connection over
+  // `Fanout:MaxCellsPerConnection` — looked exactly like one that worked, and the run then
+  // measured an empty map and reported it as a latency of zero over zero observations. That is
+  // C129's `D-19 e2e p95 0 ms over 0 observations`, and it is why this exists.
+  let nextInvocation = 0;
+  const pending = {};
 
   const url = `${options.edge.replace(/^http/, 'ws')}/hubs/live?access_token=${options.token}`;
   const socket = new WebSocket(url);
@@ -114,6 +126,17 @@ export function LiveHubClient(options) {
         if (options.onEvent) {
           options.onEvent(message.target, message.arguments || []);
         }
+      } else if (message.type === COMPLETION) {
+        const waiting = pending[message.invocationId];
+        delete pending[message.invocationId];
+
+        if (message.error) {
+          // The hub's own words. `JoinGeocells` names the offending cell and the resolution it
+          // wanted, which is the whole value of asking for the completion.
+          fail(`${waiting ? waiting.target : 'invocation'} refused: ${message.error}`);
+        } else if (waiting && waiting.onDone) {
+          waiting.onDone();
+        }
       } else if (message.type === CLOSE) {
         fail(`hub closed the connection: ${message.error || 'no reason given'}`);
         self.close();
@@ -144,7 +167,17 @@ export function LiveHubClient(options) {
    * splitting a large set across connections is doing what the contract expects.
    */
   this.joinGeocells = function joinGeocells(cells) {
-    self.send({ type: INVOCATION, target: 'JoinGeocells', arguments: [cells] });
+    const invocationId = String(++nextInvocation);
+    pending[invocationId] = {
+      target: 'JoinGeocells',
+      onDone: () => {
+        self.joined += cells.length;
+        if (options.onJoined) {
+          options.onJoined(cells.length);
+        }
+      },
+    };
+    self.send({ type: INVOCATION, invocationId: invocationId, target: 'JoinGeocells', arguments: [cells] });
   };
 
   this.close = function close() {

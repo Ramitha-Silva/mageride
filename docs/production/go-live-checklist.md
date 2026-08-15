@@ -1,10 +1,15 @@
 # Go-live checklist — MageRide production, DOKS Singapore
 
-C132 · prepared 2026-08-13, updated 2026-08-14 · **status: NOT READY.** Fifteen items open, four
-of them HIGH security findings that C132's own fence gates go-live on. **Item 5 — the ingest
-ceiling that made the platform not work — was closed on 2026-08-14**, and item 5a is what is left
-of it: a capacity gap rather than a defect. Item 5 stays in the table, struck through, because a
-blocker that disappears is a blocker nobody can check.
+C132 · prepared 2026-08-13, updated 2026-08-15 · **status: NOT READY.** Sixteen items open, four
+of them HIGH security findings that C132's own fence gates go-live on. **Item 5 — the EMQX ingest
+ceiling — was closed on 2026-08-14**, but closing it uncovered a second, larger one behind it:
+item 5b, position-processor-svc at **~14 msg/s**. Item 5 stays in the table, struck through,
+because a blocker that disappears is a blocker nobody can check.
+
+**Read 5a and 5b together.** On 2026-08-14 this document said the remaining gap was "measurement
+capacity, not a defect". That was measured at the MQTT bridge, which is not the end of the chain,
+and it was wrong: the 490-550 msg/s the bridge carried went into Kafka and stayed there. The
+correction is in 5a, and what it uncovered is 5b.
 
 ---
 
@@ -66,8 +71,9 @@ Every other C127/C128 finding is FIXED or risk-accepted with an owner and a date
 | # | Item | State | Owner | Gate |
 |---|---|---|---|---|
 | 5 | ~~The ingest chain carries ~10 msg/s against a 1,200 msg/s launch target~~ | **FIXED 2026-08-14.** The cause was `messages_rate = "5/s"` on EMQX's in-cluster 1883 listener — D-17's per-vehicle ceiling applied to the connection carrying the whole fleet's shared subscription. **240 msg/s now carried with zero drops** on the replica, up from ~10. `MqttBridgeThroughputTests` is the regression test | C132 | met |
-| 5a | **1,200 msg/s sustained is not yet demonstrated.** `mqtt.max_inflight` is now 512 (2026-08-15) and the same run went from 7,189 dropped to **0**; the platform carries everything this box can offer at 490-550 msg/s with no loss. What remains is only the third lever: **k6 on the same 8 vCPU as the replica cannot offer 1,200 msg/s**, so it cannot be measured here | **OPEN** — blocked on a generator off the box, not on the platform | infrastructure owner | measure on staging before go-live; this is measurement capacity, not a defect |
-| 6 | **End-to-end position latency at the launch rate** — the 33.6 s p95 was the backlog behind #5's cap and has not been re-measured since it was lifted | **OPEN** | C132 → infrastructure owner | re-measure with the subscriber half (`LOAD_WATCH=1`) before go-live |
+| 5a | **1,200 msg/s sustained is not yet demonstrated, and the 2026-08-14 reading of this row was wrong.** `mqtt.max_inflight` is now 512 and the same run went from 7,189 dropped to **0** — that part holds: **the MQTT leg carries 490-550 msg/s with no loss**. What this row previously concluded from that — "the platform carries everything this box can offer", "measurement capacity, not a defect" — does not follow. The measurement stopped at `mageride_mqtt_bridge_forwarded_total`, which is the bridge's hand-off INTO Kafka, not delivery to a subscriber. Everything the bridge forwarded above ~14 msg/s accumulated as consumer lag (see 5b) | **OPEN** — the MQTT leg is proven to 550 msg/s; the chain is not | infrastructure owner | re-measure end-to-end, not at the bridge |
+| 5b | **position-processor-svc consumes `telemetry.raw` at ~14 msg/s** — measured 2026-08-15 as a pure backlog drain: 982 messages in 71 s with nothing producing (log-end-offset constant) and the container at 35% of its 1-CPU limit, so it is not resource-bound. `KafkaTopicConsumer` handles **one message at a time and calls the synchronous `consumer.Commit(result)` per message**; `PositionProcessor.ProcessAsync` awaits 5 more round trips (4 Redis, 1 Kafka produce-with-ack). ~6 serialised round trips ≈ 72 ms per message. **This is the real ceiling C129 saw at "10 msg/s"** — fixing EMQX moved the queue from the broker to Kafka, it did not raise the chain | **OPEN — new, and the largest capacity gap on this list.** 1,200 msg/s needs ~86× this, or partition-parallel consumers with batched commits | C129 owner / hot-path owner | **before go-live** — at launch rate the backlog grows without bound and every position reaches the map already stale |
+| 6 | **End-to-end position latency at the launch rate.** The 33.6 s p95 was the backlog behind #5's cap. Re-measurement on 2026-08-15 returned **0 observations, not a latency** — the subscriber connected, joined 9 of 9 cells (hub-confirmed) and received nothing. **Cause found, and it is not fan-out:** 5b's backlog meant every cell-stream entry carried a `sampleTs` ~3 h 10 min old, `VehicleVisibility.Classify` returned `Stale` for `now - sampleTs > Fanout:FreshnessWindow` (60 s), and the pump correctly withheld all of it — `mageride_fanout_filtered_total{reason="stale"}` is the only fan-out series with a value, and `mageride_fanout_frames_total` was never emitted. **Fan-out behaved exactly as US-7.17 requires**; a stale vehicle must not be drawn | **OPEN** — measurable only once 5b's backlog is drained AND the offered rate is below the processor's ceiling | C132 → infrastructure owner | re-measure at ≤10 msg/s to get a clean D-19 number, then again at launch rate after 5b |
 | 7 | `delivery.dropped.queue_full` is not scraped. It is the ONLY symptom of an ingest ceiling, and #5 proved it can be non-zero for weeks with nothing else showing | **OPEN** — EMQX's Prometheus endpoint is not a target in the DOKS cluster | C132/C119 | with #12 |
 
 ### A3 — Operability
