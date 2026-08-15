@@ -580,7 +580,18 @@ services:
         PORT: "3001"
     image: mageride/admin-portal:replica
     environment:
-      NEXT_PUBLIC_API_BASE_URL: https://${REPLICA_HOSTNAME:-localhost}
+      # `MAGERIDE_API_BASE_URL`, and NOT a `NEXT_PUBLIC_*` name: the portal reads this on the
+      # SERVER and `portals/admin/test/fences.test.ts` fails the build if any source file reads a
+      # `NEXT_PUBLIC_` variable at all — the browser never learns where the gateway lives. It is
+      # also REQUIRED: `src/config/env.ts` throws `MissingConfigurationError` when it is absent and
+      # every request answers 503, which is a portal that starts, renders /login and can do nothing.
+      #
+      # `app-services:5000`, not `api-gateway:8080` as portals/*/.env.example shows: that is the
+      # per-service dev shape, and the replica co-locates the YARP gateway with the domain services
+      # in one process (spec Container 7). Same value, same reason, as haproxy.replica.cfg's
+      # `backend api_gateway`. Internal hostname over plain HTTP — this call never leaves the
+      # bridge network, so it neither needs the edge's self-signed cert nor public DNS.
+      MAGERIDE_API_BASE_URL: http://app-services:5000
     depends_on:
       app-services: { condition: service_healthy }
     deploy:
@@ -600,7 +611,10 @@ services:
         PORT: "3002"
     image: mageride/fleet-portal:replica
     environment:
-      NEXT_PUBLIC_API_BASE_URL: https://${REPLICA_HOSTNAME:-localhost}
+      # Same as admin-portal above, and for the same two reasons: server-read name (no
+      # `NEXT_PUBLIC_*`, enforced by the portal's own fence test) and Container 7's co-located
+      # gateway rather than the per-service dev address in portals/fleet/.env.example.
+      MAGERIDE_API_BASE_URL: http://app-services:5000
     depends_on:
       app-services: { condition: service_healthy }
     deploy:
