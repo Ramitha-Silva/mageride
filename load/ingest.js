@@ -108,6 +108,11 @@ const hubFrames = new Counter('fanout_frames');
 const hubMatched = new Counter('fanout_matched');
 const hubUnmatched = new Counter('fanout_unmatched');
 const hubOk = new Rate('fanout_connect_ok');
+// Cells the hub ITSELF confirmed, off the invocation's completion. Without this a refused
+// JoinGeocells is indistinguishable from a working one and the run reports a latency of zero
+// over zero observations — which is exactly what C129 §3 recorded.
+const hubCellsJoined = new Counter('fanout_cells_joined');
+const hubCellsWanted = new Counter('fanout_cells_wanted');
 
 // -------------------------------------------------------------------------------------
 // Options
@@ -216,9 +221,12 @@ export default function (plan) {
     }
 
     if (wanted.length > 0) {
+      hubCellsWanted.add(Math.min(wanted.length, 128));
+
       watcher = new LiveHubClient({
         edge: config.edge,
         token: config.watcherToken,
+        onJoined: (count) => hubCellsJoined.add(count),
         onReady: (hub) => {
           hubOk.add(true);
           // `Fanout:MaxCellsPerConnection` is 128 and a VU holds a handful; the slice is a fence
@@ -444,6 +452,8 @@ export function handleSummary(data) {
             trend('position_e2e_ms', 'p(95)') < 5000 && trend('position_e2e_ms', 'p(99)') < 8000,
           hubMessages: count('fanout_messages'),
           hubFrames: count('fanout_frames'),
+          cellsWanted: count('fanout_cells_wanted'),
+          cellsJoined: count('fanout_cells_joined'),
           matched: count('fanout_matched'),
           unmatched: count('fanout_unmatched'),
         }
@@ -465,7 +475,12 @@ export function handleSummary(data) {
       `  D-19 e2e      p95 ${fmt(result.endToEnd.p95Ms)} ms (< 5000)  ` +
         `p99 ${fmt(result.endToEnd.p99Ms)} ms (< 8000)  over ${result.endToEnd.samples} observations`,
       `  fan-out       ${result.endToEnd.hubMessages} hub messages carrying ` +
-        `${result.endToEnd.hubFrames} frames; ${result.endToEnd.unmatched} unmatched`);
+        `${result.endToEnd.hubFrames} frames; ${result.endToEnd.unmatched} unmatched`,
+      `  subscription  ${result.endToEnd.cellsJoined} of ${result.endToEnd.cellsWanted} cells ` +
+        'confirmed by the hub' +
+        (result.endToEnd.cellsWanted > 0 && result.endToEnd.cellsJoined === 0
+          ? '  <- NOTHING IS SUBSCRIBED; a zero above measures the subscription, not the platform'
+          : ''));
   } else {
     lines.push('  D-19 e2e      NOT MEASURED — no subscriber half in this run');
   }
