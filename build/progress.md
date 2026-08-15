@@ -21576,3 +21576,67 @@ already existed and had never been reachable.** Fixing each one exposed the next
   the head, not a rewrite), `infra/CLAUDE.md`, and C132's own three documents in `docs/production/`.
   **New:** `backend/src/HotPath.Tests/Integration/MqttBridgeThroughputTests.cs`.
   **No service, spec, contract or migration file was changed.**
+
+---
+
+### C132 — addendum 2, 2026-08-15: the ceiling behind the ceiling
+
+Go-live item 6 (re-measure end-to-end position latency now that item 5's EMQX cap is lifted) was
+attempted and **cannot be measured yet**. Chasing why produced the largest capacity finding on the
+checklist, and a correction to something this addendum's predecessor claimed.
+
+**The symptom.** The subscriber half of the load suite connected, held its socket 68 s, joined
+9 of 9 geocells — and received nothing. `D-19 e2e p95 0 ms over 0 observations`.
+
+**Three wrong answers, in order.** (1) *The join is being refused invisibly.* `lib/signalr.js` sent
+every invocation without an `invocationId`, so SignalR answered nothing and a thrown `JoinGeocells`
+was indistinguishable from a successful one. Adding COMPLETION handling **disproved the hypothesis
+it was built to test** — 9 of 9 confirmed by the hub. Committed anyway: a measurement that cannot
+fail is not a measurement, and this one could only ever report zero. (2) *The pump is not running.*
+`Fanout__PumpEnabled` is unset, the code default is `true`, and no tick logged an error. (3) *The
+pump is stuck at one of `DrainAsync`'s three early returns.* It is not.
+
+**The answer, from one metric.** fanout-svc serves metrics on **5001**, not 5000 — the port I had
+been scraping, which answered connection-refused and looked like "the counter was never emitted".
+On the right port exactly one fan-out series has a value:
+
+    mageride_fanout_filtered_total{reason="stale"} 58
+
+**Fan-out is correct and was correct throughout.** Cell-stream entries carried a `sampleTs`
+~3 h 10 min behind wall clock; `VehicleVisibility.Classify` returns `Stale` when
+`now - sampleTs > Fanout:FreshnessWindow` (60 s); the pump withheld every frame. US-7.17 requires
+exactly that — a vehicle whose last fix is that old must not be drawn on a public map. The pump
+never reached `SendAsync`, so `mageride_fanout_frames_total` was never emitted, which reads like a
+dead pump and is in fact a working filter.
+
+**Why the timestamps were old — the actual finding.** position-processor-svc had 38,045 messages of
+consumer lag on `telemetry.raw`. Measured as a pure drain, with nothing producing (log-end-offset
+constant across 71 s) and the container at 35% of its 1-CPU limit:
+
+    982 messages in 71 s = 13.8 msg/s
+
+It is not resource-bound. `MageRide.Shared/Messaging/KafkaTopicConsumer.cs` handles **one message at
+a time** and calls the synchronous `consumer.Commit(result)` **per message**;
+`PositionProcessor.ProcessAsync` then awaits five more round trips (four Redis, one Kafka
+produce-with-ack). Six serialised round trips ≈ 72 ms per message. Recorded as **go-live blocker
+5b**, and it is ~86× short of the 1,200 msg/s launch rate.
+
+**The correction.** This addendum previously closed item 5a as "measurement capacity, not a defect",
+on 490-550 msg/s carried with zero drops. The MQTT leg does carry that — that part stands. But the
+number came from `mageride_mqtt_bridge_forwarded_total`, which counts the bridge's hand-off **into**
+Kafka, not delivery to a subscriber. Everything above ~14 msg/s became lag. **Raising the EMQX
+ceiling moved the queue from the broker to Kafka; it did not raise the chain**, and C129's original
+"10 msg/s" was probably always this. Item 5a is rewritten to say so.
+
+**Item 6 stays open**, but it is no longer unexplained: it is measurable once 5b's backlog drains
+and the offered rate is below the processor's ceiling. The next attempt should offer **≤10 msg/s**
+to get a clean D-19 number, then repeat at launch rate only after 5b is fixed.
+
+**Secondary, not filed:** `mageride_positions_dropped_total` carries a `vehicle_id` label — 85
+series for ~55 synthetic vehicles. At 10,000 vehicles that is per-vehicle cardinality in a counter,
+which the capacity plan's Prometheus sizing does not account for.
+
+**Files:** `docs/production/go-live-checklist.md` (5a rewritten, 5b added, 6 rewritten, header),
+`docs/production/readiness-report.md` (fifteen → sixteen), `load/lib/signalr.js`, `load/ingest.js`.
+`verify-readiness.sh` picks the new blocker up by parsing the checklist — 16, unchanged exit 2.
+**No service, spec, contract or migration file was changed.**
