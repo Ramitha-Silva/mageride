@@ -44,12 +44,15 @@ Measured on the replica after the fix, same suite:
 **So one replica carries at least 240 msg/s cleanly, against the ~10 it did, and against 1,200
 needed at launch.** What remains is capacity rather than a defect, and it is the ordinary kind:
 
-* `mqtt.max_inflight = 32` still bounds a QoS-1 session — C129 §1.5's second recommendation stands,
-  and 32 → 512 is the next lever;
+* ~~`mqtt.max_inflight = 32`~~ **applied 2026-08-15**: 512, on a `services` zone bound to 1883 so
+  device sessions keep EMQX's defaults. At ~520 msg/s offered the same run went from **7,189
+  dropped to 0**, and 400 and 500 connections are also clean;
 * more bridge replicas: E-08's shared subscription is what they are for, and `telemetry.raw` has six
   partitions in production;
-* a box that is not also running the load generator — at 1,000 msg/s offered, k6 itself only
-  achieved 513 on this VPS.
+* **a box that is not also running the load generator — this is now the binding constraint.** k6
+  plateaus at 490-550 msg/s whatever the connection count, on the same 8 vCPU that runs the whole
+  replica, and the platform drops nothing at any of it. 1,200 msg/s cannot be offered here, so it
+  cannot be measured here.
 * **`queue_full` is still the number to watch**, because the loss is silent and there is no other
   symptom. `EmqxMessagesDropped` (C119) is the alert.
 
